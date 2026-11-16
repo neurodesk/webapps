@@ -116,3 +116,42 @@ from 51 elements, every remaining-column model when m = 8).
   if the first fails mechanically or gives no AMD host.
 - A production change needs every existing numerical, CSS, QR, HRF, reverse
   correlation, preprocessing and browser gate to stay as it is.
+
+## Results of run 43882331042 (recorder a7014f1eb)
+
+`ubuntu-22.04` was an AMD EPYC 9V74 (CNR `auto`) and `ubuntu-24.04` an Intel Xeon
+6975P-C (`AVX512_E1`), an Intel model no earlier pin has. Each host's two MATLAB
+processes recorded identical arrays (3,111 each), so one dispatch was enough.
+`constants-gamma-gemv-reference.json` pins the recording; `constants_gemv.rs` and
+`src/held_out_gamma.rs` freeze the outcome below.
+
+- **A: #868's constant-course behaviour is MATLAB's on the AMD host.** M1 reproduces
+  every direct value (255,495 detrended and 255,495 z-scored, constants, ramps,
+  near-constants and the one- and two-sample courses included) and every pipeline
+  course (141,000) and noise ceiling (564) in both precisions. A constant non-zero
+  raw course becomes rounding noise with unit variance and a finite noise ceiling
+  in MATLAB too. M2 (constants become zero) misses 58,000 pipeline values and 232
+  noise ceilings; M0 (`main`) misses more. One prediction failed: the global signal,
+  `nanmean(Srf.Data, 2)` over every vertex, equals MATLAB's in 15 of 2,000 values
+  (relative error up to 2.7e-13 in double, 9.9e-5 in single). Its input courses are
+  exact, so the across-vertex sum is in another order; 1-32 accumulators and
+  `matlab_math::sum` were tried afterwards (best 24 of 250) and none is MATLAB's.
+  On the Intel host M1 matches 31,190 of 153,297 constant-course values; there
+  M0/M2 match more of them (66,542), as its MKL often leaves a constant's residual
+  exactly zero. That host is reported only.
+- **B: the gampdf candidate is rejected.** It reproduces 23,941 of 29,376 held-out
+  positive densities on both hosts, missing from the smallest shape (0.05) on. By
+  the decision rule production keeps the closed form below shape 1, which matches
+  2,054 of them. Every model gives the 108 edge values (0, -1, Inf inputs).
+- **C: the double `y' * A` order is identified.** On the AMD host the full-block
+  columns follow the two-lane model on every fingerprint (32 columns) and random
+  product (3,200). No frozen remaining-column alternative did (best 4 of 18 trees).
+  The n = 250 fingerprints show instead the positions `lstsq::rhs_kernel` already
+  gives `?ormqr`'s right-hand sides: one remaining column, or the third of three,
+  sums in 8 lanes; the first of two or three in 4 lanes over blocks of 8; the second
+  in 2 lanes over blocks of 8 (amendment, read after the run). That model then
+  reproduced every held-out tree (n = 61, 97, 128, 17), all 1,800 random
+  remaining-column products with separate multiply and add, and the 216 remaining
+  values of the pinned double CF profiles (and 38 of the edge pin) on the AMD hosts.
+  Production adopts it (`lstsq::gemv_t_double`, the double `corr(Y, X)` of
+  `revcor_cf`). The Intel host matches 0 of 50 trees.

@@ -492,6 +492,48 @@ fn double_rc_profiles_equal_matlab_on_amd_hosts() {
     failures.assert_none();
 }
 
+/// Unsmoothed double `corr(Y, X)`: MATLAB's `mean`, `norm` and `y' * A`
+/// (`lstsq::gemv_t_double`, record_constants_gamma_gemv.m) make every profile
+/// bit-identical to MATLAB's on the AMD hosts. The Intel AVX-512 host is counted, not gated.
+#[test]
+fn double_cf_profiles_equal_matlab_on_amd_hosts() {
+    let Some(hosts) = hosts() else { return; };
+    let mut failures = Failures::default();
+    let (mut amd_cases, mut amd_values) = (0usize, 0usize);
+    for host in &hosts {
+        for case in pipelines(host, "cf").filter(|c| !single(c) && parse(c).is_ok()) {
+            if case["mapReplayModel"]["Smoothing"].as_f64().unwrap_or(0.0) != 0.0 {
+                continue;
+            }
+            let prepared = cf_prepared(host, case, &template_maps(host, case));
+            let y = array(&host.root, &case["savedCourses"]);
+            let volumes = shape(&case["savedCourses"])[0];
+            let profiles = array(&host.root, &case["profiles"]);
+            let nsvx = shape(&case["profiles"])[0];
+            let saved = vertices(&host.root, &case["savedVertices"]);
+            let (mut identical, mut compared) = (0usize, 0usize);
+            for (i, course) in y.chunks(volumes).enumerate() {
+                let v = saved[i] as usize;
+                for (j, &a) in prepared.profile(course).iter().enumerate() {
+                    let e = profiles[v * nsvx + j];
+                    identical += usize::from(same(a, e));
+                    compared += 1;
+                    if !intel(host) {
+                        failures.check(same(a, e), || format!("{} {}: vertex {v} seed {j}: {a} vs {e}", host.name, case["id"]));
+                    }
+                }
+            }
+            if !intel(host) {
+                amd_cases += 1;
+                amd_values += compared;
+            }
+            println!("{} {}: double CF profile {identical}/{compared} identical", host.name, case["id"]);
+        }
+    }
+    assert_eq!((amd_cases, amd_values), (26, 26 * 21 * 9), "AMD double CF inventory");
+    failures.assert_none();
+}
+
 /// `samsrf_removenoise` on the ROI: MATLAB's single residuals differ between hosts by
 /// up to 5.2 x 2^-24 of a course's peak; its single QR is not reproduced bit for bit.
 /// Limits are relative to the input course, which sets the residual's rounding.

@@ -598,6 +598,25 @@ fn rhs_kernel(complex: bool, single: bool, count: usize, index: usize) -> Kernel
     }
 }
 
+/// MATLAB R2023b's double `y' * A`, MKL's `dgemv` with `trans` on AMD hosts (CNR
+/// `auto`): column `j` of `m` sums its products in `?ormqr`'s tree for right-hand side
+/// `j` of `m`. Fingerprinted and confirmed on held-out shapes, random products and the
+/// pinned double CF profiles by `record_constants_gamma_gemv.m`
+/// (validation/matlab/constants-gamma-gemv-predictions.md).
+pub fn gemv_t_double(y: &[f64], columns: &[&[f64]]) -> Vec<f64> {
+    columns
+        .iter()
+        .enumerate()
+        .map(|(j, a)| {
+            let products: Vec<C<f64>> = y.iter().zip(*a).map(|(&y, &a)| C::real(y * a)).collect();
+            if products.is_empty() {
+                return 0.0;
+            }
+            tree_sum(rhs_kernel(false, false, columns.len(), j), C::real(0.0), &products, false).re
+        })
+        .collect()
+}
+
 /// `w = v^H c` in `kernel`'s summation order.
 fn kernel_dot<T: Real>(kernel: Kernel, v: &[C<T>], c: &[C<T>], complex: bool) -> C<T> {
     if v.is_empty() {

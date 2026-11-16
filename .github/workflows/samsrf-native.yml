@@ -219,6 +219,14 @@ jobs:
           SAMSRF_CLI_REFERENCE_DIR="$RUNNER_TEMP/samsrf-cli" SAMSRF_CLI_COURSES_DIR="$RUNNER_TEMP/samsrf-cli-courses" \
             cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test cli_preprocess -- --nocapture
           rm -rf "$RUNNER_TEMP/samsrf-cli"
+      - name: Constants, small-shape gampdf and double y' * A against MATLAB (constants-gamma-gemv-predictions.md)
+        run: |
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-cgg" packages/samsrf/validation/matlab/constants-gamma-gemv-reference.json
+          python3 packages/samsrf/validation/matlab/fetch_x001_runs.py "$RUNNER_TEMP/samsrf-x001-runs"
+          SAMSRF_CGG_DIR="$RUNNER_TEMP/samsrf-cgg" SAMSRF_CGG_RUNS_DIR="$RUNNER_TEMP/samsrf-x001-runs" \
+            cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test constants_gemv -- --nocapture
+          SAMSRF_CGG_DIR="$RUNNER_TEMP/samsrf-cgg" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --lib held_out_gamma -- --nocapture
+          rm -rf "$RUNNER_TEMP/samsrf-x001-runs"
       - name: Single-precision Gaussian refusal evidence (MATLAB exp and host spread)
         run: |
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-single-kernels" packages/samsrf/validation/matlab/single-kernels-reference.json
@@ -811,18 +819,7 @@ jobs:
       - name: Fetch the first two pinned X001 runs for the constants probes
         if: inputs.probes == 'constants-gamma-gemv'
         run: |
-          python3 - "$RUNNER_TEMP/samsrf-x001-runs" <<'PY'
-          import hashlib, json, pathlib, sys, urllib.request
-          target = pathlib.Path(sys.argv[1])
-          target.mkdir()
-          files = {f['name']: f for f in json.loads(pathlib.Path('apps/samsrf/examples.json').read_text())[0]['files']}
-          for name in ('lh_uBars1.gii', 'lh_uBars2.gii'):
-              pin = files[name]
-              data = urllib.request.urlopen(pin['url']).read()
-              assert hashlib.sha256(data).hexdigest() == pin['sha256'] and len(data) == pin['bytes'], name
-              (target / name).write_bytes(data)
-              print(name, pin['sha256'])
-          PY
+          python3 packages/samsrf/validation/matlab/fetch_x001_runs.py "$RUNNER_TEMP/samsrf-x001-runs"
           mkdir "$RUNNER_TEMP/samsrf-matlab-repeat"
           cp "$RUNNER_TEMP/samsrf-matlab/source.json" "$RUNNER_TEMP/samsrf-matlab-repeat/source.json"
           python3 packages/samsrf/validation/matlab/capture_environment.py "$RUNNER_TEMP/samsrf-matlab-repeat"

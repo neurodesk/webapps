@@ -143,6 +143,23 @@ fn read_runs(dir: &Path) -> Vec<RawRun> {
     (1..=2).map(|r| gifti::read_run(&std::fs::read(dir.join(format!("lh_uBars{r}.gii"))).unwrap()).unwrap()).collect()
 }
 
+/// Runs 1 and 2 truncated to `count` vertices with the recorder's edits.
+fn edited_runs(runs: &[RawRun], count: usize, tail: &[usize]) -> Vec<RawRun> {
+    let volumes = runs[0].volumes;
+    let positions = (1999..2059).chain(count - tail.len()..count);
+    let kinds: Vec<usize> = (0..60).map(|q| q / 4 + 1).chain(tail.iter().copied()).collect();
+    runs.iter()
+        .map(|run| {
+            let donor = run.course(DONOR).to_vec();
+            let mut data = run.data[..count * volumes].to_vec();
+            for (vertex, &kind) in positions.clone().zip(&kinds) {
+                data[vertex * volumes..(vertex + 1) * volumes].copy_from_slice(&edited(kind, volumes, &donor));
+            }
+            RawRun { volumes, vertices: count, data }
+        })
+        .collect()
+}
+
 struct Direct {
     id: String,
     kind: usize,
@@ -186,7 +203,6 @@ struct Pipeline {
 }
 
 fn pipeline_cases(runs: &[RawRun]) -> Vec<Pipeline> {
-    let volumes = runs[0].volumes;
     let grouped: Vec<usize> = (1999..2059).collect();
     let controls = [6378, 6355, 0, 1, 2, 3, 2060, 2061];
     let mut cases = Vec::new();
@@ -194,17 +210,7 @@ fn pipeline_cases(runs: &[RawRun]) -> Vec<Pipeline> {
         let last: Vec<usize> = (count - tail.len()..count).collect();
         let kinds: Vec<usize> = (0..60).map(|q| q / 4 + 1).chain(tail.iter().copied()).collect();
         let positions: Vec<usize> = grouped.iter().chain(&last).chain(&controls).copied().collect();
-        let edited_runs: Vec<RawRun> = runs
-            .iter()
-            .map(|run| {
-                let donor = run.course(DONOR).to_vec();
-                let mut data = run.data[..count * volumes].to_vec();
-                for (&vertex, &kind) in grouped.iter().chain(&last).zip(&kinds) {
-                    data[vertex * volumes..(vertex + 1) * volumes].copy_from_slice(&edited(kind, volumes, &donor));
-                }
-                RawRun { volumes, vertices: count, data }
-            })
-            .collect();
+        let edited_runs = edited_runs(runs, count, tail);
         let inputs = edited_runs.iter().map(|run| f32_hash(&run.data)).collect::<Vec<_>>();
         for single in [false, true] {
             let precision = if single { Precision::Single } else { Precision::Double };
@@ -293,6 +299,15 @@ fn lanes(y: &[f64], a: &[f64], lanes: usize, fold: bool) -> f64 {
     sum
 }
 
+/// Production's double `y' * A` (`lstsq::gemv_t_double`), one column of `m`: the
+/// model read from this recording's n = 250 fingerprints (an amendment after run
+/// 43882331042), gated on the held-out shapes and products.
+fn production(y: &[f64], a: &[f64], j: usize, m: usize) -> f64 {
+    let zero = vec![0.0; y.len()];
+    let columns: Vec<&[f64]> = (0..m).map(|k| if k == j { a } else { &zero[..] }).collect();
+    samsrf_core::lstsq::gemv_t_double(y, &columns)[j]
+}
+
 fn full_block(y: &[f64], a: &[f64]) -> f64 {
     lanes(y, a, 2, false)
 }
@@ -300,7 +315,8 @@ fn full_block(y: &[f64], a: &[f64]) -> f64 {
 /// The frozen models: full blocks of four columns use two lanes (identified on the
 /// pinned double CF profiles, 1,728 + 304 values); the remaining columns use one of
 /// the listed alternatives. `port` is production's double CF dot today.
-const GEMV_MODELS: [(&str, Gemv); 9] = [
+const GEMV_MODELS: [(&str, Gemv); 10] = [
+    ("production lstsq::gemv_t_double", production),
     ("leftover in order", |y, a, j, m| if j < m / 4 * 4 { full_block(y, a) } else { lanes(y, a, 1, false) }),
     ("leftover 2 lanes", |y, a, j, m| if j < m / 4 * 4 { full_block(y, a) } else { lanes(y, a, 2, false) }),
     ("leftover 4 lanes", |y, a, j, m| if j < m / 4 * 4 { full_block(y, a) } else { lanes(y, a, 4, false) }),
@@ -408,11 +424,13 @@ fn constants_and_gemv_against_the_recording() {
     let direct = direct_cases(&runs[0]);
     let pipeline = pipeline_cases(&runs);
     let mut report = BTreeMap::new();
+    let mut amd_hosts = 0;
     for host in HOSTS {
         let dir = root.join(host);
         let environment: Value = serde_json::from_slice(&std::fs::read(dir.join("constants-direct.json")).unwrap()).unwrap();
-        let cpu = environment["environment"]["cpu"].as_str().unwrap().lines().find(|l| l.starts_with("Model name")).unwrap_or("").to_string();
+        let cpu = environment["environment"]["cpu"].as_str().unwrap().lines().find(|l| l.trim_start().starts_with("Model name")).unwrap_or("").trim().to_string();
         let mut tallies = BTreeMap::<String, [usize; 2]>::new();
+        let mut global_error = BTreeMap::<String, f64>::new();
         let recorded_direct = cases(&dir, "constants-direct.json");
         assert_eq!(recorded_direct.len(), direct.len(), "{host}: direct inventory");
         for (case, port) in recorded_direct.iter().zip(&direct) {
@@ -454,6 +472,8 @@ fn constants_and_gemv_against_the_recording() {
             let entry = tallies.entry("pipeline global signal M1 port".into()).or_default();
             entry[0] += same(&port.global, &global);
             entry[1] += 250;
+            let relative = port.global.iter().zip(&global).map(|(a, b)| ((a - b) / b).abs()).fold(0.0, f64::max);
+            global_error.insert(port.id.clone(), relative);
         }
         let recorded_gemv = cases(&dir, "gemv.json");
         assert_eq!(recorded_gemv.len(), GEMV_SHAPES.len(), "{host}: gemv inventory");
@@ -485,10 +505,58 @@ fn constants_and_gemv_against_the_recording() {
                 }
             }
         }
-        report.insert(host, json!({ "cpu": cpu, "tallies": tallies }));
+        let blas = environment["environment"]["observed"]["blas"].as_str().unwrap_or("");
+        if cpu.contains("AMD") && blas.contains("CNR branch auto") {
+            amd_hosts += 1;
+            require_amd_outcome(host, &tallies);
+        }
+        report.insert(host, json!({ "cpu": cpu, "blas": blas, "tallies": tallies, "globalSignalMaxRelativeError": global_error }));
     }
     println!("{}", serde_json::to_string_pretty(&report).unwrap());
     if let Some(out) = env("SAMSRF_CGG_REPORT") {
         std::fs::write(out, serde_json::to_string_pretty(&report).unwrap()).unwrap();
+    }
+    // Run 43882331042: an AMD EPYC 9V74 (CNR auto) and an Intel Xeon 6975P-C
+    // (AVX512_E1, reported only: its MKL solves double `\` and `y' * A` in other orders).
+    assert_eq!(amd_hosts, 1, "the pinned recording has one AMD host with MKL's auto branch");
+}
+
+/// The outcome on an AMD host, decided by the pre-registered rules.
+fn require_amd_outcome(host: &str, tallies: &BTreeMap<String, [usize; 2]>) {
+    let count = |key: &str| tallies.get(key).copied().unwrap_or_else(|| panic!("{host}: no tally {key}"));
+    let exact = |key: &str| {
+        let [same, total] = count(key);
+        assert!(total > 0 && same == total, "{host}: {key} {same}/{total}");
+    };
+    let misses = |key: &str| {
+        let [same, total] = count(key);
+        assert!(same < total, "{host}: {key} should not reproduce the recording ({same}/{total})");
+    };
+    // A: #868's port is MATLAB's, constants and single samples included; the
+    // alternatives are not.
+    for stage in ["detrend", "zscore"] {
+        for group in ["constant", "other"] {
+            exact(&format!("direct {stage} {group} M1 port"));
+        }
+        misses(&format!("direct {stage} constant M0 main"));
+        misses(&format!("direct {stage} constant M2 constants zero"));
+    }
+    for part in ["courses", "noise ceiling"] {
+        exact(&format!("pipeline {part} M1 port"));
+        misses(&format!("pipeline {part} M0 main"));
+        misses(&format!("pipeline {part} M2 constants zero"));
+    }
+    assert_eq!(count("direct detrend constant M1 port")[1] + count("direct detrend other M1 port")[1], 255_495);
+    assert_eq!(count("pipeline courses M1 port"), [141_000, 141_000]);
+    assert_eq!(count("pipeline noise ceiling M1 port"), [564, 564]);
+    // The across-vertex nanmean is not MATLAB's order (README: global signal).
+    assert_eq!(count("pipeline global signal M1 port"), [15, 2_000], "{host}: global signal");
+    // C: production's y' * A is MATLAB's on every fingerprint and random product;
+    // no frozen alternative reproduces the remaining columns.
+    for part in ["fprev full", "fprev leftover", "random discovery full", "random discovery leftover", "random held-out full", "random held-out leftover"] {
+        exact(&format!("gemv {part} production lstsq::gemv_t_double"));
+    }
+    for (name, _) in GEMV_MODELS.iter().skip(1) {
+        misses(&format!("gemv fprev leftover {name}"));
     }
 }

@@ -118,6 +118,14 @@ fn small_shapes_against_the_recording() {
                 }
             }
         }
+        // Run 43882331042: the candidate fails the held-out shapes on both hosts, so
+        // production keeps its closed form below shape 1 (pre-registered decision).
+        let count = |key: &str| tallies[key];
+        assert_eq!(count("positive G1 candidate"), [23_941, 29_376], "{host}: candidate");
+        assert_eq!(count("positive G0 port closed form"), [2_054, 29_376], "{host}: production");
+        for (name, _) in MODELS {
+            assert_eq!(count(&format!("edge {name}")), [108, 108], "{host}: edges {name}");
+        }
         report.insert(host, json!({ "tallies": tallies, "candidateMisses": misses }));
     }
     println!("{}", serde_json::to_string_pretty(&report).unwrap());

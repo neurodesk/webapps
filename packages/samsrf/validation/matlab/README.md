@@ -1508,11 +1508,13 @@ connective-field runs with global-signal correction and smoothing save `Srf.Y`
 after `samsrf_removenoise` and smoothing and are counted, not compared. On the
 Intel host 88,033 of 168,000 are identical: its MKL orders the double solve
 differently, and AMD and Intel MATLAB themselves differ in 5,051 of 5,165
-values, so one output cannot equal both. Not recorded: MATLAB on a constant
-non-zero raw course, where the port leaves a QR rounding residual that `zscore`
-scales to unit variance. MATLAB
-equivalence for this behavior remains unverified; all-zero courses stay zero.
-Also unrecorded are runs whose vertex count is not a multiple of four on this path.
+values, so one output cannot equal both. Constant, ramp and near-constant raw
+courses, one- and two-sample courses and runs of 134,257-134,259 vertices (every
+leftover position) were recorded later (`constants-gamma-gemv-predictions.md`,
+run 43882331042): on the AMD host the port gives every value, and a constant
+non-zero course is rounding noise with unit variance in MATLAB too. All-zero
+courses stay zero. That run's global signal (`nanmean(Srf.Data, 2)` over every
+vertex) matched in 15 of 2,000 values; its across-vertex order is not MATLAB's.
 
 With the courses exact, the Node package API using the committed WASM was
 compared against the AMD source execution of the 24-run matrix. The copied
@@ -1538,13 +1540,12 @@ The two refused single fits stay refused. What still differs, earliest stage fir
   (`sum(Ds(:).^2)`) and `R^2` now use the modelled MATLAB `sum` and `mean`
   orders in the double port. The fits still differ; the first optimizer
   divergence requires a MATLAB trace to locate.
-- double CF profiles: `corr(Y, X)` forms `y' * X` with MKL's `dgemv`. Fitted on
-  the 18 unsmoothed double CF cases of the reverse-correlation recording, full
-  blocks of four columns use two accumulators with element 0 seeding the first,
-  combined then the tail in order (1,728 of 1,728 values, and 304 of 304 on the
-  held-out edge cases); the remaining columns' kernel is not identified (best of
-  the families tried, 153 of 216). An FPRev recording of double `y' * A`, as
-  `record_gemv_order.m` made for single, would decide it.
+- double CF profiles: fixed since by `lstsq::gemv_t_double` (FPRev recording
+  `constants-gamma-gemv-reference.json`): full blocks of four columns use two
+  lanes, and the remaining columns the right-hand-side trees `?ormqr` uses at
+  their position. Every unsmoothed double CF profile of the pinned
+  reverse-correlation recordings equals MATLAB's on its AMD hosts (26 cases,
+  4,914 values; `double_cf_profiles_equal_matlab_on_amd_hosts`).
 - double global-signal regression (`samsrf_removenoise`) still solves normal
   equations, where MATLAB solves `[X ones] \\ Y`.
 - CSS through SamSrfAnalysis: MATLAB saves a complex `Srf.Data`.
@@ -3406,3 +3407,24 @@ SAMSRF_MATLAB_REFERENCE_DIR="$TMPDIR/samsrf-source-reference" SAMSRF_CSS_WASM_RE
 `record_matlab=true, css_pipelines_only=true` the pipelines. Octave can run
 the recorder's plumbing with a stubbed environment; its results are never
 references.
+
+## Constants, small-shape gampdf and double y' * A
+
+`constants-gamma-gemv-reference.json` pins run
+[43882331042](https://github.com/neurodesk/webapps/actions/runs/43882331042)
+(`record_constants_gamma_gemv.m`, `probes=constants-gamma-gemv`, recorder
+`a7014f1eb`): an AMD EPYC 9V74 (CNR `auto`) and an Intel Xeon 6975P-C
+(`AVX512_E1`), each repeated exactly in a new process. The questions, models,
+inputs and decision rules were committed before the run in
+[`constants-gamma-gemv-predictions.md`](constants-gamma-gemv-predictions.md),
+which also lists the results: the port's constant-course detrend and z-score are
+MATLAB's on the AMD host, the small-shape gampdf candidate is rejected, and
+production adopts the identified double `y' * A` order for connective-field
+profiles. The Intel host is reported only.
+
+```sh
+python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-cgg" packages/samsrf/validation/matlab/constants-gamma-gemv-reference.json
+python3 packages/samsrf/validation/matlab/fetch_x001_runs.py "$TMPDIR/samsrf-x001-runs"
+SAMSRF_CGG_DIR="$TMPDIR/samsrf-cgg" SAMSRF_CGG_RUNS_DIR="$TMPDIR/samsrf-x001-runs" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test constants_gemv -- --nocapture
+SAMSRF_CGG_DIR="$TMPDIR/samsrf-cgg" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --lib held_out_gamma -- --nocapture
+```
