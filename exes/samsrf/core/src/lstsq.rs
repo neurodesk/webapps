@@ -782,12 +782,15 @@ pub struct DoubleDesign(Factored<f64>);
 impl DoubleDesign {
     /// The columns must be finite and of equal length.
     pub fn new(columns: &[&[f64]]) -> Self {
+        let rows = columns.first().map_or(0, |column| column.len());
+        assert!(columns.iter().all(|column| column.len() == rows), "design columns differ in length");
         assert!(columns.iter().all(|column| column.iter().all(|value| value.is_finite())), "the design must be finite");
         DoubleDesign(Factored::new(columns.iter().map(|column| column.iter().map(|&v| C::real(v)).collect()).collect()))
     }
 
     /// The real coefficients of right-hand side `index` of `count`.
     pub fn solve(&self, y: &[f64], count: usize, index: usize) -> Vec<f64> {
+        assert_eq!(y.len(), self.0.a.first().map_or(0, Vec::len), "design columns and observations differ in length");
         assert!(index < count, "right-hand side {index} of {count}");
         let mut b: Vec<C<f64>> = y.iter().map(|&v| C::real(v)).collect();
         self.0.solve(&mut b, count, index).into_iter().map(|value| value.re).collect()
@@ -834,6 +837,16 @@ fn solve<T: Real>(columns: &[&[Complex64]], ys: &[&[f64]], keep_qty: bool) -> So
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn double_design_rejects_mismatched_shapes() {
+        let design = DoubleDesign::new(&[&[1.0, 1.0, 1.0]]);
+        assert!((design.solve(&[1.0, 2.0, 3.0], 1, 0)[0] - 2.0).abs() < 1e-14);
+        for y in [&[1.0, 2.0][..], &[1.0, 2.0, 3.0, 100.0][..]] {
+            assert!(std::panic::catch_unwind(|| design.solve(y, 1, 0)).is_err(), "accepted {y:?}");
+        }
+        assert!(std::panic::catch_unwind(|| DoubleDesign::new(&[&[1.0, 1.0, 1.0], &[1.0, 2.0, 3.0, 100.0]])).is_err());
+    }
 
     fn real(values: &[f64]) -> Vec<Complex64> {
         values.iter().map(|&v| Complex64::new(v, 0.0)).collect()

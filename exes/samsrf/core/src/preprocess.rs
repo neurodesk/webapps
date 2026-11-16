@@ -432,11 +432,13 @@ impl Detrender {
     }
 }
 
-/// MATLAB `detrend` of one course (a column vector), in place. Courses of fewer
-/// than two samples are left as they are.
+/// MATLAB `detrend` of one course (a column vector), in place. A singleton has
+/// its constant offset removed; an empty course is unchanged.
 pub fn detrend(x: &mut [f64]) {
     if x.len() > 1 {
         Detrender::new(x.len(), 1).apply(x, 0);
+    } else if let Some(value) = x.first_mut() {
+        *value -= *value;
     }
 }
 
@@ -1440,6 +1442,17 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn detrend_removes_singleton_offset() {
+        for value in [5.0, -5.0, 0.0, -0.0] {
+            let mut course = [value];
+            detrend(&mut course);
+            assert_eq!(course[0].to_bits(), 0.0_f64.to_bits());
+        }
+        let mut empty = [];
+        detrend(&mut empty);
     }
 
     #[test]

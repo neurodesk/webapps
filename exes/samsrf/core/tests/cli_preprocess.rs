@@ -21,10 +21,18 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 fn roots() -> Option<(PathBuf, PathBuf)> {
-    Some((
-        PathBuf::from(std::env::var_os("SAMSRF_CLI_REFERENCE_DIR")?),
-        PathBuf::from(std::env::var_os("SAMSRF_CLI_COURSES_DIR")?),
-    ))
+    fixture_roots(
+        std::env::var_os("SAMSRF_CLI_REFERENCE_DIR").map(PathBuf::from),
+        std::env::var_os("SAMSRF_CLI_COURSES_DIR").map(PathBuf::from),
+    )
+}
+
+fn fixture_roots(recording: Option<PathBuf>, courses: Option<PathBuf>) -> Option<(PathBuf, PathBuf)> {
+    match (recording, courses) {
+        (None, None) => None,
+        (Some(recording), Some(courses)) => Some((recording, courses)),
+        _ => panic!("set both SAMSRF_CLI_REFERENCE_DIR and SAMSRF_CLI_COURSES_DIR"),
+    }
 }
 
 fn decode_f64(bytes: &[u8], values: usize) -> Vec<f64> {
@@ -141,6 +149,14 @@ fn preprocessed_courses_equal_matlab_on_the_amd_host() {
     // Recorded, not gated as parity: the Intel host's MKL solves in another order.
     // Its single courses are all identical, its double ones mostly not.
     assert_eq!(summary[1].1, 168_000);
+}
+
+#[test]
+fn rejects_partially_configured_fixtures() {
+    assert_eq!(fixture_roots(None, None), None);
+    assert_eq!(fixture_roots(Some("reference".into()), Some("courses".into())), Some(("reference".into(), "courses".into())));
+    assert!(std::panic::catch_unwind(|| fixture_roots(Some("reference".into()), None)).is_err());
+    assert!(std::panic::catch_unwind(|| fixture_roots(None, Some("courses".into()))).is_err());
 }
 
 #[test]
