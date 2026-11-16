@@ -86,3 +86,18 @@ Predictions: H_G turns at least 200 of the 256 reproducer cases above into hull
 agreement, and on every recording loses no hull the experimental model matches.
 Decision: H_G is a candidate correction of the experimental model only if it
 loses no hull on any recording; it is then also run against the production model.
+
+## H_G outcome and H_G2 (written before H_G2 was run)
+
+H_G gains 393 hulls (reproducer round 4 +206, round 5 +176, round 1 +2, held-out
+probe +9) and loses 88 (round 4 -26, round 5 -61, held-out near-collinear cloud
+490). By the rule above it is rejected. Of the losses, 27 are polygons whose
+rings already equal MATLAB's in every ordered observable, so H_G's hull
+construction itself is wrong there; of the gains, 253 are such polygons.
+
+H_G2: `convhull(shape)` is the model's own `polyshape` of the convex hull of the
+final vertices: the hull (in input coordinates, counter-clockwise from the
+lowest-then-leftmost vertex) goes through the whole model again, on the grid of
+its own span, with Clipper's union deciding where the clean starts. Predictions:
+it keeps at least the 253 ring-equal gains and recovers at least half of the 27
+ring-equal losses. Decision: same rule; any lost hull rejects it.
