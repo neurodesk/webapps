@@ -45,3 +45,21 @@ Two placements:
 - H_T-pre is a candidate correction only if it loses no hull the experimental
   model matches on any recording and gains at least one; otherwise rejected.
 - No production code changes from this round.
+
+## Addendum, written after the first H_T run and before H_NS was run
+
+First H_T results (ubuntu-22.04): H_T-pre loses hulls on several families and is
+rejected by the rule above. H_T-post fixes 749 of the 770 "cycles" point clouds,
+2,790 strip pairs and 537 bisection polygons without changing a hull, but turns 5
+previously equal point clouds (485, 1278, 1399, 1935, 1993) and 4 round-7 cases
+into "cycles": at their touch vertices MATLAB keeps a solid and touching holes
+where the counter-clockwise rule splits solids. Prediction 2 fails, so H_T-post
+is not accepted as stated.
+
+H_NS-post: unite the model's final rings again with Clipper 6.4.2's union with
+`StrictlySimple` off (the flag's four effects: no type-3 join at scanbeam tops,
+collinear points removed in `FixupOutPolygon`, no `DoSimplePolygons`) and split
+every output ring at each vertex it visits twice. If MATLAB's pairing is the
+non-strict sweep's, H_NS-post keeps those 5 clouds and 4 cases equal and fixes at
+least as many "cycles" polygons as H_T-post. It is judged by the same rules as
+H_T-post (no hull or vertex-set change allowed, no equal polygon lost).
