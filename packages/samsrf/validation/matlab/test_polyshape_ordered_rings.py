@@ -1,7 +1,10 @@
 """Unit tests of polyshape_ordered_rings.py (no recording needed)."""
+import json
 import os
+from pathlib import Path
 import struct
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -65,6 +68,52 @@ class SplitRings(unittest.TestCase):
         for bad in ([(0.0, 0.0), (nan, nan), (nan, nan), (1.0, 1.0)], [(0.0, 0.0), (nan, nan)]):
             with self.assertRaises(ValueError):
                 rings.split_rings(bad)
+
+
+class RecordedFlags(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+        case = {'id': 'triangle', 'kind': 'polygon-batch', 'cases': 1}
+        arrays = {
+            'points': ([0, 1, 0, 0, 0, 1], [3, 2]),
+            'counts': ([3], [1, 1]),
+            'hull': ([0, 1, 0, 0, 0, 1], [3, 2]),
+            'hullCounts': ([3], [1, 1]),
+            'simplified': ([0, 1, 0, 0, 0, 1], [3, 2]),
+            'simplifiedCounts': ([3], [1, 1]),
+            'defaultHoles': ([0], [1, 1]),
+            'defaultHolesCounts': ([1], [1, 1]),
+            'error': ([0], [1, 1]),
+        }
+        for name, (values, shape) in arrays.items():
+            filename = f'{name}.f64'
+            (self.root / filename).write_bytes(struct.pack(f'<{len(values)}d', *values))
+            case[name] = {'class': 'double', 'imaginary': '', 'shape': shape, 'file': filename}
+        (self.root / 'geometry.json').write_text(json.dumps({'cases': [case]}))
+
+    def test_nonbinary_recorded_flags_are_rejected_before_conversion(self):
+        baseline = rings.digest(self.root, 'triangle')
+        for field in ('defaultHoles', 'error'):
+            for value in (0.5, -0.5, 1.5, 2, float('nan'), float('inf'), -float('inf')):
+                with self.subTest(field=field, value=value):
+                    path = self.root / f'{field}.f64'
+                    path.write_bytes(struct.pack('<d', value))
+                    try:
+                        with self.assertRaises(ValueError):
+                            rings.digest(self.root, 'triangle')
+                    finally:
+                        path.write_bytes(struct.pack('<d', 0))
+        self.assertEqual(rings.digest(self.root, 'triangle'), baseline)
+
+    def test_binary_flags_keep_their_values(self):
+        for value in (0, 1):
+            for field in ('defaultHoles', 'error'):
+                (self.root / f'{field}.f64').write_bytes(struct.pack('<d', value))
+            batch = rings.Batch(self.root, 'triangle')
+            self.assertEqual(batch.failed, [bool(value)])
+            self.assertEqual(batch.rings[0][0][0], value)
 
 
 if __name__ == '__main__':

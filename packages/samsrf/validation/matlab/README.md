@@ -2583,7 +2583,8 @@ rings. It reports the first observable that differs:
 2. connectivity: the undirected edge set;
 3. cycles: how those edges are partitioned into rings;
 4. hole flags: MATLAB's `ishole` where recorded, else the exact shoelace sign;
-5. containing solid: the smallest solid whose closed polygon contains a hole.
+5. containing solid: the smallest solid whose closed polygon contains every
+   vertex of a hole.
 
 Orientation and containment use exact rational arithmetic. A double shoelace
 flipped the orientation of 921 thin triangles. In the causal recording, all
@@ -2616,9 +2617,10 @@ are left out.
 
 What this localises:
 
-- **Survival is the first difference behind every hull failure** of the 44
-  original clouds, the 246 real-cloud transforms and the four regressions'
-  reproducers. Where the hull fails, the model already keeps different vertices.
+- **Survival differs on all 44 original cloud failures and all 246 real-cloud
+  transform failures.** This does not hold for every reduced reproducer.
+  `reproducer_cases[29,30]`, both reductions of cloud 932, have matching ordered
+  rings but different hulls.
 - **Hull agreement hides ring disagreement.** 552 original clouds have MATLAB's
   hull but other vertices, and 922 have MATLAB's vertices but other edges or
   rings.
@@ -2679,10 +2681,12 @@ Predictions and decision rules were committed before each run, in
   - None of the 23 losses had MATLAB's rings. Each matched MATLAB's hull while
     its rings already kept other vertices.
   - Among polygons whose rings equal MATLAB's, it fixes 259 hulls, loses none
-    and leaves 6.
+    and leaves 6: round 4 indices 11058, 11150 and 11169, and round 5 indices
+    6446, 9096 and 9891 (zero-based).
   - By its pre-registered rule it is rejected: it would change frozen accepted
-    hulls. It is the best-supported description of MATLAB's hull stage so far,
-    and it moves the remaining hull failures to vertex survival.
+    hulls. These results support further testing of this empirical candidate,
+    not identification of MATLAB's hull algorithm. The six matching-ring
+    failures leave the hull stage unresolved.
 
 None of these changes the experimental model's default, the production model or
 any frozen baseline.
@@ -2693,7 +2697,7 @@ extracted recordings, then run from the repository root:
 ```sh
 cargo build --release --manifest-path exes/samsrf/Cargo.toml \
   -p samsrf-core --features polyshape-experimental --example polyshape_hulls
-oracle=exes/samsrf/target/release/examples/polyshape_hulls
+oracle="$PWD/exes/samsrf/target/release/examples/polyshape_hulls"
 cd packages/samsrf/validation/matlab
 python3 -I polyshape_ordered_rings.py compare "$oracle" "$reproducers/ubuntu-22.04" \
   reproducer_round4 > round4.json
@@ -2724,11 +2728,12 @@ Established on the pinned recordings (both hosts identical):
 - 1-minimal reproducers of 6, 11, 8 and 8 points (above), with exact inputs,
   MATLAB's outputs on two hosts and both models' predictions made before
   recording.
-- MATLAB's ordered rings: each batch's canonical cycles and hole flags are frozen
-  by digest. The earliest difference behind every experimental hull failure on
+- MATLAB's ordered rings: each causal and reproducer batch's canonical cycles
+  and hole flags are frozen by digest. The first differing observable for every experimental hull failure on
   the original and real-cloud recordings is vertex survival.
-- Where the model's rings equal MATLAB's, the hull is MATLAB's `polyshape` of
-  their convex hull (H_G2) on every such polygon but 6.
+- On the recorded polygons whose rings equal MATLAB's, the experimental
+  model's additional convex-hull pass (H_G2) fixes 259 hulls and leaves 6
+  unexplained. This does not establish MATLAB's internal operation.
 
 Not known:
 
@@ -2747,8 +2752,9 @@ Not known:
   both models refuse or return an empty hull.
 - MATLAB's rule for pairing edges at touch vertices: mostly separate solids,
   but holes touching twice survive in some clouds (H_T above).
-- Why MATLAB's vertex survival differs on near-collinear clouds. That is now the
-  earliest measured divergence, not ring topology or the hull stage.
+- Why MATLAB's vertex survival differs on near-collinear clouds, and why the
+  six matching-ring cases still have different hulls under H_G2. Both vertex
+  survival and the hull stage remain unresolved.
 
 ### Shipped and experimental models on the probe recordings
 

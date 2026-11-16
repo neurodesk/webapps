@@ -16,8 +16,8 @@ rings (and its diagnostic variants, through `polyshape_hulls --oracle`):
 - membership: each hole's containing solid, the smallest-area solid whose
   closed polygon contains every vertex of the hole.
 
-Each polygon is classified at its first difference, in this order: `hull`
-(hull vertex sets differ), `survival` (the union of ring vertices differs),
+Each polygon is classified at its first ring difference, in this order:
+`survival` (the union of ring vertices differs),
 `connectivity` (same vertices, different edge sets), `cycles` (same edges,
 different cycles), `holes` (same cycles, different hole flags), `membership`
 (same holed cycles, different containing solids), or `equal`. Hull equality is
@@ -83,6 +83,8 @@ class Batch:
         self.flags = (self._split('defaultHoles', 'defaultHolesCounts', 1, nan_rows=False)
                       if 'defaultHoles' in self.case else None)
         errors = self._read('error', 1).ravel()
+        if not np.all((errors == 0) | (errors == 1)):
+            raise ValueError(f'{case_id}: error flags must be finite binary values')
         self.failed = [bool(e) for e in errors]
         if len(self.failed) != self.n:
             raise ValueError(f'{case_id}: error inventory')
@@ -90,9 +92,10 @@ class Batch:
         for i, rows in enumerate(self.vertices):
             rings = split_rings(rows)
             if self.flags is not None:
-                flags = [int(f[0]) for f in self.flags[i]]
-                if any(f not in (0, 1) for f in flags):
-                    raise ValueError(f'{case_id}[{i}]: hole flags must be binary')
+                raw_flags = self.flags[i].ravel()
+                if not np.all((raw_flags == 0) | (raw_flags == 1)):
+                    raise ValueError(f'{case_id}[{i}]: hole flags must be finite binary values')
+                flags = [int(f) for f in raw_flags]
                 if len(flags) != len(rings):
                     raise ValueError(f'{case_id}[{i}]: {len(flags)} hole flags for {len(rings)} rings')
             else:
