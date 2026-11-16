@@ -18,6 +18,9 @@ window. A newer run of the same workflow, event and branch supersedes them,
 including when it tests a newer commit. This lookup reads all pages in that
 window and orders attempts by their start time, so a rerun of an older-created
 run cannot be hidden by a newer-created run.
+A run from this repository whose branch or tag no longer exists is excluded: a
+workflow whose push filter leaves the branch out creates no later run there, so
+nothing would supersede it. A fork run's branch is not looked up here.
 
 A failure without jobs is not a test failure. The report includes GitHub failure
 annotations or check output when the Checks API exposes them. Otherwise, the
