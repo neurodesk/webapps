@@ -104,8 +104,8 @@ function twoPhase() {
   };
   const decodes = [];
   const NVImage = {
-    loadFromUrl: (options) => new Promise((resolve) => {
-      decodes.push({ options, finish: () => resolve({ name: options.name, img: new Uint8Array([0, 1]) }) });
+    loadFromFile: (options) => new Promise((resolve) => {
+      decodes.push({ options, finish: () => resolve({ name: options.file.name, img: new Uint8Array([0, 1]) }) });
     }),
   };
   return { nv, decodes, viewer: new ViewerController({ nv, NVImage }) };
@@ -178,23 +178,20 @@ test('a stack with assertCurrent replaces the viewer only when every entry is de
   assert.equal(viewer.isCurrentVolumeStack(entries), true);
 });
 
-test('a decode releases only the object URL it created, however it ends', async () => {
+test('a load with assertCurrent creates no object URL, however it ends', async () => {
   const originalCreate = URL.createObjectURL;
-  const originalRevoke = URL.revokeObjectURL;
   let created = 0;
-  const revoked = [];
-  URL.createObjectURL = (input) => {
+  URL.createObjectURL = () => {
     created += 1;
-    return `blob:${input.name}#${created}`;
+    return 'blob:unexpected';
   };
-  URL.revokeObjectURL = url => revoked.push(url);
 
   try {
     const { nv, decodes, viewer } = twoPhase();
     const failing = [];
     viewer.NVImage = {
-      loadFromUrl: options => new Promise((resolve, reject) => {
-        decodes.push({ options, finish: () => resolve({ name: options.name }) });
+      loadFromFile: options => new Promise((resolve, reject) => {
+        decodes.push({ options, finish: () => resolve({ name: options.file.name }) });
         failing.push(() => reject(new Error('decode failed')));
       }),
     };
@@ -208,44 +205,58 @@ test('a decode releases only the object URL it created, however it ends', async 
     supersededA = true;
     failing[0]();
     await assert.rejects(replaced, { name: 'AbortError' }, 'a superseded load that fails ends as superseded');
-    assert.deepEqual(revoked, ['blob:A.nii#1'], 'the failed decode releases its own URL and no other');
 
     decodes[1].finish();
     assert.equal(await current, true);
     assert.deepEqual(nv.volumes.map(volume => volume.name), ['B.nii']);
-    assert.deepEqual(revoked, ['blob:A.nii#1'], 'an inserted image keeps its URL');
 
     const failed = viewer.loadOverlay(file('seg.nii'), 'red', 0.5, { assertCurrent: () => {} });
     failing[2]();
     assert.equal(await failed, false, 'a current load that fails is reported, not thrown');
-    assert.deepEqual(revoked, ['blob:A.nii#1', 'blob:seg.nii#3']);
 
     viewer.clearVolumes();
-    assert.deepEqual(revoked, ['blob:A.nii#1', 'blob:seg.nii#3', 'blob:B.nii#2'], 'the URL goes when the image leaves the viewer');
+    assert.equal(created, 0);
   } finally {
     URL.createObjectURL = originalCreate;
-    URL.revokeObjectURL = originalRevoke;
   }
 });
 
-function countingUrls() {
-  const originalCreate = URL.createObjectURL;
-  const originalRevoke = URL.revokeObjectURL;
-  let created = 0;
-  const revoked = [];
-  URL.createObjectURL = (input) => {
-    created += 1;
-    return `blob:${input.name}#${created}`;
-  };
-  URL.revokeObjectURL = url => revoked.push(url);
-  return {
-    revoked,
-    restore: () => {
-      URL.createObjectURL = originalCreate;
-      URL.revokeObjectURL = originalRevoke;
+test('a decode hands NiiVue the file itself and the image gets the viewer\'s colormap callback', async () => {
+  const { nv, viewer } = twoPhase();
+  nv.onColormapChange = () => {};
+  nv.opts = { limitFrames4D: 1 };
+  const input = file('bold.nii');
+  const asked = [];
+  viewer.NVImage = {
+    loadFromFile: async (options) => {
+      asked.push(options);
+      return { name: options.file.name };
     },
   };
-}
+  assert.equal(await viewer.loadBaseVolume(input, { assertCurrent: () => {} }), true);
+  assert.deepEqual(asked, [{ file: input, trustCalMinMax: undefined, limitFrames4D: 1 }]);
+  assert.equal(nv.volumes[0].onColormapChange, nv.onColormapChange);
+});
+
+test('a failure NiiVue reports without its cause is logged with the cause', async () => {
+  const messages = [];
+  const input = file('broken.nii');
+  const viewer = new ViewerController({
+    nv: niivue(),
+    updateOutput: message => messages.push(message),
+    NVImage: {
+      loadFromFile: async () => {
+        throw new Error('could not build NVImage');
+      },
+      readFileAsync: async read => (read === input ? new ArrayBuffer(4) : null),
+      new: async (buffer, name) => {
+        throw new Error(`Failed to parse NIfTI file ${name} of ${buffer.byteLength} bytes.`);
+      },
+    },
+  });
+  assert.equal(await viewer.loadBaseVolume(input, { assertCurrent: () => {} }), false);
+  assert.equal(messages.at(-1), 'Error loading broken.nii: Failed to parse NIfTI file broken.nii of 4 bytes.');
+});
 
 for (const kind of ['base', 'overlay', 'stack']) {
   test(`a ${kind} decode failure superseded before its continuation is silent`, async () => {
@@ -276,142 +287,106 @@ for (const kind of ['base', 'overlay', 'stack']) {
   });
 }
 
-test('a superseded stack releases a decoded member while a sibling never ends', async () => {
-  const urls = countingUrls();
-  try {
-    const { nv, decodes, viewer } = twoPhase();
-    let current = true;
-    const stack = viewer.loadVolumeStack([
-      { file: file('done.nii'), stage: 'template' },
-      { file: file('never.nii'), stage: 'map' },
-    ], {
-      assertCurrent: () => {
-        if (!current) throw new DOMException('superseded', 'AbortError');
-      },
-    });
-    decodes[0].finish();
-    await new Promise(resolve => setTimeout(resolve, 0));
-    assert.equal(viewer.decodedUrls.size, 1, 'the decoded member waits for its sibling');
+test('a superseded stack ends when the viewer changes, while a sibling never ends', async () => {
+  const { nv, decodes, viewer } = twoPhase();
+  let current = true;
+  const stack = viewer.loadVolumeStack([
+    { file: file('done.nii'), stage: 'template' },
+    { file: file('never.nii'), stage: 'map' },
+  ], {
+    assertCurrent: () => {
+      if (!current) throw new DOMException('superseded', 'AbortError');
+    },
+  });
+  decodes[0].finish();
+  await new Promise(resolve => setTimeout(resolve, 0));
 
-    current = false;
-    const next = viewer.loadBaseVolume(file('next.nii'), { assertCurrent: () => {} });
-    decodes[2].finish();
-    assert.equal(await next, true);
-    await assert.rejects(stack, { name: 'AbortError' }, 'the stack ends without waiting for the member that never does');
-    assert.equal(viewer.decodedUrls.size, 0);
-    assert.deepEqual(urls.revoked, ['blob:done.nii#1'], 'the decoded member is released when the viewer changes');
-    assert.deepEqual(nv.volumes.map(volume => volume.name), ['next.nii']);
+  current = false;
+  const next = viewer.loadBaseVolume(file('next.nii'), { assertCurrent: () => {} });
+  decodes[2].finish();
+  assert.equal(await next, true);
+  await assert.rejects(stack, { name: 'AbortError' }, 'the stack ends without waiting for the member that never does');
+  assert.deepEqual(nv.volumes.map(volume => volume.name), ['next.nii']);
 
-    decodes[1].finish();
-    await new Promise(resolve => setTimeout(resolve, 0));
-    assert.equal(viewer.decodedUrls.size, 0, 'a member that settles later releases itself');
-    assert.deepEqual(urls.revoked, ['blob:done.nii#1', 'blob:never.nii#2']);
-  } finally {
-    urls.restore();
-  }
+  decodes[1].finish();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.deepEqual(nv.volumes.map(volume => volume.name), ['next.nii'], 'a member that settles later is dropped');
 });
 
 test('a superseded stack lets go of a decoded image while a sibling never ends', async () => {
   setFlagsFromString('--expose-gc');
   const collectGarbage = runInNewContext('gc');
-  const urls = countingUrls();
-  try {
-    let decoded;
-    const viewer = new ViewerController({
-      nv: { opts: {}, volumes: [], updateGLVolume() {}, drawScene() {} },
-      NVImage: {
-        loadFromUrl: ({ name }) => {
-          if (name === 'never.nii') return new Promise(() => {});
-          const image = { name, img: new Uint8Array(1024 * 1024) };
-          decoded = new WeakRef(image);
-          return Promise.resolve(image);
-        },
+  let decoded;
+  const viewer = new ViewerController({
+    nv: { opts: {}, volumes: [], updateGLVolume() {}, drawScene() {} },
+    NVImage: {
+      loadFromFile: ({ file: { name } }) => {
+        if (name === 'never.nii') return new Promise(() => {});
+        const image = { name, img: new Uint8Array(1024 * 1024) };
+        decoded = new WeakRef(image);
+        return Promise.resolve(image);
       },
-    });
-    let current = true;
-    const stack = viewer.loadVolumeStack([
-      { file: file('done.nii'), stage: 'template' },
-      { file: file('never.nii'), stage: 'map' },
-    ], {
-      assertCurrent: () => {
-        if (!current) throw new DOMException('superseded', 'AbortError');
-      },
-    });
+    },
+  });
+  let current = true;
+  const stack = viewer.loadVolumeStack([
+    { file: file('done.nii'), stage: 'template' },
+    { file: file('never.nii'), stage: 'map' },
+  ], {
+    assertCurrent: () => {
+      if (!current) throw new DOMException('superseded', 'AbortError');
+    },
+  });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  current = false;
+  viewer.clearVolumes();
+  await assert.rejects(stack, { name: 'AbortError' });
+  for (let round = 0; round < 10 && decoded.deref(); round += 1) {
     await new Promise(resolve => setTimeout(resolve, 0));
-    current = false;
-    viewer.clearVolumes();
-    await assert.rejects(stack, { name: 'AbortError' });
-    for (let round = 0; round < 10 && decoded.deref(); round += 1) {
-      await new Promise(resolve => setTimeout(resolve, 0));
-      collectGarbage();
-    }
-    assert.ok(decoded.deref() === undefined, 'the pending sibling does not keep the decoded image alive');
-  } finally {
-    urls.restore();
+    collectGarbage();
   }
+  assert.ok(decoded.deref() === undefined, 'the pending sibling does not keep the decoded image alive');
 });
 
 test('a stack reports the first failed member while a sibling never ends', async () => {
-  const urls = countingUrls();
-  try {
-    const messages = [];
-    const nv = niivue();
-    nv.addVolume = function addVolume(image) {
-      this.volumes.push(image);
-    };
-    const NVImage = {
-      loadFromUrl: (options) => {
-        if (options.name === 'broken.nii') return Promise.reject(new Error('broken header'));
-        if (options.name === 'done.nii') return Promise.resolve({ name: options.name });
-        return new Promise(() => {});
-      },
-    };
-    const viewer = new ViewerController({ nv, NVImage, updateOutput: message => messages.push(message) });
-    const stack = viewer.loadVolumeStack([
-      { file: file('done.nii'), stage: 'template' },
-      { file: file('broken.nii'), stage: 'map' },
-      { file: file('never.nii'), stage: 'other' },
-    ], { assertCurrent: () => {} });
-    assert.equal(await stack, false);
-    assert.deepEqual(messages, ['Error loading viewer volumes: broken header']);
-    assert.deepEqual(nv.volumes, []);
-    assert.equal(viewer.decodedUrls.size, 0, 'the decoded member is released with the failure');
-    assert.deepEqual(urls.revoked.sort(), ['blob:broken.nii#2', 'blob:done.nii#1']);
-  } finally {
-    urls.restore();
-  }
+  const messages = [];
+  const nv = niivue();
+  nv.addVolume = function addVolume(image) {
+    this.volumes.push(image);
+  };
+  const NVImage = {
+    loadFromFile: ({ file: { name } }) => {
+      if (name === 'broken.nii') return Promise.reject(new Error('broken header'));
+      if (name === 'done.nii') return Promise.resolve({ name });
+      return new Promise(() => {});
+    },
+  };
+  const viewer = new ViewerController({ nv, NVImage, updateOutput: message => messages.push(message) });
+  const stack = viewer.loadVolumeStack([
+    { file: file('done.nii'), stage: 'template' },
+    { file: file('broken.nii'), stage: 'map' },
+    { file: file('never.nii'), stage: 'other' },
+  ], { assertCurrent: () => {} });
+  assert.equal(await stack, false);
+  assert.deepEqual(messages, ['Error loading viewer volumes: broken header']);
+  assert.deepEqual(nv.volumes, []);
 });
 
-test('a synchronous stack insertion failure releases decoded siblings and unused URLs', async () => {
-  const urls = countingUrls();
-  try {
-    const { nv, decodes, viewer } = twoPhase();
-    nv.mediaUrlMap = new Map();
-    nv.addVolume = () => { throw new Error('viewer insertion failed'); };
-    const stack = viewer.loadVolumeStack([
-      { file: file('base.nii') },
-      { file: file('overlay.nii') },
-    ], { assertCurrent: () => {} });
-    decodes.forEach(decode => decode.finish());
-    await assert.rejects(stack, /viewer insertion failed/);
-    assert.equal(viewer.decodedUrls.size, 0, 'uninserted siblings must be released');
-    assert.equal(viewer.insertedUrls.size, 0, 'failed insertions must not retain URLs');
-    assert.equal(nv.mediaUrlMap.size, 0, 'failed insertions must not retain decoded images in NiiVue');
-    assert.deepEqual(urls.revoked.sort(), ['blob:base.nii#1', 'blob:overlay.nii#2']);
-  } finally {
-    urls.restore();
-  }
-});
-
-test('replacing and clearing checked volumes releases NiiVue URL references', async () => {
+test('a synchronous stack insertion failure reaches the caller and records nothing', async () => {
   const { nv, decodes, viewer } = twoPhase();
-  nv.mediaUrlMap = new Map();
-  for (const name of ['first.nii', 'second.nii']) {
-    const loading = viewer.loadBaseVolume(file(name), { assertCurrent: () => {} });
-    decodes.at(-1).finish();
-    await loading;
-    assert.deepEqual([...nv.mediaUrlMap.keys()], nv.volumes, 'only images still displayed may be retained');
-  }
-  viewer.clearVolumes();
-  assert.equal(nv.mediaUrlMap.size, 0, 'clearing the viewer must release decoded images');
+  let committed = false;
+  nv.addVolume = () => { throw new Error('viewer insertion failed'); };
+  const stack = viewer.loadVolumeStack([
+    { file: file('base.nii') },
+    { file: file('overlay.nii') },
+  ], {
+    assertCurrent: () => {},
+    onCommit: () => {
+      committed = true;
+    },
+  });
+  decodes.forEach(decode => decode.finish());
+  await assert.rejects(stack, /viewer insertion failed/);
+  assert.equal(committed, false);
+  assert.equal(viewer.currentBaseFile, null);
 });
