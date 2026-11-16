@@ -5,8 +5,8 @@
 //! (parameter column 1). Evidence, not a gate.
 //!   cargo run --release --features polyshape-experimental --example polyshape_hulls -- HOST_DIR CASE_ID MODEL
 //! MODEL is production, experimental, or a diagnostic rule variant of the
-//! experimental model (`experimental::Hypothesis`): h-merge, h-merge-single, h-start
-//! or h-merge-start.
+//! experimental model (`experimental::Hypothesis`): h-merge, h-merge-single, h-start,
+//! h-merge-start, h-touch-pre, h-touch-post, h-nonstrict-post, h-hull-grid or h-hull-polyshape.
 //! `--oracle` instead reads a JSON list of polygons (lists of [x, y] as IEEE-754 bit
 //! patterns, u64, because serde_json's default float parser is not correctly
 //! rounded) from stdin and
@@ -34,6 +34,11 @@ fn hypothesis_of(model: &str) -> Option<samsrf_core::experimental::Hypothesis> {
         "h-merge-single" => Some(Hypothesis { merge_touching: true, single_contact: true, ..Hypothesis::default() }),
         "h-start" => Some(Hypothesis { start_independent: true, ..Hypothesis::default() }),
         "h-merge-start" => Some(Hypothesis { merge_touching: true, start_independent: true, ..Hypothesis::default() }),
+        "h-touch-pre" => Some(Hypothesis { touch_pairing_pre: true, ..Hypothesis::default() }),
+        "h-touch-post" => Some(Hypothesis { touch_pairing_post: true, ..Hypothesis::default() }),
+        "h-nonstrict-post" => Some(Hypothesis { nonstrict_post: true, ..Hypothesis::default() }),
+        "h-hull-grid" => Some(Hypothesis { hull_own_grid: true, ..Hypothesis::default() }),
+        "h-hull-polyshape" => Some(Hypothesis { hull_polyshape: true, ..Hypothesis::default() }),
         _ => None,
     }
 }
@@ -55,7 +60,7 @@ fn oracle() {
             Err(e) => serde_json::json!({"error": e.to_string()}),
         };
         let mut variants = serde_json::Map::new();
-        for name in ["experimental", "h-merge", "h-merge-single", "h-start", "h-merge-start"] {
+        for name in ["experimental", "h-merge", "h-merge-single", "h-start", "h-merge-start", "h-touch-pre", "h-touch-post", "h-nonstrict-post", "h-hull-grid", "h-hull-polyshape"] {
             let hypothesis = hypothesis_of(name).unwrap_or_default();
             variants.insert(name.into(), match samsrf_core::experimental::hull_of_polygon_with(p, hypothesis) {
                 Ok((hull, holes)) => {
@@ -85,7 +90,7 @@ fn main() {
     let (root, id, model) = (Path::new(&args[1]), args[2].as_str(), args[3].as_str());
     assert!(
         model == "production" || model == "experimental" || hypothesis_of(model).is_some(),
-        "model must be production, experimental, h-merge, h-merge-single, h-start or h-merge-start"
+        "model must be production, experimental, h-merge, h-merge-single, h-start, h-merge-start, h-touch-pre, h-touch-post, h-nonstrict-post, h-hull-grid or h-hull-polyshape"
     );
     let meta: Value =
         serde_json::from_slice(&std::fs::read(root.join("geometry.json")).unwrap()).unwrap();
