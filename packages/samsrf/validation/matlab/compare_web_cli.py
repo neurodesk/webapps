@@ -427,8 +427,13 @@ def main(arguments=None):
         output.write('\n')
     for run in report['runs']:
         if run['class'] in ('exact', 'differs'):
-            detail = ', '.join(f'{entry["label"]}:{"=" if entry["class"] == "exact" else entry["srfData"]["differing"]}'
-                               for entry in run['maps'])
+            maps = []
+            for entry in run['maps']:
+                raw = 'exact' if entry['srfData']['exact'] else entry['srfData']['differing']
+                gifti = 'exact' if entry['gifti']['exact'] else entry['gifti']['differing']
+                maps.append(f'{entry["label"]}: raw={raw} gifti={gifti} '
+                            f'castExact={entry["castExact"]} imaginaryNonzero={entry["imaginaryNonzero"]}')
+            detail = ', '.join(maps)
         else:
             detail = run.get('error') or json.dumps(run.get('message', run['status']))
         print(f'{run["class"]:<15} {run["id"]:<36} {detail}')

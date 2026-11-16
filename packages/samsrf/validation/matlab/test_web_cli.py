@@ -3,6 +3,8 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
+import subprocess
+import sys
 import unittest
 
 import h5py
@@ -188,6 +190,39 @@ class Values(Base):
         self.assertFalse(run['maps'][0]['srfData']['nonfiniteMaskEqual'])
         self.assertEqual(run['maps'][3]['imaginaryNonzero'], 1)
         self.assertTrue(run['matlabComplex'])
+
+
+class CommandLine(Base):
+    ids = list(PLAN)
+
+    def test_gifti_only_difference_is_reported_without_failing(self):
+        self.x.plan = cli_plan.plan()
+        plan = self.x.root / 'plan.json'
+        manifest = self.x.root / 'manifest.json'
+        plan.write_text(json.dumps(self.x.plan))
+        manifest.write_text(json.dumps(self.x.manifest))
+        self.x.plan_sha = sha(plan.read_bytes())
+        self.x.write()
+        for changed in (False, True):
+            with self.subTest(gifti_changed=changed):
+                if changed:
+                    values = self.x.maps[self.id][0].astype('<f4')
+                    values[ROI[0]] = numpy.nextafter(values[ROI[0]], numpy.float32(numpy.inf))
+                    write_gifti(self.x.web / self.id / self.names[0], values)
+                report = self.x.root / f'report-{changed}.json'
+                result = subprocess.run([
+                    sys.executable, str(Path(web_cli.__file__).resolve()),
+                    str(plan), str(manifest), str(self.x.web), str(self.x.matlab), str(report),
+                    '--expect', 'source', '--allow-unattested-source-inputs',
+                ], capture_output=True, text=True, check=False)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                run = json.loads(report.read_text())['runs'][0]
+                self.assertEqual(run['class'], 'differs' if changed else 'exact')
+                self.assertTrue(run['maps'][0]['srfData']['exact'])
+                self.assertEqual(run['maps'][0]['gifti']['exact'], not changed)
+                if changed:
+                    self.assertIn('raw=exact', result.stdout)
+                    self.assertIn('gifti=1', result.stdout)
 
 
 class Ulp(unittest.TestCase):
