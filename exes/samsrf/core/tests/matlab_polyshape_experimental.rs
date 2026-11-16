@@ -509,6 +509,8 @@ fn polyshape_causal_matches_matlab() {
         ]) {
             validate_causal_case(&root, case, expected_n, parameter_shape);
             let id = case["id"].as_str().unwrap();
+            assert_eq!(ordered_observable_digest(&root, case, expected_n), listed["orderedRecordedSha256"][id].as_str().unwrap_or_else(|| panic!("{id}: no frozen ordered digest")),
+                "{} {id}: MATLAB's ordered rings (cycles, edges or hole flags) changed", root.display());
             let polygons = split_rows(&points(&array(&root, &case["points"])), &array(&root, &case["counts"]));
             let simplified = split_rows(&points(&array(&root, &case["simplified"])), &array(&root, &case["simplifiedCounts"]));
             let hulls = split_rows(&points(&array(&root, &case["hull"])), &array(&root, &case["hullCounts"]));
@@ -799,6 +801,120 @@ fn recorded_observable_bytes(rings: &[(bool, Vec<[u64; 2]>)], hull: &[[u64; 2]])
     bytes
 }
 
+/// A ring's vertex bits at its lexicographically smallest rotation over both
+/// directions: the ring as a cycle, with start and direction normalised and edge
+/// order kept (polyshape_ordered_rings.py's `canonical_cycle`).
+fn canonical_cycle(ring: &[[u64; 2]]) -> Vec<[u64; 2]> {
+    let mut best: Option<Vec<[u64; 2]>> = None;
+    let reversed: Vec<[u64; 2]> = ring.iter().rev().copied().collect();
+    for sequence in [ring.to_vec(), reversed] {
+        for k in 0..sequence.len() {
+            let mut rotated = sequence[k..].to_vec();
+            rotated.extend_from_slice(&sequence[..k]);
+            if best.as_ref().is_none_or(|b| rotated < *b) {
+                best = Some(rotated);
+            }
+        }
+    }
+    best.unwrap_or_default()
+}
+
+/// MATLAB's default boundaries as recorded (NaN rows between boundaries) with their
+/// ishole flags, each boundary in recorded order. A NaN row must separate two
+/// nonempty boundaries; both inventories must agree.
+fn recorded_rings(vertices: &[[f64; 2]], flags: &[[f64; 2]], at: &str) -> Vec<(bool, Vec<[u64; 2]>)> {
+    let mut boundaries: Vec<Vec<[u64; 2]>> = Vec::new();
+    let mut current: Vec<[u64; 2]> = Vec::new();
+    for v in vertices {
+        if v[0].is_nan() && v[1].is_nan() {
+            assert!(!current.is_empty(), "{at}: empty boundary between NaN rows");
+            boundaries.push(std::mem::take(&mut current));
+        } else {
+            assert!(v[0].is_finite() && v[1].is_finite(), "{at}: nonfinite boundary vertex");
+            current.push(v.map(f64::to_bits));
+        }
+    }
+    assert!(!current.is_empty() || vertices.is_empty(), "{at}: trailing NaN row");
+    if !current.is_empty() {
+        boundaries.push(current);
+    }
+    assert_eq!(flags.len(), boundaries.len(), "{at}: hole flags and boundaries differ in number");
+    flags.iter().zip(boundaries).map(|(f, b)| {
+        assert!(f[0] == 0.0 || f[0] == 1.0, "{at}: hole flags must be binary");
+        (f[0] == 1.0, b)
+    }).collect()
+}
+
+/// polyshape_ordered_rings.py's `digest` (`canonicalSha256`) bytes for one polygon:
+/// ring count, then per ring (sorted by hole flag and canonical cycle) its hole
+/// byte, length and canonical cycle. Unlike `recorded_observable_bytes` this keeps
+/// edges and connectivity: two vertices swapped within a ring change it.
+fn ordered_observable_bytes(rings: &[(bool, Vec<[u64; 2]>)]) -> Vec<u8> {
+    let mut cycles: Vec<(bool, Vec<[u64; 2]>)> = rings.iter().map(|(hole, ring)| (*hole, canonical_cycle(ring))).collect();
+    cycles.sort();
+    let mut bytes = (cycles.len() as u64).to_le_bytes().to_vec();
+    for (hole, cycle) in cycles {
+        bytes.push(u8::from(hole));
+        bytes.extend((cycle.len() as u64).to_le_bytes());
+        for [x, y] in cycle {
+            bytes.extend(x.to_le_bytes());
+            bytes.extend(y.to_le_bytes());
+        }
+    }
+    bytes
+}
+
+/// SHA-256 over a batch's ordered observable: the polygon count, then
+/// `ordered_observable_bytes` of each polygon's recorded rings.
+fn ordered_observable_digest(root: &Path, case: &Value, n: usize) -> String {
+    let id = case["id"].as_str().unwrap();
+    let defaults = split_rows(&points(&array(root, &case["simplified"])), &array(root, &case["simplifiedCounts"]));
+    let flags = split_rows(&array(root, &case["defaultHoles"]).iter().map(|&v| [v, 0.0]).collect::<Vec<_>>(), &array(root, &case["defaultHolesCounts"]));
+    assert_eq!((defaults.len(), flags.len()), (n, n), "{id}: default and hole-flag inventories");
+    let mut digest = <sha2::Sha256 as sha2::Digest>::new();
+    sha2::Digest::update(&mut digest, (n as u64).to_le_bytes());
+    for i in 0..n {
+        let rings = recorded_rings(&defaults[i], &flags[i], &format!("{} {id} {i}", root.display()));
+        sha2::Digest::update(&mut digest, ordered_observable_bytes(&rings));
+    }
+    sha2::Digest::finalize(digest).iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// The ordered digest sees what the sorted one cannot, and ignores only the
+/// legitimate normalisation: rotating or reversing a ring leaves it unchanged,
+/// swapping two vertices within a ring (same vertex set, other edges) changes it,
+/// as do a flipped hole flag and a one-ULP move. Needs no recording.
+#[test]
+fn ordered_observable_keeps_edges_and_ignores_start_and_direction() {
+    let ring: Vec<[u64; 2]> = [[0.0, 0.0], [2.0, 0.0], [2.0, 1.0], [1.0, 2.0], [0.0, 1.0]].iter().map(|p: &[f64; 2]| p.map(f64::to_bits)).collect();
+    let base = ordered_observable_bytes(&[(false, ring.clone())]);
+    let mut rotated = ring.clone();
+    rotated.rotate_left(2);
+    let reversed: Vec<[u64; 2]> = ring.iter().rev().copied().collect();
+    assert_eq!(ordered_observable_bytes(&[(false, rotated)]), base);
+    assert_eq!(ordered_observable_bytes(&[(false, reversed)]), base);
+    let mut swapped = ring.clone();
+    swapped.swap(1, 3);
+    let sorted = |r: &[[u64; 2]]| { let mut r = r.to_vec(); r.sort(); r };
+    assert_eq!(recorded_observable_bytes(&[(false, sorted(&swapped))], &[]), recorded_observable_bytes(&[(false, sorted(&ring))], &[]), "the sorted observable cannot see the swap");
+    assert_ne!(ordered_observable_bytes(&[(false, swapped)]), base);
+    assert_ne!(ordered_observable_bytes(&[(true, ring.clone())]), base);
+    let mut moved = ring.clone();
+    moved[2][0] += 1;
+    assert_ne!(ordered_observable_bytes(&[(false, moved)]), base);
+    // Ring order within a polygon is not observable; ring partition is.
+    let other: Vec<[u64; 2]> = [[5.0, 5.0], [6.0, 5.0], [5.0, 6.0]].iter().map(|p: &[f64; 2]| p.map(f64::to_bits)).collect();
+    assert_eq!(ordered_observable_bytes(&[(false, ring.clone()), (false, other.clone())]), ordered_observable_bytes(&[(false, other.clone()), (false, ring.clone())]));
+    let mut joined = ring.clone();
+    joined.extend(&other);
+    assert_ne!(ordered_observable_bytes(&[(false, joined)]), ordered_observable_bytes(&[(false, ring), (false, other)]));
+    // Malformed separators are rejected.
+    let nan = [f64::NAN, f64::NAN];
+    for (rows, flags) in [(vec![[0.0, 0.0], nan, nan, [1.0, 1.0]], vec![[0.0, 0.0]; 2]), (vec![[0.0, 0.0], nan], vec![[0.0, 0.0]]), (vec![[0.0, 0.0]], vec![[2.0, 0.0]]), (vec![[0.0, 0.0]], vec![])] {
+        assert!(std::panic::catch_unwind(|| recorded_rings(&rows, &flags, "control")).is_err());
+    }
+}
+
 /// The reduced reproducers of the four regressions, on both hosts. Every recorded
 /// polygon is the spec's (indices into the full clouds the first batch records as
 /// controls, then the transform). Both models still give the hulls predicted
@@ -847,6 +963,8 @@ fn polyshape_reproducers_match_recording() {
             assert!(n > 0, "{id}: empty round");
             validate_causal_case(&root, case, n, [n, 5]);
             assert_reproducer_parameters(&array(&root, &case["parameters"]), items);
+            assert_eq!(ordered_observable_digest(&root, case, n), frozen["orderedRecordedSha256"][*id].as_str().unwrap_or_else(|| panic!("{id}: no frozen ordered digest")),
+                "{} {id}: MATLAB's ordered rings (cycles, edges or hole flags) changed", root.display());
             let polygons = split_rows(&points(&array(&root, &case["points"])), &array(&root, &case["counts"]));
             let hulls = split_rows(&points(&array(&root, &case["hull"])), &array(&root, &case["hullCounts"]));
             assert_eq!((polygons.len(), hulls.len()), (n, n), "{id}: polygon inventory");
