@@ -230,13 +230,13 @@ impl Prepared {
                         }).collect();
                         return f64::from(crate::precision::sum_single(&squares));
                     }
-                    let mut total = 0.0;
-                    for (pixel, observed) in rmap.iter().enumerate() {
+                    // sum(Ds(:).^2) in MATLAB's summation order.
+                    let squares: Vec<f64> = rmap.iter().enumerate().map(|(pixel, observed)| {
                         let modelled = (profile.data[pixel] * p[n - 2] + p[n - 1]) * self.mask[pixel];
                         let difference = observed - modelled;
-                        total += difference * difference;
-                    }
-                    total
+                        difference * difference
+                    }).collect();
+                    crate::matlab_math::sum(&squares)
                 }
                 Err(error) => {
                     failure.get_or_insert(error);
@@ -271,8 +271,9 @@ impl Prepared {
             let total = crate::precision::sum_single(&observed.iter().map(|value| (value - mean) * (value - mean)).collect::<Vec<_>>());
             f64::from(1.0 - residual as f32 / total)
         } else {
-            let mean = rmap.iter().sum::<f64>() / rmap.len() as f64;
-            let total: f64 = rmap.iter().map(|value| (value - mean) * (value - mean)).sum();
+            // Resid = (Rmap - mean(Rmap(:))).^2 and R2 = 1 - R/sum(Resid(:)), in MATLAB's orders.
+            let mean = crate::precision::mean_double(&rmap);
+            let total = crate::matlab_math::sum(&rmap.iter().map(|value| (value - mean) * (value - mean)).collect::<Vec<_>>());
             1.0 - residual / total
         };
         let n = params.len();

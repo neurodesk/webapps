@@ -341,7 +341,14 @@ test('RunAccumulator averages z-scored runs with the odd/even noise ceiling', ()
     return (2 * rho) / (1 + rho);
   });
   close(result.noiseCeiling, ceiling);
-  const everyVertex = [0, 1, 2, 3].map((vertex) => average(vertex, [0, 1, 2]));
+  // detrend is MATLAB's QR over every vertex, which leaves vertex 1's constant 3 a
+  // rounding residual that zscore scales up, as the same algorithm does in MATLAB (not
+  // recorded for a constant non-zero raw course). The global signal averages the
+  // combined courses of every vertex, whatever they are.
+  const all = accumulate(null, { normalise: 'zscore', combine: 'average', noiseCeiling: true, globalSignal: true });
+  for (const vertex of [0, 2, 3]) close(all.data.slice(vertex * 6, vertex * 6 + 6), average(vertex, [0, 1, 2]));
+  const everyVertex = [0, 1, 2, 3].map((vertex) => Array.from(all.data.slice(vertex * 6, vertex * 6 + 6)));
+  assert.ok(everyVertex[1].every(Number.isFinite));
   close(result.globalSignal, everyVertex[0].map((_, t) => mean(everyVertex.map((course) => course[t]))));
 });
 

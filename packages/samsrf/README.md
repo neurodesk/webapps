@@ -387,15 +387,23 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   compiled MATLAB Runtime probe now matches the web core's Gaussian fine-fit
   parameters within 2.8e-14 on 20 vertices when observations use the same double
   precision; the default-single container still differs by up to 0.001318° in y0.
-- **Detrending.** `detrend` solves the centred normal equations, where MATLAB
-  uses QR. The two agree to about 1e-14 of the course's scale.
+- **Detrending.** `detrend` removes the line `[linspace(0,1,n)' ones] \ Data`
+  fits to every vertex of a run in one QR, as MATLAB R2023b does; MKL's `?ormqr`
+  rounds each vertex by its place among them, and the port solves vertex `v` of
+  `n` in that order. On the AMD host of the pinned SamSrfAnalysis recording every
+  preprocessed course equals MATLAB's (validation README, "Double detrend and
+  z-score"). A constant non-zero course keeps the QR's rounding residual, which
+  `zscore` then scales to unit variance, as the same algorithm does in MATLAB;
+  MATLAB has not been recorded on such a raw course. All-zero courses stay zero.
 - **Double gamma.** `samsrf_doublegamma` with more than seven parameters
   ignores the extra values; MATLAB errors.
-- **z-score.** A zero standard deviation gives zeros, as MATLAB's `zscore`
-  does, so a constant course (the medial wall) is 0, not `NaN`.
-- **Averaging with the noise ceiling.** The odd and even runs are summed
-  separately and the mean is their combined sum, so the summation order
-  differs from SamSrf's run-by-run average (within rounding).
+- **z-score.** MATLAB's `mean` and `sum` orders. A zero standard deviation gives
+  zeros, as MATLAB's `zscore` does, so an all-zero course (the medial wall) is 0,
+  not `NaN`.
+- **Averaging with the noise ceiling.** Runs are summed in order for the mean,
+  as `nanmean(Data, 3)` does, and the odd and even runs separately for the
+  noise ceiling, whose `corr` follows MATLAB's operation order. That needs a
+  third running sum over the kept vertices.
 - **Export defaults.** `exportGiis` without a selection exports the polar angle
   and eccentricity maps, as the help text of `samsrf_export_giis` says. The
   code's default selects only the rows of `Srf.Values`, which leaves them out.
@@ -414,8 +422,12 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
 - **Old-school HRF.** An `hrf_*` file is turned into one kernel. Since
   26/08/2026, `samsrf_fit_prf`'s fine fit would mistake that kernel's row
   vector for vertex-wise HRFs.
-- **Correlations and regressions.** `corr` is a dot product of centred,
-  unit-norm courses. The forward and CSS Beta and Baseline come from
+- **Correlations and regressions.** `corr` follows MATLAB's order (centre with
+  `mean`, `x' * y` by MATLAB's pair tree or MKL's `ddot`, BLAS norms,
+  `dot / norm(x) / norm(y)`) in the double objective, the noise ceiling and the
+  reverse-correlation `R^2`; the double connective-field profile is still a dot
+  product of centred, unit-norm courses. Every HRF convolution is MATLAB's
+  `conv` (`matlab_math::convolve_real`). The forward and CSS Beta and Baseline come from
   `lstsq`, MATLAB's `[ones x] \ y`: column-pivoted Householder QR in the
   design's class (single when the observations are single, as MATLAB converts
   the design), MATLAB's rank rule and back substitution. Real and imaginary

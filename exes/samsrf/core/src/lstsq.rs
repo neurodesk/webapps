@@ -757,8 +757,8 @@ impl<T: Real> Factored<T> {
         let mut x = vec![C::real(T::ZERO); n];
         for i in (0..self.rank).rev() {
             let mut sum = b[i];
-            for j in i + 1..self.rank {
-                sum = sum.sub(self.a[j][i].mul(x[j], complex), complex);
+            for (column, &xj) in self.a[i + 1..self.rank].iter().zip(&x[i + 1..self.rank]) {
+                sum = sum.sub(column[i].mul(xj, complex), complex);
             }
             x[i] = if count == 1 {
                 trsv_divide(sum, self.a[i][i], complex, self.single)
