@@ -136,14 +136,16 @@ test('what a called reusable workflow runs counts as the caller\'s', async () =>
   assert.deepEqual(calledWorkflows(hmc), ['node-cli-portable']);
   assert.deepEqual(calledWorkflows({ jobs: { gate: { uses: './.github/workflows/pr-gate.yml' }, a: { uses: 'org/repo/.github/workflows/x.yml@v1' }, b: { steps: [] } } }), []);
   assert.deepEqual(workflowScripts({ jobs: {} }, [{ jobs: { a: { steps: [{ run: 'node scripts/called.mjs' }] } } }]), ['scripts/called.mjs']);
+  // A portable caller filtered on the shared trees, as hmc-native was before it listed its own closure.
+  const sharedTrees = ['packages/hmc/**', 'packages/**', 'scripts/**', 'test-utils/**'];
   // The packager's Python imports scripts/lib/windows_signing.py; the closure follows only JS and TS.
   for (const path of ['scripts/lib/windows_signing.py', 'scripts/windows-signing.ps1', 'test-utils/fixture.sh']) {
-    const decision = await decideReal('hmc-native', [path]);
+    const decision = await decideReal('hmc-native', [path], new Map(), sharedTrees);
     assert.equal(decision.run, true, path);
     assert.match(decision.reason, /cannot follow/);
   }
   // Its release tests read every package's release specification.
-  const spec = await decideReal('hmc-native', ['packages/topofit/release.json']);
+  const spec = await decideReal('hmc-native', ['packages/topofit/release.json'], new Map(), sharedTrees);
   assert.equal(spec.run, true);
   assert.match(spec.reason, /shared packager/);
   // A workflow that does not call the packager has no use for another package's specification.
