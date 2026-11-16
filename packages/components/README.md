@@ -54,8 +54,11 @@ rejects never reaches the viewer, and what `assertCurrent` throws reaches the
 caller, also when the decode itself failed. `assertCurrent` is asked whenever
 a member of the load is decoded and whenever the viewer changes, so it must
 have no side effects; a stack ends on its first failed or superseded member
-without waiting for the others. Each such load creates its own object URL per
-file and releases only those. `replaceStage` makes an overlay take the place
+without waiting for the others. Each such load reads its `File` with
+`NVImage.loadFromFile`, without an object URL or a fetch, so a superseded load
+holds nothing to release. The image keeps the `File`, from which NiiVue reads
+the frames a `limitFrames4D` load left out, also after the image left the
+viewer and was added again. `replaceStage` makes an overlay take the place
 of its stage's overlay in the commit. Use it wherever a newer load can
 supersede one that is still being fetched or decoded. Pass `NVImage` to the
 constructor when NiiVue is imported as a module.
@@ -67,9 +70,12 @@ optional check, commands retain their existing behavior. Initialization waits
 belong to a worker session and reject when that worker is cancelled or fails.
 A replacement worker cannot complete an older session's initialization wait.
 
-Checked viewer commits release uninserted images and unused object URLs in
-`finally`, including when synchronous NiiVue insertion or configuration throws.
-Images that reach the viewer keep their URL until they leave it.
+A decode from a `File` settles. Measured in Chromium with NiiVue 0.68.2: a file
+deleted or rewritten on disk after it was chosen, a truncated header, a
+truncated gzip stream, an empty file and bytes that are no NIfTI image each
+rejected within 5 ms, and a NIfTI file cut inside its voxel data resolved with
+a short image. NiiVue reports each failure as `could not build NVImage`; the
+controller reads the file once more to log the reason.
 
 ## Verified downloads
 
