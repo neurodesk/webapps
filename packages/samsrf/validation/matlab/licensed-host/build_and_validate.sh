@@ -39,8 +39,13 @@ cd "$work"
 git clone --quiet https://github.com/samsrf/samsrf.git reference-source
 git -C reference-source checkout --quiet "$source_commit"
 git clone --quiet --filter=blob:none --sparse https://github.com/spm/spm12.git reference-spm
+# Cone mode keeps the root files, spm.m among them, which SamSrf's GIfTI reader
+# looks for. Git before 2.37 defaults to non-cone and ignores `set --cone`.
+git -C reference-spm sparse-checkout init --cone
 git -C reference-spm sparse-checkout set @gifti @xmltree @file_array
 git -C reference-spm checkout --quiet "$spm_commit"
+[ -f reference-spm/spm.m ] \
+  || { echo 'The SPM checkout has no spm.m; SamSrf cannot read GIfTI without it' >&2; exit 1; }
 python3 "$repo/packages/samsrf/validation/container/download.py" "$work/matrix-input" "$matlab/inputs.json"
 python3 "$matlab/prepare.py" --cli reference-source "$cli/provenance"
 python3 "$matlab/cli_plan.py" plan "$cli/plan.json"
