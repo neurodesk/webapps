@@ -16,6 +16,13 @@
   "causal_hole_contactVertices": [],
   "causal_realVertices": [],
   "description": "Polyshape causal probe exceptions (polyshape-causal-reference.json): per family, the IDs whose simplified vertex set differs from MATLAB's while the hull matches, and the real-cloud transforms whose hull differs, with their frozen port outcomes (IEEE bits; regression snapshots, not MATLAB ground truth). Each must still differ: remove an entry only when it matches MATLAB.",
+  "orderedRecordedSha256": {
+    "causal_gap_bisection": "8b458c6ecc6b64060960b993560f1ab11f34b3a4f01aaf76482b69cf897c40fa",
+    "causal_gap_sweep": "694691bdc3b12c56015d9e1b9a141a1858763bb48924b0ee358a6d596c581210",
+    "causal_heldout": "b8a070cb3ea989cd891ac833c8c2d28b6d097d630a225db7d0eb1094eeca449b",
+    "causal_hole_contact": "b55460e020cb35e3c1ff4dfe3393c85ec8c868178816b6f55ecbaf1cc0203682",
+    "causal_real": "5c4d526b75008c29a9332a668eba6c515c2587e685feeac80cc31b7910d80800"
+  },
   "realOutcomes": {
     "100": {
       "area": 4516006316921683968,

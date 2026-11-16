@@ -2570,6 +2570,144 @@ digest without a recording. Each of the following makes the gate fail:
 - flipping a frozen agreement;
 - changing the prediction digest.
 
+### Ordered boundaries (2026-11-16, existing recordings only)
+
+Every polygon batch records MATLAB's `polyshape(P).Vertices` in order, one NaN
+row between boundaries. The comparisons above sorted those vertices, so they
+could not see edges, connectivity or which solid a hole belongs to.
+`polyshape_ordered_rings.py` reads each boundary as a cycle, normalised only
+for start and direction, and compares it with the experimental model's final
+rings. It reports the first observable that differs:
+
+1. vertex survival: the union of ring vertices;
+2. connectivity: the undirected edge set;
+3. cycles: how those edges are partitioned into rings;
+4. hole flags: MATLAB's `ishole` where recorded, else the exact shoelace sign;
+5. containing solid: the smallest solid whose closed polygon contains every
+   vertex of a hole.
+
+Orientation and containment use exact rational arithmetic. A double shoelace
+flipped the orientation of 921 thin triangles. In the causal recording, all
+24,827 recorded hole flags equal the exact shoelace sign, and MATLAB winds solids
+clockwise. No MATLAB dispatch was spent.
+
+The experimental model against MATLAB on ubuntu-22.04 follows. The arrays of both
+hosts are byte-identical. Columns: rings equal (hull equal / hull differs), then
+first difference at hole flags or containing solid, cycles, connectivity, and
+survival (hull equal / hull differs). The four extreme grids the model refuses
+are left out.
+
+| Batch | Polygons | Rings equal | Holes | Cycles | Connectivity | Survival |
+| --- | ---: | --- | ---: | ---: | ---: | --- |
+| Thin, collinear-vertex, spike and degenerate families | 23,557 | 23,557 / 0 | 0 | 0 | 0 | 0 / 0 |
+| Original point clouds | 2,500 | 981 / 0 | 1 | 770 | 152 | 552 / 44 |
+| Grid sweep and bisection (probe) | 27,648 | 27,648 / 0 | 0 | 0 | 0 | 0 / 0 |
+| Held-out near-collinear (probe) | 1,500 | 1,012 / 8 | 0 | 23 | 10 | 307 / 140 |
+| Held-out mixed (probe) | 1,500 | 625 / 1 | 2 | 443 | 81 | 319 / 29 |
+| Strip pairs (causal) | 8,424 | 4,986 / 0 | 0 | 2,430 | 1,000 | 8 / 0 |
+| Sliver bisection (causal) | 1,152 | 609 / 0 | 0 | 534 | 9 | 0 / 0 |
+| Holes at one contact (causal) | 170 | 170 / 0 | 0 | 0 | 0 | 0 / 0 |
+| Real-cloud transforms (causal) | 403 | 0 / 0 | 0 | 0 | 1 | 156 / 246 |
+| Held-out strip pairs (causal) | 600 | 453 / 0 | 0 | 0 | 146 | 1 / 0 |
+| Reproducer rounds 1-3 | 244 | 65 / 2 | 0 | 3 | 0 | 19 / 155 |
+| Reproducer round 4 | 12,873 | 2,979 / 124 | 3 | 0 | 75 | 3,281 / 6,411 |
+| Reproducer round 5 | 12,897 | 4,890 / 130 | 3 | 13 | 155 | 3,220 / 4,486 |
+| Reproducer round 6 | 1,212 | 678 / 0 | 0 | 0 | 0 | 129 / 405 |
+| Reproducer round 7 | 592 | 406 / 0 | 0 | 20 | 12 | 146 / 8 |
+
+What this localises:
+
+- **Survival differs on all 44 original cloud failures and all 246 real-cloud
+  transform failures.** This does not hold for every reduced reproducer.
+  `reproducer_cases[29,30]`, both reductions of cloud 932, have matching ordered
+  rings but different hulls.
+- **Hull agreement hides ring disagreement.** 552 original clouds have MATLAB's
+  hull but other vertices, and 922 have MATLAB's vertices but other edges or
+  rings.
+- **Round 7, with edges.** All 288 pinwheels equal MATLAB in every ordered
+  observable, so the rejection of H_M and H_M1 now holds for edge order and
+  connectivity too. Of the 72 lenses, 40 are equal, 20 differ in cycles and 12
+  in connectivity, and their hulls agree.
+- **A later stage, separately.** 256 reproducer polygons and 9 held-out probe
+  clouds have MATLAB's rings exactly but another hull.
+
+The gates now freeze MATLAB's ordered observable, independent of any model.
+`matlab_polyshape_reproducers.json` and `matlab_polyshape_causal.json` hold
+`orderedRecordedSha256`: one SHA-256 per batch over the canonical cycles and
+hole flags. `polyshape_ordered_rings.py digest` computes it, the two hosts give
+the same value, and `polyshape_reproducers_match_recording` and
+`polyshape_causal_matches_matlab` recompute it in Rust.
+
+The previous round-7 digest sorts vertices. With two vertices of one recorded
+ring swapped (a copy of the pin, round 7, polygon 36), that gate still passes
+on both hosts and the ordered digest fails.
+`ordered_observable_keeps_edges_and_ignores_start_and_direction` holds the
+same property without a recording.
+
+**Rules tested on these recordings.** Each rule is an opt-in
+`experimental::Hypothesis` variant (`polyshape_hulls` `h-touch-pre`,
+`h-touch-post`, `h-nonstrict-post`, `h-hull-grid`, `h-hull-polyshape`).
+Predictions and decision rules were committed before each run, in
+`polyshape-touch-pairing-predictions.md`.
+
+- **H_T, touch-vertex pairing.** Where edges agree but cycles do not, MATLAB's
+  two rings at a touch vertex are mostly two solids. With the region on the
+  left, they take the most counter-clockwise turn. The model has a solid and a
+  touching hole there. H_T traces every ring that way and splits each cycle at
+  repeated vertices.
+  - Applied to the final rings (H_T-post), it fixes 749 of the 770 "cycles"
+    clouds, 2,790 strip pairs, 537 bisection polygons and 20 lenses, with no
+    hull change.
+  - It breaks five equal clouds (485, 1278, 1399, 1935, 1993) and the four
+    copies of `gapped-k6-s3-g10-r0`. There MATLAB keeps a hole that touches its
+    solid at two vertices.
+  - Applied before cleaning (H_T-pre), it loses 1,040 and 964 hulls in rounds 4
+    and 5.
+  - Both placements are rejected. MATLAB's pairing rule is open.
+- **H_NS, Clipper's non-strict union then splitting at repeated vertices.** It
+  equals the experimental model on rounds 1-7, so it does not explain MATLAB's
+  pairing. Rejected.
+- **H_G, the hull on the final vertices' own grid.** In 251 of the 256
+  ring-equal, hull-different reproducer polygons, the final vertices span less
+  than the input. H_G gains 393 hulls and loses 88, 27 of them ring-equal.
+  Rejected.
+- **H_G2, `convhull` as the model's own `polyshape` of the convex hull of the
+  final vertices.** It runs on the hull's own grid, with Clipper's union deciding
+  where the clean starts.
+  - It gains 396 hulls: round 4 +205, round 5 +180, round 1 +2, held-out probe
+    +9.
+  - It loses 23: round 4 -8, round 5 -13, reproducer case 28, held-out
+    near-collinear cloud 490.
+  - None of the 23 losses had MATLAB's rings. Each matched MATLAB's hull while
+    its rings already kept other vertices.
+  - Among polygons whose rings equal MATLAB's, it fixes 259 hulls, loses none
+    and leaves 6: round 4 indices 11058, 11150 and 11169, and round 5 indices
+    6446, 9096 and 9891 (zero-based).
+  - By its pre-registered rule it is rejected: it would change frozen accepted
+    hulls. These results support further testing of this empirical candidate,
+    not identification of MATLAB's hull algorithm. The six matching-ring
+    failures leave the hull stage unresolved.
+
+None of these changes the experimental model's default, the production model or
+any frozen baseline.
+
+To reproduce, set `geometry`, `probe`, `causal` and `reproducers` to the
+extracted recordings, then run from the repository root:
+
+```sh
+cargo build --release --manifest-path exes/samsrf/Cargo.toml \
+  -p samsrf-core --features polyshape-experimental --example polyshape_hulls
+oracle="$PWD/exes/samsrf/target/release/examples/polyshape_hulls"
+cd packages/samsrf/validation/matlab
+python3 -I polyshape_ordered_rings.py compare "$oracle" "$reproducers/ubuntu-22.04" \
+  reproducer_round4 > round4.json
+python3 -I polyshape_ordered_rings.py table h-touch-post,h-hull-grid,h-hull-polyshape round4.json
+python3 -I polyshape_ordered_rings.py digest "$causal/ubuntu-22.04" causal_real
+```
+
+`compare` takes any polygon batch of the four recordings; its `summary` gives
+each variant's first-difference counts.
+
 ### What is established and what is not
 
 Established on the pinned recordings (both hosts identical):
@@ -2590,6 +2728,12 @@ Established on the pinned recordings (both hosts identical):
 - 1-minimal reproducers of 6, 11, 8 and 8 points (above), with exact inputs,
   MATLAB's outputs on two hosts and both models' predictions made before
   recording.
+- MATLAB's ordered rings: each causal and reproducer batch's canonical cycles
+  and hole flags are frozen by digest. The first differing observable for every experimental hull failure on
+  the original and real-cloud recordings is vertex survival.
+- On the recorded polygons whose rings equal MATLAB's, the experimental
+  model's additional convex-hull pass (H_G2) fixes 259 hulls and leaves 6
+  unexplained. This does not establish MATLAB's internal operation.
 
 Not known:
 
@@ -2606,6 +2750,11 @@ Not known:
   and the shipped model's are not compared; SamSrf uses only the hull.
 - Anything outside the recorded families, including the extreme grids where
   both models refuse or return an empty hull.
+- MATLAB's rule for pairing edges at touch vertices: mostly separate solids,
+  but holes touching twice survive in some clouds (H_T above).
+- Why MATLAB's vertex survival differs on near-collinear clouds, and why the
+  six matching-ring cases still have different hulls under H_G2. Both vertex
+  survival and the hull stage remain unresolved.
 
 ### Shipped and experimental models on the probe recordings
 
