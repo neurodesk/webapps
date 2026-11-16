@@ -31,6 +31,9 @@
     "test": "node --test test/*.test.js",
     "lint": "node --check src/*.js && node --check bin/samsrf.js"
   },
+  "devDependencies": {
+    "playwright": "1.64.0"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/neurodesk/webapps.git",
