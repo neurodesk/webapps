@@ -1530,6 +1530,7 @@ the Node runner also accepts custom HRFs unavailable through the app interface.
 | `corr` order for the noise ceiling | 6 | 105 |
 | MATLAB `conv` for every HRF convolution | 11 | 115 |
 | one QR for double RC profiles, `corr` order for RC `R^2` | 11 | 119 |
+| MATLAB's double `corr(Y, X)` for CF profiles (`lstsq::gemv_t_double`, run 43890832220's module `d5ae6ba2`; Intel 0 runs, 42 maps) | 13 | 129 |
 
 The two refused single fits stay refused. What still differs, earliest stage first:
 
