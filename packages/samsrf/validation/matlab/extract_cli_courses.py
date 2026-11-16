@@ -52,8 +52,14 @@ def main(arguments):
     if output.exists() and any(output.iterdir()):
         raise SystemExit(f'{output}: use a new or empty directory')
     plan = json.loads((root / 'plan.json').read_text())
+    ids = [run['id'] for run in plan['runs']]
+    if not ids or len(ids) != len(set(ids)):
+        raise ValueError('the plan must contain nonempty, unique run identities')
     manifest = {'plan': plan, 'hosts': {}}
     for key, source in (('amd', root / 'source-1'), ('intel', root / 'ubuntu-24.04' / 'source-1')):
+        missing = [run_id for run_id in ids if not (source / run_id).is_dir()]
+        if missing:
+            raise ValueError(f'{source}: missing planned run directories {missing}')
         receipt = host_receipt(source)
         expected = 'AMD' if key == 'amd' else 'INTEL'
         if not receipt['cpu'].upper().startswith(expected):
@@ -62,8 +68,6 @@ def main(arguments):
         runs = []
         for run in plan['runs']:
             directory = source / run['id']
-            if not directory.is_dir():
-                continue
             name, values, roi = courses(directory, run['id'])
             kind = {'<f8': 'double', '<f4': 'single'}[values.dtype.str]
             if kind != run['precision']:

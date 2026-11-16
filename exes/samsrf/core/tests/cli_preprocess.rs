@@ -17,6 +17,7 @@ use samsrf_core::precision::Precision;
 use samsrf_core::preprocess::{Combine, Normalise, PreprocessOptions, RunAccumulator};
 use samsrf_core::timeseries::VertexSelection;
 use serde_json::Value;
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 fn roots() -> Option<(PathBuf, PathBuf)> {
@@ -26,8 +27,20 @@ fn roots() -> Option<(PathBuf, PathBuf)> {
     ))
 }
 
-fn read_f64(path: &Path) -> Vec<f64> {
-    std::fs::read(path).unwrap().as_chunks::<8>().0.iter().map(|b| f64::from_le_bytes(*b)).collect()
+fn decode_f64(bytes: &[u8], values: usize) -> Vec<f64> {
+    assert_eq!(bytes.len(), values.checked_mul(8).unwrap(), "float64 payload byte count");
+    bytes.as_chunks::<8>().0.iter().map(|b| f64::from_le_bytes(*b)).collect()
+}
+
+fn run_ids(runs: &[Value]) -> BTreeSet<&str> {
+    let ids: BTreeSet<_> = runs.iter().map(|run| run["id"].as_str().unwrap()).collect();
+    assert!(!ids.is_empty(), "empty run inventory");
+    assert_eq!(ids.len(), runs.len(), "duplicate run identity");
+    ids
+}
+
+fn validate_inventory(plan: &Value, host: &Value) {
+    assert_eq!(run_ids(plan["runs"].as_array().unwrap()), run_ids(host["runs"].as_array().unwrap()), "planned and extracted run identities");
 }
 
 fn argument<'a>(argv: &'a [Value], prefix: &str) -> Option<&'a str> {
@@ -83,21 +96,32 @@ fn preprocessed_courses_equal_matlab_on_the_amd_host() {
     let Some((recording, courses)) = roots() else { return };
     let manifest: Value = serde_json::from_slice(&std::fs::read(courses.join("manifest.json")).unwrap()).unwrap();
     let plan = &manifest["plan"];
+    let recorded_plan: Value = serde_json::from_slice(&std::fs::read(recording.join("plan.json")).unwrap()).unwrap();
+    assert_eq!(plan, &recorded_plan, "extraction plan differs from the recording");
+    assert_eq!(run_ids(plan["runs"].as_array().unwrap()).len(), 24, "recorded run inventory");
+    assert_eq!(manifest["hosts"].as_object().unwrap().keys().map(String::as_str).collect::<BTreeSet<_>>(), BTreeSet::from(["amd", "intel"]));
     let mut summary = Vec::new();
     for (key, expected_host) in [("amd", "AMD"), ("intel", "INTEL")] {
         let host = &manifest["hosts"][key];
+        validate_inventory(plan, host);
         assert!(host["cpu"].as_str().unwrap().to_uppercase().starts_with(expected_host), "{key}: {}", host["cpu"]);
         let (mut compared, mut exact, mut later_runs, mut runs_seen) = (0usize, 0usize, 0usize, 0usize);
         for entry in host["runs"].as_array().unwrap() {
             let id = entry["id"].as_str().unwrap();
             let run = plan["runs"].as_array().unwrap().iter().find(|run| run["id"] == id).unwrap();
             runs_seen += 1;
+            assert_eq!(entry["precision"], run["precision"], "{key} {id}: precision");
+            let vertices = usize::try_from(entry["vertices"].as_u64().unwrap()).unwrap();
+            let declared_volumes = usize::try_from(entry["volumes"].as_u64().unwrap()).unwrap();
+            assert!(vertices > 0 && declared_volumes > 0, "{key} {id}: empty shape");
+            assert_eq!(entry["roi"].as_array().unwrap().len(), vertices, "{key} {id}: ROI rows");
+            let bytes = std::fs::read(courses.join(key).join(entry["file"].as_str().unwrap())).unwrap();
+            let matlab = decode_f64(&bytes, vertices.checked_mul(declared_volumes).unwrap());
             if after_later_stages(run) {
                 later_runs += 1;
                 continue;
             }
             let roi: Vec<u32> = entry["roi"].as_array().unwrap().iter().map(|v| v.as_u64().unwrap() as u32 - 1).collect();
-            let matlab = read_f64(&courses.join(key).join(entry["file"].as_str().unwrap()));
             let (volumes, port) = port_courses(&recording, run, &roi);
             assert_eq!(volumes, entry["volumes"].as_u64().unwrap() as usize, "{key} {id}: volumes");
             assert_eq!(port.len(), matlab.len(), "{key} {id}: values");
@@ -117,4 +141,27 @@ fn preprocessed_courses_equal_matlab_on_the_amd_host() {
     // Recorded, not gated as parity: the Intel host's MKL solves in another order.
     // Its single courses are all identical, its double ones mostly not.
     assert_eq!(summary[1].1, 168_000);
+}
+
+#[test]
+fn rejects_incomplete_or_duplicated_run_inventories() {
+    let plan = serde_json::json!({"runs": [{"id": "a"}, {"id": "b"}]});
+    validate_inventory(&plan, &plan);
+    for runs in [serde_json::json!([]), serde_json::json!([{"id": "a"}]),
+                 serde_json::json!([{"id": "a"}, {"id": "a"}]),
+                 serde_json::json!([{"id": "a"}, {"id": "c"}])] {
+        let host = serde_json::json!({"runs": runs});
+        assert!(std::panic::catch_unwind(|| validate_inventory(&plan, &host)).is_err());
+    }
+    let duplicate_plan = serde_json::json!({"runs": [{"id": "a"}, {"id": "a"}]});
+    assert!(std::panic::catch_unwind(|| validate_inventory(&duplicate_plan, &plan)).is_err());
+}
+
+#[test]
+fn rejects_truncated_or_extended_float64_payloads() {
+    let bytes: Vec<u8> = [1.0_f64, 2.0].iter().flat_map(|v| v.to_le_bytes()).collect();
+    assert_eq!(decode_f64(&bytes, 2), vec![1.0, 2.0]);
+    for size in [0, 8, 15, 17, 24] {
+        assert!(std::panic::catch_unwind(|| decode_f64(&vec![0; size], 2)).is_err());
+    }
 }

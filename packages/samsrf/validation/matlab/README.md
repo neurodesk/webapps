@@ -1313,13 +1313,17 @@ after `samsrf_removenoise` and smoothing and are counted, not compared. On the
 Intel host 88,033 of 168,000 are identical: its MKL orders the double solve
 differently, and AMD and Intel MATLAB themselves differ in 5,051 of 5,165
 values, so one output cannot equal both. Not recorded: MATLAB on a constant
-non-zero raw course, where the QR leaves a rounding residual that `zscore`
-scales to unit variance (the port does the same; all-zero courses stay zero),
-and runs whose vertex count is not a multiple of four on this path.
+non-zero raw course, where the port leaves a QR rounding residual that `zscore`
+scales to unit variance. MATLAB
+equivalence for this behavior remains unverified; all-zero courses stay zero.
+Also unrecorded are runs whose vertex count is not a multiple of four on this path.
 
-With the courses exact, the web app (Node, committed module) against the AMD
-source execution of the 24-run matrix, with `run_web_matrix.mjs` and
-`compare_web_cli.py` from #866 at `61d900d1`:
+With the courses exact, the Node package API using the committed WASM was
+compared against the AMD source execution of the 24-run matrix. The copied
+`run_web_matrix.mjs` and `compare_web_cli.py` match #866 at `dd36baa32`.
+Recomparison with the corrected comparator at `d12064c9a` preserves the final
+11-run, 119-map result. This is not a browser or production UI comparison;
+the Node runner also accepts custom HRFs unavailable through the app interface.
 
 | Change | Exact runs | Exact maps (of 168) |
 | --- | --- | --- |
@@ -1334,9 +1338,10 @@ The two refused single fits stay refused. What still differs, earliest stage fir
 - double convex-hull RC centroids: from MATLAB's own profile, `x0` and `y0` of
   `polyshape.centroid` differ by 1-3 ULP (one by 38 ULP); areas are exact.
   This is geometry (#732).
-- double RC Gaussian and CF Gaussian fits: `samsrf_fit2dprf`'s `errfun` is
-  `sum(Ds(:).^2)` with MATLAB's lane order over 400 pixels, and `R^2` uses
-  `mean` and `sum`; the double port sums in order.
+- double RC Gaussian and CF Gaussian fits: `samsrf_fit2dprf`'s `errfun`
+  (`sum(Ds(:).^2)`) and `R^2` now use the modelled MATLAB `sum` and `mean`
+  orders in the double port. The fits still differ; the first optimizer
+  divergence requires a MATLAB trace to locate.
 - double CF profiles: `corr(Y, X)` forms `y' * X` with MKL's `dgemv`. Fitted on
   the 18 unsmoothed double CF cases of the reverse-correlation recording, full
   blocks of four columns use two accumulators with element 0 seeding the first,
