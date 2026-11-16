@@ -417,9 +417,25 @@ fn cases(dir: &Path, file: &str) -> Vec<Value> {
     value["cases"].as_array().unwrap().clone()
 }
 
+fn fixture_roots(recording: Option<PathBuf>, runs: Option<PathBuf>) -> Option<(PathBuf, PathBuf)> {
+    match (recording, runs) {
+        (None, None) => None,
+        (Some(recording), Some(runs)) => Some((recording, runs)),
+        _ => panic!("set both SAMSRF_CGG_DIR and SAMSRF_CGG_RUNS_DIR"),
+    }
+}
+
+#[test]
+fn refuses_partial_fixture_configuration() {
+    assert_eq!(fixture_roots(None, None), None);
+    assert_eq!(fixture_roots(Some("recording".into()), Some("runs".into())), Some(("recording".into(), "runs".into())));
+    assert!(std::panic::catch_unwind(|| fixture_roots(Some("recording".into()), None)).is_err());
+    assert!(std::panic::catch_unwind(|| fixture_roots(None, Some("runs".into()))).is_err());
+}
+
 #[test]
 fn constants_and_gemv_against_the_recording() {
-    let (Some(root), Some(runs_dir)) = (env("SAMSRF_CGG_DIR"), env("SAMSRF_CGG_RUNS_DIR")) else { return };
+    let Some((root, runs_dir)) = fixture_roots(env("SAMSRF_CGG_DIR"), env("SAMSRF_CGG_RUNS_DIR")) else { return };
     let runs = read_runs(&runs_dir);
     let direct = direct_cases(&runs[0]);
     let pipeline = pipeline_cases(&runs);
