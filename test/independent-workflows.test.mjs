@@ -751,3 +751,14 @@ test('the command-line closure follows workspace exports and relative imports', 
   // An asset named without ./ is relative to the module too.
   assert.ok(commandLineClosure(repoRoot, 'packages/deface').includes('packages/runtime-support/src/niimath/niimath.wasm'));
 });
+
+// GitHub rejects a workflow with more than 25 workflow_dispatch inputs. A rejected file fails
+// every push without jobs, even pushes its branch filter leaves out (samsrf-native, #730).
+test('no workflow declares more than 25 workflow_dispatch inputs', async () => {
+  const files = await readdir(new URL('../.github/workflows/', import.meta.url));
+  for (const file of files.filter((name) => /\.ya?ml$/.test(name))) {
+    const flow = YAML.parse(await readFile(new URL(`../.github/workflows/${file}`, import.meta.url), 'utf8'));
+    const inputs = Object.keys(flow.on?.workflow_dispatch?.inputs ?? {});
+    assert.ok(inputs.length <= 25, `${file} declares ${inputs.length} workflow_dispatch inputs; GitHub accepts at most 25`);
+  }
+});

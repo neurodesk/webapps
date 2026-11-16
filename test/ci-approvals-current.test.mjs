@@ -31,7 +31,7 @@ const run = (id, conclusion, overrides = {}) => ({
   ...overrides,
 });
 
-function fixture({ pulls = [pull()], runs = [], latest = runs, jobs = {}, checks = {}, annotations = {}, unavailable = [] } = {}) {
+function fixture({ pulls = [pull()], runs = [], latest = runs, jobs = {}, checks = {}, annotations = {}, unavailable = [], refs = ['heads/main'] } = {}) {
   const calls = [];
   function record(path) {
     calls.push(path);
@@ -66,6 +66,12 @@ function fixture({ pulls = [pull()], runs = [], latest = runs, jobs = {}, checks
     },
     async request(path) {
       record(path);
+      const ref = path.match(/^\/git\/ref\/(.+)$/);
+      if (ref) {
+        const name = ref[1].split('/').map(decodeURIComponent).join('/');
+        if (refs.includes(name)) return { ref: `refs/${name}` };
+        throw Object.assign(new Error('GitHub API returned 404'), { status: 404 });
+      }
       const match = path.match(/^\/actions\/runs\/(\d+)\/attempts\/(\d+)\/jobs\?per_page=1$/);
       assert.ok(match, `Unexpected request: ${path}`);
       return { total_count: jobs[`${match[1]}:${match[2]}`] ?? 0 };
@@ -630,4 +636,41 @@ test('a connection that keeps dropping aborts the report instead of resolving it
   const api = githubApi({ approval, latest: { ...approval, run_attempt: 2, status: 'in_progress', conclusion: null }, drops: 3 });
   await assert.rejects(approvalReport(api.client, 'owner/repo', { now }), error => error.cause?.code === 'UND_ERR_SOCKET');
   assert.equal(api.paths.filter(path => path.endsWith('?head_sha')).length, 3);
+});
+
+const ownRepository = { id: 7, full_name: 'owner/repo' };
+const branchRun = (id, overrides = {}) => run(id, 'failure', {
+  event: 'push', head_branch: 't3/feature', head_repository: ownRepository, repository: ownRepository, ...overrides,
+});
+
+test('a non-PR failure on a deleted branch is obsolete without probing its jobs', async () => {
+  const client = fixture({ pulls: [], runs: [branchRun(1)], refs: ['heads/main'] });
+  const report = await approvalReport(client, 'owner/repo', { now });
+  assert.equal(report.actionable, false);
+  assert.equal(report.counts.obsolete, 1);
+  assert.equal(report.counts.failedWithoutJobs, 0);
+  assert.ok(client.calls.includes('/git/ref/heads/t3/feature'));
+  assert.ok(client.calls.includes('/git/ref/tags/t3/feature'));
+  assert.ok(!client.calls.some(path => path.includes('/jobs')));
+  assert.match(report.body, /closed PRs, deleted branches or older commits/);
+});
+
+test('a non-PR failure on a live branch or tag stays visible', async () => {
+  for (const refs of [['heads/t3/feature'], ['tags/t3/feature']]) {
+    const report = await approvalReport(fixture({ pulls: [], runs: [branchRun(1)], refs }), 'owner/repo', { now });
+    assert.equal(report.counts.failedWithoutJobs, 1, refs[0]);
+    assert.match(report.body, /Other runs on t3\/feature/);
+  }
+});
+
+test('a fork run is never dropped by a branch lookup in this repository', async () => {
+  const client = fixture({ pulls: [], runs: [branchRun(1, { event: 'workflow_run', head_repository: source })], refs: [] });
+  const report = await approvalReport(client, 'owner/repo', { now });
+  assert.equal(report.counts.failedWithoutJobs, 1);
+  assert.ok(!client.calls.some(path => path.startsWith('/git/ref/')));
+});
+
+test('a failed branch lookup aborts instead of hiding or resolving a blocker', async () => {
+  const client = fixture({ pulls: [], runs: [branchRun(1)], unavailable: ['/git/ref/'] });
+  await assert.rejects(approvalReport(client, 'owner/repo', { now }), /502/);
 });

@@ -26,6 +26,26 @@ function workflowKey(run) {
   return [run.workflow_id, run.event, run.head_repository?.id ?? run.head_repository?.full_name, run.head_branch].join(':');
 }
 
+async function refExists(client, ref) {
+  try {
+    await client.request(`/git/ref/${ref.split('/').map(encodeURIComponent).join('/')}`);
+    return true;
+  } catch (error) {
+    if (error.status === 404) return false;
+    throw error;
+  }
+}
+
+// A push or dispatch run whose branch (or tag) is gone can never be superseded: a later
+// commit on a branch that a workflow's push filter leaves out creates no run at all.
+async function refDeleted(client, run) {
+  if (!run.head_branch || !sameSource(run.head_repository, run.repository)) return false;
+  for (const kind of ['heads', 'tags']) {
+    if (await refExists(client, `${kind}/${run.head_branch}`)) return false;
+  }
+  return true;
+}
+
 function needsAttention(run) {
   return (run.status === 'completed' || run.status === 'action_required') &&
     (['failure', 'startup_failure', 'action_required'].includes(run.conclusion) || run.status === 'action_required');
@@ -129,6 +149,10 @@ export async function approvalReport(client, repository, { now = new Date(), day
       counts.obsolete++;
       continue;
     }
+    if (!pull && await refDeleted(client, candidate)) {
+      counts.obsolete++;
+      continue;
+    }
     let run;
     if (pull) {
       run = (await runsAtHead(candidate.head_sha)).get(workflowKey(candidate));
@@ -177,7 +201,7 @@ export async function approvalReport(client, repository, { now = new Date(), day
     [...new Set(group.runs.map(item => item.status))].map(status => `<!-- ci-pr:${group.pull.number}:${status}:${group.sha} -->`));
   const lines = [marker, ...markers, '# CI approvals and runs without jobs', '',
     `Current PR runs and other runs created in the last ${days} days: ${counts.pendingApproval} awaiting approval, ${counts.failedWithoutJobs} failed without jobs, ${counts.jobsUnknown} with job data unavailable.`,
-    `${counts.failedWithJobs} failures with jobs are outside this report. Excluded ${counts.obsolete} runs from closed PRs or older commits and ${counts.superseded} superseded workflow runs or attempts.`,
+    `${counts.failedWithJobs} failures with jobs are outside this report. Excluded ${counts.obsolete} runs from closed PRs, deleted branches or older commits and ${counts.superseded} superseded workflow runs or attempts.`,
     'Exclusion does not establish that checks passed. Successful, cancelled and running attempts are not blockers in this report.', '',
     'Review contributor changes before approving runs. No approvals are granted by this reporter.',
     'A failure without jobs is not a test failure. When no diagnostic is available, inspect the run annotation to determine the cause.',
