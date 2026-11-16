@@ -24,8 +24,12 @@ arguments=(--rm --network host --init
   --volume /var/run/docker.sock:/var/run/docker.sock
   --volume "$SAMSRF_WORK:$SAMSRF_WORK" --volume "$repo:$repo:ro"
   --workdir "$PWD")
+# Pass only the controls that are set: an empty OMP_NUM_THREADS or OMP_DYNAMIC is
+# not "unset" to the OpenMP runtime, which warns and falls back to its defaults.
 for name in MKL_CBWR MKL_NUM_THREADS OMP_NUM_THREADS MKL_DYNAMIC OMP_DYNAMIC; do
-  arguments+=(--env "$name=${!name:-}")
+  if [ -n "${!name:-}" ]; then
+    arguments+=(--env "$name=${!name}")
+  fi
 done
 if [[ "$SAMSRF_LICENSE" =~ ^[0-9]+@[A-Za-z0-9.-]+$ ]]; then
   arguments+=(--env "MLM_LICENSE_FILE=$SAMSRF_LICENSE")

@@ -2,7 +2,8 @@
 # Build the compiled SamSrfAnalysis reference on one licensed Linux host and run
 # every gate of samsrf-native's runtime_cli=build mode on that same host:
 # source MATLAB twice, the custom-HRF check, the compiled image twice, strict
-# compiled-versus-source and repeat comparisons, interruption and failure.
+# compiled-versus-source and repeat comparisons, interruption and failure,
+# then the web app's engine against source and compiled MATLAB (a report).
 # Nothing is published; publish the reported image ID separately once it passes.
 #
 # Usage: build_and_validate.sh NEW_WORK_DIRECTORY LICENSE_FILE_OR_PORT@HOST MATLAB_ROOT
@@ -104,5 +105,14 @@ python3 "$matlab/run_runtime_cli.py" interrupt "$image" "$cli/plan.json" "$cli/b
 mkdir -p "$cli/failure/missing-model"
 cp "$cli/bundle/SamSrf_defaults.json" "$cli/failure/missing-model/"
 python3 "$matlab/run_runtime_cli.py" failure "$image" "$cli/bundle" "$cli/failure/missing-model"
+# 6. The web app's engine on the same bundle, against source and compiled MATLAB
+# on this host (a report: compare_web_cli.py fails only on missing results or a
+# failed run). Node runs offline in a pinned image.
+node_image=node@sha256:7702d8aa4d5910871692af4480eb3ba86f23047a6417a44d857d06c95d060d3f
+docker run --rm --network none --user "$(id -u):$(id -g)" \
+  --volume "$repo:$repo:ro" --volume "$cli:$cli" "$node_image" \
+  node "$matlab/run_web_matrix.mjs" "$cli/plan.json" "$cli/bundle" "$cli/bundle-sha256.json" "$cli/web-1"
+in_builder "$work/venv/bin/python" "$matlab/compare_web_cli.py" "$cli/plan.json" "$cli/web-1" "$cli/source-1" "source MATLAB on this host" "$cli/web-vs-source.json"
+in_builder "$work/venv/bin/python" "$matlab/compare_web_cli.py" "$cli/plan.json" "$cli/web-1" "$cli/compiled-1" "compiled image $image on this host" "$cli/web-vs-compiled.json"
 echo "All gates passed on this host for local image $image."
 echo "Evidence: $cli. Publish this image ID by digest; it has not been pushed."

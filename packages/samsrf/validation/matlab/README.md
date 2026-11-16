@@ -923,7 +923,7 @@ is the only CLI evidence so far. The Runtime references in
 [`validation/container`](../container/README.md) come from Neurodesk's 2024
 SamSrfX image, which reports SamSrf 10.003 and lacks the repairs.
 
-### Compiler access, checked 2026-11-10 and 2026-11-12
+### Compiler access, checked 2026-11-10, 2026-11-12 and 2026-11-16
 
 | Route | Finding |
 | --- | --- |
@@ -935,11 +935,13 @@ SamSrfX image, which reports SamSrf 10.003 and lacks the repairs.
 | Neurodesk organisation | No organisation secret holds a MATLAB token (only `AUTOCOMMIT_FOR_NEUROCOMMAND`, `NEURODESK_GITHUB_TOKEN_ISSUE_AUTOMATION` and `RCLONE_CONFIG` are visible). `neurocontainers`' `build-matlab-standalone.yml` expects a `MATLAB_BATCH_LICENSE_TOKEN` secret that does not exist; its only run failed and it has never compiled anything. |
 | Upstream distribution | SamSrf's changelog says `SamSrfAnalysis` was made "for use in NeuroDesk", and Neurodesk distributes the builds. A full listing of the Neurodesk `build` container (46 objects) on 2026-11-12 found only the 2024 SamSrf zips and a 2024 `SamSrfX.zip`. No public build of 10.4 was found. |
 | Institutional license | Many Campus-Wide Licenses include MATLAB Compiler for staff at no personal cost. Whether one covers this user, and on which machines, is for the user and their institution to confirm. Activation needs the user's MathWorks account, so only the user can take this route. |
+| Institutional license server, checked 2026-11-16 | The user authorised a network license server at their institution (`SERVER <host> ANY 27000`, `USE_SERVER`), held only in an untracked file outside the repository. Its name resolves to a private 10.x address. From this build host (a cloud VM routed through its public gateway, with no VPN interface) TCP 27000 timed out twice, and MATLAB 23.2.0.3097123 in the builder container stopped with License Manager Error -15 (`-15,570`, system error 115, `Feature: MATLAB`). MATLAB never started, so MATLAB Compiler entitlement was not checked. The route needs a host on that institution's network or VPN, with port 27000 and the vendor daemon's port (`ANY` in the file, so dynamic) reachable. |
 | MATLAB Runtime | Free, and not a compiler. The [R2023b Update 11 installer](https://ssd.mathworks.com/supportfiles/downloads/R2023b/Release/11/deployment_files/installer/complete/glnxa64/MATLAB_Runtime_R2023b_Update_11_glnxa64.zip) (4,834,714,979 bytes) is public. `containers.mathworks.com/matlab-runtime` has `r2023b-update-1` to `-9` tags and a moving `r2023b` tag. The Runtime executes a compiled archive; it cannot build one. |
 
 Building therefore needs a MATLAB Compiler license for R2023b Update 11, as a
 batch token for the `build` dispatch, or as a license for one Linux host. That
-host can be this kind of machine, using `licensed-host/`.
+host can be this kind of machine, using `licensed-host/`. With the institutional
+server above, it must also be able to reach that server.
 
 ### Building on one licensed host
 
@@ -1018,12 +1020,16 @@ local image sha256:...` and `Evidence: .../samsrf-cli`. In `$WORK/samsrf-cli`:
 | `compiled-repeat.json` | The compiled image repeated bit for bit. |
 | `compiled-1/receipts`, `compiled-2/receipts` | No network, read-only inputs, the image ID, input hashes unchanged. |
 | `interrupt/`, `failure/` | A prompt nonzero exit on SIGINT, and on a missing model. |
+| `web-1/`, `web-vs-source.json`, `web-vs-compiled.json` | The web engine on the same bundle, held against both executions on this host ([web engine against the CLI matrix](#web-engine-against-the-cli-matrix)). This is a report: it lists exact, differing, refused and unsupported runs, and the driver fails only on missing results or a failed run. |
+
+The archive keeps `bundle/` (11 MB) because the web engine and the maintainers'
+browser run read those exact input bytes.
 
 Return two files and their SHA-256 through whatever channel the maintainers
 name, never with the license:
 
 ```sh
-tar -C "$WORK" --exclude=samsrf-cli/bundle -czf samsrf-cli-evidence.tar.gz samsrf-cli
+tar -C "$WORK" -czf samsrf-cli-evidence.tar.gz samsrf-cli
 docker save samsrf-reference:41ed1e96-r2023b | gzip > samsrf-reference-41ed1e96-r2023b.tar.gz
 sha256sum samsrf-cli-evidence.tar.gz samsrf-reference-41ed1e96-r2023b.tar.gz
 ```
@@ -1037,9 +1043,9 @@ record its digest beside `cli-reference.json`, and dispatch `samsrf-native`
 with `runtime_image=ghcr.io/neurodesk/samsrf-reference@sha256:...` for the
 Runtime-only check on other hosts. That last step needs no license.
 
-Checked without a license on 2026-11-13: `test_licensed_host.py`, `test_cli.py`
-and the other harness tests pass (25, Python 3.12 with
-`requirements-cli.txt`), and the driver refuses a MATLAB root other than
+Checked without a license on 2026-11-13, and again on 2026-11-16 with
+`test_web_cli.py`: all 46 harness tests in this directory pass (Python 3.12
+with `requirements-cli.txt`, none skipped), and the driver refuses a MATLAB root other than
 23.2.0.3097123 and an existing work directory before it does anything.
 
 ### SamSrfAnalysis case matrix
@@ -1193,6 +1199,119 @@ older Neurodesk image's Runtime. The recipe sets `MKL_CBWR=COMPATIBLE` in both
 the build process and generated container. Set `SAMSRF_MATLAB_BATCH=matlab-batch`
 when licensing through a batch token. Then follow the `build` steps in
 `samsrf-native.yml` to run the matrix and the gates.
+
+### Web engine against the CLI matrix
+
+`run_web_matrix.mjs` runs the 24 `cli_plan.py` runs through the web app's
+WebAssembly module (Node, one thread) on the same read-only bundle, after
+checking every bundle file against `bundle-sha256.json`.
+`run_browser_matrix.mjs` runs them in Chromium through the app's own
+`apps/samsrf/src/engine.js` (`createJob`, `runShard`, `mergeShards`) from the
+bundle's file bytes, as the app reads dropped files. Both write one layout, and
+`compare_web_cli.py` holds either against one MATLAB execution: source
+(`source-1`) or compiled (`compiled-1`, `runtime-1`).
+
+Each run's model is the CLI model plus `Data_Precision`, which carries the
+precision that `def_64bit` selects for MATLAB. Bundle paths replace `/input`,
+and CF reads the Benson GIfTI that `prepare_cli_bundle.m` converted into the
+per-precision `.mat`. The Node runner passes the subject-HRF file to the engine
+API as a kernel (`hrf.oldSchool` of the file's `fP`). The app's interface has no
+subject-HRF route, so the browser runner records those four runs as
+`unsupported`.
+
+For every map in the run's contract (`compare_cli.expected_results`) the
+comparator checks two things bitwise:
+
+- MATLAB's `Srf.Data` column over `Srf.Roi`, against the web value cast to
+  MATLAB's class. The cast must be exact, so a single run's web values must
+  already be float32.
+- The exported GIfTI over every vertex.
+
+A map is `exact` only if both agree bit for bit, including nonfinite values
+and the sign of zero. A complex `Srf.Data` makes a map differ wherever its
+imaginary part is nonzero. Otherwise the map `differs`, and the report gives
+the differing vertices, how many of them differ only in the sign of zero, the
+largest absolute, relative and ULP differences, and whether the nonfinite and
+zero masks agree. No tolerance is applied, and refused, unsupported and failed
+runs never count as agreement. Missing results and failed runs exit nonzero.
+`test_web_cli.py` covers this with negative controls: one ULP that the float32
+GIfTI hides, a signed zero, a NaN, an imaginary part, a refusal, an
+unsupported run, a failure, a missing map and a single run whose web value is
+not a float32.
+
+The `runtime_cli` build job, the `runtime_image` job and
+`licensed-host/build_and_validate.sh` run it against every MATLAB execution
+they make. The build job runs it after publication, so a web difference never
+blocks a validated image.
+
+**Interim result against source MATLAB (not the compiled image).** The pinned
+source recording ([run 42928350417](#pinned-source-recording)) was compared on
+2026-11-16. The web engine was package 0.6.20261115 with WASM SHA-256
+`f069b06b0473a4538353063b5acda52c8da4351e812ed870e6dc177132a90f9f`, run on an
+AMD EPYC-Milan host, under Node 24.19.0 and in `node@sha256:7702d8aa…` (Node
+22.23.4), and in Chromium 156.0.8078.4. The two Node runs gave identical
+`maps.f64` and GIfTIs. Chromium, through the app's engine, gave the same
+`maps.f64` and all 176 GIfTIs byte for byte for its 18 succeeded runs. Each
+cell gives the maps that are exact:
+
+| Run | Node vs AMD | Browser vs AMD | Node vs Intel | Browser vs Intel |
+| --- | --- | --- | --- | --- |
+| `prf_gaussian_lh_average_double` | 0/8 | 0/8 | 0/8 | 0/8 |
+| `prf_gaussian_lh_average_single` | 6/8 | 6/8 | 1/8 | 1/8 |
+| `prf_gaussian_lh_concatenate_double` | 0/6 | 0/6 | 0/6 | 0/6 |
+| `prf_gaussian_lh_concatenate_single` | 6/6 | 6/6 | 0/6 | 0/6 |
+| `prf_gaussian_rh_double` | 0/6 | 0/6 | 0/6 | 0/6 |
+| `prf_gaussian_rh_single` | 6/6 | 6/6 | 0/6 | 0/6 |
+| `prf_css_lh_double` | 0/9 | 0/9 | 0/9 | 0/9 |
+| `prf_css_lh_single` | 1/9 | 1/9 | 1/9 | 1/9 |
+| `prf_custom_hrf_lh_double` | 0/8 | unsupported | 3/8 | unsupported |
+| `prf_custom_hrf_lh_single` | 8/8 | unsupported | 1/8 | unsupported |
+| `rc_hull_lh_double` | 0/6 | 0/6 | 0/6 | 0/6 |
+| `rc_hull_lh_single` | 6/6 | 6/6 | 4/6 | 4/6 |
+| `rc_gaussian_lh_double` | 0/7 | 0/7 | 0/7 | 0/7 |
+| `rc_gaussian_lh_single` | refused | refused | refused | refused |
+| `rc_custom_hrf_lh_double` | 0/6 | unsupported | 0/6 | unsupported |
+| `rc_custom_hrf_lh_single` | 6/6 | unsupported | 4/6 | unsupported |
+| `cf_hull_lh_double` | 4/10 | 4/10 | 4/10 | 4/10 |
+| `cf_hull_lh_single` | 8/10 | 8/10 | 5/10 | 5/10 |
+| `cf_summary_lh_double` | 5/7 | 5/7 | 5/7 | 5/7 |
+| `cf_summary_lh_single` | 7/7 | 7/7 | 6/7 | 6/7 |
+| `cf_gaussian_lh_double` | 2/9 | 2/9 | 2/9 | 2/9 |
+| `cf_gaussian_lh_single` | refused | refused | refused | refused |
+| `cf_hull_smooth_global_lh_double` | 4/10 | 4/10 | 4/10 | 4/10 |
+| `cf_hull_smooth_global_lh_single` | 8/10 | 8/10 | 5/10 | 5/10 |
+
+Totals against the AMD host: Node 6 of 24 runs and 77 of 168 maps exact;
+browser 4 runs and 63 of 140 maps exact, with 4 runs unsupported. Against the
+Intel host: no run exact; 45 of 168 and 37 of 140 maps exact. The single
+reverse-correlation Gaussian and single CF Gaussian runs are the public
+refusals (#729).
+
+What the differences are (AMD host):
+
+- **Double preprocessing.** This is the earliest divergence. MATLAB's double
+  `Srf.Y` (detrended and z-scored courses over the ROI) differs from the
+  engine's in 4,985 of 5,250 samples (`prf_gaussian_lh_average_double`) and in
+  5,161 of 5,250 on the one-run right hemisphere, by at most 1.2e-14. The two
+  MATLAB hosts differ from each other in 5,051 and 5,165 samples. The engine
+  matches neither; it differs from the Intel host in 5,101 and 5,209 samples.
+  Single `Srf.Y` is identical to the engine's. Every double noise ceiling then
+  differs at all 18 vertices, by up to 2,250 ULP (2.6e-13 relative), and the
+  double R², Beta, Baseline and reverse-correlation maps differ in the last
+  bits. Fits that land on another optimum differ by more: one or two vertices
+  in each double Gaussian pRF, one vertex of `prf_custom_hrf_lh_double`, and
+  the 11 diverged vertices of `cf_gaussian_lh_double`.
+- **CSS from SamSrfAnalysis.** MATLAB saves a complex `Srf.Data` in both
+  precisions. Single CSS differs at 12 to 13 of 21 vertices and double CSS at
+  14 to 15, by up to 1.8 in x0. The zero masks of single CSS disagree.
+- **Single forward fits.** `prf_gaussian_lh_average_single` differs at one
+  vertex in Beta (1 ULP) and Baseline (5 ULP); its other maps are exact.
+- **Signed zeros.** The `cf_hull` x0 and y0 maps, and Sigma, Beta and Baseline
+  at the 11 rejected vertices of `rc_gaussian_lh_double`, differ only in the
+  sign of zero.
+
+These comparisons are with source MATLAB. They are not compiled-image parity,
+which needs the build.
 
 ## Recorded inputs and focused diagnosis
 

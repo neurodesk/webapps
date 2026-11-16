@@ -1075,6 +1075,21 @@ jobs:
           docker push "$target"
           docker image inspect "$target" --format '{{json .RepoDigests}}' > "$RUNNER_TEMP/samsrf-cli/container-build/published.json"
           cat "$RUNNER_TEMP/samsrf-cli/container-build/published.json"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+      - name: Web engine against MATLAB on this host (report; refusals and unsupported runs listed)
+        env:
+          RUNTIME_CLI: ${{ inputs.runtime_cli }}
+          HOST: ${{ matrix.host }}
+        run: |
+          cli="$RUNNER_TEMP/samsrf-cli"
+          matlab="packages/samsrf/validation/matlab"
+          node "$matlab/run_web_matrix.mjs" "$cli/plan.json" "$cli/bundle" "$cli/bundle-sha256.json" "$cli/web-1"
+          "$RUNNER_TEMP/samsrf-cli-venv/bin/python" "$matlab/compare_web_cli.py" "$cli/plan.json" "$cli/web-1" "$cli/source-1" "source MATLAB on $HOST" "$cli/web-vs-source.json"
+          if [ "$RUNTIME_CLI" = build ]; then
+            "$RUNNER_TEMP/samsrf-cli-venv/bin/python" "$matlab/compare_web_cli.py" "$cli/plan.json" "$cli/web-1" "$cli/compiled-1" "compiled image on $HOST" "$cli/web-vs-compiled.json"
+          fi
       - name: Retain plan, bundle, receipts, outputs and comparisons
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -1127,6 +1142,15 @@ jobs:
         run: |
           cli="$RUNNER_TEMP/samsrf-cli"
           "$RUNNER_TEMP/samsrf-cli-venv/bin/python" packages/samsrf/validation/matlab/compare_cli.py "$cli/plan.json" "$cli/source-1" "$cli/runtime-1" "$cli/runtime-vs-pinned-source.json" || echo 'Cross-host differences recorded; the same-host gate is in the build job.'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+      - name: Web engine against the Runtime-only image on this host (report)
+        run: |
+          cli="$RUNNER_TEMP/samsrf-cli"
+          matlab="packages/samsrf/validation/matlab"
+          node "$matlab/run_web_matrix.mjs" "$cli/plan.json" "$cli/bundle" "$cli/bundle-sha256.json" "$cli/web-1"
+          "$RUNNER_TEMP/samsrf-cli-venv/bin/python" "$matlab/compare_web_cli.py" "$cli/plan.json" "$cli/web-1" "$cli/runtime-1" "compiled image $IMAGE, Runtime only, ubuntu-24.04" "$cli/web-vs-runtime.json"
       - name: Retain receipts, outputs and comparisons
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
