@@ -48,11 +48,17 @@ async function holdImports(page) {
       return loadSeed(...args);
     };
     globalThis.holdDecoded = [];
-    const decode = globalThis.niivue.NVImage.loadFromUrl;
-    globalThis.niivue.NVImage.loadFromUrl = async function loadFromUrl(options) {
+    const decode = globalThis.niivue.NVImage.loadFromFile;
+    globalThis.niivue.NVImage.loadFromFile = async function loadFromFile(options) {
       const image = await decode.call(this, options);
-      const name = options.name || (globalThis.holdDecodedDrawing ? 'decoded-drawing' : '');
+      const name = options.file.name;
       if (name.startsWith('decoded-') || globalThis.holdDecoded.includes(name)) await held(name);
+      return image;
+    };
+    const decodeDrawing = globalThis.niivue.NVImage.loadFromUrl;
+    globalThis.niivue.NVImage.loadFromUrl = async function loadFromUrl(options) {
+      const image = await decodeDrawing.call(this, options);
+      if (globalThis.holdDecodedDrawing) await held('decoded-drawing');
       return image;
     };
     const importInput = app.importInput.bind(app);
@@ -1089,34 +1095,19 @@ test.describe('an import that finishes late', () => {
   test('a replaced structural image whose decode fails leaves the newer one its file', async ({ page }) => {
     const { choose, hold, waiting, resume, ended, loaded, log, viewerIdle } = await holdImports(page);
     await page.evaluate(() => {
-      const decode = globalThis.niivue.NVImage.loadFromUrl;
-      globalThis.niivue.NVImage.loadFromUrl = async function loadFromUrl(options) {
+      const decode = globalThis.niivue.NVImage.loadFromFile;
+      globalThis.niivue.NVImage.loadFromFile = async function loadFromFile(options) {
         const image = await decode.call(this, options);
-        if (options.name === 'decoded-A.nii') throw new Error('the old decoder failed');
+        if (options.file.name === 'decoded-A.nii') throw new Error('the old decoder failed');
         return image;
       };
-      const fetchFile = globalThis.fetch;
-      globalThis.fetch = async (...args) => {
-        if (globalThis.holdFetch) {
-          await new Promise((resolve) => {
-            globalThis.releaseImport.fetch = resolve;
-          });
-        }
-        return fetchFile(...args);
-      };
+      globalThis.holdDecoded.push('B.nii');
     });
     await hold('structural', 'decoded-A.nii');
-    await page.evaluate(() => {
-      globalThis.holdFetch = true;
-    });
-    await choose('structural', 'B.nii');
-    await waiting('fetch');
-    await page.evaluate(() => {
-      globalThis.holdFetch = false;
-    });
+    await hold('structural', 'B.nii');
     await resume('decoded-A.nii');
     expect(await ended('decoded-A.nii')).toBe('AbortError');
-    await resume('fetch');
+    await resume('B.nii');
     expect(await ended('B.nii')).toBe('kept');
     await viewerIdle();
     expect(await loaded()).toMatchObject({ structural: 'B.nii', base: 'B.nii', controllerBase: 'B.nii', viewer: ['B.nii'] });
