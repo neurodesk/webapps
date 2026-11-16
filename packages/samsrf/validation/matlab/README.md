@@ -2484,6 +2484,92 @@ void's size swept across the tolerance, and two-vertex contacts as controls.
 It would need its own pre-registration; its predictions under H_M1 and under
 the experimental model would come from the committed variants.
 
+### Controlled touching regions and enclosed voids (round 7)
+
+The previous section left open whether MATLAB merges regions that touch at
+single vertices around an enclosed void, which is how H_M and H_M1 explain the
+932 and 1607 holes. Round 7 tests that on shapes built for it.
+
+**Shapes** (`polyshape-reproducers-7.json`, from `polyshape_controlled.py`): 148
+single-ring shapes, 592 cases.
+- Pinwheels: k = 3-6 tips touching at single corners around a regular void,
+  swept from 0.5 to 1e4 x 2e-8.
+- Lenses: two regions touching at two vertices around a void.
+- Controls: the pinwheel with the void filled, the pinwheel with its corners
+  split so that the tips do not touch, and the 932 and 1607 reproducers.
+- Each shape is drawn at two rotations and recorded four ways: as drawn,
+  reversed from another start, translated, and scaled.
+
+43 cases are discovery cases and 549 held out.
+
+**Pre-registration.** The experimental model's, H_M's and H_M1's hulls and
+final rings (hole flags and vertex sets) were frozen by a SHA-256 before the
+first recording, together with the comparison and decision rules, stop rules
+and a two-dispatch budget (`polyshape-reproducers-7-predictions.md`, commit
+bc8ce6313). The models' predictions differed on 464 to 496 cases.
+
+**Recording.** Run
+[43697002946](https://github.com/neurodesk/webapps/actions/runs/43697002946)
+recorded the round on two AMD CPUs, an EPYC 9V74 and an EPYC 7763.
+- Same-host repeats are exact, and all 168 arrays are byte-identical across
+  the hosts.
+- Rounds 1-6 equal the earlier pin.
+- There was no Intel host in this run.
+
+Agreement with MATLAB, as pre-registered (hull and every ring's hole flag and
+vertex set; for the reproducers hull and ring counts), discovery / held out:
+
+| Family | Experimental model | H_M | H_M1 | MATLAB's topology |
+| --- | --- | --- | --- | --- |
+| pinwheel | 18/18, 270/270 | 0/18, 0/270 | 0/18, 0/270 | k separate solids, no hole, at every void size |
+| filled | 2/2, 30/30 | 2/2, 30/30 | 2/2, 30/30 | one solid |
+| lens | 6/9, 34/63 | 0/9, 16/63 | 6/9, 34/63 | two solids, or one where the rotated void is at most 2 x 2e-8 wide |
+| gapped | 1/12, 45/180 | 0/12, 0/180 | 0/12, 0/180 | 3-12 solids, some holes |
+| reproducer | 0/2, 0/6 | 0/2, 0/6 | 0/2, 0/6 | 2 solids and 1 hole (932), 5 and 1 (1607) |
+
+Results:
+
+- **H_M and H_M1 are rejected.** On every pinwheel, at every void size,
+  rotation, start, direction, translation and scale, MATLAB keeps the k tips as
+  separate solids and reports no hole. Each ring's hole flag and vertex set
+  match the experimental model bit for bit. This comparison does not check
+  edge connectivity or boundary order. MATLAB therefore does not merge regions merely
+  because they touch at single vertices around a void. The touching-ring
+  account of the 932 and 1607 holes, which their geometry suggested, does not
+  hold as a general rule.
+- **Lenses.** MATLAB keeps two solids where the experimental model gives:
+  - one solid, when the unrotated void is at most 1.5 x 2e-8 wide;
+  - one solid with a touching hole, when the rotated void is at least
+    3 x 2e-8 wide (the same point set, represented differently).
+- **The reproducers' holes** remain unexplained by all three models.
+
+By the pre-registered stop rule, the round ended after one dispatch: no
+model failed only across a single interval between adjacent sizes. The
+experimental model, production and their baselines are unchanged.
+
+What the hole really depends on in 932 and 1607 is open. It is not touching at
+single vertices alone, since the pinwheels touch that way and keep no hole.
+
+`polyshape_reproducers_match_recording` holds round 7 on both hosts:
+- every case rebuilt from the exact base shapes, with unique identities;
+- the predictions digest;
+- MATLAB's hole flags read as binary, one per boundary;
+- an independent frozen digest of MATLAB's ring membership, hole flags and
+  hull vertex bits, with case, ring and vertex counts separating the records;
+- each model's frozen agreement, per case;
+- the family inventory: pinwheels 288 / 288 / 0 / 0, filled 32 for all
+  models, reproducers 0 for all.
+
+`controlled_predictions_match_their_preregistered_digest` recomputes the
+digest without a recording. Each of the following makes the gate fail:
+- deleting the lens family;
+- duplicating a case;
+- duplicating a shape identity;
+- changing one recorded boundary vertex by one ULP with the ring counts
+  unchanged, including a case where all three models already disagree;
+- flipping a frozen agreement;
+- changing the prediction digest.
+
 ### What is established and what is not
 
 Established on the pinned recordings (both hosts identical):

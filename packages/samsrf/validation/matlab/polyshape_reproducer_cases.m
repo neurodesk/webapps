@@ -11,7 +11,52 @@ function [polygons, parameters] = polyshape_reproducer_cases(originalClouds, spe
 % compact round, polyshape-reproducers-4.json and later: spec.masks holds one
 % bitmask of 1-based indices into cloud spec.cloud per case, untransformed),
 % 8 perturbation (see below).
-roles = {'original', 'minimal', 'chain', 'oneDeleted', 'order', 'scale', 'reproducer', 'reduction', 'perturbation'};
+roles = {'original', 'minimal', 'chain', 'oneDeleted', 'order', 'scale', 'reproducer', 'reduction', 'perturbation', 'controlled'};
+if isfield(spec, 'shapes')
+    % 9 controlled (polyshape-reproducers-7.json): exact base shapes, each case one
+    % shape flipped when reversed, circshifted by -shift and transformed.
+    % parameters: [shape index (0-based) role reversed shift transform].
+    shapes = spec.shapes;
+    if ~iscell(shapes)
+        shapes = num2cell(shapes);
+    end
+    bases = cell(1, numel(shapes));
+    for k = 1:numel(shapes)
+        % jsondecode reads [["x","y"], ...] as a cell of 2-element cells (or a
+        % char/cell matrix): flatten to x1, y1, x2, y2, ...
+        hex = shapes{k}.points;
+        if iscell(hex) && ~isempty(hex) && iscell(hex{1})
+            hex = reshape(vertcat(hex{:}), 2, [])';
+        end
+        assert(iscell(hex) && size(hex, 2) == 2, 'shape points must decode to N x 2 hex strings');
+        bases{k} = [hex2num(char(hex(:, 1))) hex2num(char(hex(:, 2)))];
+    end
+    items = spec.cases;
+    if ~iscell(items)
+        items = num2cell(items);
+    end
+    polygons = cell(1, numel(items));
+    parameters = zeros(numel(items), 5);
+    for i = 1:numel(items)
+        c = items{i};
+        Q = bases{c.shape + 1};
+        if c.reversed
+            Q = flipud(Q);
+        end
+        Q = circshift(Q, -c.shift, 1);
+        switch c.transform
+            case 1
+                Q = Q + [0.37 -1.21];
+            case 2
+                Q = Q * 1e-2;
+            case 3
+                Q = Q * 1e2;
+        end
+        polygons{i} = Q;
+        parameters(i, :) = [c.shape, find(strcmp(roles, spec.role)) - 1, c.reversed, c.shift, c.transform];
+    end
+    return
+end
 if isfield(spec, 'perturbations')
     % 8 perturbation (polyshape-reproducers-6.json): the reproducer spec.indices
     % of cloud spec.cloud with one coordinate replaced by an exact double, then

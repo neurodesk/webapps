@@ -142,6 +142,24 @@ pub(crate) fn stages_of_boundaries(boundaries: &[Vec<[f64; 2]>]) -> Result<Optio
     stages_of_boundaries_with(boundaries, Hypothesis::default())
 }
 
+/// A final ring: whether it is a hole, and its vertices in input coordinates.
+pub type FinalRing = (bool, Vec<[f64; 2]>);
+
+/// The final rings of the model under a rule variant, in input coordinates, each
+/// with whether it is wound negatively (a hole): surviving input vertices keep
+/// their coordinates, new ones are unsnapped from the grid.
+pub(crate) fn final_rings_with(points: &[[f64; 2]], hypothesis: Hypothesis) -> Result<Vec<FinalRing>, Unresolved> {
+    let Some(stages) = stages_of_boundaries_with(std::slice::from_ref(&points.to_vec()), hypothesis)? else { return Ok(Vec::new()) };
+    let coordinates = |k: &Point| stages.original.get(k).copied().unwrap_or_else(|| stages.grid.unsnap(*k));
+    Ok(stages.second_clean.iter().map(|ring| {
+        let doubled: i128 = (0..ring.len()).map(|i| {
+            let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
+            a.0 as i128 * b.1 as i128 - b.0 as i128 * a.1 as i128
+        }).sum();
+        (doubled < 0, ring.iter().map(coordinates).collect())
+    }).collect())
+}
+
 /// `stages_of_boundaries` under a rule variant.
 pub(crate) fn stages_of_boundaries_with(boundaries: &[Vec<[f64; 2]>], hypothesis: Hypothesis) -> Result<Option<Stages>, Unresolved> {
     let boundaries: Vec<Vec<[f64; 2]>> = boundaries.iter().map(|b| b.iter().copied().filter(|p| p[0].is_finite() && p[1].is_finite()).collect()).collect();
