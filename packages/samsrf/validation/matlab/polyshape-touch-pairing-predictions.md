@@ -63,3 +63,26 @@ every output ring at each vertex it visits twice. If MATLAB's pairing is the
 non-strict sweep's, H_NS-post keeps those 5 clouds and 4 cases equal and fixes at
 least as many "cycles" polygons as H_T-post. It is judged by the same rules as
 H_T-post (no hull or vertex-set change allowed, no equal polygon lost).
+
+## H_G, the hull on its own grid (written before H_G was run)
+
+H_NS-post changed no polygon of reproducer rounds 1-7 (identical to the
+experimental model), so it does not explain MATLAB's pairing.
+
+The ordered comparison also separates a later stage: polygons whose rings equal
+MATLAB's in every observable (cycles, edges, hole flags, containing solids) but
+whose hull differs. Reproducer rounds 4 and 5 have 124 and 130, round 1 has 2 and
+the held-out probe clouds 9. In 251 of those 256 reproducer cases the final
+vertices span less than the input, and MATLAB's hull mostly has one vertex more
+than the model's.
+
+H_G: MATLAB's `convhull(shape)` is `polyshape` of the convex hull of
+`shape.Vertices`, so its grid and tolerance come from the span of the final
+vertices, not of the input. The model snaps the final vertices (input coordinates,
+survivors unchanged) to that grid, takes their integer hull and cleans it with
+that tolerance.
+
+Predictions: H_G turns at least 200 of the 256 reproducer cases above into hull
+agreement, and on every recording loses no hull the experimental model matches.
+Decision: H_G is a candidate correction of the experimental model only if it
+loses no hull on any recording; it is then also run against the production model.
