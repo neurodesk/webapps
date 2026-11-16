@@ -4,6 +4,9 @@
 
 ### Patch Changes
 
+- 9637ff4: Compute double connective-field profiles as MATLAB R2023b's `corr(Y, X)`: both courses centred with MATLAB's `mean`, `y' * X` summed in the order MKL's `dgemv` uses on AMD hosts, then divided by `norm(y)` and each seed's norm and limited to [-1, 1]. The port took a dot product of unit-norm courses instead, a last-bit difference in most values. A pre-registered recording fingerprinted the order of double `y' * A`: columns in full blocks of four sum in two lanes, the remaining columns in the trees `?ormqr` uses at their position. That model reproduced every held-out fingerprint and random product on the AMD host, and now every unsmoothed double CF profile of the pinned reverse-correlation recordings equals MATLAB's on its AMD hosts (26 cases, 4,914 values). The same recording confirms that MATLAB, like the port since this release, turns a constant non-zero raw course into rounding noise with unit variance, and it rejects a candidate formula for `gampdf` below shape 1, which keeps its closed form. Smoothed profiles are built from these and are not checked bit for bit. The global signal's across-vertex order, CF Gaussian fits, convex-hull centroids and every Intel host still differ from MATLAB; the public single RC 2D and CF Gaussian refusals stay.
+- Updated dependencies [9637ff4]
+  - @neurodesk/samsrf@0.6.20261116
 - 09a13c8: Preserve singleton detrending's offset removal and reject incompatible dimensions in the factored double solver. Preprocessing reference tests now require both fixture directories, complete unique run identities and exact payload byte lengths.
 - Updated dependencies [09a13c8]
   - @neurodesk/samsrf@0.6.20261116
