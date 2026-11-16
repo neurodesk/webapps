@@ -396,10 +396,6 @@ fn mean_across_vertices(data: &TimeSeries, precision: Precision) -> Vec<f64> {
     across.mean()
 }
 
-fn mean(x: &[f64]) -> f64 {
-    x.iter().sum::<f64>() / x.len() as f64
-}
-
 /// MATLAB `detrend` of a volumes x vertices run: `x - a*(a\\x)` with
 /// `a = [linspace(0, 1, n)' ones(n, 1)]`, solved for every vertex at once. MKL's
 /// `?ormqr` rounds each vertex's `Q' x` by its place among all of them, so a vertex
@@ -476,24 +472,12 @@ fn zscore_single(x: &[f32]) -> Vec<f32> {
     x.iter().map(|value| (value - mu) / sigma).collect()
 }
 
-/// Pearson correlation as MATLAB `corr(x, y)`: NaN when either course is constant or has a NaN.
-fn correlation(x: &[f64], y: &[f64]) -> f64 {
-    let mx = mean(x);
-    let my = mean(y);
-    let mut sxy = 0.0;
-    let mut sxx = 0.0;
-    let mut syy = 0.0;
-    for (&a, &b) in x.iter().zip(y) {
-        sxy += (a - mx) * (b - my);
-        sxx += (a - mx) * (a - mx);
-        syy += (b - my) * (b - my);
-    }
-    sxy / (sxx * syy).sqrt()
-}
-
-/// `(2 * rho) / (1 + rho)` with `rho = corr(odd, even)`: the Spearman-Brown noise ceiling.
+/// `(2 * rho) / (1 + rho)` with `rho = corr(odd, even)`: the Spearman-Brown noise ceiling,
+/// with `corr` in MATLAB's operation order (`css::correlation`). NaN when either course is
+/// constant or has a NaN.
 pub fn noise_ceiling(odd_mean: &[f64], even_mean: &[f64]) -> f64 {
-    let rho = correlation(odd_mean, even_mean);
+    let odd: Vec<num_complex::Complex64> = odd_mean.iter().map(|&value| num_complex::Complex64::new(value, 0.0)).collect();
+    let rho = crate::css::correlation(&odd, even_mean, Precision::Double).re;
     (2.0 * rho) / (1.0 + rho)
 }
 
@@ -1489,7 +1473,8 @@ mod tests {
     #[test]
     fn noise_ceiling_is_nan_for_a_constant_course() {
         assert!(noise_ceiling(&[1.0, 1.0, 1.0], &[1.0, 2.0, 3.0]).is_nan());
-        assert_eq!(noise_ceiling(&[1.0, 2.0, 3.0], &[2.0, 4.0, 6.0]), 1.0);
+        // dot / norm(x) / norm(y) in MATLAB's order rounds this rho = 1 to 1 - 2^-52.
+        assert_eq!(noise_ceiling(&[1.0, 2.0, 3.0], &[2.0, 4.0, 6.0]), 1.0 - f64::EPSILON / 2.0);
     }
 
     #[test]

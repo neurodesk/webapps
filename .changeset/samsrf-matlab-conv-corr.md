@@ -1,0 +1,6 @@
+---
+"@neurodesk/samsrf": patch
+"samsrf": patch
+---
+
+Use MATLAB R2023b's `conv` for every HRF convolution (`prf_convolve_hrf`), MATLAB's `corr` for the noise ceiling and for the reverse-correlation `R^2`, and one `[Y ones] \ X` over every aperture pixel for double reverse-correlation profiles, as the single profiles already did. The coarse search, the fitted Beta and Baseline and the reverse-correlation regressors still used a plain in-order sum, the noise ceiling an unscaled Pearson correlation, and double profiles a centred solve, each a last-bit difference. Against the AMD host of the pinned SamSrfAnalysis recording, the web app now gives MATLAB's maps bit for bit in 11 of 22 supported runs (6 before), including every double pRF Gaussian and custom-HRF run, every double noise ceiling, and every double reverse-correlation `R^2` and `Beta`; every double reverse-correlation profile of the pinned reverse-correlation recordings equals MATLAB's on its AMD hosts (75,600 + 28,800 values). Double convex-hull centroids, double 2D fits, double connective-field profiles, CSS through SamSrfAnalysis and every Intel host still differ. The public single RC 2D and CF Gaussian refusals are unchanged.
