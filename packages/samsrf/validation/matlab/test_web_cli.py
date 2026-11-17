@@ -14,6 +14,7 @@ import cli_plan
 import compare_cli
 import compare_web_cli as web_cli
 from compare_web_cli import Inventory
+import web_cli_outcome
 from test_cli import scratch, write_gifti
 
 PLAN = {run['id']: run for run in cli_plan.plan()['runs']}
@@ -74,6 +75,8 @@ class Fixture:
             if PLAN[run_id]['precision'] == 'single':
                 values = values.astype('<f4').astype('<f8')
             self.maps[run_id] = values
+        # Imaginary parts over every vertex, written to both executions where set.
+        self.imaginary = {}
         self.status = {i: web_cli.expected_web_status(PLAN[i], runner) for i in ids}
         self.receipt = {i: 'succeeded' for i in ids}
         self.write()
@@ -106,8 +109,9 @@ class Fixture:
             mat, labels, names = compare_cli.expected_results(run)
             if self.receipt[run_id] == 'succeeded':
                 (self.matlab / run_id).mkdir()
+                imaginary = self.imaginary.get(run_id)
                 write_srf(self.matlab / run_id / mat, self.maps[run_id][:, ROI].T, [v + 1 for v in ROI],
-                          run['precision'], labels)
+                          run['precision'], labels, imaginary=None if imaginary is None else imaginary[:, ROI].T)
                 for index, name in enumerate(names):
                     write_gifti(self.matlab / run_id / name, self.maps[run_id][index])
             if self.status[run_id] == 'succeeded':
@@ -120,6 +124,10 @@ class Fixture:
                 for index, name in enumerate(files):
                     write_gifti(directory / name, self.maps[run_id][min(index, len(names) - 1)])
                 record.update({'values': labels, 'vertices': VERTICES, 'roi': ROI, 'files': files, 'mapsSha256': sha(data)})
+                if run_id in self.imaginary:
+                    parts = numpy.asarray(self.imaginary[run_id], '<f8').tobytes()
+                    (directory / 'maps.imag.f64').write_bytes(parts)
+                    record['imaginarySha256'] = sha(parts)
             (self.web / f'{run_id}.web.json').write_text(json.dumps(record))
 
     def report(self, expect=None, allow=True):
@@ -189,7 +197,98 @@ class Values(Base):
         self.assertEqual(run['maps'][1]['srfData']['maxAbsolute'], 0)
         self.assertFalse(run['maps'][0]['srfData']['nonfiniteMaskEqual'])
         self.assertEqual(run['maps'][3]['imaginaryNonzero'], 1)
+        self.assertEqual(run['maps'][3]['imaginary']['differing'], 1)
+        self.assertEqual(run['maps'][3]['class'], 'differs')
         self.assertTrue(run['matlabComplex'])
+
+
+class Imaginary(Base):
+    ids = ['prf_css_lh_double']
+
+    def complex_maps(self):
+        imaginary = numpy.zeros_like(self.x.maps[self.id])
+        imaginary[0, ROI] = [-2e-3, 0.0, 5e-4]
+        imaginary[-3, ROI] = [1e-3, -7e-4, 0.0]
+        self.x.imaginary[self.id] = imaginary
+        self.x.write()
+        return imaginary
+
+    def test_matching_imaginary_parts_are_exact(self):
+        self.complex_maps()
+        run = self.x.report()['runs'][0]
+        self.assertEqual(run['class'], 'exact')
+        self.assertTrue(run['matlabComplex'])
+        self.assertEqual([entry['imaginaryNonzero'] for entry in run['maps']][0], 2)
+        self.assertTrue(all(entry['imaginary']['exact'] for entry in run['maps']))
+
+    def test_one_ulp_or_a_signed_zero_in_an_imaginary_part_differs(self):
+        imaginary = self.complex_maps()
+        mat, labels, _ = compare_cli.expected_results(PLAN[self.id])
+        matlab = imaginary[:, ROI].T.copy()
+        matlab[0, 0] = numpy.nextafter(matlab[0, 0], numpy.inf)
+        matlab[1, 0] = -0.0
+        write_srf(self.x.matlab / self.id / mat, self.x.maps[self.id][:, ROI].T, [v + 1 for v in ROI], 'double', labels,
+                  imaginary=matlab)
+        entry = self.x.report()['runs'][0]['maps'][0]
+        self.assertEqual(entry['class'], 'differs')
+        self.assertEqual(entry['imaginary']['differing'], 2)
+        self.assertEqual(entry['imaginary']['signedZeroOnly'], 1)
+        self.assertEqual(entry['imaginary']['maxUlp'], 1)
+        self.assertTrue(entry['srfData']['exact'] and entry['gifti']['exact'])
+
+    def test_a_web_run_without_imaginary_parts_differs_from_complex_matlab_maps(self):
+        self.complex_maps()
+        (self.x.web / self.id / 'maps.imag.f64').unlink()
+        self.x.edit_record(self.id, imaginarySha256=None)
+        run = self.x.report()['runs'][0]
+        self.assertEqual(run['class'], 'differs')
+        self.assertEqual(run['maps'][0]['imaginary']['differing'], 2)
+        self.assertTrue(run['maps'][0]['srfData']['exact'])
+
+    def test_imaginary_file_damage_is_an_inventory_error(self):
+        self.complex_maps()
+        path = self.x.web / self.id / 'maps.imag.f64'
+        good = path.read_bytes()
+        path.write_bytes(good + bytes(8))
+        self.assertEqual(self.run_class(), 'inventory-error')
+        path.write_bytes(good[:-8] + numpy.float64(1.0).tobytes())
+        self.assertIn('hash', self.x.report()['runs'][0]['error'])
+        path.write_bytes(good)
+        self.x.edit_record(self.id, imaginarySha256=None)
+        self.assertIn('differs from its record', self.x.report()['runs'][0]['error'])
+
+
+class Outcome(Base):
+    ids = ['rc_hull_lh_double', 'prf_css_lh_double']
+
+    def check(self, frozen):
+        path = self.x.root / 'report.json'
+        path.write_text(json.dumps(self.x.report()))
+        return web_cli_outcome.differences(frozen, web_cli_outcome.outcome(json.loads(path.read_text())))
+
+    def test_an_unchanged_outcome_passes_and_any_change_fails(self):
+        frozen = web_cli_outcome.outcome(self.x.report())
+        self.assertEqual(frozen['runs']['rc_hull_lh_double'], {'class': 'exact', 'maps': {name: 'exact' for name in compare_cli.expected_results(PLAN['rc_hull_lh_double'])[1]}})
+        self.assertEqual(self.check(frozen), [])
+        mat, labels, _ = compare_cli.expected_results(PLAN[self.id])
+        data = self.x.maps[self.id][:, ROI].T.copy()
+        data[0, 1] = numpy.nextafter(data[0, 1], numpy.inf)
+        write_srf(self.x.matlab / self.id / mat, data, [v + 1 for v in ROI], 'double', labels)
+        found = self.check(frozen)
+        self.assertIn(f'/runs/{self.id}/class: expected "exact", found "differs"', found)
+        self.assertIn(f'/runs/{self.id}/maps/{labels[1]}: expected "exact", found {{"srfData": 1, "imaginary": 0, "gifti": 0}}', found)
+
+    def test_a_better_outcome_or_another_host_also_fails(self):
+        mat, labels, _ = compare_cli.expected_results(PLAN[self.id])
+        data = self.x.maps[self.id][:, ROI].T.copy()
+        data[0, 1] = numpy.nextafter(data[0, 1], numpy.inf)
+        write_srf(self.x.matlab / self.id / mat, data, [v + 1 for v in ROI], 'double', labels)
+        frozen = web_cli_outcome.outcome(self.x.report())
+        self.x.write()
+        self.assertIn('/summary/exactRuns: expected 1, found 2', self.check(frozen))
+        frozen = web_cli_outcome.outcome(self.x.report())
+        frozen['matlab']['cpu'] = 'Intel(R) Xeon(R) Platinum 8573C'
+        self.assertEqual(self.check(frozen), ['/matlab/cpu: expected "Intel(R) Xeon(R) Platinum 8573C", found "AMD EPYC 9V74 80-Core Processor"'])
 
 
 class CommandLine(Base):

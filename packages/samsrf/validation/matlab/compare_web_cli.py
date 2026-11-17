@@ -23,11 +23,13 @@ Each run is classed:
 - `exact` / `differs`: both executions succeeded. Every contract map
   (compare_cli.expected_results) is compared bitwise twice: MATLAB's Srf.Data column
   over Srf.Roi against the web value cast to MATLAB's class (the cast must be exact),
-  and the exported GIfTIs over every vertex. A map is exact only if both agree bit for
-  bit, nonfinite values and the sign of zero included, and MATLAB's imaginary part is
-  zero. Differences report the vertices that differ, those that differ only in the
-  sign of zero, the largest absolute, relative and ULP differences (+0 and -0 are the
-  same ordinal; signedZeroOnly counts them), and whether the masks agree.
+  and the exported GIfTIs over every vertex. Where Srf.Data is complex, its imaginary
+  parts are compared bitwise with the engine's (maps.imag.f64, cast the same way); a
+  web run without that file has +0 imaginary parts. A map is exact only if all three
+  agree bit for bit, nonfinite values and the sign of zero included. Differences
+  report the vertices that differ, those that differ only in the sign of zero, the
+  largest absolute, relative and ULP differences (+0 and -0 are the same ordinal;
+  signedZeroOnly counts them), and whether the masks agree.
 - `refused`: MATLAB succeeded and the engine refused a run it is expected to refuse
   (single RC with a fitted profile, single CF Gaussian).
 - `unsupported`: MATLAB succeeded and the browser runner could not offer the run's
@@ -36,7 +38,8 @@ Each run is classed:
   the expected one. Both sides' statuses are kept.
 - `inventory-error`: missing, extra, empty, truncated or inconsistent files: a GIfTI
   that does not cover every vertex, an ROI that is not unique integers in 1..vertices,
-  maps.f64 of the wrong length, labels or ROI that differ between the executions.
+  maps.f64 or maps.imag.f64 of the wrong length or hash, labels or ROI that differ
+  between the executions.
 
 Web-only files (the polar angle and eccentricity GIfTIs, which SamSrfAnalysis does
 not export) are checked for shape and listed as not compared. MATLAB-only files
@@ -304,7 +307,9 @@ def compare_maps(run, web, web_dir, matlab_dir):
     web_only = sorted(set(files) - set(maps))
     if not set(web_only) <= {f'{stem}_pol.gii', f'{stem}_ecc.gii'}:
         raise Inventory(f'unexpected web files {web_only}')
-    if {path.name for path in web_dir.iterdir()} != set(files) | {'maps.f64'}:
+    imaginary_sha = web.get('imaginarySha256')
+    data_files = {'maps.f64', 'maps.imag.f64'} if imaginary_sha is not None else {'maps.f64'}
+    if {path.name for path in web_dir.iterdir()} != set(files) | data_files:
         raise Inventory('the web run directory differs from its record')
     present = {path.name for path in matlab_dir.iterdir()}
     missing = sorted({mat, *maps} - present)
@@ -319,26 +324,35 @@ def compare_maps(run, web, web_dir, matlab_dir):
         raise Inventory(f'web vertices {web.get("vertices")} differ from MATLAB surface {vertices}')
     if web.get('roi') != roi.tolist():
         raise Inventory('the web ROI differs from MATLAB Srf.Roi (values or order)')
-    raw = (web_dir / 'maps.f64').read_bytes()
-    if len(raw) != 8 * len(labels) * vertices:
-        raise Inventory(f'maps.f64 has {len(raw)} bytes, expected {8 * len(labels) * vertices}')
-    if web.get('mapsSha256') != sha256_bytes(raw):
-        raise Inventory('maps.f64 differs from the hash its record names')
-    rows = numpy.frombuffer(raw, dtype='<f8').reshape(len(labels), vertices)
+    def web_rows(name, recorded_sha):
+        raw = (web_dir / name).read_bytes()
+        if len(raw) != 8 * len(labels) * vertices:
+            raise Inventory(f'{name} has {len(raw)} bytes, expected {8 * len(labels) * vertices}')
+        if recorded_sha != sha256_bytes(raw):
+            raise Inventory(f'{name} differs from the hash its record names')
+        return numpy.frombuffer(raw, dtype='<f8').reshape(len(labels), vertices)
+
+    rows = web_rows('maps.f64', web.get('mapsSha256'))
+    imaginary_rows = numpy.zeros_like(rows) if imaginary_sha is None else web_rows('maps.imag.f64', imaginary_sha)
     results = []
     for index, (label, name) in enumerate(zip(labels, maps)):
         column = data[:, index]
+        matlab_imaginary = numpy.zeros_like(column) if imaginary is None else imaginary[:, index]
         web_values = rows[index, roi]
+        web_imaginary = imaginary_rows[index, roi]
         cast = web_values.astype(column.dtype)
+        cast_imaginary = web_imaginary.astype(column.dtype)
         entry = {'label': label, 'file': name,
-                 'castExact': bool(numpy.array_equal(cast.astype(numpy.float64), web_values, equal_nan=True)),
-                 'srfData': difference(column, cast)}
-        entry['imaginaryNonzero'] = 0 if imaginary is None else int(numpy.count_nonzero(imaginary[:, index]))
+                 'castExact': bool(numpy.array_equal(cast.astype(numpy.float64), web_values, equal_nan=True)
+                                   and numpy.array_equal(cast_imaginary.astype(numpy.float64), web_imaginary, equal_nan=True)),
+                 'srfData': difference(column, cast),
+                 'imaginary': difference(numpy.ascontiguousarray(matlab_imaginary), cast_imaginary)}
+        entry['imaginaryNonzero'] = int(numpy.count_nonzero(matlab_imaginary))
         if entry['imaginaryNonzero']:
-            entry['maxImaginary'] = float(numpy.max(numpy.abs(imaginary[:, index])))
+            entry['maxImaginary'] = float(numpy.max(numpy.abs(matlab_imaginary)))
         entry['gifti'] = difference(surface_map(matlab_dir / name, vertices), surface_map(web_dir / name, vertices))
-        entry['class'] = ('exact' if entry['castExact'] and not entry['imaginaryNonzero']
-                          and entry['srfData']['exact'] and entry['gifti']['exact'] else 'differs')
+        entry['class'] = ('exact' if entry['castExact'] and entry['srfData']['exact']
+                          and entry['imaginary']['exact'] and entry['gifti']['exact'] else 'differs')
         results.append(entry)
     for name in web_only:
         surface_map(web_dir / name, vertices)
@@ -430,8 +444,9 @@ def main(arguments=None):
             maps = []
             for entry in run['maps']:
                 raw = 'exact' if entry['srfData']['exact'] else entry['srfData']['differing']
+                imaginary = 'exact' if entry['imaginary']['exact'] else entry['imaginary']['differing']
                 gifti = 'exact' if entry['gifti']['exact'] else entry['gifti']['differing']
-                maps.append(f'{entry["label"]}: raw={raw} gifti={gifti} '
+                maps.append(f'{entry["label"]}: raw={raw} imaginary={imaginary} gifti={gifti} '
                             f'castExact={entry["castExact"]} imaginaryNonzero={entry["imaginaryNonzero"]}')
             detail = ', '.join(maps)
         else:
