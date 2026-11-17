@@ -1412,46 +1412,83 @@ headers, by its interface. For each run it:
    the app offers a result, downloads the zip with "Download all".
 
 The app replaces the model's file fields with the names of the files it was
-given; `app-model.json` shows that this is the only change. The environment
-records the SHA-256 of the WebAssembly module the page actually fetched.
+given. The environment records the SHA-256 of the WebAssembly module the page
+actually fetched.
 
-Each run gets one status:
+`expectedOutcome` names what the app must do with each run, and the exact text
+of an expected refusal. Each run gets one status:
 
-- `refused`: the app refused the model.
-- `unsupported`: the model names a subject-HRF `.mat`, which the interface
-  has no field for.
-- `succeeded`: the app offered a result.
-- `succeeded-ui-error`: the app offered a result for download, then showed an
-  error. The maps are kept and compared, and the error is reported.
-- `failed`: anything else.
+- `refused`: when the model loaded, the app showed exactly the single-precision
+  refusal the run expects (single RC Gaussian, single CF Gaussian).
+- `unsupported`: after Run, the app showed exactly the core's subject-HRF
+  message (`model: Hrf hrf_custom is an old-school HRF fit file: ...`) and
+  offered nothing.
+- `succeeded`: the status line shows the run's outcome, "Download all" is
+  offered, and the page threw nothing.
+- `succeeded-ui-error`: the app offered a result, then showed an error or
+  threw. The zip is kept and the error is `uiError`. The workflow did not
+  complete.
+- `failed`: anything else, including a crash or a load failure on a run that
+  is expected to be refused.
 
 ```sh
 compare_ui_cli.py PLAN BUNDLE_SHA256 UI_ROOT MATLAB_ROOT REPORT \
-  --expect source|compiled-runtime [--allow-unattested-source-inputs] [--engine-root WEB_ROOT]
+  --expect source|compiled-runtime --engine-root WEB_ROOT [--allow-unattested-source-inputs]
 ```
 
-`compare_ui_cli.py` checks the plan, the bundle manifest and the MATLAB
-receipts exactly as `compare_web_cli.py` does, and the zip against the hash
-its record names. The interface downloads float32 GIfTIs only, so each
-contract map is compared bitwise twice:
+`compare_ui_cli.py` refuses the comparison (exit 2) unless all of these hold:
+
+- PLAN is `cli_plan.py`'s whole matrix. A subset is never compared.
+- The bundle manifest and the MATLAB receipts pass `compare_web_cli.py`'s
+  checks, and WEB_ROOT, the `run_web_matrix.mjs` or `run_browser_matrix.mjs`
+  run of the same plan file, passes them as a web execution.
+- The page served the WebAssembly module that the engine harness ran.
+- UI_ROOT holds exactly the plan's records and their run directories.
+
+Each run directory must hold exactly the files its record names:
+
+- `app-model.json`, whose bytes hash to `appModelSha256` and whose content is
+  the plan model with `Data_Precision` added and the file fields named as the
+  app names them (`aps_bars`, `seed`, `lh_benson`);
+- the zip, whose bytes hash to `zipSha256` and which holds exactly the
+  contract maps and the polar angle and eccentricity maps.
+
+The interface downloads float32 GIfTIs only, so each contract map is compared
+bitwise twice:
 
 - against MATLAB's GIfTI, over every vertex;
 - against MATLAB's `Srf.Data` column over `Srf.Roi`, cast to float32.
 
 A double run's double values cannot be observed through the interface; the
 report says which precision each comparison stands for, and
-`compare_web_cli.py` holds the engine's double rows. With `--engine-root`,
-each downloaded file must also equal byte for byte the file that
-`run_web_matrix.mjs` or `run_browser_matrix.mjs` wrote for that run.
-`nanSignOnly` counts differing values that are NaN on both sides. The zip's
-own hash changes from run to run, because its entries carry the time of the
-download; its GIfTIs do not.
+`compare_web_cli.py` holds the engine's double rows. `nanSignOnly` counts
+differing values that are NaN on both sides. The zip's own hash changes from
+run to run, because its entries carry the time of the download; its GIfTIs do
+not.
 
-`test_ui_cli.py` (18 tests) covers each status, the zip, file and vertex
-checks, the provenance refusals, a float32 ULP, a NaN sign, a GIfTI that
-agrees while `Srf.Data` does not, a double ULP that float32 hides, and the
-run translation in `run_ui_matrix.mjs`. Seven comparator mutations each fail
-it.
+The comparator classes each run from its record, and does not take the
+runner's status on trust:
+
+- `exact` or `differs`: a completed workflow (`succeeded`, no page error).
+- `ui-error`: the app offered a result and then failed. Its downloads are
+  compared and reported (`downloads`), and the run counts as a failure.
+- `refused` or `unsupported`: the record carries the expected text and no zip.
+- `failed` or `inventory-error`: as in `compare_web_cli.py`.
+
+Engine equality is a gate of its own. For every run the app computed, the zip
+must hold exactly the files the engine harness exported, each equal byte for
+byte. MATLAB numerical differences are reported and never gated. The exit
+status is 0 when every run is `exact`, `differs`, `refused` or `unsupported`
+and the engine gate holds, and 1 otherwise; the report's `failures` says why.
+
+`test_ui_cli.py` (34 tests) covers each status and class, the exact contents
+of the UI, engine and MATLAB roots, the saved model, the served module, the
+engine gate, and the command line's exit codes on the whole matrix and its
+refusal of a subset. It also covers a float32 ULP, a NaN sign, a GIfTI that
+agrees while `Srf.Data` does not, and a double ULP that float32 hides.
+`scripted_ui_page.mjs` stands in for the page, so `runOne`'s statuses are
+tested without a browser. Each of 17 mutations that reverts one of these
+checks fails it.
 
 ```sh
 pnpm install --frozen-lockfile
@@ -1472,8 +1509,15 @@ What the interface cannot yet do on this matrix:
   DataView`) and does not throw. `viewer.js` then treats the surface as
   shown, and drawing the first map fails with `Cannot read properties of
   undefined (reading 'layers')` after the result is offered. Every computed
-  run is therefore `succeeded-ui-error`.
+  run is therefore `succeeded-ui-error`, and none completes.
 - **Double values.** Only float32 GIfTIs are offered.
+
+On the retained runs of 2026-11-17 (`ui-2`, the production bundle with module
+`d5ae6ba2…`, against the compiled image and with `run_browser_matrix.mjs`'s
+`browser-1` as the engine root), the comparator exits 1: 18 runs are
+`ui-error` and none is completed, 2 are `refused` and 4 `unsupported`. The
+downloads of 11 of the 18 runs are exact (110 of 140 maps), and all 176
+downloaded files equal the engine harness's.
 
 ## Recorded inputs and focused diagnosis
 

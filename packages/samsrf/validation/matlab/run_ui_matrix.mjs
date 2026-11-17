@@ -13,11 +13,15 @@
 //
 // Usage: node run_ui_matrix.mjs APP_URL PLAN_JSON BUNDLE BUNDLE_SHA256_JSON OUTPUT_ROOT
 //
-// A run the app refuses (when loading the model or when running) is written as
-// `refused` with the app's message; a run whose model needs an input the interface
-// has no field for (the subject-HRF .mat) is `unsupported`. Neither is agreement.
-// A run whose result the app offers for download while its status line shows an
-// error is `succeeded-ui-error`, with that error kept as `uiError`.
+// Each run gets one status, which compare_ui_cli.py checks again:
+// - `refused` / `unsupported`: the app showed exactly the refusal expectedOutcome names
+//   for this run (when the model loads, or when Run is pressed) and offered nothing.
+//   Any other refusal, crash or load failure is `failed`. Neither is agreement.
+// - `succeeded`: the status line shows the run's outcome, the app offers the download,
+//   and the page threw nothing.
+// - `succeeded-ui-error`: the app offered a result, then showed an error or threw. The
+//   zip is kept and the error is `uiError`; the workflow did not complete.
+// - `failed`: anything else.
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
@@ -26,6 +30,26 @@ import { isEntry, treeHashes } from './run_web_matrix.mjs';
 const INPUT = '/input';
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const OUTCOME = { prf: 'pRF maps ready', rc: 'Reverse-correlation maps ready', cf: 'Connective field maps ready' };
+// apps/samsrf/src/models.js parseModel, shown when the model loads.
+const MODEL_REFUSALS = {
+  rc: 'Single precision reverse correlation supports the convex hull; 2D pRF fits need double precision.',
+  cf: 'Single precision connective fields support Fit_pRF 0 or -1; Gaussian fits need double precision.',
+};
+
+/** What the app must do with a plan run; compare_ui_cli.py's expected_ui_outcome says the same. */
+export function expectedOutcome({ algorithm, model, precision }) {
+  if (precision === 'single' && algorithm === 'rc' && (model.Prf_Function ?? 0) !== 0) {
+    return { status: 'refused', stage: 'model', message: MODEL_REFUSALS.rc };
+  }
+  if (precision === 'single' && algorithm === 'cf' && model.Fit_pRF === 1) {
+    return { status: 'refused', stage: 'model', message: MODEL_REFUSALS.cf };
+  }
+  if (typeof model.Hrf === 'string' && model.Hrf.startsWith('hrf_')) {
+    // exes/samsrf/core/src/hrf.rs resolve(): the app has no subject-HRF file route.
+    return { status: 'unsupported', stage: 'run', message: `model: Hrf ${model.Hrf} is an old-school HRF fit file: the caller must load its fP and call hrf::old_school` };
+  }
+  return { status: 'succeeded' };
+}
 
 /** The files and settings a person gives the app for one plan run. */
 export function uiRun(run, bundle) {
@@ -47,10 +71,7 @@ export function uiRun(run, bundle) {
     files.template = [join(dataset, `${hemisphere}_benson.gii`)];
     files.seed = [`${local(model.SeedRoi)}.label`];
   }
-  const unsupported = typeof model.Hrf === 'string' && model.Hrf.startsWith('hrf_')
-    ? `the model's Hrf ${model.Hrf} is a subject-HRF file, and the interface has no field for it`
-    : null;
-  return { algorithm, model, files, combine: option('aver') === '1' ? 'average' : 'concatenate', unsupported };
+  return { algorithm, model, files, combine: option('aver') === '1' ? 'average' : 'concatenate' };
 }
 
 const payload = (path) => ({ name: basename(path), mimeType: 'application/octet-stream', buffer: readFileSync(path) });
@@ -59,7 +80,8 @@ async function statusText(page) {
   return (await page.locator('#statusText').textContent())?.trim() ?? '';
 }
 
-async function runOne(browser, url, run, bundle, directory, served) {
+/** Drives one plan run through the app in a fresh browser context and returns its record. */
+export async function runOne(browser, url, run, bundle, directory, served) {
   const started = performance.now();
   const record = { id: run.id, precision: run.precision, algorithm: run.algorithm };
   const context = await browser.newContext({ acceptDownloads: true, serviceWorkers: 'block' });
@@ -69,10 +91,11 @@ async function runOne(browser, url, run, bundle, directory, served) {
     void response.body().then((body) => { served[response.url()] = sha256(body); }).catch(() => {});
   });
   const page = await context.newPage();
-  const consoleErrors = [];
-  page.on('pageerror', (error) => consoleErrors.push(error.message));
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
   try {
     const plan = uiRun(run, bundle);
+    const expected = expectedOutcome(run);
     record.files = Object.fromEntries(Object.entries(plan.files).map(([slot, paths]) => [slot, paths.map((path) => basename(path))]));
     record.combine = plan.combine;
     await page.goto(url);
@@ -82,9 +105,8 @@ async function runOne(browser, url, run, bundle, directory, served) {
     await page.waitForFunction(() => !/ selected$/.test(document.querySelector('#statusText')?.textContent?.trim() ?? ''));
     const loaded = await statusText(page);
     if (!loaded.startsWith('Model ')) {
-      record.status = 'refused';
-      record.stage = 'model';
-      record.message = loaded;
+      const refused = expected.status === 'refused' && expected.stage === 'model' && loaded === expected.message;
+      Object.assign(record, { status: refused ? 'refused' : 'failed', stage: 'model', message: loaded });
       return record;
     }
     await page.locator('#combine').selectOption(plan.combine);
@@ -99,11 +121,6 @@ async function runOne(browser, url, run, bundle, directory, served) {
     const modelBytes = readFileSync(await saved.path());
     writeFileSync(join(directory, 'app-model.json'), modelBytes);
     record.appModelSha256 = sha256(modelBytes);
-    if (plan.unsupported) {
-      record.status = 'unsupported';
-      record.stage = 'interface';
-      record.message = plan.unsupported;
-    }
     const button = page.locator('#runButton');
     if (!(await button.isEnabled())) throw new Error(`Run is disabled: ${await page.locator('#runHint').textContent()}`);
     // The app locks Run while it works and unlocks it with the outcome or the error in the status line.
@@ -112,35 +129,26 @@ async function runOne(browser, url, run, bundle, directory, served) {
     await page.waitForFunction(() => !document.querySelector('#runButton').disabled, null, { timeout: 3600000 });
     const outcome = await statusText(page);
     record.statusText = outcome;
-    const downloadable = await page.locator('#downloadAll').isEnabled();
-    if (!outcome.includes(OUTCOME[plan.algorithm]) && downloadable && !record.status) {
-      // The app rendered a result and offers its download, then reported an error
-      // (for example while drawing a map). The maps are kept; the error is the run's status.
-      record.status = 'succeeded-ui-error';
-      record.uiError = outcome;
-    } else if (!outcome.includes(OUTCOME[plan.algorithm])) {
-      record.status ??= /is not supported by this port/.test(outcome) ? 'refused' : 'failed';
-      record.stage ??= 'run';
-      record.runMessage = outcome;
+    if (!(await page.locator('#downloadAll').isEnabled())) {
+      const unsupported = expected.status === 'unsupported' && expected.stage === 'run' && outcome === expected.message;
+      Object.assign(record, { status: unsupported ? 'unsupported' : 'failed', stage: 'run', runMessage: outcome });
       return record;
     }
-    if (record.status === 'unsupported') {
-      record.status = 'failed';
-      record.message = `the interface ran a model it cannot express (${plan.unsupported})`;
-    }
+    // The app offers a result: keep it whatever the status line says, so its maps can be compared.
     const [archive] = await Promise.all([page.waitForEvent('download'), page.locator('#downloadAll').click()]);
     const zipBytes = readFileSync(await archive.path());
     writeFileSync(join(directory, archive.suggestedFilename()), zipBytes);
-    Object.assign(record, {
-      status: record.status ?? 'succeeded',
-      zip: archive.suggestedFilename(),
-      zipSha256: sha256(zipBytes),
-    });
+    Object.assign(record, { zip: archive.suggestedFilename(), zipSha256: sha256(zipBytes) });
+    if (outcome.includes(OUTCOME[plan.algorithm]) && !pageErrors.length) {
+      record.status = 'succeeded';
+    } else {
+      Object.assign(record, { status: 'succeeded-ui-error', uiError: pageErrors.length ? pageErrors.join('; ') : outcome });
+    }
   } catch (error) {
     record.status = 'failed';
     record.message = error.message;
   } finally {
-    record.pageErrors = consoleErrors;
+    record.pageErrors = pageErrors;
     record.seconds = Number(((performance.now() - started) / 1000).toFixed(1));
     await context.close();
   }
