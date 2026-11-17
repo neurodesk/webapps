@@ -74,6 +74,11 @@ def sha256_bytes(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def is_sha256(value):
+    """A lowercase hex SHA-256 and nothing else (re.match's $ would also accept a trailing newline)."""
+    return isinstance(value, str) and SHA256.fullmatch(value) is not None
+
+
 def read_json(path):
     try:
         return json.loads(Path(path).read_text())
@@ -131,7 +136,7 @@ def matlab_execution(root, plan, manifest, allow_unattested):
     if environment.get('execution') == 'compiled-runtime':
         kind = 'compiled-runtime'
         image = environment.get('image') or {}
-        if not IMAGE_ID.match(str(image.get('id', ''))):
+        if not IMAGE_ID.fullmatch(str(image.get('id', ''))):
             raise Inventory('the compiled receipts do not name an image ID')
         identity = {'kind': kind, 'image': image,
                     'cpu': cpu_model((environment.get('host') or {}).get('lscpu')),
@@ -182,7 +187,7 @@ def web_execution(root, plan, plan_sha, manifest_sha):
         raise Inventory('the web execution ran another plan file')
     if environment.get('bundleSha256') != manifest_sha:
         raise Inventory('the web execution ran on another bundle manifest')
-    if not SHA256.match(str(environment.get('wasmSha256', ''))):
+    if not is_sha256(environment.get('wasmSha256')):
         raise Inventory('the web environment names no WebAssembly hash')
     allowed = {'environment.json', 'runs.json'}
     records = {}
@@ -293,10 +298,16 @@ def matlab_results(entries, precision, labels):
     return numpy.ascontiguousarray(data), imaginary, roi.astype(numpy.int64) - 1, count
 
 
-def compare_maps(run, web, web_dir, matlab_dir):
-    mat, labels, maps = expected_results(run)
-    if web.get('values') != labels:
-        raise Inventory(f'web map labels {web.get("values")} differ from the contract {labels}')
+def names_in(directory):
+    if not directory.is_dir():
+        raise Inventory(f'missing directory {directory}')
+    return {path.name for path in directory.iterdir()}
+
+
+def web_files(run, web, web_dir):
+    """A succeeded web run's exported files: every contract map, at most the polar angle and
+    eccentricity maps besides, and exactly what its directory holds beside maps.f64."""
+    mat, _, maps = expected_results(run)
     files = web.get('files')
     if not isinstance(files, list) or len(set(files)) != len(files) or not set(maps) <= set(files):
         raise Inventory('the web record does not list every contract map')
@@ -304,15 +315,31 @@ def compare_maps(run, web, web_dir, matlab_dir):
     web_only = sorted(set(files) - set(maps))
     if not set(web_only) <= {f'{stem}_pol.gii', f'{stem}_ecc.gii'}:
         raise Inventory(f'unexpected web files {web_only}')
-    if {path.name for path in web_dir.iterdir()} != set(files) | {'maps.f64'}:
+    if names_in(web_dir) != set(files) | {'maps.f64'}:
         raise Inventory('the web run directory differs from its record')
-    present = {path.name for path in matlab_dir.iterdir()}
+    return files, web_only
+
+
+def matlab_outputs(run, matlab_dir):
+    """A succeeded MATLAB run's files beyond its results: every result present, the rest staged
+    inputs or SamSrf's intermediate files (MATLAB_EXTRA). Returns those, sorted."""
+    mat, _, maps = expected_results(run)
+    present = names_in(matlab_dir)
     missing = sorted({mat, *maps} - present)
     if missing:
         raise Inventory(f'missing MATLAB results {missing}')
     matlab_only = sorted(present - {mat, *maps})
-    if any(not MATLAB_EXTRA.match(name) for name in matlab_only):
+    if any(not MATLAB_EXTRA.fullmatch(name) for name in matlab_only):
         raise Inventory(f'unexpected MATLAB files {matlab_only}')
+    return matlab_only
+
+
+def compare_maps(run, web, web_dir, matlab_dir):
+    mat, labels, maps = expected_results(run)
+    if web.get('values') != labels:
+        raise Inventory(f'web map labels {web.get("values")} differ from the contract {labels}')
+    _, web_only = web_files(run, web, web_dir)
+    matlab_only = matlab_outputs(run, matlab_dir)
     entries = {key: (kind, values) for key, kind, values in read_mat(matlab_dir / mat)}
     data, imaginary, roi, vertices = matlab_results(entries, run['precision'], labels)
     if web.get('vertices') != vertices:
