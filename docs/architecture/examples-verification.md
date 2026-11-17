@@ -78,7 +78,7 @@ A local `pnpm audit:interfaces` uses the network unless `EXAMPLE_ASSET_CACHE`
 is set. CI's `composite-site` job always sets it. Before the audit,
 `node scripts/fetch-example-cache.mjs <directory> --prune` brings the directory
 to the files the audit imports: the first example of each app and the pinned
-files the offline apps' pages load, 374 files and 1.75 GB for 63 apps on
+files the `PAGE_ASSET_APPS` pages load, 374 files and 1.75 GB for 63 apps on
 2026-11-16. It keeps entries that match the lock,
 downloads the rest with retries, checks each download against the lock's
 SHA-256 and size before renaming it into place, and fails with the URL of a
@@ -101,20 +101,27 @@ service worker fetched and the page then cancelled is not counted a second time
 `externalRequestLog` lists each of those requests with its URL, outcome,
 transferred body size and duration.
 
-The apps in `OFFLINE_AUDIT_APPS` (`scripts/lib/example-asset-cache.mjs`),
-dicompare, Deface, Disconnectome, QSMbly, SurfAnnotate and ZARRo, run in cache
-mode without any request to another host. The cache also holds what the
-offline lock pins for them and their page loads before a run, checked like the
-examples: lock kinds `runtime`, `python-runtime`, `python-wheel`,
-`runtime-cdn`, `font`, `example-template` and `example-or-support-data`. For
-dicompare that is Pyodide 0.27.0, its packages and the five PyPI wheels (37
-files and 143 MB, the same files QSMbly's lock entry lists); for the other five
-apps it adds 13 files and 4.0 MB: QSMbly's Tagify script and stylesheet and its
-Inter fonts, SurfAnnotate's Pontano Sans font, and Deface's avg152T1 template,
-face mask and support image. Disconnectome's MNI template is already in the
-cache as the first example of ANTs, Elastix, Greedy and FireANTs. Models (QSMbly's 1.2 GB of ONNX weights), Disconnectome's atlases and
-tract geometry load only when a method runs, which the audit does not do, so
-the cache leaves them out.
+In cache mode the audit runs every app without any request to another host:
+it refuses each one and fails the app with its URL. The nightly run on
+2026-11-16 (`39b32f56a`) recorded no such request for any of the 63 apps at
+either width. Models, atlases, tract geometry and other files an app loads
+only when a method runs never load in the audit, which does not run one; the
+deployed apps still fetch those from their pinned hosts.
+
+The apps in `PAGE_ASSET_APPS` (`scripts/lib/example-asset-cache.mjs`),
+dicompare, Deface, Disconnectome, QSMbly, SurfAnnotate and ZARRo, load pinned
+files before a run, so the cache also holds what the offline lock pins for
+them and their page loads, checked like the examples: lock kinds `runtime`,
+`python-runtime`, `python-wheel`, `runtime-cdn`, `font`, `example-template`
+and `example-or-support-data`. For dicompare that is Pyodide 0.27.0, its
+packages and the five PyPI wheels (37 files and 143 MB, the same files
+QSMbly's lock entry lists); for the other five apps it adds 13 files and
+4.0 MB: QSMbly's Tagify script and stylesheet and its Inter fonts,
+SurfAnnotate's Pontano Sans font, and Deface's avg152T1 template, face mask
+and support image. Disconnectome's MNI template is already in the cache as the
+first example of ANTs, Elastix, Greedy and FireANTs. Models (QSMbly's 1.2 GB
+of ONNX weights), Disconnectome's atlases and tract geometry load only when a
+method runs, so the cache leaves them out.
 
 Before this change, on 2026-11-16, the five apps sent 15 requests at each
 width to other hosts: ZARRo 6, Deface 4, QSMbly 2, Disconnectome 2 and
@@ -134,9 +141,7 @@ every release and cannot be pinned, so the audit answers each index request
 from the lock: the project's one locked wheel with its SHA-256. The hosted app
 resolves live and on 2026-11-12 installed tabulate 0.10.0 and nibabel 5.5.0
 where the lock pins 0.9.0 and 5.3.3; the audit installs the locked ones, as
-the desktop bundle does. For an offline app any other request to another host
-is refused, and the app fails with its URL. Other apps still load models and
-runtimes from other hosts.
+the desktop bundle does.
 
 One app at one width has 420 s (`AUDIT_DEADLINE_MS`). Past that the audit
 closes the page and fails the app with every request still open and how long

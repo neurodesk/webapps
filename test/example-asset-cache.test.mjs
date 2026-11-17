@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
-import { OFFLINE_AUDIT_APPS, absentZarrKey, auditedExampleFiles, auditedOfflineFiles, exampleCachePath, fillExampleCache, loadVerifiedExampleCache, pythonIndexAnswers, pythonIndexProject } from '../scripts/lib/example-asset-cache.mjs';
+import { PAGE_ASSET_APPS, absentZarrKey, auditedExampleFiles, auditedOfflineFiles, exampleCachePath, fillExampleCache, loadVerifiedExampleCache, pythonIndexAnswers, pythonIndexProject } from '../scripts/lib/example-asset-cache.mjs';
 import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
 import { loadAppExamples } from '../scripts/lib/app-examples.mjs';
 import { serveSite } from '../test-utils/serve-site.mjs';
@@ -293,9 +293,9 @@ test('the audit caches the first example of each app, the one it imports', () =>
   assert.deepEqual(auditedExampleFiles([]), []);
 });
 
-test('an offline app\'s audit files are the runtime its lock entry pins, and no other app has any', async () => {
+test('dicompare\'s audit files are the runtime its lock entry pins, and an app outside PAGE_ASSET_APPS has none', async () => {
   const lock = JSON.parse(await readFile(new URL('../registry/offline-assets.lock.json', import.meta.url), 'utf8'));
-  assert.ok(OFFLINE_AUDIT_APPS.includes('dicompare'));
+  assert.ok(PAGE_ASSET_APPS.includes('dicompare'));
   const urls = auditedOfflineFiles({ id: 'dicompare' }, lock).map(file => file.url);
   // What the hosted page fetched from other hosts on 2026-11-12, by kind.
   for (const expected of [
@@ -314,7 +314,7 @@ test('an offline app\'s audit files are the runtime its lock entry pins, and no 
   assert.deepEqual(auditedOfflineFiles({ id: 'neuromorph' }, lock), []);
 });
 
-test('each offline app\'s audit files hold what its page fetched from other hosts, and none of its models', async () => {
+test('each page-asset app\'s audit files hold what its page fetched from other hosts, and none of its models', async () => {
   const lock = JSON.parse(await readFile(new URL('../registry/offline-assets.lock.json', import.meta.url), 'utf8'));
   // What each page fetched from other hosts in the audit on 2026-11-16, besides its example.
   const fetched = {
@@ -328,7 +328,7 @@ test('each offline app\'s audit files hold what its page fetched from other host
     zarro: [],
   };
   for (const [id, expected] of Object.entries(fetched)) {
-    assert.ok(OFFLINE_AUDIT_APPS.includes(id), `${id} runs offline in the audit`);
+    assert.ok(PAGE_ASSET_APPS.includes(id), `${id} has page assets in the audit cache`);
     const urls = auditedOfflineFiles({ id }, lock).map(file => file.url);
     for (const url of expected) assert.ok(urls.includes(url), `${url} is cached for ${id}`);
     for (const url of urls) assert.match(lock.assets[url].sha256, /^[a-f0-9]{64}$/, url);
