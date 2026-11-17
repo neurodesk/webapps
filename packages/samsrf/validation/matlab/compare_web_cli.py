@@ -29,11 +29,12 @@ Each run is classed:
   sign of zero, the largest absolute, relative and ULP differences (+0 and -0 are the
   same ordinal; signedZeroOnly counts them), and whether the masks agree.
 - `refused`: MATLAB succeeded and the engine refused a run it is expected to refuse
-  (single RC with a fitted profile, single CF Gaussian).
+  (single RC with a fitted profile, single CF Gaussian) with exactly the core's text.
 - `unsupported`: MATLAB succeeded and the browser runner could not offer the run's
-  input (a subject-HRF file).
-- `failed`: anything else: MATLAB failed, the web failed, or the web status is not
-  the expected one. Both sides' statuses are kept.
+  input (a subject-HRF file): the record carries exactly the core's subject-HRF text.
+- `failed`: anything else: MATLAB failed, the web failed, the web status is not the
+  expected one, or an expected refusal carries other text (a crash, for example; the
+  run then names `expectedMessage`). Both sides' statuses are kept.
 - `inventory-error`: missing, extra, empty, truncated or inconsistent files: a GIfTI
   that does not cover every vertex, an ROI that is not unique integers in 1..vertices,
   maps.f64 of the wrong length, labels or ROI that differ between the executions.
@@ -107,17 +108,23 @@ def validate_plan(plan, manifest):
             raise Inventory(f'{run["id"]}: the plan model is not the bundle manifest model file')
 
 
-def expected_web_status(run, runner):
+def expected_web_outcome(run, runner):
+    """What the engine must do with a plan run on this runner, with the exact text of an
+    expected refusal; run_web_matrix.mjs's expectedEngineOutcome says the same."""
     model = run['model']
     single = run['precision'] == 'single'
+    # exes/samsrf/core/src/model.rs: Error::NotImplemented.
     if single and run['algorithm'] == 'rc' and model.get('Prf_Function', 0) != 0:
-        return 'refused'
+        return {'status': 'refused',
+                'message': 'Data_Precision=single with a Prf_Function fit is not supported by this port'}
     if single and run['algorithm'] == 'cf' and model.get('Fit_pRF') == 1:
-        return 'refused'
+        return {'status': 'refused', 'message': 'Data_Precision=single with Fit_pRF=1 is not supported by this port'}
     hrf = model.get('Hrf')
     if runner == 'browser' and isinstance(hrf, str) and hrf.startswith('hrf_'):
-        return 'unsupported'
-    return 'succeeded'
+        # exes/samsrf/core/src/hrf.rs resolve(): nothing in the browser loads the subject-HRF file.
+        return {'status': 'unsupported', 'message': f'model: Hrf {hrf} is an old-school HRF fit file: '
+                                                    'the caller must load its fP and call hrf::old_school'}
+    return {'status': 'succeeded'}
 
 
 def normalised_argv(argv):
@@ -373,17 +380,21 @@ def compare_maps(run, web, web_dir, matlab_dir):
 
 
 def compare_run(run, web, matlab, runner, web_root, matlab_root):
-    expected = expected_web_status(run, runner)
+    expected = expected_web_outcome(run, runner)
     report = {'id': run['id'], 'precision': run['precision'], 'algorithm': run['algorithm'],
-              'status': {'web': web['status'], 'matlab': matlab['status'], 'expectedWeb': expected},
+              'status': {'web': web['status'], 'matlab': matlab['status'], 'expectedWeb': expected['status']},
               'maps': []}
     if web.get('message') or matlab.get('message'):
         report['message'] = {'web': web.get('message'), 'matlab': matlab.get('message')}
-    if matlab['status'] != 'succeeded' or web['status'] != expected or web['status'] == 'failed':
+    refusal = 'message' in expected
+    if refusal and web['status'] == expected['status'] and web.get('message') != expected['message']:
+        report['expectedMessage'] = expected['message']
+    if (matlab['status'] != 'succeeded' or web['status'] != expected['status'] or web['status'] == 'failed'
+            or 'expectedMessage' in report):
         report['class'] = 'failed'
         return report
-    if expected in ('refused', 'unsupported'):
-        report['class'] = expected
+    if refusal:
+        report['class'] = expected['status']
         return report
     try:
         maps, complex_data, web_only, matlab_only = compare_maps(run, web, web_root / run['id'], matlab_root / run['id'])
@@ -420,7 +431,8 @@ def compare(plan, plan_sha, manifest, manifest_sha, web_root, matlab_root, expec
             'runs': len(runs),
             **{f'{value}Runs': count(runs, value) for value in ('exact', 'differs', 'refused', 'unsupported', 'failed', 'inventory-error')},
             'matlabFailedRuns': sum(run['status']['matlab'] != 'succeeded' for run in failed),
-            'webUnexpectedRuns': sum(run['status']['web'] != run['status']['expectedWeb'] or run['status']['web'] == 'failed' for run in failed),
+            'webUnexpectedRuns': sum(run['status']['web'] != run['status']['expectedWeb'] or run['status']['web'] == 'failed'
+                                     or 'expectedMessage' in run for run in failed),
             'maps': len(maps),
             'exactMaps': count(maps, 'exact'),
             'differingMaps': count(maps, 'differs'),

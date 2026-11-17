@@ -57,7 +57,7 @@ import numpy
 
 import cli_plan
 from compare_cli import expected_results, read_mat
-from compare_web_cli import (Inventory, difference, expected_web_status, is_sha256, matlab_execution, matlab_outputs,
+from compare_web_cli import (Inventory, difference, expected_web_outcome, is_sha256, matlab_execution, matlab_outputs,
                              matlab_results, names_in, read_json, sha256_bytes, surface_map, validate_plan,
                              web_execution, web_files)
 
@@ -74,16 +74,14 @@ MESSAGE_FIELD = {'model': 'message', 'run': 'runMessage'}
 
 
 def expected_ui_outcome(run):
-    """What the app must do with a plan run; run_ui_matrix.mjs's expectedOutcome says the same."""
-    status = expected_web_status(run, 'browser')
-    if status == 'refused':
-        return {'status': status, 'stage': 'model', 'message': MODEL_REFUSALS[run['algorithm']]}
-    if status == 'unsupported':
-        # exes/samsrf/core/src/hrf.rs resolve(): the app has no subject-HRF file route.
-        return {'status': status, 'stage': 'run',
-                'message': f'model: Hrf {run["model"]["Hrf"]} is an old-school HRF fit file: '
-                           'the caller must load its fP and call hrf::old_school'}
-    return {'status': status}
+    """What the app must do with a plan run; run_ui_matrix.mjs's expectedOutcome says the same. The app
+    refuses at model load what the engine would refuse, and shows the engine's subject-HRF text at Run."""
+    engine = expected_web_outcome(run, 'browser')
+    if engine['status'] == 'refused':
+        return {'status': 'refused', 'stage': 'model', 'message': MODEL_REFUSALS[run['algorithm']]}
+    if engine['status'] == 'unsupported':
+        return {'status': 'unsupported', 'stage': 'run', 'message': engine['message']}
+    return {'status': 'succeeded'}
 
 
 def expected_app_model(run):

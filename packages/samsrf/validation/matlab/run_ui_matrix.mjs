@@ -25,7 +25,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { isEntry, treeHashes } from './run_web_matrix.mjs';
+import { expectedEngineOutcome, isEntry, treeHashes } from './run_web_matrix.mjs';
 
 const INPUT = '/input';
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -36,18 +36,12 @@ const MODEL_REFUSALS = {
   cf: 'Single precision connective fields support Fit_pRF 0 or -1; Gaussian fits need double precision.',
 };
 
-/** What the app must do with a plan run; compare_ui_cli.py's expected_ui_outcome says the same. */
-export function expectedOutcome({ algorithm, model, precision }) {
-  if (precision === 'single' && algorithm === 'rc' && (model.Prf_Function ?? 0) !== 0) {
-    return { status: 'refused', stage: 'model', message: MODEL_REFUSALS.rc };
-  }
-  if (precision === 'single' && algorithm === 'cf' && model.Fit_pRF === 1) {
-    return { status: 'refused', stage: 'model', message: MODEL_REFUSALS.cf };
-  }
-  if (typeof model.Hrf === 'string' && model.Hrf.startsWith('hrf_')) {
-    // exes/samsrf/core/src/hrf.rs resolve(): the app has no subject-HRF file route.
-    return { status: 'unsupported', stage: 'run', message: `model: Hrf ${model.Hrf} is an old-school HRF fit file: the caller must load its fP and call hrf::old_school` };
-  }
+/** What the app must do with a plan run; compare_ui_cli.py's expected_ui_outcome says the same. The app
+ * refuses at model load what the engine would refuse, and shows the engine's subject-HRF text at Run. */
+export function expectedOutcome(run) {
+  const engine = expectedEngineOutcome(run, 'browser');
+  if (engine.status === 'refused') return { status: 'refused', stage: 'model', message: MODEL_REFUSALS[run.algorithm] };
+  if (engine.status === 'unsupported') return { status: 'unsupported', stage: 'run', message: engine.message };
   return { status: 'succeeded' };
 }
 

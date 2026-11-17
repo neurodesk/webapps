@@ -1231,7 +1231,10 @@ and CF reads the Benson GIfTI that `prepare_cli_bundle.m` converted into the
 per-precision `.mat`. The Node runner passes the subject-HRF file to the engine
 API as a kernel (`hrf.oldSchool` of the file's `fP`). The app's interface has no
 subject-HRF route, so the browser runner records those four runs as
-`unsupported`.
+`unsupported` when the engine stops with the core's subject-HRF text.
+`expectedEngineOutcome` names each run's expected refusal and its exact text,
+and both runners record `refused` or `unsupported` only for that text. Any
+other failure, a crash included, is `failed`.
 
 ```sh
 compare_web_cli.py PLAN BUNDLE_SHA256 WEB_ROOT MATLAB_ROOT REPORT \
@@ -1280,26 +1283,37 @@ counts the sign-of-zero differences.
 
 A run is `refused` only where the engine is expected to refuse (single RC with
 a fitted profile, single CF Gaussian), and `unsupported` only for the browser's
-subject-HRF runs, in both cases with MATLAB succeeding. Any other combination
-is `failed`, with both sides' statuses kept. The polar angle and eccentricity
-GIfTIs that the web exports and SamSrfAnalysis does not are checked for shape
-and listed as not compared. MATLAB-only files are listed the same way. No
-tolerance is applied. Failed and inventory-error runs exit nonzero.
+subject-HRF runs, in both cases with MATLAB succeeding. The comparator does not
+take the runner's word for it: the record must carry exactly the core's text
+for that run (`expected_web_outcome`), or the run is `failed` and names
+`expectedMessage`. Any other combination is `failed`, with both sides'
+statuses kept. A MATLAB failure does not hide a wrong web result: the summary
+counts it in `matlabFailedRuns` and the web side in `webUnexpectedRuns`. The
+polar angle and eccentricity GIfTIs that the web exports and SamSrfAnalysis
+does not are checked for shape and listed as not compared. MATLAB-only files
+are listed the same way. No tolerance is applied. Failed and inventory-error
+runs exit nonzero.
 
-`test_web_cli.py` (24 tests) builds full-provenance fixtures and covers each
+`test_web_cli.py` (31 tests) builds full-provenance fixtures and covers each
 refusal and inventory rule with a negative control:
 
 - one ULP that the float32 GIfTI hides, a signed zero, a NaN and an imaginary
   part;
 - ULPs across zero in both precisions;
 - a MATLAB failure behind a web refusal, and unexpected web statuses;
+- a crash or another refusal recorded as the expected refusal, beside a MATLAB
+  failure too, and on the whole browser matrix through the command line;
+- each runner's `expectedEngineOutcome` and `failureStatus` against the
+  comparator, for every run;
 - an extra `maps.f64` byte, a duplicate, zero, out-of-range or fractional ROI,
   empty and one-vertex GIfTIs, and corrupt or extra files;
 - a stale plan or bundle hash and a model changed to TR 999;
 - source receipts presented as compiled, and malformed compiled receipts.
 
 Eight comparator mutations (the earlier ULP mapping, the ROI, argv, kind and
-GIfTI-length checks, MATLAB failures and truncation) each fail the suite.
+GIfTI-length checks, MATLAB failures and truncation) each fail the suite. So do
+three that drop the exact-text check, its count in `webUnexpectedRuns`, or
+`failureStatus`'s text match.
 
 The `runtime_cli` and `runtime_image` jobs run both runners and the comparator
 against every MATLAB execution they make. The build job runs them after
