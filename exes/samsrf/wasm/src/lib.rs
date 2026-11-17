@@ -825,6 +825,7 @@ impl Job {
             ("maps", maps_object(&set.maps)),
             ("raw", set.raw.as_ref().map_or(JsValue::NULL, maps_object)),
             ("analysed", analysed),
+            ("imaginary", set.imaginary.as_deref().map_or(JsValue::NULL, f64s)),
         ]))
     }
 }
