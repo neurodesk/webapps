@@ -106,6 +106,21 @@ pub struct Hypothesis {
     pub single_contact: bool,
     /// H_I: drop a cycle that any start and direction of the clean empties.
     pub start_independent: bool,
+    /// H_T-pre: re-pair each union's rings at touch vertices (`left_pairing`)
+    /// before they are cleaned.
+    pub touch_pairing_pre: bool,
+    /// H_T-post: re-pair the final rings at touch vertices (`left_pairing`); the
+    /// vertex set and hull do not change.
+    pub touch_pairing_post: bool,
+    /// H_NS-post: unite the final rings again with Clipper's non-strict union and
+    /// split each output ring at every vertex it visits twice.
+    pub nonstrict_post: bool,
+    /// H_G: `convhull` is `polyshape` of the hull of the final vertices, on the
+    /// grid and tolerance of their own span.
+    pub hull_own_grid: bool,
+    /// H_G2: `convhull` is the model's own `polyshape` of the convex hull of the
+    /// final vertices (another full pass, on the hull's own grid).
+    pub hull_polyshape: bool,
 }
 
 /// `simplify` under a rule variant.
@@ -114,7 +129,10 @@ pub(crate) fn simplify_with(points: &[[f64; 2]], hypothesis: Hypothesis) -> Resu
     let coordinates = |k: &Point| stages.original.get(k).copied().unwrap_or_else(|| stages.grid.unsnap(*k));
     Ok(Simplified {
         vertices: stages.second_clean.iter().flatten().map(coordinates).collect(),
-        hull: (stages.hull.len() >= 3).then(|| stages.hull.iter().map(coordinates).collect()),
+        hull: match &stages.hull_values {
+            Some(values) => (values.len() >= 3).then(|| values.clone()),
+            None => (stages.hull.len() >= 3).then(|| stages.hull.iter().map(coordinates).collect()),
+        },
     })
 }
 
@@ -129,6 +147,8 @@ pub(crate) struct Stages {
     pub second_union: Vec<Vec<Point>>,
     pub second_clean: Vec<Vec<Point>>,
     pub hull: Vec<Point>,
+    /// H_G2's hull in input coordinates, replacing `hull` where set.
+    pub hull_values: Option<Vec<[f64; 2]>>,
 }
 
 /// The model's stages, `None` for an empty point set.
@@ -205,12 +225,47 @@ pub(crate) fn stages_of_boundaries_with(boundaries: &[Vec<[f64; 2]>], hypothesis
     };
     let union = |paths: &[Vec<Point>]| simplify_even_odd(paths).map_err(Unresolved::Clipper);
     let (first_union, first_union_order) = super::clipper::simplify_even_odd_traced(&rings).map_err(Unresolved::Clipper)?;
-    let first_clean = if hypothesis.merge_touching { cleaned(&merged_cycles(&first_union, hypothesis.single_contact)) } else { cleaned(&first_union) };
+    let pre = |paths: Vec<Vec<Point>>| if hypothesis.touch_pairing_pre { left_pairing(&paths) } else { paths };
+    let first_clean = if hypothesis.merge_touching { cleaned(&merged_cycles(&first_union, hypothesis.single_contact)) } else { cleaned(&pre(first_union.clone())) };
     let second_union = union(&first_clean)?;
-    let second_clean = cleaned(&second_union);
+    let second_clean = cleaned(&pre(second_union.clone()));
+    let second_clean = if hypothesis.touch_pairing_post { left_pairing(&second_clean) } else { second_clean };
+    let second_clean = if hypothesis.nonstrict_post {
+        super::clipper::union_even_odd(&second_clean, false).map_err(Unresolved::Clipper)?.iter().flat_map(|r| split_at_repeats(r)).collect()
+    } else { second_clean };
     let hull = clean(&integer_hull(second_clean.iter().flatten().copied().collect()), grid.tolerance);
     let ring = rings.concat();
-    Ok(Some(Stages { grid, original, ring, first_union, first_union_order, first_clean, second_union, second_clean, hull }))
+    let mut stages = Stages { grid, original, ring, first_union, first_union_order, first_clean, second_union, second_clean, hull, hull_values: None };
+    if hypothesis.hull_own_grid {
+        stages.hull = hull_on_own_grid(&stages)?;
+    }
+    if hypothesis.hull_polyshape {
+        let coordinates = |k: &Point| stages.original.get(k).copied().unwrap_or_else(|| stages.grid.unsnap(*k));
+        let convex: Vec<[f64; 2]> = integer_hull(stages.second_clean.iter().flatten().copied().collect()).iter().map(coordinates).collect();
+        let again = stages_of_boundaries_with(&[convex], Hypothesis::default())?;
+        stages.hull_values = Some(again.map(|inner| {
+            let back = |k: &Point| inner.original.get(k).copied().unwrap_or_else(|| inner.grid.unsnap(*k));
+            inner.second_clean.iter().flatten().map(back).collect()
+        }).unwrap_or_default());
+    }
+    Ok(Some(stages))
+}
+
+/// H_G's hull in the input grid's units: the final vertices in input coordinates
+/// are snapped to the grid of their own span, their integer hull is cleaned with
+/// that grid's tolerance, and each hull vertex is mapped back to the final vertex
+/// it came from.
+fn hull_on_own_grid(stages: &Stages) -> Result<Vec<Point>, Unresolved> {
+    let coordinates = |k: &Point| stages.original.get(k).copied().unwrap_or_else(|| stages.grid.unsnap(*k));
+    let finals: Vec<Point> = stages.second_clean.iter().flatten().copied().collect();
+    let values: Vec<[f64; 2]> = finals.iter().map(coordinates).collect();
+    let Some(own) = Grid::new(&values)? else { return Ok(Vec::new()) };
+    let mut back: HashMap<Point, Point> = HashMap::new();
+    for (k, v) in finals.iter().zip(&values) {
+        back.entry(own.snap(v)).or_insert(*k);
+    }
+    let hull = clean(&integer_hull(back.keys().copied().collect()), own.tolerance);
+    Ok(hull.iter().map(|q| back[q]).collect())
 }
 
 /// The vertices of MATLAB's `polyshape(points)` (in no particular ring order) and
@@ -461,6 +516,84 @@ fn merged_cycles(rings: &[Vec<Point>], single_contact: bool) -> Vec<Vec<Point>> 
     cycles
 }
 
+/// H_T's boundary cycles: every directed ring edge (the region on its left, as
+/// Clipper writes rings) is traced taking the most counter-clockwise turn at each
+/// vertex, so filled sectors that meet at a vertex stay in separate cycles; each
+/// cycle is then split at every vertex it visits twice, which leaves an unfilled
+/// face touching one cycle at a vertex as a separate, negatively wound ring.
+fn left_pairing(rings: &[Vec<Point>]) -> Vec<Vec<Point>> {
+    let mut edges: Vec<(Point, Point)> = Vec::new();
+    for ring in rings {
+        for i in 0..ring.len() {
+            edges.push((ring[i], ring[(i + 1) % ring.len()]));
+        }
+    }
+    let mut outgoing: HashMap<Point, Vec<usize>> = HashMap::new();
+    for (k, edge) in edges.iter().enumerate() {
+        outgoing.entry(edge.0).or_default().push(k);
+    }
+    // Counter-clockwise angle from `base` to `d`, as an exact sort key: the half
+    // (0 for [0, pi), 1 for [pi, 2 pi)) and then the cross product.
+    let half = |base: (i128, i128), d: (i128, i128)| {
+        let c = base.0 * d.1 - base.1 * d.0;
+        let dot = base.0 * d.0 + base.1 * d.1;
+        u8::from(!(c > 0 || (c == 0 && dot > 0)))
+    };
+    let ccw_less = |base: (i128, i128), d: (i128, i128), e: (i128, i128)| {
+        let (hd, he) = (half(base, d), half(base, e));
+        if hd != he { hd < he } else { d.0 * e.1 - d.1 * e.0 > 0 }
+    };
+    let direction = |a: Point, b: Point| ((b.0 - a.0) as i128, (b.1 - a.1) as i128);
+    let mut used = vec![false; edges.len()];
+    let mut cycles = Vec::new();
+    for start in 0..edges.len() {
+        if used[start] {
+            continue;
+        }
+        let mut walk = Vec::new();
+        let mut e = start;
+        loop {
+            used[e] = true;
+            walk.push(edges[e].0);
+            let (a, v) = edges[e];
+            let back = direction(v, a);
+            // The most counter-clockwise turn is the outgoing edge with the largest
+            // counter-clockwise angle from the way back.
+            let next = outgoing[&v].iter().copied().filter(|&k| !used[k] || k == start).filter(|&k| edges[k].1 != a || outgoing[&v].len() == 1)
+                .fold(None, |best: Option<usize>, k| match best {
+                    Some(b) if !ccw_less(back, direction(v, edges[b].1), direction(v, edges[k].1)) => Some(b),
+                    _ => Some(k),
+                });
+            match next {
+                Some(k) if k != start => e = k,
+                _ => break,
+            }
+        }
+        cycles.extend(split_at_repeats(&walk));
+    }
+    cycles
+}
+
+/// A closed walk split into simple cycles at every vertex it visits twice
+/// (cycles of fewer than three vertices dropped).
+fn split_at_repeats(walk: &[Point]) -> Vec<Vec<Point>> {
+    let mut cycles = Vec::new();
+    let mut stack: Vec<Point> = Vec::new();
+    for &p in walk {
+        if let Some(i) = stack.iter().position(|&q| q == p) {
+            let loop_: Vec<Point> = stack.split_off(i);
+            if loop_.len() >= 3 {
+                cycles.push(loop_);
+            }
+        }
+        stack.push(p);
+    }
+    if stack.len() >= 3 {
+        cycles.push(stack);
+    }
+    cycles
+}
+
 /// Andrew's monotone chain over grid points, counter-clockwise from the lowest
 /// point, without collinear vertices; empty for fewer than three corners.
 fn integer_hull(mut points: Vec<Point>) -> Vec<Point> {
@@ -590,6 +723,24 @@ mod tests {
         }
         // Without merging, the experimental model keeps the three rings apart.
         assert_eq!(cleaned_rings_unmerged(&rings).len(), 3);
+    }
+
+    #[test]
+    fn left_pairing_splits_a_hole_touching_twice_and_keeps_one_touching_once() {
+        let doubled = |r: &[Point]| -> i128 { (0..r.len()).map(|i| r[i].0 as i128 * r[(i + 1) % r.len()].1 as i128 - r[(i + 1) % r.len()].0 as i128 * r[i].1 as i128).sum() };
+        // A square with a diamond hole touching it at (0, 5) and (10, 5), as Clipper
+        // writes it (solid counter-clockwise, hole clockwise): H_T gives two solids.
+        let outer = vec![(0, 0), (10, 0), (10, 5), (10, 10), (0, 10), (0, 5)];
+        let lens_hole = vec![(0, 5), (5, 8), (10, 5), (5, 2)];
+        let split = left_pairing(&[outer.clone(), lens_hole]);
+        assert_eq!(split.len(), 2);
+        assert!(split.iter().all(|r| doubled(r) > 0));
+        // A hole touching the square at one vertex stays a hole.
+        let pinched = vec![(0, 5), (5, 8), (8, 5), (5, 2)];
+        let kept = left_pairing(&[outer, pinched]);
+        assert_eq!(kept.len(), 2);
+        assert_eq!(kept.iter().filter(|r| doubled(r) < 0).count(), 1);
+        assert_eq!(split_at_repeats(&[(0, 0), (1, 0), (1, 1), (0, 0), (-1, 0), (-1, -1)]).len(), 2);
     }
 
     fn cleaned_rings_unmerged(rings: &[Vec<Point>]) -> Vec<Vec<Point>> {

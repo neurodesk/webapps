@@ -302,6 +302,8 @@ struct Clipper {
     ghost_joins: Vec<Join>,
     maxima: Vec<i64>,
     intersections: Vec<IntersectNode>,
+    /// Clipper's `StrictlySimple`; only the diagnostic `union_even_odd` turns it off.
+    strict: bool,
 }
 
 /// `SimplifyPolygons(paths, pftEvenOdd)`: a strictly simple `Execute(ctUnion)`
@@ -317,7 +319,18 @@ pub(crate) type Traced = (Vec<Vec<Point>>, Vec<Vec<usize>>);
 
 /// `simplify_even_odd` with each output vertex's creation order (diagnostics).
 pub(crate) fn simplify_even_odd_traced(paths: &[Vec<Point>]) -> Result<Traced, Failed> {
+    union_traced(paths, true)
+}
+
+/// An even-odd `Execute(ctUnion)` with `StrictlySimple` set as given (diagnostics,
+/// #732: the H_NS rule variant).
+pub(crate) fn union_even_odd(paths: &[Vec<Point>], strict: bool) -> Result<Vec<Vec<Point>>, Failed> {
+    union_traced(paths, strict).map(|(paths, _)| paths)
+}
+
+fn union_traced(paths: &[Vec<Point>], strict: bool) -> Result<Traced, Failed> {
     let mut c = Clipper {
+        strict,
         edges: Vec::new(),
         minima: Vec::new(),
         current_lm: 0,
@@ -874,7 +887,9 @@ impl Clipper {
             }
             self.fixup_out_polygon(i);
         }
-        self.do_simple_polygons();
+        if self.strict {
+            self.do_simple_polygons();
+        }
         Ok(())
     }
 
@@ -1730,7 +1745,7 @@ impl Clipper {
                 }
                 // Strictly simple: give touching edges a vertex each (type-3 join).
                 let prev = self.edges[e].prev_in_ael;
-                if self.edges[e].out_idx >= 0 && self.edges[e].wind_delta != 0 && prev != NIL && self.edges[prev].out_idx >= 0
+                if self.strict && self.edges[e].out_idx >= 0 && self.edges[e].wind_delta != 0 && prev != NIL && self.edges[prev].out_idx >= 0
                     && self.edges[prev].curr.0 == self.edges[e].curr.0 && self.edges[prev].wind_delta != 0
                 {
                     let pt = self.edges[e].curr;
@@ -1782,7 +1797,7 @@ impl Clipper {
                 return;
             }
             let (a, b, c) = (self.out_pts[prev].pt, self.out_pts[pp].pt, self.out_pts[next].pt);
-            if b == c || b == a || (slopes_equal3(a, b, c) && !pt2_is_between_pt1_and_pt3(a, b, c)) {
+            if b == c || b == a || (slopes_equal3(a, b, c) && (!self.strict || !pt2_is_between_pt1_and_pt3(a, b, c))) {
                 last_ok = NIL;
                 self.out_pts[prev].next = next;
                 self.out_pts[next].prev = prev;

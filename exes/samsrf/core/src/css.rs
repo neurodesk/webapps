@@ -66,7 +66,7 @@ pub fn objective(predicted: &[Complex64], observed: &[f64], precision: Precision
 /// Statistics Toolbox `corr`: centred columns, `x' * y` and the 2-norms through
 /// MKL, `dot ./ norm(x) ./ norm(y)`, then values beyond 1 in magnitude divided by
 /// their magnitude (an overflowing dot product becomes NaN).
-fn correlation(x: &[Complex64], y: &[f64], precision: Precision) -> Complex64 {
+pub(crate) fn correlation(x: &[Complex64], y: &[f64], precision: Precision) -> Complex64 {
     if x.len() != y.len() || x.len() < 2 {
         return Complex64::new(f64::NAN, f64::NAN);
     }

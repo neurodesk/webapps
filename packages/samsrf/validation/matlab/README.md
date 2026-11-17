@@ -299,9 +299,11 @@ profile values from 6.44 to 3.20, with 30% of profile entries and 54% of
 residuals bit-identical. With the multi-RHS solves (#808) and MKL's `snrm2`
 order (#812), every single profile entry and residual is now bit-identical on
 the AMD host (above); the AVX-512 host keeps the limits. The rounding-only
-courses stay, because MATLAB's residual there is rounding the port does not have. Double courses with variance keep the
-centred solve, within 1e-12 of MATLAB on every recorded case; a constant double
-course goes through `mldivide` for its rank rule. `corr`'s dot product follows MKL's CNR `auto` order
+courses stay, because MATLAB's residual there is rounding the port does not have. Double profiles are
+one `[Y ones] \\ X` over every pixel as well since 0.6.20261116: every double
+profile of the matrix and edge recordings is bit-identical on their AMD hosts
+(`double_rc_profiles_equal_matlab_on_amd_hosts`; the centred solve it replaced
+matched 1,533-1,815 of 8,400 per case). `corr`'s dot product follows MKL's CNR `auto` order
 exactly (all 189 matrix `R^2` values on that host); the AVX-512 order was not
 identified (best candidate, 16 lanes x 4 accumulators with FMA: 145 of 189).
 
@@ -923,7 +925,7 @@ is the only CLI evidence so far. The Runtime references in
 [`validation/container`](../container/README.md) come from Neurodesk's 2024
 SamSrfX image, which reports SamSrf 10.003 and lacks the repairs.
 
-### Compiler access, checked 2026-11-10 and 2026-11-12
+### Compiler access, checked 2026-11-10, 2026-11-12 and 2026-11-16
 
 | Route | Finding |
 | --- | --- |
@@ -935,11 +937,13 @@ SamSrfX image, which reports SamSrf 10.003 and lacks the repairs.
 | Neurodesk organisation | No organisation secret holds a MATLAB token (only `AUTOCOMMIT_FOR_NEUROCOMMAND`, `NEURODESK_GITHUB_TOKEN_ISSUE_AUTOMATION` and `RCLONE_CONFIG` are visible). `neurocontainers`' `build-matlab-standalone.yml` expects a `MATLAB_BATCH_LICENSE_TOKEN` secret that does not exist; its only run failed and it has never compiled anything. |
 | Upstream distribution | SamSrf's changelog says `SamSrfAnalysis` was made "for use in NeuroDesk", and Neurodesk distributes the builds. A full listing of the Neurodesk `build` container (46 objects) on 2026-11-12 found only the 2024 SamSrf zips and a 2024 `SamSrfX.zip`. No public build of 10.4 was found. |
 | Institutional license | Many Campus-Wide Licenses include MATLAB Compiler for staff at no personal cost. Whether one covers this user, and on which machines, is for the user and their institution to confirm. Activation needs the user's MathWorks account, so only the user can take this route. |
+| Institutional license server, checked 2026-11-16 | The user authorised a network license server at their institution, given as `SERVER <host> ANY 27000` and `USE_SERVER` and kept in an untracked file outside the repository. In a `SERVER` line, `ANY` is the host ID field and 27000 the license manager's port. The file has no `DAEMON` (vendor) line, so it does not state the MathWorks vendor daemon's port; MathWorks documents fixing that port with `port=` on the `DAEMON` line of the server's license file. From this repository's cloud build host the name resolves to a private 10.x address, TCP 27000 timed out twice, and MATLAB 23.2.0.3097123 stopped with License Manager Error -15 (`-15,570`, system error 115, `Feature: MATLAB`) before any product check. A GitHub Actions runner linked to that network reaches TCP 27000; a separate maintainer worker on that route is installing R2023b Update 11 to check a MATLAB Compiler checkout before building. MATLAB Compiler entitlement and the vendor daemon's reachability are not yet observed. |
 | MATLAB Runtime | Free, and not a compiler. The [R2023b Update 11 installer](https://ssd.mathworks.com/supportfiles/downloads/R2023b/Release/11/deployment_files/installer/complete/glnxa64/MATLAB_Runtime_R2023b_Update_11_glnxa64.zip) (4,834,714,979 bytes) is public. `containers.mathworks.com/matlab-runtime` has `r2023b-update-1` to `-9` tags and a moving `r2023b` tag. The Runtime executes a compiled archive; it cannot build one. |
 
 Building therefore needs a MATLAB Compiler license for R2023b Update 11, as a
 batch token for the `build` dispatch, or as a license for one Linux host. That
-host can be this kind of machine, using `licensed-host/`.
+host can be this kind of machine, using `licensed-host/`. With the institutional
+server above, it must also be able to reach that server.
 
 ### Building on one licensed host
 
@@ -1018,12 +1022,16 @@ local image sha256:...` and `Evidence: .../samsrf-cli`. In `$WORK/samsrf-cli`:
 | `compiled-repeat.json` | The compiled image repeated bit for bit. |
 | `compiled-1/receipts`, `compiled-2/receipts` | No network, read-only inputs, the image ID, input hashes unchanged. |
 | `interrupt/`, `failure/` | A prompt nonzero exit on SIGINT, and on a missing model. |
+| `web-1/`, `web-1-vs-source.json`, `web-1-vs-compiled.json` | The web engine (Node) on the same bundle, held against both executions on this host ([web engine against the CLI matrix](#web-engine-against-the-cli-matrix)). It lists exact, differing, refused and unsupported runs; the driver fails on inventory errors and failed runs, not on differing values. The Chromium run is a separate step on the returned evidence. |
+
+The archive keeps `bundle/` (11 MB) because the web engine and the maintainers'
+browser run read those exact input bytes.
 
 Return two files and their SHA-256 through whatever channel the maintainers
 name, never with the license:
 
 ```sh
-tar -C "$WORK" --exclude=samsrf-cli/bundle -czf samsrf-cli-evidence.tar.gz samsrf-cli
+tar -C "$WORK" -czf samsrf-cli-evidence.tar.gz samsrf-cli
 docker save samsrf-reference:41ed1e96-r2023b | gzip > samsrf-reference-41ed1e96-r2023b.tar.gz
 sha256sum samsrf-cli-evidence.tar.gz samsrf-reference-41ed1e96-r2023b.tar.gz
 ```
@@ -1037,9 +1045,9 @@ record its digest beside `cli-reference.json`, and dispatch `samsrf-native`
 with `runtime_image=ghcr.io/neurodesk/samsrf-reference@sha256:...` for the
 Runtime-only check on other hosts. That last step needs no license.
 
-Checked without a license on 2026-11-13: `test_licensed_host.py`, `test_cli.py`
-and the other harness tests pass (25, Python 3.12 with
-`requirements-cli.txt`), and the driver refuses a MATLAB root other than
+Checked without a license on 2026-11-13, and again on 2026-11-16 with
+`test_web_cli.py`: all 62 harness tests in this directory pass (Python 3.12
+with `requirements-cli.txt`, none skipped), and the driver refuses a MATLAB root other than
 23.2.0.3097123 and an existing work directory before it does anything.
 
 ### SamSrfAnalysis case matrix
@@ -1194,6 +1202,196 @@ the build process and generated container. Set `SAMSRF_MATLAB_BATCH=matlab-batch
 when licensing through a batch token. Then follow the `build` steps in
 `samsrf-native.yml` to run the matrix and the gates.
 
+### Web engine against the CLI matrix
+
+`run_web_matrix.mjs` runs the 24 `cli_plan.py` runs through the web app's
+WebAssembly module (Node, one thread) on the read-only bundle, after checking
+that the bundle's file tree equals `bundle-sha256.json`. Its entry check follows
+symbolic links, so a checkout reached through a linked path runs instead of
+exiting silently.
+
+`run_browser_matrix.mjs` runs the same runs in Chromium (Playwright 1.64.0, a
+devDependency of this package) through the app's own `apps/samsrf/src/engine.js`
+(`createJob`, `runShard`, `mergeShards`), from the bundle's file bytes as the
+app reads dropped files. This is an engine-module harness served from source:
+it does not exercise the production Vite bundle or the app's interface.
+`mergeShards` rounds the maps to float32 for display, so the runner merges the
+same shard bytes once more to keep the double rows (`maps.f64`). The GIfTIs
+exported from that merge must equal the files `mergeShards` exported, byte for
+byte (`replayEqualsExport`), or the run fails.
+
+Both runners write one layout: per run the record (`files`, ROI, labels,
+vertex count, `mapsSha256`), the exported GIfTIs and `maps.f64`, plus an
+environment that names the runner and the SHA-256 of the plan file, the bundle
+manifest and the WebAssembly module.
+
+Each run's model is the CLI model plus `Data_Precision`, which carries the
+precision that `def_64bit` selects for MATLAB. Bundle paths replace `/input`,
+and CF reads the Benson GIfTI that `prepare_cli_bundle.m` converted into the
+per-precision `.mat`. The Node runner passes the subject-HRF file to the engine
+API as a kernel (`hrf.oldSchool` of the file's `fP`). The app's interface has no
+subject-HRF route, so the browser runner records those four runs as
+`unsupported`.
+
+```sh
+compare_web_cli.py PLAN BUNDLE_SHA256 WEB_ROOT MATLAB_ROOT REPORT \
+  --expect source|compiled-runtime [--allow-unattested-source-inputs]
+```
+
+`compare_web_cli.py` holds one web execution against one MATLAB execution.
+Which MATLAB execution it is comes from its receipts, not from the caller, and
+`--expect` must agree with them. It refuses before reading any value when:
+
+- the plan is not `cli_plan.py`'s matrix, is empty or repeats a run;
+- a plan model is not the bundle manifest's model file;
+- the web execution names another plan or bundle manifest;
+- a MATLAB receipt is missing, extra, of another execution kind, or ran
+  another argv;
+- a compiled execution lacks an image ID (`sha256:...`), or its
+  `receipts/inputs.json` differs from the manifest.
+
+Source receipts do not record the bundle. A source comparison therefore needs
+`--allow-unattested-source-inputs`, and its report says the inputs are
+unattested.
+
+For each run that succeeded on both sides, every map in the run's contract
+(`compare_cli.expected_results`) is compared bitwise twice:
+
+- MATLAB's `Srf.Data` column over `Srf.Roi`, against the web value cast to
+  MATLAB's class. The cast must be exact.
+- The exported GIfTI over every vertex.
+
+Before that comparison, the run's inventory must hold, or the run is an
+`inventory-error`:
+
+- `Srf.Roi` must be unique, finite integers in 1..vertices, one per row, and in
+  the same order as the web ROI;
+- both GIfTIs must hold one float32 array over every vertex;
+- `maps.f64` must have exactly 8 x maps x vertices bytes and match its hash;
+- the labels and the files on each side must match the contract.
+
+A map is `exact` only if both comparisons agree bit for bit, including
+nonfinite values and the sign of zero, and MATLAB's imaginary part is zero.
+Otherwise it `differs`. The report then gives the differing vertices, how many
+differ only in the sign of zero, the largest absolute, relative and ULP
+differences, and whether the masks agree. ULPs count +0 and -0 as one ordinal,
+so the smallest subnormals of opposite sign are 2 apart; `signedZeroOnly`
+counts the sign-of-zero differences.
+
+A run is `refused` only where the engine is expected to refuse (single RC with
+a fitted profile, single CF Gaussian), and `unsupported` only for the browser's
+subject-HRF runs, in both cases with MATLAB succeeding. Any other combination
+is `failed`, with both sides' statuses kept. The polar angle and eccentricity
+GIfTIs that the web exports and SamSrfAnalysis does not are checked for shape
+and listed as not compared. MATLAB-only files are listed the same way. No
+tolerance is applied. Failed and inventory-error runs exit nonzero.
+
+`test_web_cli.py` (24 tests) builds full-provenance fixtures and covers each
+refusal and inventory rule with a negative control:
+
+- one ULP that the float32 GIfTI hides, a signed zero, a NaN and an imaginary
+  part;
+- ULPs across zero in both precisions;
+- a MATLAB failure behind a web refusal, and unexpected web statuses;
+- an extra `maps.f64` byte, a duplicate, zero, out-of-range or fractional ROI,
+  empty and one-vertex GIfTIs, and corrupt or extra files;
+- a stale plan or bundle hash and a model changed to TR 999;
+- source receipts presented as compiled, and malformed compiled receipts.
+
+Eight comparator mutations (the earlier ULP mapping, the ROI, argv, kind and
+GIfTI-length checks, MATLAB failures and truncation) each fail the suite.
+
+The `runtime_cli` and `runtime_image` jobs run both runners and the comparator
+against every MATLAB execution they make. The build job runs them after
+publication, so a web difference never blocks a validated image.
+`licensed-host/build_and_validate.sh` runs the Node runner offline in a pinned
+image. Its Chromium run is an open gate: it needs this repository's pnpm
+install, and the maintainers run it on the returned evidence:
+
+```sh
+pnpm install --frozen-lockfile --filter @neurodesk/samsrf
+pnpm --filter @neurodesk/samsrf exec playwright install chromium
+m=packages/samsrf/validation/matlab; e=samsrf-cli   # the extracted evidence
+node $m/run_browser_matrix.mjs $e/plan.json $e/bundle $e/bundle-sha256.json $e/browser-1
+python3 $m/compare_web_cli.py $e/plan.json $e/bundle-sha256.json $e/browser-1 $e/compiled-1 \
+  browser-1-vs-compiled.json --expect compiled-runtime
+```
+
+**Interim result against source MATLAB (not the compiled image).** The pinned
+source recording ([run 42928350417](#pinned-source-recording)) was compared on
+2026-11-16. The web engine was package 0.6.20261115 with WASM SHA-256
+`f069b06b0473a4538353063b5acda52c8da4351e812ed870e6dc177132a90f9f`, run on an
+AMD EPYC-Milan host, under Node 24.19.0 and in `node@sha256:7702d8aa…` (Node
+22.23.4), and in Chromium 156.0.8078.4. The two Node runs gave identical
+`maps.f64` and GIfTIs. The strict comparator was rerun on fresh runs, each on
+the bundle of the host it is compared with (the hosts' bundles differ only in
+MAT-file timestamps), with the source inputs reported as unattested.
+
+On both bundles, Chromium (through the app's engine, with the replayed merge
+equal to the export) gave the same `maps.f64` and all 176 GIfTIs byte for byte
+for its 18 succeeded runs. Not compared: the polar angle and eccentricity
+GIfTIs that the web exports and SamSrfAnalysis does not, 44 files in Node and
+36 in the browser. Each cell gives the maps that are exact:
+
+| Run | Node vs AMD | Browser vs AMD | Node vs Intel | Browser vs Intel |
+| --- | --- | --- | --- | --- |
+| `prf_gaussian_lh_average_double` | 0/8 | 0/8 | 0/8 | 0/8 |
+| `prf_gaussian_lh_average_single` | 6/8 | 6/8 | 1/8 | 1/8 |
+| `prf_gaussian_lh_concatenate_double` | 0/6 | 0/6 | 0/6 | 0/6 |
+| `prf_gaussian_lh_concatenate_single` | 6/6 | 6/6 | 0/6 | 0/6 |
+| `prf_gaussian_rh_double` | 0/6 | 0/6 | 0/6 | 0/6 |
+| `prf_gaussian_rh_single` | 6/6 | 6/6 | 0/6 | 0/6 |
+| `prf_css_lh_double` | 0/9 | 0/9 | 0/9 | 0/9 |
+| `prf_css_lh_single` | 1/9 | 1/9 | 1/9 | 1/9 |
+| `prf_custom_hrf_lh_double` | 0/8 | unsupported | 3/8 | unsupported |
+| `prf_custom_hrf_lh_single` | 8/8 | unsupported | 1/8 | unsupported |
+| `rc_hull_lh_double` | 0/6 | 0/6 | 0/6 | 0/6 |
+| `rc_hull_lh_single` | 6/6 | 6/6 | 4/6 | 4/6 |
+| `rc_gaussian_lh_double` | 0/7 | 0/7 | 0/7 | 0/7 |
+| `rc_gaussian_lh_single` | refused | refused | refused | refused |
+| `rc_custom_hrf_lh_double` | 0/6 | unsupported | 0/6 | unsupported |
+| `rc_custom_hrf_lh_single` | 6/6 | unsupported | 4/6 | unsupported |
+| `cf_hull_lh_double` | 4/10 | 4/10 | 4/10 | 4/10 |
+| `cf_hull_lh_single` | 8/10 | 8/10 | 5/10 | 5/10 |
+| `cf_summary_lh_double` | 5/7 | 5/7 | 5/7 | 5/7 |
+| `cf_summary_lh_single` | 7/7 | 7/7 | 6/7 | 6/7 |
+| `cf_gaussian_lh_double` | 2/9 | 2/9 | 2/9 | 2/9 |
+| `cf_gaussian_lh_single` | refused | refused | refused | refused |
+| `cf_hull_smooth_global_lh_double` | 4/10 | 4/10 | 4/10 | 4/10 |
+| `cf_hull_smooth_global_lh_single` | 8/10 | 8/10 | 5/10 | 5/10 |
+
+Totals against the AMD host: Node 6 of 24 runs and 77 of 168 maps exact;
+browser 4 runs and 63 of 140 maps exact, with 4 runs unsupported. Against the
+Intel host: no run exact; 45 of 168 and 37 of 140 maps exact. The single
+reverse-correlation Gaussian and single CF Gaussian runs are the public
+refusals (#729).
+
+What the differences are (AMD host):
+
+- **Double preprocessing.** This is the earliest divergence. MATLAB's double
+  `Srf.Y` (detrended and z-scored courses over the ROI) differs from the
+  engine's in 4,985 of 5,250 samples (`prf_gaussian_lh_average_double`) and in
+  5,161 of 5,250 on the one-run right hemisphere, by at most 1.2e-14. The two
+  MATLAB hosts differ from each other in 5,051 and 5,165 samples. The engine
+  matches neither; it differs from the Intel host in 5,101 and 5,209 samples.
+  Single `Srf.Y` is identical to the engine's. Every double noise ceiling then
+  differs at all 18 vertices, by up to 2,250 ULP (2.6e-13 relative), and the
+  double R², Beta, Baseline and reverse-correlation maps differ in the last
+  bits. Fits that land on another optimum differ by more: one or two vertices
+  in each double Gaussian pRF, one vertex of `prf_custom_hrf_lh_double`, and
+  the 11 diverged vertices of `cf_gaussian_lh_double`.
+- **CSS from SamSrfAnalysis.** MATLAB saves a complex `Srf.Data` in both
+  precisions. Single CSS differs at 12 to 13 of 21 vertices and double CSS at
+  14 to 15, by up to 1.8 in x0. The zero masks of single CSS disagree.
+- **Single forward fits.** `prf_gaussian_lh_average_single` differs at one
+  vertex in Beta (1 ULP) and Baseline (5 ULP); its other maps are exact.
+- **Signed zeros.** The `cf_hull` x0 and y0 maps, and Sigma, Beta and Baseline
+  at the 11 rejected vertices of `rc_gaussian_lh_double`, differ only in the
+  sign of zero.
+
+These comparisons are with source MATLAB. They are not compiled-image parity,
+which needs the build.
+
 ## Recorded inputs and focused diagnosis
 
 `reference.json` pins the 741-case archive from runs
@@ -1279,6 +1477,90 @@ of the recorded single CSS pipeline, Beta and Baseline included, now equals
 MATLAB's; the gate keeps its per-value least-squares tolerance for coefficients.
 A successful source gate does not assert the diagnostic paths, arbitrary-input
 parity, or a rebuilt container.
+
+## Double detrend and z-score
+
+#866's web-versus-SamSrfAnalysis comparison found the earliest difference of the
+double pipelines in `samsrf_gii2srf`'s preprocessing: up to 1.2e-14 in 95% of the
+values of `Srf.Y`. It is reproduced from the pinned SamSrfAnalysis recording
+(`cli-reference.json`, run 42928350417; AMD EPYC 9V74 with MKL CNR `auto`, Intel
+Xeon Platinum 8573C with `AVX512_E1`). MATLAB R2023b converts every run to double,
+then for each run:
+
+- `detrend(Data)` subtracts `a * (a \\ Data)` with `a = [linspace(0,1,n)' ones]`
+  (the column order is immaterial: pivoting takes the ones column first). The
+  solve is one QR for every vertex of the run, and MKL's `?ormqr` rounds each
+  vertex by its place among them (`lstsq::DoubleDesign`). The fit is `a1*c1 +
+  a2*c2` with each product rounded. Searched over seven time scalings, both
+  column orders, one solve per vertex or one for all, five residual orders and
+  two `zscore` forms, only this combination reproduces the courses (5,250 of
+  5,250 on one case; the port before matched 227).
+- `zscore` with MATLAB's `mean` and `sum`.
+- `nanmean(Data, 3)` sums the runs in order. The port used to sum odd and even
+  runs separately when the noise ceiling was wanted, a last-bit difference in
+  2,124 of 5,250 averaged values.
+
+`cli_preprocess.rs` drives `RunAccumulator` on the recording's own GIfTI runs
+and compares `Srf.Y`, which `extract_cli_courses.py` writes from the MAT files.
+On the AMD host every double and single value of the 22 runs whose `Srf.Y` is
+this stage's output equals MATLAB's (168,000 of 168,000; 86,876 before). The two
+connective-field runs with global-signal correction and smoothing save `Srf.Y`
+after `samsrf_removenoise` and smoothing and are counted, not compared. On the
+Intel host 88,033 of 168,000 are identical: its MKL orders the double solve
+differently, and AMD and Intel MATLAB themselves differ in 5,051 of 5,165
+values, so one output cannot equal both. Constant, ramp and near-constant raw
+courses, one- and two-sample courses and runs of 134,257-134,259 vertices (every
+leftover position) were recorded later (`constants-gamma-gemv-predictions.md`,
+run 43882331042): on the AMD host the port matches every recorded selected
+course value and noise ceiling. A constant non-zero course can become unit-variance
+noise when QR leaves a varying residual; other recorded constants remain zero
+with NaN ceilings. Direct arithmetic was tested in double at lengths 1, 2, 3, 37
+and 250; the full pipeline was tested in both precisions at 250 samples. All-zero
+courses stay zero. That run's global signal (`nanmean(Srf.Data, 2)` over every
+vertex) matched in 15 of 2,000 values; its across-vertex order is not MATLAB's.
+
+With the courses exact, the Node package API using the committed WASM was
+compared against the AMD source execution of the 24-run matrix. The copied
+`run_web_matrix.mjs` and `compare_web_cli.py` match #866 at `dd36baa32`.
+Recomparison with the corrected comparator at `d12064c9a` preserves the final
+11-run, 119-map result. This is not a browser or production UI comparison;
+the Node runner also accepts custom HRFs unavailable through the app interface.
+
+| Change | Exact runs | Exact maps (of 168) |
+| --- | --- | --- |
+| `main` (#866's report) | 6 | 77 |
+| detrend, z-score, run order | 6 | 93 |
+| `corr` order for the noise ceiling | 6 | 105 |
+| MATLAB `conv` for every HRF convolution | 11 | 115 |
+| one QR for double RC profiles, `corr` order for RC `R^2` | 11 | 119 |
+| MATLAB's double `corr(Y, X)` for CF profiles (`lstsq::gemv_t_double`, run 43890832220's module `d5ae6ba2`; Intel 0 runs, 42 maps) | 13 | 129 |
+
+The two refused single fits stay refused. What still differs, earliest stage first:
+
+- double convex-hull RC centroids: from MATLAB's own profile, `x0` and `y0` of
+  `polyshape.centroid` differ by 1-3 ULP (one by 38 ULP); areas are exact.
+  This is geometry (#732).
+- double RC Gaussian and CF Gaussian fits: `samsrf_fit2dprf`'s `errfun`
+  (`sum(Ds(:).^2)`) and `R^2` now use the modelled MATLAB `sum` and `mean`
+  orders in the double port. The fits still differ; the first optimizer
+  divergence requires a MATLAB trace to locate.
+- double CF profiles: fixed since by `lstsq::gemv_t_double` (FPRev recording
+  `constants-gamma-gemv-reference.json`): full blocks of four columns use two
+  lanes, and the remaining columns the right-hand-side trees `?ormqr` uses at
+  their position. Every unsmoothed double CF profile of the pinned
+  reverse-correlation recordings equals MATLAB's on its AMD hosts (26 cases,
+  4,914 values; `double_cf_profiles_equal_matlab_on_amd_hosts`).
+- double global-signal regression (`samsrf_removenoise`) still solves normal
+  equations, where MATLAB solves `[X ones] \\ Y`.
+- CSS through SamSrfAnalysis: MATLAB saves a complex `Srf.Data`.
+- every Intel host.
+
+```sh
+python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-cli" packages/samsrf/validation/matlab/cli-reference.json
+python3 -I packages/samsrf/validation/matlab/extract_cli_courses.py "$TMPDIR/samsrf-cli" "$TMPDIR/samsrf-cli-courses"
+SAMSRF_CLI_REFERENCE_DIR="$TMPDIR/samsrf-cli" SAMSRF_CLI_COURSES_DIR="$TMPDIR/samsrf-cli-courses" \
+  cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test cli_preprocess -- --nocapture
+```
 
 ## Double forward fine fits (#730)
 
@@ -2570,6 +2852,144 @@ digest without a recording. Each of the following makes the gate fail:
 - flipping a frozen agreement;
 - changing the prediction digest.
 
+### Ordered boundaries (2026-11-16, existing recordings only)
+
+Every polygon batch records MATLAB's `polyshape(P).Vertices` in order, one NaN
+row between boundaries. The comparisons above sorted those vertices, so they
+could not see edges, connectivity or which solid a hole belongs to.
+`polyshape_ordered_rings.py` reads each boundary as a cycle, normalised only
+for start and direction, and compares it with the experimental model's final
+rings. It reports the first observable that differs:
+
+1. vertex survival: the union of ring vertices;
+2. connectivity: the undirected edge set;
+3. cycles: how those edges are partitioned into rings;
+4. hole flags: MATLAB's `ishole` where recorded, else the exact shoelace sign;
+5. containing solid: the smallest solid whose closed polygon contains every
+   vertex of a hole.
+
+Orientation and containment use exact rational arithmetic. A double shoelace
+flipped the orientation of 921 thin triangles. In the causal recording, all
+24,827 recorded hole flags equal the exact shoelace sign, and MATLAB winds solids
+clockwise. No MATLAB dispatch was spent.
+
+The experimental model against MATLAB on ubuntu-22.04 follows. The arrays of both
+hosts are byte-identical. Columns: rings equal (hull equal / hull differs), then
+first difference at hole flags or containing solid, cycles, connectivity, and
+survival (hull equal / hull differs). The four extreme grids the model refuses
+are left out.
+
+| Batch | Polygons | Rings equal | Holes | Cycles | Connectivity | Survival |
+| --- | ---: | --- | ---: | ---: | ---: | --- |
+| Thin, collinear-vertex, spike and degenerate families | 23,557 | 23,557 / 0 | 0 | 0 | 0 | 0 / 0 |
+| Original point clouds | 2,500 | 981 / 0 | 1 | 770 | 152 | 552 / 44 |
+| Grid sweep and bisection (probe) | 27,648 | 27,648 / 0 | 0 | 0 | 0 | 0 / 0 |
+| Held-out near-collinear (probe) | 1,500 | 1,012 / 8 | 0 | 23 | 10 | 307 / 140 |
+| Held-out mixed (probe) | 1,500 | 625 / 1 | 2 | 443 | 81 | 319 / 29 |
+| Strip pairs (causal) | 8,424 | 4,986 / 0 | 0 | 2,430 | 1,000 | 8 / 0 |
+| Sliver bisection (causal) | 1,152 | 609 / 0 | 0 | 534 | 9 | 0 / 0 |
+| Holes at one contact (causal) | 170 | 170 / 0 | 0 | 0 | 0 | 0 / 0 |
+| Real-cloud transforms (causal) | 403 | 0 / 0 | 0 | 0 | 1 | 156 / 246 |
+| Held-out strip pairs (causal) | 600 | 453 / 0 | 0 | 0 | 146 | 1 / 0 |
+| Reproducer rounds 1-3 | 244 | 65 / 2 | 0 | 3 | 0 | 19 / 155 |
+| Reproducer round 4 | 12,873 | 2,979 / 124 | 3 | 0 | 75 | 3,281 / 6,411 |
+| Reproducer round 5 | 12,897 | 4,890 / 130 | 3 | 13 | 155 | 3,220 / 4,486 |
+| Reproducer round 6 | 1,212 | 678 / 0 | 0 | 0 | 0 | 129 / 405 |
+| Reproducer round 7 | 592 | 406 / 0 | 0 | 20 | 12 | 146 / 8 |
+
+What this localises:
+
+- **Survival differs on all 44 original cloud failures and all 246 real-cloud
+  transform failures.** This does not hold for every reduced reproducer.
+  `reproducer_cases[29,30]`, both reductions of cloud 932, have matching ordered
+  rings but different hulls.
+- **Hull agreement hides ring disagreement.** 552 original clouds have MATLAB's
+  hull but other vertices, and 922 have MATLAB's vertices but other edges or
+  rings.
+- **Round 7, with edges.** All 288 pinwheels equal MATLAB in every ordered
+  observable, so the rejection of H_M and H_M1 now holds for edge order and
+  connectivity too. Of the 72 lenses, 40 are equal, 20 differ in cycles and 12
+  in connectivity, and their hulls agree.
+- **A later stage, separately.** 256 reproducer polygons and 9 held-out probe
+  clouds have MATLAB's rings exactly but another hull.
+
+The gates now freeze MATLAB's ordered observable, independent of any model.
+`matlab_polyshape_reproducers.json` and `matlab_polyshape_causal.json` hold
+`orderedRecordedSha256`: one SHA-256 per batch over the canonical cycles and
+hole flags. `polyshape_ordered_rings.py digest` computes it, the two hosts give
+the same value, and `polyshape_reproducers_match_recording` and
+`polyshape_causal_matches_matlab` recompute it in Rust.
+
+The previous round-7 digest sorts vertices. With two vertices of one recorded
+ring swapped (a copy of the pin, round 7, polygon 36), that gate still passes
+on both hosts and the ordered digest fails.
+`ordered_observable_keeps_edges_and_ignores_start_and_direction` holds the
+same property without a recording.
+
+**Rules tested on these recordings.** Each rule is an opt-in
+`experimental::Hypothesis` variant (`polyshape_hulls` `h-touch-pre`,
+`h-touch-post`, `h-nonstrict-post`, `h-hull-grid`, `h-hull-polyshape`).
+Predictions and decision rules were committed before each run, in
+`polyshape-touch-pairing-predictions.md`.
+
+- **H_T, touch-vertex pairing.** Where edges agree but cycles do not, MATLAB's
+  two rings at a touch vertex are mostly two solids. With the region on the
+  left, they take the most counter-clockwise turn. The model has a solid and a
+  touching hole there. H_T traces every ring that way and splits each cycle at
+  repeated vertices.
+  - Applied to the final rings (H_T-post), it fixes 749 of the 770 "cycles"
+    clouds, 2,790 strip pairs, 537 bisection polygons and 20 lenses, with no
+    hull change.
+  - It breaks five equal clouds (485, 1278, 1399, 1935, 1993) and the four
+    copies of `gapped-k6-s3-g10-r0`. There MATLAB keeps a hole that touches its
+    solid at two vertices.
+  - Applied before cleaning (H_T-pre), it loses 1,040 and 964 hulls in rounds 4
+    and 5.
+  - Both placements are rejected. MATLAB's pairing rule is open.
+- **H_NS, Clipper's non-strict union then splitting at repeated vertices.** It
+  equals the experimental model on rounds 1-7, so it does not explain MATLAB's
+  pairing. Rejected.
+- **H_G, the hull on the final vertices' own grid.** In 251 of the 256
+  ring-equal, hull-different reproducer polygons, the final vertices span less
+  than the input. H_G gains 393 hulls and loses 88, 27 of them ring-equal.
+  Rejected.
+- **H_G2, `convhull` as the model's own `polyshape` of the convex hull of the
+  final vertices.** It runs on the hull's own grid, with Clipper's union deciding
+  where the clean starts.
+  - It gains 396 hulls: round 4 +205, round 5 +180, round 1 +2, held-out probe
+    +9.
+  - It loses 23: round 4 -8, round 5 -13, reproducer case 28, held-out
+    near-collinear cloud 490.
+  - None of the 23 losses had MATLAB's rings. Each matched MATLAB's hull while
+    its rings already kept other vertices.
+  - Among polygons whose rings equal MATLAB's, it fixes 259 hulls, loses none
+    and leaves 6: round 4 indices 11058, 11150 and 11169, and round 5 indices
+    6446, 9096 and 9891 (zero-based).
+  - By its pre-registered rule it is rejected: it would change frozen accepted
+    hulls. These results support further testing of this empirical candidate,
+    not identification of MATLAB's hull algorithm. The six matching-ring
+    failures leave the hull stage unresolved.
+
+None of these changes the experimental model's default, the production model or
+any frozen baseline.
+
+To reproduce, set `geometry`, `probe`, `causal` and `reproducers` to the
+extracted recordings, then run from the repository root:
+
+```sh
+cargo build --release --manifest-path exes/samsrf/Cargo.toml \
+  -p samsrf-core --features polyshape-experimental --example polyshape_hulls
+oracle="$PWD/exes/samsrf/target/release/examples/polyshape_hulls"
+cd packages/samsrf/validation/matlab
+python3 -I polyshape_ordered_rings.py compare "$oracle" "$reproducers/ubuntu-22.04" \
+  reproducer_round4 > round4.json
+python3 -I polyshape_ordered_rings.py table h-touch-post,h-hull-grid,h-hull-polyshape round4.json
+python3 -I polyshape_ordered_rings.py digest "$causal/ubuntu-22.04" causal_real
+```
+
+`compare` takes any polygon batch of the four recordings; its `summary` gives
+each variant's first-difference counts.
+
 ### What is established and what is not
 
 Established on the pinned recordings (both hosts identical):
@@ -2590,6 +3010,12 @@ Established on the pinned recordings (both hosts identical):
 - 1-minimal reproducers of 6, 11, 8 and 8 points (above), with exact inputs,
   MATLAB's outputs on two hosts and both models' predictions made before
   recording.
+- MATLAB's ordered rings: each causal and reproducer batch's canonical cycles
+  and hole flags are frozen by digest. The first differing observable for every experimental hull failure on
+  the original and real-cloud recordings is vertex survival.
+- On the recorded polygons whose rings equal MATLAB's, the experimental
+  model's additional convex-hull pass (H_G2) fixes 259 hulls and leaves 6
+  unexplained. This does not establish MATLAB's internal operation.
 
 Not known:
 
@@ -2606,6 +3032,11 @@ Not known:
   and the shipped model's are not compared; SamSrf uses only the hull.
 - Anything outside the recorded families, including the extreme grids where
   both models refuse or return an empty hull.
+- MATLAB's rule for pairing edges at touch vertices: mostly separate solids,
+  but holes touching twice survive in some clouds (H_T above).
+- Why MATLAB's vertex survival differs on near-collinear clouds, and why the
+  six matching-ring cases still have different hulls under H_G2. Both vertex
+  survival and the hull stage remain unresolved.
 
 ### Shipped and experimental models on the probe recordings
 
@@ -2980,3 +3411,24 @@ SAMSRF_MATLAB_REFERENCE_DIR="$TMPDIR/samsrf-source-reference" SAMSRF_CSS_WASM_RE
 `record_matlab=true, css_pipelines_only=true` the pipelines. Octave can run
 the recorder's plumbing with a stubbed environment; its results are never
 references.
+
+## Constants, small-shape gampdf and double y' * A
+
+`constants-gamma-gemv-reference.json` pins run
+[43882331042](https://github.com/neurodesk/webapps/actions/runs/43882331042)
+(`record_constants_gamma_gemv.m`, `probes=constants-gamma-gemv`, recorder
+`a7014f1eb`): an AMD EPYC 9V74 (CNR `auto`) and an Intel Xeon 6975P-C
+(`AVX512_E1`), each repeated exactly in a new process. The questions, models,
+inputs and decision rules were committed before the run in
+[`constants-gamma-gemv-predictions.md`](constants-gamma-gemv-predictions.md),
+which also lists the results: the port's constant-course detrend and z-score are
+MATLAB's on the AMD host, the small-shape gampdf candidate is rejected, and
+production adopts the identified double `y' * A` order for connective-field
+profiles. The Intel host is reported only.
+
+```sh
+python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-cgg" packages/samsrf/validation/matlab/constants-gamma-gemv-reference.json
+python3 packages/samsrf/validation/matlab/fetch_x001_runs.py "$TMPDIR/samsrf-x001-runs"
+SAMSRF_CGG_DIR="$TMPDIR/samsrf-cgg" SAMSRF_CGG_RUNS_DIR="$TMPDIR/samsrf-x001-runs" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test constants_gemv -- --nocapture
+SAMSRF_CGG_DIR="$TMPDIR/samsrf-cgg" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --lib held_out_gamma -- --nocapture
+```

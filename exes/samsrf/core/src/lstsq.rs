@@ -598,6 +598,25 @@ fn rhs_kernel(complex: bool, single: bool, count: usize, index: usize) -> Kernel
     }
 }
 
+/// MATLAB R2023b's double `y' * A`, MKL's `dgemv` with `trans` on AMD hosts (CNR
+/// `auto`): column `j` of `m` sums its products in `?ormqr`'s tree for right-hand side
+/// `j` of `m`. Fingerprinted and confirmed on held-out shapes, random products and the
+/// pinned double CF profiles by `record_constants_gamma_gemv.m`
+/// (validation/matlab/constants-gamma-gemv-predictions.md).
+pub fn gemv_t_double(y: &[f64], columns: &[&[f64]]) -> Vec<f64> {
+    columns
+        .iter()
+        .enumerate()
+        .map(|(j, a)| {
+            let products: Vec<C<f64>> = y.iter().zip(*a).map(|(&y, &a)| C::real(y * a)).collect();
+            if products.is_empty() {
+                return 0.0;
+            }
+            tree_sum(rhs_kernel(false, false, columns.len(), j), C::real(0.0), &products, false).re
+        })
+        .collect()
+}
+
 /// `w = v^H c` in `kernel`'s summation order.
 fn kernel_dot<T: Real>(kernel: Kernel, v: &[C<T>], c: &[C<T>], complex: bool) -> C<T> {
     if v.is_empty() {
@@ -669,13 +688,141 @@ fn apply<T: Real>(kernel: Kernel, v: &[C<T>], tau: C<T>, c: &mut [C<T>], complex
     }
 }
 
+/// `xGEQP3` of a design, before any right-hand side: the packed columns in
+/// pivoted order (R on and above the diagonal, reflector vectors below), the
+/// reflector scalars and MATLAB's rank.
+struct Factored<T: Real> {
+    a: Vec<Vec<C<T>>>,
+    taus: Vec<C<T>>,
+    pivot: Vec<usize>,
+    rank: usize,
+    complex: bool,
+    single: bool,
+}
+
+impl<T: Real> Factored<T> {
+    fn new(mut a: Vec<Vec<C<T>>>) -> Self {
+        let n = a.len();
+        let m = a.first().map_or(0, Vec::len);
+        let complex = a.iter().flatten().any(|value| value.im != T::ZERO);
+        if !complex {
+            for value in a.iter_mut().flatten() {
+                value.im = T::ZERO;
+            }
+        }
+        let single = std::mem::size_of::<T>() == 4;
+        let steps = m.min(n);
+        let mut pivot: Vec<usize> = (0..n).collect();
+        let mut norms: Vec<T> = a.iter().map(|column| nrm2(column)).collect();
+        let mut original = norms.clone();
+        let threshold = T::EPSILON.sqrt();
+        let mut diagonal = Vec::with_capacity(steps);
+        let mut taus = Vec::with_capacity(steps);
+        for i in 0..steps {
+            // xLAQP2: the remaining column with the largest updated norm (first on ties).
+            let mut best = i;
+            for j in i + 1..n {
+                if norms[j] > norms[best] {
+                    best = j;
+                }
+            }
+            a.swap(i, best);
+            pivot.swap(i, best);
+            norms.swap(i, best);
+            original.swap(i, best);
+            let alpha = a[i][i];
+            let (beta, tau) = larfg(alpha, &mut a[i][i + 1..], complex);
+            a[i][i] = beta;
+            diagonal.push(beta);
+            taus.push(tau);
+            let (done, rest) = a.split_at_mut(i + 1);
+            let v = &done[i][i + 1..];
+            for column in rest {
+                apply(column_kernel(complex, single), v, tau, &mut column[i..], complex, true);
+            }
+            // Downdate the remaining norms as xLAQP2 does.
+            for j in i + 1..n {
+                if norms[j] != T::ZERO {
+                    let ratio = a[j][i].abs() / norms[j];
+                    let mut temp = T::ONE - ratio * ratio;
+                    if temp < T::ZERO {
+                        temp = T::ZERO;
+                    }
+                    let quotient = norms[j] / original[j];
+                    if temp * quotient * quotient <= threshold {
+                        norms[j] = nrm2(&a[j][i + 1..]);
+                        original[j] = norms[j];
+                    } else {
+                        norms[j] = norms[j] * temp.sqrt();
+                    }
+                }
+            }
+        }
+        // MATLAB's rank: diagonals above max(m, n) * eps * |R11|. Its complex
+        // warnings report ten times that tolerance (recorded double CSS vertex 81).
+        let factor = if complex { T::from_usize(10) } else { T::ONE };
+        let tolerance = factor * T::from_usize(m.max(n)) * T::EPSILON * diagonal.first().map_or(T::ZERO, |r| r.abs());
+        let rank = diagonal.iter().take_while(|r| r.abs() > tolerance).count();
+        Factored { a, taus, pivot, rank, complex, single }
+    }
+
+    /// Applies `Q^H` to `b` in place, as `?ormqr` does for right-hand side
+    /// `index` of `count`, and returns the coefficients in column order.
+    fn solve(&self, b: &mut [C<T>], count: usize, index: usize) -> Vec<Complex64> {
+        let (n, complex) = (self.a.len(), self.complex);
+        for (i, &tau) in self.taus.iter().enumerate() {
+            apply(rhs_kernel(complex, self.single, count, index), &self.a[i][i + 1..], tau, &mut b[i..], complex, false);
+        }
+        let mut x = vec![C::real(T::ZERO); n];
+        for i in (0..self.rank).rev() {
+            let mut sum = b[i];
+            for (column, &xj) in self.a[i + 1..self.rank].iter().zip(&x[i + 1..self.rank]) {
+                sum = sum.sub(column[i].mul(xj, complex), complex);
+            }
+            x[i] = if count == 1 {
+                trsv_divide(sum, self.a[i][i], complex, self.single)
+            } else {
+                trsm_divide(sum, self.a[i][i], complex)
+            };
+        }
+        let mut coefficients = vec![Complex64::new(0.0, 0.0); n];
+        for (k, &column) in self.pivot.iter().enumerate() {
+            coefficients[column] = Complex64::new(x[k].re.to_f64(), x[k].im.to_f64());
+        }
+        coefficients
+    }
+}
+
+/// A real double design factored once, for right-hand sides solved one at a
+/// time but rounded as MATLAB's `A \ Y` rounds column `index` of `count`
+/// (`mldivide_many` on every column at once gives the same coefficients).
+pub struct DoubleDesign(Factored<f64>);
+
+impl DoubleDesign {
+    /// The columns must be finite and of equal length.
+    pub fn new(columns: &[&[f64]]) -> Self {
+        let rows = columns.first().map_or(0, |column| column.len());
+        assert!(columns.iter().all(|column| column.len() == rows), "design columns differ in length");
+        assert!(columns.iter().all(|column| column.iter().all(|value| value.is_finite())), "the design must be finite");
+        DoubleDesign(Factored::new(columns.iter().map(|column| column.iter().map(|&v| C::real(v)).collect()).collect()))
+    }
+
+    /// The real coefficients of right-hand side `index` of `count`.
+    pub fn solve(&self, y: &[f64], count: usize, index: usize) -> Vec<f64> {
+        assert_eq!(y.len(), self.0.a.first().map_or(0, Vec::len), "design columns and observations differ in length");
+        assert!(index < count, "right-hand side {index} of {count}");
+        let mut b: Vec<C<f64>> = y.iter().map(|&v| C::real(v)).collect();
+        self.0.solve(&mut b, count, index).into_iter().map(|value| value.re).collect()
+    }
+}
+
 fn solve<T: Real>(columns: &[&[Complex64]], ys: &[&[f64]], keep_qty: bool) -> Solved {
     let n = columns.len();
     let m = ys.first().map_or(0, |y| y.len());
     assert!(columns.iter().all(|column| column.len() == m), "design columns and observations differ in length");
     assert!(ys.iter().all(|y| y.len() == m), "right-hand sides differ in length");
     let convert = |value: Complex64| C { re: T::from_f64(value.re), im: T::from_f64(value.im) };
-    let mut a: Vec<Vec<C<T>>> = columns.iter().map(|column| column.iter().map(|&v| convert(v)).collect()).collect();
+    let a: Vec<Vec<C<T>>> = columns.iter().map(|column| column.iter().map(|&v| convert(v)).collect()).collect();
     let mut bs: Vec<Vec<C<T>>> = ys.iter().map(|y| y.iter().map(|&v| C::real(T::from_f64(v))).collect()).collect();
     // MATLAB's NaN and Inf handling inside mldivide is not recorded here.
     // Nonfinite converted inputs (including finite doubles that overflow
@@ -692,100 +839,33 @@ fn solve<T: Real>(columns: &[&[Complex64]], ys: &[&[f64]], keep_qty: bool) -> So
             tau: Vec::new(),
         };
     }
-    let complex = a.iter().flatten().any(|value| value.im != T::ZERO);
-    if !complex {
-        for value in a.iter_mut().flatten() {
-            value.im = T::ZERO;
-        }
-    }
-    let single = std::mem::size_of::<T>() == 4;
+    let factored = Factored::new(a);
     let count = bs.len();
+    let coefficients = bs.iter_mut().enumerate().map(|(index, b)| factored.solve(b, count, index)).collect();
     let steps = m.min(n);
-    let mut pivot: Vec<usize> = (0..n).collect();
-    let mut norms: Vec<T> = a.iter().map(|column| nrm2(column)).collect();
-    let mut original = norms.clone();
-    let threshold = T::EPSILON.sqrt();
-    let mut diagonal = Vec::with_capacity(steps);
-    let mut taus = Vec::with_capacity(steps);
-    for i in 0..steps {
-        // xLAQP2: the remaining column with the largest updated norm (first on ties).
-        let mut best = i;
-        for j in i + 1..n {
-            if norms[j] > norms[best] {
-                best = j;
-            }
-        }
-        a.swap(i, best);
-        pivot.swap(i, best);
-        norms.swap(i, best);
-        original.swap(i, best);
-        let alpha = a[i][i];
-        let (beta, tau) = larfg(alpha, &mut a[i][i + 1..], complex);
-        a[i][i] = beta;
-        diagonal.push(beta);
-        taus.push(tau);
-        let v: Vec<C<T>> = a[i][i + 1..].to_vec();
-        for column in &mut a[i + 1..] {
-            apply(column_kernel(complex, single), &v, tau, &mut column[i..], complex, true);
-        }
-        for (index, b) in bs.iter_mut().enumerate() {
-            apply(rhs_kernel(complex, single, count, index), &v, tau, &mut b[i..], complex, false);
-        }
-        // Downdate the remaining norms as xLAQP2 does.
-        for j in i + 1..n {
-            if norms[j] != T::ZERO {
-                let ratio = a[j][i].abs() / norms[j];
-                let mut temp = T::ONE - ratio * ratio;
-                if temp < T::ZERO {
-                    temp = T::ZERO;
-                }
-                let quotient = norms[j] / original[j];
-                if temp * quotient * quotient <= threshold {
-                    norms[j] = nrm2(&a[j][i + 1..]);
-                    original[j] = norms[j];
-                } else {
-                    norms[j] = norms[j] * temp.sqrt();
-                }
-            }
-        }
-    }
-    // MATLAB's rank: diagonals above max(m, n) * eps * |R11|. Its complex
-    // warnings report ten times that tolerance (recorded double CSS vertex 81).
-    let factor = if complex { T::from_usize(10) } else { T::ONE };
-    let tolerance = factor * T::from_usize(m.max(n)) * T::EPSILON * diagonal.first().map_or(T::ZERO, |r| r.abs());
-    let rank = diagonal.iter().take_while(|r| r.abs() > tolerance).count();
     let wide = |value: &C<T>| Complex64::new(value.re.to_f64(), value.im.to_f64());
-    let coefficients = bs.iter().map(|b| {
-        let mut x = vec![C::real(T::ZERO); n];
-        for i in (0..rank).rev() {
-            let mut sum = b[i];
-            for j in i + 1..rank {
-                sum = sum.sub(a[j][i].mul(x[j], complex), complex);
-            }
-            x[i] = if count == 1 {
-                trsv_divide(sum, a[i][i], complex, single)
-            } else {
-                trsm_divide(sum, a[i][i], complex)
-            };
-        }
-        let mut coefficients = vec![Complex64::new(0.0, 0.0); n];
-        for (k, &column) in pivot.iter().enumerate() {
-            coefficients[column] = wide(&x[k]);
-        }
-        coefficients
-    }).collect();
     let r = (0..steps)
-        .map(|i| (0..n).map(|j| if j < i { Complex64::new(0.0, 0.0) } else { Complex64::new(a[j][i].re.to_f64(), a[j][i].im.to_f64()) }).collect())
+        .map(|i| (0..n).map(|j| if j < i { Complex64::new(0.0, 0.0) } else { wide(&factored.a[j][i]) }).collect())
         .collect();
-    let packed = a.iter().map(|column| column.iter().map(wide).collect()).collect();
-    let tau = taus.iter().map(wide).collect();
+    let packed = factored.a.iter().map(|column| column.iter().map(wide).collect()).collect();
+    let tau = factored.taus.iter().map(wide).collect();
     let qty = bs.iter().map(|b| if keep_qty { b.iter().map(wide).collect() } else { Vec::new() }).collect();
-    Solved { coefficients, qty, rank, pivot, r, packed, tau }
+    Solved { coefficients, qty, rank: factored.rank, pivot: factored.pivot.clone(), r, packed, tau }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn double_design_rejects_mismatched_shapes() {
+        let design = DoubleDesign::new(&[&[1.0, 1.0, 1.0]]);
+        assert!((design.solve(&[1.0, 2.0, 3.0], 1, 0)[0] - 2.0).abs() < 1e-14);
+        for y in [&[1.0, 2.0][..], &[1.0, 2.0, 3.0, 100.0][..]] {
+            assert!(std::panic::catch_unwind(|| design.solve(y, 1, 0)).is_err(), "accepted {y:?}");
+        }
+        assert!(std::panic::catch_unwind(|| DoubleDesign::new(&[&[1.0, 1.0, 1.0], &[1.0, 2.0, 3.0, 100.0]])).is_err());
+    }
 
     fn real(values: &[f64]) -> Vec<Complex64> {
         values.iter().map(|&v| Complex64::new(v, 0.0)).collect()

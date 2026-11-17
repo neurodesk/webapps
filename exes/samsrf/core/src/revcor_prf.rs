@@ -16,7 +16,6 @@ use crate::geometry::Hull;
 use crate::hrf::{self, ResolvedHrf};
 use crate::model::{FineFit, RevCorPrfModel};
 use crate::optim::{self, FminsearchOptions};
-use crate::prf;
 use crate::precision::Precision;
 
 pub const RAW_VALUES: [&str; 5] = ["R^2", "x0", "y0", "Fwhm", "Beta"];
@@ -100,28 +99,13 @@ impl Prepared {
         &self.regressors[pixel * self.volumes..(pixel + 1) * self.volumes]
     }
 
-    /// `cM = [Y ones] \ X` without the intercept row: the slope of each regressor on `y`.
-    /// `[Y ones] \\ X`, keeping the course's coefficient. Single courses use MATLAB's
-    /// single QR over all pixels at once (`lstsq::mldivide_many`, in MATLAB's column
-    /// order). A double course
-    /// with variance takes the centred solve, which agrees with MATLAB's double QR
-    /// to 1e-12 on every recorded case and is several times faster. A constant
-    /// course makes the design rank deficient: MATLAB keeps the column with the
-    /// larger norm, so its coefficient is `y'x / y'y` when `|y| > 1`, else 0.
+    /// `cM = [Y ones] \ X` without the intercept row: the slope of each regressor on `y`,
+    /// in MATLAB's QR over all pixels at once (`lstsq::mldivide_many`, each pixel rounded
+    /// by its place among them) and in the data's precision. A constant course makes the
+    /// design rank deficient: MATLAB keeps the column with the larger norm, so its
+    /// coefficient is `y'x / y'y` when `|y| > 1`, else 0.
     pub fn profile(&self, y: &[f64]) -> Vec<f64> {
         let precision = self.model.data_precision;
-        if precision == Precision::Double {
-            let n = y.len() as f64;
-            let mean = y.iter().sum::<f64>() / n;
-            let centred: Vec<f64> = y.iter().map(|value| value - mean).collect();
-            let variance: f64 = centred.iter().map(|value| value * value).sum();
-            if !variance.is_finite() {
-                return vec![f64::NAN; self.pixels];
-            }
-            if variance > 0.0 {
-                return (0..self.pixels).map(|p| crate::fit_prf::dot(&centred, self.regressor(p)) / variance).collect();
-            }
-        }
         let course: Vec<num_complex::Complex64> = y.iter().map(|&value| num_complex::Complex64::new(value, 0.0)).collect();
         let ones = vec![num_complex::Complex64::new(1.0, 0.0); y.len()];
         // `[Y ones] \ X` with every pixel's regressor as one right-hand side, as
@@ -156,7 +140,11 @@ impl Prepared {
         let above = cm.iter().filter(|value| **value > max / 2.0).count() as f64 / self.pixels as f64;
         // corr(Y, X(:,m)): single when Y is, and so is its square.
         let r2 = match model.data_precision {
-            Precision::Double => prf::pearson(y, self.regressor(m)).powi(2),
+            Precision::Double => {
+                let course: Vec<num_complex::Complex64> = y.iter().map(|&value| num_complex::Complex64::new(value, 0.0)).collect();
+                let r = crate::css::correlation(&course, self.regressor(m), Precision::Double).re;
+                r * r
+            }
             Precision::Single => {
                 let r = crate::precision::correlation_single(self.regressor(m), y, true);
                 f64::from(r * r)
@@ -242,13 +230,13 @@ impl Prepared {
                         }).collect();
                         return f64::from(crate::precision::sum_single(&squares));
                     }
-                    let mut total = 0.0;
-                    for (pixel, observed) in rmap.iter().enumerate() {
+                    // sum(Ds(:).^2) in MATLAB's summation order.
+                    let squares: Vec<f64> = rmap.iter().enumerate().map(|(pixel, observed)| {
                         let modelled = (profile.data[pixel] * p[n - 2] + p[n - 1]) * self.mask[pixel];
                         let difference = observed - modelled;
-                        total += difference * difference;
-                    }
-                    total
+                        difference * difference
+                    }).collect();
+                    crate::matlab_math::sum(&squares)
                 }
                 Err(error) => {
                     failure.get_or_insert(error);
@@ -283,8 +271,9 @@ impl Prepared {
             let total = crate::precision::sum_single(&observed.iter().map(|value| (value - mean) * (value - mean)).collect::<Vec<_>>());
             f64::from(1.0 - residual as f32 / total)
         } else {
-            let mean = rmap.iter().sum::<f64>() / rmap.len() as f64;
-            let total: f64 = rmap.iter().map(|value| (value - mean) * (value - mean)).sum();
+            // Resid = (Rmap - mean(Rmap(:))).^2 and R2 = 1 - R/sum(Resid(:)), in MATLAB's orders.
+            let mean = crate::precision::mean_double(&rmap);
+            let total = crate::matlab_math::sum(&rmap.iter().map(|value| (value - mean) * (value - mean)).collect::<Vec<_>>());
             1.0 - residual / total
         };
         let n = params.len();
@@ -351,10 +340,11 @@ mod tests {
         // A course that follows pixel 2 (top right).
         let y = [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0];
         let (row, profile) = prepared.reverse_correlate(&y);
-        assert_eq!(row[0], 1.0);
+        // The QR solve rounds as MATLAB's does, so an exact fit lands within an ULP or two.
+        let near = |value: f64, expected: f64| (value - expected).abs() <= 4.0 * f64::EPSILON;
+        assert!(near(row[0], 1.0), "{}", row[0]);
         assert_eq!((row[1], row[2]), (2.0, 2.0));
-        assert_eq!(row[4], 1.0);
-        assert_eq!(profile[2], 1.0);
+        assert!(near(row[4], 1.0) && near(profile[2], 1.0), "{} {}", row[4], profile[2]);
         // One of four pixels above half maximum: Fwhm = sqrt(0.25 * 16) = 2.
         assert_eq!(row[3], 2.0);
         let hull = prepared.convex_hull(&row, &profile);
@@ -380,8 +370,9 @@ mod tests {
         let prepared = Prepared::new(&model, &apertures(), &ResolvedHrf::None, 8).unwrap();
         let y = [0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0];
         let (row, profile) = prepared.reverse_correlate(&y);
-        assert_eq!(row[4], -1.0);
+        let near = |value: f64, expected: f64| (value - expected).abs() <= 4.0 * f64::EPSILON;
+        assert!(near(row[4], -1.0), "{}", row[4]);
         assert_eq!((row[1], row[2]), (2.0, 2.0));
-        assert_eq!(profile[2], -1.0, "the model fit flips it again and restores the fitted signs");
+        assert!(near(profile[2], -1.0), "the model fit flips it again and restores the fitted signs: {}", profile[2]);
     }
 }
