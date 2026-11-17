@@ -1226,7 +1226,9 @@ environment that names the runner and the SHA-256 of the plan file, the bundle
 manifest and the WebAssembly module.
 
 Each run's model is the CLI model plus `Data_Precision`, which carries the
-precision that `def_64bit` selects for MATLAB. Bundle paths replace `/input`,
+precision that `def_64bit` selects for MATLAB, and, for forward models,
+`Css_Convention: "samsrf"`: SamSrf always takes complex CSS powers, while the
+engine's default clips negative responses. Bundle paths replace `/input`,
 and CF reads the Benson GIfTI that `prepare_cli_bundle.m` converted into the
 per-precision `.mat`. The Node runner passes the subject-HRF file to the engine
 API as a kernel (`hrf.oldSchool` of the file's `fP`). The app's interface has no
@@ -1270,11 +1272,14 @@ Before that comparison, the run's inventory must hold, or the run is an
 - `maps.f64` must have exactly 8 x maps x vertices bytes and match its hash;
 - the labels and the files on each side must match the contract.
 
-A map is `exact` only if both comparisons agree bit for bit, including
-nonfinite values and the sign of zero, and MATLAB's imaginary part is zero.
-Otherwise it `differs`. The report then gives the differing vertices, how many
-differ only in the sign of zero, the largest absolute, relative and ULP
-differences, and whether the masks agree. ULPs count +0 and -0 as one ordinal,
+Where `Srf.Data` is complex (SamSrf's CSS powers of a negative response), its
+imaginary parts are compared bitwise with the engine's, which the runners write
+to `maps.imag.f64` from `Job.merge`'s `imaginary` (a run without that file has
++0 imaginary parts). A map is `exact` only if all of these agree bit for bit,
+including nonfinite values and the sign of zero. Otherwise it `differs`. The
+report then gives the differing vertices, how many differ only in the sign of
+zero, the largest absolute, relative and ULP differences, and whether the masks
+agree. ULPs count +0 and -0 as one ordinal,
 so the smallest subnormals of opposite sign are 2 apart; `signedZeroOnly`
 counts the sign-of-zero differences.
 
@@ -1286,11 +1291,12 @@ GIfTIs that the web exports and SamSrfAnalysis does not are checked for shape
 and listed as not compared. MATLAB-only files are listed the same way. No
 tolerance is applied. Failed and inventory-error runs exit nonzero.
 
-`test_web_cli.py` (24 tests) builds full-provenance fixtures and covers each
+`test_web_cli.py` (31 tests) builds full-provenance fixtures and covers each
 refusal and inventory rule with a negative control:
 
 - one ULP that the float32 GIfTI hides, a signed zero, a NaN and an imaginary
-  part;
+  part; equal imaginary parts, one ULP or a signed zero in one, a web run
+  without them, and a damaged, extra or unrecorded `maps.imag.f64`;
 - ULPs across zero in both precisions;
 - a MATLAB failure behind a web refusal, and unexpected web statuses;
 - an extra `maps.f64` byte, a duplicate, zero, out-of-range or fractional ROI,
@@ -1300,6 +1306,16 @@ refusal and inventory rule with a negative control:
 
 Eight comparator mutations (the earlier ULP mapping, the ROI, argv, kind and
 GIfTI-length checks, MATLAB failures and truncation) each fail the suite.
+
+The pull-request tests hold the committed module to one MATLAB execution:
+`run_web_matrix.mjs` on the pinned source recording (run 42928350417),
+`compare_web_cli.py` against its AMD host, then `web_cli_outcome.py check`
+against `web-cli-outcome.json`. That file names the host and, for each run, its
+class and, for each map, `exact` or the number of values that differ in
+`Srf.Data`, in its imaginary parts and in the GIfTI. Any change, better or worse,
+fails until `web_cli_outcome.py freeze` rewrites the file, so its diff shows what
+moved. This is agreement with source MATLAB on one AMD host, not compiled-image
+parity.
 
 The `runtime_cli` and `runtime_image` jobs run both runners and the comparator
 against every MATLAB execution they make. The build job runs them after
@@ -1382,7 +1398,8 @@ What the differences are (AMD host):
   the 11 diverged vertices of `cf_gaussian_lh_double`.
 - **CSS from SamSrfAnalysis.** MATLAB saves a complex `Srf.Data` in both
   precisions. Single CSS differs at 12 to 13 of 21 vertices and double CSS at
-  14 to 15, by up to 1.8 in x0. The zero masks of single CSS disagree.
+  14 to 15, by up to 1.8 in x0. The zero masks of single CSS disagree. (Since
+  resolved on the AMD host: [CSS through SamSrfAnalysis](#css-through-samsrfanalysis).)
 - **Single forward fits.** `prf_gaussian_lh_average_single` differs at one
   vertex in Beta (1 ULP) and Baseline (5 ULP); its other maps are exact.
 - **Signed zeros.** The `cf_hull` x0 and y0 maps, and Sigma, Beta and Baseline
@@ -1534,6 +1551,7 @@ the Node runner also accepts custom HRFs unavailable through the app interface.
 | MATLAB `conv` for every HRF convolution | 11 | 115 |
 | one QR for double RC profiles, `corr` order for RC `R^2` | 11 | 119 |
 | MATLAB's double `corr(Y, X)` for CF profiles (`lstsq::gemv_t_double`, run 43890832220's module `d5ae6ba2`; Intel 0 runs, 42 maps) | 13 | 129 |
+| `Css_Convention: "samsrf"` for forward models and MATLAB's complex `Srf.Data` (`imaginary`, [below](#css-through-samsrfanalysis); Intel 0 runs, 46 maps) | 15 | 145 |
 
 The two refused single fits stay refused. What still differs, earliest stage first:
 
@@ -1552,7 +1570,6 @@ The two refused single fits stay refused. What still differs, earliest stage fir
   4,914 values; `double_cf_profiles_equal_matlab_on_amd_hosts`).
 - double global-signal regression (`samsrf_removenoise`) still solves normal
   equations, where MATLAB solves `[X ones] \\ Y`.
-- CSS through SamSrfAnalysis: MATLAB saves a complex `Srf.Data`.
 - every Intel host.
 
 ```sh
@@ -1561,6 +1578,35 @@ python3 -I packages/samsrf/validation/matlab/extract_cli_courses.py "$TMPDIR/sam
 SAMSRF_CLI_REFERENCE_DIR="$TMPDIR/samsrf-cli" SAMSRF_CLI_COURSES_DIR="$TMPDIR/samsrf-cli-courses" \
   cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test cli_preprocess -- --nocapture
 ```
+
+### CSS through SamSrfAnalysis
+
+The two CSS runs (`prf_css_lh_double`, `prf_css_lh_single`) differed at 12 to 15
+of 21 vertices in every map but the noise ceiling, by up to 1.8 in x0. The first
+stage that differs is the power itself. The bars apertures (`aps_bars_vec`) hold
+36,203 negative values (down to -0.074, from their interpolation), so some
+predicted responses are negative. SamSrf raises them to the fitted exponent as
+complex numbers, which makes the objective, the fit and the betas complex, and it
+saves R^2, nR^2, Beta and Baseline with their imaginary parts. The runners passed
+the CLI model unchanged, so the engine used its default `Css_Convention`,
+`nonnegative`, which clips negative responses first. With `Css_Convention:
+"samsrf"`, the real part of every map equals MATLAB's on the AMD host, at every
+vertex in both precisions.
+
+The imaginary parts were then the only difference. The engine computed them but
+kept only the real parts. `Job.merge` now returns them (`imaginary`), and they
+equal MATLAB's bit for bit, zero signs included. A rejected fit is `0 + 0i`. At
+the four vertices whose noise ceiling is negative, MATLAB's nR^2 is `-0 + 0i`.
+Dividing the zeroed R^2 by the ceiling gives its real part the quotient's sign,
+while the zero imaginary part stays `+0`. Every nonzero part is the plain
+quotient. A zero real part with a nonzero imaginary part was not recorded. The
+exported GIfTIs keep only real parts, as `samsrf_expand_srf` does, and equal
+MATLAB's. Chromium gives the same bytes as Node. The engine's default convention
+is unchanged; the runners now declare SamSrf's, as they declare `Data_Precision`.
+
+The Intel host still differs. There the double fits reach MATLAB's x0, y0, Sigma
+and Exponent, but R^2, Beta and Baseline differ in its MKL's last bits, and the
+single fits differ at 10 to 14 vertices.
 
 ## Double forward fine fits (#730)
 
