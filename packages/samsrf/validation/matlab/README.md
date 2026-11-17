@@ -1558,10 +1558,13 @@ The two refused single fits stay refused. What still differs, earliest stage fir
 - double convex-hull RC centroids: from MATLAB's own profile, `x0` and `y0` of
   `polyshape.centroid` differ by 1-3 ULP (one by 38 ULP); areas are exact.
   This is geometry (#732).
-- double RC Gaussian and CF Gaussian fits: `samsrf_fit2dprf`'s `errfun`
-  (`sum(Ds(:).^2)`) and `R^2` now use the modelled MATLAB `sum` and `mean`
-  orders in the double port. The fits still differ; the first optimizer
-  divergence requires a MATLAB trace to locate.
+- double RC Gaussian fits: `samsrf_fit2dprf`'s `errfun` (`sum(Ds(:).^2)`) and
+  `R^2` now use the modelled MATLAB `sum` and `mean` orders in the double port.
+  The fits still differ in the last bits (R^2 and x0 at 9 accepted vertices, y0
+  at 6); the first optimizer divergence requires a MATLAB trace to locate. The
+  11 rejected vertices hold MATLAB's NaN, whose sign bit the engine does not
+  reproduce. The double CF Gaussian run equals MATLAB's since the double CF
+  profiles below.
 - double CF profiles: fixed since by `lstsq::gemv_t_double` (FPRev recording
   `constants-gamma-gemv-reference.json`): full blocks of four columns use two
   lanes, and the remaining columns the right-hand-side trees `?ormqr` uses at
