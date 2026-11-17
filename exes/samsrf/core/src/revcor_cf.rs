@@ -12,13 +12,15 @@
 
 use crate::error::{Error, Result};
 use crate::expr::Value;
-use crate::fit_prf::{dot, nan_max, normalise, xy_value};
+use crate::fit_prf::{nan_max, xy_value};
 use crate::geometry::{cluster_roi, unique_rows, Hull, Triangulation};
 use crate::mapset::Maps;
 use crate::mesh::Adjacency;
 use crate::model::{CfModel, CfParameterEstimate, FineFit};
 use crate::optim::{self, FminsearchOptions};
-use crate::precision::{gemv_t_single, sum_single, Precision};
+use crate::lstsq::gemv_t_double;
+use crate::matlab_math::nrm2;
+use crate::precision::{gemv_t_single, mean_double, sum_single, Precision};
 use crate::prf;
 use crate::surface::Surface;
 
@@ -33,8 +35,9 @@ pub struct Prepared {
     pub model: CfModel,
     /// Seed vertices in label order (0-based).
     pub seed_vertices: Vec<u32>,
-    /// Each seed course, centred and scaled to unit norm (`None` when constant or NaN).
-    pub seed_normalised: Vec<Option<Vec<f64>>>,
+    /// Double seed courses minus their MATLAB `mean`, and their `norm`s, for `corr(y, X)`.
+    seed_centred_double: Vec<Vec<f64>>,
+    seed_norms_double: Vec<f64>,
     /// Single seed courses centred in single, and their norms, for `corr(y, X)`.
     seed_centred: Vec<Vec<f32>>,
     seed_norms: Vec<f32>,
@@ -85,7 +88,8 @@ impl Prepared {
                 Ok([template.row(1)[v], template.row(2)[v]])
             })
             .collect::<Result<_>>()?;
-        let seed_normalised = seed_courses.iter().map(|course| normalise(course)).collect();
+        let seed_centred_double: Vec<Vec<f64>> = seed_courses.iter().map(|course| centre_double(course)).collect();
+        let seed_norms_double = seed_centred_double.iter().map(|course| nrm2(course.iter().copied())).collect();
         let seed_centred: Vec<Vec<f32>> = seed_courses.iter().map(|course| centre_single(course)).collect();
         let seed_norms = seed_centred.iter().map(|course| norm_single(course)).collect();
         let weights = if model.smoothing > 0.0 {
@@ -128,7 +132,8 @@ impl Prepared {
         Ok(Prepared {
             model,
             seed_vertices: seed_vertices.to_vec(),
-            seed_normalised,
+            seed_centred_double,
+            seed_norms_double,
             seed_centred,
             seed_norms,
             seed_xy,
@@ -146,21 +151,22 @@ impl Prepared {
         self.values.len()
     }
 
-    /// `corr(Y, X)` over the seed courses, smoothed when the model asks for it.
+    /// `corr(Y, X)` over the seed courses, smoothed when the model asks for it. Double
+    /// courses follow MATLAB's `corr`: both centred with `mean`, `yc' * Xc` as one
+    /// product (`lstsq::gemv_t_double`), divided by `y`'s `norm` and then by each
+    /// seed's, limited to [-1, 1]. A constant or NaN course gives NaN, as there.
     pub fn profile(&self, y: &[f64]) -> Vec<f64> {
         if self.model.data_precision == Precision::Single {
             return self.profile_single(y);
         }
         let nsvx = self.seed_vertices.len();
-        let yn = normalise(y);
-        let r: Vec<f64> = self
-            .seed_normalised
-            .iter()
-            .map(|xn| match (&yn, xn) {
-                (Some(yn), Some(xn)) => dot(yn, xn),
-                _ => f64::NAN,
-            })
-            .collect();
+        let yc = centre_double(y);
+        let ny = nrm2(yc.iter().copied());
+        let columns: Vec<&[f64]> = self.seed_centred_double.iter().map(Vec::as_slice).collect();
+        let r: Vec<f64> = gemv_t_double(&yc, &columns).iter().zip(&self.seed_norms_double).map(|(product, nx)| {
+            let r = (product / ny) / nx;
+            if r.abs() > 1.0 { r / r.abs() } else { r }
+        }).collect();
         match &self.weights {
             None => r,
             Some(rows) => (0..nsvx)
@@ -407,6 +413,12 @@ pub fn fit_gaussian_single(profile: &[f32], xy: &[[f32; 2]], smoothed: bool, tol
         }
     }
     best.unwrap_or(none)
+}
+
+/// A double course minus its MATLAB `mean`.
+fn centre_double(values: &[f64]) -> Vec<f64> {
+    let mean = mean_double(values);
+    values.iter().map(|value| value - mean).collect()
 }
 
 /// A single course minus its single `mean`.

@@ -827,6 +827,10 @@ pub fn gampdf(x: f64, a: f64, b: f64) -> Option<f64> {
 mod fitted_hrf_probes;
 
 #[cfg(test)]
+#[path = "held_out_gamma.rs"]
+mod held_out_gamma;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
