@@ -51,7 +51,7 @@ not make that decision. See [Intel AVX-512 and the reference host](matlab/README
 | --- | --- | --- | --- |
 | Supported single RC/CF jobs compare every output vertex and map, with nonfinite, selection and profile masks | `revcor_reference.rs` (13 gates) and `compare-revcor.mjs` (1,298 public gates on both hosts): RC hull and CF hull/summary maps equal MATLAB's on AMD; profiles 8,400/8,400 and 7,200/7,200 identical | Met on AMD | Intel host keeps documented per-map limits |
 | Constant, low-variance and threshold-boundary cases; per-map limits with evidence; no quotas | `revcor-edges-reference.json` cases; `threshold_boundary_is_exercised_exactly`; per-map table in "Reverse-correlation port gates" | Met | None |
-| Full raw-data pipelines; double and forward single gates preserved | Raw-input matrix gates; `cf_from_raw_files_equals_the_run_on_matlabs_courses`; source gates unchanged | Met on AMD | On the SamSrfAnalysis CLI matrix (below), single RC and CF from raw GIfTI are exact on AMD except signed zeros in CF hull x0 and y0 |
+| Full raw-data pipelines; double and forward single gates preserved | Raw-input matrix gates; `cf_from_raw_files_equals_the_run_on_matlabs_courses`; source gates unchanged | Met on AMD | On the SamSrfAnalysis CLI matrix (below), single RC and CF from raw GIfTI are exact on AMD except NaN sign bits in CF hull x0 and y0 |
 | Missing references fail CI; immutable pins | `Expected` case counts in `revcor_reference.rs`; HF commit pins with SHA-256 | Met | None |
 | Upstream execution limits documented (mismatched `Rdim`) | matlab/README "Raw-input reverse-correlation matrix" | Met | None |
 | Changeset, API/CLI tests, browser checks, coverage docs | `cli.test.js` (single rc writes the in-process job, refuses single 2D fits), `api.test.js`, SamSrf e2e | Met for the supported subset | — |
@@ -108,7 +108,7 @@ tolerance. The findings below belong to the issues named:
 | --- | --- | --- |
 | Double detrend and z-score from raw GIfTI differ in the last bits (up to 1.2e-14) from both MATLAB hosts, which also differ from each other; single preprocessing is identical | Every double run | #730 (and #729's double RC) |
 | SamSrfAnalysis CSS: MATLAB saves a complex `Srf.Data`; 12-15 of 21 vertices differ in both precisions | `prf_css_lh_*` | #730 |
-| Signed zeros: CF hull x0 and y0, and rejected vertices of the double RC Gaussian | `cf_hull*`, `rc_gaussian_lh_double` | #729 |
+| NaN sign bits (not signed zeros): CF hull x0 and y0, and rejected vertices of the double RC Gaussian | `cf_hull*`, `rc_gaussian_lh_double` | #729 |
 | Single forward pRF: one vertex differs in Beta (1 ULP) and Baseline (5 ULP) | `prf_gaussian_lh_average_single` | #731 |
 | Diverged double Gaussian CF fits (11 vertices) | `cf_gaussian_lh_double` | #729 |
 | Public refusals: single RC Gaussian, single CF Gaussian | 2 runs | #729 |

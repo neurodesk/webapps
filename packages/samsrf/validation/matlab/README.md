@@ -1385,12 +1385,95 @@ What the differences are (AMD host):
   14 to 15, by up to 1.8 in x0. The zero masks of single CSS disagree.
 - **Single forward fits.** `prf_gaussian_lh_average_single` differs at one
   vertex in Beta (1 ULP) and Baseline (5 ULP); its other maps are exact.
-- **Signed zeros.** The `cf_hull` x0 and y0 maps, and Sigma, Beta and Baseline
+- **NaN sign bits.** The `cf_hull` x0 and y0 maps, and Sigma, Beta and Baseline
   at the 11 rejected vertices of `rc_gaussian_lh_double`, differ only in the
-  sign of zero.
+  sign bit of a NaN: MATLAB stores `0xFFC00000` (float32) where the engine has
+  `0x7FC00000`. This was first described as signed zeros; the bits were read on
+  the licensed host's source and compiled executions (2026-11-17), where
+  `compare_ui_cli.py` counts them as `nanSignOnly`.
 
 These comparisons are with source MATLAB. They are not compiled-image parity,
 which needs the build.
+
+### Production interface against the CLI matrix
+
+`run_browser_matrix.mjs` calls the app's engine module from source; it does not
+show that the deployed app gives the same files. `run_ui_matrix.mjs` runs the
+24 runs through a built `apps/samsrf` bundle, served with its own COOP/COEP
+headers, by its interface. For each run it:
+
+1. chooses the analysis and loads the run's CLI model as a model JSON, with
+   `Data_Precision` added (the precision `def_64bit` selects for MATLAB);
+2. sets how runs combine, keeps detrending and z-scoring on, and puts each
+   input into its field: the runs, the apertures `.mat`, the ROI and the
+   seed labels, `lh.white` and `lh.area`, and the Benson GIfTI that
+   `prepare_cli_bundle.m` converted for MATLAB;
+3. saves the model the app shows (`app-model.json`), presses Run and, when
+   the app offers a result, downloads the zip with "Download all".
+
+The app replaces the model's file fields with the names of the files it was
+given; `app-model.json` shows that this is the only change. The environment
+records the SHA-256 of the WebAssembly module the page actually fetched.
+
+Each run gets one status:
+
+- `refused`: the app refused the model.
+- `unsupported`: the model names a subject-HRF `.mat`, which the interface
+  has no field for.
+- `succeeded`: the app offered a result.
+- `succeeded-ui-error`: the app offered a result for download, then showed an
+  error. The maps are kept and compared, and the error is reported.
+- `failed`: anything else.
+
+```sh
+compare_ui_cli.py PLAN BUNDLE_SHA256 UI_ROOT MATLAB_ROOT REPORT \
+  --expect source|compiled-runtime [--allow-unattested-source-inputs] [--engine-root WEB_ROOT]
+```
+
+`compare_ui_cli.py` checks the plan, the bundle manifest and the MATLAB
+receipts exactly as `compare_web_cli.py` does, and the zip against the hash
+its record names. The interface downloads float32 GIfTIs only, so each
+contract map is compared bitwise twice:
+
+- against MATLAB's GIfTI, over every vertex;
+- against MATLAB's `Srf.Data` column over `Srf.Roi`, cast to float32.
+
+A double run's double values cannot be observed through the interface; the
+report says which precision each comparison stands for, and
+`compare_web_cli.py` holds the engine's double rows. With `--engine-root`,
+each downloaded file must also equal byte for byte the file that
+`run_web_matrix.mjs` or `run_browser_matrix.mjs` wrote for that run.
+`nanSignOnly` counts differing values that are NaN on both sides. The zip's
+own hash changes from run to run, because its entries carry the time of the
+download; its GIfTIs do not.
+
+`test_ui_cli.py` (18 tests) covers each status, the zip, file and vertex
+checks, the provenance refusals, a float32 ULP, a NaN sign, a GIfTI that
+agrees while `Srf.Data` does not, a double ULP that float32 hides, and the
+run translation in `run_ui_matrix.mjs`. Seven comparator mutations each fail
+it.
+
+```sh
+pnpm install --frozen-lockfile
+pnpm --filter samsrf build
+pnpm --filter samsrf preview --port 4291 --strictPort --host 127.0.0.1 &
+node $m/run_ui_matrix.mjs http://127.0.0.1:4291/samsrf/ $e/plan.json $e/bundle $e/bundle-sha256.json $e/ui-1
+python3 $m/compare_ui_cli.py $e/plan.json $e/bundle-sha256.json $e/ui-1 $e/compiled-1 \
+  ui-1-vs-compiled.json --expect compiled-runtime --engine-root $e/browser-1
+```
+
+What the interface cannot yet do on this matrix:
+
+- **Subject-HRF files.** It has no field for them, so the four `*_custom_hrf_*`
+  runs are `unsupported`; only the Node runner reaches them, through the
+  engine API.
+- **Showing the matrix's surface.** NiiVue cannot read the matrix's
+  synthetic 96-vertex `lh.white` (`Offset is outside the bounds of the
+  DataView`) and does not throw. `viewer.js` then treats the surface as
+  shown, and drawing the first map fails with `Cannot read properties of
+  undefined (reading 'layers')` after the result is offered. Every computed
+  run is therefore `succeeded-ui-error`.
+- **Double values.** Only float32 GIfTIs are offered.
 
 ## Recorded inputs and focused diagnosis
 
