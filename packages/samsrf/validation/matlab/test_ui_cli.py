@@ -174,7 +174,7 @@ class EngineGate(Base):
         self.assertEqual(run['class'], 'exact')
         self.assertEqual(run['engineFiles']['differ'], [self.names[0]])
         self.assertEqual(report['summary']['engineMismatchRuns'], 1)
-        self.assertIn('engine harness export', report['failures'][0])
+        self.assertIn('engine harness export', ' '.join(report['failures']))
 
     def test_files_the_engine_did_not_export_fail_the_gate(self):
         stem = compare_cli.expected_results(PLAN[self.id])[0][:-4]
@@ -217,7 +217,7 @@ class Statuses(Base):
         self.assertEqual(run['downloads'], 'exact')
         self.assertEqual(run['uiError'], LAYERS)
         self.assertEqual((report['summary']['completedRuns'], report['summary']['exactDownloadRuns']), (0, 1))
-        self.assertIn('did not complete', report['failures'][0])
+        self.assertIn('did not complete', ' '.join(report['failures']))
 
     def test_a_page_error_makes_a_result_ui_error_and_a_refusal_failed(self):
         for run_id, expected in (('rc_hull_lh_single', 'ui-error'), ('prf_custom_hrf_lh_double', 'failed'),
@@ -364,6 +364,11 @@ class Provenance(Base):
                 self.environment(self.x.ui, wasmSha256=value)
                 with self.assertRaisesRegex(Inventory, message):
                     self.x.ui_report()
+        self.x.write_ui()
+        self.environment(self.x.ui, wasmSha256='Z' * 64)
+        self.environment(self.x.web, wasmSha256='Z' * 64)
+        with self.assertRaisesRegex(Inventory, 'WebAssembly hash'):
+            self.x.ui_report()
 
     def test_engine_root_must_be_a_run_of_this_plan_and_bundle(self):
         for key, value, message in (('planSha256', '0' * 64, 'another plan'), ('bundleSha256', '0' * 64, 'another bundle'),
@@ -419,9 +424,9 @@ class CommandLine(unittest.TestCase):
     def tearDown(self):
         self._scratch.cleanup()
 
-    def cli(self, plan=None, report=None):
+    def cli(self, report=None):
         report = report or self.x.root / f'report-{next(self.reports)}.json'
-        result = subprocess.run([sys.executable, str(HERE / 'compare_ui_cli.py'), str(plan or self.plan),
+        result = subprocess.run([sys.executable, str(HERE / 'compare_ui_cli.py'), str(self.plan),
                                  str(self.manifest), str(self.x.ui), str(self.x.matlab), str(report),
                                  '--expect', 'compiled-runtime', '--engine-root', str(self.x.web)],
                                 capture_output=True, text=True, check=False)
@@ -468,11 +473,25 @@ class CommandLine(unittest.TestCase):
         self.assertEqual(self.cli(report=existing)[0].returncode, 2)
         self.assertEqual(existing.read_text(), '{}')
 
-    def test_a_subset_of_the_matrix_is_refused(self):
-        subset = self.x.root / 'subset.json'
-        subset.write_text(json.dumps({**self.x.plan, 'runs': self.x.plan['runs'][:1]}))
-        result, report = self.cli(plan=subset)
-        self.assertEqual((result.returncode, report), (2, None))
+    def test_a_consistent_subset_of_the_matrix_is_refused(self):
+        root = self.x.root / 'subset'
+        root.mkdir()
+        subset = UiFixture(root, ['rc_hull_lh_single'])
+        subset.plan = {**cli_plan.plan(), 'runs': [PLAN['rc_hull_lh_single']]}
+        plan = root / 'plan.json'
+        manifest = root / 'manifest.json'
+        plan.write_text(json.dumps(subset.plan))
+        manifest.write_text(json.dumps(subset.manifest))
+        subset.plan_sha = sha(plan.read_bytes())
+        subset.manifest_sha = sha(manifest.read_bytes())
+        subset.write()
+        subset.write_ui()
+        self.assertEqual(subset.ui_report()['failures'], [], 'only the whole-matrix rule refuses this subset')
+        report = root / 'report.json'
+        result = subprocess.run([sys.executable, str(HERE / 'compare_ui_cli.py'), str(plan), str(manifest),
+                                 str(subset.ui), str(subset.matlab), str(report), '--expect', 'compiled-runtime',
+                                 '--engine-root', str(subset.web)], capture_output=True, text=True, check=False)
+        self.assertEqual((result.returncode, report.exists()), (2, False), result.stderr)
         self.assertIn("not cli_plan.py's matrix", result.stderr)
 
 
@@ -582,7 +601,7 @@ class Runner(unittest.TestCase):
         for scenario, error in (({'outcome': LAYERS}, LAYERS), ({'outcome': done, 'pageErrors': ['boom']}, 'boom')):
             with self.subTest(scenario=scenario):
                 record = self.record('rc_hull_lh_single', downloadable=True, **scenario)
-                self.assertEqual((record['status'], record['uiError']), ('succeeded-ui-error', error))
+                self.assertEqual((record['status'], record.get('uiError')), ('succeeded-ui-error', error))
                 self.assertIn('zipSha256', record)
 
 
