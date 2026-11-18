@@ -1421,7 +1421,8 @@ What the differences are (AMD host):
   sign bit of a NaN: MATLAB stores `0xFFC00000` (float32) where the engine has
   `0x7FC00000`. This was first described as signed zeros; the bits were read on
   the licensed host's source and compiled executions (2026-11-17), where
-  `compare_ui_cli.py` counts them as `nanSignOnly`.
+  `compare_ui_cli.py` counts them as `nanSignOnly`. (Since resolved:
+  [NaN representation](#nan-representation).)
 
 These comparisons are with source MATLAB. They are not compiled-image parity,
 which needs the build.
@@ -1701,6 +1702,7 @@ the Node runner also accepts custom HRFs unavailable through the app interface.
 | one QR for double RC profiles, `corr` order for RC `R^2` | 11 | 119 |
 | MATLAB's double `corr(Y, X)` for CF profiles (`lstsq::gemv_t_double`, run 43890832220's module `d5ae6ba2`; Intel 0 runs, 42 maps) | 13 | 129 |
 | `Css_Convention: "samsrf"` for forward models and MATLAB's complex `Srf.Data` (`imaginary`, [below](#css-through-samsrfanalysis); Intel 0 runs, 46 maps) | 15 | 145 |
+| MATLAB's NaN, `0xFFF8000000000000` (`0xFFC00000` in single), in every map and GIfTI ([below](#nan-representation); Intel 0 runs, 55 maps) | 17 | 154 |
 
 The two refused single fits stay refused. What still differs, earliest stage first:
 
@@ -1711,9 +1713,7 @@ The two refused single fits stay refused. What still differs, earliest stage fir
   `R^2` now use the modelled MATLAB `sum` and `mean` orders in the double port.
   The fits still differ in the last bits (R^2 and x0 at 9 accepted vertices, y0
   at 6); the first optimizer divergence requires a MATLAB trace to locate. The
-  11 rejected vertices hold MATLAB's NaN, whose sign bit the engine does not
-  reproduce. The double CF Gaussian run equals MATLAB's since the double CF
-  profiles below.
+  double CF Gaussian run equals MATLAB's since the double CF profiles below.
 - double CF profiles: fixed since by `lstsq::gemv_t_double` (FPRev recording
   `constants-gamma-gemv-reference.json`): full blocks of four columns use two
   lanes, and the remaining columns the right-hand-side trees `?ormqr` uses at
@@ -1759,6 +1759,34 @@ is unchanged; the runners now declare SamSrf's, as they declare `Data_Precision`
 The Intel host still differs. There the double fits reach MATLAB's x0, y0, Sigma
 and Exponent, but R^2, Beta and Baseline differ in its MKL's last bits, and the
 single fits differ at 10 to 14 vertices.
+
+### NaN representation
+
+The CF hull runs' x0 and y0 at one vertex each, and every map of the 11 rejected
+vertices of `rc_gaussian_lh_double`, differed only in their NaN. Earlier reports
+called these signed zeros; they are NaN sign bits. MATLAB's NaN is
+`0xFFF8000000000000` (`0xFFC00000` in single and in its GIfTIs), the negative quiet
+NaN that x86-64 returns for an invalid operation, and the `NaN` constant is the
+same: SamSrf fills rejected reverse-correlation fits from `NaN(...)`, and they
+hold it. The engine wrote Rust's positive NaN, `0x7FF8000000000000`.
+
+Every NaN of the 24-run CLI recording on both hosts is the negative NaN (89 double
+and 253 to 265 single values across `Srf.Data`, `Srf.ConFlds`, `Srf.Cortex_Steps`
+and every GIfTI). That was the discovery set. The rule that MATLAB writes this NaN
+wherever it makes one was then committed with its predictions before the other
+recordings were read: every NaN of the 741-case, reverse-correlation and edge-case
+recordings (2,021, 92,600 and 22,476 values in 8,031 arrays) is the negative NaN,
+and none is positive. The inputs of these recordings hold no NaN, so a NaN that
+SamSrf only passes on from its input is not covered.
+
+`Job.merge` now writes `mapset::MATLAB_NAN` for every NaN of the maps, of
+`Srf.Raw_Data` and of the imaginary parts, and the GIfTI writer writes
+`0xFFC00000` for a NaN. Neither relies on the sign of an arithmetic NaN or of a
+float conversion: Rust and WebAssembly leave both unspecified, and a native build
+folds `MATLAB_NAN as f32` to the positive NaN. On the matrix this moved exactly the
+predicted entries: `cf_hull_lh_single` and `cf_hull_smooth_global_lh_single`
+became exact runs, and the CF hull x0 maps and the RC Gaussian Sigma, Beta and
+Baseline became exact maps (17 runs and 154 maps against the AMD host).
 
 ## Double forward fine fits (#730)
 
