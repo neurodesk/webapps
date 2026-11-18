@@ -1706,7 +1706,7 @@ the Node runner also accepts custom HRFs unavailable through the app interface.
 | `Css_Convention: "samsrf"` for forward models and MATLAB's complex `Srf.Data` (`imaginary`, [below](#css-through-samsrfanalysis); Intel 0 runs, 46 maps) | 15 | 145 |
 | MATLAB's NaN, `0xFFF8000000000000` (`0xFFC00000` in single), in every map and GIfTI ([below](#nan-representation); Intel 0 runs, 55 maps) | 17 | 154 |
 | MATLAB's `linspace` pixel grid for RC pRF fits (`symmetric_linspace`, [below](#hull-area-centroid-and-vertex-order-732); module `abbd6625`; Intel 0 runs, 57 maps) | 18 | 157 |
-| MATLAB's `[X ones] \ Y` for the double global regression ([below](#double-global-regression); merged with the grid; Intel 0 runs, 57 maps) | 18 | 160 |
+| MATLAB's `[X ones] \ Y` for the double global regression ([below](#double-global-regression); merged with the grid, module `cc528cf6`; Intel 0 runs, 57 maps) | 18 | 160 |
 
 The two refused single fits stay refused. What still differs, earliest stage first:
 
@@ -1837,7 +1837,11 @@ Suppression 13) and none lose it; on Intel, one value gains (Suppression) and se
 it (R^2 and Beta at zero-based vertices 2, 6 and 11, Suppression at 6), the Intel loss
 described above. The matrix then has 18 of 24 runs and 160 of 168 maps exact on AMD (157
 on main) and 57 maps on Intel (57 on main); `web-cli-outcome.json` holds this AMD outcome.
-No geometry value changes on either host.
+No geometry value changes on either host. Canonical build
+[44286145940](https://github.com/neurodesk/webapps/actions/runs/44286145940) produced the
+combined module `cc528cf6`, whose maps equal its local rebuild's on both hosts; in
+Chromium it writes the same 196 files as Node (15 exact runs and 135 of 140 maps, with the
+4 subject-HRF runs unsupported in the browser).
 
 ## Double forward fine fits (#730)
 
