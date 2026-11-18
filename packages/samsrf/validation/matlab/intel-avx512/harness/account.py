@@ -16,10 +16,10 @@ Every value is labelled by the route of its final value (vertices are zero-based
   label does not establish that every kernel on its path is identified (the coarse fit's
   correlations, for example, are not modelled on either host).
 - `complex-double`: a vertex whose Srf.Data has an imaginary part on any side (the SamSrf
-  CSS convention). Its complex kernels (`z' * y`, `norm(z)`, complex least squares) have no
-  Intel reference and stay the shipped ones, but its `corr` also takes the real norm of
-  `y`, which the research module replaces: a mixed route. Its fit may also have evaluated
-  real predictions on the way.
+  CSS convention). Complex least squares stays shipped. The original `avx512` variant
+  replaces only the real y norm inside complex corr; `avx512-real-corr` keeps that corr
+  shipped; `avx512-complex-corr` also installs the complex dot and norm candidates. None
+  identifies the whole complex route. Its fit may evaluate real predictions on the way.
 - `single`: single data, whose kernels have no Intel reference and stay the shipped ones.
 - `outside-roi`: GIfTI values outside the ROI, which no kernel computes.
 

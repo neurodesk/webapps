@@ -30,6 +30,11 @@ and `tests/blas_recordings.rs` gate. There is no second copy of any kernel. `bui
 records the patches, the copied native tests and runner, the toolchain and the module, and
 whether every copied source was committed.
 
+- `complex-corr.patch` (variant `avx512-complex-corr`) adds the frozen four-lane fused
+  complex-dot candidate and uses the existing correctly rounded norm candidate for
+  complex vectors. Complex least squares remains shipped. Its evidence and limits are
+  in [the complex-dot record](../complex/README.md).
+
 ## Controls
 
 - Null control: the `hooks` build, which installs nothing, must write the committed
@@ -66,6 +71,11 @@ sequence number. Reports are kept as written, so a later run never relabels an e
   `matrix.json` and `matrix-real-corr.json`. Its CSS-pipeline dumps, and so its pipeline
   reports, were byte-identical to `4c1a23a8-2/`'s, and its departure reports to
   `4c1a23a8-1/`'s; they are not duplicated.
+
+- `cc528cf6-2/`: the complex-dot/norm candidate frozen at `040fbe29e`, on the same
+  committed baseline. `matrix.json` and `pipelines.json` retain both-host per-value
+  accounting. `relative-to-prior-research.json` separately counts transitions from
+  the original `avx512` research build, rather than relabelling it as shipped.
 
 ## Reproducing
 

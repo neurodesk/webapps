@@ -1,0 +1,25 @@
+{
+  "variant": "avx512-complex-corr",
+  "arithmeticReference": "MKL AVX512_E1 research reference (samsrf-mkl-avx512): real double kernels plus complex dot candidate and complex norm candidate",
+  "checkout": {
+    "head": "040fbe29e72f0bedd033cef572d472f2866ece8a",
+    "clean": true
+  },
+  "patches": {
+    "hooks.patch": "02c47d6960f1d6ed3e2712ca1a894822db1c649f770f4157359fc59bf3a424d6",
+    "install-avx512.patch": "a5a129d136a11927d390a639aec34d376fae8080e389c5bb9031b8f47d3ed072",
+    "complex-corr.patch": "21c580d18da75ff180d0a564d2ba51b470c0d8ef8f1eb7f1cbf037556b99ba58"
+  },
+  "copied": {
+    "native/css_pipelines.rs": "213d75b1cfb94c9e773ba25b19efb43fbe0b9c51770570ab51a7e5383dbe5aa8",
+    "run_web_matrix.mjs": "db66ec23ae2c53a64bee9a75251cdef92eaf5de2e2a87f158e6ce2a2249fa544"
+  },
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8",
+  "wasmPack": "wasm-pack 0.13.1",
+  "wasmOpt": "not run",
+  "module": {
+    "samsrf_wasm.js": "87bdffc9790c652aa3e5d8114a94866266fd697eb42d15e0ddd08068272a98cd",
+    "samsrf_wasm_bg.wasm": "f8620bbca9d384cd3726bb1db8e8f629fdcc665a5a09032439a519fb57a03a14",
+    "samsrf_wasm.d.ts": "13d53dbaa63339a73db8204cea2e738a4f723d1a32ab0fbbadbed8c7adfae4d3"
+  }
+}

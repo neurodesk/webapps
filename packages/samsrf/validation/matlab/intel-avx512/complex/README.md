@@ -59,3 +59,118 @@ both bundles, with the committed baseline and hooks null control. Count raw real
 imaginary and GIfTI gains/losses individually; preserve previous reports. Do not retune
 from fitted-map outputs. Report every remaining loss and the unchanged shipping bytes.
 Any missing evidence becomes a specific recording proposal; do not execute it.
+
+## Frozen candidate results
+
+The build at `040fbe29e` uses complex-dot source SHA-256
+`048df60acffac0b6de9dde6eb7f9c834989dabb8e579e3176445a96570778f5f` and
+`complex-corr.patch` SHA-256
+`21c580d18da75ff180d0a564d2ba51b470c0d8ef8f1eb7f1cbf037556b99ba58`.
+Its unoptimized research module is
+`f8620bbca9d384cd3726bb1db8e8f629fdcc665a5a09032439a519fb57a03a14`.
+The algorithm was not changed after pipeline evaluation. The shipping module remains
+`cc528cf6ec172367ee845296f197a686e671629386a595eaba5432ccfe0436b6`.
+
+[The matrix](../harness/cc528cf6-2/matrix.json) and
+[pipeline accounting](../harness/cc528cf6-2/pipelines.json) use the same committed
+baseline as `cc528cf6-1`. Every value is compared bitwise in MATLAB's class; neither a
+net total nor a map count can waive a lost value. Null controls retain all 236 identical
+files on each bundle, and the new research build writes identical bytes from both bundles.
+
+| Intel 8573C | Committed | Original research | Complex candidate |
+| --- | --- | --- | --- |
+| Exact maps / runs | 57 / 0 | 111 / 7 | 113 / 7 |
+| Real-double raw gains / losses | baseline | +606 / −0 | +606 / −0 |
+| Complex raw real gains / losses | baseline | +19 / −2 | +41 / −2 |
+| Complex raw imaginary gains / losses | baseline | +4 / −2 | +30 / −1 |
+| GIfTI gains / losses | baseline | +69 / −0 | +69 / −0 |
+| CSS pipeline real gains / losses | baseline | +260 / −2 | +345 / −0 |
+| CSS pipeline imaginary gains / losses | baseline | +3 / −4 | +97 / −0 |
+
+Single outputs do not change: 1,075/1,596 raw real values, 1,547/1,596 imaginary values
+and 1,075/1,596 GIfTI values match on Intel. The 110 real-double hull misses also remain.
+Relative to the previous research build, the candidate gains 49 CLI values and 185
+pipeline values on Intel without losing any; the separate
+[transition report](../harness/cc528cf6-2/relative-to-prior-research.json) lists the controls.
+
+All six earlier pipeline losses disappear. Both pipeline conventions now match every
+spatial/CSS shape parameter and correlation value on Intel; the SamSrf complex convention still
+misses 53/57 Beta values and 55/57 Baseline values in each part. Complex least squares
+has not been replaced. The three remaining CLI losses against the committed baseline
+are the previous losses, with unchanged bits:
+
+| Map | Part | Zero-based vertex | Distance from MATLAB |
+| --- | --- | --- | --- |
+| Beta | real | 11 | 5 ULP |
+| Baseline | real | 4 | 3 ULP |
+| Baseline | imaginary | 5 | 4 ULP |
+
+The candidate removes the previous imaginary nR² loss at vertex 5. This does not repair
+or waive the separate #876 production regression. Running Intel arithmetic on AMD still
+loses values: 787 CLI values and 437 pipeline values against the committed baseline,
+with no gains. Relative to the older Intel research build on AMD it gains one CLI value
+and loses three, and gains 14 pipeline values and loses 81. This is evidence for a
+recorded arithmetic branch, not a CPU-selection or reference policy.
+
+## What the current data can resolve next
+
+The Intel single-kernels recording has two real CF matrices: each supplies 21 ROI courses,
+nine seed courses and 250 samples, with means, norms, matrix products and separately copied
+column products. Those are 378 products and useful replay checks for a model inferred
+from fingerprints. The QR recording has 3,200 single and 1,600 complex-single GEMV probes,
+plus 1,600 complex-double and 800 real-double probes; the scalar/transposed matrix call
+layout must be distinguished before reusing their trees. Its 348 designs, 696 multiple-RHS
+cases and 672 ORMQR probes provide staged evidence for the remaining least-squares work.
+The previous departure table includes the 22 chains that first diverge after reflector 1;
+this experiment does not replace that table or identify the whole single path.
+
+For the two unresolved short complex correlations, the minimal additional recording would
+replay the existing n=8 and n=17 z/y input bytes and save `mean(z)`, `mean(y)`, the centred
+vectors, their mixed complex/real product, each centred norm, both successive divisions,
+and `corr(z,y)`. This distinguishes the hypotheses that the port's centring is wrong, the
+raw-dot rule does not transfer to centred inputs, or the correctly rounded norm differs.
+The fixed model predicts the raw dots exactly; the proposed centred-stage values must be
+written and hashed before any future execution. Do not tune a rounding band from a miss.
+
+A separate cancellation/fusion probe would test the raw-dot candidate beyond the present
+24 vectors: lengths around multiples of four, independent real and imaginary cancellation
+pairs, varied products to distinguish FMA, zero-sign cases, and allocation offsets. The
+QR probes do not substitute for direct `z' * y` calls. A future proposal must specify the
+inputs and predicted alternatives before recording, retain observed CNR receipts for one
+AMD and one AVX512_E1 host, and stop if the observed branches differ from those roles.
+Proposed upper budget: one dispatch, two single-thread processes, 15 minutes each, no
+automatic retries. This is a proposal only: no dispatch, license use or data publication
+is authorized or performed in this unit.
+
+## Reproduce and verify
+
+Use Python 3.13 or later for `math.fma`:
+
+```sh
+python3 dot_candidates.py "$PINS" NEW_DOT_REPORT.json
+python3 correlation_replay.py "$PINS" NEW_CORRELATION_REPORT.json
+```
+
+The portable correlation script reproduces `correlation-1.json` and
+`correlation-amd-control.json`; n=1 is excluded from its finite count. The Rust gate
+`complex_dot_candidate_matches_seen_raw_vectors_on_both_intel_hosts` uses the
+`SAMSRF_MATLAB_NUMERICS_DIR` and `SAMSRF_MATLAB_NUMERICS2_DIR` fixtures. It compares both
+parts bit for bit on both Intel hosts and both AMD controls. Unfused and wrong-fold
+mutants must fail that real fixture gate. The research harness's existing build, native
+and account commands accept `avx512-complex-corr`; they do not modify the shipping tree.
+
+Primary source procedures: [raw BLAS recorder](../../record_numerics_probes.m),
+[QR recorder](../../record_qr_kernels.m), [QR MEX calls](../../qr_kernels.c),
+[single GEMV fingerprint recorder](../../record_gemv_order.m),
+[single CF stages](../../record_single_kernels.m), and
+[real-double arithmetic recorder](../../record_arithmetic_order.m).
+
+Local validation of this unit: the numerics workflow invocation passes 18 tests with both
+pinned recordings configured; the new gate's unfused and wrong-fold mutations each fail,
+and restoring the source passes. Clippy with Rust 1.98.1 and `-D warnings` passes, as do
+58 workflow/version contracts on Node 24.19.0. The 24-run matrix runs on each bundle and
+the two native pipelines complete; the accounting above states their differences.
+The production WASM dependency tree excludes this crate, and the shipping source and
+all three committed module files are unchanged from `62eeb1a9`. The build's
+[provenance](../harness/cc528cf6-2/build.json) records its clean source at `040fbe29e`.
+Independent review and any future full affected CI remain pending.

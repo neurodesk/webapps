@@ -2,7 +2,8 @@
 //! on the recorded Intel Xeon hosts (8370C, 8573C, 6975P-C): `[a b] \ Y` (`?geqp3`,
 //! `?ormqr`, `?trsv`/`?trsm`), `detrend`'s fit and `samsrf_removenoise`; and, in [`blas`]
 //! (research, branch t3/samsrf-intel-cf), MATLAB's real double `x' * y`, `y' * A`, `corr`
-//! and CF profile on that branch.
+//! and CF profile on that branch. The [`complex`] module adds a mixed complex/real dot
+//! candidate from 24 seen vectors, not a general complex BLAS implementation.
 //!
 //! The shipped port (`samsrf_core::lstsq`) follows MKL's CNR `auto` branch on AMD hosts.
 //! MATLAB on those Intel hosts rounds the same solves differently, so one output cannot

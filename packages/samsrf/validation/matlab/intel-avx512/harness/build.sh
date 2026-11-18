@@ -11,6 +11,10 @@
 #                         as avx512, but a complex corr keeps the shipped norm of y
 #                         (real-corr-only.patch): an intervention on the mixed complex route
 #
+#   build.sh avx512-complex-corr OUT
+#                         adds the fixed complex-dot candidate and complex norm candidate;
+#                         complex least squares remains shipped
+#
 # OUT must not exist. It receives exes/samsrf, exes/nifti and the packages/samsrf files that
 # run_web_matrix.mjs loads, patched, with the module in OUT/packages/samsrf/wasm and
 # OUT/build.json, and native/*.rs as the build's exes/samsrf/wasm/tests (native.sh runs them). The module is built without wasm-opt (the canonical build pins binaryen
