@@ -537,6 +537,11 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   `samsrf_expand_srf` zero-fills the rest, so every exported map is 0 outside
   the analysed vertices, the `Noise Ceiling` row and the NaN rows of a rejected
   `rc` model fit included; `nR^2` is 0 there too.
+- **NaN.** Every NaN in `Job.merge`'s maps is MATLAB's NaN, the negative quiet NaN
+  `0xFFF8000000000000`, and exported GIfTIs write it as `0xFFC00000`, as MATLAB
+  does on x86-64 for its `NaN` constant and for invalid operations. Every NaN in
+  the pinned recordings is this one
+  ([NaN representation](validation/matlab/README.md#nan-representation)).
 - **Template precision.** `readBensonTemplate` retains double scalar constants
   until each mixed operation is rounded to single, as MATLAB does, and uses
   empirical candidates for MATLAB's single `sin` and `cos`: fdlibm's float kernels with the x/4 term of
