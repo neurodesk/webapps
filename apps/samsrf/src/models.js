@@ -19,7 +19,21 @@ export const HRF_OPTIONS = Object.freeze([
   { value: "Inf", label: "Fitted with the pRF", model: "Inf" },
 ]);
 
+/**
+ * SamSrf reads an Hrf that starts with hrf_ as the name of a subject's old-school HRF fit
+ * (hrf_*.mat holding fP) and any other name as a vertex-wise HRF map, which the engine refuses.
+ */
+export function isSubjectHrf(hrf) {
+  return typeof hrf === "string" && /^hrf_/i.test(hrf);
+}
+
+/** The Hrf a model gives to name a subject HRF fit file. */
+export function subjectHrfName(file) {
+  return file.name.replace(/\.mat$/i, "");
+}
+
 export function hrfValue(hrf) {
+  if (isSubjectHrf(hrf)) return "subject";
   if (Array.isArray(hrf)) {
     if (hrf.length === 0) return "[]";
     if (hrf.length === 1 && (hrf[0] === 0 || hrf[0] === 1)) return String(hrf[0]);
@@ -239,7 +253,7 @@ export function setFineFit(model, algorithm, preset) {
 }
 
 /** Name the input files in the model the way SamSrf's JSON does (file stems, no extension). */
-export function withInputNames(model, analysis, { apertures, seed, template }) {
+export function withInputNames(model, analysis, { apertures, seed, template, subjectHrf }) {
   const next = { ...model };
   const stem = (file) => file?.name.replace(/\.(nii\.gz|nii|mat|gif|gii|label)$/i, "") ?? "";
   if (analysis === "cf") {
@@ -247,6 +261,7 @@ export function withInputNames(model, analysis, { apertures, seed, template }) {
     next.Template = stem(template);
   } else {
     next.Aperture_File = stem(apertures);
+    if (subjectHrf && isSubjectHrf(next.Hrf)) next.Hrf = subjectHrfName(subjectHrf);
   }
   return next;
 }

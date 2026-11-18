@@ -9,6 +9,8 @@ import test from 'node:test';
 const check=fileURLToPath(new URL('../validation/package-check.mjs',import.meta.url));
 const template=fileURLToPath(new URL('../data/MNI152_T1_1mm_brain.nii.gz',import.meta.url));
 
+// The check normalises the committed template in place of its pinned download, so these tests
+// judge its verdicts without the network; the stand-in ignores the scan it is given.
 // A stand-in for the installed command. Its normalisation copies the MNI152 template into every
 // output, draws a 6 mm lesion at MNI (-30, -10, 20) and records --normalization (default greedy) in
 // provenance.json, then applies FAKE_SYNCRO_DEFECT.
@@ -60,7 +62,7 @@ async function runCheck(defect) {
     const executable=join(directory,'syncro');
     await writeFile(executable,fake);
     await chmod(executable,0o755);
-    const result=spawnSync(process.execPath,[check,'--executable',executable],{encoding:'utf8',env:{...process.env,FAKE_SYNCRO_DEFECT:defect}});
+    const result=spawnSync(process.execPath,[check,'--executable',executable,'--input',template],{encoding:'utf8',env:{...process.env,FAKE_SYNCRO_DEFECT:defect}});
     return {status:result.status,output:result.stdout+result.stderr};
   } finally {
     await rm(directory,{recursive:true,force:true});
@@ -73,6 +75,7 @@ test('the release check passes outputs that match the template and the lesion he
   const {status,output}=await runCheck('none');
   assert.equal(status,0,output);
   assert.doesNotMatch(output,/^FAIL/m);
+  assert.match(output,/^INFO input: .*MNI152_T1_1mm_brain\.nii\.gz replaces the pinned sub-01_T1w\.nii\.gz$/m);
 });
 
 test('the release check fails a lesion propagated into the wrong hemisphere',posix,async()=>{

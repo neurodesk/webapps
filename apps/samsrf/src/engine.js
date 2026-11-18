@@ -1,6 +1,8 @@
 // The one module that talks to the SamSrf engine (@neurodesk/samsrf). Everything
-// else in the app reaches the engine through these four exports, and the worker
-// pool (pool.js, worker.js) is their only caller apart from tests.
+// else in the app reaches the engine through these exports: the worker pool
+// (pool.js, worker.js) runs analyses with createJob, runShard and mergeShards, and
+// the viewer reads its surface with readSurfaceMesh, so it draws the mesh the
+// analysis reads.
 //
 // An analysis is shardable by unit (a vertex of the ROI, or of the whole surface
 // without one): createJob reads the inputs once, runShard fits units
@@ -16,6 +18,7 @@ import {
   createJob as createSamsrfJob,
   exportGiis,
   exportConvention,
+  hrf,
   init,
   polarAndEccentricity,
   readApertures,
@@ -25,9 +28,11 @@ import {
   readFreeSurferSurface,
   readGiftiRun,
   readGiftiSurface,
+  readOldSchoolHrf,
   RunAccumulator,
 } from "@neurodesk/samsrf";
 import { resolveHemisphere } from "@neurodesk/samsrf/inputs";
+import { isSubjectHrf } from "./models.js";
 
 /** @typedef {import('./models.js').Analysis} Analysis */
 /** @typedef {import('./inputs.js').SurfaceRole} SurfaceRole */
@@ -47,6 +52,7 @@ import { resolveHemisphere } from "@neurodesk/samsrf/inputs";
  *   surfaces: Partial<Record<SurfaceRole, NamedBytes>>, // FreeSurfer surfaces, curv and area, or a GIfTI mesh
  *   template: NamedBytes | null,      // cf: template map GIfTI (polar, eccentricity, ROI arrays)
  *   seed: NamedBytes | null,          // cf: seed region .label
+ *   subjectHrf: NamedBytes | null,    // prf and rc: the hrf_*.mat (fP) a model's Hrf names
  *   normalise: boolean,               // detrend and z-score each run (SamSrfAnalysis -norm)
  *   average: boolean,                 // average runs (true) or concatenate them (SamSrfAnalysis -aver)
  * }} JobInputs
@@ -100,6 +106,7 @@ export async function createJob(inputs, onProgress) {
   const seed = inputs.analysis === "cf" && inputs.seed ? readLabel(inputs.seed) : null;
   const keep = roi ? Uint32Array.from(new Set([...roi, ...(seed ?? [])])).sort() : null;
   const precision = inputs.model.Data_Precision === "single" ? "single" : "double";
+  let hrfLine = null;
   const data = preprocess(inputs.runs, keep, { ...inputs, precision });
   const spec = {
     kind: inputs.analysis,
@@ -117,6 +124,13 @@ export async function createJob(inputs, onProgress) {
     if (Number(inputs.model.Smoothing) > 0) spec.surface = readSurface(inputs.surfaces);
   } else {
     if (!inputs.apertures) throw new Error("Add the stimulus apertures.");
+    if (isSubjectHrf(inputs.model.Hrf)) {
+      if (!inputs.subjectHrf) throw new Error(`Add the subject HRF ${inputs.model.Hrf}.mat.`);
+      const fp = fromFile(inputs.subjectHrf, readOldSchoolHrf);
+      // The engine leaves file-backed HRFs to its caller; hrf.oldSchool is SamSrf's kernel from fP.
+      spec.hrf = hrf.oldSchool(inputs.model.TR, fp);
+      hrfLine = `Subject HRF ${inputs.subjectHrf.name}: fP ${[...fp].join(", ")}`;
+    }
     spec.apertures = fromFile(inputs.apertures, (bytes) => {
       const apertures = readApertures(bytes, apertureFormat(inputs.apertures.name));
       try {
@@ -145,6 +159,7 @@ export async function createJob(inputs, onProgress) {
       `${inputs.runs.length} run${inputs.runs.length === 1 ? "" : "s"} of ${data.volumes} volumes on ${data.totalVertices} vertices${inputs.runs.length > 1 ? `, ${inputs.average ? "averaged" : "concatenated"}` : ""}${inputs.normalise ? ", detrended and z-scored" : ""} (${seconds(read - started)})`,
       roi ? `ROI ${inputs.roi.name}: ${roi.length} vertices` : "No ROI: every vertex is analysed",
       ...(seed ? [`Seed ${inputs.seed.name}: ${seed.length} vertices`] : []),
+      ...(hrfLine ? [hrfLine] : []),
       `Analysis ${job.modelName}${job.outSuffix}: ${job.vertexCount} vertices, maps ${job.values.join(", ")}`,
       `Map export: ${convention}; data precision: ${precision === "single" ? "MATLAB single" : "double"}`,
       ...(gridPoints ? [`Search space: ${gridPoints} grid points per worker (${seconds(prepared - read)})`] : []),
@@ -245,6 +260,19 @@ function preprocess(runs, keep, { normalise, average, precision }) {
 
 function allVertices(count) {
   return Uint32Array.from({ length: count }, (_, index) => index);
+}
+
+/**
+ * A surface as the analysis reads it (SamSrf's fs_read_surf, or a GIfTI mesh), for the
+ * viewer: float32 xyz per vertex and three vertex indices per face.
+ * @param {NamedBytes} file
+ * @returns {Promise<{ vertices: Float32Array, faces: Uint32Array }>}
+ */
+export async function readSurfaceMesh(file) {
+  await init();
+  const mesh = fromFile(file, /\.gii$/i.test(file.name) ? readGiftiSurface : readFreeSurferSurface);
+  if (mesh.faceSize !== 3) throw new Error(`${file.name}: the viewer draws triangle meshes only.`);
+  return { vertices: Float32Array.from(mesh.vertices), faces: mesh.faces };
 }
 
 function readSurface(surfaces) {

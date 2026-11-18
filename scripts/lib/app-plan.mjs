@@ -34,9 +34,9 @@ const REGISTRY = 'registry/apps.yml';
 const STANDALONE = 'registry/standalone.json';
 const APP_INFORMATION = 'registry/app-information.yml';
 // Root tools no per-app or composite-site job executes: Knip and Stryker run
-// in the unused-code and mutation workflows, ESLint (scripts/lint.mjs,
-// eslint.config.js) in workspace-contracts and code-quality on every pull
-// request. test/app-plan.test.mjs fails when an app's CI scripts load one.
+// in the quality workflow's unused-code and mutation jobs, ESLint
+// (scripts/lint.mjs, eslint.config.js) in workspace-contracts and its
+// correctness job on every pull request. test/app-plan.test.mjs fails when an app's CI scripts load one.
 export const INDEPENDENT_ROOT_DEV_DEPENDENCIES = ['knip', '@stryker-mutator/core', 'eslint', '@eslint/js', 'globals'];
 const GITATTRIBUTES = '.gitattributes';
 // Outside the composite build and its own tests, only these root files read

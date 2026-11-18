@@ -11,7 +11,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-from prepare import SOURCE, repairs
+from prepare import SOURCE, repairs, source_record
 
 
 def git(directory, *args):
@@ -41,7 +41,7 @@ def verify_source(source, spm):
                       'patchedSha256': hashlib.sha256(expected).hexdigest()})
     if git(spm, 'rev-parse', 'HEAD') != SOURCE['spm']['commit'] or git(spm, 'status', '--porcelain'):
         raise ValueError('SPM must be the clean pinned checkout')
-    return {**SOURCE, 'repairSet': 'samsrfanalysis-cli', 'files': files}
+    return {**source_record(cli=True), 'files': files}
 
 
 def main(source, spm, output):

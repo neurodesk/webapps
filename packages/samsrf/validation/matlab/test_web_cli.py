@@ -382,7 +382,7 @@ class Statuses(Base):
     ids = ['rc_gaussian_lh_single', 'prf_custom_hrf_lh_double']
 
     def test_expected_refusals_still_require_matlab_output_inventory(self):
-        for runner, run_id in (('node', 'rc_gaussian_lh_single'), ('browser', 'prf_custom_hrf_lh_double')):
+        for runner, run_id in (('node', 'rc_gaussian_lh_single'), ('browser', 'rc_gaussian_lh_single')):
             for damage in ('missing', 'extra'):
                 with self.subTest(runner=runner, damage=damage):
                     self.x.runner = runner
@@ -444,16 +444,17 @@ class BrowserStatuses(Base):
     ids = ['prf_custom_hrf_lh_double']
     runner = 'browser'
 
-    def test_browser_subject_hrf_is_unsupported_and_matlab_failure_still_fails(self):
-        self.assertEqual(self.run_class(), 'unsupported')
+    def test_browser_subject_hrf_run_is_computed_and_matlab_failure_still_fails(self):
+        self.assertEqual(web_cli.expected_web_outcome(PLAN[self.id], 'browser'), {'status': 'succeeded'})
+        self.assertEqual(self.run_class(), 'exact')
         self.x.receipt[self.id] = 'failed'
         self.x.write()
         self.assertEqual(self.run_class(), 'failed')
 
-    def test_a_crash_on_a_subject_hrf_run_is_not_unsupported(self):
-        other_file = web_cli.expected_web_outcome(PLAN[self.id], 'browser')['message'].replace('hrf_custom', 'hrf_other')
-        for message in (CRASH, other_file):
-            with self.subTest(message=message):
+    def test_the_former_subject_hrf_refusal_or_a_crash_is_a_failure(self):
+        for status, message in (('unsupported', 'model: Hrf hrf_custom is an old-school HRF fit file: the caller must load its fP and call hrf::old_school'), ('failed', CRASH)):
+            with self.subTest(status=status):
+                self.x.status[self.id] = status
                 self.x.write()
                 self.x.edit_record(self.id, message=message)
                 report = self.x.report()
@@ -467,7 +468,7 @@ class BrowserCommandLine(Base):
     kind = 'compiled-runtime'
     runner = 'browser'
 
-    def test_a_crash_relabelled_unsupported_fails_the_command(self):
+    def test_a_crash_on_a_subject_hrf_run_fails_the_command(self):
         self.x.plan = cli_plan.plan()
         plan = self.x.root / 'plan.json'
         manifest = self.x.root / 'manifest.json'
@@ -478,6 +479,8 @@ class BrowserCommandLine(Base):
         for crash, code in ((False, 0), (True, 1)):
             with self.subTest(crash=crash):
                 if crash:
+                    self.x.status['prf_custom_hrf_lh_double'] = 'failed'
+                    self.x.write()
                     self.x.edit_record('prf_custom_hrf_lh_double', message=CRASH)
                 report = self.x.root / f'report-{crash}.json'
                 result = subprocess.run([sys.executable, str(Path(web_cli.__file__).resolve()), str(plan), str(manifest),
@@ -485,7 +488,7 @@ class BrowserCommandLine(Base):
                                         capture_output=True, text=True, check=False)
                 self.assertEqual(result.returncode, code, result.stderr)
                 summary = json.loads(report.read_text())['summary']
-                self.assertEqual((summary['unsupportedRuns'], summary['failedRuns']), (3, 1) if crash else (4, 0))
+                self.assertEqual((summary['unsupportedRuns'], summary['failedRuns']), (0, 1) if crash else (0, 0))
 
 
 class EngineRunnerStatuses(unittest.TestCase):
@@ -516,6 +519,31 @@ class EngineRunnerStatuses(unittest.TestCase):
                 self.assertEqual(statuses, [outcome['status'] if 'message' in outcome else 'failed' for outcome in expected])
                 self.assertEqual(set(self.node('runs.map((run) => failureStatus(run, runner, message))', runs, runner, CRASH)),
                                  {'failed'})
+
+
+class BrowserRequests(unittest.TestCase):
+    """run_browser_matrix.mjs's request: the files Chromium's engine.js receives for each plan run."""
+
+    def test_a_subject_hrf_run_gives_engine_js_its_file(self):
+        here = Path(web_cli.__file__).resolve().parent
+        script = ("import { mkdirSync, writeFileSync } from 'node:fs'; import { join } from 'node:path';"
+                  "import { matFile } from " + json.dumps((here.parents[1] / 'test' / 'fixtures.js').as_uri()) + ";"
+                  "import { request } from " + json.dumps((here / 'run_browser_matrix.mjs').as_uri()) + ";"
+                  "const [runs, bundle] = JSON.parse(process.argv[1]);"
+                  "for (const run of runs) { mkdirSync(join(bundle, run.dataset), { recursive: true });"
+                  "  writeFileSync(join(bundle, run.dataset, `${run.dataset.slice(-2)}_ubars1.gii`), ''); }"
+                  "writeFileSync(join(bundle, 'hrf_custom.mat'), matFile({ fP: { dims: [1, 4], data: [5.5, 15.5, 5, 2] } }));"
+                  "console.log(JSON.stringify(runs.map((run) => request(run, bundle).subjectHrf ?? null)));")
+        runs = cli_plan.plan()['runs']
+        with scratch() as bundle:
+            result = subprocess.run(['node', '--input-type=module', '-e', script, json.dumps([runs, bundle])],
+                                    capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        files = json.loads(result.stdout)
+        expected = [{'name': 'hrf_custom.mat', 'url': '/bundle/hrf_custom.mat'}
+                    if str(run['model'].get('Hrf', '')).startswith('hrf_') else None for run in runs]
+        self.assertEqual(files, expected)
+        self.assertEqual(sum(file is not None for file in files), 4)
 
 
 class InventoryErrors(Base):

@@ -1,0 +1,114 @@
+{
+  "schema": 1,
+  "round": "cleanup-order-1",
+  "status": "prepared; dispatch requires independent review and explicit authorization",
+  "base_commit": "36ac29932b9c1e214ae1ed765923a96c0818bb29",
+  "prior_round": "hull-area-1: 2/2 exhausted; unchanged",
+  "planned_budget": {
+    "dispatches": 1,
+    "matlab_jobs": 2,
+    "timeout_minutes_per_job": 15,
+    "fresh_processes_per_job": 2,
+    "cases_per_process": 7,
+    "retries": 0
+  },
+  "requested_runners": [
+    "ubuntu-22.04",
+    "ubuntu-24.04"
+  ],
+  "required_actual_cpu_vendors": [
+    "AuthenticAMD",
+    "GenuineIntel"
+  ],
+  "matlab": {
+    "matlab_version": "23.2.0.3097123 (R2023b) Update 11",
+    "release": "2023b",
+    "computer": "GLNXA64"
+  },
+  "files": [
+    {
+      "path": ".github/workflows/samsrf-native.yml",
+      "sha256": "29f92daa012c992df18e2cd82a3fef5823c02ae132de37883783bbbb30b76c43"
+    },
+    {
+      "path": "exes/samsrf/core/src/polyshape.rs",
+      "sha256": "7686355280c8dcd9bfc1d5d0f0ad273d41b00371775d074bb4d799755d549b37"
+    },
+    {
+      "path": "packages/samsrf/validation/matlab/cleanup-order-1/README.md",
+      "sha256": "554da81f80088cf4ee94387a3d6ed93d6ac396c917a978905d7159fad251de9f"
+    },
+    {
+      "path": "packages/samsrf/validation/matlab/cleanup-order-1/control.json",
+      "sha256": "2d419b492f09d2cbb6cd58fbe53409532ffdf3c8253f22c7193cfd0156d13400"
+    },
+    {
+      "path": "packages/samsrf/validation/matlab/cleanup-order-1/evaluate.py",
+      "sha256": "32755dda6a7866f938ae860244228a237bf300b5316f428c1e8cc2b342444d1a"
+    },
+    {
+      "path": "packages/samsrf/validation/matlab/cleanup-order-1/inputs.json",
+      "sha256": "dcee9b59807f379d5125db845b1da3aa2c04952ebfcf38ed2528e852c0e0033a"
+    },
+    {
+      "path": "packages/samsrf/validation/matlab/cleanup-order-1/inputs.tsv",
+      "sha256": "8005c2a3dc085f733b78407ed3e6d7dfda45f05dc3ffaaa9b4e2ab4b09b47b08"
+    },
+    {
+      "path": "packages/samsrf/validation/matlab/cleanup-order-1/metadata-receipts.json",
+      "sha256": "fb235be188139185718f7601c5ff4588b6d9632f402e056b6840bc067d575942"
+    },
+    {
+      "path": "packages/samsrf/validation/matlab/cleanup-order-1/model-main.rs",
+      "sha256": "d69f36f346738d84a27d5d2a94ac1028254661e20757da2c1737f1f8771c4a5b"
+    },
+    {
+      "path": "packages/samsrf/validation/matlab/cleanup-order-1/model-polyshape.patch",
+      "sha256": "b1ec5c17ca63e108015e02cd35b2fcf661aa2caa7e8b462a8c6159cdea5d83b2"
+    },
+    {
+      "path": "packages/samsrf/validation/matlab/cleanup-order-1/predicted.tsv",
+      "sha256": "2140259de2ae6aa217cb987ebc79e0f731ca9247e52b8e6f5645b5d6bbb51434"
+    },
+    {
+      "path": "packages/samsrf/validation/matlab/cleanup-order-1/predictions.json",
+      "sha256": "1d0b2f35f62c85ee5d01d5d798f61ba9e0b27be247066d8c49e1018890e0b090"
+    },
+    {
+      "path": "packages/samsrf/validation/matlab/cleanup-order-1/prepare.py",
+      "sha256": "a3d9fb7b4bd02a7125a2d7019cd3be1a9cfaa6ca49b5e4b9637d663897b82cff"
+    },
+    {
+      "path": "packages/samsrf/validation/matlab/cleanup-order-1/record_cleanup_order.m",
+      "sha256": "302aa186aad3b0189a1e24a0cb296db104aad1c92e2f857aeae873d655236978"
+    },
+    {
+      "path": "packages/samsrf/validation/matlab/cleanup-order-1/test_contract.py",
+      "sha256": "39d40fa1c3036f6e57e5d0e1fda066b948def7be25ba6a3b1f945de1f9e70ad5"
+    },
+    {
+      "path": "packages/samsrf/validation/matlab/controls-reference.json",
+      "sha256": "661ccc1cdd53bfb11e6540eafdc07c54229a85aaf77d525590e7f7e85115df87"
+    },
+    {
+      "path": "packages/samsrf/validation/matlab/geometry-reference.json",
+      "sha256": "e9b6dc28ac065ec33c3d02bf45fb95454e1a323ed99fb9d5898004450ddb0daf"
+    },
+    {
+      "path": "packages/samsrf/validation/matlab/revcor-reference.json",
+      "sha256": "a3653e6d001acb0b35886f8d4839c5737b31322d9a85089f8fcb19f8490a6744"
+    },
+    {
+      "path": "packages/samsrf/validation/matlab/test_cleanup_order.py",
+      "sha256": "d6889fa8716f59100d33021c9ed902936705bb8263ed27cfba76fc77324570da"
+    },
+    {
+      "path": "test/samsrf-cleanup-order-workflow.test.mjs",
+      "sha256": "7abe911d76084f8704cdd42d40a4aea9ac211cd164b0043b115b52b6a0e84888"
+    }
+  ],
+  "blas_by_vendor": {
+    "AuthenticAMD": "Intel(R) oneAPI Math Kernel Library Version 2021.3-Product Build 20220428 for Intel(R) 64 architecture applications (CNR branch auto)",
+    "GenuineIntel": "Intel(R) oneAPI Math Kernel Library Version 2021.3-Product Build 20220428 for Intel(R) 64 architecture applications (CNR branch AVX512_E1)"
+  }
+}
