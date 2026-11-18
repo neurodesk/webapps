@@ -601,8 +601,9 @@ const PLACED_IMPORTER = /^(?:(?:apps|packages|exes)\/[^/]+|site\/easter-eggs\/[^
 // The suites outside the per-app jobs: each package's own tests, which
 // workspace-contracts runs (`pnpm test:packages`), and the homepage easter
 // egg's, which the homepage-easter-egg job runs. A suite reads its own
-// directory, every node its graph node reaches, and the app, model and site
-// files those name (`graph.outside`; a package's tests count only for its own
+// directory, every node its graph node reaches, and the paths those name
+// (`graph.outside`: app, model and site paths and every relative literal,
+// `.` for the whole repository; a package's tests count only for its own
 // suite and for suites that read them).
 function suitesOf(graph) {
   const suite = (id, own, start, tests = []) => {
@@ -634,9 +635,8 @@ export function selectAffectedSuites(changedPaths, graph, manifests = new Map(),
   // The suites that read `path`: below their own directory, through a node they reach, or a path they name.
   const touch = (path, reason = path) => {
     const nodes = graphNodes(path, graph);
-    const top = path.split('/')[0];
     for (const suite of suites) {
-      const names = [...suite.outside].some((name) => name === top || path === name || path.startsWith(`${name}/`));
+      const names = [...suite.outside].some((name) => name === '.' || path === name || path.startsWith(`${name}/`));
       if (path.startsWith(suite.own) || names || nodes.some((node) => suite.reach.has(node))) select(suite.id, reason);
     }
   };

@@ -1067,19 +1067,26 @@ test('package suites run for the packages a change reaches, and all of them for 
   const workspace = await graph;
   const reasons = (paths, manifests) => createAppPlan(registry, paths, workspace, manifests).packages;
   const dependants = (node) => workspace.nodes.filter((candidate) => candidate.startsWith('packages/') && reachableFrom(workspace, candidate).has(node));
+  // Suites whose code names a path the scan cannot bound read every file: they run on every change.
+  // Keep this list short, or package tests stop narrowing (graph.unresolved lists the literals).
+  const everywhere = Object.keys(reasons(['scripts/read-by-nothing.mjs']).reasons).sort();
+  assert.deepEqual(everywhere, ['packages/desktop', 'packages/spinalcordtoolbox', 'packages/vesselboost', 'packages/white-matter-lesions']);
   // A package's own change runs it and the packages that use it.
   const greedy = reasons(['exes/greedy/core/src/lib.rs']);
   assert.equal(greedy.all, null);
-  assert.deepEqual(Object.keys(greedy.reasons).sort(), dependants('exes/greedy').sort());
+  assert.deepEqual(Object.keys(greedy.reasons).sort(), [...new Set([...dependants('exes/greedy'), ...everywhere])].sort());
   assert.ok(Object.keys(greedy.reasons).includes('packages/greedy'));
+  const everyPackage = Object.keys(reasons(['packages/read-by-nothing/x.js']).reasons).filter((dir) => !everywhere.includes(dir)).sort();
+  assert.deepEqual(everyPackage, ['packages/mri2vid', 'packages/node-drivers']);
   const own = reasons(['packages/niimath/test/node.test.js']);
-  assert.deepEqual(Object.keys(own.reasons), ['packages/niimath']);
+  assert.deepEqual(Object.keys(own.reasons).filter((dir) => ![...everywhere, ...everyPackage].includes(dir)), ['packages/niimath']);
   // A package's tests read its app's fixtures, so an app change runs the packages that name it.
   const app = reasons(['apps/easy-mp2rage/tools/golden/cli/T1map.nii']);
   assert.ok(Object.keys(app.reasons).includes('packages/easy-mp2rage'));
   assert.ok(!Object.keys(app.reasons).includes('packages/niimath'));
-  // Docs, changesets, contract tests and other workflows run none.
-  assert.deepEqual(Object.keys(reasons(['docs/quality/ci-development-tiers.md', '.changeset/x.md', 'test/app-plan.test.mjs', '.github/workflows/lcmodel-native.yml', 'AGENTS.md']).reasons), []);
+  // Docs, changesets and other workflows run none; a contract test only the suites that read every file.
+  assert.deepEqual(Object.keys(reasons(['docs/quality/ci-development-tiers.md', '.changeset/x.md', '.github/workflows/lcmodel-native.yml', 'AGENTS.md']).reasons), []);
+  assert.deepEqual(Object.keys(reasons(['test/app-plan.test.mjs']).reasons).sort(), everywhere);
   // The repository root's configuration, a full run and a plan of every app run all.
   for (const [paths, reason] of [
     [['package.json'], /^package\.json: every package suite and the easter egg install and run under it$/],
@@ -1145,6 +1152,39 @@ test('the graph records the app, model and site files code names, not keys or co
   // (a method `.join("models")` counts as a joined segment).
   const lone = "(readdir|readdirSync|readFile|readFileSync|existsSync|stat|statSync|resolve|URL)\\(\\s*['\"`](apps|models|site|runtime-assets|templates)['\"`]\\s*\\)";
   assert.deepEqual(filesNaming(lone).filter((file) => file !== 'test/app-plan.test.mjs'), []);
+});
+
+test("a package suite runs when a file its tests name through a sibling-relative path changes", async () => {
+  // packages/calmar/test/nifti.test.js reads '../../components/test/fixtures/uint8-zero-slope-intercept.nii'.
+  const plan = createAppPlan(await loadAppsRegistry(), ['packages/components/test/fixtures/uint8-zero-slope-intercept.nii'], await graph);
+  assert.ok(Object.hasOwn(plan.packages.reasons, 'packages/calmar'), 'calmar reads the components fixture');
+  assert.ok(Object.hasOwn(plan.packages.reasons, 'packages/components'));
+  assert.equal(plan.packages.all, null);
+});
+
+test('a relative literal reads the path it resolves to from its file, or the nearest one that exists', async (t) => {
+  const { root } = await plannerFixture(t);
+  const write = async (path, text) => {
+    await mkdir(join(root, path, '..'), { recursive: true });
+    await writeFile(join(root, path), text);
+  };
+  await write('packages/a/package.json', JSON.stringify({ name: '@x/a', scripts: { test: 'node --test' } }));
+  await write('packages/b/package.json', JSON.stringify({ name: '@x/b', scripts: { test: 'node --test' } }));
+  await write('packages/b/fixtures/data.bin', 'data');
+  await write('packages/a/test/a.test.js', [
+    "const data = new URL('../../b/fixtures/data.bin', import.meta.url);",
+    'const generated = new URL(`../../b/generated/${name}.bin`, import.meta.url);',
+    "const deleted = new URL('../../c/gone.bin', import.meta.url);",
+    'const anywhere = new URL(`../../../${path}`, import.meta.url);',
+    "const repository = new URL('../../../', import.meta.url);",
+    "const own = new URL('./fixtures/own.bin', import.meta.url);",
+  ].join('\n'));
+  const fixture = await loadConservativeWorkspaceGraph(root);
+  assert.deepEqual([...fixture.outside.get('packages/a/test')].sort(), ['.', 'packages', 'packages/b', 'packages/b/fixtures/data.bin'].sort());
+  // The computed and missing paths keep their nearest existing directory; the repository root is a base, not a read.
+  assert.deepEqual(fixture.unresolved.filter(({ file }) => file === 'packages/a/test/a.test.js').map(({ literal, path }) => `${literal} ${path}`).sort(), [
+    '../../b/generated/ packages/b', '../../c/gone.bin packages', './fixtures/own.bin packages/a/test',
+  ].sort());
 });
 
 test('an app with ci.e2e_shards gets one browser-e2e entry per shard', async () => {

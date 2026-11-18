@@ -1,7 +1,7 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { parse } from 'yaml';
 import { sharedModuleUsers } from './shared-module-users.mjs';
-import { basename, dirname, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import sourceParser from '@neurodesk/code-quality';
 
 // Which apps/, packages/ and exes/ directories each workspace directory uses.
@@ -15,8 +15,16 @@ import sourceParser from '@neurodesk/code-quality';
 // EASTER_EGG for what its homepage-easter-egg job runs (its commands and the
 // site/easter-eggs packages they test). `outside` lists, per directory or
 // root file, the app, model and site files it names (`apps/x`, or `apps` for
-// a path computed at run time): package tests read their app's fixtures.
-// A false reference only widens the CI selection.
+// a path computed at run time) and every repository path a relative literal
+// in it resolves to from the file that names it (`'../../components/test/x'`):
+// package tests read their app's fixtures and each other's. A literal that
+// resolves to nothing at head (computed, or deleted by the change) keeps its
+// nearest existing directory, the repository root (`.`) at worst; `unresolved`
+// lists them. A closed literal of `..` steps that names the repository root
+// (`new URL('../../../', import.meta.url)`) is a computed repository root,
+// not a read: what is joined onto it is followed through the root-relative
+// names above, as for root files. A false reference only widens the CI
+// selection.
 
 const TOP_LEVEL = ['apps', 'packages', 'exes'];
 // Apps are leaves: a package that mentions an app does not use what that app uses.
@@ -59,6 +67,9 @@ const OUTSIDE_NAME = new RegExp(OUTSIDE_DIRS);
 const OUTSIDE_RELATIVE = new RegExp(String.raw`(?:\.\.\/)+${OUTSIDE_DIRS}(?:\/([\w.-]+)|(?![\w.-]))`, 'g');
 const OUTSIDE_ROOTED = new RegExp(String.raw`['"\`]${OUTSIDE_DIRS}\/([\w.-]+)?`, 'g');
 const OUTSIDE_JOINED = new RegExp(String.raw`((?:[,/]|\.join\()\s*)?['"\`]${OUTSIDE_DIRS}['"\`](\s*[,/]\s*(?:['"\`]([\w.-]+)['"\`])?)?`, 'g');
+// A quoted relative path, up to its closing quote or a template expression: `'../x/y'`, `'./'`, `'..'`.
+const RELATIVE_LITERAL = /['"`](\.\.?(?:\/[^'"`\s$]*)?)(?=(['"`]|\$\{))/g;
+const PARENT_STEPS = /^\.\.(?:\/\.\.)*\/?$/;
 // Lint and mutation-testing configs: their own workflows read them, composite-site never does.
 export const INDEPENDENT_CONFIG = /^(?:eslint|knip|stryker)\.config\.m?js$/;
 export const CATALOG = '(catalog)';
@@ -159,7 +170,25 @@ export async function loadConservativeWorkspaceGraph(root) {
   // Packages, exes and root files a directory's text names, and what else it
   // reads: `reads(file)` is the set its outside references go to. `scripts`
   // keeps the package.json scripts a caller runs; a manifest it cannot parse is read whole.
-  const scan = async (dir, uses, reads, scripts = null) => {
+  // The repository paths the relative literals of `file` resolve to, each
+  // the nearest path that exists at head.
+  const present = new Map();
+  const unresolved = [];
+  const relativeReferences = async (text, file) => {
+    const found = new Set();
+    for (const [, literal, end] of text.matchAll(RELATIVE_LITERAL)) {
+      let path = relative(root, resolve(dirname(file), literal)).split(sep).join('/') || '.';
+      if (path === '..' || path.startsWith('../') || isAbsolute(path)) continue;
+      if (path === '.' && end !== '${' && PARENT_STEPS.test(literal)) continue;
+      const named = path;
+      while (path !== '.' && !(present.has(path) ? present.get(path) : present.set(path, await exists(join(root, path))).get(path))) path = dirname(path);
+      if (path !== named) unresolved.push({ file: relative(root, file).split(sep).join('/'), literal, path });
+      found.add(path);
+    }
+    return found;
+  };
+  // `ownDir(file)`: the directory whose own changes already reach the file's owner.
+  const scan = async (dir, uses, reads, scripts = null, ownDir = () => relative(root, dir).split(sep).join('/')) => {
     for await (const file of textFiles(dir)) {
       if ((await stat(file)).size > MAX_TEXT_BYTES) continue;
       let text = await readFile(file, 'utf8');
@@ -181,6 +210,10 @@ export async function loadConservativeWorkspaceGraph(root) {
         pendingRootFiles.push(rootFile);
       }
       for (const reference of outsideReferences(text, file)) reads(file).add(reference);
+      for (const reference of await relativeReferences(text, file)) {
+        const own = ownDir(file);
+        if (reference !== own && !reference.startsWith(`${own}/`)) reads(file).add(reference);
+      }
     }
   };
   for (const node of nodes) {
@@ -203,7 +236,7 @@ export async function loadConservativeWorkspaceGraph(root) {
       return outside.get(owner);
     };
     reads(join(root, node));
-    await scan(join(root, node), uses, reads);
+    await scan(join(root, node), uses, reads, null, (file) => relative(root, file).split(sep).join('/').match(PACKAGE_TEST_DIR)?.[0] ?? node);
     uses.delete(node);
     edges.set(node, uses);
   }
@@ -239,7 +272,7 @@ export async function loadConservativeWorkspaceGraph(root) {
       const reads = new Set();
       // It runs neither package's lint script: lint runs in workspace-contracts and code-quality.
       const withoutLint = ({ scripts: { lint, ...scripts } = {} }) => scripts;
-      if (await exists(join(root, EASTER_EGG_DIR))) await scan(join(root, EASTER_EGG_DIR), named, () => reads, withoutLint);
+      if (await exists(join(root, EASTER_EGG_DIR))) await scan(join(root, EASTER_EGG_DIR), named, () => reads, withoutLint, () => 'site');
       outside.set(node, reads);
     }
     edges.set(node, named);
@@ -256,7 +289,7 @@ export async function loadConservativeWorkspaceGraph(root) {
     const source = await readFile(join(root, file), 'utf8').catch(() => null);
     if (source === null) continue;
     const text = withoutLineComments(source, file);
-    outside.set(file, new Set(outsideReferences(text, file)));
+    outside.set(file, new Set([...outsideReferences(text, file), ...[...await relativeReferences(text, join(root, file))].filter((path) => path !== file)]));
     for (const [, top, name, inner] of text.matchAll(SCRIPT_REFERENCE)) {
       if (!nodeSet.has(`${top}/${name}`)) continue;
       const target = inner && `${top}/${name}${inner}`;
@@ -286,7 +319,7 @@ export async function loadConservativeWorkspaceGraph(root) {
   // `moduleUsers(path)`: the nodes that load one module of the shared component
   // package, or null for a file the planner ties to the whole package.
   let moduleUsers;
-  const graph = { nodes: Object.freeze(nodes), edges, outside, rootScriptsRun, moduleUsers: (path) => (moduleUsers ??= sharedModuleUsers(root, graph))(path) };
+  const graph = { nodes: Object.freeze(nodes), edges, outside, unresolved: Object.freeze(unresolved), rootScriptsRun, moduleUsers: (path) => (moduleUsers ??= sharedModuleUsers(root, graph))(path) };
   return Object.freeze(graph);
 }
 
