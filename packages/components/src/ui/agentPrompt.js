@@ -37,7 +37,7 @@ export function createAgentPrompts(doc = globalThis.document) {
         settled = true;
         root.removeEventListener('close', onClose);
         signal?.removeEventListener('abort', onAbort);
-        if (root.open) root.close();
+        root.close();
         resolve(value);
       };
       // The close event of the previous prompt can arrive after this one opened.

@@ -215,8 +215,73 @@ readouts derived from patient data, so it needs a privacy decision before any
 implementation. AWS Lambda and Google Cloud Functions do not hold long-lived
 WebSockets without extra services and are not proposed.
 
-Browser-registered tools, such as the WebMCP draft, would need no server. The
-page handlers above can be registered there once browsers support it.
+### Browser-registered tools (WebMCP)
+
+[WebMCP](https://webmachinelearning.github.io/webmcp/) (Draft Community Group
+Report, 13 November 2026) lets a page register tools with an agent built into
+the browser through `document.modelContext.registerTool`. It needs no server,
+and no tool leaves the page until the agent calls it. Every app now registers
+tools there, built from its automation contract, with no change to any app.
+
+`registerAppAutomation` checks for `document.modelContext`, and for
+`navigator.modelContext` from earlier drafts. If neither exists, it loads
+nothing more. Otherwise, once the contract is ready, it imports
+`automation/webmcp.js` and `ui/agentPrompt.js`. `webMcpTools()` builds the
+tool table from the contract, and `registerWebMcpTools()` registers it. A tool
+the browser refuses is logged once and leaves the rest registered.
+
+The tools reuse the desktop's names and argument names where they mean the
+same thing.
+
+| Tool | What it does |
+| --- | --- |
+| `app_describe` | Returns the contract's operations, the examples that the page's example selectors offer, the viewers, the current run and the files each input role holds. |
+| `inputs_request_files { role, message? }` | Asks the person to choose files for a role in a shared dialog and holds them for the next run. Returns names and sizes, or `{ declined: true }`. A DICOM role also offers a folder. |
+| `inputs_load_example { exampleId }` | Downloads an example through `fetchModel`, which checks its checksums, and holds its files by role. |
+| `run_<operation>` | One per operation. Takes `parameters`, with a JSON Schema written from the contract, `selections` for DICOM roles, `inputs` for URL roles and `waitSeconds` (default 30, at most 600). Starts the run in the page and returns the run when it ends or when `waitSeconds` passes. Aborting the call cancels the run. |
+| `runs_get { runId?, waitSeconds? }` | Returns the current run and can wait for it to end. |
+| `runs_cancel { runId? }` | Cancels the current run. |
+| `outputs_download { artifactId }` | Saves an output of the last successful run, or `report`, to the person's downloads. |
+| `user_ask { question, options?, allowText? }` | Asks the person a question in a shared dialog. Returns `{ answer }` or `{ dismissed: true }`. An agent uses it to resolve `SERIES_SELECTION_REQUIRED` from the candidates in the failed run. |
+| `viewers_list`, `viewers_state`, `viewers_crosshair`, `viewers_tab`, `viewers_regions`, `viewers_volumes`, `viewers_display`, `viewers_niivue` | Send the matching `viewers.*` command. They are registered before any viewer exists, so the command's own error answers a call that comes too early. |
+
+Tool results are JSON text. A tool reports a failure as `{ error: { message,
+code?, candidates? } }` rather than rejecting, because the browser gives the
+agent a rejection without its message. Pure reads carry `readOnlyHint`.
+Results that hold file names, report text or answers typed by the person carry
+`untrustedContentHint`. `outputs_download` carries `consequentialHint`.
+`viewers_screenshot` is left out because results are text only and a browser
+agent sees the page.
+
+WebMCP has no way to ask the person anything. `createAgentPrompts()` provides
+the questions and file requests as `dialog.nd-dialog` dialogs. One shows at a
+time and the others wait. Each says that an AI agent the person started is
+asking. Closing a dialog declines it, and an aborted call closes it.
+
+- **On by default.** The tools register wherever the browser exposes the API,
+  with no `?agent` switch. The person starts the browser's agent, and the page
+  sends nothing until it calls a tool. To gate the tools later, change
+  `webMcpContext` in `automation/app-automation.js`.
+- **Browser support.** No browser enables WebMCP by default. Chrome offers it
+  behind an origin trial and a testing flag. This change does not obtain an
+  origin trial token for any host, so on the deployed sites the tools appear
+  only in a browser where the person turned the flag on.
+- **Privacy.** An agent the person invokes can read run reports with file
+  names and checksums, viewer state and the answers typed into its dialogs. An
+  agent on a cloud model sends that to its provider. Most apps write their own
+  Privacy text, and the shell adds shared text only to apps that have none, so
+  no single sentence reaches every app yet.
+- **Tested.** Node tests build the table from every app's `automation.json`
+  and check that each run schema accepts and refuses the same parameters as
+  the contract. `pnpm --filter @neurodesk/agent-server validate:webmcp`
+  serves the built Brain Extraction app in Chromium with a stand-in
+  `document.modelContext` and runs a whole analysis through the tools,
+  answering the dialogs by clicking them and through the real file chooser.
+- **Untested.** No real browser agent has called these tools, because no
+  browser available here ships WebMCP. Apps other than Brain Extraction have
+  not been driven through them. In 19 apps, some example files use roles that
+  the contract does not declare, so `app_describe` leaves those examples out
+  and the agent asks for files instead.
 
 ## Phases
 

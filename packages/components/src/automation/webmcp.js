@@ -97,10 +97,8 @@ function failure(error) {
 }
 
 /**
- * The WebMCP tools for one application page, built from its automation contract.
- * Everything the tools touch is injected: `dispatch` is the page's automation dispatch,
- * `inputs` holds the files adopted per role, `examples` lists the page's examples,
- * and `askUser` and `requestFiles` are the shared agent prompts.
+ * The WebMCP tools for one application page, built from its automation contract. `inputs` holds the
+ * files adopted per role; `askUser` and `requestFiles` are the shared agent prompts.
  */
 export function webMcpTools({ contract, dispatch, inputs, examples = () => [], fetchAsset = fetchModel, askUser, requestFiles }) {
   const roles = fileRoles(contract);
@@ -109,7 +107,7 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
   const tools = [];
   const tool = (name, title, description, inputSchema, annotations, execute) => tools.push({
     name, title, description, inputSchema, annotations,
-    async execute(input = {}, options = {}) {
+    async execute(input, options = {}) {
       try {
         return await execute(input ?? {}, options);
       } catch (error) {
