@@ -4,8 +4,8 @@
 //! a Delaunay triangulation.
 //!
 //! A hull needs three non-collinear points. With fewer, MATLAB's `polyshape` is empty
-//! (area 0, centroid NaN) and `convexHull` errors; `Hull::of` returns `None` and each
-//! caller applies SamSrf's own fallback.
+//! (area 0, centroid NaN) and `convexHull` errors; the constructors return `None` and
+//! each caller applies SamSrf's own fallback.
 
 /// MATLAB `[C, ia] = unique(A, 'rows')`: rows sorted lexicographically, `ia` the first
 /// occurrence of each. NaN rows sort last and are all distinct, as in MATLAB.
@@ -38,90 +38,162 @@ fn nan_last(a: f64, b: f64) -> std::cmp::Ordering {
     }
 }
 
-/// A convex polygon: its vertices counter-clockwise, without a repeated closing vertex.
+/// One convex boundary of a MATLAB R2023b `polyshape`, as MATLAB stores it:
+/// clockwise, from the vertex MATLAB starts at, without a repeated closing
+/// vertex. `area` and `centroid` round like MATLAB's only in that order.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Hull {
     pub vertices: Vec<[f64; 2]>,
 }
 
 impl Hull {
-    /// `polyshape(points).convhull`, as MATLAB R2023b computes it on its
-    /// fixed-point grid with the even-odd rule and its 1e-8 cleaning tolerance
-    /// (see `polyshape.rs`). `None` where that shape is empty.
+    /// `polyshape(points).convhull`, as MATLAB R2023b computes and orders it on
+    /// its fixed-point grid with the even-odd rule and its 1e-8 cleaning
+    /// tolerance (see `polyshape.rs`). `None` where that shape is empty.
     pub fn of_polygon(points: &[[f64; 2]]) -> Option<Hull> {
         let hull = Hull { vertices: crate::polyshape::convex_hull(points)? };
         (hull.area() > 0.0).then_some(hull)
     }
 
-    /// The convex hull of `points` (Andrew's monotone chain), or `None` when the points
-    /// span no area (fewer than three distinct points, or all collinear).
-    pub fn of(points: &[[f64; 2]]) -> Option<Hull> {
-        let mut sorted: Vec<[f64; 2]> = points.iter().copied().filter(|p| p[0].is_finite() && p[1].is_finite()).collect();
-        sorted.sort_by(row_order);
-        sorted.dedup();
-        if sorted.len() < 3 {
+    /// `polyshape(DT.Points(convexHull(DT), :))` for `DT = delaunayTriangulation(points)`:
+    /// the boundary of the points' hull, exactly collinear points included and
+    /// counter-clockwise from the first input point on it, cleaned and stored as
+    /// `polyshape` does. `None` where that shape is empty or the points span no area.
+    pub fn of_delaunay_boundary(points: &[[f64; 2]]) -> Option<Hull> {
+        let boundary = delaunay_boundary(points)?;
+        let mut stored = crate::polyshape::boundaries(&boundary);
+        if stored.len() != 1 {
             return None;
         }
-        let cross = |o: &[f64; 2], a: &[f64; 2], b: &[f64; 2]| (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
-        let mut lower: Vec<[f64; 2]> = Vec::new();
-        for p in &sorted {
-            while lower.len() >= 2 && cross(&lower[lower.len() - 2], &lower[lower.len() - 1], p) <= 0.0 {
-                lower.pop();
-            }
-            lower.push(*p);
-        }
-        let mut upper: Vec<[f64; 2]> = Vec::new();
-        for p in sorted.iter().rev() {
-            while upper.len() >= 2 && cross(&upper[upper.len() - 2], &upper[upper.len() - 1], p) <= 0.0 {
-                upper.pop();
-            }
-            upper.push(*p);
-        }
-        lower.pop();
-        upper.pop();
-        lower.extend(upper);
-        if lower.len() < 3 {
-            return None;
-        }
-        let hull = Hull { vertices: lower };
-        if hull.area() <= 0.0 {
-            return None;
-        }
-        Some(hull)
+        let hull = Hull { vertices: stored.remove(0) };
+        (hull.area() > 0.0).then_some(hull)
     }
 
-    /// Shoelace area, translated to avoid cancellation far from the origin.
+    /// `polyshape.area`: half the absolute sum, in stored order, of the cross
+    /// products of consecutive vertices taken from the centre of their bounding box.
     pub fn area(&self) -> f64 {
-        let n = self.vertices.len();
-        let origin = self.vertices[0];
-        let mut twice = 0.0;
-        for i in 0..n {
-            let a = [self.vertices[i][0] - origin[0], self.vertices[i][1] - origin[1]];
-            let next = self.vertices[(i + 1) % n];
-            let b = [next[0] - origin[0], next[1] - origin[1]];
-            twice += a[0] * b[1] - b[0] * a[1];
-        }
-        twice.abs() / 2.0
+        self.sums().0.abs() / 2.0
     }
 
-    /// The polygon centroid, as `polyshape.centroid`.
+    /// `polyshape.centroid`, step for step as MATLAB R2023b rounds it on the
+    /// stored vertices: relative to the bounding-box centre, the sum of cross
+    /// products `a`, then `sum((x1 + x2) * (t * (1/a)))` times `1/3`, back in
+    /// place, weighted by the clockwise-positive area `-a/2` and multiplied by
+    /// its reciprocal, as for one boundary of a multi-boundary shape.
     pub fn centroid(&self) -> [f64; 2] {
-        let n = self.vertices.len();
-        let origin = self.vertices[0];
-        let mut twice = 0.0;
-        let mut cx = 0.0;
-        let mut cy = 0.0;
+        let (twice, centre, w) = self.sums();
+        let inverse = 1.0 / twice;
+        let n = w.len();
+        let (mut cx, mut cy) = (0.0, 0.0);
         for i in 0..n {
-            let a = [self.vertices[i][0] - origin[0], self.vertices[i][1] - origin[1]];
-            let next = self.vertices[(i + 1) % n];
-            let b = [next[0] - origin[0], next[1] - origin[1]];
-            let cross = a[0] * b[1] - b[0] * a[1];
-            twice += cross;
-            cx += (a[0] + b[0]) * cross;
-            cy += (a[1] + b[1]) * cross;
+            let (p, q) = (w[i], w[(i + 1) % n]);
+            let share = (p[0] * q[1] - p[1] * q[0]) * inverse;
+            cx += (p[0] + q[0]) * share;
+            cy += (p[1] + q[1]) * share;
         }
-        [origin[0] + cx / (3.0 * twice), origin[1] + cy / (3.0 * twice)]
+        let third = 1.0 / 3.0;
+        let local = [cx * third + centre[0], cy * third + centre[1]];
+        let weight = -(twice / 2.0);
+        let total = 0.0 + weight;
+        let reciprocal = 1.0 / total;
+        [(0.0 + weight * local[0]) * reciprocal, (0.0 + weight * local[1]) * reciprocal]
     }
+
+    /// Twice the signed area in stored order, the bounding-box centre and the
+    /// vertices relative to it.
+    fn sums(&self) -> (f64, [f64; 2], Vec<[f64; 2]>) {
+        let (low, high) = self.vertices.iter().fold(([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]), |(low, high), p| {
+            ([low[0].min(p[0]), low[1].min(p[1])], [high[0].max(p[0]), high[1].max(p[1])])
+        });
+        let centre = [(low[0] + high[0]) / 2.0, (low[1] + high[1]) / 2.0];
+        let w: Vec<[f64; 2]> = self.vertices.iter().map(|p| [p[0] - centre[0], p[1] - centre[1]]).collect();
+        let n = w.len();
+        let mut twice = 0.0;
+        for i in 0..n {
+            let (p, q) = (w[i], w[(i + 1) % n]);
+            twice += p[0] * q[1] - p[1] * q[0];
+        }
+        (twice, centre, w)
+    }
+}
+
+/// The area `[K, AV] = convexHull(delaunayTriangulation(points))` returns, or
+/// `None` where the points span no area (MATLAB errors). How MATLAB computes
+/// `AV` is not identified: this keeps the port's earlier evaluation (the hull's
+/// corners counter-clockwise from the lexicographically smallest, cross
+/// products taken from that corner), which equals MATLAB's on the recorded
+/// 20-pixel grids (half-integer coordinates) and differs by up to 2 ULP after
+/// the square root on the 100-pixel ones
+/// (`packages/samsrf/validation/matlab/README.md`, "Hull area, centroid and vertex order").
+pub fn delaunay_hull_area(points: &[[f64; 2]]) -> Option<f64> {
+    let mut sorted: Vec<[f64; 2]> = points.iter().copied().filter(|p| p[0].is_finite() && p[1].is_finite()).collect();
+    sorted.sort_by(row_order);
+    sorted.dedup();
+    if sorted.len() < 3 {
+        return None;
+    }
+    let cross = |o: &[f64; 2], a: &[f64; 2], b: &[f64; 2]| (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+    let mut lower: Vec<[f64; 2]> = Vec::new();
+    for p in &sorted {
+        while lower.len() >= 2 && cross(&lower[lower.len() - 2], &lower[lower.len() - 1], p) <= 0.0 {
+            lower.pop();
+        }
+        lower.push(*p);
+    }
+    let mut upper: Vec<[f64; 2]> = Vec::new();
+    for p in sorted.iter().rev() {
+        while upper.len() >= 2 && cross(&upper[upper.len() - 2], &upper[upper.len() - 1], p) <= 0.0 {
+            upper.pop();
+        }
+        upper.push(*p);
+    }
+    lower.pop();
+    upper.pop();
+    lower.extend(upper);
+    if lower.len() < 3 {
+        return None;
+    }
+    let origin = lower[0];
+    let n = lower.len();
+    let mut twice = 0.0;
+    for i in 0..n {
+        let a = [lower[i][0] - origin[0], lower[i][1] - origin[1]];
+        let b = [lower[(i + 1) % n][0] - origin[0], lower[(i + 1) % n][1] - origin[1]];
+        twice += a[0] * b[1] - b[0] * a[1];
+    }
+    let area = twice.abs() / 2.0;
+    (area > 0.0).then_some(area)
+}
+
+/// The boundary of the convex hull of `points` that `convexHull` of their
+/// Delaunay triangulation lists: decided with exact predicates, exactly
+/// collinear points included, counter-clockwise from the first input point on
+/// it. `None` where the points span no area.
+fn delaunay_boundary(points: &[[f64; 2]]) -> Option<Vec<[f64; 2]>> {
+    let finite: Vec<[f64; 2]> = points.iter().copied().filter(|p| p[0].is_finite() && p[1].is_finite()).collect();
+    let mut sorted = finite.clone();
+    sorted.sort_by(row_order);
+    sorted.dedup();
+    let turn = |a: &[f64; 2], b: &[f64; 2], c: &[f64; 2]| robust::orient2d(coord(a), coord(b), coord(c));
+    if sorted.len() < 3 || (2..sorted.len()).all(|k| turn(&sorted[0], &sorted[1], &sorted[k]) == 0.0) {
+        return None;
+    }
+    let chain = |ordered: &mut dyn Iterator<Item = &[f64; 2]>| {
+        let mut half: Vec<[f64; 2]> = Vec::new();
+        for p in ordered {
+            while half.len() >= 2 && turn(&half[half.len() - 2], &half[half.len() - 1], p) < 0.0 {
+                half.pop();
+            }
+            half.push(*p);
+        }
+        half.pop();
+        half
+    };
+    let mut boundary = chain(&mut sorted.iter());
+    boundary.extend(chain(&mut sorted.iter().rev()));
+    let start = finite.iter().find_map(|p| boundary.iter().position(|b| b == p))?;
+    boundary.rotate_left(start);
+    Some(boundary)
 }
 
 /// A Delaunay triangulation reduced to what `samsrf_clusterroi` needs: each point's
@@ -345,21 +417,56 @@ mod tests {
         assert_eq!(first, vec![1, 0]);
     }
 
+    /// MATLAB R2023b's `centroid` and `area` of hulls it stored in this vertex
+    /// order (record_geometry.m, `geometry-reference.json`, both hosts).
     #[test]
-    fn hull_of_a_square_with_interior_points() {
-        let points = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.5, 0.5], [0.25, 0.75]];
-        let hull = Hull::of(&points).unwrap();
-        assert_eq!(hull.vertices.len(), 4);
-        assert!((hull.area() - 1.0).abs() < 1e-15);
-        let [cx, cy] = hull.centroid();
-        assert!((cx - 0.5).abs() < 1e-15 && (cy - 0.5).abs() < 1e-15);
+    fn centroid_and_area_round_as_matlab_on_its_stored_vertices() {
+        let cases: [(&[[f64; 2]], [f64; 3]); 5] = [
+            // From the box centre, 1/3 lands one ULP above its correct rounding.
+            (&[[0.0, 0.0], [1.0, 1.0], [1.0, 0.0]], [0.6666666666666666, 0.33333333333333337, 0.5]),
+            // Exact sums; MATLAB's y is one ULP below the correctly rounded 13/9.
+            (&[[1.0, 2.0], [2.0, 2.0], [2.0, 1.0], [0.0, 1.0]], [1.2222222222222223, 1.4444444444444442, 1.5]),
+            (&[[0.5, 0.0], [0.0, 2.0], [2.0, 1.0], [2.0, 0.5]], [0.9509803921568628, 0.9117647058823529, 2.125]),
+            // Cross products cancel by about 4e6 ULP.
+            (&[[0.0, 0.0], [7.64842058440951e-05, 6.442178402061286e-05], [0.001529684374568977, 0.001288435374475382]], [0.0005353895268043573, 0.00045095238616533166, 2.0000000072549875e-14]),
+            // A centroid on the axes is +0, not -0.
+            (&[[-0.5, -1.0], [-1.0, 0.0], [0.5, 1.0], [1.0, 0.0]], [0.0, 0.0, 2.0]),
+        ];
+        for (vertices, expected) in cases {
+            let hull = Hull { vertices: vertices.to_vec() };
+            let [x, y] = hull.centroid();
+            assert_eq!([x.to_bits(), y.to_bits(), hull.area().to_bits()], expected.map(f64::to_bits), "{vertices:?}");
+        }
+    }
+
+    /// A recorded cloud of distinct points: MATLAB's hull, in its stored order, and its bits.
+    #[test]
+    fn polygon_hull_is_stored_and_rounded_as_matlab_stores_it() {
+        let points = [[0.4549171866074128, 1.9098343775159823], [0.9804315476094008, 2.960863106026634], [0.29706208837477277, 1.594123948026354], [0.1567924020000721, 1.3135849239128334]];
+        let hull = Hull::of_polygon(&points).unwrap();
+        assert_eq!(hull.vertices, vec![[0.9804315476094008, 2.960863106026634], [0.29706208837477277, 1.594123948026354], [0.1567924020000721, 1.3135849239128334]]);
+        let [x, y] = hull.centroid();
+        assert_eq!([x, y, hull.area()].map(f64::to_bits), [0.4780953459852008, 1.9561906593028449, 1.3592302744447338e-07].map(f64::to_bits));
+    }
+
+    #[test]
+    fn delaunay_boundary_keeps_collinear_points_from_the_first_input_point() {
+        // A 3 x 3 grid listed column by column, top first, as the pixel order lists it.
+        let points: Vec<[f64; 2]> = (0..3).flat_map(|x| (0..3).rev().map(move |y| [f64::from(x), f64::from(y)])).collect();
+        let boundary = delaunay_boundary(&points).unwrap();
+        assert_eq!(boundary, vec![[0.0, 2.0], [0.0, 1.0], [0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [2.0, 1.0], [2.0, 2.0], [1.0, 2.0]]);
+        let hull = Hull::of_delaunay_boundary(&points).unwrap();
+        assert_eq!(hull.vertices, vec![[0.0, 2.0], [2.0, 2.0], [2.0, 0.0], [0.0, 0.0]], "polyshape drops the collinear points and turns the ring clockwise");
+        assert_eq!(delaunay_hull_area(&points), Some(4.0));
     }
 
     #[test]
     fn degenerate_sets_have_no_hull() {
-        assert_eq!(Hull::of(&[[0.0, 0.0], [1.0, 1.0]]), None);
-        assert_eq!(Hull::of(&[[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]), None);
-        assert_eq!(Hull::of(&[[0.0, 0.0], [0.0, 0.0], [0.0, 0.0]]), None);
+        for points in [&[[0.0, 0.0], [1.0, 1.0]][..], &[[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]], &[[0.0, 0.0], [0.0, 0.0], [0.0, 0.0]]] {
+            assert_eq!(delaunay_hull_area(points), None);
+            assert_eq!(Hull::of_delaunay_boundary(points), None);
+            assert_eq!(Hull::of_polygon(points), None);
+        }
     }
 
     #[test]
@@ -390,16 +497,7 @@ mod tests {
     /// Every triangle is counter-clockwise, the triangles tile the hull (Euler's
     /// count) and no point lies strictly inside the circle of a triangle.
     fn assert_delaunay(points: &[[f64; 2]], triangles: &[[usize; 3]]) {
-        let hull_points = (0..points.len()).filter(|&i| {
-            let hull = Hull::of(points).unwrap();
-            let n = hull.vertices.len();
-            (0..n).any(|k| {
-                let (a, b) = (hull.vertices[k], hull.vertices[(k + 1) % n]);
-                robust::orient2d(coord(&a), coord(&b), coord(&points[i])) == 0.0
-                    && points[i][0] >= a[0].min(b[0]) && points[i][0] <= a[0].max(b[0])
-                    && points[i][1] >= a[1].min(b[1]) && points[i][1] <= a[1].max(b[1])
-            })
-        }).count();
+        let hull_points = delaunay_boundary(points).unwrap().len();
         assert_eq!(triangles.len(), 2 * points.len() - hull_points - 2);
         for t in triangles {
             assert!(orient(points, t[0], t[1], t[2]) > 0.0);

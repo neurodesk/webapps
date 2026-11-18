@@ -7,7 +7,7 @@
 //! model's own; the production model's gates and frozen outcomes are in
 //! matlab_geometry.rs and matlab_polygon_snapping.json.
 //!   cargo test --release --features polyshape-experimental --test matlab_polyshape_experimental
-use samsrf_core::experimental::{hull_of_polygon, polyshape_vertices};
+use samsrf_core::experimental::{hull_of_polygon, polyshape_vertices, shipped_hull_as_listed};
 use samsrf_core::geometry::Hull;
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
@@ -569,13 +569,39 @@ fn reproducer_hosts() -> Vec<(PathBuf, Vec<Value>)> {
 
 /// A model's hull as polyshape_reduce.py's `prediction` writes it: sorted IEEE
 /// bits of the vertices, area and centroid, or `{"empty": true}`.
-fn predicted_bits(hull: Option<&Hull>) -> Value {
+/// The area and centroid that `Hull` computed when reproducer rounds 1 to 5 were
+/// predicted, before it followed MATLAB's own arithmetic: shoelace sums taken
+/// from the first listed vertex, in listed order. Their predictions are verified
+/// with it, so the pre-registered files stay as they were committed.
+fn predicted_area_centroid(vertices: &[[f64; 2]]) -> (f64, [f64; 2]) {
+    let n = vertices.len();
+    let origin = vertices[0];
+    let (mut twice, mut cx, mut cy) = (0.0, 0.0, 0.0);
+    for i in 0..n {
+        let a = [vertices[i][0] - origin[0], vertices[i][1] - origin[1]];
+        let b = [vertices[(i + 1) % n][0] - origin[0], vertices[(i + 1) % n][1] - origin[1]];
+        let cross = a[0] * b[1] - b[0] * a[1];
+        twice += cross;
+        cx += (a[0] + b[0]) * cross;
+        cy += (a[1] + b[1]) * cross;
+    }
+    (twice.abs() / 2.0, [origin[0] + cx / (3.0 * twice), origin[1] + cy / (3.0 * twice)])
+}
+
+/// The shipped hull as the shipped model listed and kept it when those rounds
+/// were predicted.
+fn shipped_as_predicted(polygon: &[[f64; 2]]) -> Option<Vec<[f64; 2]>> {
+    shipped_hull_as_listed(polygon).filter(|vertices| predicted_area_centroid(vertices).0 > 0.0)
+}
+
+fn predicted_bits(hull: Option<&[[f64; 2]]>) -> Value {
     match hull {
         None => json!({"empty": true}),
         Some(hull) => {
-            let mut vertices: Vec<[u64; 2]> = hull.vertices.iter().map(|p| [p[0].to_bits(), p[1].to_bits()]).collect();
+            let mut vertices: Vec<[u64; 2]> = hull.iter().map(|p| [p[0].to_bits(), p[1].to_bits()]).collect();
             vertices.sort();
-            json!({"hull": vertices, "area": hull.area().to_bits(), "centroid": hull.centroid().map(f64::to_bits)})
+            let (area, centroid) = predicted_area_centroid(hull);
+            json!({"hull": vertices, "area": area.to_bits(), "centroid": centroid.map(f64::to_bits)})
         }
     }
 }
@@ -709,17 +735,18 @@ fn controlled_bytes(polygon: &[[f64; 2]]) -> Vec<u8> {
 
 /// polyshape_reduce.py's `prediction_bytes`: 0 for an empty hull, else 1, the
 /// sorted vertex bits, the area bits and the centroid bits, little-endian u64.
-fn prediction_bytes(hull: Option<&Hull>) -> Vec<u8> {
+fn prediction_bytes(hull: Option<&[[f64; 2]]>) -> Vec<u8> {
     let Some(hull) = hull else { return vec![0] };
-    let mut vertices: Vec<[u64; 2]> = hull.vertices.iter().map(|p| [p[0].to_bits(), p[1].to_bits()]).collect();
+    let mut vertices: Vec<[u64; 2]> = hull.iter().map(|p| [p[0].to_bits(), p[1].to_bits()]).collect();
     vertices.sort();
     let mut bytes = vec![1];
     for [x, y] in vertices {
         bytes.extend(x.to_le_bytes());
         bytes.extend(y.to_le_bytes());
     }
-    bytes.extend(hull.area().to_bits().to_le_bytes());
-    for value in hull.centroid() {
+    let (area, centroid) = predicted_area_centroid(hull);
+    bytes.extend(area.to_bits().to_le_bytes());
+    for value in centroid {
         bytes.extend(value.to_bits().to_le_bytes());
     }
     bytes
@@ -992,14 +1019,16 @@ fn polyshape_reproducers_match_recording() {
                 assert_eq!(polygons[i].iter().map(|p| p.map(f64::to_bits)).collect::<Vec<_>>(), expected.iter().map(|p| p.map(f64::to_bits)).collect::<Vec<_>>(), "{at}: polygon differs from the spec");
                 let shipped = Hull::of_polygon(&polygons[i]);
                 let experimental = hull_of_polygon(&polygons[i]).unwrap_or_else(|e| panic!("{at}: {e}"));
+                let predicted_shipped = shipped_as_predicted(&polygons[i]);
+                let predicted_experimental = experimental.as_ref().map(|h| h.vertices.as_slice());
                 if item.get("points").is_some() {
                     sha2::Digest::update(&mut digest, controlled_bytes(&polygons[i]));
                 } else if *compact {
-                    sha2::Digest::update(&mut digest, prediction_bytes(shipped.as_ref()));
-                    sha2::Digest::update(&mut digest, prediction_bytes(experimental.as_ref()));
+                    sha2::Digest::update(&mut digest, prediction_bytes(predicted_shipped.as_deref()));
+                    sha2::Digest::update(&mut digest, prediction_bytes(predicted_experimental));
                 } else {
-                    assert_eq!(predicted_bits(shipped.as_ref()), item["predicted"]["shipped"], "{at}: shipped model changed since the prediction");
-                    assert_eq!(predicted_bits(experimental.as_ref()), item["predicted"]["experimental"], "{at}: experimental model changed since the prediction");
+                    assert_eq!(predicted_bits(predicted_shipped.as_deref()), item["predicted"]["shipped"], "{at}: shipped model changed since the prediction");
+                    assert_eq!(predicted_bits(predicted_experimental), item["predicted"]["experimental"], "{at}: experimental model changed since the prediction");
                 }
                 let matlab = sorted_vertices(&hulls[i]);
                 let same = |hull: &Option<Hull>| sorted_vertices(hull.as_ref().map(|h| h.vertices.as_slice()).unwrap_or(&[])) == matlab;

@@ -12,7 +12,7 @@
 use crate::apertures::Apertures;
 use crate::error::{Error, Result};
 use crate::expr::Value;
-use crate::geometry::Hull;
+use crate::geometry::{delaunay_hull_area, Hull};
 use crate::hrf::{self, ResolvedHrf};
 use crate::model::{FineFit, RevCorPrfModel};
 use crate::optim::{self, FminsearchOptions};
@@ -69,8 +69,8 @@ impl Prepared {
             let convolved = hrf::convolve(&course, &kernel, 1);
             regressors[p * volumes..(p + 1) * volumes].copy_from_slice(&convolved);
         }
-        let xs = linspace(-model.scaling_factor, model.scaling_factor, cols);
-        let ys = linspace(-model.scaling_factor, model.scaling_factor, rows);
+        let xs = symmetric_linspace(model.scaling_factor, cols);
+        let ys = symmetric_linspace(model.scaling_factor, rows);
         let mut xc = Vec::with_capacity(pixels);
         let mut yc = Vec::with_capacity(pixels);
         for p in 0..pixels {
@@ -157,9 +157,11 @@ impl Prepared {
         [r2, self.xc[m], self.yc[m], fwhm, max * peak_sign]
     }
 
-    /// The convex hull estimate: `x0`, `y0` and `sqrt(area) / (2 sqrt(2 ln 2))` replace
-    /// rows 2-4 of `raw`; a profile whose suprathreshold pixels span no area zeroes the
-    /// whole column, as SamSrf's `catch` does.
+    /// The convex hull estimate: `x0` and `y0` from `polyshape(DT.Points(chp, :)).centroid`
+    /// and `sqrt(cha) / (2 sqrt(2 ln 2))` from `[chp, cha] = convexHull(DT)` replace rows
+    /// 2-4 of `raw`, for `DT` the Delaunay triangulation of the suprathreshold pixels in
+    /// pixel order. Pixels that span no area zero the whole column, as SamSrf's `catch`
+    /// does; a hull that `polyshape` empties has a NaN centroid.
     pub fn convex_hull(&self, raw: &[f64; 5], profile: &[f64]) -> Vec<f64> {
         let model = &self.model;
         let mut rmap = profile.to_vec();
@@ -171,13 +173,11 @@ impl Prepared {
         let max = crate::fit_prf::nan_max(&rmap);
         let threshold = model.data_precision.round(max * model.convex_hull_threshold);
         let points: Vec<[f64; 2]> = (0..self.pixels).filter(|&p| rmap[p] > threshold).map(|p| [self.xc[p], self.yc[p]]).collect();
-        match Hull::of(&points) {
-            Some(hull) => {
-                let [cx, cy] = hull.centroid();
-                vec![raw[0], cx, cy, hull.area().sqrt() / (2.0 * (2.0 * 2f64.ln()).sqrt()), raw[4]]
-            }
-            None => vec![0.0; 5],
-        }
+        let Some(area) = delaunay_hull_area(&points) else {
+            return vec![0.0; 5];
+        };
+        let [cx, cy] = Hull::of_delaunay_boundary(&points).map_or([f64::NAN; 2], |hull| hull.centroid());
+        vec![raw[0], cx, cy, area.sqrt() / (2.0 * (2.0 * 2f64.ln()).sqrt()), raw[4]]
     }
 
     /// `samsrf_revcorprf_loop` for one vertex: NaN rows below `R2_Threshold`, otherwise
@@ -298,17 +298,23 @@ fn nan_min(values: &[f64]) -> f64 {
     values.iter().copied().filter(|value| !value.is_nan()).fold(f64::NAN, |best, value| if best.is_nan() || value < best { value } else { best })
 }
 
-/// MATLAB `linspace`.
-fn linspace(a: f64, b: f64, n: usize) -> Vec<f64> {
+/// MATLAB R2023b `linspace(-half, half, n)`: `(2 i - (n - 1)) * (half / (n - 1))`,
+/// which keeps the grid symmetric. The 100-point grid MATLAB saved for the
+/// SamSrfAnalysis matrix (`reg_aps_bars.mat`) equals it at every point; the
+/// general `a + i * (b - a) / (n - 1)` differs at 59. The ends are set to
+/// `-half` and `half`; no recording yet covers an `n` and `half` for which
+/// `(n - 1) * (half / (n - 1))` rounds away from `half`.
+fn symmetric_linspace(half: f64, n: usize) -> Vec<f64> {
     if n == 0 {
         return Vec::new();
     }
     if n == 1 {
-        return vec![b];
+        return vec![half];
     }
     let steps = (n - 1) as f64;
-    let mut values: Vec<f64> = (0..n).map(|i| a + (i as f64 * (b - a)) / steps).collect();
-    values[n - 1] = b;
+    let mut values: Vec<f64> = (0..n).map(|i| (2.0 * i as f64 - steps) * (half / steps)).collect();
+    values[0] = -half;
+    values[n - 1] = half;
     values
 }
 

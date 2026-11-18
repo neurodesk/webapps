@@ -227,6 +227,20 @@ fn same(a: f64, b: f64) -> bool {
     a == b || a.is_nan() && b.is_nan()
 }
 
+/// Identical bits, the sign of zero included; NaN only matches NaN (NaN signs
+/// belong to the export track).
+fn bits(a: f64, b: f64) -> bool {
+    a.to_bits() == b.to_bits() || a.is_nan() && b.is_nan()
+}
+
+/// Whether a replayed row is a hull geometry row: MATLAB's polyshape centroid
+/// and areas, which double replays reproduce bit for bit.
+fn hull_row(case: &Value, name: &str) -> bool {
+    let rc_hull = kind(case) == AnalysisKind::RevCorPrf && case["mapReplayModel"]["Prf_Function"] == 0;
+    let cf_hull = kind(case) == AnalysisKind::RevCorCf && case["mapReplayModel"]["Fit_pRF"] == 0;
+    (rc_hull && matches!(name, "x0" | "y0" | "Fwhm")) || (cf_hull && matches!(name, "x0" | "y0" | "Centre" | "Surround"))
+}
+
 /// Equal, or both finite and at most `limit` apart. NaN only matches NaN, an
 /// infinity only itself, and a zero limit only an exact value.
 fn within(a: f64, e: f64, limit: f64) -> bool {
@@ -684,7 +698,7 @@ fn recorded_profiles_replay_to_each_hosts_maps() {
                 for (r, name) in prepared.values.iter().enumerate() {
                     let a = if single(case) { f64::from(actual[r] as f32) } else { actual[r] };
                     let e = saved[i * rows + r];
-                    let ok = if single(case) { same(a, e) } else { within(a, e, 1e-12 * e.abs().max(1.0)) };
+                    let ok = if single(case) { same(a, e) } else if hull_row(case, name) { bits(a, e) } else { within(a, e, 1e-12 * e.abs().max(1.0)) };
                     failures.check(ok, || format!("{} {}: vertex {v} {name}: {a} vs {e}", host.name, case["id"]));
                 }
             }
@@ -720,7 +734,9 @@ fn recorded_profiles_replay_to_each_hosts_maps() {
                 for (name, a, e) in rows_out {
                     let a = if single(case) { f64::from(a as f32) } else { a };
                     // R^2 = corr(Y, X(:,m))^2, whose dot product order is host-specific.
-                    let ok = if !single(case) {
+                    let ok = if !single(case) && hull_row(case, &name) {
+                        bits(a, e)
+                    } else if !single(case) {
                         within(a, e, 1e-12 * e.abs().max(1.0))
                     } else if name.ends_with("R^2") && intel(host) {
                         ulps(a, e) <= 16.0
@@ -767,6 +783,8 @@ fn pipelines_from_matlab_courses_match_matlab() {
                     let ok = if rounding.contains(&v) {
                         // MATLAB fitted its rounding residual; the port has none to fit.
                         a == 0.0 || name == "Noise Ceiling"
+                    } else if !single(case) && hull_row(case, name) {
+                        bits(a, e)
                     } else if !single(case) {
                         within(a, e, 1e-12 * k * e.abs().max(1.0))
                     } else if single(case) && !intel(host) {
