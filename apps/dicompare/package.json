@@ -3,8 +3,7 @@
   "version": "0.15.20261119",
   "description": "DICOM compliance validation tool for medical imaging",
   "author": {
-    "name": "Ashley Stewart",
-    "email": "ashley.stewart@uq.edu.au"
+    "name": "Ashley Stewart"
   },
   "private": true,
   "main": "./out/main/index.js",
