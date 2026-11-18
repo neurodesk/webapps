@@ -207,7 +207,7 @@ test('portable Node command lines build on target runners and publish through on
   assert.deepEqual(shared.permissions,{contents:'read'});
   assert.deepEqual(shared.jobs.portable.permissions,{contents:'read', 'id-token':'write'});
   assert.equal(shared.jobs.release.if,'inputs.publish_release');
-  assert.deepEqual(shared.jobs.release.needs,['portable']);
+  assert.deepEqual(shared.jobs.release.needs,['runners','portable']);
   assert.equal(shared.jobs.release.permissions.contents,'write');
   assert.equal(shared.jobs.release['runs-on'],"${{ inputs.sign_release && 'macos-15' || 'ubuntu-latest' }}");
   const signing=['APPLEID','APPLEIDPASS','APPLE_TEAM_ID','CSC_LINK','CSC_KEY_PASSWORD','CSC_INSTALLER_LINK','CSC_INSTALLER_KEY_PASSWORD'];
@@ -220,7 +220,11 @@ test('portable Node command lines build on target runners and publish through on
   const unsigned=shared.jobs.release.steps.filter(step=>step!==sign);
   assert.ok(!JSON.stringify(unsigned).includes('secrets.'),'signing secrets reach only the signing step');
   const upload=shared.jobs.portable.steps.find(step=>step.uses?.startsWith('actions/upload-artifact@'));
-  assert.equal(upload.with.name,"${{ runner.os == 'macOS' && 'test-installer' || 'portable' }}-${{ matrix.platform }}");
+  // native.yml runs several callers in one workflow run, where an artifact name must be unique.
+  assert.equal(upload.with.name,"${{ runner.os == 'macOS' && 'test-installer' || 'portable' }}-${{ needs.runners.outputs.package }}-${{ matrix.platform }}");
+  assert.equal(shared.jobs.runners.outputs.package,'${{ steps.select.outputs.package }}');
+  const download=shared.jobs.release.steps.find(step=>step.uses?.startsWith('actions/download-artifact@'));
+  assert.equal(download.with.pattern,'portable-${{ needs.runners.outputs.package }}-*');
   const build=JSON.stringify(shared.jobs.portable);
   for(const command of ['portable_release\\.py package','portable_release\\.py verify','test_portable_release\\.py','cargo test --manifest-path exes/node-cli/Cargo\\.toml','cargo clippy --manifest-path exes/node-cli/Cargo\\.toml --locked -- -D warnings','cargo fmt --manifest-path exes/node-cli/Cargo\\.toml --check']) {
     assert.match(build,new RegExp(command));
