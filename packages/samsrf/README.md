@@ -129,7 +129,7 @@ a u32 count, that many u32 pixel indices and that many f64 values.
 | `detrend(x) → Float64Array` | MATLAB `detrend`: removes the least-squares line. |
 | `zscore(x) → Float64Array` | MATLAB `zscore` with the `n - 1` standard deviation. |
 | `noiseCeiling(odd, even) → number` | The Spearman-Brown noise ceiling `2r / (1 + r)` of the odd-run and even-run means. |
-| `removeNoise({ volumes, vertices, data }, covariates, nCovariates) → Float64Array` | `samsrf_removenoise`: regresses z-scored covariates (column-major, `volumes x nCovariates`) and an intercept out of every course; a course containing `NaN` becomes zeros. |
+| `removeNoise({ volumes, vertices, data }, covariates, nCovariates) → Float64Array` | `samsrf_removenoise`: regresses z-scored covariates (column-major, `volumes x nCovariates`) and an intercept out of every course, as MATLAB's `[X ones] \ Y` over every course at once; a course containing `NaN` becomes zeros. |
 
 ### Export
 

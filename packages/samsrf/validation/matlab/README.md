@@ -241,7 +241,8 @@ low-variance edge course.
 | RC profiles from MATLAB's courses, AVX-512 host | 32 units x peak x kappa | 4.95 per kappa (29-36% identical) | MATLAB's single QR vs exact: 20 |
 | Single global-regression residuals, AMD host | exact | 0 (every residual identical) | |
 | Single global-regression residuals, AVX-512 matrix host | 32 units of the input course's peak | Not summarized here | Matrix reference; the edge recording has AMD hosts only |
-| Double global-regression residuals, both recordings and hosts | `1e-13` x input course peak | Not summarized here | Separate double-precision gate |
+| Double global-regression residuals, AMD hosts of both recordings | exact | 0 (every residual identical) | |
+| Double global-regression residuals, AVX-512 matrix host | `1e-13` x input course peak | Not summarized here | Separate double-precision gate |
 | Each host's profiles to its maps (replay) | exact | 0 | |
 | RC `R^2` where MATLAB used MKL's AVX-512 path | 16 single ULPs | 9 | the dot product order (below) |
 | Positions, `Fwhm`, `Vx`, hull and summary widths, end to end | exact | 0 | |
@@ -252,7 +253,7 @@ low-variance edge course.
 | Public single `rc` 2D and CF Gaussian fits | refused | | below |
 
 Double precision is held to `1e-12 x kappa` (relative above 1), and its
-regression residuals to `1e-13` of the input's peak.
+regression residuals on the AVX-512 host to `1e-13` of the input's peak.
 
 Three record-keeping rules of the source are reproduced, not tolerated. MATLAB
 stores an RC profile only when `corr(Y, X(:,m))` is finite, so a constant
@@ -291,7 +292,7 @@ the global signal and its regression are single.
 
 The port cannot be bit-identical before the profiles, because MATLAB is not:
 the two matrix hosts' profiles differ on about 70% of entries. Single RC profiles
-(`[Y ones] \ X`) and the single global regression (`[X ones] \ Y`) use
+(`[Y ones] \ X`) and the global regression (`[X ones] \ Y`, both precisions) use
 `lstsq::mldivide_many`, which solves all right-hand sides together,
 in MATLAB's column order. Historically it brought the largest RC profile error
 from 8.42 to 5.45 units per kappa, residuals from 18.81 to 5.41 and end-to-end
@@ -412,8 +413,9 @@ MATLAB's global regression is `B = [X ones] \ Y` over every ROI course at once
 aperture pixel at once (`samsrf_revcor_prf`, `prf_contour`). The port solves
 both the same way with `lstsq::mldivide_many` (#795), whose `?ormqr` order
 depends on each column's place among the right-hand sides. On the AMD hosts
-the single residuals are bit-identical (5,250 of 5,250 values at 250 volumes,
-31,500 of 31,500 at 1500, and the edge case on both edge hosts).
+the single and double residuals are bit-identical (5,250 of 5,250 values at
+250 volumes, 31,500 of 31,500 at 1500, and the edge case on both edge hosts):
+see [double global regression](#double-global-regression) for the double one.
 
 A course with a NaN keeps its place as a column of zeros and comes back
 zeroed. Courses without NaNs that contain infinities or overflow when converted
@@ -421,9 +423,9 @@ to single also retain a zero placeholder, but return NaN residuals, preserving
 the previous isolated-solve behavior. An empty ROI remains a successful no-op
 after input-shape validation. MATLAB's result for invalid courses was not
 recorded; these are port rules, not parity claims. The other courses are unaffected:
-`a_missing_course_keeps_its_place_in_the_single_regression` replaces one ROI
-course with NaN in every AMD case and still gets MATLAB's residual for every
-other course. Dropping the course instead changes the last course in every
+`a_missing_course_keeps_its_place_in_the_regression` replaces one ROI course
+with NaN in every AMD case, in both precisions, and still gets MATLAB's residual
+for every other course. Dropping the course instead changes the last course in every
 case, by 80 to 705 values.
 
 Single RC profiles rose from 31% to 82-96% identical on the AMD hosts with
@@ -1703,6 +1705,7 @@ the Node runner also accepts custom HRFs unavailable through the app interface.
 | MATLAB's double `corr(Y, X)` for CF profiles (`lstsq::gemv_t_double`, run 43890832220's module `d5ae6ba2`; Intel 0 runs, 42 maps) | 13 | 129 |
 | `Css_Convention: "samsrf"` for forward models and MATLAB's complex `Srf.Data` (`imaginary`, [below](#css-through-samsrfanalysis); Intel 0 runs, 46 maps) | 15 | 145 |
 | MATLAB's NaN, `0xFFF8000000000000` (`0xFFC00000` in single), in every map and GIfTI ([below](#nan-representation); Intel 0 runs, 55 maps) | 17 | 154 |
+| MATLAB's `[X ones] \ Y` for the double global regression ([below](#double-global-regression); Intel 0 runs, 55 maps) | 17 | 157 |
 
 The two refused single fits stay refused. What still differs, earliest stage first:
 
@@ -1720,8 +1723,6 @@ The two refused single fits stay refused. What still differs, earliest stage fir
   their position. Every unsmoothed double CF profile of the pinned
   reverse-correlation recordings equals MATLAB's on its AMD hosts (26 cases,
   4,914 values; `double_cf_profiles_equal_matlab_on_amd_hosts`).
-- double global-signal regression (`samsrf_removenoise`) still solves normal
-  equations, where MATLAB solves `[X ones] \\ Y`.
 - every Intel host.
 
 ```sh
@@ -1790,6 +1791,31 @@ folds `MATLAB_NAN as f32` to the positive NaN. On the matrix this moved exactly 
 predicted entries: `cf_hull_lh_single` and `cf_hull_smooth_global_lh_single`
 became exact runs, and the CF hull x0 maps and the RC Gaussian Sigma, Beta and
 Baseline became exact maps (17 runs and 154 maps against the AMD host).
+
+### Double global regression
+
+`samsrf_removenoise` z-scores the global signal, solves `B = [X ones] \ Y` over
+every ROI course at once and keeps `Y - X * B`. The single port already did so,
+but the double port solved the normal equations of each course. The
+reverse-correlation recordings keep MATLAB's residuals for MATLAB's own courses
+and global signal (`recomputedCorrectedCourses` of the `global1` cases). Of their
+52,500 double values on the AMD hosts (three matrix cases and the edge case on
+both edge hosts), the normal equations gave 8,973. `lstsq::mldivide_many` in
+double, then `X * B` as each row's rounded products added in column order, gives
+all 52,500. A fused multiply-add of the intercept gives 41,375. This rule was
+chosen from those two orders on all of these AMD values, with no separate
+held-out set. The Intel host's MKL solves in another order: there the rule gives
+1,155 to 2,343 identical values per case, and the normal equations gave 2,234 to
+7,155.
+
+Both precisions now run one function, and `revcor_reference.rs` holds the double
+residuals bit for bit on the AMD hosts (`1e-13` of the course's peak before).
+Courses whose regression leaves only rounding (vertices 4 and 6 of the edge
+recording) are now held to MATLAB's maps there instead of being required to come
+back zero, because the port leaves MATLAB's rounding. On the CLI matrix,
+`cf_hull_smooth_global_lh_double`'s R^2, Beta and Suppression became exact, which
+was observed after the rule was adopted, not predicted (157 of 168 maps). Its
+y0 still differs in the centroids (#732).
 
 ## Double forward fine fits (#730)
 
