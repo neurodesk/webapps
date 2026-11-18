@@ -670,6 +670,10 @@ test('a site key the table does not name selects every app, whatever its depth o
     'site.catalogs[].desktop.notes': (registry) => { registry.site.catalogs[0].desktop.notes = []; },
     'site.analytics.measurement_id': (registry) => { registry.site.analytics.measurement_id = { id: registry.site.analytics.measurement_id }; },
     'site.categories': (registry) => { registry.site.categories.push(structuredClone(registry.site.categories[0])); },
+    // One key named brand.home, not brand then home: joined with dots it looks like a listed key.
+    'site.hub["brand.home"]': (registry) => { registry.site.hub['brand.home'] = 'https://example.org/'; },
+    'site.catalogs[]["desktop.release"]': (registry) => { registry.site.catalogs[0]['desktop.release'] = 'x'; },
+    'site["catalogs[]"]': (registry) => { registry.site['catalogs[]'] = []; },
   };
   for (const [key, edit] of Object.entries(cases)) {
     const plan = await registryPlan(edit);
@@ -677,7 +681,7 @@ test('a site key the table does not name selects every app, whatever its depth o
     assert.match(plan.reasons.fallback ?? '', new RegExp(`^registry/apps\\.yml: (?:its site section has ${key.replace(/[.[\]]/g, '\\$&')}(?:\\.id)?, and no rule|it is not valid at head)`), key);
   }
   const text = await readFile(join(repoRoot, 'registry/apps.yml'), 'utf8');
-  for (const edit of [cases['site.unclassified'], cases['site.hub.unclassified']]) {
+  for (const edit of [cases['site.unclassified'], cases['site.hub.unclassified'], cases['site.hub["brand.home"]']]) {
     const after = parse(text);
     edit(after);
     assert.doesNotThrow(() => parseAppsRegistry(stringify(after)), 'the loader accepts it, so only the shape check stops it');

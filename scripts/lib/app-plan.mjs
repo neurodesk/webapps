@@ -159,40 +159,56 @@ function appInformationImpact({ before, after }, registry) {
   }
 }
 
-// The site keys two registries differ in, as SITE_KEY_READERS names them:
-// lists of entries with unique ids compare entry by entry (`[]`), and an entry
-// that is added, removed or moved changes `[].id` and every key below it. Any
-// other list that changed is one key the table does not name.
-function changedSiteKeys(old, now, path = 'site') {
+// Site key paths are arrays of raw segments, `[]` standing for each entry of
+// a list, and are compared only as arrays: SITE_KEY_READERS' dotted names are
+// split once, into a table keyed by the segments' JSON. A raw key that
+// contains a delimiter (`brand.home` written as one key) or is empty can
+// never equal a table path, so it is a key the table does not name.
+const siteSegments = (name) => name.split('.').flatMap((part) => (part.endsWith('[]') ? [part.slice(0, -2), '[]'] : [part]));
+const SITE_TABLE = new Map(Object.entries(SITE_KEY_READERS).map(([name, readers]) => [JSON.stringify(siteSegments(name)), { name, readers }]));
+const siteEntry = (segments) => SITE_TABLE.get(JSON.stringify(segments));
+// Whether some table path continues `segments` (a mapping or list the table names).
+const siteContainer = (segments) => [...SITE_TABLE.keys()].some((key) => {
+  const path = JSON.parse(key);
+  return path.length > segments.length && segments.every((segment, index) => path[index] === segment);
+});
+const plainKey = (key) => key !== '' && key !== '[]' && !/[.[\]]/.test(key);
+const showSegments = (segments) => segments.map((segment, index) => (segment === '[]' ? '[]' : plainKey(segment) ? `${index ? '.' : ''}${segment}` : `[${JSON.stringify(segment)}]`)).join('');
+
+// The site key paths two registries differ in: lists of entries with unique
+// ids compare entry by entry (`[]`), and an entry that is added, removed or
+// moved changes `[]`/`id` and every key below it. Any other list that changed
+// is one path the table does not name.
+function changedSiteKeys(old, now, path = ['site']) {
   if (same(old, now)) return [];
   const record = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
   const entries = (value) => Array.isArray(value) && value.every((entry) => record(entry) && typeof entry.id === 'string') && new Set(value.map((entry) => entry.id)).size === value.length;
   if (entries(old) && entries(now)) {
     const [before, after] = [new Map(old.map((entry) => [entry.id, entry])), new Map(now.map((entry) => [entry.id, entry]))];
-    const moved = same(old.map((entry) => entry.id), now.map((entry) => entry.id)) ? [] : [`${path}[].id`];
-    return [...moved, ...[...new Set([...before.keys(), ...after.keys()])].flatMap((id) => changedSiteKeys(before.get(id), after.get(id), `${path}[]`))];
+    const moved = same(old.map((entry) => entry.id), now.map((entry) => entry.id)) ? [] : [[...path, '[]', 'id']];
+    return [...moved, ...[...new Set([...before.keys(), ...after.keys()])].flatMap((id) => changedSiteKeys(before.get(id), after.get(id), [...path, '[]']))];
   }
   if ((record(old) || old === undefined) && (record(now) || now === undefined)) {
-    return [...new Set([...Object.keys(old ?? {}), ...Object.keys(now ?? {})])].flatMap((key) => changedSiteKeys(old?.[key], now?.[key], `${path}.${key}`));
+    return [...new Set([...Object.keys(old ?? {}), ...Object.keys(now ?? {})])].flatMap((key) => changedSiteKeys(old?.[key], now?.[key], [...path, key]));
   }
   return [path];
 }
 
 // The first path in a site section that SITE_KEY_READERS does not name: a key
-// it does not list at any depth, or a value of another kind than the table
-// gives its path (a mapping or list where it lists a scalar, or the reverse).
-// An empty mapping under a new key is a path the table does not name too.
-function unknownSiteKey(value, path = 'site') {
-  const below = (prefix) => Object.keys(SITE_KEY_READERS).some((key) => key.startsWith(prefix));
+// it does not list at any depth or that holds a delimiter, or a value of
+// another kind than the table gives its path (a mapping or list where it
+// lists a scalar, or the reverse). An empty mapping under a new key is a path
+// the table does not name too.
+function unknownSiteKey(value, path = ['site']) {
   if (Array.isArray(value)) {
-    if (!below(`${path}[].`)) return path;
-    return value.reduce((issue, entry) => issue ?? unknownSiteKey(entry, `${path}[]`), null);
+    if (!siteContainer([...path, '[]'])) return path;
+    return value.reduce((issue, entry) => issue ?? unknownSiteKey(entry, [...path, '[]']), null);
   }
   if (value !== null && typeof value === 'object') {
-    if (!below(`${path}.`)) return path;
-    return Object.entries(value).reduce((issue, [name, child]) => issue ?? unknownSiteKey(child, `${path}.${name}`), null);
+    if (!siteContainer(path)) return path;
+    return Object.entries(value).reduce((issue, [name, child]) => issue ?? (plainKey(name) ? unknownSiteKey(child, [...path, name]) : [...path, name]), null);
   }
-  return Object.hasOwn(SITE_KEY_READERS, path) ? null : path;
+  return siteEntry(path) ? null : path;
 }
 
 // The app entries and site keys a registry/apps.yml change touched, or why
@@ -208,15 +224,15 @@ function registryImpact({ before, after }) {
   }
   const section = [...new Set([...Object.keys(old ?? {}), ...Object.keys(now ?? {})])].find((key) => key !== 'apps' && key !== 'site' && !same(old?.[key], now?.[key]));
   if (section) return { shared: `its ${section} section changed, and every app build reads it` };
-  const siteKeys = [...new Set(changedSiteKeys(old?.site, now?.site))];
+  const siteKeys = [...new Map(changedSiteKeys(old?.site, now?.site).map((key) => [JSON.stringify(key), key])).values()];
   if (!same(old?.site, now?.site)) {
     try {
       parseAppsRegistry(after);
     } catch (error) {
       return { shared: `it is not valid at head (${error.message.split('\n').slice(0, 2).join(' ')}), and every app build validates it` };
     }
-    const unknown = unknownSiteKey(old?.site) ?? unknownSiteKey(now?.site) ?? siteKeys.find((key) => !Object.hasOwn(SITE_KEY_READERS, key));
-    if (unknown) return { shared: `its site section has ${unknown}, and no rule says which builds read it` };
+    const unknown = unknownSiteKey(old?.site) ?? unknownSiteKey(now?.site) ?? siteKeys.find((key) => !siteEntry(key));
+    if (unknown) return { shared: `its site section has ${showSegments(unknown)}, and no rule says which builds read it` };
   }
   const entries = (registry) => (Array.isArray(registry?.apps) ? registry.apps : []);
   const byId = (registry) => new Map(entries(registry).map((app) => [app?.id, app]));
@@ -503,8 +519,8 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
       for (const id of impact.changed) {
         if (appIds.has(id)) select(id, `${path}: the ${id} entry changed`);
       }
-      for (const key of impact.siteKeys) {
-        const readers = SITE_KEY_READERS[key];
+      for (const segments of impact.siteKeys) {
+        const { name: key, readers } = siteEntry(segments);
         if (!readers.length) siteBuild(`${path}: ${key} changed, and only the site build reads it`);
         if (readers.length && !graph) shared(`${path}: ${key} changed, and there is no workspace graph to find the apps that read it`);
         else for (const reader of readers) selectReaching(reader, `${path}: ${key} changed, and ${reader} reads it`);
