@@ -125,26 +125,6 @@ notices is the one thing such a skipped sweep leaves a day stale.
 - Replay a sweep with
   `GITHUB_REPOSITORY=neurodesk/webapps GITHUB_TOKEN=$(gh auth token) node scripts/workflow-gate.mjs --workflow <name> --sweep`.
 
-## Nightly desktop suites
-
-`standalone.yml` has no path filter: its schedule builds, tests and publishes
-every catalogue's desktop suite (about 375 runner minutes on a green night).
-Its `decide` job (`scripts/standalone-gate.mjs`) skips the build when no desktop
-input changed on main since the head of the last run that published the
-suites, and builds anyway when that run started 6.5 days ago or more, for
-runner and toolchain drift. Every path is an input except another workflow's
-file and a `registry/standalone.json` change to `suites` alone, which the
-publish job itself writes. A skipped night, a dispatch without `publish` and a
-failed run do not move the base, so the next night compares against the commit
-that was published. A dispatch always builds; the gate builds when the Actions
-API cannot answer. `test/standalone-gate.test.mjs` holds these rules.
-
-The gate does not build some suites and skip others: from 5 to 18 November
-2026, every night changed a file all four suites read.
-
-- Replay the gate with
-  `GITHUB_REPOSITORY=neurodesk/webapps GITHUB_TOKEN=$(gh auth token) node scripts/standalone-gate.mjs --event schedule`.
-
 ## Daily usage budget
 
 `ci-usage.yml` runs `scripts/ci-usage-report.mjs` at 06:41 UTC. It lists, by

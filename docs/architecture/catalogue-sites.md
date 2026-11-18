@@ -203,10 +203,7 @@ catalogue id. A catalogue without an entry has not published a suite yet, and it
 landing page shows no download link. The `standalone` workflow builds once, then
 assembles, tests and publishes one suite per catalogue. A suite runs the offline
 workflows of the apps it is home to; a copy's workflow runs in its home suite.
-Its model pack is tested with every app it serves that reads a model. The
-schedule skips a night when no desktop input changed since the suites were last
-published, and builds at least weekly
-([nightly desktop suites](../quality/ci-development-tiers.md#nightly-desktop-suites)).
+Its model pack is tested with every app it serves that reads a model.
 
 ## Deployment
 

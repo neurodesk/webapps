@@ -37,56 +37,8 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.source_approval_only
     uses: ./.github/workflows/desktop-source-approval.yml
 
-  # Every remote input is pinned, so the schedule builds only when a desktop
-  # input changed on main since the suites were last published, and at least
-  # weekly for runner drift (scripts/lib/standalone-gate.mjs). A dispatch always
-  # builds. A skipped night finishes green without publishing, so the next
-  # night still compares against the commit that was published.
-  decide:
-    if: github.event_name != 'workflow_dispatch' || !inputs.source_approval_only
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      actions: read
-    outputs:
-      run: ${{ steps.event.outputs.run || steps.decide.outputs.run }}
-    steps:
-      - name: Answer for dispatches
-        id: event
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-        run: |
-          if [ "$EVENT_NAME" != schedule ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          fi
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        if: steps.event.outputs.run == ''
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-        if: steps.event.outputs.run == ''
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        if: steps.event.outputs.run == ''
-        with:
-          node-version: 24
-          cache: pnpm
-      - name: Install frozen dependencies
-        if: steps.event.outputs.run == ''
-        run: pnpm install --frozen-lockfile
-      - name: Decide whether a desktop input changed since the last published suites
-        if: steps.event.outputs.run == ''
-        id: decide
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          HEAD_SHA: ${{ github.sha }}
-          GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/standalone-gate.mjs --event "$EVENT_NAME" --head "$HEAD_SHA"
-
   bundle:
-    needs: decide
-    if: needs.decide.outputs.run == 'true'
+    if: github.event_name != 'workflow_dispatch' || !inputs.source_approval_only
     runs-on: ubuntu-22.04
     timeout-minutes: 90
     outputs:
