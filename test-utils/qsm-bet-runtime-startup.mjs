@@ -1,19 +1,25 @@
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { appFileReaders } from '../scripts/lib/smoke-apps.mjs';
 import { decompressIfNeeded } from './nifti-fixture.mjs';
 import { serveSite } from './serve-site.mjs';
 
 // This is the existing scientific regression pin, also used by both app and package BET tests.
 const maskSha256 = '20112e75bdaab6c8f3d9d47469b6814554f167996f4cff61e004f00207b233ad';
+const PROBED_APPS = ['qsmbly', 'brain-extraction'];
+const FIXTURE = 'apps/calmar/tests/fixtures/synthstrip-mini/T1.nii.gz';
+
+// The `needs` of this check for smokeApps: both probes segment a fixture CALMaR owns.
+export const betNeeds = appFileReaders({ [FIXTURE]: PROBED_APPS });
 
 // Runs the production BET worker of each of `apps` that ships one; returns how many it ran.
 export async function verifyQsmBetRuntime({ browser, repoRoot, apps }) {
-  const tested = ['qsmbly', 'brain-extraction'].filter(id => apps.some(app => app.id === id));
+  const tested = PROBED_APPS.filter(id => apps.some(app => app.id === id));
   if (!tested.length) return 0;
   const site = await serveSite(join(repoRoot, 'dist'), { isolationHeaders: false });
   try {
-    const bytes = decompressIfNeeded(await readFile(join(repoRoot, 'apps/calmar/tests/fixtures/synthstrip-mini/T1.nii.gz')));
+    const bytes = decompressIfNeeded(await readFile(join(repoRoot, FIXTURE)));
     const assets = join(repoRoot, 'dist/brain-extraction/assets');
     const workers = [];
     for (const name of await readdir(assets)) {

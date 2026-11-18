@@ -6,16 +6,23 @@ import { chromium } from '@playwright/test';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { requireChecked, smokeApps } from '../scripts/lib/smoke-apps.mjs';
 import { serveSite } from '../test-utils/serve-site.mjs';
-import { verifyAsyncifyRuntime } from '../test-utils/asyncify-runtime-startup.mjs';
-import { verifyQsmBetRuntime } from '../test-utils/qsm-bet-runtime-startup.mjs';
-import { verifySharedBinaries } from '../test-utils/shared-binary-startup.mjs';
+import { asyncifyNeeds, verifyAsyncifyRuntime } from '../test-utils/asyncify-runtime-startup.mjs';
+import { betNeeds, verifyQsmBetRuntime } from '../test-utils/qsm-bet-runtime-startup.mjs';
+import { parityPeers, verifySharedBinaries } from '../test-utils/shared-binary-startup.mjs';
 
 // A two-element Neg graph: exercise real ORT pthread startup without downloading a scientific model.
 const modelBase64 = 'CAcSDGJhY2tlbmQtdGVzdDpBCgsKAXgSAXkiA05lZxIQdGVzdF9uZWdfZXhhbXBsZVoPCgF4EgoKCAgBEgQKAggCYg8KAXkSCgoICAESBAoCCAJCBAoAEA0=';
 const registry = await loadAppsRegistry();
-// SMOKE_APPS narrows every gate below to the apps it lists; without it each covers the catalogue.
+// SMOKE_APPS narrows every gate below to the apps it lists, and the apps each gate compares them
+// with or reads files from; without it each covers the catalogue.
 const selection = smokeApps(registry.apps);
 const { apps } = selection;
+const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets/manifest.json'), 'utf8'));
+function gateApps(gate, needs) {
+  const gated = smokeApps(registry.apps, process.env.SMOKE_APPS, needs);
+  if (gated.added.length) console.log(`${gate} also runs ${gated.added.join(', ')}, which it compares the listed apps with or reads files from`);
+  return gated.apps;
+}
 const site = process.env.BASE_URL ? null : await serveSite(join(repoRoot, 'dist'), { isolationHeaders: false });
 const base = `${(process.env.BASE_URL || site.origin).replace(/\/$/, '')}/`;
 const browser = await chromium.launch({ headless: true });
@@ -114,9 +121,9 @@ try {
     }
   }
   assert.equal(failures.length, 0, failures.join('\n'));
-  const asyncify = await verifyAsyncifyRuntime({ browser, base, apps, repoRoot });
-  const qsmBet = await verifyQsmBetRuntime({ browser, repoRoot, apps });
-  const shared = await verifySharedBinaries({ browser, registry, repoRoot, apps });
+  const asyncify = await verifyAsyncifyRuntime({ browser, base, apps: gateApps('Asyncify startup', asyncifyNeeds(registry)), repoRoot });
+  const qsmBet = await verifyQsmBetRuntime({ browser, repoRoot, apps: gateApps('BET startup', betNeeds) });
+  const shared = await verifySharedBinaries({ browser, registry, repoRoot, apps: gateApps('Shared binaries', parityPeers(manifest)) });
   if (!selection.filtered) {
     assert.ok(tested >= 5, `Expected at least five ONNX worker apps, tested ${tested}`);
     assert.ok(asyncify > 0, 'No asyncify consumers were tested');

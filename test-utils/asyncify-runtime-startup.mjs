@@ -4,6 +4,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { serveSite } from './serve-site.mjs';
+import { appFileReaders } from '../scripts/lib/smoke-apps.mjs';
 
 const modelBase64 = 'CAcSDGJhY2tlbmQtdGVzdDpBCgsKAXgSAXkiA05lZxIQdGVzdF9uZWdfZXhhbXBsZVoPCgF4EgoKCAgBEgQKAggCYg8KAXkSCgoICAESBAoCCAJCBAoAEA0=';
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -35,14 +36,23 @@ async function runAsyncifyModel({ data }) {
   }
 }
 
+// Every consumer's inference runs on the ONNX Runtime API that SynthSR installs.
+const MODULE_FAMILY = 'ort-web-asyncify';
+const API = 'apps/synthsr/node_modules/onnxruntime-web/dist/ort.webgpu.bundle.min.mjs';
+
+// The `needs` of this check for smokeApps: listing the app that installs the API runs every consumer.
+export function asyncifyNeeds(registry) {
+  return appFileReaders({ [API]: registry.apps.filter(app => app.app_scoped_runtime_families.includes(MODULE_FAMILY)).map(app => app.id) });
+}
+
 // Runs two-thread inference in every bundled asyncify worker of `apps`; returns how many it ran.
 export async function verifyAsyncifyRuntime({ browser, apps, repoRoot }) {
   const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets/manifest.json'), 'utf8'));
-  const moduleFamily = manifest.families.find(family => family.id === 'ort-web-asyncify');
+  const moduleFamily = manifest.families.find(family => family.id === MODULE_FAMILY);
   const binaryFamily = manifest.families.find(family => family.id === 'ort-web-asyncify-wasm');
   const module = moduleFamily.files[0];
   const binary = binaryFamily.files[0];
-  const apiPath = join(repoRoot, 'apps/synthsr/node_modules/onnxruntime-web/dist/ort.webgpu.bundle.min.mjs');
+  const apiPath = join(repoRoot, API);
   const consumers = apps.filter(app => app.app_scoped_runtime_families.includes(moduleFamily.id));
   if (!consumers.length) return 0;
   const scratch = await mkdtemp(join(tmpdir(), 'asyncify-startup-'));
