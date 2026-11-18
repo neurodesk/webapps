@@ -1,7 +1,8 @@
 # CI approval reporting
 
-The hourly report lists current workflow approval and startup blockers in one
-GitHub issue. Each open PR has a section with its title, author, current commit,
+The report runs four times a day, at 17 minutes past 00, 06, 12 and 18 UTC, and
+on manual dispatch. It lists current workflow approval and startup blockers in
+one GitHub issue. Each open PR has a section with its title, author, current commit,
 affected workflow names, run ages and links to the exact attempts.
 
 PR runs must match an open PR's current head or merge commit. Fork runs can have

@@ -7,6 +7,8 @@ import { publishApprovalReport } from '../scripts/lib/ci-approvals.mjs';
 test('the privileged reporter executes default-branch code without installing dependencies', async () => {
   const workflow = YAML.parse(await readFile(new URL('../.github/workflows/ci-approvals.yml', import.meta.url), 'utf8'));
   assert.deepEqual(Object.keys(workflow.on).sort(), ['schedule', 'workflow_dispatch']);
+  // Four reports a day: an hourly cron made 48 runs in two days for a report that changes slowly.
+  assert.deepEqual(workflow.on.schedule, [{ cron: '17 */6 * * *' }]);
   assert.deepEqual(workflow.permissions, { contents: 'read', actions: 'read', checks: 'read', 'pull-requests': 'read', issues: 'write' });
   assert.equal(workflow.concurrency['cancel-in-progress'], false);
   const steps = workflow.jobs.report.steps;

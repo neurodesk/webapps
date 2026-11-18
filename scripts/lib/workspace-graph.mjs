@@ -276,7 +276,7 @@ export async function loadConservativeWorkspaceGraph(root) {
     // The job's filtered package scripts test the easter-egg packages, so it reads what they name.
     if (node === EASTER_EGG) {
       const reads = new Set();
-      // It runs neither package's lint script: lint runs in workspace-contracts and code-quality.
+      // It runs neither package's lint script: lint runs in workspace-contracts and the quality workflow.
       const withoutLint = ({ scripts: { lint, ...scripts } = {} }) => scripts;
       if (await exists(join(root, EASTER_EGG_DIR))) await scan(join(root, EASTER_EGG_DIR), named, () => reads, withoutLint, () => 'site');
       outside.set(node, reads);

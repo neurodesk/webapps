@@ -1,7 +1,7 @@
 # Dependency boundaries
 
-Run `pnpm check:dependencies` after installing the workspace. The independent
-`dependency-quality` pull request workflow checks the graph and its canary tests
+Run `pnpm check:dependencies` after installing the workspace. The `dependencies`
+job of the independent `quality` workflow checks the graph and its canary tests
 without building apps, downloading models or launching a browser. CI always
 runs workspace contracts; app tests follow the affected workspace dependencies.
 Main runs retain GPU checks for affected apps; nightly and manual full runs
