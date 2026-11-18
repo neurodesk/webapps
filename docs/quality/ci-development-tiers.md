@@ -165,7 +165,7 @@ listing leaves out the earlier attempts of a re-run.
 | Job minutes per merged pull request | For each pull request merged in the window: its runs of every workflow on its head branch from its opening to its merge (earlier days included), its merge queue runs, and the push runs of its merge commit, also those created after the window up to the report. Median and the three largest. | - |
 | Fixed-job share | Of the job minutes of pull request `ci` runs, the share in `plan` and `fixed` jobs, for draft, ready, whole-catalogue, unknown-tier and all runs. | Draft runs under 30% |
 | Ready to green | For each ready pull request `ci` run that succeeded, the start of its latest attempt to completion, so a late re-run does not count the wait before it; a re-run of failed jobs counts only the re-run. Median and 90th percentile, apart for whole-catalogue runs. | Median under 20 minutes |
-| Merge to live | For each push to main (the first run of its commit), to the completion of the first successful `deploy-github-pages` run on main of that commit or a later one, also after the window. A deploy on main runs main's head when it is created, so one of a commit the pushes do not name counts for the pushes created before it. Median and maximum; pushes not yet live are listed. | - |
+| Merge to live | For each push to main (the first run of its commit), to the completion of the first successful `deploy-github-pages` run on main of that commit or a later one, also after the window. A deploy on main runs main's head when it is created, so one of a commit the pushes do not name counts for the pushes created before it, not those created in the same second. Median and maximum; pushes not yet live are listed. | - |
 | Runs that tested nothing | Runs that were skipped, ran no job, or ran only `plan` and `report` jobs. Count and share of all runs. | - |
 | Cancelled minutes | Job minutes of cancelled runs. | - |
 
@@ -196,17 +196,33 @@ opens an issue on every miss.
 
 The budgets come first, on about 80 requests a day (the run listings and one
 job count per `ci` pull request run that did work), and alone decide the exit
-code. The
-measures then read the deploys, the merged pull requests and their runs
-outside the window, and the jobs of every run that was not skipped, at one
-request per 30 jobs, under a cap of 600 requests (`--max-requests`). That is
-well below the 1,000 an hour a workflow token may make, which other workflows
-share. The 48 hours to 18 November took 984 measure requests, so an ordinary
-day needs about 490. Once the cap is reached, or a request is
-refused (a rate limit, for instance), the report starts no further request
-and shows each measure that lacks data as `unavailable:` with the reason;
-it never shows such a measure as zero, and the job does not fail. The report
-prints both request counts.
+code; nothing the measures do changes it. The measures then read the deploys,
+the merged pull requests and their runs outside the window, and the jobs of
+every run that was not skipped. Every one of these reads goes through one
+runner, `limitedReads` in `scripts/lib/github-actions.mjs`. It reads listings
+a page at a time and charges each page and each retry before sending it, so the
+measures send at most 600 requests (`--max-requests`) however many listings run
+at once. That is well below the 1,000 an hour a workflow token may make, which
+other workflows share. The runner also kills every request 10 minutes after the
+report started (`--time-limit`), well below the job's `timeout-minutes` of 15.
+Each run, job, pull request and deploy record must have the fields the measures
+use, of the API's types, before a measure reads it. Once the cap or the time
+limit is reached or a request is refused (a rate limit, for instance), the
+report sends no further request. Each measure that lacks data, for that reason
+or because a record failed the check, shows `unavailable:` with the reason,
+never a zero, `undefined` or `NaN`. A step summary that cannot be written loses
+the measures, not the exit code. The report prints both request counts.
+
+The 48 hours to 18 November took 987 measure requests in about four minutes,
+980 of them job pages. The two 24-hour halves of that window needed 304 and 676
+job pages and its one complete UTC day 240, so on a busy day the cap can leave
+the job measures unavailable. Of the 980 pages, 235 list runs of report-only
+workflows (185 `workflow_run` reporter runs and 50 scheduled reports). The
+report still reads them: they give the report role's 131 job minutes and tell a
+run that started no job from one that only reported. Two other pull requests of
+the CI optimisation program of November 2026 lower the need: one replaces the
+two `workflow_run` reporters with one scheduled reporter, and one replaces the
+194 runs that only ran a gate with one native run per pull request.
 
 ### Enforcement in CI
 
