@@ -118,7 +118,7 @@ export async function readLiveRecord({ site, host, nonce, fetch = globalThis.fet
  * content may differ from what is live, so the build's pre-deploy checks have to run.
  */
 export function decideSite({ digest, analytics, live, deployAll }) {
-  if (deployAll) return { publish: true, verifyBuild: true, reason: 'manual run: every site deploys' };
+  if (deployAll) return { publish: true, verifyBuild: true, reason: 'dispatched run: every site deploys' };
   if (live.error) return { publish: true, verifyBuild: true, reason: `live digest unreadable (${live.error})` };
   if (live.record.digest !== digest) return { publish: true, verifyBuild: true, reason: 'content changed' };
   if (analyticsStale(live.record.analyticsGeneratedAt, analytics)) {

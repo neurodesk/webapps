@@ -6,7 +6,7 @@
 //
 //   node scripts/plan-site-deploy.mjs [--deploy-all] [--sites-dir dist-sites]
 //
-// --deploy-all publishes every site (a manual run). A site whose live record
+// --deploy-all publishes every site (a dispatched run). A site whose live record
 // cannot be read is published.
 import { appendFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';

@@ -1314,6 +1314,8 @@ test('only the composite build and its own tests read the composite-only site fi
     'scripts/write-analytics.mjs',
     // Each desktop suite is its catalogue site without the host-only 404 page and headers.
     'scripts/desktop/assemble.mjs',
+    // The deploy plan leaves each projected site's usage report out of its digest.
+    'scripts/lib/site-deploy.mjs',
     'test-utils/dicompare-routes.mjs',
     'knip.config.mjs',
     // The planner names them to classify them.

@@ -3,11 +3,11 @@ name: deploy-github-pages
 on:
   push:
     branches: [main]
-  # Refreshes each catalogue's usage report (analytics.json) once a day; the
+  # Refreshes each catalogue's usage report once a day; the
   # time is ANALYTICS_REFRESH_UTC in scripts/lib/site-deploy.mjs.
   schedule:
     - cron: '17 4 * * *'
-  # A manual run publishes every site.
+  # A dispatched run (by hand or by standalone-catalog.yml) publishes every site.
   workflow_dispatch:
 
 permissions:

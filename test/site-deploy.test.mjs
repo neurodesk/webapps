@@ -120,7 +120,7 @@ test('the refresh time is the deploy workflow\'s daily schedule', async () => {
 const digest = 'a'.repeat(64);
 const record = (fields = {}) => ({ schema: 1, site: 'msk', digest, analyticsGeneratedAt: '2026-11-18T04:24:00Z', commit: 'fd08c1c20', ...fields });
 
-test('a site is published when its content changed, its live record is unreadable, its report is stale, or the run is manual', () => {
+test('a site is published when its content changed, its live record is unreadable, its report is stale, or the run was dispatched', () => {
   const analytics = '2026-11-18T12:00:00Z';
   const live = { record: record() };
   assert.deepEqual(decideSite({ digest, analytics, live }), {
@@ -133,7 +133,7 @@ test('a site is published when its content changed, its live record is unreadabl
   assert.deepEqual(decideSite({ digest, analytics: '2026-11-19T04:30:00Z', live }), {
     publish: true, verifyBuild: false, reason: 'usage report refresh (live report: 2026-11-18T04:24:00Z)',
   });
-  assert.deepEqual(decideSite({ digest, analytics, live, deployAll: true }), { publish: true, verifyBuild: true, reason: 'manual run: every site deploys' });
+  assert.deepEqual(decideSite({ digest, analytics, live, deployAll: true }), { publish: true, verifyBuild: true, reason: 'dispatched run: every site deploys' });
   // Content outranks the report: a changed site is verified before it is published.
   assert.equal(decideSite({ digest: 'b'.repeat(64), analytics: '2026-11-19T04:30:00Z', live }).verifyBuild, true);
 });
@@ -242,9 +242,9 @@ test('a deploy whose content is all live publishes nothing and skips the build\'
   assert.deepEqual(daily.filter(({ publish }) => publish).map(({ site: id }) => id), registry.site.catalogs.map(({ id }) => id));
   assert.equal(deployOutputs(daily).verify_build, 'false');
   assert.equal(deployOutputs(daily).pages, 'true');
-  // A manual run publishes and checks everything.
-  const manual = await planDeploy({ registry, sitesDir: root, commit: 'c1', nonce: 'n', fetch: served, write, deployAll: true });
-  assert.ok(manual.every(({ publish, verifyBuild }) => publish && verifyBuild));
+  // A dispatched run publishes and checks everything.
+  const dispatched = await planDeploy({ registry, sitesDir: root, commit: 'c1', nonce: 'n', fetch: served, write, deployAll: true });
+  assert.ok(dispatched.every(({ publish, verifyBuild }) => publish && verifyBuild));
 });
 
 const workflow = parse(await readFile(join(repoRoot, '.github/workflows/deploy-pages.yml'), 'utf8'));

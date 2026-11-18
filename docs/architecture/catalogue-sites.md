@@ -227,7 +227,7 @@ configuration, leaving out the root `analytics.json` and `site-digest.json`.
 `site-digest.json` records the digest, the usage report's `generatedAt` and the
 commit. A site is published when:
 
-- the run was dispatched (every site);
+- the run was dispatched, by hand or by `standalone-catalog.yml` (every site);
 - its host does not serve a readable record of this site, so a failed deploy is
   retried by the next run;
 - its digest differs from the served one;
