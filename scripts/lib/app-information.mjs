@@ -44,7 +44,7 @@ export function handoffCatalogEntry(app) {
 export function validateAppInformation(data, registry) {
   const errors = [];
   const shared = data?.shared ?? {};
-  for (const key of ['builder', 'execution', 'ecosystem', 'ecosystem_name', 'ecosystem_url']) {
+  for (const key of ['builder', 'execution', 'ecosystem', 'ecosystem_name', 'ecosystem_url', 'agents']) {
     if (!text(shared[key])) errors.push(`shared.${key} must be a non-empty string`);
   }
   if (!/lightNIIng/.test(shared.ecosystem ?? '') || !/lightniing\.org/.test(shared.ecosystem ?? '')) errors.push('shared.ecosystem must name the lightNIIng ecosystem and its domain lightniing.org');
@@ -52,6 +52,9 @@ export function validateAppInformation(data, registry) {
   if (!/clinical translation/.test(shared.ecosystem ?? '')) errors.push('shared.ecosystem must state the clinical-translation aim');
   if (!/Neurodesk/.test(shared.builder ?? '')) errors.push('shared.builder must name Neurodesk');
   if (!/browser/.test(shared.execution ?? '')) errors.push('shared.execution must state that apps run in the browser by default');
+  for (const [term, fact] of [[/Nothing reaches the agent until it calls a tool/, 'that nothing is shared until a tool is called'], [/file names and checksums/, 'that run reports carry file names and checksums'], [/measurements/, 'that measurements are readable'], [/viewer/, 'that viewer state is readable'], [/answers you type/, 'that typed answers are readable'], [/cloud sends what it reads to its provider/, 'that a cloud agent sends it to its provider']]) {
+    if (!term.test(shared.agents ?? '')) errors.push(`shared.agents must state ${fact}`);
+  }
   validateCitation(shared.platform_citation, 'shared.platform_citation', errors);
   if (shared.platform_citation?.doi !== '10.1038/s41592-023-02145-x') errors.push('shared.platform_citation must be the Neurodesk Nature Methods paper');
 
