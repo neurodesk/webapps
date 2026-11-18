@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
 import * as samsrf from '../src/node.js';
 import { giftiRun, matFile } from './fixtures.js';
 
@@ -63,4 +64,16 @@ test('preprocessing must declare the same reference as the fit; Intel never fall
   }
   assert.throws(() => new samsrf.RunAccumulator(3, null, { precision: 'single', arithmeticReference: 'matlab-intel' }), /Intel single-precision kernels are not implemented/);
   assert.throws(() => samsrf.parseModel('rc', JSON.stringify({ ...JSON.parse(input.model), Data_Precision: 'single' })), /Intel single-precision kernels are not implemented/);
+});
+
+test('Intel CSS refuses an omitted or nonnegative convention at the WASM boundary', () => {
+  const model = JSON.parse(readFileSync(new URL('../../../exes/samsrf/core/tests/data/Example_2D_Gaussian_pRF.json', import.meta.url)));
+  Object.assign(model, { Arithmetic_Reference: 'matlab-intel', Compressive_Nonlinearity: true });
+  for (const Css_Convention of [undefined, 'nonnegative']) {
+    assert.throws(() => samsrf.parseModel('prf', JSON.stringify({ ...model, Css_Convention })), /Intel CSS requires Css_Convention='samsrf'/);
+  }
+  assert.doesNotThrow(() => samsrf.parseModel('prf', JSON.stringify({ ...model, Css_Convention: 'samsrf' })));
+  for (const Arithmetic_Reference of ['current', 'matlab-amd']) {
+    assert.doesNotThrow(() => samsrf.parseModel('prf', JSON.stringify({ ...model, Arithmetic_Reference })));
+  }
 });

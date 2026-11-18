@@ -13,7 +13,8 @@ itself remains excluded from WebAssembly.
 The earlier test-only and blocked-shipping statements below describe their
 historical heads. This change preserves the old production result by default;
 it does not waive #876's losses under an implicit AMD default. Intel single
-precision is refused. Opt-ins have separate provenance and cannot share
+precision and nonnegative CSS are refused; Intel CSS requires the recorded
+`samsrf` convention. Opt-ins have separate provenance and cannot share
 preprocessed data or shards with another choice. Browser ZIPs include the
 reference and saved model; individual GIfTIs retain their original encoding.
 

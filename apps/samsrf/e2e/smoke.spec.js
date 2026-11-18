@@ -664,4 +664,15 @@ test("explicit arithmetic references run through workers and are retained in dow
   await page.locator("#runButton").click();
   await expect(page.locator("#statusText")).toContainText("Intel single-precision kernels are not implemented");
   await expect(page.locator("#downloadAll")).toBeDisabled();
+  await page.locator("#analysis").selectOption("prf");
+  const css = {
+    Name: "css", TR: 1, Scaling_Factor: 1, Hrf: 1,
+    Prf_Function: "@(P,ApWidth)prf_gaussian_rf(P(1),P(2),P(3),ApWidth)",
+    Param_Names: ["x0", "y0", "Sigma"], Scaled_Param: [1, 1, 1], Only_Positive: [0, 0, 1],
+    Param1: [0], Param2: [0], Param3: [1], Compressive_Nonlinearity: true,
+    Arithmetic_Reference: "matlab-intel", Css_Convention: "nonnegative",
+  };
+  await page.locator("#modelInput").setInputFiles(payload("css.json", JSON.stringify(css)));
+  await expect(page.locator("#statusText")).toContainText("Intel CSS requires Css_Convention='samsrf'");
+  await expect(page.locator("#downloadAll")).toBeDisabled();
 });

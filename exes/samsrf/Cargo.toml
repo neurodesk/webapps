@@ -1,6 +1,6 @@
 # SamSrf (BSD-3-Clause, https://github.com/samsrf/samsrf) ported to Rust: `core` is the
-# pure port, `wasm` its wasm-bindgen surface for packages/samsrf, `mkl-avx512` a second
-# reference (MATLAB's least squares on Intel hosts) that only tests use. Standalone
+# pure port, `wasm` its wasm-bindgen surface for packages/samsrf, `mkl-avx512` the
+# native recording gates for the optional Intel reference in core. Standalone
 # workspace so `cargo build` here never joins a parent one.
 [workspace]
 resolver = "2"

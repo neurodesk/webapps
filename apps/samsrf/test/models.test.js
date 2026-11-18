@@ -149,3 +149,15 @@ test("arithmetic references round-trip through presets and imported models witho
 function expectReference(model, reference) {
   assert.equal(model.Arithmetic_Reference ?? "current", reference);
 }
+
+test("Intel CSS requires the recorded SamSrf convention", () => {
+  const model = { ...buildModel("example-gaussian"), Compressive_Nonlinearity: true, Arithmetic_Reference: "matlab-intel" };
+  delete model.Css_Convention;
+  for (const Css_Convention of [undefined, "nonnegative"]) {
+    assert.throws(() => parseModel(JSON.stringify({ ...model, Css_Convention }), "prf"), /Intel CSS requires Css_Convention='samsrf'/);
+  }
+  assert.doesNotThrow(() => parseModel(JSON.stringify({ ...model, Css_Convention: "samsrf" }), "prf"));
+  for (const Arithmetic_Reference of ["current", "matlab-amd"]) {
+    assert.doesNotThrow(() => parseModel(JSON.stringify({ ...model, Arithmetic_Reference }), "prf"));
+  }
+});

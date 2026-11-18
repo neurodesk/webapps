@@ -359,6 +359,16 @@ impl Fields {
         let coarse_fit_percentile = self.number_or("Coarse_Fit_Percentile", 100.0)?;
         let aperture_mean_response = self.flag_or("Aperture_Mean_Response", false)?;
         let compressive_nonlinearity = self.flag_or("Compressive_Nonlinearity", false)?;
+        let arithmetic_reference = self.arithmetic_reference()?;
+        let css_convention = match self.string_or("Css_Convention", "nonnegative")?.as_str() {
+            "nonnegative" => crate::css::Convention::Nonnegative,
+            "samsrf" => crate::css::Convention::Samsrf,
+            _ => return Err(Error::Model("Css_Convention must be 'nonnegative' or 'samsrf'".into())),
+        };
+        if arithmetic_reference == ArithmeticReference::MatlabIntel
+            && compressive_nonlinearity && css_convention == crate::css::Convention::Nonnegative {
+            return Err(Error::Model("MATLAB Intel CSS requires Css_Convention='samsrf'; nonnegative CSS is not supported by this reference".into()));
+        }
         if !(0.0..=100.0).contains(&coarse_fit_percentile) {
             return Err(Error::Model("Coarse fit percentile invalid! It should probably be between 99.9-100...".into()));
         }
@@ -381,12 +391,8 @@ impl Fields {
         Ok(PrfModel {
             name,
             data_precision: self.precision()?,
-            arithmetic_reference: self.arithmetic_reference()?,
-            css_convention: match self.string_or("Css_Convention", "nonnegative")?.as_str() {
-                "nonnegative" => crate::css::Convention::Nonnegative,
-                "samsrf" => crate::css::Convention::Samsrf,
-                _ => return Err(Error::Model("Css_Convention must be 'nonnegative' or 'samsrf'".into())),
-            },
+            arithmetic_reference,
+            css_convention,
             prf_function,
             param_names,
             scaled_param: scaled_param.iter().map(|value| *value != 0.0).collect(),
@@ -763,6 +769,30 @@ mod tests {
         assert_eq!(parse_model_json(AnalysisKind::RevCorCf, &gaussian).unwrap_err(), Error::NotImplemented("Data_Precision=single with Fit_pRF=1"));
         let double = with(serde_json::from_str(REVCOR_CF).unwrap(), "Fit_pRF", serde_json::json!(1));
         assert_eq!(revcor_cf(&double).unwrap().fit_prf, CfParameterEstimate::Gaussian);
+    }
+
+    #[test]
+    fn intel_css_requires_the_samsrf_convention() {
+        let mut map = minimal_prf();
+        map.insert("Arithmetic_Reference".into(), serde_json::json!("matlab-intel"));
+        map.insert("Compressive_Nonlinearity".into(), serde_json::json!(true));
+        for convention in [None, Some("nonnegative")] {
+            if let Some(value) = convention {
+                map.insert("Css_Convention".into(), serde_json::json!(value));
+            }
+            assert_eq!(model_error(&Value::Object(map.clone()).to_string(), AnalysisKind::Prf),
+                "MATLAB Intel CSS requires Css_Convention='samsrf'; nonnegative CSS is not supported by this reference");
+        }
+        map.insert("Css_Convention".into(), serde_json::json!("samsrf"));
+        assert!(prf(&Value::Object(map.clone()).to_string()).is_ok());
+        map.insert("Css_Convention".into(), serde_json::json!("nonnegative"));
+        for reference in ["current", "matlab-amd"] {
+            map.insert("Arithmetic_Reference".into(), serde_json::json!(reference));
+            assert!(prf(&Value::Object(map.clone()).to_string()).is_ok());
+        }
+        map.insert("Arithmetic_Reference".into(), serde_json::json!("matlab-intel"));
+        map.insert("Compressive_Nonlinearity".into(), serde_json::json!(false));
+        assert!(prf(&Value::Object(map).to_string()).is_ok());
     }
 
     #[test]

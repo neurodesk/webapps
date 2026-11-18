@@ -19,7 +19,10 @@ A run directory holds exactly the files its record names, or the run is `invento
 app-model.json is the model the app saved before Run: its bytes hash to appModelSha256,
 and its content is the plan model with Data_Precision added, Css_Convention "samsrf" for a
 forward model, and the input files named as the app names them. The zip's bytes hash to
-zipSha256, and it holds exactly the contract maps and the polar angle and eccentricity maps.
+zipSha256. It holds the contract maps, the polar angle and eccentricity maps, and
+the arithmetic provenance JSON required by current runner receipts. That JSON
+must name the actual reference and equal the saved model; historical receipts
+without the provenance requirement remain readable.
 
 The interface downloads float32 GIfTIs only, so each contract map is compared bitwise
 twice: against MATLAB's exported GIfTI over every vertex, and against MATLAB's Srf.Data

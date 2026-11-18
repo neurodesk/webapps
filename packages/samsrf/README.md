@@ -43,8 +43,9 @@ kernels. Selection never depends on the machine running the analysis.
 
 These are arithmetic references, not a promise of universal MATLAB parity.
 The recorded AMD and Intel MATLAB builds disagree for identical inputs. Intel
-requires double precision and at least two volumes; single requests are refused,
-not silently routed to AMD. Hull geometry differences and two near-tie norm
+requires double precision and at least two volumes. Intel CSS requires
+`Css_Convention: "samsrf"`; its nonnegative CSS objective is not implemented.
+Unsupported choices are refused, not silently routed to AMD. Hull geometry differences and two near-tie norm
 cases remain unresolved. The recorded complex QR evidence covers finite
 two-column designs; other numerical edge cases are not established by MATLAB
 recordings. See [the validation record](validation/matlab/README.md).
