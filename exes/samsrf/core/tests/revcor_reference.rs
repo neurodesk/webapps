@@ -257,7 +257,9 @@ fn courses_of(host: &Host, case: &Value) -> (Vec<f64>, Vec<f64>, usize, Vec<u32>
 
 /// Vertices whose course global regression reduces to rounding in MATLAB
 /// (at most 64 units of the input's precision times its peak): MATLAB's maps then
-/// follow that rounding, which the port does not reproduce (its residual is 0).
+/// follow that rounding. The port's regression leaves the same rounding on the AMD
+/// hosts, so their maps are held to MATLAB's exactly there; a limit scaled by the
+/// course's conditioning would hold nothing.
 fn rounding_courses(host: &Host, case: &Value) -> Vec<usize> {
     if case["mapReplayModel"]["Global_Signal_Correction"] != true {
         return Vec::new();
@@ -572,9 +574,11 @@ fn double_cf_profiles_equal_matlab_on_amd_hosts() {
     failures.assert_none();
 }
 
-/// `samsrf_removenoise` on the ROI: MATLAB's single residuals differ between hosts by
-/// up to 5.2 x 2^-24 of a course's peak; its single QR is not reproduced bit for bit.
-/// Limits are relative to the input course, which sets the residual's rounding.
+/// `samsrf_removenoise` on the ROI, from MATLAB's courses and global signal: every
+/// residual equals MATLAB's on the AMD hosts in both precisions (MATLAB solves every
+/// course at once, `lstsq::mldivide_many`, then adds `X * B`'s rounded products in
+/// order). The Intel host's MKL rounds the solve in another order; there the residual is
+/// held within a limit relative to the input course, which sets its rounding.
 #[test]
 fn global_regression_stays_within_rounding() {
     let Some(hosts) = hosts() else { return; };
@@ -606,9 +610,7 @@ fn global_regression_stays_within_rounding() {
                     }
                     identical += usize::from(same(a, e));
                     compared += 1;
-                    // Single residuals are bit-identical on the AMD (CNR auto) hosts:
-                    // MATLAB solves every course at once (`lstsq::mldivide_many`).
-                    let ok = if single(case) && !intel(host) { same(a, e) } else { within(a, e, relative * peak) };
+                    let ok = if intel(host) { within(a, e, relative * peak) } else { same(a, e) };
                     failures.check(ok, || format!("{} {}: vertex {v} volume {t}: {a} vs {e}", host.name, case["id"]));
                 }
             }
@@ -619,16 +621,17 @@ fn global_regression_stays_within_rounding() {
     failures.assert_none();
 }
 
-/// A course with a NaN keeps its place among the right-hand sides of the single
-/// global regression and comes back zeroed; every other course is unchanged, so it
-/// still equals MATLAB's residual on the AMD hosts. MATLAB's own result for a
-/// missing course was not recorded, so only the other courses are compared.
+/// A course with a NaN keeps its place among the right-hand sides of the global
+/// regression and comes back zeroed; every other course is unchanged, so it still
+/// equals MATLAB's residual on the AMD hosts, in both precisions. MATLAB's own result
+/// for a missing course was not recorded, so only the other courses are compared.
 #[test]
-fn a_missing_course_keeps_its_place_in_the_single_regression() {
+fn a_missing_course_keeps_its_place_in_the_regression() {
     let Some(hosts) = hosts() else { return; };
     let mut cases = 0;
     for host in hosts.iter().filter(|host| !intel(host)) {
-        for case in pipelines(host, "cf").filter(|c| single(c) && c["id"].as_str().unwrap().ends_with("mode0_smooth0_global1")) {
+        for case in pipelines(host, "cf").filter(|c| c["id"].as_str().unwrap().ends_with("mode0_smooth0_global1")) {
+            let precision = if single(case) { Precision::Single } else { Precision::Double };
             let pre = find(&host.cases, case["preprocessing"].as_str().unwrap());
             let courses = array(&host.root, &pre["courses"]);
             let volumes = shape(&pre["courses"])[0];
@@ -639,7 +642,7 @@ fn a_missing_course_keeps_its_place_in_the_single_regression() {
                 series.course_mut(i).copy_from_slice(&courses[v as usize * volumes..(v as usize + 1) * volumes]);
             }
             series.course_mut(missing)[volumes / 3] = f64::NAN;
-            preprocess::remove_noise_in(&mut series, &array(&host.root, &case["globalSignal"]), 1, Precision::Single).unwrap();
+            preprocess::remove_noise_in(&mut series, &array(&host.root, &case["globalSignal"]), 1, precision).unwrap();
             assert!(series.course(missing).iter().all(|&value| value == 0.0), "{} {}: the missing course is zeroed", host.name, case["id"]);
             let expected = array(&host.root, &case["recomputedCorrectedCourses"]);
             for (i, &v) in roi.iter().enumerate().filter(|(i, _)| *i != missing) {
@@ -652,8 +655,8 @@ fn a_missing_course_keeps_its_place_in_the_single_regression() {
         }
     }
     if !hosts.is_empty() {
-        // Three matrix cases on its AMD host and one edge case on each AMD host.
-        assert_eq!(cases, 5, "single global-regression cases on the AMD hosts");
+        // Per precision, three matrix cases on its AMD host and one edge case on each AMD host.
+        assert_eq!(cases, 10, "global-regression cases on the AMD hosts");
     }
 }
 
@@ -764,9 +767,10 @@ fn pipelines_from_matlab_courses_match_matlab() {
             for (r, name) in expected.values.iter().enumerate() {
                 for (v, (&a, &e)) in actual.row(r).iter().zip(expected.row(r)).enumerate() {
                     let k = conditioning[v];
-                    let ok = if rounding.contains(&v) {
-                        // MATLAB fitted its rounding residual; the port has none to fit.
-                        a == 0.0 || name == "Noise Ceiling"
+                    let ok = if rounding.contains(&v) && !intel(host) {
+                        // MATLAB fitted the rounding its global regression left, and the
+                        // port's regression leaves the same rounding on the AMD hosts.
+                        same(a, e)
                     } else if !single(case) {
                         within(a, e, 1e-12 * k * e.abs().max(1.0))
                     } else if single(case) && !intel(host) {
