@@ -7,9 +7,11 @@
 //   hang-jobs     job listings never answer
 //   retry         the first job listing of run 4 answers HTTP 502 once
 //   empty-pr      the pull request search answers [{}]
+//   null-cursor   the pull request search announces a second page without a cursor
 //   bad-job       job records carry a start time that is not a time
 //   break-summary the first deploy page turns GITHUB_STEP_SUMMARY into a directory
 //   fifo-summary  the first deploy page turns GITHUB_STEP_SUMMARY into a FIFO no one reads
+//   slow-deploys  the first deploy page answers after a second
 const { appendFileSync, existsSync, mkdirSync, rmSync, writeFileSync } = require('node:fs');
 const { execFileSync } = require('node:child_process');
 const { join } = require('node:path');
@@ -41,9 +43,9 @@ function breakSummary() {
 
 if (args[0] === 'api' && args[1] === 'graphql') {
   // The merged pull request search, two pages: #864 opened before the window, #865 in it.
-  if (modes.has('empty-pr')) print({ next: null, items: [{}] });
-  else if (!args.some((arg) => arg.startsWith('after='))) print({ next: 'c1', items: [{ number: 864, createdAt: '2026-11-17T09:00:00Z', mergedAt: '2026-11-18T10:50:00Z', mergeCommit: { oid: MERGE_COMMIT }, headRefName: 'feature', headRepository: { nameWithOwner: 'neurodesk/webapps' } }] });
-  else print({ next: null, items: [{ number: 865, createdAt: '2026-11-18T09:30:00Z', mergedAt: '2026-11-18T10:30:00Z', mergeCommit: { oid: 'n'.repeat(40) }, headRefName: 'other', headRepository: { nameWithOwner: 'neurodesk/webapps' } }] });
+  if (modes.has('empty-pr')) print({ hasNextPage: false, next: null, items: [{}] });
+  else if (!args.some((arg) => arg.startsWith('after='))) print({ hasNextPage: true, next: modes.has('null-cursor') ? null : 'c1', items: [{ number: 864, createdAt: '2026-11-17T09:00:00Z', mergedAt: '2026-11-18T10:50:00Z', mergeCommit: { oid: MERGE_COMMIT }, headRefName: 'feature', headRepository: { nameWithOwner: 'neurodesk/webapps' } }] });
+  else print({ hasNextPage: false, next: null, items: [{ number: 865, createdAt: '2026-11-18T09:30:00Z', mergedAt: '2026-11-18T10:30:00Z', mergeCommit: { oid: 'n'.repeat(40) }, headRefName: 'other', headRepository: { nameWithOwner: 'neurodesk/webapps' } }] });
 } else if (/\/runs\/\d+\/jobs\?per_page=1&/.test(path)) {
   // A budget's job count: every ci pull request run ran 120 jobs.
   print(120);
@@ -62,6 +64,7 @@ if (args[0] === 'api' && args[1] === 'graphql') {
   }
 } else if (path.includes('/workflows/deploy-pages.yml/runs?')) {
   if (modes.has('break-summary') || modes.has('fifo-summary')) breakSummary();
+  if (modes.has('slow-deploys') && page === 1) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1000);
   // 250 deploys, three pages of 100.
   listing(250, 100, (index) => run({ id: 1000 + index, name: 'deploy-github-pages', event: 'push', head_branch: 'main', head_sha: 'd'.repeat(40), pull_requests: [], created_at: '2026-11-18T10:59:00Z', updated_at: '2026-11-18T11:10:00Z' }));
 } else if (args.includes('--paginate') && path.startsWith('repos/neurodesk/webapps/actions/runs?')) {

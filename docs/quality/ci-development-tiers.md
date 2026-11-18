@@ -210,7 +210,7 @@ use, of the API's types, before a measure reads it. Once the cap or the time
 limit is reached or a request is refused (a rate limit, for instance), the
 report sends no further request. Each measure that lacks data, for that reason
 or because a record failed the check, shows `unavailable:` with the reason,
-never a zero, `undefined` or `NaN`. A step summary that cannot be written loses
+never a zero, `undefined` or `NaN`. A step summary or a standard output that cannot be written loses
 the measures, not the exit code. The report prints both request counts.
 
 The 48 hours to 18 November took 987 measure requests in about four minutes,

@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { readdirSync, readFileSync } from 'node:fs';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import { closeSync, constants, openSync, readdirSync, readFileSync, readSync, writeSync } from 'node:fs';
 import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
@@ -279,7 +280,7 @@ test('the measures reproduce the hand-computed numbers of the measured window', 
 // ci run of one pull request keeps the window inside every budget; `over`
 // makes it three. `requests` are the calls the measures sent: every page and
 // retry of theirs is one `gh` call.
-async function reportWith(t, { mode = [], args = [], summary = false } = {}) {
+async function stubbed(t, { mode = [], args = [], summary = false } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'ci-usage-report-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const bin = join(root, 'bin');
@@ -290,16 +291,19 @@ async function reportWith(t, { mode = [], args = [], summary = false } = {}) {
   const log = join(root, 'calls.jsonl');
   await writeFile(log, '');
   const summaryPath = join(root, 'summary.md');
+  const argv = [fileURLToPath(new URL('../scripts/ci-usage-report.mjs', import.meta.url)), '--hours', '2', '--until', '2026-11-18T11:00:00Z', ...args];
+  const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, GH_STUB_MODE: mode.join(','), GH_STUB_LOG: log, GH_STUB_STATE: root, GITHUB_REPOSITORY: 'neurodesk/webapps', GITHUB_STEP_SUMMARY: summary ? summaryPath : '' };
+  return { root, log, summaryPath, argv, env };
+}
+
+async function reportWith(t, options = {}) {
+  const { log, summaryPath, argv, env } = await stubbed(t, options);
   const begun = Date.now();
   // A report that hangs fails here with status null.
-  const result = spawnSync(process.execPath, [fileURLToPath(new URL('../scripts/ci-usage-report.mjs', import.meta.url)), '--hours', '2', '--until', '2026-11-18T11:00:00Z', ...args], {
-    encoding: 'utf8',
-    timeout: 60e3,
-    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, GH_STUB_MODE: mode.join(','), GH_STUB_LOG: log, GH_STUB_STATE: root, GITHUB_REPOSITORY: 'neurodesk/webapps', GITHUB_STEP_SUMMARY: summary ? summaryPath : '' },
-  });
+  const result = spawnSync(process.execPath, argv, { encoding: 'utf8', timeout: 60e3, env });
   const calls = readFileSync(log, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line));
   const requests = calls.filter((call) => call[1] === 'graphql' || call.some((arg) => /&page=\d+$/.test(arg)));
-  return { ...result, seconds: (Date.now() - begun) / 1000, requests, summaryPath };
+  return { ...result, seconds: (Date.now() - begun) / 1000, requests, summaryPath, log };
 }
 
 const MEASURE_ROWS = ['Job minutes per merged pull request, median', 'Fixed-job share of draft pull request ci runs', 'Ready to green, median and 90th percentile', 'Merge to live, median and maximum', 'Runs that tested nothing', 'Job minutes of cancelled runs'];
@@ -334,6 +338,110 @@ test('the measures send at most --max-requests requests, concurrent job listings
       assert.match(result.stdout, new RegExp(`\\| Job minutes of cancelled runs \\| unavailable: the request cap of ${cap} was reached \\| - \\|`));
     }
     assert.doesNotMatch(result.stdout, NO_JUNK);
+  }
+});
+
+test('--max-requests takes a whole number and --time-limit a number of minutes, before any request', async (t) => {
+  for (const args of [['--max-requests', '0.5'], ['--max-requests', '5.5'], ['--max-requests', '-1'], ['--max-requests', 'Infinity'], ['--time-limit', '-1'], ['--time-limit', 'Infinity'], ['--time-limit', 'soon']]) {
+    const result = await reportWith(t, { args });
+    assert.equal(result.status, 1, args.join(' '));
+    assert.match(result.stderr, /Usage: ci-usage-report\.mjs/);
+    assert.equal(result.stdout, '');
+    assert.equal(readFileSync(result.log, 'utf8'), '', `${args.join(' ')} sent a request`);
+  }
+});
+
+test('with no time left the measures send nothing and name the time limit', async (t) => {
+  for (const [mode, code] of [[[], 0], [['over'], 1]]) {
+    const result = await reportWith(t, { mode, args: ['--time-limit', '0'] });
+    assert.equal(result.status, code, result.stderr);
+    assert.equal(result.requests.length, 0);
+    for (const row of MEASURE_ROWS) assert.match(result.stdout, new RegExp(`\\| ${row} \\| unavailable: the time limit of 0 minutes was reached \\| - \\|`));
+    assert.match(result.stdout, /and 0 for the measures \(cap 600\)/);
+  }
+});
+
+test('the pull request search must give a cursor for a page it announces', async (t) => {
+  const result = await reportWith(t, { mode: ['null-cursor'] });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /\| Job minutes per merged pull request, median \| unavailable: the API announced another page of the pull request search without a cursor \| - \|/);
+  assert.match(result.stdout, /\| Merge to live, median and maximum \| 130 and 130 min/);
+});
+
+// A pipe whose reader has not read yet: a FIFO filled to its capacity before
+// the report starts. The reader drains it after `lateBy` milliseconds, or
+// once the report exited if that is sooner. `sentBeforeReader` are the `gh`
+// calls of the measures until then.
+async function reportIntoFullPipe(t, options, lateBy) {
+  const { root, log, argv, env } = await stubbed(t, options);
+  const fifo = join(root, 'stdout');
+  execFileSync('mkfifo', [fifo]);
+  const reader = openSync(fifo, constants.O_RDONLY | constants.O_NONBLOCK);
+  const writer = openSync(fifo, constants.O_WRONLY | constants.O_NONBLOCK);
+  let filled = 0;
+  try {
+    for (;;) filled += writeSync(writer, Buffer.alloc(65536));
+  } catch (error) {
+    if (error.code !== 'EAGAIN') throw error;
+  }
+  const child = spawn(process.execPath, argv, { env, stdio: ['ignore', writer, 'pipe'] });
+  closeSync(writer);
+  let stderr = '';
+  child.stderr.on('data', (chunk) => (stderr += chunk));
+  const exited = new Promise((resolve) => child.on('exit', (code) => resolve(code)));
+  const exitedBeforeReader = await Promise.race([exited.then(() => true), sleep(lateBy).then(() => false)]);
+  const sentBeforeReader = readFileSync(log, 'utf8').split('\n').filter((line) => line.includes('&page=') || line.includes('"graphql"')).length;
+  const chunks = [];
+  const buffer = Buffer.alloc(65536);
+  for (;;) {
+    let size;
+    try {
+      size = readSync(reader, buffer);
+    } catch (error) {
+      if (error.code !== 'EAGAIN') throw error;
+      await sleep(20);
+      continue;
+    }
+    if (size === 0) break;
+    chunks.push(Buffer.from(buffer.subarray(0, size)));
+  }
+  closeSync(reader);
+  return { status: await exited, stderr, exitedBeforeReader, sentBeforeReader, stdout: Buffer.concat(chunks).subarray(filled).toString('utf8') };
+}
+
+test('a reader that drains stdout late still gets the budget result and the measures', { skip: process.platform === 'win32' }, async (t) => {
+  const result = await reportIntoFullPipe(t, { mode: ['over'] }, 2000);
+  assert.equal(result.exitedBeforeReader, false, 'the report exited before its output was read');
+  // The measures start only once the budget lines and annotations are delivered.
+  assert.equal(result.sentBeforeReader, 0);
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stdout, /^### Over budget/m);
+  assert.match(result.stdout, /^::error::/m);
+  assert.match(result.stdout, /\| Merge to live, median and maximum \| 130 and 130 min/);
+  assert.match(result.stdout, /and 18 for the measures \(cap 600\)/);
+  assert.doesNotMatch(result.stdout, /unavailable/);
+});
+
+test('a reader that closes stdout after the budget result leaves the exit code to the budgets', { skip: process.platform === 'win32' }, async (t) => {
+  for (const [mode, code, heading] of [[['slow-deploys'], 0, 'Inside every budget'], [['slow-deploys', 'over'], 1, 'Over budget']]) {
+    // The step summary write keeps the measures going after their stdout write failed.
+    const { argv, env, summaryPath } = await stubbed(t, { mode, summary: true });
+    const child = spawn(process.execPath, argv, { env, stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    child.stderr.on('data', (chunk) => (stderr += chunk));
+    const exited = new Promise((resolve) => child.on('exit', (status) => resolve(status)));
+    // The first deploy page takes a second: the measures print after the reader left.
+    await new Promise((resolve) => child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+      if (stdout.includes(`### ${heading}`)) resolve();
+    }));
+    await sleep(200);
+    child.stdout.destroy();
+    assert.equal(await exited, code, stderr);
+    assert.doesNotMatch(stderr, /EPIPE|Error/);
+    assert.doesNotMatch(stdout, /### Measures/);
+    assert.match(readFileSync(summaryPath, 'utf8'), /### Measures/);
   }
 });
 

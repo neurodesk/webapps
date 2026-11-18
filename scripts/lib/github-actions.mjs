@@ -151,6 +151,7 @@ export function limitedReads({ cap, deadline, timeLimitMinutes }) {
   }, Math.max(0, deadline - Date.now())).unref();
 
   async function send(args) {
+    if (!stop && Date.now() >= deadline) stop = `the time limit of ${timeLimitMinutes} minutes was reached`;
     if (!stop && sent >= cap) stop = `the request cap of ${cap} was reached`;
     if (stop) throw new Error(stop);
     sent += 1;
@@ -204,13 +205,14 @@ export function limitedReads({ cap, deadline, timeLimitMinutes }) {
       const q = `repo:${REPOSITORY} is:pr is:merged base:main merged:${stamp(since)}..${stamp(new Date(until).getTime() - 1000)}`;
       const found = [];
       for (let after = null; ;) {
-        const args = ['api', 'graphql', '-f', `query=${MERGED_PULL_REQUESTS}`, '-f', `q=${q}`, '--jq', '.data.search | {next: (if .pageInfo.hasNextPage then .pageInfo.endCursor else null end), items: .nodes} | @json'];
+        const args = ['api', 'graphql', '-f', `query=${MERGED_PULL_REQUESTS}`, '-f', `q=${q}`, '--jq', '.data.search | {hasNextPage: .pageInfo.hasNextPage, next: .pageInfo.endCursor, items: .nodes} | @json'];
         if (after) args.push('-f', `after=${after}`);
-        const { next, items } = JSON.parse(await request(args));
-        if (!Array.isArray(items)) throw new Error('the API answered the pull request search without a listing');
+        const { hasNextPage, next, items } = JSON.parse(await request(args));
+        if (!Array.isArray(items) || typeof hasNextPage !== 'boolean') throw new Error('the API answered the pull request search without a listing');
+        if (hasNextPage && (typeof next !== 'string' || !next)) throw new Error('the API announced another page of the pull request search without a cursor');
         found.push(...items);
         // The search finds at most 1,000 results.
-        if (!next || found.length >= 1000) break;
+        if (!hasNextPage || found.length >= 1000) break;
         after = next;
       }
       return found.map((pullRequest) => ({

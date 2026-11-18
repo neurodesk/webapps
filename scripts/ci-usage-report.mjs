@@ -23,6 +23,7 @@
 // and the report exits with the budgets' code.
 import { constants } from 'node:fs';
 import { appendFile } from 'node:fs/promises';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { checkRecords, DEPLOY_WORKFLOW, measuresMarkdown, summarizeMeasures } from './lib/ci-measures.mjs';
 import { budgetFindings, largeRunCandidates, ofPullRequest, summarizeUsage, usageMarkdown } from './lib/ci-usage.mjs';
 import { jobCount, limitedReads, listAllRuns, mapLimited } from './lib/github-actions.mjs';
@@ -45,9 +46,12 @@ const cap = Number(option('--max-requests', MEASURE_REQUEST_CAP));
 const timeLimit = Number(option('--time-limit', MEASURE_TIME_LIMIT));
 const now = new Date();
 const until = new Date(option('--until', new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString()));
-if (!Number.isFinite(hours) || hours <= 0 || !Number.isFinite(cap) || cap < 0 || !Number.isFinite(timeLimit) || timeLimit < 0 || Number.isNaN(until.getTime())) throw new Error('Usage: ci-usage-report.mjs [--hours <n>] [--until <ISO time>] [--max-requests <n>] [--time-limit <minutes>]');
+if (!Number.isFinite(hours) || hours <= 0 || !Number.isSafeInteger(cap) || cap < 0 || !Number.isFinite(timeLimit) || timeLimit < 0 || Number.isNaN(until.getTime())) throw new Error('Usage: ci-usage-report.mjs [--hours <n>] [--until <ISO time>] [--max-requests <n>] [--time-limit <minutes>]');
 const since = new Date(until.getTime() - hours * 3600e3);
 const nowIso = now.toISOString();
+// Settles once `chunk` is handed to the operating system. On a pipe stdout is
+// asynchronous, and process.exit drops what is still queued.
+const flushed = (chunk) => new Promise((resolve, reject) => process.stdout.write(chunk, (error) => (error ? reject(error) : resolve())));
 
 // The budgets.
 const runs = await listAllRuns({ since, until });
@@ -59,10 +63,11 @@ const findings = budgetFindings(usage);
 const budgetRequests = Math.ceil(hours / 2) + Math.floor(runs.length / 100) + candidates.length;
 const text = usageMarkdown(usage, findings, { since: since.toISOString(), until: until.toISOString() });
 
-// As before the measures: a summary that cannot be written fails the report here.
-process.stdout.write(text);
+// As before the measures: the budget lines are delivered before they start,
+// and a stdout or summary that cannot be written fails the report here.
+await flushed(text);
 if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, text);
-for (const finding of findings) console.log(`::error::${finding}`);
+for (const finding of findings) await flushed(`::error::${finding}\n`);
 // The one exit code; nothing after this line changes it.
 const exitCode = findings.length ? 1 : 0;
 process.exitCode = exitCode;
@@ -71,6 +76,10 @@ process.exitCode = exitCode;
 // or names why it did not.
 const deadline = started + timeLimit * 60e3;
 let printed = false;
+// From here stdout carries only the measures: a reader that left (EPIPE) or
+// stalls loses them, never the exit code.
+process.stdout.on('error', () => {});
+const shown = (chunk) => flushed(chunk).catch(() => {});
 
 async function measures() {
   const reads = limitedReads({ cap, deadline, timeLimitMinutes: timeLimit });
@@ -124,8 +133,9 @@ async function measures() {
   if (!unavailable.pullRequests) await collect('pullRequests', () => readJobs([...earlierRuns, ...lateRuns]));
 
   const measured = `\n${measuresMarkdown(summarizeMeasures({ runs, earlierRuns, lateRuns, jobs, pullRequests, deploys, now: nowIso, unavailable }))}\nAbout ${budgetRequests} API requests for the budgets and ${reads.requests()} for the measures (cap ${cap}).\n`;
-  process.stdout.write(measured);
+  const delivered = shown(measured);
   printed = true;
+  await delivered;
   // Non-blocking: a summary path no one reads (a FIFO) fails at once, where a
   // blocking open would hold a libuv thread that even process.exit waits for.
   if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, measured, { flag: constants.O_WRONLY | constants.O_APPEND | constants.O_CREAT | constants.O_NONBLOCK });
@@ -142,11 +152,7 @@ const failure = await Promise.race([
 clearTimeout(timer);
 if (failure) {
   const reason = (failure.message || String(failure)).trim().split('\n')[0];
-  try {
-    process.stdout.write(printed ? `\nThe measures did not complete: ${reason}\n` : `\n### Measures\n\nUnavailable: ${reason}\n`);
-  } catch {
-    // stdout is gone; the exit code still stands.
-  }
+  await Promise.race([shown(printed ? `\nThe measures did not complete: ${reason}\n` : `\n### Measures\n\nUnavailable: ${reason}\n`), sleep(GRACE_MS)]);
 }
 // A `gh` process or socket that outlives the measures cannot hold the job open.
 process.exit(exitCode);
