@@ -1231,11 +1231,10 @@ precision that `def_64bit` selects for MATLAB, and, for forward models,
 engine's default clips negative responses. Bundle paths replace `/input`,
 and CF reads the Benson GIfTI that `prepare_cli_bundle.m` converted into the
 per-precision `.mat`. The Node runner passes the subject-HRF file to the engine
-API as a kernel (`hrf.oldSchool` of the file's `fP`). The app's interface has no
-subject-HRF route, so the browser runner records those four runs as
-`unsupported` when the engine stops with the core's subject-HRF text.
-`expectedEngineOutcome` names each run's expected refusal and its exact text,
-and both runners record `refused` or `unsupported` only for that text. Any
+API as a kernel (`hrf.oldSchool` of the file's `fP`); the browser runner gives
+the file to the app's `engine.js`, which builds the same kernel, as the
+interface does. `expectedEngineOutcome` names each run's expected refusal and
+its exact text, and both runners record `refused` only for that text. Any
 other failure, a crash included, is `failed`.
 
 ```sh
@@ -1287,10 +1286,10 @@ so the smallest subnormals of opposite sign are 2 apart; `signedZeroOnly`
 counts the sign-of-zero differences.
 
 A run is `refused` only where the engine is expected to refuse (single RC with
-a fitted profile, single CF Gaussian), and `unsupported` only for the browser's
-subject-HRF runs, in both cases with MATLAB succeeding. The comparator does not
-take the runner's word for it: the record must carry exactly the core's text
-for that run (`expected_web_outcome`), or the run is `failed` and names
+a fitted profile, single CF Gaussian), with MATLAB succeeding; no planned run
+is expected to be `unsupported`. The comparator does not take the runner's word
+for it: the record must carry exactly the core's text for that run
+(`expected_web_outcome`), or the run is `failed` and names
 `expectedMessage`. Any other combination is `failed`, with both sides'
 statuses kept. A MATLAB failure does not hide a wrong web result: the summary
 counts it in `matlabFailedRuns` and the web side in `webUnexpectedRuns`. The
@@ -1299,7 +1298,7 @@ does not are checked for shape and listed as not compared. MATLAB-only files
 are listed the same way. No tolerance is applied. Failed and inventory-error
 runs exit nonzero.
 
-`test_web_cli.py` (31 tests) builds full-provenance fixtures and covers each
+`test_web_cli.py` (44 tests) builds full-provenance fixtures and covers each
 refusal and inventory rule with a negative control:
 
 - one ULP that the float32 GIfTI hides, a signed zero, a NaN and an imaginary
@@ -1311,6 +1310,8 @@ refusal and inventory rule with a negative control:
   failure too, and on the whole browser matrix through the command line;
 - each runner's `expectedEngineOutcome` and `failureStatus` against the
   comparator, for every run;
+- the browser runner's `request`, which gives `engine.js` the subject-HRF file
+  for exactly the four runs whose model names one;
 - an extra `maps.f64` byte, a duplicate, zero, out-of-range or fractional ROI,
   empty and one-vertex GIfTIs, and corrupt or extra files;
 - a stale plan or bundle hash and a model changed to TR 999;
@@ -1440,8 +1441,9 @@ headers, by its interface. For each run it:
    it (`matlabModel`; the app shows that control for a CSS model);
 2. sets how runs combine, keeps detrending and z-scoring on, and puts each
    input into its field: the runs, the apertures `.mat`, the ROI and the
-   seed labels, `lh.white` and `lh.area`, and the Benson GIfTI that
-   `prepare_cli_bundle.m` converted for MATLAB;
+   seed labels, `lh.white` and `lh.area`, the Benson GIfTI that
+   `prepare_cli_bundle.m` converted for MATLAB, and `hrf_custom.mat` for a
+   model whose `Hrf` names it;
 3. saves the model the app shows (`app-model.json`), presses Run and, when
    the app offers a result, downloads the zip with "Download all".
 
@@ -1454,9 +1456,6 @@ of an expected refusal. Each run gets one status:
 
 - `refused`: when the model loaded, the app showed exactly the single-precision
   refusal the run expects (single RC Gaussian, single CF Gaussian).
-- `unsupported`: after Run, the app showed exactly the core's subject-HRF
-  message (`model: Hrf hrf_custom is an old-school HRF fit file: ...`) and
-  offered nothing.
 - `succeeded`: the status line shows the run's outcome, "Download all" is
   offered, and the page threw nothing.
 - `succeeded-ui-error`: the app offered a result, then showed an error or
@@ -1521,7 +1520,7 @@ byte. MATLAB numerical differences are reported and never gated. The exit
 status is 0 when every run is `exact`, `differs`, `refused` or `unsupported`
 and the engine gate holds, and 1 otherwise; the report's `failures` says why.
 
-`test_ui_cli.py` (34 tests) covers each status and class, the exact contents
+`test_ui_cli.py` (44 tests) covers each status and class, the exact contents
 of the UI, engine and MATLAB roots, the saved model, the served module, the
 engine gate, and the command line's exit codes on the whole matrix and its
 refusal of a subset. It also covers a float32 ULP, a NaN sign, a GIfTI that
@@ -1539,25 +1538,52 @@ python3 $m/compare_ui_cli.py $e/plan.json $e/bundle-sha256.json $e/ui-1 $e/compi
   ui-1-vs-compiled.json --expect compiled-runtime --engine-root $e/browser-1
 ```
 
-What the interface cannot yet do on this matrix:
+What the interface cannot show on this matrix:
 
-- **Subject-HRF files.** It has no field for them, so the four `*_custom_hrf_*`
-  runs are `unsupported`; only the Node runner reaches them, through the
-  engine API.
-- **Showing the matrix's surface.** NiiVue cannot read the matrix's
-  synthetic 96-vertex `lh.white` (`Offset is outside the bounds of the
-  DataView`) and does not throw. `viewer.js` then treats the surface as
-  shown, and drawing the first map fails with `Cannot read properties of
-  undefined (reading 'layers')` after the result is offered. Every computed
-  run is therefore `succeeded-ui-error`, and none completes.
 - **Double values.** Only float32 GIfTIs are offered.
+- **Complex CSS maps.** SamSrfAnalysis keeps complex powers and saves a
+  complex `Srf.Data`. The app's default stays `nonnegative` (#717); the runner
+  selects `Css_Convention: "samsrf"` in the model it loads, and the saved
+  `app-model.json` must carry it. The downloads hold the real parts only, as
+  SamSrf's GIfTI export does, so a CSS map whose MATLAB values are complex
+  stays `differs`, and only `compare_web_cli.py` holds its imaginary parts.
 
 On the retained runs of 2026-11-17 (`ui-2`, the production bundle with module
 `d5ae6ba2…`, against the compiled image and with `run_browser_matrix.mjs`'s
 `browser-1` as the engine root), the comparator exits 1: 18 runs are
 `ui-error` and none is completed, 2 are `refused` and 4 `unsupported`. The
 downloads of 11 of the 18 runs are exact (110 of 140 maps), and all 176
-downloaded files equal the engine harness's.
+downloaded files equal the engine harness's. NiiVue could not read the
+matrix's synthetic 96-vertex `lh.white`, which ends at its faces as MATLAB's
+`write_surf` writes it: its FreeSurfer reader requires the optional tags, and
+it logs the failure without throwing. The viewer now reads surfaces with the
+engine's own reader.
+
+On 2026-11-18, after #874 (the production bundle of a fresh full build and
+the tooling of the same commit, module `abbd6625…`, against the compiled
+execution with `run_browser_matrix.mjs`'s run of that commit as the engine
+root), the comparator exits 0: all 22 computed runs complete, 2 are `refused`,
+and none is `ui-error`, `unsupported`, `failed` or `inventory-error`. All 212
+downloaded files equal the engine harness's, with the Node runner's run as the
+engine root too, and the source execution gives the same counts. In their
+float32 downloads 20 runs are exact and 2 differ (160 of 168 maps). The four
+`*_custom_hrf_*` runs take `hrf_custom.mat` through the Subject HRF field. The
+two that differ are the CSS runs, loaded with `Css_Convention: "samsrf"`: every
+real part is exact, but R², nR², Beta and Baseline are complex in MATLAB at 12
+to 15 vertices, and only the engine runners match their imaginary parts. Four
+double runs are exact in float32 while their double values differ, which the
+downloads cannot show: x0, y0 and Fwhm of `rc_hull_lh_double` and
+`rc_custom_hrf_lh_double`, y0 of `cf_hull_lh_double`, and R², y0, Beta and
+Suppression of `cf_hull_smooth_global_lh_double`, at 8 to 18 vertices each and
+by at most 147 ULPs (2.2e-14 relative). These are the maps and counts
+`web-cli-outcome.json` records against the pinned AMD host. Both engine runners
+compute 22 runs (18 exact, 157 of 168 maps), equal to each other byte for
+byte, and main's unchanged Node runner (#874) writes the same 236 files: an
+outcome frozen from main's runner and comparator holds for this commit's.
+Against the run of #875's module (`1745ae49…`), value by value on both
+executions, 24 real `Srf.Data` values became exact (R², x0 and y0 of
+`rc_gaussian_lh_double`) and none was lost; all 3,528 imaginary parts and
+15,888 GIfTI values stay exact.
 
 ## Recorded inputs and focused diagnosis
 
