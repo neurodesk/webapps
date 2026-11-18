@@ -5,35 +5,63 @@ These scripts build the SamSrf engine with the test-only `samsrf-mkl-avx512` ker
 (MKL's AVX512_E1 branch on the recorded Intel hosts) and measure it against the recordings.
 The results and their limits are in [the Intel record](../README.md).
 
-## How the research build differs from the shipped one
+## How the research builds differ from the shipped one
 
 `build.sh` copies `exes/samsrf`, `exes/nifti` and the `packages/samsrf` files the runner
-loads into a new directory outside the checkout, applies two patches there and builds the
-module with `wasm-pack --no-opt`:
+loads into a new directory outside the checkout, applies patches there and builds the module
+with `wasm-pack --no-opt`:
 
 - `hooks.patch` adds `samsrf_core::reference`: the MKL kernels whose rounding differs between
-  the recorded hosts (`x' * y` from 51 elements, `norm` of a real double vector, double
-  `y' * A`, and the factorisation and solve of a finite real double design) become
-  replaceable hooks. With nothing installed, every call runs the shipped kernels.
+  the recorded hosts become replaceable hooks. These are `x' * y` from 51 elements, the norm
+  of a real double vector, double `y' * A`, and the factorisation and solve of a finite real
+  double design. With nothing installed, every call runs the shipped kernels (variant
+  `hooks`).
 - `install-avx512.patch` lets the WebAssembly crate depend on `samsrf-mkl-avx512` (removing
   that crate's WebAssembly guard in the copy only) and installs its kernels when the module
-  starts. Single and complex kernels are not replaced.
+  starts (variant `avx512`). Single and complex kernels are not replaced. A complex `corr`
+  also takes the norm of the real `y`, which this variant replaces, so complex vertices run
+  a mixed route.
+- `real-corr-only.patch` (variant `avx512-real-corr`) keeps the shipped norm of `y` inside a
+  complex `corr` and changes nothing else. It is an intervention that tests where the
+  complex route's changes come from, not a candidate reference.
 
-The kernels the module runs are the crate's own code, the code that `tests/recordings.rs`
-and `tests/blas_recordings.rs` gate. There is no second copy of any kernel.
+The kernels the modules run are the crate's own code, the code that `tests/recordings.rs`
+and `tests/blas_recordings.rs` gate. There is no second copy of any kernel. `build.json`
+records the patches, the copied native tests and runner, the toolchain and the module, and
+whether every copied source was committed.
 
 ## Controls
 
 - Null control: the `hooks` build, which installs nothing, must write the committed
-  module's bytes in every file of every run on both bundles (`account.py` refuses
-  otherwise).
+  module's bytes in every file of every run on both bundles. `account.py` refuses
+  otherwise.
 - The two hosts' bundles differ only in MAT and HDF5 headers. Every module must write the
   same bytes from both bundles; this is checked, not assumed.
-- The comparison is the unmodified `compare_web_cli.py`. `account.py` reuses its readers and
-  casts and counts every value. A value counts as equal only if the cast to MATLAB's class
-  is exact and the bits are equal. No tolerance is applied.
-- Native runs (`native.sh`) report the AMD host beside the Intel host. With the shipped
-  arithmetic, the AMD host must reproduce every value.
+- Host roles come from the MATLAB receipts, not from folder names. `account.py` requires the
+  CLI root's process to report MKL's CNR `auto` branch on an AMD CPU and ubuntu-24.04's to
+  report `AVX512_E1`. `account_pipelines.py` requires the pipelines manifest to hold one
+  host of each branch.
+- The CLI comparison is the unmodified `compare_web_cli.py`. `account.py` reuses its readers
+  and casts and counts every value. A value counts as equal only if the cast to MATLAB's
+  class is exact and the bits are equal. No tolerance is applied.
+- `account_pipelines.py` holds both builds' native dumps value by value against the CSS
+  pipelines recording, real and imaginary parts, and lists every gained and lost value.
+  With the shipped arithmetic, the AMD host must reproduce every value.
+
+The MATLAB references are source MATLAB processes whose receipts do not attest the input
+bundle. None of this is compiled-image (container) or browser UI evidence.
+
+## Reports
+
+Each folder is named after the committed module the CLI matrix compares with, followed by a
+sequence number. Reports are kept as written, so a later run never relabels an earlier one.
+
+- `4c1a23a8-1/`: the first run (at `8c5009fc1`), kept unchanged. Its CSS-pipeline files count
+  each build's matches with MATLAB but no transitions, which hid six losses. Its
+  `divergence/` reports were reproduced byte for byte at `a31a71baf`.
+- `4c1a23a8-2/`: the run after the review (at `a31a71baf`). It holds `matrix.json` and
+  `matrix-real-corr.json` (`account.py --summary`), and `pipelines.json` and
+  `pipelines-real-corr.json` (`account_pipelines.py`).
 
 ## Reproducing
 
@@ -44,21 +72,26 @@ must be new.
 
 ```sh
 H=packages/samsrf/validation/matlab/intel-avx512/harness
-bash $H/build.sh hooks  "$TMPDIR/build-hooks"
-bash $H/build.sh avx512 "$TMPDIR/build-avx512"
-PYTHON=... bash $H/run.sh packages/samsrf          "$PINS/cli" "$TMPDIR/runs-shipped"
-PYTHON=... bash $H/run.sh "$TMPDIR/build-hooks/packages/samsrf"  "$PINS/cli" "$TMPDIR/runs-hooks"
-PYTHON=... bash $H/run.sh "$TMPDIR/build-avx512/packages/samsrf" "$PINS/cli" "$TMPDIR/runs-avx512"
-$PYTHON $H/account.py --pins "$PINS/cli" --shipped "$TMPDIR/runs-shipped" \
-  --control "$TMPDIR/runs-hooks" --control-build "$TMPDIR/build-hooks/build.json" \
-  --research "$TMPDIR/runs-avx512" --research-build "$TMPDIR/build-avx512/build.json" \
-  --committed packages/samsrf/wasm/samsrf_wasm_bg.wasm \
-  --out "$TMPDIR/account.json" --summary "$TMPDIR/matrix.json"      # equals matrix-1.json
-bash $H/native.sh "$TMPDIR/build-hooks"  "$PINS/css-pipelines" "$TMPDIR/native-hooks"   # css-pipelines-hooks-1.json
-bash $H/native.sh "$TMPDIR/build-avx512" "$PINS/css-pipelines" "$TMPDIR/native-avx512" # css-pipelines-avx512-1.json
+for v in hooks avx512 avx512-real-corr; do bash $H/build.sh $v "$TMPDIR/build-$v"; done
+PYTHON=... bash $H/run.sh packages/samsrf "$PINS/cli" "$TMPDIR/runs-shipped"
+for v in hooks avx512 avx512-real-corr; do
+  PYTHON=... bash $H/run.sh "$TMPDIR/build-$v/packages/samsrf" "$PINS/cli" "$TMPDIR/runs-$v"
+  bash $H/native.sh "$TMPDIR/build-$v" "$PINS/css-pipelines" "$TMPDIR/native-$v"
+done
+for v in avx512 avx512-real-corr; do
+  $PYTHON $H/account.py --pins "$PINS/cli" --shipped "$TMPDIR/runs-shipped" \
+    --control "$TMPDIR/runs-hooks" --control-build "$TMPDIR/build-hooks/build.json" \
+    --research "$TMPDIR/runs-$v" --research-build "$TMPDIR/build-$v/build.json" \
+    --committed packages/samsrf/wasm/samsrf_wasm_bg.wasm \
+    --out "$TMPDIR/account-$v.json" --summary "$TMPDIR/matrix-$v.json"
+  $PYTHON $H/account_pipelines.py --pins "$PINS/css-pipelines" \
+    --baseline "$TMPDIR/native-hooks/css-pipelines.tsv" --baseline-build "$TMPDIR/build-hooks/build.json" \
+    --research "$TMPDIR/native-$v/css-pipelines.tsv" --research-build "$TMPDIR/build-$v/build.json" \
+    --out "$TMPDIR/pipelines-$v.json"
+done
 ```
 
-`matrix-1.json` names the SHA-256 of both patches, of every module and of every run's
-maps. The module bytes depend on the toolchain and on the build directory, because Cargo
-hashes the path of `exes/nifti` into its crate metadata. The run hashes must not change: a
-rebuild in another directory reproduced every one of them on both hosts.
+The summaries name the SHA-256 of every patch, every module and every run's maps. Module
+bytes depend on the toolchain and on the build directory, because Cargo hashes the path of
+`exes/nifti` into its crate metadata. The run hashes must not change: a rebuild in another
+directory reproduced every one of them on both hosts.

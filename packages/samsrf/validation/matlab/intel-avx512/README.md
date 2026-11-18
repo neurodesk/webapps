@@ -65,7 +65,9 @@ the y norm one ULP below the correctly rounded one, and the exact norm lies 6.4e
 above a rounding midpoint. The correctly rounded norm is therefore a candidate, not
 MATLAB's `dnrm2`: its rounding near ties is not identified. The gate
 `correctly_rounded_norm_is_a_candidate_with_one_known_miss` pins the miss, with the AMD
-order as negative control. A band that rounds down within 2^-13 ULP above a midpoint also
+order as negative control. A second near-tie miss (n = 75 pair 16) appeared later in the
+research `corr` data (the research section on `x' * y` below), so the candidate has two
+known misses. A band that rounds down within 2^-13 ULP above a midpoint also
 fits these data; it is a fit to one point, not adopted. The complex norms (`dznrm2`) agree
 with the correctly rounded norm on 24 of 24 vectors on both Intel models (the AMD order
 11): discovery data only.
@@ -107,18 +109,22 @@ Single and complex designs and every other MKL kernel are not part of the refere
 ## Research: `x' * y`, `y' * A`, `corr` and CF profiles (branch `t3/samsrf-intel-cf`)
 
 Not part of #880. `prereg-dot-gemv.md` was frozen (sha256 `f819c98b...`, 4,719 bytes)
-before any Intel model touched these data. Prior exposure, stated there: the
-arithmetic-order and constants-gamma-gemv draws had been compared, in aggregate, with AMD
-models only; the `corr` values at 25-50 elements had been evaluated with the norm candidate
-and are replay; the CF profiles had been counted against the AMD kernel. The held-out
-evaluators were written in the step that ran them; only the kernels were hashed first.
+before any Intel model of `x' * y` or `y' * A` was evaluated on these data. Prior exposure,
+stated there: the arithmetic-order and constants-gamma-gemv draws had been compared, in
+aggregate, with AMD models only; the `corr` values at 25 to 50 elements had already been
+evaluated with the Intel norm candidate and are replay; the CF profiles had been counted
+against the AMD kernel. The held-out evaluators were written in the step that ran them; only
+the kernels were hashed first. The `x' * y` kernel departed from the pre-registration: its
+tail (a chunk of 16 and a chunk of 8, then a masked rest) is outside the registered
+structure family, and its freeze called that a refinement instead of an amendment. The
+corrections are appended to `prereg-dot-gemv.md`; its frozen prefixes are unchanged.
 
 | Kernel (Intel Xeon 6975P-C unless noted) | Discovery | Then |
 | --- | --- | --- |
-| `x' * y` from 51 elements (`dot/dot_kernel.py`) | 67,195 fingerprints, draws 1-25 (975) | draws 26-50: 975 / 975 |
+| `x' * y` from 51 elements (`dot/dot_kernel.py`, structure outside the registered family) | 67,195 fingerprints, draws 1-25 (975) | draws 26-50 at 39 lengths: 975 / 975, held out from fitting but not a pre-registered test |
 | `y' * A` (`gemv/gemv_kernel.py`, written a priori from `?ormqr`) | every fingerprint of 9 shapes, draws 0-49 | draws 50-99: 2,500 / 2,500 |
 | `corr` with both and the norm candidate (`downstream/downstream.py`) | | 51-250 elements: 679 / 680; 25-50 (replay): 519 / 520 |
-| double CF profiles, revcor run 42445033403 (Xeon 8370C) | | 3,402 / 3,402 |
+| double CF profiles, revcor run 42445033403 (Xeon 8370C) | | 3,402 / 3,402 (counted before against the AMD kernel only) |
 
 `x' * y` from 51 elements: 32 lanes over whole blocks of 32, a chunk of 16 and of 8 from
 lane 0 where they fit, the rest masked from lane 0, products fused, folds 8, 16, 4, 2, 1.
@@ -127,17 +133,35 @@ four). Both `corr` misses (n = 36 pair 6, n = 75 pair 16) have the same signatur
 y norm lies 6.4e-5 and 2.6e-4 ULP above a rounding midpoint and MATLAB's value needs that
 norm one ULP below the correctly rounded one. Rounding the exact sum of squares to double
 before the square root is refuted (it fails D, R(1,1) and `corr` widely), and a 2^-13 ULP
-band would not cover the second case: near-tie rounding stays unidentified, and the gates
-in `exes/samsrf/mkl-avx512/tests/blas_recordings.rs` pin both misses.
+band would not cover the second case. The norm candidate therefore has two known near-tie
+misses; near-tie rounding stays unidentified, and the gates in
+`exes/samsrf/mkl-avx512/tests/blas_recordings.rs` pin both misses.
 
-## Research: the engine with these kernels on the 24-run matrix (`harness/`)
+## Research: the engine with these kernels (`harness/`)
 
 Not part of #880 and not a product change. `harness/` builds the engine in a directory
-outside the checkout, with every real double MKL kernel replaced by this crate's: `x' * y`
-from 51 elements, `norm`, `y' * A` and the least-squares chain. Single and complex kernels
-stay the shipped ones. The build, its controls and the commands are in
-[harness/README.md](harness/README.md). The kernels are those frozen above, unchanged, with
-the correctly rounded norm candidate.
+outside the checkout. In that copy, every call of a real double MKL kernel (`x' * y` from 51
+elements, the norm of a real vector, `y' * A` and the least-squares chain) runs this crate's
+code. The single kernels and the complex kernels (`z' * y`, `norm(z)` and complex least
+squares) stay the shipped ones. A complex `corr` also takes the norm of the real `y`, which
+the research build replaces, so complex vertices run a mixed route. The intervention build
+`avx512-real-corr` keeps that norm shipped as well and changes nothing else. The builds,
+controls and commands are in [harness/README.md](harness/README.md). The kernels are those
+frozen above, unchanged, with the correctly rounded norm candidate and its two known
+near-tie misses.
+
+What these comparisons are and are not:
+
+- The baseline ("committed module") is this stack's module, #876's `4c1a23a8`, not main's.
+  Each report folder is named after the module it compares with: `harness/4c1a23a8-1/` is
+  the first run (at `8c5009fc1`, kept unchanged) and `harness/4c1a23a8-2/` the run after
+  the review (at `a31a71baf`).
+- MATLAB is the source recording's MATLAB processes (`source-1` on each host; `source-2`
+  repeats it bit for bit), whose receipts do not attest the input bundle (the comparator's
+  `--allow-unattested-source-inputs`). Nothing here is compiled-image (container) or browser
+  UI evidence.
+- Host roles come from the receipts: the AMD EPYC 9V74 reports MKL's CNR `auto` branch and
+  the Xeon Platinum 8573C reports `AVX512_E1`. Vertex indices are zero-based.
 
 Prior exposure and chronology:
 
@@ -147,75 +171,106 @@ Prior exposure and chronology:
 - The CSS pipelines' Intel maps had not been compared with any model; only their courses
   had.
 - The harness and the accounting were written in this unit. The comparator's summary counts
-  were seen before `account.py` first counted values. No kernel or patch changed after a
-  result, except one: the install was moved into an idempotent function so that native
-  tests can call it. Every run's output hash is unchanged.
+  were seen before `account.py` first counted values. The first CSS-pipeline report
+  (`4c1a23a8-1/css-pipelines-*.json`) counted each build's matches with MATLAB but not
+  value-by-value transitions, and that hid six losses, which the review of `8c5009fc1`
+  found. `account_pipelines.py` now holds both builds value by value.
+- No kernel changed after any result. The patches changed twice without changing a kernel:
+  the install moved into an idempotent function for native tests (every output hash
+  unchanged), and the intervention patch was added after the review.
+
+### The 24-run CLI matrix (`harness/4c1a23a8-2/matrix.json`, `matrix-real-corr.json`)
 
 The null control (the hooks build with nothing installed) writes the committed module's
 bytes in all 236 files of the 24 runs on both bundles. Each module writes the same bytes
-from both hosts' bundles. Raw values are every Srf.Data value over the ROI (21 vertices).
-GIfTI values cover every vertex. Counts are values equal to MATLAB, bitwise
-(`harness/matrix-1.json`):
+from both hosts' bundles. Raw values are every Srf.Data value over the ROI (21 vertices);
+GIfTI values cover every vertex. Counts are values bitwise equal to MATLAB:
 
-| Route | Values | AMD 9V74, committed module | AMD 9V74, research module | Intel 8573C, committed module | Intel 8573C, research module |
-| --- | --- | --- | --- | --- | --- |
-| real double, raw | 1,797 | 1,663 | 1,058 | 1,058 | 1,663 (+605, -0) |
-| real double, GIfTI | 1,797 | 1,797 | 1,728 | 1,728 | 1,797 (+69, -0) |
-| complex double (15 CSS vertices), raw real / imaginary | 135 / 135 | 135 / 135 | 77 / 83 | 68 / 79 | 85 / 81 (+23, -4) |
-| complex double, GIfTI | 135 | 135 | 135 | 135 | 135 |
-| single, raw real / imaginary | 1,596 / 1,596 | 1,596 / 1,596 | 1,596 / 1,596 | 1,075 / 1,547 | 1,075 / 1,547 |
-| single, GIfTI | 1,596 | 1,596 | 1,596 | 1,075 | 1,075 |
-| exact maps / exact runs (comparator) | 168 / 24 | 157 / 17 | 100 / 10 | 55 / 0 | 108 / 6 |
+| Route | Values | AMD 9V74, committed | AMD 9V74, research | Intel 8573C, committed | Intel 8573C, research | Intel 8573C, intervention |
+| --- | --- | --- | --- | --- | --- | --- |
+| real double, raw | 1,797 | 1,663 | 1,058 | 1,058 | 1,663 (+605, -0) | 1,663 (+605, -0) |
+| real double, GIfTI | 1,797 | 1,797 | 1,728 | 1,728 | 1,797 (+69, -0) | 1,797 (+69, -0) |
+| complex double (15 CSS vertices), raw real / imaginary | 135 / 135 | 135 / 135 | 77 / 83 | 68 / 79 | 85 / 81 (+23, -4) | 83 / 84 (+24, -4) |
+| complex double, GIfTI | 135 | 135 | 135 | 135 | 135 | 135 |
+| single, raw real / imaginary | 1,596 / 1,596 | 1,596 / 1,596 | 1,596 / 1,596 | 1,075 / 1,547 | 1,075 / 1,547 | 1,075 / 1,547 |
+| single, GIfTI | 1,596 | 1,596 | 1,596 | 1,075 | 1,075 | 1,075 |
+| exact maps / exact runs (comparator) | 168 / 24 | 157 / 17 | 100 / 10 | 55 / 0 | 108 / 6 | 108 / 6 |
 
 The imaginary parts of real double vertices (+0) and the 12,360 GIfTI values outside the ROI
-are equal with every module on both hosts. Two runs are refused on both hosts and by both
-modules (single RC with a fitted profile, single CF Gaussian).
+are equal with every module on both hosts. Two runs are refused on both hosts and by every
+module (single RC with a fitted profile, single CF Gaussian). A vertex's route is the route
+of its final values; a complex vertex's fit may have evaluated real predictions on the way.
 
-On the Intel host, six double runs become exact with the research module:
+On the Intel host, six double runs become exact with both research builds:
 `prf_gaussian_lh_average_double`, `prf_gaussian_lh_concatenate_double`,
 `prf_gaussian_rh_double`, `prf_custom_hrf_lh_double`, `cf_summary_lh_double` and
-`cf_gaussian_lh_double`. Every value of their maps is MATLAB's, including the fitted
-parameters. On real double routes, the research module matches the Intel host exactly as
-often as the committed module matches the AMD host. The 134 raw values it still misses are
-at the positions the committed module misses on AMD. For 131 of them, both hosts' MATLAB
-values are equal and both modules' values are equal. These are host-independent port gaps
-that [the package README](../README.md) lists for the AMD host: the convex-hull geometry of
-the RC and CF hull fits (#732) and the RC Gaussian fits, which need a MATLAB trace.
+`cf_gaussian_lh_double`. Every value of their maps equals Intel MATLAB on this recording,
+fitted parameters included. On this matrix's real double values, the research builds match
+the Intel host exactly as often as the committed module matches the AMD host. The 134 raw
+values they still miss are at the positions the committed module misses on AMD. For 131 of
+them, both hosts' MATLAB values are equal and both modules' values are equal. These are
+host-independent port gaps that [the package README](../README.md) lists for the AMD host:
+the convex-hull geometry of the RC and CF hull fits (#732) and the RC Gaussian fits, which
+need a MATLAB trace.
 
-The research module loses 4 Intel values, all on complex vertices of `prf_css_lh_double`:
-nR^2 imaginary at vertex 5, Beta real at vertex 11, Baseline real at vertex 4 and Baseline
-imaginary at vertex 5. They differ from MATLAB by 3 to 5 ULP. The fitted parameters of
-these vertices are exact with both modules, so their prediction `x` is identical. Beta and
-Baseline, `[ones x] \ y`, can change only through `y`. The committed module uses the AMD
-detrend, and the hosts' recorded `Srf.Y` differ at 219 to 250 of 250 samples of these
-vertices. Its 4 matches combined the AMD host's `y` with the AMD complex kernels, so they
-are coincidences. With Intel's own `y`, the research module exposes the unimplemented
-complex kernels. Run on the AMD host, the research module loses 784 values: it is not the
-AMD reference.
+Both research builds lose the same 4 Intel values, all on complex vertices of
+`prf_css_lh_double`, 3 to 5 ULP from MATLAB where the committed module was exact. Every
+fitted parameter of those vertices is exact with every module, so the prediction `x` is
+identical:
 
-A second recording, the Intel CSS pipelines (`harness/css-pipelines-*-1.json`), was run
-natively from MATLAB's own courses on the Xeon 8573C, with the AMD EPYC 9V74 as control:
+- Beta real at vertex 11, Baseline real at vertex 4 and Baseline imaginary at vertex 5 come
+  from `[ones x] \ y`, which can then change only through `y`. The committed module
+  detrends with the AMD arithmetic (the hosts' recorded `Srf.Y` differ at 219 to 250 of 250
+  samples of these vertices); the research builds hand Intel's `Srf.Y` to the shipped
+  complex least squares. The two research builds give the same values.
+- nR^2 imaginary at vertex 5 is lost by the intervention build too, so Intel's `y` alone
+  loses it. The mixed norm moves the research build's value a further 2 ULP.
 
-- The nonnegative pipeline, all real, 96 vertices and 9 maps: with the research kernels,
-  every value equals Intel MATLAB. With the shipped arithmetic, 8 of the 9 maps differ, with
-  39 to 94 of 96 values equal; the noise ceiling, computed from the courses, is equal with
-  both.
-- The samsrf-convention pipeline: every value of its 39 real vertices is equal with the
-  research kernels. Its 57 complex vertices still differ: x0 and y0 55/57, Sigma 57/57,
-  Exponent 54/57, real R^2 17/57, Beta 4/57, Baseline 2/57. The fitted parameters of 2 to
-  3 complex vertices differ with both builds.
-- The AMD host reproduces every value with the shipped arithmetic.
+The committed module's matches of these 4 values combined the AMD host's `y` with AMD
+complex kernels; they are coincidences, not identified arithmetic. Run on the AMD host, the
+research build loses 784 values and the intervention build 781: neither is the AMD
+reference.
 
-The research module ran the matrix in 67 to 69 s against 56 to 57 s (the exact norm uses
-big integers), and its unoptimized module is 90 KB larger than the hooks build.
+### The recorded CSS pipelines (`harness/4c1a23a8-2/pipelines*.json`)
+
+Both pipelines ran natively from each host's own MATLAB courses and noise ceiling, so
+preprocessing plays no part. Every map value was held against MATLAB with the baseline (the
+hooks build, the shipped arithmetic) and with each research build. On the Intel Xeon 8573C,
+values are kept (equal with both), gained, lost or still differing:
+
+| Values (96 + 96 vertices, 9 maps) | Total | research build | intervention build |
+| --- | --- | --- | --- |
+| real vertices (135), real parts | 1,215 | 967 / 248 / 0 / 0 | 967 / 248 / 0 / 0 |
+| real vertices, imaginary parts | 1,215 | 1,215 / 0 / 0 / 0 | 1,215 / 0 / 0 / 0 |
+| complex vertices (57), real parts | 513 | 306 / 12 / 2 / 193 | 308 / 0 / 0 / 205 |
+| complex vertices, imaginary parts | 513 | 304 / 3 / 4 / 202 | 308 / 0 / 0 / 205 |
+
+- Every value of the 135 real vertices equals Intel MATLAB with both research builds: the
+  whole nonnegative pipeline (96 vertices, all real) and the 39 real vertices of the
+  samsrf-convention pipeline. The shipped arithmetic misses 248 of those values.
+- The research build loses 6 values, all in R^2 and nR^2 of `pipeline_double_css`, 2 to 4
+  ULP from MATLAB where the shipped arithmetic was exact: the real parts at vertex 3 (R^2
+  and nR^2), and the imaginary parts at vertex 42 (R^2 and nR^2) and at vertices 8 and 69
+  (nR^2).
+- The intervention build changes only the norm of `y` inside a complex `corr`. It loses
+  none of these values, and every complex-vertex value equals the baseline's. The 6 losses,
+  and the 15 complex gains of the research build, therefore come from the mixed complex
+  `corr`: shipped `z' * y` and `norm(z)` with the research norm of `y`.
+- On the AMD EPYC 9V74, the shipped arithmetic reproduces every value; the research build
+  loses 370 values and the intervention build 246.
+
+With the research build, the complex route loses 10 values across both recordings (4 in the
+CLI matrix, 6 in the pipelines); with the intervention build it loses the 4 CLI values.
+Neither build leaves complex vertices as they were.
 
 ## Research: where single and complex runs first depart (`tests/divergence.rs`)
 
 These tests locate the first departure with the shipped kernels and fit no Intel model. On
-every AMD host of each recording, the shipped kernels reproduce every compared value; that
-is the control. The Intel counts are observations of data that earlier reports had counted
-only in aggregate. They are pinned so that a change shows; they are not targets
-(`harness/divergence-1/`).
+every AMD host of each recording the shipped kernels reproduce every compared value; that is
+the control. Host roles are checked against each recording's receipts. The Intel counts
+are observations of data that earlier reports had counted only in aggregate. They are
+pinned so that a change shows; they are not targets. The reports
+(`harness/4c1a23a8-1/divergence/`) were reproduced byte for byte at `a31a71baf`.
 
 - Preprocessing is not where single runs depart. The CLI recording's single `Srf.Y` equals
   the port's in all 84,000 values on both hosts: SamSrf detrends in double and rounds to
@@ -223,25 +278,34 @@ only in aggregate. They are pinned so that a change shows; they are not targets
   shipped double detrend matches 4,033 of 84,000 Intel values; this crate matches all.
 - Single CF `corr(y, X)` (single-kernels recording, Xeon 8573C): MATLAB's own `sum`, `mean`
   and `vecnorm` are equal at every stage. The first departure is MKL `sgemv`: 110 of 378
-  products equal, then 121 of 378 correlations. The x0 and y0 maps of the single CF runs are
-  still exact, because the peak and the hull survive small changes in the profile; R^2,
-  Beta and Suppression are not.
-- Single and complex least squares (qr-kernels recording, Xeon 8370C): no single or complex
-  chain equals the shipped model end to end. The first differing step is R(1,2), the `?gemv`
-  update of the second column, in 87 of 107 single real chains, 41 of 64 single complex
-  chains and 49 of 79 complex double chains. It is R(1,1), the complex norm, in 23 complex
-  double chains, and reflector 1 in 7 complex double and 21 single complex chains. Of the
-  8-column solves' coefficient columns, 334 of 1,712 single real, 56 of 1,072 single
-  complex and 4 of 1,264 complex double are equal; no Q^H Y column is.
-- Complex BLAS (numerics recordings, both Intel models, 24 vectors): the shipped `z' * y`
-  equals MATLAB on 5 and the shipped `norm(z)` on 11. The correctly rounded norm over
-  interleaved parts equals all 24 (discovery data only). This crate's `x' * y` equals all
-  24, including the 3 lengths from 51 elements; these were compared after its freeze, not as
-  pre-registered held-out data.
+  products equal, then 121 of 378 correlations. On the CLI matrix the x0 and y0 maps of the
+  single CF runs stay exact, because the peak and the hull survive these changes in the
+  profile; R^2, Beta and Suppression do not.
+- Least squares (qr-kernels recording, Xeon 8370C): no single or complex chain equals the
+  shipped model end to end. The first differing step of each chain, in LAPACK's one-based
+  notation (R(i,j), reflectors v1 and v2, rows 1 and 2 of Q'y):
+
+  | Class (chains) | R(1,1) | v1 | R(1,2) | R(2,2) | v2 | Q'y row 1 | Q'y row 2 |
+  | --- | --- | --- | --- | --- | --- | --- | --- |
+  | double real (95) | 25 | 0 | 54 | 9 | 6 | 1 | 0 |
+  | double complex (79) | 23 | 7 | 49 | 0 | 0 | 0 | 0 |
+  | single real (107) | 0 | 0 | 87 | 4 | 13 | 2 | 1 |
+  | single complex (64) | 0 | 21 | 41 | 0 | 2 | 0 | 0 |
+
+  The double real chains are the discovery data of this crate's chain, which reproduces all
+  of them. Three single designs have no chain in the class the port solves in. Of the
+  8-column solves' coefficient columns, 124 of 1,520 double real, 334 of 1,712 single real,
+  56 of 1,072 single complex and 4 of 1,264 complex double are equal with the shipped model;
+  no Q'Y column is.
+- Complex BLAS (numerics recordings, both Intel models, 24 vectors each): the shipped
+  `z' * y` equals MATLAB on 5 and the shipped `norm(z)` on 11. The correctly rounded norm
+  over interleaved parts equals all 24 (discovery data only). This crate's `x' * y` equals
+  all 24, including the 3 lengths from 51 elements; these were compared after its freeze,
+  not as pre-registered held-out data.
 - Single pRF fits: no Intel recording isolates `sdot`. Besides the dot product, the single
   objective uses means and norms that are MATLAB's own sums, like the single CF stages that
-  are equal on the Intel host. The betas use single least squares. By elimination, the
-  departure is in `sdot` and the single least squares. This is inferred, not measured.
+  are equal on the Intel host, and its betas use single least squares. By elimination the
+  departure is in `sdot` and the single least squares; this is inferred, not measured.
 
 So on the Intel host, each remaining route first departs in an MKL kernel that has no Intel
 reference:
@@ -259,29 +323,34 @@ reference:
 MATLAB's result depends on the MKL branch, so one arithmetic cannot equal both hosts'
 recordings. The harness shows how a second reference could run in the engine. Here,
 reference means which recorded host's MKL arithmetic the engine reproduces. These are the
-measured options for that decision; it belongs to the maintainers, and nothing below is
-implemented:
+measured options for that decision, on the source recordings named above (no container or
+UI evidence); the decision belongs to the maintainers, and nothing below is implemented.
+None of them resolves the Intel blocker of #876.
 
-1. Keep the AMD arithmetic only (today): AMD 157 of 168 maps and 17 runs exact. Intel 55
-   maps and no run exact.
+1. Keep the AMD arithmetic only (this stack's module, `4c1a23a8`): AMD 157 of 168 maps and
+   17 runs exact; Intel 55 maps and no run exact.
 2. An explicit reference in the model, recorded in every output, with the AMD arithmetic as
-   the default and an Intel option for real double data only. When it is not selected, the
-   AMD results do not change. When it is selected, the Intel host gets 108 maps and 6 runs
-   exact. Raw values gain 605 + 23 and lose 4, and GIfTI values gain 69. The 4 losses are
-   the coincidences above, in the unimplemented complex route. The Intel CSS pipelines' real
-   fits become exact. Single runs and complex vertices stay as today, and the correctly
-   rounded norm still has its two known near-tie misses. The cost is about 21% more time
-   and a larger module.
-3. As 2, but only once single and complex Intel kernels are identified. That needs new
+   the default and the research build as an Intel option. When it is not selected, the AMD
+   results do not change. When it is selected on the Intel recordings: 108 maps and 6 runs
+   exact; the CLI matrix gains 628 raw values (605 real double, 23 complex) and 69 GIfTI
+   values and loses 4; the pipelines gain 263 values and lose 6. The 10 losses are all on
+   complex vertices (attributed above). Single runs stay as they are, and the norm
+   candidate keeps its two known near-tie misses.
+3. As 2, with the intervention build: the same maps and runs; the CLI matrix gains 629 raw
+   and 69 GIfTI values and loses the same 4; the pipelines gain 248 and lose none. Its
+   complex `corr` stays entirely shipped, which is no closer to Intel's arithmetic; it only
+   moves fewer unidentified values.
+4. As 2 or 3, but only once single and complex Intel kernels are identified. That needs new
    recordings (fingerprints of Intel `sgemv` with `trans`, `sdot` and `zdotc`) and
    pre-registered fits of the single and complex least squares from the existing Xeon 8370C
    fingerprints.
 
 Choosing the reference by CPU is not one of these options, because it does not select a
-recorded MATLAB reference. Option 2 would move the kernels from this crate into the core as
-a runtime value threaded through the job, not a global and not a Cargo feature. It would
-carry the AMD gates under the default, run this crate's gates and the harness's matrix
-outcome under the Intel option, and need a changeset, a release and a canonical module.
+recorded MATLAB reference. Options 2 and 3 would move the kernels from this crate into the
+core as a runtime value threaded through the job, not a global and not a Cargo feature,
+carry the AMD gates under the default, run this crate's gates and the harness's outcomes
+under the Intel option, and need a changeset, a release and a canonical module. Their
+research builds cost about 21% more time on the matrix (the exact norm uses big integers).
 
 ## Reproducing
 

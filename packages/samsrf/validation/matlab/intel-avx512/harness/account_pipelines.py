@@ -160,6 +160,44 @@ def totals(report):
     return out
 
 
+def report_text(result):
+    """JSON with one line per map and per listed value, so a change shows as a one-line diff."""
+    line = lambda value: json.dumps(value, separators=(',', ':'))
+    out = ['{']
+    keys = list(result)
+    for i, key in enumerate(keys):
+        tail = ',' if i < len(keys) - 1 else ''
+        if key != 'hosts':
+            out.append(f' {line(key)}: {line(result[key])}{tail}')
+            continue
+        out.append(' "hosts": {')
+        roles = list(result['hosts'].items())
+        for j, (role, entry) in enumerate(roles):
+            out.append(f'  {line(role)}: {{')
+            out.append(f'   "host": {line(entry["host"])}, "cpu": {line(entry["cpu"])}, "blas": {line(entry["blas"])},')
+            out.append('   "pipelines": {')
+            pipelines = list(entry['pipelines'].items())
+            for k, (pipeline, case) in enumerate(pipelines):
+                out.append(f'    {line(pipeline)}: {{')
+                scalars = {name: case[name] for name in ('vertices', 'complexVertices', 'savedRealDiffersFromMaps')}
+                out.append(f'     {line(scalars)[1:-1]},')
+                out.append('     "maps": {')
+                maps = list(case['maps'].items())
+                out.extend(f'      {line(label)}: {line(counts)}' + (',' if m < len(maps) - 1 else '') for m, (label, counts) in enumerate(maps))
+                out.append('     },')
+                for name in ('gained', 'lost'):
+                    values = case[name]
+                    out.append(f'     {line(name)}: [')
+                    out.extend(f'      {line(value)}' + (',' if n < len(values) - 1 else '') for n, value in enumerate(values))
+                    out.append('     ]' + (',' if name == 'gained' else ''))
+                out.append('    }' + (',' if k < len(pipelines) - 1 else ''))
+            out.append('   }')
+            out.append('  }' + (',' if j < len(roles) - 1 else ''))
+        out.append(' }' + tail)
+    out.append('}')
+    return '\n'.join(out) + '\n'
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     for name in ('pins', 'baseline', 'baseline-build', 'research', 'research-build', 'out'):
@@ -178,8 +216,7 @@ def main():
         'hosts': report,
     }
     with Path(options.out).open('x') as output:
-        json.dump(result, output, indent=1)
-        output.write('\n')
+        output.write(report_text(result))
     for role, sums in result['totals'].items():
         print(role, report[role]['cpu'])
         for key, values in sorted(sums.items()):

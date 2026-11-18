@@ -124,3 +124,31 @@ freeze). The held-out draws had been compared before, in aggregate, with AMD mod
 - Q4 Intel double unsmoothed CF profiles (revcor run 42445033403, Intel 8370C, the host's
   recorded seed and saved courses): 3,402 / 3,402. AMD control 3,402 / 3,402. These values
   had been counted before against the AMD kernel only.
+
+## Corrections after the review of #882 (appended 2026-11-18; nothing above is edited)
+
+The frozen versions above stay byte prefixes of this file: 4,719 bytes (original,
+sha256 `f819c98b...`), 5,831 bytes (Q1 freeze, `2187fc13...`) and 6,515 bytes (Q2 freeze,
+`b0657577...`).
+
+- Q1 departed from this pre-registration. The frozen `x' * y` kernel runs whole blocks of
+  32 products in 32 lanes, then a chunk of 16 and a chunk of 8 from lane 0 where they fit,
+  then the rest as one masked chunk. That tail is not in the registered family: family (a)
+  registered the tails `mod`, `seq` and `pow2`, and family (b) registered paired chunks. The
+  stop rule then required stopping, or one amendment appended before any held-out value was
+  read. Instead, the Q1 freeze called the change a refinement ("refined once from the
+  fingerprints"). The 975 / 975 held-out draws therefore test a structure chosen from the
+  discovery fingerprints outside the registered family. They are not a pre-registered
+  confirmation of that family.
+- Count: the held-out set of Q1 was draws 26-50 at 39 lengths from 51 elements (30
+  exhaustive lengths 51-80 and 96, 100, 127, 128, 129, 200, 250, 256, 1,000), 975 values,
+  as the Q1 freeze and `dot/dot-heldout-1.json` state. The original text's "38 lengths, 950
+  values" was wrong.
+- Exposure: the `corr` values at 25 to 50 elements had been evaluated with the Intel norm
+  candidate before this file was frozen (prereg-dnrm2.md H1, 519 / 520), as stated above.
+  `src/blas.rs` and the README later described all the comparison data as compared before
+  only with AMD models; both are corrected. Every result here is a replay or a comparison
+  held out from Intel fitting, not a blind holdout: the AMD-model aggregates of these draws
+  had been read.
+- The norm candidate has two known near-tie misses, not one: n = 36 pair 6 (prereg-dnrm2.md)
+  and n = 75 pair 16 (Q3 above). Both are pinned; no threshold is adopted.
