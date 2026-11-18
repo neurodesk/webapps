@@ -1,5 +1,12 @@
 {
+  "brainchop": "Its model needs an 8351-pixel WebGL texture; SwiftShader and many GPUs allow 8192.",
+  "brainqcnet": "Its WebAssembly classification of the example outlasts 25 minutes in a SwiftShader Chromium; the app's own e2e test takes 3.4 minutes on 8 native cores.",
   "cryo-em": "Its only example's movies stay on the compute server, so the tools cannot load it (examples.json automation.unavailable).",
+  "dwi2trx": "Streamline tracking needs 32-lane WebGPU subgroups; SwiftShader offers 4.",
+  "musclemap": "Its segmentation of the example outlasts 25 minutes on SwiftShader WebGPU; it needs a hardware GPU.",
   "seedseg": "SeedSeg publishes no example in examples.json, so there is nothing for the tools to load and run.",
+  "syncro": "The example volume needs a 2,916 MiB GPU buffer; SwiftShader allows 1,024 MiB.",
+  "synthseg": "The cropped example still exceeds SwiftShader's GPU memory; the app suggests 1.3 mm voxels or a hardware GPU.",
+  "white-matter-lesions": "Its five-fold ensemble on the example outlasts 25 minutes on CPU WebAssembly in a SwiftShader Chromium.",
   "zarro": "Its example is the chunks of an OME-Zarr store that the page assembles itself; open-url needs the address of a whole store."
 }
