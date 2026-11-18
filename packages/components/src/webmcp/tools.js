@@ -66,7 +66,6 @@ function sleep(ms, signal) {
   });
 }
 
-// A failure a tool reports to the agent with a code and the facts it needs to recover.
 function toolError(code, message, details = {}) {
   return Object.assign(new Error(message), { code, details });
 }
@@ -130,7 +129,6 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
       await sleep(Math.min(POLL_MS, remaining), signal);
     }
   }
-  // Nothing the agent names is fetched until the person allows it in the page.
   const approved = async (addresses, signal) => !addresses.length || await confirmFetch({ app: contract.title, addresses }, { signal });
   const runTools = Object.fromEntries(Object.keys(contract.operations).map(name => [name, toolName(name)]));
   const tools = [];

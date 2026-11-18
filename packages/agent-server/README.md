@@ -71,6 +71,14 @@ No browser turns WebMCP on by default yet. To try it in Chrome:
 3. Start the browser's agent and ask it, for example, to extract the brain from
    the example and save the mask.
 
+The browser's agent works only with what you allow. It runs on files you
+choose in its dialog, files you opened in the app, or the app's examples, and
+whenever you open or drop another file, pick an example or clear the app, it
+lets go of the files it held, so it asks again. It can move and restyle the
+viewer but cannot capture it or save images from it. Before the app fetches a
+web address the agent names, a dialog shows the address and asks you. The
+WebSocket connection above keeps nv-mcp's full set of tools.
+
 Each app's Privacy dialog says what the agent can read. A host that holds a
 Chrome origin trial token (`webmcp_origin_trial` in `registry/apps.yml`) offers
 the tools without the flag.

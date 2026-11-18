@@ -238,42 +238,67 @@ same thing.
 
 | Tool | What it does |
 | --- | --- |
-| `app_describe` | Returns the contract's operations, the examples that the page's example selectors offer, `unavailableExamples` with the reason each cannot be loaded, the viewers, the current run, the files each input role holds (`inputs`) and the files the person loaded into the page's own inputs (`pageFiles`). |
+| `app_describe` | Returns the contract's operations, the examples that the page's example selectors offer with the run tool and parameters each needs, `unavailableExamples` with the reason each cannot be loaded, the viewers, the current run, the files each input role holds (`inputs`), the files the person loaded into the page's own inputs (`pageFiles`) and the example the person loaded in the page (`pageExample`). |
 | `inputs_request_files { role, message? }` | Asks the person to choose files for a role in a shared dialog and holds them. Returns names and sizes, or `{ declined: true }`. A DICOM role also offers a folder. |
 | `inputs_use_page_files { role, input }` | Holds the files of one `pageFiles` entry for a role, so an agent runs on what the person already opened. |
-| `inputs_load_example { exampleId }` | Downloads an example through `fetchModel`, which checks its checksums, and holds its files by role. |
-| `run_<operation>` | One per operation. Takes `parameters`, with a JSON Schema written from the contract, `selections` for DICOM roles, `inputs` for URL roles and `waitSeconds` (default 30, at most 600). Hands the held files to the app, starts the run and returns the run when it ends or when `waitSeconds` passes. The files stay held, so a rerun with other parameters asks for nothing. Aborting the call cancels the run. |
-| `runs_get { runId?, waitSeconds? }` | Returns the current run and can wait for it to end. |
+| `inputs_load_example { exampleId }` | Downloads an example through `fetchModel`, which checks its checksums, and holds its files by role in place of everything held before. |
+| `run_<operation>` | One per operation. Takes `parameters`, with a JSON Schema written from the contract (a `required: true` parameter is required), `selections` for DICOM roles, `inputs` for URL roles and `waitSeconds` (default 30, at most 600). Refuses with `RUN_ACTIVE` while another run is going. Asks the person before it lets the app fetch a URL input. Hands the held files to the app, starts the run and returns the run when it ends or when `waitSeconds` passes. The files stay held, so a rerun with other parameters asks for nothing. Aborting the call cancels the run. |
+| `runs_get { runId?, waitSeconds? }` | Returns the named run, or the current one, and can wait for it to end. A run another run replaced returns `RUN_REPLACED`, never the other run. |
 | `runs_cancel { runId? }` | Cancels the current run. |
-| `outputs_download { artifactId }` | Saves an output of the last successful run, or `report`, to the person's downloads. |
+| `outputs_download { runId, artifactId }` | Saves an output of the named run, or `report`, to the person's downloads, if that run is still the current one. |
 | `user_ask { question, options?, allowText? }` | Asks the person a question in a shared dialog. Returns `{ answer }` or `{ dismissed: true }`. An agent uses it to resolve `SERIES_SELECTION_REQUIRED` from the candidates in the failed run. |
-| `viewers_list`, `viewers_state`, `viewers_crosshair`, `viewers_tab`, `viewers_regions`, `viewers_volumes`, `viewers_display`, `viewers_niivue` | Send the matching `viewers.*` command. They are registered before any viewer exists, so the command's own error answers a call that comes too early. |
+| `viewers_list`, `viewers_state`, `viewers_crosshair`, `viewers_tab`, `viewers_regions`, `viewers_volumes`, `viewers_display`, `viewers_niivue` | Send the matching `viewers.*` command. They are registered before any viewer exists, so the command's own error answers a call that comes too early. `viewers_niivue` offers only the nv-mcp methods described below. |
 
 Tool results are JSON text. A tool reports a failure as `{ error: { message,
-code?, candidates? } }` rather than rejecting, because the browser gives the
-agent a rejection without its message. Pure reads carry `readOnlyHint`.
-Results that hold file names, report text or answers typed by the person carry
-`untrustedContentHint`. `outputs_download` carries `consequentialHint`.
+code?, ... } }` rather than rejecting, because the browser gives the agent a
+rejection without its message. The browser does not check arguments against
+`inputSchema`, so every tool checks its input against the schema it publishes
+first (`webmcp/schema.js`) and returns `INVALID_INPUT` without running. Pure
+reads carry `readOnlyHint`. Every result carries `untrustedContentHint` except
+those of `inputs_load_example`, `outputs_download` and `viewers_list`, which
+hold only what the app's author or the agent wrote. `outputs_download`,
+`viewers_niivue` and run tools with URL inputs carry `consequentialHint`.
 `viewers_screenshot` is left out because results are text only and a browser
 agent sees the page.
 
-Held files live in `webmcp/tool-inputs.js`. They are released when the app clears
-its examination (`registerAppAutomation`'s `reset` fires
-`neurodesk-automation-reset`) or when the person loads files into one of the
-app's classified inputs while no run is going. A page input's files are
-forgotten when it takes new ones. The tools therefore keep no file the app has
-let go of.
+`viewers_niivue` offers only the nv-mcp methods that
+`webmcp/niivue-methods.js` classifies as reading the scene, changing the
+display, or fetching an address. Methods that export pixels or files
+(`screenshot`, `save`), edit or remove data, add page controls or take
+settings that can name an address are not offered. A test holds the table to
+nv-mcp's method list, so a method nv-mcp adds stays out until someone
+classifies it. Before a call that names an address (any `url`, or a label
+table other than `freesurfer`) and before a run with URL inputs, the shared
+prompt asks the person, naming the app and each resolved address. Declining
+returns `{ declined: true, addresses }` and nothing is fetched. The desktop
+agent server and the nv-mcp WebSocket keep nv-mcp's full vocabulary.
+
+Held files live in `webmcp/tool-inputs.js` and belong to one examination.
+Anything the person does to change what the page shows starts a new one with
+nothing held: a trusted change on a classified input or a trusted file drop
+(also during a run), an untrusted load while no run is going (a page drop or a
+handoff through the inputs), the page's example selector starting a load, a
+`takeHandoff` receiver taking files (`nd-handoff`), and the app's `reset`. A
+load an operation makes while its run is going is untrusted and changes
+nothing, so reruns keep their files. A reset in the same task as the person's
+load is part of that load and keeps it, so an app that clears its picker and
+resets as it reads (dcm2niix) still offers those files. An example that
+finishes downloading after the examination changed is discarded with
+`EXAMINATION_CHANGED`. The page files come only from loads the module saw.
 
 An example's file roles serve the page's example selector and sometimes differ
 from the contract's. The example's `automation` field in `examples.json` maps
-them, leaves files out with a `reason`, or says why the example is
-`unavailable` (`webmcp/examples.js`). `node scripts/webmcp-examples.mjs`
-reports every app's examples.
+them, leaves files out with a `reason`, translates page parameters into
+contract parameters (`parameters`), or says why the example is `unavailable`
+(`webmcp/examples.js`). `node scripts/webmcp-examples.mjs` reports every app's
+examples and fails when an example's operation requires a parameter the
+example does not give.
 
 WebMCP has no way to ask the person anything. `createAgentPrompts()` provides
-the questions and file requests as `dialog.nd-dialog` dialogs. One shows at a
-time and the others wait. Each says that an AI agent the person started is
-asking. Closing a dialog declines it, and an aborted call closes it.
+the questions, file requests and fetch approvals as `dialog.nd-dialog`
+dialogs. One shows at a time and the others wait; a prompt that fails to
+render rejects only its own call. Each says that an AI agent the person
+started is asking. Closing a dialog declines it, and an aborted call closes it.
 
 - **On by default.** The tools register wherever the browser exposes the API,
   with no `?agent` switch. The person starts the browser's agent, and the page
@@ -289,39 +314,54 @@ asking. Closing a dialog declines it, and an aborted call closes it.
 - **Privacy.** `shared.agents` in `registry/app-information.yml` closes every
   Privacy dialog, the app's own included: nothing reaches the agent until it
   calls a tool; it can read run reports with file names and checksums,
-  measurements, viewer state and the answers typed into its dialogs; an agent
-  in the cloud sends what it reads to its provider.
+  measurements, viewer state (including the value under the crosshair, volume
+  names and image statistics) and the answers typed into its dialogs; it runs
+  the app only on files the person chose, already opened, or the app's
+  examples; it can move and restyle the viewer but not capture it or save
+  images from it; it fetches an address only after the person allows it; it can
+  save run outputs to downloads; an agent in the cloud sends what it reads to
+  its provider.
 - **Tested.** Node tests build the table from every app's `automation.json`
   and check that each run schema accepts and refuses the same parameters as
-  the contract; they also state the held-file lifetime.
+  the contract, both through a JSON Schema reader and through the tools' own
+  input check; they also cover the examination lifetime, run binding, the
+  nv-mcp method table and fetch approval.
   `pnpm --filter @neurodesk/agent-server validate:webmcp` runs a whole Brain
   Extraction analysis through Chrome's own WebMCP: example, run, viewer, both
   dialogs, the real file chooser, a rerun with another threshold, a file the
-  person opened in the sidebar, and a download. `node test/webmcp.smoke.mjs`
-  checks every app of the built site at 1440 and 390 px: the full tool set,
-  `app_describe` with every loadable example, both dialogs, the Privacy
-  statement, and that a browser without WebMCP loads none of its modules.
-  On 18 November 2026 all 63 apps passed in 342 s; CI runs it in the
-  composite-site job.
+  person opened in the sidebar, and a download.
+  `node test/webmcp-examination.smoke.mjs` drives in Chromium what a person
+  can do to the agent's files: picking an example in NiiMath, opening a file
+  during a run (a trusted file pick), dropping a file, dcm2niix's picker, and
+  Brain Extraction's viewer permissions and fetch approval.
+  `node test/webmcp.smoke.mjs` checks every app of the built site at 1440 and
+  390 px in Chrome's own WebMCP (it fails without it unless
+  `WEBMCP_STAND_IN=1`): the full tool set, `app_describe` with every loadable
+  example, both dialogs, the Privacy statement, a file opened in each of the
+  app's inputs staying available to the agent, and that a browser without
+  WebMCP loads none of its modules. On 18 November 2026 all 63 apps passed in
+  386 s; CI runs it in the composite-site job.
 - **Full runs.** `WEBMCP_RUNS=1` also loads each app's first loadable example,
-  runs it with the example's parameters and saves an output, through the tools
-  only, with a 420 s limit per run (five catalogue shards in parallel on 16
-  cores, SwiftShader WebGPU). On 18 November 2026, 43 apps completed: ants,
+  runs it with the tool and parameters `app_describe` gives and saves an
+  output, through the tools only. A run that fails or outlasts its limit fails
+  its app unless `test/webmcp-run-skips.json` names the app with its reason.
+  On 18 November 2026, on 16 cores with SwiftShader WebGPU, 53 apps
+  completed. 45 completed within 420 s in four parallel shards: ants,
   ants-denoise, brain-extraction, brain2print, calcium-imaging, carotid-flow,
   dcm2niix, deconvolution, deface, degibbs, dicompare, dicomview,
-  disconnectome, dwicorrect, dwidenoise, edgereg, elastix, greedy, histo2mri,
-  lcmodel, lightsheet-atlas, me-ica, microscope-qc, mri2vid, n4, nesvor (its
-  viewer operation), neuromorph, niimath, noddi, omezarr-convert,
-  pipeline-builder, qsmbly, reproin, samsrf, sdc, spinalcordtoolbox,
-  spot-detection, stardist, stitching, structure-tensor, surfannotate, synthsr
-  and topofit. Ten ran past the limit: bison, brainqcnet, calmar, fastprep,
-  fireants, gliomoda, hmc, musclemap, vesselboost and white-matter-lesions.
-  Five failed for the GPU or the browser, not the tools: brainchop (WebGL
-  texture limit), browserqc (niimath timed out under load), dwi2trx (needs
-  32-lane subgroups), syncro and synthseg (GPU memory). Two need parameters
-  their examples do not state: easy-mp2rage (the nine MP2RAGE acquisition
-  values) and microsam (point or box prompts). cryo-em, seedseg and zarro have
-  no example the tools can load.
+  disconnectome, dwicorrect, dwidenoise, easy-mp2rage, edgereg, elastix,
+  greedy, histo2mri, lcmodel, lightsheet-atlas, me-ica, microsam,
+  microscope-qc, mri2vid, n4, nesvor (its viewer operation), neuromorph,
+  niimath, omezarr-convert, pipeline-builder, qsmbly, reproin, samsrf, sdc,
+  spinalcordtoolbox, spot-detection, stardist, stitching, structure-tensor,
+  surfannotate, synthsr and topofit, and noddi on a second pass. Eight more
+  completed within 1500 s in two shards: bison (1137 s), browserqc (232 s),
+  calmar (406 s), fastprep (693 s), fireants (939 s), gliomoda (873 s), hmc
+  (333 s) and vesselboost (605 s). Three still ran past 1500 s: brainqcnet,
+  musclemap and white-matter-lesions. Four failed for the GPU, not the tools:
+  brainchop (WebGL texture limit), dwi2trx (needs 32-lane subgroups), syncro
+  and synthseg (GPU memory). cryo-em, seedseg and zarro have no example the
+  tools can load. These ten are the expected skips.
 - **Untested.** No browser agent has called these tools: every call came from
   a test through `executeTool`.
 
