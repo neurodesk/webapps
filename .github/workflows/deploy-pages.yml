@@ -14,7 +14,7 @@ permissions:
   contents: read
   pages: write
   id-token: write
-  # The deploy plan reads this workflow's earlier runs.
+  # The deploy plan looks up the verified markers in this repository's Actions cache.
   actions: read
 
 concurrency:
@@ -35,6 +35,7 @@ jobs:
       workers: ${{ steps.plan.outputs.workers }}
       verify: ${{ steps.plan.outputs.verify }}
       verify_hub: ${{ steps.plan.outputs.verify_hub }}
+      markers: ${{ steps.plan.outputs.markers }}
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -66,19 +67,18 @@ jobs:
       - run: pnpm audit:artifacts
       - name: Verify each catalogue site holds its apps and everything they load
         run: node --test test/catalog-sites.test.mjs
-      # Publishes a site only when its content differs from the digest record its
-      # host serves, or its usage report predates the daily refresh. A site whose
-      # record cannot be read is published. Every site is published on a re-run
-      # and when the deploy run before this one, on any ref, was not green, so a
-      # failed deploy or check is retried. The daily run checks every live site.
-      # Every read has a deadline (about 2 minutes in all); the step limit is a backstop.
+      # Skips a site only when its host serves this build's digest, the site's
+      # verified marker for that digest and these checks is in the Actions cache,
+      # and its usage report is current. Every other site is published and
+      # checked; a dispatched run publishes every site, and the daily run checks
+      # every live site. Every read has a deadline (30 s); the step limit is a backstop.
       - name: Decide which sites to publish
         id: plan
         timeout-minutes: 10
         run: node scripts/plan-site-deploy.mjs ${{ github.event_name == 'workflow_dispatch' && '--deploy-all' || github.event_name == 'schedule' && '--verify-all' || '' }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
-      # Content the hosts already serve passed these checks when it was published.
+      # Content the hosts already serve passed these checks when it was first published.
       - name: Install runtime startup test browser
         if: steps.plan.outputs.verify_build == 'true'
         run: |
@@ -142,6 +142,9 @@ jobs:
     # run publishes, or with none to publish, never after a failed one.
     needs: [build, deploy-workers]
     if: ${{ !cancelled() && needs.build.result == 'success' && needs.build.outputs.pages == 'true' && (needs.deploy-workers.result == 'success' || needs.deploy-workers.result == 'skipped') }}
+    env:
+      SITE_DIGEST: ${{ fromJSON(needs.build.outputs.markers).neuro.digest }}
+      SITE_MARKER: ${{ fromJSON(needs.build.outputs.markers).neuro.key }}
     steps:
       - name: Deploy composite site
         id: deployment
@@ -160,6 +163,15 @@ jobs:
         run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
           node node_modules/@playwright/test/cli.js install --with-deps chromium
+      # The verified marker is saved only when the host serves this build's
+      # digest before and after the checks (scripts/confirm-site-digest.mjs).
+      - name: Confirm the host serves this build before the checks
+        id: before
+        if: env.SITE_MARKER != ''
+        run: node scripts/confirm-site-digest.mjs --url "$BASE_URL" --site "$SITE_CATALOG" --digest "$SITE_DIGEST"
+        env:
+          BASE_URL: ${{ steps.deployment.outputs.page_url }}
+          SITE_CATALOG: neuro
       - name: Verify deployed cross-origin isolation
         run: pnpm test:deployed
         env:
@@ -175,6 +187,30 @@ jobs:
         env:
           BASE_URL: ${{ steps.deployment.outputs.page_url }}
           SITE_CATALOG: neuro
+      - name: Confirm the host still serves this build after the checks
+        id: after
+        if: steps.before.outputs.confirmed == 'true'
+        run: node scripts/confirm-site-digest.mjs --url "$BASE_URL" --site "$SITE_CATALOG" --digest "$SITE_DIGEST" --marker deploy-verified.json
+        env:
+          BASE_URL: ${{ steps.deployment.outputs.page_url }}
+          SITE_CATALOG: neuro
+      # Restoring an existing marker is an access, which keeps it from eviction;
+      # a missing one is saved. Neither can fail the checks that passed.
+      - name: Keep the verified marker
+        id: kept
+        if: steps.after.outputs.confirmed == 'true'
+        continue-on-error: true
+        uses: actions/cache/restore@v6
+        with:
+          path: deploy-verified.json
+          key: ${{ env.SITE_MARKER }}
+      - name: Save the verified marker
+        if: steps.after.outputs.confirmed == 'true' && steps.kept.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          path: deploy-verified.json
+          key: ${{ env.SITE_MARKER }}
 
   # mskapps.sciget.org, microscopyapps.sciget.org, preclinicalapps.sciget.org and the webapps.sciget.org hub are assets-only Cloudflare
   # Workers on custom domains (dist-sites/<site>.wrangler.json, written by the build).
@@ -213,13 +249,47 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build, deploy-workers]
     if: ${{ !cancelled() && needs.build.result == 'success' && needs.build.outputs.verify_hub == 'true' && (needs.deploy-workers.result == 'success' || needs.deploy-workers.result == 'skipped') }}
+    env:
+      SITE_URL: ${{ fromJSON(needs.build.outputs.markers).hub.url }}
+      SITE_DIGEST: ${{ fromJSON(needs.build.outputs.markers).hub.digest }}
+      SITE_MARKER: ${{ fromJSON(needs.build.outputs.markers).hub.key }}
     steps:
+      # The digest confirmation loads only Node built-ins from scripts/.
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Confirm the host serves this build before the checks
+        id: before
+        if: env.SITE_MARKER != ''
+        run: node scripts/confirm-site-digest.mjs --url "$SITE_URL" --site hub --digest "$SITE_DIGEST"
       - name: Check the hub lists every catalogue
         run: |
           page="$(curl --fail --silent --show-error --retry 5 --retry-all-errors https://webapps.sciget.org/)"
           for host in webapps.neurodesk.org mskapps.sciget.org microscopyapps.sciget.org preclinicalapps.sciget.org; do
             grep -q "href=\"https://$host/\"" <<< "$page" || { echo "hub does not link $host"; exit 1; }
           done
+      - name: Confirm the host still serves this build after the checks
+        id: after
+        if: steps.before.outputs.confirmed == 'true'
+        run: node scripts/confirm-site-digest.mjs --url "$SITE_URL" --site hub --digest "$SITE_DIGEST" --marker deploy-verified.json
+      - name: Keep the verified marker
+        id: kept
+        if: steps.after.outputs.confirmed == 'true'
+        continue-on-error: true
+        uses: actions/cache/restore@v6
+        with:
+          path: deploy-verified.json
+          key: ${{ env.SITE_MARKER }}
+      - name: Save the verified marker
+        if: steps.after.outputs.confirmed == 'true' && steps.kept.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          path: deploy-verified.json
+          key: ${{ env.SITE_MARKER }}
 
   # Browser checks run apart from the deploy so a flaky check cannot hold back
   # the Pages deploy. The Pages deploy job checks the neuro site it publishes.
@@ -234,6 +304,8 @@ jobs:
     env:
       BASE_URL: ${{ matrix.url }}
       SITE_CATALOG: ${{ matrix.site }}
+      SITE_DIGEST: ${{ fromJSON(needs.build.outputs.markers)[matrix.site].digest }}
+      SITE_MARKER: ${{ fromJSON(needs.build.outputs.markers)[matrix.site].key }}
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -246,9 +318,32 @@ jobs:
         run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
           node node_modules/@playwright/test/cli.js install --with-deps chromium
+      - name: Confirm the host serves this build before the checks
+        id: before
+        if: env.SITE_MARKER != ''
+        run: node scripts/confirm-site-digest.mjs --url "$BASE_URL" --site "$SITE_CATALOG" --digest "$SITE_DIGEST"
       - name: Verify deployed cross-origin isolation
         run: pnpm test:deployed
       - name: Verify standalone downloads in every deployed application
         run: node test/standalone-downloads.smoke.mjs
       - name: Verify deployed NIfTI and DICOM scan pickers
         run: pnpm test:image-uploads
+      - name: Confirm the host still serves this build after the checks
+        id: after
+        if: steps.before.outputs.confirmed == 'true'
+        run: node scripts/confirm-site-digest.mjs --url "$BASE_URL" --site "$SITE_CATALOG" --digest "$SITE_DIGEST" --marker deploy-verified.json
+      - name: Keep the verified marker
+        id: kept
+        if: steps.after.outputs.confirmed == 'true'
+        continue-on-error: true
+        uses: actions/cache/restore@v6
+        with:
+          path: deploy-verified.json
+          key: ${{ env.SITE_MARKER }}
+      - name: Save the verified marker
+        if: steps.after.outputs.confirmed == 'true' && steps.kept.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          path: deploy-verified.json
+          key: ${{ env.SITE_MARKER }}

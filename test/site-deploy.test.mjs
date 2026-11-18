@@ -1,36 +1,37 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdir, mkdtemp, readFile, rename, rm, utimes, writeFile } from 'node:fs/promises';
+import { access, cp, mkdir, mkdtemp, readFile, rename, rm, symlink, utimes, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 import { parse } from 'yaml';
-import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
+import { catalogApps, findCatalog, loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { workerSites } from '../scripts/lib/catalog-sites.mjs';
+import { moduleClosure } from '../scripts/lib/module-closure.mjs';
 import {
   ANALYTICS_REFRESH_UTC,
-  DIGEST_FILE,
-  HISTORY_DAYS,
-  HISTORY_MAX_RUNS,
-  RERUN_LIMIT_DAYS,
+  CHECK_DATA,
+  DEPLOYED_CHECKS,
+  DEPLOY_WORKFLOW,
+  MARKER_PREFIX,
   analyticsStale,
+  checkHashes,
+  checkInputs,
   decideSite,
   deployOutputs,
   deploySites,
   deploySummary,
-  forcedReason,
   lastAnalyticsRefresh,
-  parseLiveRecord,
+  markerKey,
   planDeploy,
   planSiteDeploy,
-  previousDeploy,
-  readDeployHistory,
-  readLiveRecord,
+  readMarker,
   siteDigest,
 } from '../scripts/lib/site-deploy.mjs';
+import { DIGEST_FILE, parseLiveRecord, readLiveRecord } from '../scripts/lib/site-record.mjs';
 
 const registry = await loadAppsRegistry();
 
@@ -125,7 +126,7 @@ test('the usage report is refreshed once a day, by the first run after the sched
 });
 
 test('the refresh time is the deploy workflow\'s daily schedule', async () => {
-  const workflow = parse(await readFile(join(repoRoot, '.github/workflows/deploy-pages.yml'), 'utf8'));
+  const workflow = parse(await readFile(join(repoRoot, DEPLOY_WORKFLOW), 'utf8'));
   assert.deepEqual(workflow.on.schedule, [{ cron: `${ANALYTICS_REFRESH_UTC.minute} ${ANALYTICS_REFRESH_UTC.hour} * * *` }]);
 });
 
@@ -133,42 +134,52 @@ const digest = 'a'.repeat(64);
 const C1 = 'fd08c1c20'.padEnd(40, '0');
 const C2 = '77f026063'.padEnd(40, '0');
 const record = (fields = {}) => ({ schema: 1, site: 'msk', digest, analyticsGeneratedAt: '2026-11-18T04:24:00Z', commit: C1, ...fields });
-// Run histories as readDeployHistory returns them. This run, 100, started at
-// NOW; run(id, minutesAgo, conclusion, options) is another run of the workflow
-// whose latest attempt started that many minutes earlier and started `jobs` jobs.
-const NOW = Date.parse('2026-11-18T12:00:00Z');
-const MINUTE = 60_000;
-const DAY = 24 * 60 * MINUTE;
-const instant = (time) => new Date(time).toISOString().replace('.000Z', 'Z');
-const SINCE = instant(NOW - HISTORY_DAYS * DAY);
-const THIS_RUN = { id: 100, run_attempt: 1, status: 'in_progress', conclusion: null, run_started_at: instant(NOW) };
-const run = (id, minutesAgo, conclusion = 'success', { attempt = 1, status = 'completed', jobs = 5 } = {}) => ({
-  id, run_attempt: attempt, status, conclusion: status === 'completed' ? conclusion : null, run_started_at: instant(NOW - minutesAgo * MINUTE), jobs,
-});
-const history = (...runs) => ({ runId: 100, attempt: 1, since: SINCE, runs: [THIS_RUN, ...runs] });
-// The deploy run before this one finished green.
-const green = history(run(99, 30));
 const json = (body, { status = 200, headers = {} } = {}) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=utf-8', ...headers } });
+const missing = async () => new Response('Not found', { status: 404 });
+// Check hashes as checkHashes gives them; CHECKS_2 after a check script changed.
+const CHECKS = Object.fromEntries(deploySites(registry).map(({ site: id }) => [id, 'c'.repeat(64)]));
+const CHECKS_2 = Object.fromEntries(deploySites(registry).map(({ site: id }) => [id, 'd'.repeat(64)]));
+// A marker store holding `keys`, as readMarker answers.
+const store = (keys = []) => {
+  const markers = new Set(keys);
+  return { markers, lookup: async (key) => ({ present: markers.has(key) }) };
+};
+const absent = store().lookup;
 
-test('a site is published when its content changed, its live record is unreadable, its report is stale, or the run was dispatched', () => {
+test('a site is skipped only when its host serves this digest, its marker exists, its report is current and the run was not dispatched', () => {
+  const lives = { unreadable: { error: 'HTTP 404' }, same: { record: record() }, other: { record: record({ digest: 'b'.repeat(64) }) } };
+  const markers = { present: { present: true }, absent: { present: false }, unknown: { error: 'GitHub API: HTTP 503' } };
+  const events = { push: {}, schedule: { verifyAll: true }, dispatch: { deployAll: true } };
+  const reports = { current: '2026-11-18T12:00:00Z', stale: '2026-11-19T04:30:00Z' };
+  let cases = 0;
+  for (const [liveName, live] of Object.entries(lives)) {
+    for (const [markerName, marker] of Object.entries(markers)) {
+      for (const [event, flags] of Object.entries(events)) {
+        for (const [reportName, analytics] of Object.entries(reports)) {
+          const name = `${liveName} live record, marker ${markerName}, ${event}, ${reportName} report`;
+          const decision = decideSite({ digest, analytics, live, marker, ...flags });
+          const skip = event !== 'dispatch' && liveName === 'same' && markerName === 'present' && reportName === 'current';
+          assert.equal(decision.publish, !skip, name);
+          // A published site is checked after the publish; the daily run checks every site.
+          assert.equal(decision.verify, !skip || event === 'schedule', name);
+          // The build's checks run whenever the content may not be what the host serves.
+          assert.equal(decision.verifyBuild, event === 'dispatch' || liveName !== 'same', name);
+          cases++;
+        }
+      }
+    }
+  }
+  assert.equal(cases, 3 * 3 * 3 * 2);
   const analytics = '2026-11-18T12:00:00Z';
   const live = { record: record() };
-  assert.deepEqual(decideSite({ digest, analytics, live }), {
-    publish: false, verifyBuild: false, reason: 'unchanged: the live site has this content and a current usage report',
-  });
-  assert.deepEqual(decideSite({ digest: 'b'.repeat(64), analytics, live }), { publish: true, verifyBuild: true, reason: 'content changed' });
-  assert.deepEqual(decideSite({ digest, analytics, live: { error: 'HTTP 404' } }), {
-    publish: true, verifyBuild: true, reason: 'live digest unreadable (HTTP 404)',
-  });
-  assert.deepEqual(decideSite({ digest, analytics: '2026-11-19T04:30:00Z', live }), {
-    publish: true, verifyBuild: false, reason: 'usage report refresh (live report: 2026-11-18T04:24:00Z)',
-  });
-  assert.deepEqual(decideSite({ digest, analytics, live, deployAll: true }), { publish: true, verifyBuild: true, reason: 'dispatched run: every site deploys' });
-  assert.deepEqual(decideSite({ digest, analytics, live, forced: 'previous deploy run 9 failure' }), {
-    publish: true, verifyBuild: true, reason: 'forced: previous deploy run 9 failure',
-  });
-  // Content outranks the report: a changed site is verified before it is published.
-  assert.equal(decideSite({ digest: 'b'.repeat(64), analytics: '2026-11-19T04:30:00Z', live }).verifyBuild, true);
+  const reason = (fields) => decideSite({ digest, analytics, live, marker: { present: true }, ...fields }).reason;
+  assert.equal(reason({}), 'verified: the host serves this content, checked by these checks, with a current usage report');
+  assert.equal(reason({ deployAll: true }), 'dispatched run: every site deploys');
+  assert.equal(reason({ live: { error: 'HTTP 404' } }), 'live digest unreadable (HTTP 404)');
+  assert.equal(reason({ digest: 'b'.repeat(64) }), 'content changed');
+  assert.equal(reason({ marker: { present: false } }), 'no verified marker for this content and these checks');
+  assert.equal(reason({ marker: { error: 'GitHub API: HTTP 503' } }), 'marker unknown (GitHub API: HTTP 503)');
+  assert.equal(reason({ analytics: '2026-11-19T04:30:00Z' }), 'usage report refresh (live report: 2026-11-18T04:24:00Z)');
 });
 
 test('a served record is trusted only when it is this schema\'s record of this site', () => {
@@ -181,6 +192,28 @@ test('a served record is trusted only when it is this schema\'s record of this s
   assert.deepEqual(parseLiveRecord(JSON.stringify(record({ digest: 'abc' })), 'msk'), { error: 'no content digest' });
   assert.deepEqual(parseLiveRecord(JSON.stringify(record({ analyticsGeneratedAt: null, commit: null })), 'msk').error, undefined, 'a build without a report or a commit');
 });
+
+async function sitesFixture(root) {
+  for (const { site: id, hosting, host } of deploySites(registry)) {
+    await site(join(root, id));
+    // The hub has no usage report.
+    if (id === 'hub') await rm(join(root, id, 'analytics.json'));
+    if (hosting === 'worker') await put(root, `${id}.wrangler.json`, JSON.stringify({ name: host }));
+  }
+}
+
+// Sites whose every digest is live and verified: the hosts serve the records a
+// first plan wrote, and the marker store holds each site's marker.
+async function verifiedFixture(t) {
+  const root = await tempDir(t);
+  await sitesFixture(root);
+  const first = await planDeploy({ registry, sitesDir: root, commit: C1, checks: CHECKS, lookup: absent, nonce: 'n', fetch: missing, write: writeFile });
+  const records = new Map(first.map(({ host, record: served }) => [host, served]));
+  const served = async (url) => json(records.get(new URL(url).host));
+  const { markers, lookup } = store(first.map(({ key }) => key));
+  const plan = (options = {}) => planDeploy({ registry, sitesDir: root, commit: C1, checks: CHECKS, lookup, nonce: 'n', fetch: served, write: writeFile, ...options });
+  return { root, first, records, served, markers, lookup, plan };
+}
 
 test('a served record of the wrong shape is unreadable, so its site is published instead of the plan throwing', async (t) => {
   const malformed = {
@@ -197,28 +230,26 @@ test('a served record of the wrong shape is unreadable, so its site is published
     assert.ok(parseLiveRecord(JSON.stringify(record(fields)), 'msk').error, `${name} is refused`);
   }
   // End to end: the hosts serve their records with a commit that is an object.
-  const root = await tempDir(t);
-  await sitesFixture(root);
-  const first = await planDeploy({ registry, sitesDir: root, commit: C1, history: green, nonce: 'n', fetch: async () => json({}, { status: 404 }), write: writeFile });
-  const records = new Map(first.map(({ host, record: served }) => [host, { ...served, commit: { sha: C1 } }]));
-  const plan = await planDeploy({ registry, sitesDir: root, commit: C1, history: green, nonce: 'n', fetch: async (url) => json(records.get(new URL(url).host)), write: writeFile });
-  assert.ok(plan.every(({ publish, reason }) => publish && /^live digest unreadable \(commit is neither/.test(reason)));
-  assert.match(deploySummary(plan), /\| msk \| mskapps\.sciget\.org \| publish \|/);
+  const { records, plan } = await verifiedFixture(t);
+  const planned = await plan({ fetch: async (url) => json({ ...records.get(new URL(url).host), commit: { sha: C1 } }) });
+  assert.ok(planned.every(({ publish, reason }) => publish && /^live digest unreadable \(commit is neither/.test(reason)));
+  assert.match(deploySummary(planned), /\| msk \| mskapps\.sciget\.org \| publish \|/);
 });
 
-test('a site whose plan throws is published, and the other sites are still planned', async (t) => {
-  const root = await tempDir(t);
-  await sitesFixture(root);
-  const first = await planDeploy({ registry, sitesDir: root, commit: C1, history: green, nonce: 'n', fetch: async () => json({}, { status: 404 }), write: writeFile });
-  const records = new Map(first.map(({ host, record: served }) => [host, served]));
+test('a site whose plan throws is published and checked, and the other sites are still planned', async (t) => {
+  const { root, plan } = await verifiedFixture(t);
   await rm(join(root, 'microscopy.wrangler.json'));
-  const plan = await planDeploy({ registry, sitesDir: root, commit: C1, history: green, nonce: 'n', fetch: async (url) => json(records.get(new URL(url).host)), write: writeFile });
-  const decision = Object.fromEntries(plan.map(({ site: id, publish, reason }) => [id, publish ? reason : 'skip']));
+  const planned = await plan();
+  const decision = Object.fromEntries(planned.map(({ site: id, publish, reason }) => [id, publish ? reason : 'skip']));
   assert.match(decision.microscopy, /^plan failed \(ENOENT/);
   assert.deepEqual({ ...decision, microscopy: 'plan failed' }, { neuro: 'skip', msk: 'skip', microscopy: 'plan failed', preclinical: 'skip', hub: 'skip' });
-  assert.deepEqual(JSON.parse(deployOutputs(plan).workers), [{ site: 'microscopy', url: 'https://microscopyapps.sciget.org/' }]);
-  assert.equal(deployOutputs(plan).verify_build, 'true');
-  assert.match(deploySummary(plan), /\| microscopy \| microscopyapps\.sciget\.org \| publish \| after publish \| plan failed/);
+  const outputs = deployOutputs(planned);
+  assert.deepEqual(JSON.parse(outputs.workers), [{ site: 'microscopy', url: 'https://microscopyapps.sciget.org/' }]);
+  assert.deepEqual(JSON.parse(outputs.verify), [{ site: 'microscopy', url: 'https://microscopyapps.sciget.org/' }]);
+  assert.equal(outputs.verify_build, 'true');
+  // With no digest there is no marker to save.
+  assert.deepEqual(JSON.parse(outputs.markers), {});
+  assert.match(deploySummary(planned), /\| microscopy \| microscopyapps\.sciget\.org \| publish \| after publish \| plan failed \(ENOENT[^|]*\| - \|/);
 });
 
 test('reading a live record bypasses caches and turns every failure into a reason to publish', async () => {
@@ -231,6 +262,7 @@ test('reading a live record bypasses caches and turns every failure into a reaso
   assert.equal(requests[0].url, `https://mskapps.sciget.org/${DIGEST_FILE}?run=7-1`);
   assert.equal(requests[0].init.cache, 'no-store');
   assert.equal(requests[0].init.headers['cache-control'], 'no-cache');
+  assert.equal(requests[0].init.signal.aborted, true, 'the request is aborted once the read ends');
   assert.deepEqual(await readLiveRecord({ site: 'msk', host: 'h', nonce: 'n', fetch: answer(new Response('Not found', { status: 404 })) }), { error: 'HTTP 404' });
   assert.deepEqual(await readLiveRecord({ site: 'msk', host: 'h', nonce: 'n', fetch: async () => { throw new TypeError('fetch failed'); } }), { error: 'fetch failed' });
   // A fetch that never answers; its own timer keeps the event loop alive as a real socket would.
@@ -255,215 +287,56 @@ test('only a direct, uncached JSON answer of the host counts as its live record'
   assert.deepEqual(await read(new Response(JSON.stringify(record()))), { error: 'content type "text/plain"' });
 });
 
-test('a re-run publishes and checks every site before it reads any history', async () => {
-  // Run 99 published every site and failed a browser check; a person re-runs it. It keeps its id.
-  const rerun = { runId: 99, attempt: 2, since: SINCE, runs: [run(98, 60), { ...run(99, 0, null, { status: 'in_progress', attempt: 2 }) }] };
-  assert.deepEqual(previousDeploy(rerun), { green: false, reason: 're-run (attempt 2)' });
-  assert.deepEqual(previousDeploy({ runId: 99, attempt: '3' }), { green: false, reason: 're-run (attempt 3)' }, 'with no history at all');
-  assert.equal(previousDeploy({ ...green, attempt: undefined }).reason, 'this run\'s attempt is unknown (undefined)');
-  assert.equal(previousDeploy({ ...green, attempt: '1.5' }).green, false);
-  // The reader asks nothing of the API for a re-run.
-  let requests = 0;
-  const read = await readDeployHistory({ repository: 'o/r', workflowRef: 'o/r/.github/workflows/deploy-pages.yml@refs/heads/main', runId: '99', attempt: '2', token: 't', fetch: async () => { requests++; return json({}); } });
-  assert.equal(requests, 0);
-  assert.equal(forcedReason(read), 're-run (attempt 2)');
+const KEY = markerKey('msk', digest, 'c'.repeat(64));
+const cacheEntry = (fields = {}) => ({ id: 1, ref: 'refs/heads/main', key: KEY, version: 'f'.repeat(64), last_accessed_at: '2026-11-18T05:00:00Z', created_at: '2026-11-18T05:00:00Z', size_in_bytes: 230, ...fields });
+const cacheList = (...entries) => ({ total_count: entries.length, actions_caches: entries });
+
+test('a marker key names its site, digest and check hash, and nothing else', () => {
+  assert.equal(KEY, `${MARKER_PREFIX}msk-${digest}-${'c'.repeat(64)}`);
+  assert.equal(new Set([KEY, markerKey('msk', 'b'.repeat(64), 'c'.repeat(64)), markerKey('msk', digest, 'd'.repeat(64)), markerKey('preclinical', digest, 'c'.repeat(64))]).size, 4);
+  // The Actions cache refuses a key longer than 512 characters or with a comma.
+  assert.ok(KEY.length < 512 && !KEY.includes(','));
 });
 
-test('the run whose latest attempt started last decides, whatever its id', () => {
-  // Run 98 is older than 99, but its re-run started after 99 and failed.
-  assert.deepEqual(previousDeploy(history(run(99, 60), run(98, 20, 'failure', { attempt: 2 }))), { green: false, reason: 'previous deploy run 98 attempt 2 failure' });
-  // Its re-run published and checked every site and passed, after 99 had failed.
-  assert.deepEqual(previousDeploy(history(run(99, 60, 'failure'), run(98, 20, 'success', { attempt: 2 }))), { green: true, run: run(98, 20, 'success', { attempt: 2 }) });
-  // The order the API lists them in does not matter.
-  assert.deepEqual(previousDeploy(history(run(98, 20, 'failure', { attempt: 2 }), run(99, 60))).reason, 'previous deploy run 98 attempt 2 failure');
-  assert.deepEqual(previousDeploy(history(run(99, 30), run(98, 31, 'failure'))), { green: true, run: run(99, 30) });
-});
-
-test('an earlier run that is still queued, waiting or in progress leaves the order unknown', () => {
-  for (const status of ['queued', 'waiting', 'pending', 'requested', 'in_progress']) {
-    assert.deepEqual(previousDeploy(history(run(99, 30), run(98, 10, null, { status }))), { green: false, reason: `run 98 is ${status} and started before this run` });
-  }
-  // A run that started after this one waits for it in the concurrency group and does not count.
-  assert.equal(previousDeploy(history(run(99, 30), run(101, -5, null, { status: 'pending' }))).green, true);
-  // One that started after this one and did work cannot have run before it.
-  assert.deepEqual(previousDeploy(history(run(99, 30), run(101, -5, 'success'))), { green: false, reason: 'run 101 ran after this run started' });
-});
-
-test('a malformed or missing field, or a date that is not a real instant, is a doubt', () => {
-  const mutations = {
-    'record null': () => null,
-    'id string': (r) => ({ ...r, id: '99' }),
-    'id zero': (r) => ({ ...r, id: 0 }),
-    'attempt zero': (r) => ({ ...r, run_attempt: 0 }),
-    'attempt string': (r) => ({ ...r, run_attempt: '1' }),
-    'status missing': (r) => ({ ...r, status: undefined }),
-    'conclusion number': (r) => ({ ...r, conclusion: 7 }),
-    'start missing': (r) => ({ ...r, run_started_at: undefined }),
-    'start text': (r) => ({ ...r, run_started_at: 'yesterday' }),
-    'start 31 February': (r) => ({ ...r, run_started_at: '2026-02-31T10:00:00Z' }),
-    'start 24:00': (r) => ({ ...r, run_started_at: '2026-11-17T24:00:00Z' }),
-    'start with offset': (r) => ({ ...r, run_started_at: '2026-11-18T11:30:00+00:00' }),
-    'jobs negative': (r) => ({ ...r, jobs: -1 }),
-    'jobs string': (r) => ({ ...r, jobs: '5' }),
-    'jobs null': (r) => ({ ...r, jobs: null }),
-  };
-  for (const [name, mutate] of Object.entries(mutations)) {
-    const decision = previousDeploy(history(mutate(run(99, 30))));
-    assert.equal(decision.green, false, name);
-    assert.match(decision.reason, /^malformed run history \(/, name);
-  }
-  assert.deepEqual(previousDeploy({ ...green, runs: 'none' }), { green: false, reason: 'no run history' });
-  assert.deepEqual(previousDeploy({ ...green, since: '2026-10-16' }), { green: false, reason: 'no run history' });
-  assert.deepEqual(previousDeploy({ ...green, runId: '100' }), { green: false, reason: 'no run history' });
-  assert.deepEqual(previousDeploy({ ...green, runs: [run(99, 30)] }), { green: false, reason: 'run 100 is not in the run history' });
-  assert.deepEqual(previousDeploy({ ...green, runs: [{ ...THIS_RUN, run_attempt: 2 }, run(99, 30)] }), { green: false, reason: 'the run history has run 100 at attempt 2' });
-});
-
-test('two runs that started at the same instant leave the order unknown', () => {
-  assert.deepEqual(previousDeploy(history(run(99, 30), run(98, 30, 'failure'))), { green: false, reason: 'run 99 started at the same instant as another run' });
-  // A run that started when this one did.
-  assert.equal(previousDeploy(history(run(99, 30), run(101, 0, 'cancelled', { jobs: 0 }))).reason, 'run 101 started at the same instant as another run');
-});
-
-test('a deciding run the history cannot be certain of publishes everything', () => {
-  // The history lists runs created since SINCE; a run created before can have a re-run up to 30 days later.
-  const certain = (HISTORY_DAYS - RERUN_LIMIT_DAYS - 1) * 24 * 60;
-  assert.equal(previousDeploy(history(run(99, certain))).green, true);
-  assert.deepEqual(previousDeploy(history(run(99, certain + 1))), { green: false, reason: `run 99 started ${instant(NOW - (certain + 1) * MINUTE)}, before the run history read is certain` });
-  assert.deepEqual(previousDeploy(history()), { green: false, reason: 'no earlier deploy run that started a job' });
-  assert.deepEqual(previousDeploy(history(run(99, 30, 'cancelled', { jobs: 0 }))), { green: false, reason: 'no earlier deploy run that started a job' });
-});
-
-test('a run that started no job is passed over, unless an earlier attempt of it may have', () => {
-  // Cancelled while it waited in the concurrency group, or a startup failure: it did nothing.
-  assert.deepEqual(previousDeploy(history(run(99, 30, 'cancelled', { jobs: 0 }), run(98, 31, 'startup_failure', { jobs: 0 }), run(97, 60))), { green: true, run: run(97, 60) });
-  assert.equal(previousDeploy(history(run(99, 30, 'cancelled', { jobs: 0 }), run(97, 60, 'failure'))).reason, 'previous deploy run 97 failure');
-  // A run cancelled part-way did work and may have left a site half deployed or unchecked.
-  assert.equal(previousDeploy(history(run(99, 30, 'cancelled', { jobs: 3 }), run(97, 60))).reason, 'previous deploy run 99 cancelled');
-  assert.equal(previousDeploy(history(run(99, 30, 'timed_out'), run(97, 60))).reason, 'previous deploy run 99 timed_out');
-  // A re-run cancelled while it waited leaves its first attempt's outcome unaccounted for.
-  assert.deepEqual(previousDeploy(history(run(99, 30, 'cancelled', { attempt: 2, jobs: 0 }), run(97, 60))), { green: false, reason: 'run 99 attempt 2 started no job after an earlier attempt' });
-  // A job count the reader has not fetched is asked for, newest start first.
-  const { jobs, ...unread } = run(99, 30, 'cancelled');
-  assert.equal(jobs, 5);
-  assert.deepEqual(previousDeploy(history(unread, run(97, 60))), { need: 99 });
-  assert.equal(forcedReason(history(unread, run(97, 60))), 'deploy history incomplete (no job count for run 99)');
-});
-
-// The API as the reader sees it: `runs` newest first, served `perPage` at a time.
-function githubApi(runs, { jobs = {}, totals = [], perPage = 100 } = {}) {
+test('a marker exists only when the cache list has an entry of its exact key on this ref', async () => {
   const requests = [];
-  const fetch = async (url, init) => {
-    requests.push({ url, init });
-    const { pathname, searchParams } = new URL(url);
-    const listing = pathname.match(/^\/repos\/neurodesk\/webapps\/actions\/workflows\/deploy-pages\.yml\/runs$/);
-    if (listing) {
-      const page = Number(searchParams.get('page'));
-      return json({ total_count: totals[page - 1] ?? runs.length, workflow_runs: runs.slice((page - 1) * perPage, page * perPage) });
-    }
-    const counted = pathname.match(/^\/repos\/neurodesk\/webapps\/actions\/runs\/(\d+)\/jobs$/);
-    if (counted && searchParams.get('filter') === 'latest' && Number(counted[1]) in jobs) return json({ total_count: jobs[counted[1]], jobs: [] });
-    return json({ message: 'Not Found' }, { status: 404 });
-  };
-  return { fetch, requests };
-}
-const READER = { repository: 'neurodesk/webapps', workflowRef: 'neurodesk/webapps/.github/workflows/deploy-pages.yml@refs/heads/main', runId: '1000', attempt: '1', token: 't', now: NOW };
-// 150 runs as the API lists them, newest first: this run (1000), a run cancelled
-// while it waited, a failed dispatch from a branch, then green pushes.
-const listed = [
-  { ...THIS_RUN, id: 1000, event: 'push', head_branch: 'main' },
-  { ...run(999, 30, 'cancelled'), event: 'push', head_branch: 'main' },
-  { ...run(998, 60, 'failure'), event: 'workflow_dispatch', head_branch: 'fix/site' },
-  ...Array.from({ length: 147 }, (_, index) => run(997 - index, 90 + index * 30)),
-].map((record) => Object.fromEntries(Object.entries(record).filter(([key]) => key !== 'jobs')));
-
-test('the history is every run of the workflow on every ref created in the last 33 days, then the job counts the decision asks for', async () => {
-  const api = githubApi(listed, { jobs: { 999: 0, 998: 4 } });
-  const read = await readDeployHistory({ ...READER, fetch: api.fetch });
-  assert.equal(read.since, SINCE);
-  assert.equal(read.runs.length, 150);
-  assert.equal(forcedReason(read), 'previous deploy run 998 failure', 'the failed dispatch from a branch decides');
-  const paths = api.requests.map(({ url }) => decodeURIComponent(new URL(url).pathname + new URL(url).search));
-  const listing = `/repos/neurodesk/webapps/actions/workflows/deploy-pages.yml/runs?per_page=100&page=PAGE&exclude_pull_requests=true&created=>=${SINCE}`;
-  assert.deepEqual(paths, [
-    listing.replace('PAGE', '1'),
-    listing.replace('PAGE', '2'),
-    '/repos/neurodesk/webapps/actions/runs/999/jobs?filter=latest&per_page=1',
-    '/repos/neurodesk/webapps/actions/runs/998/jobs?filter=latest&per_page=1',
-  ], 'no branch filter, and a job count only for the runs it passes on the way');
-  assert.ok(paths.every((path) => !path.includes('branch=')));
-  assert.equal(api.requests[0].init.headers.authorization, 'Bearer t');
-  // With the dispatch green, the history is green.
-  const passing = listed.map((record) => (record.id === 998 ? { ...record, conclusion: 'success' } : record));
-  assert.equal(forcedReason(await readDeployHistory({ ...READER, fetch: githubApi(passing, { jobs: { 999: 0, 998: 4 } }).fetch })), null);
-});
-
-test('a history the reader cannot read whole, or an API that fails, is a doubt', async () => {
-  const cases = {
-    'no token': [{ token: undefined }, 'no repository, workflow, run id or token'],
-    'HTTP 403': [{ fetch: async () => json({ message: 'Forbidden' }, { status: 403 }) }, /HTTP 403$/],
-    'a body that is not JSON': [{ fetch: async () => new Response('<html>', { headers: { 'content-type': 'application/json' } }) }, /JSON/],
-    'no workflow runs': [{ fetch: async () => json({ total_count: 1 }) }, 'GitHub API: no workflow runs'],
-    'too many runs': [{ fetch: githubApi(listed, { totals: [HISTORY_MAX_RUNS + 1] }).fetch }, `${HISTORY_MAX_RUNS + 1} runs since ${SINCE}, more than the ${HISTORY_MAX_RUNS} the plan reads`],
-    'a run added between pages': [{ fetch: githubApi(listed, { totals: [150, 151] }).fetch }, 'the run history changed while it was read'],
-    'a run listed twice': [{ fetch: githubApi([...listed.slice(0, 100), ...listed.slice(99, 149)]).fetch }, 'the run history lists 149 distinct runs of 150'],
-    'a job count missing': [{ fetch: githubApi(listed, { jobs: { 999: 0 } }).fetch }, /actions\/runs\/998\/jobs\?filter=latest&per_page=1: HTTP 404$/],
-    'a network failure': [{ fetch: async () => { throw new TypeError('fetch failed'); } }, 'fetch failed'],
-  };
-  for (const [name, [options, error]] of Object.entries(cases)) {
-    const read = await readDeployHistory({ ...READER, fetch: githubApi(listed, { jobs: { 999: 0, 998: 4 } }).fetch, ...options });
-    assert.equal(read.runs, undefined, name);
-    if (typeof error === 'string') assert.equal(read.error, error, name);
-    else assert.match(read.error, error, name);
-    assert.equal(forcedReason(read), `deploy history unreadable (${read.error})`, name);
+  const read = (answer, fields = {}) => readMarker({
+    key: KEY,
+    repository: 'neurodesk/webapps',
+    ref: 'refs/heads/main',
+    token: 't',
+    fetch: async (url, init) => {
+      requests.push({ url, init });
+      return typeof answer === 'function' ? answer() : json(answer);
+    },
+    ...fields,
+  });
+  assert.deepEqual(await read(cacheList(cacheEntry())), { present: true });
+  const { searchParams, pathname, origin } = new URL(requests[0].url);
+  assert.equal(`${origin}${pathname}`, 'https://api.github.com/repos/neurodesk/webapps/actions/caches');
+  assert.deepEqual(Object.fromEntries(searchParams), { key: KEY, ref: 'refs/heads/main', per_page: '100' });
+  assert.equal(requests[0].init.headers.authorization, 'Bearer t');
+  assert.equal(requests[0].init.signal.aborted, true, 'the request is aborted once the read ends');
+  // The API's key is a prefix: a longer key is another marker.
+  assert.deepEqual(await read(cacheList(cacheEntry({ key: `${KEY}0` }))), { present: false });
+  // A pull request's or another branch's entry is not main's.
+  assert.deepEqual(await read(cacheList(cacheEntry({ ref: 'refs/pull/889/merge' }), cacheEntry({ ref: 'refs/heads/ci/deploy-changed-catalogues' }))), { present: false });
+  assert.deepEqual(await read(cacheList()), { present: false });
+  assert.deepEqual(await read(cacheList(cacheEntry({ key: `${KEY}0` }), cacheEntry())), { present: true });
+  // Anything else is unknown, which publishes and checks the site.
+  assert.deepEqual(await read({ total_count: 101, actions_caches: [cacheEntry({ key: `${KEY}0` })] }), { error: 'GitHub API: 101 caches match, more than one page' });
+  assert.deepEqual(await read(() => json({ message: 'Resource not accessible by integration' }, { status: 403 })), { error: 'GitHub API: HTTP 403' });
+  assert.deepEqual(await read(() => new Response('<html>', { status: 200 })), { error: 'Unexpected token \'<\', "<html>" is not valid JSON' });
+  assert.deepEqual(await read({ total_count: '1', actions_caches: [cacheEntry()] }), { error: 'GitHub API: no cache list' });
+  assert.deepEqual(await read({ total_count: 1, actions_caches: null }), { error: 'GitHub API: no cache list' });
+  assert.deepEqual(await read(async () => { throw new TypeError('fetch failed'); }), { error: 'fetch failed' });
+  const hang = (url, { signal }) => new Promise((resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason)));
+  assert.deepEqual(await readMarker({ key: KEY, repository: 'r', ref: 'refs/heads/main', token: 't', fetch: hang, timeoutMs: 20 }), { error: 'GitHub API: no complete answer in 0.02 s' });
+  const before = requests.length;
+  for (const field of ['key', 'repository', 'ref', 'token']) {
+    assert.deepEqual(await read(cacheList(cacheEntry()), { [field]: undefined }), { error: 'no key, repository, ref or token' }, field);
   }
-  // A job count that is not a count.
-  const odd = await readDeployHistory({ ...READER, fetch: githubApi(listed, { jobs: { 999: 'none' } }).fetch });
-  assert.equal(forcedReason(odd), 'malformed run history (run 999: job count "none")');
-});
-
-test('after a re-run, a failed run before this one or an unreadable history, every site is published and checked, though its digest is live', async (t) => {
-  const root = await tempDir(t);
-  await sitesFixture(root);
-  const first = await planDeploy({ registry, sitesDir: root, commit: C1, history: green, nonce: 'n', fetch: async () => json({}, { status: 404 }), write: writeFile });
-  const records = new Map(first.map(({ host, record: served }) => [host, served]));
-  const served = async (url) => json(records.get(new URL(url).host));
-  const plan = (state) => planDeploy({ registry, sitesDir: root, commit: C1, history: state, nonce: 'n', fetch: served, write: writeFile });
-  assert.ok((await plan(green)).every(({ publish }) => !publish), 'every digest is live');
-  assert.ok((await plan(Promise.resolve(green))).every(({ publish }) => !publish), 'the history can still be on its way');
-  for (const [state, reason] of [
-    [{ runId: 100, attempt: '2' }, 'forced: re-run (attempt 2)'],
-    [history(run(99, 30, 'cancelled', { jobs: 0 }), run(98, 60, 'failure'), run(97, 90)), 'forced: previous deploy run 98 failure'],
-    [{ error: 'HTTP 403' }, 'forced: deploy history unreadable (HTTP 403)'],
-    [undefined, 'forced: deploy history unreadable (not read)'],
-    // A history read that rejects, as a thenable so the rejection waits for its reader.
-    [{ then: (resolve, reject) => reject(new Error('lost')) }, 'forced: deploy history unreadable (lost)'],
-  ]) {
-    const planned = await plan(state);
-    assert.ok(planned.every((site) => site.publish && site.verifyBuild && site.verify && site.reason === reason), reason);
-    const outputs = deployOutputs(planned);
-    assert.equal(outputs.pages, 'true');
-    assert.deepEqual(JSON.parse(outputs.workers).map(({ site: id }) => id), ['msk', 'microscopy', 'preclinical', 'hub']);
-    // The Pages deploy job checks neuro; the verify jobs check the rest.
-    assert.deepEqual(JSON.parse(outputs.verify).map(({ site: id }) => id), ['msk', 'microscopy', 'preclinical']);
-    assert.equal(outputs.verify_hub, 'true');
-    assert.match(deploySummary(planned), new RegExp(`\\| msk \\| mskapps\\.sciget\\.org \\| publish \\| after publish \\| ${reason.replace(/[()]/g, '\\$&')} \\|`));
-  }
-});
-
-test('red, then green, then a skip; red, then a part-way cancellation, then everything again', async (t) => {
-  const root = await tempDir(t);
-  await sitesFixture(root);
-  const first = await planDeploy({ registry, sitesDir: root, commit: C1, history: green, nonce: 'n', fetch: async () => json({}, { status: 404 }), write: writeFile });
-  const records = new Map(first.map(({ host, record: served }) => [host, served]));
-  const served = async (url) => json(records.get(new URL(url).host));
-  const published = async (state) => (await planDeploy({ registry, sitesDir: root, commit: C1, history: state, nonce: 'n', fetch: served, write: writeFile })).filter(({ publish }) => publish).length;
-  const all = deploySites(registry).length;
-  // Run 98 failed: run 99 publishes everything. It passes: run 100 skips what is live.
-  assert.equal(await published({ runId: 99, attempt: 1, since: SINCE, runs: [{ ...THIS_RUN, id: 99 }, run(98, 30, 'failure')] }), all);
-  assert.equal(await published(history(run(99, 10), run(98, 30, 'failure'))), 0);
-  // Run 99 is cancelled part-way through that republish: run 100 publishes everything again.
-  assert.equal(await published(history(run(99, 10, 'cancelled', { jobs: 2 }), run(98, 30, 'failure'))), all);
+  assert.equal(requests.length, before, 'without a token or ref it asks nothing');
 });
 
 // A loopback server that answers every request with JSON headers at once and
@@ -493,7 +366,7 @@ const elapsed = async (work) => {
   return { result, ms: performance.now() - start };
 };
 
-test('a live record whose body arrives after the deadline, or never ends, is unreadable at the deadline', { timeout: 10_000 }, async (t) => {
+test('a live record or a marker list whose body arrives after the deadline, or never ends, is unreadable at the deadline', { timeout: 10_000 }, async (t) => {
   const prompt = await slowServer(t, 0);
   assert.equal((await readLiveRecord({ site: 'msk', host: 'h', nonce: 'n', fetch: prompt, timeoutMs: 2000 })).record.digest, digest, 'the server answers in time');
   for (const late of [3000, Infinity]) {
@@ -501,16 +374,10 @@ test('a live record whose body arrives after the deadline, or never ends, is unr
     const { result, ms } = await elapsed(() => readLiveRecord({ site: 'msk', host: 'h', nonce: 'n', fetch, timeoutMs: 300 }));
     assert.deepEqual(result, { error: 'no complete answer in 0.3 s' }, `body after ${late} ms`);
     assert.ok(ms >= 290 && ms < 1500, `ended after ${ms} ms`);
-    assert.equal(decideSite({ digest, analytics: null, live: result }).publish, true);
-  }
-});
-
-test('a run history whose body stalls is unreadable at the deadline', { timeout: 10_000 }, async (t) => {
-  for (const late of [3000, Infinity]) {
-    const fetch = await slowServer(t, late);
-    const { result, ms } = await elapsed(() => readDeployHistory({ ...READER, fetch, timeoutMs: 300 }));
-    assert.deepEqual(result, { error: 'GitHub API: no complete answer in 0.3 s' });
-    assert.ok(ms >= 290 && ms < 1500, `ended after ${ms} ms`);
+    const marker = await elapsed(() => readMarker({ key: KEY, repository: 'r', ref: 'refs/heads/main', token: 't', fetch, timeoutMs: 300 }));
+    assert.deepEqual(marker.result, { error: 'GitHub API: no complete answer in 0.3 s' }, `marker body after ${late} ms`);
+    assert.ok(marker.ms >= 290 && marker.ms < 1500, `ended after ${marker.ms} ms`);
+    assert.equal(decideSite({ digest, analytics: null, live: result, marker: marker.result }).publish, true);
   }
 });
 
@@ -518,35 +385,65 @@ test('the plan returns its outputs by its deadlines when every read stalls, and 
   const root = await tempDir(t);
   await sitesFixture(root);
   const fetch = await slowServer(t, Infinity);
-  const env = { GITHUB_REPOSITORY: 'neurodesk/webapps', GITHUB_WORKFLOW_REF: READER.workflowRef, GITHUB_RUN_ID: '1000', GITHUB_RUN_ATTEMPT: '1', GITHUB_TOKEN: 't', GITHUB_SHA: C1 };
-  const all = { pages: 'true', workers: JSON.stringify(['msk', 'microscopy', 'preclinical', 'hub'].map((id) => ({ site: id, url: `https://${deploySites(registry).find(({ site: s }) => s === id).host}/` }))) };
-  const { result, ms } = await elapsed(() => planSiteDeploy({ registry, sitesDir: root, env, fetch, write: writeFile, timeouts: { record: 1200, history: 1500 }, now: NOW }));
-  // One after the other they would take 2.7 s.
-  assert.ok(ms >= 1490 && ms < 2400, `the reads run at once and end at the longer deadline (${ms} ms)`);
-  assert.deepEqual({ pages: result.outputs.pages, workers: result.outputs.workers }, all);
+  const env = { GITHUB_REPOSITORY: 'neurodesk/webapps', GITHUB_REF: 'refs/heads/main', GITHUB_TOKEN: 't', GITHUB_SHA: C1 };
+  const { result, ms } = await elapsed(() => planSiteDeploy({ registry, sitesDir: root, root: repoRoot, env, fetch, write: writeFile, timeouts: { record: 1200, marker: 800 } }));
+  assert.ok(ms >= 1190 && ms < 2400, `the reads run at once and end at the longer deadline (${ms} ms)`);
+  assert.equal(result.outputs.pages, 'true');
+  assert.deepEqual(JSON.parse(result.outputs.workers).map(({ site: id }) => id), ['msk', 'microscopy', 'preclinical', 'hub']);
   assert.equal(result.outputs.verify_build, 'true');
   assert.equal(result.outputs.verify_hub, 'true');
-  assert.match(result.summary, /^Every site is published: deploy history unreadable \(GitHub API: no complete answer in 1\.5 s\)\.\n/);
-  // With a readable green history, each stalled record publishes its own site.
-  const api = githubApi(listed.map((record) => (record.id === 998 ? { ...record, conclusion: 'success' } : record)), { jobs: { 999: 0, 998: 4 } });
-  const split = (url, init) => (url.startsWith('https://api.github.com/') ? api.fetch(url, init) : fetch(url, init));
-  const green2 = await planSiteDeploy({ registry, sitesDir: root, env, fetch: split, write: writeFile, timeouts: { record: 300 }, now: NOW });
-  assert.ok(green2.planned.every(({ publish, reason }) => publish && reason === 'live digest unreadable (no complete answer in 0.3 s)'));
-  assert.doesNotMatch(green2.summary, /^Every site is published/);
-  assert.deepEqual({ pages: green2.outputs.pages, workers: green2.outputs.workers }, all);
+  assert.ok(result.planned.every(({ publish, reason }) => publish && reason === 'live digest unreadable (no complete answer in 1.2 s)'));
+  assert.ok(result.planned.every(({ marker }) => marker.error === 'GitHub API: no complete answer in 0.8 s'));
+  assert.match(result.summary, /\| msk \| mskapps\.sciget\.org \| publish \| after publish \| live digest unreadable \(no complete answer in 1\.2 s\) \| unknown \(GitHub API: no complete answer in 0\.8 s\) \|/);
 });
 
-// The plan command as the workflow runs it, against a loopback server that
-// answers every request (live records and the GitHub API) with `status` and
-// `type` at once, then sends `first` and, with `trickle`, a space every 100 ms
-// forever, with `end` nothing more and the end, or else nothing more. A preload
-// sends every https request to the server and divides every deadline of 10 s or
-// more by 100, so 30 s ends at 0.3 s.
-async function planCommand(t, { status, type, first = '{', trickle, end }) {
+// A preload for a command under test: every https request goes to the
+// loopback server at `port`, and every deadline of 10 s or more is divided by
+// `scale`: by 100, a 30 s deadline ends at 0.3 s.
+async function loopbackPreload(root, port, scale) {
+  const preload = join(root, 'loopback.mjs');
+  await writeFile(preload, [
+    `const origin = 'http://127.0.0.1:${port}';`,
+    'const realFetch = globalThis.fetch;',
+    'globalThis.fetch = (url, init) => { const { pathname, search } = new URL(url); return realFetch(origin + pathname + search, init); };',
+    'const realTimeout = globalThis.setTimeout;',
+    `globalThis.setTimeout = (callback, ms, ...args) => realTimeout(callback, ms >= 10_000 ? ms / ${scale} : ms, ...args);`,
+    '',
+  ].join('\n'));
+  return preload;
+}
+
+// Run `script` with `args` under the preload; the outputs it writes to GITHUB_OUTPUT.
+async function command(t, root, port, script, args, { env = {}, scale = 100 } = {}) {
+  const output = join(root, 'output');
+  await writeFile(output, '');
+  const start = performance.now();
+  const child = spawn(process.execPath, ['--import', await loopbackPreload(root, port, scale), join(repoRoot, script), ...args], {
+    cwd: root,
+    env: { PATH: process.env.PATH, GITHUB_OUTPUT: output, ...env },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let stdout = '';
+  let stderr = '';
+  child.stdout.on('data', (chunk) => { stdout += chunk; });
+  child.stderr.on('data', (chunk) => { stderr += chunk; });
+  const killer = setTimeout(() => child.kill('SIGKILL'), 8000);
+  const [code, signal] = await once(child, 'exit');
+  clearTimeout(killer);
+  const outputs = Object.fromEntries((await readFile(output, 'utf8')).trim().split('\n').filter(Boolean).map((line) => line.split(/=(.*)/s).slice(0, 2)));
+  return { code, signal, stdout, stderr, ms: performance.now() - start, outputs };
+}
+
+// A loopback server that answers every request with `status` and `type` at
+// once, then sends `body` and, with `trickle`, a space every 100 ms forever,
+// with `end` the end, or else nothing more.
+async function answeringServer(t, { status, type, body = '{', trickle, end }) {
+  const requests = [];
   const server = createServer((request, response) => {
+    requests.push(request.url);
     response.writeHead(status, { 'content-type': type });
     response.flushHeaders();
-    response.write(first);
+    response.write(typeof body === 'function' ? body(request.url) : body);
     if (end) response.end();
     if (trickle) {
       const interval = setInterval(() => response.write(' '), 100);
@@ -558,46 +455,21 @@ async function planCommand(t, { status, type, first = '{', trickle, end }) {
     server.closeAllConnections();
     server.close();
   });
+  return { port: server.address().port, requests };
+}
+
+const PLAN_ENV = { GITHUB_REPOSITORY: 'neurodesk/webapps', GITHUB_REF: 'refs/heads/main', GITHUB_SHA: C1, GITHUB_TOKEN: 'fixture' };
+
+async function planCommand(t, answer) {
+  const { port } = await answeringServer(t, answer);
   const root = await tempDir(t);
   await sitesFixture(join(root, 'sites'));
-  const preload = join(root, 'loopback.mjs');
-  await writeFile(preload, [
-    `const origin = 'http://127.0.0.1:${server.address().port}';`,
-    'const realFetch = globalThis.fetch;',
-    'globalThis.fetch = (url, init) => { const { pathname, search } = new URL(url); return realFetch(origin + pathname + search, init); };',
-    'const realTimeout = globalThis.setTimeout;',
-    'globalThis.setTimeout = (callback, ms, ...args) => realTimeout(callback, ms >= 10_000 ? ms / 100 : ms, ...args);',
-    '',
-  ].join('\n'));
-  const output = join(root, 'output');
-  await writeFile(output, '');
-  const start = performance.now();
-  const child = spawn(process.execPath, ['--import', preload, join(repoRoot, 'scripts/plan-site-deploy.mjs'), '--sites-dir', join(root, 'sites')], {
-    cwd: repoRoot,
-    env: {
-      PATH: process.env.PATH,
-      GITHUB_OUTPUT: output,
-      GITHUB_REPOSITORY: 'neurodesk/webapps',
-      GITHUB_REF: 'refs/heads/main',
-      GITHUB_WORKFLOW_REF: 'neurodesk/webapps/.github/workflows/deploy-pages.yml@refs/heads/main',
-      GITHUB_RUN_ID: '1000',
-      GITHUB_RUN_ATTEMPT: '1',
-      GITHUB_SHA: C1,
-      GITHUB_TOKEN: 'fixture',
-    },
-    stdio: ['ignore', 'ignore', 'pipe'],
-  });
-  let stderr = '';
-  child.stderr.on('data', (chunk) => { stderr += chunk; });
-  const killer = setTimeout(() => child.kill('SIGKILL'), 8000);
-  const [code, signal] = await once(child, 'exit');
-  clearTimeout(killer);
-  return { code, signal, stderr, ms: performance.now() - start, outputs: Object.fromEntries((await readFile(output, 'utf8')).trim().split('\n').filter(Boolean).map((line) => line.split(/=(.*)/s).slice(0, 2))) };
+  return command(t, root, port, 'scripts/plan-site-deploy.mjs', ['--sites-dir', join(root, 'sites')], { env: PLAN_ENV });
 }
 
 test('the plan command exits by itself soon after its deadlines when answers trickle, are refused or stall', { timeout: 60_000 }, async (t) => {
   // Start-up, digests and outputs, with every answer complete at once.
-  const prompt = await planCommand(t, { status: 404, type: 'text/plain', first: 'Not found', end: true });
+  const prompt = await planCommand(t, { status: 404, type: 'text/plain', body: 'Not found', end: true });
   assert.equal(prompt.code, 0, prompt.stderr);
   for (const [name, answer] of [
     ['a trickling HTTP 502', { status: 502, type: 'text/html', trickle: true }],
@@ -607,35 +479,146 @@ test('the plan command exits by itself soon after its deadlines when answers tri
     const { code, signal, stderr, ms, outputs } = await planCommand(t, answer);
     assert.equal(signal, null, `${name}: the process ended by itself (${stderr})`);
     assert.equal(code, 0, `${name}: ${stderr}`);
-    // The longest deadline, the whole history read, is 1.2 s under the preload.
-    assert.ok(ms < prompt.ms + 1200 + 1500, `${name}: exited after ${Math.round(ms)} ms, ${Math.round(prompt.ms)} ms with prompt answers`);
+    // Each live record and marker read ends at 0.3 s under the preload.
+    assert.ok(ms < prompt.ms + 300 + 1500, `${name}: exited after ${Math.round(ms)} ms, ${Math.round(prompt.ms)} ms with prompt answers`);
     assert.equal(outputs.pages, 'true', name);
     assert.deepEqual(JSON.parse(outputs.workers).map(({ site: id }) => id), ['msk', 'microscopy', 'preclinical', 'hub'], name);
     assert.equal(outputs.verify_hub, 'true', name);
     assert.equal(outputs.verify_build, 'true', name);
+    assert.deepEqual(Object.keys(JSON.parse(outputs.markers)), ['neuro', 'msk', 'microscopy', 'preclinical', 'hub'], name);
+  }
+});
+
+test('the confirm command marks a digest only when the host serves it, and never fails the job', { timeout: 60_000 }, async (t) => {
+  const served = record({ site: 'msk' });
+  const { port, requests } = await answeringServer(t, { status: 200, type: 'application/json', body: JSON.stringify(served), end: true });
+  const root = await tempDir(t);
+  // Prompt answers keep the real deadline.
+  const confirm = (args) => command(t, root, port, 'scripts/confirm-site-digest.mjs', args, { env: { GITHUB_RUN_ID: '7', GITHUB_SHA: C2 }, scale: 1 });
+  const marker = join(root, 'deploy-verified.json');
+  const args = (value) => ['--url', 'https://mskapps.sciget.org/', '--site', 'msk', '--digest', value, '--marker', marker];
+
+  const same = await confirm(args(digest));
+  assert.deepEqual({ code: same.code, outputs: same.outputs }, { code: 0, outputs: { confirmed: 'true' } }, same.stderr);
+  assert.match(requests.at(-1), new RegExp(`^/${DIGEST_FILE}\\?run=`));
+  assert.deepEqual(JSON.parse(await readFile(marker, 'utf8')), { ...JSON.parse(await readFile(marker, 'utf8')), site: 'msk', digest, run: '7', commit: C2 });
+  await rm(marker);
+
+  // Another digest, another site's record, no digest: no marker file, and the job goes on.
+  for (const [name, values] of [
+    ['an older digest', args('b'.repeat(64))],
+    ['another site', ['--url', 'https://mskapps.sciget.org/', '--site', 'neuro', '--digest', digest, '--marker', marker]],
+    ['no digest', ['--url', 'https://mskapps.sciget.org/', '--site', 'msk', '--digest', '', '--marker', marker]],
+    ['no URL', ['--site', 'msk', '--digest', digest, '--marker', marker]],
+  ]) {
+    const result = await confirm(values);
+    assert.deepEqual({ code: result.code, outputs: result.outputs }, { code: 0, outputs: { confirmed: 'false' } }, `${name}: ${result.stderr}`);
+    assert.match(result.stdout, /^::warning::.*no verified marker is saved\.$/m, name);
+    await assert.rejects(access(marker), name);
+  }
+
+  // A host that stalls is unconfirmed by the deadline (0.3 s under the preload).
+  const stalled = await answeringServer(t, { status: 200, type: 'application/json', trickle: true });
+  const slow = await command(t, root, stalled.port, 'scripts/confirm-site-digest.mjs', args(digest));
+  assert.deepEqual({ code: slow.code, signal: slow.signal, outputs: slow.outputs }, { code: 0, signal: null, outputs: { confirmed: 'false' } }, slow.stderr);
+  // The message names the configured deadline; the preload ended it at 0.3 s.
+  assert.match(slow.stdout, /no readable record \(no complete answer in 30 s\)/);
+  assert.ok(slow.ms < 5000, `ended after ${Math.round(slow.ms)} ms`);
+});
+
+test('the confirm command loads only Node built-ins, so the hub check needs no install', async () => {
+  const closure = moduleClosure(repoRoot, ['scripts/confirm-site-digest.mjs']);
+  assert.deepEqual(closure, ['scripts/confirm-site-digest.mjs', 'scripts/lib/site-record.mjs']);
+  for (const file of closure) {
+    for (const [, specifier] of (await readFile(join(repoRoot, file), 'utf8')).matchAll(/\bfrom\s+'([^']+)'/g)) {
+      assert.ok(specifier.startsWith('node:') || specifier.startsWith('.'), `${file} imports ${specifier}`);
+    }
+  }
+  const hub = parse(await readFile(join(repoRoot, DEPLOY_WORKFLOW), 'utf8')).jobs['verify-hub'];
+  assert.deepEqual(hub.steps[0], { uses: 'actions/checkout@v7', with: { 'sparse-checkout': 'scripts' } });
+});
+
+// A copy of the files the deployed checks read, with the npm packages they
+// import installed at `versions`, under a temporary root.
+async function checksFixture(t, versions = { '@playwright/test': '1.64.0', yaml: '2.9.0', zod: '4.6.5' }) {
+  const root = await tempDir(t);
+  const inputs = checkInputs(repoRoot, registry);
+  for (const path of new Set(Object.values(inputs).flatMap(({ files }) => files))) await cp(join(repoRoot, path), join(root, path));
+  await mkdir(join(root, 'exes'), { recursive: true });
+  for (const [name, version] of Object.entries(versions)) await put(root, `node_modules/${name}/package.json`, JSON.stringify({ name, version }));
+  // pnpm links a workspace package into the node_modules of each package that depends on it.
+  await mkdir(join(root, 'packages/desktop/node_modules/@neurodesk'), { recursive: true });
+  await symlink('../../../components', join(root, 'packages/desktop/node_modules/@neurodesk/webapp-components'));
+  return root;
+}
+
+test('the check hash covers every input of a site\'s deployed checks and nothing else', async (t) => {
+  const root = await checksFixture(t);
+  const base = checkHashes(root, registry);
+  assert.deepEqual(Object.keys(base), ['hub', ...registry.site.catalogs.map(({ id }) => id)]);
+  assert.ok(Object.values(base).every((hash) => /^[0-9a-f]{64}$/.test(hash)));
+  assert.deepEqual(checkHashes(root, registry), base, 'the same inputs give the same hash');
+  assert.deepEqual(checkHashes(root, registry).msk, checkHashes(await checksFixture(t), registry).msk, 'a copy gives the same hash');
+  const inputs = checkInputs(root, registry);
+  assert.deepEqual(inputs.hub, { files: [DEPLOY_WORKFLOW], packages: [] }, 'the hub check is a step of the workflow');
+  for (const path of [...DEPLOYED_CHECKS, ...CHECK_DATA, 'test-utils/site-catalog.mjs', 'scripts/lib/apps-registry.mjs', 'packages/components/package.json']) {
+    assert.ok(inputs.msk.files.includes(path), `${path} is a check input`);
+  }
+  assert.deepEqual(inputs.msk.packages, ['@playwright/test@1.64.0', 'yaml@2.9.0', 'zod@4.6.5']);
+  // An app served by one catalogue only.
+  const single = registry.apps.find((app) => registry.site.catalogs.filter((catalog) => catalogApps(registry, findCatalog(registry, catalog.id)).includes(app)).length === 1);
+  const changed = (hashes) => Object.keys(base).filter((id) => hashes[id] !== base[id]).join(' ');
+  const catalogues = registry.site.catalogs.map(({ id }) => id).join(' ');
+  for (const [name, change, expected] of [
+    ['a check script', (dir) => put(dir, 'test/image-upload.smoke.mjs', '// changed\n'), catalogues],
+    ['a module a check imports', (dir) => put(dir, 'test-utils/site-catalog.mjs', '// changed\n'), catalogues],
+    ['the app registry', (dir) => put(dir, 'registry/apps.yml', '# changed\n'), catalogues],
+    ['the standalone catalog', (dir) => put(dir, 'registry/standalone.json', '{}'), catalogues],
+    ['the root scripts', (dir) => put(dir, 'package.json', '{}'), catalogues],
+    [`the package.json of ${single.id}`, (dir) => put(dir, `apps/${single.id}/package.json`, '{}'), single.catalog],
+    ['the installed Playwright', (dir) => put(dir, 'node_modules/@playwright/test/package.json', '{"version":"1.65.0"}'), catalogues],
+    ['the workflow', (dir) => put(dir, DEPLOY_WORKFLOW, '# changed\n'), `hub ${catalogues}`],
+    ['a deleted check script', (dir) => rm(join(dir, 'test/deployed-site.smoke.mjs')), catalogues],
+    ['a file no check reads', (dir) => put(dir, 'apps/no-check/src/main.js', '// new\n'), ''],
+  ]) {
+    const dir = await checksFixture(t);
+    await change(dir);
+    assert.equal(changed(checkHashes(dir, registry)), expected, name);
+  }
+});
+
+test('the check scripts the hash covers are the ones the workflow\'s check steps run', async () => {
+  const workflow = parse(await readFile(join(repoRoot, DEPLOY_WORKFLOW), 'utf8'));
+  const scripts = JSON.parse(await readFile(join(repoRoot, 'package.json'), 'utf8')).scripts;
+  for (const name of ['deploy', 'verify-sites']) {
+    const steps = workflow.jobs[name].steps;
+    const before = steps.findIndex(({ id }) => id === 'before');
+    const after = steps.findIndex(({ id }) => id === 'after');
+    const run = steps.slice(before + 1, after).map((step) => step.run.replace(/^pnpm (\S+)$/, (whole, script) => scripts[script]));
+    assert.deepEqual(run.map((line) => line.replace(/^node /, '')).sort(), [...DEPLOYED_CHECKS].sort(), `${name} runs exactly the deployed checks between its confirmations`);
   }
 });
 
 test('the daily run checks every live site, published or not', async (t) => {
-  const root = await tempDir(t);
-  await sitesFixture(root);
-  const first = await planDeploy({ registry, sitesDir: root, commit: C1, history: green, nonce: 'n', fetch: async () => json({}, { status: 404 }), write: writeFile });
-  const records = new Map(first.map(({ host, record: served }) => [host, served]));
-  const served = async (url) => json(records.get(new URL(url).host));
+  const { plan } = await verifiedFixture(t);
   // GA4 was unavailable, so no usage report is refreshed and nothing is published.
-  const daily = await planDeploy({ registry, sitesDir: root, commit: C1, history: green, verifyAll: true, nonce: 'n', fetch: served, write: writeFile });
+  const daily = await plan({ verifyAll: true });
   assert.ok(daily.every(({ publish, verify }) => !publish && verify));
-  assert.deepEqual(deployOutputs(daily), {
+  const outputs = deployOutputs(daily);
+  assert.deepEqual({ ...outputs, markers: undefined }, {
     pages: 'false',
     workers: '[]',
     verify: JSON.stringify(registry.site.catalogs.map(({ id, host }) => ({ site: id, url: `https://${host}/` }))),
     verify_hub: 'true',
     verify_build: 'false',
+    markers: undefined,
   });
-  assert.match(deploySummary(daily), /\| neuro \| webapps\.neurodesk\.org \| skip \| live site \| unchanged/);
+  // Each check job gets the digest it must confirm and the marker it saves or keeps.
+  assert.deepEqual(JSON.parse(outputs.markers), Object.fromEntries(daily.map(({ site: id, url, digest: built, key }) => [id, { url, digest: built, key }])));
+  assert.match(deploySummary(daily), /\| neuro \| webapps\.neurodesk\.org \| skip \| live site \| verified: [^|]* \| found \|/);
   // A push checks nothing it does not publish.
-  const push = await planDeploy({ registry, sitesDir: root, commit: C1, history: green, nonce: 'n', fetch: served, write: writeFile });
-  assert.deepEqual(deployOutputs(push), { pages: 'false', workers: '[]', verify: '[]', verify_hub: 'false', verify_build: 'false' });
+  const push = await plan();
+  assert.deepEqual(deployOutputs(push), { pages: 'false', workers: '[]', verify: '[]', verify_hub: 'false', verify_build: 'false', markers: '{}' });
 });
 
 test('every catalogue and the hub is planned, and the Worker list is the one the registry declares', () => {
@@ -644,23 +627,13 @@ test('every catalogue and the hub is planned, and the Worker list is the one the
   assert.equal(deploySites(registry).filter(({ hosting }) => hosting === 'pages').length, 1);
 });
 
-async function sitesFixture(root) {
-  for (const { site: id, hosting, host } of deploySites(registry)) {
-    await site(join(root, id));
-    // The hub has no usage report.
-    if (id === 'hub') await rm(join(root, id, 'analytics.json'));
-    if (hosting === 'worker') await put(root, `${id}.wrangler.json`, JSON.stringify({ name: host }));
-  }
-}
-
-test('a plan publishes only what differs from the live hosts and writes each site its record', async (t) => {
+test('a plan publishes only what differs from the live hosts or lacks a marker, and writes each site its record', async (t) => {
   const root = await tempDir(t);
   await sitesFixture(root);
   const written = new Map();
   const write = async (path, text) => { written.set(path, text); await writeFile(path, text); };
-  // First deploy: nothing is live yet, so every site is published.
-  const missing = async () => new Response('Not found', { status: 404 });
-  const first = await planDeploy({ registry, sitesDir: root, commit: C1, history: green, nonce: 'n', fetch: missing, write });
+  // First deploy: nothing is live and no marker exists, so every site is published.
+  const first = await planDeploy({ registry, sitesDir: root, commit: C1, checks: CHECKS, lookup: absent, nonce: 'n', fetch: missing, write });
   assert.ok(first.every(({ publish, verifyBuild }) => publish && verifyBuild));
   assert.equal(written.size, deploySites(registry).length);
   const records = Object.fromEntries(first.map(({ site, record }) => [site, record]));
@@ -668,64 +641,222 @@ test('a plan publishes only what differs from the live hosts and writes each sit
   assert.equal(records.msk.analyticsGeneratedAt, '2026-11-18T01:06:47.596Z');
   assert.equal(records.hub.analyticsGeneratedAt, null);
   assert.equal(records.msk.commit, C1);
+  assert.deepEqual(first.map(({ key }) => key), first.map(({ site: id, digest: built }) => markerKey(id, built, CHECKS[id])));
 
-  // The hosts now serve those records. One app of msk changes, and preclinical's deploy had failed.
+  // The hosts now serve those records and every check passed but preclinical's.
+  // One app of msk changes, and microscopy's deploy had failed.
+  const { lookup } = store(first.filter(({ site: id }) => id !== 'preclinical').map(({ key }) => key));
   const served = async (url) => {
     const id = deploySites(registry).find(({ host }) => url.startsWith(`https://${host}/`)).site;
-    if (id === 'preclinical') return json({ ...records.preclinical, digest: 'f'.repeat(64) });
+    if (id === 'microscopy') return json({ ...records.microscopy, digest: 'f'.repeat(64) });
     return json(records[id]);
   };
   await put(join(root, 'msk'), 'app/assets/model.wasm', 'new model');
-  const second = await planDeploy({ registry, sitesDir: root, commit: C2, history: green, nonce: 'n', fetch: served, write });
+  const second = await planDeploy({ registry, sitesDir: root, commit: C2, checks: CHECKS, lookup, nonce: 'n', fetch: served, write });
   const decision = Object.fromEntries(second.map(({ site, publish, reason }) => [site, publish ? reason : 'skip']));
   assert.deepEqual(decision, {
-    neuro: 'skip', msk: 'content changed', microscopy: 'skip', preclinical: 'content changed', hub: 'skip',
+    neuro: 'skip', msk: 'content changed', microscopy: 'content changed', preclinical: 'no verified marker for this content and these checks', hub: 'skip',
   });
-  assert.deepEqual(deployOutputs(second), {
+  const outputs = deployOutputs(second);
+  const sites = (ids) => JSON.stringify(ids.map((id) => ({ site: id, url: `https://${deploySites(registry).find(({ site: s }) => s === id).host}/` })));
+  assert.deepEqual({ ...outputs, markers: undefined }, {
     pages: 'false',
-    workers: JSON.stringify([
-      { site: 'msk', url: 'https://mskapps.sciget.org/' },
-      { site: 'preclinical', url: 'https://preclinicalapps.sciget.org/' },
-    ]),
-    verify: JSON.stringify([
-      { site: 'msk', url: 'https://mskapps.sciget.org/' },
-      { site: 'preclinical', url: 'https://preclinicalapps.sciget.org/' },
-    ]),
+    workers: sites(['msk', 'microscopy', 'preclinical']),
+    verify: sites(['msk', 'microscopy', 'preclinical']),
     verify_hub: 'false',
     verify_build: 'true',
+    markers: undefined,
   });
+  assert.deepEqual(Object.keys(JSON.parse(outputs.markers)), ['msk', 'microscopy', 'preclinical']);
   // The record a site now carries does not change its digest.
   assert.equal(second.find(({ site: id }) => id === 'neuro').digest, records.neuro.digest);
   assert.equal(await siteDigest(join(root, 'neuro')), records.neuro.digest);
 
   const summary = deploySummary(second);
   for (const { site: id, host } of deploySites(registry)) assert.match(summary, new RegExp(`\\| ${id} \\| ${host} \\| (publish|skip) \\| `));
-  assert.match(summary, /\| neuro \| webapps\.neurodesk\.org \| skip \| - \| unchanged: the live site has this content and a current usage report \|/);
-  assert.match(summary, /\| msk \| mskapps\.sciget\.org \| publish \| after publish \| content changed \|/);
+  assert.match(summary, /\| Site \| Host \| Decision \| Deployed checks \| Why \| Verified marker \| Build digest \| Live digest \| Live commit \|/);
+  assert.match(summary, /\| neuro \| webapps\.neurodesk\.org \| skip \| - \| verified: [^|]* \| found \|/);
+  assert.match(summary, /\| msk \| mskapps\.sciget\.org \| publish \| after publish \| content changed \| none \|/);
+  assert.match(summary, /\| preclinical \| preclinicalapps\.sciget\.org \| publish \| after publish \| no verified marker for this content and these checks \| none \|/);
 });
 
-test('a deploy whose content is all live publishes nothing and skips the build\'s browser checks', async (t) => {
-  const root = await tempDir(t);
-  await sitesFixture(root);
-  const write = writeFile;
-  const first = await planDeploy({ registry, sitesDir: root, commit: C1, history: green, nonce: 'n', fetch: async () => new Response('', { status: 404 }), write });
-  const records = new Map(first.map(({ host, record }) => [host, record]));
-  const served = async (url) => json(records.get(new URL(url).host));
-  const again = await planDeploy({ registry, sitesDir: root, commit: C1, history: green, nonce: 'n', fetch: served, write });
-  assert.deepEqual(deployOutputs(again), { pages: 'false', workers: '[]', verify: '[]', verify_hub: 'false', verify_build: 'false' });
+test('a deploy whose content is all live and verified publishes nothing and skips the build\'s browser checks', async (t) => {
+  const { root, plan } = await verifiedFixture(t);
+  assert.deepEqual(deployOutputs(await plan()), { pages: 'false', workers: '[]', verify: '[]', verify_hub: 'false', verify_build: 'false', markers: '{}' });
   // The next day's scheduled run refreshes every catalogue's usage report, not the hub, and needs no browser check.
   for (const { site: id } of deploySites(registry).filter(({ site: s }) => s !== 'hub')) await put(join(root, id), 'analytics.json', report('2026-11-19T04:24:00Z'));
-  const daily = await planDeploy({ registry, sitesDir: root, commit: C1, history: green, nonce: 'n', fetch: served, write });
+  const daily = await plan();
   assert.deepEqual(daily.filter(({ publish }) => publish).map(({ site: id }) => id), registry.site.catalogs.map(({ id }) => id));
   assert.equal(deployOutputs(daily).verify_build, 'false');
   assert.equal(deployOutputs(daily).pages, 'true');
   // A dispatched run publishes and checks everything.
-  const dispatched = await planDeploy({ registry, sitesDir: root, commit: C1, history: green, nonce: 'n', fetch: served, write, deployAll: true });
-  assert.ok(dispatched.every(({ publish, verifyBuild }) => publish && verifyBuild));
+  const dispatched = await plan({ deployAll: true });
+  assert.ok(dispatched.every(({ publish, verifyBuild, verify }) => publish && verifyBuild && verify));
 });
 
-const workflow = parse(await readFile(join(repoRoot, '.github/workflows/deploy-pages.yml'), 'utf8'));
-// A GitHub expression of `needs`, `steps` and status functions, evaluated as JavaScript.
+// The deploy workflow over several runs, with the real plan: hosts that serve
+// what the last successful publish of each site sent, and the marker store of
+// main. A run publishes what its plan says (the Worker sites, then Pages only
+// when every Worker deploy passed), runs the checks of each site it checks,
+// and saves a site's marker as the check job does: when every check passed and
+// the host served this build's digest before and after them. `failChecks`
+// fail those sites' checks, `failDeploys` their deploys, and `lagging` sites
+// keep serving their old bytes until the checks are over.
+function deployWorld(root) {
+  const hosts = new Map();
+  const markers = new Set();
+  const state = { storeDown: false };
+  const fetch = async (url) => {
+    const served = hosts.get(new URL(url).host);
+    return served ? json(served) : new Response('Not found', { status: 404 });
+  };
+  const lookup = async (key) => (state.storeDown ? { error: 'GitHub API: HTTP 503' } : { present: markers.has(key) });
+  // One check job: confirm, the checks, confirm, keep or save the marker.
+  const check = ({ host, digest: built, key }, { fails = false } = {}) => {
+    const before = hosts.get(host)?.digest === built;
+    if (fails) return 'failure';
+    if (key && before && hosts.get(host)?.digest === built) markers.add(key);
+    return 'success';
+  };
+  async function run({ event = 'push', checks = CHECKS, failChecks = [], failDeploys = [], lagging = [] } = {}) {
+    const planned = await planDeploy({ registry, sitesDir: root, commit: C1, deployAll: event === 'dispatch', verifyAll: event === 'schedule', checks, lookup, nonce: 'n', fetch, write: writeFile });
+    const late = [];
+    const publish = (entry) => (lagging.includes(entry.site) ? late.push(entry) : hosts.set(entry.host, entry.record));
+    const workers = planned.filter(({ hosting, publish: published }) => hosting === 'worker' && published);
+    for (const entry of workers) if (!failDeploys.includes(entry.site)) publish(entry);
+    const workersPassed = workers.every(({ site: id }) => !failDeploys.includes(id));
+    const pages = planned.find(({ hosting }) => hosting === 'pages');
+    const pagesPassed = !(pages.publish && failDeploys.includes(pages.site));
+    if (workersPassed && pages.publish && pagesPassed) publish(pages);
+    const checked = {};
+    if (workersPassed) {
+      for (const entry of planned.filter(({ verify }) => verify)) {
+        if (entry.hosting === 'pages' && entry.publish && !pagesPassed) continue;
+        checked[entry.site] = check(entry, { fails: failChecks.includes(entry.site) });
+      }
+    }
+    for (const entry of late) hosts.set(entry.host, entry.record);
+    return { planned, checked, published: planned.filter(({ publish: published }) => published).map(({ site: id }) => id), rerunCheck: (id) => check(planned.find(({ site: s }) => s === id)) };
+  }
+  return { hosts, markers, state, run };
+}
+const everySite = deploySites(registry).map(({ site: id }) => id);
+
+test('a site whose check failed is checked again by the next run, and skipped once a check passed', async (t) => {
+  const root = await tempDir(t);
+  await sitesFixture(root);
+  const world = deployWorld(root);
+  // The first run after the merge: nothing is verified, so everything is published and checked.
+  const first = await world.run({ failChecks: ['msk'] });
+  assert.deepEqual(first.published, everySite);
+  assert.equal(first.checked.msk, 'failure');
+  // No change: the sites that passed are skipped; msk is published and checked again.
+  const second = await world.run();
+  assert.deepEqual(second.published, ['msk']);
+  assert.deepEqual(second.checked, { msk: 'success' });
+  assert.equal(second.planned.find(({ site: id }) => id === 'msk').verifyBuild, false, 'its bytes passed the build\'s checks when they were first published');
+  // No change, and every check has passed: nothing runs.
+  assert.deepEqual((await world.run()).published, []);
+});
+
+test('a re-run of an older run\'s hub check cannot hide a newer failed check', async (t) => {
+  const root = await tempDir(t);
+  await sitesFixture(root);
+  const world = deployWorld(root);
+  await world.run();
+  // Run A changes the hub; its hub check fails.
+  await put(join(root, 'hub'), 'index.html', '<!doctype html><title>hub 2</title>');
+  const a = await world.run({ failChecks: ['hub'] });
+  assert.deepEqual(a.published, ['hub']);
+  assert.deepEqual(a.checked, { hub: 'failure' });
+  // Run B changes msk; msk's check fails, and the hub, still unverified, is published and checked again and fails.
+  await put(join(root, 'msk'), 'app/new.js', '');
+  const b = await world.run({ failChecks: ['msk', 'hub'] });
+  assert.deepEqual(b.published, ['msk', 'hub']);
+  assert.deepEqual(b.checked, { msk: 'failure', hub: 'failure' });
+  // Someone re-runs only A's hub check, and it passes: it marks the hub at A's digest, which the host still serves.
+  assert.equal(a.rerunCheck('hub'), 'success');
+  // The next run skips the hub but still publishes and checks msk.
+  const c = await world.run();
+  assert.deepEqual(c.published, ['msk']);
+  assert.deepEqual(c.checked, { msk: 'success' });
+  assert.deepEqual((await world.run()).published, []);
+});
+
+test('"Re-run failed jobs" after a failed check saves its marker, and the next run skips the site', async (t) => {
+  const root = await tempDir(t);
+  await sitesFixture(root);
+  const world = deployWorld(root);
+  await world.run();
+  await put(join(root, 'preclinical'), 'app/new.js', '');
+  const failed = await world.run({ failChecks: ['preclinical'] });
+  assert.deepEqual(failed.checked, { preclinical: 'failure' });
+  assert.equal(failed.rerunCheck('preclinical'), 'success');
+  assert.deepEqual((await world.run()).published, []);
+});
+
+test('a failed deploy, a check that saw older bytes or a lost marker is published and checked again', async (t) => {
+  const root = await tempDir(t);
+  await sitesFixture(root);
+  const world = deployWorld(root);
+  await world.run();
+  // msk's Worker deploy fails: no check runs, and the next run publishes msk again.
+  await put(join(root, 'msk'), 'app/new.js', '');
+  const failedDeploy = await world.run({ failDeploys: ['msk'] });
+  assert.deepEqual(failedDeploy.checked, {});
+  const retried = await world.run();
+  assert.deepEqual(retried.published, ['msk']);
+  assert.deepEqual(retried.checked, { msk: 'success' });
+  // preclinical's host still serves its old bytes while the checks run: they pass, but mark nothing.
+  await put(join(root, 'preclinical'), 'app/new.js', '');
+  const lag = await world.run({ lagging: ['preclinical'] });
+  assert.deepEqual(lag.checked, { preclinical: 'success' });
+  const after = await world.run();
+  assert.deepEqual(after.published, ['preclinical'], 'its digest is live now, but unverified');
+  assert.equal(after.planned.find(({ site: id }) => id === 'preclinical').reason, 'no verified marker for this content and these checks');
+  // The cache evicts neuro's marker: the next run publishes and checks neuro once.
+  world.markers.delete(after.planned.find(({ site: id }) => id === 'neuro').key);
+  assert.deepEqual((await world.run()).published, ['neuro']);
+  assert.deepEqual((await world.run()).published, []);
+});
+
+test('changed check scripts check every site again, and an unreachable marker store publishes and checks every site', async (t) => {
+  const root = await tempDir(t);
+  await sitesFixture(root);
+  const world = deployWorld(root);
+  await world.run();
+  assert.deepEqual((await world.run()).published, []);
+  const changed = await world.run({ checks: CHECKS_2 });
+  assert.deepEqual(changed.published, everySite);
+  assert.deepEqual(Object.keys(changed.checked), everySite);
+  assert.ok(changed.planned.every(({ verifyBuild }) => !verifyBuild), 'the content is what the hosts serve');
+  assert.deepEqual((await world.run({ checks: CHECKS_2 })).published, []);
+  // The cache API fails.
+  world.state.storeDown = true;
+  const down = await world.run({ checks: CHECKS_2 });
+  assert.deepEqual(down.published, everySite);
+  assert.deepEqual(Object.keys(down.checked), everySite);
+  assert.ok(down.planned.every(({ reason }) => reason === 'marker unknown (GitHub API: HTTP 503)'));
+});
+
+test('the daily run checks every live site and restores the markers it lacks; a dispatch publishes and checks every site', async (t) => {
+  const root = await tempDir(t);
+  await sitesFixture(root);
+  const world = deployWorld(root);
+  await world.run();
+  const keys = [...world.markers];
+  world.markers.delete(keys[1]);
+  const daily = await world.run({ event: 'schedule' });
+  assert.deepEqual(Object.keys(daily.checked), everySite);
+  assert.deepEqual(daily.published, [everySite[1]], 'only the site without a marker is published');
+  assert.deepEqual([...world.markers].sort(), [...keys].sort());
+  const dispatched = await world.run({ event: 'dispatch' });
+  assert.deepEqual(dispatched.published, everySite);
+  assert.deepEqual(Object.keys(dispatched.checked), everySite);
+});
+
+const workflow = parse(await readFile(join(repoRoot, DEPLOY_WORKFLOW), 'utf8'));
+// A GitHub expression of `needs`, `steps`, `matrix` and status functions, evaluated as JavaScript.
 const expression = (source, context) => runInNewContext(
   source.replace(/^\$\{\{\s*|\s*\}\}$/g, '').replace(/\.(\w+-[\w-]+)/g, '["$1"]').replace(/\bfromJSON\(/g, 'JSON.parse('),
   { cancelled: () => false, success: () => true, ...context },
@@ -743,7 +874,7 @@ test('the build plans the deploy after its checks of the projected sites and bef
   for (const [event, flag] of [['workflow_dispatch', '--deploy-all'], ['schedule', '--verify-all'], ['push', '']]) {
     assert.equal(expression(steps[plan].run.replace(/^node scripts\/plan-site-deploy\.mjs /, ''), { github: { event_name: event } }), flag);
   }
-  // The plan reads this workflow's earlier runs. Its reads end by their deadlines; the step limit is a backstop.
+  // The plan looks up markers with the run's token. Its reads end by their deadlines; the step limit is a backstop.
   assert.equal(steps[plan].env.GITHUB_TOKEN, '${{ github.token }}');
   assert.equal(steps[plan]['timeout-minutes'], 10);
   assert.equal(workflow.permissions.actions, 'read');
@@ -768,7 +899,50 @@ test('the build plans the deploy after its checks of the projected sites and bef
     assert.ok(index > plan, 'the site records are written before the upload');
     assert.equal(steps[index].if, condition);
   }
-  assert.deepEqual(workflow.jobs.build.outputs, Object.fromEntries(['pages', 'workers', 'verify', 'verify_hub'].map((key) => [key, `\${{ steps.plan.outputs.${key} }}`])));
+  assert.deepEqual(workflow.jobs.build.outputs, Object.fromEntries(['pages', 'workers', 'verify', 'verify_hub', 'markers'].map((key) => [key, `\${{ steps.plan.outputs.${key} }}`])));
+});
+
+// The jobs that check a site against its host, and the site each checks: verify-sites one per matrix entry.
+const CHECK_JOBS = { deploy: registry.site.catalogs.find(({ hosting }) => hosting === 'pages').id, 'verify-hub': 'hub', 'verify-sites': null };
+
+test('each check job confirms the digest before and after its checks, and only then keeps or saves the marker', () => {
+  for (const [name, fixed] of Object.entries(CHECK_JOBS)) {
+    const job = workflow.jobs[name];
+    const site = fixed ?? 'msk';
+    const index = (id) => job.steps.findIndex((step) => step.id === id);
+    const [before, after, kept] = ['before', 'after', 'kept'].map(index);
+    const save = job.steps.findIndex((step) => step.uses === 'actions/cache/save@v6');
+    assert.ok(before >= 0 && before < after && after < kept && kept < save && save === job.steps.length - 1, `${name}: confirm, checks, confirm, keep, save`);
+    const checks = job.steps.slice(before + 1, after);
+    assert.ok(checks.length > 0, `${name} checks between its confirmations`);
+    // Every check runs for every site; only a status function could let a later step run after a failed one.
+    for (const step of checks) assert.ok(step.if === undefined && step['continue-on-error'] === undefined, `${name}: ${step.name} always runs and can fail the job`);
+    for (const step of job.steps.slice(after)) assert.doesNotMatch(String(step.if), /\b(always|failure|cancelled)\(\)/, `${name}: ${step.name} runs only after every check passed`);
+    for (const step of job.steps.slice(0, before)) assert.doesNotMatch(String(step.run ?? ''), /test:|smoke/, `${name}: no check runs before the first confirmation`);
+    const confirm = (step) => step.run.match(/^node scripts\/confirm-site-digest\.mjs --url "\$(\w+)" --site (\S+) --digest "\$SITE_DIGEST"( --marker deploy-verified\.json)?$/);
+    const [, urlVariable, siteArgument, beforeMarker] = confirm(job.steps[before]);
+    const [, afterUrl, afterSite, afterMarker] = confirm(job.steps[after]);
+    assert.deepEqual([afterUrl, afterSite, beforeMarker, afterMarker], [urlVariable, siteArgument, undefined, ' --marker deploy-verified.json']);
+    assert.equal(siteArgument, name === 'verify-hub' ? 'hub' : '"$SITE_CATALOG"');
+    assert.equal(job.steps[before].if, "env.SITE_MARKER != ''");
+    assert.equal(job.steps[after].if, "steps.before.outputs.confirmed == 'true'");
+    assert.equal(job.steps[kept].if, "steps.after.outputs.confirmed == 'true'");
+    assert.equal(job.steps[save].if, "steps.after.outputs.confirmed == 'true' && steps.kept.outputs.cache-hit != 'true'");
+    assert.equal(job.steps[kept].uses, 'actions/cache/restore@v6');
+    for (const step of [job.steps[kept], job.steps[save]]) {
+      assert.deepEqual(step.with, { path: 'deploy-verified.json', key: '${{ env.SITE_MARKER }}' }, `${name}: ${step.name}`);
+      assert.equal(step['continue-on-error'], true, `${name}: ${step.name} cannot fail checks that passed`);
+    }
+    // The digest and key come from the build's plan for this job's site.
+    const lookup = fixed ? `.${fixed}` : '[matrix.site]';
+    assert.equal(job.env.SITE_DIGEST, `\${{ fromJSON(needs.build.outputs.markers)${lookup}.digest }}`);
+    assert.equal(job.env.SITE_MARKER, `\${{ fromJSON(needs.build.outputs.markers)${lookup}.key }}`);
+    const markers = { [site]: { url: 'https://h/', digest, key: KEY } };
+    const context = { needs: { build: { outputs: { markers: JSON.stringify(markers) } } }, matrix: { site } };
+    assert.equal(expression(job.env.SITE_DIGEST, context), digest);
+    assert.equal(expression(job.env.SITE_MARKER, context), KEY);
+  }
+  assert.equal(workflow.jobs['verify-hub'].env.SITE_URL, '${{ fromJSON(needs.build.outputs.markers).hub.url }}');
 });
 
 // The jobs GitHub runs for a build's outputs: a job whose `if` has no status
@@ -793,6 +967,10 @@ function simulate(outputs, failing = [], kept = {}) {
     if (runs && job.strategy) {
       const matrix = expression(job.strategy.matrix.include, context);
       assert.ok(Array.isArray(matrix) && matrix.length > 0, `${name} never runs with an empty matrix`);
+      // Each check job gets its site's digest and marker key.
+      if (name === 'verify-sites') {
+        for (const entry of matrix) assert.ok(expression(job.env.SITE_MARKER, { ...context, matrix: entry }).startsWith(MARKER_PREFIX), `${entry.site} has a marker key`);
+      }
     }
     results[name] = !runs ? 'skipped' : failing.includes(name) ? 'failure' : 'success';
   }
@@ -817,28 +995,25 @@ test('every job of the workflow is in the simulated order', () => {
 });
 
 test('each case runs exactly the deploy and check jobs it needs, and leaves the run green', async (t) => {
-  const root = await tempDir(t);
-  await sitesFixture(root);
-  const first = await planDeploy({ registry, sitesDir: root, commit: C1, history: green, nonce: 'n', fetch: async () => json({}, { status: 404 }), write: writeFile });
-  const records = new Map(first.map(({ host, record: served }) => [host, served]));
-  const served = (unreadable) => async (url) => (new URL(url).host === unreadable ? new Response('Not found', { status: 404 }) : json(records.get(new URL(url).host)));
-  const failed = history(run(99, 30, 'failure'));
-  const plan = (options) => planDeploy({ registry, sitesDir: root, commit: C1, history: green, nonce: 'n', fetch: served(), write: writeFile, ...options });
+  const { root, markers, served, lookup, plan } = await verifiedFixture(t);
+  const withoutMsk = async (key) => (key.startsWith(`${MARKER_PREFIX}msk-`) ? { present: false } : lookup(key));
+  const unreadable = (host) => async (url) => (new URL(url).host === host ? missing() : served(url));
   const cases = {
-    'nothing changed, previous run green': await plan({}),
-    'nothing changed, previous run failed': await plan({ history: failed }),
+    'nothing changed, markers present': await plan(),
+    'nothing changed, msk marker absent': await plan({ lookup: withoutMsk }),
     'one site changed': await (async () => {
       await put(join(root, 'msk'), 'app/new.js', '');
-      const planned = await plan({});
+      const planned = await plan();
       await rm(join(root, 'msk', 'app/new.js'));
       return planned;
     })(),
-    'scheduled run, every digest live': await plan({ verifyAll: true }),
+    'scheduled run, every digest live and verified': await plan({ verifyAll: true }),
     'dispatched run': await plan({ deployAll: true }),
-    'unreadable record for one site': await plan({ fetch: served('webapps.neurodesk.org') }),
-    // Run 100 published msk and its browser check failed; a person re-runs every job of it.
-    'full re-run after a failed check': await plan({ history: { runId: 100, attempt: '2' } }),
+    'unreadable record for one site': await plan({ fetch: unreadable('webapps.neurodesk.org') }),
+    'marker store unreachable': await plan({ lookup: async () => ({ error: 'GitHub API: HTTP 503' }) }),
+    'first run after the merge': await plan({ fetch: missing, lookup: absent }),
   };
+  assert.ok(markers.size === deploySites(registry).length);
   const table = Object.fromEntries(Object.entries(cases).map(([name, planned]) => {
     const outputs = deployOutputs(planned);
     const results = simulate(outputs);
@@ -847,35 +1022,38 @@ test('each case runs exactly the deploy and check jobs it needs, and leaves the 
   }));
   const all = { outputs: 'pages=true workers=msk,microscopy,preclinical,hub verify=msk,microscopy,preclinical hub=true startup=true', ran: JOB_ORDER.join(' ') };
   assert.deepEqual(table, {
-    'nothing changed, previous run green': { outputs: 'pages=false workers= verify= hub=false startup=false', ran: 'build turbo-cache-retention' },
-    'nothing changed, previous run failed': all,
+    'nothing changed, markers present': { outputs: 'pages=false workers= verify= hub=false startup=false', ran: 'build turbo-cache-retention' },
+    'nothing changed, msk marker absent': { outputs: 'pages=false workers=msk verify=msk hub=false startup=false', ran: 'build turbo-cache-retention deploy-workers verify-sites' },
     'one site changed': { outputs: 'pages=false workers=msk verify=msk hub=false startup=true', ran: 'build turbo-cache-retention deploy-workers verify-sites' },
-    'scheduled run, every digest live': { outputs: 'pages=false workers= verify=neuro,msk,microscopy,preclinical hub=true startup=false', ran: 'build turbo-cache-retention verify-hub verify-sites' },
+    'scheduled run, every digest live and verified': { outputs: 'pages=false workers= verify=neuro,msk,microscopy,preclinical hub=true startup=false', ran: 'build turbo-cache-retention verify-hub verify-sites' },
     'dispatched run': all,
     'unreadable record for one site': { outputs: 'pages=true workers= verify= hub=false startup=true', ran: 'build turbo-cache-retention deploy' },
-    'full re-run after a failed check': all,
+    'marker store unreachable': { ...all, outputs: all.outputs.replace('startup=true', 'startup=false') },
+    'first run after the merge': all,
   });
   // "Re-run failed jobs" after msk's check failed: the build is not re-run and keeps its
-  // outputs, so the check runs again on the sites the first attempt published.
-  const firstAttempt = simulate(deployOutputs(cases['one site changed']), ['verify-sites']);
+  // outputs, so the check runs again on the sites the first attempt published, with the same marker key.
+  const outputs = deployOutputs(cases['one site changed']);
+  const firstAttempt = simulate(outputs, ['verify-sites']);
   assert.equal(greenRun(firstAttempt), false);
-  const rerun = rerunFailed(deployOutputs(cases['one site changed']), firstAttempt);
+  const rerun = rerunFailed(outputs, firstAttempt);
   assert.equal(rerun.ran, 'verify-sites');
   assert.equal(greenRun(rerun.results), true);
-  assert.deepEqual(JSON.parse(deployOutputs(cases['one site changed']).verify).map(({ site: id }) => id), ['msk']);
+  assert.deepEqual(JSON.parse(outputs.verify).map(({ site: id }) => id), ['msk']);
+  assert.equal(JSON.parse(outputs.markers).msk.key, cases['one site changed'].find(({ site: id }) => id === 'msk').key);
   // A failed Worker deploy re-runs with every job that waited for it.
-  const workersFailed = simulate(deployOutputs(cases['one site changed']), ['deploy-workers']);
-  assert.equal(rerunFailed(deployOutputs(cases['one site changed']), workersFailed).ran, 'deploy-workers verify-sites');
+  const workersFailed = simulate(outputs, ['deploy-workers']);
+  assert.equal(rerunFailed(outputs, workersFailed).ran, 'deploy-workers verify-sites');
 });
 
 test('a failed Worker deploy holds back the Pages deploy and every check, and a failed build stops everything', () => {
-  const outputs = { pages: 'true', workers: '[{"site":"msk"},{"site":"hub"}]', verify: '[{"site":"msk"}]', verify_hub: 'true', verify_build: 'true' };
+  const outputs = { pages: 'true', workers: '[{"site":"msk"},{"site":"hub"}]', verify: '[{"site":"msk"}]', verify_hub: 'true', verify_build: 'true', markers: JSON.stringify({ msk: { key: KEY } }) };
   assert.equal(ran(simulate(outputs, ['deploy-workers'])), 'build turbo-cache-retention deploy-workers');
   assert.equal(ran(simulate(outputs, ['build'])), 'build');
   // The checks of the live hosts do not wait for the Pages deploy, which checks neuro itself.
   assert.deepEqual(workflow.jobs['verify-sites'].needs, ['build', 'deploy-workers']);
   assert.deepEqual(workflow.jobs['verify-hub'].needs, ['build', 'deploy-workers']);
   assert.deepEqual(workflow.jobs.deploy.needs, ['build', 'deploy-workers']);
-  for (const step of workflow.jobs['verify-sites'].steps.filter(({ run }) => /test:|smoke/.test(run ?? ''))) assert.equal(step.if, undefined, `${step.name} runs for every listed site`);
-  assert.deepEqual(workflow.jobs['verify-sites'].env, { BASE_URL: '${{ matrix.url }}', SITE_CATALOG: '${{ matrix.site }}' });
+  assert.deepEqual(Object.keys(workflow.jobs['verify-sites'].env), ['BASE_URL', 'SITE_CATALOG', 'SITE_DIGEST', 'SITE_MARKER']);
+  assert.deepEqual({ BASE_URL: workflow.jobs['verify-sites'].env.BASE_URL, SITE_CATALOG: workflow.jobs['verify-sites'].env.SITE_CATALOG }, { BASE_URL: '${{ matrix.url }}', SITE_CATALOG: '${{ matrix.site }}' });
 });
