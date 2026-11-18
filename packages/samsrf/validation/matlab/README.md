@@ -2445,6 +2445,10 @@ figures are the web engine in Node against source MATLAB (run 42928350417), with
 no compiled image. Base is the committed module `d5ae6ba2`. The stored order is
 the canonical module `ab4aeb60` (commit 4ad82aad2), whose maps equal its local
 rebuild. Production was verified on canonical module `e0f7f12a` at commit `6c6ddde2`.
+After restoring base behavior for NaN hull areas, canonical build
+[44240894061](https://github.com/neurodesk/webapps/actions/runs/44240894061)
+produced module `afbe5110`. Both host matrices on that module retain all 234
+raw-map and GIfTI files per host byte for byte.
 
 **How MATLAB splits rings.** On the CF template shapes, MATLAB's recorded rings
 are mostly the port's cleaned rings re-paired at shared vertices. The re-pairing
