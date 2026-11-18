@@ -1,74 +1,12 @@
 {
   "numerics": {
-    "equal": 21,
+    "equal": 23,
     "of": 23,
-    "misses": [
-      {
-        "id": "blas_n8",
-        "equal": [
-          true,
-          false
-        ],
-        "actual": [
-          "8d600d551e8dd83f",
-          "0642a5e940a372bf"
-        ],
-        "expected": [
-          "8d600d551e8dd83f",
-          "0942a5e940a372bf"
-        ]
-      },
-      {
-        "id": "blas_n17",
-        "equal": [
-          true,
-          false
-        ],
-        "actual": [
-          "3e02ae33722adb3f",
-          "fee0fe5e2c9361bf"
-        ],
-        "expected": [
-          "3e02ae33722adb3f",
-          "04e1fe5e2c9361bf"
-        ]
-      }
-    ]
+    "misses": []
   },
   "numerics2": {
-    "equal": 21,
+    "equal": 23,
     "of": 23,
-    "misses": [
-      {
-        "id": "blas_n8",
-        "equal": [
-          true,
-          false
-        ],
-        "actual": [
-          "8d600d551e8dd83f",
-          "0642a5e940a372bf"
-        ],
-        "expected": [
-          "8d600d551e8dd83f",
-          "0942a5e940a372bf"
-        ]
-      },
-      {
-        "id": "blas_n17",
-        "equal": [
-          true,
-          false
-        ],
-        "actual": [
-          "3e02ae33722adb3f",
-          "fee0fe5e2c9361bf"
-        ],
-        "expected": [
-          "3e02ae33722adb3f",
-          "04e1fe5e2c9361bf"
-        ]
-      }
-    ]
+    "misses": []
   }
 }

@@ -45,11 +45,13 @@ norm candidate for both parts of a centred complex vector. It keeps the existing
 Intel kernels and the shipped single/complex least-squares routines. The norm remains
 a candidate with two known real-correlation near-tie misses; no threshold is added.
 
-A preliminary reconstruction of the 23 finite recorded complex correlations matches
-21 on both Intel hosts, with imaginary-part misses at n=8 and n=17. The same reconstruction
-with shipped AMD arithmetic matches 18/23 AMD, so this is not a validated centring/stage
-oracle. Record these misses; do not select another dot or norm from them. Additional
-centred-stage recordings would distinguish a centring error from a dot or norm error.
+The reconstruction matches all 23 finite recorded complex correlations on both Intel
+hosts and both AMD controls. Independent review found that the original diagnostic
+incorrectly forced four accumulation lanes for complex means below 44 elements; the
+engine uses one lane there, for both real and complex means. Correcting the diagnostic
+removes its two Intel and five AMD misses without changing any kernel or pipeline.
+The recorded final correlations corroborate the candidate on these seen inputs; they
+do not identify unrecorded intermediate stages or establish general MATLAB parity.
 
 ## Evaluation and stop rule
 
@@ -124,13 +126,9 @@ cases and 672 ORMQR probes provide staged evidence for the remaining least-squar
 The previous departure table includes the 22 chains that first diverge after reflector 1;
 this experiment does not replace that table or identify the whole single path.
 
-For the two unresolved short complex correlations, the minimal additional recording would
-replay the existing n=8 and n=17 z/y input bytes and save `mean(z)`, `mean(y)`, the centred
-vectors, their mixed complex/real product, each centred norm, both successive divisions,
-and `corr(z,y)`. This distinguishes the hypotheses that the port's centring is wrong, the
-raw-dot rule does not transfer to centred inputs, or the correctly rounded norm differs.
-The fixed model predicts the raw dots exactly; the proposed centred-stage values must be
-written and hashed before any future execution. Do not tune a rounding band from a miss.
+The diagnostic correction removes the reason for the earlier proposed n=8/n=17
+centred-stage recording. No new recording is needed to resolve those reported misses.
+The two separate real-norm near-tie misses remain unresolved; no rounding band is adopted.
 
 A separate cancellation/fusion probe would test the raw-dot candidate beyond the present
 24 vectors: lengths around multiples of four, independent real and imaginary cancellation
@@ -151,7 +149,8 @@ python3 dot_candidates.py "$PINS" NEW_DOT_REPORT.json
 python3 correlation_replay.py "$PINS" NEW_CORRELATION_REPORT.json
 ```
 
-The portable correlation script reproduces `correlation-1.json` and
+Projecting each recording's `intel` or `amd` result from the portable correlation
+script onto `equal`, `of` and `misses` reproduces `correlation-1.json` and
 `correlation-amd-control.json`; n=1 is excluded from its finite count. The Rust gate
 `complex_dot_candidate_matches_seen_raw_vectors_on_both_intel_hosts` uses the
 `SAMSRF_MATLAB_NUMERICS_DIR` and `SAMSRF_MATLAB_NUMERICS2_DIR` fixtures. It compares both

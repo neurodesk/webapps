@@ -20,10 +20,10 @@ MODELS = {
 }
 
 
-def mean(values, complex_part=False):
+def mean(values):
     lanes = [0.0] * 4
     for i, value in enumerate(values):
-        lanes[i % 4 if complex_part or len(values) >= 44 else 0] += value
+        lanes[i % 4 if len(values) >= 44 else 0] += value
     total = 0.0
     for value in lanes:
         total += value
@@ -48,8 +48,8 @@ def replay(pins):
                 zr, zi, y = array(directory, case['z']), array(directory, case['z'], True), array(directory, case['y'])
                 if len(y) == 1:
                     continue
-                zr = [value - mean(zr, True) for value in zr]
-                zi = [value - mean(zi, True) for value in zi]
+                zr = [value - mean(zr) for value in zr]
+                zi = [value - mean(zi) for value in zi]
                 y = [value - mean(y) for value in y]
                 norm = cr_nrm2 if role == 'intel' else ref_nrm2
                 nx, ny = norm([v for pair in zip(zr, zi, strict=True) for v in pair]), norm(y)
