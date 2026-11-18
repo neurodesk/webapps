@@ -219,10 +219,10 @@ job pages and its one complete UTC day 240, so on a busy day the cap can leave
 the job measures unavailable. Of the 980 pages, 235 list runs of report-only
 workflows (185 `workflow_run` reporter runs and 50 scheduled reports). The
 report still reads them: they give the report role's 131 job minutes and tell a
-run that started no job from one that only reported. Two other pull requests of
-the CI optimisation program of November 2026 lower the need: one replaces the
-two `workflow_run` reporters with one scheduled reporter, and one replaces the
-194 runs that only ran a gate with one native run per pull request.
+run that started no job from one that only reported. `workflow-reports.yml`
+has since replaced the two `workflow_run` reporters with four scheduled runs a
+day, and another pull request of the CI optimisation program of November 2026
+replaces the 194 runs that only ran a gate with one native run per pull request.
 
 ### Enforcement in CI
 

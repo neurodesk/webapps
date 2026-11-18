@@ -45,7 +45,10 @@ export const READY_ONLY_CI_JOBS = Object.freeze(['full-plan', 'full-plan-withhel
 export const DEPLOY_WORKFLOW = Object.freeze({ name: 'deploy-github-pages', file: 'deploy-pages.yml' });
 
 // Every workflow by its `name:`. In a `test` workflow the reusable gate's jobs
-// (`gate / decide`) plan and every other job tests.
+// (`gate / decide`) plan and every other job tests. A workflow removed from the
+// tree keeps its entry while the daily report can still list its runs:
+// code-quality, dependency-quality, mutation-quality, unused-code (now quality)
+// and the two workflow_run reporters (now workflow failure reports).
 const TEST = 'test';
 export const WORKFLOWS = Object.freeze({
   ci: CI_JOBS,
@@ -91,6 +94,7 @@ export const WORKFLOWS = Object.freeze({
   'node-cli': TEST,
   'node-drivers': TEST,
   'qsmbly-native': TEST,
+  quality: TEST,
   'samsrf-native': TEST,
   'sct-full-tests': TEST,
   'sdc-native': TEST,
@@ -118,6 +122,7 @@ export const WORKFLOWS = Object.freeze({
   'CI approval report': 'report',
   'ci-usage': 'report',
   'scheduled workflow failure reports': 'report',
+  'workflow failure reports': 'report',
 });
 
 const GATE_JOB = /^gate( \/ |$)/;

@@ -53,19 +53,19 @@ test('a job a renamed workflow or ci job ran is unclassified, not dropped', () =
   assert.equal(jobRole('ci', 'site-build'), 'unclassified');
   assert.equal(jobRole('ants-native', 'gate / decide'), 'plan');
   assert.equal(jobRole('ants-native', 'portable / linux-x64'), 'test');
-  assert.equal(jobRole('quality', 'lint'), 'unclassified');
+  assert.equal(jobRole('lint-suite', 'lint'), 'unclassified');
   assert.equal(jobRole('constructor', 'lint'), 'unclassified');
 
   // A run of an unknown workflow that started no job is listed too.
-  const runs = [run({ name: 'quality', id: 1 }), run({ id: 2 }), run({ name: 'constructor', id: 3, conclusion: 'skipped' })];
+  const runs = [run({ name: 'lint-suite', id: 1 }), run({ id: 2 }), run({ name: 'constructor', id: 3, conclusion: 'skipped' })];
   const jobs = new Map([[1, [job('lint', 7)]], [2, [job('site-build', 3), job('app-plan', 1)]]]);
   const minutes = minutesByRole(runs, jobs);
   assert.equal(minutes.total, 11);
   assert.equal(minutes.roles.unclassified, 10);
-  assert.deepEqual(minutes.unclassified, [{ name: 'quality', minutes: 7 }, { name: 'ci: site-build', minutes: 3 }, { name: 'constructor', minutes: 0 }]);
+  assert.deepEqual(minutes.unclassified, [{ name: 'lint-suite', minutes: 7 }, { name: 'ci: site-build', minutes: 3 }, { name: 'constructor', minutes: 0 }]);
   const text = measuresMarkdown(summarizeMeasures({ runs, jobs, pullRequests: [], deploys: [] }));
   assert.match(text, /plan 1, .*unclassified 10\./);
-  assert.match(text, /- quality: 7 min\n- ci: site-build: 3 min\n- constructor: 0 min/);
+  assert.match(text, /- lint-suite: 7 min\n- ci: site-build: 3 min\n- constructor: 0 min/);
 });
 
 let nextId = 100;
@@ -207,6 +207,7 @@ test('runs that tested nothing are skipped, jobless, report-only or plan-only', 
     run({}),
     run({ name: DEPLOY_WORKFLOW.name, event: 'push' }),
     run({ name: 'quality' }),
+    run({ name: 'workflow failure reports', event: 'schedule' }),
   ];
   const jobs = new Map([
     // Cancelled before a runner took its only job.
@@ -215,9 +216,17 @@ test('runs that tested nothing are skipped, jobless, report-only or plan-only', 
     [runs[3].id, [job('gate / decide', 1), job('portable / linux-x64', 0, 'skipped')]],
     [runs[4].id, [job('app-plan', 1), job('workspace-contracts', 9)]],
     [runs[5].id, [job('deploy', 2)]],
-    [runs[6].id, [job('lint', 2)]],
+    [runs[6].id, [job('correctness', 2)]],
+    [runs[7].id, [job('report', 1)]],
   ]);
-  assert.deepEqual(idleRuns(runs, jobs), { runs: 7, idle: 4, share: 4 / 7, reasons: { skipped: 1, 'no job': 1, 'report only': 1, 'plan or gate only': 1 } });
+  assert.deepEqual(idleRuns(runs, jobs), { runs: 8, idle: 5, share: 5 / 8, reasons: { skipped: 1, 'no job': 1, 'report only': 2, 'plan or gate only': 1 } });
+});
+
+test('a workflow removed from the tree keeps its role while its runs are in the daily window', () => {
+  for (const name of ['code-quality', 'dependency-quality', 'mutation-quality', 'unused-code']) assert.equal(jobRole(name, 'report'), 'test', name);
+  for (const name of ['Apple notarization alert', 'scheduled workflow failure reports']) assert.equal(jobRole(name, 'report'), 'report', name);
+  for (const name of ['correctness', 'unused-code', 'dependencies', 'mutation']) assert.equal(jobRole('quality', name), 'test', name);
+  assert.equal(jobRole('workflow failure reports', 'report'), 'report');
 });
 
 test('cancelled runs keep the job minutes they used', () => {
