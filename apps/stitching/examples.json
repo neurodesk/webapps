@@ -124,6 +124,11 @@
         "sha256": "90e9868dc6e6c4cf4befe2da9d9d7ef792421aa93f1c4305dac9ceddaa6d94fc",
         "bytes": 672
       }
-    ]
+    ],
+    "automation": {
+      "roles": {
+        "tile": "tiles"
+      }
+    }
   }
 ]

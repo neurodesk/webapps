@@ -47,7 +47,13 @@
         "sha256": "d66a304a9a7242b65fd0a6229a785ee6e115fe995ca69bdd4e5b4a0f4ae54a3f",
         "bytes": 882
       }
-    ]
+    ],
+    "automation": {
+      "roles": {
+        "echo": "echoes",
+        "metadata": "sidecars"
+      }
+    }
   },
   {
     "id": "motor-3echo-moco",
@@ -104,6 +110,12 @@
         "sha256": "c428c20f417dc358b90b77f3a1de5cc8c864d30ddf4da9e2f6535f60119ddc77",
         "bytes": 38818
       }
-    ]
+    ],
+    "automation": {
+      "roles": {
+        "echo": "echoes",
+        "metadata": "sidecars"
+      }
+    }
   }
 ]

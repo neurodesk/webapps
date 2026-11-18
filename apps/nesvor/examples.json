@@ -48,6 +48,11 @@
         "sha256": "d3675b1ceedebc7ae85023e105ccf4af1497532260018ce521d73b3dd9de4c98",
         "bytes": 1274175
       }
-    ]
+    ],
+    "automation": {
+      "roles": {
+        "stack": "stacks"
+      }
+    }
   }
 ]

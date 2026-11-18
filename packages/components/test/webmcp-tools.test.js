@@ -18,6 +18,9 @@ const contract = () => ({ schemaVersion: 2, app: 'test', title: 'Test', descript
 const examples = [
   { id: 'head', label: 'Head', description: 'A head.', expectedResult: 'Labels.', files: [{ role: 'image', name: 'head.nii', url: 'https://example.test/head.nii', sha256: 'a'.repeat(64), bytes: 4 }] },
   { id: 'other', label: 'Other', description: 'Wrong role.', expectedResult: 'None.', files: [{ role: 'scan', name: 'scan.nii', url: 'https://example.test/scan.nii' }] },
+  { id: 'mapped', label: 'Mapped', description: 'Its own role names.', expectedResult: 'Labels.', automation: { roles: { scan: 'image', notes: null }, reason: 'The notes are for people.' },
+    files: [{ role: 'scan', name: 'scan.nii', url: 'https://example.test/scan.nii', bytes: 4 }, { role: 'notes', name: 'notes.txt', url: 'https://example.test/notes.txt' }] },
+  { id: 'remote', label: 'Remote', description: 'On a server.', expectedResult: 'None.', automation: { unavailable: 'Its data stay on the compute server.' }, files: [{ role: 'image', name: 'x.nii', url: 'https://example.test/x.nii' }] },
 ];
 
 function page(t, operation, options = {}) {
@@ -172,13 +175,20 @@ test('inputs_load_example verifies each file through the fetcher and holds it fo
     return new TextEncoder().encode('head').buffer;
   } });
   const describe = await call('app_describe');
-  assert.deepEqual(describe.examples.map(example => example.id), ['head'], 'an example whose roles the contract lacks is not offered');
+  assert.deepEqual(describe.examples.map(example => example.id), ['head', 'mapped'], 'an example whose roles the contract lacks is not offered');
+  assert.deepEqual(describe.examples[1].roles, ['image']);
+  assert.equal(describe.examples[1].omitted, 'The notes are for people.');
+  assert.deepEqual(describe.unavailableExamples, [
+    { id: 'other', label: 'Other', reason: 'Its scan file scan.nii matches no input of this application.' },
+    { id: 'remote', label: 'Remote', reason: 'Its data stay on the compute server.' },
+  ]);
   assert.equal(describe.operations.run.tool, 'run_run');
   assert.equal(describe.run.state, 'idle');
   assert.deepEqual(describe.viewers, []);
   assert.deepEqual(await call('inputs_load_example', { exampleId: 'head' }), { exampleId: 'head', inputs: { image: [{ name: 'head.nii', bytes: 4 }] } });
   assert.deepEqual(fetched, [{ asset: { url: 'https://example.test/head.nii', integrity: { bytes: 4, sha256: 'a'.repeat(64) } }, retries: 4 }]);
-  assert.match((await call('inputs_load_example', { exampleId: 'other' })).error.message, /unloadable example/);
+  assert.match((await call('inputs_load_example', { exampleId: 'remote' })).error.message, /cannot be loaded here: Its data stay on the compute server/);
+  assert.deepEqual((await call('inputs_load_example', { exampleId: 'mapped' })).inputs, { image: [{ name: 'scan.nii', bytes: 4 }] });
   assert.equal((await call('run_run')).state, 'succeeded');
   assert.equal((await call('viewers_state', { viewerId: 'main' })).error.message, 'Unknown viewer: main');
   assert.deepEqual(await call('viewers_list'), { viewers: [] });
@@ -234,7 +244,7 @@ test('the page module registers the tools for an app that registers before or af
     if (order === 'tools first') register();
     assert.equal((await exposed).failed.length, 0, order);
     const call = (name, input = {}) => registered.get(name).execute(input, { signal: new AbortController().signal });
-    assert.deepEqual((await call('app_describe')).examples.map(example => example.id), ['head'], 'the page\'s example selector supplies the examples');
+    assert.deepEqual((await call('app_describe')).examples.map(example => example.id), ['head', 'mapped'], 'the page\'s example selector supplies the examples');
     const request = call('inputs_request_files', { role: 'image' });
     let field;
     while (!(field = document.querySelector('#neurodeskAgentPrompt nd-file-field'))) await new Promise(resolve => setTimeout(resolve, 5));

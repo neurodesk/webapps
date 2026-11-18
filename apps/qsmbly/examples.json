@@ -35,6 +35,12 @@
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ee7566df698ad9b1d0cd1e8fe65ac9ccc671657f/examples/qsmbly/real-brain-qsm/sub-170705134431std1312211075243167001_ses-1_run-1_part-phase_T2starw.json",
         "bytes": 1968
       }
-    ]
+    ],
+    "automation": {
+      "roles": {
+        "metadata": null
+      },
+      "reason": "The JSON sidecars are left out: pass their echo time and field strength as echoTimesMs [20] and fieldStrength 3."
+    }
   }
 ]

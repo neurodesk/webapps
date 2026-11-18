@@ -1,5 +1,6 @@
 import { fetchModel } from '../worker/fetchModel.js';
 import { convertsDicom } from '../automation/files.js';
+import { exampleInputs } from './examples.js';
 
 const terminal = new Set(['idle', 'succeeded', 'failed', 'cancelled']);
 const POLL_MS = 250;
@@ -102,7 +103,8 @@ function failure(error) {
  */
 export function webMcpTools({ contract, dispatch, inputs, examples = () => [], fetchAsset = fetchModel, askUser, requestFiles }) {
   const roles = fileRoles(contract);
-  const loadable = example => !example.rotation && example.files?.length > 0 && example.files.every(file => roles.has(file.role));
+  // A rotation entry cycles through examples that are offered on their own.
+  const catalog = async () => (await examples()).filter(example => !example.rotation).map(example => ({ example, ...exampleInputs(example, roles) }));
   const runTools = Object.fromEntries(Object.keys(contract.operations).map(name => [name, toolName(name)]));
   const tools = [];
   const tool = (name, title, description, inputSchema, annotations, execute) => tools.push({
@@ -117,7 +119,7 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
   });
 
   tool('app_describe', 'Describe this application',
-    `Read what ${contract.title} does: its operations with their inputs, parameters and outputs, its examples, its viewers, the current run and the files each input role holds.`,
+    `Read what ${contract.title} does: its operations with their inputs, parameters and outputs, its examples (and why any cannot be loaded), its viewers, the current run and the files each input role holds.`,
     object({}), { ...readOnly, ...untrusted },
     async () => ({
       app: contract.app,
@@ -126,9 +128,10 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
       appVersion: contract.appVersion,
       defaultOperation: contract.defaultOperation,
       operations: Object.fromEntries(Object.entries(contract.operations).map(([name, operation]) => [name, { tool: runTools[name], ...structuredClone(operation) }])),
-      examples: (await examples()).filter(loadable).map(({ id, label, description, expectedResult, files }) => ({
-        id, label, description, expectedResult, roles: [...new Set(files.map(file => file.role))],
+      examples: (await catalog()).filter(entry => entry.files).map(({ example: { id, label, description, expectedResult }, files, omitted }) => ({
+        id, label, description, expectedResult, roles: [...new Set(files.map(file => file.role))], ...(omitted && { omitted }),
       })),
+      unavailableExamples: (await catalog()).filter(entry => entry.unavailable).map(({ example: { id, label }, unavailable }) => ({ id, label, reason: unavailable })),
       viewers: await dispatch('viewers.list'),
       run: await dispatch('snapshot'),
       inputs: inputs.held(),
@@ -153,10 +156,11 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
     'Download one of the application\'s examples, verify its checksums and hold its files as the input for the next run.',
     object({ exampleId: { type: 'string', description: 'An example ID from app_describe' } }, ['exampleId']), {},
     async ({ exampleId }, { signal }) => {
-      const example = (await examples()).find(item => item.id === exampleId);
-      if (!example || !loadable(example)) throw new Error(`Unknown or unloadable example: ${exampleId}`);
+      const entry = (await catalog()).find(item => item.example.id === exampleId);
+      if (!entry) throw new Error(`Unknown example: ${exampleId}`);
+      if (entry.unavailable) throw new Error(`Example ${exampleId} cannot be loaded here: ${entry.unavailable}`);
       const files = new Map();
-      for (const asset of example.files) {
+      for (const asset of entry.files) {
         const bytes = await fetchAsset({ url: asset.url, integrity: { bytes: asset.bytes, sha256: asset.sha256 } }, { signal, retries: 4 });
         files.set(asset.role, [...(files.get(asset.role) ?? []), new File([bytes], asset.name)]);
       }
