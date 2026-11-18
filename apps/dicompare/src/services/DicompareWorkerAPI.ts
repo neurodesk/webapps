@@ -32,12 +32,14 @@ export class DicompareWorkerAPI {
   private requestId = 0;
   private initializationPromise: Promise<void> | null = null;
   private initialized = false;
+  private workerStarted = false;
 
   constructor() {
     this.createWorker();
   }
 
   private createWorker(): void {
+    this.workerStarted = false;
     // Create worker using Vite's worker import syntax
     this.worker = new Worker(
       new URL('../workers/pyodide.worker.ts', import.meta.url),
@@ -49,16 +51,19 @@ export class DicompareWorkerAPI {
     // normal 'error' message, so without this every in-flight request would hang
     // forever. Reject them all and rebuild the worker so the app can recover.
     this.worker.onerror = (event) => {
-      console.error('[DicompareWorkerAPI] Worker error:', event);
-      this.handleWorkerCrash(
-        new Error(`Worker crashed: ${event.message || 'unknown fatal error'}`)
-      );
+      const detail = event.message?.trim();
+      const message = detail
+        ? `Worker crashed: ${detail}`
+        : (this.workerStarted || this.initialized)
+          ? 'Processing worker stopped unexpectedly (often low device memory)'
+          : 'Worker failed to start';
+      console.error('[DicompareWorkerAPI]', message, event);
+      this.handleWorkerCrash(new Error(message));
     };
     this.worker.onmessageerror = (event) => {
-      console.error('[DicompareWorkerAPI] Worker message error:', event);
-      this.handleWorkerCrash(
-        new Error('Worker received an undeserializable message')
-      );
+      const message = 'Worker message could not be deserialized (often low device memory)';
+      console.error('[DicompareWorkerAPI]', message, event);
+      this.handleWorkerCrash(new Error(message));
     };
   }
 
@@ -104,6 +109,7 @@ export class DicompareWorkerAPI {
   }
 
   private handleMessage(event: MessageEvent<WorkerResponse>): void {
+    this.workerStarted = true;
     const response = event.data;
 
     // Handle ready message (no id)

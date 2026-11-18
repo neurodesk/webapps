@@ -235,7 +235,10 @@ function appendConsoleError(doc, message, { avoidDuplicateSubstring = '' } = {})
   if (consoleContainsText(doc, message)) return true;
   const ndConsole = doc.querySelector('nd-console');
   if (ndConsole && typeof ndConsole.log === 'function') {
-    ndConsole.log(message, 'error');
+    const channel = Array.isArray(ndConsole.channels) && ndConsole.channels.includes('technical')
+      ? 'technical'
+      : undefined;
+    ndConsole.log(message, 'error', channel);
     return true;
   }
   const output = doc.querySelector(CONSOLE_OUTPUT_SELECTOR);
@@ -277,8 +280,10 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
   let loaded = false;
   let immediateActiveDetail = '';
   let recoveredFailure = null;
+  let activeRunFailure = null;
   let pendingConsoleMessage = '';
   const lostCanvases = new Set();
+  let webglNoticeDispatched = false;
   let cleanedUp = false;
   let unloading = false;
   let reconcileTimer = null;
@@ -453,6 +458,7 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
   function markWorkflowStart(detail) {
     interacted = true;
     recoveredFailure = null;
+    activeRunFailure = null;
     pruneDisconnectedLostCanvases();
     view?.coiHoldReloads?.();
     immediateActiveDetail = cleanText(detail).slice(0, 80);
@@ -515,13 +521,34 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
     }
   }
 
+  function flushActiveRunFailure() {
+    if (!activeRunFailure || applying || view?.[STATUS_MANAGED_KEY]) return;
+    if (!currentSessionState().active) {
+      activeRunFailure = null;
+      return;
+    }
+    const statusEl = findStatusElement(doc);
+    if (!statusEl) return;
+    const current = cleanText(statusEl.textContent);
+    if (current !== activeRunFailure.status && ACTIVE_STATUS_VERB.test(current)) {
+      applying = true;
+      try {
+        writeStatusError(doc, view, activeRunFailure.status);
+      } finally {
+        applying = false;
+      }
+    }
+  }
+
   function onRuntimeError(event) {
     const candidate = event?.error ?? event?.reason ?? event?.message ?? event;
     if (!isMemoryErrorMessage(candidate)) return;
     const raw = errorText(candidate);
+    const active = currentSessionState().active;
     recoveredFailure = null;
     immediateActiveDetail = '';
     const formatted = formatMemoryError(raw);
+    activeRunFailure = active ? formatted : null;
     // Surface the OOM explanation in #statusText.error and the technical log;
     // writeStatusError leaves <progress>, Cancel and #neurodesk-run untouched.
     applyFailure(formatted, { preserveRawSubstring: raw });
@@ -541,12 +568,37 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
     }
   }
 
+  function hasVisibleLostCanvas() {
+    pruneDisconnectedLostCanvases();
+    for (const entry of lostCanvases) {
+      if (typeof entry.checkVisibility !== 'function' || entry.checkVisibility()) return true;
+    }
+    return false;
+  }
+
+  function reconcileLostCanvases() {
+    if (applying || !hasVisibleLostCanvas()) return;
+    if (currentSessionState().active) return;
+    const formatted = formatMemoryError('WebGL context lost', { kind: 'webgl' });
+    if (view?.[STATUS_MANAGED_KEY]) {
+      if (!webglNoticeDispatched) {
+        webglNoticeDispatched = true;
+        applyFailure(formatted);
+      }
+      return;
+    }
+    const statusEl = findStatusElement(doc);
+    if (!statusEl || statusEl.classList.contains('error')) return;
+    recoveredFailure = null;
+    applyFailure(formatted);
+    syncCheckpoint();
+  }
+
   function onWebglContextLost(event) {
     const canvas = event?.target;
     if (!isViewerCanvas(canvas)) return;
     const check = () => {
       if (cleanedUp || !canvas.isConnected) return;
-      if (typeof canvas.checkVisibility === 'function' && !canvas.checkVisibility()) return;
       pruneDisconnectedLostCanvases();
       lostCanvases.add(canvas);
       const formatted = formatMemoryError('WebGL context lost', { kind: 'webgl' });
@@ -554,9 +606,7 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
         appendConsoleError(doc, formatted.log);
         return;
       }
-      recoveredFailure = null;
-      applyFailure(formatted);
-      syncCheckpoint();
+      reconcileLostCanvases();
     };
     if (typeof queueMicrotask === 'function') queueMicrotask(check);
     else check();
@@ -567,6 +617,7 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
     pruneDisconnectedLostCanvases();
     if (!canvas || !lostCanvases.delete(canvas)) return;
     if (lostCanvases.size > 0) return;
+    webglNoticeDispatched = false;
     const statusEl = findStatusElement(doc);
     const expected = formatMemoryError('WebGL context lost', { kind: 'webgl' }).status;
     if (statusEl && cleanText(statusEl.textContent) === expected) {
@@ -581,6 +632,7 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
   }
 
   function onVisibilityChange() {
+    reconcileLostCanvases();
     syncCheckpoint();
   }
 
@@ -603,7 +655,9 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
     ? new view.MutationObserver(() => {
       if (applying) return;
       flushPendingRecovery();
+      flushActiveRunFailure();
       inspectLiveErrors();
+      reconcileLostCanvases();
       syncCheckpoint();
     })
     : null;

@@ -110,12 +110,15 @@ export async function verifyMobileMemoryCrash(page, origin) {
     await expect(crashPage.locator('#statusText')).toHaveText('Drag and drop files');
     await expect(crashPage.locator('#statusText')).not.toHaveClass(/\berror\b/);
 
-    // 2. Drive the real workflow again (load NIfTI + click #runSegmentation), then
-    //    force-crash the Chromium renderer mid-run via CDP Page.crash and revive the
-    //    EXACT same tab target via CDP Page.navigate so its real sessionStorage is used.
+    // 2. Drive the real workflow again (load NIfTI + click #runSegmentation), wait for
+    //    MuscleMap's own Cancel control and past the 250 ms click bridge so the app's
+    //    live running state owns the checkpoint, then force-crash the Chromium renderer
+    //    mid-run via CDP Page.crash and revive the EXACT same tab target.
     await crashPage.locator('#fileInput').setInputFiles(niftiInput);
     await expect(crashPage.locator('#runSegmentation')).toBeEnabled();
     await crashPage.locator('#runSegmentation').click();
+    await expect(crashPage.locator('#cancelButton')).toBeVisible();
+    await crashPage.waitForTimeout(300);
     await expect.poll(() => crashPage.evaluate(() => {
       const raw = window.sessionStorage.getItem('neurodesk-memory-guard:/musclemap/');
       return raw ? JSON.parse(raw).active === true : false;

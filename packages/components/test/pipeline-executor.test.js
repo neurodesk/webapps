@@ -137,6 +137,14 @@ test('a mid-run worker crash terminates the dead worker, rejects pending restore
   // 4. Subsequent run() spawns another fresh worker.
   await executor.run({ label: 'segmentation' });
   assert.equal(workers.length, 3);
+
+  // 5. A fatal worker message (such as installWorkerRouter unhandledrejection) discards the worker so retry starts fresh.
+  executor.handleMessage({ type: 'error', message: 'Out of memory', fatal: true });
+  assert.equal(workers[2].terminated, true);
+  assert.equal(executor.isReady(), false);
+  await executor.run({ label: 'segmentation' });
+  assert.equal(workers.length, 4);
+  assert.equal(executor.isReady(), true);
 });
 
 test('synchronous postMessage throws and init timeouts clear the failed session so retry spawns a fresh worker', async () => {

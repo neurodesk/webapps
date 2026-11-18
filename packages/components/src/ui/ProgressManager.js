@@ -24,6 +24,7 @@ export class ProgressManager {
     this.lastAnimationTime = 0;
     this.timer = null;
     this.startedAt = 0;
+    this.pinnedError = false;
     const doc = this.textElement?.ownerDocument;
     if (doc) doc[PROGRESS_MANAGER_KEY] = this;
   }
@@ -38,13 +39,21 @@ export class ProgressManager {
     this.targetProgress = next;
     this.animatedProgress = next;
     this.updateProgressBar();
-    if (text != null && this.textElement) this.textElement.textContent = String(text);
+    if (text != null && this.textElement && !this.pinnedError) {
+      if (this.textElement.classList?.contains('error')) this.textElement.classList.remove('error');
+      const nextText = String(text);
+      if (this.textElement.textContent !== nextText) this.textElement.textContent = nextText;
+    }
     this.stopAnimation();
   }
 
   setIndeterminate(text = 'Working...') {
     this.targetProgress = 0.98;
-    if (this.textElement) this.textElement.textContent = text;
+    if (this.textElement && !this.pinnedError) {
+      if (this.textElement.classList?.contains('error')) this.textElement.classList.remove('error');
+      const nextText = String(text);
+      if (this.textElement.textContent !== nextText) this.textElement.textContent = nextText;
+    }
     if (this.isNativeProgress) {
       this.barElement.removeAttribute('value');
       return;
@@ -54,14 +63,23 @@ export class ProgressManager {
 
   /** Show the message without touching the bar. */
   setText(text) {
+    if (!this.textElement || this.pinnedError) return;
+    if (this.textElement.classList?.contains('error')) this.textElement.classList.remove('error');
     const next = String(text);
-    if (this.textElement && this.textElement.textContent !== next) this.textElement.textContent = next;
+    if (this.textElement.textContent !== next) this.textElement.textContent = next;
   }
 
   /** Show an error message in the status bar without disturbing an active run's controls. */
   setError(text) {
-    this.setText(text);
-    if (this.textElement && !this.textElement.classList.contains('error')) {
+    const activeRun = Boolean(
+      this.timer
+      || (this.cancelElement && !this.cancelElement.hidden && !this.cancelElement.disabled),
+    );
+    this.pinnedError = activeRun;
+    if (!this.textElement) return;
+    const next = String(text);
+    if (this.textElement.textContent !== next) this.textElement.textContent = next;
+    if (!this.textElement.classList.contains('error')) {
       this.textElement.classList.add('error');
     }
   }
@@ -100,6 +118,7 @@ export class ProgressManager {
 
   /** A run begins: message, indeterminate bar, timer and cancel. */
   begin(text = 'Working…', { cancellable = true } = {}) {
+    this.pinnedError = false;
     if (this.textElement?.classList?.contains('error')) this.textElement.classList.remove('error');
     this.setIndeterminate(text);
     this.startTimer();
@@ -108,10 +127,18 @@ export class ProgressManager {
 
   /** A run ends: final message, full or empty bar, frozen timer, no cancel. */
   end(text, { success = true } = {}) {
-    if (success && this.textElement?.classList?.contains('error')) this.textElement.classList.remove('error');
+    const label = text == null ? null : String(text);
+    const preservePinned = !success && this.pinnedError && /^(?:failed|error)$/i.test((label || '').trim());
+    this.pinnedError = false;
+    if ((success || /^cancelled$/i.test((label || '').trim())) && this.textElement?.classList?.contains('error')) {
+      this.textElement.classList.remove('error');
+    }
     this.stopTimer();
     this.setCancellable(false);
-    this.setProgress(success ? 1 : 0, text);
+    this.setProgress(success ? 1 : 0, null);
+    if (!preservePinned && label != null && this.textElement && this.textElement.textContent !== label) {
+      this.textElement.textContent = label;
+    }
   }
 
   startAnimation() {
@@ -141,6 +168,7 @@ export class ProgressManager {
   }
 
   reset(text = 'Ready') {
+    this.pinnedError = false;
     if (this.textElement?.classList?.contains('error')) this.textElement.classList.remove('error');
     this.stopTimer(true);
     this.setCancellable(false);

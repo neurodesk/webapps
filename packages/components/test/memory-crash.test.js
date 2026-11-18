@@ -331,6 +331,27 @@ test('live OOM errors route through shared owners, respect ConsoleOutput line ca
   assert.match(appConsole.getText(), /Browser memory limit exceeded/);
   assert.match(legacyPage.window.document.getElementById('statusText').textContent, /Out of browser memory/);
 
+  // Dual-channel console (<nd-console channels="analysis:Analysis,technical:Technical">)
+  // routes lifecycle/memory diagnostics to Technical without polluting Analysis.
+  const dualDom = new JSDOM(`<!doctype html><html><body>
+    <main id="viewer"></main>
+    <footer id="status"><span id="statusText" class="nd-status-text">RangeError: Out of memory</span></footer>
+  </body></html>`, { url: 'https://webapps.neurodesk.org/samsrf/', pretendToBeVisual: true });
+  const dualConsole = createConsole({
+    id: 'dualLog',
+    channels: 'analysis:Analysis,technical:Technical',
+  }, dualDom.window.document);
+  dualDom.window.document.getElementById('viewer').append(dualConsole);
+  assert.equal(dualConsole.activeChannel, 'analysis');
+  const dualMonitor = bindMemoryCrashMonitor(dualDom.window.document);
+  t.after(() => {
+    dualMonitor?.destroy();
+    dualDom.window.close();
+  });
+  assert.equal(dualConsole.activeChannel, 'technical');
+  assert.equal(dualConsole.getText('analysis'), '');
+  assert.match(dualConsole.getText('technical'), /Browser memory limit exceeded/);
+
   // React-managed status (dicompare) receives CustomEvent without direct DOM mutation.
   const reactDom = createWorkspaceDom(t, 'https://webapps.neurodesk.org/dicompare/', {
     'neurodesk-memory-guard:/dicompare/': { active: true, loaded: true, hidden: false, detail: 'Validating…', updatedAt: 1000 },
@@ -395,29 +416,37 @@ test('webglcontextlost and uncaught errors never disable active run cancellation
   assert.ok(statusText.classList.contains('error'));
   assert.match(page.log.getText(), /Browser memory limit exceeded/);
 
+  // Subsequent progress ticks keep moving the bar and leave Cancel active WITHOUT erasing the OOM notice!
+  page.progressManager.setProgress(0.75, 'Converting 75%…');
+  await waitMs(20);
+  assert.equal(progress.value, 0.75);
+  assert.equal(cancel.hidden, false);
+  assert.match(statusText.textContent, /Out of browser memory on this device/);
+  assert.ok(statusText.classList.contains('error'));
+
   // ProgressManager.reset() clears .error cleanly (e.g. Clear action in DCM2NIIX).
   page.progressManager.reset('Drag and drop files');
   assert.equal(statusText.textContent, 'Drag and drop files');
   assert.equal(statusText.classList.contains('error'), false);
 
-  // Finish the job so workspace is idle with loaded data.
+  // When the run finishes ("Done") while viewerCanvas is STILL lost from mid-run,
+  // the footer immediately surfaces the still-lost WebGL context instead of claiming "Done"!
   page.progressManager.end('Done');
   statusText.dataset.neurodeskState = 'succeeded';
   await waitMs(280);
+  assert.match(statusText.textContent, /Viewer graphics context lost/);
+  assert.ok(statusText.classList.contains('error'));
 
   // Non-viewer canvases (outside #viewer or inside .nd-chart) are ignored when idle.
   outsideCanvas.dispatchEvent(new page.window.Event('webglcontextlost'));
   chartCanvas.dispatchEvent(new page.window.Event('webglcontextlost'));
-  await waitMs(20);
-  assert.equal(statusText.textContent, 'Done');
-  assert.equal(progress.value, 1);
 
-  // viewerCanvas was ALREADY lost during the run; now secondViewerCanvas loses WebGL when idle.
-  // Restoring secondViewerCanvas alone must NOT clear the warning because viewerCanvas is still lost!
+  // A temporarily hidden viewer canvas losing WebGL is also tracked and prevents premature clear once shown.
+  secondViewerCanvas.hidden = true;
   secondViewerCanvas.dispatchEvent(new page.window.Event('webglcontextlost'));
   await waitMs(20);
-  assert.match(statusText.textContent, /Viewer graphics context lost/);
-  assert.ok(statusText.classList.contains('error'));
+  secondViewerCanvas.hidden = false;
+  await waitMs(20);
 
   outsideCanvas.dispatchEvent(new page.window.Event('webglcontextrestored'));
   chartCanvas.dispatchEvent(new page.window.Event('webglcontextrestored'));

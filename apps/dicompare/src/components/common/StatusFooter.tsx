@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { usePyodide } from '../../contexts/PyodideContext';
 import { useProcessing } from '../../contexts/ProcessingContext';
+import { formatMemoryError, isMemoryErrorMessage } from '@neurodesk/webapp-components/ui';
 import { clearRecoveryNotice, LogEntry, useActivity, useRecoveryNotice, useTechnicalLog } from '../../utils/technicalLog';
 
 function newestError(entries: LogEntry[]): LogEntry | null {
@@ -64,7 +65,7 @@ export function ActivityStatusFooter({ pyodide, isProcessing = false, processing
     const list = entriesRef.current;
     errorFloor.current = list.length ? list[list.length - 1].id : errorFloor.current;
     clearRecoveryNotice();
-  }, [workflowRunning]);
+  }, [workflowRunning, activity.startedAt]);
 
   useEffect(() => {
     if (!running) {
@@ -77,8 +78,15 @@ export function ActivityStatusFooter({ pyodide, isProcessing = false, processing
     return () => window.clearInterval(timer);
   }, [running]);
 
+  const activeProgress = isProcessing
+    ? (processingProgress ? processingProgress.percentage / 100 : null)
+    : activity.progress;
+
   let state: FooterState;
-  if (isProcessing) {
+  if (workflowRunning && lastError) {
+    // Keep live errors (such as uncaught OOMs) visible while progress and elapsed continue.
+    state = { message: lastError.message, progress: activeProgress, running: true, error: true };
+  } else if (isProcessing) {
     state = {
       message: processingProgress?.currentOperation || 'Processing files…',
       progress: processingProgress ? processingProgress.percentage / 100 : null,
@@ -99,7 +107,13 @@ export function ActivityStatusFooter({ pyodide, isProcessing = false, processing
   } else if (recoveryNotice) {
     state = { message: recoveryNotice, progress: 0, running: false, error: true };
   } else if (pyodide?.error) {
-    state = { message: `Analysis engine unavailable: ${pyodide.error}`, progress: 0, running: false, error: true };
+    const memoryError = isMemoryErrorMessage(pyodide.error) ? formatMemoryError(pyodide.error) : null;
+    state = {
+      message: memoryError ? memoryError.status : `Analysis engine unavailable: ${pyodide.error}`,
+      progress: 0,
+      running: false,
+      error: true,
+    };
   } else {
     state = {
       message: pyodide ? (pyodide.isReady ? 'Ready · load DICOMs, a protocol or a schema' : 'Starting…') : 'Ready',

@@ -146,7 +146,7 @@ export class PipelineExecutor {
         this.workerLog(data.message, data);
         break;
       case WorkerEventType.ERROR:
-        this.handleError(data.message || data.error || 'Worker failed');
+        this.handleError(data.message || data.error || 'Worker failed', { fatal: Boolean(data.fatal) });
         break;
       case WorkerEventType.INITIALIZED:
         this.workerReady = true;
@@ -194,7 +194,7 @@ export class PipelineExecutor {
     }
   }
 
-  handleError(message) {
+  handleError(message, { fatal = false } = {}) {
     const wasInitializing = this.workerInitializing;
     this.updateOutput(`Error: ${message}`);
     this.setProgress(0, 'Failed');
@@ -210,6 +210,9 @@ export class PipelineExecutor {
         this.workerSession.failureReason = message;
         this.terminateWorker();
       }
+    } else if (fatal && this.workerSession) {
+      this.workerSession.failed = true;
+      this.terminateWorker();
     }
     this.onError(message);
   }
