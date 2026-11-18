@@ -1,0 +1,119 @@
+{
+ "sizes": {
+  "D": 24,
+  "H1": 520,
+  "H2": 95,
+  "H2 amd": 95,
+  "H2 nonfinite excluded (both hosts)": 0
+ },
+ "ref": {
+  "D intel": 14,
+  "D amd": 24,
+  "H1 intel": 160,
+  "H1 amd": 520,
+  "H2 intel (a)": 70,
+  "H2 amd (a)": 95,
+  "H2 intel (b)": 52,
+  "H2 amd (b)": 72,
+  "H2 intel (c)": 50,
+  "H2 amd (c)": 64
+ },
+ "cr": {
+  "D intel": 24,
+  "D amd": 14,
+  "H1 intel": 519,
+  "H1 amd": 160,
+  "H2 intel (a)": 95,
+  "H2 amd (a)": 70,
+  "H2 intel (b)": 72,
+  "H2 amd (b)": 52,
+  "H2 intel (c)": 72,
+  "H2 amd (c)": 52
+ },
+ "dd-seq": {
+  "D intel": 24,
+  "D amd": 14,
+  "H1 intel": 519,
+  "H1 amd": 160,
+  "H2 intel (a)": 86,
+  "H2 amd (a)": 65,
+  "H2 intel (b)": 65,
+  "H2 amd (b)": 49,
+  "H2 intel (c)": 64,
+  "H2 amd (c)": 48
+ },
+ "misses": {
+  "cr": {
+   "H1": [
+    [
+     36,
+     226
+    ]
+   ],
+   "H2 (a)": [],
+   "H2 (c)": [
+    "glm_double_100_0",
+    "glm_double_10000_0",
+    "glm_double_1e+06_0",
+    "glm_double_1e+08_0",
+    "glm_double_1e+10_0",
+    "rank_double_n16_e-10_i0",
+    "rank_double_n16_e-9_i0",
+    "rank_double_n16_e-8_i0",
+    "rank_double_n16_e-7_i0",
+    "rank_double_n16_e-6_i0",
+    "rank_double_n16_e10_i0",
+    "rank_double_n250_e6_i0",
+    "rank_double_n250_e7_i0",
+    "rank_double_n250_e8_i0",
+    "rank_double_n250_e9_i0",
+    "rank_double_n250_e10_i0",
+    "nearly_constant_double_1e-07",
+    "nearly_constant_double_1e-05",
+    "extreme_double_1e+300_0",
+    "ones_last_double_10000"
+   ]
+  },
+  "dd-seq": {
+   "H1": [
+    [
+     36,
+     226
+    ]
+   ],
+   "H2 (a)": [
+    "extreme_double_1e+155_0",
+    "extreme_double_1e+300_0",
+    "trace_double_v60_nonnegative0_recorded",
+    "trace_double_v60_nonnegative0_recomputed",
+    "trace_double_v69_nonnegative0_recorded",
+    "trace_double_v69_nonnegative0_recomputed",
+    "trace_double_v88_nonnegative0_recorded",
+    "trace_double_v88_nonnegative0_recomputed",
+    "trace_double_v69_nonnegative1_recomputed"
+   ],
+   "H2 (c)": [
+    "glm_double_100_0",
+    "glm_double_10000_0",
+    "glm_double_1e+06_0",
+    "glm_double_1e+08_0",
+    "glm_double_1e+10_0",
+    "rank_double_n16_e-10_i0",
+    "rank_double_n16_e-9_i0",
+    "rank_double_n16_e-8_i0",
+    "rank_double_n16_e-7_i0",
+    "rank_double_n16_e-6_i0",
+    "rank_double_n16_e10_i0",
+    "rank_double_n250_e6_i0",
+    "rank_double_n250_e7_i0",
+    "rank_double_n250_e8_i0",
+    "rank_double_n250_e9_i0",
+    "rank_double_n250_e10_i0",
+    "nearly_constant_double_1e-07",
+    "nearly_constant_double_1e-05",
+    "extreme_double_1e+155_0",
+    "extreme_double_1e+300_0"
+   ]
+  }
+ }
+}
