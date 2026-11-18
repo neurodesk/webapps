@@ -58,12 +58,15 @@ PR/push quality workflow does not run automatically.
 `workflow-reports.yml` runs at 00:47, 06:47, 12:47 and 18:47 UTC and on
 manual dispatch (`scripts/report-workflow-failures.mjs`). It keeps no cursor.
 Each tick asks the Actions API for the runs created in the last 14 days that
-a report can concern: scheduled runs on the default branch, and the runs of
-every event other than pull requests that a notarizing workflow runs on
-(`push` and `workflow_dispatch` today), whatever their latest conclusion. It
-reads every attempt of each run, the earlier ones from the attempts endpoint
-when a run was rerun, and reports each completed attempt that has no report
-marker in the issues yet (`scripts/lib/workflow-reports.mjs`). The markers are
+a report can concern, whatever their latest conclusion: scheduled runs on the
+default branch, and every run of each notarizing workflow but pull request runs,
+listed by workflow file so that no event is missed (a release, a dispatch on a
+tag, an event only an older ref declares). It reads every attempt of each run,
+the earlier ones from the attempts endpoint when a run was rerun, and reports
+each completed attempt that has no report marker in the issues yet
+(`scripts/lib/workflow-reports.mjs`). The API can qualify a run's workflow path
+with a ref (`.github/workflows/ci.yml@main`); every attempt is compared by its
+path without the ref (`workflowPath`). The markers are
 the only state, so a failed, cancelled, overlapping or late tick and a rerun
 lose nothing, and a repeated tick writes nothing. The reporter's own failed
 scheduled ticks are reported like any other scheduled workflow, so a broken
@@ -74,7 +77,7 @@ What a tick does not report: an attempt of a run created more than 14 days
 before the tick, which is a rerun of an older run (GitHub allows reruns for
 30 days) or a failure missed by a reporter outage longer than 14 days; and an
 attempt that completed before `CUTOVER`, which the `workflow_run` reporters
-this one replaced handled with the same markers. In the 30 days to
+this one replaced handled with the same markers (see the handoff below). In the 30 days to
 18 November 2026, every rerun of a scheduled or notarizing run started within
 43 hours of its run. The lookback is 14 days and not 30 because an attempt
 without a marker is read again on every tick: the failed notarizing attempts
@@ -83,9 +86,12 @@ job whose log is downloaded again) and the passing scheduled attempts of the
 workflows with a job that continues on error (`ci.yml` and `deploy-pages.yml`,
 whose passing run can contain a failed job).
 Measured on 18 November 2026 with every attempt of the lookback past the
-cutover, which is the steady state, a dry-run tick listed 3,318 runs, read
-2,070 attempts, re-read 141 attempts without a marker and made 305 HTTP
-requests in 7 minutes. A 30-day lookback would about double both.
+cutover, which is the steady state, a dry-run tick listed 11,060 runs, read
+2,086 attempts, re-read 141 attempts without a marker and made 402 HTTP
+requests in 10 minutes; the job's limit is 30. Most of the listing is the
+notarizing workflows' pull request runs (8,906 of the 10,143 they had in those
+14 days), read only to be left out, so fewer native workflow runs per pull
+request make a tick cheaper. A 30-day lookback would about double the cost.
 
 Every scheduled run on the default branch is checked; no workflow list is
 kept. The reporter opens one bot-authored issue per failing workflow,
@@ -114,11 +120,45 @@ and prints, for each attempt that completed in that range, whether it would
 open an issue, comment on one, or was already reported, and how many HTTP
 requests the tick made. A dry run writes nothing, not even the step summary.
 
+### Handoff from the workflow_run reporters
+
+`CUTOVER` (`2026-11-18T13:00:00Z`) splits the attempts by when they completed
+(`updated_at`), not by when their run started: an attempt that completed at or
+after it and has no marker is reported by the first tick, whatever the old
+reporters did with it; one that completed before it is left to them. The
+`workflow_run` reporters keep reporting until the merge with the same markers,
+and a `workflow_run` workflow starts runs only from the default branch, so none
+starts after the merge. `CUTOVER` had passed before the pull request left
+draft, so every merge comes after it. To hand over:
+
+1. Before merging, wait until this lists nothing, so that no attempt completed
+   before `CUTOVER` is still waiting for an old reporter:
+
+   ```sh
+   for workflow in nightly-failures.yml notarization-alert.yml; do
+     for status in queued pending waiting in_progress; do
+       gh run list --repo neurodesk/webapps --workflow "$workflow" --status "$status"
+     done
+   done
+   ```
+
+2. Merge outside the 30 minutes before a scheduled tick (00:47, 06:47, 12:47
+   and 18:47 UTC), so that step 3 ends before the schedule's first tick.
+3. After the merge, wait until the command of step 1 lists nothing again.
+   A run that broke because the merge removed its script left its attempt
+   without a marker; the first tick reports it. Cancel a run that stays queued
+   (`gh run cancel <id> --repo neurodesk/webapps`) for the same reason.
+4. Dispatch the first tick:
+   `gh workflow run workflow-reports.yml --repo neurodesk/webapps --ref main`.
+
+The old and the new reporter then never write at the same time, and every
+report the old ones made carries a marker the first tick reads.
+
 ## Apple notarization alerts
 
 The same tick checks the failed and timed-out attempts of every workflow that
-notarizes macOS packages, on any branch or tag, release dispatches included,
-but not pull requests. The workflows are derived from the workflow files
+notarizes macOS packages, of any event on any branch or tag, release dispatches
+included, but not pull requests. The workflows are derived from the workflow files
 (`workflowFacts`: a file that mentions notarization, `APPLE_ID` or
 calls `node-cli-portable.yml`, reusable workflows excluded). When a failed
 macOS job log shows Apple refusing a notarization (an expired agreement or
