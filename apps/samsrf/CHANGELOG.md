@@ -4,6 +4,13 @@
 
 ### Patch Changes
 
+- 5cdad1a: SamSrf draws its maps on FreeSurfer surfaces that end at their faces, as MATLAB's `write_surf` writes them. NiiVue 1.0.0-rc.26 could not read such a surface: it logged the error, the app showed "Ready", and every run then ended with "Cannot read properties of undefined (reading 'layers')" after offering its maps. The viewer now reads every surface with the engine's own reader and draws it from mz3, so it shows the mesh the analysis reads, and a surface that cannot be shown is reported in the status bar.
+
+  A model whose `Hrf` names a subject's HRF fit (`hrf_*.mat`) now runs. The app takes the file in a Subject HRF field or from a dropped folder and gives the engine SamSrf's old-school kernel built from its `fP`, as the command line does. A file not named `hrf_*.mat` is refused, a malformed one stops the run with its name, and vertex-wise HRF maps are still refused.
+
+  The CSS convention help now says that downloaded maps keep the real parts of SamSrf's complex results, as SamSrf's GIfTI export does.
+
+  - @neurodesk/samsrf@0.6.20261118
 - fcc327c: Return the imaginary parts of SamSrf's complex CSS results. With `Css_Convention: "samsrf"`, a negative predicted response (interpolated apertures dip below zero) makes the CSS objective and the betas complex, and MATLAB saves R², nR², Beta and Baseline with their imaginary parts in `Srf.Data`. `Job.merge` now returns those parts as `imaginary`, in the layout of `maps.data`, and `null` when every result is real. A zeroed R² over a negative noise ceiling gives nR² `-0 + 0i`, as in MATLAB. Exported maps still keep only the real parts, as `samsrf_expand_srf` does, and the default `nonnegative` convention is unchanged. The SamSrfAnalysis matrix runners now pass `Css_Convention: "samsrf"` for forward models, because SamSrf always takes complex CSS powers. Against the AMD host of the pinned SamSrfAnalysis source recording, both CSS runs now equal MATLAB in every real and imaginary `Srf.Data` value and every GIfTI, in both precisions (12 to 15 of 21 vertices differed). The Node/WASM matrix there matches 15 of 24 runs and 145 of 168 maps (13 and 129 before), Chromium gives the same bytes, and pull-request CI now holds every map of that matrix to a frozen outcome. Intel hosts, the global-signal sum, geometry, and compiled-container and production-interface parity are still open, and both public single-fit refusals remain.
 - Updated dependencies [fcc327c]
   - @neurodesk/samsrf@0.6.20261118
