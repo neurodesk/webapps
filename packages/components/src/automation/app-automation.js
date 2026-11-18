@@ -232,6 +232,7 @@ export function registerAppAutomation({ app, operations, convertDicom, contractU
   };
   target.neurodeskAutomation = Object.freeze({
     dispatch,
+    running: () => !terminal.has(snapshot.state),
     async adopt(role, files) {
       await ready;
       return adopt(role, files);

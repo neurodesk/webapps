@@ -254,6 +254,8 @@ export async function takeHandoff({ document = globalThis.document, signal } = {
   try {
     const files = await Promise.all(entry.files.map((file) => copyOut(file, signal)));
     signal?.throwIfAborted();
+    // The page now shows what another app sent; a browser agent's held files belong to what it showed before.
+    document.dispatchEvent(new window.CustomEvent('nd-handoff', { detail: { source: entry.source } }));
     return { source: entry.source, files };
   } catch (error) {
     if (signal?.aborted) throw signal.reason;

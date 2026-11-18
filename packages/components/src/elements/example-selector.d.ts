@@ -19,7 +19,7 @@ export interface AppExample {
 }
 
 export type ExampleAutomation =
-  | { roles?: Record<string, string | null>; files?: Record<string, string | null>; reason?: string; unavailable?: undefined }
+  | { roles?: Record<string, string | null>; files?: Record<string, string | null>; reason?: string; parameters?: Record<string, unknown>; unavailable?: undefined }
   | { unavailable: string };
 
 export interface ExampleLoadContext {

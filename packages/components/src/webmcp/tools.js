@@ -147,7 +147,7 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
   });
 
   tool('app_describe', 'Describe this application',
-    `Read what ${contract.title} does: its operations with their inputs, parameters and outputs, its examples (and why any cannot be loaded), its viewers, the current run, the files each input role holds and the files the user has loaded into the page (pageFiles).`,
+    `Read what ${contract.title} does: its operations with their inputs, parameters and outputs, its examples (and why any cannot be loaded), its viewers, the current run, the files each input role holds (inputs), the files the user has loaded into the page (pageFiles) and the example the user loaded in the page (pageExample). Held files are released whenever the user changes what the page shows.`,
     object({}), readOnly,
     async () => {
       const entries = await catalog();
@@ -166,6 +166,7 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
         run: await snapshot(),
         inputs: inputs.held(),
         pageFiles: inputs.page(),
+        pageExample: inputs.pageExample(),
       };
     });
 
@@ -179,7 +180,7 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
       const field = roles.get(role);
       const files = await requestFiles({ label: field.description, formats: field.formats, message, minimum: field.minimum, maximum: field.maximum, folder: field.folder }, { signal });
       if (!files) return { declined: true };
-      inputs.adopt(role, files);
+      inputs.hold(role, files);
       return { role, files: describeFiles(files) };
     });
 
@@ -194,19 +195,20 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
     });
 
   tool('inputs_load_example', 'Load an example',
-    'Download one of the application\'s examples, verify its checksums and hold its files as the input for the next run. Run it with the example\'s parameters from app_describe.',
+    'Download one of the application\'s examples, verify its checksums and hold its files as the input for the next run, replacing every file held before. Run it with the example\'s parameters from app_describe.',
     object({ exampleId: { type: 'string', description: 'An example ID from app_describe' } }, ['exampleId']), {},
     async ({ exampleId }, { signal }) => {
       const entry = (await catalog()).find(item => item.example.id === exampleId);
       if (!entry) throw new Error(`Unknown example: ${exampleId}`);
       if (entry.unavailable) throw new Error(`Example ${exampleId} cannot be loaded here: ${entry.unavailable}`);
+      const from = inputs.examination();
       const files = new Map();
       for (const asset of entry.files) {
         const bytes = await fetchAsset({ url: asset.url, integrity: { bytes: asset.bytes, sha256: asset.sha256 } }, { signal, retries: 4 });
         files.set(asset.role, [...(files.get(asset.role) ?? []), new File([bytes], asset.name)]);
       }
       signal?.throwIfAborted();
-      for (const [role, held] of files) inputs.adopt(role, held);
+      inputs.replace(from, files);
       return { exampleId, inputs: Object.fromEntries([...files].map(([role, held]) => [role, describeFiles(held)])) };
     });
 

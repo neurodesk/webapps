@@ -108,7 +108,7 @@ test('a run tool starts the operation, waits for it and returns the report', asy
 test('a run that outlasts waitSeconds returns running, and runs_get waits for the rest', async t => {
   let finish;
   const { call, inputs } = page(t, () => new Promise(resolve => { finish = () => resolve(labels()); }));
-  await inputs.adopt('image', [new File(['input'], 'input.nii')]);
+  await inputs.hold('image', [new File(['input'], 'input.nii')]);
   const started = Date.now();
   const running = await call('run_run', { waitSeconds: 0.1 });
   assert.equal(running.state, 'running');
@@ -126,14 +126,14 @@ test('aborting a run tool call cancels the run, and runs_cancel cancels a runnin
     operationSignal = signal;
     return new Promise(() => {});
   });
-  await inputs.adopt('image', [new File(['input'], 'input.nii')]);
+  await inputs.hold('image', [new File(['input'], 'input.nii')]);
   const controller = new AbortController();
   const pending = call('run_run', { waitSeconds: 60 }, controller.signal);
   setTimeout(() => controller.abort(), 50);
   const cancelled = await pending;
   assert.equal(cancelled.state, 'cancelled');
   assert.equal(operationSignal.aborted, true);
-  await inputs.adopt('image', [new File(['input'], 'input.nii')]);
+  await inputs.hold('image', [new File(['input'], 'input.nii')]);
   const running = await call('run_run', { waitSeconds: 0 });
   assert.equal(running.state, 'running');
   const result = await call('runs_cancel', { runId: running.runId });
@@ -203,7 +203,7 @@ test('inputs_load_example verifies each file through the fetcher and holds it fo
 
 test('outputs_download saves a completed artifact through the page download', async t => {
   const { call, inputs, downloads } = page(t, async () => labels());
-  await inputs.adopt('image', [new File(['input'], 'input.nii')]);
+  await inputs.hold('image', [new File(['input'], 'input.nii')]);
   assert.equal((await call('run_run')).state, 'succeeded');
   const { runId } = (await call('app_describe')).run;
   assert.deepEqual(await call('outputs_download', { runId, artifactId: 'labels' }), { runId, artifactId: 'labels' });
@@ -212,7 +212,7 @@ test('outputs_download saves a completed artifact through the page download', as
 
 test('outputs_download saves only an output of the run the agent names', async t => {
   const { call, inputs, downloads, dispatch } = page(t, async () => labels());
-  inputs.adopt('image', [new File(['input'], 'input.nii')]);
+  inputs.hold('image', [new File(['input'], 'input.nii')]);
   const first = await call('run_run');
   const second = await call('run_run');
   assert.equal(second.state, 'succeeded');
@@ -242,7 +242,7 @@ test('a wait on a run that another run replaced says so instead of returning the
 test('a run tool refuses to start while another run is going, and names it', async t => {
   let finish;
   const { call, inputs } = page(t, () => (finish ? labels() : new Promise(resolve => { finish = () => resolve(labels()); })));
-  inputs.adopt('image', [new File(['input'], 'input.nii')]);
+  inputs.hold('image', [new File(['input'], 'input.nii')]);
   const running = await call('run_run', { waitSeconds: 0 });
   assert.equal(running.state, 'running');
   const refused = await call('run_run', { waitSeconds: 0 });
@@ -334,7 +334,7 @@ test('held files serve every rerun until the person loads their own files or the
     return labels();
   });
   window = pageWindow;
-  inputs.adopt('image', [new File(['input'], 'input.nii')]);
+  inputs.hold('image', [new File(['input'], 'input.nii')]);
   for (const threshold of [0.2, 0.8, 0.9]) assert.equal((await call('run_run', { parameters: { threshold } })).state, 'succeeded');
   await settled();
   assert.deepEqual(seen, [['input.nii', 0.2], ['input.nii', 0.8], ['input.nii', 0.9]]);
@@ -352,7 +352,7 @@ test('held files serve every rerun until the person loads their own files or the
   personLoads(window, [new File(['newer'], 'newer.nii')]);
   await settled(async () => (await call('app_describe')).pageFiles[0].files[0].name === 'newer.nii');
   assert.deepEqual((await call('app_describe')).pageFiles[0].files, [{ name: 'newer.nii', bytes: 5 }], 'an input\'s earlier files are forgotten');
-  inputs.adopt('image', [new File(['input'], 'input.nii')]);
+  inputs.hold('image', [new File(['input'], 'input.nii')]);
   registration.reset();
   assert.deepEqual((await call('app_describe')).inputs, {}, 'a reset releases the held files');
 });
@@ -455,4 +455,64 @@ test('a run that would fetch an address the agent supplied asks the person first
   allow(true);
   assert.equal((await call('run_run', { inputs: { store: { url: store } }, waitSeconds: 0 })).runId, 'R');
   assert.equal(webMcpTools({ contract: contract(), inputs: {}, dispatch: async () => ({}) }).find(tool => tool.name === 'run_run').annotations.consequentialHint, undefined);
+});
+
+// A page whose contract has an optional mask beside the image, as QSMbly's does.
+function maskPage(t, operation, options = {}) {
+  const dom = new JSDOM('<body><input type="file" id="t1" data-neurodesk-input="image"></body>', { url: 'https://example.test/test/' });
+  t.after(() => dom.window.close());
+  const maskContract = contract();
+  maskContract.operations.run.inputs.mask = { source: 'files', type: 'neuro:mask', formats: ['nifti'], description: 'A brain mask', minimum: 0, maximum: 1 };
+  const registration = registerAppAutomation({ app: 'test', contract: maskContract, operations: { run: operation }, document: dom.window.document, target: dom.window });
+  const automation = dom.window.neurodeskAutomation;
+  const inputs = createToolInputs({ doc: dom.window.document, automation });
+  const tools = webMcpTools({ contract: maskContract, dispatch: automation.dispatch, inputs, examples: () => examples,
+    fetchAsset: async () => new TextEncoder().encode('head').buffer, ...options });
+  const call = (name, input = {}) => tools.find(tool => tool.name === name).execute(input, { signal: new AbortController().signal });
+  return { call, inputs, registration, window: dom.window };
+}
+
+test('loading an example replaces every held role, so no file from the examination before stays', async t => {
+  const { call, inputs } = maskPage(t, async ({ inputs: files }) => ({ ...labels(), summary: { mask: files.mask.map(file => file.name) } }));
+  inputs.hold('image', [new File(['old'], 'earlier-exam.nii')]);
+  inputs.hold('mask', [new File(['mask'], 'earlier-exam-mask.nii')]);
+  await call('inputs_load_example', { exampleId: 'head' });
+  assert.deepEqual((await call('app_describe')).inputs, { image: [{ name: 'head.nii', bytes: 4 }] });
+  const run = await call('run_run');
+  assert.equal(run.report.inputs.image[0].filename, 'head.nii');
+  assert.deepEqual(run.report.inputs.mask, [], 'the earlier examination\'s mask is not run with the example');
+});
+
+test('an example that finishes downloading after the examination changed is discarded', async t => {
+  let finish;
+  const { call, registration } = maskPage(t, async () => labels(), { fetchAsset: () => new Promise(resolve => { finish = resolve; }) });
+  const pending = call('inputs_load_example', { exampleId: 'head' });
+  while (!finish) await new Promise(resolve => setTimeout(resolve, 5));
+  registration.reset();
+  finish(new TextEncoder().encode('head').buffer);
+  const result = await pending;
+  assert.equal(result.error.code, 'EXAMINATION_CHANGED');
+  assert.deepEqual((await call('app_describe')).inputs, {}, 'nothing from the stale download is held');
+});
+
+test('the person picking an example in the page releases held and page files and names the example', async t => {
+  const { call, inputs, window } = maskPage(t, async () => labels());
+  personLoads(window, [new File(['scan'], 'new-exam.nii')]);
+  assert.deepEqual(await call('inputs_use_page_files', { role: 'image', input: 't1' }), { role: 'image', files: [{ name: 'new-exam.nii', bytes: 4 }] });
+  inputs.hold('mask', [new File(['mask'], 'mask.nii')]);
+  const status = detail => window.document.body.dispatchEvent(new window.CustomEvent('nd-example-status', { bubbles: true, detail }));
+  status({ state: 'loading' });
+  status({ state: 'ready', exampleId: 't1-head' });
+  const describe = await call('app_describe');
+  assert.deepEqual(describe.inputs, {}, 'the scan the person replaced is no longer held');
+  assert.deepEqual(describe.pageFiles, [], 'nor offered as what the page shows');
+  assert.equal(describe.pageExample, 't1-head');
+  assert.equal((await call('run_run')).error?.message ?? (await call('runs_get')).error.message, 'Missing input: image');
+});
+
+test('a handoff from another app releases the held files', async t => {
+  const { call, inputs, window } = maskPage(t, async () => labels());
+  inputs.hold('image', [new File(['old'], 'old.nii')]);
+  window.document.dispatchEvent(new window.CustomEvent('nd-handoff', { detail: { source: { app: 'dicomview' } } }));
+  assert.deepEqual((await call('app_describe')).inputs, {});
 });
