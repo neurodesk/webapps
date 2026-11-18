@@ -318,7 +318,7 @@ jobs:
           node packages/samsrf/validation/matlab/compare-css.mjs "$RUNNER_TEMP/samsrf-source-reference" "$RUNNER_TEMP/samsrf-css-comparison.json" "$RUNNER_TEMP/samsrf-css-pipelines"
           SAMSRF_MATLAB_REFERENCE_DIR="$RUNNER_TEMP/samsrf-source-reference" SAMSRF_CSS_WASM_REPORT="$RUNNER_TEMP/samsrf-css-comparison.json" SAMSRF_MATLAB_CSS_PIPELINES_DIR="$RUNNER_TEMP/samsrf-css-pipelines" \
             cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test css_pipeline -- --nocapture
-          SAMSRF_MATLAB_CSS_PIPELINES_DIR="$RUNNER_TEMP/samsrf-css-pipelines" SAMSRF_MATRIX_INPUT_DIR="$RUNNER_TEMP/samsrf-matrix-input" \
+          SAMSRF_MATLAB_CSS_PIPELINES_DIR="$RUNNER_TEMP/samsrf-css-pipelines" SAMSRF_INTEL_CSS_INPUT_DIR="$RUNNER_TEMP/samsrf-matrix-input" \
             cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-mkl-avx512 --test recordings -- --nocapture
           cargo run --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --example css_trace -- "$RUNNER_TEMP/samsrf-source-reference" "$RUNNER_TEMP/samsrf-css-diagnostics" css_pipeline_double_v47_nonnegative0_recorded "$RUNNER_TEMP/samsrf-css-trace.json"
           cargo run --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --example css_trace -- "$RUNNER_TEMP/samsrf-source-reference" "$RUNNER_TEMP/samsrf-css-diagnostics" css_pipeline_double_v60_nonnegative0_recorded "$RUNNER_TEMP/samsrf-css-trace-v60.json"

@@ -84,3 +84,17 @@ Appended; nothing above was changed.
 - The complex-norm agreement (24 of 24 per Intel host) is discovery data only.
 - A prefix hash shows what was frozen, not when; the order of events rests on the local
   decision log.
+
+## Further correction after independent re-review (2026-11-18)
+
+Appended; the historical text and frozen prefixes above are unchanged.
+
+H1 and H2 were also inspected before this record was frozen. H1's Intel `corr` values
+had been compared with the AMD order. H2's Intel R(1,1) values had been searched with
+plain and lane-wise norm candidates in commit `811e45c87` (2026-11-13). The earlier
+"held-out", "unevaluated" and "before any H2 value is read" descriptions therefore do
+not establish blind confirmation. The reported agreement is replay corroboration on
+previously inspected recordings; the norm candidate remains refuted by the known miss.
+
+The miss indices above are zero-based: pair 6 at n = 36, index 226 in H1. In one-based
+MATLAB indexing those are pair 7 and objective 227.

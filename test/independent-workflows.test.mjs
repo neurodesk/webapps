@@ -14,6 +14,34 @@ async function workflow(name) {
   return YAML.parse(await readFile(new URL(`../.github/workflows/${name}.yml`, import.meta.url), 'utf8'));
 }
 
+test('each Intel reference invocation configures complete fixture pairs', async () => {
+  const flow = await workflow('samsrf-native');
+  const source = await readFile(new URL('../exes/samsrf/mkl-avx512/tests/recordings.rs', import.meta.url), 'utf8');
+  const pairs = [...source.matchAll(/fixture_pair\(\["(SAMSRF_\w+)", "(SAMSRF_\w+)"\]\)/g)]
+    .map(match => match.slice(1));
+  assert.ok(pairs.length > 0, 'find the fixture pairs used by the recording gates');
+  const exercised = new Set();
+  let invocations = 0;
+  for (const step of flow.jobs.test.steps) {
+    const commands = (step.run || '').replace(/\\\r?\n/g, ' ').split('\n');
+    for (const command of commands.filter(line => /cargo test .* -p samsrf-mkl-avx512 --test recordings/.test(line))) {
+      const configured = new Set([
+        ...Object.keys(flow.env || {}),
+        ...Object.keys(flow.jobs.test.env || {}),
+        ...Object.keys(step.env || {}),
+        ...[...command.matchAll(/\b(SAMSRF_\w+)=/g)].map(match => match[1]),
+      ]);
+      for (const [recording, input] of pairs) {
+        assert.equal(configured.has(recording), configured.has(input), `${step.name}: set both ${recording} and ${input}`);
+        if (configured.has(recording)) exercised.add(recording);
+      }
+      invocations += 1;
+    }
+  }
+  assert.ok(invocations > 0, 'find the Intel recording invocations');
+  for (const [recording] of pairs) assert.ok(exercised.has(recording), `${recording} runs in CI`);
+});
+
 // Every workflow whose portable job calls the shared Node packager, with its package directory.
 async function portableCallers() {
   const files = await readdir(new URL('../.github/workflows/', import.meta.url));

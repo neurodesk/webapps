@@ -54,9 +54,11 @@ were outside the model's hash.
 The norm (`prereg-dnrm2.md`). No candidate of the frozen lane-tree family reproduced the
 24 discovery norms (the best 23; every candidate missed n = 13). Intel's 24 norms are
 each the correctly rounded norm (|error| at most 0.472 ULP; the AMD order is correctly
-rounded at 14). The correctly rounded norm, frozen as amendment 1, then matched R(1,1) of
-all 95 real double kernel chains (with LAPACK's `dlapy2`) and 519 of the 520 Intel `corr`
-values from 25 to 50 elements. The miss (n = 36, pair 6, index 226 of that set) is not the
+rounded at 14). The correctly rounded candidate documented in amendment 1 matches R(1,1)
+of all 95 real double kernel chains (with LAPACK's `dlapy2`) and 519 of the 520 Intel `corr`
+values from 25 to 50 elements. Both sets had been inspected before that amendment;
+these are replay results, not blind confirmation. The miss (n = 36, zero-based pair 6,
+zero-based index 226 of that set) is not the
 dot product: below 51 elements MATLAB's `x' * y` is its own pair tree, with identical
 arrays on both hosts of the arithmetic-order and numerics recordings. MATLAB's value needs
 the y norm one ULP below the correctly rounded one, and the exact norm lies 6.4e-5 ULP

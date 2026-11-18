@@ -1,7 +1,8 @@
 //! The test-only Intel AVX512_E1 reference (`samsrf_mkl_avx512`) against the pinned MATLAB
 //! recordings of finite real double least squares from the observed AVX512_E1 Xeon hosts
 //! (8370C, 8573C, 6975P-C). Each test returns when its recording is not configured; a pair
-//! of variables set only halfway fails. The variables are the ones the AMD gates use.
+//! of variables set only halfway fails. CSS uses its own input variable so configuring
+//! the reverse-correlation inputs does not partially configure the CSS gate.
 //!
 //! Record: packages/samsrf/validation/matlab/intel-avx512/README.md. The kernel recording
 //! (SAMSRF_QR_KERNELS_DIR) and the numerics norms were discovery data. The direct detrend
@@ -42,7 +43,7 @@ fn partial_fixture_configuration_is_rejected() {
         ["SAMSRF_CGG_DIR", "SAMSRF_CGG_RUNS_DIR"],
         ["SAMSRF_REVCOR_REFERENCE_DIR", "SAMSRF_MATRIX_INPUT_DIR"],
         ["SAMSRF_CLI_REFERENCE_DIR", "SAMSRF_CLI_COURSES_DIR"],
-        ["SAMSRF_MATLAB_CSS_PIPELINES_DIR", "SAMSRF_MATRIX_INPUT_DIR"],
+        ["SAMSRF_MATLAB_CSS_PIPELINES_DIR", "SAMSRF_INTEL_CSS_INPUT_DIR"],
     ] {
         assert_eq!(paired_roots(names, [None, None]), None);
         let roots = [PathBuf::from("recording"), PathBuf::from("inputs")];
@@ -248,7 +249,7 @@ fn cgg_intel_host(root: &Path) -> PathBuf {
 }
 
 /// `D = detrend(X)` and `zscore(D)` of all 1,485 direct cases on the Intel host, from the
-/// regenerated inputs (held out, frozen before reading).
+/// regenerated inputs (previously inspected; replay corroboration, not a blind holdout).
 #[test]
 fn detrend_equals_matlab_on_the_intel_host() {
     let Some([root, runs_dir]) = fixture_pair(["SAMSRF_CGG_DIR", "SAMSRF_CGG_RUNS_DIR"]) else { return };
@@ -337,7 +338,7 @@ fn revcor_intel_host(root: &Path) -> PathBuf {
 }
 
 /// `samsrf_removenoise` of the double global-regression cases on the Intel host, from that
-/// host's own courses and global signal (held out, frozen before reading).
+/// host's own courses and global signal (previously inspected; replay corroboration).
 #[test]
 fn global_regression_equals_matlab_on_the_intel_host() {
     let Some(root) = env("SAMSRF_REVCOR_REFERENCE_DIR") else { return };
@@ -622,7 +623,7 @@ type CorrCase = (usize, Vec<f64>, Vec<f64>, Vec<f64>);
 /// The correctly rounded norm is a candidate for MKL's Intel `dnrm2`, not an identification
 /// of it. On the arithmetic-order recording's AVX512_E1 host (Xeon 6975P-C), `corr` from 25
 /// to 50 elements, where `x' * y` is MATLAB's host-independent pair tree, equals 519 of the
-/// 520 recorded values with that norm. The miss, n = 36 pair 6, is pinned: the exact norm of
+/// 520 recorded values with that norm. The miss, n = 36 pair 6 (zero-based), is pinned: the exact norm of
 /// its centred y lies less than 1e-4 ULP above a rounding midpoint, and MATLAB's value needs
 /// that norm one ULP below the correctly rounded one. MKL's rounding near ties is not
 /// identified. Negative controls: the port's AMD order gives all 520 values on the AMD host
@@ -691,7 +692,7 @@ fn correctly_rounded_norm_is_a_candidate_with_one_known_miss() {
 /// freeze; the reviewer's replay of these courses found the same.
 #[test]
 fn css_pipeline_courses_equal_matlab_on_each_host() {
-    let Some([css, input]) = fixture_pair(["SAMSRF_MATLAB_CSS_PIPELINES_DIR", "SAMSRF_MATRIX_INPUT_DIR"]) else { return };
+    let Some([css, input]) = fixture_pair(["SAMSRF_MATLAB_CSS_PIPELINES_DIR", "SAMSRF_INTEL_CSS_INPUT_DIR"]) else { return };
     let manifest = json(&input.join("manifest.json"));
     let entry = manifest["datasets"].as_array().unwrap().iter().find(|d| d["id"] == "x001_lh").unwrap();
     let runs: Vec<RawRun> = entry["runs"].as_array().unwrap().iter().map(|run| gifti::read_run(&std::fs::read(input.join("x001_lh").join(run.as_str().unwrap())).unwrap()).unwrap()).collect();

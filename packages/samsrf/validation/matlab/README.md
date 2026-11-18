@@ -2314,14 +2314,14 @@ So the column update (`?gemv` inside `?geqp3`) differs first in most designs,
 in 28 complex designs.
 
 On identical inputs the Intel hosts first depart from the port inside MKL: MATLAB's
-`sum`, `mean`, `zscore` and `nanmean(Data, 2)` equal the port on every Intel host. The
+`sum`, `mean`, `zscore` and `nanmean(Data, 2)` equal the port on the recorded Intel hosts. The
 reference computes (fitted on the Intel kernel recording, with every AMD recording as
 control):
 
 - The norm: the correctly rounded norm of the exact sum of squares. This is a candidate
   for MKL's `dnrm2`, not an identification. It equals all 24 numerics norms on both Intel
   models (the AMD order rounds 14 of them so), all 95 kernel R(1,1) values and 519 of the
-  520 Intel `corr` values from 25 to 50 elements. The miss (n = 36, pair 6) needs the norm
+  520 Intel `corr` values from 25 to 50 elements. The miss (n = 36, zero-based pair 6) needs the norm
   one ULP below the correctly rounded value where the exact norm lies 6.4e-5 ULP above a
   rounding midpoint. MKL's rounding that close to a tie is not known; the gates pin the
   miss rather than fit it. The complex norms (`dznrm2`) agree with it on the 24 numerics

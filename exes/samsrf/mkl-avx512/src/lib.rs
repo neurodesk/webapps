@@ -38,8 +38,8 @@ const RESCALE: f64 = f64::MIN_POSITIVE / (f64::EPSILON * 0.5);
 
 /// The correctly rounded Euclidean norm (round to nearest, ties to even) of the exact sum
 /// of squares; NaN if any value is NaN, infinity if any is infinite. This is a candidate for
-/// MKL's `dnrm2` on the AVX512_E1 branch, not an identification of it: it equals every
-/// recorded Intel norm except one, where the exact norm lies 6.4e-5 ULP above a rounding
+/// MKL's `dnrm2` on the AVX512_E1 branch, not an identification of it: it equals the Intel
+/// norms evaluated by the gates except one, where the exact norm lies 6.4e-5 ULP above a rounding
 /// midpoint and MATLAB's result is one ULP lower (pinned in the gates). MKL's rounding that
 /// close to a tie is not known.
 pub fn nrm2(values: &[f64]) -> f64 {
