@@ -3,9 +3,11 @@
 //! hosts: research reference, fitted on the arithmetic-order (Xeon 6975P-C) and
 //! constants-gamma-gemv (Xeon 6975P-C) fingerprints and draws, frozen, then compared with
 //! their remaining draws, with `corr` (Xeon 6975P-C) and with the double CF profiles of the
-//! reverse-correlation recording (Xeon 8370C). Those comparison data had been compared
-//! before only with AMD models; the record is
-//! packages/samsrf/validation/matlab/intel-avx512/prereg-dot-gemv.md.
+//! reverse-correlation recording (Xeon 8370C). Before that, the remaining draws and the CF
+//! profiles had been compared only with AMD models, but the `corr` values of 25 to 50
+//! elements had already been evaluated with the Intel norm candidate (replay). The `x' * y`
+//! kernel's tail lies outside the pre-registered structure family. The record, with these
+//! deviations, is packages/samsrf/validation/matlab/intel-avx512/prereg-dot-gemv.md.
 //!
 //! The norms are the crate's correctly rounded candidate ([`crate::nrm2`]): two recorded
 //! `corr` values need a norm one ULP below it near a rounding tie, and the gates pin both.

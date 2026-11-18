@@ -5,8 +5,10 @@
 //! (the shipped arithmetic), the samsrf-mkl-avx512 kernels in the avx512 build. Every map
 //! value is compared bitwise with the host's recorded maps (real parts) and saved imaginary
 //! parts; the report (SAMSRF_HARNESS_REPORT) counts equal values per host, pipeline and map,
-//! split into vertices with and without an imaginary part. Nothing is asserted about the
-//! counts: run.sh's matrix and account.py are the accounting, this is a second recording.
+//! split into vertices with and without an imaginary part. SAMSRF_HARNESS_DUMP receives every
+//! value the build computed (host, pipeline, map, zero-based vertex, real and imaginary bits),
+//! which `account_pipelines.py` holds value by value against the recording and the other build.
+//! Nothing is asserted about the counts here.
 
 use samsrf_core::{job, mat, model, timeseries::TimeSeries};
 use serde_json::{json, Value};
@@ -39,6 +41,7 @@ fn recorded_css_pipelines_by_host() {
     samsrf_wasm::install_research_reference();
     let manifest = read_json(&root.join("manifest.json"));
     let mut hosts = BTreeMap::new();
+    let mut dump = String::from("host\tpipeline\tmap\tvertex0\treal\timaginary\n");
     for (host, info) in manifest["hosts"].as_object().unwrap() {
         let blas = info["blas"].as_str().unwrap();
         let dir = root.join(host).join("compatible");
@@ -90,6 +93,11 @@ fn recorded_css_pipelines_by_host() {
             for (r, label) in values.iter().enumerate() {
                 let mut counts = BTreeMap::new();
                 for v in 0..vertices {
+                    dump.push_str(&format!(
+                        "{host}\t{id}\t{label}\t{v}\t{:016x}\t{:016x}\n",
+                        merged.maps.data[r * vertices + v].to_bits(),
+                        port_imaginary[r * vertices + v].to_bits()
+                    ));
                     let route = if complex[v] { "complex" } else { "real" };
                     let port = merged.maps.data[r * vertices + v];
                     let checks = [
@@ -111,6 +119,9 @@ fn recorded_css_pipelines_by_host() {
     }
     let report = json!({"reference": samsrf_core::reference::name(), "hosts": hosts});
     println!("{}", serde_json::to_string(&report).unwrap());
+    if let Some(path) = std::env::var_os("SAMSRF_HARNESS_DUMP") {
+        std::fs::write(path, &dump).unwrap();
+    }
     if let Some(path) = std::env::var_os("SAMSRF_HARNESS_REPORT") {
         std::fs::write(path, serde_json::to_string_pretty(&report).unwrap() + "\n").unwrap();
     }

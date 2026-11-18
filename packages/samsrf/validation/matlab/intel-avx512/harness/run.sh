@@ -7,9 +7,12 @@
 #
 # PACKAGE is a packages/samsrf directory: this checkout's (the committed module) or one
 # build.sh wrote. CLI_PINS is the recording extracted by validation/container/download.py:
-# the AMD EPYC 9V74 host at its root and the Intel Xeon Platinum 8573C host under
-# ubuntu-24.04/, each with plan.json, bundle/, bundle-sha256.json and source-1/.
-# OUT (new) receives amd-web/, intel-web/ and the comparator reports amd.json, intel.json.
+# one host at its root and the other under ubuntu-24.04/, each with plan.json, bundle/,
+# bundle-sha256.json and source-1/ (a source MATLAB process whose receipts do not attest
+# the bundle). The folders are named amd and intel here; account.py refuses the reports
+# unless the receipts show MKL's CNR auto branch on an AMD CPU at the root and AVX512_E1
+# under ubuntu-24.04/. OUT (new) receives amd-web/, intel-web/ and the comparator reports
+# amd.json, intel.json.
 # PYTHON names an interpreter with numpy and h5py (requirements-cli.txt).
 set -euo pipefail
 [[ $# -eq 3 ]] || { echo "usage: $0 PACKAGE CLI_PINS OUT" >&2; exit 2; }

@@ -97,7 +97,9 @@ fn single_courses_are_matlab_on_both_hosts() {
     let plan = &manifest["plan"];
     assert_eq!(plan, &json_file(&recording.join("plan.json")), "the extraction's plan is the recording's");
     let mut counts = BTreeMap::new();
-    for host in ["amd", "intel"] {
+    for (host, branch) in [("amd", "auto"), ("intel", "AVX512_E1")] {
+        // extract_cli_courses.py records each host's MKL branch from its MATLAB receipts.
+        assert_eq!(manifest["hosts"][host]["cnr"].as_str(), Some(branch), "{host}: MKL branch");
         let entries = manifest["hosts"][host]["runs"].as_array().unwrap();
         assert_eq!(entries.len(), 24, "{host}: run inventory");
         for entry in entries {
@@ -164,9 +166,12 @@ fn single_courses_are_matlab_on_both_hosts() {
 fn single_cf_correlation_stages_by_host() {
     let Some(root) = env("SAMSRF_SINGLE_KERNELS_DIR") else { return };
     let mut by_host = BTreeMap::new();
-    for host in ["amd-7763-auto", "intel-8573c-avx512"] {
+    for (host, branch) in [("amd-7763-auto", "(CNR branch auto)"), ("intel-8573c-avx512", "(CNR branch AVX512_E1)")] {
         let dir = root.join(host);
         let recording = json_file(&dir.join("kernels.json"));
+        // The folder names the role; the receipt must report that MKL branch.
+        let observed = recording["environment"]["observed"]["blas"].as_str().unwrap_or("");
+        assert!(observed.ends_with(branch), "{host}: the receipt reports {observed:?}");
         let mut stages: BTreeMap<&str, [usize; 2]> = BTreeMap::new();
         let mut tally = |stage: &'static str, port: f32, matlab: f64| {
             let slot = stages.entry(stage).or_insert([0; 2]);
@@ -363,8 +368,9 @@ fn blas_kernels_by_host() {
     for variable in ["SAMSRF_MATLAB_NUMERICS_DIR", "SAMSRF_MATLAB_NUMERICS2_DIR"] {
         let Some(root) = env(variable) else { continue };
         let manifest = json_file(&root.join("manifest.json"));
+        let [_, intel_host] = branch_roles(&manifest);
         for (host, entry) in manifest["hosts"].as_object().unwrap() {
-            let avx512 = entry["blas"].as_str().unwrap().contains("CNR branch AVX512_E1");
+            let avx512 = *host == intel_host;
             let dir = root.join(host).join("compatible");
             let recording = json_file(&dir.join("numerics.json"));
             let mut counts: BTreeMap<&str, [usize; 2]> = BTreeMap::new();
@@ -407,6 +413,42 @@ fn blas_kernels_by_host() {
     }
     if !results.is_empty() {
         report("blas", &json!(results));
-        assert_eq!(results.values().filter(|host| host["avx512"] == true).count(), results.len() / 2, "one Intel host per recording");
+    }
+}
+
+/// The AMD host (MKL CNR `auto`) and the Intel host (`AVX512_E1`) of a recording, by the MKL
+/// branch each host reports; any other set of hosts is refused.
+fn branch_roles(manifest: &Value) -> [String; 2] {
+    let (mut amd, mut intel) = (Vec::new(), Vec::new());
+    for (host, entry) in manifest["hosts"].as_object().expect("a hosts object") {
+        let (cpu, blas) = (entry["cpu"].as_str().unwrap_or(""), entry["blas"].as_str().unwrap_or(""));
+        if blas.ends_with("(CNR branch auto)") && cpu.starts_with("AMD") {
+            amd.push(host.clone());
+        } else if blas.ends_with("(CNR branch AVX512_E1)") {
+            intel.push(host.clone());
+        } else {
+            panic!("{host}: unrecognised MKL branch {blas:?} on {cpu:?}");
+        }
+    }
+    assert!(amd.len() == 1 && intel.len() == 1, "one AMD (CNR auto) and one AVX512_E1 host, found {amd:?} and {intel:?}");
+    [amd.remove(0), intel.remove(0)]
+}
+
+#[test]
+fn branch_roles_need_one_amd_and_one_avx512_host() {
+    let host = |cpu: &str, branch: &str| json!({"cpu": cpu, "blas": format!("Intel(R) oneAPI Math Kernel Library (CNR branch {branch})")});
+    let amd = host("AMD EPYC 7763 64-Core Processor", "auto");
+    let intel = host("Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz", "AVX512_E1");
+    assert_eq!(branch_roles(&json!({"hosts": {"a": amd, "b": intel}})), ["a".to_string(), "b".to_string()]);
+    for hosts in [
+        json!({"a": amd, "b": amd}),
+        json!({"a": intel, "b": intel}),
+        json!({"a": amd}),
+        json!({"a": amd, "b": intel, "c": intel}),
+        json!({"a": amd, "b": host("Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz", "auto")}),
+        json!({"a": amd, "b": host("Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz", "AVX2")}),
+    ] {
+        let manifest = json!({"hosts": hosts});
+        assert!(std::panic::catch_unwind(|| branch_roles(&manifest)).is_err(), "{manifest}");
     }
 }

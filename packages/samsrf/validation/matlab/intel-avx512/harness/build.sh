@@ -74,18 +74,23 @@ await import('./src/node.js');
 const wasm = await import('./wasm/samsrf_wasm.js');
 process.stdout.write(wasm.arithmeticReference());
 ")
-python3 -I - "$out" "$variant" "$repo" "$reference" "${patches[@]}" <<'EOF'
+python3 -I - "$out" "$variant" "$repo" "$harness" "$reference" "${patches[@]}" <<'EOF'
 import hashlib, json, subprocess, sys
 from pathlib import Path
-out, variant, repo, reference, *patches = sys.argv[1:]
+out, variant, repo, harness, reference, *patches = sys.argv[1:]
 sha = lambda path: hashlib.sha256(Path(path).read_bytes()).hexdigest()
 run = lambda *args: subprocess.run(args, check=True, capture_output=True, text=True).stdout.strip()
 record = {
     'variant': variant,
     'arithmeticReference': reference,
+    # Every copied source: the patched trees, the runner and the harness (patches, native
+    # tests) must be committed for the record to name what was built.
     'checkout': {'head': run('git', '-C', repo, 'rev-parse', 'HEAD'),
-                 'clean': run('git', '-C', repo, 'status', '--porcelain', '--', 'exes/samsrf', 'exes/nifti', 'packages/samsrf/src') == ''},
+                 'clean': run('git', '-C', repo, 'status', '--porcelain', '--', 'exes/samsrf', 'exes/nifti', 'packages/samsrf/src',
+                              'packages/samsrf/package.json', 'packages/samsrf/validation/matlab/run_web_matrix.mjs', harness) == ''},
     'patches': {Path(p).name: sha(p) for p in patches},
+    'copied': {f'native/{path.name}': sha(path) for path in sorted(Path(harness, 'native').glob('*.rs'))}
+              | {'run_web_matrix.mjs': sha(Path(out, 'packages/samsrf/validation/matlab/run_web_matrix.mjs'))},
     'rustc': run('rustc', '-vV'),
     'wasmPack': run('wasm-pack', '--version'),
     'wasmOpt': 'not run',

@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "MATLAB's real double least squares on MKL's AVX512_E1 branch (Intel hosts): a second reference for samsrf-core's validation, never shipped"
+description = "MATLAB's real double least squares, x'y, y'A and corr on MKL's AVX512_E1 branch (Intel hosts): a second reference for samsrf-core's validation, never shipped"
 publish = false
 
 [lib]

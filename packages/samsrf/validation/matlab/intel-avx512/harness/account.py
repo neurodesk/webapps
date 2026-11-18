@@ -9,14 +9,18 @@ value is equal only if the cast is exact and the bits agree (NaN payloads and th
 zero included). For the research module each value moves between the committed module's
 result and its own: kept (equal in both), gained, lost, or still differing. No tolerance.
 
-Every value is attributed to the route the engine computed it on:
+Every value is labelled by the route of its final value (vertices are zero-based):
 
-- `real-double`: double data on real arithmetic, where the research module runs the
-  samsrf-mkl-avx512 kernels (implemented);
-- `complex-double`: a vertex whose Srf.Data has an imaginary part on either side (the SamSrf
-  CSS convention), computed with complex kernels that have no Intel reference
-  (unimplemented; the real dnrm2 of y in its corr is the research one);
-- `single`: single data, whose kernels have no Intel reference (unimplemented);
+- `real-double`: a double vertex with no imaginary part on any side. The research module
+  computes it with the samsrf-mkl-avx512 kernels wherever the arithmetic is real; this
+  label does not establish that every kernel on its path is identified (the coarse fit's
+  correlations, for example, are not modelled on either host).
+- `complex-double`: a vertex whose Srf.Data has an imaginary part on any side (the SamSrf
+  CSS convention). Its complex kernels (`z' * y`, `norm(z)`, complex least squares) have no
+  Intel reference and stay the shipped ones, but its `corr` also takes the real norm of
+  `y`, which the research module replaces: a mixed route. Its fit may also have evaluated
+  real predictions on the way.
+- `single`: single data, whose kernels have no Intel reference and stay the shipped ones.
 - `outside-roi`: GIfTI values outside the ROI, which no kernel computes.
 
 Refused and unsupported runs carry no values; they are listed with the comparator's class.
@@ -28,7 +32,14 @@ Before any value is counted (fail closed):
 - null control: the hooks build (nothing installed) writes the committed module's bytes in
   every file of every run on both bundles, with the same statuses and messages;
 - the two hosts' bundles differ only in MAT/HDF5 headers, so each module must write the
-  same bytes from both; it is checked, not assumed.
+  same bytes from both; it is checked, not assumed;
+- host roles come from the MATLAB receipts the comparator read, not from folder names: the
+  root's process must report MKL's CNR `auto` branch on an AMD CPU and ubuntu-24.04's the
+  `AVX512_E1` branch.
+
+The MATLAB executions are the source recording's processes (`source-1`), whose receipts do
+not attest the bundle (the comparator's --allow-unattested-source-inputs). Nothing here is
+compiled-image (container) or browser UI evidence.
 
 The full report (--out) lists every lost value on both hosts. The summary (--summary) keeps
 every count, every lost value on the Intel host (the research module's own reference), the
@@ -69,7 +80,15 @@ def read_json(path):
     return json.loads(Path(path).read_text())
 
 
+BRANCHES = {'amd': ('AMD', '(CNR branch auto)'), 'intel': ('', '(CNR branch AVX512_E1)')}
+
+
 def check_report(report, module_sha, label, host):
+    identity = report['matlab']
+    cpu_prefix, branch = BRANCHES[host]
+    if identity.get('kind') != 'source' or not str(identity.get('blas', '')).endswith(branch) \
+            or not str(identity.get('cpu', '')).upper().startswith(cpu_prefix.upper()):
+        raise Refused(f'{label} {host}: the receipts report {identity.get("cpu")!r} {identity.get("blas")!r}, not this role')
     summary = report['summary']
     if summary['failedRuns'] or summary['inventory-errorRuns']:
         raise Refused(f'{label} {host}: failed or inventory-error runs')
@@ -194,7 +213,7 @@ def account_host(plan, pins_root, shipped_root, research_root, shipped_report, r
                 map_entry[kind] = counts
                 for position in numpy.flatnonzero(before & ~after):
                     vertex = int(roi[position]) if kind != 'gifti' else int(position)
-                    losses.append({'run': rid, 'map': label, 'kind': kind, 'vertex': vertex,
+                    losses.append({'run': rid, 'map': label, 'kind': kind, 'vertex0': vertex,
                                    'route': str(route_of[position]),
                                    'matlab': hex_value(reference[position]),
                                    'shipped': hex_value(numpy.ascontiguousarray(shipped[kind][:, index]).astype(reference.dtype)[position]),

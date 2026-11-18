@@ -14,32 +14,115 @@ async function workflow(name) {
   return YAML.parse(await readFile(new URL(`../.github/workflows/${name}.yml`, import.meta.url), 'utf8'));
 }
 
-test('each Intel reference invocation configures complete fixture pairs', async () => {
-  const flow = await workflow('samsrf-native');
-  const source = await readFile(new URL('../exes/samsrf/mkl-avx512/tests/recordings.rs', import.meta.url), 'utf8');
-  const pairs = [...source.matchAll(/fixture_pair\(\["(SAMSRF_\w+)", "(SAMSRF_\w+)"\]\)/g)]
-    .map(match => match.slice(1));
-  assert.ok(pairs.length > 0, 'find the fixture pairs used by the recording gates');
-  const exercised = new Set();
-  let invocations = 0;
-  for (const step of flow.jobs.test.steps) {
-    const commands = (step.run || '').replace(/\\\r?\n/g, ' ').split('\n');
-    for (const command of commands.filter(line => /cargo test .* -p samsrf-mkl-avx512 --test recordings/.test(line))) {
-      const configured = new Set([
-        ...Object.keys(flow.env || {}),
-        ...Object.keys(flow.jobs.test.env || {}),
-        ...Object.keys(step.env || {}),
-        ...[...command.matchAll(/\b(SAMSRF_\w+)=/g)].map(match => match[1]),
-      ]);
-      for (const [recording, input] of pairs) {
-        assert.equal(configured.has(recording), configured.has(input), `${step.name}: set both ${recording} and ${input}`);
-        if (configured.has(recording)) exercised.add(recording);
-      }
-      invocations += 1;
+// The samsrf-mkl-avx512 integration suites (exes/samsrf/mkl-avx512/tests/*.rs) and the fixture
+// variables each reads, from its source: every "SAMSRF_..." literal except the outputs below,
+// and the pairs it requires together. A suite that is not in the workflow, a fixture no
+// invocation of its suite configures, or a half-configured pair fails the contract.
+const INTEL_OUTPUTS = new Set(['SAMSRF_DIVERGENCE_REPORT_DIR', 'SAMSRF_HELDOUT_DUMP']);
+
+async function intelSuites() {
+  const directory = new URL('../exes/samsrf/mkl-avx512/tests/', import.meta.url);
+  const suites = new Map();
+  for (const file of (await readdir(directory)).filter((name) => name.endsWith('.rs')).sort()) {
+    const source = await readFile(new URL(file, directory), 'utf8');
+    const variables = new Set([...source.matchAll(/"(SAMSRF_[A-Z0-9_]+)"/g)].map((match) => match[1]).filter((name) => !INTEL_OUTPUTS.has(name)));
+    const pairs = [...source.matchAll(/\b(?:fixture_pair|pair)\(\["(SAMSRF_\w+)", "(SAMSRF_\w+)"\]\)/g)].map((match) => match.slice(1));
+    suites.set(file.slice(0, -'.rs'.length), { variables, pairs });
+  }
+  return suites;
+}
+
+// Every command of the test job that runs the crate's suites: `-p samsrf-mkl-avx512` with
+// `--test NAME` flags (those suites), `--tests` or no target filter (every suite), and
+// `cargo test` of the whole samsrf workspace (every suite). Configured fixtures are the
+// command's own assignments and the step's and job's environment.
+function intelInvocations(flow, suites) {
+  const job = flow.jobs.test;
+  const invocations = [];
+  for (const step of job.steps) {
+    const inherited = [...Object.keys(flow.env || {}), ...Object.keys(job.env || {}), ...Object.keys(step.env || {})];
+    for (const command of (step.run || '').replace(/\\\r?\n/g, ' ').split('\n')) {
+      if (!/\bcargo\s+(?:\+\S+\s+)?test\b/.test(command) || !command.includes('exes/samsrf/Cargo.toml')) continue;
+      const packages = [...command.matchAll(/(?:^|\s)(?:-p|--package)[ =](\S+)/g)].map((match) => match[1]);
+      if (packages.length && !packages.includes('samsrf-mkl-avx512')) continue;
+      const named = [...command.matchAll(/(?:^|\s)--test[ =](\S+)/g)].map((match) => match[1]);
+      const filtered = named.length > 0 || /(?:^|\s)--(?:lib|bins?|bin|examples?|example|benches?|bench|doc)\b/.test(command);
+      const run = named.length && !/(?:^|\s)--tests\b/.test(command) ? named : filtered && !/(?:^|\s)--tests\b/.test(command) ? [] : [...suites.keys()];
+      const own = [...command.matchAll(/\b(SAMSRF_\w+)=/g)].map((match) => match[1]);
+      invocations.push({ step: step.name, command: command.trim(), run, own: new Set(own), configured: new Set([...inherited, ...own]) });
     }
   }
-  assert.ok(invocations > 0, 'find the Intel recording invocations');
-  for (const [recording] of pairs) assert.ok(exercised.has(recording), `${recording} runs in CI`);
+  return invocations;
+}
+
+function checkIntelContract(flow, suites) {
+  const invocations = intelInvocations(flow, suites);
+  assert.ok(invocations.length > 0, 'find the samsrf-mkl-avx512 invocations');
+  for (const invocation of invocations) {
+    for (const name of invocation.run) assert.ok(suites.has(name), `${invocation.step}: no suite ${name}`);
+    const read = new Set(invocation.run.flatMap((name) => [...suites.get(name).variables]));
+    for (const variable of invocation.own) {
+      assert.ok(read.has(variable), `${invocation.step}: no suite it runs reads ${variable}`);
+    }
+    for (const name of invocation.run) {
+      for (const [first, second] of suites.get(name).pairs) {
+        assert.equal(invocation.configured.has(first), invocation.configured.has(second),
+          `${invocation.step}: ${name} needs both ${first} and ${second}`);
+      }
+    }
+  }
+  for (const [name, { variables }] of suites) {
+    const runs = invocations.filter((invocation) => invocation.run.includes(name));
+    assert.ok(runs.length > 0, `${name} runs in CI`);
+    for (const variable of variables) {
+      assert.ok(runs.some((invocation) => invocation.configured.has(variable)), `${name} runs in CI with ${variable}`);
+    }
+  }
+  return invocations;
+}
+
+// A copy of the workflow with each logical command of the test job rewritten (continuations joined).
+function rewriteCommands(flow, rewrite) {
+  const copy = structuredClone(flow);
+  for (const step of copy.jobs.test.steps) {
+    if (step.run) step.run = step.run.replace(/\\\r?\n/g, ' ').split('\n').map(rewrite).filter((line) => line !== null).join('\n');
+  }
+  return copy;
+}
+
+const intelCommand = (line) => /cargo\s+test\b/.test(line) && /-p samsrf-mkl-avx512\b/.test(line);
+
+test('each samsrf-mkl-avx512 suite runs in CI with every fixture it reads, in complete pairs', async () => {
+  const suites = await intelSuites();
+  assert.deepEqual([...suites.keys()], ['blas_recordings', 'divergence', 'recordings'], 'the crate\'s integration suites');
+  const invocations = checkIntelContract(await workflow('samsrf-native'), suites);
+  for (const name of suites.keys()) assert.ok(invocations.some((invocation) => invocation.run.includes(name) && invocation.own.size > 0), `${name} runs with fixtures`);
+});
+
+test('the samsrf-mkl-avx512 CI contract rejects a dropped suite, invocation, fixture or half pair', async () => {
+  const suites = await intelSuites();
+  const flow = await workflow('samsrf-native');
+  const mutants = {
+    'every --test blas_recordings and --test divergence removed': rewriteCommands(flow, (line) =>
+      intelCommand(line) ? line.replaceAll(' --test blas_recordings', '').replaceAll(' --test divergence', '') : line),
+    '--test divergence removed from the QR command': rewriteCommands(flow, (line) =>
+      intelCommand(line) && line.includes('SAMSRF_QR_KERNELS_DIR') ? line.replace(' --test divergence', '') : line),
+    'the single-kernels divergence invocation removed': rewriteCommands(flow, (line) =>
+      intelCommand(line) && line.includes('SAMSRF_SINGLE_KERNELS_DIR') ? null : line),
+    'SAMSRF_ARITHMETIC_ORDER_DIR removed from the crate command': rewriteCommands(flow, (line) =>
+      intelCommand(line) ? line.replace(/SAMSRF_ARITHMETIC_ORDER_DIR="[^"]*"\s+/, '') : line),
+    'SAMSRF_CGG_DIR removed from the crate command': rewriteCommands(flow, (line) =>
+      intelCommand(line) ? line.replace(/SAMSRF_CGG_DIR="[^"]*"\s+/, '') : line),
+    'half of the CLI pair': rewriteCommands(flow, (line) =>
+      intelCommand(line) ? line.replace(/SAMSRF_CLI_COURSES_DIR="[^"]*"\s+/, '') : line),
+    'a fixture no suite of the command reads': rewriteCommands(flow, (line) =>
+      intelCommand(line) && line.includes('SAMSRF_SINGLE_KERNELS_DIR') ? line.replace(' --test divergence', ' --test recordings') : line),
+  };
+  for (const [name, mutant] of Object.entries(mutants)) {
+    assert.notDeepEqual(mutant, flow, `${name}: the mutation changed the workflow`);
+    assert.throws(() => checkIntelContract(mutant, suites), assert.AssertionError, name);
+  }
+  assert.doesNotThrow(() => checkIntelContract(rewriteCommands(flow, (line) => line), suites), 'the unmutated workflow passes after the rewrite');
 });
 
 // Every workflow whose portable job calls the shared Node packager, with its package directory.

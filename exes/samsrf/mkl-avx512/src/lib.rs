@@ -1,6 +1,8 @@
 //! MATLAB R2023b's real double least squares as MKL 2021.3 ran it on its AVX512_E1 branch
 //! on the recorded Intel Xeon hosts (8370C, 8573C, 6975P-C): `[a b] \ Y` (`?geqp3`,
-//! `?ormqr`, `?trsv`/`?trsm`), `detrend`'s fit and `samsrf_removenoise`.
+//! `?ormqr`, `?trsv`/`?trsm`), `detrend`'s fit and `samsrf_removenoise`; and, in [`blas`]
+//! (research, branch t3/samsrf-intel-cf), MATLAB's real double `x' * y`, `y' * A`, `corr`
+//! and CF profile on that branch.
 //!
 //! The shipped port (`samsrf_core::lstsq`) follows MKL's CNR `auto` branch on AMD hosts.
 //! MATLAB on those Intel hosts rounds the same solves differently, so one output cannot
@@ -41,8 +43,9 @@ const RESCALE: f64 = f64::MIN_POSITIVE / (f64::EPSILON * 0.5);
 /// The correctly rounded Euclidean norm (round to nearest, ties to even) of the exact sum
 /// of squares; NaN if any value is NaN, infinity if any is infinite. This is a candidate for
 /// MKL's `dnrm2` on the AVX512_E1 branch, not an identification of it: it equals the Intel
-/// norms evaluated by the gates except one, where the exact norm lies 6.4e-5 ULP above a rounding
-/// midpoint and MATLAB's result is one ULP lower (pinned in the gates). MKL's rounding that
+/// norms evaluated by the gates except two, where the exact norm lies 6.4e-5 and 2.6e-4 ULP
+/// above a rounding midpoint and MATLAB's result is one ULP lower (both pinned in the gates:
+/// `recordings.rs` and `blas_recordings.rs`). MKL's rounding that
 /// close to a tie is not known.
 pub fn nrm2(values: &[f64]) -> f64 {
     if values.iter().any(|v| v.is_nan()) {
