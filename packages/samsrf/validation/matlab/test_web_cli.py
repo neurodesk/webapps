@@ -17,6 +17,7 @@ from compare_web_cli import Inventory
 from test_cli import scratch, write_gifti
 
 PLAN = {run['id']: run for run in cli_plan.plan()['runs']}
+CRASH = 'RangeError: WebAssembly.instantiate(): Out of memory: Cannot allocate Wasm memory for new instance'
 VERTICES = 6
 ROI = [1, 3, 4]
 IMAGE = 'sha256:' + 'a' * 64
@@ -74,7 +75,7 @@ class Fixture:
             if PLAN[run_id]['precision'] == 'single':
                 values = values.astype('<f4').astype('<f8')
             self.maps[run_id] = values
-        self.status = {i: web_cli.expected_web_status(PLAN[i], runner) for i in ids}
+        self.status = {i: web_cli.expected_web_outcome(PLAN[i], runner)['status'] for i in ids}
         self.receipt = {i: 'succeeded' for i in ids}
         self.write()
 
@@ -103,6 +104,9 @@ class Fixture:
             (self.matlab / 'receipts' / f'{run_id}.json').write_text(json.dumps({
                 'id': run_id, 'execution': execution, 'argv': argv, 'status': self.receipt[run_id]}))
             record = {'id': run_id, 'status': self.status[run_id]}
+            expected = web_cli.expected_web_outcome(run, self.runner)
+            if self.status[run_id] == expected['status'] and 'message' in expected:
+                record['message'] = expected['message']
             mat, labels, names = compare_cli.expected_results(run)
             if self.receipt[run_id] == 'succeeded':
                 (self.matlab / run_id).mkdir()
@@ -272,6 +276,24 @@ class Statuses(Base):
         self.x.write()
         self.assertEqual(self.x.report()['runs'][1]['class'], 'failed')
 
+    def test_a_refusal_needs_the_engines_exact_text(self):
+        expected = web_cli.expected_web_outcome(PLAN[self.id], 'node')['message']
+        for message in (CRASH, 'Fit_pRF 2 is not supported by this port', None):
+            with self.subTest(message=message):
+                self.x.write()
+                self.x.edit_record(self.id, message=message)
+                report = self.x.report()
+                run = report['runs'][0]
+                self.assertEqual((run['class'], run.get('expectedMessage')), ('failed', expected))
+                self.assertEqual(report['summary']['webUnexpectedRuns'], 1)
+
+    def test_a_matlab_failure_does_not_hide_a_wrong_refusal(self):
+        self.x.receipt[self.id] = 'failed'
+        self.x.write()
+        self.x.edit_record(self.id, message=CRASH)
+        summary = self.x.report()['summary']
+        self.assertEqual((summary['failedRuns'], summary['matlabFailedRuns'], summary['webUnexpectedRuns']), (1, 1, 1))
+
 
 class BrowserStatuses(Base):
     ids = ['prf_custom_hrf_lh_double']
@@ -282,6 +304,73 @@ class BrowserStatuses(Base):
         self.x.receipt[self.id] = 'failed'
         self.x.write()
         self.assertEqual(self.run_class(), 'failed')
+
+    def test_a_crash_on_a_subject_hrf_run_is_not_unsupported(self):
+        other_file = web_cli.expected_web_outcome(PLAN[self.id], 'browser')['message'].replace('hrf_custom', 'hrf_other')
+        for message in (CRASH, other_file):
+            with self.subTest(message=message):
+                self.x.write()
+                self.x.edit_record(self.id, message=message)
+                report = self.x.report()
+                self.assertEqual(self.run_class(report), 'failed')
+                self.assertEqual(report['summary']['webUnexpectedRuns'], 1)
+
+
+class BrowserCommandLine(Base):
+    """The public entry on the whole matrix from the browser runner, against a compiled execution."""
+    ids = list(PLAN)
+    kind = 'compiled-runtime'
+    runner = 'browser'
+
+    def test_a_crash_relabelled_unsupported_fails_the_command(self):
+        self.x.plan = cli_plan.plan()
+        plan = self.x.root / 'plan.json'
+        manifest = self.x.root / 'manifest.json'
+        plan.write_text(json.dumps(self.x.plan))
+        manifest.write_text(json.dumps(self.x.manifest))
+        self.x.plan_sha = sha(plan.read_bytes())
+        self.x.write()
+        for crash, code in ((False, 0), (True, 1)):
+            with self.subTest(crash=crash):
+                if crash:
+                    self.x.edit_record('prf_custom_hrf_lh_double', message=CRASH)
+                report = self.x.root / f'report-{crash}.json'
+                result = subprocess.run([sys.executable, str(Path(web_cli.__file__).resolve()), str(plan), str(manifest),
+                                         str(self.x.web), str(self.x.matlab), str(report), '--expect', 'compiled-runtime'],
+                                        capture_output=True, text=True, check=False)
+                self.assertEqual(result.returncode, code, result.stderr)
+                summary = json.loads(report.read_text())['summary']
+                self.assertEqual((summary['unsupportedRuns'], summary['failedRuns']), (3, 1) if crash else (4, 0))
+
+
+class EngineRunnerStatuses(unittest.TestCase):
+    """run_web_matrix.mjs's expectedEngineOutcome and failureStatus, which both engine runners use."""
+
+    def node(self, call, *arguments):
+        script = ("import { expectedEngineOutcome, failureStatus } from "
+                  + json.dumps((Path(web_cli.__file__).resolve().parent / 'run_web_matrix.mjs').as_uri()) + ";"
+                  f"const [runs, runner, message] = JSON.parse(process.argv[1]); console.log(JSON.stringify({call}));")
+        result = subprocess.run(['node', '--input-type=module', '-e', script, json.dumps(arguments)],
+                                capture_output=True, text=True, check=True)
+        return json.loads(result.stdout)
+
+    def test_expected_outcomes_agree_with_the_comparator(self):
+        runs = cli_plan.plan()['runs']
+        for runner in ('node', 'browser'):
+            with self.subTest(runner=runner):
+                self.assertEqual(self.node('runs.map((run) => expectedEngineOutcome(run, runner))', runs, runner),
+                                 [web_cli.expected_web_outcome(run, runner) for run in runs])
+
+    def test_only_the_expected_text_is_a_refusal(self):
+        runs = cli_plan.plan()['runs']
+        for runner in ('node', 'browser'):
+            expected = [web_cli.expected_web_outcome(run, runner) for run in runs]
+            with self.subTest(runner=runner):
+                statuses = self.node('runs.map((run, i) => failureStatus(run, runner, message[i]))', runs, runner,
+                                     [outcome.get('message', 'any failure') for outcome in expected])
+                self.assertEqual(statuses, [outcome['status'] if 'message' in outcome else 'failed' for outcome in expected])
+                self.assertEqual(set(self.node('runs.map((run) => failureStatus(run, runner, message))', runs, runner, CRASH)),
+                                 {'failed'})
 
 
 class InventoryErrors(Base):

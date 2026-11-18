@@ -12,7 +12,8 @@
 // another form are named there too: the Benson template GIfTI (MATLAB reads the .mat
 // prepare_cli_bundle.m derived from it) and the subject-HRF file, which the engine API
 // takes as a kernel (`hrf.oldSchool`); the web app's interface has no subject-HRF route.
-// A run the engine refuses is written as refused with its message. It is never a pass.
+// A run the engine refuses with exactly the text expectedEngineOutcome names is written
+// as refused, with its message; any other failure is failed. Neither is a pass.
 import { createHash } from 'node:crypto';
 import { cpus } from 'node:os';
 import { mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync, existsSync } from 'node:fs';
@@ -36,6 +37,29 @@ export function treeHashes(root) {
   };
   visit(root);
   return Object.fromEntries(Object.entries(hashes).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+}
+
+/** What the engine must do with a plan run on this runner, with the exact text of an expected
+ * refusal; compare_web_cli.py's expected_web_outcome says the same. */
+export function expectedEngineOutcome({ algorithm, model, precision }, runner) {
+  // exes/samsrf/core/src/model.rs: Error::NotImplemented.
+  if (precision === 'single' && algorithm === 'rc' && (model.Prf_Function ?? 0) !== 0) {
+    return { status: 'refused', message: 'Data_Precision=single with a Prf_Function fit is not supported by this port' };
+  }
+  if (precision === 'single' && algorithm === 'cf' && model.Fit_pRF === 1) {
+    return { status: 'refused', message: 'Data_Precision=single with Fit_pRF=1 is not supported by this port' };
+  }
+  if (runner === 'browser' && typeof model.Hrf === 'string' && model.Hrf.startsWith('hrf_')) {
+    // exes/samsrf/core/src/hrf.rs resolve(): nothing in the browser loads the subject-HRF file.
+    return { status: 'unsupported', message: `model: Hrf ${model.Hrf} is an old-school HRF fit file: the caller must load its fP and call hrf::old_school` };
+  }
+  return { status: 'succeeded' };
+}
+
+/** The status of a run the engine did not finish: refused or unsupported only with exactly the expected text. */
+export function failureStatus(run, runner, message) {
+  const expected = expectedEngineOutcome(run, runner);
+  return expected.status !== 'succeeded' && message === expected.message ? expected.status : 'failed';
 }
 
 /** Translates one plan run into the readAnalysisInputs options, the model text and the HRF override. */
@@ -98,7 +122,7 @@ function runOne(run, bundle, directory) {
     try {
       job = samsrf.createJob(spec);
     } catch (error) {
-      record.status = /is not supported by this port/.test(error.message) ? 'refused' : 'failed';
+      record.status = failureStatus(run, 'node', error.message);
       record.message = error.message;
       return record;
     }

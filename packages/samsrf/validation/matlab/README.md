@@ -1231,7 +1231,10 @@ and CF reads the Benson GIfTI that `prepare_cli_bundle.m` converted into the
 per-precision `.mat`. The Node runner passes the subject-HRF file to the engine
 API as a kernel (`hrf.oldSchool` of the file's `fP`). The app's interface has no
 subject-HRF route, so the browser runner records those four runs as
-`unsupported`.
+`unsupported` when the engine stops with the core's subject-HRF text.
+`expectedEngineOutcome` names each run's expected refusal and its exact text,
+and both runners record `refused` or `unsupported` only for that text. Any
+other failure, a crash included, is `failed`.
 
 ```sh
 compare_web_cli.py PLAN BUNDLE_SHA256 WEB_ROOT MATLAB_ROOT REPORT \
@@ -1280,26 +1283,37 @@ counts the sign-of-zero differences.
 
 A run is `refused` only where the engine is expected to refuse (single RC with
 a fitted profile, single CF Gaussian), and `unsupported` only for the browser's
-subject-HRF runs, in both cases with MATLAB succeeding. Any other combination
-is `failed`, with both sides' statuses kept. The polar angle and eccentricity
-GIfTIs that the web exports and SamSrfAnalysis does not are checked for shape
-and listed as not compared. MATLAB-only files are listed the same way. No
-tolerance is applied. Failed and inventory-error runs exit nonzero.
+subject-HRF runs, in both cases with MATLAB succeeding. The comparator does not
+take the runner's word for it: the record must carry exactly the core's text
+for that run (`expected_web_outcome`), or the run is `failed` and names
+`expectedMessage`. Any other combination is `failed`, with both sides'
+statuses kept. A MATLAB failure does not hide a wrong web result: the summary
+counts it in `matlabFailedRuns` and the web side in `webUnexpectedRuns`. The
+polar angle and eccentricity GIfTIs that the web exports and SamSrfAnalysis
+does not are checked for shape and listed as not compared. MATLAB-only files
+are listed the same way. No tolerance is applied. Failed and inventory-error
+runs exit nonzero.
 
-`test_web_cli.py` (24 tests) builds full-provenance fixtures and covers each
+`test_web_cli.py` (31 tests) builds full-provenance fixtures and covers each
 refusal and inventory rule with a negative control:
 
 - one ULP that the float32 GIfTI hides, a signed zero, a NaN and an imaginary
   part;
 - ULPs across zero in both precisions;
 - a MATLAB failure behind a web refusal, and unexpected web statuses;
+- a crash or another refusal recorded as the expected refusal, beside a MATLAB
+  failure too, and on the whole browser matrix through the command line;
+- each runner's `expectedEngineOutcome` and `failureStatus` against the
+  comparator, for every run;
 - an extra `maps.f64` byte, a duplicate, zero, out-of-range or fractional ROI,
   empty and one-vertex GIfTIs, and corrupt or extra files;
 - a stale plan or bundle hash and a model changed to TR 999;
 - source receipts presented as compiled, and malformed compiled receipts.
 
 Eight comparator mutations (the earlier ULP mapping, the ROI, argv, kind and
-GIfTI-length checks, MATLAB failures and truncation) each fail the suite.
+GIfTI-length checks, MATLAB failures and truncation) each fail the suite. So do
+three that drop the exact-text check, its count in `webUnexpectedRuns`, or
+`failureStatus`'s text match.
 
 The `runtime_cli` and `runtime_image` jobs run both runners and the comparator
 against every MATLAB execution they make. The build job runs them after
@@ -1385,12 +1399,139 @@ What the differences are (AMD host):
   14 to 15, by up to 1.8 in x0. The zero masks of single CSS disagree.
 - **Single forward fits.** `prf_gaussian_lh_average_single` differs at one
   vertex in Beta (1 ULP) and Baseline (5 ULP); its other maps are exact.
-- **Signed zeros.** The `cf_hull` x0 and y0 maps, and Sigma, Beta and Baseline
+- **NaN sign bits.** The `cf_hull` x0 and y0 maps, and Sigma, Beta and Baseline
   at the 11 rejected vertices of `rc_gaussian_lh_double`, differ only in the
-  sign of zero.
+  sign bit of a NaN: MATLAB stores `0xFFC00000` (float32) where the engine has
+  `0x7FC00000`. This was first described as signed zeros; the bits were read on
+  the licensed host's source and compiled executions (2026-11-17), where
+  `compare_ui_cli.py` counts them as `nanSignOnly`.
 
 These comparisons are with source MATLAB. They are not compiled-image parity,
 which needs the build.
+
+### Production interface against the CLI matrix
+
+`run_browser_matrix.mjs` calls the app's engine module from source; it does not
+show that the deployed app gives the same files. `run_ui_matrix.mjs` runs the
+24 runs through a built `apps/samsrf` bundle, served with its own COOP/COEP
+headers, by its interface. For each run it:
+
+1. chooses the analysis and loads the run's CLI model as a model JSON, with
+   `Data_Precision` added (the precision `def_64bit` selects for MATLAB);
+2. sets how runs combine, keeps detrending and z-scoring on, and puts each
+   input into its field: the runs, the apertures `.mat`, the ROI and the
+   seed labels, `lh.white` and `lh.area`, and the Benson GIfTI that
+   `prepare_cli_bundle.m` converted for MATLAB;
+3. saves the model the app shows (`app-model.json`), presses Run and, when
+   the app offers a result, downloads the zip with "Download all".
+
+The app replaces the model's file fields with the names of the files it was
+given. The environment records the SHA-256 of the WebAssembly module the page
+actually fetched.
+
+`expectedOutcome` names what the app must do with each run, and the exact text
+of an expected refusal. Each run gets one status:
+
+- `refused`: when the model loaded, the app showed exactly the single-precision
+  refusal the run expects (single RC Gaussian, single CF Gaussian).
+- `unsupported`: after Run, the app showed exactly the core's subject-HRF
+  message (`model: Hrf hrf_custom is an old-school HRF fit file: ...`) and
+  offered nothing.
+- `succeeded`: the status line shows the run's outcome, "Download all" is
+  offered, and the page threw nothing.
+- `succeeded-ui-error`: the app offered a result, then showed an error or
+  threw. The zip is kept and the error is `uiError`. The workflow did not
+  complete.
+- `failed`: anything else, including a crash or a load failure on a run that
+  is expected to be refused.
+
+```sh
+compare_ui_cli.py PLAN BUNDLE_SHA256 UI_ROOT MATLAB_ROOT REPORT \
+  --expect source|compiled-runtime --engine-root WEB_ROOT [--allow-unattested-source-inputs]
+```
+
+`compare_ui_cli.py` refuses the comparison (exit 2) unless all of these hold:
+
+- PLAN is `cli_plan.py`'s whole matrix. A subset is never compared.
+- The bundle manifest and the MATLAB receipts pass `compare_web_cli.py`'s
+  checks, and WEB_ROOT, the `run_web_matrix.mjs` or `run_browser_matrix.mjs`
+  run of the same plan file, passes them as a web execution.
+- The page served the WebAssembly module that the engine harness ran.
+- UI_ROOT holds exactly the plan's records and their run directories.
+
+Each run directory must hold exactly the files its record names:
+
+- `app-model.json`, whose bytes hash to `appModelSha256` and whose content is
+  the plan model with `Data_Precision` added and the file fields named as the
+  app names them (`aps_bars`, `seed`, `lh_benson`);
+- the zip, whose bytes hash to `zipSha256` and which holds exactly the
+  contract maps and the polar angle and eccentricity maps.
+
+The interface downloads float32 GIfTIs only, so each contract map is compared
+bitwise twice:
+
+- against MATLAB's GIfTI, over every vertex;
+- against MATLAB's `Srf.Data` column over `Srf.Roi`, cast to float32.
+
+A double run's double values cannot be observed through the interface; the
+report says which precision each comparison stands for, and
+`compare_web_cli.py` holds the engine's double rows. `nanSignOnly` counts
+differing values that are NaN on both sides. The zip's own hash changes from
+run to run, because its entries carry the time of the download; its GIfTIs do
+not.
+
+The comparator classes each run from its record, and does not take the
+runner's status on trust:
+
+- `exact` or `differs`: a completed workflow (`succeeded`, no page error).
+- `ui-error`: the app offered a result and then failed. Its downloads are
+  compared and reported (`downloads`), and the run counts as a failure.
+- `refused` or `unsupported`: the record carries the expected text and no zip.
+- `failed` or `inventory-error`: as in `compare_web_cli.py`.
+
+Engine equality is a gate of its own. For every run the app computed, the zip
+must hold exactly the files the engine harness exported, each equal byte for
+byte. MATLAB numerical differences are reported and never gated. The exit
+status is 0 when every run is `exact`, `differs`, `refused` or `unsupported`
+and the engine gate holds, and 1 otherwise; the report's `failures` says why.
+
+`test_ui_cli.py` (34 tests) covers each status and class, the exact contents
+of the UI, engine and MATLAB roots, the saved model, the served module, the
+engine gate, and the command line's exit codes on the whole matrix and its
+refusal of a subset. It also covers a float32 ULP, a NaN sign, a GIfTI that
+agrees while `Srf.Data` does not, and a double ULP that float32 hides.
+`scripted_ui_page.mjs` stands in for the page, so `runOne`'s statuses are
+tested without a browser. Each of 17 mutations that reverts one of these
+checks fails it.
+
+```sh
+pnpm install --frozen-lockfile
+pnpm --filter samsrf build
+pnpm --filter samsrf preview --port 4291 --strictPort --host 127.0.0.1 &
+node $m/run_ui_matrix.mjs http://127.0.0.1:4291/samsrf/ $e/plan.json $e/bundle $e/bundle-sha256.json $e/ui-1
+python3 $m/compare_ui_cli.py $e/plan.json $e/bundle-sha256.json $e/ui-1 $e/compiled-1 \
+  ui-1-vs-compiled.json --expect compiled-runtime --engine-root $e/browser-1
+```
+
+What the interface cannot yet do on this matrix:
+
+- **Subject-HRF files.** It has no field for them, so the four `*_custom_hrf_*`
+  runs are `unsupported`; only the Node runner reaches them, through the
+  engine API.
+- **Showing the matrix's surface.** NiiVue cannot read the matrix's
+  synthetic 96-vertex `lh.white` (`Offset is outside the bounds of the
+  DataView`) and does not throw. `viewer.js` then treats the surface as
+  shown, and drawing the first map fails with `Cannot read properties of
+  undefined (reading 'layers')` after the result is offered. Every computed
+  run is therefore `succeeded-ui-error`, and none completes.
+- **Double values.** Only float32 GIfTIs are offered.
+
+On the retained runs of 2026-11-17 (`ui-2`, the production bundle with module
+`d5ae6ba2…`, against the compiled image and with `run_browser_matrix.mjs`'s
+`browser-1` as the engine root), the comparator exits 1: 18 runs are
+`ui-error` and none is completed, 2 are `refused` and 4 `unsupported`. The
+downloads of 11 of the 18 runs are exact (110 of 140 maps), and all 176
+downloaded files equal the engine harness's.
 
 ## Recorded inputs and focused diagnosis
 
