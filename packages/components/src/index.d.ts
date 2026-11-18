@@ -108,6 +108,7 @@ export class ProgressManager {
   setProgress(value: number, text?: string | null): void;
   setIndeterminate(text?: string): void;
   setText(text: string): void;
+  setError(text: string): void;
   setCancellable(cancellable: boolean): void;
   startTimer(): void;
   stopTimer(clear?: boolean): void;
@@ -115,6 +116,16 @@ export class ProgressManager {
   end(text: string, options?: { success?: boolean }): void;
   reset(text?: string): void;
 }
+
+export interface FormattedMemoryError {
+  readonly kind: 'oom' | 'worker-crash' | 'webgl' | 'reload-active' | 'reload-loaded' | 'reload-discarded';
+  readonly raw: string;
+  readonly status: string;
+  readonly log: string;
+}
+export function isMemoryErrorMessage(value: unknown): boolean;
+export function formatMemoryError(value: unknown, options?: { kind?: FormattedMemoryError['kind']; detail?: string }): FormattedMemoryError | null;
+export function bindMemoryCrashMonitor(doc?: Document, options?: { now?: () => number; maxAgeMs?: number }): { destroy(): void } | null;
 
 export * from './elements/index.js';
 export * from './ui/templates.js';

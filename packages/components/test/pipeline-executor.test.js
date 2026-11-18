@@ -80,10 +80,98 @@ test('cancel during initialization settles the old wait without borrowing replac
   assert.equal(executor.isReady(), true);
 });
 
-test('initialization failure releases the readiness wait', async () => {
+test('initialization failure releases the readiness wait and preserves the worker error reason', async () => {
   const executor = new PipelineExecutor({ createWorker: () => ({ postMessage() {}, terminate() {} }) });
   const pending = executor.initialize();
-  const rejected = assert.rejects(pending, /Worker initialization failed/);
-  executor.handleError('failed to initialize');
+  const rejected = assert.rejects(pending, /Worker initialization failed: WebAssembly\.Memory\(\): could not allocate memory/);
+  executor.handleMessage({ type: 'error', message: 'WebAssembly.Memory(): could not allocate memory' });
   await rejected;
+});
+
+test('a mid-run worker crash terminates the dead worker, rejects pending restore and lets retry start fresh', async () => {
+  const workers = [];
+  const errors = [];
+  let failOnInit = true;
+  const executor = new PipelineExecutor({
+    createWorker: () => {
+      const worker = {
+        terminated: false,
+        postMessage(message) {
+          if (message.type === 'init') {
+            queueMicrotask(() => {
+              if (failOnInit) worker.onerror({});
+              else worker.onmessage({ data: { type: 'initialized' } });
+            });
+          }
+        },
+        terminate() { this.terminated = true; },
+      };
+      workers.push(worker);
+      return worker;
+    },
+    onError: (message) => errors.push(message),
+  });
+
+  // 1. Worker error during initialization rejects initialize() and discards the broken session.
+  await assert.rejects(executor.initialize(), /Worker initialization failed/);
+  assert.equal(workers[0].terminated, true);
+  assert.equal(executor.isReady(), false);
+
+  // 2. Retrying initialize() spawns a fresh worker.
+  failOnInit = false;
+  await executor.run({ label: 'segmentation' });
+  assert.equal(workers.length, 2);
+  assert.equal(executor.isReady(), true);
+
+  // 3. Worker error during restoreState() rejects the restore promise instead of stranding it.
+  const restoring = executor.restoreState({ inputData: new ArrayBuffer(4) });
+  const rejectedRestore = assert.rejects(restoring, /stopped unexpectedly \(often low device memory\)/);
+  await Promise.resolve();
+  workers[1].onerror({});
+  await rejectedRestore;
+  assert.equal(workers[1].terminated, true);
+  assert.equal(executor.isReady(), false);
+  assert.equal(executor.isRunning(), false);
+  assert.match(errors.at(-1), /stopped unexpectedly \(often low device memory\)/);
+
+  // 4. Subsequent run() spawns another fresh worker.
+  await executor.run({ label: 'segmentation' });
+  assert.equal(workers.length, 3);
+});
+
+test('synchronous postMessage throws and init timeouts clear the failed session so retry spawns a fresh worker', async () => {
+  const workers = [];
+  let mode = 'sync-throw';
+  const executor = new PipelineExecutor({
+    initTimeoutMs: 25,
+    createWorker: () => {
+      const currentMode = mode;
+      const worker = {
+        terminated: false,
+        postMessage(message) {
+          if (message.type === 'init') {
+            if (currentMode === 'sync-throw') throw new RangeError('Out of memory');
+            if (currentMode === 'ready') queueMicrotask(() => worker.onmessage({ data: { type: 'initialized' } }));
+          }
+        },
+        terminate() { this.terminated = true; },
+      };
+      workers.push(worker);
+      return worker;
+    },
+  });
+
+  await assert.rejects(executor.initialize(), { name: 'RangeError', message: /Out of memory/ });
+  assert.equal(workers[0].terminated, true);
+  assert.equal(executor.isReady(), false);
+
+  mode = 'hang';
+  await assert.rejects(executor.initialize(), /Worker initialization timed out/);
+  assert.equal(workers[1].terminated, true);
+  assert.equal(executor.isReady(), false);
+
+  mode = 'ready';
+  await executor.initialize();
+  assert.equal(workers.length, 3);
+  assert.equal(executor.isReady(), true);
 });

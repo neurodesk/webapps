@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { serveSite } from '../test-utils/serve-site.mjs';
 import { chromium, expect } from '@playwright/test';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
-import { verifyMobileImageImport, verifyMobileMeasurement } from '../test-utils/mobile-imaging.mjs';
+import { verifyMobileImageImport, verifyMobileMeasurement, verifyMobileMemoryCrash } from '../test-utils/mobile-imaging.mjs';
 
 const dist = join(repoRoot, 'dist');
 const registry = await loadAppsRegistry();
@@ -181,6 +181,8 @@ try {
       if (app.id === 'musclemap') {
         await verifyMobileImageImport(page);
         await checkLayout(page, `${app.id}/image-import/320`);
+        await verifyMobileMemoryCrash(page, origin);
+        console.log(`PASS ${app.id}/memory-crash/320`);
       }
       if (await page.locator('.nd-viewer-panel-grid:visible').count()) {
         // All three viewer panels must be square (height capped at 360px), inside the page width, and reachable by scrolling.

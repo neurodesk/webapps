@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { usePyodide } from '../../contexts/PyodideContext';
 import { useProcessing } from '../../contexts/ProcessingContext';
-import { LogEntry, useActivity, useTechnicalLog } from '../../utils/technicalLog';
+import { clearRecoveryNotice, LogEntry, useActivity, useRecoveryNotice, useTechnicalLog } from '../../utils/technicalLog';
 
 function newestError(entries: LogEntry[]): LogEntry | null {
   for (let index = entries.length - 1; index >= 0; index -= 1) {
@@ -44,6 +44,7 @@ type ActivityStatusFooterProps = {
 export function ActivityStatusFooter({ pyodide, isProcessing = false, processingProgress, position = 'sticky' }: ActivityStatusFooterProps) {
   const activity = useActivity();
   const entries = useTechnicalLog();
+  const recoveryNotice = useRecoveryNotice();
   const [now, setNow] = useState(() => Date.now());
   const startedAt = useRef<number | null>(null);
   const errorFloor = useRef(0);
@@ -51,18 +52,25 @@ export function ActivityStatusFooter({ pyodide, isProcessing = false, processing
   const entriesRef = useRef(entries);
   entriesRef.current = entries;
 
-  const running = Boolean(pyodide?.isLoading) || isProcessing || activity.label !== null;
-  // The newest error stays visible until the next operation starts.
+  const workflowRunning = isProcessing || activity.label !== null;
+  const running = Boolean(pyodide?.isLoading) || workflowRunning;
+  // The newest error stays visible until the next user workflow starts;
+  // automatic Pyodide startup must not swallow pre-ready recovery notices.
   const candidate = newestError(entries);
   const lastError = candidate && candidate.id > errorFloor.current ? candidate : null;
+
+  useEffect(() => {
+    if (!workflowRunning) return;
+    const list = entriesRef.current;
+    errorFloor.current = list.length ? list[list.length - 1].id : errorFloor.current;
+    clearRecoveryNotice();
+  }, [workflowRunning]);
 
   useEffect(() => {
     if (!running) {
       startedAt.current = null;
       return undefined;
     }
-    const list = entriesRef.current;
-    errorFloor.current = list.length ? list[list.length - 1].id : errorFloor.current;
     startedAt.current = Date.now();
     setNow(Date.now());
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -88,6 +96,8 @@ export function ActivityStatusFooter({ pyodide, isProcessing = false, processing
     };
   } else if (lastError) {
     state = { message: lastError.message, progress: 0, running: false, error: true };
+  } else if (recoveryNotice) {
+    state = { message: recoveryNotice, progress: 0, running: false, error: true };
   } else if (pyodide?.error) {
     state = { message: `Analysis engine unavailable: ${pyodide.error}`, progress: 0, running: false, error: true };
   } else {

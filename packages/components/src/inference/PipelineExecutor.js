@@ -50,6 +50,7 @@ export class PipelineExecutor {
     this.pendingAbortCheckpoint = null;
     this.currentTaskId = options.currentTaskId || null;
     this.checkpointExtension = options.checkpointExtension || null;
+    this.initTimeoutMs = options.initTimeoutMs ?? 120000;
   }
 
   isReady() { return this.workerReady; }
@@ -66,8 +67,18 @@ export class PipelineExecutor {
     if (this.workerReady) return;
     if (this.workerInitializing) return this.waitUntilReady();
     this.workerInitializing = true;
+    this.lastInitError = '';
     if (this.initializingMessage) this.updateOutput(this.initializingMessage);
-    this.postRaw({ type: WorkerRequestType.INIT, ...this.initPayload, version: this.version }, { transfer: false });
+    try {
+      this.postRaw({ type: WorkerRequestType.INIT, ...this.initPayload, version: this.version }, { transfer: false });
+    } catch (error) {
+      if (this.workerSession) {
+        this.workerSession.failed = true;
+        this.workerSession.failureReason = error?.message || String(error);
+      }
+      this.terminateWorker();
+      throw error;
+    }
     return this.waitUntilReady();
   }
 
@@ -77,8 +88,13 @@ export class PipelineExecutor {
     this.workerSession = new WorkerSession({
       createWorker: this.createWorker || (() => new Worker(this.workerUrl, this.workerType ? { type: this.workerType } : undefined)),
       onError: (message) => {
+        if (this.workerSession) {
+          this.workerSession.failed = true;
+          this.workerSession.failureReason = message;
+        }
         this.updateOutput(`Worker error: ${message}`);
         this.handleError(message);
+        this.terminateWorker();
       },
     });
     this.workerSession.subscribe((message) => this.handleMessage(message));
@@ -89,9 +105,17 @@ export class PipelineExecutor {
     return new Promise((resolve, reject) => {
       const session = this.workerSession;
       const started = Date.now();
-      const timeoutMs = 120000;
+      const timeoutMs = this.initTimeoutMs;
+      const formatInitFailure = (detail) => (
+        detail && detail !== 'Worker error'
+          ? new Error(`Worker initialization failed: ${detail}`)
+          : new Error('Worker initialization failed')
+      );
       const interval = setInterval(() => {
-        if (this.workerSession !== session) {
+        if (session?.failed) {
+          clearInterval(interval);
+          reject(formatInitFailure(session.failureReason || this.lastInitError));
+        } else if (this.workerSession !== session) {
           clearInterval(interval);
           reject(new DOMException('The worker was replaced.', 'AbortError'));
         } else if (this.workerReady) {
@@ -99,12 +123,16 @@ export class PipelineExecutor {
           resolve();
         } else if (!this.workerInitializing) {
           clearInterval(interval);
-          reject(new Error('Worker initialization failed'));
+          reject(formatInitFailure(this.lastInitError));
         } else if (Date.now() - started > timeoutMs) {
           clearInterval(interval);
+          if (this.workerSession === session) {
+            session.failed = true;
+            this.terminateWorker();
+          }
           reject(new Error('Worker initialization timed out'));
         }
-      }, 50);
+      }, Math.min(50, Math.max(5, Math.floor(timeoutMs / 4))));
     });
   }
 
@@ -167,6 +195,7 @@ export class PipelineExecutor {
   }
 
   handleError(message) {
+    const wasInitializing = this.workerInitializing;
     this.updateOutput(`Error: ${message}`);
     this.setProgress(0, 'Failed');
     this.running = false;
@@ -174,6 +203,14 @@ export class PipelineExecutor {
     this.pendingRestore?.reject(new Error(message));
     this.pendingRestore = null;
     this.currentRunningStep = null;
+    if (wasInitializing) {
+      this.lastInitError = message;
+      if (this.workerSession) {
+        this.workerSession.failed = true;
+        this.workerSession.failureReason = message;
+        this.terminateWorker();
+      }
+    }
     this.onError(message);
   }
 
@@ -461,12 +498,14 @@ export class PipelineExecutor {
   }
 
   post(type, data = {}, options = {}) {
+    if (!this.workerSession) throw new Error('The worker stopped before the request could be sent.');
     const payload = { type, data };
     const transferables = options.transfer === false ? [] : collectTransferables(data);
     this.workerSession.send(payload, transferables);
   }
 
   postRaw(message, options = {}) {
+    if (!this.workerSession) throw new Error('The worker stopped before the request could be sent.');
     const transferables = options.transfer === false ? [] : collectTransferables(message.data || {});
     this.workerSession.send(message, transferables);
   }

@@ -37,6 +37,10 @@ import { resolveShellAdapter } from './shell-adapters/index.js';
     .then(({ bindPageDrop }) => bindPageDrop(document))
     .catch((error) => console.warn('Neurodesk page-wide file drop could not start:', error));
 
+  import(/* @vite-ignore */ new URL('ui/memoryCrash.js', metadata.componentsHref).href)
+    .then(({ bindMemoryCrashMonitor }) => bindMemoryCrashMonitor(document))
+    .catch((error) => console.warn('Neurodesk memory crash monitor could not start:', error));
+
   // Files one app passed to another live for minutes; whichever app opens next removes stale ones.
   import(/* @vite-ignore */ new URL('handoff/index.js', metadata.componentsHref).href)
     .then(({ sweepHandoffs }) => sweepHandoffs())
@@ -121,6 +125,7 @@ import { resolveShellAdapter } from './shell-adapters/index.js';
       ['Page', `${location.origin}${location.pathname}`],
       ['Browser', navigator.userAgent],
       ['Window', `${innerWidth}x${innerHeight} at ${devicePixelRatio}x`],
+      ['Device memory', typeof navigator.deviceMemory === 'number' ? `${navigator.deviceMemory} GB` : 'not reported'],
       ['WebGPU', navigator.gpu ? 'available' : 'unavailable'],
       ['Cross-origin isolated', crossOriginIsolated ? 'yes' : 'no'],
       ['CPU threads', String(navigator.hardwareConcurrency ?? 'unknown')],

@@ -1,7 +1,6 @@
 import { expect } from '@playwright/test';
 
-export async function verifyMobileImageImport(page) {
-  await page.setViewportSize({ width: 320, height: 568 });
+function createTestNiftiBuffer() {
   // A NIfTI-1 header followed by a 16×16×16 uint8 volume.
   const buffer = Buffer.alloc(352 + 4096);
   buffer.writeInt32LE(348, 0);
@@ -13,6 +12,12 @@ export async function verifyMobileImageImport(page) {
   buffer.writeFloatLE(1, 112);
   buffer.write('n+1\0', 344);
   for (let index = 352; index < buffer.length; index++) buffer[index] = index % 251;
+  return buffer;
+}
+
+export async function verifyMobileImageImport(page) {
+  await page.setViewportSize({ width: 320, height: 568 });
+  const buffer = createTestNiftiBuffer();
   const name = 'mobile-check-a-long-image-filename-with-many-details-and-no-spaces.nii';
   await page.locator('#fileInput').setInputFiles({ name, mimeType: 'application/octet-stream', buffer });
   await expect(page.locator('#fileList')).toContainText(name);
@@ -79,4 +84,136 @@ export async function verifyMobileMeasurement(page, origin) {
   await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await expect(page.locator('#clearMeasurements')).toBeEnabled({ timeout: 5000 });
   await expect(page.locator('#measurementStatus')).toContainText('mm');
+}
+
+export async function verifyMobileMemoryCrash(page, origin) {
+  await page.setViewportSize({ width: 320, height: 568 });
+  const buffer = createTestNiftiBuffer();
+  const niftiInput = { name: 'mobile-crash-check.nii', mimeType: 'application/octet-stream', buffer };
+  const browserCdp = await page.context().browser().newBrowserCDPSession();
+  const crashPage = await page.context().newPage();
+  await crashPage.setViewportSize({ width: 320, height: 568 });
+  let crashTargetId = null;
+  try {
+    await crashPage.goto(`${origin}/musclemap/?crashProbe=1`, { waitUntil: 'domcontentloaded' });
+    await expect(crashPage.locator('.nd-app-bar:visible').first()).toBeVisible();
+
+    // 1. Load real NIfTI data so a live session checkpoint exists, then perform a
+    //    normal user reload and confirm pagehide clears the checkpoint cleanly.
+    await crashPage.locator('#fileInput').setInputFiles(niftiInput);
+    await expect(crashPage.locator('#runSegmentation')).toBeEnabled();
+    await expect.poll(() => crashPage.evaluate(() => {
+      const raw = window.sessionStorage.getItem('neurodesk-memory-guard:/musclemap/');
+      return raw ? JSON.parse(raw).loaded === true : false;
+    })).toBe(true);
+    await crashPage.reload({ waitUntil: 'domcontentloaded' });
+    await expect(crashPage.locator('#statusText')).toHaveText('Drag and drop files');
+    await expect(crashPage.locator('#statusText')).not.toHaveClass(/\berror\b/);
+
+    // 2. Drive the real workflow again (load NIfTI + click #runSegmentation), then
+    //    force-crash the Chromium renderer mid-run via CDP Page.crash and revive the
+    //    EXACT same tab target via CDP Page.navigate so its real sessionStorage is used.
+    await crashPage.locator('#fileInput').setInputFiles(niftiInput);
+    await expect(crashPage.locator('#runSegmentation')).toBeEnabled();
+    await crashPage.locator('#runSegmentation').click();
+    await expect.poll(() => crashPage.evaluate(() => {
+      const raw = window.sessionStorage.getItem('neurodesk-memory-guard:/musclemap/');
+      return raw ? JSON.parse(raw).active === true : false;
+    })).toBe(true);
+
+    const { targetInfos } = await browserCdp.send('Target.getTargets');
+    crashTargetId = targetInfos.find((info) => info.type === 'page' && info.url.includes('crashProbe=1'))?.targetId;
+    expect(crashTargetId).toBeTruthy();
+
+    const pageCdp = await crashPage.context().newCDPSession(crashPage);
+    const crashed = crashPage.waitForEvent('crash', { timeout: 10000 });
+    void pageCdp.send('Page.crash').catch(() => {});
+    await crashed;
+
+    const { sessionId } = await browserCdp.send('Target.attachToTarget', { targetId: crashTargetId, flatten: false });
+    let nextCdpId = 1;
+    const sendToRevivedTab = (method, params = {}, timeoutMs = 10000) => new Promise((resolve, reject) => {
+      const id = nextCdpId++;
+      const timer = setTimeout(() => {
+        browserCdp.off('Target.receivedMessageFromTarget', onMessage);
+        reject(new Error(`Timed out waiting for CDP ${method} on revived tab`));
+      }, timeoutMs);
+      function onMessage({ sessionId: incomingSessionId, message }) {
+        if (incomingSessionId !== sessionId) return;
+        const parsed = JSON.parse(message);
+        if (parsed.id !== id) return;
+        clearTimeout(timer);
+        browserCdp.off('Target.receivedMessageFromTarget', onMessage);
+        if (parsed.error) reject(new Error(parsed.error.message));
+        else resolve(parsed.result);
+      }
+      browserCdp.on('Target.receivedMessageFromTarget', onMessage);
+      browserCdp.send('Target.sendMessageToTarget', {
+        sessionId,
+        message: JSON.stringify({ id, method, params }),
+      }).catch((error) => {
+        clearTimeout(timer);
+        browserCdp.off('Target.receivedMessageFromTarget', onMessage);
+        reject(error);
+      });
+    });
+
+    await sendToRevivedTab('Page.navigate', { url: `${origin}/musclemap/` });
+    await expect.poll(async () => {
+      const response = await sendToRevivedTab('Runtime.evaluate', {
+        expression: `JSON.stringify({
+          ready: document.readyState,
+          status: document.getElementById('statusText')?.textContent?.trim() || '',
+          hasErrorClass: Boolean(document.getElementById('statusText')?.classList.contains('error')),
+          consoleText: document.querySelector('#consoleOutput, .nd-console-output, .console-output')?.textContent || '',
+          copyText: document.getElementById('consoleOutput')?.[Symbol.for('neurodesk.consoleOutput')]?.getText?.() || '',
+          fitsWidth: document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1
+        })`,
+        returnByValue: true,
+      }).catch(() => null);
+      return response?.result?.value ? JSON.parse(response.result.value) : null;
+    }, { timeout: 10000 }).toEqual(expect.objectContaining({
+      status: expect.stringContaining('reloaded mid-run (likely low memory)'),
+      hasErrorClass: true,
+      consoleText: expect.stringContaining('reloaded before processing finished'),
+      copyText: expect.stringContaining('reloaded before processing finished'),
+      fitsWidth: true,
+    }));
+
+    // 3. An idle hidden tab checkpoint without document.wasDiscarded never claims a crash,
+    //    and an in-page allocation failure translates into concise phone guidance.
+    const checkPage = await page.context().newPage();
+    await checkPage.setViewportSize({ width: 320, height: 568 });
+    try {
+      await checkPage.addInitScript(() => {
+        if (window.sessionStorage.getItem('idle-seeded')) return;
+        window.sessionStorage.setItem('idle-seeded', '1');
+        window.sessionStorage.setItem('neurodesk-memory-guard:/musclemap/', JSON.stringify({
+          active: false,
+          loaded: true,
+          hidden: true,
+          detail: '',
+          updatedAt: Date.now(),
+        }));
+      });
+      await checkPage.goto(`${origin}/musclemap/`, { waitUntil: 'domcontentloaded' });
+      await expect(checkPage.locator('#statusText')).toHaveText('Drag and drop files');
+      await expect(checkPage.locator('#statusText')).not.toHaveClass(/\berror\b/);
+
+      await checkPage.evaluate(() => {
+        const event = new Event('unhandledrejection');
+        event.reason = new RangeError('Array buffer allocation failed');
+        window.dispatchEvent(event);
+      });
+      await expect(checkPage.locator('#statusText')).toContainText('Out of browser memory on this device');
+      await expect(checkPage.locator('#statusText')).toHaveClass(/\berror\b/);
+      expect(await checkPage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+    } finally {
+      await checkPage.close();
+    }
+  } finally {
+    if (crashTargetId) await browserCdp.send('Target.closeTarget', { targetId: crashTargetId }).catch(() => {});
+    await crashPage.close().catch(() => {});
+    await browserCdp.detach().catch(() => {});
+  }
 }

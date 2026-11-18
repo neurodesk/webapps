@@ -8,6 +8,8 @@
  * ids: `progress` (falling back to `progressBar`), `statusText`, `elapsed`
  * and `cancelButton`.
  */
+const PROGRESS_MANAGER_KEY = Symbol.for('neurodesk.progressManager');
+
 export class ProgressManager {
   constructor(options = {}) {
     this.barElement = resolveTarget(options.barElement || options.progressBarId || 'progress') || resolveTarget('progressBar');
@@ -22,6 +24,8 @@ export class ProgressManager {
     this.lastAnimationTime = 0;
     this.timer = null;
     this.startedAt = 0;
+    const doc = this.textElement?.ownerDocument;
+    if (doc) doc[PROGRESS_MANAGER_KEY] = this;
   }
 
   get isNativeProgress() {
@@ -50,7 +54,16 @@ export class ProgressManager {
 
   /** Show the message without touching the bar. */
   setText(text) {
-    if (this.textElement) this.textElement.textContent = String(text);
+    const next = String(text);
+    if (this.textElement && this.textElement.textContent !== next) this.textElement.textContent = next;
+  }
+
+  /** Show an error message in the status bar without disturbing an active run's controls. */
+  setError(text) {
+    this.setText(text);
+    if (this.textElement && !this.textElement.classList.contains('error')) {
+      this.textElement.classList.add('error');
+    }
   }
 
   /** Show or hide the cancel ×. Hidden and disabled when a run cannot be cancelled. */
@@ -65,7 +78,10 @@ export class ProgressManager {
     this.stopTimer();
     this.startedAt = Date.now();
     this.renderElapsed();
-    if (globalThis.setInterval) this.timer = setInterval(() => this.renderElapsed(), 1000);
+    if (globalThis.setInterval) {
+      this.timer = setInterval(() => this.renderElapsed(), 1000);
+      this.timer?.unref?.();
+    }
   }
 
   /** Freeze the elapsed counter at its final value; `clear` removes it. */
@@ -84,6 +100,7 @@ export class ProgressManager {
 
   /** A run begins: message, indeterminate bar, timer and cancel. */
   begin(text = 'Working…', { cancellable = true } = {}) {
+    if (this.textElement?.classList?.contains('error')) this.textElement.classList.remove('error');
     this.setIndeterminate(text);
     this.startTimer();
     this.setCancellable(cancellable);
@@ -91,6 +108,7 @@ export class ProgressManager {
 
   /** A run ends: final message, full or empty bar, frozen timer, no cancel. */
   end(text, { success = true } = {}) {
+    if (success && this.textElement?.classList?.contains('error')) this.textElement.classList.remove('error');
     this.stopTimer();
     this.setCancellable(false);
     this.setProgress(success ? 1 : 0, text);
@@ -123,6 +141,7 @@ export class ProgressManager {
   }
 
   reset(text = 'Ready') {
+    if (this.textElement?.classList?.contains('error')) this.textElement.classList.remove('error');
     this.stopTimer(true);
     this.setCancellable(false);
     this.setProgress(0, text);

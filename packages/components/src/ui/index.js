@@ -17,5 +17,6 @@ export * from './bindInfoTooltips.js';
 export * from './agentControl.js';
 export * from '../elements/index.js';
 export * from './pageDrop.js';
+export * from './memoryCrash.js';
 export * from './templates.js';
 export * from './volume-preview.js';

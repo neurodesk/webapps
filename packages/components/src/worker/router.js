@@ -39,6 +39,14 @@ export function installWorkerRouter({
     }
   };
 
+  if (typeof scope.addEventListener === 'function') {
+    scope.addEventListener('unhandledrejection', (event) => {
+      const reason = event?.reason;
+      const message = reason?.message || String(reason ?? 'Unhandled worker rejection');
+      scope.postMessage({ type: 'error', message, fatal: true });
+    });
+  }
+
   return Object.freeze({
     resetServices() { servicesPromise = undefined; },
   });

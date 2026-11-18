@@ -47,3 +47,44 @@ test('GPU scopes reject an otherwise successful run and both are drained', async
     await runner.release();
   }
 });
+
+test('empty-message GPUOutOfMemoryError scopes and uncaptured errors name GPU out of memory even when readback fails', async () => {
+  class GPUOutOfMemoryError {
+    constructor(message = '') { this.message = message; }
+  }
+
+  // 1. Scoped empty-message GPUOutOfMemoryError when readback mapAsync succeeds.
+  const device1 = fakeGpuDevice();
+  const runner1 = await session(device1);
+  device1.popResults.push(null, new GPUOutOfMemoryError(''));
+  await assert.rejects(runner1.run(feeds(async () => new Float32Array(32 ** 3))), /GPU out of memory/);
+  await runner1.release();
+
+  // 2. Scoped empty-message GPUOutOfMemoryError when readback mapAsync rejects with OperationError.
+  const device2 = fakeGpuDevice();
+  const createBuffer2 = device2.createBuffer.bind(device2);
+  device2.createBuffer = (options) => {
+    const buffer = createBuffer2(options);
+    if (options.label === 'U-Net output readback') {
+      buffer.mapAsync = async () => { throw new Error('OperationError: Buffer is invalid'); };
+    }
+    return buffer;
+  };
+  const runner2 = await session(device2);
+  device2.popResults.push(null, new GPUOutOfMemoryError(''));
+  await assert.rejects(runner2.run(feeds(async () => new Float32Array(32 ** 3))), /GPU out of memory/);
+  await runner2.release();
+
+  // 3. Uncaptured empty-message GPUOutOfMemoryError event during run.
+  const device3 = fakeGpuDevice();
+  let uncapturedHandler = null;
+  device3.addEventListener = (type, fn) => {
+    if (type === 'uncapturederror') uncapturedHandler = fn;
+  };
+  const runner3 = await session(device3);
+  device3.queue.submit = () => {
+    uncapturedHandler?.({ error: new GPUOutOfMemoryError('') });
+  };
+  await assert.rejects(runner3.run(feeds(async () => new Float32Array(32 ** 3))), /GPU out of memory/);
+  await runner3.release();
+});
