@@ -1,11 +1,12 @@
 # CI development tiers
 
-Keep iterative PRs in draft. Drafts run repository contracts, package tests,
-lint, and app unit/browser tests for directly edited `apps/<id>/` files and
-`models/<id>.manifest.json`. If the diff cannot be determined, the app planner
-keeps its conservative full selection. Changes confined to shared packages
-receive package tests during development; their downstream applications run
-when the PR is ready.
+Keep iterative PRs in draft. Drafts run repository contracts, lint, the
+package tests the change reaches, the homepage easter egg when the change
+reaches its tests, and app unit/browser tests for directly edited `apps/<id>/`
+files and `models/<id>.manifest.json`. If the diff cannot be determined, the
+app planner keeps its conservative full selection and every package test runs.
+Changes confined to shared packages receive their package tests during
+development; their downstream applications run when the PR is ready.
 
 Mark the PR ready when it is ready for integration testing. `ready_for_review`
 and every subsequent push to a ready PR run the complete affected-app plan,
@@ -198,17 +199,79 @@ for an app the change edits:
 its `apps/`, `packages/` or `exes/` directory or its model manifest, release
 bookkeeping aside, or an app a failed run on main left untested. An app a
 change reaches only through shared code, such as a `packages/runtime-support`
-edit or a `ci.yml` change, leaves them to the nightly run, so a shared change
+edit or a change to a per-app job of `ci.yml`, leaves them to the nightly run, so a shared change
 that breaks only such a path is found the next night rather than before merge.
 The planner marks each browser matrix entry with `heavy_tests`, and the jobs
 set `NEURODESK_E2E_SKIP_HEAVY`, which `e2eTier` turns into a `grepInvert`.
-A whole-catalogue plan for a change the planner could not narrow, such as a
-`ci.yml` edit, counts as shared. Only a plan with no diff at all (the nightly,
+A whole-catalogue plan for a change the planner could not narrow, such as an
+edit to a per-app job of `ci.yml`, counts as shared. Only a plan with no diff at all (the nightly,
 a dispatch of every app, an unknown base) is a full run. The macOS GPU job
 runs every test, since the threshold is a CPU measurement: SynthSeg's four
 `@heavy` tests take 12 to 25 seconds on Metal. Dispatched, nightly and release
 runs include every test. To run them before merging a shared change, dispatch
 `ci` on the branch.
+
+## Site keys, ci.yml jobs and the fixed jobs
+
+Over 16 to 18 November 2026 two small changes cost 2,577 runner minutes of
+whole-catalogue runs. PR #864 changed a comment in the `composite-site` job of
+`ci.yml` and the interface audit it runs; PR #872 changed a link in the `site`
+section of `registry/apps.yml`. The planner then tied any `ci.yml` edit and any
+`site` change but a category to every app.
+
+A `site` change now narrows per key. The keys an app build or an app's tests
+read are listed with their readers in `SITE_KEY_READERS`: the analytics
+measurement id (every themed build), the catalogue ids (the standalone check
+every themed build runs) and the catalogue hosts, primary domain and desktop
+identities (the desktop scripts that dicompare and Pipeline builder reach). A
+changed key selects the apps that reach a reader, once the head registry passes
+the validation every build runs; the hub, catalogue titles, brands and
+categories select only the site build, and a key not listed selects every app.
+`test/app-plan.test.mjs` lists every file an app build or app test runs that
+loads the registry, with the keys it reads, and fails on a new one. Package
+suites and the easter egg follow `registry/apps.yml` itself through the graph,
+so any registry change runs the desktop package and the easter egg.
+
+A `ci.yml` change is compared job by job on the parsed workflow, so a comment
+changes nothing (`CI_JOB_SCOPES` in `scripts/lib/app-plan.mjs`). A change
+confined to `composite-site` or a job that only consumes its build selects the
+site build; one confined to `workspace-contracts` runs every package suite, one
+to `homepage-easter-egg` the easter egg, and one to the `full-plan` markers
+nothing. The plan, the per-app jobs, a new job and every key outside `jobs`
+still select every app, as does a change whose base text is unknown. The
+nightly run tests every app, so a narrowed `ci.yml` change that breaks an app
+job is found there.
+
+`workspace-contracts` and `homepage-easter-egg` ran on every draft push: 1,015
+minutes in 63 draft runs, and the easter egg 445 minutes in 102 runs in which no
+pull request touched it. Both now wait for the plan. The package step runs
+`test` (`test:unit` for the components) only in the packages the change
+reaches: its own files, what its workspace graph node reaches, and the app,
+model and site paths their code names, since package tests read their app's
+fixtures (`outside` in `scripts/lib/workspace-graph.mjs`; a package's tests
+count only for its own suite). The repository root's configuration, an
+unplaced lockfile importer, a full run and a plan of every app test every
+package. The easter egg runs when a change reaches its tests, on the nightly
+and on `scope=all` or `scope=site` dispatches. Contract tests, the nii2tvx
+check and lint still run on every run; like every job after the plan, neither
+runs when the plan fails, which fails the run. A failure in either on main sends the next push back to the last green run,
+since that push would not run it again.
+
+Text references widen the selection: a JavaScript comment line naming a path
+is skipped, any other mention counts, and a path built at run time
+(`join(root, 'apps', id)`) reaches every app. A lone quoted name
+(`doc.get('apps')`) is a key, so `test/app-plan.test.mjs` fails when code reads
+a directory as `readdir('apps')`.
+
+Replayed over the 40 pull requests merged up to #885 (`node
+scripts/app-plan-shadow.mjs --last 40`), main's planner selected every app
+for 8 and this one for 3 (two `on:` edits and one `app-plan` edit of
+`ci.yml`): 228 of 2,520 app-test jobs instead of 543, with 0 oracle misses
+before and after and 0 package-suite misses. It ran 253 of 2,160 package
+suites and the easter egg for 6 of the 40. Replayed over every `ci` run of
+16 to 18 November, it would have left out 2,302 minutes of per-app jobs (the
+#864 and #872 runs), 405 of the 444 easter-egg minutes and about 500
+package-test minutes, weighting each package by its test time in one run.
 
 ## Module-level selection in the component package
 
@@ -287,7 +350,8 @@ push also selects the apps whose `app-tests` or browser jobs did not pass
 there (`resolveCiBase`, `carriedApps`): on 13 November 2026 synthsr's GPU job
 failed for 7 hours, and each push in that time tested all 63 apps from the
 last green run; replayed, the second of them selects synthsr alone. A failed
-job that belongs to no app, such as the plan itself, a job of that attempt
+job that belongs to no app, such as the plan itself or a job the plan narrows
+(`workspace-contracts`, `homepage-easter-egg`), a job of that attempt
 that has not finished, or an app id the registry does not know sends the push
 back to the last green run. A carried app runs all its jobs again, but a push
 leaves out `@slow` tests, so an app a nightly failed in a `@slow` test is
