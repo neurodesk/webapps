@@ -213,10 +213,11 @@ export function expectedApps({ apps, changedPaths, workspace, lockClosures = nul
 // lockfile closure as pnpm lists it. `packages` are the directories with a
 // test script; `lockClosures` maps them like expectedApps' apps. `texts`
 // maps a package directory to the text of its files (tests included, at the
-// merge base and at head): a file outside the package that its text names, by
-// its parent directory and name (`synthstrip-mini/T1.nii.gz`) or by a
-// directory of three segments (`components/test/fixtures/`), is read by the
-// suite, as a reader would see it, without the planner's graph.
+// merge base and at head): a file outside the package that its text names
+// (`apps/calmar/tests/fixtures/synthstrip-mini/T1.nii.gz`), as a sibling does
+// (`../components/test/fixtures/x.nii`) or by a directory of it below its app
+// or package, is read by the suite, as a reader would see it, without the
+// planner's graph.
 export function expectedPackages({ packages, changedPaths, workspace, lockClosures = null, texts = null }) {
   const expected = new Map();
   const add = (dir, reason) => expected.set(dir, [...(expected.get(dir) ?? []), reason]);
@@ -242,11 +243,16 @@ export function expectedPackages({ packages, changedPaths, workspace, lockClosur
   return expected;
 }
 
-// How `text` names `path`: its parent directory and file name, or a directory of it three segments deep.
+// How `text` names `path`: by its repository path or, for a file in a
+// workspace directory, as a sibling does (`../<id>/...`), the file itself or a
+// directory of it below the workspace directory. A shorter name (`src/main.js`)
+// says nothing about which app or package it is in.
 function namedBy(text, path) {
   const parts = path.split('/');
-  const needles = [parts.slice(-2).join('/'), ...parts.slice(0, -1).flatMap((_, end) => end >= 2 ? [`${parts.slice(end - 2, end + 1).join('/')}/`] : [])];
-  return parts.length >= 2 ? needles.find((needle) => text.includes(needle)) : undefined;
+  const workspace = ['apps', 'packages', 'exes'].includes(parts[0]) && parts.length > 2;
+  const forms = (tail) => [tail.join('/'), ...(workspace ? [`../${tail.slice(1).join('/')}`] : [])];
+  const directories = parts.slice(0, -1).map((_, end) => `${parts.slice(0, end + 1).join('/')}/`).filter((directory) => directory.split('/').length > (workspace ? 3 : 2));
+  return [...forms(parts), ...directories.flatMap((directory) => forms(directory.split('/')))].find((needle) => text.includes(needle));
 }
 
 // Package suites the planner left out although the oracle expects them.

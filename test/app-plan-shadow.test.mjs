@@ -169,7 +169,10 @@ test('the package oracle expects a suite whose files name a changed file outside
   ]);
   const fixture = expectedPackages({ packages, changedPaths: ['packages/core/test/fixtures/uint8-zero-slope-intercept.nii'], workspace, texts });
   assert.deepEqual([...fixture.keys()].sort(), ['packages/core', 'packages/util']);
-  assert.match(fixture.get('packages/util')[0], /its files name fixtures\/uint8-zero-slope-intercept\.nii/);
+  assert.match(fixture.get('packages/util')[0], /its files name \.\.\/core\/test\/fixtures\/uint8-zero-slope-intercept\.nii/);
+  // A name without its app or package says nothing: samsrf's src/main.js is not every package's.
+  const generic = new Map([['packages/util', "import './src/main.js';"]]);
+  assert.deepEqual([...expectedPackages({ packages, changedPaths: ['apps/samsrf/src/main.js'], workspace, texts: generic }).keys()], []);
   const directory = expectedPackages({ packages, changedPaths: ['apps/calmar/tests/fixtures/synthstrip-mini/T1.nii.gz'], workspace, texts });
   assert.deepEqual([...directory.keys()], ['packages/local']);
   assert.deepEqual([...expectedPackages({ packages, changedPaths: ['README.md'], workspace, texts }).keys()], []);
