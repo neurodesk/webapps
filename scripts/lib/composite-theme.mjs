@@ -1,6 +1,6 @@
+import { ORIGIN_TRIAL_TOKEN } from './apps-registry.mjs';
+
 const appIdPattern = /^[a-z][a-z0-9-]*$/;
-// A Chrome origin trial token is base64.
-export const ORIGIN_TRIAL_TOKEN = /^[A-Za-z0-9+/]*={0,2}$/;
 const titlePattern = /<title\b[^>]*>[\s\S]*?<\/title>/i;
 const iconLinkPattern = /\s*<link\b[^>]*\brel=["']?[^"'>]*\bicon\b[^>]*>/gi;
 const placeholderIconPattern = /\bhref=["']data:,?["']/i;
