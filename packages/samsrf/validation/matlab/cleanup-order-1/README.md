@@ -77,8 +77,13 @@ hosts, two AMD hosts, unknown hardware or missing receipts mean **undecided,
 stop**. No output-dependent CPU selection or AMD-only acceptance is allowed.
 
 MATLAB is pinned to R2023b Update 11, full version
-`23.2.0.3097123 (R2023b) Update 11`, `GLNXA64`. The exact expected BLAS version
-string is in `contract.json`. Requested controls match the existing recording
+`23.2.0.3097123 (R2023b) Update 11`, `GLNXA64`. The exact expected BLAS string for each actual vendor is in
+`contract.json`: AMD uses CNR `auto`; Intel uses CNR `AVX512_E1`. These were
+frozen from the existing pinned revcor receipts, independently corroborated by
+the controls recording. `metadata-receipts.json` preserves the complete CPU
+report strings and observed numerical metadata, with original entry and archive
+hashes. Unknown or swapped vendor/backend combinations stop; `COMPATIBLE` is
+not assumed to force the same backend on both vendors. Requested controls match the existing recording
 workflow. MATLAB has previously cleared `MKL_NUM_THREADS`; the observed receipt
 explicitly permits `""` or `"1"` for that field and requires
 `maxNumCompThreads == 1`. This is a receipt, not proof that every internal
@@ -99,11 +104,21 @@ run ID/attempt and requested runner. Each fresh MATLAB process rehashes those
 files before computing any case. The two run-command steps are separate
 processes; their PIDs and nonces must differ. There is no in-process repeat loop.
 
-The evaluator is read-only. It requires exact object fields and case identities,
+The evaluator is read-only. Its independently supplied `--commit` must be the
+exact reviewed dispatch commit obtained from GitHub/review records, never a SHA
+copied from an artifact. It resolves that commit in the evaluator checkout's Git
+object database and checks local contract bytes and every source-inventory blob
+against it. A nonexistent commit, a changed contract, or a source/prediction
+edit with refreshed local hashes stops. Run the evaluator from the reviewed
+checkout; a receipt cannot authenticate its own evaluator or trust anchor.
+
+It requires exact object fields and case identities,
 seven cases once in each process, real double arrays, integer dimensions and
 counts, lowercase sixteen-digit IEEE-754 hexadecimal words, exact MATLAB
 version/release, CPU/BLAS receipts and input/code hashes. It rejects duplicate
 JSON keys, JSON NaN constants, unexpected records/files and malformed receipts.
+Every embedded context is schema-validated independently before comparison;
+Python equality between booleans, floats and integers cannot satisfy the gate.
 The six new cases must be finite. Only the exposed control's recorded shape
 separators may be nonfinite, exactly at their pinned bit patterns.
 
@@ -126,6 +141,23 @@ Decision sequence:
    eighteen estimate words match it exactly on both hosts. Exactly one model
    must survive. Otherwise stop with an undecided result.
 
+Each process writes an immutable `process-N/start.json` with PID and nonce
+before reading metadata, inputs or computing cases. `receipt.json` preserves the
+context and complete numerical metadata before input validation. Each completed
+case is closed in `case-I.json` before the next case starts. The final
+`record-N.json` is written only after all seven cases. The gate requires the
+start receipt, numerical receipt and all seven case entries to agree exactly
+with that final record; all nested types are checked before equality.
+
+On a caught error, `process-N/failure.json` records the stage, active case,
+completed case IDs and MATLAB error identifier/message/report, then rethrows.
+A killed process can lack failure.json; its already-closed entries still survive.
+A metadata failure can leave only start.json and failure.json. Filesystem-write
+failure can prevent a new entry from being saved; earlier entries are retained.
+The workflow's existing always-upload preserves this whole directory. The
+success inventory admits no failure file or partial process. These artifacts
+explain a stop; they never count as scientific acceptance or authorize a retry.
+
 A host job reports `host-valid-pair-undecided`; this is never scientific
 acceptance. Both artifact directories must be downloaded together and passed
 to the paired evaluator. Its failure exit code and `undecided-stop` result
@@ -140,8 +172,10 @@ review, and production-WASM validation. One lost exact value blocks adoption.
 
 From this directory, run `python3 -m unittest test_contract.py`. The cases are
 synthetic protocol fixtures built from frozen predictions; no MATLAB is called.
-The parent Python test wrapper and package workflow-contract test run in normal
-CI. `record_cleanup_order.m` has only been parsed by Octave during preparation;
+The parent Python test wrapper and root workflow-contract test run in normal
+CI. Protocol tests create an isolated synthetic Git repository to seal their
+fixture before testing coordinated source/contract/prediction/receipt mutations.
+This is not a recording, and the fixture commit is never a dispatch identity. `record_cleanup_order.m` has only been parsed by Octave during preparation;
 no MATLAB compatibility or scientific outcome is claimed from that parse.
 
 To reproduce the model output offline, extract the pinned base's polyshape
@@ -178,3 +212,24 @@ checks. The original prediction JSON SHA-256 remains
 The model patch uses zero context to avoid whitespace-only patch lines; applying
 it reconstructs the identical draft model source and identical output TSV.
 No recording has occurred, and no scientific model has been refitted here.
+
+
+### Pre-execution review amendment, 2026-11-18
+
+Independent review of `2a613ad991f2e887b238ed71b56870ed66201288` found five
+protocol defects: the paired gate trusted mutable local hashes, the CPU parser
+rejected the recorded indentation, the BLAS contract omitted Intel's observed
+backend, embedded contexts bypassed strict integer checks, and failures lost
+in-memory results. This amendment binds evaluation to Git objects, preserves
+duplicate rejection while accepting indented CPU fields, freezes per-vendor
+backends from existing outputs, validates each embedded context and adds the
+incremental failure inventory above. Synthetic negative controls cover these
+findings; MATLAB control-flow inspection is static only. No new cases have been
+executed, no budget has been spent, and no scientific model/prediction changed.
+
+The workflow-contract test moved to the root test suite because its YAML parser
+is a root tooling dependency. This fixes the introduced dependency-quality
+finding without adding dependencies or changing workflow inputs/defaults.
+The original four input/prediction blobs remain byte-identical. Independent
+review of this amended commit and explicit authorization are still required
+before any execution. Old `hull-area-1` remains exhausted at 2/2.

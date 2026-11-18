@@ -3,64 +3,103 @@ function record_cleanup_order(outputDirectory, repeat)
 assert(isequal(repeat, 1) || isequal(repeat, 2));
 here = fileparts(mfilename('fullpath'));
 repo = fileparts(fileparts(fileparts(fileparts(fileparts(here)))));
-context = jsondecode(fileread(fullfile(outputDirectory, 'context.json')));
-assert(strcmp(context.contract_sha256, fileHash(fullfile(here, 'contract.json'))));
-for i = 1:numel(context.source_files)
-    entry = context.source_files(i);
-    assert(strcmp(entry.sha256, fileHash(fullfile(repo, entry.path))));
-end
-inputFile = fullfile(here, 'inputs.tsv');
-assert(strcmp(context.input_sha256, fileHash(inputFile)));
-fid = fopen(inputFile, 'r');
-assert(fid >= 0);
-closeInput = onCleanup(@() fclose(fid));
-inputs = {};
-line = fgetl(fid);
-while ischar(line)
-    fields = strsplit(line, sprintf('\t'));
-    assert(numel(fields) == 2);
-    hex = strsplit(strtrim(fields{2}));
-    assert(mod(numel(hex), 2) == 0);
-    values = hex2num(char(hex));
-    inputs{end + 1} = struct('id', fields{1}, 'P', reshape(values, 2, []).'); %#ok<AGROW>
-    line = fgetl(fid);
-end
-assert(numel(inputs) == 7);
-ids = cellfun(@(x) x.id, inputs, 'UniformOutput', false);
-assert(numel(unique(ids)) == 7);
-[cpuStatus, cpuReport] = system('LC_ALL=C lscpu');
-assert(cpuStatus == 0);
-keys = {'MKL_CBWR', 'MKL_NUM_THREADS', 'OMP_NUM_THREADS', 'MKL_DYNAMIC', 'OMP_DYNAMIC'};
-environment = struct();
-for i = 1:numel(keys)
-    environment.(keys{i}) = getenv(keys{i});
-end
-metadata = struct('matlab_version', version, 'release', version('-release'), ...
-    'computer', computer, 'blas', strtrim(version('-blas')), ...
-    'threads', maxNumCompThreads, 'environment', environment, ...
-    'cpu_report', cpuReport, 'process_id', feature('getpid'), ...
+evidenceDirectory = fullfile(outputDirectory, sprintf('process-%d', repeat));
+assert(~isfolder(evidenceDirectory), 'Never overwrite prior process evidence');
+mkdir(evidenceDirectory);
+start = struct('schema', 1, 'repeat', repeat, 'process_id', feature('getpid'), ...
     'process_nonce', char(java.util.UUID.randomUUID()));
-results = {};
-for i = 1:numel(inputs)
-    item = inputs{i};
-    lastwarn('', '');
-    shape = polyshape(item.P);
-    hull = convhull(shape);
-    [cx, cy] = centroid(hull);
-    [warningMessage, warningId] = lastwarn;
-    results{end + 1} = struct('id', item.id, 'points', arrayBits(item.P), ...
-        'shape', arrayBits(shape.Vertices), 'hull', arrayBits(hull.Vertices), ...
-        'estimate', arrayBits([cx cy area(hull)]), ...
-        'warning_id', warningId, 'warning_message', warningMessage); %#ok<AGROW>
+writeJson(fullfile(evidenceDirectory, 'start.json'), start);
+stage = 'metadata';
+caseIndex = 0;
+caseId = '';
+completed = {};
+try
+    [cpuStatus, cpuReport] = system('LC_ALL=C lscpu');
+    assert(cpuStatus == 0);
+    keys = {'MKL_CBWR', 'MKL_NUM_THREADS', 'OMP_NUM_THREADS', 'MKL_DYNAMIC', 'OMP_DYNAMIC'};
+    environment = struct();
+    for i = 1:numel(keys)
+        environment.(keys{i}) = getenv(keys{i});
+    end
+    metadata = struct('matlab_version', version, 'release', version('-release'), ...
+        'computer', computer, 'blas', strtrim(version('-blas')), ...
+        'threads', maxNumCompThreads, 'environment', environment, ...
+        'cpu_report', cpuReport, 'process_id', start.process_id, ...
+        'process_nonce', start.process_nonce);
+    context = jsondecode(fileread(fullfile(outputDirectory, 'context.json')));
+    receipt = struct('schema', 1, 'repeat', repeat, 'context', context, 'metadata', metadata);
+    writeJson(fullfile(evidenceDirectory, 'receipt.json'), receipt);
+    stage = 'input-validation';
+    assert(strcmp(context.contract_sha256, fileHash(fullfile(here, 'contract.json'))));
+    for i = 1:numel(context.source_files)
+        entry = context.source_files(i);
+        assert(strcmp(entry.sha256, fileHash(fullfile(repo, entry.path))));
+    end
+    inputFile = fullfile(here, 'inputs.tsv');
+    assert(strcmp(context.input_sha256, fileHash(inputFile)));
+    fid = fopen(inputFile, 'r');
+    assert(fid >= 0);
+    closeInput = onCleanup(@() fclose(fid));
+    inputs = {};
+    line = fgetl(fid);
+    while ischar(line)
+        fields = strsplit(line, sprintf('\t'));
+        assert(numel(fields) == 2);
+        hex = strsplit(strtrim(fields{2}));
+        assert(mod(numel(hex), 2) == 0);
+        values = hex2num(char(hex));
+        inputs{end + 1} = struct('id', fields{1}, 'P', reshape(values, 2, []).'); %#ok<AGROW>
+        line = fgetl(fid);
+    end
+    assert(numel(inputs) == 7);
+    ids = cellfun(@(x) x.id, inputs, 'UniformOutput', false);
+    assert(numel(unique(ids)) == 7);
+    results = {};
+    stage = 'case';
+    for i = 1:numel(inputs)
+        item = inputs{i};
+        caseIndex = i;
+        caseId = item.id;
+        lastwarn('', '');
+        shape = polyshape(item.P);
+        hull = convhull(shape);
+        [cx, cy] = centroid(hull);
+        [warningMessage, warningId] = lastwarn;
+        result = struct('id', item.id, 'points', arrayBits(item.P), ...
+            'shape', arrayBits(shape.Vertices), 'hull', arrayBits(hull.Vertices), ...
+            'estimate', arrayBits([cx cy area(hull)]), ...
+            'warning_id', warningId, 'warning_message', warningMessage);
+        entry = struct('schema', 1, 'repeat', repeat, 'index', i, 'case', result);
+        writeJson(fullfile(evidenceDirectory, sprintf('case-%d.json', i)), entry);
+        completed{end + 1} = item.id; %#ok<AGROW>
+        results{end + 1} = result; %#ok<AGROW>
+    end
+    stage = 'final-record';
+    recording = struct('schema', 1, 'repeat', repeat, 'context', context, ...
+        'metadata', metadata, 'cases', {results});
+    writeJson(fullfile(outputDirectory, sprintf('record-%d.json', repeat)), recording);
+catch failure
+    evidence = struct('schema', 1, 'repeat', repeat, 'stage', stage, ...
+        'case_index', caseIndex, 'case_id', caseId, 'completed_cases', {completed}, ...
+        'error_id', failure.identifier, 'error_message', failure.message, ...
+        'error_report', getReport(failure, 'extended', 'hyperlinks', 'off'));
+    try
+        writeJson(fullfile(evidenceDirectory, 'failure.json'), evidence);
+    catch persistenceFailure
+        warning('cleanup_order:EvidenceWriteFailed', '%s', persistenceFailure.message);
+    end
+    rethrow(failure);
 end
-recording = struct('schema', 1, 'repeat', repeat, 'context', context, ...
-    'metadata', metadata, 'cases', {results});
-outputFile = fullfile(outputDirectory, sprintf('record-%d.json', repeat));
-assert(~isfile(outputFile), 'Never overwrite a prior process recording');
-fidOut = fopen(outputFile, 'w');
-assert(fidOut >= 0);
-closeOutput = onCleanup(@() fclose(fidOut));
-fprintf(fidOut, '%s\n', jsonencode(recording));
+end
+
+function writeJson(path, value)
+% Each immutable journal entry is closed before the next scientific operation.
+assert(~isfile(path), 'Never overwrite a prior process recording');
+bytes = unicode2native([jsonencode(value) newline], 'UTF-8');
+fid = fopen(path, 'wb');
+assert(fid >= 0);
+closeOutput = onCleanup(@() fclose(fid));
+assert(fwrite(fid, bytes, 'uint8') == numel(bytes));
 end
 
 function out = arrayBits(A)

@@ -6,7 +6,7 @@ import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 import { parse } from 'yaml';
 
-const flow = parse(readFileSync(new URL('../../../.github/workflows/samsrf-native.yml', import.meta.url), 'utf8'));
+const flow = parse(readFileSync(new URL('../.github/workflows/samsrf-native.yml', import.meta.url), 'utf8'));
 const inputs = flow.on.workflow_dispatch.inputs;
 const recording = flow.jobs['cleanup-order-reference'];
 
@@ -60,7 +60,7 @@ test('cleanup selector isolates its two MATLAB jobs and leaves other events on t
 
 
 test('preparation accepts the complete actual dispatch input schema and rejects its default full matrix', () => {
-  const folder = fileURLToPath(new URL('../validation/matlab/cleanup-order-1/', import.meta.url));
+  const folder = fileURLToPath(new URL('../packages/samsrf/validation/matlab/cleanup-order-1/', import.meta.url));
   const payload = Object.fromEntries(Object.entries(inputs).map(([key, value]) => [key, String(value.default)]));
   Object.assign(payload, { record_matlab: 'true', probes: 'cleanup-order-1', include_matrix: 'false' });
   const script = `import sys,json
@@ -69,7 +69,7 @@ import prepare
 x=json.load(sys.stdin)
 assert set(x)==prepare.INPUTS
 e=dict(prepare.ENVIRONMENT,GITHUB_EVENT_NAME='workflow_dispatch',GITHUB_RUN_ATTEMPT='1',GITHUB_SHA='a'*40,GITHUB_RUN_ID='123',GITHUB_REPOSITORY='neurodesk/webapps',GITHUB_WORKFLOW_REF='neurodesk/webapps/.github/workflows/samsrf-native.yml@refs/heads/test')
-prepare.make_context(e,{'inputs':x},'ubuntu-22.04',prepare.contract())
+prepare.make_context(e,{'inputs':x},'ubuntu-22.04',prepare.read(prepare.HERE / 'contract.json'))
 `;
   const run = (value) => spawnSync('python3', ['-c', script, folder], { input: JSON.stringify(value), encoding: 'utf8', env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' } });
   const good = run(payload);

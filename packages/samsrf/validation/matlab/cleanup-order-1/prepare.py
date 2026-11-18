@@ -1,6 +1,5 @@
 """Prepare an exact-head receipt for one explicitly selected cleanup-order-1 job."""
 import argparse
-import hashlib
 import json
 import os
 import subprocess
@@ -42,17 +41,12 @@ def main():
     parser.add_argument("output", type=Path)
     parser.add_argument("--runner", required=True, choices=RUNNERS)
     args = parser.parse_args()
-    c = contract()
+    c = contract(os.environ.get("GITHUB_SHA"))
     ctx = make_context(os.environ, read(os.environ["GITHUB_EVENT_PATH"]), args.runner, c)
     root = HERE.parents[4]
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
     require(head == ctx["commit"], "checkout must equal the dispatch SHA")
     subprocess.run(["git", "merge-base", "--is-ancestor", c["base_commit"], "HEAD"], cwd=root, check=True)
-    # Bind working-tree bytes to the requested commit, including the contract itself.
-    files = c["files"] + [{"path": str((HERE / "contract.json").relative_to(root)), "sha256": ctx["contract_sha256"]}]
-    for item in files:
-        committed = subprocess.check_output(["git", "show", f"{head}:{item['path']}"], cwd=root)
-        require(hashlib.sha256(committed).hexdigest() == item["sha256"], f"uncommitted source: {item['path']}")
     args.output.mkdir(parents=True, exist_ok=False)
     (args.output / "context.json").write_text(json.dumps(ctx, indent=2) + "\n", encoding="utf-8")
     print("Prepared exact-head receipt; two fresh MATLAB processes still required; no pair decision.")

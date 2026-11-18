@@ -5,6 +5,7 @@ import json
 import math
 import re
 import struct
+import subprocess
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -55,11 +56,29 @@ def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def contract():
-    c = read(HERE / "contract.json")
+def contract(commit):
+    """Authenticate local protocol bytes against independently supplied Git identity.
+
+    --commit must come from the reviewed dispatch, never from a downloaded receipt.
+    Git objects seal the contract as well as every file in its source inventory.
+    """
+    text(commit, COMMIT.pattern, "expected commit")
     root = HERE.parents[4]
+
+    def git(*args):
+        run = subprocess.run(["git", "--no-replace-objects", *args], cwd=root, capture_output=True)
+        require(run.returncode == 0, "reviewed commit/source unavailable in Git objects")
+        return run.stdout
+
+    require(git("cat-file", "-t", commit).strip() == b"commit", "reviewed identity must be a Git commit")
+    contract_path = (HERE / "contract.json").relative_to(root).as_posix()
+    require(git("show", f"{commit}:{contract_path}") == (HERE / "contract.json").read_bytes(),
+            "contract differs from reviewed commit")
+    c = read(HERE / "contract.json")
     for row in c["files"]:
-        require(sha(root / row["path"]) == row["sha256"], f"committed source hash: {row['path']}")
+        committed = git("show", f"{commit}:{row['path']}")
+        require(hashlib.sha256(committed).hexdigest() == row["sha256"], f"reviewed source hash: {row['path']}")
+        require(committed == (root / row["path"]).read_bytes(), f"source differs from reviewed commit: {row['path']}")
     require(c["round"] == ROUND, "wrong contract round")
     return c
 
@@ -105,7 +124,7 @@ def context(value, runner, commit, c):
 
 def metadata(value, c):
     fields(value, ("matlab_version", "release", "computer", "blas", "threads", "environment", "cpu_report", "process_id", "process_nonce"), "metadata")
-    for key in ("matlab_version", "release", "computer", "blas"):
+    for key in ("matlab_version", "release", "computer"):
         require(value[key] == c["matlab"][key], f"wrong MATLAB {key}")
     integer(value["threads"], 1, 1, "computational threads")
     integer(value["process_id"], 1, 2**31 - 1, "process id")
@@ -117,13 +136,14 @@ def metadata(value, c):
     report = value["cpu_report"]
     require(type(report) is str and 0 < len(report) < 50000, "CPU receipt missing/oversized")
     def cpu_field(name):
-        matches = re.findall(r"^" + re.escape(name) + r":\s*([^\n]+)$", report, re.M)
+        matches = re.findall(r"^[ \t]*" + re.escape(name) + r":[ \t]*([^\r\n]+)$", report, re.M)
         require(len(matches) == 1, f"CPU receipt: {name}")
         return matches[0].strip()
     vendor, model = cpu_field("Vendor ID"), cpu_field("Model name")
     require(cpu_field("Architecture") == "x86_64", "CPU architecture")
     require(vendor in ("AuthenticAMD", "GenuineIntel"), "CPU vendor outside preselected pair")
     require((vendor == "AuthenticAMD" and "AMD" in model) or (vendor == "GenuineIntel" and "Intel" in model), "CPU model/vendor mismatch")
+    require(value["blas"] == c["blas_by_vendor"][vendor], "wrong MATLAB blas for actual CPU vendor")
     return vendor, model
 
 
@@ -162,10 +182,43 @@ def cases(value, expected, control):
     return found
 
 
+def journal(root, repeat, record, runner, commit, c, expected, control):
+    """Only a complete, consistent append-only process journal can pass."""
+    names = {"start.json", "receipt.json"} | {f"case-{i}.json" for i in range(1, 8)}
+    require(root.is_dir() and {p.name for p in root.iterdir()} == names,
+            "process evidence inventory incomplete or contains failure")
+    start = read(root / "start.json")
+    fields(start, ("schema", "repeat", "process_id", "process_nonce"), "process start")
+    integer(start["schema"], 1, 1, "start schema")
+    integer(start["repeat"], repeat, repeat, "start repeat")
+    integer(start["process_id"], 1, 2**31 - 1, "start process id")
+    text(start["process_nonce"], r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", "start nonce")
+    for key in ("process_id", "process_nonce"):
+        require(start[key] == record["metadata"][key], "start/process identity differs")
+    receipt = read(root / "receipt.json")
+    fields(receipt, ("schema", "repeat", "context", "metadata"), "process receipt")
+    integer(receipt["schema"], 1, 1, "receipt schema")
+    integer(receipt["repeat"], repeat, repeat, "receipt repeat")
+    context(receipt["context"], runner, commit, c)
+    metadata(receipt["metadata"], c)
+    for key in ("context", "metadata"):
+        require(receipt[key] == record[key], "journal receipt differs from final record")
+    completed = []
+    for index in range(1, 8):
+        item = read(root / f"case-{index}.json")
+        fields(item, ("schema", "repeat", "index", "case"), "completed case")
+        integer(item["schema"], 1, 1, "case schema")
+        integer(item["repeat"], repeat, repeat, "case repeat")
+        integer(item["index"], index, index, "case index")
+        completed.append(item["case"])
+    cases(completed, expected, control)
+    require(completed == record["cases"], "completed case evidence differs from final record")
+
+
 def host(root, runner, commit, c):
     require(runner in RUNNERS, "unknown requested runner")
     root = Path(root)
-    required = {"context.json", "record-1.json", "record-2.json"}
+    required = {"context.json", "record-1.json", "record-2.json", "process-1", "process-2"}
     names = {p.name for p in root.iterdir()}
     require(required <= names <= required | {"host-verdict.json"}, "host artifact inventory")
     ctx = read(root / "context.json")
@@ -178,9 +231,12 @@ def host(root, runner, commit, c):
         fields(record, ("schema", "repeat", "context", "metadata", "cases"), "record")
         integer(record["schema"], 1, 1, "record schema")
         integer(record["repeat"], repeat, repeat, "repeat identity")
+        context(record["context"], runner, commit, c)
         require(record["context"] == ctx, "process context differs from prepared receipt")
         cpus.append(metadata(record["metadata"], c))
-        records.append((record, cases(record["cases"], exp, control)))
+        checked_cases = cases(record["cases"], exp, control)
+        journal(root / f"process-{repeat}", repeat, record, runner, commit, c, exp, control)
+        records.append((record, checked_cases))
     first, second = records
     require(cpus[0] == cpus[1], "CPU changed between processes")
     for field in ("process_id", "process_nonce"):
@@ -190,7 +246,7 @@ def host(root, runner, commit, c):
 
 
 def decide(root, commit):
-    c = contract()
+    c = contract(commit)
     root = Path(root)
     require({p.name for p in root.iterdir()} == set(RUNNERS), "exactly two requested host artifacts required")
     hosts = [host(root / runner, runner, commit, c) for runner in RUNNERS]
@@ -228,7 +284,7 @@ def main():
         text(args.commit, COMMIT.pattern, "expected commit")
         if args.mode == "host":
             require(args.runner is not None, "host mode requires --runner")
-            result = host(args.root, args.runner, args.commit, contract())
+            result = host(args.root, args.runner, args.commit, contract(args.commit))
             result = {"status": "host-valid-pair-undecided", "cpu": result["cpu"], "production_approval": False}
         else:
             require(args.runner is None, "pair mode has no --runner")
