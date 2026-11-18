@@ -30,10 +30,10 @@ import {
   markerKey,
   planDeploy,
   planSiteDeploy,
-  readMarker,
   siteDigest,
 } from '../scripts/lib/site-deploy.mjs';
-import { DIGEST_FILE, parseLiveRecord, readLiveRecord, siteAnswers } from '../scripts/lib/site-record.mjs';
+import { deleteMarker, readMarker } from '../scripts/lib/site-marker.mjs';
+import { DIGEST_FILE, parseLiveRecord, readLiveRecord } from '../scripts/lib/site-record.mjs';
 
 const registry = await loadAppsRegistry();
 
@@ -247,10 +247,9 @@ test('a site whose plan throws is published and checked, and the other sites are
   assert.deepEqual({ ...decision, microscopy: 'plan failed' }, { neuro: 'skip', msk: 'skip', microscopy: 'plan failed', preclinical: 'skip', hub: 'skip' });
   const outputs = deployOutputs(planned);
   assert.deepEqual(JSON.parse(outputs.workers), [{ site: 'microscopy', url: 'https://microscopyapps.sciget.org/' }]);
-  assert.deepEqual(JSON.parse(outputs.verify), [{ site: 'microscopy', url: 'https://microscopyapps.sciget.org/' }]);
+  // With no digest there is nothing to confirm and no marker to save.
+  assert.deepEqual(JSON.parse(outputs.verify), [{ site: 'microscopy', url: 'https://microscopyapps.sciget.org/', digest: '', key: '', published: true }]);
   assert.equal(outputs.verify_build, 'true');
-  // With no digest there is no marker to save.
-  assert.deepEqual(JSON.parse(outputs.markers), {});
   assert.match(deploySummary(planned), /\| microscopy \| microscopyapps\.sciget\.org \| publish \| after publish \| plan failed \(ENOENT[^|]*\| - \|/);
 });
 
@@ -395,7 +394,7 @@ test('the plan returns its outputs by its deadlines when every read stalls, and 
   assert.equal(result.outputs.pages, 'true');
   assert.deepEqual(JSON.parse(result.outputs.workers).map(({ site: id }) => id), ['msk', 'microscopy', 'preclinical', 'hub']);
   assert.equal(result.outputs.verify_build, 'true');
-  assert.equal(result.outputs.verify_hub, 'true');
+  assert.deepEqual(JSON.parse(result.outputs.hub).map(({ site: id }) => id), ['hub']);
   assert.ok(result.planned.every(({ publish, reason }) => publish && reason === 'live digest unreadable (no complete answer in 1.2 s)'));
   assert.ok(result.planned.every(({ marker }) => marker.error === 'GitHub API: no complete answer in 0.8 s'));
   assert.match(result.summary, /\| msk \| mskapps\.sciget\.org \| publish \| after publish \| live digest unreadable \(no complete answer in 1\.2 s\) \| unknown \(GitHub API: no complete answer in 0\.8 s\) \|/);
@@ -487,13 +486,14 @@ test('the plan command exits by itself soon after its deadlines when answers tri
     assert.ok(ms < prompt.ms + 300 + 1500, `${name}: exited after ${Math.round(ms)} ms, ${Math.round(prompt.ms)} ms with prompt answers`);
     assert.equal(outputs.pages, 'true', name);
     assert.deepEqual(JSON.parse(outputs.workers).map(({ site: id }) => id), ['msk', 'microscopy', 'preclinical', 'hub'], name);
-    assert.equal(outputs.verify_hub, 'true', name);
+    assert.deepEqual(JSON.parse(outputs.hub).map(({ site: id, published }) => [id, published]), [['hub', true]], name);
     assert.equal(outputs.verify_build, 'true', name);
-    assert.deepEqual(Object.keys(JSON.parse(outputs.markers)), ['neuro', 'msk', 'microscopy', 'preclinical', 'hub'], name);
+    // Each check leg gets its site's digest and marker key.
+    assert.deepEqual(JSON.parse(outputs.verify).map(({ site: id, digest: built, key }) => [id, /^[0-9a-f]{64}$/.test(built), key.startsWith(MARKER_PREFIX)]), registry.site.catalogs.map(({ id }) => [id, true, true]), name);
   }
 });
 
-test('the confirm command marks a digest only when the host serves it, and never fails the job', { timeout: 60_000 }, async (t) => {
+test('the confirm command marks a digest only when the host serves it, flags a publish that did not take, and never fails the step', { timeout: 60_000 }, async (t) => {
   const served = record({ site: 'msk' });
   const { port, requests } = await answeringServer(t, { status: 200, type: 'application/json', body: JSON.stringify(served), end: true });
   const root = await tempDir(t);
@@ -521,6 +521,18 @@ test('the confirm command marks a digest only when the host serves it, and never
     await assert.rejects(access(marker), name);
   }
 
+  // This run published the site: a host that does not serve the build flags the
+  // publish as untaken, and the leg fails once its checks have run.
+  const untaken = await confirm([...args('b'.repeat(64)), '--published', 'true']);
+  assert.deepEqual({ code: untaken.code, outputs: untaken.outputs }, { code: 0, outputs: { untaken: 'true', confirmed: 'false' } }, untaken.stderr);
+  assert.match(untaken.stdout, /^::error::mskapps\.sciget\.org serves digest a{64}, not msk at b{64}: this run published it, so the publish did not take\.$/m);
+  const taken = await confirm([...args(digest), '--published', 'true']);
+  assert.deepEqual(taken.outputs, { confirmed: 'true' });
+  await rm(marker);
+  // Without a digest (the site's plan failed) there is nothing to confirm.
+  assert.deepEqual((await confirm(['--url', 'https://mskapps.sciget.org/', '--site', 'msk', '--digest', '', '--published', 'true'])).outputs, { confirmed: 'false' });
+  assert.deepEqual((await confirm([...args('b'.repeat(64)), '--published', 'false'])).outputs, { confirmed: 'false' });
+
   // A host that stalls is unconfirmed by the deadline (0.3 s under the preload).
   const stalled = await answeringServer(t, { status: 200, type: 'application/json', trickle: true });
   const slow = await command(t, root, stalled.port, 'scripts/confirm-site-digest.mjs', args(digest));
@@ -530,16 +542,16 @@ test('the confirm command marks a digest only when the host serves it, and never
   assert.ok(slow.ms < 5000, `ended after ${Math.round(slow.ms)} ms`);
 });
 
-test('the confirm and probe commands load only Node built-ins, so the hub check needs no install', async () => {
-  const closure = moduleClosure(repoRoot, ['scripts/confirm-site-digest.mjs', SITE_PROBE]);
-  assert.deepEqual(closure, [SITE_PROBE, 'scripts/confirm-site-digest.mjs', 'scripts/lib/site-record.mjs']);
+test('the confirm and delete commands load only Node built-ins, so the hub check needs no install', async () => {
+  const closure = moduleClosure(repoRoot, ['scripts/confirm-site-digest.mjs', 'scripts/revoke-site-marker.mjs']);
+  assert.deepEqual(closure, ['scripts/confirm-site-digest.mjs', 'scripts/lib/site-marker.mjs', 'scripts/lib/site-record.mjs', 'scripts/revoke-site-marker.mjs']);
   for (const file of closure) {
     for (const [, specifier] of (await readFile(join(repoRoot, file), 'utf8')).matchAll(/\bfrom\s+'([^']+)'/g)) {
       assert.ok(specifier.startsWith('node:') || specifier.startsWith('.'), `${file} imports ${specifier}`);
     }
   }
   const hub = parse(await readFile(join(repoRoot, DEPLOY_WORKFLOW), 'utf8')).jobs['verify-hub'];
-  assert.deepEqual(hub.steps[0], { uses: 'actions/checkout@v7', with: { 'sparse-checkout': 'scripts' } });
+  assert.deepEqual(hub.steps[0], { uses: 'actions/checkout@v7', with: { 'sparse-checkout': 'scripts', 'persist-credentials': false } });
 });
 
 // Install npm package `name` at `version` in pnpm's layout: its files in the
@@ -585,8 +597,8 @@ test('the check hash covers every input of a site\'s deployed checks and nothing
   assert.deepEqual(checkHashes(root, registry), base, 'the same inputs give the same hash');
   assert.deepEqual(checkHashes(root, registry).msk, checkHashes(await checksFixture(t), registry).msk, 'a copy gives the same hash');
   const inputs = checkInputs(root, registry);
-  assert.deepEqual(inputs.hub, { files: [DEPLOY_WORKFLOW, ...HUB_CHECKS, 'scripts/lib/site-record.mjs'].sort(), packages: [] }, 'the hub\'s checks are the probe and a step of the workflow');
-  for (const path of [...DEPLOYED_CHECKS, ...CHECK_DATA, 'test-utils/site-catalog.mjs', 'scripts/lib/apps-registry.mjs', 'scripts/lib/site-record.mjs', 'packages/components/package.json']) {
+  assert.deepEqual(inputs.hub, { files: [DEPLOY_WORKFLOW, ...HUB_CHECKS].sort(), packages: [] }, 'the hub\'s checks are the probe and a step of the workflow');
+  for (const path of [...DEPLOYED_CHECKS, ...CHECK_DATA, 'test-utils/site-catalog.mjs', 'scripts/lib/apps-registry.mjs', 'packages/components/package.json']) {
     assert.ok(inputs.msk.files.includes(path), `${path} is a check input`);
   }
   // The packages the checks import, and what they depend on, by store directory; fsevents is optional and absent.
@@ -605,7 +617,8 @@ test('the check hash covers every input of a site\'s deployed checks and nothing
     ['a check script', (dir) => put(dir, 'test/image-upload.smoke.mjs', '// changed\n'), catalogues],
     ['a module a check imports', (dir) => put(dir, 'test-utils/site-catalog.mjs', '// changed\n'), catalogues],
     ['the landing page probe', (dir) => put(dir, SITE_PROBE, '// changed\n'), `hub ${catalogues}`],
-    ['the record reader the probe imports', (dir) => put(dir, 'scripts/lib/site-record.mjs', '// changed\n'), `hub ${catalogues}`],
+    // The digest confirmation and the marker steps decide which marker is saved, not whether a check passes.
+    ['the record reader', (dir) => put(dir, 'scripts/lib/site-record.mjs', '// changed\n'), ''],
     ['the app registry', (dir) => put(dir, 'registry/apps.yml', '# changed\n'), catalogues],
     ['the standalone catalog', (dir) => put(dir, 'registry/standalone.json', '{}'), catalogues],
     ['the root scripts', (dir) => put(dir, 'package.json', '{}'), catalogues],
@@ -632,77 +645,124 @@ test('the check scripts the hash covers are the ones the workflow\'s check steps
     const after = steps.findIndex(({ id }) => id === 'after');
     return steps.slice(before + 1, after);
   };
-  for (const name of ['deploy', 'verify-sites']) {
-    const run = between(name).map((step) => step.run.replace(/^pnpm (\S+)$/, (whole, script) => scripts[script]));
-    assert.deepEqual(run.map((line) => line.match(/^node (\S+)/)[1]).sort(), [...DEPLOYED_CHECKS].sort(), `${name} runs exactly the deployed checks between its confirmations`);
-  }
+  const script = (run) => run.replace(/^pnpm (\S+)$/, (whole, name) => scripts[name]).match(/^(?:node|bash) (\S+)/)?.[1];
+  assert.deepEqual(between('verify-sites').map(({ run }) => script(run)).sort(), [...DEPLOYED_CHECKS].sort(), 'verify-sites runs exactly the deployed checks between its confirmations');
   // The hub's checks: the probe, then the hub check, a step of the workflow the hash covers.
   const hub = between('verify-hub');
-  assert.deepEqual(hub.map(({ name }) => name), ['Check the site answers', 'Check the hub lists every catalogue']);
-  assert.deepEqual(hub.filter(({ run }) => run.startsWith('node ')).map(({ run }) => run.match(/^node (\S+)/)[1]), HUB_CHECKS);
+  assert.deepEqual(hub.map(({ id }) => id), ['answers', 'links']);
+  assert.deepEqual(hub.map(({ run }) => script(run)).filter(Boolean), HUB_CHECKS);
 });
 
-test('one probe checks a site\'s landing page after a Worker publish and in every job that checks the site', async () => {
+// The landing page probe of the base workflow, whose flags the probe keeps.
+const BASE_PROBE = 'curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 15 --output /dev/null';
+
+test('one probe, the base\'s curl command with a deadline per try, checks a landing page after each publish and in every check leg', async () => {
   const workflow = parse(await readFile(join(repoRoot, DEPLOY_WORKFLOW), 'utf8'));
-  const probes = Object.entries(workflow.jobs).flatMap(([job, { steps }]) => steps.filter(({ run }) => run?.includes('check-site-answers') || /curl/.test(run ?? '') && !/hub does not link/.test(run)).map((step) => [job, step]));
-  assert.deepEqual(probes.map(([job, step]) => [job, step.run]), [
-    ['deploy', `node ${SITE_PROBE} "$BASE_URL"`],
-    ['deploy-workers', `node ${SITE_PROBE} "$SITE_URL"`],
-    ['verify-hub', `node ${SITE_PROBE} "$SITE_URL"`],
-    ['verify-sites', `node ${SITE_PROBE} "$BASE_URL"`],
+  const probes = Object.entries(workflow.jobs).flatMap(([job, { steps }]) => steps.filter(({ run }) => run?.includes(SITE_PROBE) || (/curl/.test(run ?? '') && !/hub does not link/.test(run))).map((step) => [job, step]));
+  assert.deepEqual(probes.map(([job, step]) => [job, step.id, step.run]), [
+    ['deploy', 'answers', `bash ${SITE_PROBE} "$SITE_URL"`],
+    ['deploy-workers', 'answers', `bash ${SITE_PROBE} "$SITE_URL"`],
+    ['verify-hub', 'answers', `bash ${SITE_PROBE} "$SITE_URL"`],
+    ['verify-sites', 'answers', `bash ${SITE_PROBE} "$BASE_URL"`],
   ]);
-  assert.equal(workflow.jobs['deploy-workers'].steps.find(({ run }) => run?.includes(SITE_PROBE)).env.SITE_URL, '${{ matrix.url }}');
-  assert.equal(workflow.jobs.deploy.steps.find(({ run }) => run?.includes(SITE_PROBE)).env.BASE_URL, '${{ steps.deployment.outputs.page_url }}');
+  assert.ok(probes.every(([, step]) => step['timeout-minutes'] === undefined), 'curl\'s own limits end the probe, so a failure is a failed step');
+  assert.equal(workflow.jobs['deploy-workers'].steps.find(({ id }) => id === 'answers').env.SITE_URL, '${{ matrix.url }}');
+  assert.equal(workflow.jobs.deploy.steps.find(({ id }) => id === 'answers').env.SITE_URL, '${{ steps.deployment.outputs.page_url }}');
   assert.equal(workflow.jobs['verify-sites'].env.BASE_URL, '${{ matrix.url }}');
-  // The hub is probed at its registry host, whatever the plan wrote.
-  assert.equal(workflow.jobs['verify-hub'].env.SITE_URL, `https://${registry.site.hub.host}/`);
+  assert.equal(workflow.jobs['verify-hub'].env.SITE_URL, '${{ matrix.url }}');
+  const command = (await readFile(join(repoRoot, SITE_PROBE), 'utf8')).split('\n').filter((line) => line.startsWith('exec '));
+  assert.deepEqual(command, [`exec ${BASE_PROBE.replace(' --output', ' --max-time 30 --output')} "\${1:?usage: check-site-answers.sh <site URL>}"`]);
 });
 
-test('the landing page probe retries until the site answers below HTTP 400, then fails', async () => {
-  const answers = (...responses) => {
-    const requests = [];
-    const fetch = async (url, init) => {
-      requests.push({ url, init });
-      const next = responses.length > 1 ? responses.shift() : responses[0];
-      return typeof next === 'function' ? next(init) : new Response('page', { status: next });
-    };
-    return { fetch, requests };
+// A loopback server that answers its requests in turn with `answers`
+// ({ status, headers }), repeating the last one.
+async function answersServer(t, answers) {
+  const requests = [];
+  const server = createServer((request, response) => {
+    const { status, headers = {} } = answers[Math.min(requests.length, answers.length - 1)];
+    requests.push(performance.now());
+    response.writeHead(status, { 'content-type': 'text/html', ...headers });
+    response.end('<!doctype html>');
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => {
+    server.closeAllConnections();
+    server.close();
+  });
+  return { url: `http://127.0.0.1:${server.address().port}/`, requests };
+}
+
+const probeCommand = async (url) => {
+  const child = spawn('bash', [join(repoRoot, SITE_PROBE), ...(url ? [url] : [])], { stdio: ['ignore', 'ignore', 'pipe'] });
+  let stderr = '';
+  child.stderr.on('data', (chunk) => { stderr += chunk; });
+  const [code] = await once(child, 'exit');
+  return { code, stderr };
+};
+
+test('the probe passes on an answer below HTTP 400, retries as the host asks, and fails the step when the site keeps failing', { timeout: 60_000 }, async (t) => {
+  const up = await answersServer(t, [{ status: 200 }]);
+  assert.deepEqual(await probeCommand(up.url), { code: 0, stderr: '' });
+  assert.equal(up.requests.length, 1);
+  // curl --fail counts a redirect as an answer and does not follow it.
+  const moved = await answersServer(t, [{ status: 302, headers: { location: '/elsewhere' } }]);
+  assert.equal((await probeCommand(moved.url)).code, 0);
+  assert.equal(moved.requests.length, 1);
+  // curl waits as long as Retry-After asks before its next try.
+  const recovering = await answersServer(t, [{ status: 503, headers: { 'retry-after': '1' } }, { status: 200 }]);
+  assert.equal((await probeCommand(recovering.url)).code, 0);
+  assert.equal(recovering.requests.length, 2);
+  assert.ok(recovering.requests[1] - recovering.requests[0] >= 900, 'it waited for the host');
+  // Eleven tries, then the step fails with curl's error.
+  const down = await answersServer(t, [{ status: 503, headers: { 'retry-after': '1' } }]);
+  const failed = await probeCommand(down.url);
+  assert.equal(failed.code, 22);
+  assert.match(failed.stderr, /The requested URL returned error: 503/);
+  assert.equal(down.requests.length, 11);
+  assert.notEqual((await probeCommand()).code, 0, 'a missing URL fails');
+});
+
+test('a marker delete removes the exact key on this ref, and anything it cannot confirm is an error', async () => {
+  const requests = [];
+  const api = (...answers) => async (url, init) => {
+    requests.push({ url, init });
+    const next = answers.length > 1 ? answers.shift() : answers[0];
+    return typeof next === 'function' ? next() : json(next.body, { status: next.status ?? 200 });
   };
-  const probe = (fetch, fields = {}) => siteAnswers({ url: 'https://mskapps.sciget.org/', fetch, retryMs: 1, timeoutMs: 50, ...fields });
-  const prompt = answers(200);
-  assert.deepEqual(await probe(prompt.fetch), { status: 200 });
-  assert.equal(prompt.requests[0].init.redirect, 'manual', 'a redirect is not followed');
-  assert.equal(prompt.requests[0].init.signal.aborted, true, 'the request is aborted once the read ends');
-  // curl --fail counts a redirect as an answer, and so does the probe.
-  assert.deepEqual(await probe(answers(302).fetch), { status: 302 });
-  const recovering = answers(503, 503, 200);
-  assert.deepEqual(await probe(recovering.fetch), { status: 200 });
-  assert.equal(recovering.requests.length, 3);
-  const down = answers(503);
-  assert.deepEqual(await probe(down.fetch), { error: 'HTTP 503 after 11 attempts' });
-  assert.equal(down.requests.length, 11);
-  assert.deepEqual(await probe(answers(404).fetch, { attempts: 2 }), { error: 'HTTP 404 after 2 attempts' });
-  assert.deepEqual(await probe(async () => { throw new TypeError('fetch failed'); }, { attempts: 2 }), { error: 'fetch failed after 2 attempts' });
-  // A body that never ends is a failed attempt at the deadline.
-  const stalled = () => new Response(new ReadableStream({ start() {} }), { status: 200 });
-  assert.deepEqual(await probe(answers(stalled).fetch, { attempts: 2 }), { error: 'no complete answer in 0.05 s after 2 attempts' });
-  assert.deepEqual(await probe(answers(stalled, 200).fetch), { status: 200 });
+  const remove = (fetch, fields = {}) => deleteMarker({ key: KEY, repository: 'neurodesk/webapps', ref: 'refs/heads/main', token: 't', fetch, ...fields });
+  assert.deepEqual(await remove(api({ body: cacheList(cacheEntry()) })), { deleted: 1 });
+  const { searchParams, pathname } = new URL(requests[0].url);
+  assert.equal(requests[0].init.method, 'DELETE');
+  assert.equal(pathname, '/repos/neurodesk/webapps/actions/caches');
+  assert.deepEqual(Object.fromEntries(searchParams), { key: KEY, ref: 'refs/heads/main' });
+  assert.equal(requests[0].init.signal.aborted, true, 'the request is aborted once the read ends');
+  // The API documents only 200. A 404 is "nothing to delete" only when a lookup then finds no marker.
+  assert.deepEqual(await remove(api({ status: 404, body: { message: 'Not Found' } }, { body: cacheList() })), { deleted: 0 });
+  assert.deepEqual(await remove(api({ status: 404, body: { message: 'Not Found' } }, { body: cacheList(cacheEntry()) })), { error: 'HTTP 404, but the marker is still listed' });
+  assert.deepEqual(await remove(api({ status: 404, body: {} }, { status: 500, body: {} })), { error: 'HTTP 404, then the marker could not be looked up (GitHub API: HTTP 500)' });
+  assert.deepEqual(await remove(api({ status: 403, body: { message: 'Resource not accessible by integration' } })), { error: 'GitHub API: HTTP 403' });
+  assert.deepEqual(await remove(api({ body: { message: 'no list' } })), { error: 'GitHub API: no list of deleted caches' });
+  assert.deepEqual(await remove(async () => { throw new TypeError('fetch failed'); }), { error: 'fetch failed' });
+  assert.deepEqual(await remove(api({ body: cacheList() }), { token: undefined }), { error: 'no key, repository, ref or token' });
 });
 
-test('the probe command fails the step when the site does not answer, and passes when it does', { timeout: 60_000 }, async (t) => {
+test('the delete command reports its result in the job summary and fails the step when the delete fails', { timeout: 60_000 }, async (t) => {
   const root = await tempDir(t);
-  const up = await answeringServer(t, { status: 200, type: 'text/html', body: '<!doctype html>', end: true });
-  const ok = await command(t, root, up.port, SITE_PROBE, ['https://mskapps.sciget.org/'], { scale: 1 });
-  assert.deepEqual({ code: ok.code, stdout: ok.stdout }, { code: 0, stdout: 'https://mskapps.sciget.org/ answers with HTTP 200.\n' }, ok.stderr);
-  assert.deepEqual(up.requests, ['/']);
-  // 11 attempts 0.15 s apart under the preload.
-  const down = await answeringServer(t, { status: 503, type: 'text/html', body: 'Service Unavailable', end: true });
-  const failed = await command(t, root, down.port, SITE_PROBE, ['https://mskapps.sciget.org/']);
-  assert.deepEqual({ code: failed.code, signal: failed.signal }, { code: 1, signal: null }, failed.stderr);
-  assert.equal(failed.stdout, '::error::https://mskapps.sciget.org/ does not answer: HTTP 503 after 11 attempts.\n');
-  assert.equal(down.requests.length, 11);
-  const none = await command(t, root, down.port, SITE_PROBE, []);
-  assert.equal(none.code, 1);
+  const summary = join(root, 'summary.md');
+  const revoke = async (status, body) => {
+    const server = await answeringServer(t, { status, type: 'application/json', body: JSON.stringify(body), end: true });
+    await writeFile(summary, '');
+    const env = { ...PLAN_ENV, GITHUB_STEP_SUMMARY: summary, GITHUB_API_URL: 'https://api.github.com' };
+    const result = await command(t, root, server.port, 'scripts/revoke-site-marker.mjs', ['--key', KEY], { env, scale: 1 });
+    return { code: result.code, summary: await readFile(summary, 'utf8'), requests: server.requests };
+  };
+  const deleted = await revoke(200, cacheList(cacheEntry()));
+  assert.equal(deleted.code, 0);
+  assert.equal(deleted.summary, `Deleted the verified marker \`${KEY}\` of refs/heads/main: a check failed, so the next run checks this site again.\n`);
+  assert.match(deleted.requests[0], new RegExp(`^/repos/neurodesk/webapps/actions/caches\\?key=${KEY}&ref=refs%2Fheads%2Fmain$`));
+  const failed = await revoke(500, { message: 'Server Error' });
+  assert.equal(failed.code, 1);
+  assert.equal(failed.summary, `Could not delete the verified marker \`${KEY}\` of refs/heads/main: GitHub API: HTTP 500. A check failed in this run; the marker may remain until it is deleted by hand.\n`);
 });
 
 test('the daily run checks every live site, published or not', async (t) => {
@@ -710,21 +770,19 @@ test('the daily run checks every live site, published or not', async (t) => {
   // GA4 was unavailable, so no usage report is refreshed and nothing is published.
   const daily = await plan({ verifyAll: true });
   assert.ok(daily.every(({ publish, verify }) => !publish && verify));
-  const outputs = deployOutputs(daily);
-  assert.deepEqual({ ...outputs, markers: undefined }, {
+  // Each check leg gets its site, the digest it must confirm and the marker it saves, keeps or deletes.
+  const legs = daily.map(({ site: id, url, digest: built, key }) => ({ site: id, url, digest: built, key, published: false }));
+  assert.deepEqual(deployOutputs(daily), {
     pages: 'false',
     workers: '[]',
-    verify: JSON.stringify(registry.site.catalogs.map(({ id, host }) => ({ site: id, url: `https://${host}/` }))),
-    verify_hub: 'true',
+    verify: JSON.stringify(legs.filter(({ site: id }) => id !== 'hub')),
+    hub: JSON.stringify(legs.filter(({ site: id }) => id === 'hub')),
     verify_build: 'false',
-    markers: undefined,
   });
-  // Each check job gets the digest it must confirm and the marker it saves or keeps.
-  assert.deepEqual(JSON.parse(outputs.markers), Object.fromEntries(daily.map(({ site: id, url, digest: built, key }) => [id, { url, digest: built, key }])));
   assert.match(deploySummary(daily), /\| neuro \| webapps\.neurodesk\.org \| skip \| live site \| verified: [^|]* \| found \|/);
   // A push checks nothing it does not publish.
   const push = await plan();
-  assert.deepEqual(deployOutputs(push), { pages: 'false', workers: '[]', verify: '[]', verify_hub: 'false', verify_build: 'false', markers: '{}' });
+  assert.deepEqual(deployOutputs(push), { pages: 'false', workers: '[]', verify: '[]', hub: '[]', verify_build: 'false' });
 });
 
 test('every catalogue and the hub is planned, and the Worker list is the one the registry declares', () => {
@@ -763,17 +821,15 @@ test('a plan publishes only what differs from the live hosts or lacks a marker, 
   assert.deepEqual(decision, {
     neuro: 'skip', msk: 'content changed', microscopy: 'content changed', preclinical: 'no verified marker for this content and these checks', hub: 'skip',
   });
-  const outputs = deployOutputs(second);
-  const sites = (ids) => JSON.stringify(ids.map((id) => ({ site: id, url: `https://${deploySites(registry).find(({ site: s }) => s === id).host}/` })));
-  assert.deepEqual({ ...outputs, markers: undefined }, {
+  const ids = ['msk', 'microscopy', 'preclinical'];
+  const entry = (id) => second.find(({ site: s }) => s === id);
+  assert.deepEqual(deployOutputs(second), {
     pages: 'false',
-    workers: sites(['msk', 'microscopy', 'preclinical']),
-    verify: sites(['msk', 'microscopy', 'preclinical']),
-    verify_hub: 'false',
+    workers: JSON.stringify(ids.map((id) => ({ site: id, url: entry(id).url }))),
+    verify: JSON.stringify(ids.map((id) => ({ site: id, url: entry(id).url, digest: entry(id).digest, key: markerKey(id, entry(id).digest, CHECKS[id]), published: true }))),
+    hub: '[]',
     verify_build: 'true',
-    markers: undefined,
   });
-  assert.deepEqual(Object.keys(JSON.parse(outputs.markers)), ['msk', 'microscopy', 'preclinical']);
   // The record a site now carries does not change its digest.
   assert.equal(second.find(({ site: id }) => id === 'neuro').digest, records.neuro.digest);
   assert.equal(await siteDigest(join(root, 'neuro')), records.neuro.digest);
@@ -788,7 +844,7 @@ test('a plan publishes only what differs from the live hosts or lacks a marker, 
 
 test('a deploy whose content is all live and verified publishes nothing and skips the build\'s browser checks', async (t) => {
   const { root, plan } = await verifiedFixture(t);
-  assert.deepEqual(deployOutputs(await plan()), { pages: 'false', workers: '[]', verify: '[]', verify_hub: 'false', verify_build: 'false', markers: '{}' });
+  assert.deepEqual(deployOutputs(await plan()), { pages: 'false', workers: '[]', verify: '[]', hub: '[]', verify_build: 'false' });
   // The next day's scheduled run refreshes every catalogue's usage report, not the hub, and needs no browser check.
   for (const { site: id } of deploySites(registry).filter(({ site: s }) => s !== 'hub')) await put(join(root, id), 'analytics.json', report('2026-11-19T04:24:00Z'));
   const daily = await plan();
@@ -800,173 +856,18 @@ test('a deploy whose content is all live and verified publishes nothing and skip
   assert.ok(dispatched.every(({ publish, verifyBuild, verify }) => publish && verifyBuild && verify));
 });
 
-// The deploy workflow over several runs, with the real plan: hosts that serve
-// what the last successful publish of each site sent, and the marker store of
-// main. A run publishes what its plan says (the Worker sites, then Pages only
-// when every Worker deploy passed), runs the checks of each site it checks,
-// and saves a site's marker as the check job does: when every check passed and
-// the host served this build's digest before and after them. `failChecks`
-// fail those sites' checks, `failDeploys` their deploys, and `lagging` sites
-// keep serving their old bytes until the checks are over.
-function deployWorld(root) {
-  const hosts = new Map();
-  const markers = new Set();
-  const state = { storeDown: false };
-  const fetch = async (url) => {
-    const served = hosts.get(new URL(url).host);
-    return served ? json(served) : new Response('Not found', { status: 404 });
-  };
-  const lookup = async (key) => (state.storeDown ? { error: 'GitHub API: HTTP 503' } : { present: markers.has(key) });
-  // One check job: confirm, the checks, confirm, keep or save the marker.
-  const check = ({ host, digest: built, key }, { fails = false } = {}) => {
-    const before = hosts.get(host)?.digest === built;
-    if (fails) return 'failure';
-    if (key && before && hosts.get(host)?.digest === built) markers.add(key);
-    return 'success';
-  };
-  async function run({ event = 'push', checks = CHECKS, failChecks = [], failDeploys = [], lagging = [] } = {}) {
-    const planned = await planDeploy({ registry, sitesDir: root, commit: C1, deployAll: event === 'dispatch', verifyAll: event === 'schedule', checks, lookup, nonce: 'n', fetch, write: writeFile });
-    const late = [];
-    const publish = (entry) => (lagging.includes(entry.site) ? late.push(entry) : hosts.set(entry.host, entry.record));
-    const workers = planned.filter(({ hosting, publish: published }) => hosting === 'worker' && published);
-    for (const entry of workers) if (!failDeploys.includes(entry.site)) publish(entry);
-    const workersPassed = workers.every(({ site: id }) => !failDeploys.includes(id));
-    const pages = planned.find(({ hosting }) => hosting === 'pages');
-    const pagesPassed = !(pages.publish && failDeploys.includes(pages.site));
-    if (workersPassed && pages.publish && pagesPassed) publish(pages);
-    const checked = {};
-    if (workersPassed) {
-      for (const entry of planned.filter(({ verify }) => verify)) {
-        if (entry.hosting === 'pages' && entry.publish && !pagesPassed) continue;
-        checked[entry.site] = check(entry, { fails: failChecks.includes(entry.site) });
-      }
-    }
-    for (const entry of late) hosts.set(entry.host, entry.record);
-    return { planned, checked, published: planned.filter(({ publish: published }) => published).map(({ site: id }) => id), rerunCheck: (id) => check(planned.find(({ site: s }) => s === id)) };
-  }
-  return { hosts, markers, state, run };
-}
-const everySite = deploySites(registry).map(({ site: id }) => id);
-
-test('a site whose check failed is checked again by the next run, and skipped once a check passed', async (t) => {
-  const root = await tempDir(t);
-  await sitesFixture(root);
-  const world = deployWorld(root);
-  // The first run after the merge: nothing is verified, so everything is published and checked.
-  const first = await world.run({ failChecks: ['msk'] });
-  assert.deepEqual(first.published, everySite);
-  assert.equal(first.checked.msk, 'failure');
-  // No change: the sites that passed are skipped; msk is published and checked again.
-  const second = await world.run();
-  assert.deepEqual(second.published, ['msk']);
-  assert.deepEqual(second.checked, { msk: 'success' });
-  assert.equal(second.planned.find(({ site: id }) => id === 'msk').verifyBuild, false, 'its bytes passed the build\'s checks when they were first published');
-  // No change, and every check has passed: nothing runs.
-  assert.deepEqual((await world.run()).published, []);
-});
-
-test('a re-run of an older run\'s hub check cannot hide a newer failed check', async (t) => {
-  const root = await tempDir(t);
-  await sitesFixture(root);
-  const world = deployWorld(root);
-  await world.run();
-  // Run A changes the hub; its hub check fails.
-  await put(join(root, 'hub'), 'index.html', '<!doctype html><title>hub 2</title>');
-  const a = await world.run({ failChecks: ['hub'] });
-  assert.deepEqual(a.published, ['hub']);
-  assert.deepEqual(a.checked, { hub: 'failure' });
-  // Run B changes msk; msk's check fails, and the hub, still unverified, is published and checked again and fails.
-  await put(join(root, 'msk'), 'app/new.js', '');
-  const b = await world.run({ failChecks: ['msk', 'hub'] });
-  assert.deepEqual(b.published, ['msk', 'hub']);
-  assert.deepEqual(b.checked, { msk: 'failure', hub: 'failure' });
-  // Someone re-runs only A's hub check, and it passes: it marks the hub at A's digest, which the host still serves.
-  assert.equal(a.rerunCheck('hub'), 'success');
-  // The next run skips the hub but still publishes and checks msk.
-  const c = await world.run();
-  assert.deepEqual(c.published, ['msk']);
-  assert.deepEqual(c.checked, { msk: 'success' });
-  assert.deepEqual((await world.run()).published, []);
-});
-
-test('"Re-run failed jobs" after a failed check saves its marker, and the next run skips the site', async (t) => {
-  const root = await tempDir(t);
-  await sitesFixture(root);
-  const world = deployWorld(root);
-  await world.run();
-  await put(join(root, 'preclinical'), 'app/new.js', '');
-  const failed = await world.run({ failChecks: ['preclinical'] });
-  assert.deepEqual(failed.checked, { preclinical: 'failure' });
-  assert.equal(failed.rerunCheck('preclinical'), 'success');
-  assert.deepEqual((await world.run()).published, []);
-});
-
-test('a failed deploy, a check that saw older bytes or a lost marker is published and checked again', async (t) => {
-  const root = await tempDir(t);
-  await sitesFixture(root);
-  const world = deployWorld(root);
-  await world.run();
-  // msk's Worker deploy fails: no check runs, and the next run publishes msk again.
-  await put(join(root, 'msk'), 'app/new.js', '');
-  const failedDeploy = await world.run({ failDeploys: ['msk'] });
-  assert.deepEqual(failedDeploy.checked, {});
-  const retried = await world.run();
-  assert.deepEqual(retried.published, ['msk']);
-  assert.deepEqual(retried.checked, { msk: 'success' });
-  // preclinical's host still serves its old bytes while the checks run: they pass, but mark nothing.
-  await put(join(root, 'preclinical'), 'app/new.js', '');
-  const lag = await world.run({ lagging: ['preclinical'] });
-  assert.deepEqual(lag.checked, { preclinical: 'success' });
-  const after = await world.run();
-  assert.deepEqual(after.published, ['preclinical'], 'its digest is live now, but unverified');
-  assert.equal(after.planned.find(({ site: id }) => id === 'preclinical').reason, 'no verified marker for this content and these checks');
-  // The cache evicts neuro's marker: the next run publishes and checks neuro once.
-  world.markers.delete(after.planned.find(({ site: id }) => id === 'neuro').key);
-  assert.deepEqual((await world.run()).published, ['neuro']);
-  assert.deepEqual((await world.run()).published, []);
-});
-
-test('changed check scripts check every site again, and an unreachable marker store publishes and checks every site', async (t) => {
-  const root = await tempDir(t);
-  await sitesFixture(root);
-  const world = deployWorld(root);
-  await world.run();
-  assert.deepEqual((await world.run()).published, []);
-  const changed = await world.run({ checks: CHECKS_2 });
-  assert.deepEqual(changed.published, everySite);
-  assert.deepEqual(Object.keys(changed.checked), everySite);
-  assert.ok(changed.planned.every(({ verifyBuild }) => !verifyBuild), 'the content is what the hosts serve');
-  assert.deepEqual((await world.run({ checks: CHECKS_2 })).published, []);
-  // The cache API fails.
-  world.state.storeDown = true;
-  const down = await world.run({ checks: CHECKS_2 });
-  assert.deepEqual(down.published, everySite);
-  assert.deepEqual(Object.keys(down.checked), everySite);
-  assert.ok(down.planned.every(({ reason }) => reason === 'marker unknown (GitHub API: HTTP 503)'));
-});
-
-test('the daily run checks every live site and restores the markers it lacks; a dispatch publishes and checks every site', async (t) => {
-  const root = await tempDir(t);
-  await sitesFixture(root);
-  const world = deployWorld(root);
-  await world.run();
-  const keys = [...world.markers];
-  world.markers.delete(keys[1]);
-  const daily = await world.run({ event: 'schedule' });
-  assert.deepEqual(Object.keys(daily.checked), everySite);
-  assert.deepEqual(daily.published, [everySite[1]], 'only the site without a marker is published');
-  assert.deepEqual([...world.markers].sort(), [...keys].sort());
-  const dispatched = await world.run({ event: 'dispatch' });
-  assert.deepEqual(dispatched.published, everySite);
-  assert.deepEqual(Object.keys(dispatched.checked), everySite);
-});
-
 const workflow = parse(await readFile(join(repoRoot, DEPLOY_WORKFLOW), 'utf8'));
-// A GitHub expression of `needs`, `steps`, `matrix` and status functions, evaluated as JavaScript.
+// A GitHub expression of `needs`, `steps`, `matrix`, `env` and status functions, evaluated as JavaScript.
 const expression = (source, context) => runInNewContext(
-  source.replace(/^\$\{\{\s*|\s*\}\}$/g, '').replace(/\.(\w+-[\w-]+)/g, '["$1"]').replace(/\bfromJSON\(/g, 'JSON.parse('),
+  String(source).replace(/^\$\{\{\s*|\s*\}\}$/g, '').replace(/\.(\w+-[\w-]+)/g, '["$1"]').replace(/\bfromJSON\(/g, 'JSON.parse('),
   { cancelled: () => false, success: () => true, ...context },
 );
+const STATUS_FUNCTION = /\b(always|cancelled|failure|success)\(\)/;
+const JOB_ORDER = ['build', 'turbo-cache-retention', 'deploy-workers', 'deploy', 'verify-hub', 'verify-sites'];
+const CHECK_JOBS = ['verify-hub', 'verify-sites'];
+const PAGES_SITE = registry.site.catalogs.find(({ hosting }) => hosting === 'pages').id;
+// The steps that assert something about a site's public host, by id.
+const ASSERTIONS = new Set(['answers', 'isolation', 'downloads', 'uploads', 'links']);
 
 test('the build plans the deploy after its checks of the projected sites and before anything is uploaded', () => {
   const steps = workflow.jobs.build.steps;
@@ -1005,223 +906,543 @@ test('the build plans the deploy after its checks of the projected sites and bef
     assert.ok(index > plan, 'the site records are written before the upload');
     assert.equal(steps[index].if, condition);
   }
-  assert.deepEqual(workflow.jobs.build.outputs, Object.fromEntries(['pages', 'workers', 'verify', 'verify_hub', 'markers'].map((key) => [key, `\${{ steps.plan.outputs.${key} }}`])));
+  assert.deepEqual(workflow.jobs.build.outputs, Object.fromEntries(['pages', 'workers', 'verify', 'hub'].map((key) => [key, `\${{ steps.plan.outputs.${key} }}`])));
 });
 
-// The jobs that check a site against its host, and the site each checks: verify-sites one per matrix entry.
-const CHECK_JOBS = { deploy: registry.site.catalogs.find(({ hosting }) => hosting === 'pages').id, 'verify-hub': 'hub', 'verify-sites': null };
+// GitHub's text of a value in `env`: null and undefined are empty.
+const text = (value) => (value === null || value === undefined ? '' : String(value));
+const jobEnv = (job, context) => Object.fromEntries(Object.entries(job.env ?? {}).map(([name, value]) => [name, text(String(value).includes('${{') ? expression(value, { secrets: {}, ...context }) : value)]));
 
-test('each check job confirms the digest before and after its checks, and only then keeps or saves the marker', () => {
-  for (const [name, fixed] of Object.entries(CHECK_JOBS)) {
-    const job = workflow.jobs[name];
-    const site = fixed ?? 'msk';
-    const index = (id) => job.steps.findIndex((step) => step.id === id);
-    const [before, after, kept] = ['before', 'after', 'kept'].map(index);
-    const save = job.steps.findIndex((step) => step.uses === 'actions/cache/save@v6');
-    assert.ok(before >= 0 && before < after && after < kept && kept < save && save === job.steps.length - 1, `${name}: confirm, checks, confirm, keep, save`);
-    const checks = job.steps.slice(before + 1, after);
-    assert.ok(checks.length > 0, `${name} checks between its confirmations`);
-    // Every check runs for every site; only a status function could let a later step run after a failed one.
-    for (const step of checks) assert.ok(step.if === undefined && step['continue-on-error'] === undefined, `${name}: ${step.name} always runs and can fail the job`);
-    for (const step of job.steps.slice(after)) assert.doesNotMatch(String(step.if), /\b(always|failure|cancelled)\(\)/, `${name}: ${step.name} runs only after every check passed`);
-    for (const step of job.steps.slice(0, before)) assert.doesNotMatch(String(step.run ?? ''), /test:|smoke|check-site-answers/, `${name}: no check runs before the first confirmation`);
-    const confirm = (step) => step.run.match(/^node scripts\/confirm-site-digest\.mjs --url "\$(\w+)" --site (\S+) --digest "\$SITE_DIGEST"( --marker deploy-verified\.json)?$/);
-    const [, urlVariable, siteArgument, beforeMarker] = confirm(job.steps[before]);
-    const [, afterUrl, afterSite, afterMarker] = confirm(job.steps[after]);
-    assert.deepEqual([afterUrl, afterSite, beforeMarker, afterMarker], [urlVariable, siteArgument, undefined, ' --marker deploy-verified.json']);
-    assert.equal(siteArgument, name === 'verify-hub' ? 'hub' : '"$SITE_CATALOG"');
-    assert.equal(job.steps[before].if, "env.SITE_MARKER != ''");
-    assert.equal(job.steps[after].if, "steps.before.outputs.confirmed == 'true'");
-    assert.equal(job.steps[kept].if, "steps.after.outputs.confirmed == 'true'");
-    assert.equal(job.steps[save].if, "steps.after.outputs.confirmed == 'true' && steps.kept.outputs.cache-hit != 'true'");
-    assert.equal(job.steps[kept].uses, 'actions/cache/restore@v6');
-    for (const step of [job.steps[kept], job.steps[save]]) {
-      assert.deepEqual(step.with, { path: 'deploy-verified.json', key: '${{ env.SITE_MARKER }}' }, `${name}: ${step.name}`);
-      assert.equal(step['continue-on-error'], true, `${name}: ${step.name} cannot fail checks that passed`);
-    }
-    // The digest and key come from the build's plan for this job's site.
-    const lookup = fixed ? `.${fixed}` : '[matrix.site]';
-    assert.equal(job.env.SITE_DIGEST, `\${{ fromJSON(needs.build.outputs.markers)${lookup}.digest }}`);
-    assert.equal(job.env.SITE_MARKER, `\${{ fromJSON(needs.build.outputs.markers)${lookup}.key }}`);
-    const markers = { [site]: { url: 'https://h/', digest, key: KEY } };
-    const context = { needs: { build: { outputs: { markers: JSON.stringify(markers) } } }, matrix: { site } };
-    assert.equal(expression(job.env.SITE_DIGEST, context), digest);
-    assert.equal(expression(job.env.SITE_MARKER, context), KEY);
-  }
-});
-
-// The jobs GitHub runs for a build's outputs: a job whose `if` has no status
-// function runs only when every job it needs succeeded. A matrix job must get
-// a non-empty matrix, and a run is green when no job failed.
-const JOB_ORDER = ['build', 'turbo-cache-retention', 'deploy-workers', 'deploy', 'verify-hub', 'verify-sites'];
-const STATUS_FUNCTION = /\b(always|cancelled|failure|success)\(\)/;
-function simulate(outputs, failing = [], kept = {}) {
-  const results = {};
-  for (const name of JOB_ORDER) {
-    if (name in kept) {
-      results[name] = kept[name];
-      continue;
-    }
-    const job = workflow.jobs[name];
-    const needs = [job.needs ?? []].flat();
-    assert.ok(needs.every((need) => need in results), `${name} runs after what it needs`);
-    const context = { needs: Object.fromEntries(needs.map((need) => [need, { result: results[need], outputs: need === 'build' ? outputs : {} }])) };
-    const condition = job.if === undefined || expression(String(job.if), context);
-    const gated = job.if !== undefined && STATUS_FUNCTION.test(String(job.if));
-    const runs = condition && (gated || needs.every((need) => results[need] === 'success'));
-    if (runs && job.strategy) {
-      const matrix = expression(job.strategy.matrix.include, context);
-      assert.ok(Array.isArray(matrix) && matrix.length > 0, `${name} never runs with an empty matrix`);
-      // Each check job gets its site's digest and marker key.
-      if (name === 'verify-sites') {
-        for (const entry of matrix) assert.ok(expression(job.env.SITE_MARKER, { ...context, matrix: entry }).startsWith(MARKER_PREFIX), `${entry.site} has a marker key`);
-      }
-    }
-    results[name] = !runs ? 'skipped' : failing.includes(name) ? 'failure' : 'success';
-  }
-  return results;
+// Whether GitHub starts a job: its `if`, plus the implicit success() of every
+// job it needs when the `if` has no status function.
+function jobRuns(name, results, outputs, { cancelled = false } = {}) {
+  const job = workflow.jobs[name];
+  const needs = [job.needs ?? []].flat();
+  const context = { cancelled: () => cancelled, needs: Object.fromEntries(needs.map((need) => [need, { result: results[need], outputs: need === 'build' ? outputs : {} }])) };
+  const condition = job.if === undefined ? !cancelled : expression(String(job.if), context);
+  const gated = job.if !== undefined && STATUS_FUNCTION.test(String(job.if));
+  return { runs: Boolean(condition) && (gated || (!cancelled && needs.every((need) => results[need] === 'success'))), context };
 }
-const ran = (results) => JOB_ORDER.filter((name) => results[name] !== 'skipped').join(' ');
-// The steps GitHub runs in one job: a step whose `if` has no status function
-// runs only when no earlier step failed; a step that may continue on error
-// fails nothing. `fail` names the steps that fail, `outputs` the outputs of
-// the steps that run, by id.
-function runSteps(job, { fail = [], outputs = {}, env = {} } = {}) {
+
+// The steps GitHub runs in one job or matrix leg. A step whose `if` has no
+// status function runs only when no earlier step failed and nothing was
+// cancelled; a step that may continue on error fails nothing. `act(step)`
+// performs a step and says whether it failed or was cancelled, and its outputs.
+function runSteps(job, { env = {}, act = () => ({}) } = {}) {
   const steps = {};
   const ran = [];
   let failed = false;
+  let cancelled = false;
   for (const step of job.steps) {
-    const id = step.id ?? step.name;
-    const status = { success: () => !failed, failure: () => failed, always: () => true };
+    const id = step.id ?? step.name ?? step.uses;
+    const status = { success: () => !failed && !cancelled, failure: () => failed, always: () => true, cancelled: () => cancelled };
     const condition = step.if === undefined || expression(String(step.if), { env, steps, ...status });
-    const runs = condition && (STATUS_FUNCTION.test(String(step.if ?? '')) || !failed);
-    steps[id] = { outputs: runs ? outputs[id] ?? {} : {} };
-    if (!runs) continue;
-    ran.push(step.name ?? step.uses);
-    if (fail.includes(step.name) && !step['continue-on-error']) failed = true;
+    const runs = Boolean(condition) && (STATUS_FUNCTION.test(String(step.if ?? '')) || (!failed && !cancelled));
+    if (!runs) {
+      steps[id] = { outcome: 'skipped', outputs: {} };
+      continue;
+    }
+    ran.push(id);
+    const { fail = false, cancel = false, outputs = {} } = act(step) ?? {};
+    steps[id] = { outcome: cancel ? 'cancelled' : fail ? 'failure' : 'success', outputs };
+    if (cancel) cancelled = true;
+    else if (fail && !step['continue-on-error']) failed = true;
   }
-  return { failed, ran };
+  return { result: cancelled ? 'cancelled' : failed ? 'failure' : 'success', ran, steps };
 }
-const SAVE = 'Save the verified marker';
-const KEEP = 'Keep the verified marker';
-const CONFIRMED = { before: { confirmed: 'true' }, after: { confirmed: 'true' }, kept: { 'cache-hit': 'false' } };
 
-test('a failed check, the landing page probe included, fails its job and saves no marker', () => {
-  const env = { SITE_MARKER: KEY };
-  for (const name of Object.keys(CHECK_JOBS)) {
+// One run of the workflow after its plan, job by job and leg by leg, with the
+// workflow's own job and step conditions; only what each step does is a model.
+// `world.hosts` maps each host to the record it serves and `world.markers` is
+// the marker store. A scenario fails some sites' publishes (`failPublish`) or
+// assertions (`failing`: site → step ids, or true for all of them), keeps
+// `lagging` sites serving their old bytes until the checks are over, cancels
+// every check leg at step `cancelAt`, or fails every marker delete
+// (`deleteFails`). `previous`, a run's result, makes this "Re-run failed jobs"
+// of it: the failed legs and every job after a re-run one run again.
+function runWorkflow(planned, world, { failPublish = [], failing = {}, lagging = [], cancelAt, deleteFails = false } = {}, previous) {
+  const outputs = deployOutputs(planned);
+  const bySite = Object.fromEntries(planned.map((entry) => [entry.site, entry]));
+  const results = { build: 'success' };
+  const legs = previous ? structuredClone(previous.legs) : {};
+  const summary = [];
+  const late = new Map();
+  const rerun = new Set();
+  const serves = (site) => world.hosts.get(bySite[site].host);
+  const publish = (site) => (lagging.includes(site) ? late.set(site, bySite[site].record) : world.hosts.set(bySite[site].host, bySite[site].record));
+  const fails = (site, id) => failing[site] === true || (failing[site] ?? []).includes(id);
+  for (const name of JOB_ORDER.slice(1)) {
     const job = workflow.jobs[name];
-    const index = (id) => job.steps.findIndex((step) => step.id === id);
-    const checks = job.steps.slice(index('before') + 1, index('after')).map((step) => step.name);
-    assert.ok(checks.includes('Check the site answers'), `${name} probes the landing page among its checks`);
-    const passed = runSteps(job, { outputs: CONFIRMED, env });
-    assert.equal(passed.failed, false, name);
-    assert.ok(checks.every((check) => passed.ran.includes(check)) && passed.ran.includes(SAVE), `${name}: every check, then the save`);
-    // An existing marker is restored, which counts as an access, and not saved again.
-    const kept = runSteps(job, { outputs: { ...CONFIRMED, kept: { 'cache-hit': 'true' } }, env });
-    assert.ok(kept.ran.includes(KEEP) && !kept.ran.includes(SAVE), name);
-    for (const check of checks) {
-      const failed = runSteps(job, { fail: [check], outputs: CONFIRMED, env });
-      assert.equal(failed.failed, true, `${name}: ${check} fails the job`);
-      assert.ok(!failed.ran.includes(KEEP) && !failed.ran.includes(SAVE), `${name}: no marker after ${check} failed`);
+    const needs = [job.needs ?? []].flat();
+    if (previous && previous.results[name] !== 'failure' && !needs.some((need) => rerun.has(need))) {
+      results[name] = previous.results[name];
+      continue;
     }
-    // The host served other bytes before or after the checks: the job passes and saves nothing.
-    for (const which of ['before', 'after']) {
-      const other = runSteps(job, { outputs: { ...CONFIRMED, [which]: { confirmed: 'false' } }, env });
-      assert.ok(!other.failed && !other.ran.includes(KEEP) && !other.ran.includes(SAVE), `${name}: ${which}`);
+    if (previous) rerun.add(name);
+    const { runs, context } = jobRuns(name, results, outputs);
+    if (!runs) {
+      results[name] = 'skipped';
+      continue;
     }
-    // Without a marker key (the site's plan failed), every check still runs and nothing is saved.
-    const unkeyed = runSteps(job, { outputs: CONFIRMED, env: { SITE_MARKER: '' } });
-    assert.ok(checks.every((check) => unkeyed.ran.includes(check)) && !unkeyed.ran.includes(SAVE), name);
-    // A failed restore or save cannot fail checks that passed.
-    assert.equal(runSteps(job, { fail: [KEEP, SAVE], outputs: CONFIRMED, env }).failed, false, name);
+    const matrix = job.strategy ? expression(job.strategy.matrix.include, context) : [{ site: name === 'deploy' ? PAGES_SITE : undefined }];
+    assert.ok(Array.isArray(matrix) && matrix.length > 0, `${name} never runs with an empty matrix`);
+    legs[name] ??= {};
+    for (const leg of matrix) {
+      const site = leg.site;
+      if (previous && previous.results[name] === 'failure' && !needs.some((need) => rerun.has(need)) && legs[name][site]?.result !== 'failure') continue;
+      const env = jobEnv(job, { ...context, matrix: leg });
+      const act = (step) => {
+        if (cancelAt && step.id === cancelAt && CHECK_JOBS.includes(name)) return { cancel: true };
+        switch (step.id) {
+          case 'deployment':
+          case 'publish':
+            if (failPublish.includes(site)) return { fail: true };
+            publish(site);
+            return {};
+          case 'before': {
+            const confirmed = env.SITE_DIGEST !== '' && serves(site)?.digest === env.SITE_DIGEST;
+            return { outputs: { confirmed: String(confirmed), ...(!confirmed && env.SITE_PUBLISHED === 'true' && env.SITE_DIGEST !== '' ? { untaken: 'true' } : {}) } };
+          }
+          case 'after':
+            return { outputs: { confirmed: String(env.SITE_DIGEST !== '' && serves(site)?.digest === env.SITE_DIGEST) } };
+          case 'kept':
+            return { outputs: { 'cache-hit': String(world.markers.has(env.SITE_MARKER)) } };
+          case 'save':
+            world.markers.add(env.SITE_MARKER);
+            return {};
+          case 'revoke':
+            if (deleteFails) {
+              summary.push(`${site}: could not delete its marker`);
+              return { fail: true };
+            }
+            world.markers.delete(env.SITE_MARKER);
+            summary.push(`${site}: deleted its marker`);
+            return {};
+          case 'untaken':
+            return { fail: true };
+          default:
+            return ASSERTIONS.has(step.id) ? { fail: fails(site, step.id) } : {};
+        }
+      };
+      legs[name][site] = runSteps(job, { env, act });
+    }
+    const legResults = Object.values(legs[name]).map(({ result }) => result);
+    results[name] = legResults.includes('failure') ? 'failure' : legResults.includes('cancelled') ? 'cancelled' : 'success';
+  }
+  for (const [site, record] of late) world.hosts.set(bySite[site].host, record);
+  const green = Object.values(results).every((result) => result === 'success' || result === 'skipped');
+  return { outputs, results, legs, summary, green, ran: JOB_ORDER.filter((name) => results[name] !== 'skipped').join(' ') };
+}
+
+// Sites at C1 content, hosts that serve nothing yet and an empty marker store.
+async function deployWorld(t) {
+  const root = await tempDir(t);
+  await sitesFixture(root);
+  const world = { hosts: new Map(), markers: new Set(), storeDown: false };
+  const fetch = async (url) => {
+    const served = world.hosts.get(new URL(url).host);
+    return served ? json(served) : missing();
+  };
+  const lookup = async (key) => (world.storeDown ? { error: 'GitHub API: HTTP 503' } : { present: world.markers.has(key) });
+  const run = async ({ event = 'push', checks = CHECKS, ...scenario } = {}) => {
+    const planned = await planDeploy({ registry, sitesDir: root, commit: C1, deployAll: event === 'dispatch', verifyAll: event === 'schedule', checks, lookup, nonce: 'n', fetch, write: writeFile });
+    const result = runWorkflow(planned, world, scenario);
+    const rerunFailed = (rescenario = {}) => runWorkflow(planned, world, rescenario, result);
+    return { planned, published: planned.filter(({ publish }) => publish).map(({ site: id }) => id), key: (id) => planned.find(({ site: s }) => s === id).key, rerunFailed, ...result };
+  };
+  const change = (id) => put(join(root, id), 'app/new.js', `// ${Math.random()}\n`);
+  return { root, world, run, change };
+}
+const everySite = deploySites(registry).map(({ site: id }) => id);
+// The steps of one check leg that assert something about its site's host.
+const assertionsOf = (name) => workflow.jobs[name].steps.filter(({ id }) => ASSERTIONS.has(id)).map(({ id }) => id);
+const checkJobOf = (id) => (id === 'hub' ? 'verify-hub' : 'verify-sites');
+// Every site the plan checked ran every assertion of its site in its own leg,
+// except `failed`, whose leg stops at its first failed assertion.
+function assertEverySiteFullyChecked(run, sites, failed) {
+  for (const id of sites) {
+    const leg = run.legs[checkJobOf(id)]?.[id];
+    assert.ok(leg, `${id} has a check leg`);
+    const assertions = assertionsOf(checkJobOf(id));
+    const expected = id === failed ? assertions.slice(0, assertions.findIndex((step) => leg.steps[step].outcome === 'failure') + 1) : assertions;
+    assert.ok(expected.length > 0, `${id} ran an assertion`);
+    for (const step of expected) assert.ok(leg.ran.includes(step), `${id} ran ${step}`);
+  }
+}
+
+test('the model knows every step of the publish and check jobs, and each check job deletes its marker on any of its assertions', () => {
+  const modelled = new Set([...ASSERTIONS, 'deployment', 'publish', 'before', 'after', 'kept', 'save', 'revoke', 'untaken']);
+  for (const name of ['deploy', 'deploy-workers', ...CHECK_JOBS]) {
+    for (const step of workflow.jobs[name].steps) {
+      const acts = Boolean(step.run) || /^actions\/(deploy-pages|cache)/.test(step.uses ?? '');
+      const setup = /^(actions\/(checkout|setup-node|download-artifact)|pnpm\/action-setup)/.test(step.uses ?? '') || /^(pnpm install|sudo rm)/.test(step.run ?? '');
+      assert.ok(setup || (acts && modelled.has(step.id)), `${name}: "${step.name ?? step.uses}" is a set-up step or one the model performs`);
+    }
+  }
+  for (const name of CHECK_JOBS) {
+    const steps = workflow.jobs[name].steps;
+    const index = (id) => steps.findIndex((step) => step.id === id);
+    const between = steps.slice(index('before') + 1, index('after'));
+    assert.deepEqual(between.map(({ id }) => id), assertionsOf(name), `${name}: only assertions run between the confirmations`);
+    const revoke = steps[index('revoke')];
+    const listed = [...String(revoke.if).matchAll(/steps\.(\w+)\.outcome == 'failure'/g)].map(([, id]) => id);
+    assert.deepEqual(listed, assertionsOf(name), `${name} deletes its marker when any of its assertions failed`);
   }
 });
-// "Re-run failed jobs": GitHub re-runs each failed job and every job that needs
-// one; the others keep their results and outputs from the attempt before.
-function rerunFailed(outputs, previous) {
-  const rerun = new Set();
-  for (const name of JOB_ORDER) {
-    const needs = [workflow.jobs[name].needs ?? []].flat();
-    if (previous[name] === 'failure' || needs.some((need) => rerun.has(need))) rerun.add(name);
+
+test('every check job starts once every publish has ended, whatever its result, whenever the plan selects a site', () => {
+  const entry = (id) => ({ site: id, url: `https://${id}/`, digest, key: KEY, published: true });
+  const outputs = { pages: 'true', workers: JSON.stringify([entry('msk')]), verify: JSON.stringify([entry('neuro'), entry('msk')]), hub: JSON.stringify([entry('hub')]), verify_build: 'true' };
+  const publishes = ['success', 'failure', 'skipped'];
+  for (const name of CHECK_JOBS) {
+    for (const workers of publishes) {
+      for (const pages of publishes) {
+        const results = { build: 'success', 'turbo-cache-retention': 'success', 'deploy-workers': workers, deploy: pages };
+        assert.equal(jobRuns(name, results, outputs).runs, true, `${name} after deploy-workers ${workers} and deploy ${pages}`);
+      }
+    }
+    const done = { build: 'success', 'turbo-cache-retention': 'success', 'deploy-workers': 'success', deploy: 'success' };
+    assert.equal(jobRuns(name, { ...done, build: 'failure' }, outputs).runs, false, 'a failed plan checks nothing');
+    assert.equal(jobRuns(name, done, { ...outputs, verify: '[]', hub: '[]' }).runs, false, 'an empty matrix never starts');
+    assert.equal(jobRuns(name, done, outputs, { cancelled: true }).runs, false, 'a cancelled run starts no check');
+    assert.equal(workflow.jobs[name].strategy['fail-fast'], false, `${name}: one leg per site, none cancels another`);
+    assert.deepEqual(workflow.jobs[name].permissions, { contents: 'read', actions: 'write' }, `${name} may delete markers`);
   }
-  const results = simulate(outputs, [], Object.fromEntries(JOB_ORDER.filter((name) => !rerun.has(name)).map((name) => [name, previous[name]])));
-  return { results, ran: JOB_ORDER.filter((name) => rerun.has(name) && results[name] !== 'skipped').join(' ') };
-}
-const greenRun = (results) => Object.values(results).every((result) => result !== 'failure');
+  // Each check job waits for the publishes of the sites it checks.
+  assert.deepEqual(workflow.jobs['verify-sites'].needs, ['build', 'deploy-workers', 'deploy']);
+  assert.deepEqual(workflow.jobs['verify-hub'].needs, ['build', 'deploy-workers']);
+  assert.equal(workflow.jobs['verify-sites'].strategy.matrix.include, '${{ fromJSON(needs.build.outputs.verify) }}');
+  assert.equal(workflow.jobs['verify-hub'].strategy.matrix.include, '${{ fromJSON(needs.build.outputs.hub) }}');
+  // The Pages deploy still waits for the Worker sites, so the neuro 404 page never redirects to a host that is not live.
+  assert.equal(jobRuns('deploy', { build: 'success', 'deploy-workers': 'failure' }, outputs).runs, false);
+  assert.equal(jobRuns('deploy', { build: 'success', 'deploy-workers': 'skipped' }, outputs).runs, true);
+  // Only the check jobs may delete markers; the token reaches the delete step alone, and no checkout keeps it.
+  // turbo-cache-retention, as at the base, deletes the superseded turbo-pages- caches and nothing else.
+  for (const [name, job] of Object.entries(workflow.jobs)) {
+    if (CHECK_JOBS.includes(name) || job.permissions?.actions !== 'write') continue;
+    assert.equal(name, 'turbo-cache-retention');
+    assert.match(job.steps.map(({ run }) => run).join('\n'), /gh cache list --ref "\$CACHE_REF" --key turbo-pages- /);
+  }
+  assert.equal(workflow.permissions.actions, 'read');
+  for (const name of CHECK_JOBS) {
+    for (const step of workflow.jobs[name].steps) {
+      if (step.uses?.startsWith('actions/checkout')) assert.equal(step.with['persist-credentials'], false, `${name} keeps no token in its checkout`);
+      if (JSON.stringify(step).includes('github.token')) assert.equal(step.id, 'revoke', `${name}: only the delete step gets the token`);
+    }
+  }
+});
+
+test('one site\'s failed publish holds back no other site\'s checks, and the failed site gains no marker', async (t) => {
+  const pagesFailures = [];
+  for (const failed of everySite) {
+    // A push that changed every site: each is published and checked.
+    const { world, run, change } = await deployWorld(t);
+    await run();
+    for (const id of everySite) await change(id);
+    const result = await run({ failPublish: [failed] });
+    assert.deepEqual(result.published, everySite);
+    assert.equal(result.green, false, `${failed}: the failed publish leaves the run red`);
+    assertEverySiteFullyChecked(result, everySite);
+    // A failed Worker publish also holds back the Pages publish, so neuro's new bytes are not live either.
+    const notLive = new Set(failed === PAGES_SITE ? [failed] : [failed, PAGES_SITE]);
+    if (failed !== PAGES_SITE) pagesFailures.push(result.results.deploy);
+    for (const id of everySite) {
+      const leg = result.legs[checkJobOf(id)][id];
+      assert.equal(world.markers.has(result.key(id)), !notLive.has(id), `${failed} failed: ${id} ${notLive.has(id) ? 'gains no marker' : 'gains its marker'}`);
+      assert.equal(leg.result, notLive.has(id) ? 'failure' : 'success', `${failed} failed: ${id}'s leg`);
+    }
+    // The mixed case: a scheduled run with only this site changed, every other site live and verified.
+    const mixed = await deployWorld(t);
+    await mixed.run();
+    await mixed.change(failed);
+    const daily = await mixed.run({ event: 'schedule', failPublish: [failed] });
+    assert.deepEqual(daily.published, [failed]);
+    assert.equal(daily.green, false);
+    assertEverySiteFullyChecked(daily, everySite);
+    for (const id of everySite) assert.equal(mixed.world.markers.has(daily.key(id)), id !== failed, `${failed} failed on the daily run: ${id}`);
+  }
+  assert.ok(pagesFailures.every((result) => result === 'skipped'), 'the Pages publish waits for the Worker publishes');
+});
+
+test('a site whose checks fail loses its marker, and the next run with no change checks it again', async (t) => {
+  for (const failed of everySite) {
+    const { world, run } = await deployWorld(t);
+    await run();
+    assert.equal((await run()).published.length, 0, 'every site is live and verified');
+    const keys = new Set(world.markers);
+    // The daily run: the site's landing page answers 503, which its probe reports.
+    const daily = await run({ event: 'schedule', failing: { [failed]: ['answers'] } });
+    assert.equal(daily.green, false, failed);
+    assertEverySiteFullyChecked(daily, everySite, failed);
+    assert.deepEqual(daily.summary, [`${failed}: deleted its marker`]);
+    assert.deepEqual([...world.markers].sort(), [...keys].filter((key) => key !== daily.key(failed)).sort(), `${failed}: only its marker is gone`);
+    const next = await run();
+    assert.deepEqual(next.published, [failed], `${failed} is published and checked again`);
+    assert.equal(next.green, true);
+    assert.deepEqual((await run()).published, [], `${failed} passed, so the run after skips it`);
+  }
+  // Any one assertion is enough.
+  for (const step of assertionsOf('verify-sites')) {
+    const { world, run } = await deployWorld(t);
+    await run();
+    const daily = await run({ event: 'schedule', failing: { msk: [step] } });
+    assert.equal(world.markers.has(daily.key('msk')), false, step);
+  }
+});
+
+test('a cancelled check deletes nothing, but an assertion that failed before the cancellation still deletes its marker', async (t) => {
+  const { world, run } = await deployWorld(t);
+  await run();
+  const keys = [...world.markers].sort();
+  const cancelled = await run({ event: 'schedule', cancelAt: 'isolation' });
+  assert.equal(cancelled.green, false);
+  assert.deepEqual(cancelled.summary, []);
+  assert.deepEqual([...world.markers].sort(), keys, 'a cancelled check proves nothing');
+  for (const id of registry.site.catalogs.map(({ id: catalogue }) => catalogue)) {
+    assert.ok(!cancelled.legs['verify-sites'][id].ran.includes('save') && !cancelled.legs['verify-sites'][id].ran.includes('revoke'), id);
+  }
+  // msk's probe failed, then the run was cancelled during the next check.
+  const failedThenCancelled = await run({ event: 'schedule', failing: { msk: ['answers'] }, cancelAt: 'isolation' });
+  assert.equal(world.markers.has(failedThenCancelled.key('msk')), false);
+  assert.deepEqual(failedThenCancelled.summary, ['msk: deleted its marker']);
+});
+
+test('a failed delete leaves the run red and says why', async (t) => {
+  const { world, run } = await deployWorld(t);
+  await run();
+  const result = await run({ event: 'schedule', failing: { hub: ['links'] }, deleteFails: true });
+  assert.equal(result.green, false);
+  assert.equal(result.legs['verify-hub'].hub.steps.revoke.outcome, 'failure');
+  assert.deepEqual(result.summary, ['hub: could not delete its marker']);
+  assert.equal(world.markers.has(result.key('hub')), true, 'the marker stays when the delete fails');
+});
+
+test('a site whose check failed is checked again by the next run, and skipped once a check passed', async (t) => {
+  const { run } = await deployWorld(t);
+  // The first run after the merge: nothing is verified, so everything is published and checked.
+  const first = await run({ failing: { msk: ['isolation'] } });
+  assert.deepEqual(first.published, everySite);
+  assert.equal(first.legs['verify-sites'].msk.result, 'failure');
+  // No change: the sites that passed are skipped; msk is published and checked again.
+  const second = await run();
+  assert.deepEqual(second.published, ['msk']);
+  assert.equal(second.planned.find(({ site: id }) => id === 'msk').verifyBuild, false, 'its bytes passed the build\'s checks when they were first published');
+  assert.equal(second.green, true);
+  // No change, and every check has passed: nothing runs.
+  assert.deepEqual((await run()).published, []);
+});
+
+test('a re-run of an older run\'s hub check cannot hide a newer failed check', async (t) => {
+  const { root, run } = await deployWorld(t);
+  await run();
+  // Run A changes the hub; its hub check fails.
+  await put(join(root, 'hub'), 'index.html', '<!doctype html><title>hub 2</title>');
+  const a = await run({ failing: { hub: ['links'] } });
+  assert.deepEqual(a.published, ['hub']);
+  // Run B changes msk; msk's check fails, and the hub, still unverified, is published and checked again and fails.
+  await put(join(root, 'msk'), 'app/new.js', '');
+  const b = await run({ failing: { msk: ['uploads'], hub: ['links'] } });
+  assert.deepEqual(b.published, ['msk', 'hub']);
+  // Someone re-runs only A's failed jobs, and the hub check passes: it marks the hub at A's digest, which the host still serves.
+  const rerun = a.rerunFailed();
+  assert.equal(rerun.ran, 'build turbo-cache-retention deploy-workers verify-hub');
+  assert.equal(rerun.results['verify-hub'], 'success');
+  // The next run skips the hub but still publishes and checks msk.
+  const c = await run();
+  assert.deepEqual(c.published, ['msk']);
+  assert.equal(c.green, true);
+  assert.deepEqual((await run()).published, []);
+});
+
+test('"Re-run failed jobs" re-runs only the failed check legs, saves their markers, and the next run skips them', async (t) => {
+  const { world, run, change } = await deployWorld(t);
+  await run();
+  await change('preclinical');
+  await change('msk');
+  const failed = await run({ failing: { preclinical: ['downloads'] } });
+  assert.equal(failed.legs['verify-sites'].preclinical.result, 'failure');
+  const rerun = failed.rerunFailed();
+  assert.equal(rerun.results['verify-sites'], 'success');
+  assert.equal(rerun.green, true);
+  assert.equal(world.markers.has(failed.key('preclinical')), true);
+  assert.deepEqual((await run()).published, []);
+});
+
+test('a check that saw older bytes or a lost marker is published and checked again', async (t) => {
+  const { world, run, change } = await deployWorld(t);
+  await run();
+  // preclinical's host still serves its old bytes while the checks run: they pass, but mark nothing.
+  await change('preclinical');
+  const lag = await run({ lagging: ['preclinical'] });
+  assert.equal(lag.legs['verify-sites'].preclinical.steps.before.outputs.confirmed, 'false');
+  assert.equal(world.markers.has(lag.key('preclinical')), false);
+  const after = await run();
+  assert.deepEqual(after.published, ['preclinical'], 'its digest is live now, but unverified');
+  assert.equal(after.planned.find(({ site: id }) => id === 'preclinical').reason, 'no verified marker for this content and these checks');
+  // The cache evicts neuro's marker: the next run publishes and checks neuro once.
+  world.markers.delete(after.key('neuro'));
+  assert.deepEqual((await run()).published, ['neuro']);
+  assert.deepEqual((await run()).published, []);
+});
+
+test('changed check scripts check every site again, and an unreachable marker store publishes and checks every site', async (t) => {
+  const { world, run } = await deployWorld(t);
+  await run();
+  assert.deepEqual((await run()).published, []);
+  const changed = await run({ checks: CHECKS_2 });
+  assert.deepEqual(changed.published, everySite);
+  assertEverySiteFullyChecked(changed, everySite);
+  assert.ok(changed.planned.every(({ verifyBuild }) => !verifyBuild), 'the content is what the hosts serve');
+  assert.deepEqual((await run({ checks: CHECKS_2 })).published, []);
+  world.storeDown = true;
+  const down = await run({ checks: CHECKS_2 });
+  assert.deepEqual(down.published, everySite);
+  assertEverySiteFullyChecked(down, everySite);
+  assert.ok(down.planned.every(({ reason }) => reason === 'marker unknown (GitHub API: HTTP 503)'));
+});
+
+test('the daily run checks every live site and restores the markers it lacks; a dispatch publishes and checks every site', async (t) => {
+  const { world, run } = await deployWorld(t);
+  await run();
+  const keys = [...world.markers];
+  world.markers.delete(keys.find((key) => key.startsWith(`${MARKER_PREFIX}msk-`)));
+  const daily = await run({ event: 'schedule' });
+  assertEverySiteFullyChecked(daily, everySite);
+  assert.deepEqual(daily.published, ['msk'], 'only the site without a marker is published');
+  assert.deepEqual([...world.markers].sort(), [...keys].sort());
+  const dispatched = await run({ event: 'dispatch' });
+  assert.deepEqual(dispatched.published, everySite);
+  assertEverySiteFullyChecked(dispatched, everySite);
+});
+
+test('each check leg confirms the digest before and after its assertions, keeps or saves the marker only after both, and fails an untaken publish last', () => {
+  for (const name of CHECK_JOBS) {
+    const job = workflow.jobs[name];
+    const index = (id) => job.steps.findIndex((step) => step.id === id);
+    const order = ['before', ...assertionsOf(name), 'after', 'kept', 'save', 'revoke', 'untaken'];
+    assert.deepEqual(job.steps.slice(index('before')).map(({ id }) => id), order, `${name}: confirm, assertions, confirm, keep, save, delete, untaken`);
+    for (const step of job.steps.slice(0, index('before'))) assert.doesNotMatch(String(step.run ?? ''), /test:|smoke|check-site-answers|curl/, `${name}: no assertion runs before the first confirmation`);
+    const site = name === 'verify-hub' ? 'hub' : '"$SITE_CATALOG"';
+    const url = name === 'verify-hub' ? '$SITE_URL' : '$BASE_URL';
+    const step = (id) => job.steps[index(id)];
+    assert.equal(step('before').run, `node scripts/confirm-site-digest.mjs --url "${url}" --site ${site} --digest "$SITE_DIGEST" --published "$SITE_PUBLISHED"`);
+    assert.equal(step('before').if, undefined, 'the confirmation always runs and never stops the assertions');
+    assert.equal(step('after').run, `node scripts/confirm-site-digest.mjs --url "${url}" --site ${site} --digest "$SITE_DIGEST" --marker deploy-verified.json`);
+    for (const id of assertionsOf(name)) assert.ok(step(id).if === undefined && step(id)['continue-on-error'] === undefined, `${name}: ${id} runs whenever the leg has not failed, and can fail it`);
+    assert.equal(step('after').if, "steps.before.outputs.confirmed == 'true'");
+    assert.equal(step('kept').if, "steps.after.outputs.confirmed == 'true' && env.SITE_MARKER != ''");
+    assert.equal(step('save').if, "steps.after.outputs.confirmed == 'true' && env.SITE_MARKER != '' && steps.kept.outputs.cache-hit != 'true'");
+    assert.match(step('revoke').if, /^\$\{\{ always\(\) && env\.SITE_MARKER != '' && \(/);
+    assert.equal(step('revoke').run, 'node scripts/revoke-site-marker.mjs --key "$SITE_MARKER"');
+    assert.equal(step('untaken').if, "${{ !cancelled() && steps.before.outputs.untaken == 'true' }}");
+    assert.equal(step('kept').uses, 'actions/cache/restore@v6');
+    assert.equal(step('save').uses, 'actions/cache/save@v6');
+    for (const id of ['kept', 'save']) {
+      assert.deepEqual(step(id).with, { path: 'deploy-verified.json', key: '${{ env.SITE_MARKER }}' }, `${name}: ${id}`);
+      assert.equal(step(id)['continue-on-error'], true, `${name}: ${id} cannot fail checks that passed`);
+    }
+    // The leg's site, digest, key and whether this run published it come from the build's plan.
+    const leg = { site: 'msk', url: 'https://mskapps.sciget.org/', digest, key: KEY, published: true };
+    const env = jobEnv(job, { matrix: leg });
+    assert.deepEqual({ digest: env.SITE_DIGEST, key: env.SITE_MARKER, published: env.SITE_PUBLISHED }, { digest, key: KEY, published: 'true' });
+    assert.equal(env[name === 'verify-hub' ? 'SITE_URL' : 'BASE_URL'], leg.url);
+    assert.equal(jobEnv(job, { matrix: { ...leg, key: '' } }).SITE_MARKER, '');
+  }
+});
+
+test('the steps of a check leg: any failed assertion fails it and deletes the marker; a pass saves or keeps it', () => {
+  const env = { SITE_MARKER: KEY, SITE_DIGEST: digest, SITE_PUBLISHED: 'false' };
+  const outputs = { before: { confirmed: 'true' }, after: { confirmed: 'true' }, kept: { 'cache-hit': 'false' } };
+  // The untaken step fails whenever it runs.
+  const leg = (job, { fail = [], cancel, out = outputs, legEnv = env } = {}) => runSteps(job, { env: legEnv, act: (step) => ({ fail: fail.includes(step.id) || step.id === 'untaken', cancel: cancel !== undefined && step.id === cancel, outputs: out[step.id] ?? {} }) });
+  for (const name of CHECK_JOBS) {
+    const job = workflow.jobs[name];
+    const passed = leg(job);
+    assert.equal(passed.result, 'success', name);
+    assert.ok(passed.ran.includes('save') && !passed.ran.includes('revoke') && !passed.ran.includes('untaken'), name);
+    const kept = leg(job, { out: { ...outputs, kept: { 'cache-hit': 'true' } } });
+    assert.ok(kept.ran.includes('kept') && !kept.ran.includes('save'), `${name}: an existing marker is restored, which keeps it from eviction`);
+    for (const id of assertionsOf(name)) {
+      const failed = leg(job, { fail: [id] });
+      assert.equal(failed.result, 'failure', `${name}: ${id}`);
+      assert.ok(failed.ran.includes('revoke') && !failed.ran.includes('kept') && !failed.ran.includes('save'), `${name}: ${id} failed, so the marker is deleted and not saved`);
+      // Without a key there is nothing to delete.
+      assert.ok(!leg(job, { fail: [id], legEnv: { ...env, SITE_MARKER: '' } }).ran.includes('revoke'), `${name}: ${id}`);
+    }
+    // A cancellation deletes and saves nothing.
+    const cancelled = leg(job, { cancel: assertionsOf(name).at(-1) });
+    assert.ok(!cancelled.ran.includes('revoke') && !cancelled.ran.includes('save'), `${name}: cancelled`);
+    // The host served other bytes before or after: every assertion runs, nothing is saved, and the leg passes unless this run published the site.
+    for (const which of ['before', 'after']) {
+      const other = leg(job, { out: { ...outputs, [which]: { confirmed: 'false' } } });
+      assert.ok(other.result === 'success' && assertionsOf(name).every((id) => other.ran.includes(id)) && !other.ran.includes('save'), `${name}: ${which}`);
+    }
+    const untaken = leg(job, { out: { ...outputs, before: { confirmed: 'false', untaken: 'true' } } });
+    assert.equal(untaken.result, 'failure', `${name}: an untaken publish fails the leg`);
+    assert.ok(assertionsOf(name).every((id) => untaken.ran.includes(id)) && !untaken.ran.includes('save') && !untaken.ran.includes('revoke'), `${name}: its assertions still run`);
+    // A failed delete fails the step; the leg is red already.
+    const deleteFails = leg(job, { fail: [assertionsOf(name)[0], 'revoke'] });
+    assert.equal(deleteFails.steps.revoke.outcome, 'failure');
+    assert.equal(deleteFails.result, 'failure');
+  }
+});
 
 test('every job of the workflow is in the simulated order', () => {
   assert.deepEqual(Object.keys(workflow.jobs).sort(), [...JOB_ORDER].sort());
 });
 
-test('each case runs exactly the deploy and check jobs it needs, and leaves the run green', async (t) => {
-  const { root, markers, served, lookup, plan } = await verifiedFixture(t);
-  const withoutMsk = async (key) => (key.startsWith(`${MARKER_PREFIX}msk-`) ? { present: false } : lookup(key));
-  const unreadable = (host) => async (url) => (new URL(url).host === host ? missing() : served(url));
-  const cases = {
-    'nothing changed, markers present': await plan(),
-    'nothing changed, msk marker absent': await plan({ lookup: withoutMsk }),
-    'one site changed': await (async () => {
-      await put(join(root, 'msk'), 'app/new.js', '');
-      const planned = await plan();
-      await rm(join(root, 'msk', 'app/new.js'));
-      return planned;
-    })(),
-    'scheduled run, every digest live and verified': await plan({ verifyAll: true }),
-    'dispatched run': await plan({ deployAll: true }),
-    'unreadable record for one site': await plan({ fetch: unreadable('webapps.neurodesk.org') }),
-    'marker store unreachable': await plan({ lookup: async () => ({ error: 'GitHub API: HTTP 503' }) }),
-    'first run after the merge': await plan({ fetch: missing, lookup: absent }),
+test('each case runs exactly the deploy and check jobs it needs', async (t) => {
+  const table = {};
+  const describe = (result) => {
+    const sites = (list) => JSON.parse(list).map(({ site: id }) => id).join(',');
+    const { pages, workers, verify, hub, verify_build: startup } = result.outputs;
+    return { outputs: `pages=${pages} workers=${sites(workers)} verify=${sites(verify)} hub=${sites(hub)} startup=${startup}`, ran: result.ran, green: result.green };
   };
-  assert.ok(markers.size === deploySites(registry).length);
-  const table = Object.fromEntries(Object.entries(cases).map(([name, planned]) => {
-    const outputs = deployOutputs(planned);
-    const results = simulate(outputs);
-    assert.ok(greenRun(results), name);
-    return [name, { outputs: `pages=${outputs.pages} workers=${JSON.parse(outputs.workers).map(({ site: id }) => id)} verify=${JSON.parse(outputs.verify).map(({ site: id }) => id)} hub=${outputs.verify_hub} startup=${outputs.verify_build}`, ran: ran(results) }];
-  }));
-  const all = { outputs: 'pages=true workers=msk,microscopy,preclinical,hub verify=msk,microscopy,preclinical hub=true startup=true', ran: JOB_ORDER.join(' ') };
-  assert.deepEqual(table, {
-    'nothing changed, markers present': { outputs: 'pages=false workers= verify= hub=false startup=false', ran: 'build turbo-cache-retention' },
-    'nothing changed, msk marker absent': { outputs: 'pages=false workers=msk verify=msk hub=false startup=false', ran: 'build turbo-cache-retention deploy-workers verify-sites' },
-    'one site changed': { outputs: 'pages=false workers=msk verify=msk hub=false startup=true', ran: 'build turbo-cache-retention deploy-workers verify-sites' },
-    'scheduled run, every digest live and verified': { outputs: 'pages=false workers= verify=neuro,msk,microscopy,preclinical hub=true startup=false', ran: 'build turbo-cache-retention verify-hub verify-sites' },
-    'dispatched run': all,
-    'unreadable record for one site': { outputs: 'pages=true workers= verify= hub=false startup=true', ran: 'build turbo-cache-retention deploy' },
-    'marker store unreachable': { ...all, outputs: all.outputs.replace('startup=true', 'startup=false') },
-    'first run after the merge': all,
+  const scenario = async (name, prepare) => {
+    const world = await deployWorld(t);
+    await world.run();
+    table[name] = describe(await prepare(world));
+  };
+  await scenario('nothing changed, markers present', ({ run }) => run());
+  await scenario('nothing changed, msk marker absent', async ({ world, run }) => {
+    world.markers.delete([...world.markers].find((key) => key.startsWith(`${MARKER_PREFIX}msk-`)));
+    return run();
   });
-  // The scheduled run with every digest live and verified, and one Worker
-  // catalogue's landing page failing: verify-sites fails, the run is red, and
-  // that site's job saves no marker.
-  const scheduled = simulate(deployOutputs(cases['scheduled run, every digest live and verified']), ['verify-sites']);
-  assert.equal(ran(scheduled), 'build turbo-cache-retention verify-hub verify-sites');
-  assert.equal(greenRun(scheduled), false);
-  const landing = runSteps(workflow.jobs['verify-sites'], { fail: ['Check the site answers'], outputs: CONFIRMED, env: { SITE_MARKER: KEY } });
-  assert.equal(landing.failed, true);
-  assert.ok(!landing.ran.includes(SAVE) && !landing.ran.includes(KEEP));
-  // "Re-run failed jobs" after msk's check failed: the build is not re-run and keeps its
-  // outputs, so the check runs again on the sites the first attempt published, with the same marker key.
-  const outputs = deployOutputs(cases['one site changed']);
-  const firstAttempt = simulate(outputs, ['verify-sites']);
-  assert.equal(greenRun(firstAttempt), false);
-  const rerun = rerunFailed(outputs, firstAttempt);
-  assert.equal(rerun.ran, 'verify-sites');
-  assert.equal(greenRun(rerun.results), true);
-  assert.deepEqual(JSON.parse(outputs.verify).map(({ site: id }) => id), ['msk']);
-  assert.equal(JSON.parse(outputs.markers).msk.key, cases['one site changed'].find(({ site: id }) => id === 'msk').key);
-  // A failed Worker deploy re-runs with every job that waited for it.
-  const workersFailed = simulate(outputs, ['deploy-workers']);
-  assert.equal(rerunFailed(outputs, workersFailed).ran, 'deploy-workers verify-sites');
-});
-
-test('a failed Worker deploy holds back the Pages deploy and every check, and a failed build stops everything', () => {
-  const outputs = { pages: 'true', workers: '[{"site":"msk"},{"site":"hub"}]', verify: '[{"site":"msk"}]', verify_hub: 'true', verify_build: 'true', markers: JSON.stringify({ msk: { key: KEY } }) };
-  assert.equal(ran(simulate(outputs, ['deploy-workers'])), 'build turbo-cache-retention deploy-workers');
-  assert.equal(ran(simulate(outputs, ['build'])), 'build');
-  // The checks of the live hosts do not wait for the Pages deploy, which checks neuro itself.
-  assert.deepEqual(workflow.jobs['verify-sites'].needs, ['build', 'deploy-workers']);
-  assert.deepEqual(workflow.jobs['verify-hub'].needs, ['build', 'deploy-workers']);
-  assert.deepEqual(workflow.jobs.deploy.needs, ['build', 'deploy-workers']);
-  assert.deepEqual(Object.keys(workflow.jobs['verify-sites'].env), ['BASE_URL', 'SITE_CATALOG', 'SITE_DIGEST', 'SITE_MARKER']);
-  assert.deepEqual({ BASE_URL: workflow.jobs['verify-sites'].env.BASE_URL, SITE_CATALOG: workflow.jobs['verify-sites'].env.SITE_CATALOG }, { BASE_URL: '${{ matrix.url }}', SITE_CATALOG: '${{ matrix.site }}' });
+  await scenario('one site changed', async ({ run, change }) => {
+    await change('msk');
+    return run();
+  });
+  await scenario('scheduled run, every digest live and verified', ({ run }) => run({ event: 'schedule' }));
+  await scenario('scheduled run, every digest live and verified, a landing page fails', ({ run }) => run({ event: 'schedule', failing: { microscopy: ['answers'] } }));
+  await scenario('dispatched run', ({ run }) => run({ event: 'dispatch' }));
+  await scenario('unreadable record for one site', async ({ world, run }) => {
+    world.hosts.delete('webapps.neurodesk.org');
+    return run();
+  });
+  await scenario('marker store unreachable', async ({ world, run }) => {
+    world.storeDown = true;
+    return run();
+  });
+  await scenario('first run after the merge', async ({ world, run }) => {
+    world.hosts.clear();
+    world.markers.clear();
+    return run();
+  });
+  await scenario('one Worker site changed and its publish fails', async ({ run, change }) => {
+    await change('msk');
+    return run({ failPublish: ['msk'] });
+  });
+  const all = 'pages=true workers=msk,microscopy,preclinical,hub verify=neuro,msk,microscopy,preclinical hub=hub';
+  assert.deepEqual(table, {
+    'nothing changed, markers present': { outputs: 'pages=false workers= verify= hub= startup=false', ran: 'build turbo-cache-retention', green: true },
+    'nothing changed, msk marker absent': { outputs: 'pages=false workers=msk verify=msk hub= startup=false', ran: 'build turbo-cache-retention deploy-workers verify-sites', green: true },
+    'one site changed': { outputs: 'pages=false workers=msk verify=msk hub= startup=true', ran: 'build turbo-cache-retention deploy-workers verify-sites', green: true },
+    'scheduled run, every digest live and verified': { outputs: 'pages=false workers= verify=neuro,msk,microscopy,preclinical hub=hub startup=false', ran: 'build turbo-cache-retention verify-hub verify-sites', green: true },
+    'scheduled run, every digest live and verified, a landing page fails': { outputs: 'pages=false workers= verify=neuro,msk,microscopy,preclinical hub=hub startup=false', ran: 'build turbo-cache-retention verify-hub verify-sites', green: false },
+    'dispatched run': { outputs: `${all} startup=true`, ran: JOB_ORDER.join(' '), green: true },
+    'unreadable record for one site': { outputs: 'pages=true workers= verify=neuro hub= startup=true', ran: 'build turbo-cache-retention deploy verify-sites', green: true },
+    'marker store unreachable': { outputs: `${all} startup=false`, ran: JOB_ORDER.join(' '), green: true },
+    'first run after the merge': { outputs: `${all} startup=true`, ran: JOB_ORDER.join(' '), green: true },
+    'one Worker site changed and its publish fails': { outputs: 'pages=false workers=msk verify=msk hub= startup=true', ran: 'build turbo-cache-retention deploy-workers verify-sites', green: false },
+  });
 });

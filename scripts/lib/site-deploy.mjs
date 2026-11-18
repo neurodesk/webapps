@@ -5,15 +5,17 @@ import { basename, dirname, join, posix, relative, sep } from 'node:path';
 import { catalogApps, findCatalog } from './apps-registry.mjs';
 import { HUB_SITE } from './catalog-sites.mjs';
 import { moduleClosure } from './module-closure.mjs';
-import { DIGEST_FILE, DIGEST_SCHEMA, exchange, isInstant, message, readLiveRecord } from './site-record.mjs';
+import { readMarker } from './site-marker.mjs';
+import { DIGEST_FILE, DIGEST_SCHEMA, isInstant, message, readLiveRecord } from './site-record.mjs';
 
 // Which projected sites (dist-sites/<site>) a deploy publishes and checks. Each
 // published site carries a record of its content digest (site-record.mjs). The
-// job that checks a site against its public host saves a verified marker, a
-// GitHub Actions cache entry whose key names the site, the digest the host
-// served before and after the checks, and a hash of the check inputs. A run
-// skips a site only when the host serves this build's digest and that marker
-// exists (.github/workflows/deploy-pages.yml).
+// job that checks a site against its public host saves a verified marker
+// (site-marker.mjs), a GitHub Actions cache entry whose key names the site, the
+// digest the host served before and after the checks, and a hash of the check
+// inputs, and deletes it when a check fails. A run skips a site only when the
+// host serves this build's digest and that marker exists
+// (.github/workflows/deploy-pages.yml).
 
 // The usage report's counts move by the hour (scripts/write-analytics.mjs), so
 // the digest leaves it out and analyticsStale decides when it is published.
@@ -26,8 +28,8 @@ export const ANALYTICS_REFRESH_UTC = { hour: 4, minute: 17 };
 
 // The workflow that publishes and checks the sites; its check steps and hub check are check inputs.
 export const DEPLOY_WORKFLOW = '.github/workflows/deploy-pages.yml';
-// The landing page probe, which every check job and the Worker deploy run.
-export const SITE_PROBE = 'scripts/check-site-answers.mjs';
+// The landing page probe, which every check job and both deploy jobs run.
+export const SITE_PROBE = 'scripts/check-site-answers.sh';
 // The scripts the deployed checks of a catalogue site run, and the files they
 // read from the checkout to decide pass or fail besides the modules they import.
 // The hub's checks are the probe and a step of the workflow.
@@ -37,8 +39,6 @@ export const HUB_CHECKS = [SITE_PROBE];
 export const CHECK_DATA = ['package.json', 'registry/apps.yml', 'registry/standalone.json', DEPLOY_WORKFLOW];
 // A new marker schema leaves every older marker unread.
 export const MARKER_PREFIX = 'deploy-verified-1-';
-// Each marker lookup ends at this deadline.
-const MARKER_TIMEOUT_MS = 30_000;
 
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
@@ -190,30 +190,6 @@ export function checkHashes(root, registry) {
 export const markerKey = (site, digest, checks) => `${MARKER_PREFIX}${site}-${digest}-${checks}`;
 
 /**
- * Whether the verified marker `key` exists in the Actions cache of `ref`:
- * `{ present }`, or `{ error }`, never a throw. The REST API matches `key` as a
- * prefix, so an entry counts only when its key and its ref are both equal. An
- * answer with more than one page of matches is unknown, even with a match on it.
- */
-export async function readMarker({ key, repository, ref, token, apiUrl = 'https://api.github.com', fetch = globalThis.fetch, timeoutMs = MARKER_TIMEOUT_MS }) {
-  try {
-    if (!key || !repository || !ref || !token) throw new Error('no key, repository, ref or token');
-    return await exchange(timeoutMs, 'GitHub API: ', async ({ signal, within }) => {
-      const query = new URLSearchParams({ key, ref, per_page: '100' });
-      const headers = { accept: 'application/vnd.github+json', authorization: `Bearer ${token}`, 'x-github-api-version': '2022-11-28' };
-      const response = await within(fetch(`${apiUrl}/repos/${repository}/actions/caches?${query}`, { headers, signal }));
-      if (response.status !== 200) throw new Error(`GitHub API: HTTP ${response.status}`);
-      const answer = JSON.parse(await within(response.text()));
-      if (!Number.isSafeInteger(answer?.total_count) || !Array.isArray(answer.actions_caches)) throw new Error('GitHub API: no cache list');
-      if (answer.total_count > answer.actions_caches.length) throw new Error(`GitHub API: ${answer.total_count} caches match, more than one page`);
-      return { present: answer.actions_caches.some((entry) => entry?.key === key && entry?.ref === ref) };
-    });
-  } catch (error) {
-    return { error: message(error) };
-  }
-}
-
-/**
  * Whether one site is published and checked, and why. `live` is the record its
  * host serves (`{ record }` or `{ error }`), `marker` the lookup of its verified
  * marker (`{ present }` or `{ error }`). A site is skipped only when the host
@@ -268,9 +244,8 @@ export async function planDeploy({ registry, sitesDir, commit, deployAll = false
  * The plan deploy-pages.yml runs, from the Actions environment: the check
  * hashes from the checkout at `root`, the markers from the Actions cache of
  * GITHUB_REF, read with GITHUB_TOKEN. Every site's live record and marker are
- * read at once, each under its own deadline, so it returns its outputs within
- * about MARKER_TIMEOUT_MS plus the time to digest the sites, whatever the
- * network does. Returns the plan, its step outputs and the job summary.
+ * read at once, each under its own 30 s deadline, so it returns its outputs
+ * within about 30 s plus the time to digest the sites, whatever the network does. Returns the plan, its step outputs and the job summary.
  */
 export async function planSiteDeploy({ registry, sitesDir, root, env, deployAll = false, verifyAll = false, fetch = globalThis.fetch, write, timeouts = {} }) {
   let checks = {};
@@ -298,23 +273,26 @@ export async function planSiteDeploy({ registry, sitesDir, root, env, deployAll 
   return { planned, outputs: deployOutputs(planned), summary };
 }
 
+// What the job that checks a site needs: its URL, the digest it was built at
+// and its marker key ('' when the plan has none), and whether this run publishes it.
+const checkEntry = ({ site, url, digest, key, publish }) => ({ site, url, digest: digest ?? '', key: key ?? '', published: publish });
+
 /**
- * The step outputs deploy-pages.yml reads. `verify` lists the catalogue sites the
- * verify-sites job checks; the Pages deploy job checks the site it publishes
- * itself, and verify-hub the hub. `markers` gives each checked site's URL,
- * build digest and marker key, for the job that checks it to save the marker.
+ * The step outputs deploy-pages.yml reads. `workers` lists the Worker sites to
+ * publish and `pages` whether the Pages site is published. `verify` lists every
+ * catalogue site to check, one verify-sites leg each, and `hub` the hub when it
+ * is checked (verify-hub). Every site is checked in this run whatever happens
+ * to another site's publish or checks.
  */
 export function deployOutputs(planned) {
   const workers = planned.filter(({ hosting, publish }) => hosting === 'worker' && publish).map(({ site, url }) => ({ site, url }));
-  const checked = planned.filter(({ site, hosting, publish, verify }) => verify && site !== HUB_SITE && !(hosting === 'pages' && publish));
-  const markers = Object.fromEntries(planned.filter(({ verify, key }) => verify && key).map(({ site, url, digest, key }) => [site, { url, digest, key }]));
+  const checked = planned.filter(({ verify }) => verify);
   return {
     pages: String(planned.some(({ hosting, publish }) => hosting === 'pages' && publish)),
     workers: JSON.stringify(workers),
-    verify: JSON.stringify(checked.map(({ site, url }) => ({ site, url }))),
-    verify_hub: String(planned.some(({ site, verify }) => site === HUB_SITE && verify)),
+    verify: JSON.stringify(checked.filter(({ site }) => site !== HUB_SITE).map(checkEntry)),
+    hub: JSON.stringify(checked.filter(({ site }) => site === HUB_SITE).map(checkEntry)),
     verify_build: String(planned.some(({ verifyBuild }) => verifyBuild)),
-    markers: JSON.stringify(markers),
   };
 }
 

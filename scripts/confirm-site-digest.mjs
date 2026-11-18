@@ -4,11 +4,14 @@
 // after the checks, and save the site's verified marker only when both confirm,
 // so checks that ran against a host serving other bytes never mark this digest.
 //
-//   node scripts/confirm-site-digest.mjs --url <site URL> --site <id> --digest <hex> [--marker <file>]
+//   node scripts/confirm-site-digest.mjs --url <site URL> --site <id> --digest <hex> [--published true] [--marker <file>]
 //
 // Writes `confirmed=true` or `confirmed=false` to GITHUB_OUTPUT and, when
-// confirmed, the marker file to save. It never fails the job: a host that
-// cannot be read or serves another digest only leaves the marker unsaved.
+// confirmed, the marker file to save. With `--published true` (this run
+// published the site) a host that does not serve the digest also writes
+// `untaken=true`: the publish did not take, and the job fails once the site's
+// checks have run. Otherwise an unconfirmed digest only leaves the marker
+// unsaved. It never fails the step itself, so the site's checks always run.
 // It loads only Node built-ins, so a job need not install the workspace.
 import { randomUUID } from 'node:crypto';
 import { appendFile, writeFile } from 'node:fs/promises';
@@ -22,6 +25,7 @@ function option(name) {
 const site = option('--site');
 const digest = option('--digest');
 const marker = option('--marker');
+const published = option('--published') === 'true';
 let host;
 try {
   host = new URL(option('--url')).host;
@@ -40,6 +44,9 @@ if (confirmed) {
   }
 } else {
   const served = live.error ? `no readable record (${live.error})` : `digest ${live.record.digest}`;
-  console.log(`::warning::${host ?? 'the host'} serves ${served}, not ${site} at ${digest ?? 'no digest'}: no verified marker is saved.`);
+  // Without a digest there is nothing to confirm, whether or not the site was published.
+  const untaken = published && /^[0-9a-f]{64}$/.test(digest ?? '');
+  console.log(`::${untaken ? 'error' : 'warning'}::${host ?? 'the host'} serves ${served}, not ${site} at ${digest || 'no digest'}: ${untaken ? 'this run published it, so the publish did not take' : 'no verified marker is saved'}.`);
+  if (untaken && process.env.GITHUB_OUTPUT) await appendFile(process.env.GITHUB_OUTPUT, 'untaken=true\n');
 }
 if (process.env.GITHUB_OUTPUT) await appendFile(process.env.GITHUB_OUTPUT, `confirmed=${confirmed}\n`);

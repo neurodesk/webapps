@@ -173,9 +173,8 @@ test('the deploy workflow deploys every Worker site the registry declares', asyn
   const pages = workflow.jobs.build.steps.find((step) => step.uses?.startsWith('actions/upload-pages-artifact'));
   const primary = full.site.catalogs.find((catalog) => catalog.hosting === 'pages');
   assert.equal(pages.with.path, `dist-sites/${primary.id}`);
-  for (const step of workflow.jobs.deploy.steps.filter((candidate) => candidate.env?.BASE_URL)) {
-    assert.equal(step.env.SITE_CATALOG, primary.id, `${step.name} checks only the Pages catalogue`);
-  }
+  // The Pages deploy only publishes and probes; its site is checked in verify-sites with every other catalogue.
+  assert.deepEqual(workflow.jobs.deploy.steps.filter((step) => step.run).map(({ id }) => id), ['answers']);
 });
 
 test('an app copy takes the URL and brand of the host that serves it', () => {
