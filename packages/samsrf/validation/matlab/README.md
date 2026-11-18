@@ -1537,9 +1537,9 @@ the Node runner also accepts custom HRFs unavailable through the app interface.
 
 The two refused single fits stay refused. What still differs, earliest stage first:
 
-- double convex-hull RC centroids: from MATLAB's own profile, `x0` and `y0` of
-  `polyshape.centroid` differ by 1-3 ULP (one by 38 ULP); areas are exact.
-  This is geometry (#732).
+- double convex-hull RC centroids: resolved since 0.6.20261118 by MATLAB's
+  pixel grid and `polyshape` arithmetic and order; `Fwhm` keeps 1-2 ULP at 15
+  of 42 vertices ([hull area, centroid and vertex order](#hull-area-centroid-and-vertex-order-732)).
 - double RC Gaussian and CF Gaussian fits: `samsrf_fit2dprf`'s `errfun`
   (`sum(Ds(:).^2)`) and `R^2` now use the modelled MATLAB `sum` and `mean`
   orders in the double port. The fits still differ; the first optimizer
@@ -2232,9 +2232,11 @@ identity; `tests/matlab_geometry.rs` is the port gate:
   and Gaussian CF in double. In single precision the hull geometry rows,
   `Fwhm` and `Vx` agree; R² and the summary and Gaussian parameters are
   MATLAB single arithmetic, left to the single-precision pipeline work.
-- **Polygons.** Emptiness is exact, the hull has exactly MATLAB's vertices,
-  bit for bit, and area and centroid then lie within the forward-error bound
-  of MATLAB's shoelace on untranslated vertices. 25,964 of the 26,057 recorded
+- **Polygons.** Emptiness is exact and the hull has exactly MATLAB's vertices,
+  bit for bit. Where the port also lists them in MATLAB's stored order (15,840
+  of the 16,871 nonempty hulls, pinned per family), area and centroid are
+  MATLAB's bits; elsewhere they lie within a forward-error bound of the
+  shoelace ([hull area, centroid and vertex order](#hull-area-centroid-and-vertex-order-732)). 25,964 of the 26,057 recorded
   polygons agree, on both hosts, and so do all 253 polygons of the 741-case
   reference without exclusions. This is the shipped model: the WebAssembly
   module, the web app and the `samsrf` command line use it, and its gate and
@@ -2310,7 +2312,108 @@ the all-pairs intersection graph can still grow quadratically.
 
 The same test replays the double hull and summary CF pipelines of the raw-input
 matrix (both hemispheres, smoothing and global regression on and off, both
-hosts) from their recorded profiles; all values agree within 1e-12 relative.
+hosts) from their recorded profiles: hull values bit for bit, summary values
+within 1e-12 relative.
+
+### Hull area, centroid and vertex order (#732)
+
+MATLAB R2023b computes `polyshape` area and centroid one boundary at a time,
+in the order it stores the vertices, relative to the centre of that boundary's
+bounding box. Since 0.6.20261118 `geometry::Hull` repeats it step for step:
+
+1. `c = ((min x + max x) / 2, (min y + max y) / 2)` and `w = v - c` for the
+   stored vertices `v`.
+2. `t_i = x_i y_(i+1) - y_i x_(i+1)` on `w`, summed in stored order to `a`;
+   the area is `|a| / 2`.
+3. A second pass sums `(x_i + x_(i+1)) * (t_i * (1/a))`; that sum times `1/3`,
+   plus `c`, is the boundary's centroid.
+4. The shape's centroid weights each boundary by its clockwise-positive area
+   `-a/2` and multiplies the weighted sum by the reciprocal of the total; a
+   boundary of zero area is left out. A single boundary also goes through this
+   step, which can move its centroid by one ULP and keeps a zero centroid
+   positive.
+
+The steps were found by search on the original recording, where they give
+MATLAB's centroid and area bits, the sign of zero included, for every hull
+(16,871), single-boundary shape (14,746) and multi-boundary shape (2,125) on
+both hosts. On recordings not used to find them they give every hull of the
+probe (31,894), causal (10,728) and reproducer (27,805) recordings on both
+hosts, and all but one centroid and three areas of their 70,428 shapes; the
+recorded vertices of those four shapes disagree with MATLAB's own area by up to
+8 %, which is ring topology, not arithmetic. `tests/polyshape_arithmetic.rs`
+holds every recorded hull of the four recordings to MATLAB's bits, given
+MATLAB's stored vertices. Rejected on the way, each short of the original
+recording: Boost's `bashein_detmer` from the first vertex or the origin, the
+same sums from the box centre (8,300 of 16,871 hulls), per-term thirds, fans
+and every triangulation of the reverse-correlation hulls, sums in fixed-point
+grid units, fused multiply-adds, two- and four-lane sums, and the exactly
+rounded centroid (6,878).
+
+The vertex order is part of the arithmetic: starting the recorded hulls one
+vertex later changes the bits of 1,024 of the 16,871. MATLAB stores each
+boundary from its input point that comes first among the polygon's points,
+orders the boundaries by those points and runs solids clockwise; `convhull`
+starts at the first stored vertex on the hull and runs clockwise. On MATLAB's
+own stored shapes these rules hold for all 316 real-template CF clusters and
+for 95 to 97.5 % of the other recorded polygons (55 % of the adversarial causal
+set); repeated input points break them (original cloud 965). `polyshape.rs`
+applies them to the port's rings.
+
+What this changes in SamSrf:
+
+- **Reverse correlation, `Prf_Function = 0`.** The first difference was the
+  pixel grid. R2023b's `linspace(-a, a, n)` is `(2i - (n - 1)) * (a / (n - 1))`:
+  the 100-point grid MATLAB saved with the SamSrfAnalysis matrix
+  (`reg_aps_bars.mat`) equals it at every point, where the port's general
+  `a + i (b - a) / (n - 1)` matched 41. The ends are set to `-a` and `a`; no
+  recording covers a grid where `(n - 1) * (a / (n - 1))` rounds away from `a`.
+  The centroid is then `polyshape` of `convexHull`'s boundary (exact
+  predicates, exactly collinear points included, counter-clockwise from the
+  first suprathreshold pixel), cleaned and stored clockwise from that pixel.
+  `Fwhm` is `convexHull`'s own area, whose arithmetic is not identified: the
+  port keeps its earlier evaluation (`delaunay_hull_area`), which equals MATLAB's
+  on the recorded 20-pixel grids and differs by 1 or 2 ULP at 15 of the 42 AMD
+  vertices of the 100-pixel matrix runs (`tests/cli_rc_hulls.rs` lists them).
+- **Connective fields, `Fit_pRF = 0`.** The hull of the cluster's polyshape
+  starts at the first stored vertex on it. The port does not reproduce how
+  MATLAB splits these self-intersecting clusters into rings (one real-template
+  cluster: 301 rings against MATLAB's 420), so the hull can start elsewhere.
+  With MATLAB's own stored shapes the rules above give all 316 template
+  clusters' centroids. With the port's rings, 30 template values (15 per host,
+  listed in `TEMPLATE_HULL_START`) still round differently, within 1e-12
+  relative; three of them per host had matched MATLAB by chance before.
+
+| Gate (both hosts) | Before | Since 0.6.20261118 |
+| --- | --- | --- |
+| Revcor replay and pipelines, double RC hull `x0`, `y0`, `Fwhm` and CF hull `x0`, `y0`, `Centre`, `Surround` | within 1e-12 relative | bit for bit |
+| Revcor CF hull values from MATLAB's profiles (504 per row) | `x0` 462, `y0` 234 exact | all 504 exact |
+| Real-template double hull values (80 per row and hemisphere) | `x0` 32 and 42, `y0` 34 and 52 exact | all but the 15 listed |
+| Original polygons, hulls in MATLAB's stored order | bounded | 15,840 bit for bit |
+| SamSrfAnalysis RC hulls from MATLAB's courses (`cli_rc_hulls.rs`) | not gated | grid, peak, `x0`, `y0` bit for bit; `Fwhm` 27 of 42 |
+
+The web engine on the SamSrfAnalysis matrix against source MATLAB (run
+42928350417; the Node runner on a local rebuild of this source, not the
+canonical module, and no compiled image), against the committed module
+`d5ae6ba2`:
+
+| Map | AMD before | AMD after | Intel before | Intel after |
+| --- | --- | --- | --- | --- |
+| `rc_hull_lh_double` `x0`, `y0`, `Fwhm` | 18, 12, 12 differ (up to 33 ULP) | exact, exact, 5 differ (up to 2 ULP) | 18, 12, 12 | exact, exact, 5 |
+| `rc_custom_hrf_lh_double` `x0`, `y0`, `Fwhm` | 16, 9, 15 differ (up to 36 ULP) | exact, exact, 10 differ (up to 2 ULP) | 16, 9, 15 | exact, exact, 10 |
+| `cf_hull_lh_double` `y0` | 17 differ (1 ULP) | 1 differs (a NaN's sign) | 17 | 1 |
+| `cf_hull_smooth_global_lh_double` `y0` | 13 differ (1 ULP) | 1 differs (a NaN's sign) | 13 | 1 |
+| `rc_gaussian_lh_double` `R^2`, `x0`, `y0` | 20, 20, 17 differ (up to 2.3e7 ULP) | 11 each, all NaN signs | 21, 20, 17 | 13, 11, 11 |
+
+Exact maps rise from 129 to 133 of 168 on AMD and from 42 to 46 on Intel, and
+no map loses agreement. The double RC Gaussian fits start from the peak pixel,
+so the grid also gives MATLAB's fitted `R^2`, `x0` and `y0` at every finite AMD
+vertex; their 11 rejected vertices differ only in the sign of NaN, as `Sigma`,
+`Beta` and `Baseline` already did.
+
+Still open for these hulls: the arithmetic of `convexHull`'s area, MATLAB's
+ring decomposition of self-intersecting clusters (which sets where a CF hull
+starts, and where 1,031 of the original recording's hulls start), and the ends
+of `linspace` grids that do not round back to `a`.
 
 ### Experimental Clipper model (not in production, #732 open)
 
