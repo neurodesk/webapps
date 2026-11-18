@@ -1298,7 +1298,7 @@ does not are checked for shape and listed as not compared. MATLAB-only files
 are listed the same way. No tolerance is applied. Failed and inventory-error
 runs exit nonzero.
 
-`test_web_cli.py` (43 tests) builds full-provenance fixtures and covers each
+`test_web_cli.py` (44 tests) builds full-provenance fixtures and covers each
 refusal and inventory rule with a negative control:
 
 - one ULP that the float32 GIfTI hides, a signed zero, a NaN and an imaginary
@@ -1310,6 +1310,8 @@ refusal and inventory rule with a negative control:
   failure too, and on the whole browser matrix through the command line;
 - each runner's `expectedEngineOutcome` and `failureStatus` against the
   comparator, for every run;
+- the browser runner's `request`, which gives `engine.js` the subject-HRF file
+  for exactly the four runs whose model names one;
 - an extra `maps.f64` byte, a duplicate, zero, out-of-range or fractional ROI,
   empty and one-vertex GIfTIs, and corrupt or extra files;
 - a stale plan or bundle hash and a model changed to TR 999;
@@ -1557,29 +1559,29 @@ matrix's synthetic 96-vertex `lh.white`, which ends at its faces as MATLAB's
 it logs the failure without throwing. The viewer now reads surfaces with the
 engine's own reader.
 
-On 2026-11-18 (`ui-1`, the production bundle and tooling of the change that
-added the Subject HRF field, merged with #873, module `337d726c…`, against the
-compiled execution with `run_browser_matrix.mjs`'s run of the same commit as
-the engine root), the comparator exits 0: all 22 computed runs complete, 2 are
-`refused`, and none is `ui-error`, `unsupported` or `failed`. All 212
+On 2026-11-18, after #875 (the production bundle of a fresh full build and
+the tooling of the same commit, module `1745ae49…`, against the compiled
+execution with `run_browser_matrix.mjs`'s run of that commit as the engine
+root), the comparator exits 0: all 22 computed runs complete, 2 are `refused`,
+and none is `ui-error`, `unsupported`, `failed` or `inventory-error`. All 212
 downloaded files equal the engine harness's, with the Node runner's run as the
 engine root too, and the source execution gives the same counts. In their
-float32 downloads 15 runs are exact and 7 differ (146 of 168 maps). The four
-`*_custom_hrf_*` runs take `hrf_custom.mat` through the Subject HRF field;
-their downloads are exact. Both CSS runs load with `Css_Convention: "samsrf"`
-and stay `differs` although every real part is exact: R², nR², Beta and
-Baseline are complex in MATLAB, and only the engine runners match their
-imaginary parts (9 of 9 maps). Nine maps of three double runs agree in
-float32 while their double rows differ by at most 147 ULPs (2.2e-14
-relative): the 3 differing maps of `rc_hull_lh_double` and of
-`rc_custom_hrf_lh_double`, and 3 of the 5 of `cf_hull_smooth_global_lh_double`.
-Both engine runners compute 22 runs (15 exact, 145 of 168 maps), equal to each
-other byte for byte. Main's unchanged Node runner (#873) writes the same 236
-files, and main's comparator classes them the same. Main's UI runner gives no
-HRF file: with it the 18 other computed runs complete (11 exact, 118 of 140
-maps, 176 files equal to the engine's), and the four subject-HRF runs never
-reach "Ready" because the app asks for the file, so the runner records them as
-`failed` after its 120 s wait.
+float32 downloads 20 runs are exact and 2 differ (160 of 168 maps). The four
+`*_custom_hrf_*` runs take `hrf_custom.mat` through the Subject HRF field. The
+two that differ are the CSS runs, loaded with `Css_Convention: "samsrf"`: every
+real part is exact, but R², nR², Beta and Baseline are complex in MATLAB at 12
+to 15 vertices, and only the engine runners match their imaginary parts. Five
+double runs are exact in float32 while their double values differ, which the
+downloads cannot show: x0, y0 and Fwhm of `rc_hull_lh_double` and
+`rc_custom_hrf_lh_double`, R², x0 and y0 of `rc_gaussian_lh_double`, y0 of
+`cf_hull_lh_double`, and R², y0, Beta and Suppression of
+`cf_hull_smooth_global_lh_double`, at 6 to 18 vertices each (up to 2.6e-9
+relative in the double RC Gaussian fits, at most 147 ULPs elsewhere). These
+are the maps and counts `web-cli-outcome.json` records against the pinned AMD
+host. Both engine runners compute 22 runs (17 exact, 154 of 168 maps), equal to
+each other byte for byte, and main's unchanged Node runner (#875) writes the
+same 236 files: an outcome frozen from main's runner and comparator holds for
+this commit's.
 
 ## Recorded inputs and focused diagnosis
 
