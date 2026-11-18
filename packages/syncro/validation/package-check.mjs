@@ -7,7 +7,7 @@ import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {mkdtemp,mkdir,writeFile,readFile,rename,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
-import {join,resolve} from 'node:path';
+import {basename,join,resolve} from 'node:path';
 import {gunzipSync} from 'node:zlib';
 import assert from 'node:assert/strict';
 
@@ -38,6 +38,10 @@ const LIMITS={
 const executableIndex=process.argv.indexOf('--executable');
 const executable=executableIndex>=0?resolve(process.argv[executableIndex+1]):process.execPath;
 const prefix=executableIndex>=0?[]:[resolve(process.argv[2]||'packages/syncro/bin/syncro.js')];
+// A local scan in place of the pinned download. Only the check's own tests pass it, to judge a
+// stand-in command without the network; a release check always reads the pinned scan.
+const inputIndex=process.argv.indexOf('--input');
+const localInput=inputIndex>=0?resolve(process.argv[inputIndex+1]):null;
 const sha256=bytes=>createHash('sha256').update(bytes).digest('hex');
 const failures=[];
 
@@ -234,7 +238,9 @@ async function rejectsInvalidUse(work) {
 async function normalisesPinnedScan(work,engine) {
   const templateBytes=await readFile(TEMPLATE.url);
   check(sha256(templateBytes)===TEMPLATE.sha256,`MNI152 template SHA-256 ${TEMPLATE.sha256}`);
-  const inputPath=await pinnedInput();
+  const inputPath=localInput??await pinnedInput();
+  if(localInput)console.log(`INFO input: ${localInput} replaces the pinned ${INPUT.name}`);
+  const name=basename(inputPath);
   const lesion=lesionFixture(readNifti(await readFile(inputPath)));
   const lesionPath=join(work,'lesion.nii');
   await writeFile(lesionPath,lesion.bytes);
@@ -245,11 +251,11 @@ async function normalisesPinnedScan(work,engine) {
   if(result.status!==0)throw new Error(`normalisation exited with ${result.status}:\n${result.stderr}`);
   const provenance=JSON.parse(await readFile(join(output,'provenance.json'),'utf8'));
   check(provenance.normalization===engine,`${engine}: provenance records the ${provenance.normalization} normalisation`);
-  console.log(`INFO ${engine}: offline normalisation of ${INPUT.name} took ${seconds.toFixed(0)} s; native lesion centre ${lesion.centre.map(value=>value.toFixed(1)).join(', ')} mm`);
+  console.log(`INFO ${engine}: offline normalisation of ${name} took ${seconds.toFixed(0)} s; native lesion centre ${lesion.centre.map(value=>value.toFixed(1)).join(', ')} mm`);
   report(score({
     template:readNifti(templateBytes),
-    brain:readNifti(await readFile(join(output,`wbt1${INPUT.name}`))),
-    primary:readNifti(await readFile(join(output,`w${INPUT.name}`))),
+    brain:readNifti(await readFile(join(output,`wbt1${name}`))),
+    primary:readNifti(await readFile(join(output,`w${name}`))),
     lesion:readNifti(await readFile(join(output,'wlesion.nii'))),
   }),engine);
 }

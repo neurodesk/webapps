@@ -29,6 +29,7 @@
   "scripts": {
     "build:wasm": "bash scripts/build-bet-wasm.sh",
     "test": "node --test test/*.test.js",
+    "test:reference": "node --test test/reference/*.test.js",
     "lint": "node --check src/*.js && node --check bin/brain-extraction.js"
   },
   "dependencies": {

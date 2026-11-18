@@ -13,7 +13,7 @@
     "build": "node ../../scripts/build-static.mjs && node ../../scripts/theme-app-dist.mjs --app seedseg",
     "lint": "node ../../scripts/check-app-js.mjs web",
     "pretest": "pnpm vendor && pnpm runtime-support",
-    "test": "node ../../scripts/check-app-js.mjs web && node --test test/*.test.mjs",
+    "test": "node ../../scripts/check-app-js.mjs web && node --test test/*.test.mjs && pnpm --filter @neurodesk/seedseg test:runtime",
     "test:e2e": "playwright test && node ../../test/examples.smoke.mjs --app seedseg"
   },
   "dependencies": {
