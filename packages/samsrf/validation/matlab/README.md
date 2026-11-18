@@ -1298,7 +1298,7 @@ does not are checked for shape and listed as not compared. MATLAB-only files
 are listed the same way. No tolerance is applied. Failed and inventory-error
 runs exit nonzero.
 
-`test_web_cli.py` (31 tests) builds full-provenance fixtures and covers each
+`test_web_cli.py` (43 tests) builds full-provenance fixtures and covers each
 refusal and inventory rule with a negative control:
 
 - one ULP that the float32 GIfTI hides, a signed zero, a NaN and an imaginary
@@ -1517,7 +1517,7 @@ byte. MATLAB numerical differences are reported and never gated. The exit
 status is 0 when every run is `exact`, `differs`, `refused` or `unsupported`
 and the engine gate holds, and 1 otherwise; the report's `failures` says why.
 
-`test_ui_cli.py` (39 tests) covers each status and class, the exact contents
+`test_ui_cli.py` (44 tests) covers each status and class, the exact contents
 of the UI, engine and MATLAB roots, the saved model, the served module, the
 engine gate, and the command line's exit codes on the whole matrix and its
 refusal of a subset. It also covers a float32 ULP, a NaN sign, a GIfTI that
@@ -1557,19 +1557,28 @@ it logs the failure without throwing. The viewer now reads surfaces with the
 engine's own reader.
 
 On 2026-11-18 (`ui-1`, the production bundle and tooling of the change that
-added the Subject HRF field, module `d5ae6ba2…`, against the compiled
-execution with `run_browser_matrix.mjs`'s run of the same commit as the engine
-root), the comparator exits 0: all 22 computed runs complete (15 exact and 7
-differing in their float32 downloads, 138 of 168 maps), 2 are `refused`, and
-none is `ui-error`, `unsupported` or `failed`. All 212 downloaded files equal
-the engine harness's, with the Node runner's run as the engine root too, and
-the source execution gives the same counts. The four `*_custom_hrf_*` runs
-take `hrf_custom.mat` through the Subject HRF field; their downloads are
-exact. Both engine runners compute 22 runs (13 exact, 129 of 168 maps), equal
-to each other byte for byte. #871's unchanged tooling gives no HRF file: with
-it the 18 other computed runs complete (11 exact, 110 of 140 maps) and the
-four subject-HRF runs wait for "the subject HRF hrf_custom.mat", which it
-records as `failed`.
+added the Subject HRF field, merged with #873, module `337d726c…`, against the
+compiled execution with `run_browser_matrix.mjs`'s run of the same commit as
+the engine root), the comparator exits 0: all 22 computed runs complete, 2 are
+`refused`, and none is `ui-error`, `unsupported` or `failed`. All 212
+downloaded files equal the engine harness's, with the Node runner's run as the
+engine root too, and the source execution gives the same counts. In their
+float32 downloads 15 runs are exact and 7 differ (146 of 168 maps). The four
+`*_custom_hrf_*` runs take `hrf_custom.mat` through the Subject HRF field;
+their downloads are exact. Both CSS runs load with `Css_Convention: "samsrf"`
+and stay `differs` although every real part is exact: R², nR², Beta and
+Baseline are complex in MATLAB, and only the engine runners match their
+imaginary parts (9 of 9 maps). Nine maps of three double runs agree in
+float32 while their double rows differ by at most 147 ULPs (2.2e-14
+relative): the 3 differing maps of `rc_hull_lh_double` and of
+`rc_custom_hrf_lh_double`, and 3 of the 5 of `cf_hull_smooth_global_lh_double`.
+Both engine runners compute 22 runs (15 exact, 145 of 168 maps), equal to each
+other byte for byte. Main's unchanged Node runner (#873) writes the same 236
+files, and main's comparator classes them the same. Main's UI runner gives no
+HRF file: with it the 18 other computed runs complete (11 exact, 118 of 140
+maps, 176 files equal to the engine's), and the four subject-HRF runs never
+reach "Ready" because the app asks for the file, so the runner records them as
+`failed` after its 120 s wait.
 
 ## Recorded inputs and focused diagnosis
 
