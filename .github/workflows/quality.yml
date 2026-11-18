@@ -3,7 +3,8 @@ name: quality
 # Correctness lint, unused code, dependency boundaries and mutation testing,
 # one run per event. Each job keeps the events its former workflow ran on
 # (test/ci-policy.test.mjs): the first three on pull requests and main pushes,
-# mutation testing on pull requests (smoke) and weekly (every module).
+# mutation testing on pull requests (smoke) and weekly (every module), and
+# the concurrency group and cancellation rule its former workflow had.
 
 on:
   pull_request:
@@ -16,12 +17,11 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: quality-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
-
 jobs:
   correctness:
+    concurrency:
+      group: code-quality-${{ github.ref }}
+      cancel-in-progress: true
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     env:
@@ -39,6 +39,9 @@ jobs:
       - run: pnpm lint:correctness
 
   unused-code:
+    concurrency:
+      group: unused-code-${{ github.ref }}
+      cancel-in-progress: true
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -60,6 +63,9 @@ jobs:
           retention-days: 14
 
   dependencies:
+    concurrency:
+      group: dependency-quality-${{ github.ref }}
+      cancel-in-progress: true
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -78,6 +84,9 @@ jobs:
       - run: pnpm check:dependencies
 
   mutation:
+    concurrency:
+      group: mutation-quality-${{ github.event_name }}-${{ github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
     if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 20

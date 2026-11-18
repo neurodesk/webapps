@@ -29,8 +29,8 @@ function group(template, event) {
 const commands = (job) => job.steps.flatMap((step) => step.run ? [step.run] : []);
 
 test('new pushes cannot cancel scheduled or manually requested coverage', async () => {
-  for (const name of ['ci', 'quality', 'standalone-links']) {
-    const flow = await workflow(name);
+  const quality = await workflow('quality');
+  for (const [name, flow] of [['ci', ci], ['quality mutation', quality.jobs.mutation], ['standalone-links', await workflow('standalone-links')]]) {
     assert.equal(new Set(events.map((event) => group(flow.concurrency.group, event))).size, events.length, name);
     for (const event of events) {
       const cancels = event === 'pull_request' || (name !== 'ci' && event === 'push');
@@ -167,6 +167,21 @@ test('each quality job runs on exactly the events its former workflow ran on', a
   for (const [name, job] of Object.entries(quality.jobs)) {
     const runs = triggers.filter(event => evaluate(job.if ?? 'true', event));
     assert.deepEqual(runs, expected[name], name);
+  }
+  // Each job keeps its former workflow's concurrency: a newer run on the same ref cancels the
+  // running correctness, unused-code and dependency checks, whatever the event.
+  assert.equal(quality.concurrency, undefined, 'one group for the workflow would make every job wait for the previous run');
+  const formerConcurrency = {
+    correctness: { group: 'code-quality-${{ github.ref }}', 'cancel-in-progress': true },
+    'unused-code': { group: 'unused-code-${{ github.ref }}', 'cancel-in-progress': true },
+    dependencies: { group: 'dependency-quality-${{ github.ref }}', 'cancel-in-progress': true },
+    mutation: { group: 'mutation-quality-${{ github.event_name }}-${{ github.ref }}', 'cancel-in-progress': "${{ github.event_name == 'pull_request' || github.event_name == 'push' }}" },
+  };
+  for (const [name, concurrency] of Object.entries(formerConcurrency)) assert.deepEqual(quality.jobs[name].concurrency, concurrency, name);
+  for (const name of ['correctness', 'unused-code', 'dependencies']) {
+    for (const event of expected[name]) {
+      assert.equal(group(quality.jobs[name].concurrency.group, event), group(quality.jobs[name].concurrency.group, 'push'), `${name}: ${event} shares the ref's group`);
+    }
   }
   const mutation = quality.jobs.mutation.steps;
   const step = (command) => mutation.find(each => each.run === command);
