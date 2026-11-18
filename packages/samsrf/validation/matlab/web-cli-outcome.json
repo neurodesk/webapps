@@ -4,8 +4,8 @@
   "cpu": "AMD EPYC 9V74 80-Core Processor"
  },
  "summary": {
-  "exactRuns": 17,
-  "exactMaps": 154,
+  "exactRuns": 18,
+  "exactMaps": 157,
   "maps": 168
  },
  "runs": {
@@ -168,23 +168,11 @@
    }
   },
   "rc_gaussian_lh_double": {
-   "class": "differs",
+   "class": "exact",
    "maps": {
-    "R^2": {
-     "srfData": 9,
-     "imaginary": 0,
-     "gifti": 0
-    },
-    "x0": {
-     "srfData": 9,
-     "imaginary": 0,
-     "gifti": 0
-    },
-    "y0": {
-     "srfData": 6,
-     "imaginary": 0,
-     "gifti": 0
-    },
+    "R^2": "exact",
+    "x0": "exact",
+    "y0": "exact",
     "Sigma": "exact",
     "Beta": "exact",
     "Baseline": "exact",

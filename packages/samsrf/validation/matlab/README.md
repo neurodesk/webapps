@@ -1703,6 +1703,7 @@ the Node runner also accepts custom HRFs unavailable through the app interface.
 | MATLAB's double `corr(Y, X)` for CF profiles (`lstsq::gemv_t_double`, run 43890832220's module `d5ae6ba2`; Intel 0 runs, 42 maps) | 13 | 129 |
 | `Css_Convention: "samsrf"` for forward models and MATLAB's complex `Srf.Data` (`imaginary`, [below](#css-through-samsrfanalysis); Intel 0 runs, 46 maps) | 15 | 145 |
 | MATLAB's NaN, `0xFFF8000000000000` (`0xFFC00000` in single), in every map and GIfTI ([below](#nan-representation); Intel 0 runs, 55 maps) | 17 | 154 |
+| MATLAB's `linspace` pixel grid for RC pRF fits (`symmetric_linspace`, [below](#hull-area-centroid-and-vertex-order-732); module `abbd6625`; Intel 0 runs, 57 maps) | 18 | 157 |
 
 The two refused single fits stay refused. What still differs, earliest stage first:
 
@@ -1715,11 +1716,12 @@ The two refused single fits stay refused. What still differs, earliest stage fir
   `x0` and `y0` and 27 `Fwhm` but loses one `Fwhm`, so it stays out of
   production ([hull area, centroid and vertex order](#hull-area-centroid-and-vertex-order-732)).
   This is geometry (#732).
-- double RC Gaussian fits: `samsrf_fit2dprf`'s `errfun` (`sum(Ds(:).^2)`) and
-  `R^2` now use the modelled MATLAB `sum` and `mean` orders in the double port.
-  The fits still differ in the last bits (R^2 and x0 at 9 accepted vertices, y0
-  at 6); the first optimizer divergence requires a MATLAB trace to locate. The
-  double CF Gaussian run equals MATLAB's since the double CF profiles below.
+- double RC Gaussian fits: fixed since by MATLAB's pixel grid for pRF fits
+  (`symmetric_linspace`, [hull area, centroid and vertex order](#hull-area-centroid-and-vertex-order-732)).
+  The fits start at the peak pixel; on the previous grid R^2 and x0 differed at
+  9 accepted vertices and y0 at 6, by up to 1.0e-8 (2.6e-9 relative). `samsrf_fit2dprf`'s `errfun`
+  (`sum(Ds(:).^2)`) and `R^2` use the modelled MATLAB `sum` and `mean` orders.
+  The double CF Gaussian run equals MATLAB's since the double CF profiles below.
 - double CF profiles: fixed since by `lstsq::gemv_t_double` (FPRev recording
   `constants-gamma-gemv-reference.json`): full blocks of four columns use two
   lanes, and the remaining columns the right-hand-side trees `?ormqr` uses at
@@ -2677,8 +2679,9 @@ the remaining differences; the stored-order diagnostic is tested separately.
 | SamSrfAnalysis matrix, web engine, Intel | | | 119 | 1 |
 
 On the matrix, production since this change gains the 24 AMD and 23 Intel RC
-Gaussian values and loses none. Exact maps stay at 129 of 168 on AMD and 42 on
-Intel, as before. The stored order would raise them to 133 and 46. The matrix
+Gaussian values and loses none. Before main's complex CSS results and MATLAB's
+NaN were merged in, exact maps stayed at 129 of 168 on AMD and 42 on Intel, and
+the stored order would have raised them to 133 and 46. The matrix
 figures are the web engine in Node against source MATLAB (run 42928350417), with
 no compiled image. Base is the committed module `d5ae6ba2`. The stored order is
 the canonical module `ab4aeb60` (commit 4ad82aad2), whose maps equal its local
@@ -2687,6 +2690,17 @@ After restoring base behavior for NaN hull areas, canonical build
 [44240894061](https://github.com/neurodesk/webapps/actions/runs/44240894061)
 produced module `afbe5110`. Both host matrices on that module retain all 234
 raw-map and GIfTI files per host byte for byte.
+
+Merged with main at `2304713` (#873's complex CSS results and #875's MATLAB NaN,
+module `1745ae49`: 17 runs and 154 maps exact on AMD, 55 maps on Intel), canonical
+build [44255790968](https://github.com/neurodesk/webapps/actions/runs/44255790968)
+produced module `abbd6625`. Of the 3,528 real `Srf.Data`, 3,528 imaginary and
+15,888 GIfTI values per host, it changes 24 real values, all in
+`rc_gaussian_lh_double`'s `R^2`, `x0` and `y0`. It gains all 24 on AMD and 23 on
+Intel, where one `R^2` value moves to the AMD host's value, 1 ULP from Intel's,
+and it loses none. The double RC Gaussian run is then exact on AMD: 18 of 24 runs
+and 157 of 168 maps, and 57 maps on Intel. `web-cli-outcome.json` holds that AMD
+outcome. The stored order was not measured on the merged tree.
 
 **How MATLAB splits rings.** On the CF template shapes, MATLAB's recorded rings
 are mostly the port's cleaned rings re-paired at shared vertices. The re-pairing
