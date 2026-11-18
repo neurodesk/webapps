@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { parse, stringify } from 'yaml';
-import { AUTOMATION_CATALOG_READERS, CI_JOB_SCOPES, createAppPlan, EASTER_EGG_SUITE, INDEPENDENT_ROOT_DEV_DEPENDENCIES, RUNTIME_MANIFEST_READERS, SITE_KEY_READERS, SITE_ONLY_FILES } from '../scripts/lib/app-plan.mjs';
+import { AUTOMATION_CATALOG_READERS, changedPathsFromGit, CI_JOB_SCOPES, createAppPlan, EASTER_EGG_SUITE, INDEPENDENT_ROOT_DEV_DEPENDENCIES, RUNTIME_MANIFEST_READERS, SITE_KEY_READERS, SITE_ONLY_FILES } from '../scripts/lib/app-plan.mjs';
 import { APP_JOBS, carriedApps, NIGHTLY_JOBS, PLANNED_JOBS, RERUN_JOBS, testedBase } from '../scripts/lib/tested-base.mjs';
 import { lockfileImpact } from '../scripts/lib/lockfile-impact.mjs';
 import { loadAppsRegistry, parseAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
@@ -1583,6 +1583,29 @@ test('a push run tests the merges whose own runs were cancelled, and falls back 
     assert.equal(fallback.all_apps, 'true', name);
     assert.match(fallback.fallback_reason, /ci run on main/, name);
   }
+});
+
+test('a rename lists both its paths, so what reads the old path is selected', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'app-plan-rename-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const git = (...args) => execFileSync('git', ['-c', 'user.name=planner', '-c', 'user.email=planner@example.org', ...args], { cwd: root, encoding: 'utf8' }).trim();
+  git('init', '--quiet');
+  // Deface's and Brain Extraction's package tests read CALMaR's fixture.
+  const fixture = 'apps/calmar/tests/fixtures/synthstrip-mini/T1.nii.gz';
+  await mkdir(join(root, fixture, '..'), { recursive: true });
+  await writeFile(join(root, fixture), await readFile(join(repoRoot, fixture)));
+  git('add', '-A');
+  git('commit', '--quiet', '-m', 'base');
+  const base = git('rev-parse', 'HEAD');
+  await mkdir(join(root, 'docs'));
+  git('mv', fixture, 'docs/T1.nii.gz');
+  git('commit', '--quiet', '-m', 'move');
+  assert.match(git('diff', '--name-status', `${base}...HEAD`), /^R100\t/, 'git pairs the move as a rename by default');
+  const paths = changedPathsFromGit({ base, cwd: root });
+  assert.deepEqual(paths.sort(), [fixture, 'docs/T1.nii.gz'].sort());
+  const plan = createAppPlan(await loadAppsRegistry(), paths, await graph);
+  for (const dir of ['packages/deface', 'packages/brain-extraction']) assert.ok(Object.hasOwn(plan.packages.reasons, dir), dir);
+  assert.ok(plan.selected.some((app) => app.id === 'calmar'));
 });
 
 test('a .gitattributes change selects the apps whose files now check out differently', async (t) => {

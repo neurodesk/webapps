@@ -684,10 +684,11 @@ export function createAppPlan(registry, changedPaths = [], graph = null, manifes
   });
 }
 
+// Both sides of every rename and copy: a moved input changes what reads its old path.
 export function changedPathsFromGit({ base, head = 'HEAD', cwd }) {
   if (!base || /^0+$/.test(base)) return [];
   try {
-    return execFileSync('git', ['diff', '--name-only', `${base}...${head}`], {
+    return execFileSync('git', ['diff', '--no-renames', '--name-only', `${base}...${head}`], {
       cwd,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
