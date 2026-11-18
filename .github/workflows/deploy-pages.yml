@@ -14,7 +14,7 @@ permissions:
   contents: read
   pages: write
   id-token: write
-  # The deploy plan reads this workflow's earlier runs on main.
+  # The deploy plan reads this workflow's earlier runs.
   actions: read
 
 concurrency:
@@ -68,11 +68,13 @@ jobs:
         run: node --test test/catalog-sites.test.mjs
       # Publishes a site only when its content differs from the digest record its
       # host serves, or its usage report predates the daily refresh. A site whose
-      # record cannot be read is published. Every site is published when the
-      # previous deploy run on main that did any work was not green, so a failed
-      # deploy or check is retried. The daily run checks every live site.
+      # record cannot be read is published. Every site is published on a re-run
+      # and when the deploy run before this one, on any ref, was not green, so a
+      # failed deploy or check is retried. The daily run checks every live site.
+      # Every read has a deadline (about 2 minutes in all); the step limit is a backstop.
       - name: Decide which sites to publish
         id: plan
+        timeout-minutes: 10
         run: node scripts/plan-site-deploy.mjs ${{ github.event_name == 'workflow_dispatch' && '--deploy-all' || github.event_name == 'schedule' && '--verify-all' || '' }}
         env:
           GITHUB_TOKEN: ${{ github.token }}

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, rename, rm, utimes, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { runInNewContext } from 'node:vm';
@@ -10,14 +11,19 @@ import { workerSites } from '../scripts/lib/catalog-sites.mjs';
 import {
   ANALYTICS_REFRESH_UTC,
   DIGEST_FILE,
+  HISTORY_DAYS,
+  HISTORY_MAX_RUNS,
+  RERUN_LIMIT_DAYS,
   analyticsStale,
   decideSite,
   deployOutputs,
   deploySites,
   deploySummary,
+  forcedReason,
   lastAnalyticsRefresh,
   parseLiveRecord,
   planDeploy,
+  planSiteDeploy,
   previousDeploy,
   readDeployHistory,
   readLiveRecord,
@@ -125,8 +131,21 @@ const digest = 'a'.repeat(64);
 const C1 = 'fd08c1c20'.padEnd(40, '0');
 const C2 = '77f026063'.padEnd(40, '0');
 const record = (fields = {}) => ({ schema: 1, site: 'msk', digest, analyticsGeneratedAt: '2026-11-18T04:24:00Z', commit: C1, ...fields });
-// The history of a deploy whose previous run finished green.
-const green = { runs: [{ id: 1, status: 'completed', conclusion: 'success' }] };
+// Run histories as readDeployHistory returns them. This run, 100, started at
+// NOW; run(id, minutesAgo, conclusion, options) is another run of the workflow
+// whose latest attempt started that many minutes earlier and started `jobs` jobs.
+const NOW = Date.parse('2026-11-18T12:00:00Z');
+const MINUTE = 60_000;
+const DAY = 24 * 60 * MINUTE;
+const instant = (time) => new Date(time).toISOString().replace('.000Z', 'Z');
+const SINCE = instant(NOW - HISTORY_DAYS * DAY);
+const THIS_RUN = { id: 100, run_attempt: 1, status: 'in_progress', conclusion: null, run_started_at: instant(NOW) };
+const run = (id, minutesAgo, conclusion = 'success', { attempt = 1, status = 'completed', jobs = 5 } = {}) => ({
+  id, run_attempt: attempt, status, conclusion: status === 'completed' ? conclusion : null, run_started_at: instant(NOW - minutesAgo * MINUTE), jobs,
+});
+const history = (...runs) => ({ runId: 100, attempt: 1, since: SINCE, runs: [THIS_RUN, ...runs] });
+// The deploy run before this one finished green.
+const green = history(run(99, 30));
 const json = (body, { status = 200, headers = {} } = {}) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=utf-8', ...headers } });
 
 test('a site is published when its content changed, its live record is unreadable, its report is stale, or the run was dispatched', () => {
@@ -214,7 +233,9 @@ test('reading a live record bypasses caches and turns every failure into a reaso
   assert.deepEqual(await readLiveRecord({ site: 'msk', host: 'h', nonce: 'n', fetch: async () => { throw new TypeError('fetch failed'); } }), { error: 'fetch failed' });
   // A fetch that never answers; its own timer keeps the event loop alive as a real socket would.
   const hang = (url, { signal }) => new Promise((resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason)));
-  assert.deepEqual(await readLiveRecord({ site: 'msk', host: 'h', nonce: 'n', fetch: hang, timeoutMs: 20 }), { error: 'no answer in 0.02 s' });
+  assert.deepEqual(await readLiveRecord({ site: 'msk', host: 'h', nonce: 'n', fetch: hang, timeoutMs: 20 }), { error: 'no complete answer in 0.02 s' });
+  // A fetch that ignores its signal still ends at the deadline.
+  assert.deepEqual(await readLiveRecord({ site: 'msk', host: 'h', nonce: 'n', fetch: () => new Promise(() => setTimeout(() => {}, 100)), timeoutMs: 20 }), { error: 'no complete answer in 0.02 s' });
 });
 
 test('only a direct, uncached JSON answer of the host counts as its live record', async () => {
@@ -232,70 +253,191 @@ test('only a direct, uncached JSON answer of the host counts as its live record'
   assert.deepEqual(await read(new Response(JSON.stringify(record()))), { error: 'content type "text/plain"' });
 });
 
-test('every site is skipped only after a green deploy run: the latest earlier run on main that started a job', () => {
-  const run = (id, conclusion, jobs, status = 'completed') => ({ id, status, conclusion, jobs });
-  assert.deepEqual(previousDeploy([run(10, 'success'), run(9, 'failure')]), { green: true, run: run(10, 'success') });
-  // Newest first, whatever order the records come in.
-  assert.equal(previousDeploy([run(9, 'success'), run(10, 'failure')]).reason, 'previous deploy run 10 failure');
-  assert.equal(previousDeploy([run(10, 'timed_out'), run(9, 'success')]).reason, 'previous deploy run 10 timed_out');
-  // A run cancelled part-way did work, and may have left a site half deployed or unchecked.
-  assert.equal(previousDeploy([run(10, 'cancelled', 3), run(9, 'success')]).reason, 'previous deploy run 10 cancelled');
-  // A run cancelled while pending never started a job and does not count: the run before it decides.
-  assert.deepEqual(previousDeploy([run(12, 'cancelled', 0), run(11, 'cancelled', 0), run(10, 'success')]).green, true);
-  assert.equal(previousDeploy([run(12, 'cancelled', 0), run(11, 'failure')]).reason, 'previous deploy run 11 failure');
-  // Unknown job counts and unfinished runs are doubts, and doubts publish.
-  assert.equal(previousDeploy([run(10, 'cancelled', undefined), run(9, 'success')]).green, false);
-  assert.equal(previousDeploy([run(10, null, undefined, 'in_progress')]).reason, 'previous deploy run 10 in_progress');
-  assert.equal(previousDeploy([run(10, 'cancelled', 0)]).reason, 'no earlier deploy run on main');
-  assert.equal(previousDeploy([]).reason, 'no earlier deploy run on main');
+test('a re-run publishes and checks every site before it reads any history', async () => {
+  // Run 99 published every site and failed a browser check; a person re-runs it. It keeps its id.
+  const rerun = { runId: 99, attempt: 2, since: SINCE, runs: [run(98, 60), { ...run(99, 0, null, { status: 'in_progress', attempt: 2 }) }] };
+  assert.deepEqual(previousDeploy(rerun), { green: false, reason: 're-run (attempt 2)' });
+  assert.deepEqual(previousDeploy({ runId: 99, attempt: '3' }), { green: false, reason: 're-run (attempt 3)' }, 'with no history at all');
+  assert.equal(previousDeploy({ ...green, attempt: undefined }).reason, 'this run\'s attempt is unknown (undefined)');
+  assert.equal(previousDeploy({ ...green, attempt: '1.5' }).green, false);
+  // The reader asks nothing of the API for a re-run.
+  let requests = 0;
+  const read = await readDeployHistory({ repository: 'o/r', workflowRef: 'o/r/.github/workflows/deploy-pages.yml@refs/heads/main', runId: '99', attempt: '2', token: 't', fetch: async () => { requests++; return json({}); } });
+  assert.equal(requests, 0);
+  assert.equal(forcedReason(read), 're-run (attempt 2)');
 });
 
-test('the deploy history is read from the API for runs before this one, and any failure is an error', async () => {
-  const requests = [];
-  const api = (routes) => async (url, init) => {
-    requests.push({ url, init });
-    const path = new URL(url).pathname + new URL(url).search;
-    if (!(path in routes)) return json({ message: 'Not Found' }, { status: 404 });
-    return json(routes[path]);
+test('the run whose latest attempt started last decides, whatever its id', () => {
+  // Run 98 is older than 99, but its re-run started after 99 and failed.
+  assert.deepEqual(previousDeploy(history(run(99, 60), run(98, 20, 'failure', { attempt: 2 }))), { green: false, reason: 'previous deploy run 98 attempt 2 failure' });
+  // Its re-run published and checked every site and passed, after 99 had failed.
+  assert.deepEqual(previousDeploy(history(run(99, 60, 'failure'), run(98, 20, 'success', { attempt: 2 }))), { green: true, run: run(98, 20, 'success', { attempt: 2 }) });
+  // The order the API lists them in does not matter.
+  assert.deepEqual(previousDeploy(history(run(98, 20, 'failure', { attempt: 2 }), run(99, 60))).reason, 'previous deploy run 98 attempt 2 failure');
+  assert.deepEqual(previousDeploy(history(run(99, 30), run(98, 31, 'failure'))), { green: true, run: run(99, 30) });
+});
+
+test('an earlier run that is still queued, waiting or in progress leaves the order unknown', () => {
+  for (const status of ['queued', 'waiting', 'pending', 'requested', 'in_progress']) {
+    assert.deepEqual(previousDeploy(history(run(99, 30), run(98, 10, null, { status }))), { green: false, reason: `run 98 is ${status} and started before this run` });
+  }
+  // A run that started after this one waits for it in the concurrency group and does not count.
+  assert.equal(previousDeploy(history(run(99, 30), run(101, -5, null, { status: 'pending' }))).green, true);
+  // One that started after this one and did work cannot have run before it.
+  assert.deepEqual(previousDeploy(history(run(99, 30), run(101, -5, 'success'))), { green: false, reason: 'run 101 ran after this run started' });
+});
+
+test('a malformed or missing field, or a date that is not a real instant, is a doubt', () => {
+  const mutations = {
+    'record null': () => null,
+    'id string': (r) => ({ ...r, id: '99' }),
+    'id zero': (r) => ({ ...r, id: 0 }),
+    'attempt zero': (r) => ({ ...r, run_attempt: 0 }),
+    'attempt string': (r) => ({ ...r, run_attempt: '1' }),
+    'status missing': (r) => ({ ...r, status: undefined }),
+    'conclusion number': (r) => ({ ...r, conclusion: 7 }),
+    'start missing': (r) => ({ ...r, run_started_at: undefined }),
+    'start text': (r) => ({ ...r, run_started_at: 'yesterday' }),
+    'start 31 February': (r) => ({ ...r, run_started_at: '2026-02-31T10:00:00Z' }),
+    'start 24:00': (r) => ({ ...r, run_started_at: '2026-11-17T24:00:00Z' }),
+    'start with offset': (r) => ({ ...r, run_started_at: '2026-11-18T11:30:00+00:00' }),
+    'jobs negative': (r) => ({ ...r, jobs: -1 }),
+    'jobs string': (r) => ({ ...r, jobs: '5' }),
+    'jobs null': (r) => ({ ...r, jobs: null }),
   };
-  const base = '/repos/neurodesk/webapps/actions';
-  const fetch = api({
-    [`${base}/workflows/deploy-pages.yml/runs?branch=main&per_page=20`]: { workflow_runs: [
-      { id: 44253351833, status: 'in_progress', conclusion: null },
-      { id: 44245715798, status: 'completed', conclusion: 'success' },
-      { id: 44245320494, status: 'completed', conclusion: 'cancelled' },
-      { id: 44244032064, status: 'completed', conclusion: 'success' },
-    ] },
-    [`${base}/runs/44245320494/jobs?filter=all&per_page=1`]: { total_count: 0, jobs: [] },
-  });
-  const options = { repository: 'neurodesk/webapps', workflowRef: 'neurodesk/webapps/.github/workflows/deploy-pages.yml@refs/heads/main', runId: '44253351833', token: 't' };
-  const history = await readDeployHistory({ ...options, fetch });
-  assert.deepEqual(history, { runs: [
-    { id: 44245715798, status: 'completed', conclusion: 'success', jobs: undefined },
-    { id: 44245320494, status: 'completed', conclusion: 'cancelled', jobs: 0 },
-    { id: 44244032064, status: 'completed', conclusion: 'success', jobs: undefined },
-  ] }, 'this run is left out');
-  assert.equal(requests[0].init.headers.authorization, 'Bearer t');
-  assert.deepEqual(await readDeployHistory({ ...options, token: undefined, fetch }), { error: 'no repository, workflow, run id or token' });
-  assert.match((await readDeployHistory({ ...options, fetch: api({}) })).error, /HTTP 404$/);
-  assert.deepEqual(await readDeployHistory({ ...options, fetch: async () => { throw new TypeError('fetch failed'); } }), { error: 'fetch failed' });
+  for (const [name, mutate] of Object.entries(mutations)) {
+    const decision = previousDeploy(history(mutate(run(99, 30))));
+    assert.equal(decision.green, false, name);
+    assert.match(decision.reason, /^malformed run history \(/, name);
+  }
+  assert.deepEqual(previousDeploy({ ...green, runs: 'none' }), { green: false, reason: 'no run history' });
+  assert.deepEqual(previousDeploy({ ...green, since: '2026-10-16' }), { green: false, reason: 'no run history' });
+  assert.deepEqual(previousDeploy({ ...green, runId: '100' }), { green: false, reason: 'no run history' });
+  assert.deepEqual(previousDeploy({ ...green, runs: [run(99, 30)] }), { green: false, reason: 'run 100 is not in the run history' });
+  assert.deepEqual(previousDeploy({ ...green, runs: [{ ...THIS_RUN, run_attempt: 2 }, run(99, 30)] }), { green: false, reason: 'the run history has run 100 at attempt 2' });
 });
 
-test('after a failed or unreadable deploy history every site is published and checked, though its digest is live', async (t) => {
+test('two runs that started at the same instant leave the order unknown', () => {
+  assert.deepEqual(previousDeploy(history(run(99, 30), run(98, 30, 'failure'))), { green: false, reason: 'run 99 started at the same instant as another run' });
+  // A run that started when this one did.
+  assert.equal(previousDeploy(history(run(99, 30), run(101, 0, 'cancelled', { jobs: 0 }))).reason, 'run 101 started at the same instant as another run');
+});
+
+test('a deciding run the history cannot be certain of publishes everything', () => {
+  // The history lists runs created since SINCE; a run created before can have a re-run up to 30 days later.
+  const certain = (HISTORY_DAYS - RERUN_LIMIT_DAYS - 1) * 24 * 60;
+  assert.equal(previousDeploy(history(run(99, certain))).green, true);
+  assert.deepEqual(previousDeploy(history(run(99, certain + 1))), { green: false, reason: `run 99 started ${instant(NOW - (certain + 1) * MINUTE)}, before the run history read is certain` });
+  assert.deepEqual(previousDeploy(history()), { green: false, reason: 'no earlier deploy run that started a job' });
+  assert.deepEqual(previousDeploy(history(run(99, 30, 'cancelled', { jobs: 0 }))), { green: false, reason: 'no earlier deploy run that started a job' });
+});
+
+test('a run that started no job is passed over, unless an earlier attempt of it may have', () => {
+  // Cancelled while it waited in the concurrency group, or a startup failure: it did nothing.
+  assert.deepEqual(previousDeploy(history(run(99, 30, 'cancelled', { jobs: 0 }), run(98, 31, 'startup_failure', { jobs: 0 }), run(97, 60))), { green: true, run: run(97, 60) });
+  assert.equal(previousDeploy(history(run(99, 30, 'cancelled', { jobs: 0 }), run(97, 60, 'failure'))).reason, 'previous deploy run 97 failure');
+  // A run cancelled part-way did work and may have left a site half deployed or unchecked.
+  assert.equal(previousDeploy(history(run(99, 30, 'cancelled', { jobs: 3 }), run(97, 60))).reason, 'previous deploy run 99 cancelled');
+  assert.equal(previousDeploy(history(run(99, 30, 'timed_out'), run(97, 60))).reason, 'previous deploy run 99 timed_out');
+  // A re-run cancelled while it waited leaves its first attempt's outcome unaccounted for.
+  assert.deepEqual(previousDeploy(history(run(99, 30, 'cancelled', { attempt: 2, jobs: 0 }), run(97, 60))), { green: false, reason: 'run 99 attempt 2 started no job after an earlier attempt' });
+  // A job count the reader has not fetched is asked for, newest start first.
+  const { jobs, ...unread } = run(99, 30, 'cancelled');
+  assert.equal(jobs, 5);
+  assert.deepEqual(previousDeploy(history(unread, run(97, 60))), { need: 99 });
+  assert.equal(forcedReason(history(unread, run(97, 60))), 'deploy history incomplete (no job count for run 99)');
+});
+
+// The API as the reader sees it: `runs` newest first, served `perPage` at a time.
+function githubApi(runs, { jobs = {}, totals = [], perPage = 100 } = {}) {
+  const requests = [];
+  const fetch = async (url, init) => {
+    requests.push({ url, init });
+    const { pathname, searchParams } = new URL(url);
+    const listing = pathname.match(/^\/repos\/neurodesk\/webapps\/actions\/workflows\/deploy-pages\.yml\/runs$/);
+    if (listing) {
+      const page = Number(searchParams.get('page'));
+      return json({ total_count: totals[page - 1] ?? runs.length, workflow_runs: runs.slice((page - 1) * perPage, page * perPage) });
+    }
+    const counted = pathname.match(/^\/repos\/neurodesk\/webapps\/actions\/runs\/(\d+)\/jobs$/);
+    if (counted && searchParams.get('filter') === 'latest' && Number(counted[1]) in jobs) return json({ total_count: jobs[counted[1]], jobs: [] });
+    return json({ message: 'Not Found' }, { status: 404 });
+  };
+  return { fetch, requests };
+}
+const READER = { repository: 'neurodesk/webapps', workflowRef: 'neurodesk/webapps/.github/workflows/deploy-pages.yml@refs/heads/main', runId: '1000', attempt: '1', token: 't', now: NOW };
+// 150 runs as the API lists them, newest first: this run (1000), a run cancelled
+// while it waited, a failed dispatch from a branch, then green pushes.
+const listed = [
+  { ...THIS_RUN, id: 1000, event: 'push', head_branch: 'main' },
+  { ...run(999, 30, 'cancelled'), event: 'push', head_branch: 'main' },
+  { ...run(998, 60, 'failure'), event: 'workflow_dispatch', head_branch: 'fix/site' },
+  ...Array.from({ length: 147 }, (_, index) => run(997 - index, 90 + index * 30)),
+].map((record) => Object.fromEntries(Object.entries(record).filter(([key]) => key !== 'jobs')));
+
+test('the history is every run of the workflow on every ref created in the last 33 days, then the job counts the decision asks for', async () => {
+  const api = githubApi(listed, { jobs: { 999: 0, 998: 4 } });
+  const read = await readDeployHistory({ ...READER, fetch: api.fetch });
+  assert.equal(read.since, SINCE);
+  assert.equal(read.runs.length, 150);
+  assert.equal(forcedReason(read), 'previous deploy run 998 failure', 'the failed dispatch from a branch decides');
+  const paths = api.requests.map(({ url }) => decodeURIComponent(new URL(url).pathname + new URL(url).search));
+  const listing = `/repos/neurodesk/webapps/actions/workflows/deploy-pages.yml/runs?per_page=100&page=PAGE&exclude_pull_requests=true&created=>=${SINCE}`;
+  assert.deepEqual(paths, [
+    listing.replace('PAGE', '1'),
+    listing.replace('PAGE', '2'),
+    '/repos/neurodesk/webapps/actions/runs/999/jobs?filter=latest&per_page=1',
+    '/repos/neurodesk/webapps/actions/runs/998/jobs?filter=latest&per_page=1',
+  ], 'no branch filter, and a job count only for the runs it passes on the way');
+  assert.ok(paths.every((path) => !path.includes('branch=')));
+  assert.equal(api.requests[0].init.headers.authorization, 'Bearer t');
+  // With the dispatch green, the history is green.
+  const passing = listed.map((record) => (record.id === 998 ? { ...record, conclusion: 'success' } : record));
+  assert.equal(forcedReason(await readDeployHistory({ ...READER, fetch: githubApi(passing, { jobs: { 999: 0, 998: 4 } }).fetch })), null);
+});
+
+test('a history the reader cannot read whole, or an API that fails, is a doubt', async () => {
+  const cases = {
+    'no token': [{ token: undefined }, 'no repository, workflow, run id or token'],
+    'HTTP 403': [{ fetch: async () => json({ message: 'Forbidden' }, { status: 403 }) }, /HTTP 403$/],
+    'a body that is not JSON': [{ fetch: async () => new Response('<html>', { headers: { 'content-type': 'application/json' } }) }, /JSON/],
+    'no workflow runs': [{ fetch: async () => json({ total_count: 1 }) }, 'GitHub API: no workflow runs'],
+    'too many runs': [{ fetch: githubApi(listed, { totals: [HISTORY_MAX_RUNS + 1] }).fetch }, `${HISTORY_MAX_RUNS + 1} runs since ${SINCE}, more than the ${HISTORY_MAX_RUNS} the plan reads`],
+    'a run added between pages': [{ fetch: githubApi(listed, { totals: [150, 151] }).fetch }, 'the run history changed while it was read'],
+    'a run listed twice': [{ fetch: githubApi([...listed.slice(0, 100), ...listed.slice(99, 149)]).fetch }, 'the run history lists 149 distinct runs of 150'],
+    'a job count missing': [{ fetch: githubApi(listed, { jobs: { 999: 0 } }).fetch }, /actions\/runs\/998\/jobs\?filter=latest&per_page=1: HTTP 404$/],
+    'a network failure': [{ fetch: async () => { throw new TypeError('fetch failed'); } }, 'fetch failed'],
+  };
+  for (const [name, [options, error]] of Object.entries(cases)) {
+    const read = await readDeployHistory({ ...READER, fetch: githubApi(listed, { jobs: { 999: 0, 998: 4 } }).fetch, ...options });
+    assert.equal(read.runs, undefined, name);
+    if (typeof error === 'string') assert.equal(read.error, error, name);
+    else assert.match(read.error, error, name);
+    assert.equal(forcedReason(read), `deploy history unreadable (${read.error})`, name);
+  }
+  // A job count that is not a count.
+  const odd = await readDeployHistory({ ...READER, fetch: githubApi(listed, { jobs: { 999: 'none' } }).fetch });
+  assert.equal(forcedReason(odd), 'malformed run history (run 999: job count "none")');
+});
+
+test('after a re-run, a failed run before this one or an unreadable history, every site is published and checked, though its digest is live', async (t) => {
   const root = await tempDir(t);
   await sitesFixture(root);
   const first = await planDeploy({ registry, sitesDir: root, commit: C1, history: green, nonce: 'n', fetch: async () => json({}, { status: 404 }), write: writeFile });
   const records = new Map(first.map(({ host, record: served }) => [host, served]));
   const served = async (url) => json(records.get(new URL(url).host));
-  const plan = (history) => planDeploy({ registry, sitesDir: root, commit: C1, history, nonce: 'n', fetch: served, write: writeFile });
+  const plan = (state) => planDeploy({ registry, sitesDir: root, commit: C1, history: state, nonce: 'n', fetch: served, write: writeFile });
   assert.ok((await plan(green)).every(({ publish }) => !publish), 'every digest is live');
-  const failed = { runs: [{ id: 3, status: 'completed', conclusion: 'cancelled', jobs: 0 }, { id: 2, status: 'completed', conclusion: 'failure' }, ...green.runs] };
-  for (const [history, reason] of [
-    [failed, 'forced: previous deploy run 2 failure'],
+  assert.ok((await plan(Promise.resolve(green))).every(({ publish }) => !publish), 'the history can still be on its way');
+  for (const [state, reason] of [
+    [{ runId: 100, attempt: '2' }, 'forced: re-run (attempt 2)'],
+    [history(run(99, 30, 'cancelled', { jobs: 0 }), run(98, 60, 'failure'), run(97, 90)), 'forced: previous deploy run 98 failure'],
     [{ error: 'HTTP 403' }, 'forced: deploy history unreadable (HTTP 403)'],
     [undefined, 'forced: deploy history unreadable (not read)'],
+    // A history read that rejects, as a thenable so the rejection waits for its reader.
+    [{ then: (resolve, reject) => reject(new Error('lost')) }, 'forced: deploy history unreadable (lost)'],
   ]) {
-    const planned = await plan(history);
+    const planned = await plan(state);
     assert.ok(planned.every((site) => site.publish && site.verifyBuild && site.verify && site.reason === reason), reason);
     const outputs = deployOutputs(planned);
     assert.equal(outputs.pages, 'true');
@@ -305,6 +447,91 @@ test('after a failed or unreadable deploy history every site is published and ch
     assert.equal(outputs.verify_hub, 'true');
     assert.match(deploySummary(planned), new RegExp(`\\| msk \\| mskapps\\.sciget\\.org \\| publish \\| after publish \\| ${reason.replace(/[()]/g, '\\$&')} \\|`));
   }
+});
+
+test('red, then green, then a skip; red, then a part-way cancellation, then everything again', async (t) => {
+  const root = await tempDir(t);
+  await sitesFixture(root);
+  const first = await planDeploy({ registry, sitesDir: root, commit: C1, history: green, nonce: 'n', fetch: async () => json({}, { status: 404 }), write: writeFile });
+  const records = new Map(first.map(({ host, record: served }) => [host, served]));
+  const served = async (url) => json(records.get(new URL(url).host));
+  const published = async (state) => (await planDeploy({ registry, sitesDir: root, commit: C1, history: state, nonce: 'n', fetch: served, write: writeFile })).filter(({ publish }) => publish).length;
+  const all = deploySites(registry).length;
+  // Run 98 failed: run 99 publishes everything. It passes: run 100 skips what is live.
+  assert.equal(await published({ runId: 99, attempt: 1, since: SINCE, runs: [{ ...THIS_RUN, id: 99 }, run(98, 30, 'failure')] }), all);
+  assert.equal(await published(history(run(99, 10), run(98, 30, 'failure'))), 0);
+  // Run 99 is cancelled part-way through that republish: run 100 publishes everything again.
+  assert.equal(await published(history(run(99, 10, 'cancelled', { jobs: 2 }), run(98, 30, 'failure'))), all);
+});
+
+// A loopback server that answers every request with JSON headers at once and
+// then the body `late` ms later, or never when `late` is Infinity.
+async function slowServer(t, late) {
+  const timers = new Set();
+  const server = createServer((request, response) => {
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.flushHeaders();
+    response.write('{"schema":1,');
+    if (late !== Infinity) timers.add(setTimeout(() => response.end(`"site":"msk","digest":"${digest}","analyticsGeneratedAt":null,"commit":null}`), late));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => {
+    for (const timer of timers) clearTimeout(timer);
+    server.closeAllConnections();
+    server.close();
+  });
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  // Every https URL the plan asks for goes to the server instead.
+  return (url, init) => globalThis.fetch(url.replace(/^https:\/\/[^/]+/, origin), init);
+}
+
+const elapsed = async (work) => {
+  const start = performance.now();
+  const result = await work();
+  return { result, ms: performance.now() - start };
+};
+
+test('a live record whose body arrives after the deadline, or never ends, is unreadable at the deadline', { timeout: 10_000 }, async (t) => {
+  const prompt = await slowServer(t, 0);
+  assert.equal((await readLiveRecord({ site: 'msk', host: 'h', nonce: 'n', fetch: prompt, timeoutMs: 2000 })).record.digest, digest, 'the server answers in time');
+  for (const late of [3000, Infinity]) {
+    const fetch = await slowServer(t, late);
+    const { result, ms } = await elapsed(() => readLiveRecord({ site: 'msk', host: 'h', nonce: 'n', fetch, timeoutMs: 300 }));
+    assert.deepEqual(result, { error: 'no complete answer in 0.3 s' }, `body after ${late} ms`);
+    assert.ok(ms >= 290 && ms < 1500, `ended after ${ms} ms`);
+    assert.equal(decideSite({ digest, analytics: null, live: result }).publish, true);
+  }
+});
+
+test('a run history whose body stalls is unreadable at the deadline', { timeout: 10_000 }, async (t) => {
+  for (const late of [3000, Infinity]) {
+    const fetch = await slowServer(t, late);
+    const { result, ms } = await elapsed(() => readDeployHistory({ ...READER, fetch, timeoutMs: 300 }));
+    assert.deepEqual(result, { error: 'GitHub API: no complete answer in 0.3 s' });
+    assert.ok(ms >= 290 && ms < 1500, `ended after ${ms} ms`);
+  }
+});
+
+test('the plan returns its outputs by its deadlines when every read stalls, and publishes and checks everything', { timeout: 10_000 }, async (t) => {
+  const root = await tempDir(t);
+  await sitesFixture(root);
+  const fetch = await slowServer(t, Infinity);
+  const env = { GITHUB_REPOSITORY: 'neurodesk/webapps', GITHUB_WORKFLOW_REF: READER.workflowRef, GITHUB_RUN_ID: '1000', GITHUB_RUN_ATTEMPT: '1', GITHUB_TOKEN: 't', GITHUB_SHA: C1 };
+  const all = { pages: 'true', workers: JSON.stringify(['msk', 'microscopy', 'preclinical', 'hub'].map((id) => ({ site: id, url: `https://${deploySites(registry).find(({ site: s }) => s === id).host}/` }))) };
+  const { result, ms } = await elapsed(() => planSiteDeploy({ registry, sitesDir: root, env, fetch, write: writeFile, timeouts: { record: 1200, history: 1500 }, now: NOW }));
+  // One after the other they would take 2.7 s.
+  assert.ok(ms >= 1490 && ms < 2400, `the reads run at once and end at the longer deadline (${ms} ms)`);
+  assert.deepEqual({ pages: result.outputs.pages, workers: result.outputs.workers }, all);
+  assert.equal(result.outputs.verify_build, 'true');
+  assert.equal(result.outputs.verify_hub, 'true');
+  assert.match(result.summary, /^Every site is published: deploy history unreadable \(GitHub API: no complete answer in 1\.5 s\)\.\n/);
+  // With a readable green history, each stalled record publishes its own site.
+  const api = githubApi(listed.map((record) => (record.id === 998 ? { ...record, conclusion: 'success' } : record)), { jobs: { 999: 0, 998: 4 } });
+  const split = (url, init) => (url.startsWith('https://api.github.com/') ? api.fetch(url, init) : fetch(url, init));
+  const green2 = await planSiteDeploy({ registry, sitesDir: root, env, fetch: split, write: writeFile, timeouts: { record: 300 }, now: NOW });
+  assert.ok(green2.planned.every(({ publish, reason }) => publish && reason === 'live digest unreadable (no complete answer in 0.3 s)'));
+  assert.doesNotMatch(green2.summary, /^Every site is published/);
+  assert.deepEqual({ pages: green2.outputs.pages, workers: green2.outputs.workers }, all);
 });
 
 test('the daily run checks every live site, published or not', async (t) => {
@@ -434,8 +661,9 @@ test('the build plans the deploy after its checks of the projected sites and bef
   for (const [event, flag] of [['workflow_dispatch', '--deploy-all'], ['schedule', '--verify-all'], ['push', '']]) {
     assert.equal(expression(steps[plan].run.replace(/^node scripts\/plan-site-deploy\.mjs /, ''), { github: { event_name: event } }), flag);
   }
-  // The plan reads this workflow's earlier runs.
+  // The plan reads this workflow's earlier runs. Its reads end by their deadlines; the step limit is a backstop.
   assert.equal(steps[plan].env.GITHUB_TOKEN, '${{ github.token }}');
+  assert.equal(steps[plan]['timeout-minutes'], 10);
   assert.equal(workflow.permissions.actions, 'read');
   assert.equal(workflow.jobs.build.permissions, undefined, 'the build job holds the workflow permissions');
   for (const [name, match] of [
@@ -466,9 +694,13 @@ test('the build plans the deploy after its checks of the projected sites and bef
 // a non-empty matrix, and a run is green when no job failed.
 const JOB_ORDER = ['build', 'turbo-cache-retention', 'deploy-workers', 'deploy', 'verify-hub', 'verify-sites'];
 const STATUS_FUNCTION = /\b(always|cancelled|failure|success)\(\)/;
-function simulate(outputs, failing = []) {
+function simulate(outputs, failing = [], kept = {}) {
   const results = {};
   for (const name of JOB_ORDER) {
+    if (name in kept) {
+      results[name] = kept[name];
+      continue;
+    }
     const job = workflow.jobs[name];
     const needs = [job.needs ?? []].flat();
     assert.ok(needs.every((need) => need in results), `${name} runs after what it needs`);
@@ -485,6 +717,17 @@ function simulate(outputs, failing = []) {
   return results;
 }
 const ran = (results) => JOB_ORDER.filter((name) => results[name] !== 'skipped').join(' ');
+// "Re-run failed jobs": GitHub re-runs each failed job and every job that needs
+// one; the others keep their results and outputs from the attempt before.
+function rerunFailed(outputs, previous) {
+  const rerun = new Set();
+  for (const name of JOB_ORDER) {
+    const needs = [workflow.jobs[name].needs ?? []].flat();
+    if (previous[name] === 'failure' || needs.some((need) => rerun.has(need))) rerun.add(name);
+  }
+  const results = simulate(outputs, [], Object.fromEntries(JOB_ORDER.filter((name) => !rerun.has(name)).map((name) => [name, previous[name]])));
+  return { results, ran: JOB_ORDER.filter((name) => rerun.has(name) && results[name] !== 'skipped').join(' ') };
+}
 const greenRun = (results) => Object.values(results).every((result) => result !== 'failure');
 
 test('every job of the workflow is in the simulated order', () => {
@@ -497,7 +740,7 @@ test('each case runs exactly the deploy and check jobs it needs, and leaves the 
   const first = await planDeploy({ registry, sitesDir: root, commit: C1, history: green, nonce: 'n', fetch: async () => json({}, { status: 404 }), write: writeFile });
   const records = new Map(first.map(({ host, record: served }) => [host, served]));
   const served = (unreadable) => async (url) => (new URL(url).host === unreadable ? new Response('Not found', { status: 404 }) : json(records.get(new URL(url).host)));
-  const failed = { runs: [{ id: 2, status: 'completed', conclusion: 'failure' }, ...green.runs] };
+  const failed = history(run(99, 30, 'failure'));
   const plan = (options) => planDeploy({ registry, sitesDir: root, commit: C1, history: green, nonce: 'n', fetch: served(), write: writeFile, ...options });
   const cases = {
     'nothing changed, previous run green': await plan({}),
@@ -511,6 +754,8 @@ test('each case runs exactly the deploy and check jobs it needs, and leaves the 
     'scheduled run, every digest live': await plan({ verifyAll: true }),
     'dispatched run': await plan({ deployAll: true }),
     'unreadable record for one site': await plan({ fetch: served('webapps.neurodesk.org') }),
+    // Run 100 published msk and its browser check failed; a person re-runs every job of it.
+    'full re-run after a failed check': await plan({ history: { runId: 100, attempt: '2' } }),
   };
   const table = Object.fromEntries(Object.entries(cases).map(([name, planned]) => {
     const outputs = deployOutputs(planned);
@@ -526,7 +771,19 @@ test('each case runs exactly the deploy and check jobs it needs, and leaves the 
     'scheduled run, every digest live': { outputs: 'pages=false workers= verify=neuro,msk,microscopy,preclinical hub=true startup=false', ran: 'build turbo-cache-retention verify-hub verify-sites' },
     'dispatched run': all,
     'unreadable record for one site': { outputs: 'pages=true workers= verify= hub=false startup=true', ran: 'build turbo-cache-retention deploy' },
+    'full re-run after a failed check': all,
   });
+  // "Re-run failed jobs" after msk's check failed: the build is not re-run and keeps its
+  // outputs, so the check runs again on the sites the first attempt published.
+  const firstAttempt = simulate(deployOutputs(cases['one site changed']), ['verify-sites']);
+  assert.equal(greenRun(firstAttempt), false);
+  const rerun = rerunFailed(deployOutputs(cases['one site changed']), firstAttempt);
+  assert.equal(rerun.ran, 'verify-sites');
+  assert.equal(greenRun(rerun.results), true);
+  assert.deepEqual(JSON.parse(deployOutputs(cases['one site changed']).verify).map(({ site: id }) => id), ['msk']);
+  // A failed Worker deploy re-runs with every job that waited for it.
+  const workersFailed = simulate(deployOutputs(cases['one site changed']), ['deploy-workers']);
+  assert.equal(rerunFailed(deployOutputs(cases['one site changed']), workersFailed).ran, 'deploy-workers verify-sites');
 });
 
 test('a failed Worker deploy holds back the Pages deploy and every check, and a failed build stops everything', () => {

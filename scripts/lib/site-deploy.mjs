@@ -5,9 +5,10 @@ import { HUB_SITE } from './catalog-sites.mjs';
 
 // Which projected sites (dist-sites/<site>) a deploy publishes and checks. Each
 // published site carries DIGEST_FILE, a record of its content digest. A run skips
-// a site only when the host serves this build's digest and the previous deploy
-// run on main that did any work finished green, so a failed deploy or a failed
-// check is retried by the next run (.github/workflows/deploy-pages.yml).
+// a site only when the host serves this build's digest and the deploy run before
+// it, on any ref, finished green, so a failed deploy or a failed check is retried
+// by the next run. A re-run publishes and checks every site
+// (.github/workflows/deploy-pages.yml).
 
 export const DIGEST_FILE = 'site-digest.json';
 export const DIGEST_SCHEMA = 1;
@@ -19,6 +20,22 @@ export const ANALYTICS_FILE = 'analytics.json';
 export const UNDIGESTED = new Set([DIGEST_FILE, ANALYTICS_FILE]);
 // The daily refresh of the usage reports: the deploy workflow's cron, '17 4 * * *'.
 export const ANALYTICS_REFRESH_UTC = { hour: 4, minute: 17 };
+
+// Each read of a live record, and the whole read of the run history, ends at its
+// deadline, so the plan ends within HISTORY_TIMEOUT_MS plus the time to digest the sites.
+export const RECORD_TIMEOUT_MS = 30_000;
+export const HISTORY_TIMEOUT_MS = 120_000;
+// GitHub re-runs a workflow run only up to 30 days after its first attempt. The
+// history lists every run created in the last HISTORY_DAYS days, so no run it
+// leaves out can have an attempt that started after since + RERUN_LIMIT_DAYS;
+// one day more is the margin. That makes the history certain of a deciding run
+// that started in the last two days, and the daily schedule keeps one there.
+export const RERUN_LIMIT_DAYS = 30;
+export const HISTORY_DAYS = 33;
+// 700 to 825 runs in 33 days in November 2026; a page of 100 takes about 2 s.
+export const HISTORY_MAX_RUNS = 2000;
+const HISTORY_PAGE = 100;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const HEX64 = /^[0-9a-f]{64}$/;
@@ -117,17 +134,27 @@ export function parseLiveRecord(text, site) {
 }
 
 /**
- * fetch with a deadline. A plain timer, unlike AbortSignal.timeout, keeps the
- * event loop alive while it waits on a fetch that never answers.
+ * One deadline over a whole exchange: every request, its headers and its body.
+ * `within` settles with a promise or rejects when the deadline passes first,
+ * and the signal aborts the requests then. The plain timer, unlike
+ * AbortSignal.timeout, stays referenced until `end`, so a stalled read still ends.
  */
-async function fetchWithin(fetch, url, init, timeoutMs) {
+function deadline(ms, what) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(new DOMException(`no answer in ${timeoutMs / 1000} s`, 'TimeoutError')), timeoutMs);
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
+  let timer;
+  const expired = new Promise((resolve, reject) => {
+    timer = setTimeout(() => {
+      const reason = new DOMException(`${what}no complete answer in ${ms / 1000} s`, 'TimeoutError');
+      controller.abort(reason);
+      reject(reason);
+    }, ms);
+  });
+  expired.catch(() => {});
+  return {
+    signal: controller.signal,
+    within: (promise) => Promise.race([promise, expired]),
+    end: () => clearTimeout(timer),
+  };
 }
 
 /**
@@ -135,70 +162,146 @@ async function fetchWithin(fetch, url, init, timeoutMs) {
  * throw. Only a direct, uncached JSON answer counts: a redirect can lead to an
  * old copy elsewhere, and a cached copy can predate the last deploy.
  */
-export async function readLiveRecord({ site, host, nonce, fetch = globalThis.fetch, timeoutMs = 30_000 }) {
+export async function readLiveRecord({ site, host, nonce, fetch = globalThis.fetch, timeoutMs = RECORD_TIMEOUT_MS }) {
   // A fresh query string keeps a CDN from answering with a copy cached before the last deploy.
   const url = `https://${host}/${DIGEST_FILE}?run=${encodeURIComponent(nonce)}`;
+  const limit = deadline(timeoutMs, '');
   try {
-    const init = { cache: 'no-store', redirect: 'manual', headers: { 'cache-control': 'no-cache' } };
-    const response = await fetchWithin(fetch, url, init, timeoutMs);
+    const init = { cache: 'no-store', redirect: 'manual', headers: { 'cache-control': 'no-cache' }, signal: limit.signal };
+    const response = await limit.within(fetch(url, init));
     if (response.status !== 200) return { error: `HTTP ${response.status}` };
     const age = response.headers.get('age');
     if (age !== null && Number(age.trim()) !== 0) return { error: `a cached copy (Age: ${age})` };
     const type = (response.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
     if (type !== 'application/json') return { error: `content type ${JSON.stringify(type)}` };
-    return parseLiveRecord(await response.text(), site);
+    return parseLiveRecord(await limit.within(response.text()), site);
   } catch (error) {
     return { error: message(error) };
+  } finally {
+    limit.end();
   }
 }
 
-/**
- * Whether the previous deploy run on main that did any work finished green.
- * `runs` are this workflow's earlier runs on main, `{ id, status, conclusion, jobs }`,
- * where `jobs` counts the jobs of a cancelled run. A run cancelled while it waited
- * has no job: it did nothing and is passed over. Returns `{ green: true, run }`
- * or `{ green: false, reason }`.
- */
-export function previousDeploy(runs) {
-  for (const run of [...runs].sort((a, b) => b.id - a.id)) {
-    if (run.status === 'completed' && run.conclusion === 'cancelled' && run.jobs === 0) continue;
-    if (run.status === 'completed' && run.conclusion === 'success') return { green: true, run };
-    return { green: false, reason: `previous deploy run ${run.id} ${run.status === 'completed' ? run.conclusion : run.status}` };
-  }
-  return { green: false, reason: 'no earlier deploy run on main' };
+/** Why a run record cannot be read, or null. */
+function malformedRun(run) {
+  if (run === null || typeof run !== 'object') return 'a run record that is not an object';
+  if (!Number.isSafeInteger(run.id) || run.id < 1) return `a run with id ${JSON.stringify(run.id)}`;
+  if (!Number.isSafeInteger(run.run_attempt) || run.run_attempt < 1) return `run ${run.id}: run_attempt ${JSON.stringify(run.run_attempt)}`;
+  if (typeof run.status !== 'string') return `run ${run.id}: status ${JSON.stringify(run.status)}`;
+  if (run.conclusion !== null && typeof run.conclusion !== 'string') return `run ${run.id}: conclusion ${JSON.stringify(run.conclusion)}`;
+  if (!isInstant(run.run_started_at)) return `run ${run.id}: run_started_at ${JSON.stringify(run.run_started_at)}`;
+  if ('jobs' in run && !(Number.isSafeInteger(run.jobs) && run.jobs >= 0)) return `run ${run.id}: job count ${JSON.stringify(run.jobs)}`;
+  return null;
 }
 
 /**
- * Read this workflow's earlier runs on main for previousDeploy; any failure is
- * an `{ error }`, never a throw. `workflowRef` is GITHUB_WORKFLOW_REF.
+ * Whether the deploy work before this run finished green. `history` is
+ * `{ runId, attempt, since, runs }`: this run's id and attempt, and every run of
+ * this workflow on every ref created at or after `since` (they share one
+ * concurrency group, so any of them can publish), as the API lists them, with
+ * `jobs`, the job count of a run's latest attempt, where the reader fetched it.
+ *
+ * A re-run (attempt above 1) publishes and checks every site. Otherwise the run
+ * that decides is the one whose latest attempt started last
+ * (`run_started_at`, which a re-run moves), other than this run, among those
+ * that started a job; it must have succeeded. A run cancelled while it waited
+ * started no job and is passed over. Every doubt about that order publishes
+ * every site.
+ *
+ * Returns `{ green: true, run }`, `{ green: false, reason }`, or `{ need: id }`
+ * when it needs that run's job count to go on.
  */
-export async function readDeployHistory({ repository, workflowRef, runId, token, fetch = globalThis.fetch, timeoutMs = 30_000 }) {
+export function previousDeploy({ runId, attempt, since, runs } = {}) {
+  const doubt = (reason) => ({ green: false, reason });
+  const attemptNumber = Number(attempt);
+  if (!Number.isSafeInteger(attemptNumber) || attemptNumber < 1) return doubt(`this run's attempt is unknown (${JSON.stringify(attempt)})`);
+  if (attemptNumber > 1) return doubt(`re-run (attempt ${attemptNumber})`);
+  if (!Number.isSafeInteger(runId) || !isInstant(since) || !Array.isArray(runs)) return doubt('no run history');
+  const malformed = runs.map(malformedRun).find(Boolean);
+  if (malformed) return doubt(`malformed run history (${malformed})`);
+  const current = runs.find(({ id }) => id === runId);
+  if (!current) return doubt(`run ${runId} is not in the run history`);
+  if (current.run_attempt !== 1) return doubt(`the run history has run ${runId} at attempt ${current.run_attempt}`);
+  const started = (run) => Date.parse(run.run_started_at);
+  const start = started(current);
+  const others = runs.filter((run) => run !== current);
+  // The concurrency group runs one deploy at a time, so an earlier run still going means the order is unknown.
+  const unfinished = others.find((run) => run.status !== 'completed' && started(run) <= start);
+  if (unfinished) return doubt(`run ${unfinished.id} is ${unfinished.status} and started before this run`);
+  const sameStart = new Map();
+  for (const run of runs) sameStart.set(started(run), (sameStart.get(started(run)) ?? 0) + 1);
+  const completed = others.filter(({ status }) => status === 'completed').sort((a, b) => started(b) - started(a));
+  for (const run of completed) {
+    if (sameStart.get(started(run)) > 1) return doubt(`run ${run.id} started at the same instant as another run`);
+    if (!('jobs' in run)) return { need: run.id };
+    if (run.jobs === 0 && run.run_attempt === 1) continue;
+    // A later attempt that started no job leaves an earlier attempt's work unaccounted for.
+    if (run.jobs === 0) return doubt(`run ${run.id} attempt ${run.run_attempt} started no job after an earlier attempt`);
+    if (started(run) >= start) return doubt(`run ${run.id} ran after this run started`);
+    if (started(run) < Date.parse(since) + (RERUN_LIMIT_DAYS + 1) * DAY_MS) {
+      return doubt(`run ${run.id} started ${run.run_started_at}, before the run history read is certain`);
+    }
+    if (run.conclusion !== 'success') {
+      return doubt(`previous deploy run ${run.id}${run.run_attempt > 1 ? ` attempt ${run.run_attempt}` : ''} ${run.conclusion}`);
+    }
+    return { green: true, run };
+  }
+  return doubt('no earlier deploy run that started a job');
+}
+
+/**
+ * Read the run history previousDeploy decides on; any failure is an
+ * `{ error }`, never a throw. A re-run reads nothing. It lists every run of this
+ * workflow on every ref created in the last HISTORY_DAYS days, then the job
+ * count of each run previousDeploy asks for. One deadline covers every request
+ * and body. `workflowRef` is GITHUB_WORKFLOW_REF.
+ */
+export async function readDeployHistory({ repository, workflowRef, runId, attempt, token, apiUrl, fetch = globalThis.fetch, timeoutMs = HISTORY_TIMEOUT_MS, now = Date.now() }) {
+  if (String(attempt) !== '1') return { runId: Number(runId), attempt };
+  const limit = deadline(timeoutMs, 'GitHub API: ');
   try {
     const workflow = /\/\.github\/workflows\/([^@/]+)@/.exec(workflowRef ?? '')?.[1];
     if (!repository || !workflow || !Number(runId) || !token) throw new Error('no repository, workflow, run id or token');
+    const headers = { accept: 'application/vnd.github+json', authorization: `Bearer ${token}`, 'x-github-api-version': '2022-11-28' };
     const get = async (path) => {
-      const headers = { accept: 'application/vnd.github+json', authorization: `Bearer ${token}`, 'x-github-api-version': '2022-11-28' };
-      const response = await fetchWithin(fetch, `https://api.github.com/repos/${repository}${path}`, { headers }, timeoutMs);
+      const response = await limit.within(fetch(`${apiUrl ?? 'https://api.github.com'}/repos/${repository}${path}`, { headers, signal: limit.signal }));
       if (response.status !== 200) throw new Error(`GitHub API ${path}: HTTP ${response.status}`);
-      return response.json();
+      return JSON.parse(await limit.within(response.text()));
     };
-    const listed = (await get(`/actions/workflows/${encodeURIComponent(workflow)}/runs?branch=main&per_page=20`)).workflow_runs;
-    if (!Array.isArray(listed)) throw new Error('GitHub API: no workflow_runs');
-    const runs = [];
-    for (const { id, status, conclusion } of listed.filter((run) => run.id < Number(runId))) {
-      const jobs = conclusion === 'cancelled' ? (await get(`/actions/runs/${id}/jobs?filter=all&per_page=1`)).total_count : undefined;
-      runs.push({ id, status, conclusion, jobs });
+    const since = new Date(Math.floor((now - HISTORY_DAYS * DAY_MS) / 1000) * 1000).toISOString().replace('.000Z', 'Z');
+    const listed = new Map();
+    let total;
+    for (let page = 1; total === undefined || (page - 1) * HISTORY_PAGE < total; page++) {
+      const query = `per_page=${HISTORY_PAGE}&page=${page}&exclude_pull_requests=true&created=${encodeURIComponent(`>=${since}`)}`;
+      const answer = await get(`/actions/workflows/${encodeURIComponent(workflow)}/runs?${query}`);
+      if (!Number.isSafeInteger(answer?.total_count) || !Array.isArray(answer.workflow_runs)) throw new Error('GitHub API: no workflow runs');
+      if (total !== undefined && answer.total_count !== total) throw new Error('the run history changed while it was read');
+      total = answer.total_count;
+      if (total > HISTORY_MAX_RUNS) throw new Error(`${total} runs since ${since}, more than the ${HISTORY_MAX_RUNS} the plan reads`);
+      for (const run of answer.workflow_runs) {
+        listed.set(run?.id, { id: run?.id, run_attempt: run?.run_attempt, status: run?.status, conclusion: run?.conclusion, run_started_at: run?.run_started_at });
+      }
     }
-    return { runs };
+    if (listed.size !== total) throw new Error(`the run history lists ${listed.size} distinct runs of ${total}`);
+    const history = { runId: Number(runId), attempt: 1, since, runs: [...listed.values()] };
+    for (let reads = 0; ; reads++) {
+      const { need } = previousDeploy(history);
+      if (need === undefined) return history;
+      if (reads >= history.runs.length) throw new Error('the run history asks for more job counts than it has runs');
+      const jobs = (await get(`/actions/runs/${need}/jobs?filter=latest&per_page=1`))?.total_count;
+      history.runs = history.runs.map((run) => (run.id === need ? { ...run, jobs } : run));
+    }
   } catch (error) {
     return { error: message(error) };
+  } finally {
+    limit.end();
   }
 }
 
 /**
  * Whether one site is published, and why. `verifyBuild` is true when the site's
  * content may differ from what is live, so the build's pre-deploy checks have to run.
- * `forced` says why every site is published: the previous deploy run was not green.
+ * `forced` says why every site is published: a re-run, or a doubt about the deploy run before this one.
  */
 export function decideSite({ digest, analytics, live, deployAll, forced }) {
   if (deployAll) return { publish: true, verifyBuild: true, reason: 'dispatched run: every site deploys' };
@@ -212,21 +315,23 @@ export function decideSite({ digest, analytics, live, deployAll, forced }) {
   return { publish: false, verifyBuild: false, reason: 'unchanged: the live site has this content and a current usage report' };
 }
 
-/** Why every site is published, or null: the previous deploy run was not green or its history is unreadable. */
+/** Why every site is published, or null: a re-run, a deploy run before this one that was not green, or any doubt about it. */
 export function forcedReason(history) {
-  if (!history?.runs) return `deploy history unreadable (${history?.error ?? 'not read'})`;
-  const previous = previousDeploy(history.runs);
+  if (!history || history.error) return `deploy history unreadable (${history?.error ?? 'not read'})`;
+  const previous = previousDeploy(history);
+  if (previous.need !== undefined) return `deploy history incomplete (no job count for run ${previous.need})`;
   return previous.green ? null : previous.reason;
 }
 
 /**
  * Digest every site in `sitesDir`, compare it with the record its host serves,
  * and write this build's record into each site. Returns one entry per site.
- * `history` is readDeployHistory's answer. `verifyAll` (the daily run) checks
- * every live site, published or not. A site whose plan throws is published.
+ * `history` is readDeployHistory's answer or a promise of it, read while the
+ * sites are digested. `verifyAll` (the daily run) checks every live site,
+ * published or not. A site whose plan throws is published.
  */
-export async function planDeploy({ registry, sitesDir, commit, deployAll = false, verifyAll = false, history, nonce, fetch, write }) {
-  const forced = forcedReason(history);
+export async function planDeploy({ registry, sitesDir, commit, deployAll = false, verifyAll = false, history, nonce, fetch, write, timeoutMs }) {
+  const forced = Promise.resolve(history).then(forcedReason).catch((error) => `deploy history unreadable (${message(error)})`);
   return Promise.all(deploySites(registry).map(async ({ site, host, hosting }) => {
     const entry = { site, host, hosting, url: `https://${host}/` };
     try {
@@ -235,16 +340,52 @@ export async function planDeploy({ registry, sitesDir, commit, deployAll = false
       const [digest, analytics, live] = await Promise.all([
         siteDigest(siteDir, { config }),
         analyticsGeneratedAt(siteDir),
-        readLiveRecord({ site, host, nonce, fetch }),
+        readLiveRecord({ site, host, nonce, fetch, timeoutMs }),
       ]);
       const record = { schema: DIGEST_SCHEMA, site, digest, analyticsGeneratedAt: analytics, commit };
-      const decision = decideSite({ digest, analytics, live, deployAll, forced });
+      const decision = decideSite({ digest, analytics, live, deployAll, forced: await forced });
       await write(join(siteDir, DIGEST_FILE), `${JSON.stringify(record, null, 2)}\n`);
       return { ...entry, digest, live, record, ...decision, verify: decision.publish || verifyAll };
     } catch (error) {
       return { ...entry, publish: true, verifyBuild: true, verify: true, reason: `plan failed (${message(error)})` };
     }
   }));
+}
+
+/**
+ * The plan deploy-pages.yml runs, from the Actions environment. The run history
+ * and every site's live record are read at once, each under its own deadline,
+ * so it returns its outputs within HISTORY_TIMEOUT_MS plus the time to digest
+ * the sites, whatever the network does. Returns the plan, its step outputs and
+ * the job summary.
+ */
+export async function planSiteDeploy({ registry, sitesDir, env, deployAll = false, verifyAll = false, fetch = globalThis.fetch, write, timeouts = {}, now = Date.now() }) {
+  const history = readDeployHistory({
+    repository: env.GITHUB_REPOSITORY,
+    workflowRef: env.GITHUB_WORKFLOW_REF,
+    runId: env.GITHUB_RUN_ID,
+    attempt: env.GITHUB_RUN_ATTEMPT,
+    token: env.GITHUB_TOKEN,
+    apiUrl: env.GITHUB_API_URL,
+    fetch,
+    timeoutMs: timeouts.history,
+    now,
+  });
+  const planned = await planDeploy({
+    registry,
+    sitesDir,
+    commit: env.GITHUB_SHA ?? null,
+    deployAll,
+    verifyAll,
+    history,
+    nonce: `${env.GITHUB_RUN_ID ?? 'local'}-${env.GITHUB_RUN_ATTEMPT ?? now}`,
+    fetch,
+    write,
+    timeoutMs: timeouts.record,
+  });
+  const forced = forcedReason(await history);
+  const summary = `${forced ? `Every site is published: ${forced}.\n\n` : ''}${deploySummary(planned)}`;
+  return { planned, outputs: deployOutputs(planned), summary };
 }
 
 /**
