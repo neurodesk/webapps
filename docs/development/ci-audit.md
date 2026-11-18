@@ -55,43 +55,58 @@ PR/push quality workflow does not run automatically.
 
 ## Scheduled failure reports
 
-`nightly-failures.yml` observes completed scheduled workflows on the default
-branch. It opens one bot-authored issue per failing workflow, comments on new
-run attempts and reopens the issue if a later run fails. Reprocessing the same
-attempt does not add a duplicate comment. Successful runs do not close issues;
-this avoids a delayed success hiding a newer failure.
+`workflow-reports.yml` runs at 00:47, 06:47, 12:47 and 18:47 UTC and on
+manual dispatch (`scripts/report-workflow-failures.mjs`). It asks the Actions
+API for the scheduled runs and the failed runs created in the last seven days
+and checks every run attempt that finished since a successful reporter run
+last listed it (`scripts/lib/workflow-reports.mjs`). A failed or skipped tick
+therefore loses nothing: the next successful tick checks the same attempts.
+An attempt replaced by a rerun before any tick listed it is read from the
+attempts endpoint and checked too. Before the first successful tick, the
+reporter checks the last day only, so dispatch it once after merging it. A report arrives up to six hours after the run finishes.
+
+Every scheduled run on the default branch is checked; no workflow list is
+kept. The reporter opens one bot-authored issue per failing workflow,
+comments on new run attempts and reopens the issue if a later run fails.
+An attempt is reported once, whichever issue of the workflow holds its
+marker, so an overlapping or repeated tick writes nothing. A report reopens a
+closed issue only when the issue was closed before that report; an issue closed
+after its report stays closed. Successful runs do not close issues; this avoids
+a delayed success hiding a newer failure.
 
 Reports include failed steps, bounded log excerpts, artifact links, the commit
 and a rerun command. Cancelled nightlies report incomplete coverage. Superseded
 Pages deployments are excluded unless they also have a failed job. The reporter
 checks out trusted default-branch code and never downloads or executes artifacts.
-Skipped reports for PR/push completions cannot replace a pending nightly report.
 It shares the approval report's GitHub client, which retries a read after a
 dropped connection or a gateway error
-([CI approval reporting](../quality/ci-approval-reporting.md)); writes are not
-retried, and a failure that persists still fails the run.
+([CI approval reporting](../quality/ci-approval-reporting.md)) and lists jobs
+in pages of 30; writes are not retried. A report that fails does not stop the
+others, and the tick then fails so the next one checks that run again.
 
 For read-only verification, set `GH_TOKEN` or `GITHUB_TOKEN` and
 `GITHUB_REPOSITORY`, then run
-`node scripts/report-nightly-failure.mjs --run-id RUN_ID --dry-run`.
-This renders a report without creating or changing an issue.
+`node scripts/report-workflow-failures.mjs --dry-run --since <ISO time> --until <ISO time>`.
+It reads the issues and prints, for each attempt that finished in that range,
+whether it would open an issue, comment on one, or was already reported.
 
 ## Apple notarization alerts
 
-`notarization-alert.yml` watches every workflow that notarizes macOS packages
-(`NOTARIZING_WORKFLOWS` in `scripts/lib/notarization-alert.mjs`), on any branch
-or tag, release dispatches included, but not pull requests. When a failed run's
-failed macOS job log shows Apple refusing a notarization (an expired agreement or
+The same tick checks the failed and timed-out runs of every workflow that
+notarizes macOS packages, on any branch or tag, release dispatches included,
+but not pull requests. The workflows are derived from the workflow files
+(`notarizingWorkflowPaths`: a file that mentions notarization, `APPLE_ID` or
+calls `node-cli-portable.yml`, reusable workflows excluded). When a failed
+macOS job log shows Apple refusing a notarization (an expired agreement or
 bad credentials from the notary service, HTTP 401 or 403, or a submission whose
 status is Invalid or Rejected), it opens the issue "Apple notarization is
 failing" assigned to the account owner, or comments on it, reopens it and
-assigns the owner again, once per run attempt. It has no concurrency group, so
-a burst of failed releases loses no alert; runs that race to open the issue
-merge into the oldest. It reads up to 64 MiB of each failed macOS job's log and
-warns when a log was longer. A Developer ID certificate or keychain failure
-before notarization is not detected. Close the issue after renewing the agreement and rerunning the
-failed jobs. `test/notarization-alert.test.mjs` fails when a workflow that
-notarizes is missing from the list.
+assigns the owner again, once per run attempt. Ticks never overlap; two
+alert issues opened anyway merge into the oldest. It reads up to 64 MiB of each failed macOS job's log and warns when a log was
+longer. A Developer ID certificate or keychain failure before notarization is
+not detected. A failed attempt that is rerun to success before the next tick
+is not alerted: the rerun shows that notarization works again. Close the issue
+after renewing the agreement and rerunning the failed jobs.
 
 ## Boundaries
 

@@ -1,0 +1,42 @@
+name: workflow failure reports
+
+# Four times a day, report the workflow runs that finished since the last
+# successful tick (scripts/lib/workflow-reports.mjs): an issue per failing
+# scheduled workflow on the default branch, and the Apple notarization alert
+# for failed non-pull-request runs of every workflow that notarizes.
+
+on:
+  schedule:
+    - cron: '47 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+# One tick at a time, so two ticks never report the same run together. A
+# pending tick replaced by a newer one loses nothing: each tick starts from
+# the last successful one.
+concurrency:
+  group: workflow-failure-reports
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # Never execute contributor code in this privileged reporting job, and never download artifacts.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.22.0
+      - name: Report failed workflow runs
+        run: node scripts/report-workflow-failures.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}

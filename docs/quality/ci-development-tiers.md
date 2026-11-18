@@ -120,7 +120,7 @@ notices is the one thing such a skipped sweep leaves a day stale.
   file there when a push must test it at once.
 - To test a shared change on every target before merging, dispatch the
   workflow on the branch.
-- A failed sweep opens an issue through `nightly-failures.yml`, like every
+- A failed sweep opens an issue through `workflow-reports.yml`, like every
   scheduled workflow.
 - Replay a sweep with
   `GITHUB_REPOSITORY=neurodesk/webapps GITHUB_TOKEN=$(gh auth token) node scripts/workflow-gate.mjs --workflow <name> --sweep`.
