@@ -76,7 +76,8 @@ test('desktop builds run on the daily schedule or by hand, and publish only on s
     assert.ok(!flow.jobs[name].steps.some(step => /pnpm build/.test(step.run || '')), `${name} reuses the one build`);
   }
   for (const [name, job] of Object.entries(flow.jobs)) {
-    if (job.uses) continue;
+    // decide only answers whether to build (test/standalone-gate.test.mjs).
+    if (job.uses || name === 'decide') continue;
     const checkout = job.steps.find(step => step.uses?.startsWith('actions/checkout@'));
     assert.equal(checkout.with?.ref, undefined, 'use the scheduled run commit for every job');
     const stamp = job.steps.find(step => step.run === 'node scripts/desktop/daily-version.mjs');
@@ -194,7 +195,7 @@ test('desktop source approval runs on Windows without an offline bundle or depen
       for (const publish of [false, true]) {
         const context = { github: { event_name: event }, inputs: { source_approval_only: only, publish } };
         assert.equal(runInNewContext(standalone.jobs['source-approval'].if, context), event === 'workflow_dispatch' && only);
-        assert.equal(runInNewContext(standalone.jobs.bundle.if, context), event !== 'workflow_dispatch' || !only);
+        assert.equal(runInNewContext(standalone.jobs.decide.if, context), event !== 'workflow_dispatch' || !only);
         assert.equal(runInNewContext(standalone.jobs.publish.if, context), !only && (event === 'schedule' || publish));
       }
     }
