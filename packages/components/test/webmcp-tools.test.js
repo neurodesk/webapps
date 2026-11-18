@@ -379,3 +379,12 @@ test('every tool checks its input against the schema it publishes before it runs
   assert.deepEqual(asked, [], 'no malformed question reached the person');
   assert.deepEqual(await call('user_ask', { question: 'Valid', options: ['OK'] }), { answer: 'OK' });
 });
+
+test('every tool marks its result untrusted except the few whose results only the app author writes', async t => {
+  const { tools } = page(t, async () => labels());
+  const trusted = tools.filter(tool => !tool.annotations.untrustedContentHint).map(tool => tool.name).sort();
+  assert.deepEqual(trusted, ['inputs_load_example', 'outputs_download', 'viewers_list']);
+  for (const name of ['viewers_state', 'viewers_tab', 'viewers_regions', 'viewers_crosshair']) {
+    assert.equal(tools.find(tool => tool.name === name).annotations.untrustedContentHint, true, `${name} returns tab labels and region names the person controls`);
+  }
+});

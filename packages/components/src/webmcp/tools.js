@@ -8,7 +8,9 @@ const POLL_MS = 250;
 const DEFAULT_WAIT_SECONDS = 30;
 const MAX_WAIT_SECONDS = 600;
 const readOnly = { readOnlyHint: true };
-const untrusted = { untrustedContentHint: true };
+// Results hold file names, report text, the person's answers, tab labels or region names unless the
+// tool is listed here: these return only what the app's author wrote or what the agent sent.
+const TRUSTED_CONTENT = new Set(['inputs_load_example', 'outputs_download', 'viewers_list']);
 const object = (properties, required = []) => ({ type: 'object', properties, ...(required.length && { required }), additionalProperties: false });
 const viewerId = { type: 'string', description: 'A viewer ID from viewers_list' };
 const toolName = operation => `run_${operation.replaceAll('-', '_')}`;
@@ -128,7 +130,8 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
   const runTools = Object.fromEntries(Object.keys(contract.operations).map(name => [name, toolName(name)]));
   const tools = [];
   const tool = (name, title, description, inputSchema, annotations, execute) => tools.push({
-    name, title, description, inputSchema, annotations,
+    name, title, description, inputSchema,
+    annotations: { ...annotations, ...(!TRUSTED_CONTENT.has(name) && { untrustedContentHint: true }) },
     async execute(input = {}, options = {}) {
       const issues = schemaIssues(inputSchema, input);
       if (issues.length) return { error: { code: 'INVALID_INPUT', message: issues.join('; ') } };
@@ -142,7 +145,7 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
 
   tool('app_describe', 'Describe this application',
     `Read what ${contract.title} does: its operations with their inputs, parameters and outputs, its examples (and why any cannot be loaded), its viewers, the current run, the files each input role holds and the files the user has loaded into the page (pageFiles).`,
-    object({}), { ...readOnly, ...untrusted },
+    object({}), readOnly,
     async () => {
       const entries = await catalog();
       return {
@@ -168,7 +171,7 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
     object({
       role: { type: 'string', enum: [...roles.keys()], description: 'The input role to fill' },
       message: { type: 'string', description: 'Why these files are needed, shown to the user' },
-    }, ['role']), untrusted,
+    }, ['role']), {},
     async ({ role, message }, { signal }) => {
       const field = roles.get(role);
       const files = await requestFiles({ label: field.description, formats: field.formats, message, minimum: field.minimum, maximum: field.maximum, folder: field.folder }, { signal });
@@ -182,7 +185,7 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
     object({
       role: { type: 'string', enum: [...roles.keys()], description: 'The input role to fill' },
       input: { type: 'string', description: 'The input key from pageFiles' },
-    }, ['role', 'input']), untrusted,
+    }, ['role', 'input']), {},
     async ({ role, input }) => {
       return { role, files: describeFiles(inputs.usePage(role, input)) };
     });
@@ -207,7 +210,7 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
   for (const [name, operation] of Object.entries(contract.operations)) {
     tool(runTools[name], operation.title,
       `${operation.description} Runs on the files the input roles hold (see inputs_request_files, inputs_use_page_files and inputs_load_example) and shows the result in the page. The files stay held, so run again with other parameters without asking for them again. Waits up to waitSeconds, then returns the run; call runs_get to keep waiting. A failed run with code SERIES_SELECTION_REQUIRED lists candidates: ask the user with user_ask and run again with selections.`,
-      runSchema(operation), untrusted,
+      runSchema(operation), {},
       async ({ parameters, inputs: sources, selections, waitSeconds: seconds = DEFAULT_WAIT_SECONDS }, { signal }) => {
         const active = await snapshot();
         if (!terminal.has(active.state)) {
@@ -225,12 +228,12 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
 
   tool('runs_get', 'Read the current run',
     'Read the current run: its state, progress, report or error. Waits up to waitSeconds for a running run to finish.',
-    object({ runId: { type: 'string' }, waitSeconds: waitSeconds(0) }), { ...readOnly, ...untrusted },
+    object({ runId: { type: 'string' }, waitSeconds: waitSeconds(0) }), readOnly,
     async ({ runId, waitSeconds: seconds = 0 }, { signal }) => settle(runId ?? (await snapshot()).runId, seconds, signal));
 
   tool('runs_cancel', 'Cancel the current run',
     'Cancel the current run. A finished run stays as it is.',
-    object({ runId: { type: 'string' } }), untrusted,
+    object({ runId: { type: 'string' } }), {},
     async ({ runId }) => {
       const current = await snapshot();
       if (runId !== undefined && current.runId !== runId) throw gone(runId, current);
@@ -253,7 +256,7 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
       question: { type: 'string', minLength: 1 },
       options: { type: 'array', items: { type: 'string', minLength: 1 }, maxItems: 8 },
       allowText: { type: 'boolean' },
-    }, ['question']), untrusted,
+    }, ['question']), {},
     ({ question, options, allowText }, { signal }) => askUser({ question, options, allowText }, { signal }));
 
   const position = object({
@@ -274,17 +277,17 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
     ['crosshair', 'Move a viewer\'s crosshair to three world coordinates in millimetres. Returns the snapped position.', { viewerId, position }, ['viewerId', 'position'], {}],
     ['tab', 'Select a viewer tab by its reported ID.', { viewerId, tabId: { type: 'string' } }, ['viewerId', 'tabId'], {}],
     ['regions', 'Read the regions a viewer exposes.', { viewerId }, ['viewerId'], readOnly, 'regions'],
-    ['volumes', 'List the volumes loaded in a viewer with their colormap, display range, opacity and dimensions.', { viewerId }, ['viewerId'], { ...readOnly, ...untrusted }, 'volumes'],
+    ['volumes', 'List the volumes loaded in a viewer with their colormap, display range, opacity and dimensions.', { viewerId }, ['viewerId'], readOnly, 'volumes'],
     ['display', 'Set a viewer\'s slice type and per-volume colormap, display range (calMin, calMax), opacity or visibility.', {
       viewerId,
       sliceType: { type: 'string', enum: ['axial', 'coronal', 'sagittal', 'multiplanar', 'render'] },
       volumes: { type: 'array', items: volumeDisplay },
-    }, ['viewerId'], untrusted],
+    }, ['viewerId'], {}],
     ['niivue', 'Call an nv-mcp NiiVue tool on a viewer by method name and params; without a method, read the scene.', {
       viewerId,
       method: { type: 'string', minLength: 1 },
       params: { type: 'object' },
-    }, ['viewerId'], untrusted],
+    }, ['viewerId'], {}],
   ]) {
     tool(`viewers_${name}`, `Viewer ${name}`, description, object(properties, required), annotations, async args => {
       const value = await dispatch(`viewers.${name}`, args);
