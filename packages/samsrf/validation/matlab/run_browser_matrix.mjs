@@ -14,8 +14,10 @@
 //
 // Usage: node run_browser_matrix.mjs PLAN_JSON BUNDLE BUNDLE_SHA256_JSON OUTPUT_ROOT
 //
-// The app has no subject-HRF file route, so runs whose model names an hrf_*.mat are
-// written as `unsupported` with the engine's message. They are not agreement.
+// The app has no subject-HRF file route, so a run whose model names an hrf_*.mat is
+// `unsupported` when the engine stops with exactly the subject-HRF text that
+// expectedEngineOutcome names. Any other failure, a crash included, is `failed`.
+// Neither is agreement.
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -23,7 +25,7 @@ import { extname, join, normalize, relative, sep } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
-import { treeHashes, webRun } from './run_web_matrix.mjs';
+import { failureStatus, treeHashes, webRun } from './run_web_matrix.mjs';
 
 const repo = fileURLToPath(new URL('../../../../', import.meta.url));
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -165,8 +167,7 @@ async function main([planPath, bundle, manifestPath, output, ...rest]) {
         });
       } catch (error) {
         const message = error.message.replace(/^page\.evaluate: (Error: )?/, '').split('\n')[0];
-        record.status = /is not supported by this port/.test(message) ? 'refused'
-          : typeof run.model.Hrf === 'string' && run.model.Hrf.startsWith('hrf_') ? 'unsupported' : 'failed';
+        record.status = failureStatus(run, 'browser', message);
         record.message = message;
       }
       record.seconds = Number(((performance.now() - started) / 1000).toFixed(1));

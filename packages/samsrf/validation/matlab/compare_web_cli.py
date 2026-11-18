@@ -31,11 +31,12 @@ Each run is classed:
   largest absolute, relative and ULP differences (+0 and -0 are the same ordinal;
   signedZeroOnly counts them), and whether the masks agree.
 - `refused`: MATLAB succeeded and the engine refused a run it is expected to refuse
-  (single RC with a fitted profile, single CF Gaussian).
+  (single RC with a fitted profile, single CF Gaussian) with exactly the core's text.
 - `unsupported`: MATLAB succeeded and the browser runner could not offer the run's
-  input (a subject-HRF file).
-- `failed`: anything else: MATLAB failed, the web failed, or the web status is not
-  the expected one. Both sides' statuses are kept.
+  input (a subject-HRF file): the record carries exactly the core's subject-HRF text.
+- `failed`: anything else: MATLAB failed, the web failed, the web status is not the
+  expected one, or an expected refusal carries other text (a crash, for example; the
+  run then names `expectedMessage`). Both sides' statuses are kept.
 - `inventory-error`: missing, extra, empty, truncated or inconsistent files: a GIfTI
   that does not cover every vertex, an ROI that is not unique integers in 1..vertices,
   maps.f64 or maps.imag.f64 of the wrong length or hash, labels or ROI that differ
@@ -77,6 +78,11 @@ def sha256_bytes(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def is_sha256(value):
+    """A lowercase hex SHA-256 and nothing else (re.match's $ would also accept a trailing newline)."""
+    return isinstance(value, str) and SHA256.fullmatch(value) is not None
+
+
 def read_json(path):
     try:
         return json.loads(Path(path).read_text())
@@ -105,17 +111,23 @@ def validate_plan(plan, manifest):
             raise Inventory(f'{run["id"]}: the plan model is not the bundle manifest model file')
 
 
-def expected_web_status(run, runner):
+def expected_web_outcome(run, runner):
+    """What the engine must do with a plan run on this runner, with the exact text of an
+    expected refusal; run_web_matrix.mjs's expectedEngineOutcome says the same."""
     model = run['model']
     single = run['precision'] == 'single'
+    # exes/samsrf/core/src/model.rs: Error::NotImplemented.
     if single and run['algorithm'] == 'rc' and model.get('Prf_Function', 0) != 0:
-        return 'refused'
+        return {'status': 'refused',
+                'message': 'Data_Precision=single with a Prf_Function fit is not supported by this port'}
     if single and run['algorithm'] == 'cf' and model.get('Fit_pRF') == 1:
-        return 'refused'
+        return {'status': 'refused', 'message': 'Data_Precision=single with Fit_pRF=1 is not supported by this port'}
     hrf = model.get('Hrf')
     if runner == 'browser' and isinstance(hrf, str) and hrf.startswith('hrf_'):
-        return 'unsupported'
-    return 'succeeded'
+        # exes/samsrf/core/src/hrf.rs resolve(): nothing in the browser loads the subject-HRF file.
+        return {'status': 'unsupported', 'message': f'model: Hrf {hrf} is an old-school HRF fit file: '
+                                                    'the caller must load its fP and call hrf::old_school'}
+    return {'status': 'succeeded'}
 
 
 def normalised_argv(argv):
@@ -134,7 +146,7 @@ def matlab_execution(root, plan, manifest, allow_unattested):
     if environment.get('execution') == 'compiled-runtime':
         kind = 'compiled-runtime'
         image = environment.get('image') or {}
-        if not IMAGE_ID.match(str(image.get('id', ''))):
+        if not IMAGE_ID.fullmatch(str(image.get('id', ''))):
             raise Inventory('the compiled receipts do not name an image ID')
         identity = {'kind': kind, 'image': image,
                     'cpu': cpu_model((environment.get('host') or {}).get('lscpu')),
@@ -185,7 +197,7 @@ def web_execution(root, plan, plan_sha, manifest_sha):
         raise Inventory('the web execution ran another plan file')
     if environment.get('bundleSha256') != manifest_sha:
         raise Inventory('the web execution ran on another bundle manifest')
-    if not SHA256.match(str(environment.get('wasmSha256', ''))):
+    if not is_sha256(environment.get('wasmSha256')):
         raise Inventory('the web environment names no WebAssembly hash')
     allowed = {'environment.json', 'runs.json'}
     records = {}
@@ -301,10 +313,17 @@ def matlab_results(entries, precision, labels):
     return numpy.ascontiguousarray(data), imaginary, roi.astype(numpy.int64) - 1, count
 
 
-def compare_maps(run, web, web_dir, matlab_dir):
-    mat, labels, maps = expected_results(run)
-    if web.get('values') != labels:
-        raise Inventory(f'web map labels {web.get("values")} differ from the contract {labels}')
+def names_in(directory):
+    if not directory.is_dir():
+        raise Inventory(f'missing directory {directory}')
+    return {path.name for path in directory.iterdir()}
+
+
+def web_files(run, web, web_dir):
+    """A succeeded web run's exported files: every contract map, at most the polar angle and
+    eccentricity maps besides, and exactly what its directory holds beside maps.f64 and,
+    when the record names its hash, maps.imag.f64 (the imaginary parts of a complex Srf.Data)."""
+    mat, _, maps = expected_results(run)
     files = web.get('files')
     if not isinstance(files, list) or len(set(files)) != len(files) or not set(maps) <= set(files):
         raise Inventory('the web record does not list every contract map')
@@ -313,16 +332,34 @@ def compare_maps(run, web, web_dir, matlab_dir):
     if not set(web_only) <= {f'{stem}_pol.gii', f'{stem}_ecc.gii'}:
         raise Inventory(f'unexpected web files {web_only}')
     imaginary_sha = web.get('imaginarySha256')
+    if imaginary_sha is not None and not is_sha256(imaginary_sha):
+        raise Inventory('the web record names an invalid imaginarySha256')
     data_files = {'maps.f64', 'maps.imag.f64'} if imaginary_sha is not None else {'maps.f64'}
-    if {path.name for path in web_dir.iterdir()} != set(files) | data_files:
+    if names_in(web_dir) != set(files) | data_files:
         raise Inventory('the web run directory differs from its record')
-    present = {path.name for path in matlab_dir.iterdir()}
+    return files, web_only
+
+
+def matlab_outputs(run, matlab_dir):
+    """A succeeded MATLAB run's files beyond its results: every result present, the rest staged
+    inputs or SamSrf's intermediate files (MATLAB_EXTRA). Returns those, sorted."""
+    mat, _, maps = expected_results(run)
+    present = names_in(matlab_dir)
     missing = sorted({mat, *maps} - present)
     if missing:
         raise Inventory(f'missing MATLAB results {missing}')
     matlab_only = sorted(present - {mat, *maps})
-    if any(not MATLAB_EXTRA.match(name) for name in matlab_only):
+    if any(not MATLAB_EXTRA.fullmatch(name) for name in matlab_only):
         raise Inventory(f'unexpected MATLAB files {matlab_only}')
+    return matlab_only
+
+
+def compare_maps(run, web, web_dir, matlab_dir):
+    mat, labels, maps = expected_results(run)
+    if web.get('values') != labels:
+        raise Inventory(f'web map labels {web.get("values")} differ from the contract {labels}')
+    _, web_only = web_files(run, web, web_dir)
+    matlab_only = matlab_outputs(run, matlab_dir)
     entries = {key: (kind, values) for key, kind, values in read_mat(matlab_dir / mat)}
     data, imaginary, roi, vertices = matlab_results(entries, run['precision'], labels)
     if web.get('vertices') != vertices:
@@ -338,6 +375,7 @@ def compare_maps(run, web, web_dir, matlab_dir):
         return numpy.frombuffer(raw, dtype='<f8').reshape(len(labels), vertices)
 
     rows = web_rows('maps.f64', web.get('mapsSha256'))
+    imaginary_sha = web.get('imaginarySha256')
     imaginary_rows = numpy.zeros_like(rows) if imaginary_sha is None else web_rows('maps.imag.f64', imaginary_sha)
     results = []
     for index, (label, name) in enumerate(zip(labels, maps)):
@@ -365,17 +403,21 @@ def compare_maps(run, web, web_dir, matlab_dir):
 
 
 def compare_run(run, web, matlab, runner, web_root, matlab_root):
-    expected = expected_web_status(run, runner)
+    expected = expected_web_outcome(run, runner)
     report = {'id': run['id'], 'precision': run['precision'], 'algorithm': run['algorithm'],
-              'status': {'web': web['status'], 'matlab': matlab['status'], 'expectedWeb': expected},
+              'status': {'web': web['status'], 'matlab': matlab['status'], 'expectedWeb': expected['status']},
               'maps': []}
     if web.get('message') or matlab.get('message'):
         report['message'] = {'web': web.get('message'), 'matlab': matlab.get('message')}
-    if matlab['status'] != 'succeeded' or web['status'] != expected or web['status'] == 'failed':
+    refusal = 'message' in expected
+    if refusal and web['status'] == expected['status'] and web.get('message') != expected['message']:
+        report['expectedMessage'] = expected['message']
+    if (matlab['status'] != 'succeeded' or web['status'] != expected['status'] or web['status'] == 'failed'
+            or 'expectedMessage' in report):
         report['class'] = 'failed'
         return report
-    if expected in ('refused', 'unsupported'):
-        report['class'] = expected
+    if refusal:
+        report['class'] = expected['status']
         return report
     try:
         maps, complex_data, web_only, matlab_only = compare_maps(run, web, web_root / run['id'], matlab_root / run['id'])
@@ -412,7 +454,8 @@ def compare(plan, plan_sha, manifest, manifest_sha, web_root, matlab_root, expec
             'runs': len(runs),
             **{f'{value}Runs': count(runs, value) for value in ('exact', 'differs', 'refused', 'unsupported', 'failed', 'inventory-error')},
             'matlabFailedRuns': sum(run['status']['matlab'] != 'succeeded' for run in failed),
-            'webUnexpectedRuns': sum(run['status']['web'] != run['status']['expectedWeb'] or run['status']['web'] == 'failed' for run in failed),
+            'webUnexpectedRuns': sum(run['status']['web'] != run['status']['expectedWeb'] or run['status']['web'] == 'failed'
+                                     or 'expectedMessage' in run for run in failed),
             'maps': len(maps),
             'exactMaps': count(maps, 'exact'),
             'differingMaps': count(maps, 'differs'),

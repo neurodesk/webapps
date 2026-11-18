@@ -8,13 +8,13 @@ site:
     host: webapps.sciget.org
     title: SciGet Webapps
     heading: Run Scientific Software in Your Browser
-    description: Scientific software that runs locally in your browser, grouped by field.
+    description: Scientific software that runs locally in your browser.
     brand:
       name: SciGet
       logo: sciget-logo.svg
       icon: sciget-icon.svg
       theme: sciget
-      home: https://webapps.sciget.org/
+      home: https://sciget.org/
       more_apps: More SciGet web apps
   # Every app has one home catalogue (its `catalog:`); `also_in:` lists other
   # catalogues whose hosts serve a copy. Handoff menus list the apps of one host.
@@ -50,7 +50,7 @@ site:
         logo: sciget-logo.svg
         icon: sciget-icon.svg
         theme: sciget
-        home: https://webapps.sciget.org/
+        home: https://sciget.org/
         more_apps: More MSK web apps
       desktop:
         product_name: MSK Webapps
@@ -68,7 +68,7 @@ site:
         logo: sciget-logo.svg
         icon: sciget-icon.svg
         theme: sciget
-        home: https://webapps.sciget.org/
+        home: https://sciget.org/
         more_apps: More microscopy web apps
       desktop:
         product_name: Microscopy Webapps
@@ -86,7 +86,7 @@ site:
         logo: sciget-logo.svg
         icon: sciget-icon.svg
         theme: sciget
-        home: https://webapps.sciget.org/
+        home: https://sciget.org/
         more_apps: More preclinical web apps
       desktop:
         product_name: Preclinical Webapps
