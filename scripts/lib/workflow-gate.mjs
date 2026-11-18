@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { createAppPlan, selectAffectedApps, standaloneImpact } from './app-plan.mjs';
@@ -23,6 +24,14 @@ import { reachableFrom } from './workspace-graph.mjs';
 // not seen. A push to main starts a workflow only for its own paths, so the
 // nightly sweep (sweepWorkflow) is what first tests such a file, and what
 // builds every target for a shared change the gate did let through.
+//
+// A workflow lists its shared filters in its gate job (`shared_paths`), not in
+// `on.pull_request.paths`, so that a pull request touching only shared trees
+// starts one workflow run, native.yml, instead of one per workflow. native.yml
+// decides for every such workflow at once and calls the ones that run
+// (dispatchDecision); its nightly run is their sweep. A pull request that also
+// changes one of a workflow's own paths starts the workflow itself, and the
+// workflow's gate decides with both kinds of filter, as before.
 
 const ROOT_MANIFESTS = ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml'];
 const SHARED_TREE = /^(?:packages|exes|scripts|test|test-utils|registry|models)\/\*\*$/;
@@ -46,6 +55,34 @@ export function pathGlob(pattern) {
     .replace(/\*/g, '[^/]*')
     .replaceAll('\u0000', '.*');
   return new RegExp(`^${source}$`);
+}
+
+// The workflow native.yml is, and the gate job in it that decides for the workflows it calls.
+export const DISPATCHER = 'native';
+const DISPATCHER_GATE = 'gate / decide';
+
+// The shared filters a workflow's gate job lists, one per line.
+export function sharedPaths(flow) {
+  const text = flow?.jobs?.gate?.with?.shared_paths;
+  return typeof text === 'string' ? text.split('\n').map((line) => line.trim()).filter(Boolean) : [];
+}
+
+// Every pull request filter of a workflow: the paths that start it (its own)
+// and the shared paths for which native.yml calls it. Undefined without a
+// pull request path filter.
+export function pullRequestFilters(flow) {
+  const own = flow?.on?.pull_request?.paths;
+  return Array.isArray(own) ? [...own, ...sharedPaths(flow)] : undefined;
+}
+
+// native.yml decides pull requests for every workflow that lists shared paths,
+// and sweeps nightly those of them that a push to main also starts: a workflow
+// never tested on main has nothing to keep in step there.
+export function dispatched(flow) {
+  return sharedPaths(flow).length > 0;
+}
+export function swept(flow) {
+  return dispatched(flow) && Boolean(flow.on?.push);
 }
 
 // A workflow owns the packages it filters on whole.
@@ -84,8 +121,8 @@ const RELEASE_SPEC = /^packages\/[^/]+\/release\.json$/;
 
 export function decideWorkflow({ flow, calledFlows = [], changedPaths: allPaths, registry, graph, manifests = new Map(), root }) {
   const run = (reason) => ({ run: true, reason });
-  const filters = flow?.on?.pull_request?.paths;
-  if (!Array.isArray(filters)) return run('the workflow has no pull request path filter');
+  const filters = pullRequestFilters(flow);
+  if (!filters) return run('the workflow has no pull request path filter');
   if (filters.some((filter) => filter.startsWith('!'))) return run('the workflow excludes paths, which the gate does not analyse');
   if (!allPaths.length) return run('the changed paths are unknown');
 
@@ -160,6 +197,128 @@ export function decideWorkflow({ flow, calledFlows = [], changedPaths: allPaths,
   };
 }
 
+// The paths a comparison changed, read NUL-delimited so that no name is
+// trimmed, quoted or split: { ok: true, paths, renamed } with both sides of
+// every rename or copy in `paths` and in `renamed`, or { ok: false, reason }
+// when git cannot compare the two commits. An unreadable diff is never an
+// empty one.
+export function readChangedPaths({ base, head = 'HEAD', cwd }) {
+  if (!base || /^0+$/.test(base)) return { ok: false, reason: 'no base commit to compare with' };
+  let output;
+  try {
+    output = execFileSync('git', ['diff', '-z', '--name-status', '--find-renames', '--find-copies', `${base}...${head}`], { cwd, encoding: 'utf8', maxBuffer: 1 << 28, stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (error) {
+    return { ok: false, reason: `git diff ${base}...${head} failed: ${String(error.stderr || error.message).trim().split('\n')[0]}` };
+  }
+  const fields = output.split('\0');
+  const paths = new Set();
+  const renamed = new Set();
+  for (let index = 0; index < fields.length - 1;) {
+    const status = fields[index++];
+    const names = /^[RC]/.test(status) ? [fields[index++], fields[index++]] : [fields[index++]];
+    if (names.some((name) => name === undefined)) return { ok: false, reason: `git diff ${base}...${head} printed an incomplete entry` };
+    for (const name of names) {
+      paths.add(name);
+      if (names.length > 1) renamed.add(name);
+    }
+  }
+  return { ok: true, paths: [...paths], renamed };
+}
+
+// GitHub matches a pull request's path filters against at most this many changed files.
+const GITHUB_DIFF_LIMIT = 3000;
+// A changed path GitHub's filter matching and pathGlob certainly read alike: ASCII
+// letters, digits and . _ @ + - in segments, no spaces, quotes or glob characters.
+const PLAIN_PATH = /^[A-Za-z0-9._@+-]+(?:\/[A-Za-z0-9._@+-]+)*$/;
+const PLAIN = '[A-Za-z0-9._@+-]';
+
+// A test that certainly agrees with GitHub's documented path filter for this
+// own filter, or null where the filter has a form this does not model: a
+// literal path, a literal directory followed by `**`, or one `*` in the last
+// segment. A wildcard never stands for a segment that starts with a dot.
+function certainMatcher(filter) {
+  if (new RegExp(`^${PLAIN}+(?:/${PLAIN}+)*$`).test(filter)) return (path) => path === filter;
+  const tree = filter.match(new RegExp(`^((?:${PLAIN}+/)+)\\*\\*$`));
+  if (tree) return (path) => path.startsWith(tree[1]) && !/(?:^|\/)\./.test(path.slice(tree[1].length));
+  const leaf = filter.match(new RegExp(`^((?:${PLAIN}+/)*)(${PLAIN}*)\\*(${PLAIN}*)$`));
+  if (leaf) {
+    const [, directory, start, end] = leaf;
+    return (path) => {
+      if (!path.startsWith(directory)) return false;
+      const name = path.slice(directory.length);
+      return !name.includes('/') && !name.startsWith('.') && name.length >= start.length + end.length && name.startsWith(start) && name.endsWith(end);
+    };
+  }
+  return null;
+}
+
+// The changed path and own filter that make it certain GitHub started a
+// workflow for a pull request itself, or null when that is not certain: the
+// comparison is not below GitHub's file limit, or every own match is a side
+// of a rename or copy, an unusual path or a filter form certainMatcher does
+// not model. `diff` is readChangedPaths's answer.
+export function certainOwnStart(flow, { paths, renamed = new Set() }) {
+  if (!(paths.length < GITHUB_DIFF_LIMIT)) return null;
+  const filters = flow.on?.pull_request?.paths ?? [];
+  // An exclusion can undo a match that comes before it.
+  if (filters.some((filter) => filter.startsWith('!'))) return null;
+  const matchers = filters.map((filter) => ({ filter, matches: certainMatcher(filter) })).filter(({ matches }) => matches);
+  for (const path of paths) {
+    if (renamed.has(path) || !PLAIN_PATH.test(path)) continue;
+    const own = matchers.find(({ matches }) => matches(path));
+    if (own) return { path, filter: own.filter };
+  }
+  return null;
+}
+
+// The skip verdict native.yml gives a workflow GitHub certainly started itself.
+export const startsItself = ({ path, filter }) => `starts itself: ${path} matches its own filter ${filter}, and its own pull request run decides`;
+
+// Whether native.yml calls a workflow for a pull request. When GitHub
+// certainly started the workflow itself, its gate decides with every filter
+// and native.yml skips it with that verdict. When that is not certain, native.yml decides
+// too: a workflow may then run twice, never not at all. A workflow none of
+// whose shared paths changed is one GitHub would not have started for them,
+// and any other gets the decision its gate would give.
+export function dispatchDecision({ flow, changedPaths, renamed = new Set(), ...rest }) {
+  const own = certainOwnStart(flow, { paths: changedPaths, renamed });
+  if (own) return { run: false, reason: startsItself(own) };
+  if (!reachesSharedPaths(flow, changedPaths)) return { run: false, reason: 'none of its shared paths changed' };
+  return decideWorkflow({ flow, changedPaths, ...rest });
+}
+
+// Whether a changed path may match one of a workflow's shared filters as
+// GitHub matches them: `*` any character but `/`, `**` any character, a
+// newline included. A path this does not model (outside PLAIN_PATH: spaces,
+// control characters, non-ASCII) counts as matching every shared filter, so
+// it can only send the workflow on to its decision.
+export function reachesSharedPaths(flow, changedPaths) {
+  const shared = sharedPaths(flow).map((filter) => new RegExp(pathGlob(filter).source, 's'));
+  return changedPaths.some((path) => !PLAIN_PATH.test(path) || shared.some((glob) => glob.test(path)));
+}
+
+// native.yml's scheduled runs on main, read as runs of one workflow it
+// calls, for the base its sweep and pushes diff from (testedBase). A run
+// that finished green tested every workflow it called. In any other, a
+// workflow's part is green when the gate decided and every job of the
+// workflow passed or was skipped: a skipped call is a sweep that found
+// nothing to test, as a skipped gate is in the workflow's own run. A run
+// whose native.yml did not call the workflow (`calls`), or whose jobs are
+// unknown, tested nothing of it.
+export function dispatchedRuns(workflow, runs, { calls, jobs }) {
+  const ours = (job) => job.name === workflow || job.name.startsWith(`${workflow} / `);
+  return runs.filter((run) => calls(run)).map((run) => {
+    let green = run.conclusion === 'success';
+    const listed = green ? null : jobs(run);
+    if (listed) {
+      const part = listed.filter(ours);
+      green = listed.some((job) => job.name === DISPATCHER_GATE && job.conclusion === 'success')
+        && part.length > 0 && part.every((job) => job.conclusion === 'success' || job.conclusion === 'skipped');
+    }
+    return { ...run, event: 'schedule', conclusion: green ? 'success' : 'failure' };
+  });
+}
+
 const STANDALONE = 'registry/standalone.json';
 
 // What a release leaves on main without changing what a workflow builds:
@@ -182,8 +341,8 @@ function bookkeepingFor(path, { manifests, registry, apps }) {
 // Release bookkeeping is the exception: every release writes it into the
 // shared packages, and it would otherwise run every workflow the night after.
 export function sweepWorkflow({ flow, changedPaths, manifests = new Map(), registry }) {
-  const filters = flow?.on?.pull_request?.paths;
-  if (!Array.isArray(filters)) return { run: true, reason: 'the workflow has no pull request path filter' };
+  const filters = pullRequestFilters(flow);
+  if (!filters) return { run: true, reason: 'the workflow has no pull request path filter' };
   const shared = filters.filter(isSharedFilter).map((filter) => ({ filter, glob: pathGlob(filter) }));
   const apps = registry ? workflowApps(filters, registry) : [];
   let inert = 0;
@@ -230,7 +389,7 @@ export function pushWorkflow({ flow, changedPaths, manifests = new Map(), regist
 // A workflow gated only so that release bookkeeping does not start it has no
 // shared pull request filter: its schedule is a plain nightly run, not a sweep.
 export function mainWorkflow({ flow, changedPaths, manifests = new Map(), registry, event }) {
-  const pulls = flow?.on?.pull_request?.paths;
+  const pulls = pullRequestFilters(flow);
   if (event === 'schedule' && Array.isArray(pulls) && !pulls.some(isSharedFilter)) {
     return { run: true, reason: 'its schedule is a nightly run of everything, not a sweep: it has no shared pull request filter' };
   }

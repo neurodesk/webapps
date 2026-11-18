@@ -26,11 +26,19 @@ export const CUTOVER = '2026-11-15T05:40:00Z';
 const FAILED = new Set(['failure', 'timed_out']);
 // A run with one of these conclusions has no failed or cancelled job unless a job continues on error.
 const QUIET = new Set(['success', 'skipped', 'neutral']);
-// Scripts and workflows that notarize with the Apple Developer account. node-cli-portable.yml is reusable:
-// its jobs run inside the workflows that call it.
-const NOTARIZES = /notar|APPLE_ID|uses: \.\/\.github\/workflows\/node-cli-portable\.yml/i;
-// A reusable workflow never has runs of its own (test/workflow-reports.test.mjs compares these with a YAML parse).
-const REUSABLE = /^ {2}workflow_call:/m;
+// Workflows that notarize with the Apple Developer account. A reusable workflow's jobs run inside the workflows
+// that call it, through any number of calls: node-cli-portable.yml inside each native workflow, and those inside
+// native.yml's runs.
+const NOTARIZES = /notar|APPLE_ID/i;
+const CALLS = /^\s+uses: \.\/\.github\/workflows\/([\w.-]+\.ya?ml)\s*$/gm;
+// The events of a workflow's `on:` block, by its two-space keys.
+const triggers = source => [...(source.match(/^on:\n((?: {2}.*\n|\s*\n)*)/m)?.[1] ?? '').matchAll(/^ {2}([a-z_]+):/gm)].map(match => match[1]);
+// A reusable workflow never has runs of its own: workflow_call is its only trigger. A workflow native.yml
+// calls still runs on its own pushes and dispatches (test/workflow-reports.test.mjs compares these with a YAML parse).
+const reusable = source => {
+  const events = triggers(source);
+  return events.length > 0 && events.every(event => event === 'workflow_call');
+};
 const JOB_CONTINUES_ON_ERROR = /^ {4}continue-on-error:/m;
 const ATTEMPT_MARKER = /<!-- (?:nightly|notarization)-run:\d+:attempt:\d+ -->/g;
 const REPORT_ISSUE = /^<!-- (?:nightly-workflow:\d+|apple-notarization-alert) -->/;
@@ -50,13 +58,27 @@ const runRecord = run => ({ ...run, path: workflowPath(run.path) });
 // notarize and the paths with a job that continues on error.
 export async function workflowFacts(directory) {
   const facts = { notarizing: [], continuesOnError: [] };
+  const sources = new Map();
   for (const file of (await readdir(directory)).sort()) {
     if (!/\.ya?ml$/.test(file) || file === REPORTER_WORKFLOW) continue;
-    const source = await readFile(new URL(file, directory), 'utf8');
-    if (REUSABLE.test(source)) continue;
+    sources.set(file, await readFile(new URL(file, directory), 'utf8'));
+  }
+  // Whether a workflow, or a workflow it calls through any number of reusable workflows, notarizes.
+  const notarizes = new Map();
+  const notarizing = file => {
+    if (!notarizes.has(file)) {
+      // A cycle adds nothing.
+      notarizes.set(file, false);
+      const source = sources.get(file) ?? '';
+      notarizes.set(file, NOTARIZES.test(source) || [...source.matchAll(CALLS)].some(([, called]) => notarizing(called)));
+    }
+    return notarizes.get(file);
+  };
+  for (const [file, source] of sources) {
+    if (reusable(source)) continue;
     const path = `.github/workflows/${file}`;
     if (JOB_CONTINUES_ON_ERROR.test(source)) facts.continuesOnError.push(path);
-    if (NOTARIZES.test(source)) facts.notarizing.push(path);
+    if (notarizing(file)) facts.notarizing.push(path);
   }
   return facts;
 }

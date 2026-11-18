@@ -141,6 +141,20 @@ export function logExcerpt({ text, truncated }) {
   return excerpt + (truncated ? '\n[Log download stopped at 2 MiB; open the job for the complete log.]' : '');
 }
 
+// Each job's group, the part of its name before the first " / ": a workflow
+// native.yml called (bison-native / portable / macos-arm64) or a reusable
+// workflow's caller job. Listed in full before the per-job details, whose
+// limits must never hide which suite failed.
+function affectedGroups(jobs) {
+  const counts = new Map();
+  for (const job of jobs) {
+    const group = String(job.name ?? '').split(' / ')[0];
+    counts.set(group, (counts.get(group) ?? 0) + 1);
+  }
+  if (!jobs.some(job => String(job.name ?? '').includes(' / '))) return [];
+  return [`- Affected: ${[...counts].map(([group, count]) => `${plain(group, 100)} (${count})`).join(', ')}.`];
+}
+
 export async function reportNightlyFailure({ run, repository, defaultBranch, client, dryRun = false }) {
   if (run.event !== 'schedule' || run.status !== 'completed') return { skipped: 'Not a completed scheduled workflow' };
   if (!defaultBranch || run.head_branch !== defaultBranch || run.head_repository?.full_name !== repository) return { skipped: 'Not a default-branch run from this repository' };
@@ -181,6 +195,7 @@ export async function reportNightlyFailure({ run, repository, defaultBranch, cli
     `- Commit: ${plain(run.head_sha)}. Branch: ${plain(run.head_branch)}.`,
     `- Started: ${plain(run.run_started_at ?? run.created_at)}. Updated: ${plain(run.updated_at)}.`,
     `- Jobs: ${failed.length} failed or timed out; ${cancelled.length} cancelled; ${jobs.filter(job => job.conclusion === 'skipped').length} skipped.`,
+    ...affectedGroups([...failed, ...cancelled]),
     '', incomplete ? 'Coverage is incomplete. Cancellation does not establish that the cancelled checks passed.' : 'Investigate the failed jobs below.', ''];
   let omitted = 0;
   let detailed = 0;
