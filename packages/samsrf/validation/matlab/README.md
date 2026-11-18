@@ -27,6 +27,10 @@ unrecorded numerical edge cases, single precision and overall compiled/UI
 parity remain open. Recordings previously exposed to research stay replay
 evidence, not blind holdouts. Source MATLAB inputs remain unattested.
 
+The separately authorized [cleanup-order-1 experiment](cleanup-order-1/result.md)
+finished with an undecided STOP on an unexpected warning. Its one-dispatch
+budget is exhausted; no hull-order prediction was adopted.
+
 
 This recorder runs the web port's pinned SamSrf source in MATLAB R2023b Update 11. It
 uses MATLAB's own optimizers, correlation, single arithmetic and geometry.
