@@ -805,8 +805,70 @@ function closing(text, open) {
 // callback reads of its entry; a helper's whole catalogue entry reads every
 // key of the entry, or of what is destructured from it. A chain that names a
 // key the table lacks reads that key, so the test names it.
-function siteKeysRead(text) {
+// Each use of the registry object in a file's code, besides `.site` chains:
+// what it reads of the site section. A use the check does not recognise reads
+// all of it. Recognised: `.apps`, a binding (`const registry = await
+// loadAppsRegistry()`, a parameter), a destructuring without `site`, and an
+// argument to a function in `callees` (defined in a listed reader, so its own
+// text is checked) or to a site helper (counted by siteKeysRead).
+const LOADERS = /\b(?:loadAppsRegistry|parseAppsRegistry)\(/;
+function registryUses(text, callees) {
+  // Comment lines and quoted strings are prose.
+  const code = text.split('\n').map((line) => (/^\s*(?:\/\/|\*|\/\*)/.test(line) ? '' : line)).join('\n').replace(/(['"])(?:\\.|(?!\1)[^\\\n])*\1/g, '""');
+  const names = new Set(['registry', ...[...code.matchAll(/\b(?:const|let|var)\s+(\w+)\s*=\s*(?:await\s+)?(?:loadAppsRegistry|parseAppsRegistry)\(/g)].map(([, name]) => name)]);
+  const unknown = [];
+  // Destructuring the loader's result directly.
+  for (const match of code.matchAll(/=\s*(?:await\s+)?(?:loadAppsRegistry|parseAppsRegistry)\(/g)) {
+    const before = code.slice(0, match.index).trimEnd();
+    if (!before.endsWith('}')) continue;
+    const pattern = code.slice(openingBrace(code, before.length - 1), before.length);
+    if (/\bsite\b|\.\.\./.test(pattern)) unknown.push(`destructures ${pattern.replace(/\s+/g, ' ')} from the loader`);
+  }
+  for (const name of names) {
+    for (const match of code.matchAll(new RegExp(String.raw`(?:(?<=\.\.\.)|(?<![\w.$'"\`/-]))${name}(?![\w$'"\`/-])`, 'g'))) {
+      const [before, after] = [code.slice(0, match.index), code.slice(match.index + name.length)];
+      if (/^\s*\??\.\s*(?:site|apps)\b/.test(after)) continue;
+      if (/\b(?:const|let|var)\s+$/.test(before) && /^\s*=\s*(?:await\s+)?(?:loadAppsRegistry|parseAppsRegistry)\(/.test(after)) continue;
+      if (/(?:function\s*\w*\s*\([^()]*|\(\s*(?:\w+\s*,\s*)*)$/.test(before) && /^[^()]*\)\s*(?:=>|\{)/.test(after)) continue;
+      if (/^\s*=>/.test(after) && /[(,\s]$/.test(before)) continue;
+      if (/\}\s*=\s*(?:await\s+)?$/.test(before)) {
+        const end = before.trimEnd().replace(/=\s*(?:await\s+)?$/, '').trimEnd().length - 1;
+        const pattern = code.slice(openingBrace(code, end), end + 1);
+        if (/\bsite\b|\.\.\./.test(pattern)) unknown.push(`destructures ${pattern.replace(/\s+/g, ' ')} from ${name}`);
+        continue;
+      }
+      const callee = /[(,]\s*$/.test(before) && /^\s*[,)]/.test(after) && calleeOf(code, match.index);
+      if (callee && (callees.has(callee) || Object.hasOwn(SITE_HELPERS, callee))) continue;
+      unknown.push(`${name}${after.slice(0, 20).split('\n')[0]} (${callee ? `passed to ${callee}` : 'used'})`);
+    }
+  }
+  return unknown;
+}
+// The index of the `{` that opens the brace closing at `end`.
+function openingBrace(text, end) {
+  let depth = 0;
+  for (let index = end; index >= 0; index--) {
+    if (text[index] === '}') depth++;
+    if (text[index] === '{' && --depth === 0) return index;
+  }
+  return 0;
+}
+// The function whose argument list holds `index`: the name before the unclosed `(`.
+function calleeOf(text, index) {
+  let depth = 0;
+  for (let at = index - 1; at >= 0; at--) {
+    if (')]}'.includes(text[at])) depth++;
+    else if ('([{'.includes(text[at])) {
+      if (depth === 0) return text[at] === '(' ? text.slice(0, at).match(/([\w$.]+)\s*$/)?.[1]?.split('.').pop() : null;
+      depth--;
+    }
+  }
+  return null;
+}
+
+function siteKeysRead(text, callees = new Set()) {
   const read = new Set();
+  if (registryUses(text, callees).length) return new Set(SITE_KEYS);
   const add = (keys) => keys.forEach((key) => read.add(key));
   const entryReads = (param, body, entry) => {
     for (const [, chain] of body.matchAll(new RegExp(String.raw`\b${param}\b((?:\??\.\w+)*)`, 'g'))) add(keysBelow(walkSiteKeys(entry, chainNames(chain)).path));
@@ -850,6 +912,22 @@ test('the site key reader check finds the keys a text reads, and every key of wh
   }
   assert.ok(reads('const catalog = findCatalog(registry, id); use(catalog);').length > 10, 'a whole catalogue entry');
   assert.deepEqual(reads('const site = await serveSite(dist); await page.goto(site.origin);'), []);
+  // Any use of the registry object the check does not recognise reads every key (S6).
+  const known = new Set(['findApp']);
+  const everything = (text) => siteKeysRead(text, known).size === SITE_KEYS.length;
+  for (const text of [
+    'const { site: { hub: { host } } } = registry;',
+    'const { apps, ...rest } = registry;',
+    'const { site: { analytics } } = await loadAppsRegistry();',
+    'const copy = { ...registry };',
+    'writeFile(out, JSON.stringify(registry));',
+    'const value = registry[key];',
+    'return registry;',
+    'unknownHelper(registry, id);',
+  ]) assert.ok(everything(text), text);
+  for (const text of ['const registry = await loadAppsRegistry(); const app = findApp(registry, id);', 'const { apps } = registry;', 'export function f(registry, id) { return registry.apps.length; }', 'const ids = registry.apps.map((app) => app.id);', "test('reads the registry beside itself', () => {});"]) {
+    assert.deepEqual([...siteKeysRead(text, known)], [], text);
+  }
 });
 
 test('every file an app build or app test runs that loads the registry has its site keys routed', async () => {
@@ -863,11 +941,17 @@ test('every file an app build or app test runs that loads the registry has its s
     if (file.startsWith('registry/') || !runs(file)) continue;
     assert.ok(SITE_SECTION_READERS.has(file), `${file} loads the registry or reads its site section; add it to SITE_SECTION_READERS and route the keys it reads in SITE_KEY_READERS`);
   }
+  // Functions a reader may hand the registry to: those the listed readers define (their text is checked
+  // here too) and the loader's, whose site reads are only the SITE_HELPERS (checked below).
+  const callees = new Set();
+  for (const file of SITE_SECTION_READERS) {
+    for (const [, name] of (await readFile(join(repoRoot, file), 'utf8')).matchAll(/\bfunction\s+(\w+)\s*\(/g)) callees.add(name);
+  }
   const readsOf = new Map();
   for (const file of SITE_SECTION_READERS) {
     assert.ok(runs(file), `${file} is no longer reached by an app; drop it`);
     if (file === REGISTRY_LOADER) continue;
-    readsOf.set(file, siteKeysRead(await readFile(join(repoRoot, file), 'utf8')));
+    readsOf.set(file, siteKeysRead(await readFile(join(repoRoot, file), 'utf8'), callees));
     for (const key of readsOf.get(file)) {
       assert.ok(SITE_KEY_READERS[key]?.includes(file), `${file} reads ${key}; list it in SITE_KEY_READERS['${key}']`);
     }
@@ -889,7 +973,10 @@ test('every file an app build or app test runs that loads the registry has its s
   }
   // A reader added to a listed file is found: theme-app-dist.mjs reading the hub's host.
   const themed = `${await readFile(join(repoRoot, 'scripts/theme-app-dist.mjs'), 'utf8')}\nconst hub = registry.site.hub.host;\n`;
-  assert.ok(siteKeysRead(themed).has('site.hub.host') && !SITE_KEY_READERS['site.hub.host'].includes('scripts/theme-app-dist.mjs'));
+  assert.ok(siteKeysRead(themed, callees).has('site.hub.host') && !SITE_KEY_READERS['site.hub.host'].includes('scripts/theme-app-dist.mjs'));
+  // So is nested destructuring the check cannot follow: it counts as reading every key.
+  const nested = `${await readFile(join(repoRoot, 'scripts/theme-app-dist.mjs'), 'utf8')}\nconst { site: { hub: { host } } } = registry;\n`;
+  assert.equal(siteKeysRead(nested, callees).size, SITE_KEYS.length);
 });
 
 test('an offline asset lock change selects the apps whose assets changed', async () => {
