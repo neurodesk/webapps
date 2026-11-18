@@ -6,9 +6,10 @@
 // Numeric parity belongs to @neurodesk/samsrf's own tests.
 import { test, expect } from "@playwright/test";
 import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { unzipSync } from "fflate";
-import { analysisSpec, createJob, exportGiis, readAnalysisInputs, readGifti, runJob } from "@neurodesk/samsrf/node";
+import { analysisSpec, createJob, exportGiis, hrf, readAnalysisInputs, readGifti, readOldSchoolHrf, runJob } from "@neurodesk/samsrf/node";
+import { matFile } from "../../../packages/samsrf/test/fixtures.js";
 import { serveSite } from "../../../test-utils/serve-site.mjs";
 
 const examples = JSON.parse(readFileSync(new URL("../examples.json", import.meta.url), "utf8"));
@@ -398,16 +399,24 @@ test("automation runs a reverse-correlation analysis on the example's files", as
 });
 
 /** Run each (analysis, precision) in the app on part of the example and require every downloaded map to equal the package's in-process job. */
-async function downloadsEqualInProcessJobs(page, testInfo, runs) {
-  const byName = (name) => example.files.find(file => file.name === name);
-  const file = async (name) => {
-    const path = local ? join(local, name) : testInfo.outputPath(name);
-    if (!local) writeFileSync(path, await exampleBytes(byName(name)));
-    return path;
-  };
+/** A path to an example file, written from Hugging Face unless SAMSRF_EXAMPLE_DIR has it. */
+async function examplePath(testInfo, name) {
+  const path = local ? join(local, name) : testInfo.outputPath(name);
+  if (!local) writeFileSync(path, await exampleBytes(example.files.find(file => file.name === name)));
+  return path;
+}
+
+/** The first SMALL_ROI vertices of the example's V1-V3 label, as a label file. */
+async function smallRoiPath(testInfo) {
   const roi = testInfo.outputPath("lh.V123_small.label");
-  const lines = (await exampleBytes(byName("lh.V123.label"))).toString("utf8").split("\n");
+  const lines = (await exampleBytes(example.files.find((file) => file.name === "lh.V123.label"))).toString("utf8").split("\n");
   writeFileSync(roi, [lines[0], String(SMALL_ROI), ...lines.slice(2, 2 + SMALL_ROI), ""].join("\n"));
+  return roi;
+}
+
+async function downloadsEqualInProcessJobs(page, testInfo, runs, { subjectHrf } = {}) {
+  const file = (name) => examplePath(testInfo, name);
+  const roi = await smallRoiPath(testInfo);
   const paths = {
     runs: [await file("lh_uBars1.gii")], apertures: [await file("aps_Bars.mat")], roi: [roi],
     surfaces: [await file("lh.white"), await file("lh.area")], template: [await file("lh_benson.gii")], seed: [await file("lh.V1_seed.label")],
@@ -421,17 +430,26 @@ async function downloadsEqualInProcessJobs(page, testInfo, runs) {
     });
     await page.locator("#analysis").selectOption(analysis);
     for (const role of roles[analysis]) await page.locator(`#${role}Input`).setInputFiles(paths[role]);
+    if (subjectHrf) {
+      // A drop reaches the first input, as the shell's page drop delivers it; the fit finds its own slot.
+      await page.locator("#runsInput").setInputFiles(subjectHrf);
+      await expect(page.locator("#subjectHrfDrop")).toContainText(basename(subjectHrf));
+      await expect(page.locator("#hrf")).toHaveValue("subject");
+    }
     await page.locator("#advancedSettings").evaluate(element => { element.open = true; });
     await page.locator("#dataPrecision").selectOption(precision);
     const model = JSON.parse(await page.locator("#modelJson").inputValue());
     expect(model.Data_Precision).toBe(precision);
+    if (subjectHrf) expect(model.Hrf).toBe(basename(subjectHrf, ".mat"));
     await expect(page.locator("#runButton")).toBeEnabled();
     await page.locator("#runButton").click();
     await expect(page.locator("#statusText")).toContainText(RUNS[analysis].outcome, { timeout: 1500000 });
     const zipped = page.waitForEvent("download");
     await page.locator("#downloadAll").click();
     const entries = unzipSync(readFileSync(await (await zipped).path()));
-    const job = createJob(analysisSpec(inputs, analysis, model));
+    const spec = analysisSpec(inputs, analysis, model);
+    if (subjectHrf) spec.hrf = hrf.oldSchool(model.TR, readOldSchoolHrf(readFileSync(subjectHrf)));
+    const job = createJob(spec);
     const prefix = `lh_${job.modelName}${job.outSuffix}`;
     let expected;
     try {
@@ -457,6 +475,49 @@ test("MATLAB single precision RC and CF downloads equal the package's in-process
 test("double pRF downloads equal the package's in-process job", async ({ page }, testInfo) => {
   test.setTimeout(1800000);
   await downloadsEqualInProcessJobs(page, testInfo, [["prf", "double"]]);
+});
+
+test("a dropped subject HRF fit runs reverse correlation and pRF fits as the package's jobs do", async ({ page }, testInfo) => {
+  test.setTimeout(1800000);
+  const subjectHrf = testInfo.outputPath("hrf_subject.mat");
+  writeFileSync(subjectHrf, matFile({ fP: { dims: [1, 4], data: [5.5, 15.5, 5, 2] } }));
+  await downloadsEqualInProcessJobs(page, testInfo, [["rc", "double"], ["prf", "single"]], { subjectHrf });
+});
+
+test("a subject HRF fit must be named hrf_*.mat; a malformed fit or a vertex-wise map stops the run", async ({ page }, testInfo) => {
+  test.setTimeout(600000);
+  const file = (name, text) => ({ name, mimeType: "application/octet-stream", buffer: Buffer.from(text) });
+  const roi = await smallRoiPath(testInfo);
+  await page.goto("/");
+  await page.locator("#analysis").selectOption("rc");
+  await page.locator("#runsInput").setInputFiles(await examplePath(testInfo, "lh_uBars1.gii"));
+  await page.locator("#aperturesInput").setInputFiles(await examplePath(testInfo, "aps_Bars.mat"));
+  await page.locator("#roiInput").setInputFiles(roi);
+  await expect(page.locator("#subjectHrfField")).toBeHidden();
+  await page.locator("#advancedSettings").evaluate(element => { element.open = true; });
+  const setHrf = async (value) => {
+    const model = JSON.parse(await page.locator("#modelJson").inputValue());
+    await page.locator("#modelJson").fill(JSON.stringify({ ...model, Hrf: value }));
+    await page.locator("#modelJson").dispatchEvent("change");
+  };
+  await setHrf("hrf_fit");
+  await expect(page.locator("#subjectHrfField")).toBeVisible();
+  await expect(page.locator("#runHint")).toHaveText("Needs the subject HRF hrf_fit.mat");
+  await expect(page.locator("#runButton")).toBeDisabled();
+  await page.locator("#subjectHrfInput").setInputFiles(file("fit.mat", "x"));
+  await expect(page.locator("#statusText")).toHaveText("fit.mat: SamSrf reads a subject HRF fit from a file named hrf_*.mat.");
+  await expect(page.locator("#runButton")).toBeDisabled();
+  await page.locator("#subjectHrfInput").setInputFiles(file("hrf_fit.mat", "not a MAT file"));
+  await expect(page.locator("#runButton")).toBeEnabled();
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toContainText("hrf_fit.mat: ", { timeout: 300000 });
+  await expect(page.locator("#statusText")).toHaveClass(/error/);
+  await expect(page.locator("#downloadAll")).toBeDisabled();
+  await setHrf("lh_hrf_fits");
+  await expect(page.locator("#hrf")).toHaveValue("custom");
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toHaveText("model: Hrf lh_hrf_fits is a vertex-wise HRF fit map: the caller must load it", { timeout: 300000 });
+  await expect(page.locator("#downloadAll")).toBeDisabled();
 });
 
 test("MATLAB fit settings round-trip through JSON and remain in collapsed settings", async ({ page }) => {
