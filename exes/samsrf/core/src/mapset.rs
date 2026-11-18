@@ -40,9 +40,13 @@ impl Maps {
 
 /// `Srf` after an analysis: the maps, their raw counterpart when SamSrf keeps one,
 /// and the vertices the analysis covered (`Srf.Roi`, 0-based, or every vertex).
+/// `imaginary` holds the imaginary parts of `maps.data`, in its layout, when MATLAB's
+/// `Srf.Data` would be complex (the SamSrf CSS convention with a negative response);
+/// `samsrf_expand_srf` and every exported map keep only the real parts.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MapSet {
     pub maps: Maps,
     pub raw: Option<Maps>,
     pub analysed: crate::timeseries::VertexSelection,
+    pub imaginary: Option<Vec<f64>>,
 }

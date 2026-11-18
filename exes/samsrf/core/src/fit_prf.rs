@@ -216,8 +216,11 @@ impl Prepared {
     }
 
     /// Fits one vertex from its coarse fit (or seed) `pimg` and `rimg`; returns the output
-    /// rows `[R^2, parameters..., Beta, Baseline]`.
-    pub fn fit_vertex(&self, y: &[f64], pimg: &[f64], rimg: f64, coarse_prediction: Option<&[f64]>) -> Result<Vec<f64>> {
+    /// rows `[R^2, parameters..., Beta, Baseline]`. Under the SamSrf CSS convention a
+    /// negative response makes the objective and the betas complex, and MATLAB saves
+    /// R^2, Beta and Baseline with their imaginary parts in `Srf.Data`; every other
+    /// fit's rows are real.
+    pub fn fit_vertex(&self, y: &[f64], pimg: &[f64], rimg: f64, coarse_prediction: Option<&[f64]>) -> Result<Vec<Complex64>> {
         let model = &self.model;
         if model.coarse_fit_only {
             let (beta, baseline) = match coarse_prediction {
@@ -228,7 +231,7 @@ impl Prepared {
             row.extend_from_slice(pimg);
             row.push(beta);
             row.push(baseline);
-            return Ok(row);
+            return Ok(row.into_iter().map(|value| Complex64::new(value, 0.0)).collect());
         }
         let mut seeds = pimg.to_vec();
         if model.compressive_nonlinearity && seeds.len() < self.fine_names.len() {
@@ -250,14 +253,15 @@ impl Prepared {
                     Complex64::new(f64::NAN, 0.0)
                 }
             };
+            let complex_objective = model.compressive_nonlinearity && model.css_convention == css::Convention::Samsrf;
             let (fp, err) = match &self.hooke_jeeves_steps {
                 Some(steps) => {
                     let only_positive: Vec<bool> = self.fine_only_positive.iter().map(|flag| *flag != 0).collect();
-                    if model.compressive_nonlinearity && model.css_convention == css::Convention::Samsrf {
-                        let (params, value) = optim::hooke_jeeves(&mut errfun, &seeds, steps, &only_positive, 15, 3);
-                        (params, value.re)
+                    if complex_objective {
+                        optim::hooke_jeeves(&mut errfun, &seeds, steps, &only_positive, 15, 3)
                     } else {
-                        optim::hooke_jeeves(|p| errfun(p).re, &seeds, steps, &only_positive, 15, 3)
+                        let (params, value) = optim::hooke_jeeves(|p| errfun(p).re, &seeds, steps, &only_positive, 15, 3);
+                        (params, Complex64::new(value, 0.0))
                     }
                 }
                 None => {
@@ -266,25 +270,27 @@ impl Prepared {
                         _ => 1e-4,
                     };
                     let options = FminsearchOptions { tol_x: tolerance, stop_when_not_finite: true, ..Default::default() };
-                    if model.compressive_nonlinearity && model.css_convention == css::Convention::Samsrf {
+                    if complex_objective {
                         let result = optim::fminsearch(&mut errfun, &seeds, &options);
-                        (result.x, result.fval.re)
+                        (result.x, result.fval)
                     } else {
                         let result = optim::fminsearch(|p| errfun(p).re, &seeds, &options);
-                        (result.x, result.fval)
+                        (result.x, Complex64::new(result.fval, 0.0))
                     }
                 }
             };
             if let Some(error) = failure {
                 return Err(error);
             }
-            (fp, model.data_precision.round(1.0 - err))
+            // `fRimg(1,v) = 1 - fR`, the real 1 taken as 1 + 0i.
+            let precision = model.data_precision;
+            (fp, Complex64::new(precision.round(1.0 - err.re), precision.round(0.0 - err.im)))
         } else {
-            (vec![0.0; self.fine_names.len()], 0.0)
+            (vec![0.0; self.fine_names.len()], Complex64::new(0.0, 0.0))
         };
         // samsrf_fit_prf's filter, parameter by parameter in order (a -1 flag sets the
-        // flag back to true, as the MATLAB loop does).
-        let mut good = fr > 0.0;
+        // flag back to true, as the MATLAB loop does). MATLAB's `>` compares real parts.
+        let mut good = fr.re > 0.0;
         if good {
             for ((value, scaled), only_positive) in fp.iter_mut().zip(&self.fine_scaled).zip(&self.fine_only_positive) {
                 if *scaled && value.abs() > 2.0 * model.scaling_factor {
@@ -317,11 +323,12 @@ impl Prepared {
         } else if model.replace_bad_fits {
             prediction = Some(self.predict(&seeds)?);
             fp = seeds.clone();
-            fr = rimg;
+            fr = Complex64::new(rimg, 0.0);
         } else {
-            fr = 0.0;
+            fr = Complex64::new(0.0, 0.0);
             fp = vec![0.0; fp.len()];
         }
+        let real = |(beta, baseline): (f64, f64)| (Complex64::new(beta, 0.0), Complex64::new(baseline, 0.0));
         let (beta, baseline) = match prediction {
             Some(fx) => {
                 let kernel = if self.fitting_hrf { hrf::doublegamma(model.tr, &fp[fp.len() - 5..]) } else { self.coarse_hrf.clone() };
@@ -330,13 +337,13 @@ impl Prepared {
                     css::fit_betas(&fx, y, model.data_precision)
                 } else {
                     let fx = hrf::convolve(&fx, &kernel, model.downsample_predictions);
-                    fit_betas_precision(&fx, y, model.data_precision)
+                    real(fit_betas_precision(&fx, y, model.data_precision))
                 }
             }
-            None => (0.0, 0.0),
+            None => real((0.0, 0.0)),
         };
         let mut row = vec![fr];
-        row.extend(fp);
+        row.extend(fp.into_iter().map(|value| Complex64::new(value, 0.0)));
         row.push(beta);
         row.push(baseline);
         Ok(row)
@@ -431,21 +438,37 @@ fn fit_betas_precision(x: &[f64], y: &[f64], precision: Precision) -> (f64, f64)
 /// `samsrf_normr2` after the noise ceiling row has been appended: `R^2` becomes `nR^2`
 /// (`R^2 / Noise Ceiling`, 0 where the ceiling is `<= 0`) and the raw `R^2` moves to a
 /// new last row. `known` says which vertices have a computed ceiling; the others get 0.
-pub fn normr2(maps: &mut crate::mapset::Maps, known: &[bool]) {
+/// `imaginary` holds the imaginary parts of `maps.data` in its layout and follows it.
+pub fn normr2(maps: &mut crate::mapset::Maps, imaginary: &mut Vec<f64>, known: &[bool]) {
     let vertices = maps.vertices;
     let ceiling_row = maps.values.iter().position(|value| value.eq_ignore_ascii_case("Noise Ceiling")).expect("a noise ceiling row");
     let mut r2 = maps.row(0).to_vec();
+    let mut r2_imaginary = imaginary[..vertices].to_vec();
     let ceiling = maps.row(ceiling_row).to_vec();
     for v in 0..vertices {
         if ceiling[v] <= 0.0 {
             r2[v] = 0.0;
+            r2_imaginary[v] = 0.0;
         }
     }
-    let normalised: Vec<f64> = (0..vertices).map(|v| if known[v] { r2[v] / ceiling[v] } else { 0.0 }).collect();
+    let normalised: Vec<(f64, f64)> = (0..vertices).map(|v| if known[v] { divide_by_real(r2[v], r2_imaginary[v], ceiling[v]) } else { (0.0, 0.0) }).collect();
     maps.values[0] = "nR^2".into();
     maps.values.push("R^2".into());
     maps.data.extend(r2);
-    maps.row_mut(0).copy_from_slice(&normalised);
+    imaginary.extend(r2_imaginary);
+    for (v, (re, im)) in normalised.into_iter().enumerate() {
+        maps.data[v] = re;
+        imaginary[v] = im;
+    }
+}
+
+/// MATLAB's `z ./ d` for one element of a complex array `z` and a real `d`: the real part
+/// is `re / d`, and a zero imaginary part stays `+0` rather than taking the quotient's sign.
+/// In the SamSrfAnalysis CSS recording a zeroed R^2 over a negative noise ceiling gives
+/// `nR^2 = -0 + 0i`, and every nonzero part is the plain quotient. A zero real part
+/// with a nonzero imaginary part was not recorded; it takes the quotient here.
+fn divide_by_real(re: f64, im: f64, d: f64) -> (f64, f64) {
+    (re / d, if im == 0.0 { 0.0 } else { im / d })
 }
 
 #[cfg(test)]
@@ -497,9 +520,25 @@ mod tests {
     #[test]
     fn normr2_divides_by_the_ceiling() {
         let mut maps = crate::mapset::Maps { values: vec!["R^2".into(), "x0".into(), "Noise Ceiling".into()], vertices: 3, data: vec![0.5, 0.2, 0.3, 1.0, 2.0, 3.0, 0.5, -0.1, 0.6] };
-        normr2(&mut maps, &[true, true, false]);
+        let mut imaginary = vec![0.0; 9];
+        normr2(&mut maps, &mut imaginary, &[true, true, false]);
         assert_eq!(maps.values, vec!["nR^2", "x0", "Noise Ceiling", "R^2"]);
         assert_eq!(maps.row(0), &[1.0, 0.0, 0.0]);
         assert_eq!(maps.row(3), &[0.5, 0.0, 0.3]);
+        assert_eq!(maps.row(0)[1].to_bits(), (-0.0f64).to_bits(), "0 / negative ceiling");
+        assert!(imaginary.iter().all(|value| value.to_bits() == 0), "real maps stay real");
+    }
+
+    #[test]
+    fn complex_normr2_keeps_matlabs_zero_signs() {
+        // R^2 of 0.5 - 0.25i, a zeroed R^2 over a negative ceiling, and one with a ceiling.
+        let mut maps = crate::mapset::Maps { values: vec!["R^2".into(), "Noise Ceiling".into()], vertices: 3, data: vec![0.5, 0.4, 0.3, 0.5, -0.1, 0.6] };
+        let mut imaginary = vec![-0.25, 0.125, 0.0, 0.0, 0.0, 0.0];
+        normr2(&mut maps, &mut imaginary, &[true, true, true]);
+        let bits = |values: &[f64]| values.iter().map(|value| value.to_bits()).collect::<Vec<_>>();
+        assert_eq!(bits(maps.row(0)), bits(&[1.0, -0.0, 0.5]));
+        assert_eq!(bits(&imaginary[..3]), bits(&[-0.5, 0.0, 0.0]), "-0 + 0i where MATLAB stores it");
+        assert_eq!(bits(maps.row(2)), bits(&[0.5, 0.0, 0.3]));
+        assert_eq!(bits(&imaginary[6..]), bits(&[-0.25, 0.0, 0.0]));
     }
 }

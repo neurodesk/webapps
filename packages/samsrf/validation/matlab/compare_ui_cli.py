@@ -17,15 +17,17 @@ The comparison is refused (exit 2) unless, before any value is read:
 
 A run directory holds exactly the files its record names, or the run is `inventory-error`.
 app-model.json is the model the app saved before Run: its bytes hash to appModelSha256,
-and its content is the plan model with Data_Precision added and the input files named as
-the app names them. The zip's bytes hash to zipSha256, and it holds exactly the contract
-maps and the polar angle and eccentricity maps.
+and its content is the plan model with Data_Precision added, Css_Convention "samsrf" for a
+forward model, and the input files named as the app names them. The zip's bytes hash to
+zipSha256, and it holds exactly the contract maps and the polar angle and eccentricity maps.
 
 The interface downloads float32 GIfTIs only, so each contract map is compared bitwise
 twice: against MATLAB's exported GIfTI over every vertex, and against MATLAB's Srf.Data
 column over Srf.Roi cast to float32. A double-precision run's own double values are not
 observable through the interface; each map says which precision its Srf.Data comparison
 stands for (`srfDataPrecision`), and compare_web_cli.py holds the engine's double rows.
+Nor are the imaginary parts of a complex Srf.Data: such a map stays `differs`
+(`imaginaryNonzero`), and compare_web_cli.py holds the engine's imaginary parts.
 
 Each run is classed:
 
@@ -87,8 +89,11 @@ def expected_ui_outcome(run):
 
 
 def expected_app_model(run):
-    """The plan model as the app saves it: Data_Precision added, input files named by their stems."""
+    """The plan model as the app saves it: Data_Precision added, Css_Convention "samsrf" for a forward
+    model (run_web_matrix.mjs's matlabModel), input files named by their stems."""
     model = {**run['model'], 'Data_Precision': run['precision']}
+    if run['algorithm'] == 'prf':
+        model['Css_Convention'] = 'samsrf'
     if run['algorithm'] == 'cf':
         model['SeedRoi'] = PurePosixPath(model['SeedRoi']).name
         # The app reads the Benson GIfTI that prepare_cli_bundle.m converted for MATLAB.

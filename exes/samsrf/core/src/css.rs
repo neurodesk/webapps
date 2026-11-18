@@ -96,14 +96,20 @@ pub(crate) fn correlation(x: &[Complex64], y: &[f64], precision: Precision) -> C
     }
 }
 
-/// `[ones x] \ y` in MATLAB's precision (see `lstsq`). The exported map
-/// drops imaginary coefficients, as samsrf_expand_srf does.
-pub fn fit_betas(x: &[Complex64], y: &[f64], precision: Precision) -> (f64, f64) {
+/// `[ones x] \ y` in MATLAB's precision (see `lstsq`): `(Beta, Baseline)`, complex
+/// when the prediction is. `Srf.Data` keeps the imaginary parts; the exported maps
+/// drop them, as samsrf_expand_srf does. A real prediction gives real coefficients,
+/// which MATLAB stores with a +0 imaginary part.
+pub fn fit_betas(x: &[Complex64], y: &[f64], precision: Precision) -> (Complex64, Complex64) {
     if x.is_empty() || x.len() != y.len() {
-        return (f64::NAN, f64::NAN);
+        return (Complex64::new(f64::NAN, 0.0), Complex64::new(f64::NAN, 0.0));
     }
     let (beta, baseline) = crate::lstsq::regress_on_ones(x, y, precision);
-    (beta.re, baseline.re)
+    if is_complex(x) {
+        (beta, baseline)
+    } else {
+        (Complex64::new(beta.re, 0.0), Complex64::new(baseline.re, 0.0))
+    }
 }
 
 #[cfg(test)]
@@ -121,7 +127,7 @@ mod tests {
     }
 
     #[test]
-    fn complex_regression_recovers_real_exported_coefficients() {
+    fn complex_regression_recovers_both_parts_of_the_coefficients() {
         let x = [
             Complex64::new(1.0, 1.0),
             Complex64::new(2.0, -1.0),
@@ -129,7 +135,16 @@ mod tests {
         ];
         // The complex solution is beta = 1 + 0.5i, baseline = 3 - i.
         let (beta, baseline) = fit_betas(&x, &[3.0, 5.0, 7.0], Precision::Double);
-        assert!((beta - 1.0).abs() < 1e-14 && (baseline - 3.0).abs() < 1e-14, "{beta} {baseline}");
+        assert!((beta - Complex64::new(1.0, 0.5)).norm() < 1e-14 && (baseline - Complex64::new(3.0, -1.0)).norm() < 1e-14, "{beta} {baseline}");
+    }
+
+    #[test]
+    fn real_predictions_give_coefficients_with_a_positive_zero_imaginary_part() {
+        let x: Vec<_> = [1.0, 2.0, 4.0, 3.0].iter().map(|&value| Complex64::new(value, -0.0)).collect();
+        for precision in [Precision::Double, Precision::Single] {
+            let (beta, baseline) = fit_betas(&x, &[3.0, 5.0, 9.0, 7.5], precision);
+            assert_eq!((beta.im.to_bits(), baseline.im.to_bits()), (0, 0), "{precision:?}");
+        }
     }
 
     #[test]
@@ -157,8 +172,8 @@ mod tests {
             .map(|value| Complex64::new(value * 1e155, 0.0))
             .collect();
         let (beta, baseline) = fit_betas(&x, &[3.0, 5.0, 7.0, 9.0], Precision::Double);
-        assert!((beta / (70.0 / 30.0 / 1e155) - 1.0).abs() < 1e-14);
-        assert_eq!(baseline, 0.0);
+        assert!((beta.re / (70.0 / 30.0 / 1e155) - 1.0).abs() < 1e-14);
+        assert_eq!(baseline.re, 0.0);
     }
 
     #[test]
@@ -168,9 +183,9 @@ mod tests {
             let y: Vec<_> = (1..=volumes).map(|t| 2.0 * (t as f64).sin() + 3.0).collect();
             let (beta, _) = fit_betas(&x, &y, Precision::Single);
             if volumes == 250 {
-                assert_eq!(beta, 0.0);
+                assert_eq!(beta, Complex64::new(0.0, 0.0));
             } else {
-                assert!(beta > 1e4);
+                assert!(beta.re > 1e4);
             }
         }
     }

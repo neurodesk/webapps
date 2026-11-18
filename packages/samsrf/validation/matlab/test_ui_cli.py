@@ -197,6 +197,59 @@ class EngineGate(Base):
         self.assertEqual(report['summary']['engineMismatchRuns'], 1)
 
 
+class ComplexEngineRuns(Base):
+    """A SamSrf-convention CSS run: MATLAB's Srf.Data and the engine's maps are complex, and the
+    app downloads the real parts as SamSrf exports them."""
+    ids = ['prf_css_lh_double']
+
+    def setUp(self):
+        super().setUp()
+        imaginary = numpy.zeros_like(self.x.maps[self.id])
+        imaginary[0, ROI] = [-2e-3, 0.0, 5e-4]
+        imaginary[-3, ROI] = [1e-3, -7e-4, 0.0]
+        self.x.imaginary[self.id] = imaginary
+        self.x.write()
+        self.x.write_ui()
+
+    def test_the_engine_files_keep_their_imaginary_parts_and_the_downloads_compare_real_parts(self):
+        report = self.x.ui_report()
+        run = report['runs'][0]
+        self.assertEqual(report['failures'], [])
+        self.assertTrue(ui_cli.engine_equal(run['engineFiles']))
+        self.assertTrue((self.x.web / self.id / 'maps.imag.f64').exists())
+        # The downloads cannot carry imaginary parts: every real part agrees, and a map whose
+        # MATLAB values are complex still differs (compare_web_cli.py holds the engine's parts).
+        complex_maps = {entry['label'] for entry in run['maps'] if entry['imaginaryNonzero']}
+        self.assertEqual(complex_maps, {'nR^2', 'Baseline'})
+        for entry in run['maps']:
+            self.assertTrue(entry['gifti']['exact'] and entry['srfDataCast']['exact'], entry)
+            self.assertEqual(entry['class'], 'differs' if entry['label'] in complex_maps else 'exact', entry)
+        self.assertEqual(run['class'], 'differs')
+
+    def test_an_engine_imaginary_file_its_record_does_not_name_is_an_inventory_error(self):
+        self.x.edit_record(self.id, imaginarySha256=None)
+        run = self.run_report()
+        self.assertEqual(run['class'], 'inventory-error', run)
+        self.assertIn('differs from its record', run['error'])
+
+    def test_engine_raw_and_imaginary_payloads_must_match_their_receipts(self):
+        for name, key in (('maps.f64', 'mapsSha256'), ('maps.imag.f64', 'imaginarySha256')):
+            for damage in ('truncated', 'changed-byte', 'wrong-hash'):
+                with self.subTest(name=name, damage=damage):
+                    self.x.write()
+                    path = self.x.web / self.id / name
+                    raw = path.read_bytes()
+                    if damage == 'truncated':
+                        path.write_bytes(raw[:-1])
+                    elif damage == 'changed-byte':
+                        path.write_bytes(bytes([raw[0] ^ 1]) + raw[1:])
+                    else:
+                        self.x.edit_record(self.id, **{key: '0' * 64})
+                    run = self.run_report()
+                    self.assertEqual(run['class'], 'inventory-error', run)
+                    self.assertIn(name, run['error'])
+
+
 class Statuses(Base):
     ids = ['rc_hull_lh_single', 'rc_gaussian_lh_single', 'prf_custom_hrf_lh_double']
 
@@ -326,6 +379,21 @@ class InventoryErrors(Base):
         self.x.write_ui()
         self.x.edit_ui(self.id, appModelSha256=sha(path.read_bytes()).upper())
         self.assertInventory('hash its record names')
+
+    def test_a_saved_forward_model_must_carry_samsrfs_css_convention(self):
+        root = Path(self._scratch.name) / 'forward'
+        root.mkdir()
+        x = UiFixture(root, ['prf_css_lh_single'])
+        path = x.ui / 'prf_css_lh_single' / 'app-model.json'
+        saved = json.loads(path.read_text())
+        self.assertEqual(saved['Css_Convention'], 'samsrf')
+        for model in ({**saved, 'Css_Convention': 'nonnegative'}, {k: v for k, v in saved.items() if k != 'Css_Convention'}):
+            with self.subTest(convention=model.get('Css_Convention')):
+                path.write_text(json.dumps(model, indent=4) + '\n')
+                x.edit_ui('prf_css_lh_single', appModelSha256=sha(path.read_bytes()))
+                run = x.ui_report()['runs'][0]
+                self.assertEqual(run['class'], 'inventory-error', run)
+                self.assertIn('not the plan model', run['error'])
 
     def test_matlab_outputs_must_be_complete_and_expected(self):
         (self.x.matlab / self.id / 'unexpected.bin').write_bytes(b'')
@@ -567,6 +635,7 @@ class RunTranslation(unittest.TestCase):
         self.assertEqual(prf['algorithm'], 'prf')
         self.assertEqual(prf['combine'], 'concatenate')
         self.assertEqual(prf['model']['Data_Precision'], 'single')
+        self.assertEqual(prf['model']['Css_Convention'], 'samsrf')
         self.assertEqual([Path(p).name for p in prf['files']['runs']], ['lh_ubars1.gii', 'lh_ubars10.gii', 'lh_ubars2.gii'])
         self.assertEqual([Path(p).name for p in prf['files']['surfaces']], ['lh.white', 'lh.area'])
         self.assertTrue(prf['files']['apertures'][0].endswith('.mat'))
@@ -574,6 +643,16 @@ class RunTranslation(unittest.TestCase):
         self.assertEqual(Path(cf['files']['template'][0]).name, 'lh_benson.gii')
         self.assertEqual(Path(cf['files']['seed'][0]).name, 'seed.label')
         self.assertNotIn('apertures', cf['files'])
+        self.assertNotIn('Css_Convention', cf['model'])
+
+    def test_the_css_convention_agrees_with_the_engine_harness_and_the_comparator(self):
+        script = ("import { matlabModel } from " + json.dumps((HERE / 'run_web_matrix.mjs').as_uri()) + ";"
+                  "console.log(JSON.stringify(JSON.parse(process.argv[1]).map(matlabModel)));")
+        runs = cli_plan.plan()['runs']
+        models = json.loads(node(script, json.dumps(runs)))
+        conventions = [model.get('Css_Convention') for model in models]
+        self.assertEqual(conventions, [ui_cli.expected_app_model(run).get('Css_Convention') for run in runs])
+        self.assertEqual(conventions, ['samsrf' if run['algorithm'] == 'prf' else None for run in runs])
 
     def test_unplanned_arguments_are_refused(self):
         run = json.loads(json.dumps(PLAN['rc_hull_lh_single']))

@@ -212,13 +212,21 @@ jobs:
           SAMSRF_REVCOR_REFERENCE_DIR="$RUNNER_TEMP/samsrf-revcor-reference" SAMSRF_REVCOR_EDGES_DIR="$RUNNER_TEMP/samsrf-revcor-edges" SAMSRF_MATRIX_INPUT_DIR="$RUNNER_TEMP/samsrf-matrix-input" \
             cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test revcor_reference -- --nocapture
           node packages/samsrf/validation/matlab/compare-revcor.mjs "$RUNNER_TEMP/samsrf-revcor-reference" "$RUNNER_TEMP/samsrf-matrix-input" "$RUNNER_TEMP/samsrf-revcor-comparison.json"
-      - name: Preprocessed courses from raw GIfTI against the SamSrfAnalysis recording
+      - name: Preprocessed courses and the web engine's maps against the SamSrfAnalysis recording
         run: |
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-cli" packages/samsrf/validation/matlab/cli-reference.json
           "$RUNNER_TEMP/samsrf-cli-venv/bin/python" -I packages/samsrf/validation/matlab/extract_cli_courses.py "$RUNNER_TEMP/samsrf-cli" "$RUNNER_TEMP/samsrf-cli-courses"
           SAMSRF_CLI_REFERENCE_DIR="$RUNNER_TEMP/samsrf-cli" SAMSRF_CLI_COURSES_DIR="$RUNNER_TEMP/samsrf-cli-courses" \
             cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test cli_preprocess -- --nocapture
-          rm -rf "$RUNNER_TEMP/samsrf-cli"
+          # The committed module on all 24 runs, held map by map to the frozen outcome
+          # against the AMD source host (web-cli-outcome.json); any change fails.
+          cli="$RUNNER_TEMP/samsrf-cli"
+          matlab=packages/samsrf/validation/matlab
+          node "$matlab/run_web_matrix.mjs" "$cli/plan.json" "$cli/bundle" "$cli/bundle-sha256.json" "$RUNNER_TEMP/samsrf-cli-web"
+          "$RUNNER_TEMP/samsrf-cli-venv/bin/python" "$matlab/compare_web_cli.py" "$cli/plan.json" "$cli/bundle-sha256.json" "$RUNNER_TEMP/samsrf-cli-web" "$cli/source-1" \
+            "$RUNNER_TEMP/samsrf-cli-web-vs-source.json" --expect source --allow-unattested-source-inputs
+          "$RUNNER_TEMP/samsrf-cli-venv/bin/python" "$matlab/web_cli_outcome.py" check "$matlab/web-cli-outcome.json" "$RUNNER_TEMP/samsrf-cli-web-vs-source.json"
+          rm -rf "$RUNNER_TEMP/samsrf-cli" "$RUNNER_TEMP/samsrf-cli-web"
       - name: Constants, small-shape gampdf and double y' * A against MATLAB (constants-gamma-gemv-predictions.md)
         run: |
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-cgg" packages/samsrf/validation/matlab/constants-gamma-gemv-reference.json
