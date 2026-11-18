@@ -163,9 +163,11 @@ comment from an old reporter run and a tick writing at the same time:
 The same tick checks the failed and timed-out attempts of every workflow that
 notarizes macOS packages, of any event on any branch or tag, release dispatches
 included, but not pull requests. The workflows are derived from the workflow files
-(`workflowFacts`: a file that mentions notarization, `APPLE_ID` or
-calls `node-cli-portable.yml`; a workflow whose only trigger is `workflow_call`
-is excluded, while one `native.yml` calls keeps its own pushes and dispatches). When a failed
+(`workflowFacts`: a file that mentions notarization or `APPLE_ID`, or that
+calls such a workflow through any number of reusable workflows, as each native
+workflow calls `node-cli-portable.yml` and `native.yml` calls the native
+workflows; a workflow whose only trigger is `workflow_call` has no runs of its
+own and is left out). When a failed
 macOS job log shows Apple refusing a notarization (an expired agreement or
 bad credentials from the notary service, HTTP 401 or 403, or a submission whose
 status is Invalid or Rejected), it opens the issue "Apple notarization is

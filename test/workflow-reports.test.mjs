@@ -125,10 +125,18 @@ test('the reporter runs four times a day from trusted code, and nothing listens 
 
 test('the notarizing workflows and the workflows with a job that continues on error come from the workflow files', async () => {
   const expected = { notarizing: [], continuesOnError: [] };
-  for (const file of (await readdir(workflows)).sort()) {
-    if (!/\.ya?ml$/.test(file) || file === REPORTER_WORKFLOW) continue;
-    const source = await readFile(new URL(file, workflows), 'utf8');
-    const workflow = YAML.parse(source);
+  const files = (await readdir(workflows)).filter(file => /\.ya?ml$/.test(file) && file !== REPORTER_WORKFLOW).sort();
+  const parsed = new Map(await Promise.all(files.map(async file => [file, { source: await readFile(new URL(file, workflows), 'utf8') }])));
+  for (const entry of parsed.values()) entry.workflow = YAML.parse(entry.source);
+  // A workflow notarizes when it, or a local workflow it calls through any number of calls, mentions notarization.
+  const notarizes = (file, seen = []) => {
+    const entry = parsed.get(file);
+    if (!entry || seen.includes(file)) return false;
+    if (/notar|APPLE_ID/i.test(entry.source)) return true;
+    return Object.values(entry.workflow.jobs ?? {}).some(job => notarizes(job.uses?.match(/^\.\/\.github\/workflows\/(.+)$/)?.[1], [...seen, file]));
+  };
+  for (const file of files) {
+    const { source, workflow } = parsed.get(file);
     const jobsContinuing = Object.values(workflow.jobs ?? {}).some(job => job['continue-on-error'] !== undefined);
     // A callable workflow's jobs run inside its callers, which the reports would then have to follow.
     if (Object.hasOwn(workflow.on ?? {}, 'workflow_call')) {
@@ -137,11 +145,12 @@ test('the notarizing workflows and the workflows with a job that continues on er
     // One whose only trigger is workflow_call has no runs of its own; one native.yml calls keeps its pushes and dispatches.
     if (Object.keys(workflow.on ?? {}).every(event => event === 'workflow_call')) continue;
     if (jobsContinuing) expected.continuesOnError.push(`.github/workflows/${file}`);
-    if (/notar|APPLE_ID|uses: \.\/\.github\/workflows\/node-cli-portable\.yml/i.test(source)) expected.notarizing.push(`.github/workflows/${file}`);
+    if (notarizes(file)) expected.notarizing.push(`.github/workflows/${file}`);
   }
   const facts = await workflowFacts(workflows);
   assert.deepEqual(facts, expected);
-  for (const file of ['syncro-native', 'standalone', 'synthseg-portable', 'node-cli', 'bison-native']) assert.ok(facts.notarizing.includes(`.github/workflows/${file}.yml`), file);
+  // native.yml notarizes nothing itself, but runs native workflows whose macOS jobs can.
+  for (const file of ['syncro-native', 'standalone', 'synthseg-portable', 'node-cli', 'bison-native', 'native']) assert.ok(facts.notarizing.includes(`.github/workflows/${file}.yml`), file);
   for (const file of ['ci', 'node-cli-portable', 'quality', 'workflow-reports']) assert.ok(!facts.notarizing.includes(`.github/workflows/${file}.yml`), file);
   assert.ok(facts.notarizing.length >= 39, 'every workflow the replaced alert listed');
   assert.deepEqual(facts.continuesOnError, ['.github/workflows/ci.yml', '.github/workflows/deploy-pages.yml']);
@@ -184,6 +193,22 @@ test('a notarization failure whose rerun passed before the next tick is still al
   assert.deepEqual(reported(client), ['notarization 500:1']);
   assert.ok(client.issues[0].body.startsWith(ALERT_MARKER));
   assert.ok(client.reads.every(path => !path.includes('/runs/500/attempts/2/')), 'the passing attempt needs no jobs listing');
+});
+
+test('a notarization failure inside a workflow native.yml called on schedule is alerted under native', async () => {
+  const failed = attempt({ id: 600, name: 'native', path: '.github/workflows/native.yml', event: 'schedule' });
+  const client = github({
+    runs: [failed],
+    jobs: { '600:1': [
+      { id: 61, name: 'bison-native / portable / macos-arm64', conclusion: 'failure', labels: ['macos-15'] },
+      { id: 62, name: 'bison-native / portable / linux-x64', conclusion: 'success', labels: ['ubuntu-22.04'] },
+    ] },
+    logs: { 61: AGREEMENT },
+  });
+  await tick(client, at(6.8));
+  assert.deepEqual(reported(client), ['nightly 600:1', 'notarization 600:1']);
+  const alert = client.issues.find(issue => issue.body.startsWith(ALERT_MARKER));
+  assert.match(alert.body, /bison-native \/ portable \/ macos-arm64/);
 });
 
 test('a notarization failure is alerted whichever attempt the API qualifies with its ref', async () => {
