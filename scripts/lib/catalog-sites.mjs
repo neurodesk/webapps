@@ -201,6 +201,7 @@ export async function projectCatalogSite({ repoRoot, siteDist, destination, regi
     await writeFile(indexPath, injectCompositeTheme(await readFile(indexPath, 'utf8'), {
       ...hostedThemeOptions({ registry, information, app, version, siteAppIds, catalog }),
       catalogId: catalog.id,
+      originTrial: catalog.webmcp_origin_trial ?? '',
     }));
   }
 

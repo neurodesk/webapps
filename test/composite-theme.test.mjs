@@ -228,3 +228,13 @@ test('composite assembly redirects baked standalone controls to shared root asse
   assert.match(composite, /data-components-href="\.\.\/shell-adapters\/components\/"/);
   assert.equal(injectCompositeTheme(composite, { ...metadata, standaloneHref: '../standalone.json', componentsHref: '../shell-adapters/components/' }), composite);
 });
+
+test('a host\'s origin trial token goes into its pages once, and a page themed without one carries none', () => {
+  const token = 'RmFrZVRva2VuRm9yVGVzdGluZ09ubHk=';
+  const themed = injectCompositeTheme(document, { ...metadata, originTrial: token });
+  assert.equal(themed.match(/<meta http-equiv="origin-trial" content="RmFrZVRva2VuRm9yVGVzdGluZ09ubHk=" data-neurodesk-origin-trial>/g)?.length, 1);
+  assert.match(themed, /<head>\n {2}<meta http-equiv="origin-trial"/, 'it precedes the scripts');
+  assert.equal(injectCompositeTheme(themed, { ...metadata, originTrial: token }), themed);
+  assert.doesNotMatch(injectCompositeTheme(themed, metadata), /origin-trial/);
+  assert.throws(() => injectCompositeTheme(document, { ...metadata, originTrial: '"><script>' }), /origin trial token/);
+});

@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isScalar, parse, parseDocument, visit } from 'yaml';
+import { ORIGIN_TRIAL_TOKEN } from './composite-theme.mjs';
 
 export const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 export const registryPath = join(repoRoot, 'registry', 'apps.yml');
@@ -129,6 +130,10 @@ function validateCatalogs(registry, errors) {
     if (!HOSTINGS.has(catalog?.hosting)) errors.push(`hosting for catalog ${catalog?.id} must be one of: ${[...HOSTINGS].join(', ')}`);
     validateSiteEntry(catalog, `catalog ${catalog?.id}`, errors);
     validateDesktop(catalog, desktop, errors);
+    const trial = catalog?.webmcp_origin_trial ?? '';
+    if (typeof trial !== 'string' || !ORIGIN_TRIAL_TOKEN.test(trial)) {
+      errors.push(`catalog ${catalog?.id}.webmcp_origin_trial must be a Chrome origin trial token for ${catalog?.host}, or empty`);
+    }
     ids.add(catalog?.id);
     hosts.add(catalog?.host);
   }

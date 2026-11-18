@@ -1,4 +1,6 @@
 const appIdPattern = /^[a-z][a-z0-9-]*$/;
+// A Chrome origin trial token is base64.
+export const ORIGIN_TRIAL_TOKEN = /^[A-Za-z0-9+/]*={0,2}$/;
 const titlePattern = /<title\b[^>]*>[\s\S]*?<\/title>/i;
 const iconLinkPattern = /\s*<link\b[^>]*\brel=["']?[^"'>]*\bicon\b[^>]*>/gi;
 const placeholderIconPattern = /\bhref=["']data:,?["']/i;
@@ -57,6 +59,7 @@ export function injectCompositeTheme(html, {
   information,
   standaloneHref,
   componentsHref,
+  originTrial = '',
 }) {
   if (typeof html !== 'string') throw new TypeError('html must be a string');
   if (!appIdPattern.test(appId)) throw new Error(`Invalid app id: ${appId}`);
@@ -70,6 +73,7 @@ export function injectCompositeTheme(html, {
     }
   }
   if (catalogId !== undefined && !appIdPattern.test(catalogId)) throw new Error(`Invalid catalog id: ${catalogId}`);
+  if (!ORIGIN_TRIAL_TOKEN.test(originTrial)) throw new Error('originTrial must be an origin trial token or empty');
   for (const [label, value] of Object.entries({ url, canonical })) {
     if (value !== undefined && !/^https?:\/\/\S+$/.test(value)) {
       throw new Error(`${label} must be an absolute http(s) URL, got ${value}`);
@@ -138,6 +142,13 @@ export function injectCompositeTheme(html, {
         ? tag.replace(/\sdata-neurodesk-catalog="[^"]*"/i, attribute)
         : tag.replace(/^<html\b/i, `<html${attribute}`)
     ));
+  }
+
+  // A Chrome origin trial token is valid for one origin, so only the catalogue that hosts the page
+  // sets it. Every run removes the previous one, and the all-app assembly carries none.
+  themed = themed.replace(/\s*<meta http-equiv="origin-trial"[^>]*data-neurodesk-origin-trial[^>]*>/gi, '');
+  if (originTrial) {
+    themed = themed.replace(/<head\b[^>]*>/i, (tag) => `${tag}\n  <meta http-equiv="origin-trial" content="${escapeAttribute(originTrial)}" data-neurodesk-origin-trial>`);
   }
 
   // A brand other than Neurodesk restyles the page through the shared app theme. Every
