@@ -207,6 +207,39 @@ export function expectedApps({ apps, changedPaths, workspace, lockClosures = nul
   return { expected, exempt, unattributed: changedPaths.filter((path) => !owned.has(path)) };
 }
 
+// The package suites (`pnpm test:packages`) a change affects by the same
+// rules: a changed file in the package's own directory, in a workspace
+// package it declares (transitively, at the merge base or at head), or in its
+// lockfile closure as pnpm lists it. `packages` are the directories with a
+// test script; `lockClosures` maps them like expectedApps' apps.
+export function expectedPackages({ packages, changedPaths, workspace, lockClosures = null }) {
+  const expected = new Map();
+  const add = (dir, reason) => expected.set(dir, [...(expected.get(dir) ?? []), reason]);
+  for (const dir of packages) {
+    const used = new Set([...(workspace.before.get(dir) ?? []), ...(workspace.after.get(dir) ?? [])]);
+    for (const path of changedPaths) {
+      if (path.startsWith(`${dir}/`)) add(dir, path);
+      else {
+        const user = [...used].find((pkg) => path.startsWith(`${pkg}/`));
+        // Another package's tests and documents are not part of this suite.
+        if (user && !PACKAGE_TESTS.test(path) && !DOCUMENT.test(path)) add(dir, `${path} (declared dependency ${user})`);
+      }
+    }
+    if (lockClosures) {
+      const change = closureChange(lockClosures.before.get(dir) ?? new Set(), lockClosures.after.get(dir) ?? new Set(), lockClosures.republished);
+      if (change.added.length || change.removed.length || change.changed.length) add(dir, 'pnpm-lock.yaml: pnpm lists a changed closure');
+    }
+  }
+  return expected;
+}
+
+// Package suites the planner left out although the oracle expects them.
+export function comparePackages({ plan, expected }) {
+  if (plan.packages.all) return { all: plan.packages.all, selected: [], misses: [] };
+  const selected = Object.keys(plan.packages.reasons);
+  return { all: null, selected, misses: [...expected].filter(([dir]) => !selected.includes(dir)).map(([dir, reasons]) => ({ package: dir, reasons })) };
+}
+
 // Planner selection versus the oracle and the full catalog.
 export function compareSelection({ catalog, plan, oracle }) {
   const selected = new Set(plan.selected.map((app) => app.id));

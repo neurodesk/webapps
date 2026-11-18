@@ -3,8 +3,10 @@ import test from 'node:test';
 import { stringify } from 'yaml';
 import {
   closureChange,
+  comparePackages,
   compareSelection,
   expectedApps,
+  expectedPackages,
   failureCandidates,
   parseableClosure,
   republishedPackages,
@@ -143,4 +145,17 @@ test('a merge whose own push run was cancelled reports the apps it left untested
     ['m3', { pr: 3, merge: 'm3', fallback: 'shared', selected: [] }],
   ]);
   assert.deepEqual(supersededMerges({ history, selections }), [{ pr: 1, run: 1, apps: ['alpha'] }]);
+});
+
+test('a package suite is expected for its own files, its declared dependencies and its lockfile closure', () => {
+  const packages = ['packages/core', 'packages/util', 'packages/local'];
+  const own = expectedPackages({ packages, changedPaths: ['packages/util/src/index.js', 'packages/util/test/a.test.js', 'apps/alpha/main.js'], workspace });
+  assert.deepEqual([...own.keys()].sort(), packages.sort());
+  // Another package's tests run only in that package's suite.
+  assert.deepEqual([...expectedPackages({ packages, changedPaths: ['packages/util/test/a.test.js'], workspace }).keys()], ['packages/util']);
+  const lockClosures = { before: new Map([['packages/core', new Set(['.pnpm/react@19.0.0'])]]), after: new Map([['packages/core', new Set(['.pnpm/react@19.1.0'])]]), republished: [] };
+  assert.deepEqual([...expectedPackages({ packages, changedPaths: ['pnpm-lock.yaml'], workspace, lockClosures }).keys()], ['packages/core']);
+  const expected = new Map([['packages/core', ['x']], ['packages/util', ['y']]]);
+  assert.deepEqual(comparePackages({ plan: { packages: { all: null, reasons: { 'packages/core': ['x'] } } }, expected }).misses, [{ package: 'packages/util', reasons: ['y'] }]);
+  assert.deepEqual(comparePackages({ plan: { packages: { all: 'full run', reasons: {} } }, expected }).misses, []);
 });
