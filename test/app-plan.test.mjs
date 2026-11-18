@@ -230,6 +230,16 @@ test('root package.json script edits count only where ci.yml runs them', async (
   assert.deepEqual(site.selected, []);
   assert.equal(site.site, true);
   assert.equal(plan({ scripts, devDependencies: { a: '1' } }).allApps, true);
+  // Every root script a ci.yml job runs is an input, read from ci.yml: the guard's
+  // check:integration (app-plan) and test:contracts (workspace-contracts) included.
+  const workspace = await graph;
+  assert.ok(workspace.jobScripts.get('app-plan').has('check:integration'));
+  assert.ok(workspace.jobScripts.get('workspace-contracts').has('test:contracts') && workspace.jobScripts.get('workspace-contracts').has('test:packages'));
+  for (const name of ['check:integration', 'test:contracts', 'test:packages']) {
+    const edited = plan({ scripts: { ...scripts, [name]: 'echo' } });
+    assert.equal(edited.allApps, true, name);
+    assert.match(edited.reasons.fallback, new RegExp(`^package\\.json: ci\\.yml's \\S+ job runs root script ${name}$`), name);
+  }
   // The easter egg runs no root script by name: only a dependency or an install script reaches it.
   assert.deepEqual(plan({ scripts: { ...scripts, 'new-app': 'B' } }).easterEgg, []);
   assert.equal(plan({ scripts: { ...scripts, postinstall: 'node x.mjs' } }).easterEgg.length, 1);

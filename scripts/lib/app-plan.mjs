@@ -532,10 +532,14 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
       }
       const scripts = changedRootScripts(manifest);
       if (scripts) {
-        const catalogScripts = scripts.filter((name) => graph.rootScriptsRun.get(CATALOG).has(name));
-        const siteScripts = scripts.filter((name) => graph.rootScriptsRun.get(SITE).has(name));
-        if (catalogScripts.length) shared(`${path}: ci.yml's per-app jobs run root scripts ${catalogScripts.join(', ')}`);
-        if (siteScripts.length) siteBuild(`${path}: the site CI jobs run root scripts ${siteScripts.join(', ')}`);
+        // Every root script a ci.yml job runs is an input: one only the site jobs run
+        // selects the site build, any other every app; a script no job runs, nothing.
+        for (const name of scripts) {
+          const jobs = [...graph.jobScripts].filter(([, run]) => run.has(name)).map(([id]) => id);
+          if (!jobs.length) continue;
+          if (jobs.every((id) => CI_JOB_SCOPES[id] === 'site')) siteBuild(`${path}: the site CI jobs run root script ${name}`);
+          else shared(`${path}: ci.yml's ${jobs.join(', ')} ${jobs.length === 1 ? 'job runs' : 'jobs run'} root script ${name}`);
+        }
         continue;
       }
     }

@@ -220,7 +220,13 @@ export async function loadConservativeWorkspaceGraph(root) {
   // `moduleUsers(path)`: the nodes that load one module of the shared component
   // package, or null for a file the planner ties to the whole package.
   let moduleUsers;
-  const graph = { nodes: Object.freeze(nodes), edges, rootScriptsRun, moduleUsers: (path) => (moduleUsers ??= sharedModuleUsers(root, graph))(path) };
+  // The root package.json scripts each ci.yml job runs, directly or through
+  // other scripts (`pnpm <script>`; a package's own scripts are not root ones).
+  const jobScripts = new Map(Object.entries(ci?.jobs ?? {}).map(([id, job]) => [id, namedByCommands(
+    (Array.isArray(job?.steps) ? job.steps : []).map((step) => String(step?.run ?? '').replace(/pnpm --filter \S+ (?:run )?\S+/g, '')),
+    rootScripts,
+  ).expanded]));
+  const graph = { nodes: Object.freeze(nodes), edges, rootScriptsRun, jobScripts, moduleUsers: (path) => (moduleUsers ??= sharedModuleUsers(root, graph))(path) };
   return Object.freeze(graph);
 }
 
