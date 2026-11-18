@@ -1,0 +1,11 @@
+{
+  "variant": "avx512",
+  "matrixHostsCountsLossesIdentical": true,
+  "allMatrixOutputHashesIdentical": true,
+  "nullAndBundleControlsIdentical": true,
+  "pipelineCountsLossesDumpHashesIdentical": true,
+  "nativePipelinesReexecuted": false,
+  "oldMatrix": "packages/samsrf/validation/matlab/intel-avx512/harness/cc528cf6-1/matrix.json",
+  "oldPipelines": "/storage/home/ubuntu/.tmp/samsrf-num6/final-codex/pipelines-avx512.json",
+  "newResearchModule": "45f142861d175feff09385df0c084dbeee34ae059d3bc577a8a31cfb7ffd9534"
+}

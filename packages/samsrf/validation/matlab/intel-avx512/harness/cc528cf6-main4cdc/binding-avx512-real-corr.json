@@ -1,0 +1,52 @@
+{
+  "oldBuildHead": "827dbcaad45f58b0d24336df20b4636bfb499be5",
+  "newBuildHead": "f04a24e8de4920fbdbe475cd3d6f5ca36902032b",
+  "freshBuildClean": true,
+  "sourceTrees": {
+    "exes/samsrf": {
+      "files": 91,
+      "sha256_of_sorted_file_hashes": "708d39819f30ce2ea82688448b441bb2e65a56651b610bb779d07373de2c37e4",
+      "identical": true
+    },
+    "exes/nifti": {
+      "files": 6,
+      "sha256_of_sorted_file_hashes": "906000d09abdba20295ff860576b7092ba01662731f7617f8843b2eb76ebbf91",
+      "identical": true
+    },
+    "packages/samsrf/src": {
+      "files": 5,
+      "sha256_of_sorted_file_hashes": "b0176ab720e124d73b237ea3c5b3c3626f6e595177385347535d49e2d4ed42e0",
+      "identical": true
+    }
+  },
+  "patchesAndNativeTestHashesIdentical": true,
+  "toolchainAndWasmPackIdentical": true,
+  "allNonCustomWasmSectionsIdentical": false,
+  "changedNonCustomSections": [
+    {
+      "id": 10,
+      "oldLength": 1008062,
+      "newLength": 1008062,
+      "oldSha256": "86b3f2e3c9002b4746279520c1e0c42d6054a172b5482830b0b1c0256a08ca91",
+      "newSha256": "041de01acbcdb5de7e8003b30ff26b9fe791a3e35d1e3210995f49ba188723f1"
+    },
+    {
+      "id": 11,
+      "oldLength": 95431,
+      "newLength": 95431,
+      "oldSha256": "77994b1bde5b8840299d4a033a85c127d7bdccb2e4b684da2e70bcd5760aed76",
+      "newSha256": "99c78a99e7281751183beaac7a8a55e9a2d8dc9685ed24fac53a9091ba86452c"
+    }
+  ],
+  "changedCustomSections": [
+    "name",
+    "producers"
+  ],
+  "oldModule": "b65bbff9f8db7db7d40801f822e55e67ef8bde0b25dadd834641d52283c8671a",
+  "newModule": "3766452868c32a12ea7436bd99f20be5b2671a6f8c93b101e4e15da369d824f3",
+  "runner": {
+    "old": "db66ec23ae2c53a64bee9a75251cdef92eaf5de2e2a87f158e6ce2a2249fa544",
+    "new": "ef5d5a98cd68921fed0efa3ae1809905daa7a3144f9b853de965f45dabf9ca5a"
+  },
+  "nativeReuse": "Retained native dumps are bound to identical Rust sources, patches, native test and compiler. They were not reexecuted for this integration. Fresh Node matrices use the new runner and newly built module. No canonical shipping rebuild or browser/container acceptance is claimed."
+}

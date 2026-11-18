@@ -99,3 +99,7 @@ The summaries name the SHA-256 of every patch, every module and every run's maps
 bytes depend on the toolchain and on the build directory, because Cargo hashes the path of
 `exes/nifti` into its crate metadata. The run hashes must not change: a rebuild in another
 directory reproduced every one of them on both hosts.
+
+The [main-4cdc integration reports](cc528cf6-main4cdc/README.md) bind the unchanged kernels
+to the merged runner with fresh research builds and full Node matrices. They preserve the
+historical reports and distinguish retained native pipeline evidence from fresh execution.
