@@ -317,11 +317,11 @@ import { resolveShellAdapter } from './shell-adapters/index.js';
   function decorateAppDialog(kind, attempt = 0) {
     if (!sharedBlocks[kind] || !information) return;
     const dialogs = [...document.querySelectorAll(openDialogSelector)]
-      .filter((node) => !node.classList.contains('nd-app-dialog') && node.checkVisibility?.() !== false);
+      .filter((node) => !node.matches('.nd-app-dialog[data-dialog]') && node.checkVisibility?.() !== false);
     const dialog = dialogs.at(-1);
     if (!dialog) { if (attempt < 10) requestAnimationFrame(() => decorateAppDialog(kind, attempt + 1)); return; }
     if (dialog.querySelector(`[data-neurodesk-app-info="${kind}"]`)) return;
-    const body = dialog.querySelector('.modal-body, .nd-dialog-body, .nd-modal-body, .dialog-body, [data-dialog-body]') || dialog;
+    const body = dialog.querySelector('.modal-body, .nd-dialog-body, .nd-modal-body, .dialog-body, [data-dialog-body], .nd-app-dialog__panel') || dialog;
     const section = document.createElement('div');
     section.innerHTML = sharedBlocks[kind]();
     if (section.firstElementChild) body.append(section.firstElementChild);

@@ -228,7 +228,8 @@ test('the page module registers the tools for an app that registers before or af
     const { document } = dom.window;
     dom.window.HTMLDialogElement.prototype.showModal = function showModal() { this.setAttribute('open', ''); };
     dom.window.HTMLDialogElement.prototype.close = function close() { this.removeAttribute('open'); };
-    document.querySelector('nd-example-selector').examples = examples;
+    document.querySelector('nd-example-selector').examples = examples.slice(0, 1);
+    dom.window.fetch = async url => ({ ok: String(url) === 'https://example.test/test/examples.json', json: async () => examples });
     const registered = new Map();
     const modelContext = { async registerTool(tool) { registered.set(tool.name, tool); } };
     const register = () => registerAppAutomation({ app: 'test', contract: contract(), operations: { run: async () => labels() }, document, target: dom.window });
@@ -237,7 +238,7 @@ test('the page module registers the tools for an app that registers before or af
     if (order === 'tools first') register();
     assert.equal((await exposed).failed.length, 0, order);
     const call = (name, input = {}) => registered.get(name).execute(input, { signal: new AbortController().signal });
-    assert.deepEqual((await call('app_describe')).examples.map(example => example.id), ['head', 'mapped'], 'the page\'s example selector supplies the examples');
+    assert.deepEqual((await call('app_describe')).examples.map(example => example.id), ['head', 'mapped'], 'the page\'s example selector and the published examples.json supply the examples');
     const request = call('inputs_request_files', { role: 'image' });
     let field;
     while (!(field = document.querySelector('#neurodeskAgentPrompt nd-file-field'))) await new Promise(resolve => setTimeout(resolve, 5));
@@ -258,7 +259,11 @@ function personLoads(window, files) {
   input.dispatchEvent(new window.Event('change', { bubbles: true }));
 }
 
-const settled = () => new Promise(resolve => setTimeout(resolve, 10));
+// The release waits for the app's run state, so poll until the page answers as asserted next.
+async function settled(check) {
+  if (!check) return new Promise(resolve => setTimeout(resolve, 100));
+  for (let attempt = 0; attempt < 200 && !(await check()); attempt += 1) await new Promise(resolve => setTimeout(resolve, 10));
+}
 
 test('held files serve every rerun until the person loads their own files or the app resets', async t => {
   const seen = [];
@@ -276,7 +281,7 @@ test('held files serve every rerun until the person loads their own files or the
   assert.deepEqual((await call('app_describe')).inputs, { image: [{ name: 'input.nii', bytes: 5 }] }, 'a load the run itself made keeps the held files');
 
   personLoads(window, [new File(['mine'], 'mine.nii')]);
-  await settled();
+  await settled(async () => Object.keys((await call('app_describe')).inputs).length === 0);
   const describe = await call('app_describe');
   assert.deepEqual(describe.inputs, {}, 'the person moved on, so the tools release the files they held');
   assert.deepEqual(describe.pageFiles, [{ input: 't1', kind: 'image', label: 'T1 image', files: [{ name: 'mine.nii', bytes: 4 }] }]);
@@ -285,7 +290,7 @@ test('held files serve every rerun until the person loads their own files or the
   assert.match((await call('inputs_use_page_files', { role: 'image', input: 'nowhere' })).error.message, /No files are loaded/);
 
   personLoads(window, [new File(['newer'], 'newer.nii')]);
-  await settled();
+  await settled(async () => (await call('app_describe')).pageFiles[0].files[0].name === 'newer.nii');
   assert.deepEqual((await call('app_describe')).pageFiles[0].files, [{ name: 'newer.nii', bytes: 5 }], 'an input\'s earlier files are forgotten');
   inputs.adopt('image', [new File(['input'], 'input.nii')]);
   registration.reset();

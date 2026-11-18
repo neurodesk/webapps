@@ -15,7 +15,6 @@ export * from './renderInfoDialog.js';
 export * from './bindFileDrop.js';
 export * from './bindInfoTooltips.js';
 export * from './agentControl.js';
-export * from './agentPrompt.js';
 export * from '../elements/index.js';
 export * from './pageDrop.js';
 export * from './templates.js';

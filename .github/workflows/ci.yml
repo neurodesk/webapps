@@ -472,6 +472,10 @@ jobs:
         run: pnpm --filter @neurodesk/webapp-components test:handoff:browser
       - name: Check published automation contracts and operation registration
         run: node test/automation-catalog.smoke.mjs
+      - name: Check the WebMCP tools, agent prompts and Privacy statement at desktop and phone width
+        run: node test/webmcp.smoke.mjs
+        env:
+          SMOKE_APPS: ${{ needs.composite-site.outputs.smoke_apps }}
       - name: Hand an image from DICOM View to White matter lesions in Chromium, Firefox and WebKit
         run: pnpm test:app-handoff
       - uses: actions/upload-artifact@v7

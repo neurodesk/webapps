@@ -9,13 +9,22 @@ function pageAutomation(view) {
   return new Promise(resolve => view.addEventListener('neurodesk-automation', () => resolve(view.neurodeskAutomation), { once: true }));
 }
 
-// The examples the page's own selectors offer, so an agent loads exactly what the person could.
+// The examples the page's own selectors offer, so an agent loads what the person could, and those the
+// build published beside the contract, for a page that mounts its selector only in some views.
 function pageExamples(doc) {
-  const examples = new Map();
-  for (const selector of doc.querySelectorAll('nd-example-selector')) {
-    for (const example of selector.examples ?? []) if (!examples.has(example.id)) examples.set(example.id, example);
-  }
-  return [...examples.values()];
+  let published;
+  return async () => {
+    published ??= Promise.resolve()
+      .then(() => doc.defaultView.fetch(new URL('examples.json', doc.baseURI)))
+      .then(response => (response.ok ? response.json() : []))
+      .catch(() => []);
+    const examples = new Map();
+    for (const selector of doc.querySelectorAll('nd-example-selector')) {
+      for (const example of selector.examples ?? []) if (!examples.has(example.id)) examples.set(example.id, example);
+    }
+    for (const example of await published) if (!examples.has(example.id)) examples.set(example.id, example);
+    return [...examples.values()];
+  };
 }
 
 /**
@@ -30,7 +39,7 @@ export async function exposeWebMcp(modelContext, doc = globalThis.document) {
     contract,
     dispatch: automation.dispatch,
     inputs: createToolInputs({ doc, automation }),
-    examples: () => pageExamples(doc),
+    examples: pageExamples(doc),
     askUser: prompts.ask,
     requestFiles: prompts.requestFiles,
   });

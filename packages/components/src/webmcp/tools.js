@@ -99,7 +99,8 @@ function failure(error) {
 
 /**
  * The WebMCP tools for one application page, built from its automation contract. `inputs` holds the
- * files adopted per role; `askUser` and `requestFiles` are the shared agent prompts.
+ * files per role and reads the page's own inputs (webmcp/inputs.js); `examples` lists the page's
+ * examples; `askUser` and `requestFiles` are the shared agent prompts.
  */
 export function webMcpTools({ contract, dispatch, inputs, examples = () => [], fetchAsset = fetchModel, askUser, requestFiles }) {
   const roles = fileRoles(contract);
@@ -121,22 +122,25 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
   tool('app_describe', 'Describe this application',
     `Read what ${contract.title} does: its operations with their inputs, parameters and outputs, its examples (and why any cannot be loaded), its viewers, the current run, the files each input role holds and the files the user has loaded into the page (pageFiles).`,
     object({}), { ...readOnly, ...untrusted },
-    async () => ({
-      app: contract.app,
-      title: contract.title,
-      description: contract.description,
-      appVersion: contract.appVersion,
-      defaultOperation: contract.defaultOperation,
-      operations: Object.fromEntries(Object.entries(contract.operations).map(([name, operation]) => [name, { tool: runTools[name], ...structuredClone(operation) }])),
-      examples: (await catalog()).filter(entry => entry.files).map(({ example: { id, label, description, expectedResult }, files, omitted }) => ({
-        id, label, description, expectedResult, roles: [...new Set(files.map(file => file.role))], ...(omitted && { omitted }),
-      })),
-      unavailableExamples: (await catalog()).filter(entry => entry.unavailable).map(({ example: { id, label }, unavailable }) => ({ id, label, reason: unavailable })),
-      viewers: await dispatch('viewers.list'),
-      run: await dispatch('snapshot'),
-      inputs: inputs.held(),
-      pageFiles: inputs.page(),
-    }));
+    async () => {
+      const entries = await catalog();
+      return {
+        app: contract.app,
+        title: contract.title,
+        description: contract.description,
+        appVersion: contract.appVersion,
+        defaultOperation: contract.defaultOperation,
+        operations: Object.fromEntries(Object.entries(contract.operations).map(([name, operation]) => [name, { tool: runTools[name], ...structuredClone(operation) }])),
+        examples: entries.filter(entry => entry.files).map(({ example: { id, label, description, expectedResult }, files, omitted }) => ({
+          id, label, description, expectedResult, roles: [...new Set(files.map(file => file.role))], ...(omitted && { omitted }),
+        })),
+        unavailableExamples: entries.filter(entry => entry.unavailable).map(({ example: { id, label }, unavailable }) => ({ id, label, reason: unavailable })),
+        viewers: await dispatch('viewers.list'),
+        run: await dispatch('snapshot'),
+        inputs: inputs.held(),
+        pageFiles: inputs.page(),
+      };
+    });
 
   tool('inputs_request_files', 'Ask the user for input files',
     'Ask the user to choose files for an input role in a dialog on this page. The page cannot read file paths, so this is how local data reaches it. Returns the chosen file names and sizes, or declined.',
