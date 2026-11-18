@@ -72,7 +72,8 @@ impl Hull {
     /// `polyshape.area`: half the absolute sum, in stored order, of the cross
     /// products of consecutive vertices taken from the centre of their bounding box.
     pub fn area(&self) -> f64 {
-        self.sums().0.abs() / 2.0
+        let sums = self.sums();
+        times_power_of_two(sums.twice.abs() / 2.0, 2 * sums.exponent)
     }
 
     /// `polyshape.centroid`, step for step as MATLAB R2023b rounds it on the
@@ -80,8 +81,17 @@ impl Hull {
     /// products `a`, then `sum((x1 + x2) * (t * (1/a)))` times `1/3`, back in
     /// place, weighted by the clockwise-positive area `-a/2` and multiplied by
     /// its reciprocal, as for one boundary of a multi-boundary shape.
+    ///
+    /// Where these steps underflow they stay MATLAB's: the recorded triangle of
+    /// side 1e-300 has area 0 and centroid NaN. No recording shows MATLAB
+    /// overflowing, and there the port keeps the centroid finite: sums that
+    /// would overflow are taken on the vertices divided by a power of two
+    /// (`Sums`), and where `-a/2` times a coordinate would overflow, the
+    /// product is taken on that coordinate's significand and its power of two
+    /// restored last. Either rounds as the steps would with an unbounded
+    /// exponent, so a hull scaled by a power of two has its centroid scaled.
     pub fn centroid(&self) -> [f64; 2] {
-        let (twice, centre, w) = self.sums();
+        let Sums { twice, centre, w, exponent } = self.sums();
         let inverse = 1.0 / twice;
         let n = w.len();
         let (mut cx, mut cy) = (0.0, 0.0);
@@ -92,29 +102,84 @@ impl Hull {
             cy += (p[1] + q[1]) * share;
         }
         let third = 1.0 / 3.0;
-        let local = [cx * third + centre[0], cy * third + centre[1]];
+        let local = [times_power_of_two(cx * third, exponent) + centre[0], times_power_of_two(cy * third, exponent) + centre[1]];
+        // In units of 2^(2 exponent) and its inverse, which cancel.
         let weight = -(twice / 2.0);
         let total = 0.0 + weight;
         let reciprocal = 1.0 / total;
-        [(0.0 + weight * local[0]) * reciprocal, (0.0 + weight * local[1]) * reciprocal]
+        local.map(|value| {
+            let k = if exponent == 0 && (weight * value).is_finite() { 0 } else { binade(value) };
+            times_power_of_two((0.0 + weight * times_power_of_two(value, -k)) * reciprocal, k)
+        })
     }
 
-    /// Twice the signed area in stored order, the bounding-box centre and the
-    /// vertices relative to it.
-    fn sums(&self) -> (f64, [f64; 2], Vec<[f64; 2]>) {
+    fn sums(&self) -> Sums {
         let (low, high) = self.vertices.iter().fold(([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]), |(low, high), p| {
             ([low[0].min(p[0]), low[1].min(p[1])], [high[0].max(p[0]), high[1].max(p[1])])
         });
-        let centre = [(low[0] + high[0]) / 2.0, (low[1] + high[1]) / 2.0];
+        let centre = [midpoint(low[0], high[0]), midpoint(low[1], high[1])];
         let w: Vec<[f64; 2]> = self.vertices.iter().map(|p| [p[0] - centre[0], p[1] - centre[1]]).collect();
-        let n = w.len();
-        let mut twice = 0.0;
-        for i in 0..n {
-            let (p, q) = (w[i], w[(i + 1) % n]);
-            twice += p[0] * q[1] - p[1] * q[0];
+        let twice = twice_area(&w);
+        if twice.is_finite() {
+            return Sums { twice, centre, w, exponent: 0 };
         }
-        (twice, centre, w)
+        let exponent = binade(w.iter().fold(0.0_f64, |m, p| m.max(p[0].abs()).max(p[1].abs())));
+        let w: Vec<[f64; 2]> = w.iter().map(|p| p.map(|v| times_power_of_two(v, -exponent))).collect();
+        Sums { twice: twice_area(&w), centre, w, exponent }
     }
+}
+
+/// The stored vertices relative to the centre of their bounding box and twice
+/// their signed area, in units of `2^exponent` (`2^2exponent` for the area). The
+/// exponent is 0 unless the area overflows; then it brings the largest coordinate
+/// into [1, 2), which rounds nothing unless a coordinate is 2^1022 times smaller.
+struct Sums {
+    twice: f64,
+    centre: [f64; 2],
+    w: Vec<[f64; 2]>,
+    exponent: i32,
+}
+
+fn twice_area(w: &[[f64; 2]]) -> f64 {
+    let n = w.len();
+    let mut twice = 0.0;
+    for i in 0..n {
+        let (p, q) = (w[i], w[(i + 1) % n]);
+        twice += p[0] * q[1] - p[1] * q[0];
+    }
+    twice
+}
+
+/// `(low + high) / 2`, or `low/2 + high/2`, which rounds the same, where the sum overflows.
+fn midpoint(low: f64, high: f64) -> f64 {
+    let sum = low + high;
+    if sum.is_infinite() && low.is_finite() && high.is_finite() { low / 2.0 + high / 2.0 } else { sum / 2.0 }
+}
+
+/// `k` with `2^k <= |x| < 2^(k+1)`; 0 where `x` is zero or not finite.
+fn binade(x: f64) -> i32 {
+    if x == 0.0 || !x.is_finite() {
+        return 0;
+    }
+    let bits = x.abs().to_bits();
+    match (bits >> 52) as i32 {
+        0 => 63 - bits.leading_zeros() as i32 - 1074,
+        biased => biased - 1023,
+    }
+}
+
+/// `x * 2^k`: exact unless the result overflows or is subnormal.
+fn times_power_of_two(mut x: f64, mut k: i32) -> f64 {
+    let power = |k: i32| f64::from_bits(((k + 1023) as u64) << 52);
+    while k > 1023 {
+        x *= power(1023);
+        k -= 1023;
+    }
+    while k < -1022 {
+        x *= power(-1022);
+        k += 1022;
+    }
+    x * power(k)
 }
 
 /// The area `[K, AV] = convexHull(delaunayTriangulation(points))` returns, or
@@ -421,7 +486,7 @@ mod tests {
     /// order (record_geometry.m, `geometry-reference.json`, both hosts).
     #[test]
     fn centroid_and_area_round_as_matlab_on_its_stored_vertices() {
-        let cases: [(&[[f64; 2]], [f64; 3]); 5] = [
+        let cases: [(&[[f64; 2]], [f64; 3]); 7] = [
             // From the box centre, 1/3 lands one ULP above its correct rounding.
             (&[[0.0, 0.0], [1.0, 1.0], [1.0, 0.0]], [0.6666666666666666, 0.33333333333333337, 0.5]),
             // Exact sums; MATLAB's y is one ULP below the correctly rounded 13/9.
@@ -431,12 +496,76 @@ mod tests {
             (&[[0.0, 0.0], [7.64842058440951e-05, 6.442178402061286e-05], [0.001529684374568977, 0.001288435374475382]], [0.0005353895268043573, 0.00045095238616533166, 2.0000000072549875e-14]),
             // A centroid on the axes is +0, not -0.
             (&[[-0.5, -1.0], [-1.0, 0.0], [0.5, 1.0], [1.0, 0.0]], [0.0, 0.0, 2.0]),
+            // The extreme grids of the polyshape probe: at 1e-300 every cross
+            // product underflows to 0, so MATLAB's area is 0 and its centroid NaN.
+            (&[[0.0, 0.0], [0.0, 1e-300], [1e-300, 0.0]], [f64::NAN, f64::NAN, 0.0]),
+            (&[[1e12, 1e12], [1e12, 1000000000000.001], [1000000000000.001, 1e12]], [1000000000000.0004, 1000000000000.0004, 4.76837158203125e-07]),
         ];
+        let bits = |v: f64| if v.is_nan() { f64::NAN.to_bits() } else { v.to_bits() };
         for (vertices, expected) in cases {
             let hull = Hull { vertices: vertices.to_vec() };
             let [x, y] = hull.centroid();
-            assert_eq!([x.to_bits(), y.to_bits(), hull.area().to_bits()], expected.map(f64::to_bits), "{vertices:?}");
+            assert_eq!([x, y, hull.area()].map(bits), expected.map(bits), "{vertices:?}");
         }
+    }
+
+    /// Recorded cases scaled by powers of two: within range (2^-300), and above
+    /// it, where `-a/2` times the centroid would overflow (from about 2^341
+    /// here) and then the cross products (from 2^511). The bits scale with them.
+    #[test]
+    fn scaled_cases_scale_their_bits() {
+        let cases: [(&[[f64; 2]], [f64; 3]); 3] = [
+            (&[[0.0, 0.0], [1.0, 1.0], [1.0, 0.0]], [0.6666666666666666, 0.33333333333333337, 0.5]),
+            (&[[0.0, 0.0], [7.64842058440951e-05, 6.442178402061286e-05], [0.001529684374568977, 0.001288435374475382]], [0.0005353895268043573, 0.00045095238616533166, 2.0000000072549875e-14]),
+            (&[[-0.5, -1.0], [-1.0, 0.0], [0.5, 1.0], [1.0, 0.0]], [0.0, 0.0, 2.0]),
+        ];
+        for (vertices, expected) in cases {
+            for k in [-300, 350, 600, 900] {
+                let hull = Hull { vertices: vertices.iter().map(|p| p.map(|v| times_power_of_two(v, k))).collect() };
+                let [x, y] = hull.centroid();
+                assert_eq!([x, y].map(f64::to_bits), [expected[0], expected[1]].map(|v| times_power_of_two(v, k).to_bits()), "{vertices:?} times 2^{k}");
+                let area = times_power_of_two(expected[2], 2 * k);
+                if area.is_normal() {
+                    assert_eq!(hull.area().to_bits(), area.to_bits(), "{vertices:?} times 2^{k}");
+                }
+            }
+        }
+    }
+
+    /// Rectangles far out, whose centroid is the middle of their bounding box.
+    #[test]
+    fn extreme_hulls_have_finite_centroids() {
+        for (offset, side) in [(1e115, 1e100), (1e150, 1e140), (1e300, 1e290), (-1e307, 1e306), (1.7e308, 1e295)] {
+            let corners = vec![[offset, 0.0], [offset + side, 0.0], [offset + side, side], [offset, side]];
+            let direct = Hull { vertices: corners.clone() };
+            let mut hulls = vec![direct];
+            if offset.abs() < 1e200 && offset.abs() > 1.0 {
+                hulls.push(Hull::of_polygon(&corners).unwrap());
+            }
+            for hull in hulls {
+                let (low, high) = (offset, offset + side);
+                let middle = [low / 2.0 + high / 2.0, side / 2.0];
+                let [x, y] = hull.centroid();
+                assert!(x.is_finite() && y.is_finite(), "{offset} {side}: {x} {y}");
+                for (got, want) in [(x, middle[0]), (y, middle[1])] {
+                    assert!(got.to_bits().abs_diff(want.to_bits()) <= 2, "{offset} {side}: {got} vs {want}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn powers_of_two_are_carried_exactly() {
+        assert_eq!([binade(1.0), binade(1.5), binade(0.75), binade(-8.0), binade(f64::MAX), binade(f64::MIN_POSITIVE)], [0, 0, -1, 3, 1023, -1022]);
+        assert_eq!([binade(5e-324), binade(3.0 * 5e-324), binade(0.0), binade(f64::NAN)], [-1074, -1073, 0, 0]);
+        assert_eq!(times_power_of_two(1.5, 2000), f64::INFINITY);
+        assert_eq!(times_power_of_two(times_power_of_two(1.5, 2000), -2000), f64::INFINITY);
+        assert_eq!(times_power_of_two(times_power_of_two(1.5e-300, 1500), -1500), 1.5e-300);
+        assert_eq!(times_power_of_two(times_power_of_two(1e300, -2000), 2000), 1e300);
+        assert_eq!(times_power_of_two(times_power_of_two(1.5, -1050), 1050), 1.5);
+        assert_eq!(times_power_of_two(1.0, -1074), 5e-324);
+        assert_eq!(midpoint(f64::MAX, f64::MAX), f64::MAX);
+        assert_eq!(midpoint(1.0, 2.0), 1.5);
     }
 
     /// A recorded cloud of distinct points: MATLAB's hull, in its stored order, and its bits.

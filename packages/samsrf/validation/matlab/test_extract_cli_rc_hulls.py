@@ -12,22 +12,29 @@ from test_cli import scratch
 VALUES = ['R^2', 'x0', 'y0', 'Fwhm', 'Beta', 'Noise Ceiling']
 
 
+def dataset(group, name, data, matlab_class='double'):
+    """A MATLAB variable as v7.3 MAT files hold it: transposed, with its MATLAB_class."""
+    created = group.create_dataset(name, data=data)
+    created.attrs['MATLAB_class'] = numpy.bytes_(matlab_class)
+    return created
+
+
 def write_maps(path, data, raw, roi, values=VALUES):
     """A MAT v7.3 Srf as MATLAB writes it: arrays transposed, Values as a cell of char arrays."""
     with h5py.File(path, 'w') as handle:
         refs = handle.create_group('#refs#')
-        labels = [refs.create_dataset(f'v{i}', data=numpy.array([[ord(c)] for c in name], dtype='<u2')).ref for i, name in enumerate(values)]
+        labels = [dataset(refs, f'v{i}', numpy.array([[ord(c)] for c in name], dtype='<u2'), 'char').ref for i, name in enumerate(values)]
         srf = handle.create_group('Srf')
-        srf.create_dataset('Values', data=numpy.array([labels], dtype=h5py.ref_dtype))
-        srf.create_dataset('Data', data=numpy.asarray(data, dtype='<f8').T)
-        srf.create_dataset('Raw_Data', data=numpy.asarray(raw, dtype='<f8').T)
-        srf.create_dataset('Roi', data=numpy.array([roi], dtype='<f8'))
+        dataset(srf, 'Values', numpy.array([labels], dtype=h5py.ref_dtype), 'cell')
+        dataset(srf, 'Data', numpy.asarray(data, dtype='<f8').T)
+        dataset(srf, 'Raw_Data', numpy.asarray(raw, dtype='<f8').T)
+        dataset(srf, 'Roi', numpy.array([roi], dtype='<f8'))
 
 
 def write_grid(path, xc, yc):
     with h5py.File(path, 'w') as handle:
-        handle.create_dataset('xc', data=numpy.asarray(xc, dtype='<f8').T)
-        handle.create_dataset('yc', data=numpy.asarray(yc, dtype='<f8').T)
+        dataset(handle, 'xc', numpy.asarray(xc, dtype='<f8').T)
+        dataset(handle, 'yc', numpy.asarray(yc, dtype='<f8').T)
 
 
 class RcHullExtraction(unittest.TestCase):
@@ -91,9 +98,34 @@ class RcHullExtraction(unittest.TestCase):
         with h5py.File(path, 'a') as handle:
             del handle['Srf']['Data']
             complex_type = numpy.dtype([('real', '<f8'), ('imag', '<f8')])
-            handle['Srf'].create_dataset('Data', data=numpy.zeros((2, 6), dtype=complex_type))
+            dataset(handle['Srf'], 'Data', numpy.zeros((2, 6), dtype=complex_type))
         with self.assertRaisesRegex(ValueError, 'complex data'):
             extract_cli_rc_hulls.main([str(self.root), str(self.output)])
+
+    def test_roi_must_be_distinct_whole_vertex_numbers(self):
+        run = extract_cli_rc_hulls.RUNS[0]
+        for roi, reason in (([3, 7.5], 'not whole vertex numbers'), ([3, float('nan')], 'not whole vertex numbers'),
+                            ([0, 7], 'not whole vertex numbers'), ([-3, 7], 'not whole vertex numbers'),
+                            ([7, 7], 'repeated vertices')):
+            with self.subTest(roi=roi):
+                write_maps(self.root / 'source-1' / run / f'lh_{run}.mat', self.data, self.raw, roi)
+                with self.assertRaisesRegex(ValueError, reason):
+                    extract_cli_rc_hulls.main([str(self.root), str(self.output / str(roi))])
+
+    def test_maps_must_be_matlab_doubles_with_distinct_names(self):
+        run = extract_cli_rc_hulls.RUNS[1]
+        path = self.root / 'source-1' / run / f'lh_{run}.mat'
+        write_maps(path, self.data, self.raw, [3, 7], values=VALUES[:5] + ['x0'])
+        with self.assertRaisesRegex(ValueError, 'repeated map names'):
+            extract_cli_rc_hulls.main([str(self.root), str(self.output / 'names')])
+        write_maps(path, self.data, self.raw, [3, 7])
+        with h5py.File(path, 'a') as handle:
+            handle['Srf']['Roi'].attrs['MATLAB_class'] = numpy.bytes_('single')
+        with self.assertRaisesRegex(ValueError, 'not a MATLAB double matrix'):
+            extract_cli_rc_hulls.main([str(self.root), str(self.output / 'class')])
+        write_maps(path, self.data[:5], self.raw, [3, 7])
+        with self.assertRaisesRegex(ValueError, 'unexpected shapes'):
+            extract_cli_rc_hulls.main([str(self.root), str(self.output / 'rows')])
 
     def test_an_existing_output_directory_is_refused(self):
         self.output.mkdir()

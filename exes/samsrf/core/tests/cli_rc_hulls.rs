@@ -59,6 +59,16 @@ fn float64(path: &Path, values: usize) -> Vec<f64> {
     bytes.as_chunks::<8>().0.iter().map(|b| f64::from_le_bytes(*b)).collect()
 }
 
+/// `Srf.Roi` as extract_cli_rc_hulls.py writes it: distinct one-based vertex numbers.
+fn vertex_numbers(roi: &Value, what: &str) -> Vec<u64> {
+    let roi: Vec<u64> = roi.as_array().unwrap_or_else(|| panic!("{what}: no ROI")).iter().map(|v| v.as_u64().filter(|&v| v >= 1).unwrap_or_else(|| panic!("{what}: ROI entry {v}"))).collect();
+    let mut distinct = roi.clone();
+    distinct.sort_unstable();
+    distinct.dedup();
+    assert_eq!(distinct.len(), roi.len(), "{what}: repeated ROI vertices");
+    roi
+}
+
 fn ulps(a: f64, b: f64) -> u64 {
     let key = |x: f64| { let i = x.to_bits() as i64; if i < 0 { i64::MIN - i } else { i } };
     key(a).abs_diff(key(b))
@@ -84,6 +94,7 @@ fn reverse_correlation_hulls_equal_matlab() {
     let course_manifest = json(&courses.join("manifest.json"));
     let hull_manifest = json(&hulls.join("manifest.json"));
     let mut differing = std::collections::BTreeSet::new();
+    assert_eq!(hull_manifest.as_object().unwrap().keys().collect::<Vec<_>>(), ["amd", "intel"], "extracted hosts");
     for (host, bundle) in [("amd", recording.join("bundle")), ("intel", recording.join("ubuntu-24.04").join("bundle"))] {
         let extracted = hull_manifest[host].as_array().unwrap();
         assert_eq!(extracted.iter().map(|run| run["id"].as_str().unwrap()).collect::<Vec<_>>(), RUNS, "{host}: extracted runs");
@@ -91,8 +102,8 @@ fn reverse_correlation_hulls_equal_matlab() {
             let run = entry["id"].as_str().unwrap();
             let course = course_manifest["hosts"][host]["runs"].as_array().unwrap().iter().find(|r| r["id"] == run).unwrap_or_else(|| panic!("{host} {run}: no courses"));
             let volumes = course["volumes"].as_u64().unwrap() as usize;
-            let roi = entry["roi"].as_array().unwrap();
-            assert_eq!(roi, course["roi"].as_array().unwrap(), "{host} {run}: ROI of courses and maps");
+            let roi = vertex_numbers(&entry["roi"], &format!("{host} {run} maps"));
+            assert_eq!(roi, vertex_numbers(&course["roi"], &format!("{host} {run} courses")), "{host} {run}: ROI of courses and maps");
             let prepared = prepared(&bundle, run, volumes);
             let pixels = entry["rows"].as_u64().unwrap() as usize * entry["columns"].as_u64().unwrap() as usize;
             assert_eq!(pixels, prepared.pixels, "{host} {run}: aperture size");
@@ -105,6 +116,9 @@ fn reverse_correlation_hulls_equal_matlab() {
             }
             let ys = float64(&courses.join(host).join(course["file"].as_str().unwrap()), roi.len() * volumes);
             let values: Vec<&str> = entry["values"].as_array().unwrap().iter().map(|v| v.as_str().unwrap()).collect();
+            for name in ["x0", "y0", "Fwhm"] {
+                assert_eq!(values.iter().filter(|v| **v == name).count(), 1, "{run}: map {name}");
+            }
             let data = float64(&hulls.join(host).join(format!("{run}.data.f64")), roi.len() * values.len());
             let raw = float64(&hulls.join(host).join(format!("{run}.raw.f64")), roi.len() * 5);
             for (position, y) in ys.chunks(volumes).enumerate() {

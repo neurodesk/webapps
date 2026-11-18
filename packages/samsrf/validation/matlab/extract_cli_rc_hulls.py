@@ -24,15 +24,39 @@ HOSTS = (('amd', Path('.')), ('intel', Path('ubuntu-24.04')))
 
 
 def matrix(dataset):
-    """A MATLAB matrix as rows x columns (HDF5 stores it transposed)."""
-    values = numpy.array(dataset)
-    if values.dtype.names:
+    """A real MATLAB double matrix as rows x columns (HDF5 stores it transposed)."""
+    if dataset.dtype.names:
         raise ValueError(f'{dataset.name}: complex data')
-    return numpy.asarray(values, dtype='<f8').T
+    if dataset.attrs.get('MATLAB_class') != b'double' or dataset.dtype != numpy.dtype('<f8') or dataset.ndim != 2:
+        raise ValueError(f'{dataset.name}: {dataset.attrs.get("MATLAB_class")} {dataset.dtype} {dataset.shape}, not a MATLAB double matrix')
+    return numpy.array(dataset).T
+
+
+def vertex_numbers(dataset):
+    """Srf.Roi: distinct one-based vertex numbers, stored as a double vector."""
+    values = matrix(dataset)
+    if 1 not in values.shape:
+        raise ValueError(f'{dataset.name}: {values.shape} is not a vector')
+    values = values.ravel()
+    if not numpy.all(numpy.isfinite(values) & (values >= 1) & (values <= 2 ** 53) & (values == numpy.floor(values))):
+        raise ValueError(f'{dataset.name}: not whole vertex numbers')
+    if numpy.unique(values).size != values.size:
+        raise ValueError(f'{dataset.name}: repeated vertices')
+    return [int(value) for value in values]
 
 
 def labels(handle, srf):
-    return [''.join(chr(c) for c in numpy.array(handle[ref]).ravel()) for ref in numpy.array(srf['Values']).ravel()]
+    """Srf.Values: a cell of distinct char arrays."""
+    if srf['Values'].attrs.get('MATLAB_class') != b'cell':
+        raise ValueError('Srf.Values is not a cell')
+    names = []
+    for ref in numpy.array(srf['Values']).ravel():
+        if handle[ref].attrs.get('MATLAB_class') != b'char':
+            raise ValueError('Srf.Values holds something other than text')
+        names.append(''.join(chr(c) for c in numpy.array(handle[ref]).ravel()))
+    if len(set(names)) != len(names):
+        raise ValueError(f'repeated map names {names}')
+    return names
 
 
 def write(path, values):
@@ -61,8 +85,8 @@ def main(arguments):
                 data = matrix(srf['Data'])
                 raw = matrix(srf['Raw_Data'])
                 values = labels(handle, srf)
-                roi = numpy.array(srf['Roi']).ravel().astype(int).tolist()
-            if xc.shape != yc.shape or data.shape[1] != len(roi) or raw.shape != (5, len(roi)):
+                roi = vertex_numbers(srf['Roi'])
+            if xc.shape != yc.shape or data.shape != (len(values), len(roi)) or raw.shape != (5, len(roi)):
                 raise ValueError(f'{run}: unexpected shapes {xc.shape} {yc.shape} {data.shape} {raw.shape}')
             # MATLAB's pixel order is column-major: xc(:) and yc(:).
             write(output / host / f'{run}.xc.f64', xc.ravel(order='F'))
