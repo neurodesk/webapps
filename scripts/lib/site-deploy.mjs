@@ -1,21 +1,13 @@
-import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
-import { basename, dirname, join, posix, relative, sep } from 'node:path';
-import { catalogApps, findCatalog } from './apps-registry.mjs';
+import { join, posix } from 'node:path';
 import { HUB_SITE } from './catalog-sites.mjs';
-import { moduleClosure } from './module-closure.mjs';
-import { readMarker } from './site-marker.mjs';
 import { DIGEST_FILE, DIGEST_SCHEMA, isInstant, message, readLiveRecord } from './site-record.mjs';
 
-// Which projected sites (dist-sites/<site>) a deploy publishes and checks. Each
-// published site carries a record of its content digest (site-record.mjs). The
-// job that checks a site against its public host saves a verified marker
-// (site-marker.mjs), a GitHub Actions cache entry whose key names the site, the
-// digest the host served before and after the checks, and a hash of the check
-// inputs, and deletes it when a check fails. A run skips a site only when the
-// host serves this build's digest and that marker exists
-// (.github/workflows/deploy-pages.yml).
+// Which projected sites (dist-sites/<site>) a deploy publishes. Each published
+// site carries a record of its content digest (site-record.mjs). A run skips
+// the publish of a site whose host already serves this build's digest; every
+// check of every site still runs (.github/workflows/deploy-pages.yml).
 
 // The usage report's counts move by the hour (scripts/write-analytics.mjs), so
 // the digest leaves it out and analyticsStale decides when it is published.
@@ -25,20 +17,6 @@ const ANALYTICS_FILE = 'analytics.json';
 const UNDIGESTED = new Set([DIGEST_FILE, ANALYTICS_FILE]);
 // The daily refresh of the usage reports: the deploy workflow's cron, '17 4 * * *'.
 export const ANALYTICS_REFRESH_UTC = { hour: 4, minute: 17 };
-
-// The workflow that publishes and checks the sites; its check steps and hub check are check inputs.
-export const DEPLOY_WORKFLOW = '.github/workflows/deploy-pages.yml';
-// The landing page probe, which every check job and both deploy jobs run.
-export const SITE_PROBE = 'scripts/check-site-answers.sh';
-// The scripts the deployed checks of a catalogue site run, and the files they
-// read from the checkout to decide pass or fail besides the modules they import.
-// The hub's checks are the probe and a step of the workflow.
-// test/site-deploy.test.mjs holds both lists to the workflow's check steps.
-export const DEPLOYED_CHECKS = [SITE_PROBE, 'test/deployed-site.smoke.mjs', 'test/standalone-downloads.smoke.mjs', 'test/image-upload.smoke.mjs'];
-export const HUB_CHECKS = [SITE_PROBE];
-export const CHECK_DATA = ['package.json', 'registry/apps.yml', 'registry/standalone.json', DEPLOY_WORKFLOW];
-// A new marker schema leaves every older marker unread.
-export const MARKER_PREFIX = 'deploy-verified-1-';
 
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
@@ -106,121 +84,27 @@ export function analyticsStale(live, built) {
   return new Date(live) < lastAnalyticsRefresh(built);
 }
 
-const IMPORT = /(?:import|export)\s[^'"`;]*?from\s*['"]([^'"]+)['"]|import\s*\(\s*['"]([^'"]+)['"]\s*\)|import\s+['"]([^'"]+)['"]/g;
-
-// The real path of the manifest Node finds for package `name` from directory
-// `from`, looking in node_modules of `from` and its ancestors within `realRoot`.
-function installedManifest(realRoot, from, name) {
-  for (let dir = from; `${dir}${sep}`.startsWith(`${realRoot}${sep}`); dir = dirname(dir)) {
-    const manifest = join(dir, 'node_modules', name, 'package.json');
-    if (basename(dir) !== 'node_modules' && existsSync(manifest)) return realpathSync(manifest);
-  }
-  return null;
-}
-
 /**
- * The npm packages `files` import by name and every package they depend on,
- * each as installed for its importer: `name@version`, with the pnpm store
- * directory, which also names a patch. An override or a patch of a dependency,
- * such as the playwright-core that @playwright/test runs, changes the list.
- * Workspace packages are left out: their files are in the module closure.
+ * Whether one site is published, and why. `live` is the record its host serves
+ * (`{ record }` or `{ error }`). A site is skipped only when the run was not
+ * dispatched, its host serves this digest and its usage report is current.
  */
-function installedPackages(root, files) {
-  const realRoot = realpathSync(root);
-  const pending = [];
-  for (const file of files.filter((path) => /\.[cm]?[jt]s$/.test(path) && existsSync(join(root, path)))) {
-    for (const match of readFileSync(join(root, file), 'utf8').matchAll(IMPORT)) {
-      const specifier = match[1] ?? match[2] ?? match[3];
-      if (/^(\.|\/|node:)/.test(specifier)) continue;
-      pending.push({ name: specifier.split('/').slice(0, specifier.startsWith('@') ? 2 : 1).join('/'), from: dirname(realpathSync(join(root, file))) });
-    }
-  }
-  const packages = new Set();
-  const seen = new Set();
-  while (pending.length) {
-    const { name, from, optional } = pending.pop();
-    const manifest = installedManifest(realRoot, from, name);
-    if (!manifest) {
-      if (!optional) packages.add(`${name}@unresolved`);
-      continue;
-    }
-    const path = relative(realRoot, manifest).split(sep).join('/');
-    if ((!path.startsWith('..') && !path.includes('node_modules/')) || seen.has(manifest)) continue;
-    seen.add(manifest);
-    const { version, dependencies = {}, optionalDependencies = {} } = JSON.parse(readFileSync(manifest, 'utf8'));
-    const store = path.match(/node_modules\/\.pnpm\/([^/]+)\//)?.[1];
-    packages.add(`${name}@${version}${store ? ` (${store})` : ''}`);
-    for (const dependency of Object.keys(dependencies)) pending.push({ name: dependency, from: dirname(manifest) });
-    for (const dependency of Object.keys(optionalDependencies)) pending.push({ name: dependency, from: dirname(manifest), optional: true });
-  }
-  return [...packages].sort();
-}
-
-/**
- * The inputs of each site's deployed checks, by site: the check scripts with
- * every module they import and the installed npm packages among them
- * (installedPackages), the files they read to decide pass or fail (CHECK_DATA,
- * and the package.json of each app of the site), and the workflow that runs
- * them. The hub's checks are the probe and a step of the workflow.
- */
-export function checkInputs(root, registry) {
-  const scripts = moduleClosure(root, DEPLOYED_CHECKS, { missing: true });
-  const files = [...new Set([...scripts, ...CHECK_DATA])];
-  const packages = installedPackages(root, scripts);
-  const hub = moduleClosure(root, HUB_CHECKS, { missing: true });
-  const inputs = { [HUB_SITE]: { files: [...new Set([...hub, DEPLOY_WORKFLOW])].sort(), packages: installedPackages(root, hub) } };
-  for (const catalog of registry.site.catalogs) {
-    const apps = catalogApps(registry, findCatalog(registry, catalog.id)).map(({ id }) => `apps/${id}/package.json`);
-    inputs[catalog.id] = { files: [...new Set([...files, ...apps])].sort(), packages };
-  }
-  return inputs;
-}
-
-/** A hash of each site's check inputs (checkInputs), by site: a changed check gives a hash no marker has. */
-export function checkHashes(root, registry) {
-  return Object.fromEntries(Object.entries(checkInputs(root, registry)).map(([site, { files, packages }]) => {
-    const lines = ['neurodesk-deploy-checks/1'];
-    for (const path of files) lines.push(`file\0${path}\0${existsSync(join(root, path)) ? sha256(readFileSync(join(root, path))) : 'missing'}`);
-    for (const pkg of packages) lines.push(`npm\0${pkg}`);
-    return [site, sha256(`${lines.join('\n')}\n`)];
-  }));
-}
-
-/** The cache key of the marker that says site `site` at digest `digest` passed the checks whose inputs hash to `checks`. */
-export const markerKey = (site, digest, checks) => `${MARKER_PREFIX}${site}-${digest}-${checks}`;
-
-/**
- * Whether one site is published and checked, and why. `live` is the record its
- * host serves (`{ record }` or `{ error }`), `marker` the lookup of its verified
- * marker (`{ present }` or `{ error }`). A site is skipped only when the host
- * serves this digest, its marker exists, its usage report is current and the
- * run was not dispatched. `verifyBuild` is true when the site's content may
- * differ from what is live, so the build's pre-deploy checks have to run;
- * `verify` when its deployed checks run: after a publish, and on the daily
- * run (`verifyAll`) for every site.
- */
-export function decideSite({ digest, analytics, live, marker, deployAll = false, verifyAll = false }) {
-  const decide = (publish, verifyBuild, reason) => ({ publish, verifyBuild, verify: publish || verifyAll, reason });
-  if (deployAll) return decide(true, true, 'dispatched run: every site deploys');
-  if (live.error) return decide(true, true, `live digest unreadable (${live.error})`);
-  if (live.record.digest !== digest) return decide(true, true, 'content changed');
-  // The live bytes are this build's, and they passed the build's checks when they were first published.
-  if (marker.error) return decide(true, false, `marker unknown (${marker.error})`);
-  if (!marker.present) return decide(true, false, 'no verified marker for this content and these checks');
+export function decideSite({ digest, analytics, live, deployAll = false }) {
+  if (deployAll) return { publish: true, reason: 'dispatched run: every site is published' };
+  if (live.error) return { publish: true, reason: `live digest unreadable (${live.error})` };
+  if (live.record.digest !== digest) return { publish: true, reason: 'content changed' };
   if (analyticsStale(live.record.analyticsGeneratedAt, analytics)) {
-    return decide(true, false, `usage report refresh (live report: ${live.record.analyticsGeneratedAt ?? 'never'})`);
+    return { publish: true, reason: `usage report refresh (live report: ${live.record.analyticsGeneratedAt ?? 'never'})` };
   }
-  return decide(false, false, 'verified: the host serves this content, checked by these checks, with a current usage report');
+  return { publish: false, reason: 'the host serves this content and a current usage report' };
 }
 
 /**
  * Digest every site in `sitesDir`, compare it with the record its host serves,
- * look up its verified marker, and write this build's record into each site.
- * Returns one entry per site. `checks` maps each site to its check hash
- * (checkHashes); `lookup(key)` reads a marker (readMarker). A site whose plan
- * throws is published and checked.
+ * and write this build's record into each site. Returns one entry per site. A
+ * site whose plan throws is published; the other sites are still planned.
  */
-export async function planDeploy({ registry, sitesDir, commit, deployAll = false, verifyAll = false, checks = {}, lookup, nonce, fetch, write, timeoutMs }) {
+export async function planDeploy({ registry, sitesDir, commit, deployAll = false, nonce, fetch, write, timeoutMs }) {
   return Promise.all(deploySites(registry).map(async ({ site, host, hosting }) => {
     const entry = { site, host, hosting, url: `https://${host}/` };
     try {
@@ -228,90 +112,45 @@ export async function planDeploy({ registry, sitesDir, commit, deployAll = false
       const config = hosting === 'worker' ? await readFile(join(sitesDir, `${site}.wrangler.json`)) : undefined;
       const liveRead = readLiveRecord({ site, host, nonce, fetch, timeoutMs });
       const [digest, analytics] = await Promise.all([siteDigest(siteDir, { config }), analyticsGeneratedAt(siteDir)]);
-      const key = checks[site] ? markerKey(site, digest, checks[site]) : null;
-      const [live, marker] = await Promise.all([liveRead, key ? lookup(key) : { error: 'no check hash' }]);
+      const live = await liveRead;
       const record = { schema: DIGEST_SCHEMA, site, digest, analyticsGeneratedAt: analytics, commit };
-      const decision = decideSite({ digest, analytics, live, marker, deployAll, verifyAll });
       await write(join(siteDir, DIGEST_FILE), `${JSON.stringify(record, null, 2)}\n`);
-      return { ...entry, digest, live, record, key, marker, ...decision };
+      return { ...entry, digest, live, record, ...decideSite({ digest, analytics, live, deployAll }) };
     } catch (error) {
-      return { ...entry, publish: true, verifyBuild: true, verify: true, reason: `plan failed (${message(error)})` };
+      return { ...entry, publish: true, reason: `plan failed (${message(error)})` };
     }
   }));
 }
 
 /**
- * The plan deploy-pages.yml runs, from the Actions environment: the check
- * hashes from the checkout at `root`, the markers from the Actions cache of
- * GITHUB_REF, read with GITHUB_TOKEN. Every site's live record and marker are
- * read at once, each under its own 30 s deadline, so it returns its outputs
- * within about 30 s plus the time to digest the sites, whatever the network does. Returns the plan, its step outputs and the job summary.
- */
-export async function planSiteDeploy({ registry, sitesDir, root, env, deployAll = false, verifyAll = false, fetch = globalThis.fetch, write, timeouts = {} }) {
-  let checks = {};
-  let checksError = null;
-  try {
-    checks = checkHashes(root, registry);
-  } catch (error) {
-    checksError = message(error);
-  }
-  const lookup = (key) => readMarker({ key, repository: env.GITHUB_REPOSITORY, ref: env.GITHUB_REF, token: env.GITHUB_TOKEN, apiUrl: env.GITHUB_API_URL, fetch, timeoutMs: timeouts.marker });
-  const planned = await planDeploy({
-    registry,
-    sitesDir,
-    commit: env.GITHUB_SHA ?? null,
-    deployAll,
-    verifyAll,
-    checks,
-    lookup,
-    nonce: randomUUID(),
-    fetch,
-    write,
-    timeoutMs: timeouts.record,
-  });
-  const summary = `${checksError ? `The check inputs could not be hashed (${checksError}), so no marker is read.\n\n` : ''}${deploySummary(planned)}`;
-  return { planned, outputs: deployOutputs(planned), summary };
-}
-
-// What the job that checks a site needs: its URL, the digest it was built at
-// and its marker key ('' when the plan has none), and whether this run publishes it.
-const checkEntry = ({ site, url, digest, key, publish }) => ({ site, url, digest: digest ?? '', key: key ?? '', published: publish });
-
-/**
- * The step outputs deploy-pages.yml reads. `workers` lists the Worker sites to
- * publish and `pages` whether the Pages site is published. `verify` lists every
- * catalogue site to check, one verify-sites leg each, and `hub` the hub when it
- * is checked (verify-hub). Every site is checked in this run whatever happens
- * to another site's publish or checks.
+ * The step outputs deploy-pages.yml reads: `publish`, a JSON object of
+ * whether each site is published; `any`, whether any site is, which runs the
+ * build's runtime startup check; and `pages_url`, the Pages site's own URL,
+ * which its checks use when its publish is skipped.
  */
 export function deployOutputs(planned) {
-  const workers = planned.filter(({ hosting, publish }) => hosting === 'worker' && publish).map(({ site, url }) => ({ site, url }));
-  const checked = planned.filter(({ verify }) => verify);
   return {
-    pages: String(planned.some(({ hosting, publish }) => hosting === 'pages' && publish)),
-    workers: JSON.stringify(workers),
-    verify: JSON.stringify(checked.filter(({ site }) => site !== HUB_SITE).map(checkEntry)),
-    hub: JSON.stringify(checked.filter(({ site }) => site === HUB_SITE).map(checkEntry)),
-    verify_build: String(planned.some(({ verifyBuild }) => verifyBuild)),
+    publish: JSON.stringify(Object.fromEntries(planned.map(({ site, publish }) => [site, publish]))),
+    any: String(planned.some(({ publish }) => publish)),
+    pages_url: planned.find(({ hosting }) => hosting === 'pages').url,
   };
 }
 
 const short = (digest) => (typeof digest === 'string' ? `\`${digest.slice(0, 12)}\`` : '-');
-const markerCell = (marker) => (!marker ? '-' : marker.error ? `unknown (${marker.error})` : marker.present ? 'found' : 'none');
 
-/** The job summary: one row per site saying whether it is published and checked, why, and whether its marker was found. */
+/** The job summary: one row per site saying whether it is published and why. */
 export function deploySummary(planned) {
-  const rows = planned.map(({ site, host, publish, verify, reason, marker, digest, live }) => {
-    const liveDigest = live?.record ? short(live.record.digest) : '-';
+  const rows = planned.map(({ site, host, publish, reason, digest, live }) => {
     const liveCommit = live?.record?.commit ? `\`${live.record.commit.slice(0, 9)}\`` : '-';
-    const checks = publish ? 'after publish' : verify ? 'live site' : '-';
-    return `| ${site} | ${host} | ${publish ? 'publish' : 'skip'} | ${checks} | ${reason} | ${markerCell(marker)} | ${short(digest)} | ${liveDigest} | ${liveCommit} |`;
+    return `| ${site} | ${host} | ${publish ? 'published' : 'skipped'} | ${reason} | ${short(digest)} | ${short(live?.record?.digest)} | ${liveCommit} |`;
   });
   return [
     '### Sites',
     '',
-    '| Site | Host | Decision | Deployed checks | Why | Verified marker | Build digest | Live digest | Live commit |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    'Every site is checked against its public host, published or not.',
+    '',
+    '| Site | Host | Publish | Why | Build digest | Live digest | Live commit |',
+    '| --- | --- | --- | --- | --- | --- | --- |',
     ...rows,
     '',
   ].join('\n');

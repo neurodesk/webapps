@@ -162,19 +162,20 @@ test('the Worker-hosted sites deploy as assets-only Workers on their own domains
 test('the deploy workflow deploys every Worker site the registry declares', async () => {
   const { parse } = await import('yaml');
   const workflow = parse(await readFile(join(repoRoot, '.github/workflows/deploy-pages.yml'), 'utf8'));
-  // The build's plan lists the Worker sites it publishes from the registry (test/site-deploy.test.mjs).
-  assert.equal(workflow.jobs['deploy-workers'].strategy.matrix.include, '${{ fromJSON(needs.build.outputs.workers) }}');
-  assert.equal(workflow.jobs['verify-sites'].strategy.matrix.include, '${{ fromJSON(needs.build.outputs.verify) }}');
+  const matrix = workflow.jobs['deploy-workers'].strategy.matrix.include;
+  assert.deepEqual(matrix, workerSites(full).map(({ host, site }) => ({ site, url: `https://${host}/` })));
+  const catalogSites = workerSites(full).filter(({ site }) => site !== 'hub');
+  assert.deepEqual(workflow.jobs['verify-workers'].strategy.matrix.include, catalogSites.map(({ host, site }) => ({ site, url: `https://${host}/` })));
   const upload = workflow.jobs.build.steps.find((step) => step.with?.name === 'worker-sites');
   assert.deepEqual(upload.with.path.trim().split('\n'), workerSites(full).flatMap(({ site }) => [`dist-sites/${site}`, `dist-sites/${site}.wrangler.json`]));
-  const hubCheck = workflow.jobs['verify-hub'].steps.find((step) => step.name === 'Check the hub lists every catalogue');
-  assert.match(hubCheck.run, new RegExp(`--retry-all-errors https://${full.site.hub.host.replaceAll('.', '\\.')}/\\)`), 'the hub check reads the hub');
+  const hubCheck = workflow.jobs['deploy-workers'].steps.find((step) => step.name === 'Check the hub lists every catalogue');
   assert.match(hubCheck.run, new RegExp(`for host in ${full.site.catalogs.map(({ host }) => host).join(' ')}; do`), 'the hub check covers every catalogue');
   const pages = workflow.jobs.build.steps.find((step) => step.uses?.startsWith('actions/upload-pages-artifact'));
   const primary = full.site.catalogs.find((catalog) => catalog.hosting === 'pages');
   assert.equal(pages.with.path, `dist-sites/${primary.id}`);
-  // The Pages deploy only publishes and probes; its site is checked in verify-sites with every other catalogue.
-  assert.deepEqual(workflow.jobs.deploy.steps.filter((step) => step.run).map(({ id }) => id), ['answers']);
+  for (const step of workflow.jobs.deploy.steps.filter((candidate) => candidate.env?.BASE_URL)) {
+    assert.equal(step.env.SITE_CATALOG, primary.id, `${step.name} checks only the Pages catalogue`);
+  }
 });
 
 test('an app copy takes the URL and brand of the host that serves it', () => {

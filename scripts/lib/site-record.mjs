@@ -1,6 +1,5 @@
 // The digest record each published site carries (DIGEST_FILE at its root), and
-// how a deploy reads it back from the site's host. It uses only Node built-ins,
-// so a job can confirm a host's digest without installing the workspace.
+// how a deploy reads it back from the site's host.
 
 export const DIGEST_FILE = 'site-digest.json';
 export const DIGEST_SCHEMA = 1;
@@ -27,12 +26,12 @@ export const message = (error) => String(error?.message ?? error);
  * cannot keep the process alive. The plain timer, unlike AbortSignal.timeout,
  * stays referenced, so a stalled read still ends.
  */
-export async function exchange(ms, what, read) {
+async function exchange(ms, read) {
   const controller = new AbortController();
   let timer;
   const expired = new Promise((resolve, reject) => {
     timer = setTimeout(() => {
-      const reason = new DOMException(`${what}no complete answer in ${ms / 1000} s`, 'TimeoutError');
+      const reason = new DOMException(`no complete answer in ${ms / 1000} s`, 'TimeoutError');
       controller.abort(reason);
       reject(reason);
     }, ms);
@@ -42,7 +41,7 @@ export async function exchange(ms, what, read) {
     return await read({ signal: controller.signal, within: (promise) => Promise.race([promise, expired]) });
   } finally {
     clearTimeout(timer);
-    controller.abort(new DOMException(`${what}read finished`, 'AbortError'));
+    controller.abort(new DOMException('read finished', 'AbortError'));
   }
 }
 
@@ -76,7 +75,7 @@ export async function readLiveRecord({ site, host, nonce, fetch = globalThis.fet
   // A fresh query string keeps a CDN from answering with a copy cached before the last deploy.
   const url = `https://${host}/${DIGEST_FILE}?run=${encodeURIComponent(nonce)}`;
   try {
-    return await exchange(timeoutMs, '', async ({ signal, within }) => {
+    return await exchange(timeoutMs, async ({ signal, within }) => {
       const init = { cache: 'no-store', redirect: 'manual', headers: { 'cache-control': 'no-cache' }, signal };
       const response = await within(fetch(url, init));
       if (response.status !== 200) return { error: `HTTP ${response.status}` };

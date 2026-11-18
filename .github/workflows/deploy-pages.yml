@@ -3,19 +3,14 @@ name: deploy-github-pages
 on:
   push:
     branches: [main]
-  # Refreshes each catalogue's usage report once a day; the
-  # time is ANALYTICS_REFRESH_UTC in scripts/lib/site-deploy.mjs.
   schedule:
     - cron: '17 4 * * *'
-  # A dispatched run (by hand or by standalone-catalog.yml) publishes every site.
   workflow_dispatch:
 
 permissions:
   contents: read
   pages: write
   id-token: write
-  # The deploy plan looks up the verified markers in this repository's Actions cache.
-  actions: read
 
 concurrency:
   # Let a running deploy finish; GitHub keeps only the newest pending run, so
@@ -31,10 +26,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     outputs:
-      pages: ${{ steps.plan.outputs.pages }}
-      workers: ${{ steps.plan.outputs.workers }}
-      verify: ${{ steps.plan.outputs.verify }}
-      hub: ${{ steps.plan.outputs.hub }}
+      publish: ${{ steps.plan.outputs.publish }}
+      pages_url: ${{ steps.plan.outputs.pages_url }}
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -66,37 +59,27 @@ jobs:
       - run: pnpm audit:artifacts
       - name: Verify each catalogue site holds its apps and everything they load
         run: node --test test/catalog-sites.test.mjs
-      # Skips a site only when its host serves this build's digest, the site's
-      # verified marker for that digest and these checks is in the Actions cache,
-      # and its usage report is current. Every other site is published and
-      # checked; a dispatched run publishes every site, and the daily run checks
-      # every live site. Every read has a deadline (30 s); the step limit is a backstop.
+      # Publishes only the sites whose host does not already serve these bytes; every site is still checked below.
       - name: Decide which sites to publish
         id: plan
-        timeout-minutes: 10
-        run: node scripts/plan-site-deploy.mjs ${{ github.event_name == 'workflow_dispatch' && '--deploy-all' || github.event_name == 'schedule' && '--verify-all' || '' }}
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-      # Content the hosts already serve passed these checks when it was first published.
+        run: node scripts/plan-site-deploy.mjs ${{ github.event_name == 'workflow_dispatch' && '--deploy-all' || '' }}
       - name: Install runtime startup test browser
-        if: steps.plan.outputs.verify_build == 'true'
+        if: steps.plan.outputs.any == 'true'
         run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
           node node_modules/@playwright/test/cli.js install --with-deps chromium
       - name: Verify threaded model loading before deployment
-        if: steps.plan.outputs.verify_build == 'true'
+        if: steps.plan.outputs.any == 'true'
         run: |
           node --test test/runtime-assets.test.mjs
           pnpm test:runtime-startup
       - uses: actions/configure-pages@v6
-        if: steps.plan.outputs.pages == 'true'
       # webapps.neurodesk.org serves the neuro catalogue; the Worker sites deploy below.
       - uses: actions/upload-pages-artifact@v5
-        if: steps.plan.outputs.pages == 'true'
+        if: fromJSON(steps.plan.outputs.publish).neuro
         with:
           path: dist-sites/neuro
       - uses: actions/upload-artifact@v7
-        if: steps.plan.outputs.workers != '[]'
         with:
           name: worker-sites
           path: |
@@ -131,46 +114,66 @@ jobs:
           GH_REPO: ${{ github.repository }}
           CACHE_REF: ${{ github.ref }}
 
-  # Publishes the neuro site. The neuro 404 page redirects moved apps to the
-  # Worker hosts, so Pages deploys only once those hosts are live: after the
-  # Worker sites this run publishes, or with none to publish, never after a
-  # failed one. Its checks run in verify-sites with every other catalogue.
   deploy:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+    # The neuro site's 404 page redirects moved apps to the Worker hosts, so
+    # Pages deploys only once those hosts are live.
     needs: [build, deploy-workers]
-    if: ${{ !cancelled() && needs.build.result == 'success' && needs.build.outputs.pages == 'true' && (needs.deploy-workers.result == 'success' || needs.deploy-workers.result == 'skipped') }}
     steps:
       - name: Deploy composite site
         id: deployment
+        if: fromJSON(needs.build.outputs.publish).neuro
         uses: actions/deploy-pages@v5
         with:
           # Pages sometimes needs more than the default ten minutes to sync the site.
           timeout: 1200000
       - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
-          sparse-checkout: scripts
-          persist-credentials: false
-      - name: Check the site answers
-        id: answers
-        run: bash scripts/check-site-answers.sh "$SITE_URL"
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install browser
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
+          node node_modules/@playwright/test/cli.js install --with-deps chromium
+      - name: Verify deployed cross-origin isolation
+        run: pnpm test:deployed
         env:
-          SITE_URL: ${{ steps.deployment.outputs.page_url }}
+          BASE_URL: ${{ steps.deployment.outputs.page_url || needs.build.outputs.pages_url }}
+          SITE_CATALOG: neuro
+      - name: Verify standalone downloads in every deployed application
+        run: node test/standalone-downloads.smoke.mjs
+        env:
+          BASE_URL: ${{ steps.deployment.outputs.page_url || needs.build.outputs.pages_url }}
+          SITE_CATALOG: neuro
+      - name: Verify deployed NIfTI and DICOM scan pickers
+        run: pnpm test:image-uploads
+        env:
+          BASE_URL: ${{ steps.deployment.outputs.page_url || needs.build.outputs.pages_url }}
+          SITE_CATALOG: neuro
 
   # mskapps.sciget.org, microscopyapps.sciget.org, preclinicalapps.sciget.org and the webapps.sciget.org hub are assets-only Cloudflare
   # Workers on custom domains (dist-sites/<site>.wrangler.json, written by the build).
-  # The matrices list the sites the build's plan publishes, from the registry
-  # (deploySites in scripts/lib/site-deploy.mjs).
   deploy-workers:
     runs-on: ubuntu-latest
     needs: build
-    if: needs.build.outputs.workers != '[]'
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.build.outputs.workers) }}
+        include:
+          - site: msk
+            url: https://mskapps.sciget.org/
+          - site: microscopy
+            url: https://microscopyapps.sciget.org/
+          - site: preclinical
+            url: https://preclinicalapps.sciget.org/
+          - site: hub
+            url: https://webapps.sciget.org/
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -186,123 +189,38 @@ jobs:
           name: worker-sites
           path: dist-sites
       - name: Deploy the ${{ matrix.site }} site
-        id: publish
+        if: fromJSON(needs.build.outputs.publish)[matrix.site]
         run: pnpm dlx wrangler@3.114.17 deploy --config dist-sites/${{ matrix.site }}.wrangler.json
-      # The same probe runs among the checks of every site a run checks, published or not.
       - name: Check the ${{ matrix.site }} site answers on its custom domain
-        id: answers
-        run: bash scripts/check-site-answers.sh "$SITE_URL"
-        env:
-          SITE_URL: ${{ matrix.url }}
-
-  # The check jobs read the public hosts, not the build. They run one leg per
-  # site the plan checks (every site it publishes, and every live site on the
-  # daily run) once every publish of this run has finished, whatever its
-  # result, so no site's failed publish or check holds back another site's
-  # checks. A leg reads which digest the host serves, runs every assertion of
-  # its site, saves or keeps the site's verified marker when they all passed
-  # and the host served the built digest before and after them, deletes the
-  # marker when one of them failed, and fails when this run published the site
-  # and the host does not serve the build. Only these jobs may delete a marker (actions: write); the
-  # token is passed to the delete step alone, and checkout does not keep it.
-  verify-hub:
-    runs-on: ubuntu-latest
-    needs: [build, deploy-workers]
-    if: ${{ !cancelled() && needs.build.result == 'success' && needs.build.outputs.hub != '[]' }}
-    permissions:
-      contents: read
-      actions: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJSON(needs.build.outputs.hub) }}
-    env:
-      SITE_URL: ${{ matrix.url }}
-      SITE_DIGEST: ${{ matrix.digest }}
-      SITE_MARKER: ${{ matrix.key }}
-      SITE_PUBLISHED: ${{ matrix.published }}
-    steps:
-      # The digest confirmation, the probe and the marker delete load only Node built-ins and curl from scripts/.
-      - uses: actions/checkout@v7
-        with:
-          sparse-checkout: scripts
-          persist-credentials: false
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-      - name: Confirm the host serves this build before the checks
-        id: before
-        run: node scripts/confirm-site-digest.mjs --url "$SITE_URL" --site hub --digest "$SITE_DIGEST" --published "$SITE_PUBLISHED"
-      - name: Check the site answers
-        id: answers
-        run: bash scripts/check-site-answers.sh "$SITE_URL"
+        run: curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 15 --output /dev/null ${{ matrix.url }}
       - name: Check the hub lists every catalogue
-        id: links
+        if: matrix.site == 'hub'
         run: |
-          page="$(curl --fail --silent --show-error --retry 5 --retry-all-errors https://webapps.sciget.org/)"
+          page="$(curl --fail --silent --show-error --retry 5 --retry-all-errors ${{ matrix.url }})"
           for host in webapps.neurodesk.org mskapps.sciget.org microscopyapps.sciget.org preclinicalapps.sciget.org; do
             grep -q "href=\"https://$host/\"" <<< "$page" || { echo "hub does not link $host"; exit 1; }
           done
-      - name: Confirm the host still serves this build after the checks
-        id: after
-        if: steps.before.outputs.confirmed == 'true'
-        run: node scripts/confirm-site-digest.mjs --url "$SITE_URL" --site hub --digest "$SITE_DIGEST" --marker deploy-verified.json
-      # Restoring an existing marker is an access, which keeps it from eviction;
-      # a missing one is saved. Neither can fail checks that passed.
-      - name: Keep the verified marker
-        id: kept
-        if: steps.after.outputs.confirmed == 'true' && env.SITE_MARKER != ''
-        continue-on-error: true
-        uses: actions/cache/restore@v6
-        with:
-          path: deploy-verified.json
-          key: ${{ env.SITE_MARKER }}
-      - name: Save the verified marker
-        id: save
-        if: steps.after.outputs.confirmed == 'true' && env.SITE_MARKER != '' && steps.kept.outputs.cache-hit != 'true'
-        continue-on-error: true
-        uses: actions/cache/save@v6
-        with:
-          path: deploy-verified.json
-          key: ${{ env.SITE_MARKER }}
-      # Runs only when an assertion of this site failed, cancelled run or not;
-      # a step that was cancelled or never ran proves nothing and deletes nothing.
-      - name: Delete the verified marker
-        id: revoke
-        if: ${{ always() && env.SITE_MARKER != '' && (steps.answers.outcome == 'failure' || steps.links.outcome == 'failure') }}
-        run: node scripts/revoke-site-marker.mjs --key "$SITE_MARKER"
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-      # A site this run published but whose host does not serve the build: its
-      # checks ran against what the host serves, and the leg fails here.
-      - name: Fail when this run's publish of the site did not take
-        id: untaken
-        if: ${{ !cancelled() && steps.before.outputs.untaken == 'true' }}
-        run: |
-          echo "::error::This run published the site, but its host does not serve the build's digest."
-          exit 1
 
-  verify-sites:
+  # Browser checks run apart from the deploy so a flaky check cannot hold back
+  # the Pages deploy.
+  verify-workers:
     runs-on: ubuntu-latest
-    needs: [build, deploy-workers, deploy]
-    if: ${{ !cancelled() && needs.build.result == 'success' && needs.build.outputs.verify != '[]' }}
-    permissions:
-      contents: read
-      actions: write
+    needs: deploy-workers
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.build.outputs.verify) }}
+        include:
+          - site: msk
+            url: https://mskapps.sciget.org/
+          - site: microscopy
+            url: https://microscopyapps.sciget.org/
+          - site: preclinical
+            url: https://preclinicalapps.sciget.org/
     env:
       BASE_URL: ${{ matrix.url }}
       SITE_CATALOG: ${{ matrix.site }}
-      SITE_DIGEST: ${{ matrix.digest }}
-      SITE_MARKER: ${{ matrix.key }}
-      SITE_PUBLISHED: ${{ matrix.published }}
     steps:
       - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -313,52 +231,9 @@ jobs:
         run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
           node node_modules/@playwright/test/cli.js install --with-deps chromium
-      - name: Confirm the host serves this build before the checks
-        id: before
-        run: node scripts/confirm-site-digest.mjs --url "$BASE_URL" --site "$SITE_CATALOG" --digest "$SITE_DIGEST" --published "$SITE_PUBLISHED"
-      - name: Check the site answers
-        id: answers
-        run: bash scripts/check-site-answers.sh "$BASE_URL"
       - name: Verify deployed cross-origin isolation
-        id: isolation
         run: pnpm test:deployed
       - name: Verify standalone downloads in every deployed application
-        id: downloads
         run: node test/standalone-downloads.smoke.mjs
       - name: Verify deployed NIfTI and DICOM scan pickers
-        id: uploads
         run: pnpm test:image-uploads
-      - name: Confirm the host still serves this build after the checks
-        id: after
-        if: steps.before.outputs.confirmed == 'true'
-        run: node scripts/confirm-site-digest.mjs --url "$BASE_URL" --site "$SITE_CATALOG" --digest "$SITE_DIGEST" --marker deploy-verified.json
-      - name: Keep the verified marker
-        id: kept
-        if: steps.after.outputs.confirmed == 'true' && env.SITE_MARKER != ''
-        continue-on-error: true
-        uses: actions/cache/restore@v6
-        with:
-          path: deploy-verified.json
-          key: ${{ env.SITE_MARKER }}
-      - name: Save the verified marker
-        id: save
-        if: steps.after.outputs.confirmed == 'true' && env.SITE_MARKER != '' && steps.kept.outputs.cache-hit != 'true'
-        continue-on-error: true
-        uses: actions/cache/save@v6
-        with:
-          path: deploy-verified.json
-          key: ${{ env.SITE_MARKER }}
-      - name: Delete the verified marker
-        id: revoke
-        if: ${{ always() && env.SITE_MARKER != '' && (steps.answers.outcome == 'failure' || steps.isolation.outcome == 'failure' || steps.downloads.outcome == 'failure' || steps.uploads.outcome == 'failure') }}
-        run: node scripts/revoke-site-marker.mjs --key "$SITE_MARKER"
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-      # A site this run published but whose host does not serve the build: its
-      # checks ran against what the host serves, and the leg fails here.
-      - name: Fail when this run's publish of the site did not take
-        id: untaken
-        if: ${{ !cancelled() && steps.before.outputs.untaken == 'true' }}
-        run: |
-          echo "::error::This run published the site, but its host does not serve the build's digest."
-          exit 1
