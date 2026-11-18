@@ -18,7 +18,7 @@ import { LARGE_RUN_JOBS, ofPullRequest } from './ci-usage.mjs';
 //   test: a test job of another workflow
 //   deliver: deploys, publishes, releases or syncs
 //   report: reports on other runs
-export const ROLES = Object.freeze(['plan', 'fixed', 'app', 'site', 'test', 'deliver', 'report', 'unclassified']);
+const ROLES = Object.freeze(['plan', 'fixed', 'app', 'site', 'test', 'deliver', 'report', 'unclassified']);
 const TESTED_NOTHING = new Set(['plan', 'report']);
 
 // The jobs of ci.yml, by job id. A job of the `ci` workflow not listed here is unclassified.
@@ -122,7 +122,7 @@ export const WORKFLOWS = Object.freeze({
 
 const GATE_JOB = /^gate( \/ |$)/;
 // A job's name without its matrix values: `app-tests (calmar, calmar)` is `app-tests`.
-export const jobKind = (name) => name.replace(/ \(.*$/, '');
+const jobKind = (name) => name.replace(/ \(.*$/, '');
 
 export function jobRole(workflow, jobName) {
   const entry = Object.hasOwn(WORKFLOWS, workflow) ? WORKFLOWS[workflow] : undefined;
@@ -135,7 +135,7 @@ export function jobRole(workflow, jobName) {
 const ran = (jobs = []) => jobs.filter((job) => job.conclusion !== 'skipped' && job.started_at);
 
 // A job's runner minutes; one still running counts up to `now`.
-export function jobMinutes(job, now) {
+function jobMinutes(job, now) {
   if (job.conclusion === 'skipped' || !job.started_at) return 0;
   const end = job.completed_at ? Date.parse(job.completed_at) : Date.parse(now);
   const minutes = (end - Date.parse(job.started_at)) / 60000;
@@ -151,9 +151,9 @@ const stats = (values) => ({ count: values.length, median: round(percentile(valu
 // when it started a ready-only job and `draft` otherwise. A job the run
 // cancelled before a runner took it still shows which plan the run had.
 export function ciPullRequestTier(jobs = []) {
-  const started = jobs.filter((job) => job.conclusion !== 'skipped');
-  if (started.length >= LARGE_RUN_JOBS) return 'whole';
-  return started.some((job) => READY_ONLY_CI_JOBS.includes(jobKind(job.name))) ? 'ready' : 'draft';
+  const listed = jobs.filter((job) => job.conclusion !== 'skipped');
+  if (listed.length >= LARGE_RUN_JOBS) return 'whole';
+  return listed.some((job) => READY_ONLY_CI_JOBS.includes(jobKind(job.name))) ? 'ready' : 'draft';
 }
 
 const ciPullRequestRuns = (runs) => runs.filter((run) => run.name === 'ci' && run.event === 'pull_request');
@@ -214,7 +214,7 @@ export function mergeToLive(runs, deploys, until) {
 // Whether a run belongs to a merged pull request: its runs on the head branch
 // from its opening to its merge, its merge queue runs and the push runs of its
 // merge commit.
-export function ofMergedPullRequest(run, pullRequest) {
+function ofMergedPullRequest(run, pullRequest) {
   if (run.event === 'push' && run.head_branch === 'main') return run.head_sha === pullRequest.mergeCommit;
   if (run.event === 'merge_group') return run.head_branch?.startsWith(`gh-readonly-queue/main/pr-${pullRequest.number}-`) ?? false;
   return run.created_at >= pullRequest.createdAt && run.created_at <= pullRequest.mergedAt && ofPullRequest(run, pullRequest);
@@ -232,7 +232,7 @@ export function minutesPerMergedPullRequest(pullRequests, runs, jobs, now) {
 }
 
 // Why a run tested nothing, or null when it ran a job that tests or delivers.
-export function idleReason(run, jobs) {
+function idleReason(run, jobs) {
   if (run.conclusion === 'skipped') return 'skipped';
   const roles = ran(jobs).map((job) => jobRole(run.name, job.name));
   if (!roles.length) return 'no job';
