@@ -6,6 +6,7 @@
 //! downloads all three pinned fixtures; any missing one fails.
 use samsrf_core::apertures::Apertures;
 use samsrf_core::error::Error;
+use samsrf_core::geometry::HullOrder;
 use samsrf_core::job::{Job, JobInputs, SeedInputs};
 use samsrf_core::mapset::Maps;
 use samsrf_core::model::{self, AnalysisKind, Model};
@@ -234,7 +235,8 @@ fn bits(a: f64, b: f64) -> bool {
 }
 
 /// Whether a replayed row is a hull geometry row: MATLAB's polyshape centroid
-/// and areas, which double replays reproduce bit for bit.
+/// and areas. Double replays reproduce them bit for bit with the diagnostic
+/// `HullOrder::Stored`; production's listed hull stays within 1e-12.
 fn hull_row(case: &Value, name: &str) -> bool {
     let rc_hull = kind(case) == AnalysisKind::RevCorPrf && case["mapReplayModel"]["Prf_Function"] == 0;
     let cf_hull = kind(case) == AnalysisKind::RevCorCf && case["mapReplayModel"]["Fit_pRF"] == 0;
@@ -689,16 +691,28 @@ fn recorded_profiles_replay_to_each_hosts_maps() {
         for case in pipelines(host, "cf").filter(|c| parse(c).is_ok() && !single_gaussian_cf(c) && !runaway_double_gaussian(c)) {
             tally.add(host);
             let prepared = cf_prepared(host, case, &template_maps(host, case));
+            let mut stored = prepared.clone();
+            stored.hull_order = HullOrder::Stored;
             let profiles = array(&host.root, &case["profiles"]);
             let nsvx = shape(&case["profiles"])[0];
             let saved = array(&host.root, &case["savedMaps"]);
             let rows = shape(&case["savedMaps"])[0];
             for (i, &v) in vertices(&host.root, &case["savedVertices"]).iter().enumerate() {
-                let actual = prepared.estimate_profile(&profiles[v as usize * nsvx..(v as usize + 1) * nsvx]).unwrap();
+                let profile = &profiles[v as usize * nsvx..(v as usize + 1) * nsvx];
+                let actual = prepared.estimate_profile(profile).unwrap();
+                let diagnostic = stored.estimate_profile(profile).unwrap();
                 for (r, name) in prepared.values.iter().enumerate() {
-                    let a = if single(case) { f64::from(actual[r] as f32) } else { actual[r] };
+                    let cast = |value: f64| if single(case) { f64::from(value as f32) } else { value };
+                    let (a, d) = (cast(actual[r]), cast(diagnostic[r]));
                     let e = saved[i * rows + r];
-                    let ok = if single(case) { same(a, e) } else if hull_row(case, name) { bits(a, e) } else { within(a, e, 1e-12 * e.abs().max(1.0)) };
+                    // Production keeps the listed hull; the stored order must give MATLAB's bits.
+                    let ok = if single(case) {
+                        same(a, e) && same(d, e)
+                    } else if hull_row(case, name) {
+                        within(a, e, 1e-12 * e.abs().max(1.0)) && bits(d, e)
+                    } else {
+                        within(a, e, 1e-12 * e.abs().max(1.0))
+                    };
                     failures.check(ok, || format!("{} {}: vertex {v} {name}: {a} vs {e}", host.name, case["id"]));
                 }
             }
@@ -706,6 +720,7 @@ fn recorded_profiles_replay_to_each_hosts_maps() {
         for case in pipelines(host, "revcor").filter(|c| parse(c).is_ok()) {
             tally.add(host);
             let prepared = rc_prepared(host, case);
+            let stored = rc_prepared(host, case).with_hull_order(HullOrder::Stored);
             let y = array(&host.root, &case["savedCourses"]);
             let volumes = shape(&case["savedCourses"])[0];
             let profiles = array(&host.root, &case["profiles"]);
@@ -728,14 +743,16 @@ fn recorded_profiles_replay_to_each_hosts_maps() {
                     Some(_) => prepared.fit_model(&raw_row, &profile).unwrap(),
                     None => prepared.convex_hull(&raw_row, &profile),
                 };
+                let diagnostic = stored.convex_hull(&stored.raw_row(course, &profile), &profile);
                 let rows_out = revcor_prf::RAW_VALUES.iter().zip(raw_row.iter().zip(&raw[i * 5..i * 5 + 5]))
-                    .map(|(name, (a, e))| (format!("raw {name}"), *a, *e))
-                    .chain(prepared.values.iter().enumerate().map(|(r, name)| (name.clone(), fitted[r], saved[i * rows + r])));
-                for (name, a, e) in rows_out {
+                    .map(|(name, (a, e))| (format!("raw {name}"), *a, *e, f64::NAN))
+                    .chain(prepared.values.iter().enumerate().map(|(r, name)| (name.clone(), fitted[r], saved[i * rows + r], diagnostic.get(r).copied().unwrap_or(f64::NAN))));
+                for (name, a, e, d) in rows_out {
                     let a = if single(case) { f64::from(a as f32) } else { a };
                     // R^2 = corr(Y, X(:,m))^2, whose dot product order is host-specific.
+                    // Production keeps the listed grid and hull; the stored order must give MATLAB's bits.
                     let ok = if !single(case) && hull_row(case, &name) {
-                        bits(a, e)
+                        within(a, e, 1e-12 * e.abs().max(1.0)) && bits(d, e)
                     } else if !single(case) {
                         within(a, e, 1e-12 * e.abs().max(1.0))
                     } else if name.ends_with("R^2") && intel(host) {
@@ -783,9 +800,9 @@ fn pipelines_from_matlab_courses_match_matlab() {
                     let ok = if rounding.contains(&v) {
                         // MATLAB fitted its rounding residual; the port has none to fit.
                         a == 0.0 || name == "Noise Ceiling"
-                    } else if !single(case) && hull_row(case, name) {
-                        bits(a, e)
                     } else if !single(case) {
+                        // Hull rows included: the job keeps the listed hull (the
+                        // replay holds the stored order to MATLAB's bits).
                         within(a, e, 1e-12 * k * e.abs().max(1.0))
                     } else if single(case) && !intel(host) {
                         // Every single CF and RC map is bit-identical on the AMD hosts.

@@ -86,9 +86,9 @@ pub(crate) fn convex_hull(points: &[[f64; 2]]) -> Option<Vec<[f64; 2]>> {
 
 /// The same hull as `clean` leaves it, counter-clockwise from the lowest grid
 /// point unless cleaning removed that point: the order the port used before it
-/// followed MATLAB's. The experimental gates verify the polyshape reproducer
-/// rounds' predictions, made in that order, against it.
-#[cfg(feature = "polyshape-experimental")]
+/// followed MATLAB's, which `geometry::ListedHull` keeps. The experimental gates
+/// verify the polyshape reproducer rounds' predictions, made in that order,
+/// against it.
 pub(crate) fn convex_hull_as_listed(points: &[[f64; 2]]) -> Option<Vec<[f64; 2]>> {
     let shape = Shape::of(points)?;
     Some(shape.listed_hull()?.into_iter().map(|k| shape.coordinates(k)).collect())

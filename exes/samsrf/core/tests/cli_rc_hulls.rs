@@ -5,11 +5,14 @@
 //! `SAMSRF_CLI_RC_HULLS_DIR` the output of `extract_cli_rc_hulls.py`; set all three
 //! or none.
 //!
-//! On both hosts the pixel grid equals the `xc` and `yc` MATLAB saved, at every
+//! This gates the diagnostic `HullOrder::Stored` evaluation, which the convex-hull
+//! analysis does not take in production (`revcor_prf::pixel_grid`). With it, on
+//! both hosts the pixel grid equals the `xc` and `yc` MATLAB saved, at every
 //! pixel. On the AMD host, where the profiles are MATLAB's, the peak, the hull
 //! centroid and, but for the listed vertices, `Fwhm` are MATLAB's bits.
 use samsrf_core::hrf::{self, ResolvedHrf};
 use samsrf_core::model::{parse_model_json, AnalysisKind, Model};
+use samsrf_core::geometry::HullOrder;
 use samsrf_core::{mat, revcor_prf};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -18,7 +21,8 @@ const RUNS: [&str; 2] = ["rc_hull_lh_double", "rc_custom_hrf_lh_double"];
 
 /// AMD vertices (positions in `Srf.Roi`) whose `Fwhm` differs: MATLAB takes it
 /// from `convexHull` of the Delaunay triangulation, whose area arithmetic is not
-/// identified (`delaunay_hull_area`). Each must still differ, by at most 2 ULP.
+/// identified (`ListedHull::of`, `hull-area-predictions.md`). Each must still
+/// differ, by at most 2 ULP.
 const FWHM_DIFFERS: [(&str, usize); 15] = [
     ("rc_hull_lh_double", 6),
     ("rc_hull_lh_double", 12),
@@ -85,7 +89,7 @@ fn prepared(bundle: &Path, run: &str, volumes: usize) -> revcor_prf::Prepared {
         Ok(kernel) => kernel,
         Err(_) => ResolvedHrf::Kernel(hrf::old_school(model.tr, mat::read_old_school_hrf(&std::fs::read(bundle.join("hrf_custom.mat")).unwrap()).unwrap())),
     };
-    revcor_prf::Prepared::new(&model, &apertures, &kernel, volumes).unwrap()
+    revcor_prf::Prepared::new(&model, &apertures, &kernel, volumes).unwrap().with_hull_order(HullOrder::Stored)
 }
 
 #[test]

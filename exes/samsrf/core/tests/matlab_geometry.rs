@@ -3,7 +3,7 @@
 //! connective fields of the raw-input RC/CF matrix (record_revcor_matrix.m),
 //! replayed from MATLAB's own profiles. The native workflow sets
 //! SAMSRF_MATLAB_GEOMETRY_DIR and SAMSRF_MATLAB_REVCOR_DIR.
-use samsrf_core::geometry::{cluster_roi, delaunay_triangles, unique_rows, Hull, Triangulation};
+use samsrf_core::geometry::{cluster_roi, delaunay_triangles, unique_rows, Hull, HullOrder, ListedHull, Triangulation};
 use samsrf_core::{mapset::Maps, model, revcor_cf};
 use std::collections::BTreeSet;
 use serde_json::{json, Value};
@@ -89,6 +89,8 @@ fn revcor_matrix_cf_maps_follow_from_matlab_profiles() {
             let courses = vec![vec![0.0; 2]; seeds.len()];
             let courses: Vec<&[f64]> = courses.iter().map(Vec::as_slice).collect();
             let prepared = revcor_cf::Prepared::new(&model, &seeds, &courses, &template, &area, None).unwrap();
+            let mut stored = prepared.clone();
+            stored.hull_order = HullOrder::Stored;
             let profiles = array(&root, &case["profiles"]);
             let maps = array(&root, &case["maps"]);
             let rows = shape(&case["maps"])[0];
@@ -100,15 +102,16 @@ fn revcor_matrix_cf_maps_follow_from_matlab_profiles() {
                 }
                 replayed += 1;
                 let actual = prepared.estimate_profile(profile).unwrap();
+                let diagnostic = stored.estimate_profile(profile).unwrap();
                 for (row, value) in actual.iter().enumerate() {
                     let label = &prepared.values[row];
                     let index = labels.iter().position(|l| l == label).unwrap_or_else(|| panic!("{id}: no {label} row"));
                     let expected = maps[vertex * rows + index];
                     let context = format!("{} {id} vertex {vertex} {label}", root.display());
+                    // Production keeps the listed hull; the stored order gives MATLAB's bits.
+                    close(*value, expected, 1e-12 * expected.abs().max(1.0), &context);
                     if fit == 0 {
-                        exact(*value, expected, &context);
-                    } else {
-                        close(*value, expected, 1e-12 * expected.abs().max(1.0), &context);
+                        exact(diagnostic[row], expected, &format!("{context} (stored order)"));
                     }
                 }
             }
@@ -208,11 +211,13 @@ fn real_template_cf_maps_match_matlab() {
     }
 }
 
-/// Double hull-mode values of the template cases whose MATLAB hull the port lists
-/// from another starting vertex, so their sums round differently: the port does
-/// not reproduce how MATLAB splits these self-intersecting clusters into rings,
-/// which sets where `convhull` starts. Each must still differ from MATLAB and stay
-/// within 1e-12 relative; a fix shortens this list.
+/// Double hull-mode values of the template cases whose MATLAB hull the stored-order
+/// diagnostic (`HullOrder::Stored`) lists from another starting vertex, so their
+/// sums round differently: the port does not reproduce how MATLAB splits these
+/// self-intersecting clusters into rings, which sets where `convhull` starts.
+/// Each must still differ from MATLAB and stay within 1e-12 relative; a fix
+/// shortens this list. Three per host (lh 29 Centre, lh 33 x0, rh 11 Centre)
+/// are exact under the listed hull that production keeps, which is why it keeps it.
 const TEMPLATE_HULL_START: [(&str, usize, &str); 15] = [
     ("template_lh_double_hull", 7, "y0"),
     ("template_lh_double_hull", 21, "y0"),
@@ -254,6 +259,8 @@ fn real_template_cf_maps_match_matlab_on(root: &Path, cases: &[Value]) {
         let courses = vec![vec![0.0; 2]; seeds.len()];
         let courses: Vec<&[f64]> = courses.iter().map(Vec::as_slice).collect();
         let prepared = revcor_cf::Prepared::new(&cf_model(fit), &seed_vx, &courses, &template_maps(&full, 5), &vec![1.0; columns], None).unwrap();
+        let mut stored = prepared.clone();
+        stored.hull_order = HullOrder::Stored;
         let profiles = array(root, &case["profiles"]);
         let maps = array(root, &case["maps"]);
         let rows = shape(&case["maps"])[0];
@@ -263,6 +270,7 @@ fn real_template_cf_maps_match_matlab_on(root: &Path, cases: &[Value]) {
         }
         for (vertex, profile) in profiles.chunks(seeds.len()).enumerate() {
             let actual = prepared.estimate_profile(profile).unwrap();
+            let diagnostic = stored.estimate_profile(profile).unwrap();
             for (row, &index) in order.iter().enumerate() {
                 let label = &prepared.values[row];
                 // Single-precision squares, medians and fits are MATLAB single
@@ -272,14 +280,17 @@ fn real_template_cf_maps_match_matlab_on(root: &Path, cases: &[Value]) {
                 }
                 let expected = maps[vertex * rows + index];
                 let context = format!("{id} vertex {vertex} {label}");
+                // Production keeps the listed hull, within 1e-12 as before.
+                close(actual[row], expected, 1e-12 * expected.abs().max(1.0), &context);
+                let stored_context = format!("{context} (stored order)");
                 if fit == 0 && !single && TEMPLATE_HULL_START.contains(&(id, vertex, label.as_str())) {
-                    assert_ne!(actual[row].to_bits(), expected.to_bits(), "{context} now equals MATLAB; remove it from TEMPLATE_HULL_START");
-                    close(actual[row], expected, 1e-12 * expected.abs().max(1.0), &context);
+                    assert_ne!(diagnostic[row].to_bits(), expected.to_bits(), "{stored_context} now equals MATLAB; remove it from TEMPLATE_HULL_START");
+                    close(diagnostic[row], expected, 1e-12 * expected.abs().max(1.0), &stored_context);
                     listed.insert((id, vertex, label.clone()));
                 } else if fit == 0 && !single {
-                    exact(actual[row], expected, &context);
+                    exact(diagnostic[row], expected, &stored_context);
                 } else {
-                    close(actual[row], expected, 1e-12 * expected.abs().max(1.0), &context);
+                    close(diagnostic[row], expected, 1e-12 * expected.abs().max(1.0), &stored_context);
                 }
             }
         }
@@ -377,17 +388,13 @@ fn uncentred_error_bound(vertices: &[[f64; 2]], area: f64) -> [f64; 3] {
     [centroid(0), centroid(1), area_bound]
 }
 
-/// The 93 near-collinear clouds (kind 3 of record_geometry.m's point clouds:
-/// points within 1e-6 to 1e-10 of a line, in random order) whose hulls still
-/// differ. MATLAB resolves their crossings of nearly parallel edges by snapping
-/// vertices up to about the 1e-8 tolerance (1e5 to 1e8 grid units) away from
-/// any exact intersection, which the port does not reproduce. Each must stay a
-/// near-collinear cloud and must still differ: a fix shortens this list.
-/// Its port outcome is separately frozen, not treated as MATLAB ground truth.
 /// Hulls per family that the port lists in MATLAB's stored order, so their area
-/// and centroid must be MATLAB's bits. The rest start elsewhere because the
-/// port's ring decomposition of a self-intersecting cloud differs from MATLAB's.
-/// A change in either direction must update this.
+/// and centroid must be MATLAB's bits: 15,840 of the 16,871 hulls MATLAB records
+/// on each host. Of the others, 948 have MATLAB's vertices in another order (the
+/// port's rings of a self-intersecting cloud are not MATLAB's) and are held to
+/// the forward-error bound; 79 with other vertices and 4 the port leaves empty
+/// are near-collinear clouds in `NEAR_COLLINEAR_SNAPPING`. A change in either
+/// direction must update this.
 const STORED_ORDER: [(&str, usize); 7] = [
     ("polygon_boundary_ulp", 6523),
     ("polygon_boundary_relative", 4902),
@@ -398,6 +405,14 @@ const STORED_ORDER: [(&str, usize); 7] = [
     ("polygon_point_clouds", 1189),
 ];
 
+/// The 93 near-collinear clouds (kind 3 of record_geometry.m's point clouds:
+/// points within 1e-6 to 1e-10 of a line, in random order) whose hulls still
+/// differ: 83 that MATLAB gives a hull and 10 whose hull MATLAB leaves empty.
+/// MATLAB resolves their crossings of nearly parallel edges by snapping
+/// vertices up to about the 1e-8 tolerance (1e5 to 1e8 grid units) away from
+/// any exact intersection, which the port does not reproduce. Each must stay a
+/// near-collinear cloud and must still differ: a fix shortens this list.
+/// Its port outcome is separately frozen, not treated as MATLAB ground truth.
 const NEAR_COLLINEAR_SNAPPING: [usize; 93] = [27, 62, 77, 102, 117, 157, 162, 182, 307, 312, 317, 377, 387, 397, 452, 482, 512, 532, 557, 562, 622, 647, 712, 737, 777, 797, 822, 852, 872, 877, 927, 1022, 1027, 1032, 1162, 1167, 1192, 1237, 1257, 1287, 1322, 1382, 1392, 1422, 1427, 1457, 1467, 1472, 1497, 1512, 1522, 1547, 1552, 1587, 1622, 1642, 1737, 1742, 1777, 1782, 1817, 1897, 1922, 1927, 1932, 1947, 1982, 2007, 2012, 2057, 2062, 2087, 2102, 2147, 2167, 2172, 2197, 2212, 2227, 2237, 2247, 2272, 2292, 2302, 2312, 2317, 2337, 2357, 2367, 2382, 2417, 2447, 2457];
 
 /// `polyshape(P).convhull` on thin triangles one ULP apart across the cutoff at
@@ -433,6 +448,14 @@ fn polygon_hulls_match_matlab_on(root: &Path, cases: &[Value]) {
             let expected = [estimate[i], estimate[n + i], estimate[2 * n + i]];
             let hull = Hull::of_polygon(polygon);
             let vertices = hull.as_ref().map(|h| h.vertices.as_slice()).unwrap_or(&[]);
+            // Production keeps the listed hull: the same vertices, measured within the bound.
+            let production = ListedHull::of_polygon(polygon);
+            assert_eq!(sorted_vertices(production.as_ref().map(|h| h.vertices.as_slice()).unwrap_or(&[])), sorted_vertices(vertices), "{id} {i}: listed and stored hulls");
+            if let Some(listed) = production.as_ref().filter(|_| sorted_vertices(vertices) == sorted_vertices(&expected_hulls[i])) {
+                let (centre, area) = (listed.centroid(), listed.area());
+                let bound = uncentred_error_bound(&listed.vertices, area);
+                assert!((0..2).all(|axis| (centre[axis] - expected[axis]).abs() <= bound[axis]) && (area - expected[2]).abs() <= bound[2], "{id} {i}: listed hull outside the bound");
+            }
             let agrees = sorted_vertices(vertices) == sorted_vertices(&expected_hulls[i]) && match &hull {
                 None => expected[2] == 0.0 && expected[0].is_nan() && expected[1].is_nan(),
                 Some(hull) if hull.vertices == expected_hulls[i] => {

@@ -552,16 +552,15 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   gives MATLAB's `delaunay` edges on every recorded grid, ring and shuffled
   tie. `polyshape(...).convhull` follows MATLAB's fixed-point grid, even-odd
   resolution and 1e-8 cleaning, and gives MATLAB's hull vertices on 25,964
-  of the 26,057 original recorded polygons. Since 0.6.20261118 area and
-  centroid follow MATLAB's own arithmetic in its stored vertex order, giving
-  MATLAB's bits wherever the port lists a hull in that order: every
-  reverse-correlation hull, whose pixel grid is now MATLAB's symmetric
-  `linspace`, and most CF hulls. For a self-intersecting CF cluster the port's
-  rings can start the hull elsewhere (30 recorded template values, within
-  1e-12 relative), and the reverse-correlation `Fwhm` keeps the port's earlier
-  `convexHull` area, whose MATLAB arithmetic is not identified (1-2 ULP at 15
-  of 42 recorded vertices;
-  [hull area, centroid and vertex order](validation/matlab/README.md#hull-area-centroid-and-vertex-order-732)).
+  of the 26,057 original recorded polygons. Hull area and centroid keep the
+  port's earlier evaluation. An order and arithmetic fitted to MATLAB's
+  recordings would give MATLAB's bits on far more recorded values, but it also
+  loses some the earlier evaluation matched, so it is kept as gated diagnostic
+  evidence rather than shipped. Reverse-correlation pRF fits use MATLAB's
+  symmetric `linspace` grid, which every recorded grid follows and which loses
+  nothing. The convex-hull analysis keeps the earlier grid, because MATLAB's
+  `convexHull` area is not identified
+  ([hull area, centroid and vertex order](validation/matlab/README.md#hull-area-centroid-and-vertex-order-732)).
   The 93 nearly collinear exceptions are frozen as regression snapshots; why
   MATLAB keeps the vertices it keeps for them is not known
   ([geometry gates](validation/matlab/README.md#geometry-polyshape-delaunay-and-real-templates)).
