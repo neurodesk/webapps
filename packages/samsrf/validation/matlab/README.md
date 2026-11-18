@@ -1559,8 +1559,8 @@ matrix's synthetic 96-vertex `lh.white`, which ends at its faces as MATLAB's
 it logs the failure without throwing. The viewer now reads surfaces with the
 engine's own reader.
 
-On 2026-11-18, after #875 (the production bundle of a fresh full build and
-the tooling of the same commit, module `1745ae49…`, against the compiled
+On 2026-11-18, after #874 (the production bundle of a fresh full build and
+the tooling of the same commit, module `abbd6625…`, against the compiled
 execution with `run_browser_matrix.mjs`'s run of that commit as the engine
 root), the comparator exits 0: all 22 computed runs complete, 2 are `refused`,
 and none is `ui-error`, `unsupported`, `failed` or `inventory-error`. All 212
@@ -1570,18 +1570,20 @@ float32 downloads 20 runs are exact and 2 differ (160 of 168 maps). The four
 `*_custom_hrf_*` runs take `hrf_custom.mat` through the Subject HRF field. The
 two that differ are the CSS runs, loaded with `Css_Convention: "samsrf"`: every
 real part is exact, but R², nR², Beta and Baseline are complex in MATLAB at 12
-to 15 vertices, and only the engine runners match their imaginary parts. Five
+to 15 vertices, and only the engine runners match their imaginary parts. Four
 double runs are exact in float32 while their double values differ, which the
 downloads cannot show: x0, y0 and Fwhm of `rc_hull_lh_double` and
-`rc_custom_hrf_lh_double`, R², x0 and y0 of `rc_gaussian_lh_double`, y0 of
-`cf_hull_lh_double`, and R², y0, Beta and Suppression of
-`cf_hull_smooth_global_lh_double`, at 6 to 18 vertices each (up to 2.6e-9
-relative in the double RC Gaussian fits, at most 147 ULPs elsewhere). These
-are the maps and counts `web-cli-outcome.json` records against the pinned AMD
-host. Both engine runners compute 22 runs (17 exact, 154 of 168 maps), equal to
-each other byte for byte, and main's unchanged Node runner (#875) writes the
-same 236 files: an outcome frozen from main's runner and comparator holds for
-this commit's.
+`rc_custom_hrf_lh_double`, y0 of `cf_hull_lh_double`, and R², y0, Beta and
+Suppression of `cf_hull_smooth_global_lh_double`, at 8 to 18 vertices each and
+by at most 147 ULPs (2.2e-14 relative). These are the maps and counts
+`web-cli-outcome.json` records against the pinned AMD host. Both engine runners
+compute 22 runs (18 exact, 157 of 168 maps), equal to each other byte for
+byte, and main's unchanged Node runner (#874) writes the same 236 files: an
+outcome frozen from main's runner and comparator holds for this commit's.
+Against the run of #875's module (`1745ae49…`), value by value on both
+executions, 24 real `Srf.Data` values became exact (R², x0 and y0 of
+`rc_gaussian_lh_double`) and none was lost; all 3,528 imaginary parts and
+15,888 GIfTI values stay exact.
 
 ## Recorded inputs and focused diagnosis
 
