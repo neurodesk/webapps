@@ -1,49 +1,5 @@
 import { sanitize } from './nightly-failures.mjs';
 
-// Workflows that sign and notarize macOS packages with the Apple Developer account. node-cli-portable.yml is
-// reusable: its jobs run inside these callers. test/notarization-alert.test.mjs keeps the list complete.
-export const NOTARIZING_WORKFLOWS = [
-  'ants-native',
-  'bison-native',
-  'brain-extraction-native',
-  'brain2print-native',
-  'browserqc-native',
-  'calmar-native',
-  'carotid-flow-native',
-  'deface-native',
-  'degibbs-native',
-  'dicompare-native',
-  'disconnectome-native',
-  'dwi2trx-native',
-  'dwidenoise-native',
-  'easy-mp2rage-native',
-  'edgereg-native',
-  'elastix-native',
-  'fireants-native',
-  'greedy-native',
-  'hmc-native',
-  'lcmodel-native',
-  'mri2vid-native',
-  'musclemap-native',
-  'n4-native',
-  'niimath-native',
-  'noddi-native',
-  'node-cli',
-  'qsmbly-native',
-  'samsrf-native',
-  'sdc-native',
-  'seedseg-native',
-  'spinalcordtoolbox-native',
-  'standalone',
-  'syncro-native',
-  'synthseg-native',
-  'synthseg-portable',
-  'synthsr-native',
-  'topofit-native',
-  'vesselboost-native',
-  'white-matter-lesions-native',
-];
-
 // Who is assigned, and so notified, when Apple refuses a notarization.
 export const NOTARIZATION_OWNER = 'stebo85';
 export const ALERT_MARKER = '<!-- apple-notarization-alert -->';
@@ -80,9 +36,11 @@ function text(value, limit = 500) {
 const LOG_LIMIT = 64 * 1024 * 1024;
 const FAILED = new Set(['failure', 'timed_out']);
 
-export async function alertNotarization({ run, repository, client, owner = NOTARIZATION_OWNER }) {
+// `run` is an attempt of a workflow that notarizes (runTick in workflow-reports.mjs decides which).
+export async function alertNotarization({ run, repository, client, owner = NOTARIZATION_OWNER, dryRun = false }) {
   if (run.status !== 'completed' || !FAILED.has(run.conclusion)) return { skipped: 'Run did not fail' };
-  if (run.event === 'pull_request' || !NOTARIZING_WORKFLOWS.includes(run.name)) return { skipped: 'Run does not notarize' };
+  if (run.event === 'pull_request') return { skipped: 'Run is a pull request run' };
+  if (run.head_repository?.full_name !== repository) return { skipped: 'Run is not from this repository' };
   const runId = numeric(run.id);
   const attempt = numeric(run.run_attempt ?? 1);
   const jobs = await client.list(`/actions/runs/${runId}/attempts/${attempt}/jobs`, 'jobs');
@@ -114,6 +72,14 @@ export async function alertNotarization({ run, repository, client, owner = NOTAR
   const all = await alerts();
   const issue = all.filter(each => each.state === 'open').sort((a, b) => a.number - b.number)[0]
     ?? all.find(each => each.state_reason !== 'duplicate');
+  // An attempt is reported once, in whichever alert issue holds its marker.
+  for (const alerted of all) {
+    const comments = alerted.body.includes(attemptMarker) ? [] : await client.list(`/issues/${numeric(alerted.number)}/comments`);
+    if (alerted.body.includes(attemptMarker) || comments.some(comment => comment.user?.login === 'github-actions[bot]' && comment.body?.startsWith(attemptMarker))) {
+      return { ...(dryRun && { dryRun: true }), issue: alerted.number, duplicate: true };
+    }
+  }
+  if (dryRun) return issue ? { dryRun: true, comment: issue.number, report } : { dryRun: true, create: true, report };
   if (!issue) {
     const created = await client.request('/issues', { method: 'POST', body: {
       title: 'Apple notarization is failing', body: `${ALERT_MARKER}\n${report}`, assignees: [owner],
@@ -127,10 +93,6 @@ export async function alertNotarization({ run, repository, client, owner = NOTAR
     return { issue: older.number, updated: true };
   }
   const number = numeric(issue.number);
-  const comments = issue.body.includes(attemptMarker) ? [] : await client.list(`/issues/${number}/comments`);
-  if (issue.body.includes(attemptMarker) || comments.some(comment => comment.user?.login === 'github-actions[bot]' && comment.body?.startsWith(attemptMarker))) {
-    return { issue: issue.number, duplicate: true };
-  }
   if (issue.state === 'closed') await client.request(`/issues/${number}`, { method: 'PATCH', body: { state: 'open' } });
   await client.request(`/issues/${number}/assignees`, { method: 'POST', body: { assignees: [owner] } });
   await client.request(`/issues/${number}/comments`, { method: 'POST', body: { body: report } });

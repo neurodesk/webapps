@@ -152,7 +152,7 @@ notarization evidence.
 
 `.github/workflows/node-cli-portable.yml` builds and verifies every target of
 one package. On pull requests the macOS job builds, installs and validates the
-ad hoc package and uploads it as `test-installer-macos-arm64`. With
+ad hoc package and uploads it as `test-installer-<package>-macos-arm64`. With
 `sign_release`, the release job runs on macOS. It calls
 `exes/synthsr/scripts/ci_macos_release.sh exes/node-cli` with the seven
 signing secrets, which imports the certificates into a temporary keychain and

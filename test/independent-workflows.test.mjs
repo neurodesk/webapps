@@ -7,7 +7,7 @@ import YAML from 'yaml';
 import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
 import { createAppPlan } from '../scripts/lib/app-plan.mjs';
 import { commandLineClosure } from '../scripts/lib/module-closure.mjs';
-import { isSharedFilter, pathGlob } from '../scripts/lib/workflow-gate.mjs';
+import { pathGlob, pullRequestFilters, sharedPaths, swept } from '../scripts/lib/workflow-gate.mjs';
 import { repoRoot } from '../scripts/lib/apps-registry.mjs';
 
 async function workflow(name) {
@@ -318,7 +318,7 @@ test('portable Node command lines build on target runners and publish through on
   assert.deepEqual(shared.permissions,{contents:'read'});
   assert.deepEqual(shared.jobs.portable.permissions,{contents:'read', 'id-token':'write'});
   assert.equal(shared.jobs.release.if,'inputs.publish_release');
-  assert.deepEqual(shared.jobs.release.needs,['portable']);
+  assert.deepEqual(shared.jobs.release.needs,['runners','portable']);
   assert.equal(shared.jobs.release.permissions.contents,'write');
   assert.equal(shared.jobs.release['runs-on'],"${{ inputs.sign_release && 'macos-15' || 'ubuntu-latest' }}");
   const signing=['APPLEID','APPLEIDPASS','APPLE_TEAM_ID','CSC_LINK','CSC_KEY_PASSWORD','CSC_INSTALLER_LINK','CSC_INSTALLER_KEY_PASSWORD'];
@@ -331,7 +331,11 @@ test('portable Node command lines build on target runners and publish through on
   const unsigned=shared.jobs.release.steps.filter(step=>step!==sign);
   assert.ok(!JSON.stringify(unsigned).includes('secrets.'),'signing secrets reach only the signing step');
   const upload=shared.jobs.portable.steps.find(step=>step.uses?.startsWith('actions/upload-artifact@'));
-  assert.equal(upload.with.name,"${{ runner.os == 'macOS' && 'test-installer' || 'portable' }}-${{ matrix.platform }}");
+  // native.yml runs several callers in one workflow run, where an artifact name must be unique.
+  assert.equal(upload.with.name,"${{ runner.os == 'macOS' && 'test-installer' || 'portable' }}-${{ needs.runners.outputs.package }}-${{ matrix.platform }}");
+  assert.equal(shared.jobs.runners.outputs.package,'${{ steps.select.outputs.package }}');
+  const download=shared.jobs.release.steps.find(step=>step.uses?.startsWith('actions/download-artifact@'));
+  assert.equal(download.with.pattern,'portable-${{ needs.runners.outputs.package }}-*');
   const build=JSON.stringify(shared.jobs.portable);
   for(const command of ['portable_release\\.py package','portable_release\\.py verify','test_portable_release\\.py','cargo test --manifest-path exes/node-cli/Cargo\\.toml','cargo clippy --manifest-path exes/node-cli/Cargo\\.toml --locked -- -D warnings','cargo fmt --manifest-path exes/node-cli/Cargo\\.toml --check']) {
     assert.match(build,new RegExp(command));
@@ -831,13 +835,14 @@ test('a native or CLI workflow runs when a file its command line imports changes
   for (const file of files) {
     const flow = await workflow(file.slice(0, -'.yml'.length));
     for (const event of ['pull_request', 'push']) {
-      const filters = flow.on?.[event]?.paths;
+      // A pull request reaches a workflow through its own paths or, by native.yml, its shared_paths.
+      const filters = event === 'pull_request' ? pullRequestFilters(flow) : flow.on?.[event]?.paths;
       if (!Array.isArray(filters)) continue;
       // These start for a pull request only on their own paths; their pushes hold the rule.
       if (event === 'pull_request' && OWN_PATHS_ONLY.includes(file)) continue;
       const patterns = filters.filter((filter) => !filter.startsWith('!')).map(pathGlob);
-      // A gated workflow's pushes leave its shared pull request filters to the nightly sweep.
-      if (event === 'push' && flow.jobs.gate && flow.on.schedule) patterns.push(...flow.on.pull_request.paths.filter(isSharedFilter).map(pathGlob));
+      // A gated workflow's pushes leave its shared paths to native.yml's nightly sweep.
+      if (event === 'push' && swept(flow)) patterns.push(...sharedPaths(flow).map(pathGlob));
       // A workflow owns the packages it filters on whole.
       const owned = filters.map((filter) => filter.match(/^((?:packages|exes)\/[^/*]+)\/\*\*$/)?.[1]).filter(Boolean);
       for (const directory of owned) {

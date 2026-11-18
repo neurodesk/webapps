@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { runInNewContext } from 'node:vm';
@@ -12,8 +13,22 @@ const workflow = async (name) => YAML.parse(await readFile(new URL(`../.github/w
 // What pr-gate.yml answers without a checkout: false for a draft, true for
 // every event other than pull_request. A ready pull request is decided by
 // scripts/lib/workflow-gate.mjs; `reached` stands for its answer.
-const gate = (github, reached = true) => ({ gate: { outputs: { run: String(github.event_name !== 'pull_request' || (!github.event?.pull_request?.draft && reached)) } } });
-const evaluate = (expression, github, inputs = {}, needs = gate(github)) => runInNewContext(expression.replace(/^\$\{\{\s*|\s*\}\}$/g, ''), { github, inputs, needs });
+// native.yml's gate names every workflow it may call in its skip list for a draft.
+const nativeCalls = JSON.stringify(YAML.parse(readFileSync(new URL('../.github/workflows/native.yml', import.meta.url), 'utf8')).jobs.gate.with.calls.split(' '));
+const gate = (github, reached = true) => {
+  const run = github.event_name !== 'pull_request' || (!github.event?.pull_request?.draft && reached);
+  return { gate: { result: 'success', outputs: { run: String(run), skips: run ? undefined : nativeCalls } } };
+};
+// GitHub's contains() and fromJSON(), as native.yml's calls use them.
+const text = (value) => (value === undefined || value === null ? '' : String(value)).toLowerCase();
+const functions = {
+  contains: (search, item) => (Array.isArray(search) ? search.includes(item) : text(search).includes(text(item))),
+  startsWith: (search, item) => text(search).startsWith(text(item)),
+  endsWith: (search, item) => text(search).endsWith(text(item)),
+  cancelled: () => false,
+  fromJSON: JSON.parse,
+};
+const evaluate = (expression, github, inputs = {}, needs = gate(github)) => runInNewContext(expression.replace(/^\$\{\{\s*|\s*\}\}$/g, ''), { github, inputs, needs, ...functions });
 
 test('draft feedback selects direct app edits; ready PRs retain shared coverage', async () => {
   const registry = await loadAppsRegistry();
@@ -36,7 +51,9 @@ test('ready and updated PRs run deferred native jobs; pushes and dispatches keep
     if (usesGate) {
       gated++;
       // The gate always finishes, so jobs after the entry jobs keep their default conditions.
-      assert.deepEqual(flow.jobs.gate, { uses: './.github/workflows/pr-gate.yml', permissions: { contents: 'read', actions: 'read', 'pull-requests': 'read' }, with: { workflow: file.slice(0, -'.yml'.length) } }, file);
+      const { shared_paths: shared, calls, sweeps, ...inputs } = flow.jobs.gate.with;
+      assert.deepEqual({ ...flow.jobs.gate, with: inputs }, { uses: './.github/workflows/pr-gate.yml', permissions: { contents: 'read', actions: 'read', 'pull-requests': 'read' }, with: { workflow: file.slice(0, -'.yml'.length) } }, file);
+      for (const list of [shared, calls, sweeps]) assert.ok(list === undefined || typeof list === 'string', `${file}: the gate's lists are strings`);
     }
     if (file !== 'ci.yml' && flow.on?.pull_request?.types?.includes('ready_for_review')) {
       for (const [id, job] of Object.entries(flow.jobs)) {
