@@ -1805,8 +1805,11 @@ double, then `X * B` as each row's rounded products added in column order, gives
 all 52,500. A fused multiply-add of the intercept gives 41,375. This rule was
 chosen from those two orders on all of these AMD values, with no separate
 held-out set. The Intel host's MKL solves in another order: there the rule gives
-1,155 to 2,343 identical values per case, and the normal equations gave 2,234 to
-7,155.
+4,844 of 42,000 identical residual values, compared with 11,647 for the normal
+equations: 1,382 values gain exactness and 8,185 lose it. In the CLI matrix, one
+Intel raw value gains exactness and seven lose it, despite unchanged exact-map
+totals and GIfTI bytes. This cross-host tradeoff remains unresolved; improved AMD
+agreement does not establish Intel non-regression or an AMD-only reference policy.
 
 Both precisions now run one function, and `revcor_reference.rs` holds the double
 residuals bit for bit on the AMD hosts (`1e-13` of the course's peak before).

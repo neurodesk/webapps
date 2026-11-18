@@ -608,9 +608,9 @@ fn global_regression_stays_within_rounding() {
                     if peak > 0.0 && a.is_finite() && e.is_finite() {
                         worst = worst.max((a - e).abs() / peak);
                     }
-                    identical += usize::from(same(a, e));
+                    identical += usize::from(a.to_bits() == e.to_bits());
                     compared += 1;
-                    let ok = if intel(host) { within(a, e, relative * peak) } else { same(a, e) };
+                    let ok = if intel(host) { within(a, e, relative * peak) } else { a.to_bits() == e.to_bits() };
                     failures.check(ok, || format!("{} {}: vertex {v} volume {t}: {a} vs {e}", host.name, case["id"]));
                 }
             }
@@ -648,7 +648,7 @@ fn a_missing_course_keeps_its_place_in_the_regression() {
             for (i, &v) in roi.iter().enumerate().filter(|(i, _)| *i != missing) {
                 let e = &expected[v as usize * volumes..(v as usize + 1) * volumes];
                 for (t, (&a, &e)) in series.course(i).iter().zip(e).enumerate() {
-                    assert!(same(a, e), "{} {}: vertex {v} volume {t}: {a} vs {e}", host.name, case["id"]);
+                    assert_eq!(a.to_bits(), e.to_bits(), "{} {}: vertex {v} volume {t}: {a} vs {e}", host.name, case["id"]);
                 }
             }
             cases += 1;
