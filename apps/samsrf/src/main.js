@@ -193,7 +193,8 @@ async function setInputs(next) {
   if (mesh !== shownSurface.mesh || curv !== shownSurface.curv) {
     shownSurface = { mesh, curv };
     try {
-      await viewer.showSurface(mesh, curv);
+      // A later change of the inputs replaced this surface; that change shows and reports its own.
+      if (!(await viewer.showSurface(mesh, curv))) return;
       viewer.setView(view, hemisphere());
       $("emptyState").hidden = Boolean(mesh);
       if (mesh) log.log(`Showing ${mesh.name}${curv ? ` shaded by ${curv.name}` : ""}`, "info", "technical");

@@ -33,6 +33,18 @@ export function createSurfaceViewer(canvasId, nv = new NiiVue({ isDragDropEnable
   });
   let surface = null;
   let mapLayer = -1;
+  // NiiVue's mesh calls await file reads and GPU uploads, and calls that overlap act on each
+  // other's meshes, so each change of the scene starts when the one before it has finished.
+  let scene = Promise.resolve();
+  function change(step) {
+    const next = scene.then(async () => {
+      await ready;
+      return step();
+    });
+    scene = next.catch(() => {});
+    return next;
+  }
+  let surfaceCalls = 0;
 
   return {
     nv,
@@ -40,41 +52,60 @@ export function createSurfaceViewer(canvasId, nv = new NiiVue({ isDragDropEnable
     get hasSurface() {
       return Boolean(surface);
     },
-    /** Show a surface, shaded by curvature when a curv file is given. Drops any map. */
+    /**
+     * Show a surface, shaded by curvature when a curv file is given, or none for null. Drops any
+     * map. Resolves false, without a change or an error, when a later call replaced the surface.
+     */
     async showSurface(mesh, curvature) {
-      await ready;
-      await nv.removeAllMeshes();
-      surface = null;
-      mapLayer = -1;
-      if (!mesh) return;
-      await nv.addMesh({
-        url: await meshFile(mesh),
-        name: mesh.name,
-        color: [0.7, 0.7, 0.7, 1],
-      });
-      // NiiVue logs a mesh it cannot load and resolves without adding it.
-      if (!nv.meshes[0]?.positions?.length) {
+      const call = ++surfaceCalls;
+      const replaced = () => call !== surfaceCalls;
+      // Files are read outside the queue, so a slow read cannot hold up the surface that replaces it.
+      const files = await Promise.all([mesh && meshFile(mesh), mesh && curvature && curvatureLayer(curvature)]).then(
+        (urls) => ({ urls }),
+        (error) => ({ error }),
+      );
+      if (replaced()) return false;
+      return change(async () => {
+        if (replaced()) return false;
         await nv.removeAllMeshes();
-        throw new Error(`${mesh.name}: the viewer could not draw this surface.`);
-      }
-      if (curvature) await nv.addMeshLayer(0, { url: await curvatureLayer(curvature), name: curvature.name, ...CURVATURE });
-      surface = mesh;
-      mapLayer = curvature ? 1 : 0;
+        surface = null;
+        mapLayer = -1;
+        if (files.error) throw files.error;
+        if (!mesh) return true;
+        const [meshUrl, curvatureUrl] = files.urls;
+        await nv.addMesh({ url: meshUrl, name: mesh.name, color: [0.7, 0.7, 0.7, 1] });
+        // NiiVue logs a mesh it cannot load and resolves without adding it.
+        if (!nv.meshes[0]?.positions?.length) {
+          await nv.removeAllMeshes();
+          throw new Error(`${mesh.name}: the viewer could not draw this surface.`);
+        }
+        if (curvatureUrl) await nv.addMeshLayer(0, { url: curvatureUrl, name: curvature.name, ...CURVATURE });
+        if (replaced()) return false;
+        surface = mesh;
+        mapLayer = curvatureUrl ? 1 : 0;
+        return true;
+      }).catch((error) => {
+        if (replaced()) return false;
+        throw error;
+      });
     },
     /** Draw an encoded map (display.js encodeOverlay) on the surface, or remove it with null. */
-    async showMap(encoded, colormap, opacity = 1) {
-      await ready;
-      if (!surface) return;
-      if (nv.meshes[0].layers.length > mapLayer) await nv.removeMeshLayer(0, mapLayer);
-      if (!encoded) return;
-      if (encoded.length !== nv.meshes[0].positions.length / 3) {
-        throw new Error(`The maps have ${encoded.length} vertices but ${surface.name} has ${nv.meshes[0].positions.length / 3}.`);
-      }
-      const url = new File([writeMz3Scalars(encoded)], "map.mz3");
-      await nv.addMeshLayer(0, { url, name: "map", colormap, calMin: 1, calMax: 2, colormapType: 0, isTransparentBelowCalMin: true, opacity, isColorbarVisible: false });
+    showMap(encoded, colormap, opacity = 1) {
+      return change(async () => {
+        if (!surface) return;
+        if (nv.meshes[0].layers.length > mapLayer) await nv.removeMeshLayer(0, mapLayer);
+        if (!encoded) return;
+        if (encoded.length !== nv.meshes[0].positions.length / 3) {
+          throw new Error(`The maps have ${encoded.length} vertices but ${surface.name} has ${nv.meshes[0].positions.length / 3}.`);
+        }
+        const url = new File([writeMz3Scalars(encoded)], "map.mz3");
+        await nv.addMeshLayer(0, { url, name: "map", colormap, calMin: 1, calMax: 2, colormapType: 0, isTransparentBelowCalMin: true, opacity, isColorbarVisible: false });
+      });
     },
-    async setOpacity(opacity) {
-      if (surface && nv.meshes[0].layers.length > mapLayer) await nv.setMeshLayerProperty(0, mapLayer, { opacity });
+    setOpacity(opacity) {
+      return change(async () => {
+        if (surface && nv.meshes[0].layers.length > mapLayer) await nv.setMeshLayerProperty(0, mapLayer, { opacity });
+      });
     },
     setView(view, hemisphere) {
       const { azimuth, elevation } = cameraFor(view, hemisphere);
