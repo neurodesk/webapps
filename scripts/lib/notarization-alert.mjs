@@ -36,10 +36,10 @@ function text(value, limit = 500) {
 const LOG_LIMIT = 64 * 1024 * 1024;
 const FAILED = new Set(['failure', 'timed_out']);
 
-// `notarizing` holds the paths of the workflows that notarize (workflowFacts in workflow-reports.mjs).
-export async function alertNotarization({ run, repository, client, notarizing, owner = NOTARIZATION_OWNER, dryRun = false }) {
+// `run` is an attempt of a workflow that notarizes (runTick in workflow-reports.mjs decides which).
+export async function alertNotarization({ run, repository, client, owner = NOTARIZATION_OWNER, dryRun = false }) {
   if (run.status !== 'completed' || !FAILED.has(run.conclusion)) return { skipped: 'Run did not fail' };
-  if (run.event === 'pull_request' || !notarizing.includes(run.path)) return { skipped: 'Run does not notarize' };
+  if (run.event === 'pull_request') return { skipped: 'Run is a pull request run' };
   if (run.head_repository?.full_name !== repository) return { skipped: 'Run is not from this repository' };
   const runId = numeric(run.id);
   const attempt = numeric(run.run_attempt ?? 1);

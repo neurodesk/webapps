@@ -13,7 +13,6 @@ const run = {
   id: 43435308021, run_attempt: 1, name: 'syncro-native', event: 'workflow_dispatch', status: 'completed', conclusion: 'failure',
   head_branch: 'syncro-v0.8.20261113', path: '.github/workflows/syncro-native.yml', head_repository: { full_name: 'owner/repo' },
 };
-const notarizing = ['.github/workflows/standalone.yml', '.github/workflows/syncro-native.yml'];
 const macJob = { id: 11, name: 'portable / release', conclusion: 'failure', labels: ['macos-15'] };
 const linuxJob = { id: 12, name: 'portable / linux-x64', conclusion: 'failure', labels: ['ubuntu-latest'] };
 
@@ -39,7 +38,7 @@ function fakeClient({ jobs = [macJob, linuxJob], logs = { 11: AGREEMENT, 12: AGR
     },
   };
 }
-const alert = (client, overrides = {}, options = {}) => alertNotarization({ run: { ...run, ...overrides }, repository: 'owner/repo', client, notarizing, ...options });
+const alert = (client, overrides = {}, options = {}) => alertNotarization({ run: { ...run, ...overrides }, repository: 'owner/repo', client, ...options });
 const writes = client => client.calls.filter(call => call.method);
 
 test('notaryFailure finds what notarytool and @electron/notarize print when Apple refuses', () => {
@@ -112,10 +111,10 @@ test('a timed-out notarization is a failure too, and a log longer than the alert
   assert.deepEqual(writes(long), []);
 });
 
-test('other failures, pull requests and unrelated workflows raise nothing', async () => {
+test('other failures, pull requests and forks raise nothing', async () => {
   const unrelated = fakeClient({ logs: { 11: 'error: parity failed', 12: AGREEMENT } });
   assert.deepEqual(await alert(unrelated), { skipped: 'No notarization failure in the failed macOS jobs' });
-  for (const overrides of [{ conclusion: 'success' }, { conclusion: 'cancelled' }, { event: 'pull_request' }, { path: '.github/workflows/ci.yml' }, { head_repository: { full_name: 'fork/repo' } }]) {
+  for (const overrides of [{ conclusion: 'success' }, { conclusion: 'cancelled' }, { event: 'pull_request' }, { head_repository: { full_name: 'fork/repo' } }]) {
     const client = fakeClient();
     assert.ok((await alert(client, overrides)).skipped);
     assert.deepEqual(client.calls, []);

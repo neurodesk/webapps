@@ -21,7 +21,7 @@ export const REPORTER_WORKFLOW = 'workflow-reports.yml';
 export const LOOKBACK_MS = 14 * 24 * 3600e3;
 // Attempts that completed before this instant belong to the workflow_run reporters this one
 // replaced (docs/development/ci-audit.md, "Handoff from the workflow_run reporters").
-export const CUTOVER = '2026-11-18T13:00:00Z';
+export const CUTOVER = '2026-11-15T05:40:00Z';
 
 const FAILED = new Set(['failure', 'timed_out']);
 // A run with one of these conclusions has no failed or cancelled job unless a job continues on error.
@@ -91,8 +91,9 @@ export function isScheduledReport(run, { repository, defaultBranch }) {
 // Any run of a notarizing workflow but a pull request's, whatever its event.
 const notarizingRun = (run, repository) => run.event !== 'pull_request' && run.head_repository?.full_name === repository;
 
-export function isNotarizationCandidate(run, { repository, notarizing }) {
-  return notarizingRun(run, repository) && notarizing.includes(run.path);
+// `notarizingRuns` holds the ids of the runs a notarizing workflow's listing returned, whatever path they carry.
+export function isNotarizationCandidate(run, { repository, notarizingRuns }) {
+  return notarizingRun(run, repository) && notarizingRuns.has(run.id);
 }
 
 // When an attempt completed: its updated_at, in the run listing and in the attempts endpoint alike.
@@ -113,11 +114,11 @@ export async function attemptsOf(runs, client) {
 
 // The reports an attempt that completed at or after `cutover` may need, by what the run listing
 // says. An attempt whose run passed is read only when its workflow has a job that continues on error.
-export function reportsFor(attempt, { repository, defaultBranch, notarizing, continuesOnError, cutover = CUTOVER }) {
+export function reportsFor(attempt, { repository, defaultBranch, notarizingRuns, continuesOnError, cutover = CUTOVER }) {
   if (attempt.status !== 'completed' || !(completedAt(attempt) >= time(cutover))) return [];
   const kinds = [];
   if (isScheduledReport(attempt, { repository, defaultBranch }) && (!QUIET.has(attempt.conclusion) || continuesOnError.includes(attempt.path))) kinds.push('scheduled');
-  if (FAILED.has(attempt.conclusion) && isNotarizationCandidate(attempt, { repository, notarizing })) kinds.push('notarization');
+  if (FAILED.has(attempt.conclusion) && isNotarizationCandidate(attempt, { repository, notarizingRuns })) kinds.push('notarization');
   return kinds;
 }
 
@@ -146,12 +147,12 @@ const markerOf = (kind, attempt) => `<!-- ${kind === 'scheduled' ? 'nightly' : '
 // lists the attempts whose marker `reported` already holds.
 // A report that throws is recorded and the others still run; the caller fails the tick, and
 // the next tick checks the attempt again because it still has no marker.
-export async function reportWorkflowRuns({ attempts, repository, defaultBranch, notarizing, continuesOnError = [], cutover = CUTOVER, reported = new Set(), client, dryRun = false }) {
+export async function reportWorkflowRuns({ attempts, repository, defaultBranch, notarizingRuns = new Set(), continuesOnError = [], cutover = CUTOVER, reported = new Set(), client, dryRun = false }) {
   const results = [];
   const marked = [];
   const ordered = [...attempts].sort((a, b) => completedAt(a) - completedAt(b) || a.id - b.id || a.run_attempt - b.run_attempt);
   for (const run of ordered) {
-    for (const kind of reportsFor(run, { repository, defaultBranch, notarizing, continuesOnError, cutover })) {
+    for (const kind of reportsFor(run, { repository, defaultBranch, notarizingRuns, continuesOnError, cutover })) {
       if (reported.has(markerOf(kind, run))) {
         marked.push(`${kind} ${run.id}:${run.run_attempt ?? 1}`);
         continue;
@@ -160,7 +161,7 @@ export async function reportWorkflowRuns({ attempts, repository, defaultBranch, 
       try {
         const result = kind === 'scheduled'
           ? await reportNightlyFailure({ run, repository, defaultBranch, client, dryRun })
-          : await alertNotarization({ run, repository, client, notarizing, dryRun });
+          : await alertNotarization({ run, repository, client, dryRun });
         results.push({ ...entry, result });
       } catch (error) {
         results.push({ ...entry, error: error.message });
@@ -178,6 +179,7 @@ export async function runTick({ client, repository, defaultBranch, workflows, un
   const last = until.getTime() - SECOND;
   const listed = new Map();
   const candidates = new Map();
+  const notarizingRuns = new Set();
   for (const run of await listCreated(client, { event: 'schedule', branch: defaultBranch }, earliest, last)) {
     listed.set(run.id, run);
     if (isScheduledReport(run, { repository, defaultBranch })) candidates.set(run.id, run);
@@ -185,16 +187,18 @@ export async function runTick({ client, repository, defaultBranch, workflows, un
   for (const path of facts.notarizing) {
     for (const run of await listCreated(client, { workflow: path.split('/').pop() }, earliest, last)) {
       listed.set(run.id, run);
-      if (notarizingRun(run, repository)) candidates.set(run.id, run);
+      if (!notarizingRun(run, repository)) continue;
+      candidates.set(run.id, run);
+      notarizingRuns.add(run.id);
     }
   }
   const attempts = (await attemptsOf(candidates.values(), client)).filter(attempt => completedAt(attempt) < until.getTime());
   const reported = await reportedMarkers(client, new Date(Math.max(earliest, time(cutover))));
-  const { results, marked } = await reportWorkflowRuns({ attempts, repository, defaultBranch, notarizing: facts.notarizing, continuesOnError: facts.continuesOnError, cutover, reported, client, dryRun });
+  const { results, marked } = await reportWorkflowRuns({ attempts, repository, defaultBranch, notarizingRuns, continuesOnError: facts.continuesOnError, cutover, reported, client, dryRun });
   const completed = attempts.filter(attempt => attempt.status === 'completed' && completedAt(attempt) >= time(cutover));
   return {
     listed: listed.size, candidates: candidates.size, attempts: attempts.length, earliest: new Date(earliest), results, marked,
     scheduled: completed.filter(attempt => isScheduledReport(attempt, { repository, defaultBranch })).length,
-    notarization: completed.filter(attempt => FAILED.has(attempt.conclusion) && isNotarizationCandidate(attempt, { repository, notarizing: facts.notarizing })).length,
+    notarization: completed.filter(attempt => FAILED.has(attempt.conclusion) && isNotarizationCandidate(attempt, { repository, notarizingRuns })).length,
   };
 }

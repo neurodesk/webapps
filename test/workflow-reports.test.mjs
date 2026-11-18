@@ -30,7 +30,7 @@ function attempt(overrides = {}) {
 
 // A stateful fake of the runs, attempts, jobs, logs and issues API. `runs` holds every attempt;
 // the listings return each run's highest attempt, as GitHub does, and a workflow's listing every
-// run of its file from any ref. `jobs` and `logs` are keyed by
+// run of its file from any ref (`listed_under` names that file when a rename separates it from the path). `jobs` and `logs` are keyed by
 // "run:attempt" and job id; a run without jobs has one failed job.
 function github({ runs = [], jobs = {}, logs = {} } = {}) {
   const issues = [];
@@ -60,7 +60,7 @@ function github({ runs = [], jobs = {}, logs = {} } = {}) {
         const query = new URLSearchParams(listing[2]);
         const [from, to] = query.get('created').split('..').map(Date.parse);
         const matching = latest()
-          .filter(run => !listing[1] || run.path.replace(/@.*$/, '') === `.github/workflows/${decodeURIComponent(listing[1])}`)
+          .filter(run => !listing[1] || (run.listed_under ?? run.path.replace(/@.*$/, '')) === `.github/workflows/${decodeURIComponent(listing[1])}`)
           .filter(run => !query.get('event') || run.event === query.get('event'))
           .filter(run => !query.get('branch') || run.head_branch === query.get('branch'))
           // A status filter matches the latest attempt's conclusion, as GitHub's does.
@@ -214,6 +214,21 @@ test('a failed notarizing run of an event its current workflow file does not dec
   assert.deepEqual(reported(client), ['notarization 600:1']);
 });
 
+test('a notarization failure is alerted when its workflow file was renamed after the run', async () => {
+  // The reviewer's replay: syncro-native.yml became syncro-native.yaml, and the new workflow's
+  // listing returns the failed run with its historical path.
+  const directory = await mkdtemp(join(tmpdir(), 'renamed-'));
+  await writeFile(join(directory, 'syncro-native.yaml'), 'name: syncro-native\non:\n  workflow_dispatch:\njobs:\n  build:\n    steps:\n      - run: xcrun notarytool submit\n');
+  const failed = attempt({ id: 500, name: 'syncro-native', path: SYNCRO, listed_under: `${SYNCRO.replace(/\.yml$/, '.yaml')}`, event: 'workflow_dispatch', head_branch: 'syncro-v1' });
+  const client = github({
+    runs: [failed],
+    jobs: { '500:1': [{ id: 51, name: 'mac', conclusion: 'failure', labels: ['macos-15'] }] },
+    logs: { 51: AGREEMENT },
+  });
+  await tick(client, at(7), { workflows: pathToFileURL(`${directory}/`) });
+  assert.deepEqual(reported(client), ['notarization 500:1']);
+});
+
 test('a rerun that starts while a tick runs leaves the failed attempt reported', async () => {
   // Attempt 1 failed at 05:00. The tick starts at 06:00, the rerun at 06:18, and the tick lists runs at 06:24.
   const first = attempt({ id: 100, updated_at: at(5) });
@@ -292,24 +307,27 @@ test('the cutover compares when an attempt completed, not when its run started',
   assert.deepEqual(reported(client), ['nightly 2:1', 'nightly 3:2']);
 });
 
-// The handoff (docs/development/ci-audit.md): between the cutover and the merge the workflow_run
-// reporters keep reporting with the same markers, and the first tick runs after they have stopped.
+// The handoff (docs/development/ci-audit.md): from the cutover on, the workflow_run reporters marked
+// every attempt they reported, so the first tick reports exactly the unmarked ones, whatever happened
+// to an old reporter's run. These attempts completed at 12:00 on 18 November, before the cutover the
+// previous round chose (13:00) and an hour before the merge could have been.
+const HANDOFF = Date.parse('2026-11-18T12:00:00Z');
 function handoff() {
-  const cutover = Date.parse(CUTOVER);
-  const hours = value => new Date(cutover + value * 3600e3).toISOString();
-  const nightly = id => attempt({ id, workflow_id: id, name: `nightly-${id}`, created_at: hours(-0.5), run_started_at: hours(-0.5), updated_at: hours(1) });
-  const release = id => attempt({ id, name: 'syncro-native', path: SYNCRO, event: 'workflow_dispatch', head_branch: 'syncro-v1', created_at: hours(0.5), run_started_at: hours(0.5), updated_at: hours(1) });
+  const hours = value => new Date(HANDOFF + value * 3600e3).toISOString();
+  const nightly = id => attempt({ id, workflow_id: id, name: `nightly-${id}`, created_at: hours(-0.5), run_started_at: hours(-0.5), updated_at: hours(0) });
+  const release = id => attempt({ id, name: 'syncro-native', path: SYNCRO, event: 'workflow_dispatch', head_branch: 'syncro-v1', created_at: hours(-1), run_started_at: hours(-1), updated_at: hours(0) });
   const client = github({
     runs: [nightly(1), release(2)],
     jobs: { '2:1': [{ id: 21, name: 'portable / release', conclusion: 'failure', labels: ['macos-15'] }] },
     logs: { 21: AGREEMENT },
   });
-  const firstTick = () => runTick({ client, repository, defaultBranch: 'main', workflows, until: new Date(cutover + 5 * 3600e3) });
+  const firstTick = () => runTick({ client, repository, defaultBranch: 'main', workflows, until: new Date(HANDOFF + 6 * 3600e3) });
   return { client, hours, firstTick };
 }
 
 test('the first tick reports the attempts after the cutover that the replaced reporters never marked', async () => {
-  // Their workflow_run runs broke when the merge removed their scripts.
+  // Their workflow_run runs never started, or broke when the merge removed their scripts.
+  assert.ok(Date.parse(CUTOVER) < HANDOFF);
   const { client, firstTick } = handoff();
   await firstTick();
   assert.deepEqual(reported(client), ['nightly 1:1', 'notarization 2:1']);
@@ -318,12 +336,12 @@ test('the first tick reports the attempts after the cutover that the replaced re
 test('the first tick does not report again an attempt the replaced reporters marked', async () => {
   const { client, hours, firstTick } = handoff();
   const bot = { login: 'github-actions[bot]' };
-  // What nightly-failures.yml and notarization-alert.yml wrote an hour after the cutover.
+  // What nightly-failures.yml and notarization-alert.yml wrote a minute after the attempts completed.
   client.issues.push(
-    { number: 336, state: 'open', user: bot, created_at: hours(1), updated_at: hours(1), body: '<!-- nightly-workflow:1 -->\n<!-- nightly-run:1:attempt:1 -->\n## Scheduled failure: nightly-1' },
-    { number: 340, state: 'open', user: bot, created_at: hours(-48), updated_at: hours(1), body: `${ALERT_MARKER}\n<!-- notarization-run:9:attempt:1 -->\nApple refused a notarization.` },
+    { number: 336, state: 'open', user: bot, created_at: hours(0.02), updated_at: hours(0.02), body: '<!-- nightly-workflow:1 -->\n<!-- nightly-run:1:attempt:1 -->\n## Scheduled failure: nightly-1' },
+    { number: 340, state: 'open', user: bot, created_at: hours(-48), updated_at: hours(0.02), body: `${ALERT_MARKER}\n<!-- notarization-run:9:attempt:1 -->\nApple refused a notarization.` },
   );
-  client.comments.set(340, [{ user: bot, created_at: hours(1), body: '<!-- notarization-run:2:attempt:1 -->\nApple refused a notarization.' }]);
+  client.comments.set(340, [{ user: bot, created_at: hours(0.02), body: '<!-- notarization-run:2:attempt:1 -->\nApple refused a notarization.' }]);
   const { results, marked } = await firstTick();
   assert.deepEqual(results, []);
   assert.deepEqual(marked, ['scheduled 1:1', 'notarization 2:1']);
@@ -363,7 +381,7 @@ test('a passing ci run with a failed job is reported when the API qualifies its 
 });
 
 test('each attempt gets the scheduled report and the notarization alert it qualifies for', async () => {
-  const notarizing = [SYNCRO];
+  const notarizingRuns = new Set([3, 4, 5]);
   const scheduled = attempt({ id: 1 });
   const branch = attempt({ id: 2, head_branch: 'feature' });
   const fork = attempt({ id: 3, head_repository: { full_name: 'fork/repo' } });
@@ -374,7 +392,7 @@ test('each attempt gets the scheduled report and the notarization alert it quali
     jobs: { '4:1': [{ id: 41, name: 'portable / release', conclusion: 'failure', labels: ['macos-15'] }] },
     logs: { 41: AGREEMENT },
   });
-  const { results } = await reportWorkflowRuns({ attempts: [scheduled, branch, fork, release, pullRequest, running], repository, defaultBranch: 'main', notarizing, cutover: at(0), client });
+  const { results } = await reportWorkflowRuns({ attempts: [scheduled, branch, fork, release, pullRequest, running], repository, defaultBranch: 'main', notarizingRuns, cutover: at(0), client });
   assert.deepEqual(results.map(({ kind, run, result }) => [kind, run, Object.keys(result).sort().join()]), [
     ['scheduled', 1, 'created,issue'],
     ['notarization', 4, 'created,issue'],
@@ -385,7 +403,7 @@ test('a report that fails is recorded without stopping the others, and a dry run
   const client = github();
   const broken = { ...client, list: async (path) => { if (path.includes('/runs/1/')) throw new Error('GitHub API GET returned 502'); return client.list(path); } };
   const attempts = [attempt({ id: 1 }), attempt({ id: 2, workflow_id: 8, name: 'standalone' })];
-  const { results } = await reportWorkflowRuns({ attempts, repository, defaultBranch: 'main', notarizing: [], cutover: at(0), client: broken });
+  const { results } = await reportWorkflowRuns({ attempts, repository, defaultBranch: 'main', cutover: at(0), client: broken });
   assert.deepEqual(results.map(each => [each.run, each.error ?? Object.keys(each.result).sort().join()]), [[1, 'GitHub API GET returned 502'], [2, 'created,issue']]);
 
   const dry = github({ runs: [attempt({ id: 1 })] });

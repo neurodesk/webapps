@@ -77,7 +77,11 @@ What a tick does not report: an attempt of a run created more than 14 days
 before the tick, which is a rerun of an older run (GitHub allows reruns for
 30 days) or a failure missed by a reporter outage longer than 14 days; and an
 attempt that completed before `CUTOVER`, which the `workflow_run` reporters
-this one replaced handled with the same markers (see the handoff below). In the 30 days to
+this one replaced handled with the same markers (see the handoff below). A
+tick lists runs by the current workflow files, and GitHub's workflow list omits
+a deleted or renamed file's former workflow, so a failed run made under a
+notarizing workflow file renamed or deleted since the last tick is not alerted
+unless the new file's listing returns it. In the 30 days to
 18 November 2026, every rerun of a scheduled or notarizing run started within
 43 hours of its run. The lookback is 14 days and not 30 because an attempt
 without a marker is read again on every tick: the failed notarizing attempts
@@ -122,37 +126,37 @@ requests the tick made. A dry run writes nothing, not even the step summary.
 
 ### Handoff from the workflow_run reporters
 
-`CUTOVER` (`2026-11-18T13:00:00Z`) splits the attempts by when they completed
-(`updated_at`), not by when their run started: an attempt that completed at or
-after it and has no marker is reported by the first tick, whatever the old
-reporters did with it; one that completed before it is left to them. The
-`workflow_run` reporters keep reporting until the merge with the same markers,
-and a `workflow_run` workflow starts runs only from the default branch, so none
-starts after the merge. `CUTOVER` had passed before the pull request left
-draft, so every merge comes after it. To hand over:
+`CUTOVER` (`2026-11-15T05:40:00Z`) is shortly after `notarization-alert.yml`
+reached `main` (pull request #848, merged at 05:36:37 UTC on 15 November; its
+first run started at 05:37:04). From then on both `workflow_run` reporters
+marked every attempt they reported. The first tick reads the attempts that
+completed (`updated_at`) at or after `CUTOVER`: it skips the marked ones and
+reports the unmarked ones, whether their old reporter run failed, was cancelled
+or never started. The notarization refusals of 13 and 14 November came before
+the alert existed and stay unreported. So the handoff loses nothing whatever
+the old reporters do at the merge; the procedure only avoids a duplicate
+comment from an old reporter run and a tick writing at the same time:
 
-1. Before merging, wait until this lists nothing, so that no attempt completed
-   before `CUTOVER` is still waiting for an old reporter:
+1. Merge outside the 30 minutes before a scheduled tick (00:47, 06:47, 12:47
+   and 18:47 UTC).
+2. After the merge, wait until every recent run of the two old workflows is
+   completed. Their files are gone then, so list them by workflow id
+   (`386038030` is `nightly-failures.yml`, `418899119` is
+   `notarization-alert.yml`). This prints each run that is not completed,
+   whatever its state (`requested`, `queued`, `waiting`, `pending`,
+   `in_progress`), and fails rather than print nothing when the API does:
 
    ```sh
-   for workflow in nightly-failures.yml notarization-alert.yml; do
-     for status in queued pending waiting in_progress; do
-       gh run list --repo neurodesk/webapps --workflow "$workflow" --status "$status"
-     done
+   for id in 386038030 418899119; do
+     gh api "repos/neurodesk/webapps/actions/workflows/$id/runs?per_page=100" \
+       --jq '.workflow_runs[] | select(.status != "completed") | [.id, .status, .created_at] | @tsv' \
+       || echo "workflow $id: the API call failed; run it again"
    done
    ```
 
-2. Merge outside the 30 minutes before a scheduled tick (00:47, 06:47, 12:47
-   and 18:47 UTC), so that step 3 ends before the schedule's first tick.
-3. After the merge, wait until the command of step 1 lists nothing again.
-   A run that broke because the merge removed its script left its attempt
-   without a marker; the first tick reports it. Cancel a run that stays queued
-   (`gh run cancel <id> --repo neurodesk/webapps`) for the same reason.
-4. Dispatch the first tick:
+   Cancel a run that does not move (`gh run cancel <id> --repo neurodesk/webapps`).
+3. Dispatch the first tick:
    `gh workflow run workflow-reports.yml --repo neurodesk/webapps --ref main`.
-
-The old and the new reporter then never write at the same time, and every
-report the old ones made carries a marker the first tick reads.
 
 ## Apple notarization alerts
 
