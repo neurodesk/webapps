@@ -69,8 +69,16 @@ test("a model that names a subject HRF fit needs that file, and a folder brings 
 
 
 test("folder drops reject ambiguous single-file inputs before choosing anatomy", () => {
-  for (const names of [["lh.white", "rh.white"], ["lh_benson.gii", "rh_benson.gii"], ["a.label", "b.label"], ["a.json", "b.json"]]) {
-    assert.throws(() => sortFiles(names.map(file)), /ambiguous/);
+  for (const [names, slot] of [
+    [["lh.white", "rh.white"], "white file"],
+    [["lh_benson.gii", "rh_benson.gii"], "template map"],
+    [["a.label", "b.label"], "ROI label"],
+    [["a.json", "b.json"], "model JSON"],
+    [["aps_a.mat", "aps_b.mat"], "apertures file"],
+    [["lh.V1_seed.label", "lh.V2_seed.label"], "seed label"],
+    [["hrf_a.mat", "hrf_b.mat"], "subject HRF fit"],
+  ]) {
+    assert.throws(() => sortFiles(names.map(file)), { message: `Choose one ${slot}: ${names[0]} and ${names[1]} are ambiguous.` });
   }
   assert.throws(() => sortFiles(["lh_run.gii", "rh_run.gii"].map(file)), /different hemispheres/);
 });

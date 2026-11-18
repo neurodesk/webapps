@@ -57,6 +57,9 @@ function surfaceRole(base) {
   return ["white", "pial", "inflated", "sphere"].includes(kind) ? kind : "mesh";
 }
 
+/** How the status bar names each slot that takes one file. */
+const SLOT_LABELS = { apertures: "apertures file", roi: "ROI label", template: "template map", seed: "seed label", subjectHrf: "subject HRF fit", model: "model JSON" };
+
 /**
  * Sort files into slots. Returns the slots they fill and the names nothing took.
  * Runs use lexical name order (1, 10, 2), matching MATLAB dir.
@@ -77,7 +80,7 @@ export function sortFiles(files) {
       (filled.surfaces ??= {})[target.role] = file;
     } else {
       const previous = filled[target.slot];
-      if (previous) throw new Error(`Choose one ${target.slot} file: ${previous.name} and ${file.name} are ambiguous.`);
+      if (previous) throw new Error(`Choose one ${SLOT_LABELS[target.slot]}: ${previous.name} and ${file.name} are ambiguous.`);
       filled[target.slot] = file;
     }
   }
