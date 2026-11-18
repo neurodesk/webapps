@@ -13,7 +13,7 @@
 use crate::error::{Error, Result};
 use crate::expr::Value;
 use crate::fit_prf::{nan_max, xy_value};
-use crate::geometry::{cluster_roi, unique_rows, Hull, Triangulation};
+use crate::geometry::{cluster_roi, polygon_hull_estimate, unique_rows, HullOrder, Triangulation};
 use crate::mapset::Maps;
 use crate::mesh::Adjacency;
 use crate::model::{CfModel, CfParameterEstimate, FineFit};
@@ -49,6 +49,9 @@ pub struct Prepared {
     pub weights: Option<Vec<WeightRow>>,
     pub values: Vec<String>,
     pub hooke_jeeves_steps: Option<Vec<f64>>,
+    /// The hull evaluation of `Fit_pRF = 0`: `Listed` unless a gate asks for the
+    /// diagnostic stored order.
+    pub hull_order: HullOrder,
     // Convex-hull geometry over the unique template coordinates.
     unique_xy: Vec<[f64; 2]>,
     unique_first: Vec<usize>,
@@ -141,6 +144,7 @@ impl Prepared {
             weights,
             values,
             hooke_jeeves_steps,
+            hull_order: HullOrder::default(),
             unique_xy,
             unique_first,
             triangulation,
@@ -247,13 +251,13 @@ impl Prepared {
                     Some(peak) => {
                         let cluster = cluster_roi(peak, &unique_r, max_u / 2.0, triangulation);
                         let points: Vec<[f64; 2]> = cluster.iter().map(|&i| self.unique_xy[i]).collect();
-                        hull_estimate(&points)
+                        hull_estimate(&points, self.hull_order)
                     }
                     None => (f64::NAN, f64::NAN, 0.0),
                 };
                 let min_u = nan_min(&unique_r);
                 let negative: Vec<[f64; 2]> = unique_r.iter().enumerate().filter(|(_, value)| **value < min_u / 2.0).map(|(i, _)| self.unique_xy[i]).collect();
-                let (_, _, surround) = hull_estimate(&negative);
+                let (_, _, surround) = hull_estimate(&negative, self.hull_order);
                 Ok(vec![r2, x0, y0, centre, surround, max_u, min_u, fwhm, vx])
             }
             CfParameterEstimate::SummaryStatistics => {
@@ -435,12 +439,9 @@ fn norm_single(values: &[f32]) -> f32 {
 
 /// `polyshape(points).convhull`: `(centroid x, centroid y, sqrt(area) / (2 sqrt(2 ln 2)))`,
 /// `(NaN, NaN, 0)` for a degenerate point set.
-fn hull_estimate(points: &[[f64; 2]]) -> (f64, f64, f64) {
-    match Hull::of_polygon(points) {
-        Some(hull) => {
-            let [cx, cy] = hull.centroid();
-            (cx, cy, hull.area().sqrt() / SIGMA_PER_FWHM)
-        }
+fn hull_estimate(points: &[[f64; 2]], order: HullOrder) -> (f64, f64, f64) {
+    match polygon_hull_estimate(points, order) {
+        Some(([cx, cy], area)) => (cx, cy, area.sqrt() / SIGMA_PER_FWHM),
         None => (f64::NAN, f64::NAN, 0.0),
     }
 }
@@ -495,9 +496,11 @@ mod tests {
         // MATLAB R2023b, SamSrf 41ed1e96: cf_double_cocircular, target 29.
         // The closing edge retraces the first edge, so polyshape removes (-1,-1).
         let points = [[-1.0, -1.0], [0.0, 0.0], [0.0, 1.0], [1.0, -1.0], [1.0, 0.0], [1.0, 1.0]];
-        let (x, y, sigma) = hull_estimate(&points);
-        assert!((sigma - 1.5_f64.sqrt() / SIGMA_PER_FWHM).abs() < 1e-14);
-        assert!(x.is_finite() && y.is_finite());
+        for order in [HullOrder::Listed, HullOrder::Stored] {
+            let (x, y, sigma) = hull_estimate(&points, order);
+            assert!((sigma - 1.5_f64.sqrt() / SIGMA_PER_FWHM).abs() < 1e-14);
+            assert!(x.is_finite() && y.is_finite());
+        }
     }
 
     #[test]

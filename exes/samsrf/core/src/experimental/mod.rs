@@ -23,6 +23,12 @@ pub fn hull_of_polygon(points: &[[f64; 2]]) -> Result<Option<Hull>> {
 
 pub use polyshape::{FinalRing, Hypothesis};
 
+/// The shipped model's hull vertices in the order it listed them before it
+/// followed MATLAB's stored order, for the reproducer rounds predicted then.
+pub fn shipped_hull_as_listed(points: &[[f64; 2]]) -> Option<Vec<[f64; 2]>> {
+    crate::polyshape::convex_hull_as_listed(points)
+}
+
 /// `hull_of_polygon` under a diagnostic rule variant, with the number of holes
 /// (negatively wound rings) in the model's final output.
 pub fn hull_of_polygon_with(points: &[[f64; 2]], hypothesis: Hypothesis) -> Result<(Option<Hull>, usize)> {

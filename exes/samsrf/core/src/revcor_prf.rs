@@ -12,7 +12,7 @@
 use crate::apertures::Apertures;
 use crate::error::{Error, Result};
 use crate::expr::Value;
-use crate::geometry::Hull;
+use crate::geometry::{Hull, HullOrder, ListedHull};
 use crate::hrf::{self, ResolvedHrf};
 use crate::model::{FineFit, RevCorPrfModel};
 use crate::optim::{self, FminsearchOptions};
@@ -37,6 +37,9 @@ pub struct Prepared {
     pub mask: Vec<f64>,
     pub values: Vec<String>,
     pub hooke_jeeves_steps: Option<Vec<f64>>,
+    /// The convex-hull analysis's grid and hull (`Prf_Function = 0`): `Listed`
+    /// unless a gate asks for MATLAB's (`with_hull_order`).
+    pub hull_order: HullOrder,
 }
 
 impl Prepared {
@@ -69,15 +72,7 @@ impl Prepared {
             let convolved = hrf::convolve(&course, &kernel, 1);
             regressors[p * volumes..(p + 1) * volumes].copy_from_slice(&convolved);
         }
-        let xs = linspace(-model.scaling_factor, model.scaling_factor, cols);
-        let ys = linspace(-model.scaling_factor, model.scaling_factor, rows);
-        let mut xc = Vec::with_capacity(pixels);
-        let mut yc = Vec::with_capacity(pixels);
-        for p in 0..pixels {
-            let (r, c) = (p % rows, p / rows);
-            xc.push(xs[c]);
-            yc.push(ys[rows - 1 - r]);
-        }
+        let (xc, yc) = pixel_grid(&model, rows, cols, HullOrder::default());
         let mut values: Vec<String> = RAW_VALUES.iter().map(|value| value.to_string()).collect();
         let mut hooke_jeeves_steps = None;
         if model.prf_function.is_some() {
@@ -92,7 +87,14 @@ impl Prepared {
                 hooke_jeeves_steps = Some(steps.clone());
             }
         }
-        Ok(Prepared { model, rows, cols, pixels, volumes, regressors, xc, yc, mask, values, hooke_jeeves_steps })
+        Ok(Prepared { model, rows, cols, pixels, volumes, regressors, xc, yc, mask, values, hooke_jeeves_steps, hull_order: HullOrder::default() })
+    }
+
+    /// The same analysis with the convex-hull evaluation `order`, its pixel grid included.
+    pub fn with_hull_order(mut self, order: HullOrder) -> Prepared {
+        (self.xc, self.yc) = pixel_grid(&self.model, self.rows, self.cols, order);
+        self.hull_order = order;
+        self
     }
 
     fn regressor(&self, pixel: usize) -> &[f64] {
@@ -157,9 +159,11 @@ impl Prepared {
         [r2, self.xc[m], self.yc[m], fwhm, max * peak_sign]
     }
 
-    /// The convex hull estimate: `x0`, `y0` and `sqrt(area) / (2 sqrt(2 ln 2))` replace
-    /// rows 2-4 of `raw`; a profile whose suprathreshold pixels span no area zeroes the
-    /// whole column, as SamSrf's `catch` does.
+    /// The convex hull estimate: `x0` and `y0` from `polyshape(DT.Points(chp, :)).centroid`
+    /// and `sqrt(cha) / (2 sqrt(2 ln 2))` from `[chp, cha] = convexHull(DT)` replace rows
+    /// 2-4 of `raw`, for `DT` the Delaunay triangulation of the suprathreshold pixels in
+    /// pixel order. Pixels that span no area zero the whole column, as SamSrf's `catch`
+    /// does; a hull that `polyshape` empties has a NaN centroid.
     pub fn convex_hull(&self, raw: &[f64; 5], profile: &[f64]) -> Vec<f64> {
         let model = &self.model;
         let mut rmap = profile.to_vec();
@@ -171,13 +175,14 @@ impl Prepared {
         let max = crate::fit_prf::nan_max(&rmap);
         let threshold = model.data_precision.round(max * model.convex_hull_threshold);
         let points: Vec<[f64; 2]> = (0..self.pixels).filter(|&p| rmap[p] > threshold).map(|p| [self.xc[p], self.yc[p]]).collect();
-        match Hull::of(&points) {
-            Some(hull) => {
-                let [cx, cy] = hull.centroid();
-                vec![raw[0], cx, cy, hull.area().sqrt() / (2.0 * (2.0 * 2f64.ln()).sqrt()), raw[4]]
-            }
-            None => vec![0.0; 5],
-        }
+        let Some(listed) = ListedHull::of(&points) else {
+            return vec![0.0; 5];
+        };
+        let [cx, cy] = match self.hull_order {
+            HullOrder::Listed => listed.centroid(),
+            HullOrder::Stored => Hull::of_delaunay_boundary(&points).map_or([f64::NAN; 2], |hull| hull.centroid()),
+        };
+        vec![raw[0], cx, cy, listed.area().sqrt() / (2.0 * (2.0 * 2f64.ln()).sqrt()), raw[4]]
     }
 
     /// `samsrf_revcorprf_loop` for one vertex: NaN rows below `R2_Threshold`, otherwise
@@ -298,8 +303,28 @@ fn nan_min(values: &[f64]) -> f64 {
     values.iter().copied().filter(|value| !value.is_nan()).fold(f64::NAN, |best, value| if best.is_nan() || value < best { value } else { best })
 }
 
-/// MATLAB `linspace`.
-fn linspace(a: f64, b: f64, n: usize) -> Vec<f64> {
+/// MATLAB R2023b `linspace(-half, half, n)`: `(2 i - (n - 1)) * (half / (n - 1))`,
+/// which keeps the grid symmetric. The 100-point grid MATLAB saved for the
+/// SamSrfAnalysis matrix (`reg_aps_bars.mat`) equals it at every point; the
+/// general `a + i * (b - a) / (n - 1)` differs at 59. The ends are set to
+/// `-half` and `half`; no recording yet covers an `n` and `half` for which
+/// `(n - 1) * (half / (n - 1))` rounds away from `half`.
+/// `xc(:)` and `yc(:)` of `meshgrid(linspace(-a, a, cols), linspace(-a, a, rows))`
+/// with `yc` flipped, as `samsrf_revcor_prf` builds them. Every grid MATLAB saved
+/// is `symmetric_linspace`. The convex-hull analysis keeps the previous
+/// `listed_linspace` under `HullOrder::Listed`: with MATLAB's grid its `Fwhm`
+/// loses a recorded value the previous grid matched, because `convexHull`'s area
+/// is not identified (`packages/samsrf/validation/matlab/README.md`, "Hull area,
+/// centroid and vertex order").
+fn pixel_grid(model: &RevCorPrfModel, rows: usize, cols: usize, order: HullOrder) -> (Vec<f64>, Vec<f64>) {
+    let a = model.scaling_factor;
+    let line = |n: usize| if model.prf_function.is_none() && order == HullOrder::Listed { listed_linspace(-a, a, n) } else { symmetric_linspace(a, n) };
+    let (xs, ys) = (line(cols), line(rows));
+    (0..rows * cols).map(|p| (xs[p / rows], ys[rows - 1 - p % rows])).unzip()
+}
+
+/// The port's `linspace` before it followed MATLAB's symmetric one.
+fn listed_linspace(a: f64, b: f64, n: usize) -> Vec<f64> {
     if n == 0 {
         return Vec::new();
     }
@@ -312,9 +337,41 @@ fn linspace(a: f64, b: f64, n: usize) -> Vec<f64> {
     values
 }
 
+fn symmetric_linspace(half: f64, n: usize) -> Vec<f64> {
+    if n == 0 {
+        return Vec::new();
+    }
+    if n == 1 {
+        return vec![half];
+    }
+    let steps = (n - 1) as f64;
+    let mut values: Vec<f64> = (0..n).map(|i| (2.0 * i as f64 - steps) * (half / steps)).collect();
+    values[0] = -half;
+    values[n - 1] = half;
+    values
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `linspace(-a, a, n)` as MATLAB R2023b recorded it (round hull-area-1, AMD
+    /// EPYC 7763), on grids where `(n - 1) * (a / (n - 1))` is not `a`: the ends
+    /// are `-a` and `a` themselves.
+    #[test]
+    fn symmetric_grid_ends_are_matlabs() {
+        let recorded: [(f64, &[f64]); 3] = [
+            (0.1, &[-0.1, -0.08947368421052632, -0.07894736842105263, -0.06842105263157895, -0.05789473684210526, -0.04736842105263158, -0.03684210526315789, -0.02631578947368421, -0.015789473684210527, -0.005263157894736842, 0.005263157894736842, 0.015789473684210527, 0.02631578947368421, 0.03684210526315789, 0.04736842105263158, 0.05789473684210526, 0.06842105263157895, 0.07894736842105263, 0.08947368421052632, 0.1]),
+            (12.7, &[-12.7, -11.595652173913042, -10.491304347826086, -9.38695652173913, -8.282608695652172, -7.178260869565216, -6.07391304347826, -4.969565217391303, -3.8652173913043475, -2.7608695652173907, -1.6565217391304345, -0.5521739130434782, 0.5521739130434782, 1.6565217391304345, 2.7608695652173907, 3.8652173913043475, 4.969565217391303, 6.07391304347826, 7.178260869565216, 8.282608695652172, 9.38695652173913, 10.491304347826086, 11.595652173913042, 12.7]),
+            (6.7, &[-6.7, -5.6692307692307695, -4.638461538461539, -3.607692307692308, -2.576923076923077, -1.5461538461538464, -0.5153846153846154, 0.5153846153846154, 1.5461538461538464, 2.576923076923077, 3.607692307692308, 4.638461538461539, 5.6692307692307695, 6.7]),
+        ];
+        for (half, values) in recorded {
+            let n = values.len();
+            let steps = (n - 1) as f64;
+            assert_ne!(steps * (half / steps), half, "{half}, {n}: the ends must matter");
+            assert_eq!(symmetric_linspace(half, n).iter().map(|v| v.to_bits()).collect::<Vec<_>>(), values.iter().map(|v| v.to_bits()).collect::<Vec<_>>(), "{half}, {n}");
+        }
+    }
     use crate::apertures::Frame;
     use crate::model::{parse_model_json, AnalysisKind, Model};
 
