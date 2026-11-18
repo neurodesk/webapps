@@ -748,10 +748,12 @@ time-course-like pairs at each of 25-80, 96, 100, 128 and 250 elements. On the
 AMD host the previous port missed 223 of the 1,200 objectives; with the new `ddot`
 all 1,200 equal MATLAB's. On the Intel host 786 differed before and 747 after,
 also below 51 elements, where the dot product is the same on both hosts; another
-operation in Intel's `corr` depends on the host. It is MKL's `dnrm2`, which the
-`AVX512_E1` branch rounds correctly: with correctly rounded norms, 519 of the 520 Intel
-values from 25 to 50 elements equal MATLAB's ([Intel AVX-512 and the reference
-host](#intel-avx-512-and-the-reference-host)).
+operation in Intel's `corr` depends on the host. With correctly rounded norms, a
+candidate for MKL's Intel `dnrm2` and not an identification, 519 of the 520 Intel values
+from 25 to 50 elements equal MATLAB's. The other one (n = 36, pair 6) needs its y norm one
+ULP below the correctly rounded value, whose exact norm lies 6.4e-5 ULP above a rounding
+midpoint; MKL's rounding that close to a tie is not known ([Intel AVX-512 and the
+reference host](#intel-avx-512-and-the-reference-host)).
 
 **Weighted sparse complex `conv`.** The 10 pinned sparse complex courses longer
 than 800 samples, each with its original values and 24 sets of random values on
@@ -1680,9 +1682,10 @@ connective-field runs with global-signal correction and smoothing save `Srf.Y`
 after `samsrf_removenoise` and smoothing and are counted, not compared. On the
 Intel host 88,033 of 168,000 are identical: its MKL orders the double solve
 differently, and AMD and Intel MATLAB themselves differ in 5,051 of 5,165
-values, so one output cannot equal both. The Intel branch's own detrend
-(`samsrf-mkl-avx512`) gives every double value of that host (84,000 of 84,000; its single
-values already equal the port's). Constant, ramp and near-constant raw
+values, so one output cannot equal both. The test-only Intel reference's detrend
+(`samsrf-mkl-avx512`) reproduces the 84,000 double `Srf.Y` values of the 11 double runs
+whose `Srf.Y` is this stage's output (the single values already equal the port's); the
+shipped module does not. Constant, ramp and near-constant raw
 courses, one- and two-sample courses and runs of 134,257-134,259 vertices (every
 leftover position) were recorded later (`constants-gamma-gemv-predictions.md`,
 run 43882331042): on the AMD host the port matches every recorded selected
@@ -1728,10 +1731,11 @@ The two refused single fits stay refused. What still differs, earliest stage fir
   their position. Every unsmoothed double CF profile of the pinned
   reverse-correlation recordings equals MATLAB's on its AMD hosts (26 cases,
   4,914 values; `double_cf_profiles_equal_matlab_on_amd_hosts`).
-- every Intel host, in the shipped (AMD-branch) arithmetic. The Intel branch is
-  identified for the double least squares, which reproduces that host's `Srf.Y` and
-  global regression bit for bit; its CF profiles (`y' * A`), `x' * y` from 51 elements and
-  single and complex kernels are not ([Intel AVX-512 and the reference
+- every Intel host, in the shipped (AMD-branch) arithmetic. A test-only reference for
+  the recorded finite real two-column least squares reproduces that host's double `Srf.Y`
+  and global regression values; the shipped module does not. Intel's CF profiles
+  (`y' * A`), `x' * y` from 51 elements, `dnrm2` near rounding ties and its single and
+  complex kernels are not identified ([Intel AVX-512 and the reference
   host](#intel-avx-512-and-the-reference-host)).
 
 ```sh
@@ -2113,10 +2117,10 @@ What this establishes:
 So the reference recordings ran each CPU's automatic branch, and the
 `MKL_CBWR` request in the recorders is ineffective. MATLAB on Intel and AMD
 hosts therefore uses different arithmetic by design, which is why Intel
-results differ. For the double least squares both branches are now reproduced, the
-AMD branch by the shipped port and the Intel branch by the test-only
-`samsrf-mkl-avx512` crate; which one users get remains the maintainers' decision (see
-"Intel AVX-512 and the reference host").
+results differ. The shipped port follows the AMD branch. For the recorded finite real
+two-column least squares, the test-only crate `samsrf-mkl-avx512` reproduces the Intel
+branch; it changes no shipped output, and which arithmetic users get remains the
+maintainers' decision (see "Intel AVX-512 and the reference host").
 
 ## Least-squares solves
 
@@ -2266,9 +2270,10 @@ AMD); it does not distinguish signed zeros.
 
 #### Remaining limits
 
-- The shipped port follows MKL's AMD branch only. The Intel `AVX512_E1` branch is
-  reproduced for real double designs by the test-only `samsrf-mkl-avx512` crate (next
-  section); its single and complex kernels are not identified.
+- The shipped port follows MKL's AMD branch only. The test-only `samsrf-mkl-avx512`
+  crate reproduces the Intel `AVX512_E1` branch for the recorded finite real two-column
+  designs only (next section); `dnrm2` near ties, the single and complex kernels and the
+  paths listed there are not identified.
 - Signed zeros of MATLAB results that MATLAB itself returns as real cannot be
   recorded through MATLAB. A MEX-level recording of `?trsm`'s own output could
   show MKL's sign there, but MATLAB's visible result has none, so it would not
@@ -2281,15 +2286,18 @@ AMD); it does not distinguish signed zeros.
 
 #### Intel AVX-512 and the reference host
 
-MATLAB on an Intel host runs MKL's `AVX512_E1` branch ([Requested and effective MKL
-controls](#requested-and-effective-mkl-controls-730)). Its real double least squares is
-identified: the test-only crate `exes/samsrf/mkl-avx512` (`samsrf-mkl-avx512`)
-reproduces it as a second, explicit reference. No shipped crate depends on it, a
+MATLAB on the recorded Intel hosts (Xeon 8370C, 8573C and 6975P-C) runs MKL's
+`AVX512_E1` branch ([Requested and effective MKL
+controls](#requested-and-effective-mkl-controls-730)). A test-only crate,
+`exes/samsrf/mkl-avx512` (`samsrf-mkl-avx512`), reproduces that branch's real double least
+squares for the recorded finite two-column designs. No shipped crate depends on it, a
 WebAssembly build refuses it, and the shipped module is byte-identical with and without
-it. Its gates (`mkl-avx512/tests/recordings.rs`, run by the native workflow on the
-recordings below) hold every pinned Intel recording of this arithmetic to MATLAB's bits.
-The pre-registrations, their freezes and the held-out results are in
-[`intel-avx512/`](intel-avx512/README.md).
+it. It is a second reference for validation, not a correction: the shipped module still
+loses the Intel exact values listed in [Double global
+regression](#double-global-regression), and that production regression remains a merge
+blocker. Its gates (`mkl-avx512/tests/recordings.rs`, run by the native workflow) hold
+the recordings below to MATLAB's bits. The pre-registrations, their freezes and the
+corrections after review are in [`intel-avx512/`](intel-avx512/README.md).
 
 Where Intel first departs, per design (`qr_steps` with `qr-steps.py` against
 the Intel recording; numeric comparison):
@@ -2307,13 +2315,17 @@ in 28 complex designs.
 
 On identical inputs the Intel hosts first depart from the port inside MKL: MATLAB's
 `sum`, `mean`, `zscore` and `nanmean(Data, 2)` equal the port on every Intel host. The
-branch computes (identified on the Intel kernel recording, every AMD recording as
+reference computes (fitted on the Intel kernel recording, with every AMD recording as
 control):
 
-- `dnrm2` and `dznrm2`: the correctly rounded norm of the exact sum of squares (all 24
-  numerics vectors on both Intel models; the AMD order rounds 14 real and 11 complex of
-  them so). Every Intel tree is deterministic and independent of memory alignment, as on
-  AMD.
+- The norm: the correctly rounded norm of the exact sum of squares. This is a candidate
+  for MKL's `dnrm2`, not an identification. It equals all 24 numerics norms on both Intel
+  models (the AMD order rounds 14 of them so), all 95 kernel R(1,1) values and 519 of the
+  520 Intel `corr` values from 25 to 50 elements. The miss (n = 36, pair 6) needs the norm
+  one ULP below the correctly rounded value where the exact norm lies 6.4e-5 ULP above a
+  rounding midpoint. MKL's rounding that close to a tie is not known; the gates pin the
+  miss rather than fit it. The complex norms (`dznrm2`) agree with it on the 24 numerics
+  vectors only, which are discovery data.
 - `?geqp3`'s column update: the 16-lane `dgemv` tree that `qr-lane-models.py` fits to the
   FPRev probes (c(1) first, whole blocks of 16, the rest in chunks of 8, 4, 2 and 1 from
   lane 0, folds 8, 4, 1, 2), products accumulated with FMA, the update `c - v t` fused.
@@ -2331,31 +2343,44 @@ control):
 | Evidence | Intel host | Equal to MATLAB's (AMD arithmetic) |
 | --- | --- | --- |
 | Discovery: 95 single-RHS chains, every step; 190 eight-column solves | Xeon 8370C | all (10 chains) |
-| Held out, frozen first: `detrend` and `zscore`, 1,485 direct cases | Xeon 6975P-C | 255,495 of 255,495 (55,277) |
-| Held out, frozen first: double `samsrf_removenoise` | Xeon 8370C | 42,000 of 42,000 (4,844) |
+| Replay, read before the freeze: `detrend` and `zscore`, 1,485 direct cases | Xeon 6975P-C | 255,495 of 255,495 (55,177) |
+| Replay, read before the freeze: double `samsrf_removenoise` | Xeon 8370C | 42,000 of 42,000 (4,844) |
 | After the freeze: courses of the 134,257-134,260-vertex runs | Xeon 6975P-C | 70,500 of 70,500 |
 | After the freeze: revcor raw-file preprocessing and global signal | Xeon 8370C | 187,000 of 187,000 |
-| After the freeze: SamSrfAnalysis double `Srf.Y` | Xeon 8573C | 84,000 of 84,000 |
+| After the freeze: SamSrfAnalysis double `Srf.Y`, 11 runs | Xeon 8573C | 84,000 of 84,000 |
+| After the freeze: CSS pipeline courses, 2 cases, each of 2 processes | Xeon 8573C | 48,000 of 48,000 per process |
+| Norm candidate: `corr` at 25-50 elements | Xeon 6975P-C | 519 of 520, the miss pinned |
 
-Not identified, and so not in the reference: single kernels (`sgemv` at 127, 128, 249
-and 250 elements, single `?ormqr`), complex designs (`zgemv`, the complex reflector's
-scaling, which FPRev's real probes cannot see), MATLAB's `x' * y` from 51 elements (the
-Intel tree pairs elements 32 apart; fingerprints exist, no model), `y' * A` for CF
-profiles, and so `corr` beyond 50 elements and the CF and CSS fits that use them. With
-correctly rounded norms, 519 of the 520 Intel `corr` values from 25 to 50 elements equal
-MATLAB's; the last one needs the correctly rounded dot product or a norm one ULP lower,
-which the recording cannot separate.
+The two replay sets were frozen before the model ran on them, but they are not blind
+holdouts. Before the freeze, the stage trace compared the AMD arithmetic with both
+targets, and an exploratory probe searched the global regression's coefficients and both
+`X * B` orders on its Intel courses. The prefix hashes in the record prove the frozen
+text, not when it was written, and the evaluator's switches (the `X * B` orders and the AMD
+control kernels) were outside the frozen model's hash.
 
-Reference host: one output cannot equal both hosts, and each branch now reproduces its
-own host's double least squares. The shipped port keeps the AMD branch; nothing has been
-decided beyond that. The options for the maintainers:
+Not identified, and so not in the reference: the norm near rounding ties (above); single
+kernels (`sgemv` at 127, 128, 249 and 250 elements, single `?ormqr`); complex designs
+(`zgemv`, the complex reflector's scaling, which FPRev's real probes cannot see); MATLAB's
+`x' * y` from 51 elements and `y' * A` for CF profiles, and so `corr` beyond 50 elements and
+the CF and CSS fits that use them. Paths no recording reaches are not established either:
+more than two columns (norm downdating and later pivots), reflectors that end in zeros, the
+`xLARFG` halving path and nonfinite inputs. Changing any of them leaves every gate passing
+(mutation review, 2026-11-18).
+
+Reference host: one output cannot equal both hosts. For the recorded finite real
+two-column least squares each host is now reproduced by its own branch, the AMD one in
+the shipped module and the Intel one only in the test-only crate. The shipped port keeps
+the AMD branch and still loses the Intel values listed in [Double global
+regression](#double-global-regression); nothing has been decided beyond that. The options
+for the maintainers:
 
 - Keep the AMD branch as the only shipped arithmetic and the Intel crate for validation.
   Results are the same on every user's machine; agreement is reported per host.
-- Ship the Intel branch as an explicit, opt-in reference identifier. This needs the
-  kernels above identified for every analysis that uses them, with held-out Intel data.
-- Choose the branch from the user's CPU. Results would depend on hardware and still not
-  match a MATLAB run on another host.
+- Ship the Intel branch as an explicit, recorded reference selection. This needs the
+  kernels above identified for every analysis that uses them, on Intel data not read
+  before the model is frozen.
+- Choose the branch from the user's CPU. That is not choosing a MATLAB reference: results
+  would depend on hardware and still not match a MATLAB run on another host.
 
 ```sh
 python3 -I packages/samsrf/validation/matlab/qr-lane-models.py "$TMPDIR/samsrf-qr-kernels/ubuntu-22.04-3" "$TMPDIR/intel-lanes.json"

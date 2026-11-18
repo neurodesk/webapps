@@ -1,12 +1,14 @@
-# MKL's AVX512_E1 branch (Intel hosts): identification record
+# MKL's AVX512_E1 branch (Intel hosts): fitting record
 
-MATLAB R2023b on an Intel host runs MKL 2021.3's `AVX512_E1` branch, and its double
-results differ from the AMD hosts' (`CNR auto`) that the shipped port follows. This folder
-records how that branch's real double least squares was identified from existing
-recordings, under pre-registered predictions, discovery and held-out sets and stop rules.
-The resulting reference is the test-only crate `exes/samsrf/mkl-avx512`
-(`samsrf-mkl-avx512`), gated by `exes/samsrf/mkl-avx512/tests/recordings.rs`. No new
-MATLAB recording was made.
+MATLAB R2023b on the recorded Intel Xeon hosts (8370C, 8573C, 6975P-C) runs MKL 2021.3's
+`AVX512_E1` branch, and its double results differ from the AMD hosts' (`CNR auto`) that
+the shipped port follows. This folder records how a reference for that branch's finite
+real two-column least squares was fitted to existing recordings under pre-registered
+predictions and stop rules, and what the evidence does and does not show. The reference
+is the test-only crate `exes/samsrf/mkl-avx512` (`samsrf-mkl-avx512`), gated by
+`exes/samsrf/mkl-avx512/tests/recordings.rs`. It changes no shipped output: the shipped
+module still loses the Intel exact values listed in the README's "Double global
+regression", and that regression still blocks #876. No new MATLAB recording was made.
 
 ## Where the Intel host first departs
 
@@ -29,8 +31,8 @@ MKL's least-squares chain, not on MATLAB's z-score or mean.
 
 ## Pre-registrations
 
-Each file was frozen before the data it names as held out were read; amendments and
-results were only appended, so every frozen version is a byte prefix of the file:
+Amendments, results and the correction after review were only appended, so every frozen
+version is a byte prefix of its file:
 
 | File | Version | Prefix bytes | sha256 of the prefix |
 | --- | --- | --- | --- |
@@ -40,45 +42,65 @@ results were only appended, so every frozen version is a byte prefix of the file
 | `prereg-chain.md` | amendment 1 (leading-entry update) | 4,258 | `faf936c6b0c2c9305fb417c0e0ac674630eac628f7c8d9eace0927b947e99093` |
 | `prereg-chain.md` | freeze (amendment 2) | 6,610 | `a8e3bd0ce8a4993b0e7646e381cd76ad4acd75ac98b176cf4d4515e265185b66` |
 
-`head -c 6610 prereg-chain.md | sha256sum` checks the freeze. The frozen model is
+`head -c 6610 prereg-chain.md | sha256sum` checks the chain freeze. The frozen model is
 `chain.py` (sha256 `757823662d6ddc1d9d801c13a733c2cb709bb7833fc07883ccf10916a04d8809`,
-also in `chain.frozen.sha256`), which `heldout_eval.py` verifies before it runs.
+also in `chain.frozen.sha256`), which `heldout_eval.py` verifies before it runs. A prefix
+hash proves what was frozen, not when: the order of events rests on the local decision
+log. The evaluator's own switches (the two `X * B` orders and the AMD control kernels)
+were outside the model's hash.
 
 ## Results
 
-`dnrm2` (`prereg-dnrm2.md`): no candidate of the frozen lane-tree family reproduced the
-24 discovery norms (the best 23; every candidate missed n = 13), so the held-out sets
-stayed unread. On the discovery data, Intel's norms are the correctly rounded norm in all
-24 cases (|error| at most 0.472 ULP); the AMD order is in 14. Amendment 1 froze the
-correctly rounded norm before the held-out sets were read. Held out: R(1,1) of all 95 real
-double kernel chains matches (with LAPACK's `dlapy2`), and 519 of the 520 Intel `corr`
-values from 25 to 50 elements match. The last one is reproduced by the correctly rounded
-dot product (MATLAB's pair tree is 0.878 ULP low there) or by either norm one ULP below
-its correctly rounded value; the recording cannot tell which. By its own frozen rule the
-norm is therefore not identified from `corr`. It entered the chain pre-registration below
-as a switch, and the frozen chain, with the correctly rounded norm, passed both held-out
-sets.
+The norm (`prereg-dnrm2.md`). No candidate of the frozen lane-tree family reproduced the
+24 discovery norms (the best 23; every candidate missed n = 13). Intel's 24 norms are
+each the correctly rounded norm (|error| at most 0.472 ULP; the AMD order is correctly
+rounded at 14). The correctly rounded norm, frozen as amendment 1, then matched R(1,1) of
+all 95 real double kernel chains (with LAPACK's `dlapy2`) and 519 of the 520 Intel `corr`
+values from 25 to 50 elements. The miss (n = 36, pair 6, index 226 of that set) is not the
+dot product: below 51 elements MATLAB's `x' * y` is its own pair tree, with identical
+arrays on both hosts of the arithmetic-order and numerics recordings. MATLAB's value needs
+the y norm one ULP below the correctly rounded one, and the exact norm lies 6.4e-5 ULP
+above a rounding midpoint. The correctly rounded norm is therefore a candidate, not
+MATLAB's `dnrm2`: its rounding near ties is not identified. The gate
+`correctly_rounded_norm_is_a_candidate_with_one_known_miss` pins the miss, with the AMD
+order as negative control. A band that rounds down within 2^-13 ULP above a midpoint also
+fits these data; it is a fit to one point, not adopted. The complex norms (`dznrm2`) agree
+with the correctly rounded norm on 24 of 24 vectors on both Intel models (the AMD order
+11): discovery data only.
 
-Least-squares chain (`prereg-chain.md`): with correctly rounded norms, a 16-lane `?gemv`
-with fused accumulation and update, the 16-lane single-column and the paired grouped
-`?ormqr` trees with fused updates and a fused leading entry, and a fused
+The least-squares chain (`prereg-chain.md`). With the correctly rounded norm, a 16-lane
+`?gemv` with fused accumulation and update, the 16-lane single-column and the paired
+grouped `?ormqr` trees with fused updates and a fused leading entry, and a fused
 back-substitution, every step of the 95 Intel chains and Q'Y and coefficients of the 190
-eight-column solves matched (discovery). The frozen chain then reproduced, once:
+eight-column solves matched (discovery). The frozen chain then reproduced:
 
-| Held-out set | Intel host | Frozen chain | AMD arithmetic |
+| Replay set (read before the freeze) | Intel host | Frozen chain | AMD arithmetic |
 | --- | --- | --- | --- |
-| `detrend` of the 1,485 constants-gamma-gemv direct cases | Xeon 6975P-C | 255,495 / 255,495 | 55,277 |
+| `detrend` of the 1,485 constants-gamma-gemv direct cases | Xeon 6975P-C | 255,495 / 255,495 | 55,177 |
 | double `samsrf_removenoise`, three revcor cases (21 courses, up to 1,500 rows) | Xeon 8370C | 42,000 / 42,000 | 4,844 |
 
-`X * B` rounds both products and adds them, as on AMD; the fused alternative was refuted
-on both held-out sets. The AMD controls reproduced both sets on the AMD host. After the
-freeze, with no change to the model, the Rust reference also reproduced every recorded
-course of the 134,257-134,260-vertex pipeline runs (Xeon 6975P-C, 70,500 values), the
-revcor raw-file preprocessing and its global signal (Xeon 8370C, 187,000 values) and the
-SamSrfAnalysis double `Srf.Y` (Xeon 8573C, 84,000 values).
+These are replay corroboration, not blind holdouts. Before the freeze, the stage trace
+(`stages-1.json`, cited in the frozen prefixes) compared the AMD arithmetic with both
+targets, and an exploratory probe searched the global regression's coefficients and both
+`X * B` orders on its 63 Intel courses. `X * B` rounds both products, as on AMD; the fused
+order failed on both sets. The AMD controls reproduced both sets on the AMD host.
 
-Seen on discovery data only, not part of the reference: Intel's `dznrm2` is also the
-correctly rounded norm (24 of 24 complex vectors on both Intel models; the AMD order 11).
+After the freeze, with no change to the model, the Rust gates also reproduced every
+recorded course of the 134,257-134,260-vertex pipeline runs (Xeon 6975P-C, 70,500 values),
+the revcor raw-file preprocessing and its global signal (Xeon 8370C, 187,000 values), the
+SamSrfAnalysis double `Srf.Y` of 11 runs (Xeon 8573C, 84,000 values) and the CSS pipeline
+courses (Xeon 8573C, 48,000 values in each of 2 processes, where the shipped detrend
+differs and reproduces the AMD host instead).
+
+## Scope
+
+Established only for finite real two-column designs with the recorded shapes (2, 3, 16,
+37, 250 or 1,500 rows; 1-3, 5-12, 21, 76 or 96 right-hand sides, or every vertex of a
+whole-hemisphere run), including rank-1 designs and the `xLARFG` rescale of subnormal
+reflectors. No recording reaches more than two columns (norm downdating and later
+pivots), reflectors that end in zeros, the `xLARFG` halving path, exact or near rounding
+ties of the norm, or nonfinite inputs: mutating those paths leaves every gate passing.
+Single and complex designs and every other MKL kernel are not part of the reference.
 
 ## Reproducing
 

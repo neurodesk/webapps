@@ -69,3 +69,18 @@ Decision rule unchanged: identified if a family-2 candidate (with one H2 variant
 every H1 corr value and every H2 R(1,1); any held-out miss refutes that combination. The
 same rules apply to the AMD order (`ref`) as a control, which must keep matching the AMD
 host. No further family is evaluated against H1/H2 in this unit.
+
+
+## Correction after independent review (2026-11-18)
+
+Appended; nothing above was changed.
+
+- The H1 miss (n = 36, pair 6) is not undecided between the dot and the norm. Below 51
+  elements MATLAB's `x' * y` is its own pair tree with identical arrays on both hosts
+  (arithmetic-order, numerics), so MATLAB's Intel value needs the y norm one ULP below the
+  correctly rounded one, at an exact norm 6.4e-5 ULP above a rounding midpoint. The
+  correctly rounded norm is a candidate with that one known miss, not MATLAB's `dnrm2`;
+  its rounding near ties is not identified. No threshold is adopted for it.
+- The complex-norm agreement (24 of 24 per Intel host) is discovery data only.
+- A prefix hash shows what was frozen, not when; the order of events rests on the local
+  decision log.

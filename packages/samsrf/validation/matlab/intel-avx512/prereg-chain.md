@@ -120,3 +120,23 @@ AMD controls on the AMD hosts (AMD chain): H3 255,495 / 255,495 and H4 42,000 / 
 with (a); (c) fails there too. Decision: identified. Alternative (a) reproduces every H3 and
 H4 value bit for bit; (c) is refuted. The leftover-column assumption (count mod 4 = 2, 3) is
 confirmed by H3's V = 6, 7, 10, 11 cases, and rows beyond 250 by H4's 1,500-row case.
+
+
+## Correction after independent review (2026-11-18)
+
+Appended; nothing above was changed.
+
+- H3 and H4 were not unread when the freeze was written. The stage trace (`stages-1.json`,
+  cited in the frozen text) had compared the AMD arithmetic with both targets, and an
+  exploratory probe had searched H4's coefficients and both `X * B` orders on its 63 Intel
+  courses. Their results corroborate the frozen chain by replay; they are not blind
+  holdouts, and "held-out" above should be read that way.
+- The prefix hashes prove the frozen text, not when it was written. `heldout_eval.py`'s
+  switches (the `X * B` orders, the AMD control kernels, the trsv/trsm choice by count)
+  were not covered by the model's hash.
+- The AMD arithmetic reproduces 55,177 of the 255,495 H3 values, not 55,277.
+- The chain's norm is the correctly rounded candidate of prereg-dnrm2.md, with its one
+  known near-tie miss; the chain does not identify MATLAB's `dnrm2`.
+- Scope: finite real two-column designs as recorded. More than two columns, reflectors
+  that end in zeros, the `xLARFG` halving path, norm ties and nonfinite inputs are reached
+  by no recording.
