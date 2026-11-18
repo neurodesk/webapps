@@ -521,6 +521,30 @@ class EngineRunnerStatuses(unittest.TestCase):
                                  {'failed'})
 
 
+class BrowserRequests(unittest.TestCase):
+    """run_browser_matrix.mjs's request: the files Chromium's engine.js receives for each plan run."""
+
+    def test_a_subject_hrf_run_gives_engine_js_its_file(self):
+        here = Path(web_cli.__file__).resolve().parent
+        script = ("import { mkdirSync, writeFileSync } from 'node:fs'; import { join } from 'node:path';"
+                  "import { matFile } from " + json.dumps((here.parents[1] / 'test' / 'fixtures.js').as_uri()) + ";"
+                  "import { request } from " + json.dumps((here / 'run_browser_matrix.mjs').as_uri()) + ";"
+                  "const [runs, bundle] = JSON.parse(process.argv[1]);"
+                  "for (const run of runs) { mkdirSync(join(bundle, run.dataset), { recursive: true });"
+                  "  writeFileSync(join(bundle, run.dataset, `${run.dataset.slice(-2)}_ubars1.gii`), ''); }"
+                  "writeFileSync(join(bundle, 'hrf_custom.mat'), matFile({ fP: { dims: [1, 4], data: [5.5, 15.5, 5, 2] } }));"
+                  "console.log(JSON.stringify(runs.map((run) => request(run, bundle).subjectHrf ?? null)));")
+        runs = cli_plan.plan()['runs']
+        with scratch() as bundle:
+            result = subprocess.run(['node', '--input-type=module', '-e', script, json.dumps([runs, bundle])],
+                                    capture_output=True, text=True, check=True)
+        files = json.loads(result.stdout)
+        expected = [{'name': 'hrf_custom.mat', 'url': '/bundle/hrf_custom.mat'}
+                    if str(run['model'].get('Hrf', '')).startswith('hrf_') else None for run in runs]
+        self.assertEqual(files, expected)
+        self.assertEqual(sum(file is not None for file in files), 4)
+
+
 class InventoryErrors(Base):
     def assertInventory(self):
         run = self.x.report()['runs'][0]

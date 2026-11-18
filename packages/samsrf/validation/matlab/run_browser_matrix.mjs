@@ -24,7 +24,7 @@ import { extname, join, normalize, relative, sep } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
-import { failureStatus, treeHashes, webRun } from './run_web_matrix.mjs';
+import { failureStatus, isEntry, treeHashes, webRun } from './run_web_matrix.mjs';
 
 const repo = fileURLToPath(new URL('../../../../', import.meta.url));
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -94,7 +94,8 @@ function serve(bundle) {
   return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(server)));
 }
 
-function request(run, bundle) {
+/** The files and options the page's runCase gives engine.js for one plan run. */
+export function request(run, bundle) {
   const { algorithm, options, model, translations } = webRun(run, bundle);
   const file = (path) => path && { name: path.split(sep).pop(), url: `/bundle/${relative(bundle, path).split(sep).join('/')}` };
   const hemisphere = options.hemisphere;
@@ -184,4 +185,4 @@ async function main([planPath, bundle, manifestPath, output, ...rest]) {
   }
 }
 
-await main(process.argv.slice(2));
+if (isEntry(import.meta.url, process.argv[1])) await main(process.argv.slice(2));

@@ -21,3 +21,11 @@ test("the viewer draws the surface the analysis reads, with or without FreeSurfe
   await assert.rejects(readSurfaceMesh({ name: "lh.white", bytes: new TextEncoder().encode("not a surface") }), /^Error: lh\.white: FreeSurfer: unknown surface magic number/);
   await assert.rejects(readSurfaceMesh({ name: "lh.white", bytes: tagless.subarray(0, tagless.length - 1) }), /^Error: lh\.white: FreeSurfer: file ends while reading faces/);
 });
+
+test("the viewer refuses a quad surface, which it cannot draw", async () => {
+  const be16 = (value) => [(value >> 8) & 0xff, value & 0xff];
+  const be24 = (value) => [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
+  // FreeSurfer's quad format: hundredths of a millimetre per coordinate and four vertices per face.
+  const quads = Uint8Array.from([...be24(16777215), ...be24(4), ...be24(1), ...[0, 0, 0, 150, 0, 0, 0, -225, 0, 0, 0, 300].flatMap(be16), ...[0, 1, 2, 3].flatMap(be24)]);
+  await assert.rejects(readSurfaceMesh({ name: "lh.white", bytes: quads }), /^Error: lh\.white: the viewer draws triangle meshes only\.$/);
+});
