@@ -85,7 +85,7 @@ export class PipelineExecutor {
   setupWorker() {
     if (this.workerSession) return;
     if (!this.createWorker && !this.workerUrl) throw new Error('PipelineExecutor requires createWorker or workerUrl');
-    this.workerSession = new WorkerSession({
+    const session = new WorkerSession({
       createWorker: this.createWorker || (() => new Worker(this.workerUrl, this.workerType ? { type: this.workerType } : undefined)),
       onError: (message) => {
         this.updateOutput(`Worker error: ${message}`);
@@ -95,8 +95,11 @@ export class PipelineExecutor {
         this.handleError(message);
       },
     });
-    this.workerSession.subscribe((message) => this.handleMessage(message));
-    this.workerSession.start();
+    session.subscribe((message) => this.handleMessage(message));
+    // Publish only a started session: a Worker constructor that throws (for
+    // example out of memory) must leave the next retry free to start again.
+    session.start();
+    this.workerSession = session;
   }
 
   waitUntilReady() {

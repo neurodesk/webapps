@@ -222,7 +222,10 @@ function findStatusElement(doc) {
   return doc.querySelector('#statusText, #statusMsg, footer#status .nd-status-text, #status .nd-status-text');
 }
 
-function storageKey(view) {
+// Key by the shell's app id when known: a single-page app such as dicompare
+// navigates from its landing path to /workspace before a crash reload.
+function storageKey(view, appId) {
+  if (appId) return `${STORAGE_PREFIX}app:${appId}`;
   const pathname = view?.location?.pathname || '/';
   return `${STORAGE_PREFIX}${pathname}`;
 }
@@ -340,7 +343,7 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
   const view = doc.defaultView || globalThis.window;
   const now = options.now || (() => Date.now());
   const maxAgeMs = options.maxAgeMs ?? MAX_CRASH_AGE_MS;
-  const key = storageKey(view);
+  const key = storageKey(view, options.appId);
 
   let applying = false;
   let interacted = false;
@@ -362,6 +365,10 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
   let reconcileTimer = null;
   let heartbeatTimer = null;
   let lastCheckpointSignature = '';
+  // Inputs the user committed files to, with their latest file counts.
+  const committedInputs = new Map();
+  let pendingRevealStatus = '';
+  let revealedStatus = '';
 
   if (view?.coiWillReload?.then) {
     view.coiWillReload.then((reloading) => {
@@ -442,15 +449,32 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
   }
 
   // Reveal after the app has laid out; a reload notice is written before boot.
+  // One reveal per notice: rewriting the same notice during boot does not
+  // scroll again, and a user scroll before it runs cancels it.
   function scheduleReveal() {
-    if (!view?.setTimeout) return;
+    if (!view?.setTimeout || !monitorErrorStatus) return;
+    if (monitorErrorStatus === revealedStatus || pendingRevealStatus === monitorErrorStatus) return;
+    pendingRevealStatus = monitorErrorStatus;
+    const cancel = () => { pendingRevealStatus = ''; };
     const reveal = () => {
-      if (cleanedUp || !monitorErrorStatus) return;
-      if (cleanText(findStatusElement(doc)?.textContent) !== monitorErrorStatus) return;
+      view.removeEventListener?.('scroll', onUserScroll, true);
+      if (cleanedUp || !pendingRevealStatus) return;
+      const status = pendingRevealStatus;
+      pendingRevealStatus = '';
+      if (cleanText(findStatusElement(doc)?.textContent) !== status) return;
+      revealedStatus = status;
       revealStatus(doc, view);
     };
-    view.setTimeout(reveal, 0);
-    if (doc.readyState !== 'complete') view.addEventListener?.('load', reveal, { once: true });
+    const onUserScroll = () => {
+      view.removeEventListener?.('scroll', onUserScroll, true);
+      cancel();
+    };
+    const run = () => {
+      view.addEventListener?.('scroll', onUserScroll, { capture: true, passive: true });
+      if (doc.readyState === 'complete') view.setTimeout(reveal, 0);
+      else view.addEventListener?.('load', () => view.setTimeout(reveal, 0), { once: true });
+    };
+    run();
   }
 
   // 1. Check whether the previous tab instance reloaded without pagehide
@@ -599,6 +623,7 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
     recoveredFailure = null;
     activeRunFailure = null;
     monitorErrorStatus = '';
+    revealedStatus = '';
     workflowStartText = cleanText(findStatusElement(doc)?.textContent);
     markConsoleTailsSeen();
     pruneDisconnectedLostCanvases();
@@ -632,6 +657,7 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
     if (!target || typeof target.matches !== 'function') return;
     if (target.matches('input[type="file"]')) {
       if (target.files?.length) {
+        committedInputs.set(target, target.files.length);
         loaded = true;
         markWorkflowStart('loading input files');
       }
@@ -639,6 +665,7 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
     }
     if (target.matches('select[data-neurodesk-example]')) {
       if (target.value) {
+        committedInputs.set(target, 1);
         loaded = true;
         markWorkflowStart('loading example');
       }
@@ -654,7 +681,13 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
   // the app rejected an import or the user removed every file, holds no session.
   function onFilesListed(event) {
     const files = event?.detail?.files;
-    if (!Array.isArray(files) || files.length > 0) return;
+    if (!Array.isArray(files)) return;
+    if (event.target) committedInputs.set(event.target, files.length);
+    if (files.length > 0) return;
+    // Clearing an optional input (masks beside loaded scans) keeps the session.
+    for (const count of committedInputs.values()) {
+      if (count > 0) return;
+    }
     loaded = false;
     immediateActiveDetail = '';
     workflowStartText = null;

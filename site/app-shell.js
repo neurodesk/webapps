@@ -38,7 +38,7 @@ import { resolveShellAdapter } from './shell-adapters/index.js';
     .catch((error) => console.warn('Neurodesk page-wide file drop could not start:', error));
 
   import(/* @vite-ignore */ new URL('ui/memoryCrash.js', metadata.componentsHref).href)
-    .then(({ bindMemoryCrashMonitor }) => bindMemoryCrashMonitor(document))
+    .then(({ bindMemoryCrashMonitor }) => bindMemoryCrashMonitor(document, { appId: metadata.id }))
     .catch((error) => console.warn('Neurodesk memory crash monitor could not start:', error));
 
   // Files one app passed to another live for minutes; whichever app opens next removes stale ones.

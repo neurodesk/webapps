@@ -97,17 +97,20 @@ export async function verifyMobileMemoryCrash(page, origin) {
   try {
     await crashPage.goto(`${origin}/musclemap/?crashProbe=1`, { waitUntil: 'domcontentloaded' });
     await expect(crashPage.locator('.nd-app-bar:visible').first()).toBeVisible();
+    // MuscleMap binds its file input after viewer setup; its example selector comes next.
+    await expect(crashPage.locator('select[data-neurodesk-example]')).toBeAttached();
 
     // 1. Load real NIfTI data so a live session checkpoint exists, then perform a
     //    normal user reload and confirm pagehide clears the checkpoint cleanly.
     await crashPage.locator('#fileInput').setInputFiles(niftiInput);
     await expect(crashPage.locator('#runSegmentation')).toBeEnabled();
     await expect.poll(() => crashPage.evaluate(() => {
-      const raw = window.sessionStorage.getItem('neurodesk-memory-guard:/musclemap/');
+      const raw = window.sessionStorage.getItem('neurodesk-memory-guard:app:musclemap');
       return raw ? JSON.parse(raw).loaded === true : false;
     })).toBe(true);
     await crashPage.reload({ waitUntil: 'domcontentloaded' });
     await expect(crashPage.locator('#statusText')).toHaveText('Drag and drop files');
+    await expect(crashPage.locator('select[data-neurodesk-example]')).toBeAttached();
     await expect(crashPage.locator('#statusText')).not.toHaveClass(/\berror\b/);
 
     // 2. Drive the real workflow again (load NIfTI + click #runSegmentation), wait for
@@ -120,7 +123,7 @@ export async function verifyMobileMemoryCrash(page, origin) {
     await expect(crashPage.locator('#cancelButton')).toBeVisible();
     await crashPage.waitForTimeout(300);
     await expect.poll(() => crashPage.evaluate(() => {
-      const raw = window.sessionStorage.getItem('neurodesk-memory-guard:/musclemap/');
+      const raw = window.sessionStorage.getItem('neurodesk-memory-guard:app:musclemap');
       return raw ? JSON.parse(raw).active === true : false;
     })).toBe(true);
 
@@ -196,7 +199,7 @@ export async function verifyMobileMemoryCrash(page, origin) {
       await checkPage.addInitScript(() => {
         if (window.sessionStorage.getItem('idle-seeded')) return;
         window.sessionStorage.setItem('idle-seeded', '1');
-        window.sessionStorage.setItem('neurodesk-memory-guard:/musclemap/', JSON.stringify({
+        window.sessionStorage.setItem('neurodesk-memory-guard:app:musclemap', JSON.stringify({
           active: false,
           loaded: true,
           hidden: true,

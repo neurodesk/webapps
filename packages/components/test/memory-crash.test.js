@@ -763,3 +763,45 @@ test('checkpoints follow committed inputs, retry failed writes and survive a can
   await waitMs(20);
   assert.equal(JSON.parse(page.window.sessionStorage.getItem(key)).detail, 'Segmenting · 20%');
 });
+
+test('clearing an optional input keeps the session; an app id keys the checkpoint across routes', async (t) => {
+  const page = createWorkspaceDom(t, 'https://webapps.neurodesk.org/dicompare/');
+  const mask = page.document.createElement('input');
+  mask.type = 'file';
+  page.document.getElementById('controls').append(mask);
+  page.bind({ now: () => 1000, appId: 'dicompare' });
+  const key = 'neurodesk-memory-guard:app:dicompare';
+  const scans = page.document.getElementById('imageInput');
+  Object.defineProperty(scans, 'files', { value: [new page.window.File(['x'], 'scan.nii.gz')], configurable: true });
+  scans.dispatchEvent(new page.window.Event('change', { bubbles: true }));
+  page.window.history.pushState({}, '', '/dicompare/workspace');
+  mask.dispatchEvent(new page.window.CustomEvent('nd-files', { bubbles: true, detail: { files: [] } }));
+  await waitMs(280);
+  assert.equal(JSON.parse(page.window.sessionStorage.getItem(key)).loaded, true);
+  scans.dispatchEvent(new page.window.CustomEvent('nd-files', { bubbles: true, detail: { files: [] } }));
+  await waitMs(20);
+  assert.equal(page.window.sessionStorage.getItem(key), null);
+});
+
+test('a recovery notice below the fold scrolls into view once on a phone', async (t) => {
+  const url = 'https://webapps.neurodesk.org/musclemap/';
+  const page = createWorkspaceDom(t, url, {
+    'neurodesk-memory-guard:/musclemap/': { active: true, loaded: true, hidden: false, detail: 'Segmenting…', updatedAt: 1000 },
+  });
+  Object.defineProperty(page.window, 'innerWidth', { value: 320, configurable: true });
+  Object.defineProperty(page.window, 'innerHeight', { value: 568, configurable: true });
+  const statusText = page.document.getElementById('statusText');
+  let scrolls = 0;
+  statusText.getBoundingClientRect = () => ({ top: 1134, bottom: 1170 });
+  statusText.scrollIntoView = () => { scrolls += 1; };
+  page.bind({ now: () => 2000 });
+  await waitMs(20);
+  assert.match(statusText.textContent, /reloaded mid-run/);
+  assert.equal(scrolls, 1);
+  // Late app boot rewrites its idle label; the monitor restores the notice without scrolling again.
+  statusText.classList.remove('error');
+  statusText.textContent = 'Drag and drop files';
+  await waitMs(20);
+  assert.match(statusText.textContent, /reloaded mid-run/);
+  assert.equal(scrolls, 1);
+});

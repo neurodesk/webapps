@@ -185,3 +185,24 @@ test('synchronous postMessage throws and init timeouts clear the failed session 
   assert.equal(workers.length, 3);
   assert.equal(executor.isReady(), true);
 });
+
+test('a Worker constructor that throws lets the next retry start a worker', async () => {
+  let attempts = 0;
+  const executor = new PipelineExecutor({
+    createWorker: () => {
+      attempts += 1;
+      if (attempts === 1) throw new RangeError('Out of memory');
+      const worker = {
+        postMessage(message) {
+          if (message.type === 'init') queueMicrotask(() => worker.onmessage({ data: { type: 'initialized' } }));
+        },
+        terminate() {},
+      };
+      return worker;
+    },
+  });
+  await assert.rejects(executor.initialize(), /Out of memory/);
+  await executor.initialize();
+  assert.equal(attempts, 2);
+  assert.equal(executor.isReady(), true);
+});
