@@ -21,7 +21,8 @@
   "scripts": {
     "start": "node src/cli.js",
     "test": "node --test test/*.test.js",
-    "validate:browser": "node validation/browser-smoke.mjs"
+    "validate:browser": "node validation/browser-smoke.mjs",
+    "validate:webmcp": "node validation/webmcp-smoke.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",
