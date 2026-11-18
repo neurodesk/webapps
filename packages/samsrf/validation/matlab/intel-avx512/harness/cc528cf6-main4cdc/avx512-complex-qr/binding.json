@@ -1,0 +1,60 @@
+{
+  "oldBuildHead": "129f6768b3c17a42649008c5f3224bc111f4ba63",
+  "newBuildHead": "21806ee85ce9b5a5243ee8cb8037f23ae1ca32cc",
+  "freshBuildClean": true,
+  "sourceTrees": {
+    "exes/samsrf": {
+      "files": 93,
+      "oldTreeSha256": "f9f06b3b314a0ba05380dffd4dbc34ec04c5a916795e512a8ab7717e10d08eaf",
+      "newTreeSha256": "f9f06b3b314a0ba05380dffd4dbc34ec04c5a916795e512a8ab7717e10d08eaf",
+      "byteIdentical": true,
+      "declaredNonNumericalDifferences": [],
+      "arithmeticSourcesUnchanged": true
+    },
+    "exes/nifti": {
+      "files": 6,
+      "oldTreeSha256": "906000d09abdba20295ff860576b7092ba01662731f7617f8843b2eb76ebbf91",
+      "newTreeSha256": "906000d09abdba20295ff860576b7092ba01662731f7617f8843b2eb76ebbf91",
+      "byteIdentical": true,
+      "declaredNonNumericalDifferences": [],
+      "arithmeticSourcesUnchanged": true
+    },
+    "packages/samsrf/src": {
+      "files": 5,
+      "oldTreeSha256": "b0176ab720e124d73b237ea3c5b3c3626f6e595177385347535d49e2d4ed42e0",
+      "newTreeSha256": "b0176ab720e124d73b237ea3c5b3c3626f6e595177385347535d49e2d4ed42e0",
+      "byteIdentical": true,
+      "declaredNonNumericalDifferences": [],
+      "arithmeticSourcesUnchanged": true
+    }
+  },
+  "patchesAndNativeTestHashesIdentical": true,
+  "toolchainAndWasmPackIdentical": true,
+  "allNonCustomWasmSectionsIdentical": false,
+  "changedNonCustomSections": [
+    {
+      "id": 10,
+      "oldLength": 1020574,
+      "newLength": 1020574,
+      "oldSha256": "7479558686131944103f6ef5ee19320a6ccaf975deb029a0aaf04b2f70a6746c",
+      "newSha256": "d51a28d3306a1a44c5809ebfae42fcf5ce39234c2d7a1c4231e6da309423d794"
+    },
+    {
+      "id": 11,
+      "oldLength": 96391,
+      "newLength": 96391,
+      "oldSha256": "8abf07b43e11befdb812dd5804a931763cd6056c9e49bef6c7a005fa2aa3fc9c",
+      "newSha256": "456b12feed5a71e8e4f1613aac43f8d4e1bf4cef4972401b84568c130905a758"
+    }
+  ],
+  "changedCustomSections": [
+    "name"
+  ],
+  "oldModule": "05ae8063ba8ef52c2b1f5168c69019971de9905b724174fed04ae4d89952f021",
+  "newModule": "dcaa83df2fcda6b57af10d7ea2ced2d84dff4eb4ff9cd9ed8b99b90a839bd23f",
+  "runner": {
+    "old": "db66ec23ae2c53a64bee9a75251cdef92eaf5de2e2a87f158e6ce2a2249fa544",
+    "new": "ef5d5a98cd68921fed0efa3ae1809905daa7a3144f9b853de965f45dabf9ca5a"
+  },
+  "nativeReuse": "Retained native dumps are bound to unchanged Rust arithmetic, patches, native test and compiler version. Any documentation/package-description differences are declared above. They were not reexecuted for this integration. Fresh Node matrices use the new runner and newly built module. No canonical shipping rebuild or browser/container acceptance is claimed."
+}

@@ -1,0 +1,11 @@
+{
+  "variant": "avx512-complex-qr",
+  "matrixHostsCountsLossesIdentical": true,
+  "allMatrixOutputHashesIdentical": true,
+  "nullAndBundleControlsIdentical": true,
+  "pipelineCountsLossesDumpHashesIdentical": true,
+  "nativePipelinesReexecuted": false,
+  "oldMatrix": "packages/samsrf/validation/matlab/intel-avx512/harness/cc528cf6-3/matrix.json",
+  "oldPipelines": "packages/samsrf/validation/matlab/intel-avx512/harness/cc528cf6-3/pipelines.json",
+  "newResearchModule": "dcaa83df2fcda6b57af10d7ea2ced2d84dff4eb4ff9cd9ed8b99b90a839bd23f"
+}

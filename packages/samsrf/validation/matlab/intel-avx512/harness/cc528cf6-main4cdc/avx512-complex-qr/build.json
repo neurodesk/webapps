@@ -1,0 +1,26 @@
+{
+  "variant": "avx512-complex-qr",
+  "arithmeticReference": "MKL AVX512_E1 research reference: real double, complex dot/norm and two-column complex QR candidates",
+  "checkout": {
+    "head": "21806ee85ce9b5a5243ee8cb8037f23ae1ca32cc",
+    "clean": true
+  },
+  "patches": {
+    "hooks.patch": "02c47d6960f1d6ed3e2712ca1a894822db1c649f770f4157359fc59bf3a424d6",
+    "install-avx512.patch": "a5a129d136a11927d390a639aec34d376fae8080e389c5bb9031b8f47d3ed072",
+    "complex-corr.patch": "21c580d18da75ff180d0a564d2ba51b470c0d8ef8f1eb7f1cbf037556b99ba58",
+    "complex-qr.patch": "1145206e594f7d549a245c719b8bb8918d6844d78b68531c13e266dfd5dbd521"
+  },
+  "copied": {
+    "native/css_pipelines.rs": "213d75b1cfb94c9e773ba25b19efb43fbe0b9c51770570ab51a7e5383dbe5aa8",
+    "run_web_matrix.mjs": "ef5d5a98cd68921fed0efa3ae1809905daa7a3144f9b853de965f45dabf9ca5a"
+  },
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8",
+  "wasmPack": "wasm-pack 0.13.1",
+  "wasmOpt": "not run",
+  "module": {
+    "samsrf_wasm.js": "87bdffc9790c652aa3e5d8114a94866266fd697eb42d15e0ddd08068272a98cd",
+    "samsrf_wasm_bg.wasm": "dcaa83df2fcda6b57af10d7ea2ced2d84dff4eb4ff9cd9ed8b99b90a839bd23f",
+    "samsrf_wasm.d.ts": "13d53dbaa63339a73db8204cea2e738a4f723d1a32ab0fbbadbed8c7adfae4d3"
+  }
+}
