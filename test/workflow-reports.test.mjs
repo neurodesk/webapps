@@ -130,17 +130,18 @@ test('the notarizing workflows and the workflows with a job that continues on er
     const source = await readFile(new URL(file, workflows), 'utf8');
     const workflow = YAML.parse(source);
     const jobsContinuing = Object.values(workflow.jobs ?? {}).some(job => job['continue-on-error'] !== undefined);
-    // A reusable workflow's jobs run inside its callers, which the reports would then have to follow.
-    if (workflow.on?.workflow_call) {
+    // A callable workflow's jobs run inside its callers, which the reports would then have to follow.
+    if (Object.hasOwn(workflow.on ?? {}, 'workflow_call')) {
       assert.ok(!jobsContinuing, `${file}: a reusable workflow with a job that continues on error makes its callers' passing runs need reading`);
-      continue;
     }
+    // One whose only trigger is workflow_call has no runs of its own; one native.yml calls keeps its pushes and dispatches.
+    if (Object.keys(workflow.on ?? {}).every(event => event === 'workflow_call')) continue;
     if (jobsContinuing) expected.continuesOnError.push(`.github/workflows/${file}`);
     if (/notar|APPLE_ID|uses: \.\/\.github\/workflows\/node-cli-portable\.yml/i.test(source)) expected.notarizing.push(`.github/workflows/${file}`);
   }
   const facts = await workflowFacts(workflows);
   assert.deepEqual(facts, expected);
-  for (const file of ['syncro-native', 'standalone', 'synthseg-portable', 'node-cli']) assert.ok(facts.notarizing.includes(`.github/workflows/${file}.yml`), file);
+  for (const file of ['syncro-native', 'standalone', 'synthseg-portable', 'node-cli', 'bison-native']) assert.ok(facts.notarizing.includes(`.github/workflows/${file}.yml`), file);
   for (const file of ['ci', 'node-cli-portable', 'quality', 'workflow-reports']) assert.ok(!facts.notarizing.includes(`.github/workflows/${file}.yml`), file);
   assert.ok(facts.notarizing.length >= 39, 'every workflow the replaced alert listed');
   assert.deepEqual(facts.continuesOnError, ['.github/workflows/ci.yml', '.github/workflows/deploy-pages.yml']);

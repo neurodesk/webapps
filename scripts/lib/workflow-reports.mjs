@@ -29,8 +29,14 @@ const QUIET = new Set(['success', 'skipped', 'neutral']);
 // Scripts and workflows that notarize with the Apple Developer account. node-cli-portable.yml is reusable:
 // its jobs run inside the workflows that call it.
 const NOTARIZES = /notar|APPLE_ID|uses: \.\/\.github\/workflows\/node-cli-portable\.yml/i;
-// A reusable workflow never has runs of its own (test/workflow-reports.test.mjs compares these with a YAML parse).
-const REUSABLE = /^ {2}workflow_call:/m;
+// The events of a workflow's `on:` block, by its two-space keys.
+const triggers = source => [...(source.match(/^on:\n((?: {2}.*\n|\s*\n)*)/m)?.[1] ?? '').matchAll(/^ {2}([a-z_]+):/gm)].map(match => match[1]);
+// A reusable workflow never has runs of its own: workflow_call is its only trigger. A workflow native.yml
+// calls still runs on its own pushes and dispatches (test/workflow-reports.test.mjs compares these with a YAML parse).
+const reusable = source => {
+  const events = triggers(source);
+  return events.length > 0 && events.every(event => event === 'workflow_call');
+};
 const JOB_CONTINUES_ON_ERROR = /^ {4}continue-on-error:/m;
 const ATTEMPT_MARKER = /<!-- (?:nightly|notarization)-run:\d+:attempt:\d+ -->/g;
 const REPORT_ISSUE = /^<!-- (?:nightly-workflow:\d+|apple-notarization-alert) -->/;
@@ -53,7 +59,7 @@ export async function workflowFacts(directory) {
   for (const file of (await readdir(directory)).sort()) {
     if (!/\.ya?ml$/.test(file) || file === REPORTER_WORKFLOW) continue;
     const source = await readFile(new URL(file, directory), 'utf8');
-    if (REUSABLE.test(source)) continue;
+    if (reusable(source)) continue;
     const path = `.github/workflows/${file}`;
     if (JOB_CONTINUES_ON_ERROR.test(source)) facts.continuesOnError.push(path);
     if (NOTARIZES.test(source)) facts.notarizing.push(path);

@@ -251,7 +251,8 @@ report shows these runs in their own row.
 each `ci` job, by the name the API lists it under (its `name:`, else its id), a role: `plan` (planner, gate, plan marker), `fixed` (tests every
 `ci` run whatever changed: `workspace-contracts`, `homepage-easter-egg`), `app`,
 `site`, `test`, `deliver` or `report`. In a test workflow the reusable gate's
-jobs plan and every other job tests. A workflow or `ci` job the table does not
+jobs plan, also inside a workflow `native.yml` calls (`bison-native / gate /
+decide`), and every other job tests. A workflow or `ci` job the table does not
 name is `unclassified`: it counts in the totals and in no share, and the report
 lists it, also when it started no job. `test/ci-measures.test.mjs` requires an
 entry for every workflow file (`.yml` or `.yaml`) and every job of `ci.yml`

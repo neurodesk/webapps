@@ -164,7 +164,8 @@ The same tick checks the failed and timed-out attempts of every workflow that
 notarizes macOS packages, of any event on any branch or tag, release dispatches
 included, but not pull requests. The workflows are derived from the workflow files
 (`workflowFacts`: a file that mentions notarization, `APPLE_ID` or
-calls `node-cli-portable.yml`, reusable workflows excluded). When a failed
+calls `node-cli-portable.yml`; a workflow whose only trigger is `workflow_call`
+is excluded, while one `native.yml` calls keeps its own pushes and dispatches). When a failed
 macOS job log shows Apple refusing a notarization (an expired agreement or
 bad credentials from the notary service, HTTP 401 or 403, or a submission whose
 status is Invalid or Rejected), it opens the issue "Apple notarization is
