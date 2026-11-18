@@ -312,7 +312,7 @@ def main():
     modules = {'shipped': sha256(options.committed),
                'control': read_json(options.control_build)['module']['samsrf_wasm_bg.wasm'],
                'research': read_json(options.research_build)['module']['samsrf_wasm_bg.wasm']}
-    if read_json(options.control_build)['variant'] != 'hooks' or read_json(options.research_build)['variant'] not in ('avx512', 'avx512-real-corr'):
+    if read_json(options.control_build)['variant'] != 'hooks' or read_json(options.research_build)['variant'] not in ('avx512', 'avx512-real-corr', 'avx512-complex-corr'):
         raise Refused('the build records name other variants')
     roots = {'shipped': Path(options.shipped), 'control': Path(options.control), 'research': Path(options.research)}
     reports = {}

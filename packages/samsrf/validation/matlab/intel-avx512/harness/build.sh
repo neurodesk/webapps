@@ -20,14 +20,14 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: $0 hooks|avx512|avx512-real-corr OUT" >&2
+  echo "usage: $0 hooks|avx512|avx512-real-corr|avx512-complex-corr OUT" >&2
   exit 2
 }
 [[ $# -eq 2 ]] || usage
 variant=$1
 out=$2
 case "$variant" in
-  hooks | avx512 | avx512-real-corr) ;;
+  hooks | avx512 | avx512-real-corr | avx512-complex-corr) ;;
   *) usage ;;
 esac
 if [[ -e "$out" ]]; then
@@ -57,6 +57,9 @@ if [[ "$variant" == avx512* ]]; then
 fi
 if [[ "$variant" == avx512-real-corr ]]; then
   patches+=("$harness/real-corr-only.patch")
+fi
+if [[ "$variant" == avx512-complex-corr ]]; then
+  patches+=("$harness/complex-corr.patch")
 fi
 for patch in "${patches[@]}"; do
   (cd "$out" && git apply --check "$patch" && git apply "$patch")

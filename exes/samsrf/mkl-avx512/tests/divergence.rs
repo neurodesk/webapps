@@ -452,3 +452,30 @@ fn branch_roles_need_one_amd_and_one_avx512_host() {
         assert!(std::panic::catch_unwind(|| branch_roles(&manifest)).is_err(), "{manifest}");
     }
 }
+
+/// The four-lane fused candidate was selected on the 24 raw vectors, not correlations
+/// or fitted maps. The second Intel recording reuses those inputs: corroboration only.
+#[test]
+fn complex_dot_candidate_matches_seen_raw_vectors_on_both_intel_hosts() {
+    for variable in ["SAMSRF_MATLAB_NUMERICS_DIR", "SAMSRF_MATLAB_NUMERICS2_DIR"] {
+        let Some(root) = env(variable) else { continue };
+        let manifest = json_file(&root.join("manifest.json"));
+        let [amd, intel] = branch_roles(&manifest);
+        for (host, candidate_matches, shipped_matches) in [(intel, 24, 5), (amd, 5, 24)] {
+            let dir = root.join(&host).join("compatible");
+            let recording = json_file(&dir.join("numerics.json"));
+            let mut counts = [0; 3];
+            let mut lengths = Vec::new();
+            for case in recording["cases"].as_array().unwrap().iter().filter(|c| c["kind"] == "blas") {
+                let (z, y) = (complex_array(&dir, &case["z"]), array(&dir, &case["y"]));
+                let expected = complex_array(&dir, &case["complexDot"])[0];
+                lengths.push(y.len());
+                counts[0] += 1;
+                counts[1] += usize::from(same_complex(samsrf_mkl_avx512::complex::zdotc_real(&z, &y), expected));
+                counts[2] += usize::from(same_complex(matlab_math::zdotc_real(&z, &y), expected));
+            }
+            assert_eq!(lengths, (1..=20).chain([33, 64, 250, 1000]).collect::<Vec<_>>(), "{variable} {host}: recorded lengths");
+            assert_eq!(counts, [24, candidate_matches, shipped_matches], "{variable} {host}: [vectors, candidate, shipped]");
+        }
+    }
+}

@@ -30,6 +30,8 @@
 
 use samsrf_core::timeseries::TimeSeries;
 use samsrf_core::{Error, Result};
+pub mod complex;
+
 use num_bigint::BigUint;
 
 pub mod blas;
