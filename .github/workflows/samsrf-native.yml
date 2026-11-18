@@ -115,7 +115,7 @@ on:
       probes:
         description: With record_matlab, record a pre-registered probe set (sparse conv boundary/blocks/gaps, conv-*-predictions.md; constants-gamma-gemv-predictions.md)
         type: choice
-        options: [none, boundary, blocks, gaps, constants-gamma-gemv]
+        options: [none, boundary, blocks, gaps, constants-gamma-gemv, cleanup-order-1]
         default: none
       controls_only:
         description: Record the MKL controls in effect inside MATLAB under three environment requests (controls-preregistration.md)
@@ -408,7 +408,7 @@ jobs:
 
   recorder-smoke:
     needs: gate
-    if: needs.gate.outputs.run == 'true' && (github.event_name != 'workflow_dispatch' || (!inputs.wasm_only && !inputs.controls_only && (inputs.runtime_cli || 'none') == 'none' && !inputs.runtime_image))
+    if: needs.gate.outputs.run == 'true' && (github.event_name != 'workflow_dispatch' || (!inputs.wasm_only && !inputs.controls_only && (inputs.runtime_cli || 'none') == 'none' && !inputs.runtime_image && inputs.probes != 'cleanup-order-1'))
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -443,9 +443,59 @@ jobs:
           node packages/samsrf/validation/matlab/compare-qr-backends.mjs "$RUNNER_TEMP/samsrf-qr-smoke" "$RUNNER_TEMP/samsrf-qr-smoke.json" --smoke
           octave --quiet --no-gui --eval "addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_qr_kernels(fullfile(getenv('RUNNER_TEMP'),'samsrf-qr-kernels-smoke'),fullfile(getenv('RUNNER_TEMP'),'samsrf-qr-smoke','compatible'),true)"
 
+  # Dispatch-only, separately reviewed budget: no retries or automatic CPU selection.
+  cleanup-order-reference:
+    if: github.event_name == 'workflow_dispatch' && inputs.record_matlab && inputs.probes == 'cleanup-order-1'
+    name: cleanup-order-1 host recording (${{ matrix.host }})
+    strategy:
+      fail-fast: false
+      matrix:
+        host: [ubuntu-22.04, ubuntu-24.04]
+    runs-on: ${{ matrix.host }}
+    timeout-minutes: 15
+    env:
+      MKL_CBWR: COMPATIBLE
+      MKL_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+      MKL_DYNAMIC: 'FALSE'
+      OMP_DYNAMIC: 'FALSE'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Validate the exact-head receipt and isolated selector before MATLAB setup
+        env:
+          CLEANUP_REQUESTED_RUNNER: ${{ matrix.host }}
+        run: python3 packages/samsrf/validation/matlab/cleanup-order-1/prepare.py "$RUNNER_TEMP/cleanup-order-1" --runner "$CLEANUP_REQUESTED_RUNNER"
+      - name: Set up the pinned MATLAB release
+        uses: matlab-actions/setup-matlab@f9e43010f1ae678f7cfa0542fe2a4f60f7d1ad8d # v3
+        with:
+          release: R2023bU11
+      - name: First fresh MATLAB process
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab','cleanup-order-1')); record_cleanup_order(fullfile(getenv('RUNNER_TEMP'),'cleanup-order-1'),1)
+      - name: Second fresh MATLAB process
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab','cleanup-order-1')); record_cleanup_order(fullfile(getenv('RUNNER_TEMP'),'cleanup-order-1'),2)
+      - name: Validate one host without making a paired scientific decision
+        env:
+          CLEANUP_REQUESTED_RUNNER: ${{ matrix.host }}
+        run: python3 packages/samsrf/validation/matlab/cleanup-order-1/evaluate.py host "$RUNNER_TEMP/cleanup-order-1" --commit "$GITHUB_SHA" --runner "$CLEANUP_REQUESTED_RUNNER" > "$RUNNER_TEMP/cleanup-order-1/host-verdict.json"
+      - name: Preserve complete or partial data; neither job alone decides the model
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: samsrf-cleanup-order-1-${{ github.sha }}-${{ matrix.host }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/cleanup-order-1/
+          if-no-files-found: error
+          retention-days: 7
+
   matlab-reference:
     needs: recorder-smoke
-    if: github.event_name == 'workflow_dispatch' && (inputs.qr_kernels || inputs.qr_only || inputs.record_matlab || inputs.revcor_only)
+    if: github.event_name == 'workflow_dispatch' && (inputs.qr_kernels || inputs.qr_only || inputs.record_matlab || inputs.revcor_only) && inputs.probes != 'cleanup-order-1'
     name: record actual MATLAB source reference (${{ matrix.host }} ${{ matrix.replica }})
     strategy:
       fail-fast: false
