@@ -12,7 +12,7 @@
 use crate::apertures::Apertures;
 use crate::error::{Error, Result};
 use crate::hrf::{self, ResolvedHrf};
-use crate::mapset::{MapSet, Maps};
+use crate::mapset::{self, MapSet, Maps};
 use crate::model::Model;
 use crate::precision::Precision;
 use crate::surface::Surface;
@@ -440,6 +440,11 @@ impl Job {
         }
         self.precision.round_slice(&mut maps.data);
         self.precision.round_slice(&mut imaginary);
+        mapset::matlab_nans(&mut maps.data);
+        mapset::matlab_nans(&mut imaginary);
+        if let Some(raw) = &mut raw {
+            mapset::matlab_nans(&mut raw.data);
+        }
         let imaginary = imaginary.iter().any(|value| value.to_bits() != 0).then_some(imaginary);
         let analysed = if self.mver.len() == self.total_vertices { VertexSelection::All } else { VertexSelection::from_indices(self.mver.clone()) };
         Ok(MapSet { maps, raw, analysed, imaginary })

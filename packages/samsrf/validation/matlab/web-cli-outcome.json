@@ -4,8 +4,8 @@
   "cpu": "AMD EPYC 9V74 80-Core Processor"
  },
  "summary": {
-  "exactRuns": 15,
-  "exactMaps": 145,
+  "exactRuns": 17,
+  "exactMaps": 154,
   "maps": 168
  },
  "runs": {
@@ -171,35 +171,23 @@
    "class": "differs",
    "maps": {
     "R^2": {
-     "srfData": 20,
+     "srfData": 9,
      "imaginary": 0,
-     "gifti": 11
+     "gifti": 0
     },
     "x0": {
-     "srfData": 20,
+     "srfData": 9,
      "imaginary": 0,
-     "gifti": 11
+     "gifti": 0
     },
     "y0": {
-     "srfData": 17,
+     "srfData": 6,
      "imaginary": 0,
-     "gifti": 11
+     "gifti": 0
     },
-    "Sigma": {
-     "srfData": 11,
-     "imaginary": 0,
-     "gifti": 11
-    },
-    "Beta": {
-     "srfData": 11,
-     "imaginary": 0,
-     "gifti": 11
-    },
-    "Baseline": {
-     "srfData": 11,
-     "imaginary": 0,
-     "gifti": 11
-    },
+    "Sigma": "exact",
+    "Beta": "exact",
+    "Baseline": "exact",
     "Noise Ceiling": "exact"
    }
   },
@@ -244,15 +232,11 @@
    "class": "differs",
    "maps": {
     "R^2": "exact",
-    "x0": {
-     "srfData": 1,
-     "imaginary": 0,
-     "gifti": 1
-    },
+    "x0": "exact",
     "y0": {
-     "srfData": 17,
+     "srfData": 16,
      "imaginary": 0,
-     "gifti": 1
+     "gifti": 0
     },
     "Centre": "exact",
     "Surround": "exact",
@@ -264,19 +248,11 @@
    }
   },
   "cf_hull_lh_single": {
-   "class": "differs",
+   "class": "exact",
    "maps": {
     "R^2": "exact",
-    "x0": {
-     "srfData": 1,
-     "imaginary": 0,
-     "gifti": 1
-    },
-    "y0": {
-     "srfData": 1,
-     "imaginary": 0,
-     "gifti": 1
-    },
+    "x0": "exact",
+    "y0": "exact",
     "Centre": "exact",
     "Surround": "exact",
     "Beta": "exact",
@@ -335,15 +311,11 @@
      "imaginary": 0,
      "gifti": 0
     },
-    "x0": {
-     "srfData": 1,
-     "imaginary": 0,
-     "gifti": 1
-    },
+    "x0": "exact",
     "y0": {
-     "srfData": 13,
+     "srfData": 12,
      "imaginary": 0,
-     "gifti": 1
+     "gifti": 0
     },
     "Centre": "exact",
     "Surround": "exact",
@@ -363,19 +335,11 @@
    }
   },
   "cf_hull_smooth_global_lh_single": {
-   "class": "differs",
+   "class": "exact",
    "maps": {
     "R^2": "exact",
-    "x0": {
-     "srfData": 1,
-     "imaginary": 0,
-     "gifti": 1
-    },
-    "y0": {
-     "srfData": 1,
-     "imaginary": 0,
-     "gifti": 1
-    },
+    "x0": "exact",
+    "y0": "exact",
     "Centre": "exact",
     "Surround": "exact",
     "Beta": "exact",
