@@ -10,7 +10,7 @@ import { parse, stringify } from 'yaml';
 import { AUTOMATION_CATALOG_READERS, CLASSIFIED_ENTRY_FIELDS, createAppPlan, HANDOFF_CATALOG_READERS, INDEPENDENT_ROOT_DEV_DEPENDENCIES, RUNTIME_MANIFEST_READERS, SITE_ONLY_FILES } from '../scripts/lib/app-plan.mjs';
 import { siteCheckApps, smokeApps } from '../scripts/lib/smoke-apps.mjs';
 import { betNeeds } from '../test-utils/qsm-bet-runtime-startup.mjs';
-import { assertParity, coveringSegmentations, parityPeers } from '../test-utils/shared-binary-startup.mjs';
+import { assertParity, parityPeers, segmentationsToRun } from '../test-utils/shared-binary-startup.mjs';
 import { APP_JOBS, carriedApps, NIGHTLY_JOBS, RERUN_JOBS, SITE_JOBS, testedBase } from '../scripts/lib/tested-base.mjs';
 import { lockfileImpact } from '../scripts/lib/lockfile-impact.mjs';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
@@ -642,7 +642,7 @@ test('a NODDI-only change runs the MindGrab parity check with a peer that shares
   assert.ok(added.some((id) => binary.file.consumers.includes(id)), `${added.join(', ')} holds a peer of noddi`);
   const jobs = apps.filter((app) => binary.file.consumers.includes(app.id))
     .map((app) => ({ family: binary.family, file: binary.file, app, consumers: binary.file.consumers, binaryPath: binary.file.name }));
-  assert.ok(assertParity(coveringSegmentations(jobs).map((job) => ({ job, sha256: 'one output', label: job.app.id }))) === 1);
+  assert.equal(assertParity(segmentationsToRun(jobs, { comparators: added }).map((job) => ({ job, sha256: 'one output', label: job.app.id }))), 1);
 });
 
 test('a change to the CALMaR fixture runs both production BET probes that segment it', async () => {

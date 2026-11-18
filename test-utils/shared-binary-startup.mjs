@@ -167,9 +167,16 @@ const SEGMENTATION_TIMEOUT_MS = 16 * 60_000;
 // The CPU build is deterministic, so every app that runs the same shared bytes must give the same file.
 // A segmentation takes minutes, so by default each app runs one and each binary two or more apps
 // share runs in two of them, whose outputs assertParity compares: every app proves its staged modules
-// run a shared binary to the end, and the start of every other pair is checked above.
-// SHARED_BINARY_EVERY_SEGMENTATION=1 runs every pair.
-export function coveringSegmentations(segmentations) {
+// run a shared binary to the end, and the start of every other pair is checked above. `every` runs
+// every pair (SHARED_BINARY_EVERY_SEGMENTATION=1). A comparator, an app smokeApps added only as a
+// peer, runs just the binaries it shares with another app of the run.
+export function segmentationsToRun(segmentations, { comparators = [], every = false } = {}) {
+  const listed = segmentations.filter(job => !comparators.includes(job.app.id));
+  const needed = segmentations.filter(job => !comparators.includes(job.app.id) || listed.some(other => other.file.sha256 === job.file.sha256));
+  return every ? needed : coveringSegmentations(needed);
+}
+
+function coveringSegmentations(segmentations) {
   const binariesOf = app => segmentations.filter(job => job.app === app).length;
   const selected = [];
   const covered = new Set();
@@ -270,11 +277,12 @@ function assertOnlySharedBinary({ label, site, binaryPath, report, wasmResponses
  * once with only the service worker, as GitHub Pages serves it. It then segments a head phantom on
  * MindGrab's threaded CPU backend in each app that shares a MindGrab CPU binary, through the app's
  * staged model module, with only the service worker, and requires every binary two or more apps share
- * to give one output in two of them (assertParity; a narrowed run adds the peer through parityPeers).
+ * to give one output in two of them (assertParity; a narrowed run adds the peer through parityPeers and
+ * names it in `comparators`).
  * Every family's binary is checked against its pin whatever `apps` holds. Returns how many module
  * starts it checked.
  */
-export async function verifySharedBinaries({ browser, registry, repoRoot, apps = registry.apps }) {
+export async function verifySharedBinaries({ browser, registry, repoRoot, apps = registry.apps, comparators = [] }) {
   const dist = join(repoRoot, 'dist');
   const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets/manifest.json'), 'utf8'));
   const shared = manifest.families.filter(family => family.deduplicate && family.files.some(file => file.name.endsWith('.wasm')));
@@ -343,7 +351,7 @@ export async function verifySharedBinaries({ browser, registry, repoRoot, apps =
         if (isolationHeaders) continue;
         const input = Buffer.from(syntheticHeadNifti()).toString('base64');
         const runs = [];
-        const selected = process.env.SHARED_BINARY_EVERY_SEGMENTATION === '1' ? segmentations : coveringSegmentations(segmentations);
+        const selected = segmentationsToRun(segmentations, { comparators, every: process.env.SHARED_BINARY_EVERY_SEGMENTATION === '1' });
         for (const job of selected) {
           const { family, app, binaryPath, model, probePath, apiPath, assetPath } = job;
           const label = `${app.id} MindGrab ${model} on the threaded CPU backend (${family.id}, ${mode})`;

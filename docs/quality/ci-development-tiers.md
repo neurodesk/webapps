@@ -273,8 +273,9 @@ alone. Two places keep the other dependencies inside the selection:
 | BET startup (`betNeeds`) | `calmar`, which owns the fixture | `qsmbly` and `brain-extraction` |
 | Asyncify startup (`asyncifyNeeds`) | `synthsr`, which installs the ONNX Runtime API it loads | Every `ort-web-asyncify` consumer in the registry |
 
-The parity check now runs every shared CPU binary in two apps and fails one
-compared in a single app. Before, the nightly ran mindmap, mindsnap and
+A parity peer runs only the binaries it shares with a listed app, so the peer
+of `lcmodel` segments with mindmap alone. The parity check now runs every
+shared CPU binary in two apps and fails one compared in a single app. Before, the nightly ran mindmap, mindsnap and
 16chan18cls in one app each, so their parity compared an output with itself.
 The three extra segmentations take about 125, 126 and 54 s (nightly run
 44230450914), so `site-runtime` takes about 5 minutes longer on a

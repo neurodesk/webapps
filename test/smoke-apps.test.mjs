@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { loadAppsRegistry, repoRoot, SHELLS } from '../scripts/lib/apps-registry.mjs';
 import { appFileReaders, CANARY_APPS, requireChecked, siteCheckApps, smokeApps } from '../scripts/lib/smoke-apps.mjs';
-import { assertParity, coveringSegmentations, parityPeers } from '../test-utils/shared-binary-startup.mjs';
+import { assertParity, parityPeers, segmentationsToRun } from '../test-utils/shared-binary-startup.mjs';
 
 const registry = await loadAppsRegistry();
 const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets/manifest.json'), 'utf8'));
@@ -72,7 +72,7 @@ function segmentationsOf(apps) {
 const finished = (jobs, output = () => 'same') => jobs.map((job) => ({ job, sha256: output(job), label: `${job.app.id} ${job.file.name}` }));
 
 test('MindGrab parity compares two apps for every shared CPU binary, and fails with one', () => {
-  const everyApp = coveringSegmentations(segmentationsOf(registry.apps));
+  const everyApp = segmentationsToRun(segmentationsOf(registry.apps));
   const shared = segmentationsOf(registry.apps).filter((job) => job.consumers.length >= 2);
   for (const binary of new Set(shared.map((job) => job.file.name))) {
     const apps = new Set(everyApp.filter((job) => job.file.name === binary).map((job) => job.app.id));
@@ -82,20 +82,28 @@ test('MindGrab parity compares two apps for every shared CPU binary, and fails w
   assert.ok(assertParity(finished(everyApp)) > 0);
   // One app alone would compare its output with itself.
   const alone = segmentationsOf(registry.apps.filter((app) => app.id === 'noddi'));
-  assert.throws(() => assertParity(finished(coveringSegmentations(alone))), /brainchop-mindgrab\.wasm: MindGrab parity ran in noddi only/);
+  assert.throws(() => assertParity(finished(segmentationsToRun(alone))), /brainchop-mindgrab\.wasm: MindGrab parity ran in noddi only/);
   assert.throws(() => assertParity(finished(everyApp, (job) => job.app.id)), /the output differs from/);
 });
 
 test('an app that shares a MindGrab CPU binary brings one peer into a narrowed run, and only when none is listed', () => {
   const peers = parityPeers(manifest);
+  const run = ({ apps, added }) => segmentationsToRun(segmentationsOf(apps), { comparators: added });
   const noddi = smokeApps(registry.apps, 'noddi', peers);
   assert.equal(noddi.added.length, 1);
-  assert.doesNotThrow(() => assertParity(finished(coveringSegmentations(segmentationsOf(noddi.apps)))));
+  assert.equal(run(noddi).length, 2);
+  assert.equal(assertParity(finished(run(noddi))), 1);
   assert.deepEqual(smokeApps(registry.apps, 'noddi,dwicorrect', peers).added, []);
   assert.deepEqual(smokeApps(registry.apps, 'zarro', peers).added, []);
   // brain2print shares three binaries; one peer that ships all three covers them.
   const brain2print = smokeApps(registry.apps, 'brain2print', peers);
-  assert.doesNotThrow(() => assertParity(finished(coveringSegmentations(segmentationsOf(brain2print.apps)))));
+  assert.equal(assertParity(finished(run(brain2print))), 3);
+  // lcmodel's peer ships two binaries lcmodel does not: as a comparator it runs only the shared one.
+  const lcmodel = smokeApps(registry.apps, 'lcmodel', peers);
+  assert.deepEqual(run(lcmodel).map((job) => `${job.app.id} ${job.file.name}`).sort(), lcmodel.apps.map((app) => `${app.id} brainchop-mindmap.wasm`).sort());
+  assert.equal(assertParity(finished(run(lcmodel))), 1);
+  // Every pair, as SHARED_BINARY_EVERY_SEGMENTATION=1 asks, still leaves the comparator's other binaries out.
+  assert.equal(assertParity(finished(segmentationsToRun(segmentationsOf(lcmodel.apps), { comparators: lcmodel.added, every: true }))), 1);
 });
 
 test('a narrowed check that checked nothing fails, and only then', () => {
