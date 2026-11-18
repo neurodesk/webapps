@@ -211,188 +211,58 @@ Its model pack is tested with every app it serves that reads a model.
 04:17 UTC and on dispatch. It builds once, then:
 
 - decides which sites to publish (`scripts/plan-site-deploy.mjs`,
-  `scripts/lib/site-deploy.mjs`), writes the decision and its reason for each
-  site to the job summary, and writes `site-digest.json` into each site;
+  `scripts/lib/site-deploy.mjs`) and writes `site-digest.json` into each site;
 - uploads `dist-sites/neuro` to GitHub Pages;
 - deploys `dist-sites/msk`, `dist-sites/microscopy`, `dist-sites/preclinical` and `dist-sites/hub` with
   `wrangler deploy --config dist-sites/<site>.wrangler.json`, using the
-  `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets, and checks that
-  each answers on its custom domain;
-- checks each site against its public host in its own leg: `verify-sites` for
-  each catalogue runs the landing page probe (`scripts/check-site-answers.sh`),
-  then `pnpm test:deployed`, `test/standalone-downloads.smoke.mjs` and
-  `pnpm test:image-uploads`, with `SITE_CATALOG=<catalogue>` limiting them to
-  that host's apps; `verify-hub` runs the probe and a check that the hub links
-  every catalogue;
-- saves a verified marker for each site whose checks all passed, and deletes
-  it for each site whose checks did not.
+  `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets;
+- runs the deployed checks (`pnpm test:deployed`,
+  `test/standalone-downloads.smoke.mjs`, `pnpm test:image-uploads`) once per host,
+  with `SITE_CATALOG=<catalogue>` limiting them to that host's apps.
 
-### Checks run per site
+### Publishing only what changed
 
-The check jobs start once every publish of the run has ended, whatever its
-result, unless the plan failed or the run was cancelled. They run one leg per
-site the plan selects (`fail-fast: false`), so a failed publish or a failed
-check of one site never holds back another site's checks. A failed publish
-still leaves the run red. The Pages deploy waits for the Worker deploys, so
-the neuro 404 page never redirects to a host that is not live; when a Worker
-deploy fails, neuro's leg still runs every check against what its host
-serves.
+A run skips the publish of a site whose host already serves the built bytes.
+Publishing those bytes again would change nothing for users. Every check of
+every site still runs on every run, published or not.
 
-Each leg:
+A site's content digest is SHA-256 over its files' relative paths and bytes,
+plus its Wrangler configuration, leaving out the root `analytics.json` and
+`site-digest.json`. `site-digest.json` records the digest, the usage report's
+`generatedAt` (an ISO instant or null) and the commit.
 
-1. reads the site's `site-digest.json` from its public host
-   (`scripts/confirm-site-digest.mjs`);
-2. runs every assertion of its site, the landing page probe first;
-3. reads the record again;
-4. when the host served the built digest D at both reads, restores the
-   marker if it exists, or saves it if it does not;
-5. when an assertion failed, deletes the marker (`scripts/revoke-site-marker.mjs`);
-6. fails when this run published the site but the host does not serve D at
-   step 1: the publish did not take.
+A site is published when:
 
-A failed assertion skips the site's later assertions and steps 3 and 4.
-Neither read, nor the restore or save, can fail assertions that passed; they
-only decide whether the marker is saved. A leg cancelled during its checks
-deletes nothing, because a cancelled or skipped step proves nothing. An
-assertion that failed before the cancellation still deletes the marker. A
-delete that fails fails its step and says why in the job summary; the leg is
-red already. So a marker exists only while the last completed check of its
-site, bytes and check inputs passed.
-
-The check jobs have `actions: write` to delete markers. The workflow and
-every other job keep `actions: read`, except `turbo-cache-retention`, which
-deletes superseded `turbo-pages-` caches. In the check jobs only the delete
-step gets the token, and the checkout does not keep it
-(`persist-credentials: false`).
-
-The deploy steps run only for the sites the run publishes. A site's content
-digest is SHA-256 over its files' relative paths and bytes, plus its Wrangler
-configuration, leaving out the root `analytics.json` and `site-digest.json`.
-`site-digest.json` records the digest, the usage report's `generatedAt` (an ISO
-instant or null) and the commit (40 hex digits, or null outside Actions).
-
-### Verified markers
-
-A verified marker says that site S, at content digest D, passed the deployed
-checks whose inputs hash to C. It is an entry in this repository's GitHub
-Actions cache with the key `deploy-verified-1-<site>-<D>-<C>`. The check legs
-save, keep and delete it as described above.
-
-C is a hash, per site, of what decides whether its checks pass:
-
-- the check scripts and every module they import (`moduleClosure`);
-- each npm package they import and every package it depends on, by version
-  and pnpm store directory, which also names a patch: `@playwright/test`,
-  `playwright` and `playwright-core`, which set the browser, and `yaml` and
-  `zod`;
-- root `package.json`, `registry/apps.yml` and `registry/standalone.json`;
-- the `package.json` of each app the site serves;
-- `deploy-pages.yml`, which holds the check steps and the hub check.
-
-The hub's C covers the probe and `deploy-pages.yml`.
-When a check changes, its hash changes, no marker has the new hash, and every
-site is published and checked once more. `test/site-deploy.test.mjs` holds the
-script lists to the steps that run between the two confirmations.
-
-The landing page probe is the base workflow's `curl --fail --silent
---show-error --retry 10 --retry-all-errors --retry-delay 15 --output /dev/null`
-with `--max-time 30` added for each try. It passes when the URL answers below
-HTTP 400, without following a redirect. It tries 11 times, 15 seconds apart,
-or as long as a `Retry-After` header asks. Both deploy jobs run it after each
-publish, and the Pages deploy waits for the Worker deploys' probes. Each check
-leg runs it again, so a site checked without a publish, such as an unchanged
-Worker catalogue on the daily run, has its landing page checked too.
-
-The plan looks up each marker with the cache REST API
-(`GET /repos/{owner}/{repo}/actions/caches?key=<key>&ref=<GITHUB_REF>`, which
-needs `actions: read`); a check leg deletes it with
-`DELETE` on the same path, by complete key and ref (`actions: write`). That
-endpoint documents only HTTP 200, so a 404 counts as "no marker to delete"
-only when a lookup then finds none. The API treats `key` as a prefix, so an entry counts
-only when its key and its ref both equal the ones asked for. Any other answer
-leaves the marker unknown: an error, a timeout, or more than one page of
-matches, even with the marker on the first page.
-
-The cache gives these guarantees
-([dependency caching reference](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching)):
-
-- An existing entry cannot be changed, and a save under an existing key
-  creates nothing.
-- On `main`, only runs triggered by `push`, `workflow_dispatch`, `schedule`
-  and a few other trusted events can write entries. Runs triggered by
-  `pull_request_target`, `workflow_run` or `issue_comment` only read them. A
-  `pull_request` run writes under its merge ref, `refs/pull/<n>/merge`, which
-  the plan's ref filter leaves out. A dispatch on another branch writes under
-  that branch, which a run on `main` never reads.
-- Entries not accessed for 7 days are removed. Above the repository limit
-  (10 GB by default), the entries accessed least recently are removed first.
-  Step 4 of a check leg restores an existing marker, so the daily run accesses
-  the marker of every live site that passes its checks.
-
-The plan does not rely on a new entry being listed at once. A lost marker, or
-one not listed yet, is a cost, never a wrong skip: the site is published and
-checked again. In November 2026 the repository's caches held about 11 GB.
-The previous deploy's turbo cache was gone after gaps between deploys of 2.8
-and 3.6 hours, and survived gaps of up to 12 hours.
-
-### When a site is published
-
-A site is published, and then checked, when:
-
-- the run was dispatched, by hand or by `standalone-catalog.yml` (every site);
+- the run was dispatched, by hand or by `standalone-catalog.yml`;
 - its host does not serve a readable record of this site. Only a direct `200`
   answer with an `application/json` type and no `Age` above 0 counts: a
   redirect is not followed, and the request asks every cache to revalidate. A
   record with a field of the wrong type, or a date that does not exist (such as
-  31 February), is unreadable too;
+  31 February), is unreadable too. One 30 second deadline covers headers and
+  body, and the request is aborted when the read ends;
 - its digest differs from the served one;
-- its marker for the served digest and this run's check hash is missing or
-  unknown. This covers a failed or skipped check (a failed check deletes the
-  marker), a failed or partial deploy, a check that saw other bytes, a changed
-  check and a lost marker;
 - its served usage report predates the last 04:17 UTC refresh. The daily
   schedule exists for this: each catalogue's report is refreshed once a day,
   by the first run after that time. The hub has no report.
 
-A site whose plan fails for any other reason is published and checked, and no
-marker is saved for it. Every other site is skipped. The job summary names
-each decision and says whether the marker was found.
+A site whose plan fails for any other reason is published; the other sites
+are still planned. The job summary has one row per site: published or
+skipped, and why.
 
-Re-runs need no rule of their own. "Re-run failed jobs" re-runs the failed
-check legs with the build's outputs from the first attempt, so they check the
-same sites and save or delete the same markers. A full re-run plans again.
+The steps that publish run only for the sites the plan publishes: the Pages
+artifact upload and `actions/deploy-pages`, and each `wrangler deploy`. The
+build's `pnpm test:runtime-startup` and its browser install run only when some
+site is published. When the Pages publish is skipped, the neuro checks read
+the registry host (`https://webapps.neurodesk.org/`) in place of the
+deployment's URL. The plan runs after `test/catalog-sites.test.mjs`, which
+asserts each site's exact root files, and before the startup check.
+`test/site-deploy.test.mjs` holds every other job, need, matrix, permission
+and step to `test/fixtures/deploy-pages.main.yml`, the workflow without the
+plan; a change to the deploy or its checks updates both.
 
-A later failure of the same checks on the same bytes deletes the marker, so
-the next run publishes and checks the site again. The daily run checks every
-live site whether it has a marker or not.
-
-A check leg's worst case, besides set-up: two record reads of at most 30
-seconds each, the probe's 11 tries of at most 30 seconds with 15 seconds
-between them (8 minutes, longer only when the host sends a long
-`Retry-After`), the browser checks, which have no limit of their own, and a
-marker delete of at most 30 seconds plus a lookup of 30 seconds. The job's
-limit is GitHub's default of 360 minutes, as before this change.
-
-One deadline covers each whole exchange, headers and body: 30 seconds for each
-live record and each marker lookup. The plan reads them all at once while it
-digests the sites, and aborts each request when its read ends, so it writes its
-outputs within about 30 seconds whatever the network does. A read that runs
-out of time publishes. The plan step's 10 minute limit is a backstop.
-
-`pnpm test:runtime-startup` runs before a deploy only when some site's content
-may be new: a dispatch, an unreadable record or a changed digest. Bytes a host
-already serves passed it when they were first published, so a site published
-only for a missing marker or a usage report does not run it again. The daily
-run checks every live site, published or not: those checks read the public
-hosts and the checked-out registry, not the build. So a broken live site is
-found within a day even when no site changes and GA4 is unavailable.
-
-The first run after this rule is introduced finds no record and no marker, so
-it publishes and checks every site once.
-
-Two builds of one commit differ only in `analytics.json`. `calmar/build-info.json`
-names the commit of calmar's last uncached build and stays in the digest, so a
-cold turbo cache republishes the neuro site.
+Two builds of one commit differ only in `analytics.json`.
+`calmar/build-info.json` names the commit of calmar's last uncached build and
+stays in the digest, so a cold turbo cache republishes the neuro site.
 
 The Cloudflare API token needs Workers Scripts edit on the account, plus
 Workers Routes and DNS edit on the `sciget.org` zone. Wrangler needs these to
@@ -404,6 +274,6 @@ attach the custom domains.
    icon to `site/` (and to `sharedSiteAssets` in `scripts/build-site.mjs`) if it
    has a new brand.
 2. Set `catalog:` on its apps.
-3. Add its site to the `worker-sites` artifact and the hub check in `deploy-pages.yml` (`test/catalog-site-projection.test.mjs` holds both to the registry). The `deploy-workers` and `verify-sites` matrices come from the registry through the deploy plan. The Pages deploy waits for `deploy-workers`, so the neuro 404 page never redirects to a host that is not live yet.
+3. Add its site to the `worker-sites` artifact, the `deploy-workers` and `verify-workers` matrices and the hub check in `deploy-pages.yml` (`test/catalog-site-projection.test.mjs` holds all four to the registry). The Pages deploy waits for `deploy-workers`, so the neuro 404 page never redirects to a host that is not live yet.
 4. Build, then run `node --test test/catalog-sites.test.mjs` and
    `pnpm audit:artifacts`.
