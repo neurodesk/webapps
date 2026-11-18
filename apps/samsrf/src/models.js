@@ -282,7 +282,7 @@ export function parseModel(text, analysis) {
   if (model.Arithmetic_Reference === "matlab-intel" && model.Data_Precision === "single") throw new Error("MATLAB Intel reference requires double precision.");
   if (model.Data_Precision !== undefined && !["single", "double"].includes(model.Data_Precision)) throw new Error("Data_Precision must be single or double.");
   if (model.Css_Convention !== undefined && !["nonnegative", "samsrf"].includes(model.Css_Convention)) throw new Error("Css_Convention must be nonnegative or samsrf.");
-  if (analysis === "prf" && model.Arithmetic_Reference === "matlab-intel" && model.Compressive_Nonlinearity && model.Css_Convention !== "samsrf") throw new Error("MATLAB Intel CSS requires Css_Convention='samsrf'; select the SamSrf CSS convention.");
+  if (analysis === "prf" && model.Arithmetic_Reference === "matlab-intel" && Number(model.Compressive_Nonlinearity ?? 0) !== 0 && model.Css_Convention !== "samsrf") throw new Error("MATLAB Intel CSS requires Css_Convention='samsrf'; select the SamSrf CSS convention.");
   if (analysis === "cf" && model.Data_Precision === "single" && Number(model.Fit_pRF) === 1) throw new Error("Single precision connective fields support Fit_pRF 0 or -1; Gaussian fits need double precision.");
   if (analysis === "rc" && model.Data_Precision === "single" && typeof model.Prf_Function === "string") throw new Error("Single precision reverse correlation supports the convex hull; 2D pRF fits need double precision.");
   if (analysis === "prf") {

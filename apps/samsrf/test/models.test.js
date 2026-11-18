@@ -157,6 +157,8 @@ test("Intel CSS requires the recorded SamSrf convention", () => {
     assert.throws(() => parseModel(JSON.stringify({ ...model, Css_Convention }), "prf"), /Intel CSS requires Css_Convention='samsrf'/);
   }
   assert.doesNotThrow(() => parseModel(JSON.stringify({ ...model, Css_Convention: "samsrf" }), "prf"));
+  assert.doesNotThrow(() => parseModel(JSON.stringify({ ...model, Compressive_Nonlinearity: [0] }), "prf"));
+  assert.throws(() => parseModel(JSON.stringify({ ...model, Compressive_Nonlinearity: [1] }), "prf"), /Intel CSS requires/);
   for (const Arithmetic_Reference of ["current", "matlab-amd"]) {
     assert.doesNotThrow(() => parseModel(JSON.stringify({ ...model, Arithmetic_Reference }), "prf"));
   }
