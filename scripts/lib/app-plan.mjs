@@ -592,6 +592,9 @@ const NO_SUITE_PATHS = [/^[^/]+\.md$/, /^\.gitignore$/, /^\.github\/workflows\/(
 // Directories whose files a suite reads only through its graph node or the paths it names.
 const SUITE_INPUT = /^(?:apps|packages|exes|scripts|test-utils|registry|test|models|site|runtime-assets|templates)\//;
 export const EASTER_EGG_SUITE = 'homepage-easter-egg';
+// workspace-contracts' package step runs this script only when the plan lists
+// packages, so a change to it runs every package suite.
+export const PACKAGE_STEP = 'scripts/run-package-tests.mjs';
 // Importers a lockfile change can place: a workspace directory or an easter egg.
 const PLACED_IMPORTER = /^(?:(?:apps|packages|exes)\/[^/]+|site\/easter-eggs\/[^/]+)$/;
 
@@ -640,6 +643,10 @@ export function selectAffectedSuites(changedPaths, graph, manifests = new Map(),
   for (const path of changedPaths) {
     if (!release && releaseBookkeeping(path, manifests)) continue;
     if (NON_CODE_FILES.has(path) || NON_CODE_PREFIXES.some((prefix) => path.startsWith(prefix)) || NO_SUITE_PATHS.some((pattern) => pattern.test(path))) continue;
+    if (path === PACKAGE_STEP) {
+      for (const suite of suites) if (suite.id !== EASTER_EGG_SUITE) select(suite.id, `${path}: workspace-contracts runs every package suite through it`);
+      continue;
+    }
     if (path === CI_WORKFLOW) {
       const impact = manifests.get(path) ? ciImpact(manifests.get(path)) : { shared: 'the base or head workflow is unavailable' };
       if (impact.shared) {

@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { parse, stringify } from 'yaml';
-import { AUTOMATION_CATALOG_READERS, changedPathsFromGit, CI_JOB_SCOPES, createAppPlan, EASTER_EGG_SUITE, INDEPENDENT_ROOT_DEV_DEPENDENCIES, RUNTIME_MANIFEST_READERS, SITE_KEY_READERS, SITE_ONLY_FILES } from '../scripts/lib/app-plan.mjs';
+import { AUTOMATION_CATALOG_READERS, changedPathsFromGit, CI_JOB_SCOPES, createAppPlan, EASTER_EGG_SUITE, INDEPENDENT_ROOT_DEV_DEPENDENCIES, PACKAGE_STEP, RUNTIME_MANIFEST_READERS, SITE_KEY_READERS, SITE_ONLY_FILES } from '../scripts/lib/app-plan.mjs';
 import { APP_JOBS, carriedApps, NIGHTLY_JOBS, PLANNED_JOBS, RERUN_JOBS, testedBase } from '../scripts/lib/tested-base.mjs';
 import { lockfileImpact } from '../scripts/lib/lockfile-impact.mjs';
 import { loadAppsRegistry, parseAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
@@ -1041,7 +1041,7 @@ test('the jobs a ci.yml change can narrow to test what CI_JOB_SCOPES says', asyn
   assert.equal(ci.jobs['homepage-easter-egg'].needs, 'app-plan');
   assert.match(ci.jobs['homepage-easter-egg'].if, / && needs\.app-plan\.outputs\.easter_egg == 'true'$/);
   assert.equal(ci.jobs['workspace-contracts'].needs, 'app-plan');
-  const packages = ci.jobs['workspace-contracts'].steps.find((step) => /pnpm test:packages/.test(step.run ?? ''));
+  const packages = ci.jobs['workspace-contracts'].steps.find((step) => step.run === `node ${PACKAGE_STEP}`);
   assert.equal(packages.if, "needs.app-plan.outputs.has_packages == 'true'");
   assert.equal(packages.env.ALL_PACKAGES, '${{ needs.app-plan.outputs.all_packages }}');
   // Contracts, the nii2tvx check and lint run whatever the plan says.
@@ -1049,11 +1049,17 @@ test('the jobs a ci.yml change can narrow to test what CI_JOB_SCOPES says', asyn
   for (const output of ['packages', 'all_packages', 'has_packages', 'easter_egg']) {
     assert.equal(ci.jobs['app-plan'].outputs[output], `\${{ steps.plan.outputs.${output} }}`);
   }
+  assert.equal(packages.env.PACKAGES, '${{ needs.app-plan.outputs.packages }}');
   // test:packages is the command the narrowed step reproduces per package.
   const scripts = JSON.parse(await readFile(join(repoRoot, 'package.json'), 'utf8')).scripts;
   assert.equal(scripts['test:packages'], "pnpm --filter './packages/*' --filter '!@neurodesk/webapp-components' run test && pnpm --filter @neurodesk/webapp-components run test:unit");
-  assert.match(packages.run, /filters\+=\(--filter "\.\/\$dir"\)/);
-  assert.match(packages.run, /pnpm --filter @neurodesk\/webapp-components run test:unit/);
+  const step = await readFile(join(repoRoot, PACKAGE_STEP), 'utf8');
+  assert.match(step, /pnpm\(\['test:packages'\]/);
+  assert.match(step, /dir !== COMPONENTS\), 'test'\],\n\s*\[suites\.filter\(\(\{ dir \}\) => dir === COMPONENTS\), 'test:unit'\]/);
+  // The step runs only when the plan lists packages, so its own change runs them all.
+  const own = createAppPlan(await loadAppsRegistry(), [PACKAGE_STEP], await graph).packages;
+  const workspace = await graph;
+  assert.deepEqual(Object.keys(own.reasons).sort(), workspace.nodes.filter((node) => node.startsWith('packages/')).sort());
 });
 
 test('package suites run for the packages a change reaches, and all of them for a full or unplaced change', async () => {

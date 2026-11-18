@@ -143,21 +143,8 @@ jobs:
         env:
           ALL_PACKAGES: ${{ needs.app-plan.outputs.all_packages }}
           PACKAGES: ${{ needs.app-plan.outputs.packages }}
-        run: |
-          if [ "$ALL_PACKAGES" = true ]; then
-            pnpm test:packages
-            exit 0
-          fi
-          filters=()
-          for dir in $(jq -r '.[] | select(. != "packages/components")' <<< "$PACKAGES"); do
-            filters+=(--filter "./$dir")
-          done
-          if [ "${#filters[@]}" -gt 0 ]; then
-            pnpm "${filters[@]}" run test
-          fi
-          if jq -e 'index("packages/components") != null' <<< "$PACKAGES" > /dev/null; then
-            pnpm --filter @neurodesk/webapp-components run test:unit
-          fi
+        # It fails on a list it cannot run as given (malformed, unknown or unmatched packages).
+        run: node scripts/run-package-tests.mjs
       - name: Check correctness on full CI runs
         if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
         run: pnpm lint:correctness
