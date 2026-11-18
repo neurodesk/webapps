@@ -10,7 +10,7 @@ import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { commandLineClosure, moduleClosure, onlyAddsExports, onlyBumpsVersion } from '../scripts/lib/module-closure.mjs';
 import { testedBase } from '../scripts/lib/tested-base.mjs';
 import { callerPermissions, dispatchedWorkflows, renderNativeWorkflow } from '../scripts/lib/native-workflow.mjs';
-import { DISPATCHER, budgetedDecision, calledWorkflows, decideWorkflow, dispatchDecision, dispatched, dispatchedRuns, isSharedFilter, mainWorkflow, ownedPackages, pathGlob, pullRequestFilters, pushWorkflow, sharedPaths, swept, sweepWorkflow, workflowApps, workflowScripts } from '../scripts/lib/workflow-gate.mjs';
+import { DISPATCHER, budgetedDecision, calledWorkflows, certainOwnStart, decideWorkflow, dispatchDecision, dispatched, dispatchedRuns, isSharedFilter, mainWorkflow, ownedPackages, pathGlob, pullRequestFilters, pushWorkflow, sharedPaths, swept, sweepWorkflow, workflowApps, workflowScripts } from '../scripts/lib/workflow-gate.mjs';
 import { loadConservativeWorkspaceGraph } from '../scripts/lib/workspace-graph.mjs';
 
 // The pull request gate skips a native suite only when no changed file can
@@ -300,7 +300,9 @@ test('native.yml calls every workflow with shared paths, granting what its jobs 
   const native = YAML.parse(text);
   assert.deepEqual(Object.keys(native.on), ['pull_request', 'schedule']);
   assert.equal(native.on.schedule.length, 1);
-  assert.deepEqual(native.jobs.gate, { uses: './.github/workflows/pr-gate.yml', permissions: { contents: 'read', actions: 'read', 'pull-requests': 'read' }, with: { workflow: DISPATCHER } });
+  // When the decision ends without a selection, the gate runs these (test/native-decision.test.mjs).
+  const lists = { calls: nativeCalls.map(([name]) => name).join(' '), sweeps: nativeCalls.filter(([, flow]) => swept(flow)).map(([name]) => name).join(' ') };
+  assert.deepEqual(native.jobs.gate, { uses: './.github/workflows/pr-gate.yml', permissions: { contents: 'read', actions: 'read', 'pull-requests': 'read' }, with: { workflow: DISPATCHER, ...lists } });
   // A pull request that changes any workflow's shared path starts native.yml.
   const starts = native.on.pull_request.paths.map(pathGlob);
   for (const [name, flow] of nativeCalls) {
@@ -335,9 +337,10 @@ const before = (name, flow, changedPaths, calledFlows) => {
 const tracked = execFileSync('git', ['ls-files'], { cwd: repoRoot, encoding: 'utf8' }).split('\n');
 const sample = (filter) => tracked.find((path) => pathGlob(filter).test(path)) ?? filter.replace('**', 'src/new.js').replaceAll('*', 'new');
 
-test('each pull request runs a workflow exactly as before, from its own trigger or from native.yml, never both', async () => {
+test('each pull request runs a workflow exactly as before, and twice only where its own start is not certain', async () => {
   let cases = 0;
   let runs = 0;
+  let twice = 0;
   for (const [name, flow] of nativeCalls) {
     const calledFlows = await Promise.all(calledWorkflows(flow).map(real));
     const own = flow.on.pull_request.paths.map(sample);
@@ -347,13 +350,17 @@ test('each pull request runs a workflow exactly as before, from its own trigger 
       const ownRun = changedPaths.some((path) => flow.on.pull_request.paths.some((filter) => pathGlob(filter).test(path)));
       const gate = ownRun && decideWorkflow({ flow, calledFlows, changedPaths, registry, graph, root: repoRoot }).run;
       const native = dispatchDecision({ flow, calledFlows, changedPaths, registry, graph, root: repoRoot }).run;
-      assert.ok(!(ownRun && native), `${name} would run twice for ${changedPaths}`);
+      // A lost run is a hidden regression; a second run only costs one.
       assert.equal(gate || native, before(name, flow, changedPaths, calledFlows), `${name}: ${changedPaths}`);
+      assert.ok(!(certainOwnStart(flow, { paths: changedPaths }) && native), `${name} would run twice although GitHub started it for ${changedPaths}`);
       cases++;
       if (gate || native) runs++;
+      if (gate && native) twice++;
     }
   }
   assert.ok(cases > 150 && runs > 30 && runs < cases, `${runs} of ${cases}`);
+  // Only the samples a dotfile or a rename makes uncertain run twice.
+  assert.ok(twice < cases / 20, `${twice} of ${cases} run twice`);
 });
 
 test('native.yml leaves a workflow to its own run, and decides one only its shared paths reach', () => {
@@ -361,7 +368,7 @@ test('native.yml leaves a workflow to its own run, and decides one only its shar
   const dispatch = (changedPaths) => dispatchDecision({ flow, changedPaths, registry, graph, root: repoRoot });
   assert.deepEqual(sharedPaths(flow), ['packages/components/**', 'pnpm-lock.yaml']);
   assert.deepEqual(pullRequestFilters(flow), ['packages/elastix/**', 'packages/components/**', 'pnpm-lock.yaml']);
-  assert.match(dispatch(['packages/elastix/src/index.js', 'packages/components/src/ui/theme.js']).reason, /^packages\/elastix\/src\/index\.js matches one of its own filters, so its own pull request run decides$/);
+  assert.match(dispatch(['packages/elastix/src/index.js', 'packages/components/src/ui/theme.js']).reason, /^packages\/elastix\/src\/index\.js matches its own filter packages\/elastix\/\*\*, so its own pull request run decides$/);
   assert.deepEqual(dispatch(['docs/readme.md']), { run: false, reason: 'none of its shared paths changed' });
   assert.equal(dispatch(['packages/components/src/ui/theme.js']).run, false, 'elastix does not load the theme');
   assert.match(dispatch(['packages/components/src/file-io/NiftiUtils.js']).reason, /a script in packages\/elastix loads packages\/components\/src\/file-io\/NiftiUtils\.js/);
@@ -554,7 +561,8 @@ test('the gate answers drafts, dispatches and calls from native.yml without a ch
   assert.match(decideStep.run, /node scripts\/workflow-gate\.mjs --workflow "\$WORKFLOW" --base "\$BASE_SHA" --head "\$HEAD_SHA"/);
   assert.match(decideStep.run, /"\$EVENT_NAME" = schedule \]; then\n\s+node scripts\/workflow-gate\.mjs --workflow "\$WORKFLOW" --sweep --head "\$HEAD_SHA"/);
   assert.match(decideStep.run, /"\$EVENT_NAME" = push \]; then\n\s+node scripts\/workflow-gate\.mjs --workflow "\$WORKFLOW" --push --head "\$HEAD_SHA"/);
-  assert.match(decideStep.run, /if \[ "\$WORKFLOW" = native \]; then\n\s+if \[ "\$EVENT_NAME" = schedule \]; then\n\s+node scripts\/workflow-gate\.mjs --native --sweep --head "\$HEAD_SHA"\n\s+else\n\s+node scripts\/workflow-gate\.mjs --native --base "\$BASE_SHA" --head "\$HEAD_SHA"/);
+  assert.match(decideStep.run, /if \[ "\$WORKFLOW" = native \]; then\n\s+if \[ "\$EVENT_NAME" = schedule \]; then\n\s+eligible=\$SWEEPS\n\s+set -- --sweep\n\s+else\n\s+eligible=\$CALLS\n\s+set -- --base "\$BASE_SHA"\n\s+fi/);
+  assert.match(decideStep.run, /NATIVE_ELIGIBLE="\$eligible" node scripts\/workflow-gate\.mjs --native "\$@" --head "\$HEAD_SHA" \|\| status=\$\?/);
   assert.equal(event.env.TOP_WORKFLOW, '${{ github.workflow_ref }}');
   assert.equal(decideStep.env.GITHUB_TOKEN, '${{ github.token }}');
   assert.equal(decideStep.env.HEAD_SHA, '${{ github.event.pull_request.head.sha || github.sha }}');

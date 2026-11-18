@@ -1,7 +1,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parse } from 'yaml';
-import { DISPATCHER, dispatched, sharedPaths } from './workflow-gate.mjs';
+import { DISPATCHER, dispatched, sharedPaths, swept } from './workflow-gate.mjs';
 
 // .github/workflows/native.yml, written from the workflows whose gate job
 // lists shared_paths (scripts/native-workflow.mjs). One run of it decides for
@@ -89,6 +89,11 @@ export function renderNativeWorkflow(workflows) {
     '      pull-requests: read',
     '    with:',
     `      workflow: ${DISPATCHER}`,
+    '      # What runs when the decision ends without a selection.',
+    '      calls: >-',
+    ...workflows.map(([name]) => `        ${name}`),
+    '      sweeps: >-',
+    ...workflows.filter(([, flow]) => swept(flow)).map(([name]) => `        ${name}`),
     ...calls,
     '',
   ].join('\n');

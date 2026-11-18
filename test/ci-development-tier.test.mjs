@@ -38,9 +38,9 @@ test('ready and updated PRs run deferred native jobs; pushes and dispatches keep
     if (usesGate) {
       gated++;
       // The gate always finishes, so jobs after the entry jobs keep their default conditions.
-      const { shared_paths: shared, ...inputs } = flow.jobs.gate.with;
+      const { shared_paths: shared, calls, sweeps, ...inputs } = flow.jobs.gate.with;
       assert.deepEqual({ ...flow.jobs.gate, with: inputs }, { uses: './.github/workflows/pr-gate.yml', permissions: { contents: 'read', actions: 'read', 'pull-requests': 'read' }, with: { workflow: file.slice(0, -'.yml'.length) } }, file);
-      assert.ok(shared === undefined || typeof shared === 'string', `${file}: shared_paths lists one filter per line`);
+      for (const list of [shared, calls, sweeps]) assert.ok(list === undefined || typeof list === 'string', `${file}: the gate's lists are strings`);
     }
     if (file !== 'ci.yml' && flow.on?.pull_request?.types?.includes('ready_for_review')) {
       for (const [id, job] of Object.entries(flow.jobs)) {

@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { createAppPlan, selectAffectedApps, standaloneImpact } from './app-plan.mjs';
@@ -196,22 +197,86 @@ export function decideWorkflow({ flow, calledFlows = [], changedPaths: allPaths,
   };
 }
 
+// The paths a comparison changed, read NUL-delimited so that no name is
+// trimmed, quoted or split: { ok: true, paths, renamed } with both sides of
+// every rename or copy in `paths` and in `renamed`, or { ok: false, reason }
+// when git cannot compare the two commits. An unreadable diff is never an
+// empty one.
+export function readChangedPaths({ base, head = 'HEAD', cwd }) {
+  if (!base || /^0+$/.test(base)) return { ok: false, reason: 'no base commit to compare with' };
+  let output;
+  try {
+    output = execFileSync('git', ['diff', '-z', '--name-status', '--find-renames', '--find-copies', `${base}...${head}`], { cwd, encoding: 'utf8', maxBuffer: 1 << 28, stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (error) {
+    return { ok: false, reason: `git diff ${base}...${head} failed: ${String(error.stderr || error.message).trim().split('\n')[0]}` };
+  }
+  const fields = output.split('\0');
+  const paths = new Set();
+  const renamed = new Set();
+  for (let index = 0; index < fields.length - 1;) {
+    const status = fields[index++];
+    const names = /^[RC]/.test(status) ? [fields[index++], fields[index++]] : [fields[index++]];
+    if (names.some((name) => name === undefined)) return { ok: false, reason: `git diff ${base}...${head} printed an incomplete entry` };
+    for (const name of names) {
+      paths.add(name);
+      if (names.length > 1) renamed.add(name);
+    }
+  }
+  return { ok: true, paths: [...paths], renamed };
+}
+
 // GitHub matches a pull request's path filters against at most this many changed files.
 const GITHUB_DIFF_LIMIT = 3000;
+// A changed path GitHub's filter matching and pathGlob certainly read alike: ASCII
+// letters, digits and . _ @ + - in segments, no spaces, quotes or glob characters.
+const PLAIN_PATH = /^[A-Za-z0-9._@+-]+(?:\/[A-Za-z0-9._@+-]+)*$/;
+const PLAIN = '[A-Za-z0-9._@+-]';
 
-// Whether native.yml calls a workflow for a pull request. GitHub starts the
-// workflow itself when a changed path matches one of its own filters, and its
-// gate then decides with every filter; native.yml leaves it to that run, so no
-// workflow runs twice. Otherwise native.yml stands in for the shared filters:
-// a workflow none of whose shared paths changed is one GitHub would not have
-// started, and any other gets the decision its gate would give. Past GitHub's
-// file limit it cannot tell whether GitHub started the workflow, and decides.
-export function dispatchDecision({ flow, changedPaths, ...rest }) {
-  const own = flow.on.pull_request.paths.map(pathGlob);
-  if (changedPaths.length <= GITHUB_DIFF_LIMIT) {
-    const path = changedPaths.find((changed) => own.some((glob) => glob.test(changed)));
-    if (path) return { run: false, reason: `${path} matches one of its own filters, so its own pull request run decides` };
+// A test that certainly agrees with GitHub's documented path filter for this
+// own filter, or null where the filter has a form this does not model: a
+// literal path, a literal directory followed by `**`, or one `*` in the last
+// segment. A wildcard never stands for a segment that starts with a dot.
+function certainMatcher(filter) {
+  if (new RegExp(`^${PLAIN}+(?:/${PLAIN}+)*$`).test(filter)) return (path) => path === filter;
+  const tree = filter.match(new RegExp(`^((?:${PLAIN}+/)+)\\*\\*$`));
+  if (tree) return (path) => path.startsWith(tree[1]) && !/(?:^|\/)\./.test(path.slice(tree[1].length));
+  const leaf = filter.match(new RegExp(`^((?:${PLAIN}+/)*)(${PLAIN}*)\\*(${PLAIN}*)$`));
+  if (leaf) {
+    const [, directory, start, end] = leaf;
+    return (path) => {
+      if (!path.startsWith(directory)) return false;
+      const name = path.slice(directory.length);
+      return !name.includes('/') && !name.startsWith('.') && name.length >= start.length + end.length && name.startsWith(start) && name.endsWith(end);
+    };
   }
+  return null;
+}
+
+// The changed path and own filter that make it certain GitHub started a
+// workflow for a pull request itself, or null when that is not certain: the
+// comparison is not below GitHub's file limit, or every own match is a side
+// of a rename or copy, an unusual path or a filter form certainMatcher does
+// not model. `diff` is readChangedPaths's answer.
+export function certainOwnStart(flow, { paths, renamed = new Set() }) {
+  if (!(paths.length < GITHUB_DIFF_LIMIT)) return null;
+  const matchers = (flow.on?.pull_request?.paths ?? []).map((filter) => ({ filter, matches: certainMatcher(filter) })).filter(({ matches }) => matches);
+  for (const path of paths) {
+    if (renamed.has(path) || !PLAIN_PATH.test(path)) continue;
+    const own = matchers.find(({ matches }) => matches(path));
+    if (own) return { path, filter: own.filter };
+  }
+  return null;
+}
+
+// Whether native.yml calls a workflow for a pull request. When GitHub
+// certainly started the workflow itself, its gate decides with every filter
+// and native.yml leaves it out. When that is not certain, native.yml decides
+// too: a workflow may then run twice, never not at all. A workflow none of
+// whose shared paths changed is one GitHub would not have started for them,
+// and any other gets the decision its gate would give.
+export function dispatchDecision({ flow, changedPaths, renamed = new Set(), ...rest }) {
+  const own = certainOwnStart(flow, { paths: changedPaths, renamed });
+  if (own) return { run: false, reason: `${own.path} matches its own filter ${own.filter}, so its own pull request run decides` };
   const shared = sharedPaths(flow).map((filter) => ({ filter, glob: pathGlob(filter) }));
   if (!changedPaths.some((path) => shared.some(({ glob }) => glob.test(path)))) return { run: false, reason: 'none of its shared paths changed' };
   return decideWorkflow({ flow, changedPaths, ...rest });

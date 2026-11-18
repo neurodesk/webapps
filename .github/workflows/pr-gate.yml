@@ -9,8 +9,11 @@ name: pr-gate
 # this workflow with `workflow: native` to decide at once for every caller with
 # shared paths: for a pull request that changed some of them and none of the
 # caller's own, and nightly as their sweep. It then calls the callers that run,
-# whose own gate answers true without a checkout. A ready pull request over its
-# full-plan budget fails the gate where its ci run withholds the full plan too.
+# whose own gate answers true without a checkout. That decision fails open:
+# whatever it cannot read or decide runs, and a decision that ends without a
+# selection runs every workflow native.yml lists in `calls` or `sweeps`. A
+# ready pull request over its full-plan budget fails the gate where its ci run
+# withholds the full plan too.
 # A push to main starts a caller only for its own paths, and runs it unless
 # they are only release bookkeeping; the sweep runs it when a shared path
 # changed on main since the caller last finished green there. A push and the
@@ -29,6 +32,14 @@ on:
         required: true
       shared_paths:
         description: Shared path filters, one per line, through which a change can reach the caller; the gate reads them from the caller's file
+        type: string
+        default: ''
+      calls:
+        description: With workflow native, the workflows native.yml may call for a pull request, space-separated
+        type: string
+        default: ''
+      sweeps:
+        description: With workflow native, the workflows native.yml sweeps nightly, space-separated
         type: string
         default: ''
     outputs:
@@ -101,12 +112,27 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           GITHUB_TOKEN: ${{ github.token }}
+          CALLS: ${{ inputs.calls }}
+          SWEEPS: ${{ inputs.sweeps }}
         run: |
           if [ "$WORKFLOW" = native ]; then
             if [ "$EVENT_NAME" = schedule ]; then
-              node scripts/workflow-gate.mjs --native --sweep --head "$HEAD_SHA"
+              eligible=$SWEEPS
+              set -- --sweep
             else
-              node scripts/workflow-gate.mjs --native --base "$BASE_SHA" --head "$HEAD_SHA"
+              eligible=$CALLS
+              set -- --base "$BASE_SHA"
+            fi
+            # The decision fails open: a run that ends without a selection runs
+            # every workflow native.yml could call. Only a withheld plan fails.
+            status=0
+            NATIVE_ELIGIBLE="$eligible" node scripts/workflow-gate.mjs --native "$@" --head "$HEAD_SHA" || status=$?
+            if grep -qx 'withheld=true' "$GITHUB_OUTPUT"; then
+              exit 1
+            fi
+            if ! grep -q '^workflows=' "$GITHUB_OUTPUT"; then
+              echo "::warning title=Native decision failed::it exited with $status and no selection, so every workflow native.yml could call runs"
+              echo "workflows=$(jq -cn --arg names "$eligible" '$names | split(" ") | map(select(. != ""))')" >> "$GITHUB_OUTPUT"
             fi
           elif [ "$EVENT_NAME" = schedule ]; then
             node scripts/workflow-gate.mjs --workflow "$WORKFLOW" --sweep --head "$HEAD_SHA"

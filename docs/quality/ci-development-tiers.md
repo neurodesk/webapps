@@ -82,10 +82,14 @@ request that changes one starts `native.yml` instead. Its gate
 `shared_paths` at once (`dispatchDecision`), and `native.yml` calls the ones
 that run through `workflow_call`:
 
-- A workflow one of whose own paths changed was started by GitHub itself;
-  its own gate decides with both kinds of filter, and `native.yml` leaves it
-  out, so no workflow runs twice. Past GitHub's 3,000-file diff limit it
-  cannot tell, and decides as well.
+- A workflow one of whose own paths changed was started by GitHub itself,
+  and its own gate decides with both kinds of filter. `native.yml` leaves it
+  out only when that start is certain (`certainOwnStart`): fewer than 3,000
+  changed files, and an own match that is neither side of a rename or copy,
+  is a plain ASCII path, and falls under a literal filter, a directory
+  followed by `**` or one `*` in the last segment, without a hidden file
+  under a wildcard. Anything else it decides too, so a workflow can run
+  twice, never not at all.
 - A workflow none of whose shared paths changed is one GitHub would not have
   started. Any other gets the decision its own gate would have given.
 - A called workflow runs on the pull request's own event, commit and ref:
@@ -94,11 +98,23 @@ that run through `workflow_call`:
   `native.yml`.
 - A draft answers `[]` without a checkout. A ready pull request over its
   full-plan budget fails `native.yml`'s gate, as it fails a workflow's own.
-  When the gate cannot decide for a workflow, that workflow runs.
+
+The decision fails open (`scripts/lib/native-decision.mjs`). Every workflow
+it may call starts selected, and a stage that throws, cannot be read or is
+cut off by the five-minute deadline leaves the workflows it was deciding
+selected: an unreadable diff (read NUL-delimited by `readChangedPaths`, so a
+name keeps its spaces, and never taken for an empty one) selects every
+workflow, a workflow file or registry that cannot be read selects every
+workflow not certainly started by its own paths, and a failed decision
+selects its workflow. A budget check that fails runs them; a spent budget
+still fails the gate. When the script ends without a selection, the gate's
+shell step runs every workflow `native.yml` lists in `calls` or `sweeps`.
+`test/native-decision.test.mjs` makes each stage fail in turn.
 
 `test/workflow-gate.test.mjs` checks, over every workflow `native.yml` calls
 and sample diffs of its own and shared paths, that the two routes together
-run a workflow exactly when its own gate did before, and never both.
+run a workflow exactly when its own gate did before, and twice only where
+its own start is not certain.
 
 `node scripts/native-workflow.mjs` writes `native.yml` from the workflow
 files: its pull request paths are the union of every `shared_paths` and the
@@ -126,8 +142,10 @@ GitHub's limits on reusable workflows shape the rest
 
 A workflow that runs inside `native.yml` reports under it: its checks are
 named `native / <workflow> / <job>`, and a failed sweep is a failed
-scheduled `native` run. Its pushes and release dispatches still run as the
-workflow itself.
+scheduled `native` run, whose report names every affected workflow before
+its per-job details. `native.yml` counts as notarizing because the workflows
+it calls do, so a notarization refused inside it is alerted too. Its
+workflows' pushes and release dispatches still run as the workflow itself.
 
 ## Pushes to main and the nightly sweep
 
@@ -165,7 +183,10 @@ workflow, or the newest scheduled `native.yml` run in which the workflow's
 part was green: the gate decided and each of its jobs passed or was skipped
 (`dispatchedRuns`). A sweep that fails, or that GitHub drops, leaves that
 commit where it was, so the next sweep still sees the change. Without such a
-run the workflow runs. The sweep does not ask whether the change reaches
+run the workflow runs, and so it does when a history read fails or the
+deadline cuts it off: the reads list jobs in pages of 30 and retry gateway
+errors (`createGitHubClient`), and a registry that cannot be read runs all of
+them. The sweep does not ask whether the change reaches
 the workflow: it is what first tests a file read through a computed path, and
 what builds every target for a shared change the pull request built on Linux
 only. A night without such a change costs one gate job in all.

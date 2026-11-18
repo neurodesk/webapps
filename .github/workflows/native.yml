@@ -52,6 +52,68 @@ jobs:
       pull-requests: read
     with:
       workflow: native
+      # What runs when the decision ends without a selection.
+      calls: >-
+        ants-native
+        bison-native
+        brain2print-native
+        browserqc-native
+        calmar-native
+        carotid-flow-native
+        compute-server-native
+        deface-native
+        degibbs-native
+        dwi-native
+        dwi2trx-native
+        dwidenoise-native
+        easy-mp2rage-native
+        edgereg-native
+        elastix-native
+        hmc-native
+        hmc-registration
+        lcmodel-native
+        musclemap-native
+        musclemap-parity
+        n4-native
+        noddi-native
+        node-drivers
+        sdc-native
+        seedseg-native
+        spinalcordtoolbox-native
+        synthseg-native
+        synthseg-portable
+        vesselboost-native
+        white-matter-lesions-native
+      sweeps: >-
+        ants-native
+        bison-native
+        brain2print-native
+        browserqc-native
+        calmar-native
+        carotid-flow-native
+        compute-server-native
+        deface-native
+        degibbs-native
+        dwi-native
+        dwi2trx-native
+        dwidenoise-native
+        easy-mp2rage-native
+        edgereg-native
+        elastix-native
+        hmc-native
+        hmc-registration
+        lcmodel-native
+        musclemap-native
+        musclemap-parity
+        n4-native
+        noddi-native
+        node-drivers
+        sdc-native
+        seedseg-native
+        spinalcordtoolbox-native
+        synthseg-portable
+        vesselboost-native
+        white-matter-lesions-native
 
   ants-native:
     needs: gate
