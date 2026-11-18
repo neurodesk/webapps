@@ -220,15 +220,18 @@ it through `.github/actions/composite-site` and check it in parallel:
 
 - `site-runtime`: resource cache and threaded runtime startup.
 - `site-audit`: the example cache and the interface audit.
-- `site-e2e`: composite smoke, e2e types, the workspace e2e catalog and
-  requested processing workflows.
+- `site-e2e`: composite smoke, e2e types and the workspace e2e catalog.
 - `site-mobile`: interface workflows, scan pickers and mobile layouts.
 - `site-catalog`: component browser checks, automation contracts and the
   cross-browser handoff.
 
-`agent-interactions` waits for all five. Before the split, one job ran every
-check in sequence for 31 to 33 minutes, and it was the last job of every ready
-one-app pull request.
+`agent-interactions`, `processing-workflows` (a dispatch with
+`agentic_mode=pipeline`) and `example-cache-retention` wait for all five, as
+they waited for the one serial job before the split, which ran every check in
+sequence for 31 to 33 minutes and was the last job of every ready one-app pull
+request. The artifact is kept 3 days. Re-running one failed check after that
+fails at the download with a message to use "Re-run all jobs", which builds
+the site again.
 
 The per-app checks read `SMOKE_APPS` (`scripts/lib/smoke-apps.mjs`), which
 `composite-site` sets with `scripts/site-check-apps.mjs`:
@@ -236,7 +239,7 @@ The per-app checks read `SMOKE_APPS` (`scripts/lib/smoke-apps.mjs`), which
 | Event | Apps the per-app site checks cover |
 | --- | --- |
 | Draft pull request | None: the site is not built |
-| Ready pull request, push, dispatch with `scope=affected` | The selected apps and the canaries seedseg, dicompare and syncro |
+| Ready pull request, push, dispatch with `scope=affected` | The selected apps, the canaries seedseg, dicompare and syncro, and the apps a check compares them with or reads files from |
 | Any of these when the plan selects every app or `site_code` is true | Every app |
 | Nightly, dispatch with `scope=all` or `scope=site` | Every app |
 
@@ -246,11 +249,44 @@ per-app checks do not read: the composite-only site files, registry, app
 information and standalone entries, and the offline asset lock. A change to a
 check, a helper it imports or `scripts/build-site.mjs` checks every app.
 Catalogue-level checks (landing page, catalogue sites, runtime assembly,
-artifact budgets, automation contracts) run whenever the site is built.
+artifact budgets, automation contracts) run whenever the site is built. A
+canary that is not a registered app of its shell, or a shell without a canary,
+fails the selection.
+
+A narrowed check is sound only where its result for an app depends on that app
+alone. Two places keep the other dependencies inside the selection:
+
+- The planner selects every app whose built pages change with the change. An
+  app's page carries the handoff catalog of every app its hosts serve, so a
+  `registry/apps.yml` change to what that catalog lists (an app's id, path,
+  title, `handoff`, `support_status` or hosts) selects the apps that render it:
+  those whose code names `HANDOFF_CATALOG_READERS` (DICOM View). A file of one
+  app that another app's code names by a relative path selects that app too:
+  DICOM View and SeedSeg stage dicompare's embedding kit, and seven apps' tests
+  read the CALMaR T1 fixture.
+- A check whose result for one app depends on another declares it as `needs`,
+  and `smokeApps` adds those apps before the check runs (null runs every app):
+
+| Check | Listed app | Also runs |
+| --- | --- | --- |
+| MindGrab CPU parity (`parityPeers`) | A consumer of a shared CPU binary | One other consumer of it, from `runtime-assets/manifest.json` |
+| BET startup (`betNeeds`) | `calmar`, which owns the fixture | `qsmbly` and `brain-extraction` |
+| Asyncify startup (`asyncifyNeeds`) | `synthsr`, which installs the ONNX Runtime API it loads | Every `ort-web-asyncify` consumer in the registry |
+
+The parity check now runs every shared CPU binary in two apps and fails one
+compared in a single app. Before, the nightly ran mindmap, mindsnap and
+16chan18cls in one app each, so their parity compared an output with itself.
+The three extra segmentations take about 125, 126 and 54 s (nightly run
+44230450914), so `site-runtime` takes about 5 minutes longer on a
+whole-catalogue run.
 
 A failed site job names no app, so the next push to main diffs from the last
-green run and checks again what the failed run covered. A regression in an app
-that no change selected shows in the nightly run.
+green `ci` run instead and carries no app: it checks the apps that the merges
+since that run reach, its own change's apps and the canaries. That covers what
+a failed push run checked, since that run's changes are among those merges. It
+does not cover an app that a failed nightly run found broken but no merge since
+the last green run reaches. The next nightly run checks it again, as does a
+dispatch with `scope=all` or `scope=site`.
 
 On 18 November 2026, against a full local build, the one-app selection
 `niimath` with the canaries took 23 s for runtime startup (9.7 minutes for the
