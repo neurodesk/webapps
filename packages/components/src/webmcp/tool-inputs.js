@@ -15,13 +15,16 @@ const describe = files => files.map(file => ({ name: file.name, bytes: file.size
  * changed is discarded.
  *
  * The person's own loads are kept per classified input (`data-neurodesk-input`), read as the change
- * event arrives because many apps clear the input once they have read it.
+ * event arrives because many apps clear the input once they have read it. An app that clears its
+ * examination at the start of handling a load (in the same task) keeps that load.
  */
 export function createToolInputs({ doc, automation }) {
   const view = doc.defaultView;
   let examination = { held: new Map() };
   let pageFiles = new WeakMap();
   let pageExample = null;
+  // The examination a person's load opened, until the task that delivered it ends.
+  let openedThisTask = null;
 
   const classified = () => [...doc.querySelectorAll('input[type="file"][data-neurodesk-input]')]
     .filter(input => input.id !== TRANSFER && !input.closest(PROMPT));
@@ -37,6 +40,11 @@ export function createToolInputs({ doc, automation }) {
       pageFiles = new WeakMap();
       pageExample = null;
     }
+    const opened = examination;
+    openedThisTask = opened;
+    view.setTimeout(() => {
+      if (openedThisTask === opened) openedThisTask = null;
+    });
   }
 
   // A trusted event is the person's own; an untrusted one while a run is going is the run feeding the app.
@@ -63,7 +71,9 @@ export function createToolInputs({ doc, automation }) {
     if (event.detail?.state === 'ready') pageExample = event.detail.exampleId ?? null;
   });
   doc.addEventListener('nd-handoff', () => moveOn({ forgetPage: true }));
-  view.addEventListener('neurodesk-automation-reset', () => moveOn({ forgetPage: true }));
+  view.addEventListener('neurodesk-automation-reset', () => {
+    if (openedThisTask !== examination) moveOn({ forgetPage: true });
+  });
 
   return {
     held: () => Object.fromEntries([...examination.held].map(([role, files]) => [role, describe(files)])),

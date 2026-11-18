@@ -73,7 +73,10 @@ test('every app contract builds spec-valid tools whose run schemas accept what t
       assert.ok(run, `${app}: ${name} has a run tool`);
       const json = z.fromJSONSchema(run.inputSchema.properties.parameters);
       const contractSchema = operationParametersSchema(operation.parameters);
-      assert.equal(json.safeParse({}).success, true, `${app}: ${name} runs with every parameter left out`);
+      const required = Object.keys(operation.parameters).filter(key => operation.parameters[key].required);
+      assert.equal(json.safeParse({}).success, required.length === 0, `${app}: ${name} runs with every optional parameter left out`);
+      assert.equal((run.inputSchema.required ?? []).includes('parameters'), required.length > 0, `${app}: ${name} requires parameters when the contract does`);
+      assert.deepEqual(run.inputSchema.properties.parameters.required ?? [], required, `${app}: ${name} publishes its required parameters`);
       assert.equal(json.safeParse({ unknownParameter: 1 }).success, false, `${app}: ${name} refuses unknown parameters`);
       for (const [key, field] of Object.entries(operation.parameters)) {
         for (const value of samples(field)) {
@@ -352,6 +355,7 @@ test('held files serve every rerun until the person loads their own files or the
   personLoads(window, [new File(['newer'], 'newer.nii')]);
   await settled(async () => (await call('app_describe')).pageFiles[0].files[0].name === 'newer.nii');
   assert.deepEqual((await call('app_describe')).pageFiles[0].files, [{ name: 'newer.nii', bytes: 5 }], 'an input\'s earlier files are forgotten');
+  await new Promise(resolve => setTimeout(resolve, 5));
   inputs.hold('image', [new File(['input'], 'input.nii')]);
   registration.reset();
   assert.deepEqual((await call('app_describe')).inputs, {}, 'a reset releases the held files');
@@ -515,4 +519,23 @@ test('a handoff from another app releases the held files', async t => {
   inputs.hold('image', [new File(['old'], 'old.nii')]);
   window.document.dispatchEvent(new window.CustomEvent('nd-handoff', { detail: { source: { app: 'dicomview' } } }));
   assert.deepEqual((await call('app_describe')).inputs, {});
+});
+
+test('an app that clears its input and resets while reading a load keeps that load for the agent', async t => {
+  const { call, registration, window } = maskPage(t, async () => labels());
+  const input = window.document.getElementById('t1');
+  input.addEventListener('change', event => {
+    const files = [...event.target.files];
+    Object.defineProperty(event.target, 'files', { configurable: true, value: [] });
+    assert.equal(files.length, 1);
+    registration.reset();
+  });
+  personLoads(window, [new File(['scan'], 'picked.nii')]);
+  assert.deepEqual((await call('app_describe')).pageFiles, [{ input: 't1', kind: 'image', label: 'image', files: [{ name: 'picked.nii', bytes: 4 }] }]);
+  assert.deepEqual(await call('inputs_use_page_files', { role: 'image', input: 't1' }), { role: 'image', files: [{ name: 'picked.nii', bytes: 4 }] });
+  await new Promise(resolve => setTimeout(resolve, 5));
+  registration.reset();
+  const cleared = await call('app_describe');
+  assert.deepEqual(cleared.pageFiles, [], 'a reset in a later task, as a Clear button makes, forgets the load');
+  assert.deepEqual(cleared.inputs, {});
 });

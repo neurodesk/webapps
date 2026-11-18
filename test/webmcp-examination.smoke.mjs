@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { chromium } from '@playwright/test';
 import { repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { exampleCachePath } from '../scripts/lib/example-asset-cache.mjs';
+import { dicomSeries } from '../test-utils/dicom-fixture.mjs';
 import { syntheticNifti } from '../test-utils/nifti-fixture.mjs';
 import { serveSite } from '../test-utils/serve-site.mjs';
 
@@ -127,6 +128,16 @@ try {
     const described = await call('app_describe');
     assert.deepEqual(described.inputs, {});
     assert.match(described.pageFiles[0].files[0].name, /^webmcp-drop-/);
+  });
+
+  await check('dcm2niix: files chosen in its picker can be reused after it clears the picker', async context => {
+    const { page, call } = await open(context, 'dcm2niix');
+    await page.locator('#imageInput').setInputFiles(dicomSeries());
+    await page.waitForFunction(() => document.querySelector('#fileInfo')?.textContent.includes('4 DICOM files'), undefined, { timeout: 60000 });
+    const described = await call('app_describe');
+    assert.equal(described.pageFiles[0]?.files.length, 4, JSON.stringify(described.pageFiles));
+    const used = await call('inputs_use_page_files', { role: 'dicom', input: 'imageInput' });
+    assert.equal(used.files?.length, 4, JSON.stringify(used));
   });
 
   await check('Brain Extraction: viewers_niivue exports no pixels and fetches only what the person allows', async context => {

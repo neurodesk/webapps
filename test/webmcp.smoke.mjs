@@ -20,6 +20,7 @@ import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { exampleCachePath } from '../scripts/lib/example-asset-cache.mjs';
 import { auditAppExamples } from '../scripts/lib/webmcp-examples.mjs';
 import { serveSite } from '../test-utils/serve-site.mjs';
+import { syntheticNifti } from '../test-utils/nifti-fixture.mjs';
 
 const FIXED_TOOLS = ['app_describe', 'inputs_request_files', 'inputs_use_page_files', 'inputs_load_example', 'runs_get', 'runs_cancel', 'outputs_download', 'user_ask',
   'viewers_list', 'viewers_state', 'viewers_crosshair', 'viewers_tab', 'viewers_regions', 'viewers_volumes', 'viewers_display', 'viewers_niivue'];
@@ -137,6 +138,35 @@ async function checkPrivacy(page, app) {
   await page.keyboard.press('Escape');
 }
 
+// Many apps clear an input once they have read it, and some reset their examination as they load.
+// Whatever an app does, a file the person opens must stay available to inputs_use_page_files, unless
+// the app reports the input's files itself (nd-files), as it does when it refuses or replaces them.
+async function checkPageFiles(page, app) {
+  await page.evaluate(() => {
+    globalThis.webMcpSmokeReported = new Set();
+    document.addEventListener('nd-files', event => globalThis.webMcpSmokeReported.add(event.target), true);
+  });
+  const inputs = page.locator('input[type="file"][data-neurodesk-input]:not(#neurodesk-input-transfer):not([webkitdirectory])');
+  const offered = [];
+  for (let index = 0; index < await inputs.count(); index += 1) {
+    const input = inputs.nth(index);
+    if (!await input.evaluate(element => element.getRootNode() === document && !element.closest('#neurodeskAgentPrompt'))) continue;
+    const name = `webmcp-page-file-${index + 1}.nii.gz`;
+    await input.setInputFiles({ name, mimeType: 'application/gzip', buffer: syntheticNifti({ dims: [8, 8, 8] }) });
+    offered.push({ input, name });
+  }
+  if (!offered.length) return 0;
+  await delay(1500);
+  const { pageFiles } = await call(page, 'app_describe');
+  const listed = pageFiles.flatMap(entry => entry.files.map(file => file.name));
+  const missing = [];
+  for (const { input, name } of offered) {
+    if (!listed.includes(name) && !await input.evaluate(element => globalThis.webMcpSmokeReported.has(element))) missing.push(name);
+  }
+  assert.deepEqual(missing, [], `${app.id}: every file opened in a page input stays available to the agent (pageFiles ${JSON.stringify(pageFiles)})`);
+  return offered.length;
+}
+
 function chooseOperation(contract, example) {
   const covers = name => Object.entries(contract.operations[name].inputs)
     .every(([role, field]) => field.source !== 'files' || field.minimum === 0 || example.roles.includes(role));
@@ -230,7 +260,10 @@ try {
           const audit = await auditAppExamples(app.id);
           assert.deepEqual(entry.examples.sort(), audit.examples.filter(example => !example.unavailable).map(example => example.id).sort(), `${app.id}: every loadable example is offered`);
           await checkPrompts(page, app, contract, viewport);
-          if (viewport === WIDTHS[0]) await checkPrivacy(page, app);
+          if (viewport === WIDTHS[0]) {
+            await checkPrivacy(page, app);
+            entry.pageInputs = await checkPageFiles(page, app);
+          }
           entry.pageErrors = errors;
         } finally {
           await page.close();
