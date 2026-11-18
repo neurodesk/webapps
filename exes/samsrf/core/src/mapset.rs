@@ -6,11 +6,11 @@
 //! Rows are row-major over all vertices of the hemisphere: `data[row * vertices + v]`,
 //! zero outside the analysed region, as `samsrf_expand_srf` expands `Srf.Roi`.
 
-/// MATLAB's NaN. R2023b on x86-64 writes every NaN it makes, from the `NaN` constant or an
-/// invalid operation, as this negative quiet NaN (`0xFFC00000` in single), and every NaN of
-/// the pinned SamSrf recordings is this one. Rust's `f64::NAN` is the positive NaN, and
-/// neither WebAssembly arithmetic nor float casts fix a NaN's sign, so `Job::merge` writes
-/// this one and `gifti::write_map` its single counterpart.
+/// Output NaN convention fitted to the pinned SamSrf recordings on R2023b x86-64.
+/// Their generated NaNs have these negative quiet bits (`0xFFC00000` in single).
+/// This does not establish every MATLAB operation's NaN representation or input
+/// payload propagation. `Job::merge` normalizes all output NaNs to this convention,
+/// including passed-through payloads; `gifti::write_map` uses its single counterpart.
 pub const MATLAB_NAN: f64 = f64::from_bits(0xFFF8_0000_0000_0000);
 
 /// Replaces every NaN with `MATLAB_NAN`.

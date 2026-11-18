@@ -1772,12 +1772,15 @@ hold it. The engine wrote Rust's positive NaN, `0x7FF8000000000000`.
 
 Every NaN of the 24-run CLI recording on both hosts is the negative NaN (89 double
 and 253 to 265 single values across `Srf.Data`, `Srf.ConFlds`, `Srf.Cortex_Steps`
-and every GIfTI). That was the discovery set. The rule that MATLAB writes this NaN
-wherever it makes one was then committed with its predictions before the other
-recordings were read: every NaN of the 741-case, reverse-correlation and edge-case
+and every GIfTI). That was the discovery set. A candidate output convention was locally recorded with predictions before the
+other recordings were inspected, according to the decision log and file timestamp.
+The cited `1524218c...` identifies the prediction file SHA-256, not a Git commit;
+no prior prediction commit has been verified. The subsequent census found: every NaN of the 741-case, reverse-correlation and edge-case
 recordings (2,021, 92,600 and 22,476 values in 8,031 arrays) is the negative NaN,
 and none is positive. The inputs of these recordings hold no NaN, so a NaN that
-SamSrf only passes on from its input is not covered.
+SamSrf only passes on from its input is not covered. Output canonicalization also
+changes such passed-through NaN payloads; that behavior is an explicit convention,
+not established MATLAB input-payload parity.
 
 `Job.merge` now writes `mapset::MATLAB_NAN` for every NaN of the maps, of
 `Srf.Raw_Data` and of the imaginary parts, and the GIfTI writer writes
