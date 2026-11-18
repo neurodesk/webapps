@@ -13,7 +13,9 @@ const workflow = async (name) => YAML.parse(await readFile(new URL(`../.github/w
 // every event other than pull_request. A ready pull request is decided by
 // scripts/lib/workflow-gate.mjs; `reached` stands for its answer.
 const gate = (github, reached = true) => ({ gate: { outputs: { run: String(github.event_name !== 'pull_request' || (!github.event?.pull_request?.draft && reached)) } } });
-const evaluate = (expression, github, inputs = {}, needs = gate(github)) => runInNewContext(expression.replace(/^\$\{\{\s*|\s*\}\}$/g, ''), { github, inputs, needs });
+// GitHub's contains() and fromJSON(), as native.yml's calls use them.
+const functions = { contains: (search, item) => (Array.isArray(search) ? search.includes(item) : String(search).includes(item)), fromJSON: JSON.parse };
+const evaluate = (expression, github, inputs = {}, needs = gate(github)) => runInNewContext(expression.replace(/^\$\{\{\s*|\s*\}\}$/g, ''), { github, inputs, needs, ...functions });
 
 test('draft feedback selects direct app edits; ready PRs retain shared coverage', async () => {
   const registry = await loadAppsRegistry();
@@ -36,7 +38,9 @@ test('ready and updated PRs run deferred native jobs; pushes and dispatches keep
     if (usesGate) {
       gated++;
       // The gate always finishes, so jobs after the entry jobs keep their default conditions.
-      assert.deepEqual(flow.jobs.gate, { uses: './.github/workflows/pr-gate.yml', permissions: { contents: 'read', actions: 'read', 'pull-requests': 'read' }, with: { workflow: file.slice(0, -'.yml'.length) } }, file);
+      const { shared_paths: shared, ...inputs } = flow.jobs.gate.with;
+      assert.deepEqual({ ...flow.jobs.gate, with: inputs }, { uses: './.github/workflows/pr-gate.yml', permissions: { contents: 'read', actions: 'read', 'pull-requests': 'read' }, with: { workflow: file.slice(0, -'.yml'.length) } }, file);
+      assert.ok(shared === undefined || typeof shared === 'string', `${file}: shared_paths lists one filter per line`);
     }
     if (file !== 'ci.yml' && flow.on?.pull_request?.types?.includes('ready_for_review')) {
       for (const [id, job] of Object.entries(flow.jobs)) {

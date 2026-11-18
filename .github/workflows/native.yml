@@ -1,0 +1,378 @@
+name: native
+
+# Written by scripts/native-workflow.mjs from every workflow whose gate job
+# lists shared_paths. Edit those workflows, then run `node scripts/native-workflow.mjs`.
+#
+# A pull request that changes a shared path starts this one workflow, not
+# every workflow that builds on the path. Its gate decides for all of them
+# (pr-gate.yml with `workflow: native`, scripts/lib/workflow-gate.mjs) and
+# it calls the ones the change reaches, on the pull request's own event and
+# commit. A workflow whose own paths the pull request also changed runs
+# itself, and is left out here. The nightly schedule is the sweep of every
+# called workflow that a push to main also starts.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+    paths:
+      - '.github/workflows/native.yml'
+      - '.github/workflows/pr-gate.yml'
+      - 'scripts/workflow-gate.mjs'
+      - 'scripts/lib/workflow-gate.mjs'
+      - 'package.json'
+      - 'packages/components/**'
+      - 'packages/components/package.json'
+      - 'packages/components/src/automation/**'
+      - 'packages/components/src/file-io/**'
+      - 'packages/components/src/volume/**'
+      - 'packages/components/src/worker/**'
+      - 'packages/runtime-support/**'
+      - 'packages/runtime-support/package.json'
+      - 'packages/runtime-support/src/mindgrab/**'
+      - 'packages/runtime-support/src/niimath/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+  schedule:
+    - cron: '5 13 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Always finishes unless a ready pull request is over its full-plan budget,
+  # where it fails as ci's full-plan-withheld does.
+  gate:
+    uses: ./.github/workflows/pr-gate.yml
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    with:
+      workflow: native
+
+  ants-native:
+    needs: gate
+    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), 'ants-native')
+    uses: ./.github/workflows/ants-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  bison-native:
+    needs: gate
+    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), 'bison-native')
+    uses: ./.github/workflows/bison-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  brain2print-native:
+    needs: gate
+    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), 'brain2print-native')
+    uses: ./.github/workflows/brain2print-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  browserqc-native:
+    needs: gate
+    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), 'browserqc-native')
+    uses: ./.github/workflows/browserqc-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  calmar-native:
+    needs: gate
+    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), 'calmar-native')
+    uses: ./.github/workflows/calmar-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  carotid-flow-native:
+    needs: gate
+    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), 'carotid-flow-native')
+    uses: ./.github/workflows/carotid-flow-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  compute-server-native:
+    needs: gate
+    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), 'compute-server-native')
+    uses: ./.github/workflows/compute-server-native.yml
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: read
+    secrets: inherit
+
+  deface-native:
+    needs: gate
+    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), 'deface-native')
+    uses: ./.github/workflows/deface-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  degibbs-native:
+    needs: gate
+    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), 'degibbs-native')
+    uses: ./.github/workflows/degibbs-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  dwi-native:
+    needs: gate
+    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), 'dwi-native')
+    uses: ./.github/workflows/dwi-native.yml
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    secrets: inherit
+
+  dwi2trx-native:
+    needs: gate
+    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), 'dwi2trx-native')
+    uses: ./.github/workflows/dwi2trx-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  dwidenoise-native:
+    needs: gate
+    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), 'dwidenoise-native')
+    uses: ./.github/workflows/dwidenoise-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  easy-mp2rage-native:
+    needs: gate
+    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), 'easy-mp2rage-native')
+    uses: ./.github/workflows/easy-mp2rage-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  edgereg-native:
+    needs: gate
+    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), 'edgereg-native')
+    uses: ./.github/workflows/edgereg-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  elastix-native:
+    needs: gate
+    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), 'elastix-native')
+    uses: ./.github/workflows/elastix-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  hmc-native:
+    needs: gate
+    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), 'hmc-native')
+    uses: ./.github/workflows/hmc-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  hmc-registration:
+    needs: gate
+    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), 'hmc-registration')
+    uses: ./.github/workflows/hmc-registration.yml
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    secrets: inherit
+
+  lcmodel-native:
+    needs: gate
+    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), 'lcmodel-native')
+    uses: ./.github/workflows/lcmodel-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  musclemap-native:
+    needs: gate
+    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), 'musclemap-native')
+    uses: ./.github/workflows/musclemap-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  musclemap-parity:
+    needs: gate
+    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), 'musclemap-parity')
+    uses: ./.github/workflows/musclemap-parity.yml
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    secrets: inherit
+
+  n4-native:
+    needs: gate
+    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), 'n4-native')
+    uses: ./.github/workflows/n4-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  noddi-native:
+    needs: gate
+    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), 'noddi-native')
+    uses: ./.github/workflows/noddi-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  node-drivers:
+    needs: gate
+    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), 'node-drivers')
+    uses: ./.github/workflows/node-drivers.yml
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    secrets: inherit
+
+  sdc-native:
+    needs: gate
+    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), 'sdc-native')
+    uses: ./.github/workflows/sdc-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  seedseg-native:
+    needs: gate
+    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), 'seedseg-native')
+    uses: ./.github/workflows/seedseg-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  spinalcordtoolbox-native:
+    needs: gate
+    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), 'spinalcordtoolbox-native')
+    uses: ./.github/workflows/spinalcordtoolbox-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  synthseg-native:
+    needs: gate
+    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), 'synthseg-native')
+    uses: ./.github/workflows/synthseg-native.yml
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: read
+    secrets: inherit
+
+  synthseg-portable:
+    needs: gate
+    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), 'synthseg-portable')
+    uses: ./.github/workflows/synthseg-portable.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  vesselboost-native:
+    needs: gate
+    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), 'vesselboost-native')
+    uses: ./.github/workflows/vesselboost-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  white-matter-lesions-native:
+    needs: gate
+    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), 'white-matter-lesions-native')
+    uses: ./.github/workflows/white-matter-lesions-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit

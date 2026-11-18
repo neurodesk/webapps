@@ -26,9 +26,12 @@ them: over 7-9 November 2026, 25,817 of the 27,539 pull request minutes in
 path-filtered workflows came from runs whose pull request touched none of the
 workflow's own code.
 
-Every workflow with such a filter now starts with a `gate` job that calls
-`.github/workflows/pr-gate.yml`, and its entry jobs wait for
-`needs.gate.outputs.run`. `scripts/lib/workflow-gate.mjs` decides:
+Every workflow that builds on such a tree now starts with a `gate` job that
+calls `.github/workflows/pr-gate.yml`, and its entry jobs wait for
+`needs.gate.outputs.run`. It lists the shared filters in the gate job's
+`shared_paths` and only its own paths in `on.pull_request.paths`
+([one run for shared paths](#one-run-for-shared-paths)).
+`scripts/lib/workflow-gate.mjs` decides with both kinds of filter:
 
 - A changed file under any other filter (the workflow's own package, app,
   `exes/` directory, workflow file, or a single generated import) runs it.
@@ -61,7 +64,70 @@ job after the entry jobs. `test/workflow-gate.test.mjs` holds the rules, and
 fails when a workflow adds a shared filter without the gate.
 
 Replay a pull request locally with
-`node scripts/workflow-gate.mjs --workflow <name> --base <sha> --head <sha>`.
+`node scripts/workflow-gate.mjs --workflow <name> --base <sha> --head <sha>`,
+or for every workflow `native.yml` calls with
+`node scripts/workflow-gate.mjs --native --base <sha> --head <sha>`.
+
+### One run for shared paths
+
+GitHub starts every workflow whose filters match, so a shared filter in 30
+workflows started 30 runs for each push to a pull request that touched the
+tree, and most of them only ran their gate. Over 16-18 November 2026, 194
+native workflow runs did nothing but answer "do not run", and each night
+started 29 sweeps.
+
+A shared filter now lives in the gate job's `shared_paths`, and a pull
+request that changes one starts `native.yml` instead. Its gate
+(`pr-gate.yml` with `workflow: native`) decides for every workflow with
+`shared_paths` at once (`dispatchDecision`), and `native.yml` calls the ones
+that run through `workflow_call`:
+
+- A workflow one of whose own paths changed was started by GitHub itself;
+  its own gate decides with both kinds of filter, and `native.yml` leaves it
+  out, so no workflow runs twice. Past GitHub's 3,000-file diff limit it
+  cannot tell, and decides as well.
+- A workflow none of whose shared paths changed is one GitHub would not have
+  started. Any other gets the decision its own gate would have given.
+- A called workflow runs on the pull request's own event, commit and ref:
+  GitHub gives a called workflow its caller's `github` context. Its own gate
+  answers `true` without a checkout, because `github.workflow_ref` names
+  `native.yml`.
+- A draft answers `[]` without a checkout. A ready pull request over its
+  full-plan budget fails `native.yml`'s gate, as it fails a workflow's own.
+  When the gate cannot decide for a workflow, that workflow runs.
+
+`test/workflow-gate.test.mjs` checks, over every workflow `native.yml` calls
+and sample diffs of its own and shared paths, that the two routes together
+run a workflow exactly when its own gate did before, and never both.
+
+`node scripts/native-workflow.mjs` writes `native.yml` from the workflow
+files: its pull request paths are the union of every `shared_paths` and the
+gate's own files, and it has one job per workflow, granting the permissions
+that workflow's jobs ask for and passing the secrets on. Adding
+`shared_paths` to a workflow means adding `workflow_call` to its triggers and
+running the script; the test fails when `native.yml` is stale.
+
+GitHub's limits on reusable workflows shape the rest
+([reusing workflows](https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations)):
+
+- One workflow file can call at most 50 unique reusable workflows, nested
+  ones included, through at most ten levels. `native.yml` reaches 32 (30
+  workflows, `node-cli-portable` and `pr-gate`). The test fails before the
+  count passes 50; the next step then is one called workflow for the
+  portable command lines, which build through `node-cli-portable` from each
+  package's `release.json` and differ only in their inputs.
+- `uses` takes no expressions, so each called workflow is a job of its own.
+- A called workflow reads `native` in `github.workflow`. Each one names its
+  concurrency group after itself, and none reads `github.workflow`.
+- Every called workflow runs in one workflow run, where an artifact name
+  must be unique: `node-cli-portable` names its archives after the package.
+- Re-running failed jobs of `native.yml` reruns the called workflows' failed
+  jobs at the first attempt's commit.
+
+A workflow that runs inside `native.yml` reports under it: its checks are
+named `native / <workflow> / <job>`, and a failed sweep is a failed
+scheduled `native` run. Its pushes and release dispatches still run as the
+workflow itself.
 
 ## Pushes to main and the nightly sweep
 
@@ -78,28 +144,31 @@ workflow runs unless every path under its `push` filter that changed since it
 last finished green on main, by a push or a sweep, is release bookkeeping
 (below). A skipped push still finishes green and moves the base the sweep
 reads, and a skipped sweep the base the next push reads, so each also asks
-the other's question: a push runs when a path under a shared pull request
-filter changed, and the sweep runs when one of the workflow's own paths
+the other's question: a push runs when a path under its `shared_paths`
+changed, and the sweep runs when one of the workflow's own paths
 changed beyond bookkeeping (a merge whose push run failed or was cancelled).
 Without a green run, or when no changed path matches a push filter, a push
 runs. Every workflow whose `push` filter covers a whole app, package or
 `exes/` directory, where each release writes its bumps and changelogs, calls
-the gate too, even without a shared pull request filter; for those the
+the gate too, even without `shared_paths`; for those the
 schedule (NeuroFlow, the SDC registration gate) stays a plain nightly run,
 since there is nothing to sweep.
 `release.yml` plans with `--release`, so its version bumps still select the
 apps to publish.
 
-Shared paths reach a gated workflow on main through its nightly sweep. Each
-has one `schedule`, and for that event the gate runs the workflow when a path
-under one of its shared pull request filters changed on main since the
-workflow last finished green there, by a merge or an earlier sweep
-(`sweepWorkflow`, `resolveTestedBase`). A sweep that fails, or that GitHub
-drops, leaves that commit where it was, so the next sweep still sees the
-change. Without such a run the workflow runs. The sweep does not ask whether the change reaches
+Shared paths reach a gated workflow on main through the nightly sweep:
+`native.yml`'s schedule, for every workflow it calls that a push also starts.
+Its gate runs a workflow when a path under the workflow's `shared_paths`
+changed on main since the workflow last finished green there, by a merge or
+an earlier sweep (`sweepWorkflow`). That is the newest green push run of the
+workflow, or the newest scheduled `native.yml` run in which the workflow's
+part was green: the gate decided and each of its jobs passed or was skipped
+(`dispatchedRuns`). A sweep that fails, or that GitHub drops, leaves that
+commit where it was, so the next sweep still sees the change. Without such a
+run the workflow runs. The sweep does not ask whether the change reaches
 the workflow: it is what first tests a file read through a computed path, and
 what builds every target for a shared change the pull request built on Linux
-only. A night without such a change costs each workflow one gate job.
+only. A night without such a change costs one gate job in all.
 
 Release bookkeeping is left aside, because every release writes it into the
 shared packages: a `CHANGELOG.md`, a workspace `package.json` whose only
@@ -120,10 +189,11 @@ notices is the one thing such a skipped sweep leaves a day stale.
   file there when a push must test it at once.
 - To test a shared change on every target before merging, dispatch the
   workflow on the branch.
-- A failed sweep opens an issue through `workflow-reports.yml`, like every
-  scheduled workflow.
+- A failed sweep fails the scheduled `native` run and opens an issue through
+  `workflow-reports.yml`, like every scheduled workflow; the failed jobs
+  carry the workflow's name.
 - Replay a sweep with
-  `GITHUB_REPOSITORY=neurodesk/webapps GITHUB_TOKEN=$(gh auth token) node scripts/workflow-gate.mjs --workflow <name> --sweep`.
+  `GITHUB_REPOSITORY=neurodesk/webapps GITHUB_TOKEN=$(gh auth token) node scripts/workflow-gate.mjs --native --sweep`.
 
 ## Daily usage budget
 
@@ -247,7 +317,7 @@ The window is rolling rather than the report's UTC day.
 
 To test every app at that head, add the `full-ci` label and use **Re-run all
 jobs** on the run and **Re-run failed jobs** on each native workflow whose gate
-failed (that re-runs the gate and what waits for it); the planner and the gate
+failed, `native` included (that re-runs the gate and what waits for it); the planner and the gate
 read the labels when they run, so no new trigger is needed. Pushing a new
 commit after adding the label also starts every check again. **Re-run failed jobs** keeps the withheld plan. The label stays until
 someone removes it, and every later push then gets the full plan again, so

@@ -23,6 +23,14 @@ import { reachableFrom } from './workspace-graph.mjs';
 // not seen. A push to main starts a workflow only for its own paths, so the
 // nightly sweep (sweepWorkflow) is what first tests such a file, and what
 // builds every target for a shared change the gate did let through.
+//
+// A workflow lists its shared filters in its gate job (`shared_paths`), not in
+// `on.pull_request.paths`, so that a pull request touching only shared trees
+// starts one workflow run, native.yml, instead of one per workflow. native.yml
+// decides for every such workflow at once and calls the ones that run
+// (dispatchDecision); its nightly run is their sweep. A pull request that also
+// changes one of a workflow's own paths starts the workflow itself, and the
+// workflow's gate decides with both kinds of filter, as before.
 
 const ROOT_MANIFESTS = ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml'];
 const SHARED_TREE = /^(?:packages|exes|scripts|test|test-utils|registry|models)\/\*\*$/;
@@ -46,6 +54,34 @@ export function pathGlob(pattern) {
     .replace(/\*/g, '[^/]*')
     .replaceAll('\u0000', '.*');
   return new RegExp(`^${source}$`);
+}
+
+// The workflow native.yml is, and the gate job in it that decides for the workflows it calls.
+export const DISPATCHER = 'native';
+const DISPATCHER_GATE = 'gate / decide';
+
+// The shared filters a workflow's gate job lists, one per line.
+export function sharedPaths(flow) {
+  const text = flow?.jobs?.gate?.with?.shared_paths;
+  return typeof text === 'string' ? text.split('\n').map((line) => line.trim()).filter(Boolean) : [];
+}
+
+// Every pull request filter of a workflow: the paths that start it (its own)
+// and the shared paths for which native.yml calls it. Undefined without a
+// pull request path filter.
+export function pullRequestFilters(flow) {
+  const own = flow?.on?.pull_request?.paths;
+  return Array.isArray(own) ? [...own, ...sharedPaths(flow)] : undefined;
+}
+
+// native.yml decides pull requests for every workflow that lists shared paths,
+// and sweeps nightly those of them that a push to main also starts: a workflow
+// never tested on main has nothing to keep in step there.
+export function dispatched(flow) {
+  return sharedPaths(flow).length > 0;
+}
+export function swept(flow) {
+  return dispatched(flow) && Boolean(flow.on?.push);
 }
 
 // A workflow owns the packages it filters on whole.
@@ -84,8 +120,8 @@ const RELEASE_SPEC = /^packages\/[^/]+\/release\.json$/;
 
 export function decideWorkflow({ flow, calledFlows = [], changedPaths: allPaths, registry, graph, manifests = new Map(), root }) {
   const run = (reason) => ({ run: true, reason });
-  const filters = flow?.on?.pull_request?.paths;
-  if (!Array.isArray(filters)) return run('the workflow has no pull request path filter');
+  const filters = pullRequestFilters(flow);
+  if (!filters) return run('the workflow has no pull request path filter');
   if (filters.some((filter) => filter.startsWith('!'))) return run('the workflow excludes paths, which the gate does not analyse');
   if (!allPaths.length) return run('the changed paths are unknown');
 
@@ -160,6 +196,49 @@ export function decideWorkflow({ flow, calledFlows = [], changedPaths: allPaths,
   };
 }
 
+// GitHub matches a pull request's path filters against at most this many changed files.
+const GITHUB_DIFF_LIMIT = 3000;
+
+// Whether native.yml calls a workflow for a pull request. GitHub starts the
+// workflow itself when a changed path matches one of its own filters, and its
+// gate then decides with every filter; native.yml leaves it to that run, so no
+// workflow runs twice. Otherwise native.yml stands in for the shared filters:
+// a workflow none of whose shared paths changed is one GitHub would not have
+// started, and any other gets the decision its gate would give. Past GitHub's
+// file limit it cannot tell whether GitHub started the workflow, and decides.
+export function dispatchDecision({ flow, changedPaths, ...rest }) {
+  const own = flow.on.pull_request.paths.map(pathGlob);
+  if (changedPaths.length <= GITHUB_DIFF_LIMIT) {
+    const path = changedPaths.find((changed) => own.some((glob) => glob.test(changed)));
+    if (path) return { run: false, reason: `${path} matches one of its own filters, so its own pull request run decides` };
+  }
+  const shared = sharedPaths(flow).map((filter) => ({ filter, glob: pathGlob(filter) }));
+  if (!changedPaths.some((path) => shared.some(({ glob }) => glob.test(path)))) return { run: false, reason: 'none of its shared paths changed' };
+  return decideWorkflow({ flow, changedPaths, ...rest });
+}
+
+// native.yml's scheduled runs on main, read as runs of one workflow it
+// calls, for the base its sweep and pushes diff from (testedBase). A run
+// that finished green tested every workflow it called. In any other, a
+// workflow's part is green when the gate decided and every job of the
+// workflow passed or was skipped: a skipped call is a sweep that found
+// nothing to test, as a skipped gate is in the workflow's own run. A run
+// whose native.yml did not call the workflow (`calls`), or whose jobs are
+// unknown, tested nothing of it.
+export function dispatchedRuns(workflow, runs, { calls, jobs }) {
+  const ours = (job) => job.name === workflow || job.name.startsWith(`${workflow} / `);
+  return runs.filter((run) => calls(run)).map((run) => {
+    let green = run.conclusion === 'success';
+    const listed = green ? null : jobs(run);
+    if (listed) {
+      const part = listed.filter(ours);
+      green = listed.some((job) => job.name === DISPATCHER_GATE && job.conclusion === 'success')
+        && part.length > 0 && part.every((job) => job.conclusion === 'success' || job.conclusion === 'skipped');
+    }
+    return { ...run, event: 'schedule', conclusion: green ? 'success' : 'failure' };
+  });
+}
+
 const STANDALONE = 'registry/standalone.json';
 
 // What a release leaves on main without changing what a workflow builds:
@@ -182,8 +261,8 @@ function bookkeepingFor(path, { manifests, registry, apps }) {
 // Release bookkeeping is the exception: every release writes it into the
 // shared packages, and it would otherwise run every workflow the night after.
 export function sweepWorkflow({ flow, changedPaths, manifests = new Map(), registry }) {
-  const filters = flow?.on?.pull_request?.paths;
-  if (!Array.isArray(filters)) return { run: true, reason: 'the workflow has no pull request path filter' };
+  const filters = pullRequestFilters(flow);
+  if (!filters) return { run: true, reason: 'the workflow has no pull request path filter' };
   const shared = filters.filter(isSharedFilter).map((filter) => ({ filter, glob: pathGlob(filter) }));
   const apps = registry ? workflowApps(filters, registry) : [];
   let inert = 0;
@@ -230,7 +309,7 @@ export function pushWorkflow({ flow, changedPaths, manifests = new Map(), regist
 // A workflow gated only so that release bookkeeping does not start it has no
 // shared pull request filter: its schedule is a plain nightly run, not a sweep.
 export function mainWorkflow({ flow, changedPaths, manifests = new Map(), registry, event }) {
-  const pulls = flow?.on?.pull_request?.paths;
+  const pulls = pullRequestFilters(flow);
   if (event === 'schedule' && Array.isArray(pulls) && !pulls.some(isSharedFilter)) {
     return { run: true, reason: 'its schedule is a nightly run of everything, not a sweep: it has no shared pull request filter' };
   }

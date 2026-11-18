@@ -2,31 +2,42 @@ name: pr-gate
 
 # Decides whether a path-filtered workflow has to run for a ready pull request,
 # a push to main or its nightly sweep. GitHub matches `paths` against the whole
-# pull request on every push, so a filter on a shared tree starts suites the
-# change never reaches. Callers keep those filters for pull requests and make
-# their entry jobs wait for this decision (scripts/lib/workflow-gate.mjs). A
-# ready pull request over its full-plan budget fails the gate where its ci run
-# withholds the full plan too. A push to main starts a caller only for its own
-# paths, and runs it unless they are only release bookkeeping; its schedule is
-# the sweep, which runs it when a shared path changed on main since the caller
-# last finished green there. A push and the sweep each also ask the other's
-# question, since either can skip and still finish green. The job finishes
-# unless the budget withholds the suite, so the jobs after a caller's entry
-# jobs keep their default conditions: a draft answers false and a dispatch
-# true, both without a checkout. A withheld suite fails its gate instead of
-# reading as green.
+# pull request on every push, so a filter on a shared tree would start suites
+# the change never reaches. A caller lists its shared filters here, in
+# `shared_paths`, and only its own paths in `on.pull_request.paths`; its entry
+# jobs wait for this decision (scripts/lib/workflow-gate.mjs). native.yml calls
+# this workflow with `workflow: native` to decide at once for every caller with
+# shared paths: for a pull request that changed some of them and none of the
+# caller's own, and nightly as their sweep. It then calls the callers that run,
+# whose own gate answers true without a checkout. A ready pull request over its
+# full-plan budget fails the gate where its ci run withholds the full plan too.
+# A push to main starts a caller only for its own paths, and runs it unless
+# they are only release bookkeeping; the sweep runs it when a shared path
+# changed on main since the caller last finished green there. A push and the
+# sweep each also ask the other's question, since either can skip and still
+# finish green. The job finishes unless the budget withholds the suite, so the
+# jobs after a caller's entry jobs keep their default conditions: a draft
+# answers false and a dispatch true, both without a checkout. A withheld suite
+# fails its gate instead of reading as green.
 
 on:
   workflow_call:
     inputs:
       workflow:
-        description: The calling workflow's file name without .yml
+        description: The calling workflow's file name without .yml; native decides for every workflow native.yml calls
         type: string
         required: true
+      shared_paths:
+        description: Shared path filters, one per line, through which a change can reach the caller; the gate reads them from the caller's file
+        type: string
+        default: ''
     outputs:
       run:
         description: "'true' when the pull request, or main since the last sweep, reaches what the workflow tests"
         value: ${{ jobs.decide.outputs.run }}
+      workflows:
+        description: With workflow native, the JSON list of the workflows native.yml calls
+        value: ${{ jobs.decide.outputs.workflows }}
 
 # The sweep and a push ask the Actions API where the calling workflow last
 # finished green, and a pull request reads its ci runs and labels for the
@@ -42,16 +53,24 @@ jobs:
     timeout-minutes: 10
     outputs:
       run: ${{ steps.event.outputs.run || steps.decide.outputs.run }}
+      workflows: ${{ steps.event.outputs.workflows || steps.decide.outputs.workflows }}
     steps:
-      - name: Answer for drafts and dispatches
+      # Inside a run of native.yml (github.workflow_ref names the top workflow),
+      # a caller's gate answers true: native.yml decided before calling it.
+      - name: Answer for drafts, dispatches and callers native.yml decided for
         id: event
         env:
           EVENT_NAME: ${{ github.event_name }}
           DRAFT: ${{ github.event.pull_request.draft }}
+          WORKFLOW: ${{ inputs.workflow }}
+          TOP_WORKFLOW: ${{ github.workflow_ref }}
         run: |
-          if [ "$EVENT_NAME" = pull_request ]; then
+          if [ "$WORKFLOW" != native ] && [[ "$TOP_WORKFLOW" == */.github/workflows/native.yml@* ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif [ "$EVENT_NAME" = pull_request ]; then
             if [ "$DRAFT" = true ]; then
               echo "run=false" >> "$GITHUB_OUTPUT"
+              echo "workflows=[]" >> "$GITHUB_OUTPUT"
             fi
           elif [ "$EVENT_NAME" != schedule ] && [ "$EVENT_NAME" != push ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
@@ -83,7 +102,13 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          if [ "$EVENT_NAME" = schedule ]; then
+          if [ "$WORKFLOW" = native ]; then
+            if [ "$EVENT_NAME" = schedule ]; then
+              node scripts/workflow-gate.mjs --native --sweep --head "$HEAD_SHA"
+            else
+              node scripts/workflow-gate.mjs --native --base "$BASE_SHA" --head "$HEAD_SHA"
+            fi
+          elif [ "$EVENT_NAME" = schedule ]; then
             node scripts/workflow-gate.mjs --workflow "$WORKFLOW" --sweep --head "$HEAD_SHA"
           elif [ "$EVENT_NAME" = push ]; then
             node scripts/workflow-gate.mjs --workflow "$WORKFLOW" --push --head "$HEAD_SHA"

@@ -7,7 +7,7 @@ import YAML from 'yaml';
 import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
 import { createAppPlan } from '../scripts/lib/app-plan.mjs';
 import { commandLineClosure } from '../scripts/lib/module-closure.mjs';
-import { isSharedFilter, pathGlob } from '../scripts/lib/workflow-gate.mjs';
+import { pathGlob, pullRequestFilters, sharedPaths, swept } from '../scripts/lib/workflow-gate.mjs';
 import { repoRoot } from '../scripts/lib/apps-registry.mjs';
 
 async function workflow(name) {
@@ -724,13 +724,14 @@ test('a native or CLI workflow runs when a file its command line imports changes
   for (const file of files) {
     const flow = await workflow(file.slice(0, -'.yml'.length));
     for (const event of ['pull_request', 'push']) {
-      const filters = flow.on?.[event]?.paths;
+      // A pull request reaches a workflow through its own paths or, by native.yml, its shared_paths.
+      const filters = event === 'pull_request' ? pullRequestFilters(flow) : flow.on?.[event]?.paths;
       if (!Array.isArray(filters)) continue;
       // These start for a pull request only on their own paths; their pushes hold the rule.
       if (event === 'pull_request' && OWN_PATHS_ONLY.includes(file)) continue;
       const patterns = filters.filter((filter) => !filter.startsWith('!')).map(pathGlob);
-      // A gated workflow's pushes leave its shared pull request filters to the nightly sweep.
-      if (event === 'push' && flow.jobs.gate && flow.on.schedule) patterns.push(...flow.on.pull_request.paths.filter(isSharedFilter).map(pathGlob));
+      // A gated workflow's pushes leave its shared paths to native.yml's nightly sweep.
+      if (event === 'push' && swept(flow)) patterns.push(...sharedPaths(flow).map(pathGlob));
       // A workflow owns the packages it filters on whole.
       const owned = filters.map((filter) => filter.match(/^((?:packages|exes)\/[^/*]+)\/\*\*$/)?.[1]).filter(Boolean);
       for (const directory of owned) {
