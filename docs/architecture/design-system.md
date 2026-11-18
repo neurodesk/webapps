@@ -79,7 +79,7 @@ impact:
 | Resizable log | `.nd-console-resizer[role=separator]` as the console's first child; the height is `--nd-console-height` on the container | `createConsole({ resizable: true })`, `<nd-console resizable>`, `bindConsoleResize()` for legacy `.console-container` markup |
 | Analysis and technical logs | `.nd-console-tabs[role=tablist] > .nd-console-tab[role=tab]` in the header, `.nd-console-panels > .nd-console-output[role=tabpanel]` | `createConsole({ channels: [{ id, label }, …] })`, `<nd-console channels="analysis:Analysis,technical:Technical">` |
 | Status (the only place for live progress) | `<footer id="status"><span class="nd-status-label">Status</span><span id="statusText" class="nd-status-text">Drag and drop files</span><span class="nd-status-elapsed"></span><progress></progress><button class="nd-btn-cancel" hidden>×</button></footer>` | |
-| Dialog | `dialog.nd-dialog` with `.nd-dialog-header`, `.nd-dialog-close`, `.nd-dialog-body`; `.nd-dialog-highlight`, `.nd-citation`, `.nd-command` inside | `createInfoDialog()`, `renderCommand()` |
+| Dialog | `dialog.nd-dialog` with `.nd-dialog-header`, `.nd-dialog-close`, `.nd-dialog-body`; `.nd-dialog-highlight`, `.nd-citation`, `.nd-command`, `.nd-dialog-actions` inside | `createInfoDialog()`, `renderCommand()`, `createAgentPrompts()` |
 
 Sizes are the same on every app: sections 12px/16px padding, controls 30px tall at
 0.8rem, hints 0.7rem, toolbar tabs 0.75rem, console 0.7rem monospace. Touch

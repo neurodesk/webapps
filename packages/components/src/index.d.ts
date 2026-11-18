@@ -81,6 +81,15 @@ export function bindInfoTooltips(root?: ParentNode): void;
 export function renderInfoIcon(text: string, config?: { label?: string; id?: string }, doc?: Document): HTMLSpanElement;
 /** The Connect an agent toolbar row for an `automation.agentConnection()`; `onStatus` receives where the connection stands, for the app's status bar. */
 export function createAgentControl(connection: import('./automation/index.js').AgentConnection, options?: { document?: Document; onStatus?: (message: string, error?: boolean) => void }): HTMLDivElement;
+export type AgentAnswer = { answer: string } | { dismissed: true };
+export interface AgentPrompts {
+  /** Ask the person a question; options become buttons, and allowText (the default without options) adds a text answer. */
+  ask(request: { question: string; options?: string[]; allowText?: boolean }, options?: { signal?: AbortSignal }): Promise<AgentAnswer>;
+  /** Ask the person to choose files; resolves null when they decline. A folder choice skips the file-count check. */
+  requestFiles(request: { label: string; formats?: string[]; message?: string; minimum?: number; maximum?: number; folder?: boolean }, options?: { signal?: AbortSignal }): Promise<File[] | null>;
+}
+/** The shared dialogs a browser AI agent asks through: one at a time, closing declines, an aborted signal closes. */
+export function createAgentPrompts(doc?: Document): AgentPrompts;
 export function bindSectionDisclosure(section: Element, root?: ParentNode): MutationObserver;
 export interface ConsoleResize {
   handle: HTMLDivElement;
