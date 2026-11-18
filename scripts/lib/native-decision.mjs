@@ -84,13 +84,24 @@ export async function pullRequestSelection({ eligible, readDiff, readFlow, readC
     }
   }
   if (![...decisions.values()].some((decision) => decision.run)) return { decisions };
+  // The budget is read within the same deadline. An answer that is not a
+  // confirmed denial (a check that fails, times out or is not reached) runs
+  // the workflows, as budgetedDecision does for one workflow.
   let verdict = { withheld: false };
-  try {
-    verdict = (await budget?.(context, diff)) ?? verdict;
-  } catch {
-    // A budget check that fails runs the workflows, as budgetedDecision does.
+  if (budget && clock() < deadline) {
+    let timer;
+    const late = new Promise((resolve) => {
+      timer = setTimeout(() => resolve({ withheld: false }), Math.max(0, deadline - clock()));
+    });
+    try {
+      verdict = (await Promise.race([budget(context, diff), late])) ?? verdict;
+    } catch {
+      verdict = { withheld: false };
+    } finally {
+      clearTimeout(timer);
+    }
   }
-  return { decisions, withheld: verdict.withheld ? verdict.reason : null };
+  return { decisions, withheld: verdict.withheld === true ? verdict.reason ?? 'the full-plan budget is spent' : null };
 }
 
 function defaultDecide({ flow, diff, ...context }) {
@@ -136,4 +147,28 @@ export async function sweepSelection({ eligible, readRegistry, readFlow, readBas
     }
   }
   return { decisions };
+}
+
+// What the gate passes on, the confirmed denial first: `writeOutput` puts
+// `withheld=true` in the step's outputs before anything else, so no later
+// failure can erase it, and only after it the selection, which pr-gate.yml
+// checks is a JSON array of names. A summary that cannot be written changes
+// neither the verdict nor the exit code, which it returns.
+export async function publishNative({ eligible, result, writeOutput, writeSelection, writeSummary }) {
+  if (result.withheld) {
+    await writeOutput('withheld=true');
+    console.log(`::error title=Full plan withheld::native: ${result.withheld}`);
+  } else {
+    await writeSelection(JSON.stringify(eligible.filter((name) => result.decisions.get(name)?.run !== false)));
+  }
+  const lines = eligible.map((name) => {
+    const decision = result.decisions.get(name);
+    return `${name} ${decision?.run === false ? 'is skipped' : 'runs'}: ${decision?.reason ?? 'the decision did not reach it'}`;
+  });
+  try {
+    await writeSummary(lines);
+  } catch (error) {
+    console.error(`native: the summary could not be written (${describe(error)})`);
+  }
+  return result.withheld ? 1 : 0;
 }

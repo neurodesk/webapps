@@ -12,9 +12,20 @@ const workflow = async (name) => YAML.parse(await readFile(new URL(`../.github/w
 // What pr-gate.yml answers without a checkout: false for a draft, true for
 // every event other than pull_request. A ready pull request is decided by
 // scripts/lib/workflow-gate.mjs; `reached` stands for its answer.
-const gate = (github, reached = true) => ({ gate: { outputs: { run: String(github.event_name !== 'pull_request' || (!github.event?.pull_request?.draft && reached)) } } });
+const gate = (github, reached = true) => {
+  const run = github.event_name !== 'pull_request' || (!github.event?.pull_request?.draft && reached);
+  // native.yml's gate passes on the workflows it runs: none for a draft.
+  return { gate: { result: 'success', outputs: { run: String(run), workflows: run ? undefined : '[]' } } };
+};
 // GitHub's contains() and fromJSON(), as native.yml's calls use them.
-const functions = { contains: (search, item) => (Array.isArray(search) ? search.includes(item) : String(search).includes(item)), fromJSON: JSON.parse };
+const text = (value) => (value === undefined || value === null ? '' : String(value)).toLowerCase();
+const functions = {
+  contains: (search, item) => (Array.isArray(search) ? search.includes(item) : text(search).includes(text(item))),
+  startsWith: (search, item) => text(search).startsWith(text(item)),
+  endsWith: (search, item) => text(search).endsWith(text(item)),
+  cancelled: () => false,
+  fromJSON: JSON.parse,
+};
 const evaluate = (expression, github, inputs = {}, needs = gate(github)) => runInNewContext(expression.replace(/^\$\{\{\s*|\s*\}\}$/g, ''), { github, inputs, needs, ...functions });
 
 test('draft feedback selects direct app edits; ready PRs retain shared coverage', async () => {

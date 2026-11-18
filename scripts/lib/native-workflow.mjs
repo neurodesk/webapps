@@ -38,13 +38,29 @@ export async function dispatchedWorkflows(root) {
   return flows.filter(([, flow]) => dispatched(flow));
 }
 
+// Whether native.yml calls a workflow. Running is the default: a call is
+// skipped only on proof that it need not run, which is a gate that succeeded
+// and passed on a JSON array (the decide step checks it) without the
+// workflow's name, or a full-plan denial the gate confirmed (`withheld`
+// exactly 'true'). A gate that failed, timed out, was cancelled or skipped, or
+// an output that is blank or not an array, runs it. A workflow native.yml does
+// not sweep is never called on the schedule. Every call uses this one
+// template; test/native-decision.test.mjs evaluates it for each gate outcome.
+export function callCondition(name, { sweep }) {
+  const proof = `needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"${name}"')`;
+  return `\${{ !cancelled() && ${sweep ? '' : "github.event_name != 'schedule' && "}needs.gate.outputs.withheld != 'true' && !(${proof}) }}`;
+}
+
+// The job that fails a run whose full plan the gate withheld.
+export const WITHHELD_CONDITION = "${{ !cancelled() && needs.gate.outputs.withheld == 'true' }}";
+
 export function renderNativeWorkflow(workflows) {
   const paths = [...GATE_FILES, ...new Set(workflows.flatMap(([, flow]) => sharedPaths(flow)).sort())];
   const calls = workflows.flatMap(([name, flow]) => [
     '',
     `  ${name}:`,
     '    needs: gate',
-    `    if: contains(fromJSON(needs.gate.outputs.workflows || '[]'), '${name}')`,
+    `    if: ${callCondition(name, { sweep: swept(flow) })}`,
     `    uses: ./.github/workflows/${name}.yml`,
     '    permissions:',
     ...Object.entries(callerPermissions(flow)).map(([scope, level]) => `      ${scope}: ${level}`),
@@ -60,9 +76,10 @@ export function renderNativeWorkflow(workflows) {
     '# every workflow that builds on the path. Its gate decides for all of them',
     '# (pr-gate.yml with `workflow: native`, scripts/lib/workflow-gate.mjs) and',
     '# it calls the ones the change reaches, on the pull request\'s own event and',
-    '# commit. A workflow whose own paths the pull request also changed runs',
-    '# itself, and is left out here. The nightly schedule is the sweep of every',
-    '# called workflow that a push to main also starts.',
+    '# commit. A workflow GitHub certainly started itself for its own paths is',
+    '# left out here. A call runs unless the gate proves it need not (callCondition',
+    '# in scripts/lib/native-workflow.mjs). The nightly schedule is the sweep of',
+    '# every called workflow that a push to main also starts.',
     'on:',
     '  pull_request:',
     '    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]',
@@ -79,8 +96,8 @@ export function renderNativeWorkflow(workflows) {
     "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
     '',
     'jobs:',
-    '  # Always finishes unless a ready pull request is over its full-plan budget,',
-    '  # where it fails as ci\'s full-plan-withheld does.',
+    '  # Decides which workflows run (scripts/lib/native-decision.mjs). Whatever',
+    '  # goes wrong in it runs them: each call skips only on its proof.',
     '  gate:',
     '    uses: ./.github/workflows/pr-gate.yml',
     '    permissions:',
@@ -89,11 +106,18 @@ export function renderNativeWorkflow(workflows) {
     '      pull-requests: read',
     '    with:',
     `      workflow: ${DISPATCHER}`,
-    '      # What runs when the decision ends without a selection.',
-    '      calls: >-',
-    ...workflows.map(([name]) => `        ${name}`),
-    '      sweeps: >-',
-    ...workflows.filter(([, flow]) => swept(flow)).map(([name]) => `        ${name}`),
+    '',
+    '  # Fails where ci withholds the full plan too: every call was skipped.',
+    '  full-plan-withheld:',
+    '    needs: gate',
+    `    if: ${WITHHELD_CONDITION}`,
+    '    runs-on: ubuntu-latest',
+    '    timeout-minutes: 5',
+    '    steps:',
+    '      - name: Fail the withheld run',
+    '        run: |',
+    '          echo "::error title=Full plan withheld::This ready pull request already used its full-plan ci runs, so native.yml ran none of the workflows it calls. Add the full-ci label, then re-run all jobs of ci and of native."',
+    '          exit 1',
     ...calls,
     '',
   ].join('\n');

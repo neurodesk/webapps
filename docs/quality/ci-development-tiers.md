@@ -88,28 +88,44 @@ that run through `workflow_call`:
   changed files, and an own match that is neither side of a rename or copy,
   is a plain ASCII path, and falls under a literal filter, a directory
   followed by `**` or one `*` in the last segment, without a hidden file
-  under a wildcard. Anything else it decides too, so a workflow can run
-  twice, never not at all.
+  under a wildcard, in a filter list without exclusions. Anything else it
+  decides too, so a workflow can run twice, never not at all.
 - A workflow none of whose shared paths changed is one GitHub would not have
-  started. Any other gets the decision its own gate would have given.
+  started. Shared filters match as GitHub's do (`*` any character but `/`,
+  `**` any character, a newline included), and a path outside the plain
+  ASCII set counts as matching all of them. Any other workflow gets the
+  decision its own gate would have given.
 - A called workflow runs on the pull request's own event, commit and ref:
   GitHub gives a called workflow its caller's `github` context. Its own gate
   answers `true` without a checkout, because `github.workflow_ref` names
   `native.yml`.
-- A draft answers `[]` without a checkout. A ready pull request over its
-  full-plan budget fails `native.yml`'s gate, as it fails a workflow's own.
+- A draft answers `[]` without a checkout.
 
-The decision fails open (`scripts/lib/native-decision.mjs`). Every workflow
-it may call starts selected, and a stage that throws, cannot be read or is
-cut off by the five-minute deadline leaves the workflows it was deciding
-selected: an unreadable diff (read NUL-delimited by `readChangedPaths`, so a
-name keeps its spaces, and never taken for an empty one) selects every
-workflow, a workflow file or registry that cannot be read selects every
-workflow not certainly started by its own paths, and a failed decision
-selects its workflow. A budget check that fails runs them; a spent budget
-still fails the gate. When the script ends without a selection, the gate's
-shell step runs every workflow `native.yml` lists in `calls` or `sweeps`.
-`test/native-decision.test.mjs` makes each stage fail in turn.
+Running is the default. Each call's generated `if:` (`callCondition`)
+skips it only on proof: the gate succeeded and passed on a JSON array
+without the workflow's name. The decide step passes on the script's
+selection only after `jq` finds exactly one array of workflow names, and
+fails, with a warning, when the script fails or prints anything else. So a
+failed checkout, install or script, a gate that hits its timeout or is
+skipped, and a blank or malformed output all run every workflow `native.yml`
+calls (on the schedule, every one it sweeps). The one outcome that skips
+calls without that proof is a budget denial the gate confirmed: the script
+writes `withheld=true` before any other output, summary or annotation, the
+step then succeeds so that the output arrives, every call skips, and the
+`full-plan-withheld` job fails the run. A missing or unreadable budget
+answer, or one not read within the deadline, is no denial.
+
+Inside the gate the decision fails open too (`scripts/lib/native-decision.mjs`):
+every workflow it may call starts selected, and a stage that throws, cannot
+be read or is cut off by the five-minute deadline, which covers the budget
+reads, leaves the workflows it was deciding selected. An unreadable diff
+(read NUL-delimited by `readChangedPaths`, so a name keeps its spaces, and
+never taken for an empty one) selects every workflow; a workflow file or
+registry that cannot be read selects every workflow not certainly started by
+its own paths; a failed decision selects its workflow; a summary that cannot
+be written changes nothing. `test/native-decision.test.mjs` evaluates every
+call condition for each gate outcome, runs the real decide step under
+`bash -eo pipefail` with failing stubs, and makes each stage fail in turn.
 
 `test/workflow-gate.test.mjs` checks, over every workflow `native.yml` calls
 and sample diffs of its own and shared paths, that the two routes together
@@ -338,8 +354,10 @@ workflows skip at the same commits ([gate](#pull-request-gate-for-shared-path-fi
 The window is rolling rather than the report's UTC day.
 
 To test every app at that head, add the `full-ci` label and use **Re-run all
-jobs** on the run and **Re-run failed jobs** on each native workflow whose gate
-failed, `native` included (that re-runs the gate and what waits for it); the planner and the gate
+jobs** on the run and on `native` (whose gate succeeds with the denial, so
+only re-running all its jobs reads the label), and **Re-run failed jobs** on
+each other native workflow whose gate failed (that re-runs the gate and what
+waits for it); the planner and the gate
 read the labels when they run, so no new trigger is needed. Pushing a new
 commit after adding the label also starts every check again. **Re-run failed jobs** keeps the withheld plan. The label stays until
 someone removes it, and every later push then gets the full plan again, so

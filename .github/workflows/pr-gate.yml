@@ -10,10 +10,11 @@ name: pr-gate
 # shared paths: for a pull request that changed some of them and none of the
 # caller's own, and nightly as their sweep. It then calls the callers that run,
 # whose own gate answers true without a checkout. That decision fails open:
-# whatever it cannot read or decide runs, and a decision that ends without a
-# selection runs every workflow native.yml lists in `calls` or `sweeps`. A
-# ready pull request over its full-plan budget fails the gate where its ci run
-# withholds the full plan too.
+# native.yml skips a call only when this gate succeeded and passed on a
+# checked selection that leaves it out, so whatever goes wrong here runs every
+# workflow. A ready pull request over its full-plan budget fails the gate where
+# its ci run withholds the full plan too; with `workflow: native` the denial is
+# the `withheld` output, which native.yml turns into its failing job.
 # A push to main starts a caller only for its own paths, and runs it unless
 # they are only release bookkeeping; the sweep runs it when a shared path
 # changed on main since the caller last finished green there. A push and the
@@ -34,21 +35,16 @@ on:
         description: Shared path filters, one per line, through which a change can reach the caller; the gate reads them from the caller's file
         type: string
         default: ''
-      calls:
-        description: With workflow native, the workflows native.yml may call for a pull request, space-separated
-        type: string
-        default: ''
-      sweeps:
-        description: With workflow native, the workflows native.yml sweeps nightly, space-separated
-        type: string
-        default: ''
     outputs:
       run:
         description: "'true' when the pull request, or main since the last sweep, reaches what the workflow tests"
         value: ${{ jobs.decide.outputs.run }}
       workflows:
-        description: With workflow native, the JSON list of the workflows native.yml calls
+        description: With workflow native, the JSON list of the workflows native.yml calls, checked by the decide step
         value: ${{ jobs.decide.outputs.workflows }}
+      withheld:
+        description: With workflow native, exactly 'true' when the budget read confirmed that the full plan is withheld
+        value: ${{ jobs.decide.outputs.withheld }}
 
 # The sweep and a push ask the Actions API where the calling workflow last
 # finished green, and a pull request reads its ci runs and labels for the
@@ -65,6 +61,7 @@ jobs:
     outputs:
       run: ${{ steps.event.outputs.run || steps.decide.outputs.run }}
       workflows: ${{ steps.event.outputs.workflows || steps.decide.outputs.workflows }}
+      withheld: ${{ steps.decide.outputs.withheld }}
     steps:
       # Inside a run of native.yml (github.workflow_ref names the top workflow),
       # a caller's gate answers true: native.yml decided before calling it.
@@ -112,28 +109,40 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           GITHUB_TOKEN: ${{ github.token }}
-          CALLS: ${{ inputs.calls }}
-          SWEEPS: ${{ inputs.sweeps }}
         run: |
           if [ "$WORKFLOW" = native ]; then
             if [ "$EVENT_NAME" = schedule ]; then
-              eligible=$SWEEPS
               set -- --sweep
             else
-              eligible=$CALLS
               set -- --base "$BASE_SHA"
             fi
-            # The decision fails open: a run that ends without a selection runs
-            # every workflow native.yml could call. Only a withheld plan fails.
+            # native.yml runs a workflow unless this step passes on a checked
+            # selection that leaves it out, so every failure here fails the step
+            # and runs every workflow it calls. The one exception is a budget
+            # denial the script confirmed and wrote first (withheld=true): the
+            # step then succeeds, so that the output reaches native.yml, which
+            # skips every call and fails its full-plan-withheld job.
+            selection="${RUNNER_TEMP:?}/native-selection.json"
+            rm -f "$selection"
             status=0
-            NATIVE_ELIGIBLE="$eligible" node scripts/workflow-gate.mjs --native "$@" --head "$HEAD_SHA" || status=$?
+            NATIVE_SELECTION="$selection" node scripts/workflow-gate.mjs --native "$@" --head "$HEAD_SHA" || status=$?
             if grep -qx 'withheld=true' "$GITHUB_OUTPUT"; then
+              exit 0
+            fi
+            if [ "$status" -ne 0 ]; then
+              echo "::warning title=Native decision failed::it exited with $status, so native.yml runs every workflow it calls"
+              exit "$status"
+            fi
+            # Exactly one JSON value, an array of workflow names (jq alone accepts an empty file).
+            if ! jq -e -s 'length == 1 and (.[0] | type == "array" and all(.[]; type == "string" and test("^[A-Za-z0-9_-]+$")))' "$selection" > /dev/null; then
+              echo "::warning title=Native decision unreadable::its selection is not one JSON array of workflow names, so native.yml runs every workflow it calls"
               exit 1
             fi
-            if ! grep -q '^workflows=' "$GITHUB_OUTPUT"; then
-              echo "::warning title=Native decision failed::it exited with $status and no selection, so every workflow native.yml could call runs"
-              echo "workflows=$(jq -cn --arg names "$eligible" '$names | split(" ") | map(select(. != ""))')" >> "$GITHUB_OUTPUT"
-            fi
+            workflows=$(jq -c -s '.[0]' "$selection")
+            case "$workflows" in
+              '['*']') echo "workflows=$workflows" >> "$GITHUB_OUTPUT" ;;
+              *) exit 1 ;;
+            esac
           elif [ "$EVENT_NAME" = schedule ]; then
             node scripts/workflow-gate.mjs --workflow "$WORKFLOW" --sweep --head "$HEAD_SHA"
           elif [ "$EVENT_NAME" = push ]; then

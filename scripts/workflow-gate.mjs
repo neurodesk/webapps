@@ -9,12 +9,14 @@
 //   node scripts/workflow-gate.mjs --workflow neuroflow --sweep --head <sha>
 //
 // With --native it decides at once for every workflow native.yml calls
-// (scripts/lib/native-decision.mjs), and writes `workflows=<JSON list>` of the
-// ones that run: for a pull request those it may call, for the sweep those it
-// sweeps. NATIVE_ELIGIBLE (space-separated names, from native.yml) says which
-// workflows those are; without it they come from the workflow files. When the
-// decision cannot be made, every eligible workflow runs; a ready pull request
-// over its full-plan budget writes `withheld=true` and fails.
+// (scripts/lib/native-decision.mjs) and writes the JSON list of the ones that
+// run to NATIVE_SELECTION, which pr-gate.yml checks before it passes it on
+// (without it, `workflows=<list>` goes to GITHUB_OUTPUT): for a pull request
+// those it may call, for the sweep those it sweeps. When it cannot decide for a
+// workflow, the workflow runs, and native.yml runs every workflow when the gate
+// fails. A ready pull request over its full-plan budget writes `withheld=true`
+// first and exits 1. NATIVE_ELIGIBLE (space-separated names) limits the
+// decision to those workflows, for local replays and tests.
 //
 //   node scripts/workflow-gate.mjs --native --base <sha> --head <sha>
 //   node scripts/workflow-gate.mjs --native --sweep --head <sha>
@@ -23,12 +25,12 @@
 // Actions runs. In a ready pull request's run (GITHUB_EVENT_NAME and
 // GITHUB_EVENT_PATH), the token also reads the pull request's labels.
 import { execFileSync } from 'node:child_process';
-import { appendFile, readFile, readdir } from 'node:fs/promises';
+import { appendFile, readFile, readdir, writeFile } from 'node:fs/promises';
 import { parse } from 'yaml';
 import { changedManifests } from './lib/app-plan.mjs';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
 import { eventPullRequest, fullPlanBudget } from './lib/full-plan-budget.mjs';
-import { pullRequestSelection, sweepSelection } from './lib/native-decision.mjs';
+import { publishNative, pullRequestSelection, sweepSelection } from './lib/native-decision.mjs';
 import { createGitHubClient } from './lib/nightly-failures.mjs';
 import { gitAncestry, testedBase } from './lib/tested-base.mjs';
 import { DISPATCHER, budgetedDecision, calledWorkflows, decideWorkflow, dispatchDecision, dispatched, dispatchedRuns, mainWorkflow, readChangedPaths, swept } from './lib/workflow-gate.mjs';
@@ -180,6 +182,7 @@ function decideNative(eligible) {
   });
 }
 
+// Optional: a summary that cannot be written never changes a verdict or an exit code.
 async function report(lines) {
   for (const line of lines) console.error(line);
   if (env.GITHUB_STEP_SUMMARY) await appendFile(env.GITHUB_STEP_SUMMARY, `${lines.join('\n')}\n`);
@@ -190,15 +193,7 @@ async function output(text) {
   else console.log(text);
 }
 
-// A withheld suite fails, like ci's full-plan-withheld job, instead of reading as green.
-function withhold(reason) {
-  console.log(`::error title=Full plan withheld::${name}: ${reason}`);
-  process.exitCode = 1;
-}
-
 if (native) {
-  // Without a list of what it may call, nothing can be selected: the step in
-  // pr-gate.yml then runs every workflow native.yml lists.
   const eligible = await eligibleWorkflows();
   let result;
   try {
@@ -206,14 +201,16 @@ if (native) {
   } catch (error) {
     result = { decisions: new Map(eligible.map((file) => [file, { run: true, reason: `the gate could not decide (${error.message})` }])) };
   }
-  const running = eligible.filter((file) => result.decisions.get(file)?.run !== false);
-  await report(eligible.map((file) => `${file} ${running.includes(file) ? 'runs' : 'is skipped'}: ${result.decisions.get(file)?.reason ?? 'the decision did not reach it'}`));
-  if (result.withheld) {
-    await output('workflows=[]\nwithheld=true');
-    withhold(result.withheld);
-  } else {
-    await output(`workflows=${JSON.stringify(running)}`);
-  }
+  process.exitCode = await publishNative({
+    eligible,
+    result,
+    writeOutput: output,
+    // pr-gate.yml checks the selection before it passes it on.
+    writeSelection: (json) => (env.NATIVE_SELECTION ? writeFile(env.NATIVE_SELECTION, `${json}\n`) : output(`workflows=${json}`)),
+    writeSummary: report,
+  });
+  // Reads the decision gave up on (a budget read past the deadline) must not hold the step open.
+  process.exit();
 } else {
   let decision;
   try {
@@ -222,7 +219,15 @@ if (native) {
     decision = { run: true, reason: `the gate could not decide (${error.message})` };
     console.log(`::warning::${name}: ${decision.reason}`);
   }
-  await report([`${name} ${decision.run ? 'runs' : 'is skipped'}: ${decision.reason}`]);
   await output(`run=${decision.run}`);
-  if (decision.withheld) withhold(decision.reason);
+  // A withheld suite fails, like ci's full-plan-withheld job, instead of reading as green.
+  if (decision.withheld) {
+    process.exitCode = 1;
+    console.log(`::error title=Full plan withheld::${name}: ${decision.reason}`);
+  }
+  try {
+    await report([`${name} ${decision.run ? 'runs' : 'is skipped'}: ${decision.reason}`]);
+  } catch (error) {
+    console.error(`${name}: the summary could not be written (${error.message})`);
+  }
 }

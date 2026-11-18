@@ -9,7 +9,7 @@ import YAML from 'yaml';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { commandLineClosure, moduleClosure, onlyAddsExports, onlyBumpsVersion } from '../scripts/lib/module-closure.mjs';
 import { testedBase } from '../scripts/lib/tested-base.mjs';
-import { callerPermissions, dispatchedWorkflows, renderNativeWorkflow } from '../scripts/lib/native-workflow.mjs';
+import { callCondition, callerPermissions, dispatchedWorkflows, renderNativeWorkflow } from '../scripts/lib/native-workflow.mjs';
 import { DISPATCHER, budgetedDecision, calledWorkflows, certainOwnStart, decideWorkflow, dispatchDecision, dispatched, dispatchedRuns, isSharedFilter, mainWorkflow, ownedPackages, pathGlob, pullRequestFilters, pushWorkflow, sharedPaths, swept, sweepWorkflow, workflowApps, workflowScripts } from '../scripts/lib/workflow-gate.mjs';
 import { loadConservativeWorkspaceGraph } from '../scripts/lib/workspace-graph.mjs';
 
@@ -300,9 +300,7 @@ test('native.yml calls every workflow with shared paths, granting what its jobs 
   const native = YAML.parse(text);
   assert.deepEqual(Object.keys(native.on), ['pull_request', 'schedule']);
   assert.equal(native.on.schedule.length, 1);
-  // When the decision ends without a selection, the gate runs these (test/native-decision.test.mjs).
-  const lists = { calls: nativeCalls.map(([name]) => name).join(' '), sweeps: nativeCalls.filter(([, flow]) => swept(flow)).map(([name]) => name).join(' ') };
-  assert.deepEqual(native.jobs.gate, { uses: './.github/workflows/pr-gate.yml', permissions: { contents: 'read', actions: 'read', 'pull-requests': 'read' }, with: { workflow: DISPATCHER, ...lists } });
+  assert.deepEqual(native.jobs.gate, { uses: './.github/workflows/pr-gate.yml', permissions: { contents: 'read', actions: 'read', 'pull-requests': 'read' }, with: { workflow: DISPATCHER } });
   // A pull request that changes any workflow's shared path starts native.yml.
   const starts = native.on.pull_request.paths.map(pathGlob);
   for (const [name, flow] of nativeCalls) {
@@ -312,14 +310,16 @@ test('native.yml calls every workflow with shared paths, granting what its jobs 
     const call = native.jobs[name];
     assert.equal(call.uses, `./.github/workflows/${name}.yml`);
     assert.equal(call.needs, 'gate');
-    assert.equal(call.if, `contains(fromJSON(needs.gate.outputs.workflows || '[]'), '${name}')`);
+    // Running is the default; the gate must prove a skip (test/native-decision.test.mjs).
+    assert.equal(call.if, callCondition(name, { sweep: swept(flow) }));
     assert.equal(call.secrets, 'inherit');
     assert.deepEqual(call.permissions, callerPermissions(flow));
     // A called workflow reads native.yml's name in github.workflow, so its concurrency group names itself.
     assert.ok(String(flow.concurrency?.group).startsWith(`${name}-`), `${name}: its concurrency group is its own`);
     assert.doesNotMatch(JSON.stringify(flow), /github\.workflow\b(?!_)/, `${name} would read native in github.workflow`);
   }
-  assert.deepEqual(Object.keys(native.jobs).sort(), ['gate', ...nativeCalls.map(([name]) => name)].sort());
+  // Each call's condition is test/native-decision.test.mjs's; full-plan-withheld fails a withheld run.
+  assert.deepEqual(Object.keys(native.jobs).sort(), ['full-plan-withheld', 'gate', ...nativeCalls.map(([name]) => name)].sort());
   assert.deepEqual(callerPermissions({ permissions: { contents: 'read' }, jobs: { a: { permissions: { contents: 'write', 'id-token': 'write' } }, b: { permissions: { actions: 'read', contents: 'read' } }, c: {} } }), { actions: 'read', contents: 'write', 'id-token': 'write' });
   assert.throws(() => callerPermissions({ permissions: 'write-all', jobs: {} }), /not a map/);
 });
@@ -561,8 +561,10 @@ test('the gate answers drafts, dispatches and calls from native.yml without a ch
   assert.match(decideStep.run, /node scripts\/workflow-gate\.mjs --workflow "\$WORKFLOW" --base "\$BASE_SHA" --head "\$HEAD_SHA"/);
   assert.match(decideStep.run, /"\$EVENT_NAME" = schedule \]; then\n\s+node scripts\/workflow-gate\.mjs --workflow "\$WORKFLOW" --sweep --head "\$HEAD_SHA"/);
   assert.match(decideStep.run, /"\$EVENT_NAME" = push \]; then\n\s+node scripts\/workflow-gate\.mjs --workflow "\$WORKFLOW" --push --head "\$HEAD_SHA"/);
-  assert.match(decideStep.run, /if \[ "\$WORKFLOW" = native \]; then\n\s+if \[ "\$EVENT_NAME" = schedule \]; then\n\s+eligible=\$SWEEPS\n\s+set -- --sweep\n\s+else\n\s+eligible=\$CALLS\n\s+set -- --base "\$BASE_SHA"\n\s+fi/);
-  assert.match(decideStep.run, /NATIVE_ELIGIBLE="\$eligible" node scripts\/workflow-gate\.mjs --native "\$@" --head "\$HEAD_SHA" \|\| status=\$\?/);
+  assert.match(decideStep.run, /if \[ "\$WORKFLOW" = native \]; then\n\s+if \[ "\$EVENT_NAME" = schedule \]; then\n\s+set -- --sweep\n\s+else\n\s+set -- --base "\$BASE_SHA"\n\s+fi/);
+  assert.match(decideStep.run, /NATIVE_SELECTION="\$selection" node scripts\/workflow-gate\.mjs --native "\$@" --head "\$HEAD_SHA" \|\| status=\$\?/);
+  assert.equal(job.outputs.withheld, '${{ steps.decide.outputs.withheld }}');
+  assert.equal(flow.on.workflow_call.outputs.withheld.value, '${{ jobs.decide.outputs.withheld }}');
   assert.equal(event.env.TOP_WORKFLOW, '${{ github.workflow_ref }}');
   assert.equal(decideStep.env.GITHUB_TOKEN, '${{ github.token }}');
   assert.equal(decideStep.env.HEAD_SHA, '${{ github.event.pull_request.head.sha || github.sha }}');
