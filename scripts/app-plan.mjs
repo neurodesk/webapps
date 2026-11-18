@@ -108,7 +108,7 @@ if (process.env.GITHUB_EVENT_NAME === 'pull_request' && !draft && process.env.GI
 }
 
 // A dispatched run's scope: `gpu` runs only the macOS GPU suite of the
-// selected apps, `site` only the composite site (and agentic checks).
+// selected apps, `site` only the composite site (and agentic checks) and the easter egg.
 const scope = option('--scope') || 'affected';
 if (!['affected', 'all', 'gpu', 'site'].includes(scope)) throw new Error(`Unknown scope ${scope}`);
 const none = { include: [] };
@@ -188,7 +188,7 @@ if (!plan.packages.all) summary.push(...Object.entries(reasons.packages).map(([d
 summary.push(easterEgg ? `Homepage easter egg runs: ${scope === 'site' ? 'scope site' : reasons.easter_egg.join('; ')}.` : 'Homepage easter egg skipped: the change reaches none of its tests.');
 if (plan.bookkeeping.length) summary.push(`Release bookkeeping set aside (changelogs and version bumps, checked by workspace-contracts): ${plan.bookkeeping.length} ${plan.bookkeeping.length === 1 ? 'file' : 'files'}.`);
 if (scope === 'gpu') summary.unshift('Scope gpu: only the macOS GPU suite of the selected apps runs.');
-if (scope === 'site') summary.unshift('Scope site: only the composite site and its agentic checks run.');
+if (scope === 'site') summary.unshift('Scope site: only the composite site, its agentic checks and the homepage easter egg run.');
 if (draft) summary.unshift('Draft feedback only: shared dependency coverage runs on ready_for_review and every subsequent ready PR push.');
 const withheldAdvice = `Full plan withheld: ${withheld}. This run tests only the apps the pull request edits. Convert the pull request to draft while iterating; to test every app at this head, add the ${FULL_CI_LABEL} label and use "Re-run all jobs" on this run.`;
 if (withheld) {

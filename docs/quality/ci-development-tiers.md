@@ -219,59 +219,105 @@ whole-catalogue runs. PR #864 changed a comment in the `composite-site` job of
 section of `registry/apps.yml`. The planner then tied any `ci.yml` edit and any
 `site` change but a category to every app.
 
-A `site` change now narrows per key. The keys an app build or an app's tests
-read are listed with their readers in `SITE_KEY_READERS`: the analytics
-measurement id (every themed build), the catalogue ids (the standalone check
-every themed build runs) and the catalogue hosts, primary domain and desktop
-identities (the desktop scripts that dicompare and Pipeline builder reach). A
-changed key selects the apps that reach a reader, once the head registry passes
-the validation every build runs; the hub, catalogue titles, brands and
-categories select only the site build, and a key not listed selects every app.
+A `site` change now narrows per key. `SITE_KEY_READERS` lists every key of the
+section (`[]` is each entry of a list) with the files an app build or an app's
+tests run that read it: the analytics measurement id (every themed build), the
+catalogue ids (the standalone check every themed build runs), and the desktop
+identities, catalogue hosts and primary domain (the desktop scripts that
+dicompare and Pipeline builder reach). `suite.mjs` and `pack.mjs` hold a whole
+catalogue entry, so every catalogue key counts as read by them. A changed key
+selects the apps that reach a reader, once the head registry passes the
+validation every build runs; the hub, the analytics period and the categories
+select only the site build. A key the table does not list, at any depth and
+whatever its value (an empty mapping, a list, a new key under `site.hub`),
+anywhere in the base or head section, selects every app.
 `test/app-plan.test.mjs` lists every file an app build or app test runs that
-loads the registry, with the keys it reads, and fails on a new one. Package
-suites and the easter egg follow `registry/apps.yml` itself through the graph,
-so any registry change runs the desktop package and the easter egg.
+loads the registry or reads its `site` section, reads each one's text for the
+keys it reads (a chain from `.site`, a list iterated with a callback, the
+catalogue helpers; a chain that stops at a mapping or list, or a whole
+catalogue entry, reads every key below it) and fails when the table does not
+list the file for one. Package suites and the easter egg follow
+`registry/apps.yml` itself through the graph, so any registry change runs the
+desktop package and the easter egg.
 
 A `ci.yml` change is compared job by job on the parsed workflow, so a comment
-changes nothing (`CI_JOB_SCOPES` in `scripts/lib/app-plan.mjs`). A change
-confined to `composite-site` or a job that only consumes its build selects the
-site build; one confined to `workspace-contracts` runs every package suite, one
-to `homepage-easter-egg` the easter egg, and one to the `full-plan` markers
-nothing. The plan, the per-app jobs, a new job and every key outside `jobs`
-still select every app, as does a change whose base text is unknown. The
-nightly run tests every app, so a narrowed `ci.yml` change that breaks an app
-job is found there.
+changes nothing (`CI_JOB_SCOPES` in `scripts/lib/app-plan.mjs`). It narrows only
+when the base and head have the same jobs and every job that needs a changed
+job, or that a changed job needs (the plan aside), at the base or the head, has
+the changed job's scope. Then a change confined to `composite-site` or a job
+that only consumes its build selects the site build; one confined to
+`workspace-contracts` runs every package suite, one to `homepage-easter-egg`
+the easter egg, and one to the `full-plan` markers nothing. An added or removed
+job, a `needs` link to a job of another scope, the plan, the per-app jobs and
+every key outside `jobs` still select every app, as does a change whose base
+text is unknown. `test/ci-required-jobs.test.mjs`, which the `app-plan` job runs
+through `pnpm check:integration` before the plan, fails when a job the policy
+needs is missing, so deleting `workspace-contracts` cannot remove its own
+guard. The nightly run tests every app, so a narrowed `ci.yml` change that
+breaks an app job is found there.
 
-`workspace-contracts` and `homepage-easter-egg` ran on every draft push: 1,015
-minutes in 63 draft runs, and the easter egg 445 minutes in 102 runs in which no
-pull request touched it. Both now wait for the plan. The package step runs
-`test` (`test:unit` for the components) only in the packages the change
-reaches: its own files, what its workspace graph node reaches, and the app,
-model and site paths their code names, since package tests read their app's
-fixtures (`outside` in `scripts/lib/workspace-graph.mjs`; a package's tests
-count only for its own suite). The repository root's configuration, an
-unplaced lockfile importer, a full run and a plan of every app test every
-package. The easter egg runs when a change reaches its tests, on the nightly
-and on `scope=all` or `scope=site` dispatches. Contract tests, the nii2tvx
-check and lint still run on every run; like every job after the plan, neither
-runs when the plan fails, which fails the run. A failure in either on main sends the next push back to the last green run,
-since that push would not run it again.
+`workspace-contracts`, `homepage-easter-egg` and `app-plan` used 1,015 minutes
+in 63 draft runs, the two fixed jobs alone 956; the easter egg used 445 minutes
+in 102 runs in which no pull request touched it. Both fixed jobs now wait for
+the plan. The package step (`scripts/run-package-tests.mjs`) runs `test`
+(`test:unit` for the components) only in the packages the change reaches: its
+own files, what its workspace graph node reaches, and every path their code
+names (`outside` in `scripts/lib/workspace-graph.mjs`; a package's tests count
+only for its own suite). That covers app, model and site paths and every
+quoted relative literal, resolved against the file that names it, since
+package tests read their app's fixtures and each other's. A closed literal that
+names nothing at head (a file the change deletes, an extensionless import)
+reads that path and every path that extends it; a literal continued at run
+time (`` `../fixtures/${name}` ``, `'../x-' + id`) reads every path that starts
+with it (`graph.unresolved` lists both). A closed literal of `..` steps that
+names the repository root is a computed root, followed through the
+root-relative names the graph already reads. On 18 November 2026 one
+package-side literal read the whole repository that way (white-matter-lesions'
+assets test), so that suite runs for every change; mri2vid and node-drivers
+read every package, desktop all of `scripts/`, `test/` and `test-utils/`, and
+the easter egg all of `scripts/lib` (the landing page's `./${...}` page paths).
+An app change runs 4 of 56 package suites. The step fails on a list it cannot
+run as given (malformed JSON, an unknown directory, a package without
+its test script or one pnpm does not match), and a change to it runs every
+package suite. The repository root's configuration, an unplaced lockfile
+importer, a full run and a plan of every app test every package. The easter
+egg runs when a change reaches its tests, on the nightly and on `scope=all` or
+`scope=site` dispatches. Contract tests, the nii2tvx check and lint still run on
+every run; like every job after the plan, neither runs when the plan fails,
+which fails the run. When either fixed job did not pass in the nearest finished
+run on main (failed, cancelled or never finished), the next push runs it in
+full: every package suite, since which one failed is not known, or the easter
+egg (`checks` from `carriedApps`).
 
 Text references widen the selection: a JavaScript comment line naming a path
 is skipped, any other mention counts, and a path built at run time
 (`join(root, 'apps', id)`) reaches every app. A lone quoted name
 (`doc.get('apps')`) is a key, so `test/app-plan.test.mjs` fails when code reads
-a directory as `readdir('apps')`.
+a directory as `readdir('apps')`. The changed paths are read
+NUL-delimited (`changedPathsFromGit`), so git neither quotes nor trims a name,
+and hold both sides of every rename and copy, so a moved input still selects
+what read it. A diff git cannot produce is never an empty one: the plan then
+tests every app, every package suite, the site build and the easter egg, and
+the workflow gate runs its workflow.
 
-Replayed over the 40 pull requests merged up to #885 (`node
-scripts/app-plan-shadow.mjs --last 40`), main's planner selected every app
-for 8 and this one for 3 (two `on:` edits and one `app-plan` edit of
-`ci.yml`): 228 of 2,520 app-test jobs instead of 543, with 0 oracle misses
-before and after and 0 package-suite misses. It ran 253 of 2,160 package
-suites and the easter egg for 6 of the 40. Replayed over every `ci` run of
-16 to 18 November, it would have left out 2,302 minutes of per-app jobs (the
-#864 and #872 runs), 405 of the 444 easter-egg minutes and about 500
-package-test minutes, weighting each package by its test time in one run.
+Replayed over 22 merged pull requests, #864, #872 and the 20 merged up to
+#887 (`scripts/app-plan-shadow.mjs`, the planner before and after the review
+fixes against the same oracle), the planner had 0 app and 0 package-suite
+misses before and after. The fixes cost 35 instead of 31 of 1,386 app-test
+jobs (#872 and #861 now test dicompare and Pipeline builder, whose desktop
+scripts read every catalogue key), 135 instead of 78 of 1,188 package suites
+(white-matter-lesions reads every path, desktop all of `scripts/`, `test/` and
+`test-utils/`, mri2vid and node-drivers every package) and the easter egg for 6 of the 22 instead of
+3 (the landing page's `./${...}` page paths read all of `scripts/lib`). The
+oracle has no expectation of its own for site keys or `ci.yml` jobs, and the
+report lists the 4 rows narrowed through them (#864, #872, #861, #854); an
+independent oracle for both is a follow-up. Replayed over every `ci` run of 16
+to 18 November (each pull request diffed from main as it stood when its run
+started, each push from its parent), the planner leaves out 2,288 minutes of
+per-app jobs (2,304 before the fixes, the #864 and #872 runs), 385 of the 437
+easter-egg minutes (405 before) and 4,737 of 5,400 package-suite runs (5,029
+before): about 475 package-test minutes, scaling the earlier estimate of 503
+minutes by suite runs.
 
 ## Module-level selection in the component package
 
@@ -336,8 +382,8 @@ run during draft feedback.
 A manual `ci` run plans like a pull request: `gh workflow run ci --ref
 <branch>` tests the apps the branch changed since it left main (on main,
 since the last finished run, as a push does). `-f scope=gpu` runs only the macOS GPU suite of
-those apps, `-f scope=site` only the composite site and its agentic checks
-(with `agentic_mode`), and `-f scope=all` every app. Like a pull request,
+those apps, `-f scope=site` only the composite site, its agentic checks (with
+`agentic_mode`) and the homepage easter egg, and `-f scope=all` every app. Like a pull request,
 `affected` builds the composite site only when its plan needs it. On 13 November 2026 all
 three manual runs tested every app (3,037 runner minutes) to reach the GPU
 suite or the agentic checks. A dispatch no longer moves the tested base main's
@@ -349,11 +395,12 @@ finished main run, covering accumulated merges. When that run failed, the
 push also selects the apps whose `app-tests` or browser jobs did not pass
 there (`resolveCiBase`, `carriedApps`): on 13 November 2026 synthsr's GPU job
 failed for 7 hours, and each push in that time tested all 63 apps from the
-last green run; replayed, the second of them selects synthsr alone. A failed
-job that belongs to no app, such as the plan itself or a job the plan narrows
-(`workspace-contracts`, `homepage-easter-egg`), a job of that attempt
-that has not finished, or an app id the registry does not know sends the push
-back to the last green run. A carried app runs all its jobs again, but a push
+last green run; replayed, the second of them selects synthsr alone. A
+`workspace-contracts` or `homepage-easter-egg` job that did not pass there runs
+again in full on the push, whichever base it takes. Any other failed job that
+belongs to no app, such as the plan itself, a per-app job of that attempt that
+has not finished, or an app id the registry does not know sends the push back
+to the last green run. A carried app runs all its jobs again, but a push
 leaves out `@slow` tests, so an app a nightly failed in a `@slow` test is
 retested in full only by the next nightly. Jobs only the nightly runs
 (`agent-interactions`) are not carried: the nightly runs them again. PR pushes cancel earlier runs

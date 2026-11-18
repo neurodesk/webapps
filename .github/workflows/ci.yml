@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       scope:
-        description: "affected: the apps the branch changes since it left main (main: like a push, since the last finished run); all: every app; gpu: only the macOS GPU suite of the affected apps; site: only the composite site and agentic checks"
+        description: "affected: the apps the branch changes since it left main (main: like a push, since the last finished run); all: every app; gpu: only the macOS GPU suite of the affected apps; site: only the composite site, agentic checks and homepage easter egg"
         type: choice
         options: [affected, all, gpu, site]
         default: affected
