@@ -51,6 +51,14 @@ import { resolveShellAdapter } from './shell-adapters/index.js';
       if (text) text.textContent = `Could not open the image sent from another app: ${error.message}`;
     });
 
+  // A browser's built-in agent reaches the app through WebMCP. Browsers without it load none of that code.
+  const modelContext = document.modelContext ?? navigator.modelContext;
+  if (modelContext) {
+    import(/* @vite-ignore */ new URL('webmcp/page.js', metadata.componentsHref).href)
+      .then(({ exposeWebMcp }) => exposeWebMcp(modelContext, document))
+      .catch((error) => console.warn('Neurodesk WebMCP tools were not registered:', error));
+  }
+
   const icons = {
     about: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg>',
     cite: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3.5h12a2 2 0 0 1 2 2V21H7a2 2 0 0 1-2-2V3.5Z"/><path d="M7 17h12M9 7h6"/></svg>',

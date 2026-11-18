@@ -228,41 +228,18 @@ export function registerAppAutomation({ app, operations, convertDicom, contractU
     registerViewer: (id, adapter) => viewers.register(id, adapter),
     agentConnection: options => createAgentConnection(() => viewers.niivue(), options),
   };
-  target.neurodeskAutomation = Object.freeze({ dispatch });
-  const modelContext = webMcpContext(doc);
-  if (modelContext) {
-    void exposeWebMcp(modelContext, {
-      ready, dispatch, doc,
-      inputs: {
-        adopt,
-        held: () => Object.fromEntries([...adopted].map(([role, files]) => [role, files.map(file => ({ name: file.name, bytes: file.size }))])),
-      },
-    }).catch(error => console.warn('WebMCP tools were not registered', error));
-  }
+  target.neurodeskAutomation = Object.freeze({
+    dispatch,
+    async adopt(role, files) {
+      await ready;
+      return adopt(role, files);
+    },
+    held: () => Object.fromEntries([...adopted].map(([role, files]) => [role, files.map(file => ({ name: file.name, bytes: file.size }))])),
+  });
+  // The shell's WebMCP module loads apart from the app and may arrive before or after this registration.
+  target.dispatchEvent?.(new target.Event('neurodesk-automation'));
   pageRegistration = handle;
   return handle;
-}
-
-// WebMCP tools register wherever the browser exposes a model context: the person starts the browser's
-// agent themselves, and nothing leaves the page until it calls a tool. Gate them here if that changes.
-function webMcpContext(doc) {
-  return doc.modelContext ?? doc.defaultView?.navigator?.modelContext ?? null;
-}
-
-// The examples the page's own selectors offer, so an agent loads exactly what the person could.
-function pageExamples(doc) {
-  const examples = new Map();
-  for (const selector of doc.querySelectorAll('nd-example-selector')) {
-    for (const example of selector.examples ?? []) if (!examples.has(example.id)) examples.set(example.id, example);
-  }
-  return [...examples.values()];
-}
-
-async function exposeWebMcp(modelContext, { ready, dispatch, doc, inputs }) {
-  const [{ webMcpTools, registerWebMcpTools }, { createAgentPrompts }] = await Promise.all([import('./webmcp.js'), import('../ui/agentPrompt.js')]);
-  const prompts = createAgentPrompts(doc);
-  const tools = webMcpTools({ contract: await ready, dispatch, inputs, examples: () => pageExamples(doc), askUser: prompts.ask, requestFiles: prompts.requestFiles });
-  return registerWebMcpTools(modelContext, tools);
 }
 
 export function registerViewer(id, adapter) {

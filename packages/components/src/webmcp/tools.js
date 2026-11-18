@@ -1,5 +1,5 @@
 import { fetchModel } from '../worker/fetchModel.js';
-import { convertsDicom } from './files.js';
+import { convertsDicom } from '../automation/files.js';
 
 const terminal = new Set(['idle', 'succeeded', 'failed', 'cancelled']);
 const POLL_MS = 250;
