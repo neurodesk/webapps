@@ -164,10 +164,11 @@ test('the deploy workflow deploys every Worker site the registry declares', asyn
   const workflow = parse(await readFile(join(repoRoot, '.github/workflows/deploy-pages.yml'), 'utf8'));
   // The build's plan lists the Worker sites it publishes from the registry (test/site-deploy.test.mjs).
   assert.equal(workflow.jobs['deploy-workers'].strategy.matrix.include, '${{ fromJSON(needs.build.outputs.workers) }}');
-  assert.equal(workflow.jobs['verify-workers'].strategy.matrix.include, '${{ fromJSON(needs.build.outputs.verify_workers) }}');
+  assert.equal(workflow.jobs['verify-sites'].strategy.matrix.include, '${{ fromJSON(needs.build.outputs.verify) }}');
   const upload = workflow.jobs.build.steps.find((step) => step.with?.name === 'worker-sites');
   assert.deepEqual(upload.with.path.trim().split('\n'), workerSites(full).flatMap(({ site }) => [`dist-sites/${site}`, `dist-sites/${site}.wrangler.json`]));
-  const hubCheck = workflow.jobs['deploy-workers'].steps.find((step) => step.name === 'Check the hub lists every catalogue');
+  const hubCheck = workflow.jobs['verify-hub'].steps.find((step) => step.name === 'Check the hub lists every catalogue');
+  assert.match(hubCheck.run, new RegExp(`--retry-all-errors https://${full.site.hub.host.replaceAll('.', '\\.')}/\\)`), 'the hub check reads the hub');
   assert.match(hubCheck.run, new RegExp(`for host in ${full.site.catalogs.map(({ host }) => host).join(' ')}; do`), 'the hub check covers every catalogue');
   const pages = workflow.jobs.build.steps.find((step) => step.uses?.startsWith('actions/upload-pages-artifact'));
   const primary = full.site.catalogs.find((catalog) => catalog.hosting === 'pages');

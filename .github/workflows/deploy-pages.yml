@@ -14,6 +14,8 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  # The deploy plan reads this workflow's earlier runs on main.
+  actions: read
 
 concurrency:
   # Let a running deploy finish; GitHub keeps only the newest pending run, so
@@ -31,7 +33,8 @@ jobs:
     outputs:
       pages: ${{ steps.plan.outputs.pages }}
       workers: ${{ steps.plan.outputs.workers }}
-      verify_workers: ${{ steps.plan.outputs.verify_workers }}
+      verify: ${{ steps.plan.outputs.verify }}
+      verify_hub: ${{ steps.plan.outputs.verify_hub }}
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -65,10 +68,14 @@ jobs:
         run: node --test test/catalog-sites.test.mjs
       # Publishes a site only when its content differs from the digest record its
       # host serves, or its usage report predates the daily refresh. A site whose
-      # record cannot be read is published, so a failed deploy is retried.
+      # record cannot be read is published. Every site is published when the
+      # previous deploy run on main that did any work was not green, so a failed
+      # deploy or check is retried. The daily run checks every live site.
       - name: Decide which sites to publish
         id: plan
-        run: node scripts/plan-site-deploy.mjs ${{ github.event_name == 'workflow_dispatch' && '--deploy-all' || '' }}
+        run: node scripts/plan-site-deploy.mjs ${{ github.event_name == 'workflow_dispatch' && '--deploy-all' || github.event_name == 'schedule' && '--verify-all' || '' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       # Content the hosts already serve passed these checks when it was published.
       - name: Install runtime startup test browser
         if: steps.plan.outputs.verify_build == 'true'
@@ -197,24 +204,31 @@ jobs:
         run: pnpm dlx wrangler@3.114.17 deploy --config dist-sites/${{ matrix.site }}.wrangler.json
       - name: Check the ${{ matrix.site }} site answers on its custom domain
         run: curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 15 --output /dev/null ${{ matrix.url }}
+
+  # The checks below read the public hosts, not the build: they run for each
+  # site this run publishes and, on the daily run, for every live site.
+  verify-hub:
+    runs-on: ubuntu-latest
+    needs: [build, deploy-workers]
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.build.outputs.verify_hub == 'true' && (needs.deploy-workers.result == 'success' || needs.deploy-workers.result == 'skipped') }}
+    steps:
       - name: Check the hub lists every catalogue
-        if: matrix.site == 'hub'
         run: |
-          page="$(curl --fail --silent --show-error --retry 5 --retry-all-errors ${{ matrix.url }})"
+          page="$(curl --fail --silent --show-error --retry 5 --retry-all-errors https://webapps.sciget.org/)"
           for host in webapps.neurodesk.org mskapps.sciget.org microscopyapps.sciget.org preclinicalapps.sciget.org; do
             grep -q "href=\"https://$host/\"" <<< "$page" || { echo "hub does not link $host"; exit 1; }
           done
 
   # Browser checks run apart from the deploy so a flaky check cannot hold back
-  # the Pages deploy.
-  verify-workers:
+  # the Pages deploy. The Pages deploy job checks the neuro site it publishes.
+  verify-sites:
     runs-on: ubuntu-latest
     needs: [build, deploy-workers]
-    if: needs.build.outputs.verify_workers != '[]'
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.build.outputs.verify != '[]' && (needs.deploy-workers.result == 'success' || needs.deploy-workers.result == 'skipped') }}
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.build.outputs.verify_workers) }}
+        include: ${{ fromJSON(needs.build.outputs.verify) }}
     env:
       BASE_URL: ${{ matrix.url }}
       SITE_CATALOG: ${{ matrix.site }}
