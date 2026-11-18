@@ -218,27 +218,43 @@ Its model pack is tested with every app it serves that reads a model.
   `wrangler deploy --config dist-sites/<site>.wrangler.json`, using the
   `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets;
 - runs the deployed checks (`pnpm test:deployed`,
-  `test/standalone-downloads.smoke.mjs`, `pnpm test:image-uploads`) once per host,
-  with `SITE_CATALOG=<catalogue>` limiting them to that host's apps.
+  `test/standalone-downloads.smoke.mjs`, `pnpm test:image-uploads`) once per
+  catalogue host, with `SITE_CATALOG=<catalogue>` limiting them to that host's
+  apps, and checks that the hub links every catalogue (`verify-hub`).
 
-Each step runs only for the sites the run publishes. A site's content digest is
-SHA-256 over its files' relative paths and bytes, plus its Wrangler
+The deploy steps run only for the sites the run publishes. A site's content
+digest is SHA-256 over its files' relative paths and bytes, plus its Wrangler
 configuration, leaving out the root `analytics.json` and `site-digest.json`.
-`site-digest.json` records the digest, the usage report's `generatedAt` and the
-commit. A site is published when:
+`site-digest.json` records the digest, the usage report's `generatedAt` (an ISO
+instant or null) and the commit (40 hex digits, or null outside Actions). A site
+is published when:
 
 - the run was dispatched, by hand or by `standalone-catalog.yml` (every site);
-- its host does not serve a readable record of this site, so a failed deploy is
-  retried by the next run;
+- the previous run of this workflow on `main` that started a job did not finish
+  green (failed, cancelled part-way or timed out), or that history cannot be
+  read (every site). A run cancelled while it waited never started a job, so
+  the run before it decides. A live digest proves the bytes are live, not that
+  their deploy and checks passed, so a failed Worker deploy, a sibling whose
+  checks it skipped, or a failed browser check is retried by the next run;
+- its host does not serve a readable record of this site. Only a direct `200`
+  answer with an `application/json` type and no `Age` above 0 counts: a
+  redirect is not followed, and the request asks every cache to revalidate. A
+  record with a field of the wrong type is unreadable too;
 - its digest differs from the served one;
 - its served usage report predates the last 04:17 UTC refresh. The daily
   schedule exists for this: each catalogue's report is refreshed once a day,
   by the first run after that time. The hub has no report.
 
+A site whose plan fails for any other reason is published. The job summary
+names each decision and, for a forced publish, the run that forced it.
+
 `pnpm test:runtime-startup` runs before a deploy only when some site's content
-may be new (the first three reasons). Content the hosts already serve passed it
-when it was published. The deployed checks run for every published site, so
-the daily refresh still checks each catalogue host once a day.
+may be new (every reason but the usage report). Content the hosts already serve
+passed it when it was published. The deployed checks run for every site a run
+publishes, and the daily run checks every live site, published or not: those
+checks read the public hosts and the checked-out registry, not the build. So a
+broken live site, or a change to the check scripts, is found within a day even
+when no site changes and GA4 is unavailable.
 
 Two builds of one commit differ only in `analytics.json`. `calmar/build-info.json`
 names the commit of calmar's last uncached build and stays in the digest, so a
@@ -254,6 +270,6 @@ attach the custom domains.
    icon to `site/` (and to `sharedSiteAssets` in `scripts/build-site.mjs`) if it
    has a new brand.
 2. Set `catalog:` on its apps.
-3. Add its site to the `worker-sites` artifact and the hub check in `deploy-pages.yml` (`test/catalog-site-projection.test.mjs` holds both to the registry). The `deploy-workers` and `verify-workers` matrices come from the registry through the deploy plan. The Pages deploy waits for `deploy-workers`, so the neuro 404 page never redirects to a host that is not live yet.
+3. Add its site to the `worker-sites` artifact and the hub check in `deploy-pages.yml` (`test/catalog-site-projection.test.mjs` holds both to the registry). The `deploy-workers` and `verify-sites` matrices come from the registry through the deploy plan. The Pages deploy waits for `deploy-workers`, so the neuro 404 page never redirects to a host that is not live yet.
 4. Build, then run `node --test test/catalog-sites.test.mjs` and
    `pnpm audit:artifacts`.
