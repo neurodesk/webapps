@@ -156,3 +156,30 @@ At most two dispatches for this round, counting any that fail.
   committed before dispatch 2; that set alone decides it.
 - Otherwise the round stops after dispatch 1. Whatever is not supported stays a
   documented gap, and the port's AV and grid are unchanged.
+
+## Addendum: dispatch 1 recorded on no AMD CPU
+
+Written after dispatch 1 (run
+[44216621796](https://github.com/neurodesk/webapps/actions/runs/44216621796),
+commit 860f39a67) and before any model was evaluated on its recording.
+
+Both runners were Intel CPUs, a Xeon Platinum 8573C (ubuntu-22.04) and a Xeon
+6975P-C (ubuntu-24.04). Each host's two MATLAB processes agree exactly, and the
+two hosts' 4,112 arrays are byte-identical. By the AMD rule this dispatch
+decides nothing, and it counts as the first of the two.
+
+The rest of the round:
+
+- Dispatch 1's recording is used only to build candidates. Anything built from
+  it is built from its discovery sets and grids alone.
+- **Dispatch 2** records this round again, unchanged, together with a fresh
+  held-out set drawn with seed 7321 (`hull-area-inputs-2.json`). The code and
+  predictions of every candidate built from dispatch 1 are committed, with their
+  digest, before dispatch 2.
+- Decisions use dispatch 2's AMD recordings under the rules above. A frozen or
+  conditional model must hold on every discovery set, the original held-out
+  sets and the fresh set. A model built from dispatch 1 is judged on the
+  discovery sets and on the fresh set alone. Dispatch 1's recording is reported
+  beside them.
+- If dispatch 2 also records on no AMD CPU, the round stops undecided. Both
+  recordings are then reported, and the port's AV and grid stay as they are.
