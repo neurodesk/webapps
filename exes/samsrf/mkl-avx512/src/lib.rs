@@ -1,25 +1,30 @@
-//! MATLAB R2023b's real double least squares as MKL 2021.3 runs it on its AVX512_E1
-//! branch, the branch MKL picks on the recorded Intel hosts: `[a b] \ Y` (`?geqp3`,
+//! MATLAB R2023b's real double least squares as MKL 2021.3 ran it on its AVX512_E1 branch
+//! on the recorded Intel Xeon hosts (8370C, 8573C, 6975P-C): `[a b] \ Y` (`?geqp3`,
 //! `?ormqr`, `?trsv`/`?trsm`), `detrend`'s fit and `samsrf_removenoise`.
 //!
 //! The shipped port (`samsrf_core::lstsq`) follows MKL's CNR `auto` branch on AMD hosts.
-//! MATLAB on an Intel host rounds the same solves differently, so one output cannot equal
-//! both hosts' recordings. This crate is the second, explicit reference: it reproduces the
-//! Intel recordings, and nothing ships it (no shipped crate depends on it and a
-//! WebAssembly build refuses it). Choosing either arithmetic for users is a separate
-//! decision.
+//! MATLAB on those Intel hosts rounds the same solves differently, so one output cannot
+//! equal both hosts' recordings. This crate is a separate, test-only reference for the
+//! Intel recordings. Nothing ships it (no shipped crate depends on it and a WebAssembly
+//! build refuses it), and it corrects nothing in the shipped module: that module still
+//! loses the Intel exact values listed in packages/samsrf/validation/matlab/README.md
+//! ("Double global regression"). Choosing an arithmetic for users is a separate decision.
 //!
-//! Identified from the pinned Intel Xeon 8370C kernel recording (run 43127453138): every
-//! step of its 95 real double chains and Q'Y and coefficients of its 190 eight-column
-//! solves. Frozen, then confirmed bit for bit on held-out recordings: `detrend` of all
-//! 1,485 constants-gamma-gemv direct cases (Intel Xeon 6975P-C, 1-12 right-hand sides,
-//! 1-250 rows) and the three double `samsrf_removenoise` revcor cases (Intel Xeon 8370C,
-//! 21 right-hand sides, up to 1,500 rows). See packages/samsrf/validation/matlab/README.md
-//! ("Intel AVX-512 and the reference host") and its `intel-avx512/` record.
+//! Fitted on the pinned Intel Xeon 8370C kernel recording (run 43127453138): every step of
+//! its 95 real double two-column chains and Q'Y and coefficients of its 190 eight-column
+//! solves. The frozen model then reproduced the constants-gamma-gemv direct `detrend` cases
+//! and the double `samsrf_removenoise` revcor cases, but both had been read before the
+//! freeze, so they corroborate it by replay, not as blind holdouts. See
+//! packages/samsrf/validation/matlab/intel-avx512/README.md.
 //!
-//! Scope: real double designs of finite values. Single and complex designs, MATLAB's
-//! `x' * y` from 51 elements, `y' * A` and the CF and corr paths are not identified for
-//! this branch and are not here.
+//! Established only for what was recorded: finite real two-column designs with 2, 3, 16,
+//! 37, 250 or 1,500 rows, solved for 1-3, 5-12, 21, 76 or 96 right-hand sides or for every
+//! vertex of a whole-hemisphere run, including the recorded rank-1 designs and the
+//! `xLARFG` rescale of subnormal reflectors. Not established by any recording: more than
+//! two columns (norm downdating and later pivots), reflectors that end in zeros (`xLARF`'s
+//! trim), the `xLARFG` halving path, exact and near rounding ties of the norm (see `nrm2`),
+//! nonfinite inputs, single and complex designs, and every other MKL kernel. Changing those
+//! paths leaves every gate passing (mutation review, 2026-11-18).
 
 use samsrf_core::timeseries::TimeSeries;
 use samsrf_core::{Error, Result};
@@ -31,9 +36,12 @@ compile_error!("samsrf-mkl-avx512 must never be built for WebAssembly");
 /// `xLARFG`'s rescaling threshold, `safmin / (eps / 2)` as LAPACK computes it.
 const RESCALE: f64 = f64::MIN_POSITIVE / (f64::EPSILON * 0.5);
 
-/// `dnrm2` on the AVX512_E1 branch: the correctly rounded Euclidean norm (round to
-/// nearest, ties to even) of the exact sum of squares. NaN if any value is NaN, infinity
-/// if any is infinite.
+/// The correctly rounded Euclidean norm (round to nearest, ties to even) of the exact sum
+/// of squares; NaN if any value is NaN, infinity if any is infinite. This is a candidate for
+/// MKL's `dnrm2` on the AVX512_E1 branch, not an identification of it: it equals every
+/// recorded Intel norm except one, where the exact norm lies 6.4e-5 ULP above a rounding
+/// midpoint and MATLAB's result is one ULP lower (pinned in the gates). MKL's rounding that
+/// close to a tie is not known.
 pub fn nrm2(values: &[f64]) -> f64 {
     if values.iter().any(|v| v.is_nan()) {
         return f64::NAN;

@@ -1,13 +1,16 @@
-//! The Intel AVX512_E1 reference (`samsrf_mkl_avx512`) against every pinned Intel
-//! recording of MATLAB's real double least squares. Each test returns when its recording is
-//! not configured; the environment variables are the ones the AMD gates use.
+//! The test-only Intel AVX512_E1 reference (`samsrf_mkl_avx512`) against the pinned MATLAB
+//! recordings of finite real double least squares from the observed AVX512_E1 Xeon hosts
+//! (8370C, 8573C, 6975P-C). Each test returns when its recording is not configured; a pair
+//! of variables set only halfway fails. The variables are the ones the AMD gates use.
 //!
-//! Identification and freezes: packages/samsrf/validation/matlab/intel-avx512/README.md.
-//! The kernel recording (SAMSRF_QR_KERNELS_DIR) and the numerics norms were the discovery
-//! set; the direct detrend cases (SAMSRF_CGG_DIR) and the global regression
-//! (SAMSRF_REVCOR_REFERENCE_DIR) were held out and frozen before they were read; the
-//! 134,257-134,260-vertex pipeline runs, the revcor raw-file preprocessing and the
-//! SamSrfAnalysis preprocessing were compared after the freeze, with no change to the model.
+//! Record: packages/samsrf/validation/matlab/intel-avx512/README.md. The kernel recording
+//! (SAMSRF_QR_KERNELS_DIR) and the numerics norms were discovery data. The direct detrend
+//! cases (SAMSRF_CGG_DIR) and the global regression (SAMSRF_REVCOR_REFERENCE_DIR) were read
+//! before the freeze (stage trace, coefficient probe), so they corroborate the frozen model
+//! by replay; they are not blind holdouts. The 134,257-134,260-vertex pipeline runs, the
+//! revcor raw-file preprocessing, the SamSrfAnalysis preprocessing and the CSS pipeline
+//! courses were compared after the freeze, with no change to the model. None of this
+//! changes the shipped module, which still follows the AMD branch.
 use samsrf_core::gifti;
 use samsrf_mkl_avx512::{self as mkl_avx512, Design, Detrender};
 use samsrf_core::preprocess;
@@ -39,6 +42,7 @@ fn partial_fixture_configuration_is_rejected() {
         ["SAMSRF_CGG_DIR", "SAMSRF_CGG_RUNS_DIR"],
         ["SAMSRF_REVCOR_REFERENCE_DIR", "SAMSRF_MATRIX_INPUT_DIR"],
         ["SAMSRF_CLI_REFERENCE_DIR", "SAMSRF_CLI_COURSES_DIR"],
+        ["SAMSRF_MATLAB_CSS_PIPELINES_DIR", "SAMSRF_MATRIX_INPUT_DIR"],
     ] {
         assert_eq!(paired_roots(names, [None, None]), None);
         let roots = [PathBuf::from("recording"), PathBuf::from("inputs")];
@@ -371,7 +375,7 @@ fn raw_preprocessing_equals_matlab_on_the_intel_host() {
     let matrix = json(&dir.join("revcor-matrix.json"));
     let manifest = json(&input.join("manifest.json"));
     let mut values = 0;
-    let mut cases = 0;
+    let mut cases = std::collections::BTreeSet::new();
     for pre in matrix["cases"].as_array().unwrap().iter().filter(|c| c["kind"] == "preprocess" && c["precision"] == "double") {
         let dataset = pre["dataset"].as_str().unwrap();
         let entry = manifest["datasets"].as_array().unwrap().iter().find(|d| d["id"] == dataset).unwrap();
@@ -397,10 +401,11 @@ fn raw_preprocessing_equals_matlab_on_the_intel_host() {
         let global: Vec<f64> = sum.iter().zip(&count).map(|(s, c)| s / f64::from(*c)).collect();
         let regression = matrix["cases"].as_array().unwrap().iter().find(|c| c["preprocessing"] == pre["id"] && c["id"].as_str().unwrap().ends_with("mode0_smooth0_global1")).unwrap();
         assert_eq!(bits(&array(&dir, &regression["globalSignal"])), bits(&global), "{}: global signal", pre["id"]);
-        cases += 1;
+        assert!(cases.insert(pre["id"].as_str().unwrap().to_string()), "{}: duplicate case", pre["id"]);
     }
-    assert_eq!(cases, 3, "double preprocessing cases");
-    println!("raw preprocessing on the Intel host: {values} values equal MATLAB's");
+    let expected = ["revcor_double_x001_lh_average0", "revcor_double_x001_lh_average1", "revcor_double_x001_rh_average1"];
+    assert_eq!(cases, expected.iter().map(|id| id.to_string()).collect(), "double preprocessing cases");
+    assert_eq!(values, 187_000, "double preprocessing values");
 }
 
 /// The SamSrfAnalysis recording's double `Srf.Y` on its Intel host (compared after the
@@ -411,9 +416,17 @@ fn preprocessed_courses_equal_matlab_on_the_intel_host() {
     let manifest = json(&courses.join("manifest.json"));
     let plan = &manifest["plan"];
     let host = &manifest["hosts"]["intel"];
-    assert!(host["cpu"].as_str().unwrap().to_uppercase().starts_with("INTEL"), "{}", host["cpu"]);
+    // Both MATLAB processes of the recording's Intel host report MKL's AVX512_E1 branch on
+    // the CPU the extracted courses name.
+    let cpu = host["cpu"].as_str().unwrap();
+    for process in ["source-1", "source-2"] {
+        let receipt = json(&recording.join("ubuntu-24.04").join(process).join("receipts").join("environment.json"));
+        assert!(receipt["observed"]["blas"].as_str().unwrap().contains("CNR branch AVX512_E1"), "{process}: MKL branch");
+        let model = receipt["cpu"].as_str().unwrap().lines().find_map(|line| line.trim_start().strip_prefix("Model name:")).map(str::trim);
+        assert_eq!(model, Some(cpu), "{process}: the receipt's CPU is the extracted host's");
+    }
     let argument = |argv: &[Value], prefix: &str| argv.iter().filter_map(Value::as_str).find_map(|value| value.strip_prefix(prefix)).map(str::to_string);
-    let (mut compared, mut runs_compared) = (0, 0);
+    let (mut compared, mut compared_runs) = (0, std::collections::BTreeSet::new());
     for entry in host["runs"].as_array().unwrap() {
         let run = plan["runs"].as_array().unwrap().iter().find(|run| run["id"] == entry["id"]).unwrap();
         let model = &run["model"];
@@ -452,16 +465,23 @@ fn preprocessed_courses_equal_matlab_on_the_intel_host() {
         let first = port.iter().zip(&matlab).position(|(a, b)| a.to_bits() != b.to_bits());
         assert_eq!(same, matlab.len(), "{id}: first difference at {first:?}");
         compared += matlab.len();
-        runs_compared += 1;
+        assert!(compared_runs.insert(id.to_string()), "{id}: compared twice");
     }
-    println!("SamSrfAnalysis double preprocessing on the Intel host: {runs_compared} runs, {compared} values equal MATLAB's");
-    assert_eq!((runs_compared, compared), (11, 84_000), "double run and value inventory");
+    let expected = [
+        "cf_gaussian_lh_double", "cf_hull_lh_double", "cf_summary_lh_double", "prf_css_lh_double",
+        "prf_custom_hrf_lh_double", "prf_gaussian_lh_average_double", "prf_gaussian_lh_concatenate_double",
+        "prf_gaussian_rh_double", "rc_custom_hrf_lh_double", "rc_gaussian_lh_double", "rc_hull_lh_double",
+    ];
+    assert_eq!(compared_runs, expected.iter().map(|id| id.to_string()).collect(), "double runs whose Srf.Y is the preprocessing output");
+    assert_eq!(compared, 84_000, "double Srf.Y values");
 }
 
 /// `norm(x)` (`dnrm2`) and `norm(z)` (`dznrm2`, over interleaved parts) of the 24 BLAS
-/// vectors on both Intel hosts of the numerics recordings: each is the correctly rounded
-/// norm (24 of 24 per host, where MKL's AMD order is correctly rounded for 14 real and 11
-/// complex vectors). Discovery data for `nrm2`; no complex held-out set exists.
+/// vectors on both Intel hosts of the numerics recordings equal the correctly rounded norm
+/// (24 of 24 per host, where MKL's AMD order is correctly rounded for 14 real and 11 complex
+/// vectors). Discovery data only: the correctly rounded norm is a candidate with one known
+/// near-tie miss (`correctly_rounded_norm_is_a_candidate_with_one_known_miss`), and the
+/// complex norms have no other Intel evidence.
 #[test]
 fn numerics_norms_are_correctly_rounded_on_the_intel_hosts() {
     for variable in ["SAMSRF_MATLAB_NUMERICS_DIR", "SAMSRF_MATLAB_NUMERICS2_DIR"] {
@@ -546,4 +566,181 @@ fn write_held_out_inputs() {
         }
     }
     std::fs::write(out.join("index.json"), serde_json::to_string_pretty(&index).unwrap()).unwrap();
+}
+
+/// MATLAB's `mean` of a double vector (`samsrf_core::precision::mean_double`, which the
+/// core keeps private): one accumulator below 44 elements, otherwise four lanes by index.
+fn matlab_mean(values: &[f64]) -> f64 {
+    let mut sums = [0.0f64; 4];
+    for (index, &value) in values.iter().enumerate() {
+        sums[if values.len() >= 44 { index % 4 } else { 0 }] += value;
+    }
+    sums.iter().sum::<f64>() / values.len() as f64
+}
+
+/// MATLAB `corr` of two real courses shorter than 51 elements: centred with `mean`, its own
+/// pair-tree `x' * y` (identical on the AMD and Intel hosts below 51 elements), divided by
+/// each norm and limited to [-1, 1].
+fn short_corr(x: &[f64], y: &[f64], norm: &dyn Fn(&[f64]) -> f64) -> f64 {
+    assert!(x.len() < 51, "MKL computes x' * y from 51 elements");
+    let (mx, my) = (matlab_mean(x), matlab_mean(y));
+    let xc: Vec<f64> = x.iter().map(|v| v - mx).collect();
+    let yc: Vec<f64> = y.iter().map(|v| v - my).collect();
+    let r = samsrf_core::matlab_math::ddot_pairs(&xc, &yc) / norm(&xc) / norm(&yc);
+    if r.abs() > 1.0 { r / r.abs() } else { r }
+}
+
+/// A finite nonzero double as `m * 2^k`, `m` an integer below 2^53.
+fn decompose(value: f64) -> (u64, i64) {
+    let bits = value.abs().to_bits();
+    let (exponent, fraction) = ((bits >> 52) as i64, bits & ((1 << 52) - 1));
+    if exponent == 0 { (fraction, -1074) } else { (fraction | (1 << 52), exponent - 1075) }
+}
+
+/// Whether the exact Euclidean norm of `values` lies above the rounding midpoint just below
+/// `rounded`, closer to it than `1 / denominator` ULP (integer arithmetic throughout).
+fn just_above_lower_midpoint(values: &[f64], rounded: f64, denominator: u64) -> bool {
+    use num_bigint::BigUint;
+    // n = 2^2148 * sum of squares; with rounded = M 2^u, the lower midpoint squared times
+    // 2^2148 is (2M - 1)^2 K and twice the midpoint times one ULP is 4 (2M - 1) K, where
+    // K = 2^(2u - 2 + 2148).
+    let mut n = BigUint::default();
+    for &value in values.iter().filter(|v| **v != 0.0) {
+        let (m, k) = decompose(value);
+        n += (BigUint::from(m) * BigUint::from(m)) << ((2 * k + 2148) as usize);
+    }
+    let (m, u) = decompose(rounded);
+    let k = BigUint::from(1u8) << ((2 * u - 2 + 2148) as usize);
+    let odd = BigUint::from(2 * m - 1);
+    let midpoint_squared = &odd * &odd * &k;
+    n > midpoint_squared && (&n - &midpoint_squared) * BigUint::from(denominator) < BigUint::from(4u8) * odd * k
+}
+
+/// One recorded `corr` length: n, the 20 x and y courses (column-major) and MATLAB's r values.
+type CorrCase = (usize, Vec<f64>, Vec<f64>, Vec<f64>);
+
+/// The correctly rounded norm is a candidate for MKL's Intel `dnrm2`, not an identification
+/// of it. On the arithmetic-order recording's AVX512_E1 host (Xeon 6975P-C), `corr` from 25
+/// to 50 elements, where `x' * y` is MATLAB's host-independent pair tree, equals 519 of the
+/// 520 recorded values with that norm. The miss, n = 36 pair 6, is pinned: the exact norm of
+/// its centred y lies less than 1e-4 ULP above a rounding midpoint, and MATLAB's value needs
+/// that norm one ULP below the correctly rounded one. MKL's rounding near ties is not
+/// identified. Negative controls: the port's AMD order gives all 520 values on the AMD host
+/// and not on the Intel one, and the candidate is not the AMD order.
+#[test]
+fn correctly_rounded_norm_is_a_candidate_with_one_known_miss() {
+    let Some(root) = env("SAMSRF_ARITHMETIC_ORDER_DIR") else { return };
+    let (mut intel, mut amd) = (None, None);
+    for host in ["ubuntu-22.04", "ubuntu-24.04"] {
+        let dir = root.join(host).join("compatible");
+        let environment = json(&dir.join("arithmetic-order.json"))["environment"].to_string();
+        if environment.contains("CNR branch AVX512_E1") {
+            assert!(intel.replace(dir).is_none(), "two AVX512_E1 hosts");
+        } else if environment.contains("CNR branch auto") && environment.contains("AMD EPYC") {
+            assert!(amd.replace(dir).is_none(), "two AMD hosts");
+        }
+    }
+    let (intel, amd) = (intel.expect("an AVX512_E1 host"), amd.expect("an AMD host"));
+    let cases = |dir: &Path| -> Vec<CorrCase> {
+        let recording = json(&dir.join("arithmetic-order.json"));
+        let mut cases: Vec<_> = recording["cases"].as_array().unwrap().iter()
+            .filter(|c| c["kind"] == "corr" && (25..=50).contains(&c["n"].as_u64().unwrap()))
+            .map(|c| (c["n"].as_u64().unwrap() as usize, array(dir, &c["x"]), array(dir, &c["y"]), array(dir, &c["r"])))
+            .collect();
+        cases.sort_by_key(|c| c.0);
+        assert_eq!(cases.iter().map(|c| c.0).collect::<Vec<_>>(), (25..=50).collect::<Vec<_>>(), "corr lengths 25-50");
+        cases
+    };
+    let misses = |dir: &Path, norm: &dyn Fn(&[f64]) -> f64| -> Vec<(usize, usize)> {
+        let mut misses = Vec::new();
+        for (n, x, y, r) in cases(dir) {
+            assert_eq!((x.len(), y.len(), r.len()), (20 * n, 20 * n, 20), "n = {n}: shapes");
+            for j in 0..20 {
+                if short_corr(&x[j * n..(j + 1) * n], &y[j * n..(j + 1) * n], norm).to_bits() != r[j].to_bits() {
+                    misses.push((n, j));
+                }
+            }
+        }
+        misses
+    };
+    let candidate = |v: &[f64]| mkl_avx512::nrm2(v);
+    let amd_order = |v: &[f64]| samsrf_core::matlab_math::nrm2(v.iter().copied());
+    assert_eq!(misses(&intel, &candidate), vec![(36, 6)], "Intel host: the correctly rounded norm's misses");
+    // The pinned miss: one ULP below the correctly rounded y norm reproduces MATLAB, and the
+    // exact y norm lies just above the midpoint below the correctly rounded value.
+    let (n, x, y, r) = cases(&intel).into_iter().find(|c| c.0 == 36).unwrap();
+    let (x, y) = (&x[6 * n..7 * n], &y[6 * n..7 * n]);
+    let (mx, my) = (matlab_mean(x), matlab_mean(y));
+    let xc: Vec<f64> = x.iter().map(|v| v - mx).collect();
+    let yc: Vec<f64> = y.iter().map(|v| v - my).collect();
+    let rounded = mkl_avx512::nrm2(&yc);
+    let one_below = samsrf_core::matlab_math::ddot_pairs(&xc, &yc) / mkl_avx512::nrm2(&xc) / rounded.next_down();
+    assert_eq!(one_below.to_bits(), r[6].to_bits(), "MATLAB's value needs the y norm one ULP lower");
+    assert!(just_above_lower_midpoint(&yc, rounded, 10_000), "the exact y norm is within 1e-4 ULP above a midpoint");
+    assert!(!just_above_lower_midpoint(&xc, mkl_avx512::nrm2(&xc), 10_000), "the x norm is not near a tie");
+    // Negative controls.
+    assert!(misses(&amd, &amd_order).is_empty(), "AMD host: the port's AMD order");
+    assert!(!misses(&amd, &candidate).is_empty(), "the candidate is not MKL's AMD order");
+    assert!(misses(&intel, &amd_order).len() > 100, "the AMD order is not the Intel host's");
+}
+
+/// The double CSS pipeline courses (css-pipelines run 43127425289): `samsrf_gii2srf` on the
+/// X001 left hemisphere, averaged, with this crate's detrend on the AVX512_E1 host (Xeon
+/// 8573C) and the shipped detrend on the AMD host, every value of both cases and both
+/// processes. Each detrend fails on the other host (negative controls). Compared after the
+/// freeze; the reviewer's replay of these courses found the same.
+#[test]
+fn css_pipeline_courses_equal_matlab_on_each_host() {
+    let Some([css, input]) = fixture_pair(["SAMSRF_MATLAB_CSS_PIPELINES_DIR", "SAMSRF_MATRIX_INPUT_DIR"]) else { return };
+    let manifest = json(&input.join("manifest.json"));
+    let entry = manifest["datasets"].as_array().unwrap().iter().find(|d| d["id"] == "x001_lh").unwrap();
+    let runs: Vec<RawRun> = entry["runs"].as_array().unwrap().iter().map(|run| gifti::read_run(&std::fs::read(input.join("x001_lh").join(run.as_str().unwrap())).unwrap()).unwrap()).collect();
+    let vertices: Vec<usize> = (0..runs[0].vertices).collect();
+    let reference = preprocess_on_avx512(&runs, &vertices, true).concat();
+    let shipped = {
+        let detrender = preprocess::Detrender::new(runs[0].volumes, runs[0].vertices);
+        let mut out = Vec::new();
+        for &vertex in &vertices {
+            let per_run: Vec<Vec<f64>> = runs.iter().map(|run| {
+                let mut course: Vec<f64> = run.course(vertex).iter().map(|&v| f64::from(v)).collect();
+                detrender.apply(&mut course, vertex);
+                preprocess::zscore(&mut course);
+                course
+            }).collect();
+            for t in 0..runs[0].volumes {
+                let (mut sum, mut count) = (0.0, 0u16);
+                for course in &per_run {
+                    if !course[t].is_nan() {
+                        sum += course[t];
+                        count += 1;
+                    }
+                }
+                out.push(sum / f64::from(count));
+            }
+        }
+        out
+    };
+    let (mut intel_hosts, mut amd_hosts) = (0, 0);
+    for host in ["ubuntu-22.04", "ubuntu-24.04"] {
+        for process in ["compatible", "repeat"] {
+            let dir = css.join(host).join(process);
+            let recording = json(&dir.join("pipelines.json"));
+            let environment = recording["environment"].to_string();
+            let avx512 = environment.contains("CNR branch AVX512_E1");
+            assert!(avx512 || (environment.contains("CNR branch auto") && environment.contains("AMD EPYC")), "{host} {process}: an AVX512_E1 or AMD auto host");
+            let ids: Vec<&str> = recording["cases"].as_array().unwrap().iter().map(|c| c["id"].as_str().unwrap()).collect();
+            assert_eq!(ids, ["pipeline_double_css", "pipeline_double_css_nonnegative"], "{host} {process}: cases");
+            for case in recording["cases"].as_array().unwrap() {
+                assert_eq!(case["courses"]["shape"], serde_json::json!([250, 96]), "{host} {process} {}: shape", case["id"]);
+                let courses = array(&dir, &case["courses"]);
+                let (own, other) = if avx512 { (&reference, &shipped) } else { (&shipped, &reference) };
+                assert_eq!(identical(own, &courses), courses.len(), "{host} {process} {}: own branch", case["id"]);
+                assert!(identical(other, &courses) < courses.len(), "{host} {process} {}: the other branch must differ", case["id"]);
+            }
+            if process == "compatible" {
+                if avx512 { intel_hosts += 1 } else { amd_hosts += 1 }
+            }
+        }
+    }
+    assert_eq!((intel_hosts, amd_hosts), (1, 1), "one AVX512_E1 and one AMD host");
 }
