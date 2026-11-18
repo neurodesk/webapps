@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { runInNewContext } from 'node:vm';
@@ -12,10 +13,11 @@ const workflow = async (name) => YAML.parse(await readFile(new URL(`../.github/w
 // What pr-gate.yml answers without a checkout: false for a draft, true for
 // every event other than pull_request. A ready pull request is decided by
 // scripts/lib/workflow-gate.mjs; `reached` stands for its answer.
+// native.yml's gate names every workflow it may call in its skip list for a draft.
+const nativeCalls = JSON.stringify(YAML.parse(readFileSync(new URL('../.github/workflows/native.yml', import.meta.url), 'utf8')).jobs.gate.with.calls.split(' '));
 const gate = (github, reached = true) => {
   const run = github.event_name !== 'pull_request' || (!github.event?.pull_request?.draft && reached);
-  // native.yml's gate passes on the workflows it runs: none for a draft.
-  return { gate: { result: 'success', outputs: { run: String(run), workflows: run ? undefined : '[]' } } };
+  return { gate: { result: 'success', outputs: { run: String(run), skips: run ? undefined : nativeCalls } } };
 };
 // GitHub's contains() and fromJSON(), as native.yml's calls use them.
 const text = (value) => (value === undefined || value === null ? '' : String(value)).toLowerCase();

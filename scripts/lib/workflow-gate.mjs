@@ -271,15 +271,18 @@ export function certainOwnStart(flow, { paths, renamed = new Set() }) {
   return null;
 }
 
+// The skip verdict native.yml gives a workflow GitHub certainly started itself.
+export const startsItself = ({ path, filter }) => `starts itself: ${path} matches its own filter ${filter}, and its own pull request run decides`;
+
 // Whether native.yml calls a workflow for a pull request. When GitHub
 // certainly started the workflow itself, its gate decides with every filter
-// and native.yml leaves it out. When that is not certain, native.yml decides
+// and native.yml skips it with that verdict. When that is not certain, native.yml decides
 // too: a workflow may then run twice, never not at all. A workflow none of
 // whose shared paths changed is one GitHub would not have started for them,
 // and any other gets the decision its gate would give.
 export function dispatchDecision({ flow, changedPaths, renamed = new Set(), ...rest }) {
   const own = certainOwnStart(flow, { paths: changedPaths, renamed });
-  if (own) return { run: false, reason: `${own.path} matches its own filter ${own.filter}, so its own pull request run decides` };
+  if (own) return { run: false, reason: startsItself(own) };
   if (!reachesSharedPaths(flow, changedPaths)) return { run: false, reason: 'none of its shared paths changed' };
   return decideWorkflow({ flow, changedPaths, ...rest });
 }

@@ -8,15 +8,14 @@
 //   node scripts/workflow-gate.mjs --workflow elastix-native --push --head <sha>
 //   node scripts/workflow-gate.mjs --workflow neuroflow --sweep --head <sha>
 //
-// With --native it decides at once for every workflow native.yml calls
-// (scripts/lib/native-decision.mjs) and writes the JSON list of the ones that
-// run to NATIVE_SELECTION, which pr-gate.yml checks before it passes it on
-// (without it, `workflows=<list>` goes to GITHUB_OUTPUT): for a pull request
-// those it may call, for the sweep those it sweeps. When it cannot decide for a
-// workflow, the workflow runs, and native.yml runs every workflow when the gate
-// fails. A ready pull request over its full-plan budget writes `withheld=true`
-// first and exits 1. NATIVE_ELIGIBLE (space-separated names) limits the
-// decision to those workflows, for local replays and tests.
+// With --native it decides at once for every workflow native.yml may call
+// (scripts/lib/native-decision.mjs), the ones NATIVE_ELIGIBLE names
+// (space-separated; without it, those the workflow files list), and writes the
+// JSON list of the ones it decided to skip to NATIVE_SKIPS, which pr-gate.yml
+// checks before it passes it on (without it, `skips=<list>` goes to
+// GITHUB_OUTPUT). native.yml runs every workflow that list does not name. A
+// ready pull request over its full-plan budget writes `withheld=true` first
+// and exits 1.
 //
 //   node scripts/workflow-gate.mjs --native --base <sha> --head <sha>
 //   node scripts/workflow-gate.mjs --native --sweep --head <sha>
@@ -205,8 +204,8 @@ if (native) {
     eligible,
     result,
     writeOutput: output,
-    // pr-gate.yml checks the selection before it passes it on.
-    writeSelection: (json) => (env.NATIVE_SELECTION ? writeFile(env.NATIVE_SELECTION, `${json}\n`) : output(`workflows=${json}`)),
+    // pr-gate.yml checks the skip list before it passes it on.
+    writeSkips: (json) => (env.NATIVE_SKIPS ? writeFile(env.NATIVE_SKIPS, `${json}\n`) : output(`skips=${json}`)),
     writeSummary: report,
   });
   // Reads the decision gave up on (a budget read past the deadline) must not hold the step open.

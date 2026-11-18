@@ -83,8 +83,9 @@ request that changes one starts `native.yml` instead. Its gate
 that run through `workflow_call`:
 
 - A workflow one of whose own paths changed was started by GitHub itself,
-  and its own gate decides with both kinds of filter. `native.yml` leaves it
-  out only when that start is certain (`certainOwnStart`): fewer than 3,000
+  and its own gate decides with both kinds of filter. `native.yml` skips it,
+  with the explicit verdict "starts itself", only when that start is certain
+  (`certainOwnStart`): fewer than 3,000
   changed files, and an own match that is neither side of a rename or copy,
   is a plain ASCII path, and falls under a literal filter, a directory
   followed by `**` or one `*` in the last segment, without a hidden file
@@ -99,17 +100,21 @@ that run through `workflow_call`:
   GitHub gives a called workflow its caller's `github` context. Its own gate
   answers `true` without a checkout, because `github.workflow_ref` names
   `native.yml`.
-- A draft answers `[]` without a checkout.
+- A draft names every workflow in the gate's `calls` list, generated into
+  `native.yml`, without a checkout.
 
-Running is the default. Each call's generated `if:` (`callCondition`)
-skips it only on proof: the gate succeeded and passed on a JSON array
-without the workflow's name. The decide step passes on the script's
-selection only after `jq` finds exactly one array of workflow names, and
-fails, with a warning, when the script fails or prints anything else. So a
-failed checkout, install or script, a gate that hits its timeout or is
-skipped, and a blank or malformed output all run every workflow `native.yml`
+Running is the default. The gate answers with the workflows it decided to
+skip, each by an explicit verdict (`skips`), and each call's generated `if:`
+(`callCondition`) skips it only when a gate that succeeded names it there.
+Absence means run: a workflow the answer leaves out, through a dropped,
+truncated, recased or unknown name or an empty list, runs. The decide step
+passes on the script's answer only when `jq` finds exactly one array whose
+names all come from `calls` (`sweeps` on the schedule), and fails, with a
+warning, when the script fails or prints anything else. So a failed
+checkout, install or script, a gate that hits its timeout or is skipped,
+and any answer the step does not pass on run every workflow `native.yml`
 calls (on the schedule, every one it sweeps). The one outcome that skips
-calls without that proof is a budget denial the gate confirmed: the script
+calls without being named is a budget denial the gate confirmed: the script
 writes `withheld=true` before any other output, summary or annotation, the
 step then succeeds so that the output arrives, every call skips, and the
 `full-plan-withheld` job fails the run. A missing or unreadable budget
@@ -118,13 +123,15 @@ answer, or one not read within the deadline, is no denial.
 Inside the gate the decision fails open too (`scripts/lib/native-decision.mjs`):
 every workflow it may call starts selected, and a stage that throws, cannot
 be read or is cut off by the five-minute deadline, which covers the budget
-reads, leaves the workflows it was deciding selected. An unreadable diff
+reads, leaves the workflows it was deciding selected, never named in
+`skips`. An unreadable diff
 (read NUL-delimited by `readChangedPaths`, so a name keeps its spaces, and
 never taken for an empty one) selects every workflow; a workflow file or
 registry that cannot be read selects every workflow not certainly started by
 its own paths; a failed decision selects its workflow; a summary that cannot
 be written changes nothing. `test/native-decision.test.mjs` evaluates every
-call condition for each gate outcome, runs the real decide step under
+call condition for each gate outcome and for a seeded stream of corrupted
+skip lists passed through the real decide step, runs that step under
 `bash -eo pipefail` with failing stubs, and makes each stage fail in turn.
 
 `test/workflow-gate.test.mjs` checks, over every workflow `native.yml` calls

@@ -39,16 +39,18 @@ export async function dispatchedWorkflows(root) {
 }
 
 // Whether native.yml calls a workflow. Running is the default: a call is
-// skipped only on proof that it need not run, which is a gate that succeeded
-// and passed on a JSON array (the decide step checks it) without the
-// workflow's name, or a full-plan denial the gate confirmed (`withheld`
-// exactly 'true'). A gate that failed, timed out, was cancelled or skipped, or
-// an output that is blank or not an array, runs it. A workflow native.yml does
-// not sweep is never called on the schedule. Every call uses this one
-// template; test/native-decision.test.mjs evaluates it for each gate outcome.
+// skipped only when the gate succeeded and names the workflow in its `skips`
+// output, the JSON array of the workflows it decided, each one explicitly, to
+// skip (the decide step checks that it holds only names native.yml may call),
+// or when the gate confirmed a full-plan denial (`withheld` exactly 'true').
+// Absence means run, so a gate that failed, timed out, was cancelled or
+// skipped, and a skip list that is missing, empty, truncated or names other
+// workflows, run it. A workflow native.yml does not sweep is never called on
+// the schedule. Every call uses this one template; test/native-decision.test.mjs
+// evaluates it for each gate outcome and for corrupted skip lists.
 export function callCondition(name, { sweep }) {
-  const proof = `needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"${name}"')`;
-  return `\${{ !cancelled() && ${sweep ? '' : "github.event_name != 'schedule' && "}needs.gate.outputs.withheld != 'true' && !(${proof}) }}`;
+  const skipped = `needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"${name}"')`;
+  return `\${{ !cancelled() && ${sweep ? '' : "github.event_name != 'schedule' && "}needs.gate.outputs.withheld != 'true' && !(${skipped}) }}`;
 }
 
 // The job that fails a run whose full plan the gate withheld.
@@ -77,9 +79,9 @@ export function renderNativeWorkflow(workflows) {
     '# (pr-gate.yml with `workflow: native`, scripts/lib/workflow-gate.mjs) and',
     '# it calls the ones the change reaches, on the pull request\'s own event and',
     '# commit. A workflow GitHub certainly started itself for its own paths is',
-    '# left out here. A call runs unless the gate proves it need not (callCondition',
-    '# in scripts/lib/native-workflow.mjs). The nightly schedule is the sweep of',
-    '# every called workflow that a push to main also starts.',
+    '# skipped here. A call runs unless the gate names it in its skip list',
+    '# (callCondition in scripts/lib/native-workflow.mjs). The nightly schedule',
+    '# is the sweep of every called workflow that a push to main also starts.',
     'on:',
     '  pull_request:',
     '    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]',
@@ -96,8 +98,8 @@ export function renderNativeWorkflow(workflows) {
     "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
     '',
     'jobs:',
-    '  # Decides which workflows run (scripts/lib/native-decision.mjs). Whatever',
-    '  # goes wrong in it runs them: each call skips only on its proof.',
+    '  # Decides which workflows to skip (scripts/lib/native-decision.mjs). Whatever',
+    '  # goes wrong in it runs them: each call skips only when the gate names it.',
     '  gate:',
     '    uses: ./.github/workflows/pr-gate.yml',
     '    permissions:',
@@ -106,6 +108,11 @@ export function renderNativeWorkflow(workflows) {
     '      pull-requests: read',
     '    with:',
     `      workflow: ${DISPATCHER}`,
+    '      # The workflows the gate may name in `skips`: all of them for a draft.',
+    '      calls: >-',
+    ...workflows.map(([name]) => `        ${name}`),
+    '      sweeps: >-',
+    ...workflows.filter(([, flow]) => swept(flow)).map(([name]) => `        ${name}`),
     '',
     '  # Fails where ci withholds the full plan too: every call was skipped.',
     '  full-plan-withheld:',

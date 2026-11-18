@@ -1,4 +1,4 @@
-import { certainOwnStart, dispatchDecision, mainWorkflow } from './workflow-gate.mjs';
+import { certainOwnStart, dispatchDecision, mainWorkflow, startsItself } from './workflow-gate.mjs';
 
 // The selection native.yml's gate makes (scripts/workflow-gate.mjs --native):
 // the workflows it calls for a pull request, or sweeps nightly.
@@ -60,7 +60,7 @@ export async function pullRequestSelection({ eligible, readDiff, readFlow, readC
     } catch {
       // Not established: it is decided.
     }
-    if (own) decisions.set(name, { run: false, reason: `${own.path} matches its own filter ${own.filter}, so its own pull request run decides` });
+    if (own) decisions.set(name, { run: false, reason: startsItself(own) });
     else flows.set(name, flow);
   }
   let context;
@@ -151,15 +151,18 @@ export async function sweepSelection({ eligible, readRegistry, readFlow, readBas
 
 // What the gate passes on, the confirmed denial first: `writeOutput` puts
 // `withheld=true` in the step's outputs before anything else, so no later
-// failure can erase it, and only after it the selection, which pr-gate.yml
-// checks is a JSON array of names. A summary that cannot be written changes
-// neither the verdict nor the exit code, which it returns.
-export async function publishNative({ eligible, result, writeOutput, writeSelection, writeSummary }) {
+// failure can erase it. Otherwise the answer is the skip list: the names whose
+// verdict is an explicit skip, which pr-gate.yml checks against the workflows
+// native.yml may call before it passes it on. A workflow missing from it runs,
+// so a dropped, unknown or truncated name can only run more. A summary that
+// cannot be written changes neither the verdict nor the exit code, which it
+// returns.
+export async function publishNative({ eligible, result, writeOutput, writeSkips, writeSummary }) {
   if (result.withheld) {
     await writeOutput('withheld=true');
     console.log(`::error title=Full plan withheld::native: ${result.withheld}`);
   } else {
-    await writeSelection(JSON.stringify(eligible.filter((name) => result.decisions.get(name)?.run !== false)));
+    await writeSkips(JSON.stringify(eligible.filter((name) => result.decisions.get(name)?.run === false)));
   }
   const lines = eligible.map((name) => {
     const decision = result.decisions.get(name);

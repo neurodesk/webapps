@@ -300,7 +300,9 @@ test('native.yml calls every workflow with shared paths, granting what its jobs 
   const native = YAML.parse(text);
   assert.deepEqual(Object.keys(native.on), ['pull_request', 'schedule']);
   assert.equal(native.on.schedule.length, 1);
-  assert.deepEqual(native.jobs.gate, { uses: './.github/workflows/pr-gate.yml', permissions: { contents: 'read', actions: 'read', 'pull-requests': 'read' }, with: { workflow: DISPATCHER } });
+  // The gate may name in its skip list only the workflows native.yml lists here.
+  const lists = { calls: nativeCalls.map(([name]) => name).join(' '), sweeps: nativeCalls.filter(([, flow]) => swept(flow)).map(([name]) => name).join(' ') };
+  assert.deepEqual(native.jobs.gate, { uses: './.github/workflows/pr-gate.yml', permissions: { contents: 'read', actions: 'read', 'pull-requests': 'read' }, with: { workflow: DISPATCHER, ...lists } });
   // A pull request that changes any workflow's shared path starts native.yml.
   const starts = native.on.pull_request.paths.map(pathGlob);
   for (const [name, flow] of nativeCalls) {
@@ -368,7 +370,7 @@ test('native.yml leaves a workflow to its own run, and decides one only its shar
   const dispatch = (changedPaths) => dispatchDecision({ flow, changedPaths, registry, graph, root: repoRoot });
   assert.deepEqual(sharedPaths(flow), ['packages/components/**', 'pnpm-lock.yaml']);
   assert.deepEqual(pullRequestFilters(flow), ['packages/elastix/**', 'packages/components/**', 'pnpm-lock.yaml']);
-  assert.match(dispatch(['packages/elastix/src/index.js', 'packages/components/src/ui/theme.js']).reason, /^packages\/elastix\/src\/index\.js matches its own filter packages\/elastix\/\*\*, so its own pull request run decides$/);
+  assert.match(dispatch(['packages/elastix/src/index.js', 'packages/components/src/ui/theme.js']).reason, /^starts itself: packages\/elastix\/src\/index\.js matches its own filter packages\/elastix\/\*\*, and its own pull request run decides$/);
   assert.deepEqual(dispatch(['docs/readme.md']), { run: false, reason: 'none of its shared paths changed' });
   assert.equal(dispatch(['packages/components/src/ui/theme.js']).run, false, 'elastix does not load the theme');
   assert.match(dispatch(['packages/components/src/file-io/NiftiUtils.js']).reason, /a script in packages\/elastix loads packages\/components\/src\/file-io\/NiftiUtils\.js/);
@@ -547,8 +549,11 @@ test('the gate answers drafts, dispatches and calls from native.yml without a ch
   const job = flow.jobs.decide;
   assert.equal(job.if, undefined, 'a skipped gate would skip every job after the entry jobs');
   assert.equal(job.outputs.run, '${{ steps.event.outputs.run || steps.decide.outputs.run }}');
-  assert.equal(job.outputs.workflows, '${{ steps.event.outputs.workflows || steps.decide.outputs.workflows }}');
-  assert.equal(flow.on.workflow_call.outputs.workflows.value, '${{ jobs.decide.outputs.workflows }}');
+  // native.yml reads the workflows the gate skips; there is no list of workflows to run.
+  assert.equal(job.outputs.skips, '${{ steps.event.outputs.skips || steps.decide.outputs.skips }}');
+  assert.equal(flow.on.workflow_call.outputs.skips.value, '${{ jobs.decide.outputs.skips }}');
+  assert.equal(job.outputs.workflows, undefined);
+  assert.equal(flow.on.workflow_call.outputs.workflows, undefined);
   assert.equal(flow.on.workflow_call.inputs.shared_paths.default, '');
   const [event, ...rest] = job.steps;
   assert.equal(event.id, 'event');
@@ -561,8 +566,8 @@ test('the gate answers drafts, dispatches and calls from native.yml without a ch
   assert.match(decideStep.run, /node scripts\/workflow-gate\.mjs --workflow "\$WORKFLOW" --base "\$BASE_SHA" --head "\$HEAD_SHA"/);
   assert.match(decideStep.run, /"\$EVENT_NAME" = schedule \]; then\n\s+node scripts\/workflow-gate\.mjs --workflow "\$WORKFLOW" --sweep --head "\$HEAD_SHA"/);
   assert.match(decideStep.run, /"\$EVENT_NAME" = push \]; then\n\s+node scripts\/workflow-gate\.mjs --workflow "\$WORKFLOW" --push --head "\$HEAD_SHA"/);
-  assert.match(decideStep.run, /if \[ "\$WORKFLOW" = native \]; then\n\s+if \[ "\$EVENT_NAME" = schedule \]; then\n\s+set -- --sweep\n\s+else\n\s+set -- --base "\$BASE_SHA"\n\s+fi/);
-  assert.match(decideStep.run, /NATIVE_SELECTION="\$selection" node scripts\/workflow-gate\.mjs --native "\$@" --head "\$HEAD_SHA" \|\| status=\$\?/);
+  assert.match(decideStep.run, /if \[ "\$WORKFLOW" = native \]; then\n\s+if \[ "\$EVENT_NAME" = schedule \]; then\n\s+eligible=\$SWEEPS\n\s+set -- --sweep\n\s+else\n\s+eligible=\$CALLS\n\s+set -- --base "\$BASE_SHA"\n\s+fi/);
+  assert.match(decideStep.run, /NATIVE_ELIGIBLE="\$eligible" NATIVE_SKIPS="\$answer" node scripts\/workflow-gate\.mjs --native "\$@" --head "\$HEAD_SHA" \|\| status=\$\?/);
   assert.equal(job.outputs.withheld, '${{ steps.decide.outputs.withheld }}');
   assert.equal(flow.on.workflow_call.outputs.withheld.value, '${{ jobs.decide.outputs.withheld }}');
   assert.equal(event.env.TOP_WORKFLOW, '${{ github.workflow_ref }}');
@@ -577,12 +582,13 @@ test('the gate answers drafts, dispatches and calls from native.yml without a ch
   };
   assert.equal(answer('workflow_dispatch', ''), 'run=true');
   for (const name of ['push', 'schedule']) assert.equal(answer(name, ''), '', name);
-  assert.equal(answer('pull_request', 'true'), 'run=false\nworkflows=[]');
+  assert.equal(answer('pull_request', 'true'), 'run=false');
   assert.equal(answer('pull_request', 'false'), '');
   // native.yml decides before it calls a workflow, so that workflow's own gate answers at once.
   const called = 'neurodesk/webapps/.github/workflows/native.yml@refs/pull/1/merge';
   for (const name of ['pull_request', 'schedule']) assert.equal(answer(name, 'false', 'bison-native', called), 'run=true', name);
-  assert.equal(answer('pull_request', 'true', 'native', called), 'run=false\nworkflows=[]');
+  // A draft skips every workflow native.yml lists, by name (test/native-decision.test.mjs).
+  assert.equal(answer('pull_request', 'true', 'native', called), 'run=false\nskips=[]');
   for (const name of ['pull_request', 'schedule']) assert.equal(answer(name, 'false', 'native', called), '', name);
   assert.equal(answer('pull_request', 'false', 'bison-native', 'neurodesk/webapps/.github/workflows/not-native.yml@refs/pull/1/merge'), '');
 });

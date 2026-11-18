@@ -8,9 +8,9 @@ name: native
 # (pr-gate.yml with `workflow: native`, scripts/lib/workflow-gate.mjs) and
 # it calls the ones the change reaches, on the pull request's own event and
 # commit. A workflow GitHub certainly started itself for its own paths is
-# left out here. A call runs unless the gate proves it need not (callCondition
-# in scripts/lib/native-workflow.mjs). The nightly schedule is the sweep of
-# every called workflow that a push to main also starts.
+# skipped here. A call runs unless the gate names it in its skip list
+# (callCondition in scripts/lib/native-workflow.mjs). The nightly schedule
+# is the sweep of every called workflow that a push to main also starts.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
@@ -43,8 +43,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Decides which workflows run (scripts/lib/native-decision.mjs). Whatever
-  # goes wrong in it runs them: each call skips only on its proof.
+  # Decides which workflows to skip (scripts/lib/native-decision.mjs). Whatever
+  # goes wrong in it runs them: each call skips only when the gate names it.
   gate:
     uses: ./.github/workflows/pr-gate.yml
     permissions:
@@ -53,6 +53,68 @@ jobs:
       pull-requests: read
     with:
       workflow: native
+      # The workflows the gate may name in `skips`: all of them for a draft.
+      calls: >-
+        ants-native
+        bison-native
+        brain2print-native
+        browserqc-native
+        calmar-native
+        carotid-flow-native
+        compute-server-native
+        deface-native
+        degibbs-native
+        dwi-native
+        dwi2trx-native
+        dwidenoise-native
+        easy-mp2rage-native
+        edgereg-native
+        elastix-native
+        hmc-native
+        hmc-registration
+        lcmodel-native
+        musclemap-native
+        musclemap-parity
+        n4-native
+        noddi-native
+        node-drivers
+        sdc-native
+        seedseg-native
+        spinalcordtoolbox-native
+        synthseg-native
+        synthseg-portable
+        vesselboost-native
+        white-matter-lesions-native
+      sweeps: >-
+        ants-native
+        bison-native
+        brain2print-native
+        browserqc-native
+        calmar-native
+        carotid-flow-native
+        compute-server-native
+        deface-native
+        degibbs-native
+        dwi-native
+        dwi2trx-native
+        dwidenoise-native
+        easy-mp2rage-native
+        edgereg-native
+        elastix-native
+        hmc-native
+        hmc-registration
+        lcmodel-native
+        musclemap-native
+        musclemap-parity
+        n4-native
+        noddi-native
+        node-drivers
+        sdc-native
+        seedseg-native
+        spinalcordtoolbox-native
+        synthseg-portable
+        vesselboost-native
+        white-matter-lesions-native
 
   # Fails where ci withholds the full plan too: every call was skipped.
   full-plan-withheld:
@@ -68,7 +130,7 @@ jobs:
 
   ants-native:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"ants-native"')) }}
+    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"ants-native"')) }}
     uses: ./.github/workflows/ants-native.yml
     permissions:
       actions: read
@@ -79,7 +141,7 @@ jobs:
 
   bison-native:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"bison-native"')) }}
+    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"bison-native"')) }}
     uses: ./.github/workflows/bison-native.yml
     permissions:
       actions: read
@@ -90,7 +152,7 @@ jobs:
 
   brain2print-native:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"brain2print-native"')) }}
+    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"brain2print-native"')) }}
     uses: ./.github/workflows/brain2print-native.yml
     permissions:
       actions: read
@@ -101,7 +163,7 @@ jobs:
 
   browserqc-native:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"browserqc-native"')) }}
+    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"browserqc-native"')) }}
     uses: ./.github/workflows/browserqc-native.yml
     permissions:
       actions: read
@@ -112,7 +174,7 @@ jobs:
 
   calmar-native:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"calmar-native"')) }}
+    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"calmar-native"')) }}
     uses: ./.github/workflows/calmar-native.yml
     permissions:
       actions: read
@@ -123,7 +185,7 @@ jobs:
 
   carotid-flow-native:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"carotid-flow-native"')) }}
+    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"carotid-flow-native"')) }}
     uses: ./.github/workflows/carotid-flow-native.yml
     permissions:
       actions: read
@@ -134,7 +196,7 @@ jobs:
 
   compute-server-native:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"compute-server-native"')) }}
+    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"compute-server-native"')) }}
     uses: ./.github/workflows/compute-server-native.yml
     permissions:
       actions: read
@@ -144,7 +206,7 @@ jobs:
 
   deface-native:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"deface-native"')) }}
+    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"deface-native"')) }}
     uses: ./.github/workflows/deface-native.yml
     permissions:
       actions: read
@@ -155,7 +217,7 @@ jobs:
 
   degibbs-native:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"degibbs-native"')) }}
+    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"degibbs-native"')) }}
     uses: ./.github/workflows/degibbs-native.yml
     permissions:
       actions: read
@@ -166,7 +228,7 @@ jobs:
 
   dwi-native:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"dwi-native"')) }}
+    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"dwi-native"')) }}
     uses: ./.github/workflows/dwi-native.yml
     permissions:
       actions: read
@@ -176,7 +238,7 @@ jobs:
 
   dwi2trx-native:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"dwi2trx-native"')) }}
+    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"dwi2trx-native"')) }}
     uses: ./.github/workflows/dwi2trx-native.yml
     permissions:
       actions: read
@@ -187,7 +249,7 @@ jobs:
 
   dwidenoise-native:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"dwidenoise-native"')) }}
+    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"dwidenoise-native"')) }}
     uses: ./.github/workflows/dwidenoise-native.yml
     permissions:
       actions: read
@@ -198,7 +260,7 @@ jobs:
 
   easy-mp2rage-native:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"easy-mp2rage-native"')) }}
+    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"easy-mp2rage-native"')) }}
     uses: ./.github/workflows/easy-mp2rage-native.yml
     permissions:
       actions: read
@@ -209,7 +271,7 @@ jobs:
 
   edgereg-native:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"edgereg-native"')) }}
+    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"edgereg-native"')) }}
     uses: ./.github/workflows/edgereg-native.yml
     permissions:
       actions: read
@@ -220,7 +282,7 @@ jobs:
 
   elastix-native:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"elastix-native"')) }}
+    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"elastix-native"')) }}
     uses: ./.github/workflows/elastix-native.yml
     permissions:
       actions: read
@@ -231,7 +293,7 @@ jobs:
 
   hmc-native:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"hmc-native"')) }}
+    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"hmc-native"')) }}
     uses: ./.github/workflows/hmc-native.yml
     permissions:
       actions: read
@@ -242,7 +304,7 @@ jobs:
 
   hmc-registration:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"hmc-registration"')) }}
+    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"hmc-registration"')) }}
     uses: ./.github/workflows/hmc-registration.yml
     permissions:
       actions: read
@@ -252,7 +314,7 @@ jobs:
 
   lcmodel-native:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"lcmodel-native"')) }}
+    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"lcmodel-native"')) }}
     uses: ./.github/workflows/lcmodel-native.yml
     permissions:
       actions: read
@@ -263,7 +325,7 @@ jobs:
 
   musclemap-native:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"musclemap-native"')) }}
+    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"musclemap-native"')) }}
     uses: ./.github/workflows/musclemap-native.yml
     permissions:
       actions: read
@@ -274,7 +336,7 @@ jobs:
 
   musclemap-parity:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"musclemap-parity"')) }}
+    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"musclemap-parity"')) }}
     uses: ./.github/workflows/musclemap-parity.yml
     permissions:
       actions: read
@@ -284,7 +346,7 @@ jobs:
 
   n4-native:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"n4-native"')) }}
+    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"n4-native"')) }}
     uses: ./.github/workflows/n4-native.yml
     permissions:
       actions: read
@@ -295,7 +357,7 @@ jobs:
 
   noddi-native:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"noddi-native"')) }}
+    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"noddi-native"')) }}
     uses: ./.github/workflows/noddi-native.yml
     permissions:
       actions: read
@@ -306,7 +368,7 @@ jobs:
 
   node-drivers:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"node-drivers"')) }}
+    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"node-drivers"')) }}
     uses: ./.github/workflows/node-drivers.yml
     permissions:
       actions: read
@@ -316,7 +378,7 @@ jobs:
 
   sdc-native:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"sdc-native"')) }}
+    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"sdc-native"')) }}
     uses: ./.github/workflows/sdc-native.yml
     permissions:
       actions: read
@@ -327,7 +389,7 @@ jobs:
 
   seedseg-native:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"seedseg-native"')) }}
+    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"seedseg-native"')) }}
     uses: ./.github/workflows/seedseg-native.yml
     permissions:
       actions: read
@@ -338,7 +400,7 @@ jobs:
 
   spinalcordtoolbox-native:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"spinalcordtoolbox-native"')) }}
+    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"spinalcordtoolbox-native"')) }}
     uses: ./.github/workflows/spinalcordtoolbox-native.yml
     permissions:
       actions: read
@@ -349,7 +411,7 @@ jobs:
 
   synthseg-native:
     needs: gate
-    if: ${{ !cancelled() && github.event_name != 'schedule' && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"synthseg-native"')) }}
+    if: ${{ !cancelled() && github.event_name != 'schedule' && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"synthseg-native"')) }}
     uses: ./.github/workflows/synthseg-native.yml
     permissions:
       actions: read
@@ -359,7 +421,7 @@ jobs:
 
   synthseg-portable:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"synthseg-portable"')) }}
+    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"synthseg-portable"')) }}
     uses: ./.github/workflows/synthseg-portable.yml
     permissions:
       actions: read
@@ -370,7 +432,7 @@ jobs:
 
   vesselboost-native:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"vesselboost-native"')) }}
+    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"vesselboost-native"')) }}
     uses: ./.github/workflows/vesselboost-native.yml
     permissions:
       actions: read
@@ -381,7 +443,7 @@ jobs:
 
   white-matter-lesions-native:
     needs: gate
-    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.workflows, '[') && endsWith(needs.gate.outputs.workflows, ']') && !contains(needs.gate.outputs.workflows, '"white-matter-lesions-native"')) }}
+    if: ${{ !cancelled() && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"white-matter-lesions-native"')) }}
     uses: ./.github/workflows/white-matter-lesions-native.yml
     permissions:
       actions: read
