@@ -671,7 +671,7 @@ export function createAppPlan(registry, changedPaths = [], graph = null, manifes
   const gpuTested = selected.filter((app) => app.ci.hardware_gpu);
   // A draft plans the easter egg as a ready pull request does.
   const carriedEgg = carriedChecks.get(EASTER_EGG_JOB);
-  const easterEgg = [...selectEasterEgg(changedPaths, manifests, { release }), ...(carriedEgg ? [`failed in the base run (${carriedEgg.join(', ')})`] : [])];
+  const easterEgg = [...selectEasterEgg(changedPaths, manifests, { release }), ...(carriedEgg ? [`it did not pass on main since the base: ${carriedEgg.join('; ')}`] : [])];
   return Object.freeze({
     changedPaths: Object.freeze([...changedPaths]),
     selected: Object.freeze(selected),

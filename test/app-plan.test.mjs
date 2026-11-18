@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { parse, stringify } from 'yaml';
 import { AUTOMATION_CATALOG_READERS, changedPathsFromGit, CI_JOB_SCOPES, createAppPlan, EASTER_EGG_INPUTS, EASTER_EGG_JOB, INDEPENDENT_ROOT_DEV_DEPENDENCIES, RUNTIME_MANIFEST_READERS, UnreadableDiffError, SITE_KEY_READERS, SITE_ONLY_FILES } from '../scripts/lib/app-plan.mjs';
-import { APP_JOBS, carriedApps, NIGHTLY_JOBS, PLANNED_JOBS, RERUN_JOBS, testedBase } from '../scripts/lib/tested-base.mjs';
+import { APP_JOBS, carriedApps, carriedPlannedJobs, NIGHTLY_JOBS, PLANNED_JOBS, plannedJobState, RERUN_JOBS, testedBase } from '../scripts/lib/tested-base.mjs';
 import { lockfileImpact } from '../scripts/lib/lockfile-impact.mjs';
 import { loadAppsRegistry, parseAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { CATALOG, CATALOG_JOBS, loadConservativeWorkspaceGraph, reachableFrom, WorkspaceGraphConfigurationError } from '../scripts/lib/workspace-graph.mjs';
@@ -1581,21 +1581,53 @@ test('a failed run carries the apps whose jobs did not pass, and nothing it cann
   ]);
   assert.deepEqual([...carried.keys()], ['calmar', 'synthsr', 'niimath']);
   assert.deepEqual(unattributed, []);
-  // The plan narrows these to what a change reaches, so a planned job that did not pass, finished or not, is carried whole.
-  for (const name of PLANNED_JOBS) {
-    for (const conclusion of ['failure', 'cancelled', 'timed_out', null]) {
-      const result = carriedApps([{ name, conclusion }]);
-      assert.deepEqual([...result.checks.keys()], [name], `${name} ${conclusion}`);
-      assert.deepEqual(result.unattributed, []);
-    }
-    assert.deepEqual([...carriedApps([{ name, conclusion: 'skipped' }]).checks.keys()], [], `${name} skipped by its plan`);
-  }
+  // carriedPlannedJobs carries the jobs the plan narrows; they are neither apps nor unattributed here.
+  for (const name of PLANNED_JOBS) assert.deepEqual(carriedApps([{ name, conclusion: 'failure' }]), { carried: new Map(), unattributed: [] });
   assert.deepEqual(carriedApps([{ name: 'app-plan', conclusion: 'failure' }, { name: 'a-new-job', conclusion: 'cancelled' }]).unattributed, ['app-plan', 'a-new-job']);
   // An id the registry does not know (a reordered matrix) and an unfinished job are tied to no app.
   const known = new Set(['calmar']);
   assert.deepEqual(carriedApps([{ name: 'browser-e2e (apps/calmar, calmar)', conclusion: 'failure' }], known).unattributed, ['browser-e2e (apps/calmar, calmar)']);
   assert.deepEqual(carriedApps([{ name: 'browser-e2e (calmar, apps/calmar)', conclusion: null }], known).unattributed, ['browser-e2e (calmar, apps/calmar) (not finished)']);
   assert.deepEqual([...carriedApps([{ name: 'browser-e2e (calmar, apps/calmar)', conclusion: 'failure' }], known).carried.keys()], ['calmar']);
+});
+
+test('a planned job passes only on success, or skipped by a plan that succeeded', () => {
+  const egg = 'homepage-easter-egg';
+  const state = (plan, conclusion, status) => plannedJobState([{ name: 'app-plan', conclusion: plan }, ...(conclusion === 'missing' ? [] : [{ name: egg, conclusion, status }])], egg);
+  assert.equal(state('success', 'success'), 'passed');
+  assert.equal(state('success', 'skipped'), 'not due');
+  assert.equal(state('failure', 'skipped'), 'homepage-easter-egg was skipped because app-plan did not succeed');
+  assert.equal(state('cancelled', 'skipped'), 'homepage-easter-egg was skipped because app-plan did not succeed');
+  for (const conclusion of ['failure', 'cancelled', 'timed_out', 'neutral']) assert.equal(state('success', conclusion), `homepage-easter-egg concluded ${conclusion}`);
+  assert.equal(state('success', null, 'in_progress'), 'homepage-easter-egg is in_progress');
+  assert.equal(state('success', 'missing'), 'homepage-easter-egg is missing from its jobs');
+});
+
+test('a planned job is carried from the most recent run since the base in which it was due', async () => {
+  // main: a - b - c - head.
+  const order = ['a', 'b', 'c', 'head'];
+  const git = { isAncestor: (ancestor, descendant) => order.indexOf(ancestor) <= order.indexOf(descendant) && order.includes(ancestor) && order.includes(descendant) };
+  const run = (id, head_sha, extra = {}) => ({ id, head_sha, head_branch: 'main', event: 'push', conclusion: 'success', status: 'completed', created_at: `2026-11-18T0${id}:00:00Z`, ...extra });
+  const job = (name, conclusion) => ({ name, conclusion });
+  const carried = async (runs, jobs, base = 'a') => Object.fromEntries(await carriedPlannedJobs({ runs, base, head: 'head', branch: 'main', git, readJobs: async (each) => {
+    if (!jobs[each.id]) throw new Error('the Actions API answered 502');
+    return jobs[each.id];
+  } }));
+  const green = [job('app-plan', 'success'), job('homepage-easter-egg', 'success')];
+  const skipped = [job('app-plan', 'success'), job('homepage-easter-egg', 'skipped')];
+  // The reviewer's sequences: a green push, then a nightly that is itself cancelled, or whose plan failed, then a docs-only push.
+  assert.deepEqual(await carried([run(2, 'a', { event: 'schedule', conclusion: 'cancelled' }), run(1, 'a')], { 1: green, 2: [job('app-plan', 'success'), job('homepage-easter-egg', 'failure')] }), { 'homepage-easter-egg': ['homepage-easter-egg concluded failure in ci run 2'] });
+  assert.deepEqual(await carried([run(2, 'a', { event: 'schedule', conclusion: 'failure' }), run(1, 'a')], { 1: green, 2: [job('app-plan', 'failure'), job('homepage-easter-egg', 'skipped')] }), { 'homepage-easter-egg': ['homepage-easter-egg was skipped because app-plan did not succeed in ci run 2'] });
+  // A run that skipped it by its plan says nothing: the older run in which it was due decides.
+  assert.deepEqual(Object.keys(await carried([run(3, 'b'), run(2, 'a', { conclusion: 'failure' }), run(1, 'a')], { 3: skipped, 2: [job('app-plan', 'success'), job('homepage-easter-egg', 'failure')], 1: green })), ['homepage-easter-egg']);
+  assert.deepEqual(await carried([run(3, 'b'), run(2, 'a', { conclusion: 'failure' })], { 3: green, 2: [job('app-plan', 'success'), job('homepage-easter-egg', 'failure')] }), {});
+  // A run still going, or one whose jobs cannot be read, has not passed it.
+  assert.deepEqual(await carried([run(2, 'b', { status: 'in_progress', conclusion: null }), run(1, 'a')], { 2: [job('app-plan', 'success'), { name: 'homepage-easter-egg', conclusion: null, status: 'queued' }], 1: green }), { 'homepage-easter-egg': ['homepage-easter-egg is queued in ci run 2'] });
+  assert.match((await carried([run(2, 'b'), run(1, 'a')], { 1: green }))['homepage-easter-egg'][0], /^the jobs of ci run 2 could not be read/);
+  // Runs before the base, at the head itself, on another branch or of a pull request are not looked at.
+  const failed = [job('app-plan', 'success'), job('homepage-easter-egg', 'failure')];
+  assert.deepEqual(await carried([run(5, 'head', { conclusion: 'failure' }), run(4, 'c', { head_branch: 'feature' }), run(3, 'c', { event: 'pull_request' }), run(2, 'a', { conclusion: 'failure' }), run(1, 'b')], { 5: failed, 4: failed, 3: failed, 2: failed, 1: green }, 'b'), {});
+  assert.deepEqual(await carried([], {}, null), {});
 });
 
 // carriedApps reads a failed run's jobs by name: every ci job must be one it knows.
@@ -1638,7 +1670,7 @@ test('a push run tests the merges whose own runs were cancelled, and falls back 
   let jobs = {};
   let status = 200;
   const server = createServer((request, response) => {
-    const listed = request.url.startsWith('/repos/neurodesk/webapps/actions/workflows/ci.yml/runs?branch=main&status=completed');
+    const listed = request.url.startsWith('/repos/neurodesk/webapps/actions/workflows/ci.yml/runs?branch=main&per_page=100');
     const run = request.url.match(/^\/repos\/neurodesk\/webapps\/actions\/runs\/(\d+)\/attempts\/1\/jobs\?/)?.[1];
     response.writeHead(listed || jobs[run] ? status : 404, { 'content-type': 'application/json' });
     response.end(JSON.stringify(listed ? { workflow_runs: runs } : { jobs: jobs[run] ?? [] }));
@@ -1811,22 +1843,24 @@ test('a planned job that did not pass on main runs again in full on the next pus
   git('add', '-A');
   git('commit', '--quiet', '-m', 'docs');
   const head = git('rev-parse', 'HEAD');
-  let jobs = [];
-  const runs = [
-    { id: 2, event: 'schedule', head_branch: 'main', head_sha: green, conclusion: 'failure' },
-    { id: 1, event: 'push', head_branch: 'main', head_sha: green, conclusion: 'success' },
-  ];
+  let runs = [];
+  let jobs = {};
   const server = createServer((request, response) => {
-    response.writeHead(200, { 'content-type': 'application/json' });
-    response.end(JSON.stringify(request.url.includes('/workflows/ci.yml/runs?') ? { workflow_runs: runs } : { jobs }));
+    const run = request.url.match(/\/actions\/runs\/(\d+)\/attempts\/1\/jobs\?/)?.[1];
+    const listed = request.url.includes('/workflows/ci.yml/runs?');
+    response.writeHead(listed || jobs[run] ? 200 : 502, { 'content-type': 'application/json' });
+    response.end(JSON.stringify(listed ? { workflow_runs: runs } : { jobs: jobs[run] ?? [] }));
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => server.close());
   const env = { ...process.env, GITHUB_OUTPUT: '', GITHUB_REPOSITORY: 'neurodesk/webapps', GITHUB_TOKEN: 'token', GITHUB_API_URL: `http://127.0.0.1:${server.address().port}` };
   // The planner asks this process's server, so it must run asynchronously.
-  const plan = async (failed) => {
-    const passed = [['app-plan', 'success'], ['workspace-contracts', 'success'], ['homepage-easter-egg', 'skipped']].filter(([name]) => !failed.some((job) => job.name === name));
-    jobs = [...passed.map(([name, conclusion]) => ({ name, conclusion })), ...failed];
+  const plan = async (nightly, nightlyJobs) => {
+    runs = [
+      { id: 2, event: 'schedule', head_branch: 'main', head_sha: green, created_at: '2026-11-18T03:23:00Z', status: 'completed', ...nightly },
+      { id: 1, event: 'push', head_branch: 'main', head_sha: green, created_at: '2026-11-18T01:00:00Z', status: 'completed', conclusion: 'success' },
+    ];
+    jobs = { 1: [{ name: 'app-plan', conclusion: 'success' }, { name: 'homepage-easter-egg', conclusion: 'success' }], ...(nightlyJobs && { 2: nightlyJobs }) };
     const child = spawn(process.execPath, ['scripts/app-plan.mjs', '--base', 'last-success', '--head', head], { cwd: root, env });
     let [stdout, stderr] = ['', ''];
     child.stdout.on('data', (chunk) => { stdout += chunk; });
@@ -1836,19 +1870,24 @@ test('a planned job that did not pass on main runs again in full on the next pus
     const output = JSON.parse(stdout);
     return { ...output, reasons: JSON.parse(output.selection_reasons), stderr };
   };
-  // Green, a nightly that fails in the easter egg, then a docs-only push: the push runs it in full.
-  const egg = await plan([{ name: 'homepage-easter-egg', conclusion: 'failure' }]);
-  assert.equal(egg.easter_egg, 'true');
-  assert.deepEqual(egg.reasons.easter_egg, ['failed in the base run (homepage-easter-egg)']);
-  // A cancelled job, or one that never started, did not pass either.
-  assert.deepEqual((await plan([{ name: 'homepage-easter-egg', conclusion: 'cancelled' }])).reasons.easter_egg, ['failed in the base run (homepage-easter-egg)']);
-  assert.deepEqual((await plan([{ name: 'homepage-easter-egg', conclusion: null }])).reasons.easter_egg, ['failed in the base run (homepage-easter-egg (not finished))']);
-  // A failure no app owns sends the base back to the green run, whose diff is empty here: the easter egg still runs.
-  const unowned = await plan([{ name: 'a-new-job', conclusion: 'failure' }, { name: 'homepage-easter-egg', conclusion: 'failure' }]);
-  assert.match(unowned.stderr, /failed in a-new-job, which no app owns; homepage-easter-egg did not pass there/);
-  assert.equal(unowned.easter_egg, 'true');
-  // workspace-contracts runs on every push, and the jobs only the nightly runs are not carried.
-  for (const name of ['workspace-contracts', 'agent-interactions (desktop, 1/3)']) assert.equal((await plan([{ name, conclusion: 'failure' }])).easter_egg, 'false', name);
+  const egg = (conclusion) => [{ name: 'app-plan', conclusion: 'success' }, { name: 'homepage-easter-egg', conclusion }];
+  // A green push, a nightly whose easter egg failed, then a docs-only push: the push runs it.
+  const failed = await plan({ conclusion: 'failure' }, egg('failure'));
+  assert.deepEqual(JSON.parse(failed.selected_ids), []);
+  assert.equal(failed.easter_egg, 'true');
+  assert.deepEqual(failed.reasons.easter_egg, ['it did not pass on main since the base: homepage-easter-egg concluded failure in ci run 2']);
+  // The reviewer's sequences: the nightly itself concluded cancelled, or its plan failed and the easter egg was skipped.
+  assert.equal((await plan({ conclusion: 'cancelled' }, egg('cancelled'))).easter_egg, 'true');
+  const planFailed = await plan({ conclusion: 'failure' }, [{ name: 'app-plan', conclusion: 'failure' }, { name: 'homepage-easter-egg', conclusion: 'skipped' }]);
+  assert.equal(planFailed.easter_egg, 'true');
+  assert.match(planFailed.stderr, /homepage-easter-egg runs again in full: homepage-easter-egg was skipped because app-plan did not succeed in ci run 2/);
+  // A nightly still running, or one whose jobs cannot be read, has not passed it either.
+  assert.equal((await plan({ status: 'in_progress', conclusion: null }, [{ name: 'app-plan', conclusion: 'success' }, { name: 'homepage-easter-egg', conclusion: null, status: 'queued' }])).easter_egg, 'true');
+  assert.equal((await plan({ conclusion: 'failure' }, null)).easter_egg, 'true');
+  // A nightly that passed it, or whose plan left it out, and one that failed only elsewhere, leave the docs-only push without it.
+  for (const [label, nightlyJobs] of [['passed', egg('success')], ['left out', egg('skipped')], ['workspace-contracts failed', [...egg('success'), { name: 'workspace-contracts', conclusion: 'failure' }]]]) {
+    assert.equal((await plan({ conclusion: label === 'workspace-contracts failed' ? 'failure' : 'success' }, nightlyJobs)).easter_egg, 'false', label);
+  }
 });
 
 test('a .gitattributes change selects the apps whose files now check out differently', async (t) => {
