@@ -7,6 +7,7 @@ use samsrf_core::geometry::{cluster_roi, delaunay_triangles, unique_rows, Hull, 
 use samsrf_core::{mapset::Maps, model, revcor_cf};
 use std::collections::BTreeSet;
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
 fn load(root: &Path, name: &str) -> Vec<Value> {
@@ -282,6 +283,13 @@ fn real_template_cf_maps_match_matlab_on(root: &Path, cases: &[Value]) {
                 let context = format!("{id} vertex {vertex} {label}");
                 // Production keeps the listed hull, within 1e-12 as before.
                 close(actual[row], expected, 1e-12 * expected.abs().max(1.0), &context);
+                // These recorded values were exact before the stored-order experiment.
+                // Its three losses per host must not enter the default CF path.
+                if [("template_lh_double_hull", 29, "Centre"),
+                    ("template_lh_double_hull", 33, "x0"),
+                    ("template_rh_double_hull", 11, "Centre")].contains(&(id, vertex, label.as_str())) {
+                    assert_eq!(actual[row].to_bits(), expected.to_bits(), "{context}: production lost an exact base value");
+                }
                 let stored_context = format!("{context} (stored order)");
                 if fit == 0 && !single && TEMPLATE_HULL_START.contains(&(id, vertex, label.as_str())) {
                     assert_ne!(diagnostic[row].to_bits(), expected.to_bits(), "{stored_context} now equals MATLAB; remove it from TEMPLATE_HULL_START");
@@ -431,6 +439,7 @@ fn polygon_hulls_match_matlab() {
 }
 
 fn polygon_hulls_match_matlab_on(root: &Path, cases: &[Value]) {
+    let mut production_bits = Sha256::new();
     let frozen: Value = serde_json::from_str(include_str!("matlab_polygon_snapping.json")).unwrap();
     let outcomes = frozen["outcomes"].as_object().unwrap();
     let frozen_ids: BTreeSet<usize> = outcomes.keys().map(|id| id.parse().unwrap()).collect();
@@ -445,6 +454,14 @@ fn polygon_hulls_match_matlab_on(root: &Path, cases: &[Value]) {
         let mut agreeing = 0;
         let mut stored_order = 0;
         for (i, polygon) in polygons.iter().enumerate() {
+            let production_estimate = samsrf_core::geometry::polygon_hull_estimate(polygon, HullOrder::default());
+            // Empty hulls have an explicit tag; all present values retain every bit.
+            production_bits.update([u8::from(production_estimate.is_some())]);
+            if let Some(([x, y], area)) = production_estimate {
+                for value in [x, y, area] {
+                    production_bits.update(value.to_le_bytes());
+                }
+            }
             let expected = [estimate[i], estimate[n + i], estimate[2 * n + i]];
             let hull = Hull::of_polygon(polygon);
             let vertices = hull.as_ref().map(|h| h.vertices.as_slice()).unwrap_or(&[]);
@@ -493,6 +510,8 @@ fn polygon_hulls_match_matlab_on(root: &Path, cases: &[Value]) {
     }
     println!("{}", report.join("\n"));
     assert_eq!(families, 7, "missing polygon families");
+    // Frozen from the base evaluation at 3f90ac124, in recorder family/case order.
+    assert_eq!(format!("{:x}", production_bits.finalize()), "1f0fcb67e172c3b20e5038985121fa5ed37ba567ed65f68cc977313c92d56dc8", "production polygon bits changed");
     assert_eq!(checked_snapping, frozen_ids, "missing snapping regression cases");
     assert!(failures.is_empty(), "{} polygons differ from MATLAB:\n{}", failures.len(), failures[..failures.len().min(20)].join("\n"));
 }

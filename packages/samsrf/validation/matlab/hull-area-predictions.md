@@ -168,6 +168,10 @@ Both runners were Intel CPUs, a Xeon Platinum 8573C (ubuntu-22.04) and a Xeon
 two hosts' 4,112 arrays are byte-identical. By the AMD rule this dispatch
 decides nothing, and it counts as the first of the two.
 
+This amendment supersedes the original stop rule, "Otherwise the round stops
+after dispatch 1", after the CPU draw was known. The fresh held-out set below
+limits that adaptation; this was not the original decision rule.
+
 The rest of the round:
 
 - Dispatch 1's recording is used only to build candidates. Anything built from
@@ -229,7 +233,7 @@ discovery. What the recording shows about it:
   set, so it is not a sum over the triangulation of the points.
 - It depends on where the listing starts. Reversing the input order changes it
   in 31 of 42 CLI sets.
-- It is within 5 ULP of the exactly rounded area, and exact in 48 of 124.
+- On discovery it is within 5 ULP of the exactly rounded area, and exact in 48 of 124. Held-out sets reach 7 ULP.
 - It equals `polyarea` of the same vertices in 23 and the polyshape area in 48.
 
 The searches on dispatch 1's discovery sets reached at most 73 of 124: clockwise

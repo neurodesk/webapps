@@ -15,6 +15,7 @@ unless they reach the round's recorded outcome.
 """
 import hashlib
 import json
+import math
 from pathlib import Path
 import re
 import struct
@@ -53,6 +54,23 @@ def hosts(recording):
     return out
 
 
+def indices(root, descriptor, columns, points):
+    """One-based integer indices; never round malformed recorded values."""
+    values = array(root, descriptor, columns)
+    assert values and all(math.isfinite(v) and v.is_integer() and 1 <= v <= points
+                          for row in values for v in row), descriptor
+    return [tuple(int(v) for v in row) for row in values]
+
+
+def inventory(cases, spec, grids):
+    """Require discovery, held-out and fresh identities exactly once per host."""
+    expected = {('hull-area', 'area_' + name) for name in spec}
+    expected.update(('linspace', 'linspace_' + name) for name in grids)
+    actual = [(case['kind'], case['id']) for case in cases]
+    assert len(actual) == len(set(actual)), 'duplicate hull-area identity'
+    assert set(actual) == expected, 'incomplete or unexpected hull-area inventory'
+
+
 def area_models(points, k, triangles, corner_points, corner_k, corner_triangles):
     """Every conditional model's AV and corners AV from what MATLAB recorded."""
     out = {}
@@ -78,6 +96,7 @@ def judge(recording, roles, models):
     report = {'roles': sorted(roles), 'hosts': {}}
     for root, cpu in hosts(recording):
         listing = json.loads((root / 'geometry.json').read_text())
+        inventory(listing['cases'], spec, grids)
         failures = {m: [] for m in models}
         counted = {'sets': 0, 'grids': 0}
         notes = {'polyareaEqualsAV': 0, 'pointsAsSent': 0}
@@ -93,14 +112,14 @@ def judge(recording, roles, models):
                 points = array(root, case['dtPoints'], 2)
                 notes['pointsAsSent'] += [tuple(map(design.bits, p)) for p in array(root, case['points'], 2)] == [tuple(map(design.bits, p)) for p in sent]
                 assert [tuple(map(design.bits, p)) for p in points] == [tuple(map(design.bits, p)) for p in sent], f'{identity}: Dt.Points differs from the input'
-                k = [int(v[0]) for v in array(root, case['hull'], 1)]
-                corner_k = [int(v[0]) for v in array(root, case['cornersHull'], 1)]
+                k = [v[0] for v in indices(root, case['hull'], 1, len(points))]
+                corner_k = [v[0] for v in indices(root, case['cornersHull'], 1, len(k) - 1)]
                 av = array(root, case['area'], 1)[0][0]
                 corners_av = array(root, case['cornersArea'], 1)[0][0]
                 notes['polyareaEqualsAV'] += design.bits(array(root, case['polyarea'], 1)[0][0]) == design.bits(av)
-                triangles = array(root, case['triangles'], 3)
+                triangles = indices(root, case['triangles'], 3, len(points))
                 corner_points = [points[i - 1] for i in k[:-1]]
-                corner_triangles = array(root, case['cornersTriangles'], 3)
+                corner_triangles = indices(root, case['cornersTriangles'], 3, len(corner_points))
                 predicted = frozen['sets'][identity]
                 observed = (design.hexed(av), design.hexed(corners_av))
                 conditional = area_models(points, k, triangles, corner_points, corner_k, corner_triangles) if any(m in CONDITIONAL for m in models) else {}

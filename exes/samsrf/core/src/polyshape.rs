@@ -16,8 +16,8 @@
 //!    neighbours are that close goes with its successor, and a vertex goes when
 //!    the point geometrically between its neighbours lies within the tolerance
 //!    of the line through the other two.
-//! 4. MATLAB stores the boundaries in the order of their earliest input point,
-//!    each from that point, solids clockwise; `convhull` starts at the first
+//! 4. The fitted storage model orders boundaries by their earliest input point,
+//!    each from that point, solids clockwise; its hull starts at the first
 //!    stored vertex on the hull and runs clockwise. Area and centroid round
 //!    differently in another order (`geometry::Hull`), so the order is part of
 //!    the model.

@@ -2,8 +2,11 @@ import collections
 import json
 from pathlib import Path
 import unittest
+import struct
+import tempfile
 
 import hull_area_design as design
+import hull_area_report as report
 
 HERE = Path(__file__).resolve().parent
 # hull-area-predictions.md, frozen before the first recording.
@@ -62,6 +65,29 @@ class Predictions(unittest.TestCase):
 
 
 class Models(unittest.TestCase):
+    def test_recorded_indices_are_integers_in_range(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            descriptor = {'class': 'double', 'imaginary': '', 'shape': [1, 1], 'file': 'k.f64'}
+            for value in [1.5, 0.0, 4.0, float('nan'), float('inf')]:
+                with self.subTest(value=value):
+                    (root / 'k.f64').write_bytes(struct.pack('<d', value))
+                    with self.assertRaises(AssertionError):
+                        report.indices(root, descriptor, 1, 3)
+            (root / 'k.f64').write_bytes(struct.pack('<d', 2.0))
+            self.assertEqual(report.indices(root, descriptor, 1, 3), [(2,)])
+
+    def test_all_recorded_identities_are_required_once(self):
+        spec = {'discovery': None, 'heldout': None, 'fresh': None}
+        grids = {'grid': None}
+        cases = [{'kind': 'hull-area', 'id': 'area_' + name} for name in spec]
+        cases.append({'kind': 'linspace', 'id': 'linspace_grid'})
+        report.inventory(cases, spec, grids)
+        for bad in [cases[1:], cases + cases[:1], cases[1:] + cases[1:2],
+                    cases + [{'kind': 'hull-area', 'id': 'area_extra'}]]:
+            with self.subTest(cases=bad), self.assertRaises(AssertionError):
+                report.inventory(bad, spec, grids)
+
     def test_grids(self):
         self.assertEqual(design.grid('L0', 2.0, 5), [-2.0, -1.0, 0.0, 1.0, 2.0])
         self.assertEqual(design.grid('L1', 0.1, 20)[-1], 0.09999999999999999)

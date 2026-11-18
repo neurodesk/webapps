@@ -94,7 +94,10 @@ impl ListedHull {
         let mut corners = chain(&mut sorted.iter());
         corners.extend(chain(&mut sorted.iter().rev()));
         let hull = ListedHull { vertices: corners };
-        (hull.vertices.len() >= 3 && hull.area() > 0.0).then_some(hull)
+        if hull.vertices.len() < 3 || hull.area() <= 0.0 {
+            return None;
+        }
+        Some(hull)
     }
 
     /// Shoelace area, translated to the first vertex.
@@ -135,18 +138,18 @@ pub fn polygon_hull_estimate(points: &[[f64; 2]], order: HullOrder) -> Option<([
     }
 }
 
-/// One convex boundary of a MATLAB R2023b `polyshape`, as MATLAB stores it:
-/// clockwise, from the vertex MATLAB starts at, without a repeated closing
-/// vertex. `area` and `centroid` round like MATLAB's only in that order.
+/// A diagnostic boundary model fitted to recorded MATLAB R2023b `polyshape`
+/// output: clockwise, without a repeated closing vertex. Agreement of `area`
+/// and `centroid` depends on the stored vertex order; other inputs are unestablished.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Hull {
     pub vertices: Vec<[f64; 2]>,
 }
 
 impl Hull {
-    /// `polyshape(points).convhull`, as MATLAB R2023b computes and orders it on
-    /// its fixed-point grid with the even-odd rule and its 1e-8 cleaning
-    /// tolerance (see `polyshape.rs`). `None` where that shape is empty.
+    /// Empirical model of `polyshape(points).convhull`, using a fixed-point grid,
+    /// the even-odd rule and a 1e-8 cleaning tolerance (see `polyshape.rs`).
+    /// This does not identify MATLAB's internal algorithm. `None` for empty shapes.
     pub fn of_polygon(points: &[[f64; 2]]) -> Option<Hull> {
         let hull = Hull { vertices: crate::polyshape::convex_hull(points)? };
         (hull.area() > 0.0).then_some(hull)
@@ -173,7 +176,7 @@ impl Hull {
         times_power_of_two(sums.twice.abs() / 2.0, 2 * sums.exponent)
     }
 
-    /// `polyshape.centroid`, step for step as MATLAB R2023b rounds it on the
+    /// Empirical arithmetic fit to recorded `polyshape.centroid` values on the
     /// stored vertices: relative to the bounding-box centre, the sum of cross
     /// products `a`, then `sum((x1 + x2) * (t * (1/a)))` times `1/3`, back in
     /// place, weighted by the clockwise-positive area `-a/2` and multiplied by
@@ -661,6 +664,13 @@ mod tests {
             assert_eq!(Hull::of_delaunay_boundary(points), None);
             assert_eq!(Hull::of_polygon(points), None);
         }
+    }
+
+    #[test]
+    fn listed_hull_preserves_base_nan_area_after_overflow() {
+        let points = [[0.0, 0.0], [2e200, 1e200], [1e200, 1e200]];
+        let hull = ListedHull::of(&points).expect("base retains a hull when its area is NaN");
+        assert!(hull.area().is_nan());
     }
 
     #[test]

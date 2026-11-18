@@ -2392,7 +2392,7 @@ it loses nothing.
 - **Reverse correlation with a pRF model.** Production takes MATLAB's grid,
   `symmetric_linspace`. Round hull-area-1 supports it on all 208 recorded grids
   (`hull-area-predictions.md`). On the SamSrfAnalysis matrix it gains the double
-  RC Gaussian fits' `R^2`, `x0` and `y0` at 24 AMD and 23 Intel vertices, because
+  RC Gaussian fits' `R^2`, `x0` and `y0` in 24 AMD and 23 Intel values at nine vertices, because
   the fits start at the peak pixel, and it loses none.
 - **Reverse correlation, `Prf_Function = 0`.** Production keeps the previous grid
   and hull (`revcor_prf::pixel_grid`). The diagnostic takes MATLAB's grid and the
@@ -2418,6 +2418,13 @@ production, now `HullOrder::Stored`. Production since this change equals base on
 every hull value: 586,668 polygon and 1,440 template-CF value bits on both hosts
 compared.
 
+The production regression checks freeze the base `3f90ac124` output bits for
+the seven original polygon families and both CLI RC hull runs on each host.
+They also require the three formerly exact template-CF values per host to stay
+exact. Switching the default to `Stored` fails all three checks. These are
+guards against losing previous agreement, not claims of MATLAB parity for
+the remaining differences; the stored-order diagnostic is tested separately.
+
 | Recorded cases (values per host) | Base exact | Stored order exact | Gained | Lost |
 | --- | ---: | ---: | ---: | ---: |
 | Original polygons, `polyshape(P).convhull` x, y, area (78,171) | 52,257 | 77,247 | 25,168 | 178 |
@@ -2437,7 +2444,7 @@ Intel, as before. The stored order would raise them to 133 and 46. The matrix
 figures are the web engine in Node against source MATLAB (run 42928350417), with
 no compiled image. Base is the committed module `d5ae6ba2`. The stored order is
 the canonical module `ab4aeb60` (commit 4ad82aad2), whose maps equal its local
-rebuild. Production is a local rebuild of this source.
+rebuild. Production was verified on canonical module `e0f7f12a` at commit `6c6ddde2`.
 
 **How MATLAB splits rings.** On the CF template shapes, MATLAB's recorded rings
 are mostly the port's cleaned rings re-paired at shared vertices. The re-pairing
