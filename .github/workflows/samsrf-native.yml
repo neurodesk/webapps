@@ -218,6 +218,9 @@ jobs:
           "$RUNNER_TEMP/samsrf-cli-venv/bin/python" -I packages/samsrf/validation/matlab/extract_cli_courses.py "$RUNNER_TEMP/samsrf-cli" "$RUNNER_TEMP/samsrf-cli-courses"
           SAMSRF_CLI_REFERENCE_DIR="$RUNNER_TEMP/samsrf-cli" SAMSRF_CLI_COURSES_DIR="$RUNNER_TEMP/samsrf-cli-courses" \
             cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test cli_preprocess -- --nocapture
+          "$RUNNER_TEMP/samsrf-cli-venv/bin/python" -I packages/samsrf/validation/matlab/extract_cli_rc_hulls.py "$RUNNER_TEMP/samsrf-cli" "$RUNNER_TEMP/samsrf-cli-rc-hulls"
+          SAMSRF_CLI_REFERENCE_DIR="$RUNNER_TEMP/samsrf-cli" SAMSRF_CLI_COURSES_DIR="$RUNNER_TEMP/samsrf-cli-courses" SAMSRF_CLI_RC_HULLS_DIR="$RUNNER_TEMP/samsrf-cli-rc-hulls" \
+            cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test cli_rc_hulls -- --nocapture
           rm -rf "$RUNNER_TEMP/samsrf-cli"
       - name: Constants, small-shape gampdf and double y' * A against MATLAB (constants-gamma-gemv-predictions.md)
         run: |
@@ -251,6 +254,10 @@ jobs:
           node packages/samsrf/validation/matlab/compare-geometry.mjs "$RUNNER_TEMP/samsrf-polyshape-causal/ubuntu-22.04" "$RUNNER_TEMP/samsrf-polyshape-causal/ubuntu-24.04" "$RUNNER_TEMP/samsrf-polyshape-causal-hosts.json"
           SAMSRF_MATLAB_GEOMETRY_DIR="$RUNNER_TEMP/samsrf-geometry" SAMSRF_MATLAB_POLYSHAPE_PROBE_DIR="$RUNNER_TEMP/samsrf-polyshape-probe" SAMSRF_MATLAB_POLYSHAPE_CAUSAL_DIR="$RUNNER_TEMP/samsrf-polyshape-causal" SAMSRF_MATLAB_POLYSHAPE_REPRODUCERS_DIR="$RUNNER_TEMP/samsrf-polyshape-reproducers" \
             cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --features polyshape-experimental --test matlab_polyshape_experimental -- --nocapture
+      - name: Polyshape area and centroid on MATLAB's stored hull vertices (four recordings, both hosts)
+        run: |
+          SAMSRF_MATLAB_GEOMETRY_DIR="$RUNNER_TEMP/samsrf-geometry" SAMSRF_MATLAB_POLYSHAPE_PROBE_DIR="$RUNNER_TEMP/samsrf-polyshape-probe" SAMSRF_MATLAB_POLYSHAPE_CAUSAL_DIR="$RUNNER_TEMP/samsrf-polyshape-causal" SAMSRF_MATLAB_POLYSHAPE_REPRODUCERS_DIR="$RUNNER_TEMP/samsrf-polyshape-reproducers" \
+            cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test polyshape_arithmetic -- --nocapture
       - name: CSS trace, MATLAB arithmetic, extreme-scale and rank regression gates
         run: |
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-css-diagnostics" packages/samsrf/validation/matlab/diagnostics-reference.json
