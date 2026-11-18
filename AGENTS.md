@@ -86,7 +86,7 @@ An e2e test that skips without data (`test.skip(!process.env.X, …)`) must run 
 
 ## Offline package tests
 
-`pnpm test:packages` runs on every `ci` run, so a package's `test` script must not reach the network. A test that needs downloaded data or a downloaded runtime goes in its own script (`test:reference` in brain-extraction, `test:runtime` in seedseg) that its app's `test` script runs, so the per-app job still runs it whenever the app is selected; the pure part stays in `test`. Never turn a failed download into a skip. Check a package offline with `unshare -rn sh -c 'ip link set lo up && pnpm --filter <package> test'`.
+`pnpm test:packages` runs in the `workspace-contracts` job of `ci`, so a package's `test` script must not reach the network. A test that needs downloaded data or a downloaded runtime goes in its own script (`test:reference` in brain-extraction, `test:runtime` in seedseg) that its app's `test` script runs, so the per-app job still runs it whenever the app is selected; the pure part stays in `test`. Never turn a failed download into a skip. Check a package offline with `unshare -rn sh -c 'ip link set lo up && pnpm --filter <package> test'`.
 
 ## CI scope
 
