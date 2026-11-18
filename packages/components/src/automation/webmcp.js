@@ -169,7 +169,7 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
 
   for (const [name, operation] of Object.entries(contract.operations)) {
     tool(runTools[name], operation.title,
-      `${operation.description} Runs on the files the input roles hold (see inputs_request_files and inputs_load_example) and shows the result in the page. Waits up to waitSeconds, then returns the run; call runs_get to keep waiting. A failed run with code SERIES_SELECTION_REQUIRED lists candidates: ask the user with user_ask and run again with selections.`,
+      `${operation.description} Runs on the files the input roles hold (see inputs_request_files and inputs_load_example) and shows the result in the page; a run uses up the held files. Waits up to waitSeconds, then returns the run; call runs_get to keep waiting. A failed run with code SERIES_SELECTION_REQUIRED lists candidates: ask the user with user_ask and run again with selections.`,
       runSchema(operation), untrusted,
       async ({ parameters, inputs: sources, selections, waitSeconds: seconds = DEFAULT_WAIT_SECONDS }, { signal }) => {
         const { runId } = await dispatch('start', { operation: name, parameters, inputs: sources, selections });

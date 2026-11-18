@@ -216,3 +216,38 @@ test('registration survives a refused tool and the registration signal unregiste
   controller.abort();
   assert.equal(registered.size, 0);
 });
+
+test('a page whose browser exposes a model context registers the tools and answers them through its own dialogs', async t => {
+  const dom = new JSDOM('<body><nd-example-selector></nd-example-selector></body>', { url: 'https://example.test/test/' });
+  t.after(() => dom.window.close());
+  const { document } = dom.window;
+  dom.window.HTMLDialogElement.prototype.showModal = function showModal() { this.setAttribute('open', ''); };
+  dom.window.HTMLDialogElement.prototype.close = function close() { this.removeAttribute('open'); };
+  document.querySelector('nd-example-selector').examples = examples;
+  const registered = new Map();
+  document.modelContext = { async registerTool(tool) { registered.set(tool.name, tool); } };
+  registerAppAutomation({ app: 'test', contract: contract(), operations: { run: async () => labels() }, document, target: dom.window });
+  while (!registered.has('viewers_niivue')) await new Promise(resolve => setTimeout(resolve, 5));
+  const call = (name, input = {}) => registered.get(name).execute(input, { signal: new AbortController().signal });
+  assert.deepEqual((await call('app_describe')).examples.map(example => example.id), ['head'], 'the page\'s example selector supplies the examples');
+  const request = call('inputs_request_files', { role: 'image' });
+  let field;
+  while (!(field = document.querySelector('#neurodeskAgentPrompt nd-file-field'))) await new Promise(resolve => setTimeout(resolve, 5));
+  Object.defineProperty(field.input, 'files', { configurable: true, value: [new File(['input'], 'input.nii')] });
+  field.input.dispatchEvent(new dom.window.Event('change'));
+  assert.deepEqual(await request, { role: 'image', files: [{ name: 'input.nii', bytes: 5 }] });
+  assert.deepEqual((await call('app_describe')).inputs, { image: [{ name: 'input.nii', bytes: 5 }] });
+  const run = await call('run_run');
+  assert.equal(run.state, 'succeeded');
+  assert.equal(run.report.inputs.image[0].filename, 'input.nii');
+  assert.deepEqual((await call('app_describe')).inputs, {}, 'a run uses up the held files');
+});
+
+test('a page without a model context registers nothing', async t => {
+  const dom = new JSDOM('<body></body>', { url: 'https://example.test/test/' });
+  t.after(() => dom.window.close());
+  const registration = registerAppAutomation({ app: 'test', contract: contract(), operations: { run: async () => labels() }, document: dom.window.document, target: dom.window });
+  await registration.ready;
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.equal(dom.window.document.getElementById('neurodeskAgentPrompt'), null);
+});

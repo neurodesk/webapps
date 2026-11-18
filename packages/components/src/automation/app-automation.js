@@ -162,6 +162,13 @@ export function registerAppAutomation({ app, operations, convertDicom, contractU
     }
   }
 
+  function adopt(role, files) {
+    if (!terminal.has(snapshot.state)) throw new Error('An operation is already running');
+    if (!Object.values(contract.operations).some(operation => Object.hasOwn(operation.inputs, role) && operation.inputs[role].source === 'files')) throw new Error(`Unknown file input role: ${role}`);
+    adopted.set(role, files);
+    return { role, count: files.length };
+  }
+
   async function dispatch(command, request = {}) {
     await ready;
     if (!object(request)) throw new Error('Automation command arguments must be an object');
@@ -175,11 +182,9 @@ export function registerAppAutomation({ app, operations, convertDicom, contractU
       return { cancelled: true };
     }
     if (command === 'adopt') {
-      if (!terminal.has(snapshot.state)) throw new Error('An operation is already running');
-      if (!Object.values(contract.operations).some(operation => Object.hasOwn(operation.inputs, request.role) && operation.inputs[request.role].source === 'files')) throw new Error(`Unknown file input role: ${request.role}`);
-      adopted.set(request.role, Array.from(transfer.files));
+      const adoption = adopt(request.role, Array.from(transfer.files));
       transfer.value = '';
-      return { role: request.role, count: adopted.get(request.role).length };
+      return adoption;
     }
     if (command === 'start') {
       if (!terminal.has(snapshot.state)) throw new Error('An operation is already running');
@@ -224,8 +229,40 @@ export function registerAppAutomation({ app, operations, convertDicom, contractU
     agentConnection: options => createAgentConnection(() => viewers.niivue(), options),
   };
   target.neurodeskAutomation = Object.freeze({ dispatch });
+  const modelContext = webMcpContext(doc);
+  if (modelContext) {
+    void exposeWebMcp(modelContext, {
+      ready, dispatch, doc,
+      inputs: {
+        adopt,
+        held: () => Object.fromEntries([...adopted].map(([role, files]) => [role, files.map(file => ({ name: file.name, bytes: file.size }))])),
+      },
+    }).catch(error => console.warn('WebMCP tools were not registered', error));
+  }
   pageRegistration = handle;
   return handle;
+}
+
+// WebMCP tools register wherever the browser exposes a model context: the person starts the browser's
+// agent themselves, and nothing leaves the page until it calls a tool. Gate them here if that changes.
+function webMcpContext(doc) {
+  return doc.modelContext ?? doc.defaultView?.navigator?.modelContext ?? null;
+}
+
+// The examples the page's own selectors offer, so an agent loads exactly what the person could.
+function pageExamples(doc) {
+  const examples = new Map();
+  for (const selector of doc.querySelectorAll('nd-example-selector')) {
+    for (const example of selector.examples ?? []) if (!examples.has(example.id)) examples.set(example.id, example);
+  }
+  return [...examples.values()];
+}
+
+async function exposeWebMcp(modelContext, { ready, dispatch, doc, inputs }) {
+  const [{ webMcpTools, registerWebMcpTools }, { createAgentPrompts }] = await Promise.all([import('./webmcp.js'), import('../ui/agentPrompt.js')]);
+  const prompts = createAgentPrompts(doc);
+  const tools = webMcpTools({ contract: await ready, dispatch, inputs, examples: () => pageExamples(doc), askUser: prompts.ask, requestFiles: prompts.requestFiles });
+  return registerWebMcpTools(modelContext, tools);
 }
 
 export function registerViewer(id, adapter) {
