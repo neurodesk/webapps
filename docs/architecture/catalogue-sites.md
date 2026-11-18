@@ -220,63 +220,126 @@ Its model pack is tested with every app it serves that reads a model.
 - runs the deployed checks (`pnpm test:deployed`,
   `test/standalone-downloads.smoke.mjs`, `pnpm test:image-uploads`) once per
   catalogue host, with `SITE_CATALOG=<catalogue>` limiting them to that host's
-  apps, and checks that the hub links every catalogue (`verify-hub`).
+  apps, and checks that the hub links every catalogue (`verify-hub`);
+- saves a verified marker for each site whose checks passed.
 
 The deploy steps run only for the sites the run publishes. A site's content
 digest is SHA-256 over its files' relative paths and bytes, plus its Wrangler
 configuration, leaving out the root `analytics.json` and `site-digest.json`.
 `site-digest.json` records the digest, the usage report's `generatedAt` (an ISO
-instant or null) and the commit (40 hex digits, or null outside Actions). A site
-is published when:
+instant or null) and the commit (40 hex digits, or null outside Actions).
+
+### Verified markers
+
+A verified marker says that site S, at content digest D, passed the deployed
+checks whose inputs hash to C. It is an entry in this repository's GitHub
+Actions cache with the key `deploy-verified-1-<site>-<D>-<C>`. The jobs that
+check a site save it: the Pages `deploy` job for neuro when it publishes neuro,
+`verify-sites` for every other catalogue check, and `verify-hub` for the hub.
+Each of these jobs:
+
+1. reads the site's `site-digest.json` from its public host
+   (`scripts/confirm-site-digest.mjs`) and goes on only if the host serves D;
+2. runs the checks;
+3. reads the record again and goes on only if the host still serves D;
+4. restores the marker if it exists, or saves it if it does not.
+
+A failed check skips steps 3 and 4. A check that ran while the host served
+other bytes saves nothing. Neither confirmation, nor the restore or save, can
+fail checks that passed: the marker is then missing, and the next run checks
+the site again.
+
+C is a hash, per site, of what decides whether its checks pass:
+
+- the check scripts and every module they import (`moduleClosure`), with the
+  installed version of each npm package among them, such as
+  `@playwright/test`, which sets the browser;
+- root `package.json`, `registry/apps.yml` and `registry/standalone.json`;
+- the `package.json` of each app the site serves;
+- `deploy-pages.yml`, which holds the check steps and the hub check.
+
+The hub's C covers `deploy-pages.yml` only. When a check changes, its hash
+changes, no marker has the new hash, and every site is published and checked
+once more. `test/site-deploy.test.mjs` holds the script list to the steps that
+run between the two confirmations.
+
+The plan looks up each marker with the cache REST API
+(`GET /repos/{owner}/{repo}/actions/caches?key=<key>&ref=<GITHUB_REF>`, which
+needs `actions: read`). The API treats `key` as a prefix, so an entry counts
+only when its key and its ref both equal the ones asked for. Any other answer
+leaves the marker unknown: an error, a timeout, or more than one page of
+matches.
+
+The cache gives these guarantees
+([dependency caching reference](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching)):
+
+- An existing entry cannot be changed, and a save under an existing key
+  creates nothing.
+- On `main`, only runs triggered by `push`, `workflow_dispatch`, `schedule`
+  and a few other trusted events can write entries. Runs triggered by
+  `pull_request_target`, `workflow_run` or `issue_comment` only read them. A
+  `pull_request` run writes under its merge ref, `refs/pull/<n>/merge`, which
+  the plan's ref filter leaves out. A dispatch on another branch writes under
+  that branch, which a run on `main` never reads.
+- Entries not accessed for 7 days are removed. Above the repository limit
+  (10 GB by default), the entries accessed least recently are removed first.
+  Step 4 restores an existing marker, so the daily run accesses the marker of
+  every live site that passes its checks.
+
+The plan does not rely on a new entry being listed at once. A lost marker, or
+one not listed yet, is a cost, never a wrong skip: the site is published and
+checked again. In November 2026 the repository's caches held about 11 GB.
+The previous deploy's turbo cache was gone after gaps between deploys of 2.8
+and 3.6 hours, and survived gaps of up to 12 hours.
+
+### When a site is published
+
+A site is published, and then checked, when:
 
 - the run was dispatched, by hand or by `standalone-catalog.yml` (every site);
-- the run is a re-run (`GITHUB_RUN_ATTEMPT` above 1; every site). A re-run
-  keeps its run id, so it reads no history. "Re-run failed jobs" re-runs only
-  the jobs that failed and those that need them; the others, the build and its
-  plan included, keep their results and outputs from the attempt before. So a
-  re-run of a failed check checks the same sites, and a re-run build publishes
-  everything;
-- the deploy run before this one did not finish green (failed, cancelled
-  part-way or timed out), or the plan cannot be certain of it (every site). The
-  plan reads every run of this workflow created in the last 33 days, on every
-  ref, since all of them share the concurrency group and any of them can
-  publish. The run whose latest attempt started last (`run_started_at`, which
-  a re-run moves) decides, among those that started a job: a run cancelled
-  while it waited started none, so the run before it decides. GitHub re-runs a
-  run only up to 30 days after it, so that history is certain of a deciding run
-  that started in the last two days, and the daily schedule keeps one there.
-  An earlier run still queued or in progress, two runs that started at the same
-  instant, a re-run that started no job, a malformed field, a history that
-  changed while it was read or holds more than 2000 runs, an API error or a
-  timeout each publish every site. A live digest proves the bytes are live, not
-  that their deploy and checks passed, so a failed Worker deploy, a sibling
-  whose checks it skipped, or a failed browser check is retried by the next run;
 - its host does not serve a readable record of this site. Only a direct `200`
   answer with an `application/json` type and no `Age` above 0 counts: a
   redirect is not followed, and the request asks every cache to revalidate. A
   record with a field of the wrong type, or a date that does not exist (such as
   31 February), is unreadable too;
 - its digest differs from the served one;
+- its marker for the served digest and this run's check hash is missing or
+  unknown. This covers a failed or skipped check, a failed or partial deploy,
+  a check that saw other bytes, a changed check and a lost marker;
 - its served usage report predates the last 04:17 UTC refresh. The daily
   schedule exists for this: each catalogue's report is refreshed once a day,
   by the first run after that time. The hub has no report.
 
-A site whose plan fails for any other reason is published. The job summary
-names each decision and, for a forced publish, the run that forced it.
+A site whose plan fails for any other reason is published and checked, and no
+marker is saved for it. Every other site is skipped. The job summary names
+each decision and says whether the marker was found.
+
+Re-runs need no rule of their own. "Re-run failed jobs" re-runs the failed
+check jobs with the build's outputs from the first attempt, so they check the
+same sites and save the same markers. A full re-run plans again.
+
+A marker records a pass; a later failure of the same checks on the same bytes
+does not remove it. Such a failure comes from outside the bytes and the check
+inputs, such as a flaky check or a remote service. The daily run checks every
+live site whether it has a marker or not, so it keeps reporting the failure
+until the checks pass.
 
 One deadline covers each whole exchange, headers and body: 30 seconds for each
-live record and 120 seconds for the whole history read. The plan reads the
-history while it digests the sites, so it writes its outputs within about two
-minutes whatever the network does; a read that runs out of time publishes. The
-plan step's 10 minute limit is a backstop.
+live record and each marker lookup. The plan reads them all at once while it
+digests the sites, and aborts each request when its read ends, so it writes its
+outputs within about 30 seconds whatever the network does. A read that runs
+out of time publishes. The plan step's 10 minute limit is a backstop.
 
 `pnpm test:runtime-startup` runs before a deploy only when some site's content
-may be new (every reason but the usage report). Content the hosts already serve
-passed it when it was published. The deployed checks run for every site a run
-publishes, and the daily run checks every live site, published or not: those
-checks read the public hosts and the checked-out registry, not the build. So a
-broken live site, or a change to the check scripts, is found within a day even
-when no site changes and GA4 is unavailable.
+may be new: a dispatch, an unreadable record or a changed digest. Bytes a host
+already serves passed it when they were first published, so a site published
+only for a missing marker or a usage report does not run it again. The daily
+run checks every live site, published or not: those checks read the public
+hosts and the checked-out registry, not the build. So a broken live site is
+found within a day even when no site changes and GA4 is unavailable.
+
+The first run after this rule is introduced finds no record and no marker, so
+it publishes and checks every site once.
 
 Two builds of one commit differ only in `analytics.json`. `calmar/build-info.json`
 names the commit of calmar's last uncached build and stays in the digest, so a
