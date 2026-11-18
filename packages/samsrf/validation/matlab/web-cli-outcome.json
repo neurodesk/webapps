@@ -1,0 +1,389 @@
+{
+ "matlab": {
+  "kind": "source",
+  "cpu": "AMD EPYC 9V74 80-Core Processor"
+ },
+ "summary": {
+  "exactRuns": 15,
+  "exactMaps": 145,
+  "maps": 168
+ },
+ "runs": {
+  "prf_gaussian_lh_average_double": {
+   "class": "exact",
+   "maps": {
+    "nR^2": "exact",
+    "x0": "exact",
+    "y0": "exact",
+    "Sigma": "exact",
+    "Beta": "exact",
+    "Baseline": "exact",
+    "Noise Ceiling": "exact",
+    "R^2": "exact"
+   }
+  },
+  "prf_gaussian_lh_average_single": {
+   "class": "exact",
+   "maps": {
+    "nR^2": "exact",
+    "x0": "exact",
+    "y0": "exact",
+    "Sigma": "exact",
+    "Beta": "exact",
+    "Baseline": "exact",
+    "Noise Ceiling": "exact",
+    "R^2": "exact"
+   }
+  },
+  "prf_gaussian_lh_concatenate_double": {
+   "class": "exact",
+   "maps": {
+    "R^2": "exact",
+    "x0": "exact",
+    "y0": "exact",
+    "Sigma": "exact",
+    "Beta": "exact",
+    "Baseline": "exact"
+   }
+  },
+  "prf_gaussian_lh_concatenate_single": {
+   "class": "exact",
+   "maps": {
+    "R^2": "exact",
+    "x0": "exact",
+    "y0": "exact",
+    "Sigma": "exact",
+    "Beta": "exact",
+    "Baseline": "exact"
+   }
+  },
+  "prf_gaussian_rh_double": {
+   "class": "exact",
+   "maps": {
+    "R^2": "exact",
+    "x0": "exact",
+    "y0": "exact",
+    "Sigma": "exact",
+    "Beta": "exact",
+    "Baseline": "exact"
+   }
+  },
+  "prf_gaussian_rh_single": {
+   "class": "exact",
+   "maps": {
+    "R^2": "exact",
+    "x0": "exact",
+    "y0": "exact",
+    "Sigma": "exact",
+    "Beta": "exact",
+    "Baseline": "exact"
+   }
+  },
+  "prf_css_lh_double": {
+   "class": "exact",
+   "maps": {
+    "nR^2": "exact",
+    "x0": "exact",
+    "y0": "exact",
+    "Sigma": "exact",
+    "Exponent": "exact",
+    "Beta": "exact",
+    "Baseline": "exact",
+    "Noise Ceiling": "exact",
+    "R^2": "exact"
+   }
+  },
+  "prf_css_lh_single": {
+   "class": "exact",
+   "maps": {
+    "nR^2": "exact",
+    "x0": "exact",
+    "y0": "exact",
+    "Sigma": "exact",
+    "Exponent": "exact",
+    "Beta": "exact",
+    "Baseline": "exact",
+    "Noise Ceiling": "exact",
+    "R^2": "exact"
+   }
+  },
+  "prf_custom_hrf_lh_double": {
+   "class": "exact",
+   "maps": {
+    "nR^2": "exact",
+    "x0": "exact",
+    "y0": "exact",
+    "Sigma": "exact",
+    "Beta": "exact",
+    "Baseline": "exact",
+    "Noise Ceiling": "exact",
+    "R^2": "exact"
+   }
+  },
+  "prf_custom_hrf_lh_single": {
+   "class": "exact",
+   "maps": {
+    "nR^2": "exact",
+    "x0": "exact",
+    "y0": "exact",
+    "Sigma": "exact",
+    "Beta": "exact",
+    "Baseline": "exact",
+    "Noise Ceiling": "exact",
+    "R^2": "exact"
+   }
+  },
+  "rc_hull_lh_double": {
+   "class": "differs",
+   "maps": {
+    "R^2": "exact",
+    "x0": {
+     "srfData": 18,
+     "imaginary": 0,
+     "gifti": 0
+    },
+    "y0": {
+     "srfData": 12,
+     "imaginary": 0,
+     "gifti": 0
+    },
+    "Fwhm": {
+     "srfData": 12,
+     "imaginary": 0,
+     "gifti": 0
+    },
+    "Beta": "exact",
+    "Noise Ceiling": "exact"
+   }
+  },
+  "rc_hull_lh_single": {
+   "class": "exact",
+   "maps": {
+    "R^2": "exact",
+    "x0": "exact",
+    "y0": "exact",
+    "Fwhm": "exact",
+    "Beta": "exact",
+    "Noise Ceiling": "exact"
+   }
+  },
+  "rc_gaussian_lh_double": {
+   "class": "differs",
+   "maps": {
+    "R^2": {
+     "srfData": 20,
+     "imaginary": 0,
+     "gifti": 11
+    },
+    "x0": {
+     "srfData": 20,
+     "imaginary": 0,
+     "gifti": 11
+    },
+    "y0": {
+     "srfData": 17,
+     "imaginary": 0,
+     "gifti": 11
+    },
+    "Sigma": {
+     "srfData": 11,
+     "imaginary": 0,
+     "gifti": 11
+    },
+    "Beta": {
+     "srfData": 11,
+     "imaginary": 0,
+     "gifti": 11
+    },
+    "Baseline": {
+     "srfData": 11,
+     "imaginary": 0,
+     "gifti": 11
+    },
+    "Noise Ceiling": "exact"
+   }
+  },
+  "rc_gaussian_lh_single": {
+   "class": "refused"
+  },
+  "rc_custom_hrf_lh_double": {
+   "class": "differs",
+   "maps": {
+    "R^2": "exact",
+    "x0": {
+     "srfData": 16,
+     "imaginary": 0,
+     "gifti": 0
+    },
+    "y0": {
+     "srfData": 9,
+     "imaginary": 0,
+     "gifti": 0
+    },
+    "Fwhm": {
+     "srfData": 15,
+     "imaginary": 0,
+     "gifti": 0
+    },
+    "Beta": "exact",
+    "Noise Ceiling": "exact"
+   }
+  },
+  "rc_custom_hrf_lh_single": {
+   "class": "exact",
+   "maps": {
+    "R^2": "exact",
+    "x0": "exact",
+    "y0": "exact",
+    "Fwhm": "exact",
+    "Beta": "exact",
+    "Noise Ceiling": "exact"
+   }
+  },
+  "cf_hull_lh_double": {
+   "class": "differs",
+   "maps": {
+    "R^2": "exact",
+    "x0": {
+     "srfData": 1,
+     "imaginary": 0,
+     "gifti": 1
+    },
+    "y0": {
+     "srfData": 17,
+     "imaginary": 0,
+     "gifti": 1
+    },
+    "Centre": "exact",
+    "Surround": "exact",
+    "Beta": "exact",
+    "Suppression": "exact",
+    "Fwhm": "exact",
+    "Vx": "exact",
+    "Noise Ceiling": "exact"
+   }
+  },
+  "cf_hull_lh_single": {
+   "class": "differs",
+   "maps": {
+    "R^2": "exact",
+    "x0": {
+     "srfData": 1,
+     "imaginary": 0,
+     "gifti": 1
+    },
+    "y0": {
+     "srfData": 1,
+     "imaginary": 0,
+     "gifti": 1
+    },
+    "Centre": "exact",
+    "Surround": "exact",
+    "Beta": "exact",
+    "Suppression": "exact",
+    "Fwhm": "exact",
+    "Vx": "exact",
+    "Noise Ceiling": "exact"
+   }
+  },
+  "cf_summary_lh_double": {
+   "class": "exact",
+   "maps": {
+    "R^2": "exact",
+    "x0": "exact",
+    "y0": "exact",
+    "Sigma": "exact",
+    "Fwhm": "exact",
+    "Vx": "exact",
+    "Noise Ceiling": "exact"
+   }
+  },
+  "cf_summary_lh_single": {
+   "class": "exact",
+   "maps": {
+    "R^2": "exact",
+    "x0": "exact",
+    "y0": "exact",
+    "Sigma": "exact",
+    "Fwhm": "exact",
+    "Vx": "exact",
+    "Noise Ceiling": "exact"
+   }
+  },
+  "cf_gaussian_lh_double": {
+   "class": "exact",
+   "maps": {
+    "R^2": "exact",
+    "x0": "exact",
+    "y0": "exact",
+    "Sigma": "exact",
+    "Beta": "exact",
+    "Baseline": "exact",
+    "Fwhm": "exact",
+    "Vx": "exact",
+    "Noise Ceiling": "exact"
+   }
+  },
+  "cf_gaussian_lh_single": {
+   "class": "refused"
+  },
+  "cf_hull_smooth_global_lh_double": {
+   "class": "differs",
+   "maps": {
+    "R^2": {
+     "srfData": 8,
+     "imaginary": 0,
+     "gifti": 0
+    },
+    "x0": {
+     "srfData": 1,
+     "imaginary": 0,
+     "gifti": 1
+    },
+    "y0": {
+     "srfData": 13,
+     "imaginary": 0,
+     "gifti": 1
+    },
+    "Centre": "exact",
+    "Surround": "exact",
+    "Beta": {
+     "srfData": 8,
+     "imaginary": 0,
+     "gifti": 0
+    },
+    "Suppression": {
+     "srfData": 13,
+     "imaginary": 0,
+     "gifti": 0
+    },
+    "Fwhm": "exact",
+    "Vx": "exact",
+    "Noise Ceiling": "exact"
+   }
+  },
+  "cf_hull_smooth_global_lh_single": {
+   "class": "differs",
+   "maps": {
+    "R^2": "exact",
+    "x0": {
+     "srfData": 1,
+     "imaginary": 0,
+     "gifti": 1
+    },
+    "y0": {
+     "srfData": 1,
+     "imaginary": 0,
+     "gifti": 1
+    },
+    "Centre": "exact",
+    "Surround": "exact",
+    "Beta": "exact",
+    "Suppression": "exact",
+    "Fwhm": "exact",
+    "Vx": "exact",
+    "Noise Ceiling": "exact"
+   }
+  }
+ }
+}

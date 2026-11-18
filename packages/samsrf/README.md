@@ -155,7 +155,7 @@ default has no offset. See the [actual container comparison](validation/containe
 | `job.values` | `Srf.Values` of the per-vertex rows (before the noise ceiling and `nR^2`). |
 | `job.modelName`, `job.outSuffix` | SamSrf's output name is `${hemisphere}_${modelName}${outSuffix}` (`_CrsFit`, `_Css`, `_Rcp`). |
 | `job.run(start, end, onProgress?) → Uint8Array` | Analyses positions `[start, end)` of `analysed` and returns a self-describing partial result to `postMessage`; `onProgress(done, count)`. |
-| `job.merge(partials) → { maps, raw, analysed }` | Merges partials that cover `[0, vertexCount)` exactly once into `Srf.Data` over every vertex (`maps`), with the `Noise Ceiling` row and, for `prf`, `samsrf_normr2` applied; `raw` is `Srf.Raw_Data` (`rc`) or `null`; `analysed` the sorted analysed vertices (`null` for all). |
+| `job.merge(partials) → { maps, raw, analysed, imaginary }` | Merges partials that cover `[0, vertexCount)` exactly once into `Srf.Data` over every vertex (`maps`), with the `Noise Ceiling` row and, for `prf`, `samsrf_normr2` applied; `raw` is `Srf.Raw_Data` (`rc`) or `null`; `analysed` the sorted analysed vertices (`null` for all); `imaginary` the imaginary parts of `maps.data` in its layout where MATLAB's `Srf.Data` is complex (`Css_Convention: "samsrf"` with a negative response), else `null`. Exports keep real parts only. |
 | `mergePartials(job, partials)` | `job.merge(partials)`. |
 | `job.free()` | Releases the job. |
 | `readBensonTemplate(bytes, hemisphere = 'lh') → { values, vertices, data }` | `samsrf_benson2srf` on a Benson GIFTI (polar angle, eccentricity, ROI arrays): the template maps `R^2`, `x0`, `y0`, `Sigma` (NaN), `ROI`, computed in single precision as MATLAB does on the GIFTI's `single` data; `'rh'` flips `x0`. |
@@ -471,8 +471,16 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   clips negative responses before the CSS power and uses the fitted Exponent
   for post-fit betas. `Css_Convention: "samsrf"` retains MATLAB's complex
   powers and its final-parameter post-fit formula: with concurrent HRF fitting
-  that parameter is AmpRat. Exported maps retain real components, as SamSrf
-  10.4's `samsrf_expand_srf` does. Raw optimizer cases match the actual
+  that parameter is AmpRat. SamSrf itself always takes complex powers, so MATLAB
+  parity needs `"samsrf"` whenever an aperture holds negative values (as
+  interpolated ones do). R², nR², Beta and Baseline are then complex, and
+  `Job.merge` returns their imaginary parts as `imaginary`, as MATLAB saves them
+  in `Srf.Data`. Exported maps retain real components, as SamSrf
+  10.4's `samsrf_expand_srf` does. On the SamSrfAnalysis CSS runs of the pinned
+  source recording (AMD host), every real and imaginary `Srf.Data` value and
+  every exported map equals MATLAB's in both precisions
+  ([CSS through SamSrfAnalysis](validation/matlab/README.md#css-through-samsrfanalysis)).
+  Raw optimizer cases match the actual
   MATLAB recordings in both precisions, and the recorded single-precision
   pipeline (`pipeline_single_css`) matches every map value exactly, Beta and
   Baseline included (`compare.mjs`). Other double CSS fits of the 741-case

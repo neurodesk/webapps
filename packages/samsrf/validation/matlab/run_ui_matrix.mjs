@@ -8,8 +8,11 @@
 // with "Save model JSON" just before running (what the app actually ran), the status
 // line and the app's own refusal text. Nothing is translated by this script beyond
 // what a person would do: the model is the CLI model plus Data_Precision (the
-// precision SamSrf_defaults.json's def_64bit selects for MATLAB); the app itself
-// replaces the model's file fields with the names of the files given to it.
+// precision SamSrf_defaults.json's def_64bit selects for MATLAB) and, for a forward
+// model, Css_Convention "samsrf" (SamSrf's complex CSS powers, which the app's CSS
+// convention control shows for a CSS model), as run_web_matrix.mjs's matlabModel gives
+// the engine; the app itself replaces the model's file fields with the names of the
+// files given to it.
 //
 // Usage: node run_ui_matrix.mjs APP_URL PLAN_JSON BUNDLE BUNDLE_SHA256_JSON OUTPUT_ROOT
 //
@@ -25,7 +28,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { expectedEngineOutcome, isEntry, treeHashes } from './run_web_matrix.mjs';
+import { expectedEngineOutcome, isEntry, matlabModel, treeHashes } from './run_web_matrix.mjs';
 
 const INPUT = '/input';
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -54,7 +57,7 @@ export function uiRun(run, bundle) {
   const dataset = join(bundle, run.dataset);
   if (runs !== `${INPUT}/${run.dataset}/${hemisphere}_ubars*.gii`) throw new Error(`${run.id}: unexpected run wildcard ${runs}`);
   if (option('norm') !== '1') throw new Error(`${run.id}: only -norm=1 is planned`);
-  const model = { ...run.model, Data_Precision: run.precision };
+  const model = matlabModel(run);
   const files = {
     runs: readdirSync(dataset).filter((name) => new RegExp(`^${hemisphere}_ubars\\d+\\.gii$`).test(name)).sort().map((name) => join(dataset, name)),
     roi: [`${local(option('roi'))}.label`],
