@@ -3,7 +3,7 @@ import { parse } from 'yaml';
 import { LockfileAnalysisError, lockfileImpact } from './lockfile-impact.mjs';
 import { onlyAddsExports } from './module-closure.mjs';
 import { EMBEDDED_VERSION_FILES, releaseBookkeeping } from './release-bookkeeping.mjs';
-import { CATALOG, EASTER_EGG, INDEPENDENT_CONFIG, SITE, reachableFrom } from './workspace-graph.mjs';
+import { CATALOG, INDEPENDENT_CONFIG, SITE, reachableFrom } from './workspace-graph.mjs';
 import { validateAppInformation } from './app-information.mjs';
 import { parseAppsRegistry } from './apps-registry.mjs';
 import { validateStandalone } from './standalone.mjs';
@@ -57,16 +57,17 @@ const AUTOMATION_CONTRACT = /^apps\/[^/]+\/automation\.json$/;
 export const SITE_ONLY_FILES = new Set(['site/landing.css', 'site/landing.js', 'site/analytics.json', 'site/404.html', 'site/dicompare-routes.js']);
 const CI_WORKFLOW = '.github/workflows/ci.yml';
 // What each ci.yml job tests, for a change confined to it: the composite site
-// (`site`: composite-site and the jobs that only consume its build), every
-// package suite (`packages`: workspace-contracts runs them), the homepage
-// easter egg (`easter-egg`), or nothing (`none`: the plan's marker jobs). The
-// plan, the per-app jobs, a job not listed here and every key outside `jobs`
-// reach every app. test/app-plan.test.mjs holds the list to ci.yml.
+// (`site`: composite-site and the jobs that only consume its build), the
+// homepage easter egg (`easter-egg`), nothing more than the run itself
+// (`every-run`: workspace-contracts runs on every run, so its own run tests
+// the change), or nothing (`none`: the plan's marker jobs). The plan, the
+// per-app jobs, a job not listed here and every key outside `jobs` reach
+// every app. test/app-plan.test.mjs holds the list to ci.yml.
 export const CI_JOB_SCOPES = Object.freeze({
   'composite-site': 'site',
   'agent-interactions': 'site',
   'example-cache-retention': 'site',
-  'workspace-contracts': 'packages',
+  'workspace-contracts': 'every-run',
   'homepage-easter-egg': 'easter-egg',
   'full-plan': 'none',
   'full-plan-withheld': 'none',
@@ -586,122 +587,75 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
   };
 }
 
-// Paths no package suite and not the easter egg reads: their tests read no
-// root Markdown, no other workflow and no lint or dependency-quality config.
-const NO_SUITE_PATHS = [/^[^/]+\.md$/, /^\.gitignore$/, /^\.github\/workflows\/(?!ci\.yml$)[^/]+$/, INDEPENDENT_CONFIG, /^config\/dependency-/];
-// Directories whose files a suite reads only through its graph node or the paths it names.
-const SUITE_INPUT = /^(?:apps|packages|exes|scripts|test-utils|registry|test|models|site|runtime-assets|templates)\//;
-export const EASTER_EGG_SUITE = 'homepage-easter-egg';
-// workspace-contracts' package step runs this script only when the plan lists
-// packages, so a change to it runs every package suite.
-export const PACKAGE_STEP = 'scripts/run-package-tests.mjs';
-// Importers a lockfile change can place: a workspace directory or an easter egg.
-const PLACED_IMPORTER = /^(?:(?:apps|packages|exes)\/[^/]+|site\/easter-eggs\/[^/]+)$/;
+export const EASTER_EGG_JOB = 'homepage-easter-egg';
+// Every file ci.yml's homepage-easter-egg job reads, from its commands and the
+// code they run (a path ending in / is a directory):
+// - `pnpm install` and the Playwright install read root configuration and the
+//   lockfile, which have their own rules below;
+// - `node --test test/easter-egg.test.mjs` reads that file, the landing page it
+//   renders (scripts/lib/landing-page.mjs, scripts/lib/apps-registry.mjs,
+//   registry/apps.yml) and the easter eggs' manifests under site/;
+// - the two `pnpm --filter` test scripts and `test:e2e` run the packages under
+//   site/easter-eggs; the e2e server (their scripts/preview-site.mjs) renders
+//   the landing page again and copies site/ files and
+//   packages/analytics/src/index.js.
+// test/app-plan.test.mjs holds the job's commands, the package scripts they
+// run and the imports of these files to the table, so a new input fails it.
+export const EASTER_EGG_INPUTS = Object.freeze(['site/', 'test/easter-egg.test.mjs', 'scripts/lib/landing-page.mjs', 'scripts/lib/apps-registry.mjs', 'registry/apps.yml', 'packages/analytics/src/']);
+// Root scripts `pnpm install` runs.
+const INSTALL_SCRIPTS = new Set(['pnpm:devPreinstall', 'preinstall', 'install', 'postinstall', 'preprepare', 'prepare', 'postprepare']);
+// Directories the job reads nothing of but the inputs above.
+const EASTER_EGG_UNREAD = /^(?:apps|packages|exes|models|scripts|test|test-utils|registry|runtime-assets|templates)\//;
+// Root files the job reads nothing of: Markdown, other workflows, lint and dependency-quality configuration.
+const EASTER_EGG_UNREAD_ROOT = [/^[^/]+\.md$/, /^\.gitignore$/, /^\.github\/workflows\/(?!ci\.yml$)[^/]+$/, INDEPENDENT_CONFIG, /^config\/dependency-/];
 
-// The suites outside the per-app jobs: each package's own tests, which
-// workspace-contracts runs (`pnpm test:packages`), and the homepage easter
-// egg's, which the homepage-easter-egg job runs. A suite reads its own
-// directory, every node its graph node reaches, and the paths those name
-// (`graph.outside`: app, model and site paths and every relative literal, a
-// name ending in `*` a prefix; a package's tests count only for its own
-// suite and for suites that read them).
-function suitesOf(graph) {
-  const suite = (id, own, start, tests = []) => {
-    const reach = reachableFrom(graph, start);
-    return { id, own, reach, outside: new Set([...reach, ...tests].flatMap((node) => [...(graph.outside?.get(node) ?? [])])) };
-  };
-  const packages = graph.nodes.filter((node) => node.startsWith('packages/'));
-  return [
-    ...packages.map((node) => suite(node, `${node}/`, node, [`${node}/test`, `${node}/tests`])),
-    ...(graph.edges.has(EASTER_EGG) ? [suite(EASTER_EGG_SUITE, 'site/', EASTER_EGG)] : []),
-  ];
-}
-
-// The package suites and the easter egg a change reaches, and why. Without a
-// diff, a graph, or for a path no rule places (root configuration, an
-// unplaced lockfile importer, ci.yml outside the jobs CI_JOB_SCOPES lists),
-// `fallback` says why every suite runs. The easter egg also runs whenever
-// the graph has no node for its job.
-export function selectAffectedSuites(changedPaths, graph, manifests = new Map(), { release = false } = {}) {
-  if (!changedPaths.length) return { fallback: 'no changed paths: no base revision, an unreadable diff, or a full run', suites: new Map() };
-  if (!graph) return { fallback: 'there is no workspace graph to find what each suite reads', suites: new Map() };
-  const suites = suitesOf(graph);
-  const selected = new Map();
-  let fallback = null;
-  const select = (id, reason) => selected.set(id, [...(selected.get(id) ?? []), reason]);
-  const shared = (reason) => {
-    fallback ??= reason;
-  };
-  // The suites that read `path`: below their own directory, through a node they reach, or a path they name.
-  const touch = (path, reason = path) => {
-    const nodes = graphNodes(path, graph);
-    for (const suite of suites) {
-      const names = [...suite.outside].some((name) => (name.endsWith('*') ? path.startsWith(name.slice(0, -1)) : path === name || path.startsWith(`${name}/`)));
-      if (path.startsWith(suite.own) || names || nodes.some((node) => suite.reach.has(node))) select(suite.id, reason);
-    }
-  };
+// Why the homepage-easter-egg job runs for a change: a path in
+// EASTER_EGG_INPUTS, a lockfile change to its importers or the root's, a
+// change to its ci.yml job, or any path no rule says it does not read (root
+// configuration among them). Empty when it does not run.
+export function selectEasterEgg(changedPaths, manifests = new Map(), { release = false } = {}) {
+  if (!changedPaths.length) return ['no changed paths: no base revision, an unreadable diff, or a full run'];
+  const reasons = [];
   for (const path of changedPaths) {
     if (!release && releaseBookkeeping(path, manifests)) continue;
-    if (NON_CODE_FILES.has(path) || NON_CODE_PREFIXES.some((prefix) => path.startsWith(prefix)) || NO_SUITE_PATHS.some((pattern) => pattern.test(path))) continue;
-    if (path === PACKAGE_STEP) {
-      for (const suite of suites) if (suite.id !== EASTER_EGG_SUITE) select(suite.id, `${path}: workspace-contracts runs every package suite through it`);
+    if (EASTER_EGG_INPUTS.some((input) => (input.endsWith('/') ? path.startsWith(input) : path === input))) {
+      reasons.push(path);
       continue;
     }
+    if (NON_CODE_PREFIXES.some((prefix) => path.startsWith(prefix)) || EASTER_EGG_UNREAD.test(path) || EASTER_EGG_UNREAD_ROOT.some((pattern) => pattern.test(path))) continue;
     if (path === CI_WORKFLOW) {
       const impact = manifests.get(path) ? ciImpact(manifests.get(path)) : { shared: 'the base or head workflow is unavailable' };
-      if (impact.shared) {
-        shared(`${path}: ${impact.shared}`);
-        continue;
-      }
-      for (const job of impact.jobs) {
-        const scope = CI_JOB_SCOPES[job];
-        for (const suite of suites) {
-          if ((scope === 'packages' && suite.id !== EASTER_EGG_SUITE) || (scope === 'easter-egg' && suite.id === EASTER_EGG_SUITE)) select(suite.id, `${path}: its ${job} job changed`);
-        }
-      }
+      if (impact.shared) reasons.push(`${path}: ${impact.shared}`);
+      else if (impact.jobs.includes(EASTER_EGG_JOB)) reasons.push(`${path}: its ${EASTER_EGG_JOB} job changed`);
       continue;
     }
     if (path === LOCKFILE) {
       const impact = manifests.get(path) ? analyseLockfile(manifests.get(path)) : { shared: 'the base or head lockfile is unavailable' };
       if (impact.shared) {
-        shared(`${path}: ${impact.shared}`);
+        reasons.push(`${path}: ${impact.shared}`);
         continue;
       }
       for (const [importer, reason] of impact.importers) {
-        if (PLACED_IMPORTER.test(importer)) touch(`${importer}/package.json`, `${path}: ${reason}`);
-        else shared(`${path}: ${reason}, and ${importer === '.' ? "the root's dependencies resolve for every workspace member" : 'no rule says which suites resolve it'}`);
+        if (importer === '.' || importer.startsWith('site/')) reasons.push(`${path}: ${reason}`);
       }
       continue;
     }
     if (path === GITATTRIBUTES) {
       const files = manifests.get(path)?.files;
-      if (!files) {
-        shared(`${path}: the files whose attributes changed are unknown`);
-        continue;
-      }
-      if (!files.length) continue;
-      const touched = selectAffectedSuites(files, graph, new Map(), { release });
-      if (touched.fallback) shared(`${path}: ${touched.fallback}`);
-      for (const [id, reasons] of touched.suites) select(id, `${path}: ${reasons[0]}`);
+      if (!files) reasons.push(`${path}: the files whose attributes changed are unknown`);
+      else if (files.length) reasons.push(...selectEasterEgg(files, new Map(), { release }).map((reason) => `${path}: ${reason}`));
       continue;
     }
-    if (SUITE_INPUT.test(path)) {
-      touch(path);
-      continue;
-    }
-    // The suites run their packages' own scripts; of the root scripts only test:packages is theirs.
+    // The job runs no root script by name; installing runs the lifecycle ones.
     const scripts = path === 'package.json' && manifests.get(path) && changedRootScripts(manifests.get(path));
-    if (scripts) {
-      if (scripts.includes('test:packages')) for (const suite of suites) if (suite.id !== EASTER_EGG_SUITE) select(suite.id, `${path}: its test:packages script changed`);
-      continue;
-    }
-    shared(`${path}: every package suite and the easter egg install and run under it`);
+    if (scripts && !scripts.some((name) => INSTALL_SCRIPTS.has(name))) continue;
+    reasons.push(`${path}: the job installs and runs under the repository root's configuration`);
   }
-  return { fallback, suites: selected };
+  return reasons;
 }
 
-// `carriedChecks` maps a planned job (workspace-contracts, homepage-easter-egg)
-// that did not pass in the base run to its failed jobs: it runs again in full.
+// `carriedChecks` maps a planned job (homepage-easter-egg) that did not pass
+// on main since the base to why: it runs again in full.
 export function createAppPlan(registry, changedPaths = [], graph = null, manifests = new Map(), { draft = false, release = false, carried = new Map(), carriedChecks = new Map() } = {}) {
   const affected = selectAffectedApps(registry, changedPaths, graph, manifests, { release, carried });
   // Drafts give fast feedback on app edits. Ready PRs always use the complete
@@ -715,16 +669,9 @@ export function createAppPlan(registry, changedPaths = [], graph = null, manifes
   const heavy = (entry) => ({ ...entry, heavy_tests: editsApp(registry.apps.find((app) => app.id === entry.app), changedPaths, edited, carried) });
   const browserTested = selected.filter((app) => app.ci.browser_test);
   const gpuTested = selected.filter((app) => app.ci.hardware_gpu);
-  // A draft runs the suites its change reaches, as a ready pull request does.
-  // A plan of every app tests every package, as the nightly does.
-  const checks = selectAffectedSuites(changedPaths, graph, manifests, { release });
-  const everyApp = affected.reasons.fallback ?? (affected.apps.length === registry.apps.length ? 'its change reaches every app' : null);
-  const failedThere = (job) => carriedChecks.has(job) ? [`failed in the base run (${carriedChecks.get(job).join(', ')})`] : [];
-  const packageFallback = checks.fallback ?? (everyApp && `the plan selects every app: ${everyApp}`) ?? failedThere('workspace-contracts')[0] ?? null;
-  const packageReasons = packageFallback ? {} : Object.fromEntries([...checks.suites].filter(([id]) => id !== EASTER_EGG_SUITE));
-  const easterEgg = checks.fallback
-    ? [checks.fallback]
-    : [...(graph.edges.has(EASTER_EGG) ? checks.suites.get(EASTER_EGG_SUITE) ?? [] : ['ci.yml has no homepage-easter-egg job for the workspace graph to follow']), ...failedThere(EASTER_EGG_SUITE)];
+  // A draft plans the easter egg as a ready pull request does.
+  const carriedEgg = carriedChecks.get(EASTER_EGG_JOB);
+  const easterEgg = [...selectEasterEgg(changedPaths, manifests, { release }), ...(carriedEgg ? [`failed in the base run (${carriedEgg.join(', ')})`] : [])];
   return Object.freeze({
     changedPaths: Object.freeze([...changedPaths]),
     selected: Object.freeze(selected),
@@ -736,8 +683,6 @@ export function createAppPlan(registry, changedPaths = [], graph = null, manifes
     site: site || selected.length > 0,
     reasons: Object.freeze(reasons),
     bookkeeping: Object.freeze([...(affected.bookkeeping ?? [])]),
-    // `all` says why every package suite runs; otherwise `reasons` maps each package directory it runs to its changes.
-    packages: Object.freeze({ all: packageFallback || null, reasons: Object.freeze(packageReasons) }),
     // Why the homepage-easter-egg job runs; empty when it does not.
     easterEgg: Object.freeze([...easterEgg]),
   });

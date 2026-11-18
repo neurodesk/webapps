@@ -197,8 +197,7 @@ test('each quality job runs on exactly the events its former workflow ran on', a
 test('contract and correctness owners replace duplicate invocations without losing native parity', async () => {
   const workspace = commands(ci.jobs['workspace-contracts']);
   assert.equal(workspace.filter((command) => command === 'pnpm test:contracts').length, 1);
-  // The package tests, narrowed to the packages a change reaches, run after the native build.
-  assert.ok(workspace.findIndex((command) => command.includes('make -C exes/nii2tvx test')) < workspace.indexOf('node scripts/run-package-tests.mjs'));
+  assert.ok(workspace.indexOf(workspace.find((command) => command.includes('make -C exes/nii2tvx test'))) < workspace.indexOf('pnpm test:packages'));
   assert.ok(workspace.includes('node scripts/lint-workspaces.mjs'));
   assert.ok(!workspace.includes('pnpm lint'));
   assert.ok(commands((await workflow('quality')).jobs.correctness).includes('pnpm lint:correctness'));

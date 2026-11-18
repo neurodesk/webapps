@@ -49,14 +49,13 @@ export function testedBase({ runs, head, branch, git, workflow = 'ci', atHead = 
 // runs again whatever its plan, and jobs only the nightly runs (which tests
 // every app), need no carrying. A job the plan narrows (PLANNED_JOBS) that did
 // not pass, finished or not, is carried whole in `checks`: the next push runs
-// every package suite or the easter egg again, since which suite failed is
-// not known. Any other failed job (the plan itself), an unfinished per-app
+// it again. Any other failed job (the plan itself), an unfinished per-app
 // job, or an app id the registry does not know cannot be tied to an app.
 // test/app-plan.test.mjs holds ci.yml to these job lists.
 export const APP_JOBS = ['app-tests', 'browser-e2e', 'browser-e2e-gpu'];
-export const RERUN_JOBS = ['composite-site', 'example-cache-retention', 'full-plan', 'full-plan-withheld'];
-// Jobs that run, or test packages, only where the plan's change reaches.
-export const PLANNED_JOBS = ['workspace-contracts', 'homepage-easter-egg'];
+export const RERUN_JOBS = ['workspace-contracts', 'composite-site', 'example-cache-retention', 'full-plan', 'full-plan-withheld'];
+// Jobs that run only where the plan's change reaches.
+export const PLANNED_JOBS = ['homepage-easter-egg'];
 export const NIGHTLY_JOBS = ['agent-interactions'];
 const APP_JOB = new RegExp(`^(?:${APP_JOBS.join('|')}) \\(([^,)]+)[,)]`);
 const UNPASSED = new Set(['failure', 'cancelled', 'timed_out', 'startup_failure', 'action_required', 'stale']);

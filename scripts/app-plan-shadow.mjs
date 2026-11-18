@@ -17,7 +17,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { parse } from 'yaml';
 import { changedManifests, changedPathsFromGit, createAppPlan, UnreadableDiffError } from './lib/app-plan.mjs';
-import { comparePackages, compareSelection, expectedApps, expectedPackages, failureCandidates, parseableClosure, republishedPackages, supersededMerges, uncheckedRules, workspaceClosures } from './lib/app-plan-shadow.mjs';
+import { compareSelection, expectedApps, failureCandidates, parseableClosure, republishedPackages, supersededMerges, uncheckedRules, workspaceClosures } from './lib/app-plan-shadow.mjs';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
 import { listJobs, listRuns, mapLimited, mergedPullRequests } from './lib/github-actions.mjs';
 import { loadConservativeWorkspaceGraph, WorkspaceGraphConfigurationError } from './lib/workspace-graph.mjs';
@@ -75,48 +75,19 @@ async function workspaceManifests(root) {
   return manifests;
 }
 
-// What pnpm lists for each workspace directory from the lockfile alone, by
-// `key(dir)` (an app's id, a package's directory).
-async function lockClosures(root, dirs, key = (dir) => dir.slice('apps/'.length)) {
+// What pnpm lists for each app from the lockfile alone.
+async function lockClosures(root, appIds) {
   const closures = new Map();
-  await mapLimited(dirs, 8, async (dir) => {
-    const exists = await readFile(join(root, dir, 'package.json'), 'utf8').then(() => true, () => false);
+  await mapLimited(appIds, 8, async (id) => {
+    const dir = join(root, 'apps', id);
+    const exists = await readFile(join(dir, 'package.json'), 'utf8').then(() => true, () => false);
     if (!exists) return;
-    const { stdout } = await execFileAsync('pnpm', ['list', '--filter', `./${dir}`, '--lockfile-only', '--depth', 'Infinity', '--parseable'], {
+    const { stdout } = await execFileAsync('pnpm', ['list', '--filter', `./apps/${id}`, '--lockfile-only', '--depth', 'Infinity', '--parseable'], {
       cwd: root, maxBuffer: 64 * 1024 * 1024, env: { ...process.env, COREPACK_ENABLE_STRICT: '0' },
     });
-    closures.set(key(dir), parseableClosure(stdout));
+    closures.set(id, parseableClosure(stdout));
   });
   return closures;
-}
-
-// The text of every file in each package directory, at both revisions, for
-// the oracle's search for paths a package names (expectedPackages).
-const TEXT = /\.(?:[cm]?[jt]sx?|json|html|css|rs|toml|py|sh|ya?ml|txt)$|^Makefile$/;
-const SKIPPED = new Set(['node_modules', 'dist', 'target', '.turbo', 'coverage']);
-async function packageTexts(roots, dirs) {
-  const texts = new Map();
-  const walk = async (path, parts) => {
-    for (const entry of await readdir(path, { withFileTypes: true }).catch(() => [])) {
-      if (entry.isDirectory() && !SKIPPED.has(entry.name)) await walk(join(path, entry.name), parts);
-      else if (entry.isFile() && TEXT.test(entry.name)) {
-        const text = await readFile(join(path, entry.name), 'utf8').catch(() => '');
-        if (text.length <= 1024 * 1024) parts.push(text);
-      }
-    }
-  };
-  await mapLimited(dirs, 8, async (dir) => {
-    const parts = [];
-    for (const root of roots) await walk(join(root, dir), parts);
-    texts.set(dir, parts.join('\n'));
-  });
-  return texts;
-}
-
-// The package directories `pnpm test:packages` tests: those with a test script
-// (`test:unit` for the component package).
-function testedPackageDirs(manifests) {
-  return [...manifests].filter(([dir, manifest]) => dir.startsWith('packages/') && manifest?.scripts?.[dir === 'packages/components' ? 'test:unit' : 'test']).map(([dir]) => dir);
 }
 
 async function shadow(pr, scratch) {
@@ -157,17 +128,10 @@ async function shadow(pr, scratch) {
     const [workspaceBefore, workspaceAfter] = await Promise.all([workspaceManifests(join(dir, 'base')), workspaceManifests(join(dir, 'head'))]);
     const ids = registry.apps.map((app) => app.id);
     const lockfile = manifests.get('pnpm-lock.yaml');
-    const appDirs = ids.map((id) => `apps/${id}`);
     const closures = lockfile && {
-      before: await lockClosures(join(dir, 'base'), appDirs),
-      after: await lockClosures(join(dir, 'head'), appDirs),
+      before: await lockClosures(join(dir, 'base'), ids),
+      after: await lockClosures(join(dir, 'head'), ids),
       republished: republishedPackages(lockfile.before, lockfile.after),
-    };
-    const packageDirs = testedPackageDirs(workspaceAfter);
-    const packageClosures = lockfile && {
-      before: await lockClosures(join(dir, 'base'), packageDirs, (path) => path),
-      after: await lockClosures(join(dir, 'head'), packageDirs, (path) => path),
-      republished: closures.republished,
     };
     const oracle = expectedApps({
       apps: registry.apps,
@@ -179,19 +143,15 @@ async function shadow(pr, scratch) {
       offlineLock: manifests.get('registry/offline-assets.lock.json') ?? null,
     });
     const comparison = compareSelection({ catalog: registry, plan, oracle });
-    const texts = await packageTexts([join(dir, 'base'), join(dir, 'head')], packageDirs);
-    const packageExpected = expectedPackages({ packages: packageDirs, changedPaths, workspace: { before: workspaceClosures(workspaceBefore), after: workspaceClosures(workspaceAfter) }, lockClosures: packageClosures ?? null, texts });
-    const packages = { ...comparePackages({ plan, expected: packageExpected, packages: packageDirs }), full: packageDirs.length };
     return {
       ...row,
-      packages,
-      easterEgg: plan.easterEgg,
-      unchecked: uncheckedRules({ plan, changedPaths, manifests }),
       base,
       head,
       changed: changedPaths.length,
       ...comparison,
       site: plan.site,
+      easterEgg: plan.easterEgg,
+      unchecked: uncheckedRules({ plan, changedPaths, manifests }),
       expected: Object.fromEntries(oracle.expected),
       reasons: plan.reasons,
       exempt: oracle.exempt,
@@ -231,15 +191,13 @@ function markdown(rows, candidates, superseded) {
     '',
     `Oracle misses: ${done.reduce((sum, row) => sum + row.misses.length, 0)}.`,
     '',
-    `Not checked: the oracle has no expectation of its own for registry site keys (SITE_KEY_READERS) or ci.yml jobs (CI_JOB_SCOPES), so a row narrowed through them reads 0 misses unchecked. Rows narrowed through them: ${done.filter((row) => row.unchecked?.length).map((row) => `#${row.pr} (${row.unchecked.join(', ')})`).join(', ') || 'none'}.`,
+    `Not checked: the oracle has no expectation of its own for registry site keys (SITE_KEY_READERS) or ci.yml jobs (CI_JOB_SCOPES), so a row narrowed through them reads 0 misses unchecked. Rows narrowed through them: ${done.filter((row) => row.unchecked?.length).map((row) => `#${row.pr} (${row.unchecked.join(', ')})`).join(', ') || 'none'}. Easter egg runs: ${done.filter((row) => row.easterEgg?.length).length}/${done.length}.`,
     '',
-    `Package suites selected versus all: ${done.reduce((sum, row) => sum + (row.packages ? (row.packages.all ? row.packages.full : row.packages.selected.length) : 0), 0)}/${done.reduce((sum, row) => sum + (row.packages?.full ?? 0), 0)}; package oracle misses: ${done.reduce((sum, row) => sum + (row.packages?.misses.length ?? 0), 0)}. Easter egg runs: ${done.filter((row) => row.easterEgg?.length).length}/${done.length}.`,
-    '',
-    '| PR | Selected | Full | Misses | Packages | Egg | Fallback or reasons |',
-    '| --- | --- | --- | --- | --- | --- | --- |',
+    '| PR | Selected | Full | Misses | Egg | Fallback or reasons |',
+    '| --- | --- | --- | --- | --- | --- |',
     ...rows.map((row) => (row.skipped
-      ? `| #${row.pr} | - | - | - | - | - | skipped: ${row.skipped} |`
-      : `| #${row.pr} | ${row.fallback ? 'all' : row.selected.length ? row.selected.join(', ') : 'none'} | ${row.full} | ${[...row.misses.map((miss) => `**${miss.app}**: ${miss.reasons.join('; ')}`), ...(row.packages?.misses ?? []).map((miss) => `**${miss.package}**: ${miss.reasons.join('; ')}`)].join('<br>') || (row.unchecked?.length ? `0, unchecked: ${row.unchecked.join(', ')}` : '0')} | ${row.packages ? (row.packages.all ? 'all' : `${row.packages.selected.length}/${row.packages.full}`) : '-'} | ${row.easterEgg ? (row.easterEgg.length ? 'yes' : 'no') : '-'} | ${(row.fallback ?? (row.site ? `site build: ${row.reasons.site[0] ?? 'selected apps'}` : 'no site build')).replaceAll('|', '\\|').slice(0, 160)} |`)),
+      ? `| #${row.pr} | - | - | - | - | skipped: ${row.skipped} |`
+      : `| #${row.pr} | ${row.fallback ? 'all' : row.selected.length ? row.selected.join(', ') : 'none'} | ${row.full} | ${row.misses.map((miss) => `**${miss.app}**: ${miss.reasons.join('; ')}`).join('<br>') || (row.unchecked?.length ? `0, unchecked: ${row.unchecked.join(', ')}` : '0')} | ${row.easterEgg ? (row.easterEgg.length ? 'yes' : 'no') : '-'} | ${(row.fallback ?? (row.site ? `site build: ${row.reasons.site[0] ?? 'selected apps'}` : 'no site build')).replaceAll('|', '\\|').slice(0, 160)} |`)),
   ];
   if (candidates) {
     lines.push('', `Apps that failed on main after a narrowed PR skipped them: ${candidates.length}.`, '');
@@ -275,7 +233,7 @@ if (option('--rows')) {
       const row = await shadow(pr, scratch);
       rows.push(row);
       const summary = row.skipped ?? (row.fallback ? `full catalog: ${row.fallback}` : `${row.selected.length}/${row.full} apps`);
-      console.error(`#${pr.number} ${summary.slice(0, 140)}${row.misses?.length ? ` MISSES ${row.misses.map((miss) => miss.app).join(', ')}` : ''}${row.packages?.misses.length ? ` PACKAGE MISSES ${row.packages.misses.map((miss) => miss.package).join(', ')}` : ''}`);
+      console.error(`#${pr.number} ${summary.slice(0, 140)}${row.misses?.length ? ` MISSES ${row.misses.map((miss) => miss.app).join(', ')}` : ''}`);
     }
   } finally {
     await rm(scratch, { recursive: true, force: true });

@@ -3,11 +3,11 @@ import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { chmod, copyFile, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, relative as relativePath, resolve as resolvePath } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { parse, stringify } from 'yaml';
-import { AUTOMATION_CATALOG_READERS, changedPathsFromGit, CI_JOB_SCOPES, createAppPlan, EASTER_EGG_SUITE, INDEPENDENT_ROOT_DEV_DEPENDENCIES, PACKAGE_STEP, RUNTIME_MANIFEST_READERS, UnreadableDiffError, SITE_KEY_READERS, SITE_ONLY_FILES } from '../scripts/lib/app-plan.mjs';
+import { AUTOMATION_CATALOG_READERS, changedPathsFromGit, CI_JOB_SCOPES, createAppPlan, EASTER_EGG_INPUTS, EASTER_EGG_JOB, INDEPENDENT_ROOT_DEV_DEPENDENCIES, RUNTIME_MANIFEST_READERS, UnreadableDiffError, SITE_KEY_READERS, SITE_ONLY_FILES } from '../scripts/lib/app-plan.mjs';
 import { APP_JOBS, carriedApps, NIGHTLY_JOBS, PLANNED_JOBS, RERUN_JOBS, testedBase } from '../scripts/lib/tested-base.mjs';
 import { lockfileImpact } from '../scripts/lib/lockfile-impact.mjs';
 import { loadAppsRegistry, parseAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
@@ -230,15 +230,10 @@ test('root package.json script edits count only where ci.yml runs them', async (
   assert.deepEqual(site.selected, []);
   assert.equal(site.site, true);
   assert.equal(plan({ scripts, devDependencies: { a: '1' } }).allApps, true);
-  // Package suites and the easter egg run their packages' scripts: only test:packages is one of theirs.
-  const unrelated = plan({ scripts: { ...scripts, 'new-app': 'B' } });
-  assert.deepEqual(Object.keys(unrelated.packages.reasons), []);
-  assert.equal(unrelated.packages.all, null);
-  assert.deepEqual(unrelated.easterEgg, []);
-  const packages = plan({ scripts: { ...scripts, 'test:packages': 'pnpm -r test' } });
-  assert.ok(Object.keys(packages.packages.reasons).includes('packages/niimath'));
-  assert.deepEqual(packages.easterEgg, []);
-  assert.match(plan({ scripts, devDependencies: { a: '1' } }).packages.all, /every package suite and the easter egg install and run under it/);
+  // The easter egg runs no root script by name: only a dependency or an install script reaches it.
+  assert.deepEqual(plan({ scripts: { ...scripts, 'new-app': 'B' } }).easterEgg, []);
+  assert.equal(plan({ scripts: { ...scripts, postinstall: 'node x.mjs' } }).easterEgg.length, 1);
+  assert.match(plan({ scripts, devDependencies: { a: '1' } }).easterEgg[0], /^package\.json: the job installs and runs under the repository root's configuration$/);
 });
 
 // Lockfile and registry changes are compared before and after: the apps whose
@@ -921,8 +916,6 @@ test('a ci.yml change confined to the composite site jobs selects only the site 
   assert.equal(audit.site, true);
   assert.equal(audit.reasons.fallback, null);
   assert.deepEqual(audit.reasons.site, ['.github/workflows/ci.yml: its composite-site job changed, and it tests only the composite site']);
-  assert.deepEqual(Object.keys(audit.packages.reasons), []);
-  assert.equal(audit.packages.all, null);
   assert.deepEqual(audit.easterEgg, []);
   for (const job of ['agent-interactions', 'example-cache-retention']) {
     const plan = await workflowPlan((ci) => {
@@ -939,15 +932,13 @@ test('a ci.yml change confined to the composite site jobs selects only the site 
 });
 
 test('a ci.yml change to a job that tests no app selects that job and no app', async () => {
+  // workspace-contracts runs on every run, so its own run tests the change.
   const contracts = await workflowPlan((ci) => {
     ci.jobs['workspace-contracts'].steps.at(-1).name = 'Lint every workspace';
   });
   assert.deepEqual(contracts.selected, []);
   assert.equal(contracts.site, false);
   assert.equal(contracts.reasons.fallback, null);
-  const workspace = await graph;
-  const packages = workspace.nodes.filter((node) => node.startsWith('packages/'));
-  assert.deepEqual(Object.keys(contracts.packages.reasons).sort(), packages.sort(), 'a workspace-contracts change tests every package');
   assert.deepEqual(contracts.easterEgg, []);
   const egg = await workflowPlan((ci) => {
     ci.jobs['homepage-easter-egg'].steps.push({ run: 'echo again' });
@@ -955,7 +946,6 @@ test('a ci.yml change to a job that tests no app selects that job and no app', a
   assert.deepEqual(egg.selected, []);
   assert.equal(egg.site, false);
   assert.deepEqual(egg.easterEgg, ['.github/workflows/ci.yml: its homepage-easter-egg job changed']);
-  assert.deepEqual(Object.keys(egg.packages.reasons), []);
   for (const job of ['full-plan', 'full-plan-withheld']) {
     const plan = await workflowPlan((ci) => {
       ci.jobs[job].steps[0].name = 'Renamed';
@@ -982,7 +972,6 @@ test('a ci.yml change the job comparison cannot place selects every app with a r
     const plan = await workflowPlan(edit);
     assert.equal(plan.allApps, true, label);
     assert.match(plan.reasons.fallback, /^\.github\/workflows\/ci\.yml: its \S+ (?:job|key) (?:changed|was added)/, label);
-    assert.ok(plan.packages.all, label);
     assert.ok(plan.easterEgg.length, label);
   }
   const registry = await loadAppsRegistry();
@@ -1010,7 +999,7 @@ test('a ci.yml change narrows only within the same jobs and their own scope', as
   const deleted = await plan(none, (ci) => { delete ci.jobs['workspace-contracts']; });
   assert.equal(deleted.allApps, true);
   assert.equal(deleted.reasons.fallback, '.github/workflows/ci.yml: its workspace-contracts job was removed, and only a change within the same jobs narrows');
-  assert.ok(deleted.packages.all && deleted.easterEgg.length);
+  assert.ok(deleted.easterEgg.length);
   // app-tests consumes an output of workspace-contracts: changing it changes what every app job sees.
   const consumed = (value) => (ci) => {
     ci.jobs['app-tests'].needs = ['app-plan', 'workspace-contracts'];
@@ -1018,10 +1007,10 @@ test('a ci.yml change narrows only within the same jobs and their own scope', as
   };
   const output = await plan(consumed('a'), consumed('b'));
   assert.equal(output.allApps, true);
-  assert.equal(output.reasons.fallback, '.github/workflows/ci.yml: its workspace-contracts job changed, and at the base app-tests needs it, which tests more than the packages scope');
+  assert.equal(output.reasons.fallback, '.github/workflows/ci.yml: its workspace-contracts job changed, and at the base app-tests needs it, which tests more than the every-run scope');
   // A narrowed job that comes to need a per-app job is skipped whenever the plan skips that job.
   const needing = await plan(none, (ci) => { ci.jobs['workspace-contracts'].needs = ['app-plan', 'app-tests']; });
-  assert.equal(needing.reasons.fallback, '.github/workflows/ci.yml: its workspace-contracts job changed, and at the head it needs app-tests, which tests more than the packages scope');
+  assert.equal(needing.reasons.fallback, '.github/workflows/ci.yml: its workspace-contracts job changed, and at the head it needs app-tests, which tests more than the every-run scope');
   // The site jobs need composite-site, which has their scope, so a change to it still narrows.
   const site = await plan(none, (ci) => { ci.jobs['composite-site']['timeout-minutes'] = 61; });
   assert.deepEqual(site.selected, []);
@@ -1037,161 +1026,83 @@ test('the jobs a ci.yml change can narrow to test what CI_JOB_SCOPES says', asyn
     // The site jobs are the composite build and jobs that only consume it.
     if (scope === 'site' && job !== 'composite-site') assert.equal(ci.jobs[job].needs, 'composite-site', `${job} needs more than the composite site`);
   }
-  // The plan decides the easter egg and the packages workspace-contracts tests.
+  // The plan decides the easter egg; workspace-contracts runs as on main, every package on every run.
   assert.equal(ci.jobs['homepage-easter-egg'].needs, 'app-plan');
   assert.match(ci.jobs['homepage-easter-egg'].if, / && needs\.app-plan\.outputs\.easter_egg == 'true'$/);
-  assert.equal(ci.jobs['workspace-contracts'].needs, 'app-plan');
-  const packages = ci.jobs['workspace-contracts'].steps.find((step) => step.run === `node ${PACKAGE_STEP}`);
-  assert.equal(packages.if, "needs.app-plan.outputs.has_packages == 'true'");
-  assert.equal(packages.env.ALL_PACKAGES, '${{ needs.app-plan.outputs.all_packages }}');
-  // Contracts, the nii2tvx check and lint run whatever the plan says.
-  for (const step of ci.jobs['workspace-contracts'].steps.filter((step) => /test:contracts|nii2tvx|lint-workspaces/.test(step.run ?? ''))) assert.equal(step.if, undefined, step.name);
-  for (const output of ['packages', 'all_packages', 'has_packages', 'easter_egg']) {
-    assert.equal(ci.jobs['app-plan'].outputs[output], `\${{ steps.plan.outputs.${output} }}`);
-  }
-  assert.equal(packages.env.PACKAGES, '${{ needs.app-plan.outputs.packages }}');
-  // test:packages is the command the narrowed step reproduces per package.
-  const scripts = JSON.parse(await readFile(join(repoRoot, 'package.json'), 'utf8')).scripts;
-  assert.equal(scripts['test:packages'], "pnpm --filter './packages/*' --filter '!@neurodesk/webapp-components' run test && pnpm --filter @neurodesk/webapp-components run test:unit");
-  const step = await readFile(join(repoRoot, PACKAGE_STEP), 'utf8');
-  assert.match(step, /pnpm\(\['test:packages'\]/);
-  assert.match(step, /dir !== COMPONENTS\), 'test'\],\n\s*\[suites\.filter\(\(\{ dir \}\) => dir === COMPONENTS\), 'test:unit'\]/);
-  // The step runs only when the plan lists packages, so its own change runs them all.
-  const own = createAppPlan(await loadAppsRegistry(), [PACKAGE_STEP], await graph).packages;
-  const workspace = await graph;
-  assert.deepEqual(Object.keys(own.reasons).sort(), workspace.nodes.filter((node) => node.startsWith('packages/')).sort());
+  assert.equal(ci.jobs['app-plan'].outputs.easter_egg, '${{ steps.plan.outputs.easter_egg }}');
+  assert.equal(ci.jobs['workspace-contracts'].needs, undefined);
+  for (const step of ci.jobs['workspace-contracts'].steps.filter((step) => step.run)) assert.equal(step.if, step.run === 'pnpm lint:correctness' ? "${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}" : undefined, step.run);
+  assert.ok(ci.jobs['workspace-contracts'].steps.some((step) => step.run === 'pnpm test:packages'));
 });
 
-test('package suites run for the packages a change reaches, and all of them for a full or unplaced change', async () => {
-  const registry = await loadAppsRegistry();
-  const workspace = await graph;
-  const reasons = (paths, manifests) => createAppPlan(registry, paths, workspace, manifests).packages;
-  const dependants = (node) => workspace.nodes.filter((candidate) => candidate.startsWith('packages/') && reachableFrom(workspace, candidate).has(node));
-  // Suites whose code names a path the scan cannot bound read every file: they run on every change.
-  // Keep this list short, or package tests stop narrowing (graph.unresolved lists the literals).
-  const everywhere = Object.keys(reasons(['registry/read-by-nothing.json']).reasons).sort();
-  assert.deepEqual(everywhere, ['packages/white-matter-lesions']);
-  // A package's own change runs it and the packages that use it.
-  const greedy = reasons(['exes/greedy/core/src/lib.rs']);
-  assert.equal(greedy.all, null);
-  assert.deepEqual(Object.keys(greedy.reasons).sort(), [...new Set([...dependants('exes/greedy'), ...everywhere])].sort());
-  assert.ok(Object.keys(greedy.reasons).includes('packages/greedy'));
-  const everyPackage = Object.keys(reasons(['packages/read-by-nothing/x.js']).reasons).filter((dir) => !everywhere.includes(dir)).sort();
-  assert.deepEqual(everyPackage, ['packages/mri2vid', 'packages/node-drivers']);
-  const own = reasons(['packages/niimath/test/node.test.js']);
-  assert.deepEqual(Object.keys(own.reasons).filter((dir) => ![...everywhere, ...everyPackage].includes(dir)), ['packages/niimath']);
-  // A package's tests read its app's fixtures, so an app change runs the packages that name it.
-  const app = reasons(['apps/easy-mp2rage/tools/golden/cli/T1map.nii']);
-  assert.ok(Object.keys(app.reasons).includes('packages/easy-mp2rage'));
-  assert.ok(!Object.keys(app.reasons).includes('packages/niimath'));
-  // Docs, changesets and other workflows run none; a contract test only the suites that read every file.
-  assert.deepEqual(Object.keys(reasons(['docs/quality/ci-development-tiers.md', '.changeset/x.md', '.github/workflows/lcmodel-native.yml', 'AGENTS.md']).reasons), []);
-  assert.deepEqual(Object.keys(reasons(['test/app-plan.test.mjs']).reasons).sort(), ['packages/desktop', ...everywhere]);
-  // The repository root's configuration, a full run and a plan of every app run all.
-  for (const [paths, reason] of [
-    [['package.json'], /^package\.json: every package suite and the easter egg install and run under it$/],
-    [['pnpm-workspace.yaml'], /^pnpm-workspace\.yaml: /],
-    [[], /^no changed paths/],
-    [['packages/components/src/ui/ProgressManager.js'], /^the plan selects every app: its change reaches every app$/],
-    [['scripts/lib/e2e-test-data.mjs'], /^the plan selects every app: scripts\/lib\/e2e-test-data\.mjs: ci\.yml's per-app jobs run it$/],
-  ]) {
-    assert.match(reasons(paths).all ?? '', reason, paths.join(', '));
-  }
-  assert.match(createAppPlan(registry, ['packages/niimath/src/index.js'], null).packages.all, /no workspace graph/);
-  // A draft runs the same suites as a ready pull request.
-  assert.deepEqual(createAppPlan(registry, ['exes/greedy/core/src/lib.rs'], workspace, new Map(), { draft: true }).packages, greedy);
-});
-
-test('a lockfile change runs the package suites whose importers it changed', async () => {
-  const registry = await loadAppsRegistry();
-  const workspace = await graph;
-  const plan = (edit) => createAppPlan(registry, ['pnpm-lock.yaml'], workspace, new Map([['pnpm-lock.yaml', manifest(baseLock, changeLock(edit))]])).packages;
-  const greedy = plan((lock) => {
-    lock.importers['packages/greedy'] = { dependencies: { fflate: dep('0.8.2') } };
-    resolve(lock, 'fflate@0.8.2');
-  });
-  assert.equal(greedy.all, null);
-  assert.ok(Object.keys(greedy.reasons).includes('packages/greedy'));
-  const root = plan((lock) => {
-    lock.importers['.'] = { devDependencies: { fflate: dep('0.8.2') } };
-    resolve(lock, 'fflate@0.8.2');
-  });
-  assert.match(root.all, /the root's dependencies resolve for every workspace member/);
-});
-
-test('the homepage easter egg runs only when a change reaches its tests', async () => {
+test('the homepage easter egg runs only when a change reaches a file its job reads', async () => {
   const registry = await loadAppsRegistry();
   const workspace = await graph;
   const egg = (paths, options) => createAppPlan(registry, paths, workspace, new Map(), options).easterEgg;
-  for (const path of ['site/easter-eggs/vessel-surfer/src/main.js', 'site/easter-eggs/vessel-surfer-leaderboard/src/worker.js', 'site/landing.js', 'site/app-theme.css', 'test/easter-egg.test.mjs', 'scripts/lib/landing-page.mjs', 'packages/analytics/src/index.js', 'registry/apps.yml', 'package.json']) {
+  for (const path of ['site/easter-eggs/vessel-surfer/src/main.js', 'site/easter-eggs/vessel-surfer-leaderboard/src/worker.js', 'site/landing.js', 'site/app-theme.css', 'test/easter-egg.test.mjs', 'scripts/lib/landing-page.mjs', 'scripts/lib/apps-registry.mjs', 'packages/analytics/src/index.js', 'registry/apps.yml', 'package.json', 'pnpm-workspace.yaml', '.npmrc', 'an-unknown-directory/file.js']) {
     assert.ok(egg([path]).length, path);
   }
-  for (const path of ['apps/niimath/main.js', 'packages/greedy/src/index.js', 'docs/x.md', 'scripts/lint.mjs', 'test/app-plan.test.mjs', '.github/workflows/standalone.yml', 'site/easter-eggs/vessel-surfer/CHANGELOG.md']) {
+  for (const path of ['apps/niimath/main.js', 'packages/greedy/src/index.js', 'packages/analytics/test/report.test.js', 'docs/x.md', 'scripts/lint.mjs', 'scripts/lib/app-plan.mjs', 'test/app-plan.test.mjs', 'test-utils/dice.mjs', 'models/lcmodel.manifest.json', '.github/workflows/standalone.yml', 'eslint.config.js', 'AGENTS.md', 'site/easter-eggs/vessel-surfer/CHANGELOG.md']) {
     assert.deepEqual(egg([path]), [], path);
   }
   assert.deepEqual(egg(['apps/niimath/main.js'], { draft: true }), []);
   assert.match(egg([])[0], /^no changed paths/);
-  assert.match(createAppPlan(registry, ['apps/niimath/main.js'], null).easterEgg[0], /no workspace graph/);
-  // The job's packages are inputs; their lint script, which the job never runs, is not.
-  const reach = reachableFrom(workspace, '(homepage-easter-egg)');
-  assert.ok(reach.has('scripts/lib/landing-page.mjs') && reach.has('packages/analytics'));
-  assert.ok(!reach.has('scripts/lint.mjs'));
+  // It does not depend on the workspace graph.
+  assert.deepEqual(createAppPlan(registry, ['apps/niimath/main.js'], null).easterEgg, []);
+  // A lockfile change runs it for its own importers and the root's, not an app's.
+  const lock = (edit) => createAppPlan(registry, ['pnpm-lock.yaml'], workspace, new Map([['pnpm-lock.yaml', manifest(baseLock, changeLock(edit))]])).easterEgg;
+  assert.equal(lock((after) => { after.importers['site/easter-eggs/vessel-surfer'].dependencies.three = dep('0.2.0'); resolve(after, 'three@0.2.0'); }).length, 1);
+  assert.deepEqual(lock((after) => { after.importers['packages/lcmodel'].dependencies.fflate = dep('0.8.2'); resolve(after, 'fflate@0.8.2'); }), []);
 });
 
-test('the graph records the app, model and site files code names, not keys or comments', async () => {
-  const workspace = await graph;
-  const outside = (node) => [...(workspace.outside.get(node) ?? [])];
-  // `join(root, 'apps', id, ...)` reads any app; `'../../../apps/x/...'` one app.
-  assert.ok(outside('scripts/lib/app-automation.mjs').includes('apps'));
-  assert.ok(outside('packages/easy-mp2rage/test').includes('apps/easy-mp2rage'));
-  // doc.get('apps') is a key, and a comment line names a path in prose.
-  assert.ok(!outside('scripts/lib/apps-registry.mjs').includes('apps'));
-  assert.ok(!outside('packages/components').includes('apps/dicompare'));
-  assert.ok(outside('packages/components/test').includes('apps/dicompare'));
-  // A lone quoted directory name is a key, so no code may read one as a path
-  // (a method `.join("models")` counts as a joined segment).
-  const lone = "(readdir|readdirSync|readFile|readFileSync|existsSync|stat|statSync|resolve|URL)\\(\\s*['\"`](apps|models|site|runtime-assets|templates)['\"`]\\s*\\)";
-  assert.deepEqual(filesNaming(lone).filter((file) => file !== 'test/app-plan.test.mjs'), []);
-});
-
-test("a package suite runs when a file its tests name through a sibling-relative path changes", async () => {
-  // packages/calmar/test/nifti.test.js reads '../../components/test/fixtures/uint8-zero-slope-intercept.nii'.
-  const plan = createAppPlan(await loadAppsRegistry(), ['packages/components/test/fixtures/uint8-zero-slope-intercept.nii'], await graph);
-  assert.ok(Object.hasOwn(plan.packages.reasons, 'packages/calmar'), 'calmar reads the components fixture');
-  assert.ok(Object.hasOwn(plan.packages.reasons, 'packages/components'));
-  assert.equal(plan.packages.all, null);
-});
-
-test('a relative literal reads the path it resolves to from its file, or every path it can name', async (t) => {
-  const { root } = await plannerFixture(t);
-  const write = async (path, text) => {
-    await mkdir(join(root, path, '..'), { recursive: true });
-    await writeFile(join(root, path), text);
-  };
-  await write('packages/a/package.json', JSON.stringify({ name: '@x/a', scripts: { test: 'node --test' } }));
-  await write('packages/b/package.json', JSON.stringify({ name: '@x/b', scripts: { test: 'node --test' } }));
-  await write('packages/b/fixtures/data.bin', 'data');
-  await write('packages/a/test/a.test.js', [
-    "const data = new URL('../../b/fixtures/data.bin', import.meta.url);",
-    'const generated = new URL(`../../b/generated/${name}.bin`, import.meta.url);',
-    "const numbered = new URL('../../b/fixtures/data-' + index + '.bin', import.meta.url);",
-    "const deleted = new URL('../../c/gone.bin', import.meta.url);",
-    "const repository = new URL('../../../', import.meta.url);",
-    "const own = new URL('./fixtures/own.bin', import.meta.url);",
-  ].join('\n'));
-  await write('packages/d/test/d.test.js', 'const anything = new URL(`../../../${path}`, import.meta.url);');
-  const fixture = await loadConservativeWorkspaceGraph(root);
-  // A closed literal that names nothing reads it and what extends it; a continued one every path it starts.
-  assert.deepEqual([...fixture.outside.get('packages/a/test')].sort(), ['packages/b/fixtures/data-*', 'packages/b/fixtures/data.bin', 'packages/b/generated/*', 'packages/c/gone.bin*'].sort());
-  assert.deepEqual([...fixture.outside.get('packages/d/test')], ['*']);
-  assert.deepEqual(fixture.unresolved.filter(({ file }) => file === 'packages/a/test/a.test.js').map(({ literal, path }) => `${literal} ${path}`).sort(), [
-    '../../b/fixtures/data- packages/b/fixtures/data-*', '../../b/generated/ packages/b/generated/*', '../../c/gone.bin packages/c/gone.bin*', './fixtures/own.bin packages/a/test/fixtures/own.bin*',
-  ].sort());
-  const registry = await loadAppsRegistry();
-  const suites = (path) => Object.keys(createAppPlan(registry, [path], fixture).packages.reasons).sort();
-  assert.deepEqual(suites('packages/b/fixtures/data-2.bin'), ['packages/a', 'packages/b', 'packages/d']);
-  assert.deepEqual(suites('packages/c/gone.bin'), ['packages/a', 'packages/d']);
-  assert.deepEqual(suites('packages/b/fixtures/other.bin'), ['packages/b', 'packages/d']);
+test("the easter egg's input table holds every file its job reads", async () => {
+  const ci = parse(await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8'));
+  // The job's commands. A new one needs its inputs in EASTER_EGG_INPUTS before this list changes.
+  assert.deepEqual(ci.jobs[EASTER_EGG_JOB].steps.filter((step) => step.run).map((step) => step.run), [
+    'pnpm install --frozen-lockfile',
+    'node node_modules/@playwright/test/cli.js install --with-deps chromium',
+    'node --test test/easter-egg.test.mjs',
+    'pnpm --filter @neurodesk/vessel-surfer-easter-egg test',
+    'pnpm --filter @neurodesk/vessel-surfer-leaderboard test',
+    'pnpm --filter @neurodesk/vessel-surfer-easter-egg test:e2e',
+  ]);
+  // The package scripts those commands run, and the e2e server's (pnpm build && pnpm preview).
+  const scripts = async (dir) => JSON.parse(await readFile(join(repoRoot, dir, 'package.json'), 'utf8')).scripts;
+  const surfer = await scripts('site/easter-eggs/vessel-surfer');
+  assert.deepEqual([surfer.test, surfer['test:e2e'], surfer.build, surfer.preview], ['node scripts/fetch-data.mjs && node --test test/*.test.js', 'playwright test', 'node scripts/fetch-data.mjs && vite build && node scripts/finish-build.mjs', 'node scripts/preview-site.mjs']);
+  assert.equal((await scripts('site/easter-eggs/vessel-surfer-leaderboard')).test, 'node --test test/*.test.js');
+  assert.match(await readFile(join(repoRoot, 'site/easter-eggs/vessel-surfer/playwright.config.js'), 'utf8'), /command:\s*"pnpm build && pnpm preview --host 127\.0\.0\.1 --port 4178 --strictPort"/);
+  // Neither package depends on a workspace package; npm packages come from the lockfile.
+  for (const dir of ['site/easter-eggs/vessel-surfer', 'site/easter-eggs/vessel-surfer-leaderboard']) {
+    const manifest = JSON.parse(await readFile(join(repoRoot, dir, 'package.json'), 'utf8'));
+    for (const spec of Object.values({ ...manifest.dependencies, ...manifest.devDependencies })) assert.ok(!/^(?:workspace|link|file):/.test(spec), `${dir} depends on ${spec}`);
+  }
+  // Every file the code outside site/ imports, and every path it builds on a URL, is in the table.
+  const inTable = (path) => EASTER_EGG_INPUTS.some((input) => (input.endsWith('/') ? path.startsWith(input) : path === input));
+  const pending = ['test/easter-egg.test.mjs', 'site/easter-eggs/vessel-surfer/scripts/preview-site.mjs', ...EASTER_EGG_INPUTS.filter((input) => /\.m?js$/.test(input))];
+  const seen = new Set();
+  while (pending.length) {
+    const file = pending.pop();
+    if (seen.has(file)) continue;
+    seen.add(file);
+    const text = await readFile(join(repoRoot, file), 'utf8');
+    for (const [, specifier] of text.matchAll(/(?:\bfrom|\bimport\s*\()\s*["'`]([^"'`]+)["'`]/g)) {
+      if (!specifier.startsWith('.')) continue;
+      const target = relativePath(repoRoot, resolvePath(repoRoot, dirname(file), specifier));
+      assert.ok(inTable(target), `${file} imports ${target}; add it to EASTER_EGG_INPUTS`);
+      pending.push(target);
+    }
+    // URLs built on the file's own location or on a URL named from it (`const root = new URL('../', import.meta.url)`).
+    const bases = new Map([['import.meta.url', `${dirname(file)}/`]]);
+    for (const [, name, literal, base] of text.matchAll(/(?:const\s+(\w+)\s*=\s*)?new URL\(\s*["'`]([^"'`$]*)[^"'`]*["'`]\s*,\s*([\w.]+)\s*\)/g)) {
+      assert.ok(bases.has(base), `${file} builds a URL on ${base}, which this test cannot follow; list what it reads in EASTER_EGG_INPUTS and here`);
+      const target = `${relativePath(repoRoot, resolvePath(repoRoot, bases.get(base), literal))}${literal.endsWith('/') || !literal ? '/' : ''}`.replace(/^\/$/, '');
+      if (name) bases.set(name, target || '.');
+      // The repository root itself is a base, not a read.
+      if (target) assert.ok(inTable(target), `${file} reads ${target}; add it to EASTER_EGG_INPUTS`);
+    }
+  }
+  assert.ok(seen.has('scripts/lib/landing-page.mjs') && seen.has('scripts/lib/apps-registry.mjs'));
 });
 
 test('an app with ci.e2e_shards gets one browser-e2e entry per shard', async () => {
@@ -1214,33 +1125,19 @@ test('the app-plan CLI selects explicit apps without a base revision', () => {
   assert.equal(plan.has_site, 'true');
 });
 
-test('the app-plan CLI lists the package suites and the easter egg it runs, in every scope', async () => {
+test('the app-plan CLI says whether the easter egg runs, in every scope', () => {
   const plan = (...args) => JSON.parse(execFileSync(process.execPath, ['scripts/app-plan.mjs', ...args], { cwd: repoRoot, encoding: 'utf8', env: { ...process.env, GITHUB_OUTPUT: '' } }));
-  const tested = [];
-  for (const dir of (await readdir(join(repoRoot, 'packages'), { withFileTypes: true })).filter((entry) => entry.isDirectory())) {
-    const scripts = JSON.parse(await readFile(join(repoRoot, 'packages', dir.name, 'package.json'), 'utf8').catch(() => '{}')).scripts ?? {};
-    if (scripts[dir.name === 'components' ? 'test:unit' : 'test']) tested.push(`packages/${dir.name}`);
-  }
   const lcmodel = plan('--only', 'lcmodel');
-  const packages = JSON.parse(lcmodel.packages);
-  assert.ok(packages.includes('packages/lcmodel'), 'its app fixtures are read by the lcmodel package tests');
-  assert.ok(packages.length < tested.length);
-  assert.ok(packages.every((dir) => tested.includes(dir)), 'only packages with tests are listed');
-  assert.equal(lcmodel.has_packages, 'true');
-  assert.equal(lcmodel.all_packages, 'false');
   assert.equal(lcmodel.easter_egg, 'false');
-  const reasons = JSON.parse(lcmodel.selection_reasons);
-  assert.deepEqual(Object.keys(reasons.packages), packages);
-  assert.deepEqual(reasons.easter_egg, []);
+  assert.deepEqual(JSON.parse(lcmodel.selection_reasons).easter_egg, []);
+  // workspace-contracts tests every package on every run; the plan lists none.
+  for (const output of ['packages', 'all_packages', 'has_packages']) assert.equal(lcmodel[output], undefined, output);
   const full = plan('--all');
-  assert.deepEqual(JSON.parse(full.packages).sort(), tested.sort());
-  assert.equal(full.all_packages, 'true');
   assert.equal(full.easter_egg, 'true');
-  assert.match(JSON.parse(full.selection_reasons).packages.all, /^no changed paths/);
-  // A site dispatch runs the easter egg; workspace-contracts does not run in it. A gpu dispatch runs neither (ci.yml).
-  const site = plan('--only', 'lcmodel', '--scope', 'site');
-  assert.equal(site.easter_egg, 'true');
-  assert.equal(site.has_packages, 'false');
+  assert.match(JSON.parse(full.selection_reasons).easter_egg[0], /^no changed paths/);
+  // A site dispatch runs the easter egg; a gpu dispatch does not.
+  assert.equal(plan('--only', 'lcmodel', '--scope', 'site').easter_egg, 'true');
+  assert.equal(plan('--all', '--scope', 'gpu').easter_egg, 'false');
 });
 
 test('deleting an imported root helper still selects the app that imports it', async (t) => {
@@ -1872,7 +1769,7 @@ test('a diff git cannot read is not an empty one: the plan tests everything', as
   assert.equal(plan.all_apps, 'true');
   assert.equal(plan.has_site, 'true');
   assert.equal(plan.easter_egg, 'true');
-  assert.match(JSON.parse(plan.selection_reasons).packages.all, /^no changed paths/);
+  assert.match(JSON.parse(plan.selection_reasons).easter_egg[0], /^no changed paths/);
 });
 
 test('a rename lists both its paths, so what reads the old path is selected', async (t) => {
@@ -1894,8 +1791,9 @@ test('a rename lists both its paths, so what reads the old path is selected', as
   const paths = changedPathsFromGit({ base, cwd: root });
   assert.deepEqual(paths.sort(), [fixture, 'docs/T1.nii.gz'].sort());
   const plan = createAppPlan(await loadAppsRegistry(), paths, await graph);
-  for (const dir of ['packages/deface', 'packages/brain-extraction']) assert.ok(Object.hasOwn(plan.packages.reasons, dir), dir);
+  // Without the old path the move would select nothing: docs/ is read by no test.
   assert.ok(plan.selected.some((app) => app.id === 'calmar'));
+  assert.deepEqual(createAppPlan(await loadAppsRegistry(), ['docs/T1.nii.gz'], await graph).selected, []);
 });
 
 test('a planned job that did not pass on main runs again in full on the next push', async (t) => {
@@ -1938,27 +1836,19 @@ test('a planned job that did not pass on main runs again in full on the next pus
     const output = JSON.parse(stdout);
     return { ...output, reasons: JSON.parse(output.selection_reasons), stderr };
   };
-  // Green, a nightly that fails in a planned job, then a docs-only push: the push runs the job in full.
-  const contracts = await plan([{ name: 'workspace-contracts', conclusion: 'failure' }]);
-  assert.deepEqual(JSON.parse(contracts.selected_ids), []);
-  assert.equal(contracts.reasons.packages.all, 'failed in the base run (workspace-contracts)');
-  assert.match(contracts.stderr, /workspace-contracts did not pass there and runs again in full/);
-  assert.equal(contracts.easter_egg, 'false');
+  // Green, a nightly that fails in the easter egg, then a docs-only push: the push runs it in full.
   const egg = await plan([{ name: 'homepage-easter-egg', conclusion: 'failure' }]);
   assert.equal(egg.easter_egg, 'true');
   assert.deepEqual(egg.reasons.easter_egg, ['failed in the base run (homepage-easter-egg)']);
-  assert.equal(egg.reasons.packages.all, undefined);
   // A cancelled job, or one that never started, did not pass either.
-  assert.equal((await plan([{ name: 'workspace-contracts', conclusion: 'cancelled' }])).reasons.packages.all, 'failed in the base run (workspace-contracts)');
+  assert.deepEqual((await plan([{ name: 'homepage-easter-egg', conclusion: 'cancelled' }])).reasons.easter_egg, ['failed in the base run (homepage-easter-egg)']);
   assert.deepEqual((await plan([{ name: 'homepage-easter-egg', conclusion: null }])).reasons.easter_egg, ['failed in the base run (homepage-easter-egg (not finished))']);
-  // A failure no app owns sends the base back to the green run, whose diff is empty here: the planned job still runs.
-  const unowned = await plan([{ name: 'a-new-job', conclusion: 'failure' }, { name: 'workspace-contracts', conclusion: 'failure' }]);
-  assert.match(unowned.stderr, /failed in a-new-job, which no app owns; workspace-contracts did not pass there/);
-  assert.equal(unowned.reasons.packages.all, 'failed in the base run (workspace-contracts)');
-  // Without a failed planned job the docs-only push runs neither.
-  const quiet = await plan([{ name: 'agent-interactions (desktop, 1/3)', conclusion: 'failure' }]);
-  assert.equal(quiet.reasons.packages.all, undefined);
-  assert.equal(quiet.easter_egg, 'false');
+  // A failure no app owns sends the base back to the green run, whose diff is empty here: the easter egg still runs.
+  const unowned = await plan([{ name: 'a-new-job', conclusion: 'failure' }, { name: 'homepage-easter-egg', conclusion: 'failure' }]);
+  assert.match(unowned.stderr, /failed in a-new-job, which no app owns; homepage-easter-egg did not pass there/);
+  assert.equal(unowned.easter_egg, 'true');
+  // workspace-contracts runs on every push, and the jobs only the nightly runs are not carried.
+  for (const name of ['workspace-contracts', 'agent-interactions (desktop, 1/3)']) assert.equal((await plan([{ name, conclusion: 'failure' }])).easter_egg, 'false', name);
 });
 
 test('a .gitattributes change selects the apps whose files now check out differently', async (t) => {

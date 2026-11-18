@@ -3,10 +3,8 @@ import test from 'node:test';
 import { stringify } from 'yaml';
 import {
   closureChange,
-  comparePackages,
   compareSelection,
   expectedApps,
-  expectedPackages,
   failureCandidates,
   parseableClosure,
   republishedPackages,
@@ -146,46 +144,6 @@ test('a merge whose own push run was cancelled reports the apps it left untested
     ['m3', { pr: 3, merge: 'm3', fallback: 'shared', selected: [] }],
   ]);
   assert.deepEqual(supersededMerges({ history, selections }), [{ pr: 1, run: 1, apps: ['alpha'] }]);
-});
-
-test('a package suite is expected for its own files, its declared dependencies and its lockfile closure', () => {
-  const packages = ['packages/core', 'packages/util', 'packages/local'];
-  const own = expectedPackages({ packages, changedPaths: ['packages/util/src/index.js', 'packages/util/test/a.test.js', 'apps/alpha/main.js'], workspace });
-  assert.deepEqual([...own.keys()].sort(), packages.sort());
-  // Another package's tests run only in that package's suite.
-  assert.deepEqual([...expectedPackages({ packages, changedPaths: ['packages/util/test/a.test.js'], workspace }).keys()], ['packages/util']);
-  const lockClosures = { before: new Map([['packages/core', new Set(['.pnpm/react@19.0.0'])]]), after: new Map([['packages/core', new Set(['.pnpm/react@19.1.0'])]]), republished: [] };
-  assert.deepEqual([...expectedPackages({ packages, changedPaths: ['pnpm-lock.yaml'], workspace, lockClosures }).keys()], ['packages/core']);
-  const expected = new Map([['packages/core', ['x']], ['packages/util', ['y']]]);
-  assert.deepEqual(comparePackages({ plan: { packages: { all: null, reasons: { 'packages/core': ['x'] } } }, expected }).misses, [{ package: 'packages/util', reasons: ['y'] }]);
-  assert.deepEqual(comparePackages({ plan: { packages: { all: 'full run', reasons: {} } }, expected }).misses, []);
-});
-
-test('the package oracle expects a suite whose files name a changed file outside it, by its folder and name', () => {
-  const packages = ['packages/core', 'packages/util', 'packages/local'];
-  const texts = new Map([
-    ['packages/util', "const bytes = await readFile(new URL('../../core/test/fixtures/uint8-zero-slope-intercept.nii', import.meta.url));"],
-    ['packages/local', "const dir = new URL('../../../apps/calmar/tests/fixtures/', import.meta.url);"],
-  ]);
-  const fixture = expectedPackages({ packages, changedPaths: ['packages/core/test/fixtures/uint8-zero-slope-intercept.nii'], workspace, texts });
-  assert.deepEqual([...fixture.keys()].sort(), ['packages/core', 'packages/util']);
-  assert.match(fixture.get('packages/util')[0], /its files name \.\.\/core\/test\/fixtures\/uint8-zero-slope-intercept\.nii/);
-  // A name without its app or package says nothing: samsrf's src/main.js is not every package's.
-  const generic = new Map([['packages/util', "import './src/main.js';"]]);
-  assert.deepEqual([...expectedPackages({ packages, changedPaths: ['apps/samsrf/src/main.js'], workspace, texts: generic }).keys()], []);
-  // Nor does a root file's bare name: packages/lcmodel's prose mentions AGENTS.md (#890).
-  const prose = new Map([['packages/util', 'Read AGENTS.md and package.json first.']]);
-  assert.deepEqual([...expectedPackages({ packages, changedPaths: ['AGENTS.md', 'package.json'], workspace, texts: prose }).keys()], []);
-  // A root file is named by its own path, not its folder (#864: scripts/lib/example-asset-cache.mjs).
-  const helpers = new Map([['packages/util', "import '../../../scripts/lib/apps-registry.mjs';"]]);
-  assert.deepEqual([...expectedPackages({ packages, changedPaths: ['scripts/lib/example-asset-cache.mjs'], workspace, texts: helpers }).keys()], []);
-  assert.deepEqual([...expectedPackages({ packages, changedPaths: ['scripts/lib/apps-registry.mjs'], workspace, texts: helpers }).keys()], ['packages/util']);
-  const directory = expectedPackages({ packages, changedPaths: ['apps/calmar/tests/fixtures/synthstrip-mini/T1.nii.gz'], workspace, texts });
-  assert.deepEqual([...directory.keys()], ['packages/local']);
-  assert.deepEqual([...expectedPackages({ packages, changedPaths: ['README.md'], workspace, texts }).keys()], []);
-  // A suite the plan lists without a test script is not counted as selected.
-  const plan = { packages: { all: null, reasons: { 'packages/util': ['x'], 'packages/no-tests': ['y'] } } };
-  assert.deepEqual(comparePackages({ plan, expected: new Map(), packages }).selected, ['packages/util']);
 });
 
 test('the shadow report names the rule families it cannot check', () => {
