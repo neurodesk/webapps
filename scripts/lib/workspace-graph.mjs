@@ -1,3 +1,4 @@
+import { readdirSync, readFileSync } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { parse } from 'yaml';
 import { sharedModuleUsers } from './shared-module-users.mjs';
@@ -44,6 +45,10 @@ const SOURCE_FILE = /\.[cm]?[jt]s$/;
 // `/// <reference path>` directives are compiler inputs.
 const LINE_COMMENT = /^[ \t]*\/\/(?!\/).*$/gm;
 const ROOT_SCRIPT_CALL = /\bpnpm (?:run )?([\w:-]+)/g;
+// An app's code names a file of another app by a relative path: a kit its build
+// stages, a fixture its tests read.
+const APP_CODE = /\.[cm]?[jt]sx?$/;
+const RELATIVE_PATH = /(['"`])((?:\.\.\/)+[^'"`\s$]*)\1/g;
 // Lint and mutation-testing configs: their own workflows read them, composite-site never does.
 export const INDEPENDENT_CONFIG = /^(?:eslint|knip|stryker)\.config\.m?js$/;
 export const CATALOG = '(catalog)';
@@ -141,6 +146,8 @@ export async function loadConservativeWorkspaceGraph(root) {
 
   const edges = new Map();
   const pendingRootFiles = [];
+  // App id -> the paths in other app directories its code names.
+  const appReads = new Map();
   for (const node of nodes) {
     const uses = new Set();
     const manifest = manifests.get(node);
@@ -165,6 +172,13 @@ export async function loadConservativeWorkspaceGraph(root) {
       for (const [, rootFile] of text.matchAll(ROOT_PATH)) {
         uses.add(rootFile);
         pendingRootFiles.push(rootFile);
+      }
+      if (node.startsWith('apps/') && APP_CODE.test(file)) {
+        for (const [, , path] of text.matchAll(RELATIVE_PATH)) {
+          const target = relative(root, resolve(dirname(file), path)).split(sep).join('/');
+          const owner = target.match(/^apps\/[^/]+/)?.[0];
+          if (owner && owner !== node && nodeSet.has(owner)) appReads.set(node, new Set([...(appReads.get(node) ?? []), target]));
+        }
       }
     }
     uses.delete(node);
@@ -233,9 +247,34 @@ export async function loadConservativeWorkspaceGraph(root) {
   }
   // `moduleUsers(path)`: the nodes that load one module of the shared component
   // package, or null for a file the planner ties to the whole package.
+  // `appReaders(path)`: the app ids whose code names `path`, or a directory
+  // holding it, in another app's directory. `appsNaming(identifier)`: the app
+  // ids whose code names `identifier`, read on first use.
   let moduleUsers;
-  const graph = { nodes: Object.freeze(nodes), edges, rootScriptsRun, moduleUsers: (path) => (moduleUsers ??= sharedModuleUsers(root, graph))(path) };
+  const naming = new Map();
+  const graph = {
+    nodes: Object.freeze(nodes),
+    edges,
+    rootScriptsRun,
+    moduleUsers: (path) => (moduleUsers ??= sharedModuleUsers(root, graph))(path),
+    appReaders: (path) => [...appReads]
+      .filter(([, targets]) => [...targets].some((target) => path === target || path.startsWith(`${target}/`)))
+      .map(([node]) => node.slice('apps/'.length)),
+    appsNaming: (identifier) => {
+      if (!naming.has(identifier)) naming.set(identifier, appsNamingIdentifier(root, nodes, identifier));
+      return naming.get(identifier);
+    },
+  };
   return Object.freeze(graph);
+}
+
+function appsNamingIdentifier(root, nodes, identifier) {
+  const word = new RegExp(String.raw`\b${identifier}\b`);
+  const names = (dir) => readdirSync(dir, { withFileTypes: true }).some((entry) => {
+    if (entry.isDirectory()) return !SKIPPED_DIRS.has(entry.name) && names(join(dir, entry.name));
+    return entry.isFile() && APP_CODE.test(entry.name) && word.test(readFileSync(join(dir, entry.name), 'utf8'));
+  });
+  return nodes.filter((node) => node.startsWith('apps/') && names(join(root, node))).map((node) => node.slice('apps/'.length));
 }
 
 // Every directory or root file `node` uses, directly or through others.

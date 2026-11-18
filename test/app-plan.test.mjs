@@ -7,7 +7,10 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { parse, stringify } from 'yaml';
-import { AUTOMATION_CATALOG_READERS, createAppPlan, INDEPENDENT_ROOT_DEV_DEPENDENCIES, RUNTIME_MANIFEST_READERS, SITE_ONLY_FILES } from '../scripts/lib/app-plan.mjs';
+import { AUTOMATION_CATALOG_READERS, CLASSIFIED_ENTRY_FIELDS, createAppPlan, HANDOFF_CATALOG_READERS, INDEPENDENT_ROOT_DEV_DEPENDENCIES, RUNTIME_MANIFEST_READERS, SITE_ONLY_FILES } from '../scripts/lib/app-plan.mjs';
+import { siteCheckApps, smokeApps } from '../scripts/lib/smoke-apps.mjs';
+import { betNeeds } from '../test-utils/qsm-bet-runtime-startup.mjs';
+import { assertParity, coveringSegmentations, parityPeers } from '../test-utils/shared-binary-startup.mjs';
 import { APP_JOBS, carriedApps, NIGHTLY_JOBS, RERUN_JOBS, SITE_JOBS, testedBase } from '../scripts/lib/tested-base.mjs';
 import { lockfileImpact } from '../scripts/lib/lockfile-impact.mjs';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
@@ -605,7 +608,7 @@ test('app registration with its lockfile importer stays scoped to that webapp', 
   assert.equal(plan.allApps, false);
 });
 
-test('removing or reordering registry entries selects no app but the site build', async () => {
+test('reordering registry entries selects no app but the site build; removing one selects the handoff menus', async () => {
   const text = await readFile(join(repoRoot, 'registry/apps.yml'), 'utf8');
   const retired = parse(text);
   retired.apps.push({ ...entry(retired, 'niimath'), id: 'retired', path: 'retired' });
@@ -613,11 +616,102 @@ test('removing or reordering registry entries selects no app but the site build'
   const reordered = await registryPlan((after) => {
     after.apps.reverse();
   });
+  // DICOM View's "Open in another webapp" menu listed the removed app.
+  assert.deepEqual(removed.selected.map((app) => app.id), ['dicomview']);
+  assert.deepEqual(reordered.selected, []);
   for (const plan of [removed, reordered]) {
-    assert.deepEqual(plan.selected, []);
     assert.equal(plan.site, true);
     assert.equal(plan.reasons.fallback, null);
   }
+});
+
+// The SMOKE_APPS value ci.yml gives a pull request's site checks for `plan`.
+function pullRequestSmokeApps(registry, plan) {
+  return siteCheckApps(registry, { event: 'pull_request', plan: {
+    all_apps: String(plan.allApps), site_code: String(plan.siteCode), selected_ids: JSON.stringify(plan.selected.map((app) => app.id)),
+  } }).value;
+}
+
+test('a NODDI-only change runs the MindGrab parity check with a peer that shares its CPU binary', async () => {
+  const registry = await loadAppsRegistry();
+  const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets/manifest.json'), 'utf8'));
+  const value = pullRequestSmokeApps(registry, createAppPlan(registry, ['apps/noddi/src/main.js'], await graph));
+  const { apps, added } = smokeApps(registry.apps, value, parityPeers(manifest));
+  const binary = manifest.families.flatMap((family) => family.files.map((file) => ({ family, file })))
+    .find(({ file }) => file.name === 'brainchop-mindgrab.wasm' && file.consumers?.includes('noddi'));
+  assert.ok(added.some((id) => binary.file.consumers.includes(id)), `${added.join(', ')} holds a peer of noddi`);
+  const jobs = apps.filter((app) => binary.file.consumers.includes(app.id))
+    .map((app) => ({ family: binary.family, file: binary.file, app, consumers: binary.file.consumers, binaryPath: binary.file.name }));
+  assert.ok(assertParity(coveringSegmentations(jobs).map((job) => ({ job, sha256: 'one output', label: job.app.id }))) === 1);
+});
+
+test('a change to the CALMaR fixture runs both production BET probes that segment it', async () => {
+  const registry = await loadAppsRegistry();
+  const value = pullRequestSmokeApps(registry, createAppPlan(registry, ['apps/calmar/tests/fixtures/synthstrip-mini/T1.nii.gz'], await graph));
+  const { apps } = smokeApps(registry.apps, value, betNeeds);
+  for (const id of ['qsmbly', 'brain-extraction']) assert.ok(apps.some((app) => app.id === id), `${id} probes the fixture`);
+});
+
+test('a registry change to what the handoff menus list selects the apps that render one', async () => {
+  const registry = await loadAppsRegistry();
+  const none = await registryPlan((after) => {
+    entry(after, 'bison').handoff = 'none';
+  });
+  assert.deepEqual(none.selected.map((app) => app.id).sort(), ['bison', 'dicomview']);
+  assert.deepEqual(none.reasons.apps.dicomview, ["registry/apps.yml: an entry changed what dicomview's handoff menu lists"]);
+  assert.equal(none.siteCode, false);
+  assert.ok(pullRequestSmokeApps(registry, none).split(',').includes('dicomview'));
+  for (const edit of [(app) => { app.title = 'Renamed'; }, (app) => { app.also_in = ['msk']; }, (app) => { app.support_status = 'retired'; }]) {
+    const plan = await registryPlan((after) => edit(entry(after, 'bison')));
+    assert.ok(plan.selected.some((app) => app.id === 'dicomview'), plan.reasons.apps.bison.join());
+  }
+  // A field the menu does not show stays with its own app.
+  const described = await registryPlan((after) => {
+    entry(after, 'bison').keywords.push('changed');
+  });
+  assert.deepEqual(described.selected.map((app) => app.id), ['bison']);
+  // Without a workspace graph the readers are unknown, so every app is tested.
+  const text = await readFile(join(repoRoot, 'registry/apps.yml'), 'utf8');
+  const renamed = parse(text);
+  entry(renamed, 'bison').title = 'Renamed';
+  const blind = createAppPlan(registry, ['registry/apps.yml'], null, new Map([['registry/apps.yml', { before: text, after: stringify(renamed) }]]));
+  assert.equal(blind.allApps, true);
+  assert.match(blind.reasons.fallback, /the apps that render one are unknown/);
+});
+
+test('a registry entry field the planner does not classify tests every app', async () => {
+  const text = parse(await readFile(join(repoRoot, 'registry/apps.yml'), 'utf8'));
+  const fields = new Set(text.apps.flatMap((app) => Object.keys(app)));
+  assert.deepEqual([...fields].filter((field) => !CLASSIFIED_ENTRY_FIELDS.includes(field)), [], 'classify every field the registry uses');
+  const plan = await registryPlan((after) => {
+    entry(after, 'bison').handoff_label = 'Send';
+  });
+  assert.equal(plan.allApps, true);
+  assert.equal(plan.reasons.fallback, "registry/apps.yml: the bison entry's handoff_label field is not one the planner classifies");
+});
+
+test('HANDOFF_CATALOG_READERS are the functions that read the handoff catalog an app page carries', async () => {
+  const sources = execFileSync('git', ['ls-files', 'packages/components/src', 'site'], { cwd: repoRoot, encoding: 'utf8' }).split('\n')
+    .filter((file) => /\.[cm]?[jt]sx?$/.test(file) && !file.startsWith('site/easter-eggs/'));
+  const readers = [];
+  for (const file of sources) {
+    const text = await readFile(join(repoRoot, file), 'utf8');
+    if (!text.includes('data-neurodesk-app-information')) continue;
+    for (const [, name, body] of text.matchAll(/export function (\w+)\([^)]*\) \{\n([\s\S]*?)\n\}/g)) {
+      if (/\.catalog\b/.test(body)) readers.push(`${file}:${name}`);
+    }
+  }
+  assert.deepEqual(readers, HANDOFF_CATALOG_READERS.map((name) => `packages/components/src/handoff/index.js:${name}`));
+});
+
+test("a file another app's code names selects that app too", async () => {
+  const registry = await loadAppsRegistry();
+  // DICOM View and SeedSeg stage dicompare's embedding kit into their builds.
+  const kit = createAppPlan(registry, ['apps/dicompare/public/embed/DicompareController.js'], await graph);
+  assert.deepEqual(kit.selected.map((app) => app.id).sort(), ['dicompare', 'dicomview', 'seedseg']);
+  assert.deepEqual(kit.reasons.apps.dicomview, ["apps/dicompare/public/embed/DicompareController.js: dicomview's code reads it"]);
+  // Elsewhere in dicompare nothing else is selected.
+  assert.deepEqual(createAppPlan(registry, ['apps/dicompare/src/App.tsx'], await graph).selected.map((app) => app.id), ['dicompare']);
 });
 
 test('registry changes outside the app entries select the whole catalog with a reason', async () => {
@@ -646,7 +740,7 @@ test('a reworded or added site category selects only the site build', async () =
   assert.equal(reworded.siteCode, false);
   const withEntry = await registryPlan((registry) => {
     registry.site.categories[0].title = 'Renamed';
-    registry.apps.find((app) => app.id === 'niimath').title = 'Renamed too';
+    registry.apps.find((app) => app.id === 'niimath').description = 'Reworded too';
   });
   assert.deepEqual(Object.keys(withEntry.reasons.apps), ['niimath']);
   // An app entry may still name a category that went away, and the builds read the rest of the section.

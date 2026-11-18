@@ -4,7 +4,8 @@ import { LockfileAnalysisError, lockfileImpact } from './lockfile-impact.mjs';
 import { onlyAddsExports } from './module-closure.mjs';
 import { EMBEDDED_VERSION_FILES, releaseBookkeeping } from './release-bookkeeping.mjs';
 import { CATALOG, INDEPENDENT_CONFIG, SITE, reachableFrom } from './workspace-graph.mjs';
-import { validateAppInformation } from './app-information.mjs';
+import { handoffCatalogEntry, validateAppInformation } from './app-information.mjs';
+import { appCatalogIds } from './apps-registry.mjs';
 import { validateStandalone } from './standalone.mjs';
 
 const NON_CODE_PREFIXES = ['docs/', '.changeset/'];
@@ -125,8 +126,32 @@ function onlyDescribesCategories(old, now) {
   return old.categories.every((category) => category?.id && kept.has(category.id));
 }
 
-// The app entries a registry/apps.yml change touched, or why the change is
-// shared: every app build embeds the site section's analytics id.
+// The fields of an app entry the planner has classified. Each reaches the
+// app's own build and jobs and the site build (landing page, 404 table,
+// desktop suite). Every app page also carries the handoff catalog
+// (handoffCatalogEntry, on the hosts appCatalogIds names), which the apps
+// naming HANDOFF_CATALOG_READERS render; the planner compares that projection
+// itself. A change to any other field could reach any app.
+export const CLASSIFIED_ENTRY_FIELDS = Object.freeze([
+  'id', 'path', 'catalog', 'also_in', 'title', 'description', 'categories', 'keywords', 'anatomy', 'modalities',
+  'inputs', 'hardware', 'legacy_domain', 'runtime', 'model_manifest', 'asset_manifest_schema', 'artifact_budget_bytes',
+  'source', 'license', 'maintainers', 'support_status', 'shell', 'app_scoped_runtime_families', 'ci', 'remote_compute',
+  'handoff', 'former_paths',
+]);
+// The handoff module's functions that read the catalog an app page carries
+// (packages/components/src/handoff/index.js); test/app-plan.test.mjs holds
+// the list to that module.
+export const HANDOFF_CATALOG_READERS = Object.freeze(['handoffTargets']);
+
+// What another app's handoff menu shows of an app entry, or null for none.
+function handoffMenuEntry(app) {
+  const entry = app ? handoffCatalogEntry(app) : null;
+  return entry ? { ...entry, hosts: appCatalogIds(app) } : null;
+}
+
+// The app entries a registry/apps.yml change touched, whether one changed what
+// other apps' handoff menus list (`menu`), or why the change is shared: every
+// app build embeds the site section's analytics id.
 function registryImpact({ before, after }) {
   let old;
   let now;
@@ -143,7 +168,13 @@ function registryImpact({ before, after }) {
   if (was.size !== entries(old).length || is.size !== entries(now).length || was.has(undefined) || is.has(undefined)) {
     return { shared: 'its app entries have missing or duplicate ids' };
   }
-  return { changed: [...new Set([...was.keys(), ...is.keys()])].filter((id) => !same(was.get(id), is.get(id))) };
+  const changed = [...new Set([...was.keys(), ...is.keys()])].filter((id) => !same(was.get(id), is.get(id)));
+  for (const id of changed) {
+    const fields = [...new Set([...Object.keys(was.get(id) ?? {}), ...Object.keys(is.get(id) ?? {})])];
+    const unknown = fields.find((field) => !CLASSIFIED_ENTRY_FIELDS.includes(field) && !same(was.get(id)?.[field], is.get(id)?.[field]));
+    if (unknown) return { shared: `the ${id} entry's ${unknown} field is not one the planner classifies` };
+  }
+  return { changed, menu: changed.some((id) => !same(handoffMenuEntry(was.get(id)), handoffMenuEntry(is.get(id)))) };
 }
 
 function shardedEntries(app) {
@@ -276,6 +307,9 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     const appId = path.match(/^apps\/([^/]+)\//)?.[1] ?? path.match(MODEL_MANIFEST)?.[1];
     if (appIds.has(appId)) {
       select(appId, path);
+      for (const reader of graph?.appReaders?.(path) ?? []) {
+        if (appIds.has(reader)) select(reader, `${path}: ${reader}'s code reads it`);
+      }
       if (graph && AUTOMATION_CONTRACT.test(path)) {
         for (const reader of AUTOMATION_CATALOG_READERS) selectReaching(reader, `${path}: ${reader} generates tools from every app's contract`);
       }
@@ -361,6 +395,15 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
       siteData(`${path}: the landing page lists the catalog`);
       for (const id of impact.changed) {
         if (appIds.has(id)) select(id, `${path}: the ${id} entry changed`);
+      }
+      if (impact.menu) {
+        if (!graph?.appsNaming) {
+          shared(`${path}: an entry changed what the handoff menus list, and without a workspace graph the apps that render one are unknown`);
+          continue;
+        }
+        for (const id of HANDOFF_CATALOG_READERS.flatMap((reader) => graph.appsNaming(reader))) {
+          if (appIds.has(id)) select(id, `${path}: an entry changed what ${id}'s handoff menu lists`);
+        }
       }
       continue;
     }
