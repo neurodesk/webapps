@@ -9,7 +9,7 @@ import { DISPATCHER, dispatched, sharedPaths } from './workflow-gate.mjs';
 // run, so a pull request that only touches shared trees starts one workflow
 // run instead of one per workflow, and the nightly sweep is one run too.
 
-export const NATIVE_CRON = '5 13 * * *';
+const NATIVE_CRON = '5 13 * * *';
 // A change to the decision itself starts native.yml, so a pull request shows the new decision.
 const GATE_FILES = ['.github/workflows/native.yml', '.github/workflows/pr-gate.yml', 'scripts/workflow-gate.mjs', 'scripts/lib/workflow-gate.mjs'];
 const LEVELS = ['none', 'read', 'write'];

@@ -111,9 +111,9 @@ GitHub's limits on reusable workflows shape the rest
 ([reusing workflows](https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations)):
 
 - One workflow file can call at most 50 unique reusable workflows, nested
-  ones included, through at most ten levels. `native.yml` reaches 32 (30
-  workflows, `node-cli-portable` and `pr-gate`). The test fails before the
-  count passes 50; the next step then is one called workflow for the
+  ones included, through at most ten levels. In November 2026 `native.yml`
+  reached 32 (30 workflows, `node-cli-portable` and `pr-gate`). The test fails
+  before the count passes 50; the next step then is one called workflow for the
   portable command lines, which build through `node-cli-portable` from each
   package's `release.json` and differ only in their inputs.
 - `uses` takes no expressions, so each called workflow is a job of its own.
