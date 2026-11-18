@@ -18,6 +18,7 @@ import {
   createJob as createSamsrfJob,
   exportGiis,
   exportConvention,
+  hrf,
   init,
   polarAndEccentricity,
   readApertures,
@@ -27,9 +28,11 @@ import {
   readFreeSurferSurface,
   readGiftiRun,
   readGiftiSurface,
+  readOldSchoolHrf,
   RunAccumulator,
 } from "@neurodesk/samsrf";
 import { resolveHemisphere } from "@neurodesk/samsrf/inputs";
+import { isSubjectHrf } from "./models.js";
 
 /** @typedef {import('./models.js').Analysis} Analysis */
 /** @typedef {import('./inputs.js').SurfaceRole} SurfaceRole */
@@ -49,6 +52,7 @@ import { resolveHemisphere } from "@neurodesk/samsrf/inputs";
  *   surfaces: Partial<Record<SurfaceRole, NamedBytes>>, // FreeSurfer surfaces, curv and area, or a GIfTI mesh
  *   template: NamedBytes | null,      // cf: template map GIfTI (polar, eccentricity, ROI arrays)
  *   seed: NamedBytes | null,          // cf: seed region .label
+ *   subjectHrf: NamedBytes | null,    // prf and rc: the hrf_*.mat (fP) a model's Hrf names
  *   normalise: boolean,               // detrend and z-score each run (SamSrfAnalysis -norm)
  *   average: boolean,                 // average runs (true) or concatenate them (SamSrfAnalysis -aver)
  * }} JobInputs
@@ -102,6 +106,7 @@ export async function createJob(inputs, onProgress) {
   const seed = inputs.analysis === "cf" && inputs.seed ? readLabel(inputs.seed) : null;
   const keep = roi ? Uint32Array.from(new Set([...roi, ...(seed ?? [])])).sort() : null;
   const precision = inputs.model.Data_Precision === "single" ? "single" : "double";
+  let hrfLine = null;
   const data = preprocess(inputs.runs, keep, { ...inputs, precision });
   const spec = {
     kind: inputs.analysis,
@@ -119,6 +124,13 @@ export async function createJob(inputs, onProgress) {
     if (Number(inputs.model.Smoothing) > 0) spec.surface = readSurface(inputs.surfaces);
   } else {
     if (!inputs.apertures) throw new Error("Add the stimulus apertures.");
+    if (isSubjectHrf(inputs.model.Hrf)) {
+      if (!inputs.subjectHrf) throw new Error(`Add the subject HRF ${inputs.model.Hrf}.mat.`);
+      const fp = fromFile(inputs.subjectHrf, readOldSchoolHrf);
+      // The engine leaves file-backed HRFs to its caller; hrf.oldSchool is SamSrf's kernel from fP.
+      spec.hrf = hrf.oldSchool(inputs.model.TR, fp);
+      hrfLine = `Subject HRF ${inputs.subjectHrf.name}: fP ${[...fp].join(", ")}`;
+    }
     spec.apertures = fromFile(inputs.apertures, (bytes) => {
       const apertures = readApertures(bytes, apertureFormat(inputs.apertures.name));
       try {
@@ -147,6 +159,7 @@ export async function createJob(inputs, onProgress) {
       `${inputs.runs.length} run${inputs.runs.length === 1 ? "" : "s"} of ${data.volumes} volumes on ${data.totalVertices} vertices${inputs.runs.length > 1 ? `, ${inputs.average ? "averaged" : "concatenated"}` : ""}${inputs.normalise ? ", detrended and z-scored" : ""} (${seconds(read - started)})`,
       roi ? `ROI ${inputs.roi.name}: ${roi.length} vertices` : "No ROI: every vertex is analysed",
       ...(seed ? [`Seed ${inputs.seed.name}: ${seed.length} vertices`] : []),
+      ...(hrfLine ? [hrfLine] : []),
       `Analysis ${job.modelName}${job.outSuffix}: ${job.vertexCount} vertices, maps ${job.values.join(", ")}`,
       `Map export: ${convention}; data precision: ${precision === "single" ? "MATLAB single" : "double"}`,
       ...(gridPoints ? [`Search space: ${gridPoints} grid points per worker (${seconds(prepared - read)})`] : []),

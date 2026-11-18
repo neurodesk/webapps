@@ -1,9 +1,10 @@
 // The input slots of a SamSrf session and how a dropped file finds its slot.
 // Pure: no DOM, so the rules are unit-tested under Node.
 import { compareRunNames, resolveHemisphere } from "@neurodesk/samsrf/inputs";
+import { isSubjectHrf } from "./models.js";
 
 /** @typedef {'white' | 'pial' | 'inflated' | 'sphere' | 'mesh' | 'curv' | 'area'} SurfaceRole */
-/** @typedef {'runs' | 'apertures' | 'roi' | 'surfaces' | 'template' | 'seed' | 'model'} Slot */
+/** @typedef {'runs' | 'apertures' | 'roi' | 'surfaces' | 'template' | 'seed' | 'subjectHrf' | 'model'} Slot */
 
 /**
  * @typedef {{
@@ -13,12 +14,13 @@ import { compareRunNames, resolveHemisphere } from "@neurodesk/samsrf/inputs";
  *   surfaces: Partial<Record<SurfaceRole, File>>,
  *   template: File | null,
  *   seed: File | null,
+ *   subjectHrf: File | null,
  * }} Inputs
  */
 
 /** @returns {Inputs} */
 export function emptyInputs() {
-  return { runs: [], apertures: null, roi: null, surfaces: {}, template: null, seed: null };
+  return { runs: [], apertures: null, roi: null, surfaces: {}, template: null, seed: null, subjectHrf: null };
 }
 
 const FREESURFER_SURFACE = /(?:^|[._-])(white|pial|inflated|sphere|orig|smoothwm|midthickness)(?:\.surf)?(?:\.gii)?$/i;
@@ -33,6 +35,7 @@ const MESH_GII = /\.surf\.gii$|(?:white|pial|inflated|sphere|midthickness)[^/]*\
 export function classifyFile(name) {
   const base = name.split("/").pop();
   if (/\.label$/i.test(base)) return { slot: /seed/i.test(base) ? "seed" : "roi" };
+  if (/\.mat$/i.test(base) && isSubjectHrf(base)) return { slot: "subjectHrf" };
   if (/\.(mat|gif)$|\.nii(\.gz)?$/i.test(base)) return { slot: "apertures" };
   if (/\.json$/i.test(base)) return { slot: "model" };
   if (/\.(curv|sulc)$/i.test(base)) return { slot: "surfaces", role: "curv" };
@@ -119,8 +122,9 @@ export function missingInputs(analysis, model, inputs) {
     if (!inputs.seed) missing.push("a seed label");
     if (!inputs.surfaces.area) missing.push("a surface area file");
     if (Number(model.Smoothing) > 0 && !inputs.surfaces.white) missing.push("a white surface");
-  } else if (!inputs.apertures) {
-    missing.push("apertures");
+  } else {
+    if (!inputs.apertures) missing.push("apertures");
+    if (isSubjectHrf(model.Hrf) && !inputs.subjectHrf) missing.push(`the subject HRF ${model.Hrf}.mat`);
   }
   try {
     validateHemisphere(inputs);
