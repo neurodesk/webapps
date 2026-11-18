@@ -60,6 +60,10 @@ jobs:
       has_site: ${{ steps.plan.outputs.has_site }}
       withheld: ${{ steps.plan.outputs.withheld }}
       full_plan: ${{ steps.plan.outputs.full_plan }}
+      packages: ${{ steps.plan.outputs.packages }}
+      all_packages: ${{ steps.plan.outputs.all_packages }}
+      has_packages: ${{ steps.plan.outputs.has_packages }}
+      easter_egg: ${{ steps.plan.outputs.easter_egg }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -108,6 +112,8 @@ jobs:
           exit 1
 
   workspace-contracts:
+    needs: app-plan
+    # Runs on every run; only its package tests follow the plan.
     if: github.event.action != 'converted_to_draft' && inputs.scope != 'gpu' && inputs.scope != 'site'
     runs-on: ubuntu-latest
     steps:
@@ -129,10 +135,29 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y zlib1g-dev
           make -C exes/nii2tvx test
-      - name: Test the shared packages every app is built from
+      - name: Test the shared packages the change reaches
         # Build nii2tvx first so its package suite exercises native/WebAssembly parity.
-        # The components' browser checks run in composite-site.
-        run: pnpm test:packages
+        # The components' browser checks run in composite-site. The plan lists the
+        # packages a change reaches; the nightly, a full dispatch and a plan of every app test all.
+        if: needs.app-plan.outputs.has_packages == 'true'
+        env:
+          ALL_PACKAGES: ${{ needs.app-plan.outputs.all_packages }}
+          PACKAGES: ${{ needs.app-plan.outputs.packages }}
+        run: |
+          if [ "$ALL_PACKAGES" = true ]; then
+            pnpm test:packages
+            exit 0
+          fi
+          filters=()
+          for dir in $(jq -r '.[] | select(. != "packages/components")' <<< "$PACKAGES"); do
+            filters+=(--filter "./$dir")
+          done
+          if [ "${#filters[@]}" -gt 0 ]; then
+            pnpm "${filters[@]}" run test
+          fi
+          if jq -e 'index("packages/components") != null' <<< "$PACKAGES" > /dev/null; then
+            pnpm --filter @neurodesk/webapp-components run test:unit
+          fi
       - name: Check correctness on full CI runs
         if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
         run: pnpm lint:correctness
@@ -608,7 +633,10 @@ jobs:
           retention-days: 7
 
   homepage-easter-egg:
-    if: github.event.action != 'converted_to_draft' && inputs.scope != 'gpu'
+    needs: app-plan
+    # The plan runs it when a change reaches its tests, on the nightly and on a
+    # dispatch of every app or of the site.
+    if: github.event.action != 'converted_to_draft' && inputs.scope != 'gpu' && needs.app-plan.outputs.easter_egg == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

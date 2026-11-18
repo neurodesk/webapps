@@ -3,8 +3,9 @@ import { parse } from 'yaml';
 import { LockfileAnalysisError, lockfileImpact } from './lockfile-impact.mjs';
 import { onlyAddsExports } from './module-closure.mjs';
 import { EMBEDDED_VERSION_FILES, releaseBookkeeping } from './release-bookkeeping.mjs';
-import { CATALOG, INDEPENDENT_CONFIG, SITE, reachableFrom } from './workspace-graph.mjs';
+import { CATALOG, EASTER_EGG, INDEPENDENT_CONFIG, SITE, reachableFrom } from './workspace-graph.mjs';
 import { validateAppInformation } from './app-information.mjs';
+import { parseAppsRegistry } from './apps-registry.mjs';
 import { validateStandalone } from './standalone.mjs';
 
 const NON_CODE_PREFIXES = ['docs/', '.changeset/'];
@@ -54,6 +55,47 @@ const AUTOMATION_CONTRACT = /^apps\/[^/]+\/automation\.json$/;
 // app shell, theme, fonts and logo go into every app and stay shared.
 // test/app-plan.test.mjs fails when anything else names them.
 export const SITE_ONLY_FILES = new Set(['site/landing.css', 'site/landing.js', 'site/analytics.json', 'site/404.html', 'site/dicompare-routes.js']);
+const CI_WORKFLOW = '.github/workflows/ci.yml';
+// What each ci.yml job tests, for a change confined to it: the composite site
+// (`site`: composite-site and the jobs that only consume its build), every
+// package suite (`packages`: workspace-contracts runs them), the homepage
+// easter egg (`easter-egg`), or nothing (`none`: the plan's marker jobs). The
+// plan, the per-app jobs, a job not listed here and every key outside `jobs`
+// reach every app. test/app-plan.test.mjs holds the list to ci.yml.
+export const CI_JOB_SCOPES = Object.freeze({
+  'composite-site': 'site',
+  'agent-interactions': 'site',
+  'example-cache-retention': 'site',
+  'workspace-contracts': 'packages',
+  'homepage-easter-egg': 'easter-egg',
+  'full-plan': 'none',
+  'full-plan-withheld': 'none',
+});
+// The files an app build or an app's tests run that read each key of
+// registry/apps.yml's site section. The composite build (scripts/build-site.mjs
+// and the landing, hub and 404 pages it writes) reads all of it, and package
+// suites and the easter egg follow the file itself through the workspace
+// graph. Every app build validates the whole registry, so a head registry that
+// fails validation reaches every app; a valid one reaches the apps that reach
+// a reader of a key that changed. A key with no readers selects only the site
+// build, and a key not listed every app. test/app-plan.test.mjs fails when a
+// file an app reaches loads the registry and its site keys are not listed.
+const DESKTOP_SUITE = ['scripts/desktop/suite.mjs', 'scripts/desktop/pack.mjs', 'scripts/desktop/models-pack.mjs', 'scripts/desktop/release-files.mjs'];
+export const SITE_KEY_READERS = Object.freeze({
+  'site.domain': ['scripts/desktop/suite.mjs'],
+  'site.hub': [],
+  'site.catalogs[].id': ['scripts/lib/standalone.mjs', ...DESKTOP_SUITE],
+  'site.catalogs[].host': ['scripts/desktop/suite.mjs'],
+  'site.catalogs[].hosting': [],
+  'site.catalogs[].title': [],
+  'site.catalogs[].heading': [],
+  'site.catalogs[].description': [],
+  'site.catalogs[].brand': [],
+  'site.catalogs[].desktop': DESKTOP_SUITE,
+  'site.analytics.measurement_id': ['scripts/theme-app-dist.mjs', 'scripts/lib/vite-app-config.mjs', 'scripts/dev-server.mjs'],
+  'site.analytics.period_days': [],
+  'site.categories': [],
+});
 
 function same(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
@@ -114,19 +156,32 @@ function appInformationImpact({ before, after }, registry) {
   }
 }
 
-// Only the landing page renders the site categories, so a new category or a
-// reworded title or description reaches no app build. A category that goes
-// away can leave an app entry invalid, so that stays a shared change.
-function onlyDescribesCategories(old, now) {
-  const fields = [...new Set([...Object.keys(old ?? {}), ...Object.keys(now ?? {})])];
-  if (fields.some((field) => field !== 'categories' && !same(old?.[field], now?.[field]))) return false;
-  if (!Array.isArray(old?.categories) || !Array.isArray(now?.categories)) return false;
-  const kept = new Set(now.categories.map((category) => category?.id));
-  return old.categories.every((category) => category?.id && kept.has(category.id));
+// The site keys two registries differ in, as SITE_KEY_READERS names them:
+// lists of entries with ids compare entry by entry (`[]`), and an entry that
+// is added, removed or moved changes `[].id` and every key below it.
+function changedSiteKeys(old, now, path = 'site') {
+  if (same(old, now)) return [];
+  const record = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+  const entries = (value) => Array.isArray(value) && value.every((entry) => record(entry) && typeof entry.id === 'string');
+  if (entries(old) && entries(now)) {
+    const [before, after] = [new Map(old.map((entry) => [entry.id, entry])), new Map(now.map((entry) => [entry.id, entry]))];
+    const moved = same(old.map((entry) => entry.id), now.map((entry) => entry.id)) ? [] : [`${path}[].id`];
+    return [...moved, ...[...new Set([...before.keys(), ...after.keys()])].flatMap((id) => changedSiteKeys(before.get(id), after.get(id), `${path}[]`))];
+  }
+  if ((record(old) || old === undefined) && (record(now) || now === undefined)) {
+    return [...new Set([...Object.keys(old ?? {}), ...Object.keys(now ?? {})])].flatMap((key) => changedSiteKeys(old?.[key], now?.[key], `${path}.${key}`));
+  }
+  return [path];
 }
 
-// The app entries a registry/apps.yml change touched, or why the change is
-// shared: every app build embeds the site section's analytics id.
+// The readers SITE_KEY_READERS lists for a changed key, or undefined for a key it does not know.
+function siteKeyReaders(key) {
+  return Object.entries(SITE_KEY_READERS).find(([pattern]) => key === pattern || key.startsWith(`${pattern}.`) || key.startsWith(`${pattern}[]`))?.[1];
+}
+
+// The app entries and site keys a registry/apps.yml change touched, or why
+// the change is shared. Every app build validates the whole registry, so a
+// site change narrows only when the head registry is valid.
 function registryImpact({ before, after }) {
   let old;
   let now;
@@ -135,15 +190,61 @@ function registryImpact({ before, after }) {
   } catch (error) {
     return { shared: `it does not parse (${error.message})` };
   }
-  const section = [...new Set([...Object.keys(old ?? {}), ...Object.keys(now ?? {})])].find((key) => key !== 'apps' && !same(old?.[key], now?.[key]));
-  if (section && !(section === 'site' && onlyDescribesCategories(old.site, now.site))) return { shared: `its ${section} section changed, and every app build reads it` };
+  const section = [...new Set([...Object.keys(old ?? {}), ...Object.keys(now ?? {})])].find((key) => key !== 'apps' && key !== 'site' && !same(old?.[key], now?.[key]));
+  if (section) return { shared: `its ${section} section changed, and every app build reads it` };
+  const siteKeys = [...new Set(changedSiteKeys(old?.site, now?.site))];
+  if (siteKeys.length) {
+    try {
+      parseAppsRegistry(after);
+    } catch (error) {
+      return { shared: `it is not valid at head (${error.message.split('\n').slice(0, 2).join(' ')}), and every app build validates it` };
+    }
+    const unknown = siteKeys.find((key) => !siteKeyReaders(key));
+    if (unknown) return { shared: `its ${unknown} key changed, and no rule says which builds read it` };
+  }
   const entries = (registry) => (Array.isArray(registry?.apps) ? registry.apps : []);
   const byId = (registry) => new Map(entries(registry).map((app) => [app?.id, app]));
   const [was, is] = [byId(old), byId(now)];
   if (was.size !== entries(old).length || is.size !== entries(now).length || was.has(undefined) || is.has(undefined)) {
     return { shared: 'its app entries have missing or duplicate ids' };
   }
-  return { changed: [...new Set([...was.keys(), ...is.keys()])].filter((id) => !same(was.get(id), is.get(id))) };
+  return { changed: [...new Set([...was.keys(), ...is.keys()])].filter((id) => !same(was.get(id), is.get(id))), siteKeys };
+}
+
+// The ci.yml jobs a workflow change touched, or why it is shared: a key
+// outside `jobs`, or a job CI_JOB_SCOPES does not place, reaches every app.
+export function ciImpact({ before, after }) {
+  let old;
+  let now;
+  try {
+    [old, now] = [parse(before), parse(after)];
+  } catch (error) {
+    return { shared: `it does not parse (${error.message.split('\n')[0]})` };
+  }
+  const record = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+  if (!record(old?.jobs) || !record(now?.jobs)) return { shared: 'it has no jobs to compare' };
+  try {
+    const key = [...new Set([...Object.keys(old), ...Object.keys(now)])].find((name) => name !== 'jobs' && !same(old[name], now[name]));
+    if (key) return { shared: `its ${key} key changed, and every job runs under it` };
+    const jobs = [...new Set([...Object.keys(old.jobs), ...Object.keys(now.jobs)])].filter((id) => !same(old.jobs[id], now.jobs[id]));
+    const unplaced = jobs.find((id) => !Object.hasOwn(CI_JOB_SCOPES, id));
+    if (unplaced) return { shared: `its ${unplaced} job changed, and only a change to ${Object.keys(CI_JOB_SCOPES).join(', ')} narrows` };
+    return { jobs };
+  } catch (error) {
+    // A recursive alias parses but has no JSON form to compare.
+    return { shared: `its jobs cannot be compared (${error.message.split('\n')[0]})` };
+  }
+}
+
+// The workspace graph nodes a changed file belongs to. A package's tests
+// reach only those that read them and a document only those that read that
+// file; any other file reaches its package's users and, if a root file names
+// it, that file's.
+function graphNodes(path, graph) {
+  const packageTests = path.match(/^packages\/[^/]+\/tests?(?=\/)/)?.[0];
+  const document = /^(?:packages|exes)\/.*\.md$/.test(path) && path;
+  if (packageTests || document) return [packageTests || document];
+  return [path.match(/^(packages|exes)\/[^/]+(?=\/)/)?.[0], ROOT_FILE.test(path) || graph?.edges.has(path) ? path : null].filter(Boolean);
 }
 
 function shardedEntries(app) {
@@ -352,6 +453,23 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
       for (const id of impact.changed) {
         if (appIds.has(id)) select(id, `${path}: the ${id} entry changed`);
       }
+      for (const key of impact.siteKeys) {
+        const readers = siteKeyReaders(key);
+        if (!readers.length) siteBuild(`${path}: ${key} changed, and only the site build reads it`);
+        if (readers.length && !graph) shared(`${path}: ${key} changed, and there is no workspace graph to find the apps that read it`);
+        else for (const reader of readers) selectReaching(reader, `${path}: ${key} changed, and ${reader} reads it`);
+      }
+      continue;
+    }
+    if (path === CI_WORKFLOW) {
+      const impact = manifests.get(path) ? ciImpact(manifests.get(path)) : { shared: 'the base or head workflow is unavailable' };
+      if (impact.shared) {
+        shared(`${path}: ${impact.shared}`);
+        continue;
+      }
+      for (const job of impact.jobs) {
+        if (CI_JOB_SCOPES[job] === 'site') siteBuild(`${path}: its ${job} job changed, and it tests only the composite site`);
+      }
       continue;
     }
     const manifest = graph && manifests.get(path);
@@ -388,13 +506,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
       }
       continue;
     }
-    // A package's tests reach only the apps that read them; any other file
-    // reaches its package's users and, if a root file names it, that file's.
-    const packageTests = path.match(/^packages\/[^/]+\/tests?(?=\/)/)?.[0];
-    const document = /^(?:packages|exes)\/.*\.md$/.test(path) && path;
-    const nodes = packageTests || document
-      ? [packageTests || document]
-      : [path.match(/^(packages|exes)\/[^/]+(?=\/)/)?.[0], ROOT_FILE.test(path) || graph?.edges.has(path) ? path : null].filter(Boolean);
+    const nodes = graphNodes(path, graph);
     if (graph && nodes.length) {
       // Per-app jobs name packages only to provision their own app's data.
       if (ROOT_FILE.test(path) && catalog.has(path)) {
@@ -425,6 +537,113 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
   };
 }
 
+// Paths no package suite and not the easter egg reads: their tests read no
+// root Markdown, no other workflow and no lint or dependency-quality config.
+const NO_SUITE_PATHS = [/^[^/]+\.md$/, /^\.gitignore$/, /^\.github\/workflows\/(?!ci\.yml$)[^/]+$/, INDEPENDENT_CONFIG, /^config\/dependency-/];
+// Directories whose files a suite reads only through its graph node or the paths it names.
+const SUITE_INPUT = /^(?:apps|packages|exes|scripts|test-utils|registry|test|models|site|runtime-assets|templates)\//;
+export const EASTER_EGG_SUITE = 'homepage-easter-egg';
+// Importers a lockfile change can place: a workspace directory or an easter egg.
+const PLACED_IMPORTER = /^(?:(?:apps|packages|exes)\/[^/]+|site\/easter-eggs\/[^/]+)$/;
+
+// The suites outside the per-app jobs: each package's own tests, which
+// workspace-contracts runs (`pnpm test:packages`), and the homepage easter
+// egg's, which the homepage-easter-egg job runs. A suite reads its own
+// directory, every node its graph node reaches, and the app, model and site
+// files those name (`graph.outside`; a package's tests count only for its own
+// suite and for suites that read them).
+function suitesOf(graph) {
+  const suite = (id, own, start, tests = []) => {
+    const reach = reachableFrom(graph, start);
+    return { id, own, reach, outside: new Set([...reach, ...tests].flatMap((node) => [...(graph.outside?.get(node) ?? [])])) };
+  };
+  const packages = graph.nodes.filter((node) => node.startsWith('packages/'));
+  return [
+    ...packages.map((node) => suite(node, `${node}/`, node, [`${node}/test`, `${node}/tests`])),
+    ...(graph.edges.has(EASTER_EGG) ? [suite(EASTER_EGG_SUITE, 'site/', EASTER_EGG)] : []),
+  ];
+}
+
+// The package suites and the easter egg a change reaches, and why. Without a
+// diff, a graph, or for a path no rule places (root configuration, an
+// unplaced lockfile importer, ci.yml outside the jobs CI_JOB_SCOPES lists),
+// `fallback` says why every suite runs. The easter egg also runs whenever
+// the graph has no node for its job.
+export function selectAffectedSuites(changedPaths, graph, manifests = new Map(), { release = false } = {}) {
+  if (!changedPaths.length) return { fallback: 'no changed paths: no base revision, an unreadable diff, or a full run', suites: new Map() };
+  if (!graph) return { fallback: 'there is no workspace graph to find what each suite reads', suites: new Map() };
+  const suites = suitesOf(graph);
+  const selected = new Map();
+  let fallback = null;
+  const select = (id, reason) => selected.set(id, [...(selected.get(id) ?? []), reason]);
+  const shared = (reason) => {
+    fallback ??= reason;
+  };
+  // The suites that read `path`: below their own directory, through a node they reach, or a path they name.
+  const touch = (path, reason = path) => {
+    const nodes = graphNodes(path, graph);
+    const top = path.split('/')[0];
+    for (const suite of suites) {
+      const names = [...suite.outside].some((name) => name === top || path === name || path.startsWith(`${name}/`));
+      if (path.startsWith(suite.own) || names || nodes.some((node) => suite.reach.has(node))) select(suite.id, reason);
+    }
+  };
+  for (const path of changedPaths) {
+    if (!release && releaseBookkeeping(path, manifests)) continue;
+    if (NON_CODE_FILES.has(path) || NON_CODE_PREFIXES.some((prefix) => path.startsWith(prefix)) || NO_SUITE_PATHS.some((pattern) => pattern.test(path))) continue;
+    if (path === CI_WORKFLOW) {
+      const impact = manifests.get(path) ? ciImpact(manifests.get(path)) : { shared: 'the base or head workflow is unavailable' };
+      if (impact.shared) {
+        shared(`${path}: ${impact.shared}`);
+        continue;
+      }
+      for (const job of impact.jobs) {
+        const scope = CI_JOB_SCOPES[job];
+        for (const suite of suites) {
+          if ((scope === 'packages' && suite.id !== EASTER_EGG_SUITE) || (scope === 'easter-egg' && suite.id === EASTER_EGG_SUITE)) select(suite.id, `${path}: its ${job} job changed`);
+        }
+      }
+      continue;
+    }
+    if (path === LOCKFILE) {
+      const impact = manifests.get(path) ? analyseLockfile(manifests.get(path)) : { shared: 'the base or head lockfile is unavailable' };
+      if (impact.shared) {
+        shared(`${path}: ${impact.shared}`);
+        continue;
+      }
+      for (const [importer, reason] of impact.importers) {
+        if (PLACED_IMPORTER.test(importer)) touch(`${importer}/package.json`, `${path}: ${reason}`);
+        else shared(`${path}: ${reason}, and ${importer === '.' ? "the root's dependencies resolve for every workspace member" : 'no rule says which suites resolve it'}`);
+      }
+      continue;
+    }
+    if (path === GITATTRIBUTES) {
+      const files = manifests.get(path)?.files;
+      if (!files) {
+        shared(`${path}: the files whose attributes changed are unknown`);
+        continue;
+      }
+      if (!files.length) continue;
+      const touched = selectAffectedSuites(files, graph, new Map(), { release });
+      if (touched.fallback) shared(`${path}: ${touched.fallback}`);
+      for (const [id, reasons] of touched.suites) select(id, `${path}: ${reasons[0]}`);
+      continue;
+    }
+    if (SUITE_INPUT.test(path)) {
+      touch(path);
+      continue;
+    }
+    // The suites run their packages' own scripts; of the root scripts only test:packages is theirs.
+    const scripts = path === 'package.json' && manifests.get(path) && changedRootScripts(manifests.get(path));
+    if (scripts) {
+      if (scripts.includes('test:packages')) for (const suite of suites) if (suite.id !== EASTER_EGG_SUITE) select(suite.id, `${path}: its test:packages script changed`);
+      continue;
+    }
+    shared(`${path}: every package suite and the easter egg install and run under it`);
+  }
+  return { fallback, suites: selected };
+}
+
 export function createAppPlan(registry, changedPaths = [], graph = null, manifests = new Map(), { draft = false, release = false, carried = new Map() } = {}) {
   const affected = selectAffectedApps(registry, changedPaths, graph, manifests, { release, carried });
   // Drafts give fast feedback on app edits. Ready PRs always use the complete
@@ -438,6 +657,15 @@ export function createAppPlan(registry, changedPaths = [], graph = null, manifes
   const heavy = (entry) => ({ ...entry, heavy_tests: editsApp(registry.apps.find((app) => app.id === entry.app), changedPaths, edited, carried) });
   const browserTested = selected.filter((app) => app.ci.browser_test);
   const gpuTested = selected.filter((app) => app.ci.hardware_gpu);
+  // A draft runs the suites its change reaches, as a ready pull request does.
+  // A plan of every app tests every package, as the nightly does.
+  const checks = selectAffectedSuites(changedPaths, graph, manifests, { release });
+  const everyApp = affected.reasons.fallback ?? (affected.apps.length === registry.apps.length ? 'its change reaches every app' : null);
+  const packageFallback = checks.fallback ?? (everyApp && `the plan selects every app: ${everyApp}`);
+  const packageReasons = packageFallback ? {} : Object.fromEntries([...checks.suites].filter(([id]) => id !== EASTER_EGG_SUITE));
+  const easterEgg = checks.fallback
+    ? [checks.fallback]
+    : graph.edges.has(EASTER_EGG) ? checks.suites.get(EASTER_EGG_SUITE) ?? [] : ['ci.yml has no homepage-easter-egg job for the workspace graph to follow'];
   return Object.freeze({
     changedPaths: Object.freeze([...changedPaths]),
     selected: Object.freeze(selected),
@@ -449,6 +677,10 @@ export function createAppPlan(registry, changedPaths = [], graph = null, manifes
     site: site || selected.length > 0,
     reasons: Object.freeze(reasons),
     bookkeeping: Object.freeze([...(affected.bookkeeping ?? [])]),
+    // `all` says why every package suite runs; otherwise `reasons` maps each package directory it runs to its changes.
+    packages: Object.freeze({ all: packageFallback || null, reasons: Object.freeze(packageReasons) }),
+    // Why the homepage-easter-egg job runs; empty when it does not.
+    easterEgg: Object.freeze([...easterEgg]),
   });
 }
 
@@ -465,10 +697,11 @@ export function changedPathsFromGit({ base, head = 'HEAD', cwd }) {
   }
 }
 
-const MANIFEST = /^(?:(?:packages|apps|exes)\/[^/]+\/)?package\.json$|^registry\/(?:offline-assets\.lock\.json|apps\.yml|app-information\.yml|standalone\.json)$|^pnpm-lock\.yaml$|^\.gitattributes$/;
+const MANIFEST = /^(?:(?:packages|apps|exes)\/[^/]+\/)?package\.json$|^registry\/(?:offline-assets\.lock\.json|apps\.yml|app-information\.yml|standalone\.json)$|^pnpm-lock\.yaml$|^\.gitattributes$|^\.github\/workflows\/ci\.yml$/;
 
-// The text of each changed manifest and the lockfile for root manifest edits,
-// at the merge base (changedPathsFromGit diffs from there) and at head. A manifest
+// The text of each changed manifest (ci.yml included) and the lockfile for
+// root manifest edits, at the merge base (changedPathsFromGit diffs from there)
+// and at head. A manifest
 // missing on either side, or every manifest when there is no merge base, is left
 // out and counts as an ordinary code change.
 export function changedManifests({ base, head = 'HEAD', cwd, changedPaths }) {

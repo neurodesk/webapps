@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process';
-import { appendFile, readFile } from 'node:fs/promises';
+import { appendFile, readdir, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { createAppPlan, changedManifests, changedPathsFromGit } from './lib/app-plan.mjs';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
 import { FULL_CI_LABEL } from './lib/ci-usage.mjs';
@@ -108,6 +109,20 @@ const scoped = {
   releaseApps: ['gpu', 'site'].includes(scope) ? none : plan.releaseApps,
   site: scope === 'site' || (scope !== 'gpu' && plan.site && !withheld),
 };
+// The package directories `pnpm test:packages` would test (a `test` script,
+// or the component package's `test:unit`), narrowed to `reached` unless null.
+async function testedPackages(reached) {
+  const dirs = (await readdir(join(repoRoot, 'packages'), { withFileTypes: true }).catch(() => [])).filter((entry) => entry.isDirectory()).map((entry) => `packages/${entry.name}`);
+  const tested = [];
+  for (const dir of dirs.sort()) {
+    if (reached && !reached.includes(dir)) continue;
+    const scripts = JSON.parse(await readFile(join(repoRoot, dir, 'package.json'), 'utf8').catch(() => '{}')).scripts ?? {};
+    if (scripts[dir === 'packages/components' ? 'test:unit' : 'test']) tested.push(dir);
+  }
+  return tested;
+}
+const packages = ['gpu', 'site'].includes(scope) ? [] : await testedPackages(plan.packages.all ? null : Object.keys(plan.packages.reasons));
+const easterEgg = scope === 'site' || (scope !== 'gpu' && plan.easterEgg.length > 0);
 const emptyMatrix = { include: [{ app: '__none__', path: '', runtime: '', rust_wasm: false, python_reference: false, shared_runtime: false, browser_test: false, hardware_gpu: false, app_scoped_runtime: false, release_test: 'test', heavy_tests: false }] };
 const fallback = (fallbackReason || (plan.reasons.fallback ?? '')).replace(/\s+/g, ' ');
 // A wide change gives every app the same long list; keep the outputs small.
@@ -121,6 +136,10 @@ const reasons = {
     .filter(([app]) => plan.selected.some((entry) => entry.id === app))
     .map(([app, list]) => [app, shorten(list)])),
   site: shorten(plan.reasons.site),
+  packages: plan.packages.all
+    ? { all: plan.packages.all }
+    : Object.fromEntries(packages.map((dir) => [dir, shorten(plan.packages.reasons[dir])])),
+  easter_egg: shorten(plan.easterEgg),
 };
 const outputs = {
   apps: JSON.stringify(scoped.apps.include.length ? scoped.apps : emptyMatrix),
@@ -138,6 +157,10 @@ const outputs = {
   full_plan: String(fullPlan),
   fallback_reason: fallback,
   selection_reasons: JSON.stringify(reasons),
+  packages: JSON.stringify(packages),
+  all_packages: String(Boolean(plan.packages.all) && packages.length > 0),
+  has_packages: String(packages.length > 0),
+  easter_egg: String(easterEgg),
 };
 
 // The same reasons for a person: the job summary on GitHub, stderr locally.
@@ -148,6 +171,11 @@ const summary = fallback && !draft
     ...Object.entries(reasons.apps).map(([app, list]) => `- ${app}: ${list.join('; ')}`),
     ...reasons.site.map((reason) => `- site: ${reason}`),
   ];
+summary.push(plan.packages.all
+  ? `Package tests: all ${packages.length} packages (${plan.packages.all}).`
+  : `Package tests: ${packages.length} of ${(await testedPackages(null)).length} packages.`);
+if (!plan.packages.all) summary.push(...Object.entries(reasons.packages).map(([dir, list]) => `- ${dir}: ${list.join('; ')}`));
+summary.push(easterEgg ? `Homepage easter egg runs: ${scope === 'site' ? 'scope site' : reasons.easter_egg.join('; ')}.` : 'Homepage easter egg skipped: the change reaches none of its tests.');
 if (plan.bookkeeping.length) summary.push(`Release bookkeeping set aside (changelogs and version bumps, checked by workspace-contracts): ${plan.bookkeeping.length} ${plan.bookkeeping.length === 1 ? 'file' : 'files'}.`);
 if (scope === 'gpu') summary.unshift('Scope gpu: only the macOS GPU suite of the selected apps runs.');
 if (scope === 'site') summary.unshift('Scope site: only the composite site and its agentic checks run.');

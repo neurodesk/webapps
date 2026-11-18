@@ -47,11 +47,14 @@ export function testedBase({ runs, head, branch, git, workflow = 'ci', atHead = 
 // listed attempt's, and `appIds` the registry's. The per-app jobs are named by
 // their matrix, whose first value is the app id (matrixEntry). Jobs every push
 // runs again whatever its plan, and jobs only the nightly runs (which tests
-// every app), need no carrying. Any other failed job (the plan itself), a job
-// that has not finished, or an app id the registry does not know cannot be
-// tied to an app. test/app-plan.test.mjs holds ci.yml to these job lists.
+// every app), need no carrying. Any other failed job (the plan itself, a job
+// whose tests the plan narrows), a job that has not finished, or an app id the
+// registry does not know cannot be tied to an app. test/app-plan.test.mjs
+// holds ci.yml to these job lists.
 export const APP_JOBS = ['app-tests', 'browser-e2e', 'browser-e2e-gpu'];
-export const RERUN_JOBS = ['workspace-contracts', 'composite-site', 'homepage-easter-egg', 'example-cache-retention', 'full-plan', 'full-plan-withheld'];
+export const RERUN_JOBS = ['composite-site', 'example-cache-retention', 'full-plan', 'full-plan-withheld'];
+// Jobs that run, or test packages, only where the plan's change reaches.
+export const PLANNED_JOBS = ['workspace-contracts', 'homepage-easter-egg'];
 export const NIGHTLY_JOBS = ['agent-interactions'];
 const APP_JOB = new RegExp(`^(?:${APP_JOBS.join('|')}) \\(([^,)]+)[,)]`);
 const UNPASSED = new Set(['failure', 'cancelled', 'timed_out', 'startup_failure', 'action_required', 'stale']);

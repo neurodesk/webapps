@@ -105,11 +105,13 @@ test('a dispatched run asks for its scope and only the jobs of that scope start'
   const condition = (id) => flow.jobs[id].if.replaceAll('needs.app-plan', "needs['app-plan']");
   const starts = (id, inputs, outputs = {}) => evaluate(condition(id), dispatch, inputs, { 'app-plan': { outputs: { has_site: 'true', has_gpu_apps: 'true', ...outputs } } });
   for (const id of ['workspace-contracts', 'homepage-easter-egg']) {
-    assert.equal(starts(id, { scope: 'affected' }), true, id);
-    assert.equal(starts(id, { scope: 'gpu' }), false, id);
+    assert.equal(starts(id, { scope: 'affected' }, { easter_egg: 'true' }), true, id);
+    assert.equal(starts(id, { scope: 'gpu' }, { easter_egg: 'true' }), false, id);
   }
   assert.equal(starts('workspace-contracts', { scope: 'site' }), false);
-  assert.equal(starts('homepage-easter-egg', { scope: 'site' }), true);
+  // The plan says whether the easter egg runs: always for the site scope, otherwise when a change reaches its tests.
+  assert.equal(starts('homepage-easter-egg', { scope: 'site' }, { easter_egg: 'true' }), true);
+  assert.equal(starts('homepage-easter-egg', { scope: 'affected' }, { easter_egg: 'false' }), false);
   // The plan decides the site build of a dispatch (has_site is false for the gpu scope); pushes and the nightly always build it.
   assert.equal(starts('composite-site', { scope: 'gpu' }, { has_site: 'false' }), false);
   assert.equal(starts('composite-site', { scope: 'site' }), true);

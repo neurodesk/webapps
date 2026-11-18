@@ -152,7 +152,8 @@ test('correctness lint runs on every CI event with no duplicate routine gate', a
 test('contract and correctness owners replace duplicate invocations without losing native parity', async () => {
   const workspace = commands(ci.jobs['workspace-contracts']);
   assert.equal(workspace.filter((command) => command === 'pnpm test:contracts').length, 1);
-  assert.ok(workspace.indexOf(workspace.find((command) => command.includes('make -C exes/nii2tvx test'))) < workspace.indexOf('pnpm test:packages'));
+  // The package tests, narrowed to the packages a change reaches, run after the native build.
+  assert.ok(workspace.findIndex((command) => command.includes('make -C exes/nii2tvx test')) < workspace.findIndex((command) => /^\s*pnpm test:packages$/m.test(command)));
   assert.ok(workspace.includes('node scripts/lint-workspaces.mjs'));
   assert.ok(!workspace.includes('pnpm lint'));
   assert.ok(commands((await workflow('code-quality')).jobs.correctness).includes('pnpm lint:correctness'));
