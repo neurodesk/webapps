@@ -1,0 +1,28 @@
+{
+  "sourceMergeHead": "8c4b3a2c6c14ecad49c0f867ca3867cbcb54fa73",
+  "previousReviewedHead": "86937c35241eb8fad277406f2754b48dab1cb0ba",
+  "previousReportDirectory": "cc528cf6-2",
+  "integrated876": "f444a7abc49d3d314295ec327f92f21434e5ca71",
+  "main": "4cdc38d2074bd221ed60f21e95351c28d3e7c7c9",
+  "shippingModuleUnchanged": "cc528cf6ec172367ee845296f197a686e671629386a595eaba5432ccfe0436b6",
+  "researchModule": "53fb607ee538bd47d902ada1fbf31827555051c7dd86ed291594d93e735f6f52",
+  "candidateAndPredictionFreezeUnchanged": true,
+  "fresh": [
+    "Research WebAssembly build from clean sourceMergeHead with the merged runner",
+    "Full 24-run research Node matrix on both source bundles; comparator exits 0",
+    "Bitwise accounting against this integration\u2019s fresh shipped/hooks matrices; historical output hashes/counts/losses unchanged",
+    "18-test recordings/divergence invocation with QR and both numerics fixture pairs configured; unrelated fixture gates early-return"
+  ],
+  "reused": [
+    "Fresh shipped and hooks builds/matrices from the #882 integration; their production source and hook patch remain unchanged",
+    "Historical native CSS pipeline dumps, re-accounted with explicit arithmetic-source/patch/native-test/compiler binding; not reexecuted",
+    "Existing exposed MATLAB source recordings; inputs remain unattested"
+  ],
+  "limits": [
+    "No new scientific candidate or prediction freeze",
+    "Research binary hashes are actual fresh builds; binary equality is claimed only where binding.json proves it",
+    "No canonical shipping rebuild, browser/UI or container acceptance, MATLAB dispatch, reference policy or loss waiver",
+    "Prior independent reviews remain scoped to previousReviewedHead; this merged head requires parent review/full affected CI",
+    "Production #876 regression remains blocked"
+  ]
+}
