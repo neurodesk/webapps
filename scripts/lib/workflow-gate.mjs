@@ -259,7 +259,10 @@ function certainMatcher(filter) {
 // not model. `diff` is readChangedPaths's answer.
 export function certainOwnStart(flow, { paths, renamed = new Set() }) {
   if (!(paths.length < GITHUB_DIFF_LIMIT)) return null;
-  const matchers = (flow.on?.pull_request?.paths ?? []).map((filter) => ({ filter, matches: certainMatcher(filter) })).filter(({ matches }) => matches);
+  const filters = flow.on?.pull_request?.paths ?? [];
+  // An exclusion can undo a match that comes before it.
+  if (filters.some((filter) => filter.startsWith('!'))) return null;
+  const matchers = filters.map((filter) => ({ filter, matches: certainMatcher(filter) })).filter(({ matches }) => matches);
   for (const path of paths) {
     if (renamed.has(path) || !PLAIN_PATH.test(path)) continue;
     const own = matchers.find(({ matches }) => matches(path));
@@ -277,9 +280,18 @@ export function certainOwnStart(flow, { paths, renamed = new Set() }) {
 export function dispatchDecision({ flow, changedPaths, renamed = new Set(), ...rest }) {
   const own = certainOwnStart(flow, { paths: changedPaths, renamed });
   if (own) return { run: false, reason: `${own.path} matches its own filter ${own.filter}, so its own pull request run decides` };
-  const shared = sharedPaths(flow).map((filter) => ({ filter, glob: pathGlob(filter) }));
-  if (!changedPaths.some((path) => shared.some(({ glob }) => glob.test(path)))) return { run: false, reason: 'none of its shared paths changed' };
+  if (!reachesSharedPaths(flow, changedPaths)) return { run: false, reason: 'none of its shared paths changed' };
   return decideWorkflow({ flow, changedPaths, ...rest });
+}
+
+// Whether a changed path may match one of a workflow's shared filters as
+// GitHub matches them: `*` any character but `/`, `**` any character, a
+// newline included. A path this does not model (outside PLAIN_PATH: spaces,
+// control characters, non-ASCII) counts as matching every shared filter, so
+// it can only send the workflow on to its decision.
+export function reachesSharedPaths(flow, changedPaths) {
+  const shared = sharedPaths(flow).map((filter) => new RegExp(pathGlob(filter).source, 's'));
+  return changedPaths.some((path) => !PLAIN_PATH.test(path) || shared.some((glob) => glob.test(path)));
 }
 
 // native.yml's scheduled runs on main, read as runs of one workflow it
