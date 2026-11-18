@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { mkdir, mkdtemp, readFile, rename, rm, utimes, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -532,6 +534,86 @@ test('the plan returns its outputs by its deadlines when every read stalls, and 
   assert.ok(green2.planned.every(({ publish, reason }) => publish && reason === 'live digest unreadable (no complete answer in 0.3 s)'));
   assert.doesNotMatch(green2.summary, /^Every site is published/);
   assert.deepEqual({ pages: green2.outputs.pages, workers: green2.outputs.workers }, all);
+});
+
+// The plan command as the workflow runs it, against a loopback server that
+// answers every request (live records and the GitHub API) with `status` and
+// `type` at once, then sends `first` and, with `trickle`, a space every 100 ms
+// forever, with `end` nothing more and the end, or else nothing more. A preload
+// sends every https request to the server and divides every deadline of 10 s or
+// more by 100, so 30 s ends at 0.3 s.
+async function planCommand(t, { status, type, first = '{', trickle, end }) {
+  const server = createServer((request, response) => {
+    response.writeHead(status, { 'content-type': type });
+    response.flushHeaders();
+    response.write(first);
+    if (end) response.end();
+    if (trickle) {
+      const interval = setInterval(() => response.write(' '), 100);
+      response.on('close', () => clearInterval(interval));
+    }
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => {
+    server.closeAllConnections();
+    server.close();
+  });
+  const root = await tempDir(t);
+  await sitesFixture(join(root, 'sites'));
+  const preload = join(root, 'loopback.mjs');
+  await writeFile(preload, [
+    `const origin = 'http://127.0.0.1:${server.address().port}';`,
+    'const realFetch = globalThis.fetch;',
+    'globalThis.fetch = (url, init) => { const { pathname, search } = new URL(url); return realFetch(origin + pathname + search, init); };',
+    'const realTimeout = globalThis.setTimeout;',
+    'globalThis.setTimeout = (callback, ms, ...args) => realTimeout(callback, ms >= 10_000 ? ms / 100 : ms, ...args);',
+    '',
+  ].join('\n'));
+  const output = join(root, 'output');
+  await writeFile(output, '');
+  const start = performance.now();
+  const child = spawn(process.execPath, ['--import', preload, join(repoRoot, 'scripts/plan-site-deploy.mjs'), '--sites-dir', join(root, 'sites')], {
+    cwd: repoRoot,
+    env: {
+      PATH: process.env.PATH,
+      GITHUB_OUTPUT: output,
+      GITHUB_REPOSITORY: 'neurodesk/webapps',
+      GITHUB_REF: 'refs/heads/main',
+      GITHUB_WORKFLOW_REF: 'neurodesk/webapps/.github/workflows/deploy-pages.yml@refs/heads/main',
+      GITHUB_RUN_ID: '1000',
+      GITHUB_RUN_ATTEMPT: '1',
+      GITHUB_SHA: C1,
+      GITHUB_TOKEN: 'fixture',
+    },
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
+  let stderr = '';
+  child.stderr.on('data', (chunk) => { stderr += chunk; });
+  const killer = setTimeout(() => child.kill('SIGKILL'), 8000);
+  const [code, signal] = await once(child, 'exit');
+  clearTimeout(killer);
+  return { code, signal, stderr, ms: performance.now() - start, outputs: Object.fromEntries((await readFile(output, 'utf8')).trim().split('\n').filter(Boolean).map((line) => line.split(/=(.*)/s).slice(0, 2))) };
+}
+
+test('the plan command exits by itself soon after its deadlines when answers trickle, are refused or stall', { timeout: 60_000 }, async (t) => {
+  // Start-up, digests and outputs, with every answer complete at once.
+  const prompt = await planCommand(t, { status: 404, type: 'text/plain', first: 'Not found', end: true });
+  assert.equal(prompt.code, 0, prompt.stderr);
+  for (const [name, answer] of [
+    ['a trickling HTTP 502', { status: 502, type: 'text/html', trickle: true }],
+    ['a trickling answer of the wrong content type', { status: 200, type: 'text/html', trickle: true }],
+    ['a stalled JSON body', { status: 200, type: 'application/json' }],
+  ]) {
+    const { code, signal, stderr, ms, outputs } = await planCommand(t, answer);
+    assert.equal(signal, null, `${name}: the process ended by itself (${stderr})`);
+    assert.equal(code, 0, `${name}: ${stderr}`);
+    // The longest deadline, the whole history read, is 1.2 s under the preload.
+    assert.ok(ms < prompt.ms + 1200 + 1500, `${name}: exited after ${Math.round(ms)} ms, ${Math.round(prompt.ms)} ms with prompt answers`);
+    assert.equal(outputs.pages, 'true', name);
+    assert.deepEqual(JSON.parse(outputs.workers).map(({ site: id }) => id), ['msk', 'microscopy', 'preclinical', 'hub'], name);
+    assert.equal(outputs.verify_hub, 'true', name);
+    assert.equal(outputs.verify_build, 'true', name);
+  }
 });
 
 test('the daily run checks every live site, published or not', async (t) => {

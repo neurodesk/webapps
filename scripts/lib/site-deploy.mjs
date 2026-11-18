@@ -138,6 +138,7 @@ export function parseLiveRecord(text, site) {
  * `within` settles with a promise or rejects when the deadline passes first,
  * and the signal aborts the requests then. The plain timer, unlike
  * AbortSignal.timeout, stays referenced until `end`, so a stalled read still ends.
+ * `end` also aborts the requests, so a body nobody read cannot keep the process alive.
  */
 function deadline(ms, what) {
   const controller = new AbortController();
@@ -153,7 +154,10 @@ function deadline(ms, what) {
   return {
     signal: controller.signal,
     within: (promise) => Promise.race([promise, expired]),
-    end: () => clearTimeout(timer),
+    end: () => {
+      clearTimeout(timer);
+      controller.abort(new DOMException(`${what}read finished`, 'AbortError'));
+    },
   };
 }
 
