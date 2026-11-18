@@ -117,7 +117,7 @@ export function isMemoryErrorMessage(value) {
 
 /**
  * Format a memory error, unexpected worker crash or interrupted-page reload
- * into a concise status-bar message (<= 110 chars for narrow phone viewports)
+ * into a concise status-bar message (<= 90 chars for narrow phone viewports)
  * and a detailed technical-log entry. Returns `null` for other errors.
  */
 export function formatMemoryError(value, options = {}) {
@@ -130,29 +130,35 @@ export function formatMemoryError(value, options = {}) {
   if (kind === 'reload-active') {
     const step = cleanText(options.detail);
     const context = step && !IDLE_STATUS.test(step) ? ` (${step})` : '';
+    const log = `Error: This page reloaded before processing finished${context}, which commonly happens on phones when browser memory runs out. Try a smaller or cropped input, close other tabs or apps, or open Standalone in the top bar to run on a computer.`;
     return {
       kind,
       raw,
-      status: 'Page reloaded mid-run (likely low memory). Try a smaller input, close other tabs, or use Standalone.',
-      log: `Error: This page reloaded before processing finished${context}, which commonly happens on phones when browser memory runs out. Try a smaller or cropped input, close other tabs or apps, or open Standalone in the top bar to run on a computer.`,
+      status: 'Page reloaded mid-run (likely low memory). Try smaller data or use Standalone.',
+      log,
+      dedupLog: log,
     };
   }
 
   if (kind === 'reload-discarded') {
+    const log = 'Error: The browser discarded and reloaded this inactive tab (often to reclaim system memory), clearing your loaded session. Load your files again, close other tabs, or open Standalone in the top bar to run on a computer.';
     return {
       kind,
       raw,
-      status: 'Browser discarded this inactive tab (often to free memory). Load your files again, or use Standalone.',
-      log: 'Error: The browser discarded and reloaded this inactive tab (often to reclaim system memory), clearing your loaded session. Load your files again, close other tabs, or open Standalone in the top bar to run on a computer.',
+      status: 'Browser discarded this inactive tab (often to free memory). Reload or use Standalone.',
+      log,
+      dedupLog: log,
     };
   }
 
   if (kind === 'reload-loaded') {
+    const log = 'Error: This page reloaded unexpectedly without a normal navigation, clearing your loaded session (often caused by low device memory on mobile browsers). Close other tabs or apps, or open Standalone in the top bar to run on a computer.';
     return {
       kind,
       raw,
-      status: 'Page reloaded unexpectedly (possible low memory), clearing loaded data. Close other tabs or use Standalone.',
-      log: 'Error: This page reloaded unexpectedly without a normal navigation, clearing your loaded session (often caused by low device memory on mobile browsers). Close other tabs or apps, or open Standalone in the top bar to run on a computer.',
+      status: 'Page reloaded unexpectedly (possible low memory). Close tabs or use Standalone.',
+      log,
+      dedupLog: log,
     };
   }
 
@@ -160,8 +166,9 @@ export function formatMemoryError(value, options = {}) {
     return {
       kind,
       raw,
-      status: 'Viewer graphics context lost (often low memory). Reload the page, close other tabs, or use Standalone.',
+      status: 'Viewer graphics context lost (often low memory). Reload page or use Standalone.',
       log: `Error: The viewer WebGL graphics context was lost (${raw || 'WebGL context lost'}), often due to GPU memory pressure on mobile devices. Reload the page, close other tabs or apps, or open Standalone in the top bar to run on a computer.`,
+      dedupLog: 'Error: The viewer WebGL graphics context was lost, often due to GPU memory pressure on mobile devices. Reload the page, close other tabs or apps, or open Standalone in the top bar to run on a computer.',
     };
   }
 
@@ -169,16 +176,18 @@ export function formatMemoryError(value, options = {}) {
     return {
       kind,
       raw,
-      status: 'Processing stopped unexpectedly (often low memory). Try a smaller input, close other tabs, or use Standalone.',
+      status: 'Processing stopped unexpectedly (often low memory). Try smaller data or use Standalone.',
       log: `Error: Processing terminated unexpectedly${raw ? ` (${raw})` : ''}, which commonly happens on phones when WebAssembly or browser memory is exhausted. Try a smaller or cropped input, close other tabs or apps, or open Standalone in the top bar to run on a computer.`,
+      dedupLog: 'Error: Processing terminated unexpectedly, which commonly happens on phones when WebAssembly or browser memory is exhausted. Try a smaller or cropped input, close other tabs or apps, or open Standalone in the top bar to run on a computer.',
     };
   }
 
   return {
     kind: 'oom',
     raw,
-    status: 'Out of browser memory on this device. Try a smaller input, close other tabs, or use Standalone.',
+    status: 'Out of browser memory on this device. Try a smaller input, close tabs, or use Standalone.',
     log: `Error: Browser memory limit exceeded${raw ? ` (${raw})` : ''}. Mobile and browser tabs cap memory per page; try a smaller or cropped input, close other tabs or apps, or open Standalone in the top bar to run on a computer.`,
+    dedupLog: 'Error: Browser memory limit exceeded on this device. Mobile and browser tabs cap memory per page; try a smaller or cropped input, close other tabs or apps, or open Standalone in the top bar to run on a computer.',
   };
 }
 
@@ -228,9 +237,9 @@ function consoleContainsText(doc, needle) {
   return false;
 }
 
-function appendConsoleError(doc, message, { avoidDuplicateSubstring = '' } = {}) {
+function appendConsoleError(doc, message, { avoidDuplicateSubstring = '', fallbackMessage = '' } = {}) {
   if (avoidDuplicateSubstring && consoleContainsText(doc, avoidDuplicateSubstring)) {
-    message = 'Error: Browser memory limit exceeded on this device. Try a smaller or cropped input, close other tabs or apps, or open Standalone in the top bar to run on a computer.';
+    message = fallbackMessage || message;
   }
   if (consoleContainsText(doc, message)) return true;
   const ndConsole = doc.querySelector('nd-console');
@@ -281,8 +290,10 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
   let immediateActiveDetail = '';
   let recoveredFailure = null;
   let activeRunFailure = null;
+  let monitorErrorStatus = '';
   let pendingConsoleMessage = '';
   const lostCanvases = new Set();
+  let lostCanvasObserver = null;
   let webglNoticeDispatched = false;
   let cleanedUp = false;
   let unloading = false;
@@ -312,9 +323,13 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
           recoveredFailure = null;
         } else {
           writeStatusError(doc, view, formatted.status);
+          monitorErrorStatus = formatted.status;
         }
       }
-      const logged = appendConsoleError(doc, formatted.log, { avoidDuplicateSubstring: preserveRawSubstring });
+      const logged = appendConsoleError(doc, formatted.log, {
+        avoidDuplicateSubstring: preserveRawSubstring,
+        fallbackMessage: formatted.dedupLog,
+      });
       pendingConsoleMessage = logged ? '' : formatted.log;
     } finally {
       applying = false;
@@ -352,6 +367,7 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
     applying = true;
     try {
       writeStatusError(doc, view, recoveredFailure.status);
+      monitorErrorStatus = recoveredFailure.status;
     } finally {
       applying = false;
     }
@@ -380,8 +396,10 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
     if (!statusEl) return;
     const current = cleanText(statusEl.textContent);
     if (isMemoryErrorMessage(current)) {
+      const active = currentSessionState().active;
       recoveredFailure = null;
       const formatted = formatMemoryError(current);
+      activeRunFailure = active ? formatted : null;
       applyFailure(formatted, { preserveRawSubstring: current });
       return;
     }
@@ -389,8 +407,10 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
       for (const output of doc.querySelectorAll(CONSOLE_OUTPUT_SELECTOR)) {
         const last = output.lastElementChild?.textContent || output.textContent || '';
         if (isMemoryErrorMessage(last)) {
+          const active = currentSessionState().active;
           recoveredFailure = null;
           const formatted = formatMemoryError(last);
+          activeRunFailure = active ? formatted : null;
           applyFailure(formatted, { preserveRawSubstring: cleanText(last) });
           return;
         }
@@ -459,8 +479,11 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
     interacted = true;
     recoveredFailure = null;
     activeRunFailure = null;
+    monitorErrorStatus = '';
     pruneDisconnectedLostCanvases();
-    view?.coiHoldReloads?.();
+    // Hold service-worker update reloads only once a controller already isolates the page;
+    // holding on an uncontrolled first visit would prevent initial COOP/COEP activation.
+    if (view?.navigator?.serviceWorker?.controller) view?.coiHoldReloads?.();
     immediateActiveDetail = cleanText(detail).slice(0, 80);
     syncCheckpoint();
     if (reconcileTimer && view?.clearTimeout) view.clearTimeout(reconcileTimer);
@@ -468,6 +491,9 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
       reconcileTimer = view.setTimeout(() => {
         immediateActiveDetail = '';
         reconcileTimer = null;
+        flushActiveRunFailure();
+        reconcileStatusErrorClass();
+        reconcileLostCanvases();
         syncCheckpoint();
       }, 250);
       reconcileTimer?.unref?.();
@@ -521,19 +547,54 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
     }
   }
 
+  function reconcileStatusErrorClass() {
+    if (applying || !monitorErrorStatus || view?.[STATUS_MANAGED_KEY]) return;
+    const statusEl = findStatusElement(doc);
+    if (!statusEl) return;
+    const current = cleanText(statusEl.textContent);
+    if (current === monitorErrorStatus) return;
+    // Raw footers that write a completion or ready label directly into textContent
+    // without ProgressManager should not inherit the monitor's .error class.
+    const looksLikeError = GENERIC_FAILURE_STATUS.test(current)
+      || /^(?:error\b|.*failed\b)/i.test(current)
+      || isMemoryErrorMessage(current);
+    monitorErrorStatus = '';
+    if (!looksLikeError && statusEl.classList.contains('error')) {
+      applying = true;
+      try {
+        statusEl.classList.remove('error');
+      } finally {
+        applying = false;
+      }
+    }
+  }
+
   function flushActiveRunFailure() {
     if (!activeRunFailure || applying || view?.[STATUS_MANAGED_KEY]) return;
     if (!currentSessionState().active) {
+      const finishedFailure = activeRunFailure;
       activeRunFailure = null;
+      const statusEl = findStatusElement(doc);
+      const current = cleanText(statusEl?.textContent);
+      if (statusEl && GENERIC_FAILURE_STATUS.test(current)) {
+        applying = true;
+        try {
+          writeStatusError(doc, view, finishedFailure.status);
+          monitorErrorStatus = finishedFailure.status;
+        } finally {
+          applying = false;
+        }
+      }
       return;
     }
     const statusEl = findStatusElement(doc);
     if (!statusEl) return;
     const current = cleanText(statusEl.textContent);
-    if (current !== activeRunFailure.status && ACTIVE_STATUS_VERB.test(current)) {
+    if (current !== activeRunFailure.status && !ALREADY_EXPLAINED.test(current) && !isMemoryErrorMessage(current)) {
       applying = true;
       try {
         writeStatusError(doc, view, activeRunFailure.status);
+        monitorErrorStatus = activeRunFailure.status;
       } finally {
         applying = false;
       }
@@ -562,10 +623,30 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
     return true;
   }
 
+  function syncLostCanvasVisibilityObserver() {
+    if (lostCanvases.size > 0) {
+      if (!lostCanvasObserver && view?.MutationObserver && doc.body) {
+        lostCanvasObserver = new view.MutationObserver(() => {
+          if (applying) return;
+          reconcileLostCanvases();
+        });
+        lostCanvasObserver.observe(doc.body, {
+          subtree: true,
+          attributes: true,
+          attributeFilter: ['class', 'style', 'hidden'],
+        });
+      }
+    } else if (lostCanvasObserver) {
+      lostCanvasObserver.disconnect();
+      lostCanvasObserver = null;
+    }
+  }
+
   function pruneDisconnectedLostCanvases() {
     for (const entry of [...lostCanvases]) {
       if (!entry.isConnected) lostCanvases.delete(entry);
     }
+    syncLostCanvasVisibilityObserver();
   }
 
   function hasVisibleLostCanvas() {
@@ -601,6 +682,7 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
       if (cleanedUp || !canvas.isConnected) return;
       pruneDisconnectedLostCanvases();
       lostCanvases.add(canvas);
+      syncLostCanvasVisibilityObserver();
       const formatted = formatMemoryError('WebGL context lost', { kind: 'webgl' });
       if (currentSessionState().active) {
         appendConsoleError(doc, formatted.log);
@@ -616,8 +698,10 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
     const canvas = event?.target;
     pruneDisconnectedLostCanvases();
     if (!canvas || !lostCanvases.delete(canvas)) return;
+    syncLostCanvasVisibilityObserver();
     if (lostCanvases.size > 0) return;
     webglNoticeDispatched = false;
+    monitorErrorStatus = '';
     const statusEl = findStatusElement(doc);
     const expected = formatMemoryError('WebGL context lost', { kind: 'webgl' }).status;
     if (statusEl && cleanText(statusEl.textContent) === expected) {
@@ -656,6 +740,7 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
       if (applying) return;
       flushPendingRecovery();
       flushActiveRunFailure();
+      reconcileStatusErrorClass();
       inspectLiveErrors();
       reconcileLostCanvases();
       syncCheckpoint();
@@ -693,6 +778,8 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
       cleanedUp = true;
       onCleanUnload();
       observer?.disconnect();
+      lostCanvasObserver?.disconnect();
+      lostCanvasObserver = null;
       doc.removeEventListener('change', onChange, true);
       doc.removeEventListener('drop', onDrop, true);
       doc.removeEventListener('click', onClick, true);

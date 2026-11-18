@@ -29,7 +29,9 @@ function createWorkspaceDom(t, url = 'https://webapps.neurodesk.org/synthsr/', s
     </footer>
   </body></html>`, { url, pretendToBeVisual: true });
   const { window } = dom;
-  window.Element.prototype.checkVisibility ??= function checkVisibility() { return !this.hidden; };
+  window.Element.prototype.checkVisibility ??= function checkVisibility() {
+    return !this.hidden && !this.closest('.hidden');
+  };
   for (const [key, value] of Object.entries(sessionEntries)) {
     window.sessionStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
   }
@@ -84,13 +86,13 @@ test('isMemoryErrorMessage and formatMemoryError keep status messages phone-size
     const formatted = formatMemoryError(sample);
     assert.ok(formatted, sample);
     assert.equal(formatted.kind, expectedKind, sample);
-    assert.ok(formatted.status.length <= 110, `${formatted.status.length} chars: ${formatted.status}`);
-    assert.match(formatted.status, /Standalone/);
+    assert.ok(formatted.status.length <= 90, `${formatted.status.length} chars: ${formatted.status}`);
+    assert.match(formatted.status, /use Standalone/);
   }
 
   for (const kind of ['reload-active', 'reload-discarded', 'reload-loaded']) {
     const formatted = formatMemoryError('', { kind, detail: 'Segmenting…' });
-    assert.ok(formatted.status.length <= 110, `${kind}: ${formatted.status.length} chars`);
+    assert.ok(formatted.status.length <= 90, `${kind}: ${formatted.status.length} chars`);
   }
 
   const ignored = [
@@ -122,6 +124,15 @@ test('a phone tab killed mid-run and reloaded shows honest guidance without re-t
   first.window.coiHoldReloads = () => { holds += 1; };
   first.bind({ now: () => clock });
 
+  // Uncontrolled first visit does NOT call coiHoldReloads so initial COOP/COEP isolation can reload!
+  first.document.getElementById('runButton').click();
+  assert.equal(holds, 0);
+
+  // Once a service worker controls the page, workflow start holds background SW update reloads.
+  Object.defineProperty(first.window.navigator, 'serviceWorker', {
+    value: { controller: {} },
+    configurable: true,
+  });
   first.document.getElementById('runButton').click();
   first.progressManager.begin('Segmenting brain · 42%');
   first.progressManager.setProgress(0.42, 'Segmenting brain · 42%');
@@ -282,11 +293,52 @@ test('live OOM errors route through shared owners, respect ConsoleOutput line ca
 
   assert.equal(
     statusText.textContent,
-    'Out of browser memory on this device. Try a smaller input, close other tabs, or use Standalone.',
+    'Out of browser memory on this device. Try a smaller input, close tabs, or use Standalone.',
   );
   const rawMatches = [...page.document.querySelectorAll('#technicalLog .nd-console-message')]
     .filter((node) => node.textContent.includes('RangeError: Array buffer allocation failed'));
   assert.equal(rawMatches.length, 1);
+
+  // Deduplicating a worker-crash log entry keeps suspected wording rather than claiming confirmed OOM!
+  const crashDedupPage = createWorkspaceDom(t);
+  crashDedupPage.bind();
+  crashDedupPage.log.log('Processing worker stopped unexpectedly (often low device memory)', 'error');
+  crashDedupPage.document.getElementById('statusText').textContent = 'Processing worker stopped unexpectedly (often low device memory)';
+  await waitMs(20);
+  assert.doesNotMatch(crashDedupPage.log.getText(), /Browser memory limit exceeded/);
+  assert.match(crashDedupPage.log.getText(), /Processing terminated unexpectedly/);
+
+  // Raw footer (without ProgressManager): live OOM stays pinned over raw progress updates and clears .error on "Done"!
+  const rawFooterDom = new JSDOM(`<!doctype html><html><body>
+    <header id="controls"><button id="runButton" class="nd-btn nd-btn-primary" type="button">Run</button></header>
+    <footer id="status">
+      <span id="statusText" class="nd-status-text">Drag and drop files</span>
+      <progress id="progress" max="1" value="0.2"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button">×</button>
+    </footer>
+  </body></html>`, { url: 'https://webapps.neurodesk.org/niimath/', pretendToBeVisual: true });
+  const rawMonitor = bindMemoryCrashMonitor(rawFooterDom.window.document);
+  t.after(() => {
+    rawMonitor?.destroy();
+    rawFooterDom.window.close();
+  });
+  rawFooterDom.window.document.getElementById('runButton').click();
+  const rawStatus = rawFooterDom.window.document.getElementById('statusText');
+  rawStatus.textContent = 'Aborted(OOM)';
+  await waitMs(20);
+  assert.match(rawStatus.textContent, /Out of browser memory on this device/);
+  assert.ok(rawStatus.classList.contains('error'));
+  rawStatus.textContent = 'Processing 50%';
+  await waitMs(20);
+  assert.match(rawStatus.textContent, /Out of browser memory on this device/);
+  assert.ok(rawStatus.classList.contains('error'));
+  rawFooterDom.window.document.getElementById('cancelButton').hidden = true;
+  rawFooterDom.window.document.getElementById('progress').value = 1;
+  await waitMs(280);
+  rawStatus.textContent = 'Done';
+  await waitMs(20);
+  assert.equal(rawStatus.textContent, 'Done');
+  assert.equal(rawStatus.classList.contains('error'), false);
 
   // Legacy ConsoleOutput (without <nd-console>) respects its configured maxLines cap, custom lineClass,
   // and shell-first fallback -> app-owner handoff (so Copy includes recovery lines logged before app init).
@@ -429,8 +481,8 @@ test('webglcontextlost and uncaught errors never disable active run cancellation
   assert.equal(statusText.textContent, 'Drag and drop files');
   assert.equal(statusText.classList.contains('error'), false);
 
-  // When the run finishes ("Done") while viewerCanvas is STILL lost from mid-run,
-  // the footer immediately surfaces the still-lost WebGL context instead of claiming "Done"!
+  // When a short (< 250 ms) run finishes ("Done") while viewerCanvas is STILL lost from mid-run,
+  // expiring the 250 ms click grace period immediately surfaces the still-lost WebGL context!
   page.progressManager.end('Done');
   statusText.dataset.neurodeskState = 'succeeded';
   await waitMs(280);
@@ -441,11 +493,23 @@ test('webglcontextlost and uncaught errors never disable active run cancellation
   outsideCanvas.dispatchEvent(new page.window.Event('webglcontextlost'));
   chartCanvas.dispatchEvent(new page.window.Event('webglcontextlost'));
 
-  // A temporarily hidden viewer canvas losing WebGL is also tracked and prevents premature clear once shown.
-  secondViewerCanvas.hidden = true;
+  // Restore viewerCanvas first so status returns to Ready, then verify a class-only reveal (.hidden)
+  // on a second viewer canvas that lost WebGL while hidden immediately surfaces the warning!
+  viewerCanvas.dispatchEvent(new page.window.Event('webglcontextrestored'));
+  await waitMs(20);
+  assert.equal(statusText.textContent, 'Ready');
+
+  secondViewerCanvas.classList.add('hidden');
   secondViewerCanvas.dispatchEvent(new page.window.Event('webglcontextlost'));
   await waitMs(20);
-  secondViewerCanvas.hidden = false;
+  assert.equal(statusText.textContent, 'Ready');
+
+  secondViewerCanvas.classList.remove('hidden');
+  await waitMs(20);
+  assert.match(statusText.textContent, /Viewer graphics context lost/);
+  assert.ok(statusText.classList.contains('error'));
+
+  viewerCanvas.dispatchEvent(new page.window.Event('webglcontextlost'));
   await waitMs(20);
 
   outsideCanvas.dispatchEvent(new page.window.Event('webglcontextrestored'));
@@ -455,7 +519,7 @@ test('webglcontextlost and uncaught errors never disable active run cancellation
   assert.match(statusText.textContent, /Viewer graphics context lost/);
   assert.ok(statusText.classList.contains('error'));
 
-  // Once the first viewer canvas (lost during the run) also restores, the warning clears!
+  // Once the other viewer canvas also restores, the warning clears!
   viewerCanvas.dispatchEvent(new page.window.Event('webglcontextrestored'));
   await waitMs(20);
   assert.equal(statusText.textContent, 'Ready');

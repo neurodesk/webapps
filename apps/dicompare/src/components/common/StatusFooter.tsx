@@ -48,24 +48,32 @@ export function ActivityStatusFooter({ pyodide, isProcessing = false, processing
   const recoveryNotice = useRecoveryNotice();
   const [now, setNow] = useState(() => Date.now());
   const startedAt = useRef<number | null>(null);
-  const errorFloor = useRef(0);
+  const lastIdleLogId = useRef(0);
+  const processingFloor = useRef(0);
+  const wasProcessing = useRef(false);
   const text = useRef<HTMLSpanElement>(null);
-  const entriesRef = useRef(entries);
-  entriesRef.current = entries;
+
+  if (isProcessing && !wasProcessing.current) {
+    processingFloor.current = lastIdleLogId.current;
+  }
+  wasProcessing.current = isProcessing;
 
   const workflowRunning = isProcessing || activity.label !== null;
   const running = Boolean(pyodide?.isLoading) || workflowRunning;
+  const effectiveFloor = Math.max(processingFloor.current, activity.logFloorId);
   // The newest error stays visible until the next user workflow starts;
-  // automatic Pyodide startup must not swallow pre-ready recovery notices.
+  // automatic Pyodide startup must not swallow pre-ready recovery notices, and
+  // errors logged synchronously right after beginActivity/isProcessing stay visible.
   const candidate = newestError(entries);
-  const lastError = candidate && candidate.id > errorFloor.current ? candidate : null;
+  const lastError = candidate && candidate.id > effectiveFloor ? candidate : null;
 
   useEffect(() => {
-    if (!workflowRunning) return;
-    const list = entriesRef.current;
-    errorFloor.current = list.length ? list[list.length - 1].id : errorFloor.current;
+    if (!workflowRunning) {
+      lastIdleLogId.current = entries.length ? entries[entries.length - 1].id : lastIdleLogId.current;
+      return;
+    }
     clearRecoveryNotice();
-  }, [workflowRunning, activity.startedAt]);
+  }, [workflowRunning, entries]);
 
   useEffect(() => {
     if (!running) {

@@ -55,6 +55,19 @@ test('a memory recovery notice delivered before Pyodide startup survives until a
   act(() => finishActivity());
   expect(status).toHaveTextContent('Out of browser memory on this device');
   expect(status).toHaveClass('error');
+
+  // An OOM logged in the SAME React batch as workflow start is NOT swallowed by the floor cutoff!
+  let finishSameBatch!: () => void;
+  act(() => {
+    finishSameBatch = beginActivity('Validating second session');
+    logError('Validation', new RangeError('Array buffer allocation failed'));
+  });
+  expect(status).toHaveTextContent('Out of browser memory on this device');
+  expect(status).toHaveClass('error');
+
+  act(() => finishSameBatch());
+  expect(status).toHaveTextContent('Out of browser memory on this device');
+  expect(status).toHaveClass('error');
 });
 
 test('silent post-startup DicompareWorkerAPI crashes and message errors translate into memory guidance', async () => {

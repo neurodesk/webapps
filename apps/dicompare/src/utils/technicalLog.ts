@@ -25,6 +25,8 @@ export interface ActivityState {
   progress: number | null;
   /** Epoch ms when the current run of activity started. */
   startedAt: number | null;
+  /** Latest log entry id recorded synchronously when the activity started. */
+  logFloorId: number;
 }
 
 const MAX_ENTRIES = 500;
@@ -94,6 +96,10 @@ export function getLogEntries(): LogEntry[] {
   return entries;
 }
 
+export function getLatestLogId(): number {
+  return entries.length ? entries[entries.length - 1].id : 0;
+}
+
 function subscribeLog(listener: Listener) {
   logListeners.add(listener);
   return () => { logListeners.delete(listener); };
@@ -108,11 +114,11 @@ export function useTechnicalLog(): LogEntry[] {
 // processing context but should show in the status footer.
 // ---------------------------------------------------------------------------
 
-interface Activity { id: number; label: string; progress: number | null }
+interface Activity { id: number; label: string; progress: number | null; logFloorId: number }
 
 let activities: Activity[] = [];
 let nextActivityId = 1;
-let activityState: ActivityState = { label: null, progress: null, startedAt: null };
+let activityState: ActivityState = { label: null, progress: null, startedAt: null, logFloorId: 0 };
 const activityListeners = new Set<Listener>();
 
 function recompute() {
@@ -122,6 +128,7 @@ function recompute() {
     label: current?.label ?? null,
     progress: current?.progress ?? null,
     startedAt: current ? (wasBusy ? activityState.startedAt : Date.now()) : null,
+    logFloorId: current ? current.logFloorId : activityState.logFloorId,
   };
   activityListeners.forEach((listener) => listener());
 }
@@ -132,9 +139,9 @@ function recompute() {
  */
 export function beginActivity(label: string, options: { silent?: boolean } = {}): (result?: { message?: string; level?: LogLevel }) => void {
   clearRecoveryNotice();
-  const activity: Activity = { id: nextActivityId++, label, progress: null };
-  activities = [...activities, activity];
   if (!options.silent) log(label);
+  const activity: Activity = { id: nextActivityId++, label, progress: null, logFloorId: getLatestLogId() };
+  activities = [...activities, activity];
   recompute();
   let finished = false;
   return (result) => {
@@ -220,7 +227,7 @@ export function installConsoleCapture(target: Window & typeof globalThis = windo
 export function resetTechnicalLog(): void {
   entries = [];
   activities = [];
-  activityState = { label: null, progress: null, startedAt: null };
+  activityState = { label: null, progress: null, startedAt: null, logFloorId: 0 };
   recoveryNotice = null;
   emitLog();
   emitRecovery();
