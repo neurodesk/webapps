@@ -7,8 +7,9 @@ import { alertNotarization } from './notarization-alert.mjs';
 // (nightly-failures.mjs), and a failed non-pull-request attempt of a workflow
 // that notarizes gets the Apple notarization alert (notarization-alert.mjs).
 //
-// A tick keeps no cursor. It lists the candidate runs created in the lookback,
-// checks every attempt of each (earlier attempts only for rerun runs), and
+// A tick keeps no cursor. It lists the candidate runs created in the lookback
+// (scheduled runs on the default branch and every run of each notarizing
+// workflow), checks every attempt of each (earlier attempts only for rerun runs), and
 // reports each attempt that has no report marker yet. The markers in the
 // issues are the only state, so a failed, overlapping or late tick and a rerun
 // lose nothing, and a repeated tick writes nothing.
@@ -18,8 +19,8 @@ export const REPORTER_WORKFLOW = 'workflow-reports.yml';
 // most 43 hours after their run; a longer lookback re-reads the logs of every failed macOS job
 // in it on each tick (docs/development/ci-audit.md has the cost).
 export const LOOKBACK_MS = 14 * 24 * 3600e3;
-// The workflow_run reporters this one replaced reported every attempt that completed before
-// this instant, with the same markers. It must precede the merge of workflow-reports.yml.
+// Attempts that completed before this instant belong to the workflow_run reporters this one
+// replaced (docs/development/ci-audit.md, "Handoff from the workflow_run reporters").
 export const CUTOVER = '2026-11-18T13:00:00Z';
 
 const FAILED = new Set(['failure', 'timed_out']);
@@ -35,43 +36,44 @@ const ATTEMPT_MARKER = /<!-- (?:nightly|notarization)-run:\d+:attempt:\d+ -->/g;
 const REPORT_ISSUE = /^<!-- (?:nightly-workflow:\d+|apple-notarization-alert) -->/;
 // The runs API answers at most this many runs per query.
 const LISTING_LIMIT = 1000;
+const SECOND = 1000;
 
 const time = value => Date.parse(value);
 const stamp = value => new Date(value).toISOString().replace(/\.\d+Z$/, 'Z');
 
+// The workflow a run record belongs to. The API can qualify a run's path with the ref it ran
+// from (".github/workflows/x.yml@v1"); every comparison uses the path without it.
+export const workflowPath = path => path.replace(/@.*$/, '');
+const runRecord = run => ({ ...run, path: workflowPath(run.path) });
+
 // What the reports need from the workflow files: the run paths (".github/workflows/x.yml") that
-// notarize, the events those run on, and the paths with a job that continues on error.
+// notarize and the paths with a job that continues on error.
 export async function workflowFacts(directory) {
-  const facts = { notarizing: [], notarizingEvents: new Set(), continuesOnError: [] };
+  const facts = { notarizing: [], continuesOnError: [] };
   for (const file of (await readdir(directory)).sort()) {
-    if (!file.endsWith('.yml') || file === REPORTER_WORKFLOW) continue;
+    if (!/\.ya?ml$/.test(file) || file === REPORTER_WORKFLOW) continue;
     const source = await readFile(new URL(file, directory), 'utf8');
     if (REUSABLE.test(source)) continue;
     const path = `.github/workflows/${file}`;
     if (JOB_CONTINUES_ON_ERROR.test(source)) facts.continuesOnError.push(path);
-    if (!NOTARIZES.test(source)) continue;
-    facts.notarizing.push(path);
-    const on = source.match(/^on:\n((?: {2}.*\n|\s*\n)*)/m)?.[1] ?? '';
-    for (const [, event] of on.matchAll(/^ {2}([a-z_]+):/gm)) facts.notarizingEvents.add(event);
+    if (NOTARIZES.test(source)) facts.notarizing.push(path);
   }
-  facts.notarizingEvents = [...facts.notarizingEvents].sort();
   return facts;
 }
 
-// The run listings a tick needs: scheduled runs on the default branch, and every event other
-// than pull_request that a notarizing workflow runs on (a schedule is on the default branch).
-export function runFilters(defaultBranch, notarizingEvents) {
-  const events = notarizingEvents.filter(event => !['pull_request', 'schedule'].includes(event));
-  return [{ event: 'schedule', branch: defaultBranch }, ...events.map(event => ({ event }))];
-}
-
-// Every run matching `filter` created in [from, to] (epoch ms), splitting a range the API would truncate.
-export async function listCreated(client, filter, from, to) {
-  const query = page => `/actions/runs?${new URLSearchParams({ ...filter, created: `${stamp(from)}..${stamp(to)}`, per_page: '100', page: String(page) })}`;
+// Every run of `listing` created in [from, to] (epoch ms, whole seconds as the API compares them),
+// splitting a range the API would truncate. `listing` is { workflow } for every run of one workflow
+// file, or a filter of the repository's runs such as { event, branch }.
+export async function listCreated(client, { workflow, ...filter }, from, to) {
+  const start = Math.floor(from / SECOND) * SECOND;
+  const end = Math.floor(to / SECOND) * SECOND;
+  const base = workflow ? `/actions/workflows/${encodeURIComponent(workflow)}/runs` : '/actions/runs';
+  const query = page => `${base}?${new URLSearchParams({ ...filter, created: `${stamp(start)}..${stamp(end)}`, per_page: '100', page: String(page) })}`;
   const first = await client.request(query(1));
-  if (first.total_count > LISTING_LIMIT && to - from >= 2000) {
-    const middle = from + Math.floor((to - from) / 2000) * 1000;
-    return [...await listCreated(client, filter, from, middle), ...await listCreated(client, filter, middle + 1000, to)];
+  if (first.total_count > LISTING_LIMIT) {
+    if (end === start) throw new Error(`More than ${LISTING_LIMIT} runs of ${base} ${JSON.stringify(filter)} were created at ${stamp(start)}; the API lists only ${LISTING_LIMIT}`);
+    const middle = start + Math.floor((end - start) / 2 / SECOND) * SECOND;
+    return [...await listCreated(client, { workflow, ...filter }, start, middle), ...await listCreated(client, { workflow, ...filter }, middle + SECOND, end)];
   }
   const runs = [...first.workflow_runs];
   for (let page = 2; runs.length < Math.min(first.total_count, LISTING_LIMIT) && page <= LISTING_LIMIT / 100; page++) {
@@ -86,17 +88,24 @@ export function isScheduledReport(run, { repository, defaultBranch }) {
   return run.event === 'schedule' && run.head_branch === defaultBranch && run.head_repository?.full_name === repository;
 }
 
+// Any run of a notarizing workflow but a pull request's, whatever its event.
+const notarizingRun = (run, repository) => run.event !== 'pull_request' && run.head_repository?.full_name === repository;
+
 export function isNotarizationCandidate(run, { repository, notarizing }) {
-  return run.event !== 'pull_request' && run.head_repository?.full_name === repository && notarizing.includes(run.path);
+  return notarizingRun(run, repository) && notarizing.includes(run.path);
 }
 
-// Every attempt of each run, the latest as listed and the earlier ones from the attempts endpoint.
+// When an attempt completed: its updated_at, in the run listing and in the attempts endpoint alike.
+export const completedAt = attempt => time(attempt.updated_at);
+
+// Every attempt of each run as a run record, the latest as listed and the earlier ones from the
+// attempts endpoint.
 export async function attemptsOf(runs, client) {
   const attempts = [];
   for (const run of runs) {
-    attempts.push(run);
+    attempts.push(runRecord(run));
     for (let number = Number(run.run_attempt ?? 1) - 1; number >= 1; number--) {
-      attempts.push(await client.request(`/actions/runs/${run.id}/attempts/${number}`));
+      attempts.push(runRecord(await client.request(`/actions/runs/${run.id}/attempts/${number}`)));
     }
   }
   return attempts;
@@ -105,7 +114,7 @@ export async function attemptsOf(runs, client) {
 // The reports an attempt that completed at or after `cutover` may need, by what the run listing
 // says. An attempt whose run passed is read only when its workflow has a job that continues on error.
 export function reportsFor(attempt, { repository, defaultBranch, notarizing, continuesOnError, cutover = CUTOVER }) {
-  if (attempt.status !== 'completed' || !(time(attempt.updated_at) >= time(cutover))) return [];
+  if (attempt.status !== 'completed' || !(completedAt(attempt) >= time(cutover))) return [];
   const kinds = [];
   if (isScheduledReport(attempt, { repository, defaultBranch }) && (!QUIET.has(attempt.conclusion) || continuesOnError.includes(attempt.path))) kinds.push('scheduled');
   if (FAILED.has(attempt.conclusion) && isNotarizationCandidate(attempt, { repository, notarizing })) kinds.push('notarization');
@@ -140,7 +149,7 @@ const markerOf = (kind, attempt) => `<!-- ${kind === 'scheduled' ? 'nightly' : '
 export async function reportWorkflowRuns({ attempts, repository, defaultBranch, notarizing, continuesOnError = [], cutover = CUTOVER, reported = new Set(), client, dryRun = false }) {
   const results = [];
   const marked = [];
-  const ordered = [...attempts].sort((a, b) => time(a.updated_at) - time(b.updated_at) || a.id - b.id || a.run_attempt - b.run_attempt);
+  const ordered = [...attempts].sort((a, b) => completedAt(a) - completedAt(b) || a.id - b.id || a.run_attempt - b.run_attempt);
   for (const run of ordered) {
     for (const kind of reportsFor(run, { repository, defaultBranch, notarizing, continuesOnError, cutover })) {
       if (reported.has(markerOf(kind, run))) {
@@ -166,17 +175,25 @@ export async function reportWorkflowRuns({ attempts, repository, defaultBranch, 
 export async function runTick({ client, repository, defaultBranch, workflows, until, cutover = CUTOVER, dryRun = false }) {
   const facts = await workflowFacts(workflows);
   const earliest = until.getTime() - LOOKBACK_MS;
+  const last = until.getTime() - SECOND;
   const listed = new Map();
-  for (const filter of runFilters(defaultBranch, facts.notarizingEvents)) {
-    for (const run of await listCreated(client, filter, earliest, until.getTime() - 1000)) listed.set(run.id, run);
+  const candidates = new Map();
+  for (const run of await listCreated(client, { event: 'schedule', branch: defaultBranch }, earliest, last)) {
+    listed.set(run.id, run);
+    if (isScheduledReport(run, { repository, defaultBranch })) candidates.set(run.id, run);
   }
-  const candidates = [...listed.values()].filter(run => isScheduledReport(run, { repository, defaultBranch }) || isNotarizationCandidate(run, { repository, notarizing: facts.notarizing }));
-  const attempts = (await attemptsOf(candidates, client)).filter(attempt => time(attempt.updated_at) < until.getTime());
+  for (const path of facts.notarizing) {
+    for (const run of await listCreated(client, { workflow: path.split('/').pop() }, earliest, last)) {
+      listed.set(run.id, run);
+      if (notarizingRun(run, repository)) candidates.set(run.id, run);
+    }
+  }
+  const attempts = (await attemptsOf(candidates.values(), client)).filter(attempt => completedAt(attempt) < until.getTime());
   const reported = await reportedMarkers(client, new Date(Math.max(earliest, time(cutover))));
   const { results, marked } = await reportWorkflowRuns({ attempts, repository, defaultBranch, notarizing: facts.notarizing, continuesOnError: facts.continuesOnError, cutover, reported, client, dryRun });
-  const completed = attempts.filter(attempt => attempt.status === 'completed' && time(attempt.updated_at) >= time(cutover));
+  const completed = attempts.filter(attempt => attempt.status === 'completed' && completedAt(attempt) >= time(cutover));
   return {
-    listed: listed.size, candidates: candidates.length, attempts: attempts.length, earliest: new Date(earliest), results, marked,
+    listed: listed.size, candidates: candidates.size, attempts: attempts.length, earliest: new Date(earliest), results, marked,
     scheduled: completed.filter(attempt => isScheduledReport(attempt, { repository, defaultBranch })).length,
     notarization: completed.filter(attempt => FAILED.has(attempt.conclusion) && isNotarizationCandidate(attempt, { repository, notarizing: facts.notarizing })).length,
   };

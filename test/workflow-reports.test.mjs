@@ -1,14 +1,15 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, readdir, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { promisify } from 'node:util';
 import YAML from 'yaml';
 import { ALERT_MARKER } from '../scripts/lib/notarization-alert.mjs';
 import {
-  CUTOVER, LOOKBACK_MS, REPORTER_WORKFLOW, listCreated, reportWorkflowRuns, runFilters, runTick, workflowFacts,
+  CUTOVER, LOOKBACK_MS, REPORTER_WORKFLOW, listCreated, reportWorkflowRuns, runTick, workflowFacts,
 } from '../scripts/lib/workflow-reports.mjs';
 
 const workflows = new URL('../.github/workflows/', import.meta.url);
@@ -28,7 +29,8 @@ function attempt(overrides = {}) {
 }
 
 // A stateful fake of the runs, attempts, jobs, logs and issues API. `runs` holds every attempt;
-// the listing returns each run's highest attempt, as GitHub does. `jobs` and `logs` are keyed by
+// the listings return each run's highest attempt, as GitHub does, and a workflow's listing every
+// run of its file from any ref. `jobs` and `logs` are keyed by
 // "run:attempt" and job id; a run without jobs has one failed job.
 function github({ runs = [], jobs = {}, logs = {} } = {}) {
   const issues = [];
@@ -53,12 +55,14 @@ function github({ runs = [], jobs = {}, logs = {} } = {}) {
     async request(path, options = {}) {
       if (options.logs) return { text: logs[path.match(/jobs\/(\d+)/)[1]] ?? 'error: failed', truncated: false };
       if ((options.method ?? 'GET') === 'GET') reads.push(path);
-      const listing = path.match(/^\/actions\/runs\?(.*)$/);
+      const listing = path.match(/^\/actions\/(?:workflows\/([^/]+)\/)?runs\?(.*)$/);
       if (listing) {
-        const query = new URLSearchParams(listing[1]);
+        const query = new URLSearchParams(listing[2]);
         const [from, to] = query.get('created').split('..').map(Date.parse);
         const matching = latest()
-          .filter(run => run.event === query.get('event') && (!query.get('branch') || run.head_branch === query.get('branch')))
+          .filter(run => !listing[1] || run.path.replace(/@.*$/, '') === `.github/workflows/${decodeURIComponent(listing[1])}`)
+          .filter(run => !query.get('event') || run.event === query.get('event'))
+          .filter(run => !query.get('branch') || run.head_branch === query.get('branch'))
           // A status filter matches the latest attempt's conclusion, as GitHub's does.
           .filter(run => !query.get('status') || run.conclusion === query.get('status'))
           .filter(run => Date.parse(run.created_at) >= from && Date.parse(run.created_at) <= to)
@@ -110,7 +114,7 @@ test('the reporter runs four times a day from trusted code, and nothing listens 
   assert.equal(report.run, 'node scripts/report-workflow-failures.mjs');
   assert.doesNotMatch(source, /download-artifact|head_sha|continue-on-error/);
   for (const file of await readdir(workflows)) {
-    if (!file.endsWith('.yml')) continue;
+    if (!/\.ya?ml$/.test(file)) continue;
     const other = YAML.parse(await readFile(new URL(file, workflows), 'utf8'));
     assert.equal(other.on?.workflow_run, undefined, `${file}: a workflow_run trigger starts a run for every completion; read the API on a schedule`);
   }
@@ -119,10 +123,10 @@ test('the reporter runs four times a day from trusted code, and nothing listens 
   }
 });
 
-test('the notarizing workflows, their events and the workflows with a job that continues on error come from the workflow files', async () => {
-  const expected = { notarizing: [], notarizingEvents: new Set(), continuesOnError: [] };
+test('the notarizing workflows and the workflows with a job that continues on error come from the workflow files', async () => {
+  const expected = { notarizing: [], continuesOnError: [] };
   for (const file of (await readdir(workflows)).sort()) {
-    if (!file.endsWith('.yml') || file === REPORTER_WORKFLOW) continue;
+    if (!/\.ya?ml$/.test(file) || file === REPORTER_WORKFLOW) continue;
     const source = await readFile(new URL(file, workflows), 'utf8');
     const workflow = YAML.parse(source);
     const jobsContinuing = Object.values(workflow.jobs ?? {}).some(job => job['continue-on-error'] !== undefined);
@@ -132,18 +136,22 @@ test('the notarizing workflows, their events and the workflows with a job that c
       continue;
     }
     if (jobsContinuing) expected.continuesOnError.push(`.github/workflows/${file}`);
-    if (!/notar|APPLE_ID|uses: \.\/\.github\/workflows\/node-cli-portable\.yml/i.test(source)) continue;
-    expected.notarizing.push(`.github/workflows/${file}`);
-    for (const event of Object.keys(workflow.on)) expected.notarizingEvents.add(event);
+    if (/notar|APPLE_ID|uses: \.\/\.github\/workflows\/node-cli-portable\.yml/i.test(source)) expected.notarizing.push(`.github/workflows/${file}`);
   }
   const facts = await workflowFacts(workflows);
-  assert.deepEqual(facts, { ...expected, notarizingEvents: [...expected.notarizingEvents].sort() });
+  assert.deepEqual(facts, expected);
   for (const file of ['syncro-native', 'standalone', 'synthseg-portable', 'node-cli']) assert.ok(facts.notarizing.includes(`.github/workflows/${file}.yml`), file);
   for (const file of ['ci', 'node-cli-portable', 'quality', 'workflow-reports']) assert.ok(!facts.notarizing.includes(`.github/workflows/${file}.yml`), file);
   assert.ok(facts.notarizing.length >= 39, 'every workflow the replaced alert listed');
   assert.deepEqual(facts.continuesOnError, ['.github/workflows/ci.yml', '.github/workflows/deploy-pages.yml']);
-  // Scheduled runs on the default branch, and every other event but pull requests.
-  assert.deepEqual(runFilters('main', facts.notarizingEvents), [{ event: 'schedule', branch: 'main' }, { event: 'push' }, { event: 'workflow_dispatch' }]);
+});
+
+test('a .yaml workflow file counts like a .yml one', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'workflow-facts-'));
+  await writeFile(join(directory, 'release.yaml'), 'on:\n  release:\njobs:\n  build:\n    continue-on-error: true\n    steps:\n      - run: xcrun notarytool submit\n');
+  assert.deepEqual(await workflowFacts(pathToFileURL(`${directory}/`)), {
+    notarizing: ['.github/workflows/release.yaml'], continuesOnError: ['.github/workflows/release.yaml'],
+  });
 });
 
 test('a listing larger than the API returns is split until every run is read', async () => {
@@ -151,6 +159,15 @@ test('a listing larger than the API returns is split until every run is read', a
   const client = github({ runs });
   const listed = await listCreated(client, { event: 'schedule', branch: 'main' }, Date.parse(at(0)), Date.parse(at(48)));
   assert.equal(new Set(listed.map(run => run.id)).size, 2500);
+});
+
+test('a listing that fills two adjacent seconds is split per second, and a full second fails visibly', async () => {
+  const second = Date.parse(at(0));
+  const runs = Array.from({ length: 1001 }, (_, index) => attempt({ id: index + 1, created_at: new Date(second + (index % 2) * 1000).toISOString() }));
+  const listed = await listCreated(github({ runs }), { event: 'schedule' }, second, second + 1000);
+  assert.equal(new Set(listed.map(run => run.id)).size, 1001);
+  const crowded = Array.from({ length: 1001 }, (_, index) => attempt({ id: index + 1, created_at: at(0) }));
+  await assert.rejects(listCreated(github({ runs: crowded }), { event: 'schedule' }, second, second + 999), /More than 1000 runs .* were created at 2026-11-20T00:00:00Z/);
 });
 
 test('a notarization failure whose rerun passed before the next tick is still alerted', async () => {
@@ -166,6 +183,35 @@ test('a notarization failure whose rerun passed before the next tick is still al
   assert.deepEqual(reported(client), ['notarization 500:1']);
   assert.ok(client.issues[0].body.startsWith(ALERT_MARKER));
   assert.ok(client.reads.every(path => !path.includes('/runs/500/attempts/2/')), 'the passing attempt needs no jobs listing');
+});
+
+test('a notarization failure is alerted whichever attempt the API qualifies with its ref', async () => {
+  // The tag dispatch of the replayed release: attempt 1 fails notarization and attempt 2 passes.
+  for (const [first, second] of [[SYNCRO, `${SYNCRO}@syncro-v1`], [`${SYNCRO}@syncro-v1`, SYNCRO]]) {
+    const failed = attempt({ id: 500, name: 'syncro-native', path: first, event: 'workflow_dispatch', head_branch: 'syncro-v1' });
+    const passed = { ...failed, path: second, run_attempt: 2, conclusion: 'success', run_started_at: at(4), updated_at: at(5) };
+    const client = github({
+      runs: [failed, passed],
+      jobs: { '500:1': [{ id: 51, name: 'portable / release', conclusion: 'failure', labels: ['macos-15'] }] },
+      logs: { 51: AGREEMENT },
+    });
+    await tick(client, at(6.8));
+    assert.deepEqual(reported(client), ['notarization 500:1'], `listed as ${second}, attempt 1 as ${first}`);
+  }
+});
+
+test('a failed notarizing run of an event its current workflow file does not declare is alerted', async () => {
+  // syncro-native.yml runs on push and workflow_dispatch today; an older tag declared release.
+  const release = attempt({ id: 600, name: 'syncro-native', path: `${SYNCRO}@syncro-v0`, event: 'release', head_branch: 'syncro-v0' });
+  const pullRequest = attempt({ id: 601, name: 'syncro-native', path: SYNCRO, event: 'pull_request', head_branch: 'feature' });
+  const client = github({
+    runs: [release, pullRequest],
+    jobs: { '600:1': [{ id: 61, name: 'portable / release', conclusion: 'failure', labels: ['macos-15'] }] },
+    logs: { 61: AGREEMENT },
+  });
+  const { candidates } = await tick(client, at(7));
+  assert.equal(candidates, 1, 'pull request runs are not candidates');
+  assert.deepEqual(reported(client), ['notarization 600:1']);
 });
 
 test('a rerun that starts while a tick runs leaves the failed attempt reported', async () => {
@@ -232,13 +278,56 @@ test('an issue a person closed after a report stays closed', async () => {
   assert.equal(client.issues[0].state, 'open');
 });
 
-test('attempts that completed before the cutover are left to the reporters this one replaced', async () => {
+test('the cutover compares when an attempt completed, not when its run started', async () => {
   const cutover = Date.parse(CUTOVER);
-  const before = attempt({ id: 1, created_at: new Date(cutover - 7200e3).toISOString(), updated_at: new Date(cutover - 1000).toISOString() });
-  const after = attempt({ id: 2, workflow_id: 8, name: 'standalone', created_at: new Date(cutover - 7200e3).toISOString(), updated_at: CUTOVER });
-  const client = github({ runs: [before, after] });
+  const hours = value => new Date(cutover + value * 3600e3).toISOString();
+  // Run 1 completed a second before the cutover. Run 2 started two hours before it and completed at it.
+  // Run 3's attempt 1 completed before the cutover and its rerun after it.
+  const before = attempt({ id: 1, created_at: hours(-2), run_started_at: hours(-2), updated_at: new Date(cutover - 1000).toISOString() });
+  const across = attempt({ id: 2, workflow_id: 8, name: 'standalone', created_at: hours(-2), run_started_at: hours(-2), updated_at: CUTOVER });
+  const rerunBefore = attempt({ id: 3, workflow_id: 9, name: 'ci-usage', created_at: hours(-3), run_started_at: hours(-3), updated_at: hours(-1) });
+  const rerunAfter = { ...rerunBefore, run_attempt: 2, run_started_at: hours(-0.5), updated_at: hours(0.5) };
+  const client = github({ runs: [before, across, rerunBefore, rerunAfter] });
   await runTick({ client, repository, defaultBranch: 'main', workflows, until: new Date(cutover + 3600e3) });
-  assert.deepEqual(reported(client), ['nightly 2:1']);
+  assert.deepEqual(reported(client), ['nightly 2:1', 'nightly 3:2']);
+});
+
+// The handoff (docs/development/ci-audit.md): between the cutover and the merge the workflow_run
+// reporters keep reporting with the same markers, and the first tick runs after they have stopped.
+function handoff() {
+  const cutover = Date.parse(CUTOVER);
+  const hours = value => new Date(cutover + value * 3600e3).toISOString();
+  const nightly = id => attempt({ id, workflow_id: id, name: `nightly-${id}`, created_at: hours(-0.5), run_started_at: hours(-0.5), updated_at: hours(1) });
+  const release = id => attempt({ id, name: 'syncro-native', path: SYNCRO, event: 'workflow_dispatch', head_branch: 'syncro-v1', created_at: hours(0.5), run_started_at: hours(0.5), updated_at: hours(1) });
+  const client = github({
+    runs: [nightly(1), release(2)],
+    jobs: { '2:1': [{ id: 21, name: 'portable / release', conclusion: 'failure', labels: ['macos-15'] }] },
+    logs: { 21: AGREEMENT },
+  });
+  const firstTick = () => runTick({ client, repository, defaultBranch: 'main', workflows, until: new Date(cutover + 5 * 3600e3) });
+  return { client, hours, firstTick };
+}
+
+test('the first tick reports the attempts after the cutover that the replaced reporters never marked', async () => {
+  // Their workflow_run runs broke when the merge removed their scripts.
+  const { client, firstTick } = handoff();
+  await firstTick();
+  assert.deepEqual(reported(client), ['nightly 1:1', 'notarization 2:1']);
+});
+
+test('the first tick does not report again an attempt the replaced reporters marked', async () => {
+  const { client, hours, firstTick } = handoff();
+  const bot = { login: 'github-actions[bot]' };
+  // What nightly-failures.yml and notarization-alert.yml wrote an hour after the cutover.
+  client.issues.push(
+    { number: 336, state: 'open', user: bot, created_at: hours(1), updated_at: hours(1), body: '<!-- nightly-workflow:1 -->\n<!-- nightly-run:1:attempt:1 -->\n## Scheduled failure: nightly-1' },
+    { number: 340, state: 'open', user: bot, created_at: hours(-48), updated_at: hours(1), body: `${ALERT_MARKER}\n<!-- notarization-run:9:attempt:1 -->\nApple refused a notarization.` },
+  );
+  client.comments.set(340, [{ user: bot, created_at: hours(1), body: '<!-- notarization-run:2:attempt:1 -->\nApple refused a notarization.' }]);
+  const { results, marked } = await firstTick();
+  assert.deepEqual(results, []);
+  assert.deepEqual(marked, ['scheduled 1:1', 'notarization 2:1']);
+  assert.deepEqual(client.writes, []);
 });
 
 test('the reporter reports its own failed scheduled ticks', async () => {
@@ -257,6 +346,20 @@ test('a passing scheduled attempt is read only when a job of its workflow contin
   await tick(client, at(7));
   assert.deepEqual(reported(client), ['nightly 2:1']);
   assert.ok(client.reads.every(path => !path.startsWith('/actions/runs/1/')), 'no read of the passing run without such a job');
+});
+
+test('a passing ci run with a failed job is reported when the API qualifies its path with a ref', async () => {
+  const listed = attempt({ id: 2, workflow_id: 9, name: 'ci', path: '.github/workflows/ci.yml@main', conclusion: 'success', run_attempt: 2, run_started_at: at(4), updated_at: at(5) });
+  const earlier = { ...listed, run_attempt: 1, run_started_at: at(2), updated_at: at(3) };
+  const client = github({
+    runs: [earlier, listed],
+    jobs: {
+      '2:1': [{ id: 21, name: 'example-cache-retention', conclusion: 'failure', steps: [] }],
+      '2:2': [{ id: 22, name: 'example-cache-retention', conclusion: 'failure', steps: [] }],
+    },
+  });
+  await tick(client, at(7));
+  assert.deepEqual(reported(client), ['nightly 2:1', 'nightly 2:2']);
 });
 
 test('each attempt gets the scheduled report and the notarization alert it qualifies for', async () => {
@@ -294,7 +397,7 @@ test('a report that fails is recorded without stopping the others, and a dry run
 
 test('a dry run of the command writes no step summary', async () => {
   // Every API answer is empty: no runs and no issues.
-  const stub = `data:text/javascript,${encodeURIComponent("globalThis.fetch = async url => new Response(JSON.stringify(String(url).includes('/actions/runs?') ? { total_count: 0, workflow_runs: [] } : []), { status: 200 });")}`;
+  const stub = `data:text/javascript,${encodeURIComponent("globalThis.fetch = async url => new Response(JSON.stringify(/\\/runs\\?/.test(String(url)) ? { total_count: 0, workflow_runs: [] } : []), { status: 200 });")}`;
   const directory = await mkdtemp(join(tmpdir(), 'workflow-reports-'));
   const run = (summary, ...args) => promisify(execFile)(process.execPath, ['--import', stub, new URL('../scripts/report-workflow-failures.mjs', import.meta.url).pathname, ...args], {
     env: { ...process.env, GH_TOKEN: 'test', GITHUB_REPOSITORY: repository, DEFAULT_BRANCH: 'main', GITHUB_STEP_SUMMARY: join(directory, summary) },
