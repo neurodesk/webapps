@@ -226,8 +226,32 @@ function registryImpact({ before, after }) {
   return { changed: [...new Set([...was.keys(), ...is.keys()])].filter((id) => !same(was.get(id), is.get(id))), siteKeys };
 }
 
-// The ci.yml jobs a workflow change touched, or why it is shared: a key
-// outside `jobs`, or a job CI_JOB_SCOPES does not place, reaches every app.
+// The jobs that need `id` (`direction` 'dependants') or that it needs
+// ('dependencies'), directly or through other jobs, in one workflow's jobs.
+function relatedJobs(jobs, id, direction) {
+  const needs = (job) => [jobs[job]?.needs ?? []].flat();
+  const next = direction === 'dependencies' ? needs : (job) => Object.keys(jobs).filter((other) => needs(other).includes(job));
+  const seen = new Set();
+  const pending = [id];
+  while (pending.length) {
+    for (const job of next(pending.pop())) {
+      if (!seen.has(job)) {
+        seen.add(job);
+        pending.push(job);
+      }
+    }
+  }
+  seen.delete(id);
+  return [...seen];
+}
+
+// The ci.yml jobs a workflow change touched, or why it is shared. It narrows
+// only when the base and head have the same jobs, each changed job is one
+// CI_JOB_SCOPES places, and every job that needs a changed job, or that a
+// changed job needs (the plan aside), at the base or the head, has the same
+// scope: a job of another scope could consume what changed while the
+// narrowed plan skips it, or skip the changed job by being skipped itself. A
+// key outside `jobs` reaches every app.
 export function ciImpact({ before, after }) {
   let old;
   let now;
@@ -241,9 +265,19 @@ export function ciImpact({ before, after }) {
   try {
     const key = [...new Set([...Object.keys(old), ...Object.keys(now)])].find((name) => name !== 'jobs' && !same(old[name], now[name]));
     if (key) return { shared: `its ${key} key changed, and every job runs under it` };
-    const jobs = [...new Set([...Object.keys(old.jobs), ...Object.keys(now.jobs)])].filter((id) => !same(old.jobs[id], now.jobs[id]));
+    const membership = [...new Set([...Object.keys(old.jobs), ...Object.keys(now.jobs)])].find((id) => !Object.hasOwn(old.jobs, id) || !Object.hasOwn(now.jobs, id));
+    if (membership) return { shared: `its ${membership} job was ${Object.hasOwn(now.jobs, membership) ? 'added' : 'removed'}, and only a change within the same jobs narrows` };
+    const jobs = Object.keys(now.jobs).filter((id) => !same(old.jobs[id], now.jobs[id]));
     const unplaced = jobs.find((id) => !Object.hasOwn(CI_JOB_SCOPES, id));
     if (unplaced) return { shared: `its ${unplaced} job changed, and only a change to ${Object.keys(CI_JOB_SCOPES).join(', ')} narrows` };
+    for (const id of jobs) {
+      for (const [side, workflow] of [['base', old], ['head', now]]) {
+        for (const direction of ['dependants', 'dependencies']) {
+          const other = relatedJobs(workflow.jobs, id, direction).find((job) => job !== 'app-plan' && CI_JOB_SCOPES[job] !== CI_JOB_SCOPES[id]);
+          if (other) return { shared: `its ${id} job changed, and at the ${side} ${direction === 'dependants' ? `${other} needs it` : `it needs ${other}`}, which tests more than the ${CI_JOB_SCOPES[id]} scope` };
+        }
+      }
+    }
     return { jobs };
   } catch (error) {
     // A recursive alias parses but has no JSON form to compare.

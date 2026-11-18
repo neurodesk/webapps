@@ -981,7 +981,7 @@ test('a ci.yml change the job comparison cannot place selects every app with a r
   for (const [label, edit] of Object.entries(cases)) {
     const plan = await workflowPlan(edit);
     assert.equal(plan.allApps, true, label);
-    assert.match(plan.reasons.fallback, /^\.github\/workflows\/ci\.yml: its \S+ (?:job|key) changed/, label);
+    assert.match(plan.reasons.fallback, /^\.github\/workflows\/ci\.yml: its \S+ (?:job|key) (?:changed|was added)/, label);
     assert.ok(plan.packages.all, label);
     assert.ok(plan.easterEgg.length, label);
   }
@@ -994,6 +994,38 @@ test('a ci.yml change the job comparison cannot place selects every app with a r
   }
   // Without the base text there is nothing to compare.
   assert.equal(createAppPlan(registry, ['.github/workflows/ci.yml'], await graph).reasons.fallback, '.github/workflows/ci.yml: the base or head workflow is unavailable');
+});
+
+test('a ci.yml change narrows only within the same jobs and their own scope', async () => {
+  const registry = await loadAppsRegistry();
+  const text = await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8');
+  const plan = (editBase, editHead) => {
+    const [before, after] = [parse(text), parse(text)];
+    editBase(before);
+    editHead(after);
+    return graph.then((workspace) => createAppPlan(registry, ['.github/workflows/ci.yml'], workspace, new Map([['.github/workflows/ci.yml', { before: stringify(before), after: stringify(after) }]])));
+  };
+  const none = () => {};
+  // Deleting the job that runs the contract tests removes the test that would catch it.
+  const deleted = await plan(none, (ci) => { delete ci.jobs['workspace-contracts']; });
+  assert.equal(deleted.allApps, true);
+  assert.equal(deleted.reasons.fallback, '.github/workflows/ci.yml: its workspace-contracts job was removed, and only a change within the same jobs narrows');
+  assert.ok(deleted.packages.all && deleted.easterEgg.length);
+  // app-tests consumes an output of workspace-contracts: changing it changes what every app job sees.
+  const consumed = (value) => (ci) => {
+    ci.jobs['app-tests'].needs = ['app-plan', 'workspace-contracts'];
+    ci.jobs['workspace-contracts'].outputs = { fixtures: value };
+  };
+  const output = await plan(consumed('a'), consumed('b'));
+  assert.equal(output.allApps, true);
+  assert.equal(output.reasons.fallback, '.github/workflows/ci.yml: its workspace-contracts job changed, and at the base app-tests needs it, which tests more than the packages scope');
+  // A narrowed job that comes to need a per-app job is skipped whenever the plan skips that job.
+  const needing = await plan(none, (ci) => { ci.jobs['workspace-contracts'].needs = ['app-plan', 'app-tests']; });
+  assert.equal(needing.reasons.fallback, '.github/workflows/ci.yml: its workspace-contracts job changed, and at the head it needs app-tests, which tests more than the packages scope');
+  // The site jobs need composite-site, which has their scope, so a change to it still narrows.
+  const site = await plan(none, (ci) => { ci.jobs['composite-site']['timeout-minutes'] = 61; });
+  assert.deepEqual(site.selected, []);
+  assert.equal(site.reasons.fallback, null);
 });
 
 test('the jobs a ci.yml change can narrow to test what CI_JOB_SCOPES says', async () => {
