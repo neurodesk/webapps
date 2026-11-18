@@ -9,6 +9,8 @@ import { registerWebMcpTools, webMcpTools } from '../src/webmcp/tools.js';
 import { exposeWebMcp } from '../src/webmcp/page.js';
 import { createToolInputs } from '../src/webmcp/tool-inputs.js';
 import { schemaIssues, unsupportedKeywords } from '../src/webmcp/schema.js';
+import { NIIVUE_METHODS } from '../src/webmcp/niivue-methods.js';
+import { coreHandlers } from '@niivue/nv-mcp/browser';
 
 const appsDir = new URL('../../../apps/', import.meta.url);
 const contract = () => ({ schemaVersion: 2, app: 'test', title: 'Test', description: 'Segments a test image.', appVersion: '0.1.20260928', defaultOperation: 'run', operations: {
@@ -387,4 +389,70 @@ test('every tool marks its result untrusted except the few whose results only th
   for (const name of ['viewers_state', 'viewers_tab', 'viewers_regions', 'viewers_crosshair']) {
     assert.equal(tools.find(tool => tool.name === name).annotations.untrustedContentHint, true, `${name} returns tab labels and region names the person controls`);
   }
+});
+
+test('every nv-mcp method is classified, so a method nv-mcp adds stays out of WebMCP until it is', () => {
+  assert.deepEqual(Object.keys(NIIVUE_METHODS).sort(), Object.keys(coreHandlers({ view: {} })).sort());
+  assert.ok(Object.values(NIIVUE_METHODS).every(kind => ['read', 'display', 'fetch', 'denied'].includes(kind)));
+});
+
+function viewerPage(t, options = {}) {
+  const sent = [];
+  const confirmations = [];
+  let approve = false;
+  const urlContract = contract();
+  urlContract.operations.run.inputs.store = { source: 'url', type: 'neuro:volume', description: 'A remote store', minimum: 0, maximum: 1 };
+  const tools = webMcpTools({ contract: urlContract, inputs: { stage: async () => {}, held: () => ({}), page: () => [] },
+    dispatch: async (command, request) => {
+      sent.push([command, request]);
+      if (command === 'snapshot') return { runId: 'R', state: 'succeeded' };
+      if (command === 'start') return { runId: 'R', state: 'running' };
+      return { ok: true };
+    },
+    confirmFetch: async (request, { signal } = {}) => {
+      confirmations.push({ ...request, signal: Boolean(signal) });
+      return approve;
+    }, ...options });
+  const call = (name, input) => tools.find(tool => tool.name === name).execute(input, { signal: new AbortController().signal });
+  return { tools, call, sent, confirmations, allow: value => { approve = value; } };
+}
+
+test('viewers_niivue offers only methods that read the scene or change the display, and asks before it fetches', async t => {
+  const { tools, call, sent, confirmations, allow } = viewerPage(t);
+  const niivue = tools.find(tool => tool.name === 'viewers_niivue');
+  const offered = niivue.inputSchema.properties.method.enum;
+  for (const method of ['screenshot', 'save', 'update_volume_data', 'add_control', 'set_options']) assert.ok(!offered.includes(method), `${method} is not offered`);
+  for (const method of ['where_am_i', 'set_volume', 'go_to_region', 'load_volume']) assert.ok(offered.includes(method), `${method} is offered`);
+  assert.equal(niivue.annotations.consequentialHint, true);
+
+  for (const method of ['screenshot', 'save']) {
+    assert.equal((await call('viewers_niivue', { viewerId: 'main', method, params: { what: 'bitmap' } })).error.code, 'INVALID_INPUT');
+  }
+  assert.deepEqual(sent, [], 'no pixel export or save reached the viewer');
+
+  const url = 'https://elsewhere.test/scan.nii.gz';
+  assert.deepEqual(await call('viewers_niivue', { viewerId: 'main', method: 'load_volume', params: { url } }), { declined: true, addresses: [url] });
+  assert.deepEqual(confirmations, [{ app: 'Test', addresses: [url], signal: true }]);
+  assert.deepEqual(sent, [], 'a declined address is never fetched');
+  assert.deepEqual((await call('viewers_niivue', { viewerId: 'main', method: 'set_volume', params: { volume: 0, labels: 'tables/atlas.json' } })).declined, true, 'a label table address asks too');
+  assert.deepEqual(confirmations[1].addresses, ['tables/atlas.json']);
+
+  allow(true);
+  assert.deepEqual(await call('viewers_niivue', { viewerId: 'main', method: 'load_volume', params: { url } }), { ok: true });
+  assert.deepEqual(sent, [['viewers.niivue', { viewerId: 'main', method: 'load_volume', params: { url } }]]);
+  await call('viewers_niivue', { viewerId: 'main', method: 'set_volume', params: { volume: 0, labels: 'freesurfer', colormap: 'gray' } });
+  assert.equal(confirmations.length, 3, 'the built-in FreeSurfer table and a colormap need no approval');
+});
+
+test('a run that would fetch an address the agent supplied asks the person first', async t => {
+  const { tools, call, sent, confirmations, allow } = viewerPage(t);
+  assert.equal(tools.find(tool => tool.name === 'run_run').annotations.consequentialHint, true, 'a run tool that takes addresses is consequential');
+  assert.equal(tools.find(tool => tool.name === 'outputs_download').annotations.consequentialHint, true);
+  const store = 'https://store.test/brain.zarr';
+  assert.deepEqual(await call('run_run', { inputs: { store: { url: store } }, waitSeconds: 0 }), { declined: true, addresses: [store] });
+  assert.deepEqual(confirmations.map(request => request.addresses), [[store]]);
+  assert.ok(!sent.some(([command]) => command === 'start'), 'a declined run never starts');
+  allow(true);
+  assert.equal((await call('run_run', { inputs: { store: { url: store } }, waitSeconds: 0 })).runId, 'R');
+  assert.equal(webMcpTools({ contract: contract(), inputs: {}, dispatch: async () => ({}) }).find(tool => tool.name === 'run_run').annotations.consequentialHint, undefined);
 });

@@ -13,6 +13,7 @@ const NOTICE = 'An AI agent you started in this browser sent this request. Closi
  *   const prompts = createAgentPrompts();
  *   await prompts.ask({ question: 'Which series?', options: ['T1', 'T2'] }, { signal });
  *   await prompts.requestFiles({ label: 'One anatomical head image', formats: ['nifti'] }, { signal });
+ *   await prompts.confirmFetch({ app: 'Brain Extraction', addresses: ['https://example.org/t1.nii.gz'] }, { signal });
  */
 export function createAgentPrompts(doc = globalThis.document) {
   let dialog;
@@ -78,6 +79,24 @@ export function createAgentPrompts(doc = globalThis.document) {
         return [...nodes, field, actions(finish, ...choices, send)];
       }, signal);
       return answer === null ? { dismissed: true } : { answer };
+    },
+
+    /** Asks whether the app may fetch the addresses the agent named. Resolves true only when the person allows it. */
+    async confirmFetch({ app, addresses }, { signal } = {}) {
+      const resolved = addresses.map(address => {
+        try {
+          return new URL(address, doc.baseURI).href;
+        } catch {
+          return address;
+        }
+      });
+      const answer = await show(finish => [
+        createElement('p', { text: `Let ${app} load ${resolved.length === 1 ? 'this address' : 'these addresses'} into the page?`, ownerDocument: doc }),
+        createElement('ul', { ownerDocument: doc }, resolved.map(href => createElement('li', { ownerDocument: doc }, [createElement('code', { text: href, ownerDocument: doc })]))),
+        createElement('p', { text: 'The server at each address sees the request.', ownerDocument: doc }),
+        actions(finish, button('Allow', 'nd-btn-primary', () => finish(true))),
+      ], signal);
+      return answer === true;
     },
 
     async requestFiles({ label, formats = [], message, minimum = 1, maximum = Infinity, folder = false }, { signal } = {}) {

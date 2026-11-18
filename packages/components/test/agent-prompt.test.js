@@ -3,8 +3,8 @@ import test from 'node:test';
 import { JSDOM } from 'jsdom';
 import { createAgentPrompts } from '../src/ui/agentPrompt.js';
 
-function page() {
-  const { window } = new JSDOM('<!doctype html><body></body>');
+function page(url = 'about:blank') {
+  const { window } = new JSDOM('<!doctype html><body></body>', { url });
   // As in a browser, close() fires the close event in a later task.
   window.HTMLDialogElement.prototype.showModal = function showModal() { this.setAttribute('open', ''); };
   window.HTMLDialogElement.prototype.close = function close() {
@@ -122,4 +122,24 @@ test('a prompt that fails to render leaves the queue working for the next one', 
   assert.match(dialog(document).textContent, /Valid\?/);
   press(document, 'OK');
   assert.deepEqual(await next, { answer: 'OK' });
+});
+
+test('a fetch approval names the app and every address, resolved, and only Allow approves it', async () => {
+  const document = page('https://apps.test/brain-extraction/');
+  const prompts = createAgentPrompts(document);
+  const asked = prompts.confirmFetch({ app: 'Brain Extraction', addresses: ['https://elsewhere.test/scan.nii.gz', 'tables/atlas.json'] });
+  await tick();
+  assert.match(dialog(document).textContent, /Let Brain Extraction load these addresses into the page\?/);
+  const shown = [...dialog(document).querySelectorAll('code')].map(code => code.textContent);
+  assert.deepEqual(shown, ['https://elsewhere.test/scan.nii.gz', 'https://apps.test/brain-extraction/tables/atlas.json']);
+  press(document, 'Allow');
+  assert.equal(await asked, true);
+  const declined = prompts.confirmFetch({ app: 'Brain Extraction', addresses: ['https://elsewhere.test/x'] });
+  await tick();
+  press(document, 'Decline');
+  assert.equal(await declined, false);
+  const closed = prompts.confirmFetch({ app: 'Brain Extraction', addresses: ['https://elsewhere.test/x'] });
+  await tick();
+  dialog(document).close();
+  assert.equal(await closed, false);
 });

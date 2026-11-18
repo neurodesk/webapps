@@ -219,7 +219,9 @@ test('every Privacy dialog, the app\'s own included, ends with what a browser AI
   const blocks = overlay.querySelectorAll('.modal-body [data-neurodesk-app-info="privacy"]');
   assert.equal(blocks.length, 1, 'appended once inside the app\'s own dialog');
   assert.match(blocks[0].textContent, /Nothing reaches the agent until it calls a tool/);
-  assert.match(blocks[0].textContent, /file names and checksums, measurements, the viewer's state and the answers you type/);
+  assert.match(blocks[0].textContent, /file names and checksums, measurements, the viewer's state/);
+  assert.match(blocks[0].textContent, /cannot take a picture of the viewer/);
+  assert.match(blocks[0].textContent, /web address only after you allow that address/);
   assert.match(blocks[0].textContent, /in the cloud sends what it reads to its provider/);
   assert.equal(window.document.querySelector('.nd-app-dialog[data-dialog="privacy"]'), null, 'the app\'s own dialog opened, not the fallback');
 });

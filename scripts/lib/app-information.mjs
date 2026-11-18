@@ -52,7 +52,7 @@ export function validateAppInformation(data, registry) {
   if (!/clinical translation/.test(shared.ecosystem ?? '')) errors.push('shared.ecosystem must state the clinical-translation aim');
   if (!/Neurodesk/.test(shared.builder ?? '')) errors.push('shared.builder must name Neurodesk');
   if (!/browser/.test(shared.execution ?? '')) errors.push('shared.execution must state that apps run in the browser by default');
-  for (const [term, fact] of [[/Nothing reaches the agent until it calls a tool/, 'that nothing is shared until a tool is called'], [/file names and checksums/, 'that run reports carry file names and checksums'], [/measurements/, 'that measurements are readable'], [/viewer/, 'that viewer state is readable'], [/answers you type/, 'that typed answers are readable'], [/cloud sends what it reads to its provider/, 'that a cloud agent sends it to its provider']]) {
+  for (const [term, fact] of [[/Nothing reaches the agent until it calls a tool/, 'that nothing is shared until a tool is called'], [/file names and checksums/, 'that run reports carry file names and checksums'], [/measurements/, 'that measurements are readable'], [/viewer/, 'that viewer state is readable'], [/answers you type/, 'that typed answers are readable'], [/cannot take a picture of the viewer/, 'that the viewer cannot be captured'], [/web address only after you allow/, 'that an address is fetched only with approval'], [/downloads folder/, 'that outputs can be saved to downloads'], [/cloud sends what it reads to its provider/, 'that a cloud agent sends it to its provider']]) {
     if (!term.test(shared.agents ?? '')) errors.push(`shared.agents must state ${fact}`);
   }
   validateCitation(shared.platform_citation, 'shared.platform_citation', errors);

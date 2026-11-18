@@ -27,8 +27,11 @@ shared:
   agents: >-
     If you start an AI agent built into your browser, it can use this app's tools only while you keep the page open.
     Nothing reaches the agent until it calls a tool.
-    Through them it can read run reports with your file names and checksums, measurements, the viewer's state and the answers you type into its questions,
-    and it can open only files you choose in its dialog or have already opened in the app.
+    Through them it can read run reports with your file names and checksums, measurements, the viewer's state (including the image value under the crosshair, volume names and image statistics) and the answers you type into its questions.
+    It can run the app only on files you choose in its dialog, files you have already opened in the app, or the app's own examples.
+    It can move the viewer and change how images are shown, but it cannot take a picture of the viewer or save images from it.
+    It loads data from a web address only after you allow that address in a dialog.
+    It can save a run's output files to your downloads folder.
     An agent that runs in the cloud sends what it reads to its provider.
   platform_citation:
     title: Neurodesk

@@ -2,6 +2,7 @@ import { fetchModel } from '../worker/fetchModel.js';
 import { convertsDicom } from '../automation/files.js';
 import { exampleInputs } from './examples.js';
 import { schemaIssues } from './schema.js';
+import { niivueAddresses, offeredNiivueMethods } from './niivue-methods.js';
 
 const terminal = new Set(['idle', 'succeeded', 'failed', 'cancelled']);
 const POLL_MS = 250;
@@ -99,9 +100,9 @@ function failure(error) {
 /**
  * The WebMCP tools for one application page, built from its automation contract. `inputs` holds the
  * files per role and reads the page's own inputs (webmcp/tool-inputs.js); `examples` lists the page's
- * examples; `askUser` and `requestFiles` are the shared agent prompts.
+ * examples; `askUser`, `requestFiles` and `confirmFetch` are the shared agent prompts.
  */
-export function webMcpTools({ contract, dispatch, inputs, examples = () => [], fetchAsset = fetchModel, askUser, requestFiles }) {
+export function webMcpTools({ contract, dispatch, inputs, examples = () => [], fetchAsset = fetchModel, askUser, requestFiles, confirmFetch }) {
   const roles = fileRoles(contract);
   // A rotation entry cycles through examples that are offered on their own.
   const parameterNames = new Set(Object.values(contract.operations).flatMap(operation => Object.keys(operation.parameters)));
@@ -127,6 +128,8 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
       await sleep(Math.min(POLL_MS, remaining), signal);
     }
   }
+  // Nothing the agent names is fetched until the person allows it in the page.
+  const approved = async (addresses, signal) => !addresses.length || await confirmFetch({ app: contract.title, addresses }, { signal });
   const runTools = Object.fromEntries(Object.keys(contract.operations).map(name => [name, toolName(name)]));
   const tools = [];
   const tool = (name, title, description, inputSchema, annotations, execute) => tools.push({
@@ -210,8 +213,10 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
   for (const [name, operation] of Object.entries(contract.operations)) {
     tool(runTools[name], operation.title,
       `${operation.description} Runs on the files the input roles hold (see inputs_request_files, inputs_use_page_files and inputs_load_example) and shows the result in the page. The files stay held, so run again with other parameters without asking for them again. Waits up to waitSeconds, then returns the run; call runs_get to keep waiting. A failed run with code SERIES_SELECTION_REQUIRED lists candidates: ask the user with user_ask and run again with selections.`,
-      runSchema(operation), {},
-      async ({ parameters, inputs: sources, selections, waitSeconds: seconds = DEFAULT_WAIT_SECONDS }, { signal }) => {
+      runSchema(operation), Object.values(operation.inputs).some(field => field.source !== 'files') ? { consequentialHint: true } : {},
+      async ({ parameters, inputs: sources = {}, selections, waitSeconds: seconds = DEFAULT_WAIT_SECONDS }, { signal }) => {
+        const addresses = Object.values(sources).map(source => source.url);
+        if (!await approved(addresses, signal)) return { declined: true, addresses };
         const active = await snapshot();
         if (!terminal.has(active.state)) {
           throw toolError('RUN_ACTIVE', `Run ${active.runId} is still going. Wait for it with runs_get, or cancel it with runs_cancel, before starting another.`, { runId: active.runId });
@@ -283,13 +288,15 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
       sliceType: { type: 'string', enum: ['axial', 'coronal', 'sagittal', 'multiplanar', 'render'] },
       volumes: { type: 'array', items: volumeDisplay },
     }, ['viewerId'], {}],
-    ['niivue', 'Call an nv-mcp NiiVue tool on a viewer by method name and params; without a method, read the scene.', {
+    ['niivue', 'Call an nv-mcp NiiVue tool on a viewer by method name and params; without a method, read the scene. Only tools that read the scene or change what it shows are offered. A call that loads from an address asks the user first and returns declined if they refuse.', {
       viewerId,
-      method: { type: 'string', minLength: 1 },
+      method: { type: 'string', enum: offeredNiivueMethods() },
       params: { type: 'object' },
-    }, ['viewerId'], {}],
+    }, ['viewerId'], { consequentialHint: true }],
   ]) {
-    tool(`viewers_${name}`, `Viewer ${name}`, description, object(properties, required), annotations, async args => {
+    tool(`viewers_${name}`, `Viewer ${name}`, description, object(properties, required), annotations, async (args, { signal }) => {
+      const addresses = name === 'niivue' ? niivueAddresses(args.params) : [];
+      if (!await approved(addresses, signal)) return { declined: true, addresses };
       const value = await dispatch(`viewers.${name}`, args);
       return wrap ? { [wrap]: value } : value;
     });
