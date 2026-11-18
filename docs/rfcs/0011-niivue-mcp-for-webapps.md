@@ -223,22 +223,26 @@ the browser through `document.modelContext.registerTool`. It needs no server,
 and no tool leaves the page until the agent calls it. Every app now registers
 tools there, built from its automation contract, with no change to any app.
 
-`registerAppAutomation` checks for `document.modelContext`, and for
-`navigator.modelContext` from earlier drafts. If neither exists, it loads
-nothing more. Otherwise, once the contract is ready, it imports
-`automation/webmcp.js` and `ui/agentPrompt.js`. `webMcpTools()` builds the
-tool table from the contract, and `registerWebMcpTools()` registers it. A tool
-the browser refuses is logged once and leaves the rest registered.
+The app shell (`site/app-shell.js`) checks for `document.modelContext`, and
+for `navigator.modelContext` from earlier drafts. If neither exists, it loads
+nothing more. Otherwise it imports `webmcp/page.js` from the shell's copy of
+the components. That module waits for the `neurodeskAutomation` global that
+`registerAppAutomation` sets, reads the contract, builds the tool table with
+`webMcpTools()` (`webmcp/tools.js`) and registers it with
+`registerWebMcpTools()`. A tool the browser refuses is logged once and leaves
+the rest registered. The automation barrel imports none of this, so the
+command lines that import it reach neither `webmcp/` nor `ui/`.
 
 The tools reuse the desktop's names and argument names where they mean the
 same thing.
 
 | Tool | What it does |
 | --- | --- |
-| `app_describe` | Returns the contract's operations, the examples that the page's example selectors offer, the viewers, the current run and the files each input role holds. |
-| `inputs_request_files { role, message? }` | Asks the person to choose files for a role in a shared dialog and holds them for the next run. Returns names and sizes, or `{ declined: true }`. A DICOM role also offers a folder. |
+| `app_describe` | Returns the contract's operations, the examples that the page's example selectors offer, `unavailableExamples` with the reason each cannot be loaded, the viewers, the current run, the files each input role holds (`inputs`) and the files the person loaded into the page's own inputs (`pageFiles`). |
+| `inputs_request_files { role, message? }` | Asks the person to choose files for a role in a shared dialog and holds them. Returns names and sizes, or `{ declined: true }`. A DICOM role also offers a folder. |
+| `inputs_use_page_files { role, input }` | Holds the files of one `pageFiles` entry for a role, so an agent runs on what the person already opened. |
 | `inputs_load_example { exampleId }` | Downloads an example through `fetchModel`, which checks its checksums, and holds its files by role. |
-| `run_<operation>` | One per operation. Takes `parameters`, with a JSON Schema written from the contract, `selections` for DICOM roles, `inputs` for URL roles and `waitSeconds` (default 30, at most 600). Starts the run in the page and returns the run when it ends or when `waitSeconds` passes. Aborting the call cancels the run. |
+| `run_<operation>` | One per operation. Takes `parameters`, with a JSON Schema written from the contract, `selections` for DICOM roles, `inputs` for URL roles and `waitSeconds` (default 30, at most 600). Hands the held files to the app, starts the run and returns the run when it ends or when `waitSeconds` passes. The files stay held, so a rerun with other parameters asks for nothing. Aborting the call cancels the run. |
 | `runs_get { runId?, waitSeconds? }` | Returns the current run and can wait for it to end. |
 | `runs_cancel { runId? }` | Cancels the current run. |
 | `outputs_download { artifactId }` | Saves an output of the last successful run, or `report`, to the person's downloads. |
@@ -253,6 +257,19 @@ Results that hold file names, report text or answers typed by the person carry
 `viewers_screenshot` is left out because results are text only and a browser
 agent sees the page.
 
+Held files live in `webmcp/inputs.js`. They are released when the app clears
+its examination (`registerAppAutomation`'s `reset` fires
+`neurodesk-automation-reset`) or when the person loads files into one of the
+app's classified inputs while no run is going. A page input's files are
+forgotten when it takes new ones. The tools therefore keep no file the app has
+let go of.
+
+An example's file roles serve the page's example selector and sometimes differ
+from the contract's. The example's `automation` field in `examples.json` maps
+them, leaves files out with a `reason`, or says why the example is
+`unavailable` (`webmcp/examples.js`). `node scripts/webmcp-examples.mjs`
+reports every app's examples.
+
 WebMCP has no way to ask the person anything. `createAgentPrompts()` provides
 the questions and file requests as `dialog.nd-dialog` dialogs. One shows at a
 time and the others wait. Each says that an AI agent the person started is
@@ -260,28 +277,53 @@ asking. Closing a dialog declines it, and an aborted call closes it.
 
 - **On by default.** The tools register wherever the browser exposes the API,
   with no `?agent` switch. The person starts the browser's agent, and the page
-  sends nothing until it calls a tool. To gate the tools later, change
-  `webMcpContext` in `automation/app-automation.js`.
-- **Browser support.** No browser enables WebMCP by default. Chrome offers it
-  behind an origin trial and a testing flag. This change does not obtain an
-  origin trial token for any host, so on the deployed sites the tools appear
-  only in a browser where the person turned the flag on.
-- **Privacy.** An agent the person invokes can read run reports with file
-  names and checksums, viewer state and the answers typed into its dialogs. An
-  agent on a cloud model sends that to its provider. Most apps write their own
-  Privacy text, and the shell adds shared text only to apps that have none, so
-  no single sentence reaches every app yet.
+  sends nothing until it calls a tool. To gate the tools later, change the
+  check in `site/app-shell.js`.
+- **Browser support.** No browser enables WebMCP by default. Chrome for
+  Testing 156 implements it behind `--enable-features=WebMCPTesting` (or
+  `WebMCP`, or `--enable-experimental-web-platform-features`), with
+  `getTools()` and `executeTool()`. Chrome also offers an origin trial. Each
+  catalogue in `registry/apps.yml` has a `webmcp_origin_trial` token, empty
+  for every host; the catalogue projection writes a token into that host's
+  app pages only.
+- **Privacy.** `shared.agents` in `registry/app-information.yml` closes every
+  Privacy dialog, the app's own included: nothing reaches the agent until it
+  calls a tool; it can read run reports with file names and checksums,
+  measurements, viewer state and the answers typed into its dialogs; an agent
+  in the cloud sends what it reads to its provider.
 - **Tested.** Node tests build the table from every app's `automation.json`
   and check that each run schema accepts and refuses the same parameters as
-  the contract. `pnpm --filter @neurodesk/agent-server validate:webmcp`
-  serves the built Brain Extraction app in Chromium with a stand-in
-  `document.modelContext` and runs a whole analysis through the tools,
-  answering the dialogs by clicking them and through the real file chooser.
-- **Untested.** No real browser agent has called these tools, because no
-  browser available here ships WebMCP. Apps other than Brain Extraction have
-  not been driven through them. In 19 apps, some example files use roles that
-  the contract does not declare, so `app_describe` leaves those examples out
-  and the agent asks for files instead.
+  the contract; they also state the held-file lifetime.
+  `pnpm --filter @neurodesk/agent-server validate:webmcp` runs a whole Brain
+  Extraction analysis through Chrome's own WebMCP: example, run, viewer, both
+  dialogs, the real file chooser, a rerun with another threshold, a file the
+  person opened in the sidebar, and a download. `node test/webmcp.smoke.mjs`
+  checks every app of the built site at 1440 and 390 px: the full tool set,
+  `app_describe` with every loadable example, both dialogs, the Privacy
+  statement, and that a browser without WebMCP loads none of its modules.
+  On 18 November 2026 all 63 apps passed in 342 s; CI runs it in the
+  composite-site job.
+- **Full runs.** `WEBMCP_RUNS=1` also loads each app's first loadable example,
+  runs it with the example's parameters and saves an output, through the tools
+  only, with a 420 s limit per run (five catalogue shards in parallel on 16
+  cores, SwiftShader WebGPU). On 18 November 2026, 43 apps completed: ants,
+  ants-denoise, brain-extraction, brain2print, calcium-imaging, carotid-flow,
+  dcm2niix, deconvolution, deface, degibbs, dicompare, dicomview,
+  disconnectome, dwicorrect, dwidenoise, edgereg, elastix, greedy, histo2mri,
+  lcmodel, lightsheet-atlas, me-ica, microscope-qc, mri2vid, n4, nesvor (its
+  viewer operation), neuromorph, niimath, noddi, omezarr-convert,
+  pipeline-builder, qsmbly, reproin, samsrf, sdc, spinalcordtoolbox,
+  spot-detection, stardist, stitching, structure-tensor, surfannotate, synthsr
+  and topofit. Ten ran past the limit: bison, brainqcnet, calmar, fastprep,
+  fireants, gliomoda, hmc, musclemap, vesselboost and white-matter-lesions.
+  Five failed for the GPU or the browser, not the tools: brainchop (WebGL
+  texture limit), browserqc (niimath timed out under load), dwi2trx (needs
+  32-lane subgroups), syncro and synthseg (GPU memory). Two need parameters
+  their examples do not state: easy-mp2rage (the nine MP2RAGE acquisition
+  values) and microsam (point or box prompts). cryo-em, seedseg and zarro have
+  no example the tools can load.
+- **Untested.** No browser agent has called these tools: every call came from
+  a test through `executeTool`.
 
 ## Phases
 

@@ -53,11 +53,34 @@ can fetch only http(s) URLs that let the page read them under CORS. A path on
 your computer cannot be loaded. There is no approval step yet, unlike the
 desktop app.
 
+## An agent built into your browser (WebMCP)
+
+A browser with [WebMCP](https://webmachinelearning.github.io/webmcp/) needs no
+server. Every app registers its tools with the browser's own agent: it can read
+what the app does, load an example, use the files you opened or ask you for
+others, run an analysis, show the result in the viewer and save an output. When
+it needs a decision, a dialog says that an AI agent is asking; closing it
+declines. The tools use the same names on every app; RFC 0011 lists them.
+
+No browser turns WebMCP on by default yet. To try it in Chrome:
+
+1. In a Chrome build that has the flag (Canary, or Chrome for Testing), open
+   `chrome://flags/#enable-webmcp-testing`, set it to **Enabled** and
+   relaunch. Playwright's Chromium takes `--enable-features=WebMCPTesting`.
+2. Open any app, for example `https://webapps.neurodesk.org/brain-extraction/`.
+3. Start the browser's agent and ask it, for example, to extract the brain from
+   the example and save the mask.
+
+Each app's Privacy dialog says what the agent can read. A host that holds a
+Chrome origin trial token (`webmcp_origin_trial` in `registry/apps.yml`) offers
+the tools without the flag.
+
 ## Development
 
 ```sh
 pnpm --filter @neurodesk/agent-server test
 pnpm --filter brain-extraction build && pnpm --filter @neurodesk/agent-server validate:browser
+pnpm --filter brain-extraction build && pnpm --filter @neurodesk/agent-server validate:webmcp
 ```
 
 `validate:browser` serves the built Brain Extraction app at its hosted address

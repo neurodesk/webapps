@@ -45,6 +45,13 @@ Apps are served from several hosts: `webapps.neurodesk.org` (catalogue `neuro`, 
 
 Every new app must offer a scientifically suitable example in its input section so users can try the main workflow without supplying files. Follow the example contract in [the interface standard](docs/architecture/interface-standard.md#examples): declare pinned data, register offline assets, and test selecting an example through processing and download. Include loading, failure, retry and cancellation behavior. Keep the generated example control and browser coverage when replacing template placeholders.
 
+## Browser agents (WebMCP)
+
+- Every app's WebMCP tools come from its `automation.json` (`packages/components/src/webmcp/tools.js`); an app writes no tool code. The shell imports `webmcp/page.js` only when the browser exposes `document.modelContext`, and it reaches the app through the `neurodeskAutomation` global. Keep `automation/` free of imports from `webmcp/`, `ui/` or `elements/`: command lines import the automation barrel, and `test/webmcp-shell.test.mjs` fails otherwise. A module the shell loads goes into `SHELL_COMPONENTS` with everything it imports.
+- The agent's questions and file requests are the shared `createAgentPrompts()` dialogs. The shared Privacy statement about agents is `shared.agents` in `registry/app-information.yml`.
+- An example file's `role` serves the page's example selector. When it differs from the contract's input role, map it in the example's `automation` field (`roles`, `files`, a `reason` for files left out) or state `automation.unavailable`. Run parameters an example needs and its files do not carry go in `automation.parameters`. `node scripts/webmcp-examples.mjs` lists the mismatches and `test/webmcp-examples.test.mjs` fails on one.
+- `node test/webmcp.smoke.mjs` (after `pnpm build`) drives every app's tools in Chromium's own WebMCP; add `WEBMCP_RUNS=1` to run each example through them.
+
 ## Reference app and minimal implementations
 
 New apps are built to look familiar and read familiar. Start with the generator,
