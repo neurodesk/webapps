@@ -93,6 +93,11 @@ export async function pullRequestLabels(number) {
   return JSON.parse(await gh(['api', `repos/${REPOSITORY}/pulls/${number}`, '--jq', '[.labels[].name]']));
 }
 
+// How many jobs a run's latest attempt has, in one request.
+export async function jobCount(runId) {
+  return Number(await gh(['api', `repos/${REPOSITORY}/actions/runs/${runId}/jobs?per_page=1&filter=latest`, '--jq', '.total_count']));
+}
+
 // The name and conclusion of each job of a run's latest attempt, in pages of 30 (see listJobs).
 export function jobOutcomes(runId) {
   return paginated(`repos/${REPOSITORY}/actions/runs/${runId}/jobs?per_page=30&filter=latest`, '.jobs[] | {name, conclusion} | @json');

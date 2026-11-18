@@ -133,6 +133,9 @@ export function jobRole(workflow, jobName) {
 }
 
 const ran = (jobs = []) => jobs.filter((job) => job.conclusion !== 'skipped' && job.started_at);
+// GitHub gives a job it cancelled before a runner took it a start time too;
+// only a runner shows that the job ran.
+const tookRunner = (job) => job.conclusion !== 'skipped' && Boolean(job.runner_name);
 
 // A job's runner minutes; one still running counts up to `now`.
 function jobMinutes(job, now) {
@@ -148,23 +151,26 @@ const round = (value) => (value === null ? null : Math.round(value));
 const stats = (values) => ({ count: values.length, median: round(percentile(values, 0.5)), p90: round(percentile(values, 0.9)), max: round(values.length ? Math.max(...values) : null) });
 
 // A pull request ci run is `whole` when it ran most of the catalogue, `ready`
-// when it started a ready-only job and `draft` otherwise. A job the run
-// cancelled before a runner took it still shows which plan the run had.
-export function ciPullRequestTier(jobs = []) {
+// when a ready-only job took a runner and `draft` otherwise. A cancelled run
+// whose ready-only jobs were neither skipped nor given a runner is `unknown`:
+// a run cancelled while planning cancels them whatever its plan.
+export function ciPullRequestTier(jobs = [], conclusion = 'success') {
   const listed = jobs.filter((job) => job.conclusion !== 'skipped');
   if (listed.length >= LARGE_RUN_JOBS) return 'whole';
-  return listed.some((job) => READY_ONLY_CI_JOBS.includes(jobKind(job.name))) ? 'ready' : 'draft';
+  const markers = listed.filter((job) => READY_ONLY_CI_JOBS.includes(jobKind(job.name)));
+  if (markers.some(tookRunner)) return 'ready';
+  return conclusion === 'cancelled' && markers.length ? 'unknown' : 'draft';
 }
 
 const ciPullRequestRuns = (runs) => runs.filter((run) => run.name === 'ci' && run.event === 'pull_request');
 
 // Of the job minutes of pull request ci runs, the share in plan and fixed jobs, per tier.
 export function fixedJobShare(runs, jobs, now) {
-  const tiers = Object.fromEntries(['draft', 'ready', 'whole', 'all'].map((tier) => [tier, { runs: 0, minutes: 0, fixedMinutes: 0 }]));
+  const tiers = Object.fromEntries(['draft', 'ready', 'whole', 'unknown', 'all'].map((tier) => [tier, { runs: 0, minutes: 0, fixedMinutes: 0 }]));
   for (const run of ciPullRequestRuns(runs)) {
     const list = jobs.get(run.id) ?? [];
     const fixed = list.filter((job) => ['plan', 'fixed'].includes(jobRole('ci', job.name)));
-    for (const tier of [ciPullRequestTier(list), 'all']) {
+    for (const tier of [ciPullRequestTier(list, run.conclusion), 'all']) {
       tiers[tier].runs += 1;
       tiers[tier].minutes += sumMinutes(list, now);
       tiers[tier].fixedMinutes += sumMinutes(fixed, now);
@@ -173,24 +179,26 @@ export function fixedJobShare(runs, jobs, now) {
   return Object.fromEntries(Object.entries(tiers).map(([tier, row]) => [tier, { runs: row.runs, minutes: Math.round(row.minutes), fixedMinutes: Math.round(row.fixedMinutes), share: row.minutes ? row.fixedMinutes / row.minutes : null }]));
 }
 
-// Minutes from creation to completion of the ready pull request ci runs that
-// finished green, apart for runs that tested most of the catalogue.
+// Minutes from the start of the latest attempt to completion of the ready
+// pull request ci runs that finished green, apart for runs that tested most
+// of the catalogue. A re-run hours later counts from the re-run.
 export function readyToGreen(runs, jobs) {
   const walls = { ready: [], whole: [] };
   for (const run of ciPullRequestRuns(runs)) {
     if (run.conclusion !== 'success') continue;
-    const tier = ciPullRequestTier(jobs.get(run.id));
-    if (tier !== 'draft') walls[tier].push(minutesBetween(run.created_at, run.updated_at));
+    const tier = ciPullRequestTier(jobs.get(run.id), run.conclusion);
+    if (Object.hasOwn(walls, tier)) walls[tier].push(minutesBetween(run.run_started_at ?? run.created_at, run.updated_at));
   }
   return { ready: stats(walls.ready), whole: stats(walls.whole) };
 }
 
 // Minutes from each push to main to the completion of the first successful
-// deploy of that commit or a later one. Pushes are the commits of the window's
-// push runs on main, at their first run's creation. `deploys` may reach past
-// the window; a deploy of a commit pushed after it covers every push in it,
-// and one of a commit pushed before it covers none.
-export function mergeToLive(runs, deploys, until) {
+// deploy on main of that commit or a later one. Pushes are the commits of the
+// window's push runs on main, at their first run's creation. `deploys` may
+// reach past the window. A deploy on main runs main's head when it is
+// created, so a deploy of a commit the pushes do not name covers the pushes
+// created before it.
+export function mergeToLive(runs, deploys) {
   const pushes = new Map();
   for (const run of runs) {
     if (run.event !== 'push' || run.head_branch !== 'main') continue;
@@ -198,13 +206,12 @@ export function mergeToLive(runs, deploys, until) {
   }
   const order = [...pushes].sort((a, b) => a[1].localeCompare(b[1]));
   const index = new Map(order.map(([sha], position) => [sha, position]));
-  const live = deploys
-    .filter((run) => run.name === DEPLOY_WORKFLOW.name && run.conclusion === 'success')
-    .map((run) => ({ at: run.updated_at, position: index.get(run.head_sha) ?? (run.created_at >= until ? Infinity : -1) }));
+  const live = deploys.filter((run) => run.name === DEPLOY_WORKFLOW.name && run.head_branch === 'main' && run.conclusion === 'success');
+  const covers = (deploy, position, pushedAt) => (index.has(deploy.head_sha) ? index.get(deploy.head_sha) >= position : deploy.created_at >= pushedAt);
   const minutes = [];
   const pending = [];
   order.forEach(([sha, pushedAt], position) => {
-    const done = live.filter((deploy) => deploy.position >= position && deploy.at >= pushedAt).map((deploy) => deploy.at).sort()[0];
+    const done = live.filter((deploy) => covers(deploy, position, pushedAt) && deploy.updated_at >= pushedAt).map((deploy) => deploy.updated_at).sort()[0];
     if (done) minutes.push(minutesBetween(pushedAt, done));
     else pending.push(sha.slice(0, 9));
   });
@@ -261,6 +268,8 @@ export function minutesByRole(runs, jobs, now) {
   const roles = Object.fromEntries(ROLES.map((role) => [role, 0]));
   const unclassified = new Map();
   for (const run of runs) {
+    // A workflow the table does not name shows even when it started no job.
+    if (!Object.hasOwn(WORKFLOWS, run.name)) unclassified.set(run.name, unclassified.get(run.name) ?? 0);
     for (const job of ran(jobs.get(run.id))) {
       const role = jobRole(run.name, job.name);
       roles[role] += jobMinutes(job, now);
@@ -284,19 +293,38 @@ export const TARGETS = Object.freeze({
   draftFixedShare: 0.3,
 });
 
+// The data each measure reads beyond the window's runs. The report collects
+// the jobs, the merged pull requests (with their runs outside the window and
+// those runs' jobs) and the deploys under a request cap.
+const SOURCES = Object.freeze({
+  minutes: ['jobs'],
+  perMergedPullRequest: ['jobs', 'pullRequests'],
+  fixedShare: ['jobs'],
+  readyToGreen: ['jobs'],
+  mergeToLive: ['deploys'],
+  idle: ['jobs'],
+  cancelled: ['jobs'],
+});
+
 // `runs` are the window's runs, `earlierRuns` the runs before it of the pull
-// requests merged in it, and `deploys` the deploy runs from the window's start
-// to the report.
-export function summarizeMeasures({ runs, earlierRuns = [], jobs, pullRequests, deploys, until, now }) {
-  return {
-    minutes: minutesByRole(runs, jobs, now),
-    perMergedPullRequest: minutesPerMergedPullRequest(pullRequests, [...earlierRuns, ...runs], jobs, now),
-    fixedShare: fixedJobShare(runs, jobs, now),
-    readyToGreen: readyToGreen(runs, jobs),
-    mergeToLive: mergeToLive(runs, deploys, until),
-    idle: idleRuns(runs, jobs),
-    cancelled: cancelledMinutes(runs, jobs, now),
+// requests merged in it, `lateRuns` the push runs of their merge commits
+// created after it, and `deploys` the deploy runs from the window's start to
+// the report. `unavailable` maps a source the report could not read to why: a
+// measure that reads it is `{ unavailable: reason }`, never a zero.
+export function summarizeMeasures({ runs, earlierRuns = [], lateRuns = [], jobs, pullRequests, deploys, now, unavailable = {} }) {
+  const compute = {
+    minutes: () => minutesByRole(runs, jobs, now),
+    perMergedPullRequest: () => minutesPerMergedPullRequest(pullRequests, [...earlierRuns, ...runs, ...lateRuns], jobs, now),
+    fixedShare: () => fixedJobShare(runs, jobs, now),
+    readyToGreen: () => readyToGreen(runs, jobs),
+    mergeToLive: () => mergeToLive(runs, deploys),
+    idle: () => idleRuns(runs, jobs),
+    cancelled: () => cancelledMinutes(runs, jobs, now),
   };
+  return Object.fromEntries(Object.entries(compute).map(([measure, measureOf]) => {
+    const missing = SOURCES[measure].find((source) => unavailable[source]);
+    return [measure, missing ? { unavailable: unavailable[missing] } : measureOf()];
+  }));
 }
 
 const percent = (share) => (share === null ? '-' : `${Math.round(share * 100)}%`);
@@ -305,20 +333,31 @@ const against = (met, target) => (met === null ? `target ${target}, no runs` : `
 
 export function measuresMarkdown(measures, targets = TARGETS) {
   const { minutes, perMergedPullRequest: merged, fixedShare, readyToGreen: green, mergeToLive: live, idle, cancelled } = measures;
-  const draftShare = fixedShare.draft.share;
-  const greenMedian = green.ready.median;
   const lines = ['### Measures', '', 'Job minutes are runner minutes: the time each job held a runner. The targets are report-only.', '', '| Measure | Value | Compared with |', '| --- | --- | --- |'];
-  lines.push(`| Job minutes per merged pull request, median | ${value(merged.median)} over ${merged.pullRequests} pull requests; largest ${merged.largest.map((row) => `#${row.number} ${row.minutes} (${row.runs} runs)`).join(', ') || '-'} | - |`);
-  lines.push(`| Fixed-job share of draft pull request ci runs | ${percent(draftShare)} (${fixedShare.draft.fixedMinutes} of ${fixedShare.draft.minutes} min, ${fixedShare.draft.runs} runs) | ${against(draftShare === null ? null : draftShare < targets.draftFixedShare, `under ${percent(targets.draftFixedShare)}`)} |`);
-  lines.push(`| Fixed-job share of ready, whole-catalogue and all pull request ci runs | ${percent(fixedShare.ready.share)}, ${percent(fixedShare.whole.share)}, ${percent(fixedShare.all.share)} | - |`);
-  lines.push(`| Ready to green, median and 90th percentile | ${value(greenMedian)} and ${value(green.ready.p90)} min over ${green.ready.count} runs | ${against(greenMedian === null ? null : greenMedian < targets.readyToGreenMedianMinutes, `under ${targets.readyToGreenMedianMinutes} min`)} |`);
-  lines.push(`| Ready to green of whole-catalogue runs, median and 90th percentile | ${value(green.whole.median)} and ${value(green.whole.p90)} min over ${green.whole.count} runs | - |`);
-  lines.push(`| Merge to live, median and maximum | ${value(live.median)} and ${value(live.max)} min over ${live.count} of ${live.pushes} pushes | ${live.pending.length ? `not live yet: ${live.pending.join(', ')}` : '-'} |`);
-  lines.push(`| Runs that tested nothing | ${idle.idle} of ${idle.runs} (${percent(idle.share)}): ${Object.entries(idle.reasons).map(([reason, count]) => `${count} ${reason}`).join(', ')} | - |`);
-  lines.push(`| Job minutes of cancelled runs | ${cancelled.minutes} in ${cancelled.runs} runs, ${cancelled.pullRequestCiMinutes} of them in pull request ci runs | - |`);
+  // A row's cells, or "unavailable" with the reason when its measure could not be read.
+  const row = (label, measure, cells) => lines.push(`| ${label} | ${(measure.unavailable ? [`unavailable: ${measure.unavailable}`, '-'] : cells()).join(' | ')} |`);
+  row('Job minutes per merged pull request, median', merged, () => [`${value(merged.median)} over ${merged.pullRequests} pull requests; largest ${merged.largest.map((each) => `#${each.number} ${each.minutes} (${each.runs} runs)`).join(', ') || '-'}`, '-']);
+  row('Fixed-job share of draft pull request ci runs', fixedShare, () => {
+    const share = fixedShare.draft.share;
+    return [`${percent(share)} (${fixedShare.draft.fixedMinutes} of ${fixedShare.draft.minutes} min, ${fixedShare.draft.runs} runs)`, against(share === null ? null : share < targets.draftFixedShare, `under ${percent(targets.draftFixedShare)}`)];
+  });
+  row('Fixed-job share of ready, whole-catalogue and all pull request ci runs', fixedShare, () => [`${percent(fixedShare.ready.share)}, ${percent(fixedShare.whole.share)}, ${percent(fixedShare.all.share)}`, '-']);
+  row('Cancelled pull request ci runs of unknown tier', fixedShare, () => [`${fixedShare.unknown.runs} runs, ${fixedShare.unknown.minutes} min: cancelled before a ready-only job took a runner or was skipped`, '-']);
+  row('Ready to green, median and 90th percentile', green, () => {
+    const median = green.ready.median;
+    return [`${value(median)} and ${value(green.ready.p90)} min over ${green.ready.count} runs`, against(median === null ? null : median < targets.readyToGreenMedianMinutes, `under ${targets.readyToGreenMedianMinutes} min`)];
+  });
+  row('Ready to green of whole-catalogue runs, median and 90th percentile', green, () => [`${value(green.whole.median)} and ${value(green.whole.p90)} min over ${green.whole.count} runs`, '-']);
+  row('Merge to live, median and maximum', live, () => [`${value(live.median)} and ${value(live.max)} min over ${live.count} of ${live.pushes} pushes`, live.pending.length ? `not live yet: ${live.pending.join(', ')}` : '-']);
+  row('Runs that tested nothing', idle, () => [`${idle.idle} of ${idle.runs} (${percent(idle.share)}): ${Object.entries(idle.reasons).map(([reason, count]) => `${count} ${reason}`).join(', ')}`, '-']);
+  row('Job minutes of cancelled runs', cancelled, () => [`${cancelled.minutes} in ${cancelled.runs} runs, ${cancelled.pullRequestCiMinutes} of them in pull request ci runs`, '-']);
+  if (minutes.unavailable) {
+    lines.push('', `Job minutes by role unavailable: ${minutes.unavailable}.`, '');
+    return `${lines.join('\n')}\n`;
+  }
   lines.push('', `${minutes.total} job minutes: ${ROLES.map((role) => `${role} ${minutes.roles[role]}`).join(', ')}.`, '');
   if (minutes.unclassified.length) {
-    lines.push('Unclassified jobs: no measure counts them as fixed, test or idle. Name their workflow or ci job in WORKFLOWS (scripts/lib/ci-measures.mjs).', '', ...minutes.unclassified.map((row) => `- ${row.name}: ${row.minutes} min`), '');
+    lines.push('Unclassified jobs: no measure counts them as fixed, test or idle. Name their workflow or ci job in WORKFLOWS (scripts/lib/ci-measures.mjs).', '', ...minutes.unclassified.map((each) => `- ${each.name}: ${each.minutes} min`), '');
   }
   return `${lines.join('\n')}\n`;
 }
