@@ -1,49 +1,4 @@
 const BAD_CONCLUSIONS = new Set(['failure', 'timed_out', 'action_required', 'startup_failure', 'stale']);
-export const SCHEDULED_WORKFLOWS = [
-  'ants-native',
-  'bison-native',
-  'brain2print-native',
-  'browserqc-native',
-  'CALMaR knowledge-base sync',
-  'calmar-native',
-  'carotid-flow-native',
-  'ci',
-  'ci-usage',
-  'CI approval report',
-  'compute-server-native',
-  'deface-native',
-  'degibbs-native',
-  'deploy-github-pages',
-  'dwi-native',
-  'dwi2trx-native',
-  'dwidenoise-native',
-  'easy-mp2rage-native',
-  'edgereg-native',
-  'elastix-native',
-  'hmc-native',
-  'hmc-registration',
-  'lcmodel-native',
-  'musclemap-native',
-  'musclemap-parity',
-  'mutation-quality',
-  'n4-native',
-  'n4-wasm-source',
-  'neuroflow',
-  'noddi-native',
-  'node-drivers',
-  'sct-full-tests',
-  'sdc-native',
-  'sdc-registration-gate',
-  'seedseg-native',
-  'spinalcordtoolbox-native',
-  'standalone',
-  'standalone-catalog',
-  'standalone-links',
-  'synthseg-portable',
-  'upstream sync',
-  'vesselboost-native',
-  'white-matter-lesions-native',
-];
 const LOG_LIMIT = 2 * 1024 * 1024;
 const BODY_LIMIT = 60000;
 // A dropped, reset or unresolvable connection and a gateway error say nothing
@@ -51,6 +6,8 @@ const BODY_LIMIT = 60000;
 const TRANSIENT_CODES = new Set(['UND_ERR_SOCKET', 'UND_ERR_CONNECT_TIMEOUT', 'ECONNRESET', 'ETIMEDOUT', 'EAI_AGAIN', 'ENOTFOUND']);
 const TRANSIENT_STATUSES = new Set([502, 503, 504]);
 const READ_RETRY_DELAYS = [1000, 4000];
+
+const time = value => Date.parse(value);
 
 function numeric(value) {
   if (!/^\d+$/.test(String(value))) throw new Error('Expected a numeric GitHub identifier');
@@ -147,14 +104,16 @@ export function createGitHubClient({ token, repository, fetchImpl = fetch, sleep
     } finally { reader.releaseLock(); }
     return { text, truncated };
   }
+  // Job listings use pages of 30: pages of 100 jobs fail with a steady HTTP 502 for some large runs.
   async function list(path, key) {
+    const size = key === 'jobs' ? 30 : 100;
     const result = [];
     for (let page = 1; ; page++) {
-      const data = await request(`${path}${path.includes('?') ? '&' : '?'}per_page=100&page=${page}`);
+      const data = await request(`${path}${path.includes('?') ? '&' : '?'}per_page=${size}&page=${page}`);
       const entries = key ? data[key] : data;
       if (!Array.isArray(entries)) throw new Error('Unexpected paginated GitHub response');
       result.push(...entries);
-      if (entries.length < 100) return result;
+      if (entries.length < size) return result;
     }
   }
   return { request, list };
@@ -183,7 +142,7 @@ export function logExcerpt({ text, truncated }) {
 }
 
 export async function reportNightlyFailure({ run, repository, defaultBranch, client, dryRun = false }) {
-  if (run.event !== 'schedule' || run.status !== 'completed' || !SCHEDULED_WORKFLOWS.includes(run.name)) return { skipped: 'Not a completed scheduled workflow' };
+  if (run.event !== 'schedule' || run.status !== 'completed') return { skipped: 'Not a completed scheduled workflow' };
   if (!defaultBranch || run.head_branch !== defaultBranch || run.head_repository?.full_name !== repository) return { skipped: 'Not a default-branch run from this repository' };
   const runId = numeric(run.id);
   const attempt = numeric(run.run_attempt ?? 1);
@@ -199,17 +158,21 @@ export async function reportNightlyFailure({ run, repository, defaultBranch, cli
   if (!failed.length && !incomplete && !BAD_CONCLUSIONS.has(run.conclusion)) return { skipped: 'No failures or incomplete coverage' };
   const workflowMarker = `<!-- nightly-workflow:${workflowId} -->`;
   const attemptMarker = `<!-- nightly-run:${runId}:attempt:${attempt} -->`;
-  const issues = dryRun ? [] : await client.list('/issues?state=all&creator=github-actions%5Bbot%5D&sort=created&direction=desc');
+  const issues = await client.list('/issues?state=all&creator=github-actions%5Bbot%5D&sort=created&direction=desc');
   const matching = issues.filter(issue => !issue.pull_request && issue.user?.login === 'github-actions[bot]' && issue.body?.startsWith(workflowMarker));
   const issue = matching.find(issue => issue.state === 'open') ?? matching[0];
-  if (issue) {
-    async function duplicate() {
-      if (issue.state === 'closed') await client.request(`/issues/${numeric(issue.number)}`, { method: 'PATCH', body: { state: 'open' } });
-      return { duplicate: true, issue: issue.number };
-    }
-    if (issue.body?.includes(attemptMarker)) return duplicate();
-    const comments = await client.list(`/issues/${numeric(issue.number)}/comments`);
-    if (comments.some(comment => comment.user?.login === 'github-actions[bot]' && comment.body?.startsWith(attemptMarker))) return duplicate();
+  // An attempt is reported once, in whichever issue of the workflow holds its marker.
+  for (const reported of matching) {
+    // The report opened this issue: it is closed only because someone closed it after the report.
+    if (reported.body?.includes(attemptMarker)) return { ...(dryRun && { dryRun: true }), duplicate: true, issue: reported.number };
+    const comments = await client.list(`/issues/${numeric(reported.number)}/comments`);
+    const comment = comments.find(comment => comment.user?.login === 'github-actions[bot]' && comment.body?.startsWith(attemptMarker));
+    if (!comment) continue;
+    // A report reopens a closed issue after commenting. Finish that if an earlier tick stopped in between,
+    // but leave an issue closed after the report alone.
+    const unfinished = reported === issue && reported.state === 'closed' && !(time(reported.closed_at) >= time(comment.created_at));
+    if (unfinished && !dryRun) await client.request(`/issues/${numeric(reported.number)}`, { method: 'PATCH', body: { state: 'open' } });
+    return { ...(dryRun && { dryRun: true }), duplicate: true, issue: reported.number, ...(unfinished && { reopened: true }) };
   }
   const hasFailure = failed.length > 0 || BAD_CONCLUSIONS.has(run.conclusion);
   const lines = [attemptMarker, `## Scheduled ${hasFailure ? 'failure' : 'incomplete coverage'}: ${plain(run.name)}`,
@@ -263,7 +226,7 @@ export async function reportNightlyFailure({ run, repository, defaultBranch, cli
   const body = lines.join('\n');
   if (body.length > BODY_LIMIT) throw new Error('Failure report exceeded the issue body budget');
   const title = `Scheduled workflow: ${run.name} requires attention`;
-  if (dryRun) return { dryRun: true, title, body: `${workflowMarker}\n${body}` };
+  if (dryRun) return issue ? { dryRun: true, comment: issue.number, title, body } : { dryRun: true, create: true, title, body: `${workflowMarker}\n${body}` };
   if (issue) {
     await client.request(`/issues/${numeric(issue.number)}/comments`, { method: 'POST', body: { body } });
     if (issue.state === 'closed') await client.request(`/issues/${numeric(issue.number)}`, { method: 'PATCH', body: { state: 'open' } });

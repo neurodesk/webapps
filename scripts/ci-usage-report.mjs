@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Reports what one UTC day of workflow runs cost and exits 1 when a budget in
 // scripts/lib/ci-usage.mjs is exceeded, so the scheduled run fails and
-// nightly-failures.yml opens an issue. The measures of scripts/lib/ci-measures.mjs
+// workflow-reports.yml opens an issue. The measures of scripts/lib/ci-measures.mjs
 // follow the budgets; they are report-only.
 //
 //   node scripts/ci-usage-report.mjs [--hours 24] [--until 2026-11-11T00:00:00Z] [--max-requests 600] [--time-limit 10]

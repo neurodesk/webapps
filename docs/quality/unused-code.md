@@ -2,8 +2,8 @@
 
 Run `pnpm quality:unused` after `pnpm install --frozen-lockfile --ignore-scripts`.
 No app builds, model downloads, native compilers or browser runtimes are required.
-The independent `unused-code` workflow runs on every pull request and main push.
-It writes a GitHub job summary and uploads `quality-artifacts/unused-code` with
+The `unused-code` job of the independent `quality` workflow runs on every pull
+request and main push. It writes a GitHub job summary and uploads `quality-artifacts/unused-code` with
 `knip.json`, `summary.md` and `diagnostics.log`. Scan warnings also appear in the
 summary so incomplete analysis is visible without downloading diagnostics.
 

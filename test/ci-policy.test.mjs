@@ -29,8 +29,8 @@ function group(template, event) {
 const commands = (job) => job.steps.flatMap((step) => step.run ? [step.run] : []);
 
 test('new pushes cannot cancel scheduled or manually requested coverage', async () => {
-  for (const name of ['ci', 'mutation-quality', 'standalone-links']) {
-    const flow = await workflow(name);
+  const quality = await workflow('quality');
+  for (const [name, flow] of [['ci', ci], ['quality mutation', quality.jobs.mutation], ['standalone-links', await workflow('standalone-links')]]) {
     assert.equal(new Set(events.map((event) => group(flow.concurrency.group, event))).size, events.length, name);
     for (const event of events) {
       const cancels = event === 'pull_request' || (name !== 'ci' && event === 'push');
@@ -118,7 +118,7 @@ test('every deterministic interface check runs before optional agent checks', ()
 });
 
 test('correctness lint runs on every CI event with no duplicate routine gate', async () => {
-  const quality = await workflow('code-quality');
+  const quality = await workflow('quality');
   for (const event of ['pull_request', 'push']) {
     assert.ok(Object.hasOwn(quality.on, event), event);
     assert.deepEqual(quality.on[event]?.branches, ci.on[event]?.branches, `${event} correctness has the same branch coverage`);
@@ -149,13 +149,58 @@ test('correctness lint runs on every CI event with no duplicate routine gate', a
   assert.equal(workspace.if, undefined);
 });
 
+test('each quality job runs on exactly the events its former workflow ran on', async () => {
+  const quality = await workflow('quality');
+  // code-quality, unused-code and dependency-quality ran on pull requests, main pushes and dispatch;
+  // mutation-quality on pull requests (smoke), its weekly schedule and dispatch (every module).
+  const expected = {
+    correctness: ['pull_request', 'push', 'workflow_dispatch'],
+    'unused-code': ['pull_request', 'push', 'workflow_dispatch'],
+    dependencies: ['pull_request', 'push', 'workflow_dispatch'],
+    mutation: ['pull_request', 'schedule', 'workflow_dispatch'],
+  };
+  const triggers = Object.keys(quality.on).sort();
+  assert.deepEqual(triggers, ['pull_request', 'push', 'schedule', 'workflow_dispatch']);
+  assert.deepEqual(quality.on.push, { branches: ['main'] });
+  assert.deepEqual(quality.on.schedule, [{ cron: '41 4 * * 1' }]);
+  assert.deepEqual(Object.keys(quality.jobs).sort(), Object.keys(expected).sort());
+  for (const [name, job] of Object.entries(quality.jobs)) {
+    const runs = triggers.filter(event => evaluate(job.if ?? 'true', event));
+    assert.deepEqual(runs, expected[name], name);
+  }
+  // Each job keeps its former workflow's concurrency: a newer run on the same ref cancels the
+  // running correctness, unused-code and dependency checks, whatever the event.
+  assert.equal(quality.concurrency, undefined, 'one group for the workflow would make every job wait for the previous run');
+  const formerConcurrency = {
+    correctness: { group: 'code-quality-${{ github.ref }}', 'cancel-in-progress': true },
+    'unused-code': { group: 'unused-code-${{ github.ref }}', 'cancel-in-progress': true },
+    dependencies: { group: 'dependency-quality-${{ github.ref }}', 'cancel-in-progress': true },
+    mutation: { group: 'mutation-quality-${{ github.event_name }}-${{ github.ref }}', 'cancel-in-progress': "${{ github.event_name == 'pull_request' || github.event_name == 'push' }}" },
+  };
+  for (const [name, concurrency] of Object.entries(formerConcurrency)) assert.deepEqual(quality.jobs[name].concurrency, concurrency, name);
+  for (const name of ['correctness', 'unused-code', 'dependencies']) {
+    for (const event of expected[name]) {
+      assert.equal(group(quality.jobs[name].concurrency.group, event), group(quality.jobs[name].concurrency.group, 'push'), `${name}: ${event} shares the ref's group`);
+    }
+  }
+  const mutation = quality.jobs.mutation.steps;
+  const step = (command) => mutation.find(each => each.run === command);
+  for (const event of expected.mutation) {
+    assert.equal(evaluate(step('pnpm quality:mutations:smoke').if, event), event === 'pull_request', `smoke on ${event}`);
+    assert.equal(evaluate(step('pnpm quality:mutations').if, event), event !== 'pull_request', `every module on ${event}`);
+  }
+  for (const name of ['code-quality', 'unused-code', 'dependency-quality', 'mutation-quality']) {
+    await assert.rejects(readFile(new URL(`../.github/workflows/${name}.yml`, import.meta.url)), { code: 'ENOENT' }, `${name}.yml is folded into quality.yml`);
+  }
+});
+
 test('contract and correctness owners replace duplicate invocations without losing native parity', async () => {
   const workspace = commands(ci.jobs['workspace-contracts']);
   assert.equal(workspace.filter((command) => command === 'pnpm test:contracts').length, 1);
   assert.ok(workspace.indexOf(workspace.find((command) => command.includes('make -C exes/nii2tvx test'))) < workspace.indexOf('pnpm test:packages'));
   assert.ok(workspace.includes('node scripts/lint-workspaces.mjs'));
   assert.ok(!workspace.includes('pnpm lint'));
-  assert.ok(commands((await workflow('code-quality')).jobs.correctness).includes('pnpm lint:correctness'));
+  assert.ok(commands((await workflow('quality')).jobs.correctness).includes('pnpm lint:correctness'));
   const composite = commands(ci.jobs['composite-site']);
   assert.ok(composite.includes('node --test test/runtime-assets.test.mjs'), 'built runtime assembly remains independently tested');
   const source = await readFile(new URL('../package.json', import.meta.url), 'utf8');
@@ -179,7 +224,7 @@ test('contract and correctness owners replace duplicate invocations without losi
   assert.ok(selected.some((entry) => entry.name === '@neurodesk/nii2tvx'), 'shared package tests include native/WASM parity');
   for (const file of ['deployed-isolation', 'runtime-assets-rewrite', 'runtime-worker-scope', 'agentic-catalog', 'agentic-provider', 'chromium-cdp', 'playwright-discovery', 'lint-coverage', 'dependency-quality', 'unused-code', 'mutation-quality']) {
     assert.ok(!pkg.scripts['test:contracts'].includes(`/${file}.test.mjs`), `${file} is not excluded from contracts`);
-    for (const name of ['ci', 'code-quality', 'dependency-quality', 'unused-code', 'mutation-quality']) {
+    for (const name of ['ci', 'quality']) {
       assert.ok(!JSON.stringify((await workflow(name)).jobs).includes(`test/${file}.test.mjs`), `${file} is owned by contracts, not repeated in ${name}`);
     }
   }

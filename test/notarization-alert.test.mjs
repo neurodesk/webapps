@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
-import { readFile, readdir } from 'node:fs/promises';
 import test from 'node:test';
-import YAML from 'yaml';
-import { ALERT_MARKER, NOTARIZATION_OWNER, NOTARIZING_WORKFLOWS, alertNotarization, notaryFailure } from '../scripts/lib/notarization-alert.mjs';
+import { ALERT_MARKER, NOTARIZATION_OWNER, alertNotarization, notaryFailure } from '../scripts/lib/notarization-alert.mjs';
 
 const AGREEMENT = '2026-11-13T15:51:01.7807410Z Error: HTTP status code: 403. A required agreement is missing or has expired. This request requires an in-effect agreement that has not been signed or has expired.';
 const ELECTRON = [
@@ -13,7 +11,7 @@ const ELECTRON = [
 
 const run = {
   id: 43435308021, run_attempt: 1, name: 'syncro-native', event: 'workflow_dispatch', status: 'completed', conclusion: 'failure',
-  head_branch: 'syncro-v0.8.20261113',
+  head_branch: 'syncro-v0.8.20261113', path: '.github/workflows/syncro-native.yml', head_repository: { full_name: 'owner/repo' },
 };
 const macJob = { id: 11, name: 'portable / release', conclusion: 'failure', labels: ['macos-15'] };
 const linuxJob = { id: 12, name: 'portable / linux-x64', conclusion: 'failure', labels: ['ubuntu-latest'] };
@@ -40,31 +38,8 @@ function fakeClient({ jobs = [macJob, linuxJob], logs = { 11: AGREEMENT, 12: AGR
     },
   };
 }
-const alert = (client, overrides = {}) => alertNotarization({ run: { ...run, ...overrides }, repository: 'owner/repo', client });
+const alert = (client, overrides = {}, options = {}) => alertNotarization({ run: { ...run, ...overrides }, repository: 'owner/repo', client, ...options });
 const writes = client => client.calls.filter(call => call.method);
-
-test('the alert watches every workflow that notarizes, from a trusted checkout', async () => {
-  const directory = new URL('../.github/workflows/', import.meta.url);
-  const notarizing = [];
-  for (const file of await readdir(directory)) {
-    if (!file.endsWith('.yml') || file === 'notarization-alert.yml') continue;
-    const source = await readFile(new URL(file, directory), 'utf8');
-    const workflow = YAML.parse(source);
-    if (workflow.on?.workflow_call) continue;
-    if (/notar|APPLE_ID|uses: \.\/\.github\/workflows\/node-cli-portable\.yml/i.test(source)) notarizing.push(workflow.name);
-  }
-  const workflow = YAML.parse(await readFile(new URL('notarization-alert.yml', directory), 'utf8'));
-  assert.deepEqual([...NOTARIZING_WORKFLOWS].sort(), notarizing.sort());
-  assert.deepEqual(workflow.on.workflow_run.workflows, NOTARIZING_WORKFLOWS);
-  assert.deepEqual(workflow.on.workflow_run.types, ['completed']);
-  assert.equal(workflow.on.workflow_run.branches, undefined, 'release dispatches run on tags');
-  assert.match(workflow.jobs.alert.if, /conclusion == 'failure' \|\| github\.event\.workflow_run\.conclusion == 'timed_out'/);
-  assert.equal(workflow.concurrency, undefined, 'a concurrency group drops pending alerts');
-  assert.match(workflow.jobs.alert.if, /event != 'pull_request'/);
-  assert.equal(workflow.jobs.alert.steps[0].with.ref, '${{ github.event.repository.default_branch }}');
-  assert.equal(workflow.jobs.alert.steps[0].with['persist-credentials'], false);
-  assert.deepEqual(workflow.permissions, { contents: 'read', actions: 'read', issues: 'write' });
-});
 
 test('notaryFailure finds what notarytool and @electron/notarize print when Apple refuses', () => {
   assert.match(notaryFailure(`setup\n${AGREEMENT}\n##[error]Process completed with exit code 1.`), /^Error: HTTP status code: 403\. A required agreement/);
@@ -136,12 +111,29 @@ test('a timed-out notarization is a failure too, and a log longer than the alert
   assert.deepEqual(writes(long), []);
 });
 
-test('other failures, pull requests and unrelated workflows raise nothing', async () => {
+test('other failures, pull requests and forks raise nothing', async () => {
   const unrelated = fakeClient({ logs: { 11: 'error: parity failed', 12: AGREEMENT } });
   assert.deepEqual(await alert(unrelated), { skipped: 'No notarization failure in the failed macOS jobs' });
-  for (const overrides of [{ conclusion: 'success' }, { conclusion: 'cancelled' }, { event: 'pull_request' }, { name: 'ci' }]) {
+  for (const overrides of [{ conclusion: 'success' }, { conclusion: 'cancelled' }, { event: 'pull_request' }, { head_repository: { full_name: 'fork/repo' } }]) {
     const client = fakeClient();
     assert.ok((await alert(client, overrides)).skipped);
     assert.deepEqual(client.calls, []);
   }
+});
+
+test('an attempt is alerted once whichever alert issue holds it, and a dry run only reads', async () => {
+  const marker = '<!-- notarization-run:43435308021:attempt:1 -->';
+  // Reported to #5, closed since; #8 opened later for another failure.
+  const elsewhere = fakeClient({ issues: [{ number: 8, state: 'open', body: `${ALERT_MARKER}\nnewer` }, { number: 5, state: 'closed', state_reason: 'completed', body: `${ALERT_MARKER}\n${marker}` }] });
+  assert.deepEqual(await alert(elsewhere), { issue: 5, duplicate: true });
+  assert.deepEqual(writes(elsewhere), []);
+
+  const dry = fakeClient({ issues: [{ number: 5, state: 'closed', body: `${ALERT_MARKER}\nold` }] });
+  const result = await alert(dry, {}, { dryRun: true });
+  assert.equal(result.comment, 5);
+  assert.match(result.report, /^<!-- notarization-run:43435308021:attempt:1 -->/);
+  assert.deepEqual(writes(dry), []);
+  assert.deepEqual(await alert(fakeClient(), {}, { dryRun: true }).then(({ create, dryRun }) => ({ create, dryRun })), { create: true, dryRun: true });
+  const seen = fakeClient({ issues: [{ number: 5, state: 'open', body: `${ALERT_MARKER}\n${marker}` }] });
+  assert.deepEqual(await alert(seen, {}, { dryRun: true }), { dryRun: true, issue: 5, duplicate: true });
 });

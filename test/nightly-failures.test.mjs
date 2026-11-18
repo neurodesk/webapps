@@ -1,9 +1,6 @@
 import assert from 'node:assert/strict';
-import { readFile, readdir } from 'node:fs/promises';
 import test from 'node:test';
-import { runInNewContext } from 'node:vm';
-import YAML from 'yaml';
-import { createGitHubClient, logExcerpt, reportNightlyFailure, sanitize, SCHEDULED_WORKFLOWS } from '../scripts/lib/nightly-failures.mjs';
+import { createGitHubClient, logExcerpt, reportNightlyFailure, sanitize } from '../scripts/lib/nightly-failures.mjs';
 
 const run = {
   id: 123, workflow_id: 45, run_attempt: 2, event: 'schedule', status: 'completed', conclusion: 'failure',
@@ -45,27 +42,6 @@ function fakeClient({ jobs = [failedJob], issues = [], comments = [], artifacts 
 const report = (client, overrides = {}) => reportNightlyFailure({ run: { ...run, ...overrides }, repository: 'owner/repo', defaultBranch: 'main', client });
 const writes = client => client.calls.filter(call => call.method);
 
-test('reporter covers every scheduled workflow and uses a privileged, trusted checkout', async () => {
-  const directory = new URL('../.github/workflows/', import.meta.url);
-  const workflows = [];
-  for (const file of await readdir(directory)) {
-    if (!file.endsWith('.yml')) continue;
-    const workflow = YAML.parse(await readFile(new URL(file, directory), 'utf8'));
-    if (workflow.on?.schedule) workflows.push(workflow.name);
-  }
-  const source = await readFile(new URL('nightly-failures.yml', directory), 'utf8');
-  const workflow = YAML.parse(source);
-  assert.deepEqual([...workflows].sort(), [...SCHEDULED_WORKFLOWS].sort());
-  assert.deepEqual([...workflow.on.workflow_run.workflows].sort(), [...workflows].sort());
-  assert.deepEqual(workflow.on.workflow_run.types, ['completed']);
-  assert.deepEqual(workflow.permissions, { contents: 'read', actions: 'read', issues: 'write' });
-  assert.equal(workflow.concurrency['cancel-in-progress'], false);
-  assert.equal(workflow.jobs.report.steps[0].with.ref, '${{ github.event.repository.default_branch }}');
-  assert.equal(workflow.jobs.report.steps[0].with['persist-credentials'], false);
-  assert.doesNotMatch(source, /download-artifact|head_sha|continue-on-error/);
-  assert.equal(workflow.jobs.report.if, "github.event.workflow_run.event == 'schedule' && github.event.workflow_run.head_branch == github.event.repository.default_branch && github.event.workflow_run.head_repository.full_name == github.repository");
-});
-
 test('creates an actionable report with failed and timed out jobs, steps, artifacts and exact attempt', async () => {
   const client = fakeClient({
     jobs: [failedJob, { id: 457, name: 'native', conclusion: 'timed_out', steps: [{ number: 2, name: 'Compile', conclusion: 'timed_out' }] }],
@@ -78,8 +54,8 @@ test('creates an actionable report with failed and timed out jobs, steps, artifa
   assert.ok(client.calls.some(call => call.path === '/actions/runs/123/attempts/2/jobs'));
 });
 
-test('ignores successful, manual, pull request and unsupported workflow events', async () => {
-  for (const overrides of [{ conclusion: 'success' }, { event: 'workflow_dispatch' }, { event: 'pull_request' }, { name: 'untrusted' }, { status: 'in_progress' }, { head_branch: 'feature' }, { head_repository: { full_name: 'fork/repo' } }]) {
+test('ignores successful, manual, pull request, running, branch and fork runs', async () => {
+  for (const overrides of [{ conclusion: 'success' }, { event: 'workflow_dispatch' }, { event: 'pull_request' }, { status: 'in_progress' }, { head_branch: 'feature' }, { head_repository: { full_name: 'fork/repo' } }]) {
     const client = fakeClient({ jobs: [] });
     assert.ok((await report(client, overrides)).skipped);
     assert.deepEqual(writes(client), []);
@@ -177,17 +153,17 @@ test('report bounds large job matrices and excerpts within GitHub issue size', a
   assert.match(writes(client)[0].body.body, /additional affected jobs omitted/);
 });
 
-test('API client paginates jobs, issues, comments and artifacts', async () => {
-  for (const [path, key] of [['/actions/runs/1/attempts/1/jobs', 'jobs'], ['/issues?state=all'], ['/issues/1/comments'], ['/actions/runs/1/artifacts', 'artifacts']]) {
+test('API client paginates jobs in pages of 30, and issues, comments and artifacts in pages of 100', async () => {
+  for (const [path, key, size] of [['/actions/runs/1/attempts/1/jobs', 'jobs', 30], ['/issues?state=all', undefined, 100], ['/issues/1/comments', undefined, 100], ['/actions/runs/1/artifacts', 'artifacts', 100]]) {
     const urls = [];
     const client = createGitHubClient({ token: 'token', repository: 'owner/repo', fetchImpl: async (url) => {
       urls.push(url);
-      const items = new URL(url).searchParams.get('page') === '1' ? Array(100).fill({ id: 1 }) : [{ id: 2 }];
+      const items = new URL(url).searchParams.get('page') === '1' ? Array(size).fill({ id: 1 }) : [{ id: 2 }];
       return Response.json(key ? { [key]: items } : items);
     } });
-    assert.equal((await client.list(path, key)).length, 101);
+    assert.equal((await client.list(path, key)).length, size + 1);
     assert.equal(urls.length, 2);
-    assert.ok(urls[1].includes('per_page=100&page=2'));
+    assert.ok(urls[1].includes(`per_page=${size}&page=2`), urls[1]);
   }
 });
 
@@ -305,8 +281,17 @@ test('dry-run renders the report without any issue or comment writes', async () 
   assert.match(result.body, /nightly-workflow:45/);
   assert.match(result.body, /scientific parity failed/);
   assert.match(result.title, /ci requires attention/);
+  assert.equal(result.create, true);
   assert.deepEqual(writes(client), []);
-  assert.equal(client.calls.filter(call => call.path.startsWith('/issues')).length, 0);
+  // It reads the issues, so it says which issue it would comment on and which attempts were reported.
+  const existing = fakeClient({ issues: [{ number: 8, state: 'closed', body: '<!-- nightly-workflow:45 -->' }] });
+  const comment = await reportNightlyFailure({ run, repository: 'owner/repo', defaultBranch: 'main', client: existing, dryRun: true });
+  assert.equal(comment.comment, 8);
+  assert.match(comment.body, /^<!-- nightly-run:123:attempt:2 -->/);
+  const reported = fakeClient({ issues: [{ number: 8, state: 'closed', body: '<!-- nightly-workflow:45 -->' }], comments: [{ body: '<!-- nightly-run:123:attempt:2 -->', created_at: '2026-10-15T00:11:00Z' }] });
+  assert.deepEqual(await reportNightlyFailure({ run, repository: 'owner/repo', defaultBranch: 'main', client: reported, dryRun: true }), { dryRun: true, duplicate: true, issue: 8, reopened: true });
+  assert.deepEqual(writes(existing), []);
+  assert.deepEqual(writes(reported), []);
 });
 
 test('retries finish reopening a closed issue after an earlier comment succeeded', async () => {
@@ -314,8 +299,37 @@ test('retries finish reopening a closed issue after an earlier comment succeeded
     issues: [{ number: 8, state: 'closed', body: '<!-- nightly-workflow:45 -->' }],
     comments: [{ body: '<!-- nightly-run:123:attempt:2 -->\nexisting report' }],
   });
-  assert.deepEqual(await report(client), { duplicate: true, issue: 8 });
+  assert.deepEqual(await report(client), { duplicate: true, issue: 8, reopened: true });
   assert.deepEqual(writes(client), [{ path: '/issues/8', method: 'PATCH', body: { state: 'open' } }]);
+});
+
+test('a reported attempt seen again never reopens an issue closed after its report, nor reports twice', async () => {
+  const marker = '<!-- nightly-run:123:attempt:2 -->';
+  // Closed after the report comment: someone resolved it.
+  const commented = fakeClient({
+    issues: [{ number: 8, state: 'closed', closed_at: '2026-10-15T09:00:00Z', body: '<!-- nightly-workflow:45 -->' }],
+    comments: [{ body: `${marker}\nexisting report`, created_at: '2026-10-15T06:00:00Z' }],
+  });
+  assert.deepEqual(await report(commented), { duplicate: true, issue: 8 });
+  assert.deepEqual(writes(commented), []);
+  // Closed before the report comment: the tick that commented stopped before reopening.
+  const interrupted = fakeClient({
+    issues: [{ number: 8, state: 'closed', closed_at: '2026-10-14T09:00:00Z', body: '<!-- nightly-workflow:45 -->' }],
+    comments: [{ body: `${marker}\nexisting report`, created_at: '2026-10-15T06:00:00Z' }],
+  });
+  assert.deepEqual(await report(interrupted), { duplicate: true, issue: 8, reopened: true });
+  assert.deepEqual(writes(interrupted), [{ path: '/issues/8', method: 'PATCH', body: { state: 'open' } }]);
+  // The issue this report opened, closed since.
+  const opened = fakeClient({ issues: [{ number: 8, state: 'closed', closed_at: '2026-10-16T00:00:00Z', body: `<!-- nightly-workflow:45 -->\n${marker}` }] });
+  assert.deepEqual(await report(opened), { duplicate: true, issue: 8 });
+  assert.deepEqual(writes(opened), []);
+  // The marker sits in an older closed issue of the same workflow while a newer one is open.
+  const older = fakeClient({ issues: [
+    { number: 9, state: 'open', body: '<!-- nightly-workflow:45 -->\nnewer' },
+    { number: 8, state: 'closed', closed_at: '2026-10-16T00:00:00Z', body: `<!-- nightly-workflow:45 -->\n${marker}` },
+  ], comments: [] });
+  assert.deepEqual(await report(older), { duplicate: true, issue: 8 });
+  assert.deepEqual(writes(older), []);
 });
 
 test('human-authored issue and comment markers cannot suppress reports', async () => {
@@ -326,19 +340,6 @@ test('human-authored issue and comment markers cannot suppress reports', async (
     comments: [{ user: { login: 'someone' }, body: '<!-- nightly-run:123:attempt:2 -->' }],
   });
   assert.equal((await report(commentClient)).updated, true);
-});
-
-test('push and manual completions cannot displace pending scheduled reports in concurrency', async () => {
-  const workflow = YAML.parse(await readFile(new URL('../.github/workflows/nightly-failures.yml', import.meta.url), 'utf8'));
-  const group = (event, reporterId, workflowId = 45) => workflow.concurrency.group.replace(/\$\{\{(.*?)\}\}/g, (_, expression) => runInNewContext(expression, {
-    github: { run_id: reporterId, event: { workflow_run: { workflow_id: workflowId, event } } },
-  }));
-  assert.equal(group('schedule', 100), 'nightly-failure-report-45-schedule');
-  assert.equal(group('schedule', 101), group('schedule', 100));
-  assert.notEqual(group('push', 102), group('schedule', 100));
-  assert.notEqual(group('workflow_dispatch', 103), group('schedule', 100));
-  assert.notEqual(group('push', 102), group('push', 104));
-  assert.notEqual(group('schedule', 100, 46), group('schedule', 100));
 });
 
 test('mixed failures and cancellation prioritize the failure and retain the coverage warning', async () => {
