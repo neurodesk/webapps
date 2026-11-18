@@ -131,7 +131,7 @@ jobs:
           make -C exes/nii2tvx test
       - name: Test the shared packages every app is built from
         # Build nii2tvx first so its package suite exercises native/WebAssembly parity.
-        # The components' browser checks run in composite-site.
+        # The components' browser checks run in site-catalog.
         run: pnpm test:packages
       - name: Check correctness on full CI runs
         if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
@@ -209,6 +209,7 @@ jobs:
     # artifact budgets), so any PR that selects at least one app runs the
     # composite checks; only docs-only changes skip them. A dispatch follows
     # its plan too, so its gpu scope skips them.
+    # This job builds the site once; the site-* jobs check that build in parallel.
     if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name == 'push' || github.event_name == 'schedule' || needs.app-plan.outputs.has_site == 'true')
     runs-on: ubuntu-latest
     outputs:
@@ -235,40 +236,78 @@ jobs:
       - name: Set up wasm-opt
         uses: ./.github/actions/setup-wasm-opt
       - run: pnpm install --frozen-lockfile
-      - name: Install browser
-        run: |
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
-          node node_modules/@playwright/test/cli.js install --with-deps chromium firefox webkit
-      - name: Check custom element browser behavior
-        run: pnpm --filter @neurodesk/webapp-components test:elements:browser
-        env:
-          ELEMENT_ARTIFACTS: ${{ github.workspace }}/interface-artifacts/elements
-      - name: Check the component showcase boots in a browser
-        run: pnpm --filter @neurodesk/webapp-components test:showcase:browser
-      - name: Check passing files between apps in Chromium, Firefox and WebKit
-        run: pnpm --filter @neurodesk/webapp-components test:handoff:browser
       - name: Build the composite site
         run: pnpm build
+      # These three read dist-sites/ and the per-app builds, which only this job holds.
       - name: Enforce scientific-asset and hosting budgets
         run: pnpm audit:artifacts
-      - name: Check published automation contracts and operation registration
-        run: node test/automation-catalog.smoke.mjs
       - name: Test shared runtime assembly
         run: node --test test/runtime-assets.test.mjs
       - name: Check each catalogue site holds its apps and everything they load
         run: node --test test/catalog-sites.test.mjs
+      - name: Package the built site for the check jobs
+        run: |
+          tar -I 'zstd -T0 -3' -cf "$RUNNER_TEMP/composite-site.tar.zst" -C dist .
+          (cd "$RUNNER_TEMP" && sha256sum composite-site.tar.zst > composite-site.tar.zst.sha256)
+          ls -l "$RUNNER_TEMP/composite-site.tar.zst"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: composite-site-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/composite-site.tar.zst
+            ${{ runner.temp }}/composite-site.tar.zst.sha256
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+      - name: Check that agent interactions can run
+        id: agent-site
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.agentic_mode == 'interactions')
+        env:
+          NEURODESK_API_KEY: ${{ secrets.NEURODESK_API_KEY }}
+        run: |
+          if [ -z "$NEURODESK_API_KEY" ]; then
+            echo '::notice::Agent interactions not run: configure the NEURODESK_API_KEY repository secret.'
+            exit 0
+          fi
+          echo 'ready=true' >> "$GITHUB_OUTPUT"
+
+  site-runtime:
+    needs: composite-site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install browser
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
+          node node_modules/@playwright/test/cli.js install --with-deps chromium
+      - uses: ./.github/actions/composite-site
       - name: Verify resources persist across browser restarts
         run: pnpm test:resource-cache
       - name: Load threaded models with service-worker isolation
         run: pnpm test:runtime-startup
-      - name: Smoke test every deployed subpath
-        run: pnpm test:smoke
-      - name: Hand an image from DICOM View to White matter lesions in Chromium, Firefox and WebKit
-        run: pnpm test:app-handoff
-      - name: Check catalog e2e types
-        run: pnpm test:e2e:types
-      - name: Test every production workspace with e2e
-        run: pnpm test:e2e:catalog --skip-build --output .e2e/workspace
+
+  site-audit:
+    needs: composite-site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install browser
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
+          node node_modules/@playwright/test/cli.js install --with-deps chromium
+      - uses: ./.github/actions/composite-site
       # The audit imports one example per app at two widths. Reading them from
       # this checked copy keeps a stalled or rate-limited download from failing it.
       # It also holds the pinned files some apps' pages load before a run (PAGE_ASSET_APPS).
@@ -301,10 +340,6 @@ jobs:
         env:
           EXAMPLE_ASSET_CACHE: ${{ runner.temp }}/example-assets
           INTERFACE_ARTIFACTS: interface-artifacts
-      - name: Check interface workflows with image data
-        run: pnpm test:interface-workflows
-      - name: Check unified scan pickers with DICOM series
-        run: pnpm test:image-uploads
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -312,31 +347,29 @@ jobs:
           path: interface-artifacts/
           if-no-files-found: ignore
           retention-days: 7
-      - name: Check phone and tablet layouts and touch navigation
-        run: pnpm test:mobile
-      - name: Package the built catalog for agent interactions
-        id: agent-site
-        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.agentic_mode == 'interactions')
-        env:
-          NEURODESK_API_KEY: ${{ secrets.NEURODESK_API_KEY }}
-        run: |
-          if [ -z "$NEURODESK_API_KEY" ]; then
-            echo '::notice::Agent interactions not run: configure the NEURODESK_API_KEY repository secret.'
-            exit 0
-          fi
-          tar -czf "$RUNNER_TEMP/agent-catalog-site.tar.gz" -C dist .
-          (cd "$RUNNER_TEMP" && sha256sum agent-catalog-site.tar.gz > agent-catalog-site.tar.gz.sha256)
-          echo 'ready=true' >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@v7
-        if: steps.agent-site.outputs.ready == 'true'
+
+  site-e2e:
+    needs: composite-site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
-          name: agent-catalog-site-${{ github.sha }}
-          path: |
-            ${{ runner.temp }}/agent-catalog-site.tar.gz
-            ${{ runner.temp }}/agent-catalog-site.tar.gz.sha256
-          if-no-files-found: error
-          retention-days: 1
-          compression-level: 0
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install browser
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
+          node node_modules/@playwright/test/cli.js install --with-deps chromium
+      - uses: ./.github/actions/composite-site
+      - name: Smoke test every deployed subpath
+        run: pnpm test:smoke
+      - name: Check catalog e2e types
+        run: pnpm test:e2e:types
+      - name: Test every production workspace with e2e
+        run: pnpm test:e2e:catalog --skip-build --output .e2e/workspace
       - name: Run requested Neurodesk processing workflows
         if: github.event_name == 'workflow_dispatch' && inputs.agentic_mode == 'pipeline'
         env:
@@ -359,10 +392,70 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  site-mobile:
+    needs: composite-site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install browser
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
+          node node_modules/@playwright/test/cli.js install --with-deps chromium
+      - uses: ./.github/actions/composite-site
+      - name: Check interface workflows with image data
+        run: pnpm test:interface-workflows
+      - name: Check unified scan pickers with DICOM series
+        run: pnpm test:image-uploads
+      - name: Check phone and tablet layouts and touch navigation
+        run: pnpm test:mobile
+
+  # Catalogue-level and cross-browser checks: the same on every event.
+  site-catalog:
+    needs: composite-site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install browser
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
+          node node_modules/@playwright/test/cli.js install --with-deps chromium firefox webkit
+      - uses: ./.github/actions/composite-site
+      - name: Check custom element browser behavior
+        run: pnpm --filter @neurodesk/webapp-components test:elements:browser
+        env:
+          ELEMENT_ARTIFACTS: ${{ github.workspace }}/interface-artifacts/elements
+      - name: Check the component showcase boots in a browser
+        run: pnpm --filter @neurodesk/webapp-components test:showcase:browser
+      - name: Check passing files between apps in Chromium, Firefox and WebKit
+        run: pnpm --filter @neurodesk/webapp-components test:handoff:browser
+      - name: Check published automation contracts and operation registration
+        run: node test/automation-catalog.smoke.mjs
+      - name: Hand an image from DICOM View to White matter lesions in Chromium, Firefox and WebKit
+        run: pnpm test:app-handoff
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: interface-elements
+          path: interface-artifacts/
+          if-no-files-found: ignore
+          retention-days: 7
+
   # The repository's caches share 10 GB, and GitHub evicts the least recently used
   # above it: a superseded copy of the examples would push out Rust and reference-data caches.
   example-cache-retention:
-    needs: composite-site
+    needs: site-audit
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     # A cache left in place costs space, never a wrong result.
@@ -380,7 +473,8 @@ jobs:
           CACHE_REF: refs/heads/main
 
   agent-interactions:
-    needs: composite-site
+    # Interactions start only once every deterministic site check passed.
+    needs: [composite-site, site-runtime, site-audit, site-e2e, site-mobile, site-catalog]
     if: needs.composite-site.outputs.agent_site_ready == 'true'
     runs-on: ubuntu-latest
     strategy:
@@ -401,16 +495,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Install browser
         run: node node_modules/@playwright/test/cli.js install --with-deps chromium
-      - uses: actions/download-artifact@v8
-        with:
-          name: agent-catalog-site-${{ github.sha }}
-          path: ${{ runner.temp }}/agent-catalog-site
-      - name: Verify and unpack the tested composite site
-        run: |
-          cd "$RUNNER_TEMP/agent-catalog-site"
-          sha256sum --check agent-catalog-site.tar.gz.sha256
-          mkdir -p "$GITHUB_WORKSPACE/dist"
-          tar -xzf agent-catalog-site.tar.gz -C "$GITHUB_WORKSPACE/dist"
+      - uses: ./.github/actions/composite-site
       # Each target runs the selected tests in three shards on one worker each. Agent
       # actions accounted for 95-98% of the measured step time across four nightlies.
       # At the slow nights' observed throughput, 329 actions project to 186-192 minutes.

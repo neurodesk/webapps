@@ -75,7 +75,7 @@ Their live hosted workflows also passed separately. `SMOKE_APPS` restricts a
 rerun to named registered apps.
 
 A local `pnpm audit:interfaces` uses the network unless `EXAMPLE_ASSET_CACHE`
-is set. CI's `composite-site` job always sets it. Before the audit,
+is set. CI's `site-audit` job always sets it. Before the audit,
 `node scripts/fetch-example-cache.mjs <directory> --prune` brings the directory
 to the files the audit imports: the first example of each app and the pinned
 files the `PAGE_ASSET_APPS` pages load, 374 files and 1.75 GB for 63 apps on

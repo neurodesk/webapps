@@ -178,10 +178,10 @@ test('DWI2TRX preserves manual tracking-only selection', async () => {
 });
 
 test('the interface audit reads the example cache the job restored, filled and saves from main', async () => {
-  const { steps } = (await workflow('ci.yml')).jobs['composite-site'];
+  const { steps } = (await workflow('ci.yml')).jobs['site-audit'];
   const position = (description, matches) => {
     const found = steps.flatMap((step, index) => matches(step) ? [index] : []);
-    assert.equal(found.length, 1, `composite-site has one step that ${description}`);
+    assert.equal(found.length, 1, `site-audit has one step that ${description}`);
     return found[0];
   };
   const restoreAt = position('restores the examples', step => String(step.uses).startsWith('actions/cache/restore@') && step.with.key.startsWith('example-assets-'));
@@ -215,7 +215,7 @@ test('superseded per-commit caches are deleted by a job that holds nothing else'
   const pages = await workflow('deploy-pages.yml');
   const cacheKey = (job, prefix) => job.steps.map(step => step.with?.key).find(key => key?.startsWith(prefix));
   for (const [file, flow, id, saver, prefix] of [
-    ['ci.yml', ci, 'example-cache-retention', 'composite-site', 'example-assets-'],
+    ['ci.yml', ci, 'example-cache-retention', 'site-audit', 'example-assets-'],
     ['deploy-pages.yml', pages, 'turbo-cache-retention', 'build', 'turbo-pages-'],
   ]) {
     const job = flow.jobs[id];

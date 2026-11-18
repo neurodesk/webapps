@@ -210,6 +210,26 @@ runs every test, since the threshold is a CPU measurement: SynthSeg's four
 runs include every test. To run them before merging a shared change, dispatch
 `ci` on the branch.
 
+## Composite site checks
+
+`composite-site` builds the site once with `pnpm build`. It runs the three
+checks that read `dist-sites/` and the per-app builds (`audit:artifacts`,
+`runtime-assets.test.mjs`, `catalog-sites.test.mjs`) and uploads `dist/` as one
+zstd tar: 283 MB from 668 MB in 2.3 s on 18 November 2026. Five jobs download
+it through `.github/actions/composite-site` and check it in parallel:
+
+- `site-runtime`: resource cache and threaded runtime startup.
+- `site-audit`: the example cache and the interface audit.
+- `site-e2e`: composite smoke, e2e types, the workspace e2e catalog and
+  requested processing workflows.
+- `site-mobile`: interface workflows, scan pickers and mobile layouts.
+- `site-catalog`: component browser checks, automation contracts and the
+  cross-browser handoff.
+
+`agent-interactions` waits for all five. Before the split, one job ran every
+check in sequence for 31 to 33 minutes, and it was the last job of every ready
+one-app pull request.
+
 ## Module-level selection in the component package
 
 Every app depends on `packages/components`, so a change anywhere in it used

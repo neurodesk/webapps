@@ -11,7 +11,7 @@ import { AUTOMATION_CATALOG_READERS, createAppPlan, INDEPENDENT_ROOT_DEV_DEPENDE
 import { APP_JOBS, carriedApps, NIGHTLY_JOBS, RERUN_JOBS, testedBase } from '../scripts/lib/tested-base.mjs';
 import { lockfileImpact } from '../scripts/lib/lockfile-impact.mjs';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
-import { CATALOG, CATALOG_JOBS, loadConservativeWorkspaceGraph, reachableFrom, WorkspaceGraphConfigurationError } from '../scripts/lib/workspace-graph.mjs';
+import { CATALOG, CATALOG_JOBS, loadConservativeWorkspaceGraph, reachableFrom, siteJobNames, WorkspaceGraphConfigurationError } from '../scripts/lib/workspace-graph.mjs';
 
 const graph = loadConservativeWorkspaceGraph(repoRoot);
 
@@ -360,7 +360,7 @@ test('ESLint stays out of every app build, unit test and browser test', async ()
   // The per-app jobs run each app's build, test:e2e and release test script.
   for (const path of loaders) assert.ok(!catalog.has(path), `ci.yml's per-app jobs run ${path}`);
   const ci = parse(await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8'));
-  for (const name of [...CATALOG_JOBS, 'composite-site']) {
+  for (const name of [...CATALOG_JOBS, ...siteJobNames(ci)]) {
     for (const step of ci.jobs[name].steps) assert.doesNotMatch(step.run ?? '', /\blint\b|eslint/, `${name} runs lint`);
   }
   const packages = await workspaceScripts();

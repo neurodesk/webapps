@@ -11,7 +11,7 @@ import sourceParser from '@neurodesk/code-quality';
 // (`../../scripts/theme-app-dist.mjs`, `../../test-utils/dice.mjs`, and the
 // registry files those read) are nodes of their own, followed through their
 // imports to the packages they copy or bundle. SITE is a node for what ci.yml's
-// composite-site and dependent agent-interactions jobs run, CATALOG for what its per-app jobs run.
+// site jobs run (siteJobNames), CATALOG for what its per-app jobs run.
 // A false reference only widens the CI selection.
 
 const TOP_LEVEL = ['apps', 'packages', 'exes'];
@@ -50,6 +50,24 @@ export const CATALOG = '(catalog)';
 export const SITE = '(site)';
 // The ci.yml jobs that run once per selected app.
 export const CATALOG_JOBS = ['app-tests', 'browser-e2e', 'browser-e2e-gpu'];
+
+// ci.yml's site jobs: composite-site, which builds the site, every job that
+// waits for a site job (the site-* checks of that build, agent-interactions)
+// and agent-interactions, which older layouts ran inside composite-site.
+export function siteJobNames(ci) {
+  const jobs = ci?.jobs ?? {};
+  const names = ['composite-site'];
+  if (Object.hasOwn(jobs, 'agent-interactions')) names.push('agent-interactions');
+  for (let added = true; added;) {
+    added = false;
+    for (const [name, job] of Object.entries(jobs)) {
+      if (names.includes(name) || ![job?.needs ?? []].flat().some((need) => names.includes(need))) continue;
+      names.push(name);
+      added = true;
+    }
+  }
+  return names;
+}
 
 // Root files a set of CI commands names, following `pnpm <root script>` calls.
 function namedByCommands(commands, rootScripts) {
@@ -162,12 +180,8 @@ export async function loadConservativeWorkspaceGraph(root) {
     }
     return steps.map((step) => step.run ?? '');
   }).map((run) => run.replace(/pnpm --filter \S+ (?:run )?\S+/g, ''));
-  // Older workflow revisions ran interactions inside composite-site. Both layouts
-  // consume the site, so moving the command must preserve its site-only selection.
-  const siteJobs = ['composite-site'];
-  if (Object.hasOwn(ci?.jobs ?? {}, 'agent-interactions')) siteJobs.push('agent-interactions');
   const entries = [
-    [SITE, runs(siteJobs)],
+    [SITE, runs(siteJobNames(ci))],
     [CATALOG, runs(CATALOG_JOBS)],
   ];
   // Root tool configs (e2e.config.ts, tsconfig.agentic.json) are read implicitly

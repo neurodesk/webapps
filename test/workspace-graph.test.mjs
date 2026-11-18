@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test, { after } from 'node:test';
 import { stringify } from 'yaml';
-import { CATALOG, CATALOG_JOBS, INDEPENDENT_CONFIG, SITE, WorkspaceGraphConfigurationError, loadConservativeWorkspaceGraph, reachableFrom } from '../scripts/lib/workspace-graph.mjs';
+import { CATALOG, CATALOG_JOBS, INDEPENDENT_CONFIG, SITE, WorkspaceGraphConfigurationError, loadConservativeWorkspaceGraph, reachableFrom, siteJobNames } from '../scripts/lib/workspace-graph.mjs';
 
 const json = (value) => JSON.stringify(value, null, 2);
 
@@ -373,6 +373,29 @@ test('a separate interaction job contributes site-only command roots and validat
     await writeFile(join(root, '.github/workflows/ci.yml'), stringify({ jobs: { ...CI.jobs, 'agent-interactions': job } }));
     await assert.rejects(loadConservativeWorkspaceGraph(root), WorkspaceGraphConfigurationError);
   }
+});
+
+test('jobs that wait for a site job contribute site-only command roots', async () => {
+  // ci.yml builds the site in composite-site and checks that build in jobs that wait for it.
+  const ci = { jobs: {
+    ...CI.jobs,
+    'site-check': { needs: 'composite-site', steps: [{ run: 'pnpm check' }] },
+    cleanup: { needs: ['site-check', 'app-tests'], steps: [{ run: 'node scripts/cleanup-only.mjs' }] },
+  } };
+  assert.deepEqual(siteJobNames(ci), ['composite-site', 'site-check', 'cleanup']);
+  const root = await fixture({
+    'package.json': json({ scripts: { check: 'node scripts/check-only.mjs' } }),
+    '.github/workflows/ci.yml': stringify(ci),
+    'scripts/check-only.mjs': 'export const value = 1;\n',
+    'scripts/cleanup-only.mjs': 'export const value = 1;\n',
+  });
+  const graph = await loadConservativeWorkspaceGraph(root);
+  for (const file of ['scripts/check-only.mjs', 'scripts/cleanup-only.mjs']) {
+    assert.ok(reachableFrom(graph, SITE).has(file), file);
+    assert.ok(!reachableFrom(graph, CATALOG).has(file), file);
+  }
+  await writeFile(join(root, '.github/workflows/ci.yml'), stringify({ jobs: { ...ci.jobs, 'site-check': { needs: 'composite-site', uses: './reusable.yml' } } }));
+  await assert.rejects(loadConservativeWorkspaceGraph(root), WorkspaceGraphConfigurationError);
 });
 
 test('a missing or step-less CI job is a configuration error naming the job', async () => {

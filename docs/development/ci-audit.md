@@ -39,8 +39,8 @@ test data affect comparisons.
 | Mutation checks | `mutation-quality` | PR smoke plus the complete scheduled/manual mutation run. |
 | App unit tests and builds | `ci / app-tests` | Affected-app matrix and conservative dependency fallback. |
 | Scientific browser tests | `ci / browser-e2e` and `browser-e2e-gpu` | Pinned data, output parity, CPU and real GPU behavior. Broad PRs defer the GPU matrix to main/nightly under the existing policy. |
-| Built runtime assembly | `ci / composite-site` | Requires the assembled production site. Source-only runtime contract tests belong to root contracts. |
-| Production browser, automation, interface, upload and mobile checks | `ci / composite-site` | Different checks of the deployed layout and workflows; retain all. |
+| Built runtime assembly | `ci / composite-site` | Requires the assembled production site and the per-app builds. Source-only runtime contract tests belong to root contracts. |
+| Production browser, automation, interface, upload and mobile checks | `ci / site-runtime`, `site-audit`, `site-e2e`, `site-mobile`, `site-catalog` | Different checks of the one build `composite-site` uploads; retain all. |
 | Agent interactions | Scheduled/manual CI | External model calls are separate from deterministic browser coverage. |
 | Homepage game and leaderboard | `ci / homepage-easter-egg` | Nested packages and homepage integration have independent tests. |
 | Committed N4 WebAssembly rebuild | `n4-wasm-source` | A Docker ITK-Wasm build with an 8 GB limit, so weekly and manual only; `dwi-native` tests the committed module on each change. |

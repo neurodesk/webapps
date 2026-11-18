@@ -1,0 +1,20 @@
+name: Unpack the composite site
+description: >-
+  Download the dist/ that the composite-site job of ci.yml built and packaged,
+  check it against the checksum packaged beside it and unpack it into dist/,
+  so every site check tests the same bytes.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/download-artifact@v8
+      with:
+        name: composite-site-${{ github.sha }}
+        path: ${{ runner.temp }}/composite-site
+    - name: Verify and unpack the built site
+      shell: bash
+      run: |
+        cd "$RUNNER_TEMP/composite-site"
+        sha256sum --check composite-site.tar.zst.sha256
+        mkdir -p "$GITHUB_WORKSPACE/dist"
+        tar -I zstd -xf composite-site.tar.zst -C "$GITHUB_WORKSPACE/dist"

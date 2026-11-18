@@ -51,7 +51,7 @@ export function testedBase({ runs, head, branch, git, workflow = 'ci', atHead = 
 // that has not finished, or an app id the registry does not know cannot be
 // tied to an app. test/app-plan.test.mjs holds ci.yml to these job lists.
 export const APP_JOBS = ['app-tests', 'browser-e2e', 'browser-e2e-gpu'];
-export const RERUN_JOBS = ['workspace-contracts', 'composite-site', 'homepage-easter-egg', 'example-cache-retention', 'full-plan', 'full-plan-withheld'];
+export const RERUN_JOBS = ['workspace-contracts', 'composite-site', 'site-runtime', 'site-audit', 'site-e2e', 'site-mobile', 'site-catalog', 'homepage-easter-egg', 'example-cache-retention', 'full-plan', 'full-plan-withheld'];
 export const NIGHTLY_JOBS = ['agent-interactions'];
 const APP_JOB = new RegExp(`^(?:${APP_JOBS.join('|')}) \\(([^,)]+)[,)]`);
 const UNPASSED = new Set(['failure', 'cancelled', 'timed_out', 'startup_failure', 'action_required', 'stale']);
