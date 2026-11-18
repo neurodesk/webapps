@@ -1,8 +1,8 @@
 # CI development tiers
 
 Keep iterative PRs in draft. Drafts run repository contracts, package tests,
-lint, the homepage easter egg when the change reaches a file its job reads, and
-app unit/browser tests for directly edited `apps/<id>/` files and
+lint, the homepage easter egg unless every changed path lies in a tree it
+cannot read, and app unit/browser tests for directly edited `apps/<id>/` files and
 `models/<id>.manifest.json`. If the diff cannot be determined, the app planner
 keeps its conservative full selection. Changes confined to shared packages
 receive package tests during development; their downstream applications run
@@ -181,8 +181,9 @@ report shows these runs in their own row.
 `WORKFLOWS` in `scripts/lib/ci-measures.mjs` gives each workflow, by name, and
 each `ci` job, by the name the API lists it under (its `name:`, else its id), a role: `plan` (planner, gate, plan marker), `fixed` (the baseline
 group the share is measured against: `workspace-contracts`, which still runs on
-every `ci` run, and `homepage-easter-egg`, which the plan now runs only where a
-change reaches it), `app`,
+every `ci` run, and `homepage-easter-egg`, which still runs on every push,
+nightly and dispatch and which a pull request skips only when every changed
+path lies in a tree it cannot read), `app`,
 `site`, `test`, `deliver` or `report`. In a test workflow the reusable gate's
 jobs plan and every other job tests. A workflow or `ci` job the table does not
 name is `unclassified`: it counts in the totals and in no share, and the report
@@ -314,8 +315,9 @@ callback, the catalogue helpers; a chain that stops at a mapping or list, or a
 whole catalogue entry, reads every key below it) and fails when the table does
 not list the file for one. Any other use of the registry object the check does
 not recognise, such as nested destructuring, a spread or a call to an unknown
-function, reads every key. The easter egg reads `registry/apps.yml`, so any
-registry change runs it.
+function, a computed member (`registry[key]`) or computed destructuring
+(`const { [key]: section } = registry`), reads every key. The easter egg reads
+`registry/apps.yml`, so a pull request that changes the registry runs it.
 
 A `ci.yml` change is compared job by job on the parsed workflow, so a comment
 changes nothing (`CI_JOB_SCOPES` in `scripts/lib/app-plan.mjs`). It narrows only
@@ -335,22 +337,23 @@ change that breaks an app job is found there.
 in 63 draft runs, the two fixed jobs alone 956; the easter egg used 445 minutes
 in 102 runs in which no pull request touched it. `workspace-contracts` still
 runs on every run and tests every package (`pnpm test:packages`), as before.
-`homepage-easter-egg` waits for the plan, which runs it from
-`EASTER_EGG_INPUTS` in `scripts/lib/app-plan.mjs`: the files its six commands
-read, listed from the code they run (everything under `site/`, its root test,
-the landing page and registry it renders, the analytics script its e2e
-preview copies), plus the lockfile's root and easter-egg importers, its own
-`ci.yml` job, root install scripts and any path no rule says it leaves
-unread. `test/app-plan.test.mjs` pins the job's commands, the package scripts
-they run and the imports and URLs of the files the table names, so a new
-input fails it. It also runs on the nightly and on `scope=all` or `scope=site`
-dispatches. Like every job after the plan, it does not run when the plan
-fails, which fails the run. A push carries it from main: it passes in a run
-only on `success`, or when skipped while that run's `app-plan` succeeded, and
-the push runs it in full when it did not pass in the most recent `ci` run on
-main from the base up to the head in which it was due (cancelled and
-unfinished runs included), or when that run's jobs cannot be read
-(`carriedPlannedJobs`).
+`homepage-easter-egg` runs on every push, nightly and dispatch but
+`scope=gpu`, as before, and also when the plan fails (`!cancelled()`). A pull
+request skips it only on proof: the plan succeeded and every changed path lies
+in a tree the job cannot read (`easterEggCannotRead` in
+`scripts/lib/app-plan.mjs`). The trees are `apps/`, `exes/`, `models/`,
+`docs/` and every package outside the job's closure, which is
+`packages/analytics` alone. A `package.json` in them still runs it, because
+its `pnpm install` reads every workspace manifest and runs their install
+scripts. Any other path runs it: every root file, `.github/`, `.changeset/`,
+`scripts/`, `test-utils/`, `test/`, `registry/`, `site/`, `templates/`, the
+lockfile and workspace files, and a path no rule knows. `EASTER_EGG_INPUTS`
+lists the files the job reads, the evidence that no skip tree holds one:
+`test/app-plan.test.mjs` pins the job's commands and the package scripts they
+run, follows the imports and URLs of the test, the inputs and every source
+file of the easter-egg packages, and requires every file the job's
+environment names (the Playwright reporter in `PW_TEST_REPORTER`) to be in
+the table and outside the skip trees.
 
 Every root `package.json` script a `ci.yml` job runs, directly or through
 another script, is a planner input, read from `ci.yml` (`jobScripts` in the
@@ -358,10 +361,19 @@ workspace graph): one only the site jobs run selects the site build, any other
 every app. `test/ci-required-jobs.test.mjs` runs twice per run, in `app-plan`
 (`pnpm check:integration`) and in `workspace-contracts` (`pnpm
 test:contracts`). It fails when a required job is missing, carries
-`continue-on-error`, runs under another condition, or has a run step that can
-be skipped other than the ten it lists, and when either guard step is missing,
-conditional or soft. `example-cache-retention` may fail by design and is not
-required.
+`continue-on-error`, runs under another condition or waits for other jobs than
+it pins, or has a run step that can be skipped other than the ten it lists,
+and when either guard step is missing, conditional or soft. It also fails when
+a required job needs a job that can be skipped on a run where the required job
+is due: it simulates every trigger of `ci.yml` (each event, pull request
+action and draft state, dispatch scope and branch) with every value of the
+outputs the job and the jobs it waits for read. A job whose condition admits a
+skipped dependency with a status function (`!cancelled()`, `always()`) may
+need one; a condition the simulation cannot evaluate fails it.
+`example-cache-retention` may fail by design and is not required. A change
+that removes both guards is caught only by review and by the full plan it
+triggers: a change to the plan job or to a root script `ci.yml` runs selects
+every app.
 
 Package suites can be narrowed safely only from recorded evidence of what each
 suite reads at run time, not from scanning text for paths. The wall time of
@@ -382,13 +394,20 @@ Replayed over 22 merged pull requests, #864, #872 and the 20 merged up to
 fixes against the same oracle), the planner had 0 app misses before and after.
 The fixes cost 35 instead of 31 of 1,386 app-test jobs: #872 and #861 now test
 dicompare and Pipeline builder, whose desktop scripts read every catalogue key.
-The easter egg ran for the same 3 of the 22. The oracle has no expectation of
+Under the skip list a pull request skips the easter egg in 7 of the 22 (#883,
+#875, #871, #869, #867, #865, #855); the others change `.github/`, a root file,
+`test/`, `scripts/`, `registry/`, `site/`, `.changeset/` or a `package.json`.
+The second replay, of the planner before and after the skip list, selected the
+same apps with 0 misses. The oracle has no expectation of
 its own for site keys or `ci.yml` jobs, and the report lists the 4 rows
 narrowed through them (#864, #872, #861, #854); an independent oracle for both
 is a follow-up. Replayed over every `ci` run of 16 to 18 November (each pull
 request diffed from main as it stood when its run started, each push from its
 parent), the planner leaves out 2,288 minutes of per-app jobs (2,304 before the
-fixes, the #864 and #872 runs) and 405 of the 437 easter-egg minutes.
+fixes, the #864 and #872 runs). The easter egg used 437 minutes in those runs,
+376 in 93 pull request runs and 62 in 12 pushes; the skip list leaves it out
+of 19 of the pull request runs, 79 minutes. 57 of the 74 pull request runs that
+still run it changed `.github/`, most of them this CI work itself.
 
 ## Module-level selection in the component package
 
@@ -466,12 +485,10 @@ finished main run, covering accumulated merges. When that run failed, the
 push also selects the apps whose `app-tests` or browser jobs did not pass
 there (`resolveCiBase`, `carriedApps`): on 13 November 2026 synthsr's GPU job
 failed for 7 hours, and each push in that time tested all 63 apps from the
-last green run; replayed, the second of them selects synthsr alone. A
-`workspace-contracts` or `homepage-easter-egg` job that did not pass there runs
-again in full on the push, whichever base it takes. Any other failed job that
-belongs to no app, such as the plan itself, a per-app job of that attempt that
-has not finished, or an app id the registry does not know sends the push back
-to the last green run. A carried app runs all its jobs again, but a push
+last green run; replayed, the second of them selects synthsr alone. A failed
+job that belongs to no app, such as the plan itself, a job of that attempt
+that has not finished, or an app id the registry does not know sends the push
+back to the last green run. A carried app runs all its jobs again, but a push
 leaves out `@slow` tests, so an app a nightly failed in a `@slow` test is
 retested in full only by the next nightly. Jobs only the nightly runs
 (`agent-interactions`) are not carried: the nightly runs them again. PR pushes cancel earlier runs
