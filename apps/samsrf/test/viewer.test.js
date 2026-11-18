@@ -80,6 +80,52 @@ class FakeNiiVue {
 const shown = (nv) => nv.meshes.map(({ positions, layers }) => ({ positions: [...positions], layers }));
 const MAP = new Float32Array(4).fill(1.5);
 
+test("Clear waits for a NiiVue surface read before removing its mesh", async () => {
+  const nv = new FakeNiiVue();
+  const viewer = createSurfaceViewer("gl1", nv);
+  const mesh = nv.hold("lh.inflated.mz3");
+  const loading = viewer.showSurface(surface(INFLATED), null);
+  await mesh.reached;
+  const clearing = viewer.showSurface(null);
+  await new Promise(setImmediate);
+  mesh.release();
+  assert.deepEqual(await Promise.all([loading, clearing]), [false, true]);
+  assert.deepEqual(shown(nv), []);
+  assert.equal(viewer.hasSurface, false);
+  await viewer.showMap(MAP, "polar");
+  assert.deepEqual(shown(nv), []);
+});
+
+test("a replacement waits for a NiiVue surface read and remains the only mesh", async () => {
+  const nv = new FakeNiiVue();
+  const viewer = createSurfaceViewer("gl1", nv);
+  const mesh = nv.hold("lh.inflated.mz3");
+  const loading = viewer.showSurface(surface(INFLATED), null);
+  await mesh.reached;
+  const replacing = viewer.showSurface(surface(WHITE, "lh.white"), null);
+  await new Promise(setImmediate);
+  mesh.release();
+  assert.deepEqual(await Promise.all([loading, replacing]), [false, true]);
+  assert.deepEqual(shown(nv), [{ positions: WHITE, layers: [] }]);
+  assert.equal(viewer.hasSurface, true);
+  await viewer.showMap(MAP, "polar");
+  assert.deepEqual(shown(nv), [{ positions: WHITE, layers: ["map"] }]);
+});
+
+test("a replaced surface that NiiVue cannot draw resolves without reporting an error", async () => {
+  const nv = new FakeNiiVue();
+  const viewer = createSurfaceViewer("gl1", nv);
+  const mesh = nv.hold("lh.inflated.mz3");
+  const loading = viewer.showSurface(new File([EMPTY], "lh.inflated"), null);
+  await mesh.reached;
+  const replacing = viewer.showSurface(surface(WHITE, "lh.white"), null);
+  await new Promise(setImmediate);
+  mesh.release();
+  assert.deepEqual(await Promise.all([loading, replacing]), [false, true]);
+  assert.deepEqual(shown(nv), [{ positions: WHITE, layers: [] }]);
+  assert.equal(viewer.hasSurface, true);
+});
+
 test("clearing a surface while its curvature loads leaves nothing for the next map", async () => {
   const nv = new FakeNiiVue();
   const viewer = createSurfaceViewer("gl1", nv);

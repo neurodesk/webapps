@@ -54,7 +54,7 @@ export function createSurfaceViewer(canvasId, nv = new NiiVue({ isDragDropEnable
     },
     /**
      * Show a surface, shaded by curvature when a curv file is given, or none for null. Drops any
-     * map. Resolves false, without a change or an error, when a later call replaced the surface.
+     * map. A replaced load resolves false without becoming the shown surface or reporting an error.
      */
     async showSurface(mesh, curvature) {
       const call = ++surfaceCalls;
