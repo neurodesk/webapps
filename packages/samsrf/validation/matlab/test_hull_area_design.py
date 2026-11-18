@@ -65,6 +65,29 @@ class Predictions(unittest.TestCase):
 
 
 class Models(unittest.TestCase):
+    def test_dispatch_one_requires_its_own_complete_inventory_explicitly(self):
+        inputs = json.loads((HERE / 'hull-area-inputs.json').read_text())
+        cases = [{'kind': 'hull-area', 'id': 'area_' + entry['identity']}
+                 for entry in inputs['sets']]
+        cases += [{'kind': 'linspace', 'id': 'linspace_' + entry['identity']}
+                  for entry in inputs['linspace']]
+        with tempfile.TemporaryDirectory() as temporary:
+            recording = Path(temporary)
+            host = recording / 'host'
+            host.mkdir()
+            (host / 'environment.json').write_text(json.dumps({
+                'mode': 'hull-area', 'cpu': 'Model name: Intel Xeon\n'}))
+            listing = host / 'geometry.json'
+            listing.write_text(json.dumps({'cases': cases}))
+            # Inventory validation is independent of which numerical roles are selected.
+            result = report.judge(recording, set(), [], dispatch=1)
+            self.assertFalse(result['decides'])
+            with self.assertRaisesRegex(AssertionError, 'inventory'):
+                report.judge(recording, set(), [])
+            listing.write_text(json.dumps({'cases': cases[1:]}))
+            with self.assertRaisesRegex(AssertionError, 'inventory'):
+                report.judge(recording, set(), [], dispatch=1)
+
     def test_recorded_indices_are_integers_in_range(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

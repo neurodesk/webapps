@@ -2408,9 +2408,11 @@ it loses nothing.
   port does not reproduce how MATLAB splits these self-intersecting clusters into
   rings, so the hull can start elsewhere. With MATLAB's own stored shapes, the
   rules above give all 316 template clusters' centroids. With the port's rings, 30
-  template values (15 per host, `TEMPLATE_HULL_START`) still round differently,
+  double template values (15 per host, `TEMPLATE_HULL_START`) still round differently,
   within 1e-12 relative. Three of them per host were exact before, which keeps the
   diagnostic out of production: lh 29 `Centre`, lh 33 `x0` and rh 11 `Centre`.
+  The corresponding single runs lose those same three values per host, for
+  twelve losses across both precisions and hosts.
 
 Exact values on every recorded case the hull work reaches, per host (both hosts
 agree). Base is commit 3f90ac124. The stored order is commit 860f39a67's
@@ -2420,9 +2422,10 @@ compared.
 
 The production regression checks freeze the base `3f90ac124` output bits for
 the seven original polygon families and both CLI RC hull runs on each host.
-They also require the three formerly exact template-CF values per host to stay
-exact. Switching the default to `Stored` fails all three checks. These are
-guards against losing previous agreement, not claims of MATLAB parity for
+They also require the three formerly exact template-CF values per precision
+and host to stay exact. This CF guard prevents the known losses; it does not
+freeze every CF output row. Switching the default to `Stored` fails all three
+checks. These are guards against losing previous agreement, not claims of MATLAB parity for
 the remaining differences; the stored-order diagnostic is tested separately.
 
 | Recorded cases (values per host) | Base exact | Stored order exact | Gained | Lost |
@@ -2431,7 +2434,7 @@ the remaining differences; the stored-order diagnostic is tested separately.
 | Probe polygons (99,462) | 38,762 | 94,184 | 56,322 | 900 |
 | Causal polygons (32,247) | 7,045 | 29,563 | 22,633 | 115 |
 | Reproducer polygons (83,454) | 644 | 22,083 | 21,535 | 96 |
-| Real-template CF hull `x0`, `y0`, `Centre`, `Surround` (320) | 215 | 305 | 93 | 3 |
+| Double real-template CF hull `x0`, `y0`, `Centre`, `Surround` (320) | 215 | 305 | 93 | 3 |
 | Revcor replays, `x0` and `y0` of every analysis (3,738) | 3,382 | 3,738 | 356 | 0 |
 | Revcor pipelines, `x0` and `y0` of every analysis (16,168) | 15,804 | 16,160 | 356 | 0 |
 | SamSrfAnalysis RC hulls from MATLAB's courses, AMD (42 vertices) | `x0` 8, `y0` 21, `Fwhm` 15 | 42, 42, 27 | 34, 21, 13 | 0, 0, 1 |
@@ -2466,6 +2469,12 @@ nothing changed and no recording was spent on it.
 Still open for these hulls: `convexHull`'s area (round hull-area-1 refuted every
 candidate; see its results), MATLAB's ring decomposition of self-intersecting
 polygons, and so the stored order's adoption in production.
+
+To replay dispatch 1's historical discovery report, run
+`python3 hull_area_report.py discovery RECORDING DECISION_JSON --dispatch-1`
+from this directory. That option requires the entire original inventory. The
+default commands, including the CI `check`, require dispatch 2's original and
+fresh cases together; a missing fresh family cannot silently select dispatch 1.
 
 ### Experimental Clipper model (not in production, #732 open)
 

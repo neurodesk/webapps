@@ -284,10 +284,13 @@ fn real_template_cf_maps_match_matlab_on(root: &Path, cases: &[Value]) {
                 // Production keeps the listed hull, within 1e-12 as before.
                 close(actual[row], expected, 1e-12 * expected.abs().max(1.0), &context);
                 // These recorded values were exact before the stored-order experiment.
-                // Its three losses per host must not enter the default CF path.
+                // Its three losses per precision and host must not enter the default CF path.
                 if [("template_lh_double_hull", 29, "Centre"),
                     ("template_lh_double_hull", 33, "x0"),
-                    ("template_rh_double_hull", 11, "Centre")].contains(&(id, vertex, label.as_str())) {
+                    ("template_rh_double_hull", 11, "Centre"),
+                    ("template_lh_single_hull", 29, "Centre"),
+                    ("template_lh_single_hull", 33, "x0"),
+                    ("template_rh_single_hull", 11, "Centre")].contains(&(id, vertex, label.as_str())) {
                     assert_eq!(actual[row].to_bits(), expected.to_bits(), "{context}: production lost an exact base value");
                 }
                 let stored_context = format!("{context} (stored order)");

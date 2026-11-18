@@ -2,7 +2,7 @@
 """Judge round hull-area-1 on its recording, as hull-area-predictions.md fixes.
 
 Usage:
-  hull_area_report.py discovery RECORDING DECISION_JSON
+  hull_area_report.py discovery RECORDING DECISION_JSON [--dispatch-1]
   hull_area_report.py heldout RECORDING DECISION_JSON REPORT_JSON
   hull_area_report.py check RECORDING
 RECORDING holds one directory per host, each record_geometry(..., 'hull-area')
@@ -12,6 +12,8 @@ every AMD host. `heldout` judges only those models, on the held-out and fresh
 sets and grids (the addendum's). Only AMD hosts decide; others are reported.
 `check` runs both on the pinned recording (hull-area-reference.json) and fails
 unless they reach the round's recorded outcome.
+The explicit --dispatch-1 option replays the historical first discovery run
+against its original complete inventory, without the later fresh cases.
 """
 import hashlib
 import json
@@ -81,10 +83,13 @@ def area_models(points, k, triangles, corner_points, corner_k, corner_triangles)
     return out
 
 
-def judge(recording, roles, models):
+def judge(recording, roles, models, dispatch=2):
+    assert dispatch in (1, 2), 'unknown hull-area dispatch'
     frozen = {'sets': {}, 'linspace': {}}
     spec, grids = {}, {}
     for name, expected in FROZEN.items():
+        if dispatch == 1 and name == 'hull-area-inputs-2.json':
+            continue
         inputs = json.loads((HERE / name).read_text())
         predicted = design.predictions(inputs)
         if design.digest(predicted) != expected:
@@ -156,9 +161,13 @@ def judge(recording, roles, models):
 
 
 def main(arguments):
+    dispatch = 2
+    if len(arguments) == 4 and arguments[0] == 'discovery' and arguments[-1] == '--dispatch-1':
+        dispatch = 1
+        arguments = arguments[:-1]
     if len(arguments) == 3 and arguments[0] == 'discovery':
         models = ['K', *design.AREA_MODELS, *CONDITIONAL, *design.GRID_MODELS]
-        report = judge(Path(arguments[1]), {'discovery'}, models)
+        report = judge(Path(arguments[1]), {'discovery'}, models, dispatch=dispatch)
         Path(arguments[2]).write_text(json.dumps(report, indent=1) + '\n')
     elif len(arguments) == 4 and arguments[0] == 'heldout':
         decision = json.loads(Path(arguments[2]).read_text())
