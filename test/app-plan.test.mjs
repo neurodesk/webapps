@@ -593,7 +593,7 @@ test('a registry entry change selects that app and the site build', async () => 
   assert.deepEqual(qsmbly.selected.map((app) => app.id), ['qsmbly', 'brain-extraction']);
 });
 
-test('app registration with its lockfile importer stays scoped to that webapp', async () => {
+test('app registration with its lockfile importer stays scoped to that webapp and the builds listing every app', async () => {
   const text = await readFile(join(repoRoot, 'registry/apps.yml'), 'utf8');
   const without = parse(text);
   without.apps = without.apps.filter((app) => app.id !== 'surfannotate');
@@ -603,12 +603,13 @@ test('app registration with its lockfile importer stays scoped to that webapp', 
       lock.importers['apps/surfannotate'] = { dependencies: { '@niivue/niivue': dep('1.0.0') } };
     }))],
   ]));
-  assert.deepEqual(plan.selected.map((app) => app.id), ['surfannotate']);
-  assert.deepEqual(plan.browserApps.include.map(({ app }) => app), ['surfannotate']);
+  // Pipeline Builder generates a tool per operation of every registered app.
+  assert.deepEqual(plan.selected.map((app) => app.id), ['surfannotate', 'pipeline-builder']);
+  assert.deepEqual(plan.browserApps.include.map(({ app }) => app), ['surfannotate', 'pipeline-builder']);
   assert.equal(plan.allApps, false);
 });
 
-test('reordering registry entries selects no app but the site build; removing one selects the handoff menus', async () => {
+test('reordering registry entries selects no app but the site build; removing one selects the handoff menus and the tool catalog', async () => {
   const text = await readFile(join(repoRoot, 'registry/apps.yml'), 'utf8');
   const retired = parse(text);
   retired.apps.push({ ...entry(retired, 'niimath'), id: 'retired', path: 'retired' });
@@ -616,8 +617,8 @@ test('reordering registry entries selects no app but the site build; removing on
   const reordered = await registryPlan((after) => {
     after.apps.reverse();
   });
-  // DICOM View's "Open in another webapp" menu listed the removed app.
-  assert.deepEqual(removed.selected.map((app) => app.id), ['dicomview']);
+  // DICOM View's "Open in another webapp" menu listed the removed app, and Pipeline Builder its tools.
+  assert.deepEqual(removed.selected.map((app) => app.id), ['dicomview', 'pipeline-builder']);
   assert.deepEqual(reordered.selected, []);
   for (const plan of [removed, reordered]) {
     assert.equal(plan.site, true);
@@ -677,6 +678,32 @@ test('a registry change to what the handoff menus list selects the apps that ren
   const blind = createAppPlan(registry, ['registry/apps.yml'], null, new Map([['registry/apps.yml', { before: text, after: stringify(renamed) }]]));
   assert.equal(blind.allApps, true);
   assert.match(blind.reasons.fallback, /the apps that render one are unknown/);
+});
+
+test('removing or registering an app selects the builds that generate tools from every registered app', async () => {
+  const registry = await loadAppsRegistry();
+  const files = ['registry/apps.yml', 'registry/app-information.yml', 'registry/standalone.json'];
+  const [apps, information, standalone] = await Promise.all(files.map((file) => readFile(join(repoRoot, file), 'utf8')));
+  const without = parse(apps);
+  without.apps = without.apps.filter((app) => app.id !== 'niimath');
+  const info = parse(information);
+  delete info.apps.niimath;
+  const catalog = JSON.parse(standalone);
+  delete catalog.apps.niimath;
+  const removedTexts = [stringify(without), stringify(info), `${JSON.stringify(catalog, null, 2)}\n`];
+  const plan = (registered, before, after) => createAppPlan(registered, files, workspace, new Map(files.map((file, index) => [file, { before: before[index], after: after[index] }])));
+  const workspace = await graph;
+  const remaining = { ...registry, apps: registry.apps.filter((app) => app.id !== 'niimath') };
+  // Pipeline Builder bundles a tool per operation of every registered app (scripts/lib/neuroflow-bundle.mjs).
+  const removed = plan(remaining, [apps, information, standalone], removedTexts);
+  assert.deepEqual(removed.selected.map((app) => app.id).sort(), ['dicomview', 'pipeline-builder']);
+  assert.ok(removed.reasons.apps['pipeline-builder'].some((reason) => reason.startsWith('registry/apps.yml: the registered apps changed')));
+  assert.equal(removed.allApps, false);
+  const added = plan(registry, removedTexts, [apps, information, standalone]);
+  assert.deepEqual(added.selected.map((app) => app.id).sort(), ['dicomview', 'niimath', 'pipeline-builder']);
+  // Without a graph the builds reading the registered apps are unknown.
+  const blind = createAppPlan(registry, ['registry/apps.yml'], null, new Map([['registry/apps.yml', { before: removedTexts[0], after: apps }]]));
+  assert.equal(blind.allApps, true);
 });
 
 test('a registry entry field the planner does not classify tests every app', async () => {

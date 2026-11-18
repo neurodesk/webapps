@@ -260,10 +260,15 @@ alone. Two places keep the other dependencies inside the selection:
   app's page carries the handoff catalog of every app its hosts serve, so a
   `registry/apps.yml` change to what that catalog lists (an app's id, path,
   title, `handoff`, `support_status` or hosts) selects the apps that render it:
-  those whose code names `HANDOFF_CATALOG_READERS` (DICOM View). A file of one
-  app that another app's code names by a relative path selects that app too:
-  DICOM View and SeedSeg stage dicompare's embedding kit, and seven apps' tests
-  read the CALMaR T1 fixture.
+  those whose code names `HANDOFF_CATALOG_READERS` (DICOM View). A change to
+  which apps are registered also selects the apps that reach
+  `AUTOMATION_CATALOG_READERS` (Pipeline Builder, whose bundle has a tool per
+  operation of every registered app). A file of one app that another app's code
+  names by a relative path selects that app too: DICOM View and SeedSeg stage
+  dicompare's embedding kit, and seven apps' tests read the CALMaR T1 fixture.
+  That rule sees literal relative paths to files and directories only; a glob,
+  an interpolated path or a repository-root-relative string selects nothing
+  more, so it adds to the selection without being a complete map.
 - A check whose result for one app depends on another declares it as `needs`,
   and `smokeApps` adds those apps before the check runs (null runs every app):
 

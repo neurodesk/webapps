@@ -150,8 +150,9 @@ function handoffMenuEntry(app) {
 }
 
 // The app entries a registry/apps.yml change touched, whether one changed what
-// other apps' handoff menus list (`menu`), or why the change is shared: every
-// app build embeds the site section's analytics id.
+// other apps' handoff menus list (`menu`), whether the set of registered ids
+// changed (`registered`), or why the change is shared: every app build embeds
+// the site section's analytics id.
 function registryImpact({ before, after }) {
   let old;
   let now;
@@ -174,7 +175,11 @@ function registryImpact({ before, after }) {
     const unknown = fields.find((field) => !CLASSIFIED_ENTRY_FIELDS.includes(field) && !same(was.get(id)?.[field], is.get(id)?.[field]));
     if (unknown) return { shared: `the ${id} entry's ${unknown} field is not one the planner classifies` };
   }
-  return { changed, menu: changed.some((id) => !same(handoffMenuEntry(was.get(id)), handoffMenuEntry(is.get(id)))) };
+  return {
+    changed,
+    menu: changed.some((id) => !same(handoffMenuEntry(was.get(id)), handoffMenuEntry(is.get(id)))),
+    registered: !same([...was.keys()].sort(), [...is.keys()].sort()),
+  };
 }
 
 function shardedEntries(app) {
@@ -395,6 +400,13 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
       siteData(`${path}: the landing page lists the catalog`);
       for (const id of impact.changed) {
         if (appIds.has(id)) select(id, `${path}: the ${id} entry changed`);
+      }
+      if (impact.registered) {
+        if (!graph) {
+          shared(`${path}: the registered apps changed, and without a workspace graph the builds that generate tools from every app are unknown`);
+          continue;
+        }
+        for (const reader of AUTOMATION_CATALOG_READERS) selectReaching(reader, `${path}: the registered apps changed, and ${reader} generates tools from every one`);
       }
       if (impact.menu) {
         if (!graph?.appsNaming) {
