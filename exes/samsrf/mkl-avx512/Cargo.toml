@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Research candidates for MATLAB least squares and real/mixed-complex BLAS on MKL AVX512_E1: validation only, never shipped"
+description = "Native recording gates for the explicit Intel arithmetic reference in samsrf-core"
 publish = false
 
 [lib]
@@ -13,11 +13,10 @@ path = "src/lib.rs"
 
 [dependencies]
 samsrf-core = { path = "../core" }
-num-bigint = "0.4.8"
-libm = "0.2"
-num-complex = "0.4.6"
 
 [dev-dependencies]
+num-bigint = "0.4.8"
+num-complex = "0.4.6"
 # Tests read MATLAB numbers written inline in JSON; only this parse is correctly rounded.
 serde_json = { version = "1", features = ["float_roundtrip"] }
 sha2 = "0.10"

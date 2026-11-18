@@ -421,6 +421,7 @@ fn check(p: Pipeline, wasm: Option<&Value>) -> Coefficients {
     let kernel = hrf::de_haas(tr);
     assert_eq!(kernel.iter().map(|v| v.to_bits()).collect::<Vec<_>>(), p.expected_hrf.iter().map(|v| v.to_bits()).collect::<Vec<_>>(), "{}: the port's HRF is MATLAB's", p.label);
     let inputs = job::JobInputs {
+        preprocessing_reference: samsrf_core::arithmetic::ArithmeticReference::Current,
         model: parsed,
         apertures: Some(apertures.clone()),
         hrf: None,

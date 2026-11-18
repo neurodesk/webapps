@@ -264,6 +264,7 @@ dependencies = [
  "libm",
  "miniz_oxide",
  "neurodesk-nifti",
+ "num-bigint",
  "num-complex",
  "num-rational",
  "num-traits",
@@ -277,7 +278,6 @@ dependencies = [
 name = "samsrf-mkl-avx512"
 version = "0.1.0"
 dependencies = [
- "libm",
  "num-bigint",
  "num-complex",
  "samsrf-core",

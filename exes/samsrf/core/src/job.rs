@@ -9,6 +9,7 @@
 //! `Job::run(start, end)` analyses positions `[start, end)` of the ROI in label order
 //! and returns a `Partial`; `Job::merge` expects partials that cover the ROI exactly once.
 
+use crate::arithmetic::ArithmeticReference;
 use crate::apertures::Apertures;
 use crate::error::{Error, Result};
 use crate::hrf::{self, ResolvedHrf};
@@ -31,6 +32,7 @@ pub struct SeedInputs {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct JobInputs {
+    pub preprocessing_reference: ArithmeticReference,
     pub model: Model,
     pub apertures: Option<Apertures>,
     /// Replaces the model's HRF when the caller resolved a file-backed one.
@@ -67,6 +69,7 @@ enum Analysis {
 }
 
 pub struct Job {
+    reference: ArithmeticReference,
     analysis: Analysis,
     data: TimeSeries,
     /// Kept position per vertex of the hemisphere, or `u32::MAX`.
@@ -85,6 +88,7 @@ pub struct Job {
 /// the rows (same layout) when any is not `+0` (see `MapSet::imaginary`), else empty.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Partial {
+    pub reference: ArithmeticReference,
     pub kind: Kind,
     pub start: usize,
     pub end: usize,
@@ -96,15 +100,15 @@ pub struct Partial {
 }
 
 const PARTIAL_MAGIC: &[u8; 8] = b"SAMSRFPT";
-const PARTIAL_VERSION: u32 = 2;
-const PARTIAL_HEADER: usize = 8 + 7 * 4;
+const PARTIAL_VERSION: u32 = 3;
+const PARTIAL_HEADER: usize = 8 + 8 * 4;
 
 impl Partial {
     pub fn to_bytes(&self) -> Vec<u8> {
         let imaginary_rows = if self.imaginary.is_empty() { 0 } else { self.rows };
         let mut out = Vec::with_capacity(PARTIAL_HEADER + 8 * (self.data.len() + self.raw.len() + self.imaginary.len()));
         out.extend_from_slice(PARTIAL_MAGIC);
-        for value in [PARTIAL_VERSION, self.kind as u32, self.start as u32, self.end as u32, self.rows as u32, self.raw_rows as u32, imaginary_rows as u32] {
+        for value in [PARTIAL_VERSION, self.kind as u32, self.start as u32, self.end as u32, self.rows as u32, self.raw_rows as u32, imaginary_rows as u32, self.reference as u32] {
             out.extend_from_slice(&value.to_le_bytes());
         }
         for values in [&self.data, &self.raw, &self.imaginary] {
@@ -133,6 +137,12 @@ impl Partial {
         let rows = u32_at(24) as usize;
         let raw_rows = u32_at(28) as usize;
         let imaginary_rows = u32_at(32) as usize;
+        let reference = match u32_at(36) {
+            0 => ArithmeticReference::Current,
+            1 => ArithmeticReference::MatlabAmd,
+            2 => ArithmeticReference::MatlabIntel,
+            _ => return Err(format("unknown arithmetic reference")),
+        };
         if end < start {
             return Err(format("range end before start"));
         }
@@ -147,18 +157,28 @@ impl Partial {
         let values: Vec<f64> = bytes[PARTIAL_HEADER..].as_chunks::<8>().0.iter().map(|chunk| f64::from_le_bytes(*chunk)).collect();
         let (data, rest) = values.split_at(rows * count);
         let (raw, imaginary) = rest.split_at(raw_rows * count);
-        Ok(Partial { kind, start, end, rows, data: data.to_vec(), raw_rows, raw: raw.to_vec(), imaginary: imaginary.to_vec() })
+        Ok(Partial { reference, kind, start, end, rows, data: data.to_vec(), raw_rows, raw: raw.to_vec(), imaginary: imaginary.to_vec() })
     }
 }
 
 impl Job {
+    pub fn arithmetic_reference(&self) -> ArithmeticReference { self.reference }
+
     pub fn prepare(inputs: JobInputs, progress: &mut dyn FnMut(usize, usize)) -> Result<Job> {
-        let JobInputs { model, apertures, hrf, mut data, kept, roi, mut noise_ceiling, global_signal, seed, surface, area, seed_fine_fit, total_vertices } = inputs;
+        let JobInputs { preprocessing_reference, model, apertures, hrf, mut data, kept, roi, mut noise_ceiling, global_signal, seed, surface, area, seed_fine_fit, total_vertices } = inputs;
+        let reference = model.arithmetic_reference();
+        if reference != preprocessing_reference {
+            return Err(Error::Model("preprocessing and model arithmetic references differ".into()));
+        }
+        if reference == ArithmeticReference::MatlabIntel && data.volumes < 2 {
+            return Err(Error::Model("matlab-intel arithmetic requires at least two volumes".into()));
+        }
         let precision = match &model {
             Model::Prf(model) => model.data_precision,
             Model::RevCorPrf(model) => model.data_precision,
             Model::RevCorCf(model) => model.data_precision,
         };
+        reference.validate(precision)?;
         precision.round_slice(&mut data.data);
         if let Some(ceiling) = &mut noise_ceiling {
             precision.round_slice(ceiling);
@@ -214,7 +234,7 @@ impl Job {
                 for (i, &vertex) in mver.iter().enumerate() {
                     roi_series.course_mut(i).copy_from_slice(data.course(kept_position[vertex as usize] as usize));
                 }
-                preprocess::remove_noise_in(&mut roi_series, signal, 1, precision)?;
+                preprocess::remove_noise_with_reference(&mut roi_series, signal, 1, precision, cf.arithmetic_reference)?;
                 for (i, &vertex) in mver.iter().enumerate() {
                     data.course_mut(kept_position[vertex as usize] as usize).copy_from_slice(roi_series.course(i));
                 }
@@ -263,7 +283,7 @@ impl Job {
                 Analysis::RevCorCf(Box::new(revcor_cf::Prepared::new(cf, &seed.vertices, &seed_courses, &seed.template, &area, surface.as_ref())?))
             }
         };
-        Ok(Job { analysis, data, kept_position, mver, noise_ceiling, seed_fine_fit, total_vertices, model_name, precision })
+        Ok(Job { reference, analysis, data, kept_position, mver, noise_ceiling, seed_fine_fit, total_vertices, model_name, precision })
     }
 
     pub fn kind(&self) -> Kind {
@@ -363,7 +383,7 @@ impl Job {
         if imaginary.iter().all(|value| value.to_bits() == 0) {
             imaginary.clear();
         }
-        Ok(Partial { kind: self.kind(), start, end, rows, data, raw_rows, raw, imaginary })
+        Ok(Partial { reference: self.reference, kind: self.kind(), start, end, rows, data, raw_rows, raw, imaginary })
     }
 
     /// Merges partials covering the ROI exactly once into `Srf.Data` over every vertex,
@@ -373,6 +393,9 @@ impl Job {
         sorted.sort_by_key(|partial| partial.start);
         let mut expected = 0;
         for partial in &sorted {
+            if partial.reference != self.reference {
+                return Err(Error::Shape("partial and job arithmetic references differ".into()));
+            }
             if partial.kind != self.kind() {
                 return Err(Error::Shape("a partial result belongs to another analysis".into()));
             }
@@ -462,8 +485,8 @@ mod tests {
 
     #[test]
     fn partial_round_trips_and_rejects_damage() {
-        let real = Partial { kind: Kind::RevCorPrf, start: 3, end: 5, rows: 2, data: vec![1.0, 2.0, 3.0, 4.0], raw_rows: 1, raw: vec![5.0, 6.0], imaginary: Vec::new() };
-        let complex = Partial { kind: Kind::Prf, start: 0, end: 2, rows: 2, data: vec![1.0, 2.0, 3.0, 4.0], raw_rows: 0, raw: Vec::new(), imaginary: vec![0.5, -0.0, 0.0, -2.0] };
+        let real = Partial { reference: ArithmeticReference::Current, kind: Kind::RevCorPrf, start: 3, end: 5, rows: 2, data: vec![1.0, 2.0, 3.0, 4.0], raw_rows: 1, raw: vec![5.0, 6.0], imaginary: Vec::new() };
+        let complex = Partial { reference: ArithmeticReference::Current, kind: Kind::Prf, start: 0, end: 2, rows: 2, data: vec![1.0, 2.0, 3.0, 4.0], raw_rows: 0, raw: Vec::new(), imaginary: vec![0.5, -0.0, 0.0, -2.0] };
         for partial in [real, complex] {
             let bytes = partial.to_bytes();
             let decoded = Partial::from_bytes(&bytes).unwrap();
@@ -473,7 +496,7 @@ mod tests {
             assert!(Partial::from_bytes(&bytes[..bytes.len() - 1]).is_err());
         }
         assert!(Partial::from_bytes(b"nope").is_err());
-        let mut partial_rows = Partial { kind: Kind::Prf, start: 0, end: 1, rows: 2, data: vec![1.0, 2.0], raw_rows: 0, raw: Vec::new(), imaginary: vec![1.0, 2.0] }.to_bytes();
+        let mut partial_rows = Partial { reference: ArithmeticReference::Current, kind: Kind::Prf, start: 0, end: 1, rows: 2, data: vec![1.0, 2.0], raw_rows: 0, raw: Vec::new(), imaginary: vec![1.0, 2.0] }.to_bytes();
         partial_rows[32..36].copy_from_slice(&1u32.to_le_bytes());
         partial_rows.truncate(partial_rows.len() - 8);
         assert!(Partial::from_bytes(&partial_rows).is_err(), "imaginary parts of some rows only");

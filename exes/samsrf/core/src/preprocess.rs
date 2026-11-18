@@ -19,6 +19,7 @@
 //! is 336 MB, 1 GB with the noise ceiling.
 //! Concatenating keeps 8 bytes per kept vertex and volume of every run.
 
+use crate::arithmetic::ArithmeticReference;
 use crate::error::{Error, Result};
 use crate::precision::Precision;
 use crate::timeseries::{RawRun, TimeSeries, VertexSelection};
@@ -54,6 +55,7 @@ pub struct PreprocessOptions {
 /// The combined, normalised data for the kept vertices.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Preprocessed {
+    pub arithmetic_reference: ArithmeticReference,
     pub kept: VertexSelection,
     /// Total vertex count of the hemisphere the runs came from.
     pub total_vertices: usize,
@@ -159,6 +161,7 @@ enum GlobalSignal {
 /// Accumulates runs pushed one at a time.
 #[derive(Debug)]
 pub struct RunAccumulator {
+    reference: ArithmeticReference,
     options: PreprocessOptions,
     kept: VertexSelection,
     total_vertices: usize,
@@ -170,7 +173,13 @@ pub struct RunAccumulator {
 
 impl RunAccumulator {
     pub fn new(total_vertices: usize, kept: VertexSelection, options: PreprocessOptions) -> Self {
-        Self {
+        Self::with_reference(total_vertices, kept, options, ArithmeticReference::Current).expect("current arithmetic supports both precisions")
+    }
+
+    pub fn with_reference(total_vertices: usize, kept: VertexSelection, options: PreprocessOptions, reference: ArithmeticReference) -> Result<Self> {
+        reference.validate(options.precision)?;
+        Ok(Self {
+            reference,
             options,
             kept,
             total_vertices,
@@ -178,7 +187,7 @@ impl RunAccumulator {
             volumes: 0,
             combined: None,
             global: GlobalSignal::Off,
-        }
+        })
     }
 
     /// Normalises `run` (every vertex) and folds it in. Every run must have the same
@@ -200,7 +209,7 @@ impl RunAccumulator {
         } else {
             Normalise::None
         };
-        let detrender = (normalise != Normalise::None).then(|| Detrender::new(volumes, self.total_vertices));
+        let detrender = (normalise != Normalise::None).then(|| Detrender::with_reference(volumes, self.total_vertices, self.reference));
         let course_of = |vertex: usize| {
             let mut course: Vec<f64> = run
                 .course(vertex)
@@ -337,7 +346,7 @@ impl RunAccumulator {
                     (0..kept_count)
                         .map(|position| {
                             let range = position * volumes..(position + 1) * volumes;
-                            noise_ceiling(&odd[range.clone()], &even[range])
+                            noise_ceiling_with_reference(&odd[range.clone()], &even[range], self.reference)
                         })
                         .collect()
                 });
@@ -377,6 +386,7 @@ impl RunAccumulator {
             }
         };
         Ok(Preprocessed {
+            arithmetic_reference: self.reference,
             kept: self.kept,
             total_vertices: self.total_vertices,
             runs: self.runs,
@@ -412,10 +422,14 @@ pub struct Detrender {
 impl Detrender {
     /// The fit for runs of `volumes` samples with `count` vertices. `volumes >= 2`.
     pub fn new(volumes: usize, count: usize) -> Self {
+        Self::with_reference(volumes, count, ArithmeticReference::Current)
+    }
+
+    pub fn with_reference(volumes: usize, count: usize, reference: ArithmeticReference) -> Self {
         let last = (volumes - 1) as f64;
         let time: Vec<f64> = (0..volumes).map(|i| i as f64 / last).collect();
         let ones = vec![1.0; volumes];
-        Detrender { design: crate::lstsq::DoubleDesign::new(&[&time, &ones]), time, count }
+        Detrender { design: crate::lstsq::DoubleDesign::with_reference(&[&time, &ones], reference), time, count }
     }
 
     /// Detrends vertex `index`'s course in place.
@@ -478,8 +492,12 @@ fn zscore_single(x: &[f32]) -> Vec<f32> {
 /// with `corr` in MATLAB's operation order (`css::correlation`). NaN when either course is
 /// constant or has a NaN.
 pub fn noise_ceiling(odd_mean: &[f64], even_mean: &[f64]) -> f64 {
+    noise_ceiling_with_reference(odd_mean, even_mean, ArithmeticReference::Current)
+}
+
+pub fn noise_ceiling_with_reference(odd_mean: &[f64], even_mean: &[f64], reference: ArithmeticReference) -> f64 {
     let odd: Vec<num_complex::Complex64> = odd_mean.iter().map(|&value| num_complex::Complex64::new(value, 0.0)).collect();
-    let rho = crate::css::correlation(&odd, even_mean, Precision::Double).re;
+    let rho = crate::css::correlation_with_reference(&odd, even_mean, Precision::Double, reference).re;
     (2.0 * rho) / (1.0 + rho)
 }
 
@@ -491,20 +509,21 @@ pub fn remove_noise(data: &mut TimeSeries, covariates: &[f64], n_covariates: usi
     remove_noise_in(data, covariates, n_covariates, Precision::Double)
 }
 
-/// `remove_noise` in the data's precision, as MATLAB computes it: `zscore`, then
-/// `B = [X ones] \ Y` over every course at once (each course's arithmetic depends on its
-/// place among the right-hand sides, `lstsq::mldivide_many`), then `Y - X * B` with the
-/// rounded products of each row added in column order, unfused. With one covariate this
-/// gives every residual of the recorded global regressions on MATLAB's AMD hosts, in both
-/// precisions; more covariates follow the same order, unrecorded. A constant covariate
-/// z-scores to zeros and gets the coefficient 0 of MATLAB's basic solution. Single data
-/// take one covariate (the global signal).
-///
-/// A course with a NaN keeps its place among the right-hand sides as zeros, so it cannot
-/// change another course's arithmetic, and comes back zero as SamSrf leaves it. A course
-/// that is otherwise nonfinite in the data's class becomes NaN. MATLAB's results for such
-/// courses were not recorded, so these replacements are not parity claims.
+/// Default production noise removal: normal equations in double precision and the
+/// existing mixed-single QR path. Use `remove_noise_with_reference` for an opt-in
+/// recorded-host QR evaluation. The default deliberately retains its original bits.
 pub fn remove_noise_in(data: &mut TimeSeries, covariates: &[f64], n_covariates: usize, precision: Precision) -> Result<()> {
+    remove_noise_with_reference(data, covariates, n_covariates, precision, ArithmeticReference::Current)
+}
+
+pub fn remove_noise_with_reference(data: &mut TimeSeries, covariates: &[f64], n_covariates: usize, precision: Precision, reference: ArithmeticReference) -> Result<()> {
+    reference.validate(precision)?;
+    if reference == ArithmeticReference::Current && precision == Precision::Double {
+        return remove_noise_current(data, covariates, n_covariates);
+    }
+    if reference == ArithmeticReference::MatlabIntel && n_covariates != 1 {
+        return Err(Error::Shape("matlab-intel noise removal supports one covariate".into()));
+    }
     let volumes = data.volumes;
     if precision == Precision::Single && (n_covariates != 1 || covariates.len() != volumes) {
         return Err(Error::Shape("single-precision noise removal takes one covariate per volume".into()));
@@ -544,7 +563,7 @@ pub fn remove_noise_in(data: &mut TimeSeries, covariates: &[f64], n_covariates: 
     }).collect();
     let zeros = vec![0.0; volumes];
     let ys: Vec<&[f64]> = (0..data.vertices).map(|v| if replacements[v].is_some() { zeros.as_slice() } else { data.course(v) }).collect();
-    let solution = crate::lstsq::mldivide_many(&design, &ys, precision);
+    let solution = crate::lstsq::mldivide_many_with_reference(&design, &ys, precision, reference);
     for (vertex, (&replacement, coefficients)) in replacements.iter().zip(&solution.coefficients).enumerate() {
         let course = data.course_mut(vertex);
         if let Some(value) = replacement {
@@ -561,6 +580,83 @@ pub fn remove_noise_in(data: &mut TimeSeries, covariates: &[f64], n_covariates: 
     }
     Ok(())
 }
+
+/// Preserves the production double-global-regression arithmetic before the reference options.
+fn remove_noise_current(data: &mut TimeSeries, covariates: &[f64], n_covariates: usize) -> Result<()> {
+    let volumes = data.volumes;
+    if covariates.len() != volumes * n_covariates {
+        return Err(Error::Shape(format!(
+            "{} covariate values are not {n_covariates} columns of {volumes} volumes",
+            covariates.len()
+        )));
+    }
+    let mut columns: Vec<Vec<f64>> = covariates
+        .chunks(volumes.max(1))
+        .take(n_covariates)
+        .map(|column| {
+            let mut column = column.to_vec();
+            zscore(&mut column);
+            column
+        })
+        .filter(|column| column.iter().any(|&value| value != 0.0))
+        .collect();
+    columns.push(vec![1.0; volumes]);
+    let gram: Vec<Vec<f64>> = columns
+        .iter()
+        .map(|a| columns.iter().map(|b| dot(a, b)).collect())
+        .collect();
+    for vertex in 0..data.vertices {
+        let course = data.course_mut(vertex);
+        if course.iter().any(|value| value.is_nan()) {
+            course.fill(0.0);
+            continue;
+        }
+        let projections: Vec<f64> = columns.iter().map(|column| dot(column, course)).collect();
+        let betas = solve(&gram, projections);
+        for (t, value) in course.iter_mut().enumerate() {
+            let modelled: f64 = columns
+                .iter()
+                .zip(&betas)
+                .map(|(column, beta)| column[t] * beta)
+                .sum();
+            *value -= modelled;
+        }
+    }
+    Ok(())
+}
+
+fn dot(a: &[f64], b: &[f64]) -> f64 {
+    a.iter().zip(b).map(|(x, y)| x * y).sum()
+}
+
+/// Solves the small square system `a x = b` by Gaussian elimination with partial pivoting.
+fn solve(a: &[Vec<f64>], mut b: Vec<f64>) -> Vec<f64> {
+    let n = b.len();
+    let mut a: Vec<Vec<f64>> = a.to_vec();
+    for column in 0..n {
+        let pivot = (column..n)
+            .max_by(|&i, &j| a[i][column].abs().total_cmp(&a[j][column].abs()))
+            .unwrap_or(column);
+        a.swap(column, pivot);
+        b.swap(column, pivot);
+        let (upper, lower) = a.split_at_mut(column + 1);
+        let pivot_row = &upper[column];
+        for (offset, row) in lower.iter_mut().enumerate() {
+            let factor = row[column] / pivot_row[column];
+            for (value, pivot_value) in row[column..].iter_mut().zip(&pivot_row[column..]) {
+                *value -= factor * pivot_value;
+            }
+            b[column + 1 + offset] -= factor * b[column];
+        }
+    }
+    let mut x = vec![0.0; n];
+    for row in (0..n).rev() {
+        let known: f64 = (row + 1..n).map(|k| a[row][k] * x[k]).sum();
+        x[row] = (b[row] - known) / a[row][row];
+    }
+    x
+}
+
 
 #[cfg(test)]
 #[allow(clippy::excessive_precision)]

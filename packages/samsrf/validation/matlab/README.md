@@ -1,5 +1,32 @@
 # Real MATLAB source references
 
+## Explicit production arithmetic references
+
+`Arithmetic_Reference` now makes the reference a per-analysis choice:
+`current` (the default) preserves main's `abbd6625` output; `matlab-amd`
+selects the reviewed `cc528cf6` arithmetic; `matlab-intel` selects the double
+real/complex kernels from the reviewed #886 research build. No CPU detection
+selects a reference. The shared core implementation is also the implementation
+exercised by the native Intel recording gates. The native fixture harness
+itself remains excluded from WebAssembly.
+
+The earlier test-only and blocked-shipping statements below describe their
+historical heads. This change preserves the old production result by default;
+it does not waive #876's losses under an implicit AMD default. Intel single
+precision is refused. Opt-ins have separate provenance and cannot share
+preprocessed data or shards with another choice. Browser ZIPs include the
+reference and saved model; individual GIfTIs retain their original encoding.
+
+`check_arithmetic_references.mjs` holds current, AMD and supported Intel runs
+against literal output hashes from those independently reviewed builds. The
+frozen default outcome is restored to 18 exact AMD runs and 157/168 maps.
+The Intel double option reproduces the reviewed candidate, including its
+remaining 110 real-double hull discrepancies. The two norm near-tie misses,
+unrecorded numerical edge cases, single precision and overall compiled/UI
+parity remain open. Recordings previously exposed to research stay replay
+evidence, not blind holdouts. Source MATLAB inputs remain unattested.
+
+
 This recorder runs the web port's pinned SamSrf source in MATLAB R2023b Update 11. It
 uses MATLAB's own optimizers, correlation, single arithmetic and geometry.
 The existing [compiled container reference](../container/README.md) remains

@@ -224,7 +224,7 @@ impl Prepared {
         let model = &self.model;
         if model.coarse_fit_only {
             let (beta, baseline) = match coarse_prediction {
-                Some(prediction) => fit_betas_precision(prediction, y, model.data_precision),
+                Some(prediction) => fit_betas_reference(prediction, y, model.data_precision, model.arithmetic_reference),
                 None => (0.0, 0.0),
             };
             let mut row = vec![rimg];
@@ -246,7 +246,7 @@ impl Prepared {
         let errfun_hrf = if self.fitting_hrf { ErrfunHrf::Fit { tr: model.tr } } else { ErrfunHrf::Kernel(self.coarse_hrf.clone()) };
         let (mut fp, mut fr) = if rimg >= model.fine_fit_threshold {
             let mut failure: Option<Error> = None;
-            let mut errfun = |p: &[f64]| match prf::errfun_with_convention(&model.prf_function, &self.apertures, &self.xy_points, &errfun_hrf, p, y, model.downsample_predictions, model.compressive_nonlinearity, model.data_precision, model.css_convention) {
+            let mut errfun = |p: &[f64]| match prf::errfun_with_reference(&model.prf_function, &self.apertures, &self.xy_points, &errfun_hrf, p, y, model.downsample_predictions, model.compressive_nonlinearity, model.data_precision, model.css_convention, model.arithmetic_reference) {
                 Ok(value) => value,
                 Err(error) => {
                     failure.get_or_insert(error);
@@ -334,10 +334,10 @@ impl Prepared {
                 let kernel = if self.fitting_hrf { hrf::doublegamma(model.tr, &fp[fp.len() - 5..]) } else { self.coarse_hrf.clone() };
                 if let Some(exponent) = legacy_exponent {
                     let fx = css::predict(&fx, exponent, &kernel, model.downsample_predictions);
-                    css::fit_betas(&fx, y, model.data_precision)
+                    css::fit_betas_with_reference(&fx, y, model.data_precision, model.arithmetic_reference)
                 } else {
                     let fx = hrf::convolve(&fx, &kernel, model.downsample_predictions);
-                    real(fit_betas_precision(&fx, y, model.data_precision))
+                    real(fit_betas_reference(&fx, y, model.data_precision, model.arithmetic_reference))
                 }
             }
             None => real((0.0, 0.0)),
@@ -427,11 +427,15 @@ pub fn fit_betas(x: &[f64], y: &[f64]) -> (f64, f64) {
 }
 
 fn fit_betas_precision(x: &[f64], y: &[f64], precision: Precision) -> (f64, f64) {
+    fit_betas_reference(x, y, precision, crate::arithmetic::ArithmeticReference::Current)
+}
+
+fn fit_betas_reference(x: &[f64], y: &[f64], precision: Precision, reference: crate::arithmetic::ArithmeticReference) -> (f64, f64) {
     if x.is_empty() || x.len() != y.len() {
         return (f64::NAN, f64::NAN);
     }
     let x: Vec<num_complex::Complex64> = x.iter().map(|&value| num_complex::Complex64::new(value, 0.0)).collect();
-    let (amplitude, intercept) = crate::lstsq::regress_on_ones(&x, y, precision);
+    let (amplitude, intercept) = crate::lstsq::regress_on_ones_with_reference(&x, y, precision, reference);
     (amplitude.re, intercept.re)
 }
 

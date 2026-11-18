@@ -197,11 +197,10 @@ jobs:
         run: |
           cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --features polyshape-experimental --lib
           cargo clippy --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --features polyshape-experimental --all-targets -- -D warnings
-      - name: Intel AVX512_E1 reference stays out of shipped builds
+      - name: Intel recording harness stays out of shipped builds
         run: |
-          # samsrf-mkl-avx512 reproduces MATLAB's least squares on Intel hosts for the
-          # gates below only: the shipped module must not depend on it, and it must refuse
-          # a WebAssembly build.
+          # The native harness re-exports the opt-in core kernels. Its fixture readers
+          # stay outside the shipped graph and refuse a WebAssembly build.
           cargo tree --manifest-path exes/samsrf/Cargo.toml -p samsrf-wasm --target wasm32-unknown-unknown --prefix none > "$RUNNER_TEMP/samsrf-wasm-dependencies.txt"
           if grep -F samsrf-mkl-avx512 "$RUNNER_TEMP/samsrf-wasm-dependencies.txt"; then
             echo 'samsrf-wasm depends on samsrf-mkl-avx512' >&2
@@ -211,7 +210,7 @@ jobs:
             echo 'samsrf-mkl-avx512 built for WebAssembly' >&2
             exit 1
           fi
-          grep -F 'samsrf-mkl-avx512 must never be built for WebAssembly' "$RUNNER_TEMP/mkl-avx512-wasm.log"
+          grep -F 'samsrf-mkl-avx512 is a validation crate; use samsrf-core for production' "$RUNNER_TEMP/mkl-avx512-wasm.log"
       - name: Package tests on the committed module
         run: node --test packages/samsrf/test/*.test.js
       - name: MATLAB Runtime reference gates (matched precision and legacy exports)
@@ -255,6 +254,7 @@ jobs:
           "$RUNNER_TEMP/samsrf-cli-venv/bin/python" "$matlab/compare_web_cli.py" "$cli/plan.json" "$cli/bundle-sha256.json" "$RUNNER_TEMP/samsrf-cli-web" "$cli/source-1" \
             "$RUNNER_TEMP/samsrf-cli-web-vs-source.json" --expect source --allow-unattested-source-inputs
           "$RUNNER_TEMP/samsrf-cli-venv/bin/python" "$matlab/web_cli_outcome.py" check "$matlab/web-cli-outcome.json" "$RUNNER_TEMP/samsrf-cli-web-vs-source.json"
+          node "$matlab/check_arithmetic_references.mjs" "$cli" "$RUNNER_TEMP/samsrf-arithmetic-references"
           rm -rf "$RUNNER_TEMP/samsrf-cli" "$RUNNER_TEMP/samsrf-cli-web"
       - name: Constants, small-shape gampdf and double y' * A against MATLAB (constants-gamma-gemv-predictions.md)
         run: |

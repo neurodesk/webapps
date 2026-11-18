@@ -15,6 +15,7 @@
 // prf this generates the search space) the first time it runs a shard.
 
 import {
+  arithmeticReference,
   createJob as createSamsrfJob,
   exportGiis,
   exportConvention,
@@ -93,6 +94,7 @@ export const ENGINE = Object.freeze({ stub: false, name: "SamSrf (@neurodesk/sam
 export async function createJob(inputs, onProgress) {
   if (!inputs.runs.length) throw new Error("Add at least one run.");
   const convention = exportConvention(inputs.model.Export_Convention);
+  const reference = arithmeticReference(inputs.model.Arithmetic_Reference);
   const hemisphere = resolveHemisphere([
     ...inputs.runs.map(file => file.name),
     inputs.roi?.name,
@@ -107,11 +109,11 @@ export async function createJob(inputs, onProgress) {
   const keep = roi ? Uint32Array.from(new Set([...roi, ...(seed ?? [])])).sort() : null;
   const precision = inputs.model.Data_Precision === "single" ? "single" : "double";
   let hrfLine = null;
-  const data = preprocess(inputs.runs, keep, { ...inputs, precision });
+  const data = preprocess(inputs.runs, keep, { ...inputs, precision, arithmeticReference: reference });
   const spec = {
     kind: inputs.analysis,
     model: JSON.stringify(inputs.model),
-    data: { volumes: data.volumes, vertices: data.kept ?? allVertices(data.totalVertices), courses: data.data },
+    data: { volumes: data.volumes, vertices: data.kept ?? allVertices(data.totalVertices), courses: data.data, arithmeticReference: data.arithmeticReference },
     roi: roi ?? undefined,
     noiseCeiling: data.noiseCeiling ?? undefined,
     globalSignal: data.globalSignal ?? undefined,
@@ -155,12 +157,14 @@ export async function createJob(inputs, onProgress) {
     vertexCount: data.totalVertices,
     outName: `${hemisphere}_${job.modelName}${job.outSuffix}`,
     exportConvention: convention,
+    arithmeticReference: job.arithmeticReference,
     summary: [
       `${inputs.runs.length} run${inputs.runs.length === 1 ? "" : "s"} of ${data.volumes} volumes on ${data.totalVertices} vertices${inputs.runs.length > 1 ? `, ${inputs.average ? "averaged" : "concatenated"}` : ""}${inputs.normalise ? ", detrended and z-scored" : ""} (${seconds(read - started)})`,
       roi ? `ROI ${inputs.roi.name}: ${roi.length} vertices` : "No ROI: every vertex is analysed",
       ...(seed ? [`Seed ${inputs.seed.name}: ${seed.length} vertices`] : []),
       ...(hrfLine ? [hrfLine] : []),
       `Analysis ${job.modelName}${job.outSuffix}: ${job.vertexCount} vertices, maps ${job.values.join(", ")}`,
+      `Arithmetic reference: ${job.arithmeticReference}`,
       `Map export: ${convention}; data precision: ${precision === "single" ? "MATLAB single" : "double"}`,
       ...(gridPoints ? [`Search space: ${gridPoints} grid points per worker (${seconds(prepared - read)})`] : []),
     ],
@@ -186,7 +190,7 @@ export async function runShard(job, start, end, onProgress) {
 /** @param {Job} job @param {Shard[]} shards @returns {Promise<Result>} */
 export async function mergeShards(job, shards) {
   const handle = await jobHandle(job);
-  const { maps } = handle.merge(shards);
+  const { maps, arithmeticReference: reference } = handle.merge(shards);
   const vertices = maps.vertices;
   const rows = maps.values.map((name, row) => ({ name, values: Float32Array.from(maps.data.subarray(row * vertices, (row + 1) * vertices)) }));
   const derived = polarAndEccentricity(maps, job.exportConvention);
@@ -199,6 +203,7 @@ export async function mergeShards(job, shards) {
   const files = exportGiis(maps, job.outName, null, job.exportConvention).map(({ name, bytes }) => ({ name, bytes, map: mapOfFile.get(name) }));
   return {
     outName: job.outName,
+    arithmeticReference: reference,
     vertexCount: vertices,
     maps: rows,
     files,
@@ -234,7 +239,7 @@ function readLabel(file) {
 }
 
 /** Combine the runs as samsrf_gii2srf does, one run in WebAssembly memory at a time. */
-function preprocess(runs, keep, { normalise, average, precision }) {
+function preprocess(runs, keep, { normalise, average, precision, arithmeticReference: reference }) {
   let accumulator = null;
   try {
     for (const file of runs) {
@@ -246,6 +251,7 @@ function preprocess(runs, keep, { normalise, average, precision }) {
           noiseCeiling: true,
           globalSignal: true,
           precision,
+          arithmeticReference: reference,
         });
         fromFile(file, () => accumulator.pushRun(run));
       } finally {

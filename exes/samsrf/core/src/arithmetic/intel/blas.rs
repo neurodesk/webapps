@@ -9,17 +9,17 @@
 //! kernel's tail lies outside the pre-registered structure family. The record, with these
 //! deviations, is packages/samsrf/validation/matlab/intel-avx512/prereg-dot-gemv.md.
 //!
-//! The norms are the crate's correctly rounded candidate ([`crate::nrm2`]): two recorded
+//! The norms are the crate's correctly rounded candidate ([`super::nrm2`]): two recorded
 //! `corr` values need a norm one ULP below it near a rounding tie, and the gates pin both.
 
-use crate::{accumulate, fold, grouped_sum, nrm2, sixteen_lanes, Term};
+use super::{accumulate, fold, grouped_sum, nrm2, sixteen_lanes, Term};
 
 /// The length from which MATLAB hands a real `x' * y` to MKL's `ddot`
-/// (`samsrf_core::matlab_math::DDOT_MKL_MIN_LENGTH`, recorded on both hosts).
-pub const DDOT_MKL_MIN_LENGTH: usize = samsrf_core::matlab_math::DDOT_MKL_MIN_LENGTH;
+/// (`crate::matlab_math::DDOT_MKL_MIN_LENGTH`, recorded on both hosts).
+pub const DDOT_MKL_MIN_LENGTH: usize = crate::matlab_math::DDOT_MKL_MIN_LENGTH;
 
 /// MATLAB's `mean` of a double vector: one accumulator below 44 elements, otherwise four
-/// lanes by index added in order. This is `samsrf_core::precision::mean_double`, which the
+/// lanes by index added in order. This is `crate::precision::mean_double`, which the
 /// core keeps private; MATLAB's `mean` is the same on both hosts.
 pub fn matlab_mean(values: &[f64]) -> f64 {
     let mut sums = [0.0f64; 4];
@@ -30,14 +30,14 @@ pub fn matlab_mean(values: &[f64]) -> f64 {
 }
 
 /// MATLAB's real `x' * y`. Below 51 elements MATLAB's own pair tree, the same on both hosts
-/// (`samsrf_core::matlab_math::ddot_pairs`). From 51, MKL's `ddot` on the AVX512_E1 branch:
+/// (`crate::matlab_math::ddot_pairs`). From 51, MKL's `ddot` on the AVX512_E1 branch:
 /// 32 lanes (four 8-wide registers) over whole blocks of 32 products, then a chunk of 16 and
 /// a chunk of 8 from lane 0 where they fit, the rest (fewer than 8) as one masked chunk from
 /// lane 0, every product fused into its lane, folds with strides 8, 16, 4, 2, 1.
 pub fn ddot(x: &[f64], y: &[f64]) -> f64 {
     let n = x.len().min(y.len());
     if n < DDOT_MKL_MIN_LENGTH {
-        return samsrf_core::matlab_math::ddot_pairs(&x[..n], &y[..n]);
+        return crate::matlab_math::ddot_pairs(&x[..n], &y[..n]);
     }
     let mut lanes = [None; 32];
     let blocked = n / 32 * 32;
@@ -91,7 +91,7 @@ fn limited(r: f64) -> f64 {
     if r.abs() > 1.0 { r / r.abs() } else { r }
 }
 
-/// Statistics Toolbox `corr(x, y)` of two real double courses (`samsrf_core::css`'s order):
+/// Statistics Toolbox `corr(x, y)` of two real double courses (`crate::css`'s order):
 /// both centred with `mean`, `x' * y`, divided by `norm(x)` and then by `norm(y)`, limited to
 /// [-1, 1].
 pub fn correlation(x: &[f64], y: &[f64]) -> f64 {
@@ -100,7 +100,7 @@ pub fn correlation(x: &[f64], y: &[f64]) -> f64 {
 }
 
 /// The double unsmoothed CF profile, `corr(y, X)` over the seed courses
-/// (`samsrf_core::revcor_cf::Prepared::profile`'s order): `y` and every seed centred with
+/// (`crate::revcor_cf::Prepared::profile`'s order): `y` and every seed centred with
 /// `mean`, `yc' * Xc` as one product, divided by `y`'s norm and then by each seed's, limited
 /// to [-1, 1].
 pub fn cf_profile(y: &[f64], seeds: &[&[f64]]) -> Vec<f64> {
@@ -130,16 +130,16 @@ mod tests {
     }
 
     /// The replica of MATLAB's private `mean` gives the shipped `zscore`'s mean: a `zscore`
-    /// built on it equals `samsrf_core::preprocess::zscore` bit for bit at every length.
+    /// built on it equals `crate::preprocess::zscore` bit for bit at every length.
     #[test]
     fn the_mean_replica_is_the_shipped_mean() {
         for n in 1..300 {
             let x = draws(n as u64, n);
             let mut shipped = x.clone();
-            samsrf_core::preprocess::zscore(&mut shipped);
+            crate::preprocess::zscore(&mut shipped);
             let mu = matlab_mean(&x);
             let squares: Vec<f64> = x.iter().map(|v| (v - mu) * (v - mu)).collect();
-            let sigma = if n > 1 { (samsrf_core::matlab_math::sum(&squares) / (n - 1) as f64).sqrt() } else { 0.0 };
+            let sigma = if n > 1 { (crate::matlab_math::sum(&squares) / (n - 1) as f64).sqrt() } else { 0.0 };
             let sigma = if sigma == 0.0 { 1.0 } else { sigma };
             let replica: Vec<f64> = x.iter().map(|v| (v - mu) / sigma).collect();
             assert_eq!(replica.iter().map(|v| v.to_bits()).collect::<Vec<_>>(), shipped.iter().map(|v| v.to_bits()).collect::<Vec<_>>(), "n = {n}");

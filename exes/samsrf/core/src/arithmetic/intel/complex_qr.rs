@@ -11,7 +11,7 @@ fn product(a: C, b: C) -> C {
 }
 
 fn norm(x: &[C]) -> f64 {
-    crate::nrm2(&x.iter().flat_map(|z| [z.re, z.im]).collect::<Vec<_>>())
+    super::nrm2(&x.iter().flat_map(|z| [z.re, z.im]).collect::<Vec<_>>())
 }
 
 // LAPACK's robust reciprocal, as in the shipped LARFG, before fused complex scaling.
@@ -68,8 +68,8 @@ fn reflector(x: &mut [C]) -> C {
     };
     let mut beta = diagonal(alpha, xn);
     let mut rescaled = 0;
-    while beta.abs() < crate::RESCALE && rescaled < 20 {
-        let inv = 1.0 / crate::RESCALE;
+    while beta.abs() < super::RESCALE && rescaled < 20 {
+        let inv = 1.0 / super::RESCALE;
         for z in &mut x[1..] {
             *z = C::new(z.re * inv, z.im * inv);
         }
@@ -98,7 +98,7 @@ fn reflector(x: &mut [C]) -> C {
         );
     }
     for _ in 0..rescaled {
-        beta *= crate::RESCALE;
+        beta *= super::RESCALE;
     }
     x[0] = C::new(beta, 0.0);
     tau

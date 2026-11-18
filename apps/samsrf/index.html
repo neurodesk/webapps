@@ -96,6 +96,12 @@
                   <option value="single">MATLAB single precision</option>
                 </select>
               </div>
+              <div class="nd-field">
+                <label for="arithmeticReference">Arithmetic reference
+                  <span class="nd-info-icon" tabindex="0" aria-label="About arithmetic references">i<span class="nd-info-tooltip">Current preserves existing results. The MATLAB AMD and Intel choices reproduce arithmetic observed on recorded hosts, regardless of your CPU. Intel supports double precision only. Remaining numerical differences are documented; neither reference guarantees exact MATLAB results for every input.</span></span>
+                </label>
+                <select id="arithmeticReference"></select>
+              </div>
               <div class="nd-field" id="cssConventionField" hidden>
                 <label for="cssConvention">CSS convention
                   <span class="nd-info-icon" tabindex="0" aria-label="About CSS conventions">i<span class="nd-info-tooltip">SamSrf keeps complex powers of negative responses and uses the final parameter for post-fit betas. With a fitted HRF that parameter is AmpRat. Nonnegative CSS clips negative responses and uses Exponent. Downloaded maps keep the real parts of complex results, as SamSrf's GIfTI export does.</span></span>
@@ -119,7 +125,7 @@
               </div>
               <div class="nd-field">
                 <label for="modelJson">Model JSON
-                  <span class="nd-info-icon" tabindex="0" aria-label="About the model JSON">i<span class="nd-info-tooltip">SamSrf model fields plus Data_Precision, Css_Convention and Export_Convention. Edits here are used for the run; the fields above update to match.</span></span>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the model JSON">i<span class="nd-info-tooltip">SamSrf model fields plus Data_Precision, Arithmetic_Reference, Css_Convention and Export_Convention. Edits here are used for the run; the fields above update to match.</span></span>
                 </label>
                 <textarea id="modelJson" rows="10" spellcheck="false"></textarea>
               </div>

@@ -197,6 +197,18 @@ def compare_downloads(run, record, run_dir, matlab_dir, engine, engine_dir, scra
     mat, labels, maps = expected_results(run)
     stem = mat[:-4]
     files = downloaded(run_dir, record)
+    provenance_name = f'{stem}_provenance.json'
+    if record.get('arithmeticProvenance') is True and provenance_name not in files:
+        raise Inventory('downloaded arithmetic provenance is missing')
+    if provenance_name in files:
+        try:
+            provenance = json.loads(files.pop(provenance_name))
+        except (ValueError, UnicodeError) as error:
+            raise Inventory('downloaded provenance is not JSON') from error
+        expected = {'arithmeticReference': run['model'].get('Arithmetic_Reference', 'current'),
+                    'model': expected_app_model(run)}
+        if canonical(provenance) != canonical(expected):
+            raise Inventory('downloaded provenance differs from the analysis model or arithmetic reference')
     contract = {*maps, f'{stem}_pol.gii', f'{stem}_ecc.gii'}
     if set(files) != contract:
         raise Inventory(f'the download is not the contract, polar angle and eccentricity maps: '

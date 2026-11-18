@@ -13,6 +13,7 @@ use samsrf_core::model::{self, AnalysisKind, Model};
 use samsrf_core::precision::Precision;
 use samsrf_core::surface::{Faces, Surface};
 use samsrf_core::timeseries::TimeSeries;
+use samsrf_core::arithmetic::ArithmeticReference;
 use samsrf_core::preprocess::{Combine, Normalise, PreprocessOptions, Preprocessed, RunAccumulator};
 use samsrf_core::timeseries::VertexSelection;
 use samsrf_core::{freesurfer, gifti, preprocess, revcor_cf, revcor_prf, template};
@@ -111,7 +112,9 @@ fn kind(case: &Value) -> AnalysisKind {
 }
 
 fn parse(case: &Value) -> Result<Model, Error> {
-    model::parse_model_json(kind(case), &case["mapReplayModel"].to_string())
+    let mut json = case["mapReplayModel"].clone();
+    json["Arithmetic_Reference"] = Value::from("matlab-amd");
+    model::parse_model_json(kind(case), &json.to_string())
 }
 
 fn template_maps(host: &Host, case: &Value) -> Maps {
@@ -136,6 +139,7 @@ fn internal_model(case: &Value) -> Model {
     }
     let mut json = case["mapReplayModel"].clone();
     json["Data_Precision"] = Value::from("double");
+    json["Arithmetic_Reference"] = Value::from("matlab-amd");
     let mut model = model::parse_model_json(kind(case), &json.to_string()).unwrap();
     match &mut model {
         Model::RevCorCf(model) => model.data_precision = Precision::Single,
@@ -170,6 +174,7 @@ fn inputs_with(host: &Host, case: &Value, template: Option<Maps>, model: Model) 
     let courses = array(root, &pre["courses"]);
     let [volumes, count] = shape(&pre["courses"])[..] else { unreachable!() };
     let mut job = JobInputs {
+        preprocessing_reference: model.arithmetic_reference(),
         model,
         apertures: None,
         hrf: None,
@@ -612,7 +617,7 @@ fn global_regression_stays_within_rounding() {
                 series.course_mut(i).copy_from_slice(&courses[v as usize * volumes..(v as usize + 1) * volumes]);
             }
             let precision = if single(case) { Precision::Single } else { Precision::Double };
-            preprocess::remove_noise_in(&mut series, &array(&host.root, &case["globalSignal"]), 1, precision).unwrap();
+            preprocess::remove_noise_with_reference(&mut series, &array(&host.root, &case["globalSignal"]), 1, precision, ArithmeticReference::MatlabAmd).unwrap();
             let expected = array(&host.root, &case["recomputedCorrectedCourses"]);
             let relative = if single(case) { 32.0 * UNIT } else { 1e-13 };
             let (mut worst, mut identical, mut compared) = (0.0f64, 0usize, 0usize);
@@ -658,7 +663,7 @@ fn a_missing_course_keeps_its_place_in_the_regression() {
                 series.course_mut(i).copy_from_slice(&courses[v as usize * volumes..(v as usize + 1) * volumes]);
             }
             series.course_mut(missing)[volumes / 3] = f64::NAN;
-            preprocess::remove_noise_in(&mut series, &array(&host.root, &case["globalSignal"]), 1, precision).unwrap();
+            preprocess::remove_noise_with_reference(&mut series, &array(&host.root, &case["globalSignal"]), 1, precision, ArithmeticReference::MatlabAmd).unwrap();
             assert!(series.course(missing).iter().all(|&value| value == 0.0), "{} {}: the missing course is zeroed", host.name, case["id"]);
             let expected = array(&host.root, &case["recomputedCorrectedCourses"]);
             for (i, &v) in roi.iter().enumerate().filter(|(i, _)| *i != missing) {
@@ -892,7 +897,7 @@ fn raw_runs(host: &Host, case: &Value, input: &Path) -> (Preprocessed, PathBuf, 
     let mut accumulator = None;
     for run in entry["runs"].as_array().unwrap() {
         let run = gifti::read_run(&std::fs::read(dir.join(run.as_str().unwrap())).unwrap()).unwrap();
-        accumulator.get_or_insert_with(|| RunAccumulator::new(run.vertices, VertexSelection::All, options.clone())).push_run(&run).unwrap();
+        accumulator.get_or_insert_with(|| RunAccumulator::with_reference(run.vertices, VertexSelection::All, options.clone(), ArithmeticReference::MatlabAmd).unwrap()).push_run(&run).unwrap();
     }
     (accumulator.unwrap().finish().unwrap(), dir, entry["hemisphere"].as_str().unwrap().to_string())
 }
@@ -906,6 +911,7 @@ fn raw_cf_inputs(host: &Host, case: &Value, input: &Path, model: Model) -> (JobI
     let template = template::read_benson_gifti(&std::fs::read(dir.join(format!("{hemisphere}_benson.gii"))).unwrap(), hemisphere == "rh").unwrap();
     let count = data.total_vertices;
     let job = JobInputs {
+        preprocessing_reference: model.arithmetic_reference(),
         model,
         apertures: None,
         hrf: None,

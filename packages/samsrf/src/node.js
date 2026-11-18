@@ -107,12 +107,13 @@ export function readAnalysisInputs({
   normalise = 'zscore',
   combine = 'average',
   precision = 'double',
+  arithmeticReference = 'current',
 }) {
   const side = resolveHemisphere([...runs, roi, seed, template, white, area], { hemisphere, required: template !== null });
   const roiVertices = roi === null ? null : readLabelFile(roi).vertices;
   const seedVertices = seed === null ? null : readLabelFile(seed).vertices;
   const keep = roiVertices === null ? null : Uint32Array.from(new Set([...roiVertices, ...(seedVertices ?? [])])).sort();
-  const data = preprocessRuns(runs, { keep, normalise, combine, noiseCeiling: true, globalSignal: true, precision });
+  const data = preprocessRuns(runs, { keep, normalise, combine, noiseCeiling: true, globalSignal: true, precision, arithmeticReference });
   const kept = data.kept ?? Uint32Array.from({ length: data.totalVertices }, (_, index) => index);
   let serialised = null;
   if (apertures !== null) {
@@ -125,7 +126,7 @@ export function readAnalysisInputs({
     roi: roiVertices,
     seed: seedVertices,
     kept,
-    data: { volumes: data.volumes, vertices: kept, courses: data.data },
+    data: { volumes: data.volumes, vertices: kept, courses: data.data, arithmeticReference: data.arithmeticReference },
     noiseCeiling: data.noiseCeiling,
     globalSignal: data.globalSignal,
     apertures: serialised,

@@ -131,3 +131,21 @@ test("reverse correlation takes single precision except for 2D fits", () => {
   assert.deepEqual(parseModel(JSON.stringify(rc), "rc"), rc);
   assert.throws(() => parseModel(JSON.stringify(buildModel("revcor-fit", { dataPrecision: "single" })), "rc"), /2D pRF fits need double precision/);
 });
+
+
+test("arithmetic references round-trip through presets and imported models without CPU selection", () => {
+  for (const arithmeticReference of ["current", "matlab-amd", "matlab-intel"]) {
+    const model = buildModel("example-gaussian", { arithmeticReference });
+    expectReference(model, arithmeticReference);
+    assert.deepEqual(parseModel(JSON.stringify(model), "prf"), model);
+  }
+  const model = buildModel("example-gaussian");
+  for (const value of ["auto", "intel", true, null, ["current"]]) {
+    assert.throws(() => parseModel(JSON.stringify({ ...model, Arithmetic_Reference: value }), "prf"), /arithmetic reference/);
+  }
+  assert.throws(() => parseModel(JSON.stringify({ ...model, Arithmetic_Reference: "matlab-intel", Data_Precision: "single" }), "prf"), /requires double precision/);
+});
+
+function expectReference(model, reference) {
+  assert.equal(model.Arithmetic_Reference ?? "current", reference);
+}
