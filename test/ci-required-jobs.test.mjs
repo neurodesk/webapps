@@ -26,7 +26,7 @@ const JOB_CONDITIONS = {
   'browser-e2e-gpu': "needs.app-plan.outputs.has_gpu_apps == 'true' && (github.event_name != 'pull_request' || needs.app-plan.outputs.all_apps != 'true')",
   'composite-site': "(github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name == 'push' || github.event_name == 'schedule' || needs.app-plan.outputs.has_site == 'true')",
   'agent-interactions': "needs.composite-site.outputs.agent_site_ready == 'true'",
-  'homepage-easter-egg': "github.event.action != 'converted_to_draft' && inputs.scope != 'gpu' && needs.app-plan.outputs.easter_egg == 'true'",
+  'homepage-easter-egg': "${{ !cancelled() && github.event.action != 'converted_to_draft' && inputs.scope != 'gpu' && (github.event_name != 'pull_request' || needs.app-plan.result != 'success' || needs.app-plan.outputs.easter_egg == 'true') }}",
 };
 // The run steps of required jobs that may be skipped, by job and step name, with their condition.
 const STEP_CONDITIONS = {

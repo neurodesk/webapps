@@ -13,7 +13,7 @@ const workflow = async (name) => YAML.parse(await readFile(new URL(`../.github/w
 // every event other than pull_request. A ready pull request is decided by
 // scripts/lib/workflow-gate.mjs; `reached` stands for its answer.
 const gate = (github, reached = true) => ({ gate: { outputs: { run: String(github.event_name !== 'pull_request' || (!github.event?.pull_request?.draft && reached)) } } });
-const evaluate = (expression, github, inputs = {}, needs = gate(github)) => runInNewContext(expression.replace(/^\$\{\{\s*|\s*\}\}$/g, ''), { github, inputs, needs });
+const evaluate = (expression, github, inputs = {}, needs = gate(github)) => runInNewContext(expression.replace(/^\$\{\{\s*|\s*\}\}$/g, ''), { github, inputs, needs, cancelled: () => false });
 
 test('draft feedback selects direct app edits; ready PRs retain shared coverage', async () => {
   const registry = await loadAppsRegistry();
@@ -103,15 +103,20 @@ test('a dispatched run asks for its scope and only the jobs of that scope start'
   assert.equal(scope.default, 'affected');
   const dispatch = { event_name: 'workflow_dispatch', event: {} };
   const condition = (id) => flow.jobs[id].if.replaceAll('needs.app-plan', "needs['app-plan']");
-  const starts = (id, inputs, outputs = {}) => evaluate(condition(id), dispatch, inputs, { 'app-plan': { outputs: { has_site: 'true', has_gpu_apps: 'true', ...outputs } } });
+  const starts = (id, inputs, outputs = {}, github = dispatch, result = 'success') => evaluate(condition(id), github, inputs, { 'app-plan': { result, outputs: { has_site: 'true', has_gpu_apps: 'true', ...outputs } } });
   for (const id of ['workspace-contracts', 'homepage-easter-egg']) {
-    assert.equal(starts(id, { scope: 'affected' }, { easter_egg: 'true' }), true, id);
-    assert.equal(starts(id, { scope: 'gpu' }, { easter_egg: 'true' }), false, id);
+    assert.equal(starts(id, { scope: 'affected' }), true, id);
+    assert.equal(starts(id, { scope: 'gpu' }), false, id);
   }
   assert.equal(starts('workspace-contracts', { scope: 'site' }), false);
-  // The plan says whether the easter egg runs: always for the site scope, otherwise when a change reaches its tests.
-  assert.equal(starts('homepage-easter-egg', { scope: 'site' }, { easter_egg: 'true' }), true);
-  assert.equal(starts('homepage-easter-egg', { scope: 'affected' }, { easter_egg: 'false' }), false);
+  // A dispatch runs the easter egg in every scope but gpu, whatever the plan says, as a push and the nightly do.
+  for (const scope of ['affected', 'all', 'site']) assert.equal(starts('homepage-easter-egg', { scope }, { easter_egg: 'false' }), true, scope);
+  for (const event_name of ['push', 'schedule']) assert.equal(starts('homepage-easter-egg', {}, { easter_egg: 'false' }, { event_name, event: {} }), true, event_name);
+  // A pull request skips it only when the plan succeeded and said so.
+  const pull = { event_name: 'pull_request', event: { action: 'synchronize', pull_request: { draft: false } } };
+  assert.equal(starts('homepage-easter-egg', {}, { easter_egg: 'false' }, pull), false);
+  assert.equal(starts('homepage-easter-egg', {}, { easter_egg: 'true' }, pull), true);
+  assert.equal(starts('homepage-easter-egg', {}, {}, pull, 'failure'), true);
   // The plan decides the site build of a dispatch (has_site is false for the gpu scope); pushes and the nightly always build it.
   assert.equal(starts('composite-site', { scope: 'gpu' }, { has_site: 'false' }), false);
   assert.equal(starts('composite-site', { scope: 'site' }), true);
@@ -129,7 +134,11 @@ test('returning to draft cancels the prior run without starting CI jobs', async 
     const needs = [job.needs ?? []].flat();
     if (needs.length) {
       assert.ok(needs.every(dependency => skipped.has(dependency)), `${id} depends on skipped jobs`);
-      assert.doesNotMatch(job.if ?? '', /always\(|!cancelled\(/, `${id} must respect skipped dependencies`);
+      // A job that runs past a skipped dependency must not start on its own.
+      if (/always\(|!cancelled\(/.test(job.if ?? '')) {
+        const none = Object.fromEntries(needs.map((dependency) => [dependency, { result: 'skipped', outputs: {} }]));
+        assert.equal(evaluate(job.if.replace(/needs\.([\w-]+)/g, "needs['$1']"), { event_name: 'pull_request', event: { action: 'converted_to_draft', pull_request: { draft: true } } }, {}, none), false, `${id} must respect skipped dependencies`);
+      }
     } else {
       assert.equal(evaluate(job.if, { event: { action: 'converted_to_draft' } }), false, id);
       for (const action of ['opened', 'synchronize', 'reopened', 'ready_for_review', undefined]) {

@@ -610,10 +610,11 @@ jobs:
 
   homepage-easter-egg:
     needs: app-plan
-    # The plan runs it when a change reaches a file it reads (EASTER_EGG_INPUTS
-    # in scripts/lib/app-plan.mjs), on the nightly and on a dispatch of every
-    # app or of the site.
-    if: github.event.action != 'converted_to_draft' && inputs.scope != 'gpu' && needs.app-plan.outputs.easter_egg == 'true'
+    # It runs on every push, nightly and dispatch, as before, even when the plan
+    # fails (!cancelled()). A pull request skips it only when the plan succeeded
+    # and found every changed path in a tree it cannot read
+    # (easterEggCannotRead in scripts/lib/app-plan.mjs).
+    if: ${{ !cancelled() && github.event.action != 'converted_to_draft' && inputs.scope != 'gpu' && (github.event_name != 'pull_request' || needs.app-plan.result != 'success' || needs.app-plan.outputs.easter_egg == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

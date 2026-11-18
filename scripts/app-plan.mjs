@@ -20,10 +20,8 @@ let base = option('--base');
 // branch (resolveCiBase), so merges whose own push run was cancelled are still
 // tested, and select again the apps a failed run there left untested.
 let baseFallback = '';
-// Apps a failed run on main left untested at the base, and the planned jobs
-// that did not pass there (resolveCiBase).
+// Apps a failed run on main left untested at the base (resolveCiBase).
 let carried = new Map();
-let carriedChecks = new Map();
 // `--base merge-base` (a dispatched run): diff a branch from where it left
 // main; a commit already on main diffs from the tested base like a push.
 if (base === 'merge-base') {
@@ -42,7 +40,6 @@ if (base === TESTED_BASE) {
   console.error(`App planner: ${tested.reason}`);
   base = tested.base;
   carried = tested.carried;
-  carriedChecks = tested.checks;
   if (!base) baseFallback = tested.reason;
 }
 // A diff git cannot read is never an empty one: the run tests everything.
@@ -78,7 +75,7 @@ const draft = process.env.GITHUB_EVENT_NAME === 'pull_request' && process.env.CI
 // `--release` (release.yml): the apps to publish are the ones the version
 // bumps reach, so release bookkeeping counts.
 const release = process.argv.includes('--release');
-let plan = createAppPlan(registry, fallbackReason ? [] : changedPaths, graph, manifests, { draft, release, carried, carriedChecks });
+let plan = createAppPlan(registry, fallbackReason ? [] : changedPaths, graph, manifests, { draft, release, carried });
 
 // A ready pull request that has used its full-plan runs gets the draft plan,
 // and the `full-plan-withheld` job fails so the run is never green. A run that
@@ -118,7 +115,9 @@ const scoped = {
   releaseApps: ['gpu', 'site'].includes(scope) ? none : plan.releaseApps,
   site: scope === 'site' || (scope !== 'gpu' && plan.site && !withheld),
 };
-const easterEgg = scope === 'site' || (scope !== 'gpu' && plan.easterEgg.length > 0);
+// A push, the nightly and a dispatch run the easter egg every time; a pull request skips it only when no changed path can reach it.
+const everyRun = Boolean(process.env.GITHUB_EVENT_NAME) && process.env.GITHUB_EVENT_NAME !== 'pull_request';
+const easterEgg = scope === 'site' || (scope !== 'gpu' && (everyRun || plan.easterEgg.length > 0));
 const emptyMatrix = { include: [{ app: '__none__', path: '', runtime: '', rust_wasm: false, python_reference: false, shared_runtime: false, browser_test: false, hardware_gpu: false, app_scoped_runtime: false, release_test: 'test', heavy_tests: false }] };
 const fallback = (fallbackReason || (plan.reasons.fallback ?? '')).replace(/\s+/g, ' ');
 // A wide change gives every app the same long list; keep the outputs small.
@@ -161,7 +160,7 @@ const summary = fallback && !draft
     ...Object.entries(reasons.apps).map(([app, list]) => `- ${app}: ${list.join('; ')}`),
     ...reasons.site.map((reason) => `- site: ${reason}`),
   ];
-summary.push(easterEgg ? `Homepage easter egg runs: ${scope === 'site' ? 'scope site' : reasons.easter_egg.join('; ')}.` : 'Homepage easter egg skipped: the change reaches none of its tests.');
+summary.push(easterEgg ? `Homepage easter egg runs: ${scope === 'site' ? 'scope site' : everyRun ? `it runs on every ${process.env.GITHUB_EVENT_NAME} run` : reasons.easter_egg.join('; ')}.` : scope === 'gpu' ? 'Homepage easter egg skipped: scope gpu.' : 'Homepage easter egg skipped: every changed path lies in a tree it cannot read.');
 if (plan.bookkeeping.length) summary.push(`Release bookkeeping set aside (changelogs and version bumps, checked by workspace-contracts): ${plan.bookkeeping.length} ${plan.bookkeeping.length === 1 ? 'file' : 'files'}.`);
 if (scope === 'gpu') summary.unshift('Scope gpu: only the macOS GPU suite of the selected apps runs.');
 if (scope === 'site') summary.unshift('Scope site: only the composite site, its agentic checks and the homepage easter egg run.');

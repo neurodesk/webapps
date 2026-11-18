@@ -608,75 +608,44 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
 }
 
 export const EASTER_EGG_JOB = 'homepage-easter-egg';
-// Every file ci.yml's homepage-easter-egg job reads, from its commands and the
-// code they run (a path ending in / is a directory):
-// - `pnpm install` and the Playwright install read root configuration and the
-//   lockfile, which have their own rules below;
-// - `node --test test/easter-egg.test.mjs` reads that file, the landing page it
-//   renders (scripts/lib/landing-page.mjs, scripts/lib/apps-registry.mjs,
-//   registry/apps.yml) and the easter eggs' manifests under site/;
-// - the two `pnpm --filter` test scripts and `test:e2e` run the packages under
-//   site/easter-eggs; the e2e server (their scripts/preview-site.mjs) renders
-//   the landing page again and copies site/ files and
-//   packages/analytics/src/index.js.
-// test/app-plan.test.mjs holds the job's commands, the package scripts they
-// run and the imports of these files to the table, so a new input fails it.
-export const EASTER_EGG_INPUTS = Object.freeze(['site/', 'test/easter-egg.test.mjs', 'scripts/lib/landing-page.mjs', 'scripts/lib/apps-registry.mjs', 'registry/apps.yml', 'packages/analytics/src/']);
-// Root scripts `pnpm install` runs.
-const INSTALL_SCRIPTS = new Set(['pnpm:devPreinstall', 'preinstall', 'install', 'postinstall', 'preprepare', 'prepare', 'postprepare']);
-// Directories the job reads nothing of but the inputs above.
-const EASTER_EGG_UNREAD = /^(?:apps|packages|exes|models|scripts|test|test-utils|registry|runtime-assets|templates)\//;
-// Root files the job reads nothing of: Markdown, other workflows, lint and dependency-quality configuration.
-const EASTER_EGG_UNREAD_ROOT = [/^[^/]+\.md$/, /^\.gitignore$/, /^\.github\/workflows\/(?!ci\.yml$)[^/]+$/, INDEPENDENT_CONFIG, /^config\/dependency-/];
+// The homepage-easter-egg job runs on every push, nightly and dispatch, as
+// before (ci.yml). On a pull request it runs unless every changed path lies in
+// a tree it cannot read: apps/, exes/, models/, docs/ and every package outside
+// its dependency closure (EASTER_EGG_PACKAGES). Any other path runs it, as do a
+// package.json anywhere (its pnpm install reads every workspace manifest and
+// runs their install scripts) and a path no rule knows.
+export const EASTER_EGG_PACKAGES = Object.freeze(['packages/analytics']);
+const EASTER_EGG_SKIP_TREE = /^(?:apps|exes|models|docs)\//;
+export function easterEggCannotRead(path) {
+  if (/(?:^|\/)package\.json$/.test(path)) return false;
+  if (EASTER_EGG_SKIP_TREE.test(path)) return true;
+  const workspacePackage = path.match(/^packages\/[^/]+(?=\/)/)?.[0];
+  return Boolean(workspacePackage) && !EASTER_EGG_PACKAGES.includes(workspacePackage);
+}
+// The files the job reads, from its commands and the code they run, kept as
+// the evidence that no skip tree holds one (a path ending in / is a
+// directory): `pnpm install` and the Playwright install read root
+// configuration, every workspace package.json and the lockfile;
+// `node --test test/easter-egg.test.mjs` reads that file, the landing page it
+// renders (scripts/lib/landing-page.mjs, scripts/lib/apps-registry.mjs,
+// registry/apps.yml) and the easter eggs' manifests under site/; the two
+// `pnpm --filter` test scripts and `test:e2e` run the packages under
+// site/easter-eggs, whose e2e server renders the landing page and copies
+// site/ files and packages/analytics/src/index.js; Playwright loads the
+// reporter ci.yml names in PW_TEST_REPORTER. test/app-plan.test.mjs holds the
+// table to the job and to the skip trees.
+export const EASTER_EGG_INPUTS = Object.freeze(['site/', 'test/easter-egg.test.mjs', 'scripts/lib/landing-page.mjs', 'scripts/lib/apps-registry.mjs', 'registry/apps.yml', 'packages/analytics/src/', 'test-utils/test-durations-reporter.mjs', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']);
 
-// Why the homepage-easter-egg job runs for a change: a path in
-// EASTER_EGG_INPUTS, a lockfile change to its importers or the root's, a
-// change to its ci.yml job, or any path no rule says it does not read (root
-// configuration among them). Empty when it does not run.
-export function selectEasterEgg(changedPaths, manifests = new Map(), { release = false } = {}) {
+// Why a pull request runs the homepage-easter-egg job: the changed paths
+// outside the trees it cannot read. Empty when every path lies in one.
+export function selectEasterEgg(changedPaths) {
   if (!changedPaths.length) return ['no changed paths: no base revision, an unreadable diff, or a full run'];
-  const reasons = [];
-  for (const path of changedPaths) {
-    if (!release && releaseBookkeeping(path, manifests)) continue;
-    if (EASTER_EGG_INPUTS.some((input) => (input.endsWith('/') ? path.startsWith(input) : path === input))) {
-      reasons.push(path);
-      continue;
-    }
-    if (NON_CODE_PREFIXES.some((prefix) => path.startsWith(prefix)) || EASTER_EGG_UNREAD.test(path) || EASTER_EGG_UNREAD_ROOT.some((pattern) => pattern.test(path))) continue;
-    if (path === CI_WORKFLOW) {
-      const impact = manifests.get(path) ? ciImpact(manifests.get(path)) : { shared: 'the base or head workflow is unavailable' };
-      if (impact.shared) reasons.push(`${path}: ${impact.shared}`);
-      else if (impact.jobs.includes(EASTER_EGG_JOB)) reasons.push(`${path}: its ${EASTER_EGG_JOB} job changed`);
-      continue;
-    }
-    if (path === LOCKFILE) {
-      const impact = manifests.get(path) ? analyseLockfile(manifests.get(path)) : { shared: 'the base or head lockfile is unavailable' };
-      if (impact.shared) {
-        reasons.push(`${path}: ${impact.shared}`);
-        continue;
-      }
-      for (const [importer, reason] of impact.importers) {
-        if (importer === '.' || importer.startsWith('site/')) reasons.push(`${path}: ${reason}`);
-      }
-      continue;
-    }
-    if (path === GITATTRIBUTES) {
-      const files = manifests.get(path)?.files;
-      if (!files) reasons.push(`${path}: the files whose attributes changed are unknown`);
-      else if (files.length) reasons.push(...selectEasterEgg(files, new Map(), { release }).map((reason) => `${path}: ${reason}`));
-      continue;
-    }
-    // The job runs no root script by name; installing runs the lifecycle ones.
-    const scripts = path === 'package.json' && manifests.get(path) && changedRootScripts(manifests.get(path));
-    if (scripts && !scripts.some((name) => INSTALL_SCRIPTS.has(name))) continue;
-    reasons.push(`${path}: the job installs and runs under the repository root's configuration`);
-  }
-  return reasons;
+  const read = changedPaths.filter((path) => !easterEggCannotRead(path));
+  const shown = read.slice(0, 5).map((path) => `${path}: outside the trees the job cannot read`);
+  return read.length > shown.length ? [...shown, `and ${read.length - shown.length} more`] : shown;
 }
 
-// `carriedChecks` maps a planned job (homepage-easter-egg) that did not pass
-// on main since the base to why: it runs again in full.
-export function createAppPlan(registry, changedPaths = [], graph = null, manifests = new Map(), { draft = false, release = false, carried = new Map(), carriedChecks = new Map() } = {}) {
+export function createAppPlan(registry, changedPaths = [], graph = null, manifests = new Map(), { draft = false, release = false, carried = new Map() } = {}) {
   const affected = selectAffectedApps(registry, changedPaths, graph, manifests, { release, carried });
   // Drafts give fast feedback on app edits. Ready PRs always use the complete
   // dependency plan, including shared-code changes, at their current head.
@@ -689,9 +658,8 @@ export function createAppPlan(registry, changedPaths = [], graph = null, manifes
   const heavy = (entry) => ({ ...entry, heavy_tests: editsApp(registry.apps.find((app) => app.id === entry.app), changedPaths, edited, carried) });
   const browserTested = selected.filter((app) => app.ci.browser_test);
   const gpuTested = selected.filter((app) => app.ci.hardware_gpu);
-  // A draft plans the easter egg as a ready pull request does.
-  const carriedEgg = carriedChecks.get(EASTER_EGG_JOB);
-  const easterEgg = [...selectEasterEgg(changedPaths, manifests, { release }), ...(carriedEgg ? [`it did not pass on main since the base: ${carriedEgg.join('; ')}`] : [])];
+  // What a pull request's homepage-easter-egg job does; a draft plans it as a ready pull request does.
+  const easterEgg = selectEasterEgg(changedPaths);
   return Object.freeze({
     changedPaths: Object.freeze([...changedPaths]),
     selected: Object.freeze(selected),
@@ -703,7 +671,7 @@ export function createAppPlan(registry, changedPaths = [], graph = null, manifes
     site: site || selected.length > 0,
     reasons: Object.freeze(reasons),
     bookkeeping: Object.freeze([...(affected.bookkeeping ?? [])]),
-    // Why the homepage-easter-egg job runs; empty when it does not.
+    // Why a pull request's homepage-easter-egg job runs; empty when it is skipped.
     easterEgg: Object.freeze([...easterEgg]),
   });
 }

@@ -47,16 +47,12 @@ export function testedBase({ runs, head, branch, git, workflow = 'ci', atHead = 
 // listed attempt's, and `appIds` the registry's. The per-app jobs are named by
 // their matrix, whose first value is the app id (matrixEntry). Jobs every push
 // runs again whatever its plan, and jobs only the nightly runs (which tests
-// every app), need no carrying; the jobs the plan narrows (PLANNED_JOBS) are
-// carried by carriedPlannedJobs. Any other failed job (the plan itself), an
-// unfinished per-app job, or an app id the registry does not know cannot be
+// every app), need no carrying. Any other failed job (the plan itself), a job
+// that has not finished, or an app id the registry does not know cannot be
 // tied to an app. test/app-plan.test.mjs holds ci.yml to these job lists.
 export const APP_JOBS = ['app-tests', 'browser-e2e', 'browser-e2e-gpu'];
-export const RERUN_JOBS = ['workspace-contracts', 'composite-site', 'example-cache-retention', 'full-plan', 'full-plan-withheld'];
-// Jobs that run only where the plan's change reaches.
-export const PLANNED_JOBS = ['homepage-easter-egg'];
+export const RERUN_JOBS = ['workspace-contracts', 'composite-site', 'homepage-easter-egg', 'example-cache-retention', 'full-plan', 'full-plan-withheld'];
 export const NIGHTLY_JOBS = ['agent-interactions'];
-const PLAN_JOB = 'app-plan';
 const APP_JOB = new RegExp(`^(?:${APP_JOBS.join('|')}) \\(([^,)]+)[,)]`);
 const UNPASSED = new Set(['failure', 'cancelled', 'timed_out', 'startup_failure', 'action_required', 'stale']);
 const PASSED = new Set(['success', 'skipped', 'neutral']);
@@ -67,54 +63,11 @@ export function carriedApps(jobs, appIds) {
     if (PASSED.has(job.conclusion)) continue;
     const app = job.name.match(APP_JOB)?.[1];
     const base = job.name.replace(/ \(.*$/, '');
-    if (PLANNED_JOBS.includes(base)) continue;
     if (!UNPASSED.has(job.conclusion)) unattributed.push(`${job.name} (not finished)`);
     else if (app && (!appIds || appIds.has(app))) carried.set(app, [...(carried.get(app) ?? []), job.name]);
     else if (app || ![...RERUN_JOBS, ...NIGHTLY_JOBS].includes(base)) unattributed.push(job.name);
   }
   return { carried, unattributed };
-}
-
-// How a planned job ended in one run: passed (`success`), not due (`skipped`
-// in a run whose plan succeeded and left it out), or why it did not pass:
-// failed, cancelled, timed out, unfinished, skipped behind a plan that did not
-// succeed, or missing from the run's jobs.
-export const NOT_DUE = 'not due';
-export function plannedJobState(jobs, name) {
-  const job = jobs.find((each) => each.name === name);
-  if (!job) return `${name} is missing from its jobs`;
-  if (job.conclusion === 'success') return 'passed';
-  if (job.conclusion === 'skipped') return jobs.find((each) => each.name === PLAN_JOB)?.conclusion === 'success' ? NOT_DUE : `${name} was skipped because ${PLAN_JOB} did not succeed`;
-  return `${name} ${job.conclusion ? `concluded ${job.conclusion}` : `is ${job.status ?? 'unfinished'}`}`;
-}
-
-// The planned jobs a push on `branch` runs again in full, and why: for each,
-// the most recent ci run whose head lies from `base` up to (not at) `head`,
-// cancelled and unfinished runs included, in which it was due; carried when
-// it did not pass there, or when that run's jobs cannot be read. A run at the
-// head itself is this push's own or a re-run of it.
-export async function carriedPlannedJobs({ runs, base, head, branch, git, readJobs }) {
-  const carried = new Map();
-  if (!base) return carried;
-  const recent = runs
-    .filter((run) => run.head_branch === branch && run.event !== 'pull_request' && run.head_sha !== head && git.isAncestor(base, run.head_sha) && git.isAncestor(run.head_sha, head))
-    .sort((a, b) => (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0) || b.id - a.id);
-  for (const name of PLANNED_JOBS) {
-    for (const run of recent) {
-      let jobs;
-      try {
-        jobs = await readJobs(run);
-      } catch (error) {
-        carried.set(name, [`the jobs of ci run ${run.id} could not be read (${error.message})`]);
-        break;
-      }
-      const state = plannedJobState(jobs, name);
-      if (state === NOT_DUE) continue;
-      if (state !== 'passed') carried.set(name, [`${state} in ci run ${run.id}`]);
-      break;
-    }
-  }
-  return carried;
 }
 
 // The jobs of one attempt of a run, from the Actions API: the attempt the run
@@ -134,49 +87,36 @@ async function runJobs({ repository, runId, attempt, token, apiUrl = 'https://ap
   }
 }
 
-// The base `ci` on main diffs from, and the apps and planned jobs it carries:
-// the head of the nearest finished push or nightly run, green or failed.
-// After a failed run only the apps whose jobs failed are untested at its head,
-// so they are selected again instead of every app since the last green run.
-// When a failed job cannot be tied to an app, the base is the last green run
-// as before. Planned jobs are carried from every run between that base and the
-// head (carriedPlannedJobs), whichever base it is.
+// The base `ci` on main diffs from, and the apps it carries: the head of the
+// nearest finished push or nightly run, green or failed. After a failed run
+// only the apps whose jobs failed are untested at its head, so they are
+// selected again instead of every app since the last green run. When a failed
+// job cannot be tied to an app, the base is the last green run as before.
 export async function resolveCiBase({ head, branch = 'main', cwd, env = process.env, fetchImpl, appIds }) {
   const git = gitAncestry(cwd);
   const sha = git.resolve(head);
-  const none = { carried: new Map(), checks: new Map() };
-  if (!sha) return { base: null, ...none, reason: `${head} is not a commit in this checkout` };
+  if (!sha) return { base: null, carried: new Map(), reason: `${head} is not a commit in this checkout` };
   const repository = env.GITHUB_REPOSITORY;
   const token = env.GITHUB_TOKEN;
-  const jobLists = new Map();
-  const readJobs = (run) => {
-    if (!jobLists.has(run.id)) jobLists.set(run.id, runJobs({ repository, runId: run.id, attempt: run.run_attempt ?? 1, token, apiUrl: env.GITHUB_API_URL, fetchImpl }));
-    return jobLists.get(run.id);
-  };
+  let runs;
+  let finished;
   try {
-    // Every run, unfinished ones too: a planned job a running nightly has not passed yet is carried.
-    const runs = await successfulRuns({ repository, workflow: 'ci.yml', branch, token, apiUrl: env.GITHUB_API_URL, fetchImpl, status: null });
-    const finished = testedBase({ runs, head: sha, branch, git, conclusions: ['success', 'failure'] });
-    let result;
-    if (finished.run?.conclusion !== 'failure') result = { ...finished, carried: new Map() };
-    else {
-      const { carried, unattributed } = carriedApps(await readJobs(finished.run), appIds);
-      if (!unattributed.length) {
-        const apps = [...carried.keys()];
-        const why = apps.length
-          ? `it failed for ${apps.join(', ')}, which ${apps.length === 1 ? 'is' : 'are'} selected again (without @slow tests on a push)`
-          : 'it failed only in jobs every push runs again, planned jobs or jobs only the nightly runs';
-        result = { ...finished, carried, reason: `${finished.reason}; ${why}` };
-      } else {
-        const green = testedBase({ runs, head: sha, branch, git });
-        result = { ...green, carried: new Map(), reason: `${green.reason}; the nearest finished run failed in ${unattributed.slice(0, 3).join(', ')}, which no app owns` };
-      }
+    runs = await successfulRuns({ repository, workflow: 'ci.yml', branch, token, apiUrl: env.GITHUB_API_URL, fetchImpl, status: 'completed' });
+    finished = testedBase({ runs, head: sha, branch, git, conclusions: ['success', 'failure'] });
+    if (finished.run?.conclusion !== 'failure') return { ...finished, carried: new Map() };
+    const jobs = await runJobs({ repository, runId: finished.run.id, attempt: finished.run.run_attempt ?? 1, token, apiUrl: env.GITHUB_API_URL, fetchImpl });
+    const { carried, unattributed } = carriedApps(jobs, appIds);
+    if (!unattributed.length) {
+      const apps = [...carried.keys()];
+      const why = apps.length
+        ? `it failed for ${apps.join(', ')}, which ${apps.length === 1 ? 'is' : 'are'} selected again (without @slow tests on a push)`
+        : 'it failed only in jobs every push runs again or only the nightly runs';
+      return { ...finished, carried, reason: `${finished.reason}; ${why}` };
     }
-    const checks = await carriedPlannedJobs({ runs, base: result.base, head: sha, branch, git, readJobs });
-    const rerun = [...checks].map(([name, reasons]) => `; ${name} runs again in full: ${reasons.join(', ')}`).join('');
-    return { ...result, checks, reason: `${result.reason}${rerun}` };
+    const green = testedBase({ runs, head: sha, branch, git });
+    return { ...green, carried: new Map(), reason: `${green.reason}; the nearest finished run failed in ${unattributed.slice(0, 3).join(', ')}, which no app owns` };
   } catch (error) {
-    return { base: null, ...none, reason: `the last finished ci run on ${branch} is unknown: ${error.message}` };
+    return { base: null, carried: new Map(), reason: `the last finished ci run on ${branch} is unknown: ${error.message}` };
   }
 }
 
@@ -205,10 +145,10 @@ export function gitAncestry(cwd) {
 }
 
 // The newest successful runs of `workflow` on `branch`, from the Actions API.
-// `status: 'completed'` lists failed runs too, and `status: null` every run.
+// `status: 'completed'` lists failed runs too.
 export async function successfulRuns({ repository, workflow, branch, token, apiUrl = 'https://api.github.com', fetchImpl = fetch, status = 'success' }) {
   if (!repository || !token) throw new Error('GITHUB_REPOSITORY and GITHUB_TOKEN are needed to find the last successful run');
-  const url = `${apiUrl}/repos/${repository}/actions/workflows/${workflow}/runs?branch=${encodeURIComponent(branch)}${status ? `&status=${status}` : ''}&per_page=100`;
+  const url = `${apiUrl}/repos/${repository}/actions/workflows/${workflow}/runs?branch=${encodeURIComponent(branch)}&status=${status}&per_page=100`;
   const response = await fetchImpl(url, {
     headers: { accept: 'application/vnd.github+json', authorization: `Bearer ${token}`, 'x-github-api-version': '2022-11-28' },
     signal: AbortSignal.timeout(30_000),
