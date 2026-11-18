@@ -1,0 +1,104 @@
+name: quality
+
+# Correctness lint, unused code, dependency boundaries and mutation testing,
+# one run per event. Each job keeps the events its former workflow ran on
+# (test/ci-policy.test.mjs): the first three on pull requests and main pushes,
+# mutation testing on pull requests (smoke) and weekly (every module).
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '41 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
+
+jobs:
+  correctness:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    env:
+      ONNXRUNTIME_NODE_INSTALL: skip
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      # Root-command canaries preserve every workspace type/syntax task; install their dependencies without runtime postinstalls.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      # Compiles each typed promise project (scripts/quality/typed-projects.mjs) with the pinned TS5 before linting.
+      - run: pnpm lint:correctness
+
+  unused-code:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm quality:unused
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: unused-code
+          path: quality-artifacts/unused-code/
+          if-no-files-found: error
+          retention-days: 14
+
+  dependencies:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ONNXRUNTIME_NODE_INSTALL: skip
+    steps:
+      - uses: actions/checkout@v7
+      - name: Use runner storage for temporary files
+        run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check:dependencies
+
+  mutation:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Prove mutation detection on pull requests
+        if: github.event_name == 'pull_request'
+        run: pnpm quality:mutations:smoke
+      - name: Run every configured module
+        if: github.event_name != 'pull_request'
+        run: pnpm quality:mutations
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mutation-quality
+          path: quality-artifacts/mutations/
+          if-no-files-found: error
+          retention-days: 14

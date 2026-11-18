@@ -334,9 +334,9 @@ test('Knip and Stryker remain independent of app, native and browser inputs', as
   for (const path of paths) {
     assert.doesNotMatch(await readFile(join(repoRoot, path), 'utf8'), /\bknip\b|@stryker-mutator\/core|\bstryker\b/, `${path} now consumes an independent root tool; revisit its CI ownership`);
   }
-  for (const [file, command] of [['unused-code', 'pnpm quality:unused'], ['mutation-quality', 'pnpm quality:mutations:smoke']]) {
-    const workflow = parse(await readFile(join(repoRoot, `.github/workflows/${file}.yml`), 'utf8'));
-    assert.ok(Object.hasOwn(workflow.on, 'pull_request'), `${file} still runs on every PR`);
+  const workflow = parse(await readFile(join(repoRoot, '.github/workflows/quality.yml'), 'utf8'));
+  assert.ok(Object.hasOwn(workflow.on, 'pull_request'), 'the quality workflow still runs on every PR');
+  for (const command of ['pnpm quality:unused', 'pnpm quality:mutations:smoke']) {
     assert.ok(Object.values(workflow.jobs).some(job => job.steps.some(step => step.run === command)), command);
   }
 });

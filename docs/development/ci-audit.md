@@ -33,10 +33,10 @@ test data affect comparisons.
 | Repository contracts | `ci / workspace-contracts`, `test:contracts` | Discovers every root `*.test.mjs`, except the built runtime and homepage tests assigned below. |
 | Shared package unit tests | `ci / workspace-contracts`, `test:packages` | Runs shared scientific and infrastructure package tests even when app selection is narrow. |
 | Native tract conversion and WASM parity | `ci / workspace-contracts` | Native binary must exist before package parity tests; otherwise comparisons can skip. |
-| Correctness lint | `code-quality` | Central typed and JavaScript correctness rules. |
+| Correctness lint | `quality / correctness` | Central typed and JavaScript correctness rules. |
 | Workspace syntax/type tasks | `ci / workspace-contracts` | Preserves workspace checks not replaced by central lint. |
-| Dependency and unused-code analysis | Dedicated quality workflows | Their analyses are distinct from root tests of the tools. |
-| Mutation checks | `mutation-quality` | PR smoke plus the complete scheduled/manual mutation run. |
+| Dependency and unused-code analysis | `quality / dependencies` and `quality / unused-code` | Their analyses are distinct from root tests of the tools. |
+| Mutation checks | `quality / mutation` | PR smoke plus the complete scheduled/manual mutation run. |
 | App unit tests and builds | `ci / app-tests` | Affected-app matrix and conservative dependency fallback. |
 | Scientific browser tests | `ci / browser-e2e` and `browser-e2e-gpu` | Pinned data, output parity, CPU and real GPU behavior. Broad PRs defer the GPU matrix to main/nightly under the existing policy. |
 | Built runtime assembly | `ci / composite-site` | Requires the assembled production site. Source-only runtime contract tests belong to root contracts. |
