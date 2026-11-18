@@ -7,6 +7,9 @@
 #                         module computes (the harness's null control)
 #   build.sh avx512 OUT   the hooks with the test-only samsrf-mkl-avx512 kernels installed
 #                         for real double data (install-avx512.patch)
+#   build.sh avx512-real-corr OUT
+#                         as avx512, but a complex corr keeps the shipped norm of y
+#                         (real-corr-only.patch): an intervention on the mixed complex route
 #
 # OUT must not exist. It receives exes/samsrf, exes/nifti and the packages/samsrf files that
 # run_web_matrix.mjs loads, patched, with the module in OUT/packages/samsrf/wasm and
@@ -17,14 +20,14 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: $0 hooks|avx512 OUT" >&2
+  echo "usage: $0 hooks|avx512|avx512-real-corr OUT" >&2
   exit 2
 }
 [[ $# -eq 2 ]] || usage
 variant=$1
 out=$2
 case "$variant" in
-  hooks | avx512) ;;
+  hooks | avx512 | avx512-real-corr) ;;
   *) usage ;;
 esac
 if [[ -e "$out" ]]; then
@@ -49,8 +52,11 @@ rsync -a "$repo/packages/samsrf/src" "$repo/packages/samsrf/package.json" "$out/
 cp "$repo/packages/samsrf/validation/matlab/run_web_matrix.mjs" "$out/packages/samsrf/validation/matlab/"
 
 patches=("$harness/hooks.patch")
-if [[ "$variant" == avx512 ]]; then
+if [[ "$variant" == avx512* ]]; then
   patches+=("$harness/install-avx512.patch")
+fi
+if [[ "$variant" == avx512-real-corr ]]; then
+  patches+=("$harness/real-corr-only.patch")
 fi
 for patch in "${patches[@]}"; do
   (cd "$out" && git apply --check "$patch" && git apply "$patch")

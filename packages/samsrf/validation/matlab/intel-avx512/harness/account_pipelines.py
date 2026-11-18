@@ -166,8 +166,8 @@ def main():
         parser.add_argument(f'--{name}', required=True)
     options = parser.parse_args()
     builds = {'baseline': read_json(options.baseline_build), 'research': read_json(options.research_build)}
-    if builds['baseline']['variant'] != 'hooks' or builds['research']['variant'] != 'avx512':
-        raise SystemExit('the baseline must be the hooks build and the research the avx512 build')
+    if builds['baseline']['variant'] != 'hooks' or builds['research']['variant'] not in ('avx512', 'avx512-real-corr'):
+        raise SystemExit('the baseline must be the hooks build and the research an avx512 build')
     report = account(Path(options.pins), read_dump(options.baseline), read_dump(options.research))
     result = {
         'counts': '[values, kept, gained, lost, neither] per kind and vertex route; vertices are zero-based',
