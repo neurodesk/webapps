@@ -126,6 +126,8 @@ const SITE_COMMANDS = {
   'site-mobile': ['pnpm test:interface-workflows', 'pnpm test:image-uploads', 'pnpm test:mobile'],
   'site-catalog': ['pnpm --filter @neurodesk/webapp-components test:elements:browser', 'pnpm --filter @neurodesk/webapp-components test:showcase:browser', 'pnpm --filter @neurodesk/webapp-components test:handoff:browser', 'node test/automation-catalog.smoke.mjs', 'pnpm test:app-handoff'],
 };
+// The checks that cover one page per app: SMOKE_APPS narrows them on pull requests and pushes.
+const SCOPED = ['pnpm test:runtime-startup', 'pnpm audit:interfaces', 'pnpm test:smoke', 'pnpm test:e2e:catalog', 'pnpm test:interface-workflows', 'pnpm test:mobile'];
 
 test('the site is built once and every site check runs in one job that tests that build', () => {
   const site = ci.jobs['composite-site'];
@@ -144,10 +146,28 @@ test('the site is built once and every site check runs in one job that tests tha
     const job = ci.jobs[id];
     assert.equal(job.needs, 'composite-site', id);
     assert.equal(job.if, undefined, `${id} starts whenever the build job succeeded`);
+    assert.equal(job.env, undefined, `${id} narrows single steps, never the whole job`);
     const unpack = job.steps.findIndex((step) => step.uses === './.github/actions/composite-site');
     const firstCheck = job.steps.findIndex((step) => SITE_COMMANDS[id].some((command) => step.run?.includes(command)));
     assert.ok(unpack >= 0 && unpack < firstCheck, `${id} unpacks the build before its first check`);
     assert.ok(!commands(job).some((run) => /\bpnpm build\b|turbo run/.test(run)), `${id} tests the uploaded build`);
+    for (const step of job.steps) {
+      const scoped = SCOPED.some((command) => step.run?.includes(command));
+      assert.equal(step.env?.SMOKE_APPS, scoped ? '${{ needs.composite-site.outputs.smoke_apps }}' : undefined, `${id}: ${step.name ?? step.run ?? step.uses}`);
+    }
+  }
+  assert.equal(site.outputs.smoke_apps, '${{ steps.check-apps.outputs.smoke_apps }}');
+  const choose = site.steps.find((step) => step.id === 'check-apps');
+  assert.equal(choose.run, 'node scripts/site-check-apps.mjs');
+  assert.deepEqual(choose.env, {
+    EVENT: '${{ github.event_name }}',
+    SCOPE: '${{ inputs.scope }}',
+    ALL_APPS: '${{ needs.app-plan.outputs.all_apps }}',
+    SITE_CODE: '${{ needs.app-plan.outputs.site_code }}',
+    SELECTED_IDS: '${{ needs.app-plan.outputs.selected_ids }}',
+  });
+  for (const output of ['all_apps', 'site_code', 'selected_ids']) {
+    assert.equal(ci.jobs['app-plan'].outputs[output], `\${{ steps.plan.outputs.${output} }}`, output);
   }
 });
 

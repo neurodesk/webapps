@@ -4,19 +4,11 @@ import { join } from 'node:path';
 import { serveSite } from '../test-utils/serve-site.mjs';
 import { chromium, expect } from '@playwright/test';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
+import { smokeApps } from '../scripts/lib/smoke-apps.mjs';
 import { verifyMobileImageImport, verifyMobileMeasurement } from '../test-utils/mobile-imaging.mjs';
 
 const dist = join(repoRoot, 'dist');
-const registry = await loadAppsRegistry();
-const requestedAppIds = new Set((process.env.SMOKE_APPS ?? '').split(',').filter(Boolean));
-const appsUnderTest = requestedAppIds.size
-  ? registry.apps.filter(({ id }) => requestedAppIds.has(id))
-  : registry.apps;
-if (appsUnderTest.length !== (requestedAppIds.size || registry.apps.length)) {
-  const found = new Set(appsUnderTest.map(({ id }) => id));
-  const missing = [...requestedAppIds].filter((id) => !found.has(id));
-  throw new Error(`Unknown SMOKE_APPS entries: ${missing.join(', ')}`);
-}
+const { apps: appsUnderTest } = smokeApps((await loadAppsRegistry()).apps);
 const { origin, close } = await serveSite(dist);
 const browser = await chromium.launch({ headless: true, args: ['--enable-webgl', '--use-gl=angle', '--use-angle=swiftshader'] });
 const failures = [];
@@ -217,4 +209,4 @@ try {
   await close();
 }
 if (failures.length) throw new Error(`Mobile failures:\n${failures.join('\n')}`);
-console.log(`Mobile layouts and touch navigation passed for all ${appsUnderTest.length} apps and the catalog.`);
+console.log(`Mobile layouts and touch navigation passed for ${appsUnderTest.length} apps and the catalog.`);

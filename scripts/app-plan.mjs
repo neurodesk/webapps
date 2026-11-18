@@ -134,6 +134,7 @@ const outputs = {
   has_release_apps: String(scoped.releaseApps.include.length > 0),
   all_apps: String(plan.allApps),
   has_site: String(scoped.site),
+  site_code: String(plan.siteCode),
   withheld: String(Boolean(withheld)),
   full_plan: String(fullPlan),
   fallback_reason: fallback,

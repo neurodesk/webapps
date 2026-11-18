@@ -215,8 +215,8 @@ function changedRootScripts(manifest) {
 // The apps a change tests, whether it needs the composite site build, and why.
 // Without a workspace graph every packages/, exes/ or root file change counts
 // as shared. With one, a change selects the apps that reach it; a root file
-// that ci.yml's per-app jobs run selects every app, and one only the
-// composite-site job runs selects no app but the site build. `manifests` maps
+// that ci.yml's per-app jobs run selects every app, and one only its site
+// jobs run (siteJobNames) selects no app but the site build. `manifests` maps
 // a changed package.json, offline asset lock, pnpm-lock.yaml or
 // registry/apps.yml to its text before and after: root script edits count only
 // where ci.yml runs them, an asset lock change selects the apps whose assets
@@ -226,12 +226,14 @@ function changedRootScripts(manifest) {
 // only the apps that read that exact file.
 // `reasons.fallback` says why the whole catalog was selected; otherwise
 // `reasons.apps` maps each selected app, and `reasons.site` the site build, to
-// the changes that selected it.
+// the changes that selected it. `siteCode` is false when every site reason is
+// data the per-app site checks do not read (landing page files, registry
+// entries, the offline lock), so they can cover only the selected apps.
 // With `release`, a version bump selects what it reaches: release.yml picks
 // the apps to publish from the version changes themselves. `carried` maps app
 // ids a failed run on main left untested to the jobs that failed there.
 export function selectAffectedApps(registry, changedPaths = [], graph = null, manifests = new Map(), { release = false, carried = new Map() } = {}) {
-  const everything = (fallback) => ({ apps: registry.apps, site: true, reasons: { fallback, apps: {}, site: [] } });
+  const everything = (fallback) => ({ apps: registry.apps, site: true, siteCode: true, reasons: { fallback, apps: {}, site: [] } });
   if (!changedPaths.length) return everything('no changed paths: no base revision, an unreadable diff, or a full run');
 
   const appIds = new Set(registry.apps.map((app) => app.id));
@@ -246,7 +248,15 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
   const shared = (reason) => {
     fallback ??= reason;
   };
-  const siteBuild = (reason) => siteReasons.push(reason);
+  // A change to code the site jobs run (the checks, the composite build) needs
+  // those checks over every app; siteData is for data only the landing page,
+  // the catalogue or the named apps read.
+  let siteCode = false;
+  const siteBuild = (reason) => {
+    siteCode = true;
+    siteReasons.push(reason);
+  };
+  const siteData = (reason) => siteReasons.push(reason);
   // Selects whatever reaches `node` or a file below it.
   const selectReaching = (node, reason) => {
     const within = (candidate) => candidate === node || candidate.startsWith(`${node}/`);
@@ -296,7 +306,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
       continue;
     }
     if (SITE_ONLY_FILES.has(path)) {
-      siteBuild(`${path}: only the composite build copies it`);
+      siteData(`${path}: only the composite build copies it`);
       continue;
     }
     if (path === RUNTIME_MANIFEST && graph) {
@@ -324,7 +334,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
         shared(`${path}: ${impact.shared}`);
         continue;
       }
-      siteBuild(`${path}: the composite site serves the catalog${impact.suite ? ' and its desktop suite' : ''}`);
+      siteData(`${path}: the composite site serves the catalog${impact.suite ? ' and its desktop suite' : ''}`);
       for (const id of impact.changed) {
         if (appIds.has(id)) select(id, `${path}: the ${id} entry changed`);
       }
@@ -336,7 +346,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
         shared(`${path}: ${impact.shared}`);
         continue;
       }
-      siteBuild(`${path}: the composite site themes every app with it`);
+      siteData(`${path}: the composite site themes every app with it`);
       for (const id of impact.changed) {
         if (appIds.has(id)) select(id, `${path}: the ${id} entry changed`);
       }
@@ -348,7 +358,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
         shared(`${path}: ${impact.shared}`);
         continue;
       }
-      siteBuild(`${path}: the landing page lists the catalog`);
+      siteData(`${path}: the landing page lists the catalog`);
       for (const id of impact.changed) {
         if (appIds.has(id)) select(id, `${path}: the ${id} entry changed`);
       }
@@ -373,7 +383,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     }
     if (manifest && path === OFFLINE_LOCK) {
       for (const app of lockOwners(manifest)) if (appIds.has(app)) select(app, `${path}: its locked assets changed`);
-      siteBuild(path);
+      siteData(path);
       continue;
     }
     // New export entries resolve every existing import as before.
@@ -420,6 +430,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
   return {
     apps,
     site: siteReasons.length > 0,
+    siteCode,
     reasons: { fallback: null, apps: Object.fromEntries(apps.map((app) => [app.id, appReasons.get(app.id)])), site: siteReasons },
     bookkeeping,
   };
@@ -447,6 +458,7 @@ export function createAppPlan(registry, changedPaths = [], graph = null, manifes
     releaseApps: Object.freeze({ include: Object.freeze(releasable.map(matrixEntry)) }),
     allApps: selected.length === registry.apps.length,
     site: site || selected.length > 0,
+    siteCode: affected.siteCode,
     reasons: Object.freeze(reasons),
     bookkeeping: Object.freeze([...(affected.bookkeeping ?? [])]),
   });

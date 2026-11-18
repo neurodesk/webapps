@@ -7,7 +7,10 @@ import { serveSite } from './serve-site.mjs';
 // This is the existing scientific regression pin, also used by both app and package BET tests.
 const maskSha256 = '20112e75bdaab6c8f3d9d47469b6814554f167996f4cff61e004f00207b233ad';
 
-export async function verifyQsmBetRuntime({ browser, repoRoot }) {
+// Runs the production BET worker of each of `apps` that ships one; returns how many it ran.
+export async function verifyQsmBetRuntime({ browser, repoRoot, apps }) {
+  const tested = ['qsmbly', 'brain-extraction'].filter(id => apps.some(app => app.id === id));
+  if (!tested.length) return 0;
   const site = await serveSite(join(repoRoot, 'dist'), { isolationHeaders: false });
   try {
     const bytes = decompressIfNeeded(await readFile(join(repoRoot, 'apps/calmar/tests/fixtures/synthstrip-mini/T1.nii.gz')));
@@ -18,7 +21,7 @@ export async function verifyQsmBetRuntime({ browser, repoRoot }) {
       if ((await readFile(join(assets, name), 'utf8')).includes('bet/bet.wasm')) workers.push(name);
     }
     assert.equal(workers.length, 1, 'one production brain-extraction worker must load compact BET');
-    for (const app of ['qsmbly', 'brain-extraction']) {
+    for (const app of tested) {
       const context = await browser.newContext();
       try {
         const requests = [];
@@ -83,4 +86,5 @@ export async function verifyQsmBetRuntime({ browser, repoRoot }) {
       } finally { await context.close(); }
     }
   } finally { await site.close(); }
+  return tested.length;
 }

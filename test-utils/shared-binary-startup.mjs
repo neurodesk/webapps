@@ -230,14 +230,15 @@ function assertOnlySharedBinary({ label, site, binaryPath, report, wasmResponses
 }
 
 /**
- * For every app that must share a WASM file of `runtime-assets/manifest.json` (the `consumers` of
+ * For every app of `apps` that must share a WASM file of `runtime-assets/manifest.json` (the `consumers` of
  * the file or of its family), start the module the app's build uses and require that it fetched the
  * binary from the family's `_runtime/` path with HTTP 200, once with isolation response headers and
  * once with only the service worker, as GitHub Pages serves it. It then segments a head phantom on
  * MindGrab's threaded CPU backend in each app that shares a MindGrab CPU binary, through the app's
- * staged model module, with only the service worker.
+ * staged model module, with only the service worker. Every family's binary is checked against its
+ * pin whatever `apps` holds. Returns how many module starts it checked.
  */
-export async function verifySharedBinaries({ browser, registry, repoRoot }) {
+export async function verifySharedBinaries({ browser, registry, repoRoot, apps = registry.apps }) {
   const dist = join(repoRoot, 'dist');
   const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets/manifest.json'), 'utf8'));
   const shared = manifest.families.filter(family => family.deduplicate && family.files.some(file => file.name.endsWith('.wasm')));
@@ -258,6 +259,7 @@ export async function verifySharedBinaries({ browser, registry, repoRoot }) {
         for (const id of consumersOf(family, file)) {
           const app = registry.apps.find(candidate => candidate.id === id);
           assert.ok(app, `${family.id}: unknown consumer ${id}`);
+          if (!apps.includes(app)) continue;
           const loaders = await findLoaders({ dist, app, binaryPath });
           assert.ok(loaders.length > 0, `${id}: no built module loads ${binaryPath}`);
           for (const loader of loaders) {
@@ -284,7 +286,7 @@ export async function verifySharedBinaries({ browser, registry, repoRoot }) {
         }
       }
     }
-    assert.ok(probes.length > 0, 'No shared WASM family lists consumers');
+    if (!probes.length) return 0;
     for (const isolationHeaders of [false, true]) {
       const site = await serveSite(dist, { isolationHeaders, files });
       const mode = isolationHeaders ? 'response-header isolation' : 'service-worker isolation';
@@ -341,4 +343,5 @@ export async function verifySharedBinaries({ browser, registry, repoRoot }) {
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }
+  return probes.length;
 }

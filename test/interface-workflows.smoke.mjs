@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium, expect } from '@playwright/test';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
+import { requireChecked, smokeApps } from '../scripts/lib/smoke-apps.mjs';
 import { serveSite } from '../test-utils/serve-site.mjs';
 import { dicomSeries } from '../test-utils/dicom-fixture.mjs';
 import { bidsTree, dropFolder } from '../test-utils/bids-folder-drop.mjs';
@@ -98,13 +99,16 @@ function fieldImage(name) {
   return { name, mimeType: 'image/tiff', buffer: Buffer.from(writeTiffStack({ width, height, data })) };
 }
 const apps = (await loadAppsRegistry()).apps;
+const selection = smokeApps(apps);
 const site = await serveSite(join(repoRoot, 'dist'));
 const browser = await chromium.launch({ args:['--enable-webgl','--use-gl=angle','--use-angle=swiftshader'] });
 const failures = [];
+let checked = 0;
 async function check(id, workflow) {
-  if (process.env.SMOKE_APPS && !process.env.SMOKE_APPS.split(',').includes(id)) return;
   const app = apps.find(app => app.id === id);
   if (!app) throw new Error(`Unknown app ${id}`);
+  if (!selection.apps.includes(app)) return;
+  checked += 1;
   const page = await browser.newPage({ viewport:{width:390,height:844}, isMobile:true, hasTouch:true });
   page.setDefaultTimeout(20000);
   try {
@@ -1227,3 +1231,4 @@ try {
   });
 } finally { await browser.close(); await site.close(); }
 if (failures.length) throw new Error(failures.join('\n'));
+requireChecked(checked, selection, 'Interface workflows');

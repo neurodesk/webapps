@@ -35,6 +35,7 @@ async function runAsyncifyModel({ data }) {
   }
 }
 
+// Runs two-thread inference in every bundled asyncify worker of `apps`; returns how many it ran.
 export async function verifyAsyncifyRuntime({ browser, apps, repoRoot }) {
   const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets/manifest.json'), 'utf8'));
   const moduleFamily = manifest.families.find(family => family.id === 'ort-web-asyncify');
@@ -43,7 +44,7 @@ export async function verifyAsyncifyRuntime({ browser, apps, repoRoot }) {
   const binary = binaryFamily.files[0];
   const apiPath = join(repoRoot, 'apps/synthsr/node_modules/onnxruntime-web/dist/ort.webgpu.bundle.min.mjs');
   const consumers = apps.filter(app => app.app_scoped_runtime_families.includes(moduleFamily.id));
-  assert.ok(consumers.length > 0, 'No asyncify consumers were tested');
+  if (!consumers.length) return 0;
   const scratch = await mkdtemp(join(tmpdir(), 'asyncify-startup-'));
   const files = new Map();
   const workers = [];
@@ -125,4 +126,5 @@ export async function verifyAsyncifyRuntime({ browser, apps, repoRoot }) {
     await site?.close();
     await rm(scratch, { recursive: true, force: true });
   }
+  return workers.length;
 }

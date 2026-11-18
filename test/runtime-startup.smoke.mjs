@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import vm from 'node:vm';
 import { chromium } from '@playwright/test';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
+import { requireChecked, smokeApps } from '../scripts/lib/smoke-apps.mjs';
 import { serveSite } from '../test-utils/serve-site.mjs';
 import { verifyAsyncifyRuntime } from '../test-utils/asyncify-runtime-startup.mjs';
 import { verifyQsmBetRuntime } from '../test-utils/qsm-bet-runtime-startup.mjs';
@@ -12,10 +13,9 @@ import { verifySharedBinaries } from '../test-utils/shared-binary-startup.mjs';
 // A two-element Neg graph: exercise real ORT pthread startup without downloading a scientific model.
 const modelBase64 = 'CAcSDGJhY2tlbmQtdGVzdDpBCgsKAXgSAXkiA05lZxIQdGVzdF9uZWdfZXhhbXBsZVoPCgF4EgoKCAgBEgQKAggCYg8KAXkSCgoICAESBAoCCAJCBAoAEA0=';
 const registry = await loadAppsRegistry();
-// Narrow static-worker diagnostics locally; the normal CI invocation still runs every gate.
-const requested = new Set((process.env.SMOKE_APPS ?? '').split(',').filter(Boolean));
-const apps = requested.size ? registry.apps.filter(app => requested.has(app.id)) : registry.apps;
-assert.equal(requested.size || apps.length, apps.length, 'SMOKE_APPS contains an unknown app');
+// SMOKE_APPS narrows every gate below to the apps it lists; without it each covers the catalogue.
+const selection = smokeApps(registry.apps);
+const { apps } = selection;
 const site = process.env.BASE_URL ? null : await serveSite(join(repoRoot, 'dist'), { isolationHeaders: false });
 const base = `${(process.env.BASE_URL || site.origin).replace(/\/$/, '')}/`;
 const browser = await chromium.launch({ headless: true });
@@ -114,12 +114,15 @@ try {
     }
   }
   assert.equal(failures.length, 0, failures.join('\n'));
-  assert.ok(tested >= (requested.size || 5), `Expected ${requested.size || 'at least five'} ONNX worker apps, tested ${tested}`);
-  if (!requested.size) {
-    await verifyAsyncifyRuntime({ browser, base, apps: registry.apps, repoRoot });
-    await verifyQsmBetRuntime({ browser, repoRoot });
-    await verifySharedBinaries({ browser, registry, repoRoot });
+  const asyncify = await verifyAsyncifyRuntime({ browser, base, apps, repoRoot });
+  const qsmBet = await verifyQsmBetRuntime({ browser, repoRoot, apps });
+  const shared = await verifySharedBinaries({ browser, registry, repoRoot, apps });
+  if (!selection.filtered) {
+    assert.ok(tested >= 5, `Expected at least five ONNX worker apps, tested ${tested}`);
+    assert.ok(asyncify > 0, 'No asyncify consumers were tested');
+    assert.ok(shared > 0, 'No shared WASM family lists consumers');
   }
+  requireChecked(tested + asyncify + qsmBet + shared, selection, 'Runtime startup');
 } finally {
   await browser.close();
   await site?.close();

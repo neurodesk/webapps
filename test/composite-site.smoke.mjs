@@ -5,22 +5,16 @@ import { createServer } from 'node:http';
 import { extname, join, normalize } from 'node:path';
 import { chromium } from '@playwright/test';
 import { findCatalog, loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
+import { smokeApps } from '../scripts/lib/smoke-apps.mjs';
 import { verifyMuscleMapFullPipeline } from './musclemap-full-pipeline-smoke.mjs';
 import { verifyDicompareRoutes } from '../test-utils/dicompare-routes.mjs';
 import { verifyMuscleMapThreads } from './multithreaded-ort-smoke.mjs';
 
 const dist = join(repoRoot, 'dist');
 const registry = await loadAppsRegistry();
-const requestedAppIds = new Set((process.env.SMOKE_APPS ?? '').split(',').filter(Boolean));
 const skipScientificWorkflows = process.env.SMOKE_SKIP_SCIENTIFIC === '1';
-const appsUnderTest = requestedAppIds.size
-  ? registry.apps.filter(({ id }) => requestedAppIds.has(id))
-  : registry.apps;
-if (appsUnderTest.length !== (requestedAppIds.size || registry.apps.length)) {
-  const found = new Set(appsUnderTest.map(({ id }) => id));
-  const missing = [...requestedAppIds].filter((id) => !found.has(id));
-  throw new Error(`Unknown SMOKE_APPS entries: ${missing.join(', ')}`);
-}
+// The landing page and catalogue checks always run; SMOKE_APPS narrows the per-app ones.
+const { apps: appsUnderTest } = smokeApps(registry.apps);
 const mimeTypes = new Map([
   ['.css', 'text/css; charset=utf-8'],
   ['.html', 'text/html; charset=utf-8'],

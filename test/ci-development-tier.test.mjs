@@ -198,6 +198,8 @@ test('the interface audit reads the example cache the job restored, filled and s
   assert.match(directory, /^\$\{\{ runner\.temp \}\}\/[\w-]+$/);
   assert.equal(fill.env.EXAMPLE_ASSET_CACHE, directory, 'the fill writes the restored directory');
   assert.match(fill.run, /fetch-example-cache\.mjs "\$EXAMPLE_ASSET_CACHE" --prune$/);
+  // The fill runs over every app, so main never saves a partial copy (and --prune refuses SMOKE_APPS).
+  assert.equal(fill.env.SMOKE_APPS, undefined);
   assert.equal(audit.env.EXAMPLE_ASSET_CACHE, directory, 'the audit reads the filled directory instead of the network');
   assert.equal(save.with.path, directory, 'the save stores the filled directory');
   assert.equal(save.with.key, `\${{ steps.${restore.id}.outputs.cache-primary-key }}`, 'the save uses the key the restore looked up');

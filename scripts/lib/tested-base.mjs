@@ -49,9 +49,12 @@ export function testedBase({ runs, head, branch, git, workflow = 'ci', atHead = 
 // runs again whatever its plan, and jobs only the nightly runs (which tests
 // every app), need no carrying. Any other failed job (the plan itself), a job
 // that has not finished, or an app id the registry does not know cannot be
-// tied to an app. test/app-plan.test.mjs holds ci.yml to these job lists.
+// tied to an app. The site jobs check only the apps their run selected and the
+// canaries (scripts/lib/smoke-apps.mjs) and name no app, so a failure there is
+// tied to none either. test/app-plan.test.mjs holds ci.yml to these job lists.
 export const APP_JOBS = ['app-tests', 'browser-e2e', 'browser-e2e-gpu'];
-export const RERUN_JOBS = ['workspace-contracts', 'composite-site', 'site-runtime', 'site-audit', 'site-e2e', 'site-mobile', 'site-catalog', 'homepage-easter-egg', 'example-cache-retention', 'full-plan', 'full-plan-withheld'];
+export const RERUN_JOBS = ['workspace-contracts', 'homepage-easter-egg', 'example-cache-retention', 'full-plan', 'full-plan-withheld'];
+export const SITE_JOBS = ['composite-site', 'site-runtime', 'site-audit', 'site-e2e', 'site-mobile', 'site-catalog'];
 export const NIGHTLY_JOBS = ['agent-interactions'];
 const APP_JOB = new RegExp(`^(?:${APP_JOBS.join('|')}) \\(([^,)]+)[,)]`);
 const UNPASSED = new Set(['failure', 'cancelled', 'timed_out', 'startup_failure', 'action_required', 'stale']);

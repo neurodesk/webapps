@@ -58,6 +58,8 @@ jobs:
       has_gpu_apps: ${{ steps.plan.outputs.has_gpu_apps }}
       all_apps: ${{ steps.plan.outputs.all_apps }}
       has_site: ${{ steps.plan.outputs.has_site }}
+      site_code: ${{ steps.plan.outputs.site_code }}
+      selected_ids: ${{ steps.plan.outputs.selected_ids }}
       withheld: ${{ steps.plan.outputs.withheld }}
       full_plan: ${{ steps.plan.outputs.full_plan }}
     steps:
@@ -213,6 +215,7 @@ jobs:
     if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name == 'push' || github.event_name == 'schedule' || needs.app-plan.outputs.has_site == 'true')
     runs-on: ubuntu-latest
     outputs:
+      smoke_apps: ${{ steps.check-apps.outputs.smoke_apps }}
       agent_site_ready: ${{ steps.agent-site.outputs.ready }}
     steps:
       - uses: actions/checkout@v7
@@ -245,6 +248,18 @@ jobs:
         run: node --test test/runtime-assets.test.mjs
       - name: Check each catalogue site holds its apps and everything they load
         run: node --test test/catalog-sites.test.mjs
+      # Pull requests and pushes check the apps the plan selected and one canary
+      # per shell; the nightly, scope all or site, a whole-catalogue plan and a
+      # change to the site jobs' own code check every app (scripts/lib/smoke-apps.mjs).
+      - name: Choose the apps the site checks cover
+        id: check-apps
+        env:
+          EVENT: ${{ github.event_name }}
+          SCOPE: ${{ inputs.scope }}
+          ALL_APPS: ${{ needs.app-plan.outputs.all_apps }}
+          SITE_CODE: ${{ needs.app-plan.outputs.site_code }}
+          SELECTED_IDS: ${{ needs.app-plan.outputs.selected_ids }}
+        run: node scripts/site-check-apps.mjs
       - name: Package the built site for the check jobs
         run: |
           tar -I 'zstd -T0 -3' -cf "$RUNNER_TEMP/composite-site.tar.zst" -C dist .
@@ -291,6 +306,8 @@ jobs:
         run: pnpm test:resource-cache
       - name: Load threaded models with service-worker isolation
         run: pnpm test:runtime-startup
+        env:
+          SMOKE_APPS: ${{ needs.composite-site.outputs.smoke_apps }}
 
   site-audit:
     needs: composite-site
@@ -312,6 +329,7 @@ jobs:
       # this checked copy keeps a stalled or rate-limited download from failing it.
       # It also holds the pinned files some apps' pages load before a run (PAGE_ASSET_APPS).
       # Only main saves the copy: a pull request's would be a second one of its size.
+      # The copy always holds every app's examples, so main never saves a partial one.
       - name: Record free disk space before the examples are restored
         run: df -h
       - name: Restore the examples the interface audit imports
@@ -340,6 +358,7 @@ jobs:
         env:
           EXAMPLE_ASSET_CACHE: ${{ runner.temp }}/example-assets
           INTERFACE_ARTIFACTS: interface-artifacts
+          SMOKE_APPS: ${{ needs.composite-site.outputs.smoke_apps }}
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -366,10 +385,17 @@ jobs:
       - uses: ./.github/actions/composite-site
       - name: Smoke test every deployed subpath
         run: pnpm test:smoke
+        env:
+          SMOKE_APPS: ${{ needs.composite-site.outputs.smoke_apps }}
       - name: Check catalog e2e types
         run: pnpm test:e2e:types
       - name: Test every production workspace with e2e
-        run: pnpm test:e2e:catalog --skip-build --output .e2e/workspace
+        env:
+          SMOKE_APPS: ${{ needs.composite-site.outputs.smoke_apps }}
+        run: |
+          args=(--skip-build --site-dir dist --output .e2e/workspace)
+          if [ -n "$SMOKE_APPS" ]; then args+=(--app "$SMOKE_APPS"); fi
+          pnpm test:e2e:catalog "${args[@]}"
       - name: Run requested Neurodesk processing workflows
         if: github.event_name == 'workflow_dispatch' && inputs.agentic_mode == 'pipeline'
         env:
@@ -410,10 +436,14 @@ jobs:
       - uses: ./.github/actions/composite-site
       - name: Check interface workflows with image data
         run: pnpm test:interface-workflows
+        env:
+          SMOKE_APPS: ${{ needs.composite-site.outputs.smoke_apps }}
       - name: Check unified scan pickers with DICOM series
         run: pnpm test:image-uploads
       - name: Check phone and tablet layouts and touch navigation
         run: pnpm test:mobile
+        env:
+          SMOKE_APPS: ${{ needs.composite-site.outputs.smoke_apps }}
 
   # Catalogue-level and cross-browser checks: the same on every event.
   site-catalog:

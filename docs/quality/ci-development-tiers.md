@@ -230,6 +230,35 @@ it through `.github/actions/composite-site` and check it in parallel:
 check in sequence for 31 to 33 minutes, and it was the last job of every ready
 one-app pull request.
 
+The per-app checks read `SMOKE_APPS` (`scripts/lib/smoke-apps.mjs`), which
+`composite-site` sets with `scripts/site-check-apps.mjs`:
+
+| Event | Apps the per-app site checks cover |
+| --- | --- |
+| Draft pull request | None: the site is not built |
+| Ready pull request, push, dispatch with `scope=affected` | The selected apps and the canaries seedseg, dicompare and syncro |
+| Any of these when the plan selects every app or `site_code` is true | Every app |
+| Nightly, dispatch with `scope=all` or `scope=site` | Every app |
+
+`site_code` is the planner's answer to "does the change reach code the site
+jobs run?". Every reason that selects the site build counts, except data the
+per-app checks do not read: the composite-only site files, registry, app
+information and standalone entries, and the offline asset lock. A change to a
+check, a helper it imports or `scripts/build-site.mjs` checks every app.
+Catalogue-level checks (landing page, catalogue sites, runtime assembly,
+artifact budgets, automation contracts) run whenever the site is built.
+
+A failed site job names no app, so the next push to main diffs from the last
+green run and checks again what the failed run covered. A regression in an app
+that no change selected shows in the nightly run.
+
+On 18 November 2026, against a full local build, the one-app selection
+`niimath` with the canaries took 23 s for runtime startup (9.7 minutes for the
+catalogue in CI), 125 s for the interface audit (8.1 minutes), 36 s for mobile
+layouts (1.8 minutes), 17 s for interface workflows (1.0 minute), 50 s for the
+composite smoke (1.8 minutes) and 49 s for the e2e catalog (2.4 minutes).
+dicompare, the only React app, takes 77 s of that audit.
+
 ## Module-level selection in the component package
 
 Every app depends on `packages/components`, so a change anywhere in it used
@@ -307,9 +336,9 @@ push also selects the apps whose `app-tests` or browser jobs did not pass
 there (`resolveCiBase`, `carriedApps`): on 13 November 2026 synthsr's GPU job
 failed for 7 hours, and each push in that time tested all 63 apps from the
 last green run; replayed, the second of them selects synthsr alone. A failed
-job that belongs to no app, such as the plan itself, a job of that attempt
-that has not finished, or an app id the registry does not know sends the push
-back to the last green run. A carried app runs all its jobs again, but a push
+job that belongs to no app, such as the plan itself or a site job (it checked
+only the apps of its own run), a job of that attempt that has not finished, or
+an app id the registry does not know sends the push back to the last green run. A carried app runs all its jobs again, but a push
 leaves out `@slow` tests, so an app a nightly failed in a `@slow` test is
 retested in full only by the next nightly. Jobs only the nightly runs
 (`agent-interactions`) are not carried: the nightly runs them again. PR pushes cancel earlier runs

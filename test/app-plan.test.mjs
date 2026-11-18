@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { parse, stringify } from 'yaml';
 import { AUTOMATION_CATALOG_READERS, createAppPlan, INDEPENDENT_ROOT_DEV_DEPENDENCIES, RUNTIME_MANIFEST_READERS, SITE_ONLY_FILES } from '../scripts/lib/app-plan.mjs';
-import { APP_JOBS, carriedApps, NIGHTLY_JOBS, RERUN_JOBS, testedBase } from '../scripts/lib/tested-base.mjs';
+import { APP_JOBS, carriedApps, NIGHTLY_JOBS, RERUN_JOBS, SITE_JOBS, testedBase } from '../scripts/lib/tested-base.mjs';
 import { lockfileImpact } from '../scripts/lib/lockfile-impact.mjs';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { CATALOG, CATALOG_JOBS, loadConservativeWorkspaceGraph, reachableFrom, siteJobNames, WorkspaceGraphConfigurationError } from '../scripts/lib/workspace-graph.mjs';
@@ -164,6 +164,25 @@ test('root files only the composite-site job runs select the site build and no a
     assert.deepEqual(plan.selected, [], path);
     assert.equal(plan.site, true, path);
   }
+});
+
+// ci.yml's site checks cover the selected apps and the canaries unless the
+// change reaches code the site jobs run: then they cover every app.
+test('a change to code the site jobs run is site code; app and site data changes are not', async () => {
+  const registry = await loadAppsRegistry();
+  const workspace = await graph;
+  for (const path of ['scripts/audit-interfaces.mjs', 'test/mobile-layout.smoke.mjs', 'test/interface-workflows.smoke.mjs', 'test/runtime-startup.smoke.mjs', 'test-utils/shared-binary-startup.mjs', 'scripts/lib/smoke-apps.mjs', 'scripts/build-site.mjs']) {
+    const plan = createAppPlan(registry, [path], workspace);
+    assert.equal(plan.allApps, false, path);
+    assert.equal(plan.siteCode, true, path);
+  }
+  for (const paths of [['apps/niimath/src/main.js'], ['apps/niimath/automation.json'], ['site/landing.js', 'apps/zarro/index.html']]) {
+    const plan = createAppPlan(registry, paths, workspace);
+    assert.equal(plan.site, true, paths[0]);
+    assert.equal(plan.siteCode, false, paths[0]);
+  }
+  assert.equal(createAppPlan(registry, ['apps/niimath/src/main.js', 'scripts/audit-interfaces.mjs'], workspace).siteCode, true);
+  assert.equal(createAppPlan(registry, [], workspace).siteCode, true, 'a whole-catalogue plan covers every app');
 });
 
 test('a root helper selects the apps that import it', async () => {
@@ -564,6 +583,7 @@ test('a registry entry change selects that app and the site build', async () => 
   assert.deepEqual(plan.selected.map((app) => app.id), ['niimath']);
   assert.deepEqual(plan.reasons.apps.niimath, ['registry/apps.yml: the niimath entry changed']);
   assert.equal(plan.site, true);
+  assert.equal(plan.siteCode, false);
   const qsmbly = await registryPlan((registry) => {
     entry(registry, 'qsmbly').keywords.push('changed');
   });
@@ -623,6 +643,7 @@ test('a reworded or added site category selects only the site build', async () =
   assert.equal(reworded.allApps, false);
   assert.deepEqual(Object.keys(reworded.reasons.apps), []);
   assert.equal(reworded.site, true);
+  assert.equal(reworded.siteCode, false);
   const withEntry = await registryPlan((registry) => {
     registry.site.categories[0].title = 'Renamed';
     registry.apps.find((app) => app.id === 'niimath').title = 'Renamed too';
@@ -647,6 +668,7 @@ test('an offline asset lock change selects the apps whose assets changed', async
   const plan = createAppPlan(registry, ['registry/offline-assets.lock.json'], await graph, new Map([['registry/offline-assets.lock.json', manifest(before, after)]]));
   assert.deepEqual(plan.selected.map((app) => app.id), ['lcmodel']);
   assert.equal(plan.site, true);
+  assert.equal(plan.siteCode, false);
 });
 
 test('a root-relative path joined onto a computed repository root selects its app', async () => {
@@ -679,6 +701,7 @@ test('the app-plan CLI selects explicit apps without a base revision', () => {
   assert.deepEqual(JSON.parse(plan.selected_ids).sort(), ['calmar', 'lcmodel']);
   assert.equal(plan.all_apps, 'false');
   assert.equal(plan.has_site, 'true');
+  assert.equal(plan.site_code, 'false');
 });
 
 test('deleting an imported root helper still selects the app that imports it', async (t) => {
@@ -995,6 +1018,7 @@ test('workflow outputs include the fallback reason and complete matrices', async
   assert.match(JSON.parse(outputs.selection_reasons).fallback, /app-tests/);
   assert.equal(outputs.all_apps, 'true');
   assert.equal(outputs.has_site, 'true');
+  assert.equal(outputs.site_code, 'true');
   assert.deepEqual(JSON.parse(outputs.selected_ids), (await loadAppsRegistry()).apps.map(app => app.id));
 });
 
@@ -1130,8 +1154,11 @@ test('a failed run carries the apps whose jobs did not pass, and nothing it cann
 // carriedApps reads a failed run's jobs by name: every ci job must be one it knows.
 test('every ci job is the plan, a per-app job named by its app, or one a push or the nightly runs again', async () => {
   const ci = parse(await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8'));
-  const known = new Set(['app-plan', ...APP_JOBS, ...RERUN_JOBS, ...NIGHTLY_JOBS]);
+  const known = new Set(['app-plan', ...APP_JOBS, ...RERUN_JOBS, ...SITE_JOBS, ...NIGHTLY_JOBS]);
   for (const id of Object.keys(ci.jobs)) assert.ok(known.has(id), `${id} is a job carriedApps cannot place`);
+  // A site job checks the apps its own plan selected, so a push after its failure diffs from the last green run.
+  for (const id of SITE_JOBS) assert.deepEqual(carriedApps([{ name: id, conclusion: 'failure' }]).unattributed, [id]);
+  assert.deepEqual(siteJobNames(ci).filter((id) => !SITE_JOBS.includes(id)).sort(), ['agent-interactions', 'example-cache-retention']);
   const outputs = { 'app-tests': 'apps', 'browser-e2e': 'browser_apps', 'browser-e2e-gpu': 'gpu_apps' };
   for (const id of APP_JOBS) {
     const job = ci.jobs[id];
@@ -1208,7 +1235,7 @@ test('a push run tests the merges whose own runs were cancelled, and falls back 
     { name: 'app-tests (calmar, apps/calmar, static-esm, false)', conclusion: 'success' },
     { name: 'browser-e2e (calmar, apps/calmar, static-esm, false, 1/2)', conclusion: 'failure' },
     { name: 'browser-e2e (niimath, apps/niimath, vite, false, )', conclusion: 'success' },
-    { name: 'composite-site', conclusion: 'failure' },
+    { name: 'workspace-contracts', conclusion: 'failure' },
     { name: 'full-plan-withheld', conclusion: 'skipped' },
   ] };
   const carried = await plan();
@@ -1220,6 +1247,9 @@ test('a push run tests the merges whose own runs were cancelled, and falls back 
   const unowned = await plan();
   assert.deepEqual(JSON.parse(unowned.selected_ids), sorted(['niimath', 'calmar', 'lcmodel', 'zarro']));
   assert.match(unowned.stderr, new RegExp(`base ${tested} is the head of the last successful ci run on main.*failed in app-plan, which no app owns`));
+  // A site check covered only the apps of its own run, so its failure falls back too.
+  jobs = { 3: [{ name: 'site-audit', conclusion: 'failure' }] };
+  assert.deepEqual(JSON.parse((await plan()).selected_ids), sorted(['niimath', 'calmar', 'lcmodel', 'zarro']));
   runs = runs.filter((each) => each !== failed);
 
   for (const [name, setup] of [
@@ -1292,6 +1322,7 @@ test('composite-only site files select the site build and no app', async () => {
       const plan = createAppPlan(registry, [path], withGraph);
       assert.deepEqual(plan.selected, [], path);
       assert.equal(plan.site, true, path);
+      assert.equal(plan.siteCode, false, path);
       assert.equal(plan.reasons.fallback, null, path);
     }
   }
@@ -1343,6 +1374,7 @@ test('a runtime manifest change selects the apps that stage its files and the si
   assert.ok(staging.length > 0);
   assert.deepEqual(plan.selected.map((app) => app.id), staging.map((app) => app.id));
   assert.equal(plan.site, true);
+  assert.equal(plan.siteCode, true, 'the shared runtime store of every app is assembled from it');
   assert.equal(createAppPlan(registry, ['runtime-assets/manifest.json']).allApps, true, 'without a graph the manifest stays shared');
 
   // Every other reader belongs to a selected app, a package only selected apps
@@ -1411,6 +1443,7 @@ test('a standalone catalog change selects the apps whose entries changed', async
   }));
   assert.deepEqual(republished.selected.map((app) => app.id), ['lcmodel']);
   assert.equal(republished.site, true);
+  assert.equal(republished.siteCode, false);
   assert.deepEqual(republished.reasons.apps.lcmodel, ['registry/standalone.json: the lcmodel entry changed']);
   const suite = plan(edit((value) => {
     value.suites.neuro.downloads[0].version = '9.9.9';
@@ -1502,6 +1535,7 @@ test('an app information change selects the apps whose entries changed', async (
   }));
   assert.deepEqual(cited.selected.map((app) => app.id), ['lcmodel']);
   assert.equal(cited.site, true);
+  assert.equal(cited.siteCode, false);
   assert.deepEqual(cited.reasons.apps.lcmodel, [`${path}: the lcmodel entry changed`]);
   // Comments and layout are not content.
   const reformatted = plan(stringify(parse(text)));

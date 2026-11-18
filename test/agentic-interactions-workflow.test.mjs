@@ -17,6 +17,7 @@ const agentReady = site.steps.find(step => step.id === 'agent-site');
 const packageSite = site.steps.find(step => step.name === 'Package the built site for the check jobs');
 const verifySite = unpackAction.runs.steps.find(step => step.name === 'Verify and unpack the built site');
 const interact = job.steps.find(step => step.run?.includes('pnpm test:e2e:agent'));
+const catalogE2e = ci.jobs['site-e2e'].steps.find(step => step.run?.includes('pnpm test:e2e:catalog'));
 
 async function scratch(t) {
   const root = await mkdtemp(join(tmpdir(), 'agent-workflow-'));
@@ -71,6 +72,21 @@ test('the actual agent command runs each target shard without dropping cases and
     shell(interact.run, root, { PATH: `${bin}${delimiter}${process.env.PATH}`, CAPTURE_ARGS: capture, AGENTIC_TARGET: target, AGENTIC_SHARD: `${shard}/${shards.length}`, AGENTIC_APPS: selection });
     assert.deepEqual(JSON.parse(await readFile(capture, 'utf8')), [
       'test:e2e:agent', '--skip-build', '--site-dir', 'dist', '--target', target, '--shard', `${shard}/${shards.length}`, '--output', `.e2e/agent-${target}-${shard}`,
+      ...(selection ? ['--app', selection] : []),
+    ]);
+  }
+});
+
+test('the workspace e2e catalog checks the apps SMOKE_APPS lists against the built site, or every app', async t => {
+  const root = await scratch(t);
+  const bin = join(root, 'bin');
+  await mkdir(bin);
+  await writeFile(join(bin, 'pnpm'), '#!/usr/bin/env node\nrequire("node:fs").writeFileSync(process.env.CAPTURE_ARGS, JSON.stringify(process.argv.slice(2)));\n', { mode: 0o755 });
+  for (const selection of ['', 'niimath,syncro']) {
+    const capture = join(root, 'args.json');
+    shell(catalogE2e.run, root, { PATH: `${bin}${delimiter}${process.env.PATH}`, CAPTURE_ARGS: capture, SMOKE_APPS: selection });
+    assert.deepEqual(JSON.parse(await readFile(capture, 'utf8')), [
+      'test:e2e:catalog', '--skip-build', '--site-dir', 'dist', '--output', '.e2e/workspace',
       ...(selection ? ['--app', selection] : []),
     ]);
   }
