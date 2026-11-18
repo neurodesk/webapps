@@ -183,3 +183,10 @@ The rest of the round:
   beside them.
 - If dispatch 2 also records on no AMD CPU, the round stops undecided. Both
   recordings are then reported, and the port's AV and grid stay as they are.
+
+Dispatch 1's discovery sets gave no new AV candidate: the searches for one are
+in the round's results below, and none equalled every discovery set. The fresh
+set is 40 blobs, 20 of them also reversed, and 20 small sets on the six held-out
+grids, and 44 grids (12 whose last symmetric value is not `a`), all role
+`fresh`. Its predictions digest, from `hull_area_design.py predict
+hull-area-inputs-2.json`: `3a0966d7a1c9df424a2d16db9b0f6f77252d7e9fa514aa760f0542bb6a81c9d4`.

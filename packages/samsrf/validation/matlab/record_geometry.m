@@ -728,9 +728,16 @@ end
 function cases = hull_area_cases()
 % Each point set as samsrf_revcor_prf.m uses it: [K, AV] = convexHull(Dt) of
 % Dt = delaunayTriangulation(txy), the centroid and area of polyshape(Dt.Points(K,:)),
-% and the same on the hull's own vertices; then linspace(-a, a, n) per grid.
+% and the same on the hull's own vertices; then linspace(-a, a, n) per grid. The
+% round's inputs first, then the fresh held-out set its addendum added.
 here = fileparts(mfilename('fullpath'));
-spec = jsondecode(fileread(fullfile(here, 'hull-area-inputs.json')));
+cases = {};
+for file = {'hull-area-inputs.json', 'hull-area-inputs-2.json'}
+    cases = [cases, hull_area_file(jsondecode(fileread(fullfile(here, file{1}))))]; %#ok<AGROW>
+end
+end
+
+function cases = hull_area_file(spec)
 grids = cell_list(spec.grids);
 coordinates = containers.Map();
 for k = 1:numel(grids)

@@ -11,6 +11,7 @@ and every candidate's prediction, before any recording
 
 Usage:
   hull_area_design.py design CLI_SETS INPUTS_JSON
+  hull_area_design.py fresh INPUTS_JSON
   hull_area_design.py predict INPUTS_JSON
 CLI_SETS lists the 42 double reverse-correlation hull vertices of the pinned
 SamSrfAnalysis recording (cli-reference.json, AMD host) with their
@@ -18,7 +19,9 @@ suprathreshold pixel coordinates, as cli_rc_hulls.rs rebuilds them from
 MATLAB's courses. `design` writes the inputs: each grid's coordinates once, each
 point set as runs of MATLAB pixel indices on its grid (reversed sets are flagged,
 not repeated). `predict` recomputes every candidate's predictions from the inputs
-alone and prints their SHA-256, which hull-area-predictions.md freezes.
+alone and prints their SHA-256, which hull-area-predictions.md freezes. `fresh`
+writes the held-out set its addendum adds for dispatch 2 (seed 7321), with no
+discovery sets of its own.
 """
 from fractions import Fraction
 import hashlib
@@ -310,6 +313,38 @@ def linspaces():
     return out
 
 
+def fresh():
+    """The addendum's fresh held-out sets and grids (seed 7321)."""
+    rng = random.Random(7321)
+    grids = {}
+    sets = []
+    made = 0
+    while made < 60:
+        a, columns, rows = GRIDS_HELD_OUT[made % len(GRIDS_HELD_OUT)]
+        small = made >= 40
+        pixel_indices = blob(rng, a, columns, rows, small)
+        if not 3 <= len(pixel_indices) <= 2500:
+            continue
+        identity = grid_identity(a, columns, rows)
+        grids.setdefault(identity, {'identity': identity, 'half': a, 'columns': columns, 'rows': rows})
+        family = 'small' if small else 'blob'
+        entry = {'identity': f'{family}_f{made:03d}', 'family': family, 'role': 'fresh', 'grid': identity, 'runs': runs(pixel_indices), 'reverse': False}
+        if boundary(points_of(grids, entry)) is None:
+            continue
+        sets.append(entry)
+        if not small and made % 2 == 0:
+            sets.append({**entry, 'identity': f'{family}_f{made:03d}_reversed', 'family': 'blob-reversed', 'reverse': True})
+        made += 1
+    entries = []
+    for a in (2.9, 4.1, 6.7, 8.3, 11.9, 0.45):
+        for n in (6, 9, 33, 77, 101, 150):
+            entries.append({'identity': f'f_{hexed(a)}_n{n}', 'role': 'fresh', 'half': a, 'n': n})
+        taken = {(e['half'], e['n']) for e in entries}
+        for n in [n for n in range(3, 300) if (a, n) not in taken and grid('L0', a, n) != grid('L1', a, n)][:2]:
+            entries.append({'identity': f'fe_{hexed(a)}_n{n}', 'role': 'fresh', 'half': a, 'n': n})
+    return list(grids.values()), sets, entries
+
+
 def points_of(grids, entry):
     """A set's points in the order MATLAB receives them."""
     g = grids[entry['grid']] if isinstance(grids, dict) else next(x for x in grids if x['identity'] == entry['grid'])
@@ -371,6 +406,11 @@ def main(arguments):
         inputs = encoded(grids, sets, linspaces())
         Path(arguments[2]).write_text(json.dumps(inputs, separators=(',', ':')) + '\n')
         print(f"{len(sets)} point sets on {len(grids)} grids, {len(inputs['linspace'])} linspace calls")
+    elif len(arguments) == 2 and arguments[0] == 'fresh':
+        grids, sets, entries = fresh()
+        inputs = {**encoded(grids, sets, entries), 'round': ROUND + ' fresh held-out (addendum)'}
+        Path(arguments[1]).write_text(json.dumps(inputs, separators=(',', ':')) + '\n')
+        print(f"{len(sets)} point sets on {len(grids)} grids, {len(entries)} linspace calls")
     elif len(arguments) == 2 and arguments[0] == 'predict':
         inputs = json.loads(Path(arguments[1]).read_text())
         print(digest(predictions(inputs)))

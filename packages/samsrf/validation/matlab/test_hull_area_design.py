@@ -8,6 +8,8 @@ import hull_area_design as design
 HERE = Path(__file__).resolve().parent
 # hull-area-predictions.md, frozen before the first recording.
 FROZEN = '14ec8549270429828f78c0c47276000d6b13237772553814d5bfdc481c06f567'
+# Its addendum's fresh held-out set, frozen before dispatch 2.
+FROZEN_FRESH = '3a0966d7a1c9df424a2d16db9b0f6f77252d7e9fa514aa760f0542bb6a81c9d4'
 
 
 class Predictions(unittest.TestCase):
@@ -17,6 +19,18 @@ class Predictions(unittest.TestCase):
 
     def test_the_committed_inputs_give_the_frozen_predictions(self):
         self.assertEqual(design.digest(design.predictions(self.inputs)), FROZEN)
+        fresh = json.loads((HERE / 'hull-area-inputs-2.json').read_text())
+        self.assertEqual(design.digest(design.predictions(fresh)), FROZEN_FRESH)
+
+    def test_the_fresh_set_is_held_out_only_and_new(self):
+        fresh = json.loads((HERE / 'hull-area-inputs-2.json').read_text())
+        self.assertEqual(collections.Counter((s['family'], s['role']) for s in fresh['sets']),
+                         {('blob', 'fresh'): 40, ('blob-reversed', 'fresh'): 20, ('small', 'fresh'): 20})
+        self.assertEqual(collections.Counter(g['role'] for g in fresh['linspace']), {'fresh': 44})
+        identities = {s['identity'] for s in self.inputs['sets']} | {g['identity'] for g in self.inputs['linspace']}
+        fresh_identities = [s['identity'] for s in fresh['sets']] + [g['identity'] for g in fresh['linspace']]
+        self.assertEqual(len(fresh_identities), len(set(fresh_identities)))
+        self.assertFalse(identities & set(fresh_identities))
 
     def test_the_inventory_is_the_preregistered_one(self):
         sets = collections.Counter((s['family'], s['role']) for s in self.inputs['sets'])

@@ -19,11 +19,13 @@ const reproducerSpec = name => {
 };
 export const REPRODUCER_POLYGONS = { reproducer_cases: reproducerSpec('./polyshape-reproducers.json'), reproducer_round2: reproducerSpec('./polyshape-reproducers-2.json'), reproducer_round3: reproducerSpec('./polyshape-reproducers-3.json'), reproducer_round4: reproducerSpec('./polyshape-reproducers-4.json'), reproducer_round5: reproducerSpec('./polyshape-reproducers-5.json'), reproducer_round6: reproducerSpec('./polyshape-reproducers-6.json'), reproducer_round7: reproducerSpec('./polyshape-reproducers-7.json') };
 export const PROBE_POLYGONS = { probe_grid_sweep: 24120, probe_heldout_collinear: 1500, probe_heldout_clouds: 1500, probe_extreme_grids: 7, probe_point_clouds: 2500 };
-// record_geometry(..., 'hull-area'): hull-area-inputs.json's point sets, then its grids.
+// record_geometry(..., 'hull-area'): each inputs file's point sets, then its grids.
 export const HULL_AREA_FIELDS = ['points', 'dtPoints', 'triangles', 'hull', 'area', 'polyarea', 'shape', 'estimate', 'cornersTriangles', 'cornersHull', 'cornersArea'];
 export function hullAreaCases() {
-  const spec = JSON.parse(fs.readFileSync(new URL('./hull-area-inputs.json', import.meta.url), 'utf8'));
-  return [...spec.sets.map(item => `area_${item.identity}`), ...spec.linspace.map(item => `linspace_${item.identity}`)];
+  return ['./hull-area-inputs.json', './hull-area-inputs-2.json'].flatMap(name => {
+    const spec = JSON.parse(fs.readFileSync(new URL(name, import.meta.url), 'utf8'));
+    return [...spec.sets.map(item => `area_${item.identity}`), ...spec.linspace.map(item => `linspace_${item.identity}`)];
+  });
 }
 
 export function validateGeometry(root) {
