@@ -497,6 +497,24 @@ test('a SamSrf-convention CSS fit returns the imaginary parts MATLAB keeps in Sr
   assert.equal(fit('nonnegative').imaginary, null);
 });
 
+test('merged maps hold MATLAB\'s NaN, the negative quiet NaN', () => {
+  // The second course has a NaN: no grid point correlates, so the coarse fit's
+  // parameters are NaN, as MATLAB's mean over an empty selection is.
+  const spec = jobSpec();
+  spec.model = JSON.stringify({ ...JSON.parse(spec.model), Coarse_Fit_Only: 1, Param1: [0, 90], Param2: [0.5], Param3: [0.5, 1] });
+  spec.data.courses = Float64Array.of(1, 2, 3, 3, Number.NaN, 2);
+  const job = samsrf.createJob(spec);
+  try {
+    const { maps } = samsrf.mergePartials(job, [job.run(0, 2)]);
+    const bits = new BigUint64Array(maps.data.buffer, maps.data.byteOffset, maps.data.length);
+    const nans = Array.from(maps.data.keys()).filter((index) => Number.isNaN(maps.data[index]));
+    assert.deepEqual(nans.map((index) => maps.values[Math.floor(index / maps.vertices)]), ['x0', 'y0', 'Sigma']);
+    assert.ok(nans.every((index) => bits[index] === 0xfff8000000000000n), 'every NaN is 0xfff8000000000000');
+  } finally {
+    job.free();
+  }
+});
+
 test('createJob validates its spec and runs a tiny coarse-only fit', () => {
   assert.throws(() => samsrf.createJob({ ...jobSpec(), kind: 'glm' }), /kind must be one of prf, rc, cf/);
   assert.throws(() => samsrf.createJob({ ...jobSpec(), model: '{}' }), /Analysis name is undefined/);
