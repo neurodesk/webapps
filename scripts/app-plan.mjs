@@ -21,8 +21,10 @@ let base = option('--base');
 // branch (resolveCiBase), so merges whose own push run was cancelled are still
 // tested, and select again the apps a failed run there left untested.
 let baseFallback = '';
-// Apps a failed run on main left untested at the base (resolveCiBase).
+// Apps a failed run on main left untested at the base, and the planned jobs
+// that did not pass there (resolveCiBase).
 let carried = new Map();
+let carriedChecks = new Map();
 // `--base merge-base` (a dispatched run): diff a branch from where it left
 // main; a commit already on main diffs from the tested base like a push.
 if (base === 'merge-base') {
@@ -41,6 +43,7 @@ if (base === TESTED_BASE) {
   console.error(`App planner: ${tested.reason}`);
   base = tested.base;
   carried = tested.carried;
+  carriedChecks = tested.checks;
   if (!base) baseFallback = tested.reason;
 }
 let changedPaths = process.argv.includes('--all') || baseFallback
@@ -69,7 +72,7 @@ const draft = process.env.GITHUB_EVENT_NAME === 'pull_request' && process.env.CI
 // `--release` (release.yml): the apps to publish are the ones the version
 // bumps reach, so release bookkeeping counts.
 const release = process.argv.includes('--release');
-let plan = createAppPlan(registry, fallbackReason ? [] : changedPaths, graph, manifests, { draft, release, carried });
+let plan = createAppPlan(registry, fallbackReason ? [] : changedPaths, graph, manifests, { draft, release, carried, carriedChecks });
 
 // A ready pull request that has used its full-plan runs gets the draft plan,
 // and the `full-plan-withheld` job fails so the run is never green. A run that

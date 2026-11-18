@@ -693,7 +693,9 @@ export function selectAffectedSuites(changedPaths, graph, manifests = new Map(),
   return { fallback, suites: selected };
 }
 
-export function createAppPlan(registry, changedPaths = [], graph = null, manifests = new Map(), { draft = false, release = false, carried = new Map() } = {}) {
+// `carriedChecks` maps a planned job (workspace-contracts, homepage-easter-egg)
+// that did not pass in the base run to its failed jobs: it runs again in full.
+export function createAppPlan(registry, changedPaths = [], graph = null, manifests = new Map(), { draft = false, release = false, carried = new Map(), carriedChecks = new Map() } = {}) {
   const affected = selectAffectedApps(registry, changedPaths, graph, manifests, { release, carried });
   // Drafts give fast feedback on app edits. Ready PRs always use the complete
   // dependency plan, including shared-code changes, at their current head.
@@ -710,11 +712,12 @@ export function createAppPlan(registry, changedPaths = [], graph = null, manifes
   // A plan of every app tests every package, as the nightly does.
   const checks = selectAffectedSuites(changedPaths, graph, manifests, { release });
   const everyApp = affected.reasons.fallback ?? (affected.apps.length === registry.apps.length ? 'its change reaches every app' : null);
-  const packageFallback = checks.fallback ?? (everyApp && `the plan selects every app: ${everyApp}`);
+  const failedThere = (job) => carriedChecks.has(job) ? [`failed in the base run (${carriedChecks.get(job).join(', ')})`] : [];
+  const packageFallback = checks.fallback ?? (everyApp && `the plan selects every app: ${everyApp}`) ?? failedThere('workspace-contracts')[0] ?? null;
   const packageReasons = packageFallback ? {} : Object.fromEntries([...checks.suites].filter(([id]) => id !== EASTER_EGG_SUITE));
   const easterEgg = checks.fallback
     ? [checks.fallback]
-    : graph.edges.has(EASTER_EGG) ? checks.suites.get(EASTER_EGG_SUITE) ?? [] : ['ci.yml has no homepage-easter-egg job for the workspace graph to follow'];
+    : [...(graph.edges.has(EASTER_EGG) ? checks.suites.get(EASTER_EGG_SUITE) ?? [] : ['ci.yml has no homepage-easter-egg job for the workspace graph to follow']), ...failedThere(EASTER_EGG_SUITE)];
   return Object.freeze({
     changedPaths: Object.freeze([...changedPaths]),
     selected: Object.freeze(selected),

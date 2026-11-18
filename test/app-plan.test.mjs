@@ -1630,8 +1630,15 @@ test('a failed run carries the apps whose jobs did not pass, and nothing it cann
   ]);
   assert.deepEqual([...carried.keys()], ['calmar', 'synthsr', 'niimath']);
   assert.deepEqual(unattributed, []);
-  // The plan narrows these to what a change reaches, so the next push would not run them again.
-  for (const name of PLANNED_JOBS) assert.deepEqual(carriedApps([{ name, conclusion: 'failure' }]).unattributed, [name]);
+  // The plan narrows these to what a change reaches, so a planned job that did not pass, finished or not, is carried whole.
+  for (const name of PLANNED_JOBS) {
+    for (const conclusion of ['failure', 'cancelled', 'timed_out', null]) {
+      const result = carriedApps([{ name, conclusion }]);
+      assert.deepEqual([...result.checks.keys()], [name], `${name} ${conclusion}`);
+      assert.deepEqual(result.unattributed, []);
+    }
+    assert.deepEqual([...carriedApps([{ name, conclusion: 'skipped' }]).checks.keys()], [], `${name} skipped by its plan`);
+  }
   assert.deepEqual(carriedApps([{ name: 'app-plan', conclusion: 'failure' }, { name: 'a-new-job', conclusion: 'cancelled' }]).unattributed, ['app-plan', 'a-new-job']);
   // An id the registry does not know (a reordered matrix) and an unfinished job are tied to no app.
   const known = new Set(['calmar']);
@@ -1768,6 +1775,69 @@ test('a rename lists both its paths, so what reads the old path is selected', as
   const plan = createAppPlan(await loadAppsRegistry(), paths, await graph);
   for (const dir of ['packages/deface', 'packages/brain-extraction']) assert.ok(Object.hasOwn(plan.packages.reasons, dir), dir);
   assert.ok(plan.selected.some((app) => app.id === 'calmar'));
+});
+
+test('a planned job that did not pass on main runs again in full on the next push', async (t) => {
+  const { root } = await plannerFixture(t);
+  // The fixture's workflow has the easter-egg job, so the graph follows it.
+  const ci = { jobs: Object.fromEntries(['composite-site', 'homepage-easter-egg', ...CATALOG_JOBS].map((name) => [name, { steps: [{ run: 'echo fixture' }] }])) };
+  await writeFile(join(root, '.github/workflows/ci.yml'), stringify(ci));
+  const git = (...args) => execFileSync('git', ['-c', 'user.name=planner', '-c', 'user.email=planner@example.org', ...args], { cwd: root, encoding: 'utf8' }).trim();
+  git('init', '--quiet');
+  git('add', '-A');
+  git('commit', '--quiet', '-m', 'green');
+  const green = git('rev-parse', 'HEAD');
+  await mkdir(join(root, 'docs'));
+  await writeFile(join(root, 'docs/notes.md'), 'docs only');
+  git('add', '-A');
+  git('commit', '--quiet', '-m', 'docs');
+  const head = git('rev-parse', 'HEAD');
+  let jobs = [];
+  const runs = [
+    { id: 2, event: 'schedule', head_branch: 'main', head_sha: green, conclusion: 'failure' },
+    { id: 1, event: 'push', head_branch: 'main', head_sha: green, conclusion: 'success' },
+  ];
+  const server = createServer((request, response) => {
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify(request.url.includes('/workflows/ci.yml/runs?') ? { workflow_runs: runs } : { jobs }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const env = { ...process.env, GITHUB_OUTPUT: '', GITHUB_REPOSITORY: 'neurodesk/webapps', GITHUB_TOKEN: 'token', GITHUB_API_URL: `http://127.0.0.1:${server.address().port}` };
+  // The planner asks this process's server, so it must run asynchronously.
+  const plan = async (failed) => {
+    const passed = [['app-plan', 'success'], ['workspace-contracts', 'success'], ['homepage-easter-egg', 'skipped']].filter(([name]) => !failed.some((job) => job.name === name));
+    jobs = [...passed.map(([name, conclusion]) => ({ name, conclusion })), ...failed];
+    const child = spawn(process.execPath, ['scripts/app-plan.mjs', '--base', 'last-success', '--head', head], { cwd: root, env });
+    let [stdout, stderr] = ['', ''];
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    const code = await new Promise((resolve) => child.on('close', resolve));
+    assert.equal(code, 0, stderr);
+    const output = JSON.parse(stdout);
+    return { ...output, reasons: JSON.parse(output.selection_reasons), stderr };
+  };
+  // Green, a nightly that fails in a planned job, then a docs-only push: the push runs the job in full.
+  const contracts = await plan([{ name: 'workspace-contracts', conclusion: 'failure' }]);
+  assert.deepEqual(JSON.parse(contracts.selected_ids), []);
+  assert.equal(contracts.reasons.packages.all, 'failed in the base run (workspace-contracts)');
+  assert.match(contracts.stderr, /workspace-contracts did not pass there and runs again in full/);
+  assert.equal(contracts.easter_egg, 'false');
+  const egg = await plan([{ name: 'homepage-easter-egg', conclusion: 'failure' }]);
+  assert.equal(egg.easter_egg, 'true');
+  assert.deepEqual(egg.reasons.easter_egg, ['failed in the base run (homepage-easter-egg)']);
+  assert.equal(egg.reasons.packages.all, undefined);
+  // A cancelled job, or one that never started, did not pass either.
+  assert.equal((await plan([{ name: 'workspace-contracts', conclusion: 'cancelled' }])).reasons.packages.all, 'failed in the base run (workspace-contracts)');
+  assert.deepEqual((await plan([{ name: 'homepage-easter-egg', conclusion: null }])).reasons.easter_egg, ['failed in the base run (homepage-easter-egg (not finished))']);
+  // A failure no app owns sends the base back to the green run, whose diff is empty here: the planned job still runs.
+  const unowned = await plan([{ name: 'a-new-job', conclusion: 'failure' }, { name: 'workspace-contracts', conclusion: 'failure' }]);
+  assert.match(unowned.stderr, /failed in a-new-job, which no app owns; workspace-contracts did not pass there/);
+  assert.equal(unowned.reasons.packages.all, 'failed in the base run (workspace-contracts)');
+  // Without a failed planned job the docs-only push runs neither.
+  const quiet = await plan([{ name: 'agent-interactions (desktop, 1/3)', conclusion: 'failure' }]);
+  assert.equal(quiet.reasons.packages.all, undefined);
+  assert.equal(quiet.easter_egg, 'false');
 });
 
 test('a .gitattributes change selects the apps whose files now check out differently', async (t) => {

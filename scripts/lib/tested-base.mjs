@@ -47,10 +47,12 @@ export function testedBase({ runs, head, branch, git, workflow = 'ci', atHead = 
 // listed attempt's, and `appIds` the registry's. The per-app jobs are named by
 // their matrix, whose first value is the app id (matrixEntry). Jobs every push
 // runs again whatever its plan, and jobs only the nightly runs (which tests
-// every app), need no carrying. Any other failed job (the plan itself, a job
-// whose tests the plan narrows), a job that has not finished, or an app id the
-// registry does not know cannot be tied to an app. test/app-plan.test.mjs
-// holds ci.yml to these job lists.
+// every app), need no carrying. A job the plan narrows (PLANNED_JOBS) that did
+// not pass, finished or not, is carried whole in `checks`: the next push runs
+// every package suite or the easter egg again, since which suite failed is
+// not known. Any other failed job (the plan itself), an unfinished per-app
+// job, or an app id the registry does not know cannot be tied to an app.
+// test/app-plan.test.mjs holds ci.yml to these job lists.
 export const APP_JOBS = ['app-tests', 'browser-e2e', 'browser-e2e-gpu'];
 export const RERUN_JOBS = ['composite-site', 'example-cache-retention', 'full-plan', 'full-plan-withheld'];
 // Jobs that run, or test packages, only where the plan's change reaches.
@@ -61,16 +63,18 @@ const UNPASSED = new Set(['failure', 'cancelled', 'timed_out', 'startup_failure'
 const PASSED = new Set(['success', 'skipped', 'neutral']);
 export function carriedApps(jobs, appIds) {
   const carried = new Map();
+  const checks = new Map();
   const unattributed = [];
   for (const job of jobs) {
     if (PASSED.has(job.conclusion)) continue;
     const app = job.name.match(APP_JOB)?.[1];
     const base = job.name.replace(/ \(.*$/, '');
-    if (!UNPASSED.has(job.conclusion)) unattributed.push(`${job.name} (not finished)`);
+    if (PLANNED_JOBS.includes(base)) checks.set(base, [...(checks.get(base) ?? []), UNPASSED.has(job.conclusion) ? job.name : `${job.name} (not finished)`]);
+    else if (!UNPASSED.has(job.conclusion)) unattributed.push(`${job.name} (not finished)`);
     else if (app && (!appIds || appIds.has(app))) carried.set(app, [...(carried.get(app) ?? []), job.name]);
     else if (app || ![...RERUN_JOBS, ...NIGHTLY_JOBS].includes(base)) unattributed.push(job.name);
   }
-  return { carried, unattributed };
+  return { carried, checks, unattributed };
 }
 
 // The jobs of one attempt of a run, from the Actions API: the attempt the run
@@ -90,15 +94,19 @@ async function runJobs({ repository, runId, attempt, token, apiUrl = 'https://ap
   }
 }
 
-// The base `ci` on main diffs from, and the apps it carries: the head of the
-// nearest finished push or nightly run, green or failed. After a failed run
-// only the apps whose jobs failed are untested at its head, so they are
-// selected again instead of every app since the last green run. When a failed
-// job cannot be tied to an app, the base is the last green run as before.
+// The base `ci` on main diffs from, and the apps and planned jobs it carries:
+// the head of the nearest finished push or nightly run, green or failed.
+// After a failed run only the apps whose jobs failed are untested at its head,
+// so they are selected again instead of every app since the last green run.
+// When a failed job cannot be tied to an app, the base is the last green run
+// as before. A planned job that did not pass is carried either way: the diff
+// from a green run can be empty (a nightly at the green head), so only
+// carrying it runs it again.
 export async function resolveCiBase({ head, branch = 'main', cwd, env = process.env, fetchImpl, appIds }) {
   const git = gitAncestry(cwd);
   const sha = git.resolve(head);
-  if (!sha) return { base: null, carried: new Map(), reason: `${head} is not a commit in this checkout` };
+  const none = { carried: new Map(), checks: new Map() };
+  if (!sha) return { base: null, ...none, reason: `${head} is not a commit in this checkout` };
   const repository = env.GITHUB_REPOSITORY;
   const token = env.GITHUB_TOKEN;
   let runs;
@@ -106,20 +114,21 @@ export async function resolveCiBase({ head, branch = 'main', cwd, env = process.
   try {
     runs = await successfulRuns({ repository, workflow: 'ci.yml', branch, token, apiUrl: env.GITHUB_API_URL, fetchImpl, status: 'completed' });
     finished = testedBase({ runs, head: sha, branch, git, conclusions: ['success', 'failure'] });
-    if (finished.run?.conclusion !== 'failure') return { ...finished, carried: new Map() };
+    if (finished.run?.conclusion !== 'failure') return { ...finished, ...none };
     const jobs = await runJobs({ repository, runId: finished.run.id, attempt: finished.run.run_attempt ?? 1, token, apiUrl: env.GITHUB_API_URL, fetchImpl });
-    const { carried, unattributed } = carriedApps(jobs, appIds);
+    const { carried, checks, unattributed } = carriedApps(jobs, appIds);
+    const rerun = checks.size ? `; ${[...checks.keys()].join(' and ')} did not pass there and ${checks.size === 1 ? 'runs' : 'run'} again in full` : '';
     if (!unattributed.length) {
       const apps = [...carried.keys()];
       const why = apps.length
         ? `it failed for ${apps.join(', ')}, which ${apps.length === 1 ? 'is' : 'are'} selected again (without @slow tests on a push)`
-        : 'it failed only in jobs every push runs again or only the nightly runs';
-      return { ...finished, carried, reason: `${finished.reason}; ${why}` };
+        : 'it failed only in jobs every push runs again, planned jobs or jobs only the nightly runs';
+      return { ...finished, carried, checks, reason: `${finished.reason}; ${why}${rerun}` };
     }
     const green = testedBase({ runs, head: sha, branch, git });
-    return { ...green, carried: new Map(), reason: `${green.reason}; the nearest finished run failed in ${unattributed.slice(0, 3).join(', ')}, which no app owns` };
+    return { ...green, carried: new Map(), checks, reason: `${green.reason}; the nearest finished run failed in ${unattributed.slice(0, 3).join(', ')}, which no app owns${rerun}` };
   } catch (error) {
-    return { base: null, carried: new Map(), reason: `the last finished ci run on ${branch} is unknown: ${error.message}` };
+    return { base: null, ...none, reason: `the last finished ci run on ${branch} is unknown: ${error.message}` };
   }
 }
 
