@@ -216,11 +216,14 @@ Its model pack is tested with every app it serves that reads a model.
 - uploads `dist-sites/neuro` to GitHub Pages;
 - deploys `dist-sites/msk`, `dist-sites/microscopy`, `dist-sites/preclinical` and `dist-sites/hub` with
   `wrangler deploy --config dist-sites/<site>.wrangler.json`, using the
-  `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets;
-- runs the deployed checks (`pnpm test:deployed`,
-  `test/standalone-downloads.smoke.mjs`, `pnpm test:image-uploads`) once per
-  catalogue host, with `SITE_CATALOG=<catalogue>` limiting them to that host's
-  apps, and checks that the hub links every catalogue (`verify-hub`);
+  `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets, and checks that
+  each answers on its custom domain;
+- runs the deployed checks once per catalogue host: the landing page probe
+  (`scripts/check-site-answers.mjs`), then `pnpm test:deployed`,
+  `test/standalone-downloads.smoke.mjs` and `pnpm test:image-uploads`, with
+  `SITE_CATALOG=<catalogue>` limiting them to that host's apps. For the hub
+  (`verify-hub`) they are the probe and a check that the hub links every
+  catalogue;
 - saves a verified marker for each site whose checks passed.
 
 The deploy steps run only for the sites the run publishes. A site's content
@@ -240,7 +243,7 @@ Each of these jobs:
 
 1. reads the site's `site-digest.json` from its public host
    (`scripts/confirm-site-digest.mjs`) and goes on only if the host serves D;
-2. runs the checks;
+2. runs the checks, the landing page probe first;
 3. reads the record again and goes on only if the host still serves D;
 4. restores the marker if it exists, or saves it if it does not.
 
@@ -251,24 +254,34 @@ the site again.
 
 C is a hash, per site, of what decides whether its checks pass:
 
-- the check scripts and every module they import (`moduleClosure`), with the
-  installed version of each npm package among them, such as
-  `@playwright/test`, which sets the browser;
+- the check scripts and every module they import (`moduleClosure`);
+- each npm package they import and every package it depends on, by version
+  and pnpm store directory, which also names a patch: `@playwright/test`,
+  `playwright` and `playwright-core`, which set the browser, and `yaml` and
+  `zod`;
 - root `package.json`, `registry/apps.yml` and `registry/standalone.json`;
 - the `package.json` of each app the site serves;
 - `deploy-pages.yml`, which holds the check steps and the hub check.
 
-The hub's C covers `deploy-pages.yml` only. When a check changes, its hash
-changes, no marker has the new hash, and every site is published and checked
-once more. `test/site-deploy.test.mjs` holds the script list to the steps that
-run between the two confirmations.
+The hub's C covers the probe, the module it imports and `deploy-pages.yml`.
+When a check changes, its hash changes, no marker has the new hash, and every
+site is published and checked once more. `test/site-deploy.test.mjs` holds the
+script lists to the steps that run between the two confirmations.
+
+The landing page probe passes when a GET of the site's URL answers below HTTP
+400 with its whole body, without following a redirect, as `curl --fail` counts
+it. It tries 11 times, 15 seconds apart, with a 30 second deadline per try.
+`deploy-workers` runs it after each publish, and the Pages deploy waits for
+that. Each check job runs it again, so a site checked without a publish, such
+as an unchanged Worker catalogue on the daily run, has its landing page
+checked too.
 
 The plan looks up each marker with the cache REST API
 (`GET /repos/{owner}/{repo}/actions/caches?key=<key>&ref=<GITHUB_REF>`, which
 needs `actions: read`). The API treats `key` as a prefix, so an entry counts
 only when its key and its ref both equal the ones asked for. Any other answer
 leaves the marker unknown: an error, a timeout, or more than one page of
-matches.
+matches, even with the marker on the first page.
 
 The cache gives these guarantees
 ([dependency caching reference](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching)):
