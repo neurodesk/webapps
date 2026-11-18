@@ -1229,11 +1229,10 @@ Each run's model is the CLI model plus `Data_Precision`, which carries the
 precision that `def_64bit` selects for MATLAB. Bundle paths replace `/input`,
 and CF reads the Benson GIfTI that `prepare_cli_bundle.m` converted into the
 per-precision `.mat`. The Node runner passes the subject-HRF file to the engine
-API as a kernel (`hrf.oldSchool` of the file's `fP`). The app's interface has no
-subject-HRF route, so the browser runner records those four runs as
-`unsupported` when the engine stops with the core's subject-HRF text.
-`expectedEngineOutcome` names each run's expected refusal and its exact text,
-and both runners record `refused` or `unsupported` only for that text. Any
+API as a kernel (`hrf.oldSchool` of the file's `fP`); the browser runner gives
+the file to the app's `engine.js`, which builds the same kernel, as the
+interface does. `expectedEngineOutcome` names each run's expected refusal and
+its exact text, and both runners record `refused` only for that text. Any
 other failure, a crash included, is `failed`.
 
 ```sh
@@ -1282,10 +1281,10 @@ so the smallest subnormals of opposite sign are 2 apart; `signedZeroOnly`
 counts the sign-of-zero differences.
 
 A run is `refused` only where the engine is expected to refuse (single RC with
-a fitted profile, single CF Gaussian), and `unsupported` only for the browser's
-subject-HRF runs, in both cases with MATLAB succeeding. The comparator does not
-take the runner's word for it: the record must carry exactly the core's text
-for that run (`expected_web_outcome`), or the run is `failed` and names
+a fitted profile, single CF Gaussian), with MATLAB succeeding; no planned run
+is expected to be `unsupported`. The comparator does not take the runner's word
+for it: the record must carry exactly the core's text for that run
+(`expected_web_outcome`), or the run is `failed` and names
 `expectedMessage`. Any other combination is `failed`, with both sides'
 statuses kept. A MATLAB failure does not hide a wrong web result: the summary
 counts it in `matlabFailedRuns` and the web side in `webUnexpectedRuns`. The
@@ -1420,8 +1419,9 @@ headers, by its interface. For each run it:
    `Data_Precision` added (the precision `def_64bit` selects for MATLAB);
 2. sets how runs combine, keeps detrending and z-scoring on, and puts each
    input into its field: the runs, the apertures `.mat`, the ROI and the
-   seed labels, `lh.white` and `lh.area`, and the Benson GIfTI that
-   `prepare_cli_bundle.m` converted for MATLAB;
+   seed labels, `lh.white` and `lh.area`, the Benson GIfTI that
+   `prepare_cli_bundle.m` converted for MATLAB, and `hrf_custom.mat` for a
+   model whose `Hrf` names it;
 3. saves the model the app shows (`app-model.json`), presses Run and, when
    the app offers a result, downloads the zip with "Download all".
 
@@ -1434,9 +1434,6 @@ of an expected refusal. Each run gets one status:
 
 - `refused`: when the model loaded, the app showed exactly the single-precision
   refusal the run expects (single RC Gaussian, single CF Gaussian).
-- `unsupported`: after Run, the app showed exactly the core's subject-HRF
-  message (`model: Hrf hrf_custom is an old-school HRF fit file: ...`) and
-  offered nothing.
 - `succeeded`: the status line shows the run's outcome, "Download all" is
   offered, and the page threw nothing.
 - `succeeded-ui-error`: the app offered a result, then showed an error or
@@ -1495,7 +1492,7 @@ byte. MATLAB numerical differences are reported and never gated. The exit
 status is 0 when every run is `exact`, `differs`, `refused` or `unsupported`
 and the engine gate holds, and 1 otherwise; the report's `failures` says why.
 
-`test_ui_cli.py` (34 tests) covers each status and class, the exact contents
+`test_ui_cli.py` (39 tests) covers each status and class, the exact contents
 of the UI, engine and MATLAB roots, the saved model, the served module, the
 engine gate, and the command line's exit codes on the whole matrix and its
 refusal of a subset. It also covers a float32 ULP, a NaN sign, a GIfTI that
@@ -1513,25 +1510,41 @@ python3 $m/compare_ui_cli.py $e/plan.json $e/bundle-sha256.json $e/ui-1 $e/compi
   ui-1-vs-compiled.json --expect compiled-runtime --engine-root $e/browser-1
 ```
 
-What the interface cannot yet do on this matrix:
+What the interface cannot show on this matrix:
 
-- **Subject-HRF files.** It has no field for them, so the four `*_custom_hrf_*`
-  runs are `unsupported`; only the Node runner reaches them, through the
-  engine API.
-- **Showing the matrix's surface.** NiiVue cannot read the matrix's
-  synthetic 96-vertex `lh.white` (`Offset is outside the bounds of the
-  DataView`) and does not throw. `viewer.js` then treats the surface as
-  shown, and drawing the first map fails with `Cannot read properties of
-  undefined (reading 'layers')` after the result is offered. Every computed
-  run is therefore `succeeded-ui-error`, and none completes.
 - **Double values.** Only float32 GIfTIs are offered.
+- **Complex CSS maps.** SamSrfAnalysis keeps complex powers and saves a
+  complex `Srf.Data`. The plan's CSS models name no `Css_Convention`, so the
+  app and both engine runners use the default, `nonnegative` (#717), and the
+  two CSS runs differ by convention. Their float32 real downloads cannot show
+  complex parity; replaying them with `samsrf` selected needs the engine
+  runners to select it too.
 
 On the retained runs of 2026-11-17 (`ui-2`, the production bundle with module
 `d5ae6ba2…`, against the compiled image and with `run_browser_matrix.mjs`'s
 `browser-1` as the engine root), the comparator exits 1: 18 runs are
 `ui-error` and none is completed, 2 are `refused` and 4 `unsupported`. The
 downloads of 11 of the 18 runs are exact (110 of 140 maps), and all 176
-downloaded files equal the engine harness's.
+downloaded files equal the engine harness's. NiiVue could not read the
+matrix's synthetic 96-vertex `lh.white`, which ends at its faces as MATLAB's
+`write_surf` writes it: its FreeSurfer reader requires the optional tags, and
+it logs the failure without throwing. The viewer now reads surfaces with the
+engine's own reader.
+
+On 2026-11-18 (`ui-1`, the production bundle and tooling of the change that
+added the Subject HRF field, module `d5ae6ba2…`, against the compiled
+execution with `run_browser_matrix.mjs`'s run of the same commit as the engine
+root), the comparator exits 0: all 22 computed runs complete (15 exact and 7
+differing in their float32 downloads, 138 of 168 maps), 2 are `refused`, and
+none is `ui-error`, `unsupported` or `failed`. All 212 downloaded files equal
+the engine harness's, with the Node runner's run as the engine root too, and
+the source execution gives the same counts. The four `*_custom_hrf_*` runs
+take `hrf_custom.mat` through the Subject HRF field; their downloads are
+exact. Both engine runners compute 22 runs (13 exact, 129 of 168 maps), equal
+to each other byte for byte. #871's unchanged tooling gives no HRF file: with
+it the 18 other computed runs complete (11 exact, 110 of 140 maps) and the
+four subject-HRF runs wait for "the subject HRF hrf_custom.mat", which it
+records as `failed`.
 
 ## Recorded inputs and focused diagnosis
 
