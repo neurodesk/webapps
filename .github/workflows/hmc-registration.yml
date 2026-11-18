@@ -10,16 +10,14 @@ on:
     paths:
       - '.github/workflows/hmc-registration.yml'
       - 'packages/hmc-registration/**'
-      - 'pnpm-lock.yaml'
   push:
     branches: [main]
     paths:
       - '.github/workflows/hmc-registration.yml'
       - 'packages/hmc-registration/**'
-  # Shared trees start this workflow nightly, not on every push: the sweep in pr-gate.yml
-  # runs it when one changed on main since this workflow last finished green there.
-  schedule:
-    - cron: '9 14 * * *'
+  # A pull request that changes only paths in the gate's shared_paths starts native.yml instead,
+  # which calls this workflow when the change reaches it; its nightly run is this workflow's sweep.
+  workflow_call:
   workflow_dispatch:
 
 concurrency:
@@ -30,8 +28,9 @@ permissions:
   contents: read
 
 jobs:
-  # Defers drafts, and skips a ready pull request whose changes match only shared path filters
-  # and do not reach this workflow (scripts/lib/workflow-gate.mjs).
+  # Defers drafts, and decides a ready pull request or a push from this workflow's own paths and
+  # its shared_paths (scripts/lib/workflow-gate.mjs). Called from native.yml, which decided first,
+  # it answers true.
   gate:
     uses: ./.github/workflows/pr-gate.yml
     permissions:
@@ -40,6 +39,8 @@ jobs:
       pull-requests: read
     with:
       workflow: hmc-registration
+      shared_paths: |
+        pnpm-lock.yaml
 
   browser-worker:
     needs: gate

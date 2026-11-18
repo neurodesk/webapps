@@ -342,6 +342,20 @@ test('human-authored issue and comment markers cannot suppress reports', async (
   assert.equal((await report(commentClient)).updated, true);
 });
 
+test('every suite with an affected job is named before the job details are capped', async () => {
+  // A scheduled native run: 20 failed BISON jobs fill the details, and Elastix's one failure comes after them.
+  const jobs = [
+    ...Array.from({ length: 20 }, (_, index) => ({ id: 1000 + index, name: `bison-native / portable / target-${index}`, conclusion: 'failure', steps: [] })),
+    { id: 2000, name: 'elastix-native / test', conclusion: 'failure', steps: [] },
+  ];
+  const client = fakeClient({ jobs });
+  await report(client, { name: 'native' });
+  const body = writes(client)[0].body.body;
+  assert.match(body, /- Affected: bison-native \(20\), elastix-native \(1\)\./);
+  assert.doesNotMatch(body, /### elastix-native/, 'the detail cap still applies');
+  assert.match(body, /1 additional affected jobs omitted/);
+});
+
 test('mixed failures and cancellation prioritize the failure and retain the coverage warning', async () => {
   const client = fakeClient({ jobs: [failedJob, { id: 457, name: 'cancelled suite', conclusion: 'cancelled' }] });
   await report(client);

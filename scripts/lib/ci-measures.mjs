@@ -89,6 +89,7 @@ export const WORKFLOWS = Object.freeze({
   'mutation-quality': TEST,
   'n4-native': TEST,
   'n4-wasm-source': TEST,
+  native: TEST,
   'native-nifti': TEST,
   'native-publish': TEST,
   'nesvor-real-validation': TEST,
@@ -129,7 +130,8 @@ export const WORKFLOWS = Object.freeze({
   'workflow failure reports': 'report',
 });
 
-const GATE_JOB = /^gate( \/ |$)/;
+// A gate's job, also inside a workflow native.yml calls (`bison-native / gate / decide`).
+const GATE_JOB = /(?:^| \/ )gate( \/ |$)/;
 // A job's name without its matrix values: `app-tests (calmar, calmar)` is `app-tests`.
 const jobKind = (name) => name.replace(/ \(.*$/, '');
 

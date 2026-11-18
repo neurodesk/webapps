@@ -53,6 +53,11 @@ test('a job a renamed workflow or ci job ran is unclassified, not dropped', () =
   assert.equal(jobRole('ci', 'site-build'), 'unclassified');
   assert.equal(jobRole('ants-native', 'gate / decide'), 'plan');
   assert.equal(jobRole('ants-native', 'portable / linux-x64'), 'test');
+  // native.yml runs the workflows it calls, whose gates answer at once.
+  assert.equal(jobRole('native', 'gate / decide'), 'plan');
+  assert.equal(jobRole('native', 'bison-native / gate / decide'), 'plan');
+  assert.equal(jobRole('native', 'bison-native / portable / linux-x64'), 'test');
+  assert.equal(jobRole('native', 'bison-native'), 'test');
   assert.equal(jobRole('lint-suite', 'lint'), 'unclassified');
   assert.equal(jobRole('constructor', 'lint'), 'unclassified');
 

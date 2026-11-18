@@ -2,31 +2,56 @@ name: pr-gate
 
 # Decides whether a path-filtered workflow has to run for a ready pull request,
 # a push to main or its nightly sweep. GitHub matches `paths` against the whole
-# pull request on every push, so a filter on a shared tree starts suites the
-# change never reaches. Callers keep those filters for pull requests and make
-# their entry jobs wait for this decision (scripts/lib/workflow-gate.mjs). A
-# ready pull request over its full-plan budget fails the gate where its ci run
-# withholds the full plan too. A push to main starts a caller only for its own
-# paths, and runs it unless they are only release bookkeeping; its schedule is
-# the sweep, which runs it when a shared path changed on main since the caller
-# last finished green there. A push and the sweep each also ask the other's
-# question, since either can skip and still finish green. The job finishes
-# unless the budget withholds the suite, so the jobs after a caller's entry
-# jobs keep their default conditions: a draft answers false and a dispatch
-# true, both without a checkout. A withheld suite fails its gate instead of
-# reading as green.
+# pull request on every push, so a filter on a shared tree would start suites
+# the change never reaches. A caller lists its shared filters here, in
+# `shared_paths`, and only its own paths in `on.pull_request.paths`; its entry
+# jobs wait for this decision (scripts/lib/workflow-gate.mjs). native.yml calls
+# this workflow with `workflow: native` to decide at once for every caller with
+# shared paths: for a pull request that changed some of them and none of the
+# caller's own, and nightly as their sweep. It then calls the callers that run,
+# whose own gate answers true without a checkout. That decision fails open:
+# native.yml skips a call only when this gate succeeded and names the workflow
+# in its `skips` output, so whatever goes wrong here runs every workflow. A ready pull request over its full-plan budget fails the gate where
+# its ci run withholds the full plan too; with `workflow: native` the denial is
+# the `withheld` output, which native.yml turns into its failing job.
+# A push to main starts a caller only for its own paths, and runs it unless
+# they are only release bookkeeping; the sweep runs it when a shared path
+# changed on main since the caller last finished green there. A push and the
+# sweep each also ask the other's question, since either can skip and still
+# finish green. The job finishes unless the budget withholds the suite, so the
+# jobs after a caller's entry jobs keep their default conditions: a draft
+# answers false and a dispatch true, both without a checkout. A withheld suite
+# fails its gate instead of reading as green.
 
 on:
   workflow_call:
     inputs:
       workflow:
-        description: The calling workflow's file name without .yml
+        description: The calling workflow's file name without .yml; native decides for every workflow native.yml calls
         type: string
         required: true
+      shared_paths:
+        description: Shared path filters, one per line, through which a change can reach the caller; the gate reads them from the caller's file
+        type: string
+        default: ''
+      calls:
+        description: With workflow native, the workflows native.yml may call for a pull request, space-separated
+        type: string
+        default: ''
+      sweeps:
+        description: With workflow native, the workflows native.yml sweeps nightly, space-separated
+        type: string
+        default: ''
     outputs:
       run:
         description: "'true' when the pull request, or main since the last sweep, reaches what the workflow tests"
         value: ${{ jobs.decide.outputs.run }}
+      skips:
+        description: With workflow native, the JSON list of the workflows it decided to skip; native.yml runs every other one
+        value: ${{ jobs.decide.outputs.skips }}
+      withheld:
+        description: With workflow native, exactly 'true' when the budget read confirmed that the full plan is withheld
+        value: ${{ jobs.decide.outputs.withheld }}
 
 # The sweep and a push ask the Actions API where the calling workflow last
 # finished green, and a pull request reads its ci runs and labels for the
@@ -42,16 +67,30 @@ jobs:
     timeout-minutes: 10
     outputs:
       run: ${{ steps.event.outputs.run || steps.decide.outputs.run }}
+      skips: ${{ steps.event.outputs.skips || steps.decide.outputs.skips }}
+      withheld: ${{ steps.decide.outputs.withheld }}
     steps:
-      - name: Answer for drafts and dispatches
+      # Inside a run of native.yml (github.workflow_ref names the top workflow),
+      # a caller's gate answers true: native.yml decided before calling it.
+      - name: Answer for drafts, dispatches and callers native.yml decided for
         id: event
         env:
           EVENT_NAME: ${{ github.event_name }}
           DRAFT: ${{ github.event.pull_request.draft }}
+          WORKFLOW: ${{ inputs.workflow }}
+          TOP_WORKFLOW: ${{ github.workflow_ref }}
+          CALLS: ${{ inputs.calls }}
         run: |
-          if [ "$EVENT_NAME" = pull_request ]; then
+          if [ "$WORKFLOW" != native ] && [[ "$TOP_WORKFLOW" == */.github/workflows/native.yml@* ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif [ "$EVENT_NAME" = pull_request ]; then
             if [ "$DRAFT" = true ]; then
               echo "run=false" >> "$GITHUB_OUTPUT"
+              if [ "$WORKFLOW" = native ]; then
+                # A draft runs nothing: it skips by name every workflow native.yml lists.
+                skips=$(jq -cn --arg names "$CALLS" '$names | split(" ") | map(select(. != ""))')
+                echo "skips=$skips" >> "$GITHUB_OUTPUT"
+              fi
             fi
           elif [ "$EVENT_NAME" != schedule ] && [ "$EVENT_NAME" != push ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
@@ -82,8 +121,45 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           GITHUB_TOKEN: ${{ github.token }}
+          CALLS: ${{ inputs.calls }}
+          SWEEPS: ${{ inputs.sweeps }}
         run: |
-          if [ "$EVENT_NAME" = schedule ]; then
+          if [ "$WORKFLOW" = native ]; then
+            if [ "$EVENT_NAME" = schedule ]; then
+              eligible=$SWEEPS
+              set -- --sweep
+            else
+              eligible=$CALLS
+              set -- --base "$BASE_SHA"
+            fi
+            # native.yml runs every workflow this step does not name in `skips`,
+            # so a failure anywhere here runs them all: the step fails when the
+            # script fails, and passes on only one JSON array of names, each one
+            # of the workflows it may call for this event. The one exception is
+            # a budget denial the script confirmed and wrote first
+            # (withheld=true): the step then succeeds, so that the output reaches
+            # native.yml, which skips every call and fails full-plan-withheld.
+            answer="${RUNNER_TEMP:?}/native-skips.json"
+            rm -f "$answer"
+            status=0
+            NATIVE_ELIGIBLE="$eligible" NATIVE_SKIPS="$answer" node scripts/workflow-gate.mjs --native "$@" --head "$HEAD_SHA" || status=$?
+            if grep -qx 'withheld=true' "$GITHUB_OUTPUT"; then
+              exit 0
+            fi
+            if [ "$status" -ne 0 ]; then
+              echo "::warning title=Native decision failed::it exited with $status, so native.yml runs every workflow it calls"
+              exit "$status"
+            fi
+            if ! jq -e -s --arg eligible "$eligible" '($eligible | split(" ") | map(select(. != ""))) as $names | length == 1 and (.[0] | type == "array" and all(.[]; type == "string" and (. as $name | any($names[]; . == $name))))' "$answer" > /dev/null; then
+              echo "::warning title=Native decision unreadable::its skip list is not one JSON array of workflows native.yml may call, so native.yml runs every workflow it calls"
+              exit 1
+            fi
+            skips=$(jq -c -s '.[0]' "$answer")
+            case "$skips" in
+              '['*']') echo "skips=$skips" >> "$GITHUB_OUTPUT" ;;
+              *) exit 1 ;;
+            esac
+          elif [ "$EVENT_NAME" = schedule ]; then
             node scripts/workflow-gate.mjs --workflow "$WORKFLOW" --sweep --head "$HEAD_SHA"
           elif [ "$EVENT_NAME" = push ]; then
             node scripts/workflow-gate.mjs --workflow "$WORKFLOW" --push --head "$HEAD_SHA"
