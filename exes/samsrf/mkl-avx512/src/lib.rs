@@ -3,7 +3,8 @@
 //! `?ormqr`, `?trsv`/`?trsm`), `detrend`'s fit and `samsrf_removenoise`; and, in [`blas`]
 //! (research, branch t3/samsrf-intel-cf), MATLAB's real double `x' * y`, `y' * A`, `corr`
 //! and CF profile on that branch. The [`complex`] module adds a mixed complex/real dot
-//! candidate from 24 seen vectors, not a general complex BLAS implementation.
+//! candidate from 24 seen vectors. [`complex_qr`] adds a finite two-column complex-double
+//! QR candidate from staged recordings; neither identifies a general complex BLAS.
 //!
 //! The shipped port (`samsrf_core::lstsq`) follows MKL's CNR `auto` branch on AMD hosts.
 //! MATLAB on those Intel hosts rounds the same solves differently, so one output cannot
@@ -32,6 +33,7 @@
 use samsrf_core::timeseries::TimeSeries;
 use samsrf_core::{Error, Result};
 pub mod complex;
+pub mod complex_qr;
 
 use num_bigint::BigUint;
 

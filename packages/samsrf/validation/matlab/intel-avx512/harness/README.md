@@ -109,3 +109,8 @@ The summaries name the SHA-256 of every patch, every module and every run's maps
 bytes depend on the toolchain and on the build directory, because Cargo hashes the path of
 `exes/nifti` into its crate metadata. The run hashes must not change: a rebuild in another
 directory reproduced every one of them on both hosts.
+
+The next isolated variant, `avx512-complex-qr`, adds the finite two-column complex-double
+least-squares candidate described in [the QR study](../complex-qr/README.md). It layers
+`complex-qr.patch` after the unchanged complex-correlation patch. Its downstream results
+are recorded separately; the previous reports retain their original baseline.

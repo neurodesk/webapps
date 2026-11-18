@@ -15,6 +15,9 @@
 #                         adds the fixed complex-dot candidate and complex norm candidate;
 #                         complex least squares remains shipped
 #
+#   build.sh avx512-complex-qr OUT
+#                         additionally installs the finite two-column complex QR candidate
+#
 # OUT must not exist. It receives exes/samsrf, exes/nifti and the packages/samsrf files that
 # run_web_matrix.mjs loads, patched, with the module in OUT/packages/samsrf/wasm and
 # OUT/build.json, and native/*.rs as the build's exes/samsrf/wasm/tests (native.sh runs them). The module is built without wasm-opt (the canonical build pins binaryen
@@ -24,14 +27,14 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: $0 hooks|avx512|avx512-real-corr|avx512-complex-corr OUT" >&2
+  echo "usage: $0 hooks|avx512|avx512-real-corr|avx512-complex-corr|avx512-complex-qr OUT" >&2
   exit 2
 }
 [[ $# -eq 2 ]] || usage
 variant=$1
 out=$2
 case "$variant" in
-  hooks | avx512 | avx512-real-corr | avx512-complex-corr) ;;
+  hooks | avx512 | avx512-real-corr | avx512-complex-corr | avx512-complex-qr) ;;
   *) usage ;;
 esac
 if [[ -e "$out" ]]; then
@@ -62,8 +65,11 @@ fi
 if [[ "$variant" == avx512-real-corr ]]; then
   patches+=("$harness/real-corr-only.patch")
 fi
-if [[ "$variant" == avx512-complex-corr ]]; then
+if [[ "$variant" == avx512-complex-corr || "$variant" == avx512-complex-qr ]]; then
   patches+=("$harness/complex-corr.patch")
+fi
+if [[ "$variant" == avx512-complex-qr ]]; then
+  patches+=("$harness/complex-qr.patch")
 fi
 for patch in "${patches[@]}"; do
   (cd "$out" && git apply --check "$patch" && git apply "$patch")

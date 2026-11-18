@@ -479,3 +479,191 @@ fn complex_dot_candidate_matches_seen_raw_vectors_on_both_intel_hosts() {
         }
     }
 }
+
+/// Discovery replay of the complex candidate against every recorded double complex chain,
+/// with the shipped AMD implementation as a control on every host.
+#[test]
+fn complex_qr_candidate_replays_stages_and_multiple_rhs() {
+    let Some([kernels, designs_root]) = pair(["SAMSRF_QR_KERNELS_DIR", "SAMSRF_QR_REFERENCE_DIR"])
+    else {
+        return;
+    };
+    let designs_root = designs_root.join("ubuntu-24.04/compatible");
+    let designs = json_file(&designs_root.join("qr.json"));
+    let hosts = json_file(&kernels.join("hosts.json"));
+    let mut results = BTreeMap::new();
+    let (mut intel, mut amd) = (0, 0);
+    let all = |a: &[Complex64], b: &[Complex64]| {
+        a.len() == b.len() && a.iter().zip(b).all(|(a, b)| same_complex(*a, *b))
+    };
+    for (host, receipt) in hosts.as_object().unwrap() {
+        let is_intel = receipt["blas"]
+            .as_str()
+            .unwrap()
+            .contains("CNR branch AVX512_E1");
+        if is_intel {
+            intel += 1;
+        } else {
+            amd += 1;
+        }
+        let root = kernels.join(host);
+        let metadata = json_file(&root.join("kernels.json"));
+        let mut counts = [0usize; 12];
+        let mut total = 0;
+        for case in metadata["cases"].as_array().unwrap() {
+            if case["precision"] != "double" {
+                continue;
+            }
+            let d = designs["cases"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|d| d["id"] == case["id"])
+                .unwrap();
+            let x = complex_array(&designs_root, &d["x"]);
+            if x.iter().all(|z| z.im == 0.0) {
+                continue;
+            }
+            let y = array(&designs_root, &d["y"]);
+            let ones = vec![Complex64::new(1.0, 0.0); x.len()];
+            let columns: [&[Complex64]; 2] = if d["order"] == "ones-first" {
+                [&ones, &x]
+            } else {
+                [&x, &ones]
+            };
+            let model = samsrf_mkl_avx512::complex_qr::Design::new(&columns);
+            let (beta, qty) = model.solve(&y, 1, 0);
+            let chain = case["chains"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|c| c["variant"] == "complex")
+                .unwrap();
+            let f = complex_array(&root, &chain["factor"]);
+            let t = complex_array(&root, &chain["tau"]);
+            let q = complex_array(&root, &chain["qty"]);
+            let b = complex_array(&root, &chain["beta"]);
+            let pivot = array(&root, &chain["pivot"])
+                .into_iter()
+                .map(|v| v as usize - 1)
+                .collect::<Vec<_>>();
+            let m = x.len();
+            let (a0, a1) = (&model.packed[0], &model.packed[1]);
+            let equal = [
+                model.pivot == pivot,
+                same_complex(a0[0], f[0]),
+                all(&a0[1..], &f[1..m]),
+                same_complex(model.tau[0], t[0]),
+                same_complex(a1[0], f[m]),
+                same_complex(a1[1], f[m + 1]),
+                all(&a1[2..], &f[m + 2..]),
+                same_complex(model.tau[1], t[1]),
+                same_complex(qty[0], q[0]),
+                same_complex(qty[1], q[1]),
+                all(&qty[2..], &q[2..]),
+                all(&beta, &b),
+            ];
+            total += 1;
+            for (i, ok) in equal.into_iter().enumerate() {
+                counts[i] += usize::from(ok);
+                if is_intel {
+                    assert!(ok, "{host} {}: {}", case["id"], STEPS[i]);
+                }
+            }
+            if is_intel {
+                assert_eq!(model.rank, chain["rank"].as_u64().unwrap() as usize);
+            }
+            if !is_intel {
+                let port = lstsq::mldivide(&columns, &y, Precision::Double);
+                assert!(
+                    all(&port.coefficients, &b) && all(&port.qty, &q),
+                    "{host} {}: AMD control",
+                    case["id"]
+                );
+            }
+        }
+        let mut multiple = [0usize; 3];
+        for item in metadata["multiple"].as_array().unwrap() {
+            if item["precision"] != "double" || item["complex"] != true {
+                continue;
+            }
+            let d = designs["cases"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|d| d["id"] == item["design"])
+                .unwrap();
+            let x = complex_array(&designs_root, &d["x"]);
+            let m = x.len();
+            let ones = vec![Complex64::new(1.0, 0.0); m];
+            let columns: [&[Complex64]; 2] = if item["order"] == "ones-first" {
+                [&ones, &x]
+            } else {
+                [&x, &ones]
+            };
+            let model = samsrf_mkl_avx512::complex_qr::Design::new(&columns);
+            let ys = array(&root, &item["rhs"]);
+            let ys = ys.chunks(m).collect::<Vec<_>>();
+            assert_eq!(ys.len(), 8);
+            let q = complex_array(&root, &item["qty"]);
+            let b = complex_array(&root, &item["together"]);
+            let stored_real = item["together"]["imaginary"]
+                .as_str()
+                .is_none_or(str::is_empty);
+            let coefficients_equal = |got: &[Complex64], want: &[Complex64]| {
+                got.iter().zip(want).all(|(a, b)| {
+                    if stored_real {
+                        same(a.re, b.re) && a.im == 0.0
+                    } else {
+                        same_complex(*a, *b)
+                    }
+                })
+            };
+            let port = if !is_intel {
+                Some(lstsq::mldivide_many_with_qty(
+                    &columns,
+                    &ys,
+                    Precision::Double,
+                ))
+            } else {
+                None
+            };
+            for (j, y) in ys.iter().enumerate() {
+                let (beta, qty) = model.solve(y, ys.len(), j);
+                let checks = [
+                    all(&qty, &q[j * m..(j + 1) * m]),
+                    coefficients_equal(&beta, &b[j * 2..j * 2 + 2]),
+                ];
+                multiple[0] += 1;
+                multiple[1] += usize::from(checks[0]);
+                multiple[2] += usize::from(checks[1]);
+                if is_intel {
+                    assert!(
+                        checks.iter().all(|v| *v),
+                        "{host} {} column {j}: {checks:?}",
+                        item["id"]
+                    );
+                }
+                if let Some((solved, qty)) = &port {
+                    assert!(
+                        all(&qty[j], &q[j * m..(j + 1) * m])
+                            && coefficients_equal(&solved.coefficients[j], &b[j * 2..j * 2 + 2]),
+                        "AMD control"
+                    );
+                }
+            }
+        }
+        if !is_intel {
+            assert_eq!(counts, [79, 56, 49, 60, 0, 15, 0, 6, 6, 2, 0, 0], "AMD candidate comparison");
+            assert_eq!(multiple, [1264, 0, 4], "AMD candidate comparison");
+        }
+        assert_eq!(total, 79);
+        assert_eq!(multiple[0], 1264);
+        results.insert(
+            host.clone(),
+            json!({"intel":is_intel,"chains":total,"stages_equal":counts,"multiple":multiple}),
+        );
+    }
+    assert_eq!((intel, amd), (1, 5), "recorded host controls");
+    report("complex-qr-candidate", &json!(results));
+}
