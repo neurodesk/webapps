@@ -7,13 +7,15 @@ function record_geometry(source, input, output, spmSource, mode)
 % held-out clouds, extreme grids) instead of the full geometry reference; mode
 % 'polyshape-causal' records polyshape_causal_cases.m's controlled polygons;
 % 'polyshape-reproducers' records the reduced reproducers in
-% polyshape-reproducers.json (polyshape_reproducer_cases.m).
+% polyshape-reproducers.json (polyshape_reproducer_cases.m); 'hull-area' records
+% convexHull(delaunayTriangulation) and linspace on hull-area-inputs.json
+% (hull-area-predictions.md).
 arguments
     source (1,:) char
     input (1,:) char
     output (1,:) char
     spmSource (1,:) char
-    mode (1,:) char {mustBeMember(mode, {'full', 'polyshape-probe', 'polyshape-causal', 'polyshape-reproducers'})} = 'full'
+    mode (1,:) char {mustBeMember(mode, {'full', 'polyshape-probe', 'polyshape-causal', 'polyshape-reproducers', 'hull-area'})} = 'full'
 end
 assert(isfile(fullfile(output, 'source.json')), 'Run prepare.py first');
 assert(~isfile(fullfile(output, 'geometry.json')), 'Use a fresh output directory');
@@ -32,13 +34,19 @@ meta.functions = struct('polyshape', which('polyshape'), 'convhull', which('conv
     'delaunay', which('delaunay'), 'delaunayTriangulation', which('delaunayTriangulation'), ...
     'clusterroi', which('samsrf_clusterroi'), 'cfparam', which('samsrf_cfparam_loop'), ...
     'gifti', which('gifti'));
-if any(strcmp(mode, {'polyshape-probe', 'polyshape-causal', 'polyshape-reproducers'}))
+if any(strcmp(mode, {'polyshape-probe', 'polyshape-causal', 'polyshape-reproducers', 'hull-area'}))
     meta.mode = mode;
+    if strcmp(mode, 'hull-area')
+        meta.functions.linspace = which('linspace');
+        meta.functions.polyarea = which('polyarea');
+    end
     write_json('environment.json', meta);
     if strcmp(mode, 'polyshape-probe')
         cases = probe_cases();
     elseif strcmp(mode, 'polyshape-causal')
         cases = causal_cases();
+    elseif strcmp(mode, 'hull-area')
+        cases = hull_area_cases();
     else
         cases = reproducer_cases();
     end
@@ -713,6 +721,99 @@ catch failure
     item.error = [failure.identifier ': ' failure.message];
 end
 warning('on', 'all');
+end
+
+%% convexHull area and linspace grids (hull-area-predictions.md)
+
+function cases = hull_area_cases()
+% Each point set as samsrf_revcor_prf.m uses it: [K, AV] = convexHull(Dt) of
+% Dt = delaunayTriangulation(txy), the centroid and area of polyshape(Dt.Points(K,:)),
+% and the same on the hull's own vertices; then linspace(-a, a, n) per grid.
+here = fileparts(mfilename('fullpath'));
+spec = jsondecode(fileread(fullfile(here, 'hull-area-inputs.json')));
+grids = cell_list(spec.grids);
+coordinates = containers.Map();
+for k = 1:numel(grids)
+    g = grids{k};
+    coordinates(g.identity) = {hex_column(g.xs), hex_column(g.ys), g.rows};
+end
+sets = cell_list(spec.sets);
+cases = {};
+for k = 1:numel(sets)
+    s = sets{k};
+    g = coordinates(s.grid);
+    [xs, ys, rows] = g{:};
+    runs = reshape(s.runs, [], 2);
+    pixel = zeros(sum(runs(:, 2)), 1);
+    at = 0;
+    for j = 1:size(runs, 1)
+        pixel(at + (1:runs(j, 2))) = runs(j, 1) + (0:runs(j, 2) - 1);
+        at = at + runs(j, 2);
+    end
+    % MATLAB's pixel order: column-major, the top row first (yc is flipped).
+    P = [xs(floor(pixel / rows) + 1), ys(rows - mod(pixel, rows))];
+    if s.reverse
+        P = flipud(P);
+    end
+    id = ['area_' s.identity];
+    item = struct('id', id, 'kind', 'hull-area', 'family', s.family, 'role', s.role, ...
+        'points', array_file([id '_points'], P));
+    lastwarn('', '');
+    warning('off', 'all');
+    try
+        Dt = delaunayTriangulation(P);
+        [K, AV] = convexHull(Dt);
+        item.dtPoints = array_file([id '_dt_points'], Dt.Points);
+        item.triangles = array_file([id '_triangles'], Dt.ConnectivityList);
+        item.hull = array_file([id '_hull'], K);
+        item.area = array_file([id '_area'], AV);
+        item.polyarea = array_file([id '_polyarea'], polyarea(Dt.Points(K, 1), Dt.Points(K, 2)));
+        ps = polyshape(Dt.Points(K, :));
+        [cx, cy] = ps.centroid;
+        item.shape = array_file([id '_shape'], ps.Vertices);
+        item.estimate = array_file([id '_estimate'], [cx cy area(ps)]);
+        Dc = delaunayTriangulation(Dt.Points(K(1:end-1), :));
+        [Kc, AVc] = convexHull(Dc);
+        item.cornersTriangles = array_file([id '_corners_triangles'], Dc.ConnectivityList);
+        item.cornersHull = array_file([id '_corners_hull'], Kc);
+        item.cornersArea = array_file([id '_corners_area'], AVc);
+        item.error = '';
+    catch failure
+        item.error = [failure.identifier ': ' failure.message];
+    end
+    [~, warningId] = lastwarn;
+    item.warning = warningId;
+    warning('on', 'all');
+    cases{end+1} = item; %#ok<AGROW>
+end
+grids = cell_list(spec.linspace);
+for k = 1:numel(grids)
+    g = grids{k};
+    a = hex2num(g.half);
+    id = ['linspace_' g.identity];
+    cases{end+1} = struct('id', id, 'kind', 'linspace', 'role', g.role, 'n', g.n, ...
+        'half', array_file([id '_half'], a), ...
+        'values', array_file([id '_values'], linspace(-a, a, g.n))); %#ok<AGROW>
+end
+fprintf('Recorded %d point sets and %d grids\n', numel(sets), numel(grids));
+end
+
+function items = cell_list(value)
+% jsondecode gives a struct array when every element has the same fields.
+if iscell(value)
+    items = value;
+else
+    items = num2cell(value);
+end
+end
+
+function values = hex_column(hex)
+% A JSON array of 16-digit hexadecimal IEEE doubles as a column.
+if ischar(hex)
+    hex = cellstr(hex);
+end
+values = hex2num(char(hex(:)));
+values = values(:);
 end
 
 %% Region growing over the triangulation

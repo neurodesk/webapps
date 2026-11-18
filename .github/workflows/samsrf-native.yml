@@ -60,6 +60,10 @@ on:
         description: With geometry_only, record only the reduced polyshape reproducers (polyshape-reproducers.json)
         type: boolean
         default: false
+      geometry_hull_area:
+        description: With geometry_only, record only convexHull(delaunayTriangulation) areas and linspace grids (hull-area-inputs.json)
+        type: boolean
+        default: false
       revcor_only:
         description: Record raw-input RC/CF pipelines in both precisions, without MATLAB Compiler
         type: boolean
@@ -474,6 +478,10 @@ jobs:
             echo 'geometry_reproducers narrows geometry_only and excludes geometry_probe and geometry_causal.' >&2
             exit 1
           fi
+          if [ '${{ inputs.geometry_hull_area }}' = true ] && { [ '${{ inputs.geometry_only }}' != true ] || [ '${{ inputs.geometry_probe }}' = true ] || [ '${{ inputs.geometry_causal }}' = true ] || [ '${{ inputs.geometry_reproducers }}' = true ]; }; then
+            echo 'geometry_hull_area narrows geometry_only and excludes geometry_probe, geometry_causal and geometry_reproducers.' >&2
+            exit 1
+          fi
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-input"
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-matrix-input" packages/samsrf/validation/matlab/inputs.json
           python3 packages/samsrf/validation/matlab/prepare.py reference-source "$RUNNER_TEMP/samsrf-matlab"
@@ -538,12 +546,12 @@ jobs:
         if: inputs.geometry_only
         uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
         with:
-          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_geometry(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-geometry-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab'),fullfile(pwd,'reference-spm'),'${{ inputs.geometry_probe && 'polyshape-probe' || inputs.geometry_causal && 'polyshape-causal' || inputs.geometry_reproducers && 'polyshape-reproducers' || 'full' }}')
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_geometry(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-geometry-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab'),fullfile(pwd,'reference-spm'),'${{ inputs.geometry_probe && 'polyshape-probe' || inputs.geometry_causal && 'polyshape-causal' || inputs.geometry_reproducers && 'polyshape-reproducers' || inputs.geometry_hull_area && 'hull-area' || 'full' }}')
       - name: Repeat geometry in a new MATLAB process on this host
         if: inputs.geometry_only
         uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
         with:
-          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_geometry(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-geometry-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab-repeat'),fullfile(pwd,'reference-spm'),'${{ inputs.geometry_probe && 'polyshape-probe' || inputs.geometry_causal && 'polyshape-causal' || inputs.geometry_reproducers && 'polyshape-reproducers' || 'full' }}')
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_geometry(fullfile(pwd,'reference-source'),fullfile(getenv('RUNNER_TEMP'),'samsrf-geometry-input'),fullfile(getenv('RUNNER_TEMP'),'samsrf-matlab-repeat'),fullfile(pwd,'reference-spm'),'${{ inputs.geometry_probe && 'polyshape-probe' || inputs.geometry_causal && 'polyshape-causal' || inputs.geometry_reproducers && 'polyshape-reproducers' || inputs.geometry_hull_area && 'hull-area' || 'full' }}')
       - name: Compare same-host geometry recordings
         if: inputs.geometry_only
         run: node packages/samsrf/validation/matlab/compare-geometry.mjs "$RUNNER_TEMP/samsrf-matlab" "$RUNNER_TEMP/samsrf-matlab-repeat" "$RUNNER_TEMP/samsrf-matlab/repeat-comparison.json"
