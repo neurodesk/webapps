@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { parse, stringify } from 'yaml';
-import { AUTOMATION_CATALOG_READERS, changedPathsFromGit, CI_JOB_SCOPES, createAppPlan, EASTER_EGG_SUITE, INDEPENDENT_ROOT_DEV_DEPENDENCIES, PACKAGE_STEP, RUNTIME_MANIFEST_READERS, SITE_KEY_READERS, SITE_ONLY_FILES } from '../scripts/lib/app-plan.mjs';
+import { AUTOMATION_CATALOG_READERS, changedPathsFromGit, CI_JOB_SCOPES, createAppPlan, EASTER_EGG_SUITE, INDEPENDENT_ROOT_DEV_DEPENDENCIES, PACKAGE_STEP, RUNTIME_MANIFEST_READERS, UnreadableDiffError, SITE_KEY_READERS, SITE_ONLY_FILES } from '../scripts/lib/app-plan.mjs';
 import { APP_JOBS, carriedApps, NIGHTLY_JOBS, PLANNED_JOBS, RERUN_JOBS, testedBase } from '../scripts/lib/tested-base.mjs';
 import { lockfileImpact } from '../scripts/lib/lockfile-impact.mjs';
 import { loadAppsRegistry, parseAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
@@ -1805,6 +1805,73 @@ test('a push run tests the merges whose own runs were cancelled, and falls back 
     assert.equal(fallback.all_apps, 'true', name);
     assert.match(fallback.fallback_reason, /ci run on main/, name);
   }
+});
+
+// A repository with one commit of `files`, and a function that commits more changes.
+async function diffRepository(t, files) {
+  const root = await mkdtemp(join(tmpdir(), 'app-plan-diff-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const git = (...args) => execFileSync('git', ['-c', 'user.name=planner', '-c', 'user.email=planner@example.org', ...args], { cwd: root, encoding: 'utf8' });
+  const write = async (files) => {
+    for (const [path, text] of Object.entries(files)) {
+      await mkdir(join(root, path, '..'), { recursive: true });
+      await writeFile(join(root, path), text);
+    }
+  };
+  git('init', '--quiet');
+  await write(files);
+  git('add', '-A');
+  git('commit', '--quiet', '-m', 'base');
+  const base = git('rev-parse', 'HEAD').trim();
+  return { root, git, base, commit: async (changes, moves = []) => {
+    await write(changes);
+    for (const [from, to] of moves) git('mv', from, to);
+    git('add', '-A');
+    git('commit', '--quiet', '-m', 'change');
+  } };
+}
+
+test('changed paths are read NUL-delimited, so git does not quote an unusual name', async (t) => {
+  const name = 'apps/niimath/ünï "quoted".js';
+  const { root, git, base, commit } = await diffRepository(t, { 'README.md': 'x' });
+  await commit({ [name]: 'x' });
+  assert.match(git('diff', '--name-only', `${base}...HEAD`), /^"apps\/niimath\/\\303/, 'git quotes the name in its line form');
+  assert.deepEqual(changedPathsFromGit({ base, cwd: root }), [name]);
+});
+
+test('changed paths keep leading and trailing spaces', async (t) => {
+  const name = 'apps/niimath/ padded.js ';
+  const { root, base, commit } = await diffRepository(t, { 'README.md': 'x' });
+  await commit({ [name]: 'x' });
+  assert.deepEqual(changedPathsFromGit({ base, cwd: root }), [name]);
+});
+
+test('changed paths hold both sides of a copy', async (t) => {
+  const source = 'packages/a/test/fixtures/data.txt';
+  const text = Array.from({ length: 40 }, (_, line) => `line ${line}`).join('\n');
+  const { root, git, base, commit } = await diffRepository(t, { [source]: text });
+  // A copy is found when its source changes in the same commit.
+  await commit({ 'apps/b/copied.txt': text, [source]: `${text}\nmore` });
+  assert.match(git('diff', '--name-status', '--find-copies', `${base}...HEAD`), /^C\d+\t/m);
+  assert.deepEqual(changedPathsFromGit({ base, cwd: root }).sort(), ['apps/b/copied.txt', source].sort());
+});
+
+test('a diff git cannot read is not an empty one: the plan tests everything', async (t) => {
+  const { root } = await diffRepository(t, { 'README.md': 'x' });
+  assert.throws(() => changedPathsFromGit({ base: '0123456789abcdef0123456789abcdef01234567', cwd: root }), UnreadableDiffError);
+  assert.deepEqual(changedPathsFromGit({ base: '', cwd: root }), [], 'no base is a full run');
+  // The CLI selects every app, the site build, every package suite and the easter egg, and says why.
+  const { root: fixture, run } = await plannerFixture(t);
+  execFileSync('git', ['init', '--quiet'], { cwd: fixture });
+  execFileSync('git', ['-c', 'user.name=p', '-c', 'user.email=p@example.org', 'commit', '--quiet', '--allow-empty', '-m', 'x'], { cwd: fixture });
+  const result = run('--base', '0123456789abcdef0123456789abcdef01234567', '--head', 'HEAD');
+  assert.equal(result.status, 0, result.stderr);
+  const plan = JSON.parse(result.stdout);
+  assert.match(plan.fallback_reason, /^the changed paths could not be read: git diff 0123456789abcdef0123456789abcdef01234567\.\.\.HEAD failed/);
+  assert.equal(plan.all_apps, 'true');
+  assert.equal(plan.has_site, 'true');
+  assert.equal(plan.easter_egg, 'true');
+  assert.match(JSON.parse(plan.selection_reasons).packages.all, /^no changed paths/);
 });
 
 test('a rename lists both its paths, so what reads the old path is selected', async (t) => {

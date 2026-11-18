@@ -743,18 +743,41 @@ export function createAppPlan(registry, changedPaths = [], graph = null, manifes
   });
 }
 
-// Both sides of every rename and copy: a moved input changes what reads its old path.
+// A diff git could not produce. It is never an empty diff: callers that
+// cannot read the change test everything (app-plan.mjs), run the workflow
+// (workflow-gate.mjs) or report the row as unknown (app-plan-shadow.mjs).
+export class UnreadableDiffError extends Error {}
+
+// The paths changed from the merge base of `base` and `head` to `head`, read
+// NUL-delimited so that git neither quotes nor splits a name and none is
+// trimmed, with both sides of every rename and copy: a moved input changes
+// what reads its old path. Without a base it is [], a full run. A diff git
+// cannot produce throws UnreadableDiffError.
 export function changedPathsFromGit({ base, head = 'HEAD', cwd }) {
   if (!base || /^0+$/.test(base)) return [];
+  let output;
   try {
-    return execFileSync('git', ['diff', '--no-renames', '--name-only', `${base}...${head}`], {
+    output = execFileSync('git', ['diff', '-z', '--name-status', '--find-renames', '--find-copies', `${base}...${head}`], {
       cwd,
       encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).split('\n').map((path) => path.trim()).filter(Boolean);
-  } catch {
-    return [];
+      maxBuffer: 256 * 1024 * 1024,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch (error) {
+    throw new UnreadableDiffError(`git diff ${base}...${head} failed: ${String(error.stderr || error.message).trim().split('\n')[0]}`);
   }
+  const fields = output.split('\0');
+  const paths = new Set();
+  // Each entry is a status, then one path, or two for a rename (R) or copy (C).
+  for (let index = 0; index < fields.length - 1;) {
+    const status = fields[index++];
+    const names = fields.slice(index, index += /^[RC]/.test(status) ? 2 : 1);
+    if (!/^[A-Z]\d*$/.test(status) || names.length < (/^[RC]/.test(status) ? 2 : 1) || names.some((name) => !name)) {
+      throw new UnreadableDiffError(`git diff ${base}...${head} printed an entry it cannot be read from (${JSON.stringify(status)})`);
+    }
+    for (const name of names) paths.add(name);
+  }
+  return [...paths];
 }
 
 const MANIFEST = /^(?:(?:packages|apps|exes)\/[^/]+\/)?package\.json$|^registry\/(?:offline-assets\.lock\.json|apps\.yml|app-information\.yml|standalone\.json)$|^pnpm-lock\.yaml$|^\.gitattributes$|^\.github\/workflows\/ci\.yml$/;

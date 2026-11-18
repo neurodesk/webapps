@@ -16,7 +16,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { parse } from 'yaml';
-import { changedManifests, changedPathsFromGit, createAppPlan } from './lib/app-plan.mjs';
+import { changedManifests, changedPathsFromGit, createAppPlan, UnreadableDiffError } from './lib/app-plan.mjs';
 import { comparePackages, compareSelection, expectedApps, expectedPackages, failureCandidates, parseableClosure, republishedPackages, supersededMerges, uncheckedRules, workspaceClosures } from './lib/app-plan-shadow.mjs';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
 import { listJobs, listRuns, mapLimited, mergedPullRequests } from './lib/github-actions.mjs';
@@ -130,7 +130,13 @@ async function shadow(pr, scratch) {
   const parents = git('rev-list', '--parents', '-n', '1', merge).split(' ').slice(1);
   const [base, head] = parents.length === 2 ? parents : [parents[0], merge];
   const mergeBase = git('merge-base', base, head);
-  const changedPaths = changedPathsFromGit({ base, head, cwd: repoRoot });
+  let changedPaths;
+  try {
+    changedPaths = changedPathsFromGit({ base, head, cwd: repoRoot });
+  } catch (error) {
+    if (!(error instanceof UnreadableDiffError)) throw error;
+    return { ...row, skipped: `the changed paths could not be read: ${error.message}` };
+  }
   const dir = join(scratch, String(pr.number));
   await extract(head, join(dir, 'head'));
   await extract(mergeBase, join(dir, 'base'));

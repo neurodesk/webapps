@@ -2,7 +2,7 @@
 import { execFileSync } from 'node:child_process';
 import { appendFile, readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createAppPlan, changedManifests, changedPathsFromGit } from './lib/app-plan.mjs';
+import { createAppPlan, changedManifests, changedPathsFromGit, UnreadableDiffError } from './lib/app-plan.mjs';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
 import { FULL_CI_LABEL } from './lib/ci-usage.mjs';
 import { eventPullRequest, fullPlanBudget } from './lib/full-plan-budget.mjs';
@@ -46,9 +46,16 @@ if (base === TESTED_BASE) {
   carriedChecks = tested.checks;
   if (!base) baseFallback = tested.reason;
 }
-let changedPaths = process.argv.includes('--all') || baseFallback
-  ? []
-  : changedPathsFromGit({ base, head, cwd: repoRoot });
+// A diff git cannot read is never an empty one: the run tests everything.
+let changedPaths = [];
+if (!process.argv.includes('--all') && !baseFallback) {
+  try {
+    changedPaths = changedPathsFromGit({ base, head, cwd: repoRoot });
+  } catch (error) {
+    if (!(error instanceof UnreadableDiffError)) throw error;
+    baseFallback = `the changed paths could not be read: ${error.message}`;
+  }
+}
 const only = option('--only');
 if (only && only !== 'affected') {
   const ids = new Set(only.split(',').map((id) => id.trim()).filter(Boolean));
