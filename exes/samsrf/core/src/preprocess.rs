@@ -484,137 +484,82 @@ pub fn noise_ceiling(odd_mean: &[f64], even_mean: &[f64]) -> f64 {
 }
 
 /// `samsrf_removenoise(Srf, X, mver, true)`: z-scores each covariate column, appends an
-/// intercept, regresses them out of every kept time course by least squares and keeps
-/// the residual; a course containing NaN is set to zero. `covariates` is column-major
-/// (`volumes x n`), as the global signal is one column. In place on `data`.
-///
-/// MATLAB's `X \ Y` is QR; here the normal equations `X'X b = X'y`, solved by Gaussian
-/// elimination with partial pivoting. With one or two z-scored covariates and an intercept
-/// `X'X` is close to diagonal, so the two agree to rounding. A constant covariate z-scores
-/// to zeros; it is left out, which is the coefficient 0 MATLAB's basic solution gives it.
-/// Collinear covariates (rank deficiency beyond that) are not reproduced.
+/// intercept, regresses them out of every kept time course and keeps the residual; a
+/// course containing NaN is set to zero. `covariates` is column-major (`volumes x n`), as
+/// the global signal is one column. In place on `data`.
 pub fn remove_noise(data: &mut TimeSeries, covariates: &[f64], n_covariates: usize) -> Result<()> {
     remove_noise_in(data, covariates, n_covariates, Precision::Double)
 }
 
-/// `remove_noise` in the data's precision. Single data make `zscore`, `[X ones] \ Y`,
-/// `X * B` and the residuals single; one covariate (the global signal) is supported.
+/// `remove_noise` in the data's precision, as MATLAB computes it: `zscore`, then
+/// `B = [X ones] \ Y` over every course at once (each course's arithmetic depends on its
+/// place among the right-hand sides, `lstsq::mldivide_many`), then `Y - X * B` with the
+/// rounded products of each row added in column order, unfused. With one covariate this
+/// gives every residual of the recorded global regressions on MATLAB's AMD hosts, in both
+/// precisions; more covariates follow the same order, unrecorded. A constant covariate
+/// z-scores to zeros and gets the coefficient 0 of MATLAB's basic solution. Single data
+/// take one covariate (the global signal).
+///
+/// A course with a NaN keeps its place among the right-hand sides as zeros, so it cannot
+/// change another course's arithmetic, and comes back zero as SamSrf leaves it. A course
+/// that is otherwise nonfinite in the data's class becomes NaN. MATLAB's results for such
+/// courses were not recorded, so these replacements are not parity claims.
 pub fn remove_noise_in(data: &mut TimeSeries, covariates: &[f64], n_covariates: usize, precision: Precision) -> Result<()> {
-    if precision == Precision::Single {
-        if n_covariates != 1 || covariates.len() != data.volumes {
-            return Err(Error::Shape("single-precision noise removal takes one covariate per volume".into()));
-        }
-        if data.vertices == 0 {
-            return Ok(());
-        }
-        let x: Vec<f32> = zscore_single(&covariates.iter().map(|&value| value as f32).collect::<Vec<_>>());
-        let design: Vec<num_complex::Complex64> = x.iter().map(|&value| num_complex::Complex64::new(f64::from(value), 0.0)).collect();
-        let ones = vec![num_complex::Complex64::new(1.0, 0.0); design.len()];
-        // `B = [X ones] \ Y` over every course at once, as MATLAB solves it: each
-        // column's arithmetic depends on its place among the right-hand sides. A
-        // nonfinite course keeps its place as zeros so it cannot poison other RHS.
-        // Preserve the port's outputs: NaN-containing courses become zero; otherwise
-        // nonfinite single-converted courses become NaN. MATLAB's handling of these
-        // inputs was not recorded, so these replacements are not parity claims.
-        let replacements: Vec<Option<f64>> = (0..data.vertices).map(|v| {
-            let course = data.course(v);
-            if course.iter().any(|value| value.is_nan()) {
-                Some(0.0)
-            } else if course.iter().any(|&value| !(value as f32).is_finite()) {
-                Some(f64::NAN)
-            } else {
-                None
-            }
-        }).collect();
-        let zeros = vec![0.0; data.volumes];
-        let ys: Vec<&[f64]> = (0..data.vertices).map(|v| if replacements[v].is_some() { zeros.as_slice() } else { data.course(v) }).collect();
-        let solution = crate::lstsq::mldivide_many(&[&design, &ones], &ys, Precision::Single);
-        for (vertex, (&replacement, coefficients)) in replacements.iter().zip(&solution.coefficients).enumerate() {
-            let course = data.course_mut(vertex);
-            if let Some(value) = replacement {
-                course.fill(value);
-                continue;
-            }
-            let (beta, baseline) = (coefficients[0].re as f32, coefficients[1].re as f32);
-            for (value, &x) in course.iter_mut().zip(&x) {
-                let modelled = x * beta + baseline;
-                *value = f64::from(*value as f32 - modelled);
-            }
-        }
-        return Ok(());
-    }
     let volumes = data.volumes;
+    if precision == Precision::Single && (n_covariates != 1 || covariates.len() != volumes) {
+        return Err(Error::Shape("single-precision noise removal takes one covariate per volume".into()));
+    }
     if covariates.len() != volumes * n_covariates {
         return Err(Error::Shape(format!(
             "{} covariate values are not {n_covariates} columns of {volumes} volumes",
             covariates.len()
         )));
     }
+    if data.vertices == 0 || volumes == 0 {
+        return Ok(());
+    }
     let mut columns: Vec<Vec<f64>> = covariates
-        .chunks(volumes.max(1))
-        .take(n_covariates)
-        .map(|column| {
-            let mut column = column.to_vec();
-            zscore(&mut column);
-            column
+        .chunks(volumes)
+        .map(|column| match precision {
+            Precision::Double => {
+                let mut column = column.to_vec();
+                zscore(&mut column);
+                column
+            }
+            Precision::Single => zscore_single(&column.iter().map(|&value| value as f32).collect::<Vec<_>>()).into_iter().map(f64::from).collect(),
         })
-        .filter(|column| column.iter().any(|&value| value != 0.0))
         .collect();
     columns.push(vec![1.0; volumes]);
-    let gram: Vec<Vec<f64>> = columns
-        .iter()
-        .map(|a| columns.iter().map(|b| dot(a, b)).collect())
-        .collect();
-    for vertex in 0..data.vertices {
-        let course = data.course_mut(vertex);
+    let design: Vec<Vec<num_complex::Complex64>> = columns.iter().map(|column| column.iter().map(|&value| num_complex::Complex64::new(value, 0.0)).collect()).collect();
+    let design: Vec<&[num_complex::Complex64]> = design.iter().map(Vec::as_slice).collect();
+    let replacements: Vec<Option<f64>> = (0..data.vertices).map(|v| {
+        let course = data.course(v);
         if course.iter().any(|value| value.is_nan()) {
-            course.fill(0.0);
+            Some(0.0)
+        } else if course.iter().any(|&value| !precision.round(value).is_finite()) {
+            Some(f64::NAN)
+        } else {
+            None
+        }
+    }).collect();
+    let zeros = vec![0.0; volumes];
+    let ys: Vec<&[f64]> = (0..data.vertices).map(|v| if replacements[v].is_some() { zeros.as_slice() } else { data.course(v) }).collect();
+    let solution = crate::lstsq::mldivide_many(&design, &ys, precision);
+    for (vertex, (&replacement, coefficients)) in replacements.iter().zip(&solution.coefficients).enumerate() {
+        let course = data.course_mut(vertex);
+        if let Some(value) = replacement {
+            course.fill(value);
             continue;
         }
-        let projections: Vec<f64> = columns.iter().map(|column| dot(column, course)).collect();
-        let betas = solve(&gram, projections);
         for (t, value) in course.iter_mut().enumerate() {
-            let modelled: f64 = columns
-                .iter()
-                .zip(&betas)
-                .map(|(column, beta)| column[t] * beta)
-                .sum();
-            *value -= modelled;
+            let product = |(column, beta): (&Vec<f64>, &num_complex::Complex64)| precision.round(column[t] * beta.re);
+            let mut terms = columns.iter().zip(coefficients).map(product);
+            let first = terms.next().expect("the intercept column");
+            let modelled = terms.fold(first, |sum, term| precision.round(sum + term));
+            *value = precision.round(precision.round(*value) - modelled);
         }
     }
     Ok(())
-}
-
-fn dot(a: &[f64], b: &[f64]) -> f64 {
-    a.iter().zip(b).map(|(x, y)| x * y).sum()
-}
-
-/// Solves the small square system `a x = b` by Gaussian elimination with partial pivoting.
-fn solve(a: &[Vec<f64>], mut b: Vec<f64>) -> Vec<f64> {
-    let n = b.len();
-    let mut a: Vec<Vec<f64>> = a.to_vec();
-    for column in 0..n {
-        let pivot = (column..n)
-            .max_by(|&i, &j| a[i][column].abs().total_cmp(&a[j][column].abs()))
-            .unwrap_or(column);
-        a.swap(column, pivot);
-        b.swap(column, pivot);
-        let (upper, lower) = a.split_at_mut(column + 1);
-        let pivot_row = &upper[column];
-        for (offset, row) in lower.iter_mut().enumerate() {
-            let factor = row[column] / pivot_row[column];
-            for (value, pivot_value) in row[column..].iter_mut().zip(&pivot_row[column..]) {
-                *value -= factor * pivot_value;
-            }
-            b[column + 1 + offset] -= factor * b[column];
-        }
-    }
-    let mut x = vec![0.0; n];
-    for row in (0..n).rev() {
-        let known: f64 = (row + 1..n).map(|k| a[row][k] * x[k]).sum();
-        x[row] = (b[row] - known) / a[row][row];
-    }
-    x
 }
 
 #[cfg(test)]

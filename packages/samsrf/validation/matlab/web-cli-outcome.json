@@ -5,7 +5,7 @@
  },
  "summary": {
   "exactRuns": 17,
-  "exactMaps": 154,
+  "exactMaps": 157,
   "maps": 168
  },
  "runs": {
@@ -306,11 +306,7 @@
   "cf_hull_smooth_global_lh_double": {
    "class": "differs",
    "maps": {
-    "R^2": {
-     "srfData": 8,
-     "imaginary": 0,
-     "gifti": 0
-    },
+    "R^2": "exact",
     "x0": "exact",
     "y0": {
      "srfData": 12,
@@ -319,16 +315,8 @@
     },
     "Centre": "exact",
     "Surround": "exact",
-    "Beta": {
-     "srfData": 8,
-     "imaginary": 0,
-     "gifti": 0
-    },
-    "Suppression": {
-     "srfData": 13,
-     "imaginary": 0,
-     "gifti": 0
-    },
+    "Beta": "exact",
+    "Suppression": "exact",
     "Fwhm": "exact",
     "Vx": "exact",
     "Noise Ceiling": "exact"
