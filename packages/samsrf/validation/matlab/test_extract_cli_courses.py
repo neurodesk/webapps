@@ -50,6 +50,15 @@ class CourseInventory(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'unique run identities'):
             extract_cli_courses.main([str(self.root), str(self.output)])
 
+    def test_roi_must_be_distinct_whole_vertex_numbers(self):
+        for roi in ([1.5], [0.], [float('nan')]):
+            with self.subTest(roi=roi):
+                with h5py.File(self.root / 'source-1' / 'a' / 'result.mat', 'a') as handle:
+                    del handle['Srf']['Roi']
+                    handle['Srf'].create_dataset('Roi', data=numpy.array(roi, dtype='<f8'))
+                with self.assertRaisesRegex(ValueError, 'distinct whole vertex numbers'):
+                    extract_cli_courses.main([str(self.root), str(self.root / f'extracted-{roi[0]}')])
+
 
 if __name__ == '__main__':
     unittest.main()
