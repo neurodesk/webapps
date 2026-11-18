@@ -274,6 +274,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "samsrf-mkl-avx512"
+version = "0.1.0"
+dependencies = [
+ "libm",
+ "num-bigint",
+ "samsrf-core",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "samsrf-wasm"
 version = "0.1.0"
 dependencies = [

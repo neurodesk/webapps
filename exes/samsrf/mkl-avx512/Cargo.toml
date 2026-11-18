@@ -1,0 +1,22 @@
+[package]
+name = "samsrf-mkl-avx512"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "MATLAB's real double least squares on MKL's AVX512_E1 branch (Intel hosts): a second reference for samsrf-core's validation, never shipped"
+publish = false
+
+[lib]
+name = "samsrf_mkl_avx512"
+path = "src/lib.rs"
+
+[dependencies]
+samsrf-core = { path = "../core" }
+num-bigint = "0.4.8"
+libm = "0.2"
+
+[dev-dependencies]
+# Tests read MATLAB numbers written inline in JSON; only this parse is correctly rounded.
+serde_json = { version = "1", features = ["float_roundtrip"] }
+sha2 = "0.10"
