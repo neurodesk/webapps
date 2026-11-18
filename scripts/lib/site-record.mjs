@@ -1,6 +1,7 @@
-// The digest record each published site carries (DIGEST_FILE at its root), and
-// how a deploy reads it back from the site's host. It uses only Node built-ins,
-// so a job can confirm a host's digest without installing the workspace.
+// The digest record each published site carries (DIGEST_FILE at its root), how
+// a deploy reads it back from the site's host, and whether the host answers at
+// all. It uses only Node built-ins, so a job can confirm a host's digest and
+// probe its landing page without installing the workspace.
 
 export const DIGEST_FILE = 'site-digest.json';
 export const DIGEST_SCHEMA = 1;
@@ -89,4 +90,33 @@ export async function readLiveRecord({ site, host, nonce, fetch = globalThis.fet
   } catch (error) {
     return { error: message(error) };
   }
+}
+
+// The landing page probe retries this often, this far apart, while a new deploy reaches its custom domain.
+const ANSWER_ATTEMPTS = 11;
+const ANSWER_RETRY_MS = 15_000;
+
+/**
+ * Whether a site's landing page answers: `{ status }` once a GET of `url`
+ * answers below HTTP 400 with its whole body, as `curl --fail` counts it (a
+ * redirect is not followed), or `{ error }` after `attempts` tries `retryMs`
+ * apart. Each try has its own deadline over headers and body.
+ */
+export async function siteAnswers({ url, fetch = globalThis.fetch, attempts = ANSWER_ATTEMPTS, retryMs = ANSWER_RETRY_MS, timeoutMs = RECORD_TIMEOUT_MS }) {
+  let error;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    if (attempt > 1) await new Promise((resolve) => setTimeout(resolve, retryMs));
+    try {
+      const status = await exchange(timeoutMs, '', async ({ signal, within }) => {
+        const response = await within(fetch(url, { cache: 'no-store', redirect: 'manual', signal }));
+        await within(response.arrayBuffer());
+        return response.status;
+      });
+      if (status < 400) return { status };
+      error = `HTTP ${status}`;
+    } catch (failure) {
+      error = message(failure);
+    }
+  }
+  return { error: `${error} after ${attempts} attempts` };
 }

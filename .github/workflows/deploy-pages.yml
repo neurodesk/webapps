@@ -172,6 +172,11 @@ jobs:
         env:
           BASE_URL: ${{ steps.deployment.outputs.page_url }}
           SITE_CATALOG: neuro
+      - name: Check the site answers
+        run: node scripts/check-site-answers.mjs "$BASE_URL"
+        env:
+          BASE_URL: ${{ steps.deployment.outputs.page_url }}
+          SITE_CATALOG: neuro
       - name: Verify deployed cross-origin isolation
         run: pnpm test:deployed
         env:
@@ -240,8 +245,11 @@ jobs:
           path: dist-sites
       - name: Deploy the ${{ matrix.site }} site
         run: pnpm dlx wrangler@3.114.17 deploy --config dist-sites/${{ matrix.site }}.wrangler.json
+      # The same probe runs among the checks of every site a run checks, published or not.
       - name: Check the ${{ matrix.site }} site answers on its custom domain
-        run: curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 15 --output /dev/null ${{ matrix.url }}
+        run: node scripts/check-site-answers.mjs "$SITE_URL"
+        env:
+          SITE_URL: ${{ matrix.url }}
 
   # The checks below read the public hosts, not the build: they run for each
   # site this run publishes and, on the daily run, for every live site.
@@ -250,7 +258,7 @@ jobs:
     needs: [build, deploy-workers]
     if: ${{ !cancelled() && needs.build.result == 'success' && needs.build.outputs.verify_hub == 'true' && (needs.deploy-workers.result == 'success' || needs.deploy-workers.result == 'skipped') }}
     env:
-      SITE_URL: ${{ fromJSON(needs.build.outputs.markers).hub.url }}
+      SITE_URL: https://webapps.sciget.org/
       SITE_DIGEST: ${{ fromJSON(needs.build.outputs.markers).hub.digest }}
       SITE_MARKER: ${{ fromJSON(needs.build.outputs.markers).hub.key }}
     steps:
@@ -265,6 +273,8 @@ jobs:
         id: before
         if: env.SITE_MARKER != ''
         run: node scripts/confirm-site-digest.mjs --url "$SITE_URL" --site hub --digest "$SITE_DIGEST"
+      - name: Check the site answers
+        run: node scripts/check-site-answers.mjs "$SITE_URL"
       - name: Check the hub lists every catalogue
         run: |
           page="$(curl --fail --silent --show-error --retry 5 --retry-all-errors https://webapps.sciget.org/)"
@@ -322,6 +332,8 @@ jobs:
         id: before
         if: env.SITE_MARKER != ''
         run: node scripts/confirm-site-digest.mjs --url "$BASE_URL" --site "$SITE_CATALOG" --digest "$SITE_DIGEST"
+      - name: Check the site answers
+        run: node scripts/check-site-answers.mjs "$BASE_URL"
       - name: Verify deployed cross-origin isolation
         run: pnpm test:deployed
       - name: Verify standalone downloads in every deployed application

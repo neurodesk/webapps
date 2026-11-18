@@ -16,7 +16,9 @@ import {
   CHECK_DATA,
   DEPLOYED_CHECKS,
   DEPLOY_WORKFLOW,
+  HUB_CHECKS,
   MARKER_PREFIX,
+  SITE_PROBE,
   analyticsStale,
   checkHashes,
   checkInputs,
@@ -31,7 +33,7 @@ import {
   readMarker,
   siteDigest,
 } from '../scripts/lib/site-deploy.mjs';
-import { DIGEST_FILE, parseLiveRecord, readLiveRecord } from '../scripts/lib/site-record.mjs';
+import { DIGEST_FILE, parseLiveRecord, readLiveRecord, siteAnswers } from '../scripts/lib/site-record.mjs';
 
 const registry = await loadAppsRegistry();
 
@@ -325,6 +327,8 @@ test('a marker exists only when the cache list has an entry of its exact key on 
   assert.deepEqual(await read(cacheList(cacheEntry({ key: `${KEY}0` }), cacheEntry())), { present: true });
   // Anything else is unknown, which publishes and checks the site.
   assert.deepEqual(await read({ total_count: 101, actions_caches: [cacheEntry({ key: `${KEY}0` })] }), { error: 'GitHub API: 101 caches match, more than one page' });
+  // More than one page is unknown even with the marker on the first page.
+  assert.deepEqual(await read({ total_count: 101, actions_caches: [cacheEntry()] }), { error: 'GitHub API: 101 caches match, more than one page' });
   assert.deepEqual(await read(() => json({ message: 'Resource not accessible by integration' }, { status: 403 })), { error: 'GitHub API: HTTP 403' });
   assert.deepEqual(await read(() => new Response('<html>', { status: 200 })), { error: 'Unexpected token \'<\', "<html>" is not valid JSON' });
   assert.deepEqual(await read({ total_count: '1', actions_caches: [cacheEntry()] }), { error: 'GitHub API: no cache list' });
@@ -526,9 +530,9 @@ test('the confirm command marks a digest only when the host serves it, and never
   assert.ok(slow.ms < 5000, `ended after ${Math.round(slow.ms)} ms`);
 });
 
-test('the confirm command loads only Node built-ins, so the hub check needs no install', async () => {
-  const closure = moduleClosure(repoRoot, ['scripts/confirm-site-digest.mjs']);
-  assert.deepEqual(closure, ['scripts/confirm-site-digest.mjs', 'scripts/lib/site-record.mjs']);
+test('the confirm and probe commands load only Node built-ins, so the hub check needs no install', async () => {
+  const closure = moduleClosure(repoRoot, ['scripts/confirm-site-digest.mjs', SITE_PROBE]);
+  assert.deepEqual(closure, [SITE_PROBE, 'scripts/confirm-site-digest.mjs', 'scripts/lib/site-record.mjs']);
   for (const file of closure) {
     for (const [, specifier] of (await readFile(join(repoRoot, file), 'utf8')).matchAll(/\bfrom\s+'([^']+)'/g)) {
       assert.ok(specifier.startsWith('node:') || specifier.startsWith('.'), `${file} imports ${specifier}`);
@@ -538,14 +542,35 @@ test('the confirm command loads only Node built-ins, so the hub check needs no i
   assert.deepEqual(hub.steps[0], { uses: 'actions/checkout@v7', with: { 'sparse-checkout': 'scripts' } });
 });
 
+// Install npm package `name` at `version` in pnpm's layout: its files in the
+// store directory `store` under node_modules/.pnpm, and each dependency linked
+// beside it. Returns the package's directory in the store.
+async function storePackage(root, { name, version, store = `${name.replace('/', '+')}@${version}`, dependencies = {}, optional = {} }) {
+  const dir = join(root, 'node_modules/.pnpm', store, 'node_modules', name);
+  await put(dir, 'package.json', JSON.stringify({ name, version, dependencies: Object.fromEntries(Object.keys(dependencies).map((dependency) => [dependency, '*'])), optionalDependencies: optional }));
+  for (const [dependency, target] of Object.entries(dependencies)) {
+    const link = join(root, 'node_modules/.pnpm', store, 'node_modules', dependency);
+    await mkdir(dirname(link), { recursive: true });
+    await symlink(target, link);
+  }
+  return dir;
+}
+
 // A copy of the files the deployed checks read, with the npm packages they
-// import installed at `versions`, under a temporary root.
-async function checksFixture(t, versions = { '@playwright/test': '1.64.0', yaml: '2.9.0', zod: '4.6.5' }) {
+// import installed in pnpm's layout, under a temporary root. `playwrightCore`
+// is the store directory of the playwright-core that playwright links.
+async function checksFixture(t, { playwrightCore = 'playwright-core@1.64.0' } = {}) {
   const root = await tempDir(t);
   const inputs = checkInputs(repoRoot, registry);
   for (const path of new Set(Object.values(inputs).flatMap(({ files }) => files))) await cp(join(repoRoot, path), join(root, path));
   await mkdir(join(root, 'exes'), { recursive: true });
-  for (const [name, version] of Object.entries(versions)) await put(root, `node_modules/${name}/package.json`, JSON.stringify({ name, version }));
+  const [core, coreVersion] = [playwrightCore, playwrightCore.match(/@([\d.]+)/)[1]];
+  const coreDir = await storePackage(root, { name: 'playwright-core', version: coreVersion, store: core });
+  const playwright = await storePackage(root, { name: 'playwright', version: '1.64.0', dependencies: { 'playwright-core': coreDir }, optional: { fsevents: '2.3.2' } });
+  const test = await storePackage(root, { name: '@playwright/test', version: '1.64.0', dependencies: { playwright } });
+  await mkdir(join(root, 'node_modules/@playwright'), { recursive: true });
+  await symlink(test, join(root, 'node_modules/@playwright/test'));
+  for (const [name, version] of [['yaml', '2.9.0'], ['zod', '4.6.5']]) await symlink(await storePackage(root, { name, version }), join(root, 'node_modules', name));
   // pnpm links a workspace package into the node_modules of each package that depends on it.
   await mkdir(join(root, 'packages/desktop/node_modules/@neurodesk'), { recursive: true });
   await symlink('../../../components', join(root, 'packages/desktop/node_modules/@neurodesk/webapp-components'));
@@ -560,28 +585,39 @@ test('the check hash covers every input of a site\'s deployed checks and nothing
   assert.deepEqual(checkHashes(root, registry), base, 'the same inputs give the same hash');
   assert.deepEqual(checkHashes(root, registry).msk, checkHashes(await checksFixture(t), registry).msk, 'a copy gives the same hash');
   const inputs = checkInputs(root, registry);
-  assert.deepEqual(inputs.hub, { files: [DEPLOY_WORKFLOW], packages: [] }, 'the hub check is a step of the workflow');
-  for (const path of [...DEPLOYED_CHECKS, ...CHECK_DATA, 'test-utils/site-catalog.mjs', 'scripts/lib/apps-registry.mjs', 'packages/components/package.json']) {
+  assert.deepEqual(inputs.hub, { files: [DEPLOY_WORKFLOW, ...HUB_CHECKS, 'scripts/lib/site-record.mjs'].sort(), packages: [] }, 'the hub\'s checks are the probe and a step of the workflow');
+  for (const path of [...DEPLOYED_CHECKS, ...CHECK_DATA, 'test-utils/site-catalog.mjs', 'scripts/lib/apps-registry.mjs', 'scripts/lib/site-record.mjs', 'packages/components/package.json']) {
     assert.ok(inputs.msk.files.includes(path), `${path} is a check input`);
   }
-  assert.deepEqual(inputs.msk.packages, ['@playwright/test@1.64.0', 'yaml@2.9.0', 'zod@4.6.5']);
+  // The packages the checks import, and what they depend on, by store directory; fsevents is optional and absent.
+  assert.deepEqual(inputs.msk.packages, [
+    '@playwright/test@1.64.0 (@playwright+test@1.64.0)',
+    'playwright-core@1.64.0 (playwright-core@1.64.0)',
+    'playwright@1.64.0 (playwright@1.64.0)',
+    'yaml@2.9.0 (yaml@2.9.0)',
+    'zod@4.6.5 (zod@4.6.5)',
+  ]);
   // An app served by one catalogue only.
   const single = registry.apps.find((app) => registry.site.catalogs.filter((catalog) => catalogApps(registry, findCatalog(registry, catalog.id)).includes(app)).length === 1);
   const changed = (hashes) => Object.keys(base).filter((id) => hashes[id] !== base[id]).join(' ');
   const catalogues = registry.site.catalogs.map(({ id }) => id).join(' ');
-  for (const [name, change, expected] of [
+  for (const [name, change, expected, options] of [
     ['a check script', (dir) => put(dir, 'test/image-upload.smoke.mjs', '// changed\n'), catalogues],
     ['a module a check imports', (dir) => put(dir, 'test-utils/site-catalog.mjs', '// changed\n'), catalogues],
+    ['the landing page probe', (dir) => put(dir, SITE_PROBE, '// changed\n'), `hub ${catalogues}`],
+    ['the record reader the probe imports', (dir) => put(dir, 'scripts/lib/site-record.mjs', '// changed\n'), `hub ${catalogues}`],
     ['the app registry', (dir) => put(dir, 'registry/apps.yml', '# changed\n'), catalogues],
     ['the standalone catalog', (dir) => put(dir, 'registry/standalone.json', '{}'), catalogues],
     ['the root scripts', (dir) => put(dir, 'package.json', '{}'), catalogues],
     [`the package.json of ${single.id}`, (dir) => put(dir, `apps/${single.id}/package.json`, '{}'), single.catalog],
-    ['the installed Playwright', (dir) => put(dir, 'node_modules/@playwright/test/package.json', '{"version":"1.65.0"}'), catalogues],
+    ['the installed @playwright/test', async (dir) => put(dir, 'node_modules/.pnpm/@playwright+test@1.64.0/node_modules/@playwright/test/package.json', '{"version":"1.65.0","dependencies":{"playwright":"*"}}'), catalogues],
+    ['an override of playwright-core', async () => {}, catalogues, { playwrightCore: 'playwright-core@1.64.1' }],
+    ['a patch of playwright-core', async () => {}, catalogues, { playwrightCore: 'playwright-core@1.64.0_patch_hash=4f2c' }],
     ['the workflow', (dir) => put(dir, DEPLOY_WORKFLOW, '# changed\n'), `hub ${catalogues}`],
     ['a deleted check script', (dir) => rm(join(dir, 'test/deployed-site.smoke.mjs')), catalogues],
     ['a file no check reads', (dir) => put(dir, 'apps/no-check/src/main.js', '// new\n'), ''],
   ]) {
-    const dir = await checksFixture(t);
+    const dir = await checksFixture(t, options);
     await change(dir);
     assert.equal(changed(checkHashes(dir, registry)), expected, name);
   }
@@ -590,13 +626,83 @@ test('the check hash covers every input of a site\'s deployed checks and nothing
 test('the check scripts the hash covers are the ones the workflow\'s check steps run', async () => {
   const workflow = parse(await readFile(join(repoRoot, DEPLOY_WORKFLOW), 'utf8'));
   const scripts = JSON.parse(await readFile(join(repoRoot, 'package.json'), 'utf8')).scripts;
-  for (const name of ['deploy', 'verify-sites']) {
+  const between = (name) => {
     const steps = workflow.jobs[name].steps;
     const before = steps.findIndex(({ id }) => id === 'before');
     const after = steps.findIndex(({ id }) => id === 'after');
-    const run = steps.slice(before + 1, after).map((step) => step.run.replace(/^pnpm (\S+)$/, (whole, script) => scripts[script]));
-    assert.deepEqual(run.map((line) => line.replace(/^node /, '')).sort(), [...DEPLOYED_CHECKS].sort(), `${name} runs exactly the deployed checks between its confirmations`);
+    return steps.slice(before + 1, after);
+  };
+  for (const name of ['deploy', 'verify-sites']) {
+    const run = between(name).map((step) => step.run.replace(/^pnpm (\S+)$/, (whole, script) => scripts[script]));
+    assert.deepEqual(run.map((line) => line.match(/^node (\S+)/)[1]).sort(), [...DEPLOYED_CHECKS].sort(), `${name} runs exactly the deployed checks between its confirmations`);
   }
+  // The hub's checks: the probe, then the hub check, a step of the workflow the hash covers.
+  const hub = between('verify-hub');
+  assert.deepEqual(hub.map(({ name }) => name), ['Check the site answers', 'Check the hub lists every catalogue']);
+  assert.deepEqual(hub.filter(({ run }) => run.startsWith('node ')).map(({ run }) => run.match(/^node (\S+)/)[1]), HUB_CHECKS);
+});
+
+test('one probe checks a site\'s landing page after a Worker publish and in every job that checks the site', async () => {
+  const workflow = parse(await readFile(join(repoRoot, DEPLOY_WORKFLOW), 'utf8'));
+  const probes = Object.entries(workflow.jobs).flatMap(([job, { steps }]) => steps.filter(({ run }) => run?.includes('check-site-answers') || /curl/.test(run ?? '') && !/hub does not link/.test(run)).map((step) => [job, step]));
+  assert.deepEqual(probes.map(([job, step]) => [job, step.run]), [
+    ['deploy', `node ${SITE_PROBE} "$BASE_URL"`],
+    ['deploy-workers', `node ${SITE_PROBE} "$SITE_URL"`],
+    ['verify-hub', `node ${SITE_PROBE} "$SITE_URL"`],
+    ['verify-sites', `node ${SITE_PROBE} "$BASE_URL"`],
+  ]);
+  assert.equal(workflow.jobs['deploy-workers'].steps.find(({ run }) => run?.includes(SITE_PROBE)).env.SITE_URL, '${{ matrix.url }}');
+  assert.equal(workflow.jobs.deploy.steps.find(({ run }) => run?.includes(SITE_PROBE)).env.BASE_URL, '${{ steps.deployment.outputs.page_url }}');
+  assert.equal(workflow.jobs['verify-sites'].env.BASE_URL, '${{ matrix.url }}');
+  // The hub is probed at its registry host, whatever the plan wrote.
+  assert.equal(workflow.jobs['verify-hub'].env.SITE_URL, `https://${registry.site.hub.host}/`);
+});
+
+test('the landing page probe retries until the site answers below HTTP 400, then fails', async () => {
+  const answers = (...responses) => {
+    const requests = [];
+    const fetch = async (url, init) => {
+      requests.push({ url, init });
+      const next = responses.length > 1 ? responses.shift() : responses[0];
+      return typeof next === 'function' ? next(init) : new Response('page', { status: next });
+    };
+    return { fetch, requests };
+  };
+  const probe = (fetch, fields = {}) => siteAnswers({ url: 'https://mskapps.sciget.org/', fetch, retryMs: 1, timeoutMs: 50, ...fields });
+  const prompt = answers(200);
+  assert.deepEqual(await probe(prompt.fetch), { status: 200 });
+  assert.equal(prompt.requests[0].init.redirect, 'manual', 'a redirect is not followed');
+  assert.equal(prompt.requests[0].init.signal.aborted, true, 'the request is aborted once the read ends');
+  // curl --fail counts a redirect as an answer, and so does the probe.
+  assert.deepEqual(await probe(answers(302).fetch), { status: 302 });
+  const recovering = answers(503, 503, 200);
+  assert.deepEqual(await probe(recovering.fetch), { status: 200 });
+  assert.equal(recovering.requests.length, 3);
+  const down = answers(503);
+  assert.deepEqual(await probe(down.fetch), { error: 'HTTP 503 after 11 attempts' });
+  assert.equal(down.requests.length, 11);
+  assert.deepEqual(await probe(answers(404).fetch, { attempts: 2 }), { error: 'HTTP 404 after 2 attempts' });
+  assert.deepEqual(await probe(async () => { throw new TypeError('fetch failed'); }, { attempts: 2 }), { error: 'fetch failed after 2 attempts' });
+  // A body that never ends is a failed attempt at the deadline.
+  const stalled = () => new Response(new ReadableStream({ start() {} }), { status: 200 });
+  assert.deepEqual(await probe(answers(stalled).fetch, { attempts: 2 }), { error: 'no complete answer in 0.05 s after 2 attempts' });
+  assert.deepEqual(await probe(answers(stalled, 200).fetch), { status: 200 });
+});
+
+test('the probe command fails the step when the site does not answer, and passes when it does', { timeout: 60_000 }, async (t) => {
+  const root = await tempDir(t);
+  const up = await answeringServer(t, { status: 200, type: 'text/html', body: '<!doctype html>', end: true });
+  const ok = await command(t, root, up.port, SITE_PROBE, ['https://mskapps.sciget.org/'], { scale: 1 });
+  assert.deepEqual({ code: ok.code, stdout: ok.stdout }, { code: 0, stdout: 'https://mskapps.sciget.org/ answers with HTTP 200.\n' }, ok.stderr);
+  assert.deepEqual(up.requests, ['/']);
+  // 11 attempts 0.15 s apart under the preload.
+  const down = await answeringServer(t, { status: 503, type: 'text/html', body: 'Service Unavailable', end: true });
+  const failed = await command(t, root, down.port, SITE_PROBE, ['https://mskapps.sciget.org/']);
+  assert.deepEqual({ code: failed.code, signal: failed.signal }, { code: 1, signal: null }, failed.stderr);
+  assert.equal(failed.stdout, '::error::https://mskapps.sciget.org/ does not answer: HTTP 503 after 11 attempts.\n');
+  assert.equal(down.requests.length, 11);
+  const none = await command(t, root, down.port, SITE_PROBE, []);
+  assert.equal(none.code, 1);
 });
 
 test('the daily run checks every live site, published or not', async (t) => {
@@ -918,7 +1024,7 @@ test('each check job confirms the digest before and after its checks, and only t
     // Every check runs for every site; only a status function could let a later step run after a failed one.
     for (const step of checks) assert.ok(step.if === undefined && step['continue-on-error'] === undefined, `${name}: ${step.name} always runs and can fail the job`);
     for (const step of job.steps.slice(after)) assert.doesNotMatch(String(step.if), /\b(always|failure|cancelled)\(\)/, `${name}: ${step.name} runs only after every check passed`);
-    for (const step of job.steps.slice(0, before)) assert.doesNotMatch(String(step.run ?? ''), /test:|smoke/, `${name}: no check runs before the first confirmation`);
+    for (const step of job.steps.slice(0, before)) assert.doesNotMatch(String(step.run ?? ''), /test:|smoke|check-site-answers/, `${name}: no check runs before the first confirmation`);
     const confirm = (step) => step.run.match(/^node scripts\/confirm-site-digest\.mjs --url "\$(\w+)" --site (\S+) --digest "\$SITE_DIGEST"( --marker deploy-verified\.json)?$/);
     const [, urlVariable, siteArgument, beforeMarker] = confirm(job.steps[before]);
     const [, afterUrl, afterSite, afterMarker] = confirm(job.steps[after]);
@@ -942,7 +1048,6 @@ test('each check job confirms the digest before and after its checks, and only t
     assert.equal(expression(job.env.SITE_DIGEST, context), digest);
     assert.equal(expression(job.env.SITE_MARKER, context), KEY);
   }
-  assert.equal(workflow.jobs['verify-hub'].env.SITE_URL, '${{ fromJSON(needs.build.outputs.markers).hub.url }}');
 });
 
 // The jobs GitHub runs for a build's outputs: a job whose `if` has no status
@@ -977,6 +1082,60 @@ function simulate(outputs, failing = [], kept = {}) {
   return results;
 }
 const ran = (results) => JOB_ORDER.filter((name) => results[name] !== 'skipped').join(' ');
+// The steps GitHub runs in one job: a step whose `if` has no status function
+// runs only when no earlier step failed; a step that may continue on error
+// fails nothing. `fail` names the steps that fail, `outputs` the outputs of
+// the steps that run, by id.
+function runSteps(job, { fail = [], outputs = {}, env = {} } = {}) {
+  const steps = {};
+  const ran = [];
+  let failed = false;
+  for (const step of job.steps) {
+    const id = step.id ?? step.name;
+    const status = { success: () => !failed, failure: () => failed, always: () => true };
+    const condition = step.if === undefined || expression(String(step.if), { env, steps, ...status });
+    const runs = condition && (STATUS_FUNCTION.test(String(step.if ?? '')) || !failed);
+    steps[id] = { outputs: runs ? outputs[id] ?? {} : {} };
+    if (!runs) continue;
+    ran.push(step.name ?? step.uses);
+    if (fail.includes(step.name) && !step['continue-on-error']) failed = true;
+  }
+  return { failed, ran };
+}
+const SAVE = 'Save the verified marker';
+const KEEP = 'Keep the verified marker';
+const CONFIRMED = { before: { confirmed: 'true' }, after: { confirmed: 'true' }, kept: { 'cache-hit': 'false' } };
+
+test('a failed check, the landing page probe included, fails its job and saves no marker', () => {
+  const env = { SITE_MARKER: KEY };
+  for (const name of Object.keys(CHECK_JOBS)) {
+    const job = workflow.jobs[name];
+    const index = (id) => job.steps.findIndex((step) => step.id === id);
+    const checks = job.steps.slice(index('before') + 1, index('after')).map((step) => step.name);
+    assert.ok(checks.includes('Check the site answers'), `${name} probes the landing page among its checks`);
+    const passed = runSteps(job, { outputs: CONFIRMED, env });
+    assert.equal(passed.failed, false, name);
+    assert.ok(checks.every((check) => passed.ran.includes(check)) && passed.ran.includes(SAVE), `${name}: every check, then the save`);
+    // An existing marker is restored, which counts as an access, and not saved again.
+    const kept = runSteps(job, { outputs: { ...CONFIRMED, kept: { 'cache-hit': 'true' } }, env });
+    assert.ok(kept.ran.includes(KEEP) && !kept.ran.includes(SAVE), name);
+    for (const check of checks) {
+      const failed = runSteps(job, { fail: [check], outputs: CONFIRMED, env });
+      assert.equal(failed.failed, true, `${name}: ${check} fails the job`);
+      assert.ok(!failed.ran.includes(KEEP) && !failed.ran.includes(SAVE), `${name}: no marker after ${check} failed`);
+    }
+    // The host served other bytes before or after the checks: the job passes and saves nothing.
+    for (const which of ['before', 'after']) {
+      const other = runSteps(job, { outputs: { ...CONFIRMED, [which]: { confirmed: 'false' } }, env });
+      assert.ok(!other.failed && !other.ran.includes(KEEP) && !other.ran.includes(SAVE), `${name}: ${which}`);
+    }
+    // Without a marker key (the site's plan failed), every check still runs and nothing is saved.
+    const unkeyed = runSteps(job, { outputs: CONFIRMED, env: { SITE_MARKER: '' } });
+    assert.ok(checks.every((check) => unkeyed.ran.includes(check)) && !unkeyed.ran.includes(SAVE), name);
+    // A failed restore or save cannot fail checks that passed.
+    assert.equal(runSteps(job, { fail: [KEEP, SAVE], outputs: CONFIRMED, env }).failed, false, name);
+  }
+});
 // "Re-run failed jobs": GitHub re-runs each failed job and every job that needs
 // one; the others keep their results and outputs from the attempt before.
 function rerunFailed(outputs, previous) {
@@ -1031,6 +1190,15 @@ test('each case runs exactly the deploy and check jobs it needs, and leaves the 
     'marker store unreachable': { ...all, outputs: all.outputs.replace('startup=true', 'startup=false') },
     'first run after the merge': all,
   });
+  // The scheduled run with every digest live and verified, and one Worker
+  // catalogue's landing page failing: verify-sites fails, the run is red, and
+  // that site's job saves no marker.
+  const scheduled = simulate(deployOutputs(cases['scheduled run, every digest live and verified']), ['verify-sites']);
+  assert.equal(ran(scheduled), 'build turbo-cache-retention verify-hub verify-sites');
+  assert.equal(greenRun(scheduled), false);
+  const landing = runSteps(workflow.jobs['verify-sites'], { fail: ['Check the site answers'], outputs: CONFIRMED, env: { SITE_MARKER: KEY } });
+  assert.equal(landing.failed, true);
+  assert.ok(!landing.ran.includes(SAVE) && !landing.ran.includes(KEEP));
   // "Re-run failed jobs" after msk's check failed: the build is not re-run and keeps its
   // outputs, so the check runs again on the sites the first attempt published, with the same marker key.
   const outputs = deployOutputs(cases['one site changed']);

@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
-import { dirname, join, posix, relative, sep } from 'node:path';
+import { basename, dirname, join, posix, relative, sep } from 'node:path';
 import { catalogApps, findCatalog } from './apps-registry.mjs';
 import { HUB_SITE } from './catalog-sites.mjs';
 import { moduleClosure } from './module-closure.mjs';
@@ -26,10 +26,14 @@ export const ANALYTICS_REFRESH_UTC = { hour: 4, minute: 17 };
 
 // The workflow that publishes and checks the sites; its check steps and hub check are check inputs.
 export const DEPLOY_WORKFLOW = '.github/workflows/deploy-pages.yml';
+// The landing page probe, which every check job and the Worker deploy run.
+export const SITE_PROBE = 'scripts/check-site-answers.mjs';
 // The scripts the deployed checks of a catalogue site run, and the files they
 // read from the checkout to decide pass or fail besides the modules they import.
-// test/site-deploy.test.mjs holds the first list to the workflow's check steps.
-export const DEPLOYED_CHECKS = ['test/deployed-site.smoke.mjs', 'test/standalone-downloads.smoke.mjs', 'test/image-upload.smoke.mjs'];
+// The hub's checks are the probe and a step of the workflow.
+// test/site-deploy.test.mjs holds both lists to the workflow's check steps.
+export const DEPLOYED_CHECKS = [SITE_PROBE, 'test/deployed-site.smoke.mjs', 'test/standalone-downloads.smoke.mjs', 'test/image-upload.smoke.mjs'];
+export const HUB_CHECKS = [SITE_PROBE];
 export const CHECK_DATA = ['package.json', 'registry/apps.yml', 'registry/standalone.json', DEPLOY_WORKFLOW];
 // A new marker schema leaves every older marker unread.
 export const MARKER_PREFIX = 'deploy-verified-1-';
@@ -104,45 +108,67 @@ export function analyticsStale(live, built) {
 
 const IMPORT = /(?:import|export)\s[^'"`;]*?from\s*['"]([^'"]+)['"]|import\s*\(\s*['"]([^'"]+)['"]\s*\)|import\s+['"]([^'"]+)['"]/g;
 
+// The real path of the manifest Node finds for package `name` from directory
+// `from`, looking in node_modules of `from` and its ancestors within `realRoot`.
+function installedManifest(realRoot, from, name) {
+  for (let dir = from; `${dir}${sep}`.startsWith(`${realRoot}${sep}`); dir = dirname(dir)) {
+    const manifest = join(dir, 'node_modules', name, 'package.json');
+    if (basename(dir) !== 'node_modules' && existsSync(manifest)) return realpathSync(manifest);
+  }
+  return null;
+}
+
 /**
- * The npm packages `files` import by name, as `name@version` with the version
- * installed for the importing file. Workspace packages are left out: their
- * files are in the module closure.
+ * The npm packages `files` import by name and every package they depend on,
+ * each as installed for its importer: `name@version`, with the pnpm store
+ * directory, which also names a patch. An override or a patch of a dependency,
+ * such as the playwright-core that @playwright/test runs, changes the list.
+ * Workspace packages are left out: their files are in the module closure.
  */
 function installedPackages(root, files) {
   const realRoot = realpathSync(root);
-  const packages = new Set();
+  const pending = [];
   for (const file of files.filter((path) => /\.[cm]?[jt]s$/.test(path) && existsSync(join(root, path)))) {
     for (const match of readFileSync(join(root, file), 'utf8').matchAll(IMPORT)) {
       const specifier = match[1] ?? match[2] ?? match[3];
       if (/^(\.|\/|node:)/.test(specifier)) continue;
-      const name = specifier.split('/').slice(0, specifier.startsWith('@') ? 2 : 1).join('/');
-      let version = 'unresolved';
-      for (let dir = dirname(join(root, file)); `${dir}${sep}`.startsWith(`${root}${sep}`); dir = dirname(dir)) {
-        const manifest = join(dir, 'node_modules', name, 'package.json');
-        if (!existsSync(manifest)) continue;
-        const real = relative(realRoot, realpathSync(manifest)).split(sep).join('/');
-        version = real.startsWith('..') || real.includes('node_modules/') ? JSON.parse(readFileSync(manifest, 'utf8')).version : 'workspace';
-        break;
-      }
-      if (version !== 'workspace') packages.add(`${name}@${version}`);
+      pending.push({ name: specifier.split('/').slice(0, specifier.startsWith('@') ? 2 : 1).join('/'), from: dirname(realpathSync(join(root, file))) });
     }
+  }
+  const packages = new Set();
+  const seen = new Set();
+  while (pending.length) {
+    const { name, from, optional } = pending.pop();
+    const manifest = installedManifest(realRoot, from, name);
+    if (!manifest) {
+      if (!optional) packages.add(`${name}@unresolved`);
+      continue;
+    }
+    const path = relative(realRoot, manifest).split(sep).join('/');
+    if ((!path.startsWith('..') && !path.includes('node_modules/')) || seen.has(manifest)) continue;
+    seen.add(manifest);
+    const { version, dependencies = {}, optionalDependencies = {} } = JSON.parse(readFileSync(manifest, 'utf8'));
+    const store = path.match(/node_modules\/\.pnpm\/([^/]+)\//)?.[1];
+    packages.add(`${name}@${version}${store ? ` (${store})` : ''}`);
+    for (const dependency of Object.keys(dependencies)) pending.push({ name: dependency, from: dirname(manifest) });
+    for (const dependency of Object.keys(optionalDependencies)) pending.push({ name: dependency, from: dirname(manifest), optional: true });
   }
   return [...packages].sort();
 }
 
 /**
  * The inputs of each site's deployed checks, by site: the check scripts with
- * every module they import and the installed version of each npm package among
- * them, the files they read to decide pass or fail (CHECK_DATA, and the
- * package.json of each app of the site), and the workflow that runs them. The
- * hub's check is a step of the workflow, so the workflow is its only input.
+ * every module they import and the installed npm packages among them
+ * (installedPackages), the files they read to decide pass or fail (CHECK_DATA,
+ * and the package.json of each app of the site), and the workflow that runs
+ * them. The hub's checks are the probe and a step of the workflow.
  */
 export function checkInputs(root, registry) {
   const scripts = moduleClosure(root, DEPLOYED_CHECKS, { missing: true });
   const files = [...new Set([...scripts, ...CHECK_DATA])];
   const packages = installedPackages(root, scripts);
-  const inputs = { [HUB_SITE]: { files: [DEPLOY_WORKFLOW], packages: [] } };
+  const hub = moduleClosure(root, HUB_CHECKS, { missing: true });
+  const inputs = { [HUB_SITE]: { files: [...new Set([...hub, DEPLOY_WORKFLOW])].sort(), packages: installedPackages(root, hub) } };
   for (const catalog of registry.site.catalogs) {
     const apps = catalogApps(registry, findCatalog(registry, catalog.id)).map(({ id }) => `apps/${id}/package.json`);
     inputs[catalog.id] = { files: [...new Set([...files, ...apps])].sort(), packages };
@@ -166,7 +192,8 @@ export const markerKey = (site, digest, checks) => `${MARKER_PREFIX}${site}-${di
 /**
  * Whether the verified marker `key` exists in the Actions cache of `ref`:
  * `{ present }`, or `{ error }`, never a throw. The REST API matches `key` as a
- * prefix, so an entry counts only when its key and its ref are both equal.
+ * prefix, so an entry counts only when its key and its ref are both equal. An
+ * answer with more than one page of matches is unknown, even with a match on it.
  */
 export async function readMarker({ key, repository, ref, token, apiUrl = 'https://api.github.com', fetch = globalThis.fetch, timeoutMs = MARKER_TIMEOUT_MS }) {
   try {
@@ -178,9 +205,8 @@ export async function readMarker({ key, repository, ref, token, apiUrl = 'https:
       if (response.status !== 200) throw new Error(`GitHub API: HTTP ${response.status}`);
       const answer = JSON.parse(await within(response.text()));
       if (!Number.isSafeInteger(answer?.total_count) || !Array.isArray(answer.actions_caches)) throw new Error('GitHub API: no cache list');
-      if (answer.actions_caches.some((entry) => entry?.key === key && entry?.ref === ref)) return { present: true };
       if (answer.total_count > answer.actions_caches.length) throw new Error(`GitHub API: ${answer.total_count} caches match, more than one page`);
-      return { present: false };
+      return { present: answer.actions_caches.some((entry) => entry?.key === key && entry?.ref === ref) };
     });
   } catch (error) {
     return { error: message(error) };
