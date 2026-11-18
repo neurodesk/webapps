@@ -183,6 +183,7 @@ async function setInputs(next) {
   renderInputs();
   const mesh = displaySurface(inputs.surfaces);
   const curv = inputs.surfaces.curv ?? null;
+  let surfaceError = null;
   if (mesh !== shownSurface.mesh || curv !== shownSurface.curv) {
     shownSurface = { mesh, curv };
     try {
@@ -192,11 +193,13 @@ async function setInputs(next) {
       if (mesh) log.log(`Showing ${mesh.name}${curv ? ` shaded by ${curv.name}` : ""}`, "info", "technical");
     } catch (error) {
       shownSurface = { mesh: null, curv: null };
-      status(`The surface could not be shown: ${error.message}`, { error: true });
+      $("emptyState").hidden = false;
+      surfaceError = `The surface could not be shown: ${error.message}`;
     }
   }
   updateRunButton();
-  status(missingInputs(analysis(), model, inputs).length ? "Add the remaining inputs" : "Ready");
+  if (surfaceError) status(surfaceError, { error: true });
+  else status(missingInputs(analysis(), model, inputs).length ? "Add the remaining inputs" : "Ready");
 }
 
 function importInto(slot) {

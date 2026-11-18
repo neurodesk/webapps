@@ -1,6 +1,8 @@
 // The one module that talks to the SamSrf engine (@neurodesk/samsrf). Everything
-// else in the app reaches the engine through these four exports, and the worker
-// pool (pool.js, worker.js) is their only caller apart from tests.
+// else in the app reaches the engine through these exports: the worker pool
+// (pool.js, worker.js) runs analyses with createJob, runShard and mergeShards, and
+// the viewer reads its surface with readSurfaceMesh, so it draws the mesh the
+// analysis reads.
 //
 // An analysis is shardable by unit (a vertex of the ROI, or of the whole surface
 // without one): createJob reads the inputs once, runShard fits units
@@ -245,6 +247,19 @@ function preprocess(runs, keep, { normalise, average, precision }) {
 
 function allVertices(count) {
   return Uint32Array.from({ length: count }, (_, index) => index);
+}
+
+/**
+ * A surface as the analysis reads it (SamSrf's fs_read_surf, or a GIfTI mesh), for the
+ * viewer: float32 xyz per vertex and three vertex indices per face.
+ * @param {NamedBytes} file
+ * @returns {Promise<{ vertices: Float32Array, faces: Uint32Array }>}
+ */
+export async function readSurfaceMesh(file) {
+  await init();
+  const mesh = fromFile(file, /\.gii$/i.test(file.name) ? readGiftiSurface : readFreeSurferSurface);
+  if (mesh.faceSize !== 3) throw new Error(`${file.name}: the viewer draws triangle meshes only.`);
+  return { vertices: Float32Array.from(mesh.vertices), faces: mesh.faces };
 }
 
 function readSurface(surfaces) {

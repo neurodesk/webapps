@@ -365,7 +365,12 @@ test("a surface the viewer cannot read is reported in the status bar", async ({ 
   await expect(page.locator("#statusText")).toHaveText("The surface could not be shown: lh.inflated: FreeSurfer: unknown surface magic number 7237492");
   await expect(page.locator(".nd-viewer-empty")).toBeVisible();
   await page.locator("#surfacesInput").setInputFiles(file("lh.inflated.surf.gii", "<GIFTI"));
-  await expect(page.locator("#statusText")).toContainText("The surface could not be shown: lh.inflated.surf.gii: GIfTI: ");
+  await expect(page.locator("#statusText")).toHaveText("The surface could not be shown: lh.inflated.surf.gii: GIFTI: tag at byte 0 is never closed");
+  await expect(page.locator(".nd-viewer-empty")).toBeVisible();
+  // The engine reads a surface without vertices; NiiVue logs that it cannot load it and adds nothing.
+  const empty = Buffer.concat([Buffer.from([0xff, 0xff, 0xfe]), Buffer.from("created by test\n\n"), Buffer.alloc(8)]);
+  await page.locator("#surfacesInput").setInputFiles({ name: "lh.inflated", mimeType: "application/octet-stream", buffer: empty });
+  await expect(page.locator("#statusText")).toHaveText("The surface could not be shown: lh.inflated: the viewer could not draw this surface.");
   await expect(page.locator(".nd-viewer-empty")).toBeVisible();
 });
 

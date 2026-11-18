@@ -1,8 +1,9 @@
 // The cortical surface in NiiVue: one mesh, curvature shading as its first layer
 // and the displayed map as its second.
 import NiiVue, { SLICE_TYPE } from "@niivue/niivue";
-import { readFreeSurferCurv, writeMz3Scalars } from "@neurodesk/webapp-components/file-io/mesh";
+import { readFreeSurferCurv, writeMz3, writeMz3Scalars } from "@neurodesk/webapp-components/file-io/mesh";
 import { POLAR_COLORMAP, POLAR_COLORMAP_POINTS, cameraFor } from "./display.js";
+import { readSurfaceMesh } from "./engine.js";
 
 // Gyri (negative curvature) light and sulci (positive) dark, as FreeSurfer shades them,
 // encoded into [1, 2] like the maps because NiiVue's layer lookup starts at zero.
@@ -13,6 +14,13 @@ async function curvatureLayer(file) {
   const curvature = readFreeSurferCurv(new Uint8Array(await file.arrayBuffer()));
   const shade = curvature.map((value) => 1.5 - Math.max(-CURVATURE_RANGE, Math.min(CURVATURE_RANGE, value)) / (2 * CURVATURE_RANGE));
   return new File([writeMz3Scalars(shade)], `${file.name}.mz3`);
+}
+
+// NiiVue's FreeSurfer reader needs the optional tags after the faces, which MATLAB's
+// write_surf leaves out, so every surface is read by the engine and drawn from mz3.
+async function meshFile(file) {
+  const { vertices, faces } = await readSurfaceMesh({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) });
+  return new File([writeMz3(vertices, faces)], `${file.name}.mz3`);
 }
 
 export function createSurfaceViewer(canvasId) {
@@ -41,10 +49,15 @@ export function createSurfaceViewer(canvasId) {
       mapLayer = -1;
       if (!mesh) return;
       await nv.addMesh({
-        url: mesh,
+        url: await meshFile(mesh),
         name: mesh.name,
         color: [0.7, 0.7, 0.7, 1],
       });
+      // NiiVue logs a mesh it cannot load and resolves without adding it.
+      if (!nv.meshes[0]?.positions?.length) {
+        await nv.removeAllMeshes();
+        throw new Error(`${mesh.name}: the viewer could not draw this surface.`);
+      }
       if (curvature) await nv.addMeshLayer(0, { url: await curvatureLayer(curvature), name: curvature.name, ...CURVATURE });
       surface = mesh;
       mapLayer = curvature ? 1 : 0;
