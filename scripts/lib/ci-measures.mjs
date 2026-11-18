@@ -22,7 +22,7 @@ const ROLES = Object.freeze(['plan', 'fixed', 'app', 'site', 'test', 'deliver', 
 const TESTED_NOTHING = new Set(['plan', 'report']);
 
 // The jobs of ci.yml, by job id. A job of the `ci` workflow not listed here is unclassified.
-export const CI_JOBS = Object.freeze({
+const CI_JOBS = Object.freeze({
   'app-plan': 'plan',
   'full-plan': 'plan',
   'full-plan-withheld': 'plan',
