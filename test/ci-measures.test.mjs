@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { parse } from 'yaml';
 import {
-  ciPullRequestTier, cancelledMinutes, DEPLOY_WORKFLOW, fixedJobShare, idleRuns, jobRole, measuresMarkdown, mergeToLive,
+  checkRecords, ciPullRequestTier, cancelledMinutes, DEPLOY_WORKFLOW, fixedJobShare, idleRuns, jobRole, measuresMarkdown, mergeToLive,
   minutesByRole, minutesPerMergedPullRequest, READY_ONLY_CI_JOBS, readyToGreen, summarizeMeasures, TARGETS, WORKFLOWS,
 } from '../scripts/lib/ci-measures.mjs';
 import { LARGE_RUN_JOBS } from '../scripts/lib/ci-usage.mjs';
@@ -274,37 +274,71 @@ test('the measures reproduce the hand-computed numbers of the measured window', 
   assert.deepEqual(measures.idle.reasons, { skipped: 306, 'no job': 9, 'report only': 235, 'plan or gate only': 194 });
 });
 
-// The report run through its CLI with a `gh` stub. One whole-catalogue ci
-// run of one pull request keeps the window inside every budget; with
-// GH_STUB_FAIL=jobs every job listing answers as a secondary rate limit does.
-async function reportWith(t, { fail, args = [] }) {
+// The report run through its CLI with the `gh` stub of
+// test/fixtures/ci-usage-gh-stub.cjs, which `mode` steers. One whole-catalogue
+// ci run of one pull request keeps the window inside every budget; `over`
+// makes it three. `requests` are the calls the measures sent: every page and
+// retry of theirs is one `gh` call.
+async function reportWith(t, { mode = [], args = [], summary = false } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'ci-usage-report-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const bin = join(root, 'bin');
   await mkdir(bin);
-  await writeFile(join(bin, 'package.json'), JSON.stringify({ type: 'commonjs' }));
-  await writeFile(join(bin, 'gh'), `#!/usr/bin/env node
-const args = process.argv.slice(2);
-const path = args.find((arg) => arg.startsWith('repos/')) ?? '';
-if (args[0] === 'pr') console.log('[]');
-else if (/\\/runs\\/\\d+\\/jobs\\?per_page=1&/.test(path)) console.log(120);
-else if (/\\/runs\\/\\d+\\/jobs/.test(path)) {
-  if (process.env.GH_STUB_FAIL === 'jobs') { process.stderr.write('gh: You have exceeded a secondary rate limit (HTTP 403)'); process.exit(1); }
-  console.log(JSON.stringify({ name: 'composite-site', conclusion: 'success', started_at: '2026-11-18T09:00:00Z', completed_at: '2026-11-18T09:30:00Z', runner_name: 'r' }));
-} else if (path.startsWith('repos/neurodesk/webapps/actions/runs?')) {
-  console.log(JSON.stringify({ id: 1, name: 'ci', event: 'pull_request', status: 'completed', conclusion: 'success', head_branch: 'feature', head_sha: 'a'.repeat(40), created_at: '2026-11-18T09:00:00Z', run_started_at: '2026-11-18T09:00:00Z', updated_at: '2026-11-18T09:40:00Z', pull_requests: [864], head_repository: 'neurodesk/webapps' }));
-} else if (!path.includes('/workflows/deploy-pages.yml/runs?')) { process.stderr.write('unexpected ' + args.join(' ')); process.exit(1); }
-`);
+  const stub = fileURLToPath(new URL('fixtures/ci-usage-gh-stub.cjs', import.meta.url));
+  await writeFile(join(bin, 'gh'), `#!/bin/sh\nexec "${process.execPath}" "${stub}" "$@"\n`);
   await chmod(join(bin, 'gh'), 0o755);
+  const log = join(root, 'calls.jsonl');
+  await writeFile(log, '');
+  const summaryPath = join(root, 'summary.md');
+  const begun = Date.now();
+  // A report that hangs fails here with status null.
   const result = spawnSync(process.execPath, [fileURLToPath(new URL('../scripts/ci-usage-report.mjs', import.meta.url)), '--hours', '2', '--until', '2026-11-18T11:00:00Z', ...args], {
     encoding: 'utf8',
-    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, GH_STUB_FAIL: fail ?? '', GITHUB_REPOSITORY: 'neurodesk/webapps', GITHUB_STEP_SUMMARY: '' },
+    timeout: 60e3,
+    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, GH_STUB_MODE: mode.join(','), GH_STUB_LOG: log, GH_STUB_STATE: root, GITHUB_REPOSITORY: 'neurodesk/webapps', GITHUB_STEP_SUMMARY: summary ? summaryPath : '' },
   });
-  return result;
+  const calls = readFileSync(log, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line));
+  const requests = calls.filter((call) => call[1] === 'graphql' || call.some((arg) => /&page=\d+$/.test(arg)));
+  return { ...result, seconds: (Date.now() - begun) / 1000, requests, summaryPath };
 }
 
+const MEASURE_ROWS = ['Job minutes per merged pull request, median', 'Fixed-job share of draft pull request ci runs', 'Ready to green, median and 90th percentile', 'Merge to live, median and maximum', 'Runs that tested nothing', 'Job minutes of cancelled runs'];
+const NO_JUNK = /undefined|NaN|#null/;
+
+test('the measures of a complete read print values, and the report counts every page and retry it sent', async (t) => {
+  const result = await reportWith(t, { mode: ['retry'] });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /### Inside every budget/);
+  // Deploys 3 pages, the search 2, #864's earlier runs 1, the late main runs 1,
+  // jobs of runs 1 (2 pages) and 4-8, run 4 retried once, of #864's run 20 and of the late run 30.
+  assert.equal(result.requests.length, 3 + 2 + 1 + 1 + 2 + 5 + 1 + 1 + 1);
+  assert.match(result.stdout, new RegExp(`and ${result.requests.length} for the measures \\(cap 600\\)`));
+  assert.match(result.stdout, /\| Job minutes per merged pull request, median \| \d+ over 2 pull requests; largest #864 /);
+  assert.match(result.stdout, /\| Merge to live, median and maximum \| 130 and 130 min over 1 of 1 pushes \| - \|/);
+  assert.doesNotMatch(result.stdout, /unavailable/);
+  assert.doesNotMatch(result.stdout, NO_JUNK);
+});
+
+test('the measures send at most --max-requests requests, concurrent job listings included', async (t) => {
+  // 16 is what the window needs without a retry; 9 stops two requests into the six concurrent job listings.
+  for (const cap of [0, 1, 5, 9, 17]) {
+    const result = await reportWith(t, { args: ['--max-requests', String(cap)] });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /### Inside every budget/);
+    assert.ok(result.requests.length <= cap, `cap ${cap}: the stub received ${result.requests.length} requests`);
+    assert.match(result.stdout, new RegExp(`and ${result.requests.length} for the measures \\(cap ${cap}\\)`));
+    if (cap === 17) {
+      assert.equal(result.requests.length, 16);
+      assert.doesNotMatch(result.stdout, /unavailable/);
+    } else {
+      assert.match(result.stdout, new RegExp(`\\| Job minutes of cancelled runs \\| unavailable: the request cap of ${cap} was reached \\| - \\|`));
+    }
+    assert.doesNotMatch(result.stdout, NO_JUNK);
+  }
+});
+
 test('a refused job listing makes the measures that read jobs unavailable, after the budgets decided the exit code', async (t) => {
-  const result = await reportWith(t, { fail: 'jobs' });
+  const result = await reportWith(t, { mode: ['fail-jobs'] });
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /### Inside every budget/);
   assert.match(result.stdout, /- #864: aaaaaaaaa \(120 jobs, 40 min, success\)/);
@@ -312,15 +346,64 @@ test('a refused job listing makes the measures that read jobs unavailable, after
   assert.match(result.stdout, /\| Job minutes per merged pull request, median \| unavailable: gh: You have exceeded/);
   assert.match(result.stdout, /Job minutes by role unavailable: gh: You have exceeded/);
   // Merge to live reads no jobs.
-  assert.match(result.stdout, /\| Merge to live, median and maximum \| - and - min over 0 of 0 pushes \| - \|/);
+  assert.match(result.stdout, /\| Merge to live, median and maximum \| 130 and 130 min over 1 of 1 pushes \| - \|/);
+  // The first refusal halts the reads: no job listing after it.
+  assert.equal(result.requests.filter((call) => call.some((arg) => arg.includes('/jobs?'))).length <= 6, true);
 });
 
-test('the request cap makes the measures unavailable without a request, and never fails the report', async (t) => {
-  const result = await reportWith(t, { fail: 'jobs', args: ['--max-requests', '0'] });
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /### Inside every budget/);
-  for (const row of ['Job minutes per merged pull request, median', 'Fixed-job share of draft pull request ci runs', 'Ready to green, median and 90th percentile', 'Merge to live, median and maximum', 'Job minutes of cancelled runs']) {
-    assert.match(result.stdout, new RegExp(`\\| ${row} \\| unavailable: the request cap of 0 was reached \\| - \\|`));
+test('a request that never answers ends the report at the time limit with the budgets\' exit code', async (t) => {
+  for (const [mode, code] of [[['hang-jobs'], 0], [['hang-jobs', 'over'], 1]]) {
+    const result = await reportWith(t, { mode, args: ['--time-limit', '0.05'] });
+    assert.equal(result.status, code, result.stderr);
+    assert.match(result.stdout, code ? /### Over budget/ : /### Inside every budget/);
+    assert.ok(result.seconds < 3 + 2, `ended after ${result.seconds} s`);
+    assert.match(result.stdout, /\| Ready to green, median and 90th percentile \| unavailable: the time limit of 0\.05 minutes was reached \| - \|/);
+    assert.match(result.stdout, /\| Merge to live, median and maximum \| 130 and 130 min/);
   }
-  assert.match(result.stdout, /and 0 for the measures \(cap 0\)/);
+});
+
+test('a step summary that stops accepting writes leaves the exit code to the budgets', async (t) => {
+  for (const [mode, code] of [[['break-summary'], 0], [['break-summary', 'over'], 1]]) {
+    const result = await reportWith(t, { mode, summary: true });
+    assert.equal(result.status, code, result.stderr);
+    assert.match(result.stdout, /\| Runs that tested nothing \| \d+ of /);
+    assert.match(result.stdout, /The measures did not complete: EISDIR/);
+  }
+  // A summary no one reads (a FIFO) fails at once instead of blocking the report.
+  const result = await reportWith(t, { mode: ['fifo-summary', 'over'], summary: true });
+  assert.equal(result.status, 1, result.stderr);
+  assert.ok(result.seconds < 5, `ended after ${result.seconds} s`);
+  assert.match(result.stdout, /The measures did not complete: ENXIO/);
+});
+
+test('records without the fields the measures read make those measures unavailable, never undefined', async (t) => {
+  const search = await reportWith(t, { mode: ['empty-pr'] });
+  assert.equal(search.status, 0, search.stderr);
+  assert.match(search.stdout, /\| Job minutes per merged pull request, median \| unavailable: the API answered a pull request record without a valid number \| - \|/);
+  assert.match(search.stdout, /\| Runs that tested nothing \| 0 of 6 \(0%\)/);
+  assert.doesNotMatch(search.stdout, NO_JUNK);
+  const jobs = await reportWith(t, { mode: ['bad-job'] });
+  assert.equal(jobs.status, 0, jobs.stderr);
+  for (const row of MEASURE_ROWS.filter((each) => !each.startsWith('Merge'))) {
+    assert.match(jobs.stdout, new RegExp(`\\| ${row} \\| unavailable: the API answered a job record without a valid started_at \\| - \\|`));
+  }
+  assert.doesNotMatch(jobs.stdout, NO_JUNK);
+});
+
+test('the window\'s runs, deploys, pull requests and jobs are checked for the fields the measures read', () => {
+  const valid = run({ run_started_at: '2026-11-10T10:00:00Z' });
+  assert.deepEqual(checkRecords('run', [valid, run({ conclusion: null, head_branch: null, head_repository: null })]).length, 2);
+  for (const [field, value] of [['id', '7'], ['name', ''], ['created_at', '2026-11-10'], ['updated_at', undefined], ['pull_requests', [{ number: 1 }]], ['run_started_at', 'soon']]) {
+    assert.throws(() => checkRecords('run', [{ ...valid, [field]: value }]), new RegExp(`a run record without a valid ${field}$`));
+  }
+  assert.throws(() => checkRecords('job', [null]), /a job record that is not an object/);
+  const listed = { name: 'app-plan', conclusion: 'success', started_at: '2026-11-10T10:00:00Z', completed_at: null, runner_name: null };
+  assert.equal(checkRecords('job', [listed]).length, 1);
+  assert.throws(() => checkRecords('job', [{ ...listed, runner_name: 3 }]), /without a valid runner_name/);
+  assert.throws(() => checkRecords('job', [{ ...listed, completed_at: '2026-11-10T10:00:00.000Z' }]), /without a valid completed_at/);
+  assert.throws(() => checkRecords('pull request', [{}]), /a pull request record without a valid number/);
+  assert.throws(() => checkRecords('run', {}), /no list of run records/);
+  // A run whose records fail makes every measure unavailable with the reason.
+  const measures = summarizeMeasures({ runs: [], jobs: new Map(), pullRequests: [], deploys: [], unavailable: { runs: 'the API answered a run record without a valid id' } });
+  for (const measure of Object.values(measures)) assert.deepEqual(measure, { unavailable: 'the API answered a run record without a valid id' });
 });

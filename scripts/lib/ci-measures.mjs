@@ -293,9 +293,62 @@ export const TARGETS = Object.freeze({
   draftFixedShare: 0.3,
 });
 
-// The data each measure reads beyond the window's runs. The report collects
-// the jobs, the merged pull requests (with their runs outside the window and
-// those runs' jobs) and the deploys under a request cap.
+// The fields each kind of API record must have, and of which type, before a
+// measure reads it. Times are compared as text, so they must be the API's
+// second-precision UTC form.
+const TIME = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/;
+const isTime = (value) => typeof value === 'string' && TIME.test(value) && !Number.isNaN(Date.parse(value));
+const isName = (value) => typeof value === 'string' && value !== '';
+const nullOr = (check) => (value) => value === null || check(value);
+const RECORDS = Object.freeze({
+  run: {
+    id: Number.isSafeInteger,
+    name: isName,
+    event: isName,
+    conclusion: nullOr(isName),
+    head_branch: nullOr((value) => typeof value === 'string'),
+    head_sha: isName,
+    head_repository: nullOr(isName),
+    pull_requests: (value) => Array.isArray(value) && value.every(Number.isSafeInteger),
+    created_at: isTime,
+    updated_at: isTime,
+    run_started_at: (value) => value === undefined || nullOr(isTime)(value),
+  },
+  job: {
+    name: isName,
+    conclusion: nullOr(isName),
+    started_at: nullOr(isTime),
+    completed_at: nullOr(isTime),
+    runner_name: nullOr((value) => typeof value === 'string'),
+  },
+  'pull request': {
+    number: Number.isSafeInteger,
+    repository: nullOr(isName),
+    branch: isName,
+    createdAt: isTime,
+    mergedAt: isTime,
+    mergeCommit: isName,
+  },
+});
+
+// `records` as the measures read them. Throws, naming the first field that is
+// missing or of the wrong type, so that the measures reading them are
+// unavailable rather than computed from `undefined`.
+export function checkRecords(kind, records) {
+  const fields = RECORDS[kind];
+  if (!Array.isArray(records)) throw new Error(`the API answered no list of ${kind} records`);
+  for (const record of records) {
+    if (record === null || typeof record !== 'object') throw new Error(`the API answered a ${kind} record that is not an object`);
+    const bad = Object.keys(fields).find((field) => !fields[field](record[field]));
+    if (bad) throw new Error(`the API answered a ${kind} record without a valid ${bad}`);
+  }
+  return records;
+}
+
+// The data each measure reads beyond the window's runs, which every measure
+// reads. The report collects the jobs, the merged pull requests (with their
+// runs outside the window and those runs' jobs) and the deploys under a
+// request cap.
 const SOURCES = Object.freeze({
   minutes: ['jobs'],
   perMergedPullRequest: ['jobs', 'pullRequests'],
@@ -322,7 +375,7 @@ export function summarizeMeasures({ runs, earlierRuns = [], lateRuns = [], jobs,
     cancelled: () => cancelledMinutes(runs, jobs, now),
   };
   return Object.fromEntries(Object.entries(compute).map(([measure, measureOf]) => {
-    const missing = SOURCES[measure].find((source) => unavailable[source]);
+    const missing = ['runs', ...SOURCES[measure]].find((source) => unavailable[source]);
     return [measure, missing ? { unavailable: unavailable[missing] } : measureOf()];
   }));
 }
