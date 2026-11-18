@@ -211,8 +211,13 @@ export function expectedApps({ apps, changedPaths, workspace, lockClosures = nul
 // rules: a changed file in the package's own directory, in a workspace
 // package it declares (transitively, at the merge base or at head), or in its
 // lockfile closure as pnpm lists it. `packages` are the directories with a
-// test script; `lockClosures` maps them like expectedApps' apps.
-export function expectedPackages({ packages, changedPaths, workspace, lockClosures = null }) {
+// test script; `lockClosures` maps them like expectedApps' apps. `texts`
+// maps a package directory to the text of its files (tests included, at the
+// merge base and at head): a file outside the package that its text names, by
+// its parent directory and name (`synthstrip-mini/T1.nii.gz`) or by a
+// directory of three segments (`components/test/fixtures/`), is read by the
+// suite, as a reader would see it, without the planner's graph.
+export function expectedPackages({ packages, changedPaths, workspace, lockClosures = null, texts = null }) {
   const expected = new Map();
   const add = (dir, reason) => expected.set(dir, [...(expected.get(dir) ?? []), reason]);
   for (const dir of packages) {
@@ -223,6 +228,10 @@ export function expectedPackages({ packages, changedPaths, workspace, lockClosur
         const user = [...used].find((pkg) => path.startsWith(`${pkg}/`));
         // Another package's tests and documents are not part of this suite.
         if (user && !PACKAGE_TESTS.test(path) && !DOCUMENT.test(path)) add(dir, `${path} (declared dependency ${user})`);
+        else {
+          const name = namedBy(texts?.get(dir) ?? '', path);
+          if (name) add(dir, `${path} (its files name ${name})`);
+        }
       }
     }
     if (lockClosures) {
@@ -233,11 +242,37 @@ export function expectedPackages({ packages, changedPaths, workspace, lockClosur
   return expected;
 }
 
+// How `text` names `path`: its parent directory and file name, or a directory of it three segments deep.
+function namedBy(text, path) {
+  const parts = path.split('/');
+  const needles = [parts.slice(-2).join('/'), ...parts.slice(0, -1).flatMap((_, end) => end >= 2 ? [`${parts.slice(end - 2, end + 1).join('/')}/`] : [])];
+  return parts.length >= 2 ? needles.find((needle) => text.includes(needle)) : undefined;
+}
+
 // Package suites the planner left out although the oracle expects them.
-export function comparePackages({ plan, expected }) {
+// Only suites with a test script (`packages`) count as selected.
+export function comparePackages({ plan, expected, packages = null }) {
   if (plan.packages.all) return { all: plan.packages.all, selected: [], misses: [] };
-  const selected = Object.keys(plan.packages.reasons);
+  const selected = Object.keys(plan.packages.reasons).filter((dir) => !packages || packages.includes(dir));
   return { all: null, selected, misses: [...expected].filter(([dir]) => !selected.includes(dir)).map(([dir, reasons]) => ({ package: dir, reasons })) };
+}
+
+// Rule families the oracle has no independent expectation for: a row whose
+// plan narrowed through one of them reads `0 misses` without being checked.
+// `manifests` maps a changed file to its { before, after } texts.
+export function uncheckedRules({ plan, changedPaths, manifests }) {
+  if (plan.reasons.fallback) return [];
+  const unchecked = [];
+  if (changedPaths.includes('.github/workflows/ci.yml')) unchecked.push('ci.yml jobs');
+  const registry = manifests.get('registry/apps.yml');
+  if (registry) {
+    try {
+      if (!same(parse(registry.before)?.site, parse(registry.after)?.site)) unchecked.push('registry site keys');
+    } catch {
+      unchecked.push('registry site keys');
+    }
+  }
+  return unchecked;
 }
 
 // Planner selection versus the oracle and the full catalog.

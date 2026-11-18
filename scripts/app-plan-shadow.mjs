@@ -17,7 +17,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { parse } from 'yaml';
 import { changedManifests, changedPathsFromGit, createAppPlan } from './lib/app-plan.mjs';
-import { comparePackages, compareSelection, expectedApps, expectedPackages, failureCandidates, parseableClosure, republishedPackages, supersededMerges, workspaceClosures } from './lib/app-plan-shadow.mjs';
+import { comparePackages, compareSelection, expectedApps, expectedPackages, failureCandidates, parseableClosure, republishedPackages, supersededMerges, uncheckedRules, workspaceClosures } from './lib/app-plan-shadow.mjs';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
 import { listJobs, listRuns, mapLimited, mergedPullRequests } from './lib/github-actions.mjs';
 import { loadConservativeWorkspaceGraph, WorkspaceGraphConfigurationError } from './lib/workspace-graph.mjs';
@@ -90,6 +90,29 @@ async function lockClosures(root, dirs, key = (dir) => dir.slice('apps/'.length)
   return closures;
 }
 
+// The text of every file in each package directory, at both revisions, for
+// the oracle's search for paths a package names (expectedPackages).
+const TEXT = /\.(?:[cm]?[jt]sx?|json|html|css|rs|toml|py|sh|ya?ml|txt)$|^Makefile$/;
+const SKIPPED = new Set(['node_modules', 'dist', 'target', '.turbo', 'coverage']);
+async function packageTexts(roots, dirs) {
+  const texts = new Map();
+  const walk = async (path, parts) => {
+    for (const entry of await readdir(path, { withFileTypes: true }).catch(() => [])) {
+      if (entry.isDirectory() && !SKIPPED.has(entry.name)) await walk(join(path, entry.name), parts);
+      else if (entry.isFile() && TEXT.test(entry.name)) {
+        const text = await readFile(join(path, entry.name), 'utf8').catch(() => '');
+        if (text.length <= 1024 * 1024) parts.push(text);
+      }
+    }
+  };
+  await mapLimited(dirs, 8, async (dir) => {
+    const parts = [];
+    for (const root of roots) await walk(join(root, dir), parts);
+    texts.set(dir, parts.join('\n'));
+  });
+  return texts;
+}
+
 // The package directories `pnpm test:packages` tests: those with a test script
 // (`test:unit` for the component package).
 function testedPackageDirs(manifests) {
@@ -150,12 +173,14 @@ async function shadow(pr, scratch) {
       offlineLock: manifests.get('registry/offline-assets.lock.json') ?? null,
     });
     const comparison = compareSelection({ catalog: registry, plan, oracle });
-    const packageExpected = expectedPackages({ packages: packageDirs, changedPaths, workspace: { before: workspaceClosures(workspaceBefore), after: workspaceClosures(workspaceAfter) }, lockClosures: packageClosures ?? null });
-    const packages = { ...comparePackages({ plan, expected: packageExpected }), full: packageDirs.length };
+    const texts = await packageTexts([join(dir, 'base'), join(dir, 'head')], packageDirs);
+    const packageExpected = expectedPackages({ packages: packageDirs, changedPaths, workspace: { before: workspaceClosures(workspaceBefore), after: workspaceClosures(workspaceAfter) }, lockClosures: packageClosures ?? null, texts });
+    const packages = { ...comparePackages({ plan, expected: packageExpected, packages: packageDirs }), full: packageDirs.length };
     return {
       ...row,
       packages,
       easterEgg: plan.easterEgg,
+      unchecked: uncheckedRules({ plan, changedPaths, manifests }),
       base,
       head,
       changed: changedPaths.length,
@@ -200,13 +225,15 @@ function markdown(rows, candidates, superseded) {
     '',
     `Oracle misses: ${done.reduce((sum, row) => sum + row.misses.length, 0)}.`,
     '',
+    `Not checked: the oracle has no expectation of its own for registry site keys (SITE_KEY_READERS) or ci.yml jobs (CI_JOB_SCOPES), so a row narrowed through them reads 0 misses unchecked. Rows narrowed through them: ${done.filter((row) => row.unchecked?.length).map((row) => `#${row.pr} (${row.unchecked.join(', ')})`).join(', ') || 'none'}.`,
+    '',
     `Package suites selected versus all: ${done.reduce((sum, row) => sum + (row.packages ? (row.packages.all ? row.packages.full : row.packages.selected.length) : 0), 0)}/${done.reduce((sum, row) => sum + (row.packages?.full ?? 0), 0)}; package oracle misses: ${done.reduce((sum, row) => sum + (row.packages?.misses.length ?? 0), 0)}. Easter egg runs: ${done.filter((row) => row.easterEgg?.length).length}/${done.length}.`,
     '',
     '| PR | Selected | Full | Misses | Packages | Egg | Fallback or reasons |',
     '| --- | --- | --- | --- | --- | --- | --- |',
     ...rows.map((row) => (row.skipped
       ? `| #${row.pr} | - | - | - | - | - | skipped: ${row.skipped} |`
-      : `| #${row.pr} | ${row.fallback ? 'all' : row.selected.length ? row.selected.join(', ') : 'none'} | ${row.full} | ${[...row.misses.map((miss) => `**${miss.app}**: ${miss.reasons.join('; ')}`), ...(row.packages?.misses ?? []).map((miss) => `**${miss.package}**: ${miss.reasons.join('; ')}`)].join('<br>') || '0'} | ${row.packages ? (row.packages.all ? 'all' : `${row.packages.selected.length}/${row.packages.full}`) : '-'} | ${row.easterEgg ? (row.easterEgg.length ? 'yes' : 'no') : '-'} | ${(row.fallback ?? (row.site ? `site build: ${row.reasons.site[0] ?? 'selected apps'}` : 'no site build')).replaceAll('|', '\\|').slice(0, 160)} |`)),
+      : `| #${row.pr} | ${row.fallback ? 'all' : row.selected.length ? row.selected.join(', ') : 'none'} | ${row.full} | ${[...row.misses.map((miss) => `**${miss.app}**: ${miss.reasons.join('; ')}`), ...(row.packages?.misses ?? []).map((miss) => `**${miss.package}**: ${miss.reasons.join('; ')}`)].join('<br>') || (row.unchecked?.length ? `0, unchecked: ${row.unchecked.join(', ')}` : '0')} | ${row.packages ? (row.packages.all ? 'all' : `${row.packages.selected.length}/${row.packages.full}`) : '-'} | ${row.easterEgg ? (row.easterEgg.length ? 'yes' : 'no') : '-'} | ${(row.fallback ?? (row.site ? `site build: ${row.reasons.site[0] ?? 'selected apps'}` : 'no site build')).replaceAll('|', '\\|').slice(0, 160)} |`)),
   ];
   if (candidates) {
     lines.push('', `Apps that failed on main after a narrowed PR skipped them: ${candidates.length}.`, '');

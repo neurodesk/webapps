@@ -11,6 +11,7 @@ import {
   parseableClosure,
   republishedPackages,
   supersededMerges,
+  uncheckedRules,
   workspaceClosures,
 } from '../scripts/lib/app-plan-shadow.mjs';
 
@@ -158,4 +159,30 @@ test('a package suite is expected for its own files, its declared dependencies a
   const expected = new Map([['packages/core', ['x']], ['packages/util', ['y']]]);
   assert.deepEqual(comparePackages({ plan: { packages: { all: null, reasons: { 'packages/core': ['x'] } } }, expected }).misses, [{ package: 'packages/util', reasons: ['y'] }]);
   assert.deepEqual(comparePackages({ plan: { packages: { all: 'full run', reasons: {} } }, expected }).misses, []);
+});
+
+test('the package oracle expects a suite whose files name a changed file outside it, by its folder and name', () => {
+  const packages = ['packages/core', 'packages/util', 'packages/local'];
+  const texts = new Map([
+    ['packages/util', "const bytes = await readFile(new URL('../../core/test/fixtures/uint8-zero-slope-intercept.nii', import.meta.url));"],
+    ['packages/local', "const dir = new URL('../../../apps/calmar/tests/fixtures/', import.meta.url);"],
+  ]);
+  const fixture = expectedPackages({ packages, changedPaths: ['packages/core/test/fixtures/uint8-zero-slope-intercept.nii'], workspace, texts });
+  assert.deepEqual([...fixture.keys()].sort(), ['packages/core', 'packages/util']);
+  assert.match(fixture.get('packages/util')[0], /its files name fixtures\/uint8-zero-slope-intercept\.nii/);
+  const directory = expectedPackages({ packages, changedPaths: ['apps/calmar/tests/fixtures/synthstrip-mini/T1.nii.gz'], workspace, texts });
+  assert.deepEqual([...directory.keys()], ['packages/local']);
+  assert.deepEqual([...expectedPackages({ packages, changedPaths: ['README.md'], workspace, texts }).keys()], []);
+  // A suite the plan lists without a test script is not counted as selected.
+  const plan = { packages: { all: null, reasons: { 'packages/util': ['x'], 'packages/no-tests': ['y'] } } };
+  assert.deepEqual(comparePackages({ plan, expected: new Map(), packages }).selected, ['packages/util']);
+});
+
+test('the shadow report names the rule families it cannot check', () => {
+  const plan = { reasons: { fallback: null } };
+  const site = (home) => stringify({ site: { hub: { brand: { home } } }, apps: [] });
+  const manifests = new Map([['registry/apps.yml', { before: site('https://a.org/'), after: site('https://b.org/') }]]);
+  assert.deepEqual(uncheckedRules({ plan, changedPaths: ['.github/workflows/ci.yml', 'registry/apps.yml'], manifests }), ['ci.yml jobs', 'registry site keys']);
+  assert.deepEqual(uncheckedRules({ plan, changedPaths: ['registry/apps.yml'], manifests: new Map([['registry/apps.yml', { before: site('x'), after: site('x') }]]) }), []);
+  assert.deepEqual(uncheckedRules({ plan: { reasons: { fallback: 'everything' } }, changedPaths: ['.github/workflows/ci.yml'], manifests }), []);
 });
