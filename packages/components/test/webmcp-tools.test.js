@@ -111,7 +111,7 @@ test('a run that outlasts waitSeconds returns running, and runs_get waits for th
   const running = await call('run_run', { waitSeconds: 0.1 });
   assert.equal(running.state, 'running');
   assert.ok(Date.now() - started < 1000);
-  assert.deepEqual(await call('runs_get', { runId: 'another' }), { error: { message: 'Unknown run: another' } });
+  assert.equal((await call('runs_get', { runId: 'another' })).error.code, 'UNKNOWN_RUN');
   setTimeout(() => finish(), 50);
   const done = await call('runs_get', { runId: running.runId, waitSeconds: 5 });
   assert.equal(done.state, 'succeeded');
@@ -203,8 +203,58 @@ test('outputs_download saves a completed artifact through the page download', as
   const { call, inputs, downloads } = page(t, async () => labels());
   await inputs.adopt('image', [new File(['input'], 'input.nii')]);
   assert.equal((await call('run_run')).state, 'succeeded');
-  assert.deepEqual(await call('outputs_download', { artifactId: 'labels' }), { artifactId: 'labels' });
+  const { runId } = (await call('app_describe')).run;
+  assert.deepEqual(await call('outputs_download', { runId, artifactId: 'labels' }), { runId, artifactId: 'labels' });
   assert.deepEqual(downloads.map(file => file.name), ['labels.nii']);
+});
+
+test('outputs_download saves only an output of the run the agent names', async t => {
+  const { call, inputs, downloads, dispatch } = page(t, async () => labels());
+  inputs.adopt('image', [new File(['input'], 'input.nii')]);
+  const first = await call('run_run');
+  const second = await call('run_run');
+  assert.equal(second.state, 'succeeded');
+  assert.equal((await call('outputs_download', { artifactId: 'labels' })).error.code, 'INVALID_INPUT', 'runId is required');
+  const stale = await call('outputs_download', { runId: first.runId, artifactId: 'labels' });
+  assert.equal(stale.error.code, 'RUN_REPLACED');
+  assert.equal(stale.error.replacedBy, second.runId);
+  assert.deepEqual(downloads, [], 'a replaced run saves nothing');
+  assert.deepEqual(await dispatch('download', { artifactId: 'labels' }), { artifactId: 'labels' }, 'the desktop dispatch still takes an artifact ID alone');
+  await assert.rejects(dispatch('download', { artifactId: 'labels', runId: first.runId }), /is not the current run/);
+});
+
+test('a wait on a run that another run replaced says so instead of returning the other run', async t => {
+  let reads = 0;
+  const { tools } = page(t, async () => labels());
+  const runsGet = webMcpTools({ contract: contract(), inputs: {}, dispatch: async command => {
+    assert.equal(command, 'snapshot');
+    return ++reads < 3 ? { runId: 'A', state: 'running' } : { runId: 'B', state: 'running' };
+  } }).find(tool => tool.name === 'runs_get');
+  assert.ok(tools.length);
+  const result = await runsGet.execute({ runId: 'A', waitSeconds: 2 });
+  assert.equal(result.error.code, 'RUN_REPLACED');
+  assert.equal(result.error.runId, 'A');
+  assert.equal(result.error.replacedBy, 'B');
+});
+
+test('a run tool refuses to start while another run is going, and names it', async t => {
+  let finish;
+  const { call, inputs } = page(t, () => (finish ? labels() : new Promise(resolve => { finish = () => resolve(labels()); })));
+  inputs.adopt('image', [new File(['input'], 'input.nii')]);
+  const running = await call('run_run', { waitSeconds: 0 });
+  assert.equal(running.state, 'running');
+  const refused = await call('run_run', { waitSeconds: 0 });
+  assert.equal(refused.error.code, 'RUN_ACTIVE');
+  assert.equal(refused.error.runId, running.runId);
+  assert.match(refused.error.message, /runs_cancel/);
+  while (!finish) await new Promise(resolve => setTimeout(resolve, 5));
+  finish();
+  assert.equal((await call('runs_get', { runId: running.runId, waitSeconds: 5 })).state, 'succeeded');
+  const replaced = await call('run_run');
+  assert.equal(replaced.state, 'succeeded');
+  assert.equal((await call('runs_get', { runId: running.runId })).error.code, 'RUN_REPLACED');
+  assert.equal((await call('runs_cancel', { runId: running.runId })).error.code, 'RUN_REPLACED');
+  assert.equal((await call('runs_get', { runId: 'never' })).error.code, 'UNKNOWN_RUN');
 });
 
 test('registration survives a refused tool and the registration signal unregisters the rest', async t => {

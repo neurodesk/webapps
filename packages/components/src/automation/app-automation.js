@@ -206,6 +206,7 @@ export function registerAppAutomation({ app, operations, convertDicom, contractU
       return { runId: run.id, state: 'running' };
     }
     if (command === 'download') {
+      if (request.runId !== undefined && request.runId !== snapshot.runId) throw new Error(`Run ${request.runId} is not the current run; its outputs are gone`);
       if (snapshot.state !== 'succeeded' || !artifacts.has(request.artifactId)) throw new Error('The requested completed artifact is unavailable');
       await download(artifacts.get(request.artifactId));
       return { artifactId: request.artifactId };

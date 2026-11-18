@@ -154,7 +154,7 @@ async function runExample(page, app, describe, progress) {
   progress.phase = `running ${operation}`;
   const started = Date.now();
   let run = await call(page, `run_${operation.replaceAll('-', '_')}`, { parameters: example.parameters ?? {}, waitSeconds: Math.min(RUN_SECONDS, 600) });
-  while (run.state === 'running' && Date.now() - started < RUN_SECONDS * 1000) run = await call(page, 'runs_get', { waitSeconds: 60 });
+  while (run.state === 'running' && Date.now() - started < RUN_SECONDS * 1000) run = await call(page, 'runs_get', { runId: run.runId, waitSeconds: 60 });
   const seconds = Math.round((Date.now() - started) / 1000);
   if (run.state === 'running') {
     await call(page, 'runs_cancel', {});
@@ -165,8 +165,8 @@ async function runExample(page, app, describe, progress) {
   // A viewer operation may write no file; its report is still an output.
   const [artifactId, artifact] = Object.entries(run.report.artifacts)[0] ?? ['report', { filename: 'report.json' }];
   const download = page.waitForEvent('download', { timeout: 60000 });
-  const saved = await call(page, 'outputs_download', { artifactId });
-  assert.deepEqual(saved, { artifactId }, `${app.id}: outputs_download`);
+  const saved = await call(page, 'outputs_download', { runId: run.runId, artifactId });
+  assert.deepEqual(saved, { runId: run.runId, artifactId }, `${app.id}: outputs_download`);
   assert.equal((await download).suggestedFilename(), artifact.filename, `${app.id}: the browser saved the artifact`);
   return { outcome: 'completed', example: example.id, operation, seconds, artifacts: Object.keys(run.report.artifacts), saved: artifact.filename };
 }

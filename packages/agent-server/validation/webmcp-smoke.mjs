@@ -159,7 +159,7 @@ try {
   log.push(`inputs_use_page_files then run_extract: ${onPage.state} on the file the person opened`);
 
   const download = page.waitForEvent('download');
-  assert.deepEqual(await call('outputs_download', { artifactId: 'mask' }), { artifactId: 'mask' });
+  assert.deepEqual(await call('outputs_download', { runId: onPage.runId, artifactId: 'mask' }), { runId: onPage.runId, artifactId: 'mask' });
   const saved = await download;
   assert.equal(saved.suggestedFilename(), onPage.report.artifacts.mask.filename);
   log.push(`outputs_download: the browser saved ${saved.suggestedFilename()}`);
