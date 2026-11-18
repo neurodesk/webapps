@@ -12,10 +12,10 @@ import { LARGE_RUN_JOBS, ofPullRequest } from './ci-usage.mjs';
 
 // What a job spends its runner on.
 //   plan: decides what to run (planner, gate, plan marker); tests nothing
-//   fixed: the jobs that tested every ci run in the 16-18 November baseline
-//     (workspace-contracts, homepage-easter-egg). The plan now runs the easter
-//     egg and the package suites only where a change reaches them, so the
-//     fixed-job share measures that narrowing against the baseline.
+//   fixed: the baseline group the fixed-job share is measured against, the
+//     jobs that tested every ci run on 16-18 November: workspace-contracts,
+//     which still does, and homepage-easter-egg, which the plan now runs only
+//     where a change reaches it.
 //   app: tests the apps the plan selected
 //   site: builds and checks the composite site
 //   test: a test job of another workflow
