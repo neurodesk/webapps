@@ -50,6 +50,23 @@
         "type": "relative",
         "refangle": 80
       }
+    },
+    "automation": {
+      "parameters": {
+        "mp2rage": [
+          6,
+          0.8,
+          2.7,
+          4,
+          5,
+          35,
+          72,
+          0.0067,
+          0.96
+        ],
+        "b1Type": "relative",
+        "referenceAngle": 80
+      }
     }
   }
 ]

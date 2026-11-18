@@ -1,0 +1,5 @@
+{
+  "cryo-em": "Its only example's movies stay on the compute server, so the tools cannot load it (examples.json automation.unavailable).",
+  "seedseg": "SeedSeg publishes no example in examples.json, so there is nothing for the tools to load and run.",
+  "zarro": "Its example is the chunks of an OME-Zarr store that the page assembles itself; open-url needs the address of a whole store."
+}

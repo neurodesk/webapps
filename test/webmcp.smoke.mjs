@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 // Drives every app of the built composite site (dist/) through its WebMCP tools in Chromium, with
 // Chrome's own WebMCP implementation switched on for testing (getTools and executeTool, as a browser
-// agent calls them). A Chromium without it gets a stand-in model context with the same calls.
+// agent calls them). An app fails when the browser has no WebMCP of its own; WEBMCP_STAND_IN=1
+// installs a stand-in model context with the same calls instead, for a Chromium without it.
 //
 // Each app, at desktop and phone width: the full tool set registers, app_describe answers with the
 // contract, user_ask and inputs_request_files render their dialogs and return what the person chose,
 // and the Privacy dialog carries the shared agent statement. A browser without WebMCP loads no WebMCP
-// module. WEBMCP_RUNS=1 also loads an example, runs it and saves an output, through the tools only.
+// module. WEBMCP_RUNS=1 also loads an example, runs it with the tool and parameters app_describe gives
+// and saves an output, through the tools only. A run that fails or outlasts WEBMCP_RUN_SECONDS fails its
+// app unless test/webmcp-run-skips.json names the app with the reason it cannot run here.
 //
 //   pnpm build && node test/webmcp.smoke.mjs
 //   SMOKE_APPS=brain-extraction,n4 WEBMCP_RUNS=1 WEBMCP_REPORT=report.json WEBMCP_SHOTS=shots node test/webmcp.smoke.mjs
@@ -31,6 +34,8 @@ const GPU_ARGS = process.platform === 'linux'
   ? ['--enable-unsafe-webgpu', '--use-angle=swiftshader', '--use-vulkan=swiftshader', '--disable-vulkan-surface']
   : [];
 const RUN_SECONDS = Number(process.env.WEBMCP_RUN_SECONDS ?? 900);
+const STAND_IN = process.env.WEBMCP_STAND_IN === '1';
+const RUN_SKIPS = JSON.parse(await readFile(new URL('./webmcp-run-skips.json', import.meta.url), 'utf8'));
 
 const registry = await loadAppsRegistry();
 const requested = new Set((process.env.SMOKE_APPS ?? '').split(',').filter(Boolean));
@@ -167,23 +172,16 @@ async function checkPageFiles(page, app) {
   return offered.length;
 }
 
-function chooseOperation(contract, example) {
-  const covers = name => Object.entries(contract.operations[name].inputs)
-    .every(([role, field]) => field.source !== 'files' || field.minimum === 0 || example.roles.includes(role));
-  return [contract.defaultOperation, ...Object.keys(contract.operations)].find(covers);
-}
-
 async function runExample(page, app, describe, progress) {
   const example = describe.examples[0];
   if (!example) return { outcome: 'no loadable example', reasons: describe.unavailableExamples };
-  const operation = chooseOperation(describe, example);
-  if (!operation) return { outcome: `no operation takes example ${example.id}`, example: example.id };
+  const operation = example.tool;
   progress.phase = `loading example ${example.id}`;
   const loaded = await call(page, 'inputs_load_example', { exampleId: example.id });
   if (loaded.error) return { outcome: 'example failed to load', example: example.id, error: loaded.error };
   progress.phase = `running ${operation}`;
   const started = Date.now();
-  let run = await call(page, `run_${operation.replaceAll('-', '_')}`, { parameters: example.parameters ?? {}, waitSeconds: Math.min(RUN_SECONDS, 600) });
+  let run = await call(page, operation, { parameters: example.parameters ?? {}, waitSeconds: Math.min(RUN_SECONDS, 600) });
   while (run.state === 'running' && Date.now() - started < RUN_SECONDS * 1000) run = await call(page, 'runs_get', { runId: run.runId, waitSeconds: 60 });
   const seconds = Math.round((Date.now() - started) / 1000);
   if (run.state === 'running') {
@@ -207,7 +205,7 @@ const flagged = await chromium.launch({ args: [...GPU_ARGS, features(['WebMCPTes
 const plain = await chromium.launch({ args: [...GPU_ARGS, features([])] });
 async function flaggedContext() {
   const context = await flagged.newContext({ acceptDownloads: true });
-  await context.addInitScript(standInModelContext);
+  if (STAND_IN) await context.addInitScript(standInModelContext);
   await context.route(/googletagmanager\.com|google-analytics\.com|cloudflareinsights\.com/, route => route.abort());
   if (cache) {
     await context.route(url => existsSync(exampleCachePath(cache, url.href)), async route => route.fulfill({ body: await readFile(exampleCachePath(cache, route.request().url())) }));
@@ -248,7 +246,8 @@ try {
         const { page, errors } = await openApp(context, app);
         try {
           await page.setViewportSize(viewport);
-          entry.api = await page.evaluate(() => (document.modelContext?.standIn ? 'stand-in' : 'chrome'));
+          entry.api = await page.evaluate(() => (!document.modelContext ? 'none' : document.modelContext.standIn ? 'stand-in' : 'chrome'));
+          assert.notEqual(entry.api, 'none', `${app.id}: this Chromium has no WebMCP; use a build with WebMCPTesting, or WEBMCP_STAND_IN=1`);
           await until(page, async count => (await document.modelContext.getTools()).length >= count, names.length, 90000);
           const registered = (await page.evaluate(() => document.modelContext.getTools().then(tools => tools.map(tool => tool.name)))).sort();
           assert.deepEqual(registered, names, `${app.id}: the full tool set`);
@@ -276,9 +275,13 @@ try {
       assert.equal(await page.evaluate(() => 'modelContext' in document), false);
       assert.deepEqual(loaded, [], `${app.id}: a browser without WebMCP loads none of its modules`);
       await page.close();
-      if (process.env.WEBMCP_RUNS) entry.run = await runInPage(app);
+      if (process.env.WEBMCP_RUNS) {
+        entry.run = await runInPage(app);
+        if (entry.run.outcome !== 'completed' && !RUN_SKIPS[app.id]) throw new Error(`the example run ${entry.run.outcome}: ${JSON.stringify(entry.run.error ?? entry.run.reasons ?? '')}`);
+        if (entry.run.outcome === 'completed' && RUN_SKIPS[app.id]) console.log(`NOTE ${app.id}: completed although webmcp-run-skips.json expects it not to (${RUN_SKIPS[app.id]})`);
+      }
       entry.passed = true;
-      console.log(`PASS ${app.id}: ${names.length} tools (${entry.api}), examples ${entry.examples.join(', ') || 'none'}${entry.run ? `; run ${entry.run.outcome}${entry.run.seconds !== undefined ? ` in ${entry.run.seconds} s` : ''}` : ''}`);
+      console.log(`PASS ${app.id}: ${names.length} tools (${entry.api}), examples ${entry.examples.join(', ') || 'none'}${entry.run ? `; run ${entry.run.outcome}${entry.run.seconds !== undefined ? ` in ${entry.run.seconds} s` : ''}${entry.run.outcome !== 'completed' ? ` (expected: ${RUN_SKIPS[app.id]})` : ''}` : ''}`);
     } catch (error) {
       entry.passed = false;
       entry.error = error.message;

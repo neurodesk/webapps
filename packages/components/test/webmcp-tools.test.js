@@ -184,6 +184,7 @@ test('inputs_load_example verifies each file through the fetcher and holds it fo
   assert.equal(describe.examples[1].omitted, 'The notes are for people.');
   assert.deepEqual(describe.examples[1].parameters, { threshold: 0.2, method: 'b' }, 'the run parameters an example needs, without the page-only ones');
   assert.equal(describe.examples[0].parameters, undefined);
+  assert.equal(describe.examples[0].tool, 'run_run', 'each example names the run tool that takes it');
   assert.deepEqual(describe.unavailableExamples, [
     { id: 'other', label: 'Other', reason: 'Its scan file scan.nii matches no input of this application.' },
     { id: 'remote', label: 'Remote', reason: 'Its data stay on the compute server.' },
@@ -538,4 +539,17 @@ test('an app that clears its input and resets while reading a load keeps that lo
   const cleared = await call('app_describe');
   assert.deepEqual(cleared.pageFiles, [], 'a reset in a later task, as a Clear button makes, forgets the load');
   assert.deepEqual(cleared.inputs, {});
+});
+
+test('a parameter the contract requires is published as required and refused when missing', async t => {
+  const strict = contract();
+  strict.operations.run.parameters.prompts = { type: 'string', description: 'Prompts', required: true };
+  const dom = new JSDOM('<body></body>', { url: 'https://example.test/test/' });
+  t.after(() => dom.window.close());
+  registerAppAutomation({ app: 'test', contract: strict, operations: { run: async () => labels() }, document: dom.window.document, target: dom.window });
+  const run = webMcpTools({ contract: strict, dispatch: dom.window.neurodeskAutomation.dispatch, inputs: {} }).find(tool => tool.name === 'run_run');
+  assert.deepEqual(run.inputSchema.required, ['parameters']);
+  assert.deepEqual(run.inputSchema.properties.parameters.required, ['prompts']);
+  assert.match((await run.execute({ parameters: { threshold: 0.2 } })).error.message, /input.parameters.prompts is required/);
+  await assert.rejects(dom.window.neurodeskAutomation.dispatch('start', { parameters: {} }), /prompts/, 'the desktop dispatch refuses it too');
 });

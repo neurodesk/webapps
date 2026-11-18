@@ -66,6 +66,7 @@ const operationParameter = z.lazy(() => z.strictObject({
   multipleOf: z.number().positive().optional(),
   items: operationParameter.optional(),
   default: z.json().optional(),
+  required: z.literal(true).optional(),
 }));
 const operationSchema = z.strictObject({
   title: z.string().min(1),
@@ -149,6 +150,8 @@ function validateParameter(key, field) {
   if (field.type === 'array' && !field.items) throw new Error(`${key}: array parameters require items`);
   if (field.type !== 'array' && field.items) throw new Error(`${key}: items requires an array`);
   if (field.items) validateParameter(`${key} item`, field.items);
+  if (field.required && field.default !== undefined) throw new Error(`${key}: a required parameter takes no default`);
+  if (field.items?.required) throw new Error(`${key} item: only a parameter can be required`);
   if (field.default !== undefined) operationParameterSchema(field).parse(field.default);
 }
 

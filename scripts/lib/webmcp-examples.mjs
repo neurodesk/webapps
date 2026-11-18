@@ -4,8 +4,8 @@ import { operationParametersSchema } from '../../packages/components/src/automat
 import { exampleInputs } from '../../packages/components/src/webmcp/examples.js';
 import { repoRoot } from './apps-registry.mjs';
 
-// How each example of one app reaches a browser agent's inputs_load_example, and what in examples.json
-// would make an example silently disappear from app_describe.
+// How each example of one app reaches a browser agent's inputs_load_example and its run tool, and what in
+// examples.json would make an example silently disappear from app_describe or fail its run.
 export async function auditAppExamples(appId, root = repoRoot) {
   const contract = JSON.parse(await readFile(join(root, 'apps', appId, 'automation.json'), 'utf8'));
   const examples = JSON.parse(await readFile(join(root, 'apps', appId, 'examples.json'), 'utf8'));
@@ -17,10 +17,6 @@ export async function auditAppExamples(appId, root = repoRoot) {
   for (const example of examples.filter(item => !item.rotation)) {
     const { roles = {}, files = {}, reason, unavailable, parameters = {} } = example.automation ?? {};
     for (const name of Object.keys(parameters)) if (!parameterNames.has(name)) problems.push(`${example.id}: automation.parameters names ${name}, which no operation takes`);
-    const takers = Object.values(contract.operations).filter(operation => Object.keys(parameters).every(name => Object.hasOwn(operation.parameters, name)));
-    if (Object.keys(parameters).length && !takers.some(operation => operationParametersSchema(operation.parameters).safeParse(parameters).success)) {
-      problems.push(`${example.id}: no operation accepts automation.parameters`);
-    }
     const exampleRoles = new Set(example.files.map(file => file.role));
     const names = new Set(example.files.map(file => file.name));
     for (const role of Object.keys(roles)) if (!exampleRoles.has(role)) problems.push(`${example.id}: automation.roles names ${role}, which no file has`);
@@ -29,10 +25,24 @@ export async function auditAppExamples(appId, root = repoRoot) {
       if (target !== null && !fileRoles.has(target)) problems.push(`${example.id}: automation maps a file to ${target}, which is not a file input of the contract`);
     }
     if (unavailable !== undefined && (typeof unavailable !== 'string' || !unavailable.trim())) problems.push(`${example.id}: automation.unavailable must say why`);
-    const outcome = exampleInputs(example, fileRoles, parameterNames);
+    const outcome = exampleInputs(example, contract.operations, contract.defaultOperation);
     if (outcome.undeclared) problems.push(`${example.id}: file role ${outcome.undeclared} is not a file input of the contract; map it in automation.roles or say why it is unavailable`);
+    if (!unavailable && !outcome.undeclared && !outcome.files) problems.push(`${example.id}: ${outcome.unavailable} Map its files or say why it is unavailable`);
     if (outcome.files && outcome.files.length < example.files.length && !reason?.trim()) problems.push(`${example.id}: files are left out without automation.reason`);
-    results.push({ id: example.id, ...(outcome.files ? { loads: outcome.files.length, of: example.files.length, ...(outcome.parameters && { parameters: outcome.parameters }), ...(outcome.omitted && { omitted: outcome.omitted }) } : { unavailable: outcome.unavailable }) });
+    if (outcome.operation) {
+      // The page's own parameters that name no contract parameter reach no agent unless translated.
+      const untranslated = Object.keys(example.parameters ?? {}).filter(name => !parameterNames.has(name));
+      if (untranslated.length && !Object.keys(parameters).length) problems.push(`${example.id}: its parameters ${untranslated.join(', ')} name no contract parameter; translate them in automation.parameters`);
+      const operation = contract.operations[outcome.operation];
+      const missing = Object.keys(operation.parameters).filter(name => operation.parameters[name].required && !Object.hasOwn(outcome.parameters ?? {}, name));
+      if (missing.length) problems.push(`${example.id}: ${outcome.operation} requires ${missing.join(', ')}, which the example does not give`);
+      const checked = operationParametersSchema(operation.parameters).safeParse(outcome.parameters ?? {});
+      if (!checked.success) problems.push(`${example.id}: ${outcome.operation} refuses its parameters: ${checked.error.issues.map(issue => `${issue.path.join('.')} ${issue.message}`).join('; ')}`);
+    }
+    results.push({ id: example.id, ...(outcome.files ? {
+      loads: outcome.files.length, of: example.files.length, operation: outcome.operation,
+      ...(outcome.parameters && { parameters: outcome.parameters }), ...(outcome.omitted && { omitted: outcome.omitted }),
+    } : { unavailable: outcome.unavailable }) });
   }
   return { app: appId, examples: results, problems };
 }

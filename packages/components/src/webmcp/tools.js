@@ -40,16 +40,18 @@ function runSchema(operation) {
   const roles = Object.entries(operation.inputs);
   const sources = roles.filter(([, field]) => field.source !== 'files');
   const dicom = roles.filter(([, field]) => field.source === 'files' && convertsDicom(field));
+  const required = Object.keys(operation.parameters).filter(name => operation.parameters[name].required);
+  const neededSources = sources.filter(([, field]) => field.minimum > 0).map(([role]) => role);
   return object({
-    parameters: object(Object.fromEntries(Object.entries(operation.parameters).map(([name, field]) => [name, parameterJsonSchema(field)]))),
+    parameters: object(Object.fromEntries(Object.entries(operation.parameters).map(([name, field]) => [name, parameterJsonSchema(field)])), required),
     ...(sources.length && { inputs: object(Object.fromEntries(sources.map(([role, field]) => [role, {
       ...object({ url: { type: 'string', format: 'uri' } }, ['url']), description: field.description,
-    }])), sources.filter(([, field]) => field.minimum > 0).map(([role]) => role)) }),
+    }])), neededSources) }),
     ...(dicom.length && { selections: object(Object.fromEntries(dicom.map(([role]) => [role, {
       type: 'string', pattern: '^[a-f0-9]{64}$', description: 'The sha256 of one converted series, from the candidates of a SERIES_SELECTION_REQUIRED error',
     }]))) }),
     waitSeconds: waitSeconds(DEFAULT_WAIT_SECONDS),
-  });
+  }, [...(required.length ? ['parameters'] : []), ...(neededSources.length ? ['inputs'] : [])]);
 }
 
 function sleep(ms, signal) {
@@ -105,8 +107,8 @@ function failure(error) {
 export function webMcpTools({ contract, dispatch, inputs, examples = () => [], fetchAsset = fetchModel, askUser, requestFiles, confirmFetch }) {
   const roles = fileRoles(contract);
   // A rotation entry cycles through examples that are offered on their own.
-  const parameterNames = new Set(Object.values(contract.operations).flatMap(operation => Object.keys(operation.parameters)));
-  const catalog = async () => (await examples()).filter(example => !example.rotation).map(example => ({ example, ...exampleInputs(example, roles, parameterNames) }));
+  const catalog = async () => (await examples()).filter(example => !example.rotation)
+    .map(example => ({ example, ...exampleInputs(example, contract.operations, contract.defaultOperation) }));
   // Every run ID the tools have reported, so a call naming one that is gone can say it was replaced.
   const seen = new Set();
   const snapshot = async () => {
@@ -158,8 +160,8 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
         appVersion: contract.appVersion,
         defaultOperation: contract.defaultOperation,
         operations: Object.fromEntries(Object.entries(contract.operations).map(([name, operation]) => [name, { tool: runTools[name], ...structuredClone(operation) }])),
-        examples: entries.filter(entry => entry.files).map(({ example: { id, label, description, expectedResult }, files, parameters, omitted }) => ({
-          id, label, description, expectedResult, roles: [...new Set(files.map(file => file.role))], ...(parameters && { parameters }), ...(omitted && { omitted }),
+        examples: entries.filter(entry => entry.files).map(({ example: { id, label, description, expectedResult }, files, operation, parameters, omitted }) => ({
+          id, label, description, expectedResult, roles: [...new Set(files.map(file => file.role))], tool: runTools[operation], ...(parameters && { parameters }), ...(omitted && { omitted }),
         })),
         unavailableExamples: entries.filter(entry => entry.unavailable).map(({ example: { id, label }, unavailable }) => ({ id, label, reason: unavailable })),
         viewers: await dispatch('viewers.list'),
@@ -195,7 +197,7 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
     });
 
   tool('inputs_load_example', 'Load an example',
-    'Download one of the application\'s examples, verify its checksums and hold its files as the input for the next run, replacing every file held before. Run it with the example\'s parameters from app_describe.',
+    'Download one of the application\'s examples, verify its checksums and hold its files as the input for the next run, replacing every file held before. Run it with the example\'s tool and parameters from app_describe.',
     object({ exampleId: { type: 'string', description: 'An example ID from app_describe' } }, ['exampleId']), {},
     async ({ exampleId }, { signal }) => {
       const entry = (await catalog()).find(item => item.example.id === exampleId);

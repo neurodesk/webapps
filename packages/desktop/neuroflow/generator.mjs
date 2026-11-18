@@ -118,7 +118,7 @@ export function generateTools(value) {
       const name = `param_${key}`;
       bindings.parameters[key] = name;
       inputs[name] = {
-        type: parameterType(field), description: field.description, optional: true,
+        type: parameterType(field), description: field.description, optional: !field.required,
         ...(field.default !== undefined && { default: structuredClone(field.default) }),
         ...(field.enum && { enum: [...field.enum] }),
         ...(['number', 'integer'].includes(field.type) && {
