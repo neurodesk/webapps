@@ -21,7 +21,7 @@ export function createAgentPrompts(doc = globalThis.document) {
   function show(content, signal) {
     if (signal?.aborted) return Promise.resolve(null);
     const turn = queue.then(() => (signal?.aborted ? null : present(content, signal)));
-    queue = turn;
+    queue = turn.catch(() => null);
     if (!signal) return turn;
     const aborted = new Promise(resolve => signal.addEventListener('abort', () => resolve(null), { once: true }));
     return Promise.race([turn, aborted]);

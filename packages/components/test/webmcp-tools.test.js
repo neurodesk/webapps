@@ -8,6 +8,7 @@ import { operationParametersSchema } from '../src/automation/parameters.js';
 import { registerWebMcpTools, webMcpTools } from '../src/webmcp/tools.js';
 import { exposeWebMcp } from '../src/webmcp/page.js';
 import { createToolInputs } from '../src/webmcp/tool-inputs.js';
+import { schemaIssues, unsupportedKeywords } from '../src/webmcp/schema.js';
 
 const appsDir = new URL('../../../apps/', import.meta.url);
 const contract = () => ({ schemaVersion: 2, app: 'test', title: 'Test', description: 'Segments a test image.', appVersion: '0.1.20260928', defaultOperation: 'run', operations: {
@@ -62,6 +63,7 @@ test('every app contract builds spec-valid tools whose run schemas accept what t
       assert.ok(tool.description.length > 0, `${app}: ${tool.name} has a description`);
       assert.equal(typeof tool.execute, 'function');
       assert.doesNotThrow(() => z.fromJSONSchema(tool.inputSchema), `${app}: ${tool.name} has a valid JSON Schema`);
+      assert.deepEqual(unsupportedKeywords(tool.inputSchema), [], `${app}: ${tool.name} uses only keywords the input check enforces`);
       JSON.stringify(tool.inputSchema);
     }
     for (const [name, operation] of Object.entries(appContract.operations)) {
@@ -74,8 +76,11 @@ test('every app contract builds spec-valid tools whose run schemas accept what t
       for (const [key, field] of Object.entries(operation.parameters)) {
         for (const value of samples(field)) {
           if (value === null) continue;
-          assert.equal(json.safeParse({ [key]: value }).success, contractSchema.safeParse({ [key]: value }).success,
+          const accepted = contractSchema.safeParse({ [key]: value }).success;
+          assert.equal(json.safeParse({ [key]: value }).success, accepted,
             `${app}: ${name}.${key} = ${JSON.stringify(value)} is judged as the contract judges it`);
+          assert.equal(schemaIssues(run.inputSchema, { parameters: { [key]: value } }).length === 0, accepted,
+            `${app}: ${name}.${key} = ${JSON.stringify(value)} passes the tools' own input check as the contract judges it`);
         }
       }
     }
@@ -156,7 +161,7 @@ test('inputs_request_files tells the prompt the role and returns declined when t
   assert.deepEqual(await call('inputs_request_files', { role: 'image', message: 'Your T1, please.' }), { declined: true });
   assert.deepEqual(requests, [{ label: 'One head image', formats: ['nifti'], message: 'Your T1, please.', minimum: 1, maximum: 1, folder: false }]);
   assert.deepEqual(inputs.held(), {});
-  assert.equal((await call('inputs_request_files', { role: 'mask' })).error.message, 'Unknown file input role: mask');
+  assert.equal((await call('inputs_request_files', { role: 'mask' })).error.code, 'INVALID_INPUT');
 });
 
 test('inputs_load_example verifies each file through the fetcher and holds it for its role', async t => {
@@ -298,4 +303,29 @@ test('held files serve every rerun until the person loads their own files or the
   inputs.adopt('image', [new File(['input'], 'input.nii')]);
   registration.reset();
   assert.deepEqual((await call('app_describe')).inputs, {}, 'a reset releases the held files');
+});
+
+test('every tool checks its input against the schema it publishes before it runs', async t => {
+  const asked = [];
+  const { call } = page(t, async () => labels(), { askUser: async request => {
+    asked.push(request);
+    return { answer: 'OK' };
+  } });
+  const invalid = [
+    ['user_ask', { question: 'Sample', options: 'not-an-array' }, /input.options must be an array/],
+    ['user_ask', { question: '' }, /input.question needs at least 1 character/],
+    ['runs_get', { waitSeconds: 'invalid' }, /input.waitSeconds must be a number/],
+    ['runs_get', { waitSeconds: 601 }, /input.waitSeconds must be at most 600/],
+    ['run_run', { parameters: { threshold: 2 } }, /input.parameters.threshold must be at most 1/],
+    ['run_run', { parameters: { method: 'c' } }, /input.parameters.method must be one of "a", "b"/],
+    ['inputs_load_example', {}, /input.exampleId is required/],
+    ['app_describe', { extra: true }, /input.extra is not a known field/],
+  ];
+  for (const [name, input, message] of invalid) {
+    const result = await call(name, input);
+    assert.equal(result.error?.code, 'INVALID_INPUT', `${name} ${JSON.stringify(input)}`);
+    assert.match(result.error.message, message);
+  }
+  assert.deepEqual(asked, [], 'no malformed question reached the person');
+  assert.deepEqual(await call('user_ask', { question: 'Valid', options: ['OK'] }), { answer: 'OK' });
 });

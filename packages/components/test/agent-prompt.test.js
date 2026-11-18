@@ -112,3 +112,14 @@ test('a folder request offers a folder field, and declining returns null', async
   press(document, 'Decline');
   assert.equal(await request, null);
 });
+
+test('a prompt that fails to render leaves the queue working for the next one', async () => {
+  const document = page();
+  const prompts = createAgentPrompts(document);
+  await assert.rejects(prompts.ask({ question: 'Broken', options: 'not a list' }));
+  const next = prompts.ask({ question: 'Valid?', options: ['OK'] });
+  await tick();
+  assert.match(dialog(document).textContent, /Valid\?/);
+  press(document, 'OK');
+  assert.deepEqual(await next, { answer: 'OK' });
+});

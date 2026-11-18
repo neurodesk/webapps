@@ -1,6 +1,7 @@
 import { fetchModel } from '../worker/fetchModel.js';
 import { convertsDicom } from '../automation/files.js';
 import { exampleInputs } from './examples.js';
+import { schemaIssues } from './schema.js';
 
 const terminal = new Set(['idle', 'succeeded', 'failed', 'cancelled']);
 const POLL_MS = 250;
@@ -111,9 +112,11 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
   const tools = [];
   const tool = (name, title, description, inputSchema, annotations, execute) => tools.push({
     name, title, description, inputSchema, annotations,
-    async execute(input, options = {}) {
+    async execute(input = {}, options = {}) {
+      const issues = schemaIssues(inputSchema, input);
+      if (issues.length) return { error: { code: 'INVALID_INPUT', message: issues.join('; ') } };
       try {
-        return await execute(input ?? {}, options);
+        return await execute(input, options);
       } catch (error) {
         return failure(error);
       }
@@ -151,7 +154,6 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
     }, ['role']), untrusted,
     async ({ role, message }, { signal }) => {
       const field = roles.get(role);
-      if (!field) throw new Error(`Unknown file input role: ${role}`);
       const files = await requestFiles({ label: field.description, formats: field.formats, message, minimum: field.minimum, maximum: field.maximum, folder: field.folder }, { signal });
       if (!files) return { declined: true };
       inputs.adopt(role, files);
@@ -165,7 +167,6 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
       input: { type: 'string', description: 'The input key from pageFiles' },
     }, ['role', 'input']), untrusted,
     async ({ role, input }) => {
-      if (!roles.has(role)) throw new Error(`Unknown file input role: ${role}`);
       return { role, files: describeFiles(inputs.usePage(role, input)) };
     });
 
