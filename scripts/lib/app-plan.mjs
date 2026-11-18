@@ -71,31 +71,33 @@ export const CI_JOB_SCOPES = Object.freeze({
   'full-plan': 'none',
   'full-plan-withheld': 'none',
 });
-// The files an app build or an app's tests run that read each key of
-// registry/apps.yml's site section. The composite build (scripts/build-site.mjs
-// and the landing, hub and 404 pages it writes) reads all of it, and package
-// suites and the easter egg follow the file itself through the workspace
-// graph. Every app build validates the whole registry, so a head registry that
-// fails validation reaches every app; a valid one reaches the apps that reach
-// a reader of a key that changed. A key with no readers selects only the site
-// build, and a key not listed every app. test/app-plan.test.mjs fails when a
-// file an app reaches loads the registry and its site keys are not listed.
+// Every key of registry/apps.yml's site section (`[]` is each entry of a
+// list), and the files an app build or an app's tests run that read it. The
+// composite build (scripts/build-site.mjs and the landing, hub and 404 pages it
+// writes) reads all of it, and package suites and the easter egg follow the
+// file itself through the workspace graph. Every app build validates the whole
+// registry, so a head registry that fails validation reaches every app; a
+// valid one reaches the apps that reach a reader of a key that changed. A key
+// with no readers selects only the site build. A key not listed here, at any
+// depth and whatever its value, selects every app. test/app-plan.test.mjs
+// reads each reader's text for the keys it reads and fails when one is not
+// listed; a file that holds a whole catalogue entry (suite.mjs, pack.mjs)
+// reads every key of it.
 const DESKTOP_SUITE = ['scripts/desktop/suite.mjs', 'scripts/desktop/pack.mjs', 'scripts/desktop/models-pack.mjs', 'scripts/desktop/release-files.mjs'];
-export const SITE_KEY_READERS = Object.freeze({
-  'site.domain': ['scripts/desktop/suite.mjs'],
-  'site.hub': [],
-  'site.catalogs[].id': ['scripts/lib/standalone.mjs', ...DESKTOP_SUITE],
-  'site.catalogs[].host': ['scripts/desktop/suite.mjs'],
-  'site.catalogs[].hosting': [],
-  'site.catalogs[].title': [],
-  'site.catalogs[].heading': [],
-  'site.catalogs[].description': [],
-  'site.catalogs[].brand': [],
-  'site.catalogs[].desktop': DESKTOP_SUITE,
-  'site.analytics.measurement_id': ['scripts/theme-app-dist.mjs', 'scripts/lib/vite-app-config.mjs', 'scripts/dev-server.mjs'],
-  'site.analytics.period_days': [],
-  'site.categories': [],
-});
+const CATALOG_ENTRY = ['scripts/desktop/suite.mjs', 'scripts/desktop/pack.mjs'];
+const BRAND_KEYS = ['name', 'logo', 'icon', 'theme', 'home', 'more_apps'].map((key) => `brand.${key}`);
+const keys = (prefix, names, readers) => names.map((name) => [`${prefix}.${name}`, readers]);
+export const SITE_KEY_READERS = Object.freeze(Object.fromEntries([
+  ['site.domain', ['scripts/desktop/suite.mjs', 'scripts/desktop/release-files.mjs']],
+  ...keys('site.hub', ['host', 'title', 'heading', 'description', ...BRAND_KEYS], []),
+  ['site.catalogs[].id', ['scripts/lib/standalone.mjs', ...DESKTOP_SUITE]],
+  ['site.catalogs[].host', [...CATALOG_ENTRY, 'scripts/desktop/release-files.mjs']],
+  ...keys('site.catalogs[]', ['hosting', 'title', 'heading', 'description', ...BRAND_KEYS], CATALOG_ENTRY),
+  ...keys('site.catalogs[].desktop', ['product_name', 'app_id', 'release', 'executable'], DESKTOP_SUITE),
+  ['site.analytics.measurement_id', ['scripts/theme-app-dist.mjs', 'scripts/lib/vite-app-config.mjs', 'scripts/dev-server.mjs']],
+  ['site.analytics.period_days', []],
+  ...keys('site.categories[]', ['id', 'title', 'description'], []),
+].map(([key, readers]) => [key, Object.freeze(readers)])));
 
 function same(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
@@ -157,12 +159,13 @@ function appInformationImpact({ before, after }, registry) {
 }
 
 // The site keys two registries differ in, as SITE_KEY_READERS names them:
-// lists of entries with ids compare entry by entry (`[]`), and an entry that
-// is added, removed or moved changes `[].id` and every key below it.
+// lists of entries with unique ids compare entry by entry (`[]`), and an entry
+// that is added, removed or moved changes `[].id` and every key below it. Any
+// other list that changed is one key the table does not name.
 function changedSiteKeys(old, now, path = 'site') {
   if (same(old, now)) return [];
   const record = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
-  const entries = (value) => Array.isArray(value) && value.every((entry) => record(entry) && typeof entry.id === 'string');
+  const entries = (value) => Array.isArray(value) && value.every((entry) => record(entry) && typeof entry.id === 'string') && new Set(value.map((entry) => entry.id)).size === value.length;
   if (entries(old) && entries(now)) {
     const [before, after] = [new Map(old.map((entry) => [entry.id, entry])), new Map(now.map((entry) => [entry.id, entry]))];
     const moved = same(old.map((entry) => entry.id), now.map((entry) => entry.id)) ? [] : [`${path}[].id`];
@@ -174,9 +177,21 @@ function changedSiteKeys(old, now, path = 'site') {
   return [path];
 }
 
-// The readers SITE_KEY_READERS lists for a changed key, or undefined for a key it does not know.
-function siteKeyReaders(key) {
-  return Object.entries(SITE_KEY_READERS).find(([pattern]) => key === pattern || key.startsWith(`${pattern}.`) || key.startsWith(`${pattern}[]`))?.[1];
+// The first path in a site section that SITE_KEY_READERS does not name: a key
+// it does not list at any depth, or a value of another kind than the table
+// gives its path (a mapping or list where it lists a scalar, or the reverse).
+// An empty mapping under a new key is a path the table does not name too.
+function unknownSiteKey(value, path = 'site') {
+  const below = (prefix) => Object.keys(SITE_KEY_READERS).some((key) => key.startsWith(prefix));
+  if (Array.isArray(value)) {
+    if (!below(`${path}[].`)) return path;
+    return value.reduce((issue, entry) => issue ?? unknownSiteKey(entry, `${path}[]`), null);
+  }
+  if (value !== null && typeof value === 'object') {
+    if (!below(`${path}.`)) return path;
+    return Object.entries(value).reduce((issue, [name, child]) => issue ?? unknownSiteKey(child, `${path}.${name}`), null);
+  }
+  return Object.hasOwn(SITE_KEY_READERS, path) ? null : path;
 }
 
 // The app entries and site keys a registry/apps.yml change touched, or why
@@ -193,14 +208,14 @@ function registryImpact({ before, after }) {
   const section = [...new Set([...Object.keys(old ?? {}), ...Object.keys(now ?? {})])].find((key) => key !== 'apps' && key !== 'site' && !same(old?.[key], now?.[key]));
   if (section) return { shared: `its ${section} section changed, and every app build reads it` };
   const siteKeys = [...new Set(changedSiteKeys(old?.site, now?.site))];
-  if (siteKeys.length) {
+  if (!same(old?.site, now?.site)) {
     try {
       parseAppsRegistry(after);
     } catch (error) {
       return { shared: `it is not valid at head (${error.message.split('\n').slice(0, 2).join(' ')}), and every app build validates it` };
     }
-    const unknown = siteKeys.find((key) => !siteKeyReaders(key));
-    if (unknown) return { shared: `its ${unknown} key changed, and no rule says which builds read it` };
+    const unknown = unknownSiteKey(old?.site) ?? unknownSiteKey(now?.site) ?? siteKeys.find((key) => !Object.hasOwn(SITE_KEY_READERS, key));
+    if (unknown) return { shared: `its site section has ${unknown}, and no rule says which builds read it` };
   }
   const entries = (registry) => (Array.isArray(registry?.apps) ? registry.apps : []);
   const byId = (registry) => new Map(entries(registry).map((app) => [app?.id, app]));
@@ -454,7 +469,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
         if (appIds.has(id)) select(id, `${path}: the ${id} entry changed`);
       }
       for (const key of impact.siteKeys) {
-        const readers = siteKeyReaders(key);
+        const readers = SITE_KEY_READERS[key];
         if (!readers.length) siteBuild(`${path}: ${key} changed, and only the site build reads it`);
         if (readers.length && !graph) shared(`${path}: ${key} changed, and there is no workspace graph to find the apps that read it`);
         else for (const reader of readers) selectReaching(reader, `${path}: ${key} changed, and ${reader} reads it`);

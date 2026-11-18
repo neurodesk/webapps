@@ -654,7 +654,34 @@ test('a reworded, added or unused site category selects only the site build', as
     registry.site.categories[0].description = 'Reworded.';
     registry.site.mirror = 'example.org';
   });
-  assert.equal(mixed.reasons.fallback, 'registry/apps.yml: its site.mirror key changed, and no rule says which builds read it');
+  assert.equal(mixed.reasons.fallback, 'registry/apps.yml: its site section has site.mirror, and no rule says which builds read it');
+});
+
+test('a site key the table does not name selects every app, whatever its depth or value', async () => {
+  // Both registries validate: an empty mapping has no leaf that differs, and hub.unclassified is no key of site.hub.
+  const cases = {
+    'site.unclassified': (registry) => { registry.site.unclassified = {}; },
+    'site.hub.unclassified': (registry) => { registry.site.hub.unclassified = 'one'; },
+    'site.catalogs[].desktop.notes': (registry) => { registry.site.catalogs[0].desktop.notes = []; },
+    'site.analytics.measurement_id': (registry) => { registry.site.analytics.measurement_id = { id: registry.site.analytics.measurement_id }; },
+    'site.categories': (registry) => { registry.site.categories.push(structuredClone(registry.site.categories[0])); },
+  };
+  for (const [key, edit] of Object.entries(cases)) {
+    const plan = await registryPlan(edit);
+    assert.equal(plan.allApps, true, key);
+    assert.match(plan.reasons.fallback ?? '', new RegExp(`^registry/apps\\.yml: (?:its site section has ${key.replace(/[.[\]]/g, '\\$&')}(?:\\.id)?, and no rule|it is not valid at head)`), key);
+  }
+  const text = await readFile(join(repoRoot, 'registry/apps.yml'), 'utf8');
+  for (const edit of [cases['site.unclassified'], cases['site.hub.unclassified']]) {
+    const after = parse(text);
+    edit(after);
+    assert.doesNotThrow(() => parseAppsRegistry(stringify(after)), 'the loader accepts it, so only the shape check stops it');
+  }
+  // Every key of today's site section is in the table.
+  const now = parse(text).site;
+  const leaves = (value, path) => Array.isArray(value) ? value.flatMap((entry) => leaves(entry, `${path}[]`))
+    : value !== null && typeof value === 'object' ? Object.entries(value).flatMap(([name, child]) => leaves(child, `${path}.${name}`)) : [path];
+  assert.deepEqual([...new Set(leaves(now, 'site'))].filter((key) => !Object.hasOwn(SITE_KEY_READERS, key)), []);
 });
 
 test('a site key selects the apps that reach a file reading it, and only the site build reads the rest', async () => {
@@ -665,16 +692,24 @@ test('a site key selects the apps that reach a file reading it, and only the sit
   const before = parse(text);
   before.site.hub.description = 'Scientific software that runs locally in your browser, grouped by field.';
   for (const entry of [before.site.hub, ...before.site.catalogs.filter((catalog) => catalog.brand.name === 'SciGet')]) entry.brand.home = 'https://webapps.sciget.org/';
+  const reaching = (readers) => registry.apps.filter((app) => readers.some((reader) => reachableFrom(workspace, `apps/${app.id}`).has(reader))).map(({ id }) => id);
   const links = createAppPlan(registry, ['registry/apps.yml'], workspace, new Map([['registry/apps.yml', { before: stringify(before), after: text }]]));
-  assert.deepEqual(links.selected, []);
+  // A catalogue's brand is read by the desktop scripts that hold a whole catalogue entry.
+  assert.deepEqual(links.selected.map(({ id }) => id), reaching(SITE_KEY_READERS['site.catalogs[].brand.home']));
+  assert.ok(links.selected.length <= 2, 'only the apps that reach the desktop suite scripts');
   assert.equal(links.reasons.fallback, null);
   assert.equal(links.site, true);
-  assert.ok(links.reasons.site.includes('registry/apps.yml: site.catalogs[].brand.home changed, and only the site build reads it'));
-  const reaching = (readers) => registry.apps.filter((app) => readers.some((reader) => reachableFrom(workspace, `apps/${app.id}`).has(reader))).map(({ id }) => id);
+  assert.ok(links.reasons.site.includes('registry/apps.yml: site.hub.brand.home changed, and only the site build reads it'));
+  const hub = await registryPlan((after) => {
+    after.site.hub.description = 'Reworded.';
+    after.site.hub.brand.home = 'https://example.org/';
+  });
+  assert.deepEqual(hub.selected, []);
+  assert.equal(hub.reasons.fallback, null);
   const suite = await registryPlan((after) => {
     after.site.catalogs[1].desktop.product_name = 'MSK Desktop';
   });
-  assert.deepEqual(suite.selected.map(({ id }) => id), reaching(SITE_KEY_READERS['site.catalogs[].desktop']));
+  assert.deepEqual(suite.selected.map(({ id }) => id), reaching(SITE_KEY_READERS['site.catalogs[].desktop.product_name']));
   assert.ok(suite.selected.length > 0 && suite.selected.length < registry.apps.length);
   assert.match(suite.reasons.apps[suite.selected[0].id][0], /^registry\/apps\.yml: site\.catalogs\[\]\.desktop\.product_name changed, and scripts\/desktop\/\S+ reads it$/);
   const measurement = await registryPlan((after) => {
@@ -700,57 +735,152 @@ test('a site key selects the apps that reach a file reading it, and only the sit
   assert.match(blind.reasons.fallback, /site\.analytics\.measurement_id changed, and there is no workspace graph/);
 });
 
-// Files an app build or an app's tests run that load registry/apps.yml, and
-// the site keys each reads, itself or through a helper it passes the registry to.
-const SITE_SECTION_READERS = {
-  'scripts/lib/apps-registry.mjs': ['validates every key'],
-  'scripts/theme-app-dist.mjs': ['site.analytics.measurement_id'],
-  'scripts/lib/vite-app-config.mjs': ['site.analytics.measurement_id'],
-  'scripts/dev-server.mjs': ['site.analytics.measurement_id'],
-  'scripts/lib/standalone.mjs': ['site.catalogs[].id'],
-  'scripts/desktop/suite.mjs': ['site.domain', 'site.catalogs[].id', 'site.catalogs[].host', 'site.catalogs[].desktop'],
-  'scripts/desktop/pack.mjs': ['site.catalogs[].id', 'site.catalogs[].desktop'],
-  'scripts/desktop/models-pack.mjs': ['site.catalogs[].id', 'site.catalogs[].desktop'],
-  'scripts/desktop/release-files.mjs': ['site.catalogs[].id', 'site.catalogs[].desktop'],
-  // The rest read app entries only.
-  'scripts/lib/app-automation.mjs': [],
-  'scripts/lib/app-examples.mjs': [],
-  'scripts/lib/app-information.mjs': [],
-  'scripts/lib/neuroflow-bundle.mjs': [],
-  'test/easy-mp2rage-workspace.smoke.mjs': [],
-  'test/examples.smoke.mjs': [],
-  'apps/dicomview/e2e/smoke.spec.js': [],
-  'apps/hmc/test/runtime-assets.test.js': [],
-  'apps/pipeline-builder/e2e/smoke.spec.js': [],
-  // A maintenance note.
-  'apps/qsmbly/README.md': [],
+// Files an app build or an app's tests run that load registry/apps.yml or
+// read its site section. The loader validates every key (only a valid head
+// registry narrows); siteKeysRead finds what each of the others reads.
+const REGISTRY_LOADER = 'scripts/lib/apps-registry.mjs';
+const SITE_SECTION_READERS = new Set([
+  REGISTRY_LOADER,
+  'scripts/theme-app-dist.mjs',
+  'scripts/lib/vite-app-config.mjs',
+  'scripts/dev-server.mjs',
+  'scripts/lib/standalone.mjs',
+  'scripts/desktop/suite.mjs',
+  'scripts/desktop/pack.mjs',
+  'scripts/desktop/models-pack.mjs',
+  'scripts/desktop/release-files.mjs',
+  // These read app entries only.
+  'scripts/lib/app-automation.mjs',
+  'scripts/lib/app-examples.mjs',
+  'scripts/lib/app-information.mjs',
+  'scripts/lib/neuroflow-bundle.mjs',
+  'test/easy-mp2rage-workspace.smoke.mjs',
+  'test/examples.smoke.mjs',
+  'apps/dicomview/e2e/smoke.spec.js',
+  'apps/hmc/test/runtime-assets.test.js',
+  'apps/pipeline-builder/e2e/smoke.spec.js',
+]);
+// Functions that read the site section for their caller: the keys each reads,
+// and whether it hands the caller a whole catalogue entry.
+const SITE_HELPERS = {
+  findCatalog: { reads: ['site.catalogs[].id'], entry: true },
+  primaryCatalog: { reads: ['site.domain', 'site.catalogs[].host'], entry: true },
+  suiteCatalog: { reads: ['site.domain', 'site.catalogs[].id', 'site.catalogs[].host'], entry: true },
+  appUrl: { reads: ['site.catalogs[].id', 'site.catalogs[].host'], entry: false },
 };
+const SITE_KEYS = Object.keys(SITE_KEY_READERS);
+const SITE_LISTS = new Set(SITE_KEYS.flatMap((key) => [...key.matchAll(/^(.*?)\[\]/g)].map(([, list]) => list)));
+const keysBelow = (path) => SITE_KEYS.filter((key) => key === path || key.startsWith(`${path}.`) || key.startsWith(`${path}[]`));
+// Follows a property chain from `path` while it names site keys.
+function walkSiteKeys(path, names) {
+  for (const [index, name] of names.entries()) {
+    const next = `${path}.${name}`;
+    if (SITE_LISTS.has(path) || !keysBelow(next).length) return { path, stopped: name, rest: names.slice(index) };
+    path = next;
+  }
+  return { path, stopped: null };
+}
+const chainNames = (chain) => chain.split(/\??\./).filter(Boolean);
+// The index of the bracket that closes the one at `open`.
+function closing(text, open) {
+  let depth = 0;
+  for (let index = open; index < text.length; index++) {
+    if ('([{'.includes(text[index])) depth++;
+    if (')]}'.includes(text[index]) && --depth === 0) return index;
+  }
+  return text.length;
+}
+// The site keys a file's text reads. A chain that names a key reads it; one
+// that stops at a mapping or list hands it on, spreads it or iterates it, and
+// reads every key below; a list iterated with a callback reads what the
+// callback reads of its entry; a helper's whole catalogue entry reads every
+// key of the entry, or of what is destructured from it. A chain that names a
+// key the table lacks reads that key, so the test names it.
+function siteKeysRead(text) {
+  const read = new Set();
+  const add = (keys) => keys.forEach((key) => read.add(key));
+  const entryReads = (param, body, entry) => {
+    for (const [, chain] of body.matchAll(new RegExp(String.raw`\b${param}\b((?:\??\.\w+)*)`, 'g'))) add(keysBelow(walkSiteKeys(entry, chainNames(chain)).path));
+  };
+  for (const match of text.matchAll(/\.site\b((?:\??\.\w+)*)/g)) {
+    const { path, stopped } = walkSiteKeys('site', chainNames(match[1]));
+    const after = match.index + match[0].length;
+    const callback = stopped && SITE_LISTS.has(path) && text[after] === '('
+      && text.slice(after + 1, closing(text, after)).match(/^\s*(?:\(\s*)?(\w+)\s*\)?\s*=>([\s\S]*)$/);
+    if (callback) entryReads(callback[1], callback[2], `${path}[]`);
+    else if (stopped && !SITE_LISTS.has(path) && !/^(?:map|find|filter|some|every|flatMap|forEach|findIndex|length)$/.test(stopped)) read.add(`${path}.${stopped}`);
+    else add(keysBelow(path));
+  }
+  // `{ site } = registry`, `({ site }) =>` and `registry['site']` hand the whole section on.
+  if (/\{[^{}]*\bsite\b[^{}]*\}\s*(?:=[^=>]|\)\s*=>)|\[\s*['"`]site['"`]\s*\]/.test(text)) add(SITE_KEYS);
+  for (const match of text.matchAll(new RegExp(String.raw`\b(${Object.keys(SITE_HELPERS).join('|')})\(`, 'g'))) {
+    if (/function\s+$/.test(text.slice(0, match.index))) continue;
+    const helper = SITE_HELPERS[match[1]];
+    add(helper.reads);
+    if (!helper.entry) continue;
+    const chain = text.slice(closing(text, match.index + match[0].length - 1) + 1).match(/^(?:\??\.\w+)+/)?.[0];
+    const destructured = text.slice(0, match.index).match(/\{([\w\s,]*)\}\s*=\s*(?:await\s+)?$/)?.[1];
+    if (chain) add(keysBelow(walkSiteKeys('site.catalogs[]', chainNames(chain)).path));
+    else if (destructured) for (const name of destructured.split(',').map((name) => name.trim()).filter(Boolean)) add(keysBelow(`site.catalogs[].${name}`));
+    else add(keysBelow('site.catalogs[]'));
+  }
+  return read;
+}
+
+test('the site key reader check finds the keys a text reads, and every key of what it hands on', () => {
+  const reads = (text) => [...siteKeysRead(text)].sort();
+  assert.deepEqual(reads('measurementId: registry.site.analytics.measurement_id,\nhost: registry.site.hub.host'), ['site.analytics.measurement_id', 'site.hub.host']);
+  assert.deepEqual(reads('registry?.site?.hub?.brand?.home'), ['site.hub.brand.home']);
+  assert.deepEqual(reads('const ids = registry.site.catalogs.map(catalog => catalog.id);'), ['site.catalogs[].id']);
+  assert.deepEqual(reads('const { desktop } = findCatalog(registry, id);'), ['site.catalogs[].id', ...keysBelow('site.catalogs[].desktop')].sort());
+  assert.deepEqual(reads('primaryCatalog(registry).id'), ['site.catalogs[].host', 'site.catalogs[].id', 'site.domain']);
+  assert.deepEqual(reads('registry.site.hub.unclassified'), ['site.hub.unclassified']);
+  for (const whole of ['render(registry.site)', 'const copy = { ...registry.site.hub };', 'for (const key of Object.keys(registry.site.catalogs[0])) {}', "registry['site']", 'const { site } = registry;', 'export default ({ site }) => site;']) {
+    const keys = reads(whole);
+    assert.ok(keys.length > 1 && keys.every((key) => key.startsWith('site.')), whole);
+  }
+  assert.ok(reads('const catalog = findCatalog(registry, id); use(catalog);').length > 10, 'a whole catalogue entry');
+  assert.deepEqual(reads('const site = await serveSite(dist); await page.goto(site.origin);'), []);
+});
 
 test('every file an app build or app test runs that loads the registry has its site keys routed', async () => {
   const workspace = await graph;
   const registry = await loadAppsRegistry();
   const reached = new Set([...registry.apps.flatMap((app) => [...reachableFrom(workspace, `apps/${app.id}`)]), ...reachableFrom(workspace, CATALOG)]);
-  for (const file of filesNaming(String.raw`apps-registry|loadAppsRegistry|parseAppsRegistry|apps\.yml`)) {
-    if (file.startsWith('registry/') || (!file.startsWith('apps/') && !reached.has(file))) continue;
-    assert.ok(Object.hasOwn(SITE_SECTION_READERS, file), `${file} loads the registry; list the site keys it reads here and route each in SITE_KEY_READERS`);
+  // A package's files are run where its node, or its tests' node, is reached.
+  const runs = (file) => file.startsWith('apps/') || reached.has(file) || reached.has(file.match(/^(?:packages|exes)\/[^/]+(?:\/tests?(?=\/))?/)?.[0]);
+  const helpers = Object.keys(SITE_HELPERS).join('|');
+  for (const file of filesNaming(String.raw`apps-registry|loadAppsRegistry|parseAppsRegistry|apps\.yml|\.site\b|\b(${helpers})\(`)) {
+    if (file.startsWith('registry/') || !runs(file)) continue;
+    assert.ok(SITE_SECTION_READERS.has(file), `${file} loads the registry or reads its site section; add it to SITE_SECTION_READERS and route the keys it reads in SITE_KEY_READERS`);
   }
-  for (const [file, keys] of Object.entries(SITE_SECTION_READERS)) {
-    assert.ok(file.startsWith('apps/') || reached.has(file), `${file} is no longer reached by an app; drop it`);
-    for (const key of keys.filter((key) => key.startsWith('site.'))) {
+  const readsOf = new Map();
+  for (const file of SITE_SECTION_READERS) {
+    assert.ok(runs(file), `${file} is no longer reached by an app; drop it`);
+    if (file === REGISTRY_LOADER) continue;
+    readsOf.set(file, siteKeysRead(await readFile(join(repoRoot, file), 'utf8')));
+    for (const key of readsOf.get(file)) {
       assert.ok(SITE_KEY_READERS[key]?.includes(file), `${file} reads ${key}; list it in SITE_KEY_READERS['${key}']`);
     }
   }
-  // A listed reader is a real file some app reaches.
+  // A listed reader reads the key, so the table selects no more than it must.
   for (const [key, readers] of Object.entries(SITE_KEY_READERS)) {
-    for (const reader of readers) assert.ok(SITE_SECTION_READERS[reader]?.includes(key), `SITE_KEY_READERS lists ${reader} for ${key}, but it is not recorded as reading it`);
+    for (const reader of readers) assert.ok(readsOf.get(reader)?.has(key), `SITE_KEY_READERS lists ${reader} for ${key}, but its text does not read it`);
+  }
+  // The loader's own functions that read the site section are the helpers the check knows.
+  for (const file of [REGISTRY_LOADER, 'scripts/desktop/suite.mjs']) {
+    const text = await readFile(join(repoRoot, file), 'utf8');
+    for (const [, name, body] of text.matchAll(/^export (?:async )?function (\w+)\(([\s\S]*?)^}/gm)) {
+      if (/\.site\b/.test(body) && !['loadAppsRegistry', 'parseAppsRegistry'].includes(name)) assert.ok(Object.hasOwn(SITE_HELPERS, name), `${file} ${name} reads the site section for its caller; add it to SITE_HELPERS`);
+    }
   }
   // The files that read a key only for the site build are not run by any app.
   for (const reader of ['scripts/build-site.mjs', 'scripts/lib/landing-page.mjs', 'scripts/lib/hub-page.mjs', 'scripts/lib/catalog-sites.mjs', 'scripts/lib/not-found-page.mjs', 'scripts/write-analytics.mjs']) {
     assert.ok(!reached.has(reader), `${reader} is run by an app build or test; route the site keys it reads`);
   }
-  // Each key's readers read only what the loader validates: a new key fails validation's shape check only if the loader knows it.
-  const validated = parseAppsRegistry(await readFile(join(repoRoot, 'registry/apps.yml'), 'utf8')).site;
-  assert.deepEqual(Object.keys(validated).sort(), ['analytics', 'catalogs', 'categories', 'domain', 'hub']);
+  // A reader added to a listed file is found: theme-app-dist.mjs reading the hub's host.
+  const themed = `${await readFile(join(repoRoot, 'scripts/theme-app-dist.mjs'), 'utf8')}\nconst hub = registry.site.hub.host;\n`;
+  assert.ok(siteKeysRead(themed).has('site.hub.host') && !SITE_KEY_READERS['site.hub.host'].includes('scripts/theme-app-dist.mjs'));
 });
 
 test('an offline asset lock change selects the apps whose assets changed', async () => {
