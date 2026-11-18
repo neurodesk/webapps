@@ -45,6 +45,7 @@ const WORKER_CRASH = new RegExp([
 const RAW_ENGINE_SIGNATURES = [
   String.raw`\b(?:[a-z]*error|aborted)\s*:\s*out of memory\b`,
   String.raw`^out of memory\.?$`,
+  String.raw`^out of memory:\s*[\d,]+\s*bytes\b`,
   String.raw`\bgpuoutofmemoryerror\b`,
   String.raw`\barray buffer allocation failed\b`,
   String.raw`\binvalid (?:array buffer|typed array) length\b`,
@@ -240,10 +241,13 @@ function readCheckpoint(view, key) {
 
 function writeCheckpoint(view, key, record) {
   try {
-    if (view?.sessionStorage?.getItem('coiReloadedBySelf')) return;
-    view?.sessionStorage?.setItem(key, JSON.stringify(record));
+    if (view?.sessionStorage?.getItem('coiReloadedBySelf')) return false;
+    if (!view?.sessionStorage) return false;
+    view.sessionStorage.setItem(key, JSON.stringify(record));
+    return true;
   } catch {
     // Private browsing or disabled storage leaves in-page error handling active.
+    return false;
   }
 }
 
@@ -253,10 +257,22 @@ function checkpointSignature(state) {
 
 function clearCheckpoint(view, key) {
   try {
-    view?.sessionStorage?.removeItem(key);
+    if (!view?.sessionStorage) return false;
+    view.sessionStorage.removeItem(key);
+    return true;
   } catch {
     // Ignore storage removal failures during teardown.
+    return false;
   }
+}
+
+// The text of a console's newest entry without its timestamp, so anchored
+// patterns such as a bare "Out of memory" still match.
+function consoleMessageText(output) {
+  const line = output.lastElementChild;
+  if (!line) return output.textContent || '';
+  const body = line.querySelector('.nd-console-message, .console-message');
+  return body?.textContent || line.textContent || '';
 }
 
 function consoleContainsText(doc, needle) {
@@ -284,6 +300,18 @@ function appendConsoleError(doc, message, { avoidDuplicateSubstring = '', fallba
   if (!output) return false;
   ConsoleOutput.forElement(output).log(message, 'error');
   return true;
+}
+
+// On a phone the footer can sit below the fold; bring a new notice into view.
+function revealStatus(doc, view) {
+  const statusEl = findStatusElement(doc);
+  if (!statusEl || typeof statusEl.scrollIntoView !== 'function') return;
+  const width = Number(view?.innerWidth) || 0;
+  const height = Number(view?.innerHeight) || 0;
+  if (!width || !height || width > 768) return;
+  const rect = statusEl.getBoundingClientRect?.();
+  if (!rect || (rect.top >= 0 && rect.bottom <= height)) return;
+  statusEl.scrollIntoView({ block: 'end', inline: 'nearest' });
 }
 
 function writeStatusError(doc, view, text) {
@@ -362,6 +390,7 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
         } else {
           writeStatusError(doc, view, formatted.status);
           monitorErrorStatus = formatted.status;
+          scheduleReveal();
         }
       }
       const logged = appendConsoleError(doc, formatted.log, {
@@ -406,13 +435,26 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
     try {
       writeStatusError(doc, view, recoveredFailure.status);
       monitorErrorStatus = recoveredFailure.status;
+      scheduleReveal();
     } finally {
       applying = false;
     }
   }
 
-  // 1. Check whether the previous tab instance reloaded without pagehide /
-  //    beforeunload while running a job, in the foreground with loaded data, or
+  // Reveal after the app has laid out; a reload notice is written before boot.
+  function scheduleReveal() {
+    if (!view?.setTimeout) return;
+    const reveal = () => {
+      if (cleanedUp || !monitorErrorStatus) return;
+      if (cleanText(findStatusElement(doc)?.textContent) !== monitorErrorStatus) return;
+      revealStatus(doc, view);
+    };
+    view.setTimeout(reveal, 0);
+    if (doc.readyState !== 'complete') view.addEventListener?.('load', reveal, { once: true });
+  }
+
+  // 1. Check whether the previous tab instance reloaded without pagehide
+  //    while running a job, in the foreground with loaded data, or
   //    via browser tab discard (`document.wasDiscarded`, which only Chromium
   //    browsers report; elsewhere a discard reads as a hidden idle tab).
   const previous = readCheckpoint(view, key);
@@ -456,7 +498,7 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
       for (const output of doc.querySelectorAll(CONSOLE_OUTPUT_SELECTOR)) {
         const marker = output.lastElementChild || output.textContent || '';
         if (!marker || seenConsoleTails.get(output) === marker) continue;
-        const last = output.lastElementChild?.textContent || output.textContent || '';
+        const last = consoleMessageText(output);
         if (isRawMemoryErrorText(last)) {
           immediateActiveDetail = '';
           const active = currentSessionState().active;
@@ -524,8 +566,7 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
       heartbeatTimer = view.setInterval(() => {
         if (cleanedUp || unloading) return;
         const next = currentSessionState();
-        if (next.active || next.loaded) {
-          writeCheckpoint(view, key, next);
+        if ((next.active || next.loaded) && writeCheckpoint(view, key, next)) {
           lastCheckpointSignature = checkpointSignature(next);
         }
       }, HEARTBEAT_MS);
@@ -544,12 +585,10 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
     // synchronous. The heartbeat keeps `updatedAt` fresh in between.
     if (state.active || state.loaded) {
       const signature = checkpointSignature(state);
-      if (signature !== lastCheckpointSignature) {
-        writeCheckpoint(view, key, state);
+      if (signature !== lastCheckpointSignature && writeCheckpoint(view, key, state)) {
         lastCheckpointSignature = signature;
       }
-    } else if (lastCheckpointSignature !== 'cleared') {
-      clearCheckpoint(view, key);
+    } else if (lastCheckpointSignature !== 'cleared' && clearCheckpoint(view, key)) {
       lastCheckpointSignature = 'cleared';
     }
     syncHeartbeat(state);
@@ -609,6 +648,17 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
       interacted = true;
       recoveredFailure = null;
     }
+  }
+
+  // An input that lists its files (`nd-files`) and reports none, such as after
+  // the app rejected an import or the user removed every file, holds no session.
+  function onFilesListed(event) {
+    const files = event?.detail?.files;
+    if (!Array.isArray(files) || files.length > 0) return;
+    loaded = false;
+    immediateActiveDetail = '';
+    workflowStartText = null;
+    syncCheckpoint();
   }
 
   function onDrop(event) {
@@ -738,13 +788,32 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
       if (!entry.isConnected) lostCanvases.delete(entry);
     }
     if (lostCanvases.size === 0) {
-      if (hadLost && webglNoticeDispatched && view?.[STATUS_MANAGED_KEY] && typeof view.CustomEvent === 'function') {
-        webglNoticeDispatched = false;
-        view.dispatchEvent(new view.CustomEvent('neurodesk-memory-restored', { detail: { kind: 'webgl' } }));
-      }
+      if (hadLost) clearWebglNotice();
       webglNoticeDispatched = false;
     }
     syncLostCanvasVisibilityObserver();
+  }
+
+  // Every lost viewer canvas recovered or left the page: withdraw the notice,
+  // but only where the footer still shows it.
+  function clearWebglNotice() {
+    const dispatched = webglNoticeDispatched;
+    webglNoticeDispatched = false;
+    if (view?.[STATUS_MANAGED_KEY] && typeof view.CustomEvent === 'function') {
+      if (dispatched) view.dispatchEvent(new view.CustomEvent('neurodesk-memory-restored', { detail: { kind: 'webgl' } }));
+      return;
+    }
+    const statusEl = findStatusElement(doc);
+    const expected = formatMemoryError('WebGL context lost', { kind: 'webgl' }).status;
+    if (!statusEl || cleanText(statusEl.textContent) !== expected) return;
+    if (monitorErrorStatus === expected) monitorErrorStatus = '';
+    applying = true;
+    try {
+      statusEl.classList.remove('error');
+      statusEl.textContent = loaded ? 'Ready' : 'Drag and drop files';
+    } finally {
+      applying = false;
+    }
   }
 
   function hasVisibleLostCanvas() {
@@ -806,23 +875,8 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
     notifiedWebglCanvases.delete(canvas);
     syncLostCanvasVisibilityObserver();
     if (lostCanvases.size > 0) return;
-    webglNoticeDispatched = false;
-    monitorErrorStatus = '';
-    if (view?.[STATUS_MANAGED_KEY] && typeof view.CustomEvent === 'function') {
-      view.dispatchEvent(new view.CustomEvent('neurodesk-memory-restored', { detail: { kind: 'webgl' } }));
-      return;
-    }
-    const statusEl = findStatusElement(doc);
-    const expected = formatMemoryError('WebGL context lost', { kind: 'webgl' }).status;
-    if (statusEl && cleanText(statusEl.textContent) === expected) {
-      applying = true;
-      try {
-        statusEl.classList.remove('error');
-        statusEl.textContent = loaded ? 'Ready' : 'Drag and drop files';
-      } finally {
-        applying = false;
-      }
-    }
+    if (view?.[STATUS_MANAGED_KEY]) webglNoticeDispatched = true;
+    clearWebglNotice();
   }
 
   function onVisibilityChange() {
@@ -836,8 +890,7 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
     if (heartbeatTimer && view?.clearInterval) view.clearInterval(heartbeatTimer);
     reconcileTimer = null;
     heartbeatTimer = null;
-    lastCheckpointSignature = 'cleared';
-    clearCheckpoint(view, key);
+    lastCheckpointSignature = clearCheckpoint(view, key) ? 'cleared' : '';
   }
 
   function onPageShow() {
@@ -879,6 +932,7 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
 
   doc.addEventListener('change', onChange, true);
   doc.addEventListener('drop', onDrop, true);
+  doc.addEventListener('nd-files', onFilesListed, true);
   doc.addEventListener('click', onClick, true);
   doc.addEventListener('webglcontextlost', onWebglContextLost, true);
   doc.addEventListener('webglcontextrestored', onWebglContextRestored, true);
@@ -886,7 +940,6 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
   view?.addEventListener?.('error', onRuntimeError);
   view?.addEventListener?.('unhandledrejection', onRuntimeError);
   view?.addEventListener?.('pagehide', onCleanUnload);
-  view?.addEventListener?.('beforeunload', onCleanUnload);
   view?.addEventListener?.('pageshow', onPageShow);
 
   flushPendingRecovery();
@@ -903,6 +956,7 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
       lostCanvasObserver = null;
       doc.removeEventListener('change', onChange, true);
       doc.removeEventListener('drop', onDrop, true);
+      doc.removeEventListener('nd-files', onFilesListed, true);
       doc.removeEventListener('click', onClick, true);
       doc.removeEventListener('webglcontextlost', onWebglContextLost, true);
       doc.removeEventListener('webglcontextrestored', onWebglContextRestored, true);
@@ -910,7 +964,6 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
       view?.removeEventListener?.('error', onRuntimeError);
       view?.removeEventListener?.('unhandledrejection', onRuntimeError);
       view?.removeEventListener?.('pagehide', onCleanUnload);
-      view?.removeEventListener?.('beforeunload', onCleanUnload);
       view?.removeEventListener?.('pageshow', onPageShow);
       root.removeAttribute(GUARD_ATTR);
     },

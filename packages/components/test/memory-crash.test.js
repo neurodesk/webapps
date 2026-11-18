@@ -674,3 +674,92 @@ test('webglcontextlost and uncaught errors never disable active run cancellation
   assert.equal(statusText.textContent, 'Ready');
   assert.equal(statusText.classList.contains('error'), false);
 });
+
+test('a pinned mid-run error yields to the next status once the app ends the run through setters', async (t) => {
+  const page = createWorkspaceDom(t);
+  const statusText = page.document.getElementById('statusText');
+  page.progressManager.begin('Importing…', { cancellable: true });
+  page.progressManager.setError('Out of browser memory on this device. Try a smaller input, close tabs, or use Standalone.');
+  page.progressManager.setText('Importing 40%');
+  assert.match(statusText.textContent, /Out of browser memory/);
+  // Carotid Flow style cleanup: stop the timer and hide cancel, then report the outcome.
+  page.progressManager.stopTimer();
+  page.progressManager.setCancellable(false);
+  page.progressManager.setText('Loading cancelled');
+  assert.equal(statusText.textContent, 'Loading cancelled');
+  assert.equal(statusText.classList.contains('error'), false);
+});
+
+test('forwarded allocation errors match, including bare log entries behind a timestamp', async (t) => {
+  assert.equal(isRawMemoryErrorText('Out of memory: 734003200 bytes for the tract atlas.'), true);
+  assert.equal(isRawMemoryErrorText('Out of memory: raise the Seed/Stop FA thresholds or lower Density for the full set.'), false);
+
+  const page = createWorkspaceDom(t);
+  page.bind();
+  const statusText = page.document.getElementById('statusText');
+  page.document.getElementById('runButton').click();
+  await waitMs(280);
+  page.log.log('Out of memory', 'error');
+  statusText.textContent = 'Failed';
+  await waitMs(20);
+  assert.match(statusText.textContent, /Out of browser memory on this device/);
+});
+
+test('replacing the only lost viewer canvas withdraws the WebGL notice from a plain footer', async (t) => {
+  const page = createWorkspaceDom(t);
+  page.bind();
+  const statusText = page.document.getElementById('statusText');
+  const canvas = page.document.getElementById('gl1');
+  canvas.dispatchEvent(new page.window.Event('webglcontextlost'));
+  await waitMs(20);
+  assert.match(statusText.textContent, /Viewer graphics context lost/);
+  const replacement = page.document.createElement('canvas');
+  replacement.id = 'gl1';
+  canvas.replaceWith(replacement);
+  page.document.getElementById('runButton').click();
+  await waitMs(20);
+  assert.doesNotMatch(statusText.textContent, /Viewer graphics context lost/);
+  assert.equal(statusText.classList.contains('error'), false);
+});
+
+test('checkpoints follow committed inputs, retry failed writes and survive a cancelled beforeunload', async (t) => {
+  const url = 'https://webapps.neurodesk.org/musclemap/';
+  const key = 'neurodesk-memory-guard:/musclemap/';
+  const page = createWorkspaceDom(t, url);
+  page.bind({ now: () => 1000 });
+  const input = page.document.getElementById('imageInput');
+  const file = new page.window.File(['x'], 'scan.nii.gz');
+  Object.defineProperty(input, 'files', { value: [file], configurable: true });
+  input.dispatchEvent(new page.window.Event('change', { bubbles: true }));
+  assert.equal(JSON.parse(page.window.sessionStorage.getItem(key)).loaded, true);
+
+  // The app rejects the import and lists no files.
+  input.dispatchEvent(new page.window.CustomEvent('nd-files', { bubbles: true, detail: { files: [] } }));
+  await waitMs(280);
+  assert.equal(page.window.sessionStorage.getItem(key), null);
+
+  // A failed write is retried on the next change instead of being remembered as done.
+  const storage = Object.getPrototypeOf(page.window.sessionStorage);
+  const originalSetItem = storage.setItem;
+  let failNext = true;
+  storage.setItem = function flakySetItem(...args) {
+    if (failNext) {
+      failNext = false;
+      throw new Error('QuotaExceededError');
+    }
+    return originalSetItem.apply(this, args);
+  };
+  t.after(() => { storage.setItem = originalSetItem; });
+  page.document.getElementById('runButton').click();
+  page.progressManager.begin('Segmenting…');
+  await waitMs(20);
+  page.progressManager.setText('Segmenting · 10%');
+  await waitMs(20);
+  assert.equal(JSON.parse(page.window.sessionStorage.getItem(key)).active, true);
+
+  // A beforeunload the user cancels keeps tracking; only pagehide clears it.
+  page.window.dispatchEvent(new page.window.Event('beforeunload'));
+  page.progressManager.setText('Segmenting · 20%');
+  await waitMs(20);
+  assert.equal(JSON.parse(page.window.sessionStorage.getItem(key)).detail, 'Segmenting · 20%');
+});

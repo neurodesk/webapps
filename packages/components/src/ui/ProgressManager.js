@@ -39,7 +39,7 @@ export class ProgressManager {
     this.targetProgress = next;
     this.animatedProgress = next;
     this.updateProgressBar();
-    if (text != null && this.textElement && !this.pinnedError) {
+    if (text != null && this.textElement && !this.holdsPinnedError()) {
       if (this.textElement.classList?.contains('error')) this.textElement.classList.remove('error');
       const nextText = String(text);
       if (this.textElement.textContent !== nextText) this.textElement.textContent = nextText;
@@ -49,7 +49,7 @@ export class ProgressManager {
 
   setIndeterminate(text = 'Working...') {
     this.targetProgress = 0.98;
-    if (this.textElement && !this.pinnedError) {
+    if (this.textElement && !this.holdsPinnedError()) {
       if (this.textElement.classList?.contains('error')) this.textElement.classList.remove('error');
       const nextText = String(text);
       if (this.textElement.textContent !== nextText) this.textElement.textContent = nextText;
@@ -63,19 +63,32 @@ export class ProgressManager {
 
   /** Show the message without touching the bar. */
   setText(text) {
-    if (!this.textElement || this.pinnedError) return;
+    if (!this.textElement || this.holdsPinnedError()) return;
     if (this.textElement.classList?.contains('error')) this.textElement.classList.remove('error');
     const next = String(text);
     if (this.textElement.textContent !== next) this.textElement.textContent = next;
   }
 
-  /** Show an error message in the status bar without disturbing an active run's controls. */
-  setError(text) {
-    const activeRun = Boolean(
+  /** True while a run shows its timer or a usable cancel ×. */
+  isRunActive() {
+    return Boolean(
       this.timer
       || (this.cancelElement && !this.cancelElement.hidden && !this.cancelElement.disabled),
     );
-    this.pinnedError = activeRun;
+  }
+
+  /**
+   * An error shown mid-run stays until the run ends. Apps that end a run by
+   * stopping the timer and hiding cancel, rather than with `end()`, release it too.
+   */
+  holdsPinnedError() {
+    if (this.pinnedError && !this.isRunActive()) this.pinnedError = false;
+    return this.pinnedError;
+  }
+
+  /** Show an error message in the status bar without disturbing an active run's controls. */
+  setError(text) {
+    this.pinnedError = this.isRunActive();
     if (!this.textElement) return;
     const next = String(text);
     if (this.textElement.textContent !== next) this.textElement.textContent = next;

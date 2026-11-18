@@ -88,13 +88,11 @@ export class PipelineExecutor {
     this.workerSession = new WorkerSession({
       createWorker: this.createWorker || (() => new Worker(this.workerUrl, this.workerType ? { type: this.workerType } : undefined)),
       onError: (message) => {
-        if (this.workerSession) {
-          this.workerSession.failed = true;
-          this.workerSession.failureReason = message;
-        }
         this.updateOutput(`Worker error: ${message}`);
+        // handleError discards a worker that fails while initializing. After
+        // initialization the worker holds loaded inputs, so it stays: a fresh
+        // worker would run the next step without them.
         this.handleError(message);
-        this.terminateWorker();
       },
     });
     this.workerSession.subscribe((message) => this.handleMessage(message));
@@ -146,7 +144,7 @@ export class PipelineExecutor {
         this.workerLog(data.message, data);
         break;
       case WorkerEventType.ERROR:
-        this.handleError(data.message || data.error || 'Worker failed', { fatal: Boolean(data.fatal) });
+        this.handleError(data.message || data.error || 'Worker failed');
         break;
       case WorkerEventType.INITIALIZED:
         this.workerReady = true;
@@ -194,7 +192,7 @@ export class PipelineExecutor {
     }
   }
 
-  handleError(message, { fatal = false } = {}) {
+  handleError(message) {
     const wasInitializing = this.workerInitializing;
     this.updateOutput(`Error: ${message}`);
     this.setProgress(0, 'Failed');
@@ -210,9 +208,6 @@ export class PipelineExecutor {
         this.workerSession.failureReason = message;
         this.terminateWorker();
       }
-    } else if (fatal && this.workerSession) {
-      this.workerSession.failed = true;
-      this.terminateWorker();
     }
     this.onError(message);
   }

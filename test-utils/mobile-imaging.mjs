@@ -170,7 +170,11 @@ export async function verifyMobileMemoryCrash(page, origin) {
           hasErrorClass: Boolean(document.getElementById('statusText')?.classList.contains('error')),
           consoleText: document.querySelector('#consoleOutput, .nd-console-output, .console-output')?.textContent || '',
           copyText: document.getElementById('consoleOutput')?.[Symbol.for('neurodesk.consoleOutput')]?.getText?.() || '',
-          fitsWidth: document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1
+          fitsWidth: document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
+          statusInView: (() => {
+            const rect = document.getElementById('statusText')?.getBoundingClientRect();
+            return Boolean(rect && rect.top >= 0 && rect.bottom <= window.innerHeight);
+          })()
         })`,
         returnByValue: true,
       }).catch(() => null);
@@ -181,6 +185,7 @@ export async function verifyMobileMemoryCrash(page, origin) {
       consoleText: expect.stringContaining('reloaded before processing finished'),
       copyText: expect.stringContaining('reloaded before processing finished'),
       fitsWidth: true,
+      statusInView: true,
     }));
 
     // 3. An idle hidden tab checkpoint without document.wasDiscarded never claims a crash,
