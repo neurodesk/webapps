@@ -25,6 +25,9 @@ async function paginated(path, jq) {
   return out.split('\n').filter(Boolean).map((line) => JSON.parse(line));
 }
 
+// A time as the API's `created` filter takes it, to the second.
+const stamp = (time) => new Date(time).toISOString().replace(/\.\d+Z$/, 'Z');
+
 // Workflow runs of `workflow` (file name), newest first, created on or after `since` (YYYY-MM-DD).
 export function listRuns({ workflow = 'ci.yml', since, event, branch, limit = 1000 }) {
   const query = new URLSearchParams({ per_page: '100', created: `>=${since}` });
@@ -43,7 +46,6 @@ const RUN_FIELDS = '{id, name, event, status, conclusion, head_branch, head_sha,
 
 export async function listAllRuns({ since, until, windowHours = 2 }) {
   const fields = RUN_FIELDS;
-  const stamp = (time) => new Date(time).toISOString().replace(/\.\d+Z$/, 'Z');
   const runs = new Map();
   for (let from = since.getTime(); from < until.getTime(); from += windowHours * 3600e3) {
     const to = Math.min(from + windowHours * 3600e3, until.getTime()) - 1000;
@@ -61,15 +63,34 @@ export function listPullRequestRuns({ branch, since }) {
   return paginated(`repos/${REPOSITORY}/actions/workflows/ci.yml/runs?${query}`, `.workflow_runs[] | ${RUN_FIELDS} | @json`);
 }
 
+// The runs of every workflow on one head branch created in [since, until), in
+// the usage report's shape. Forks share branch names; ofPullRequest tells
+// their runs apart.
+export function listBranchRuns({ branch, since, until }) {
+  const query = new URLSearchParams({ per_page: '100', branch, created: `${stamp(since)}..${stamp(new Date(until).getTime() - 1000)}` });
+  return paginated(`repos/${REPOSITORY}/actions/runs?${query}`, `.workflow_runs[] | ${RUN_FIELDS} | @json`);
+}
+
+// Pull requests merged into main in [since, until), in one search query, as
+// { number, repository, branch, createdAt, mergedAt, mergeCommit }.
+export async function pullRequestsMergedBetween({ since, until, limit = 1000 }) {
+  const search = `merged:${stamp(since)}..${stamp(new Date(until).getTime() - 1000)}`;
+  const fields = 'number,createdAt,mergedAt,mergeCommit,headRefName,headRepository';
+  const list = JSON.parse(await gh(['pr', 'list', '--repo', REPOSITORY, '--state', 'merged', '--base', 'main', '--search', search, '--limit', String(limit), '--json', fields]));
+  return list.map((pullRequest) => ({
+    number: pullRequest.number,
+    repository: pullRequest.headRepository?.nameWithOwner,
+    branch: pullRequest.headRefName,
+    createdAt: pullRequest.createdAt,
+    mergedAt: pullRequest.mergedAt,
+    mergeCommit: pullRequest.mergeCommit?.oid,
+  }));
+}
+
 // The names of a pull request's labels as they are now, not as the event that
 // started the run saw them, so a re-run sees a label added since.
 export async function pullRequestLabels(number) {
   return JSON.parse(await gh(['api', `repos/${REPOSITORY}/pulls/${number}`, '--jq', '[.labels[].name]']));
-}
-
-// How many jobs a run's latest attempt has.
-export async function jobCount(runId) {
-  return Number(await gh(['api', `repos/${REPOSITORY}/actions/runs/${runId}/jobs?per_page=1&filter=latest`, '--jq', '.total_count']));
 }
 
 // The name and conclusion of each job of a run's latest attempt, in pages of 30 (see listJobs).

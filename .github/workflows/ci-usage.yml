@@ -2,6 +2,7 @@ name: ci-usage
 
 # Reports what the last day of workflow runs cost and fails when a budget in
 # scripts/lib/ci-usage.mjs is exceeded; nightly-failures.yml then opens an issue.
+# The measures of scripts/lib/ci-measures.mjs follow, report-only.
 on:
   schedule:
     # Late enough that a run created just before midnight UTC has all its jobs.
@@ -11,6 +12,8 @@ on:
 permissions:
   contents: read
   actions: read
+  # The pull requests merged in the window.
+  pull-requests: read
 
 concurrency:
   group: ci-usage

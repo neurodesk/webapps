@@ -152,6 +152,45 @@ them. Run the report for
 any day with `node scripts/ci-usage-report.mjs --until <ISO time>`. Change a
 budget only with the measurement that justifies it.
 
+### Daily measures
+
+After the budgets, the report shows whether the CI got cheaper and faster.
+These measures are report-only: none fails the job. Job minutes are the time
+each job held a runner, from the jobs of every run that was not skipped.
+
+| Measure | Definition | Target |
+| --- | --- | --- |
+| Job minutes per merged pull request | For each pull request merged in the window: its runs of every workflow on its head branch from its opening to its merge (earlier days included), its merge queue runs, and the push runs of its merge commit. Median and the three largest. | - |
+| Fixed-job share | Of the job minutes of pull request `ci` runs, the share in `plan` and `fixed` jobs, for draft, ready, whole-catalogue and all runs. | Draft runs under 30% |
+| Ready to green | For each ready pull request `ci` run that succeeded, creation to completion. Median and 90th percentile, apart for whole-catalogue runs. | Median under 20 minutes |
+| Merge to live | For each push to main (the first run of its commit), to the completion of the first successful `deploy-github-pages` run of that commit or a later one, also after the window. Median and maximum; pushes not yet live are listed. | - |
+| Runs that tested nothing | Runs that were skipped, ran no job, or ran only `plan` and `report` jobs. Count and share of all runs. | - |
+| Cancelled minutes | Job minutes of cancelled runs. | - |
+
+A pull request `ci` run is whole-catalogue when it ran at least 100 jobs, ready
+when it started a job only a ready pull request starts (`full-plan`,
+`full-plan-withheld`, `composite-site`), and draft otherwise. A ready run that
+selects neither the site nor more than its draft plan counts as draft.
+
+`WORKFLOWS` in `scripts/lib/ci-measures.mjs` gives each workflow, by name, and
+each `ci` job a role: `plan` (planner, gate, plan marker), `fixed` (tests every
+`ci` run whatever changed: `workspace-contracts`, `homepage-easter-egg`), `app`,
+`site`, `test`, `deliver` or `report`. In a test workflow the reusable gate's
+jobs plan and every other job tests. A workflow or `ci` job the table does not
+name is `unclassified`: it counts in the totals and in no share, and the report
+lists it. `test/ci-measures.test.mjs` requires an entry for every workflow file
+and every job of `ci.yml`, so rename both together.
+
+The targets are the CI optimisation program's goals of November 2026. In the
+48 hours to 18 November 2026 11:00 UTC the draft share was 58%, ready to
+green 34 minutes and merge to live 20 minutes. They become budgets only once
+the changes that reach them have landed and the numbers have held; a budget
+opens an issue on every miss.
+
+Reading the jobs costs one request per 30 jobs of each run. The 48 hours to
+18 November took 1,019 requests, so a daily report makes about 510: half of
+the 1,000 an hour a workflow token may make. The report prints its count.
+
 ### Enforcement in CI
 
 The report fires the next morning, after the runners are spent: on 13 November
