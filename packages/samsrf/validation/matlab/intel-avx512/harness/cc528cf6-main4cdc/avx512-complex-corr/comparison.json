@@ -1,0 +1,11 @@
+{
+  "variant": "avx512-complex-corr",
+  "matrixHostsCountsLossesIdentical": true,
+  "allMatrixOutputHashesIdentical": true,
+  "nullAndBundleControlsIdentical": true,
+  "pipelineCountsLossesDumpHashesIdentical": true,
+  "nativePipelinesReexecuted": false,
+  "oldMatrix": "packages/samsrf/validation/matlab/intel-avx512/harness/cc528cf6-2/matrix.json",
+  "oldPipelines": "packages/samsrf/validation/matlab/intel-avx512/harness/cc528cf6-2/pipelines.json",
+  "newResearchModule": "53fb607ee538bd47d902ada1fbf31827555051c7dd86ed291594d93e735f6f52"
+}

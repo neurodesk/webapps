@@ -114,3 +114,7 @@ The next isolated variant, `avx512-complex-qr`, adds the finite two-column compl
 least-squares candidate described in [the QR study](../complex-qr/README.md). It layers
 `complex-qr.patch` after the unchanged complex-correlation patch. Its downstream results
 are recorded separately; the previous reports retain their original baseline.
+
+The [main-4cdc integration reports](cc528cf6-main4cdc/README.md) bind the unchanged kernels
+to the merged runner with fresh research builds and full Node matrices. They preserve the
+historical reports and distinguish retained native pipeline evidence from fresh execution.

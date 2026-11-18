@@ -66,6 +66,22 @@ class RepairSets(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, 'SPM' if cli else 'prepare.py --cli'):
                         build_container.verify_source(source, source)
 
+    def test_the_build_records_the_provenance_prepare_wrote(self):
+        root, source, pinned = self.checkout()
+        spm = root / 'spm'
+        spm.mkdir()
+        git(spm, 'init', '-q')
+        (spm / 'spm.m').write_text('% fixture\n')
+        git(spm, 'add', '.')
+        git(spm, '-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-qm', 'fixture')
+        pinned = {**pinned, 'spm': {**pinned['spm'], 'commit': git(spm, 'rev-parse', 'HEAD')}}
+        with mock.patch.object(prepare, 'SOURCE', pinned), \
+                mock.patch.object(build_container, 'SOURCE', pinned):
+            prepare.prepare(source, root / 'out', cli=True)
+            built = build_container.verify_source(source, spm)
+        self.assertEqual(built, json.loads((root / 'out' / 'source.json').read_text()))
+        self.assertIn('Keep the subject-HRF file route a column, as samsrf_doublegamma returns it', built['patches'])
+
 
 if __name__ == '__main__':
     unittest.main()
