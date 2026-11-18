@@ -224,8 +224,8 @@ export function installConsoleCapture(target: Window & typeof globalThis = windo
   });
   target.addEventListener('neurodesk-memory-restored', () => {
     const webglStatus = formatMemoryError('WebGL context lost', { kind: 'webgl' })?.status;
-    if (webglStatus && entries[entries.length - 1]?.message === webglStatus) {
-      entries = entries.slice(0, -1);
+    if (webglStatus && entries.some((entry) => entry.level === 'error' && entry.message === webglStatus)) {
+      entries = entries.filter((entry) => !(entry.level === 'error' && entry.message === webglStatus));
       emitLog();
     }
     if (recoveryNotice === webglStatus) clearRecoveryNotice();

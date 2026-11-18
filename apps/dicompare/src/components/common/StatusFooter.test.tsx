@@ -1,7 +1,7 @@
 import { act, render, screen } from '@testing-library/react';
 import { ActivityStatusFooter } from './StatusFooter';
 import { DicompareWorkerAPI } from '../../services/DicompareWorkerAPI';
-import { beginActivity, installConsoleCapture, logError, resetTechnicalLog } from '../../utils/technicalLog';
+import { beginActivity, installConsoleCapture, log, logError, resetTechnicalLog } from '../../utils/technicalLog';
 
 beforeEach(resetTechnicalLog);
 
@@ -105,6 +105,12 @@ test('a memory recovery notice delivered before Pyodide startup survives until a
   });
   expect(status).toHaveTextContent('Viewer graphics context lost');
   expect(status).toHaveClass('error');
+  // Even if info/success log entries arrive after the WebGL error, restoration clears the WebGL error!
+  act(() => {
+    log('Loaded volume metadata', 'info');
+    log('Thumbnail ready', 'success');
+  });
+  expect(status).toHaveTextContent('Viewer graphics context lost');
   act(() => {
     window.dispatchEvent(new CustomEvent('neurodesk-memory-restored', { detail: { kind: 'webgl' } }));
   });

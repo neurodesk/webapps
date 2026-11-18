@@ -210,12 +210,13 @@ test('idle hidden tabs and COI reloads do not trigger false memory warnings, whi
   hiddenIdle.bind({ now: () => 2000 });
   assert.equal(hiddenIdle.document.getElementById('statusText').textContent, 'Drag and drop files');
 
-  // 2. Loaded background tab with document.wasDiscarded === true -> honest tab-discard notice.
+  // 2. Loaded background tab with document.wasDiscarded === true -> honest tab-discard notice,
+  //    even when the idle tab sat discarded in the background past the 30-minute heuristic cutoff!
   const discarded = createWorkspaceDom(t, url, {
     'neurodesk-memory-guard:/ants/': { active: false, loaded: true, hidden: true, detail: '', updatedAt: 1000 },
   });
   Object.defineProperty(discarded.document, 'wasDiscarded', { value: true, configurable: true });
-  discarded.bind({ now: () => 2000 });
+  discarded.bind({ now: () => 1000 + 31 * 60 * 1000 });
   assert.match(discarded.document.getElementById('statusText').textContent, /discarded this inactive tab \(often to free memory\)/);
 
   // 3a. COI reload marker recorded on window (after coi-serviceworker consumed coiReloadedBySelf) suppresses recovery.
@@ -350,7 +351,13 @@ test('live OOM errors route through shared owners, respect ConsoleOutput line ca
   assert.equal(rawStatus.textContent, 'Done');
   assert.equal(rawStatus.classList.contains('error'), false);
 
-  // Specific non-memory error ending inside the 250 ms window is also preserved,
+  // Clicking Run to retry while "Done" is still visible must keep the new 250 ms active checkpoint!
+  rawFooterDom.window.document.getElementById('progress').value = 0;
+  rawFooterDom.window.document.getElementById('runButton').click();
+  const retryCheckpoint = JSON.parse(rawFooterDom.window.sessionStorage.getItem('neurodesk-memory-guard:/niimath/'));
+  assert.equal(retryCheckpoint.active, true);
+
+  // Specific non-memory error ending inside the 250 ms window (even while progress remains partial!) is preserved,
   // and a subsequent retry failing with "Failed" does NOT inherit an earlier run's console OOM!
   const rawConsole = rawFooterDom.window.document.getElementById('rawConsole');
   const rawLogger = new ConsoleOutput({ element: rawConsole, mirrorToConsole: false });
@@ -361,13 +368,14 @@ test('live OOM errors route through shared owners, respect ConsoleOutput line ca
   rawStatus.textContent = 'Failed';
   await waitMs(20);
   assert.match(rawStatus.textContent, /Out of browser memory on this device/);
+  // Leave progress at 0.3 (partial) while hiding Cancel and writing a specific non-memory error:
   rawFooterDom.window.document.getElementById('cancelButton').hidden = true;
-  rawFooterDom.window.document.getElementById('progress').value = 0;
   rawStatus.textContent = 'Error: Could not write output';
   rawStatus.classList.add('error');
   await waitMs(260);
   assert.equal(rawStatus.textContent, 'Error: Could not write output');
   assert.equal(rawStatus.classList.contains('error'), true);
+  rawFooterDom.window.document.getElementById('progress').value = 0;
 
   // Retry fails with generic "Failed" and no new OOM line in console -> stays "Failed"!
   rawFooterDom.window.document.getElementById('runButton').click();
@@ -462,10 +470,24 @@ test('live OOM errors route through shared owners, respect ConsoleOutput line ca
   await waitMs(20);
   assert.equal(notices.length, 2);
   assert.equal(notices[1].kind, 'webgl');
-  dicompareCanvas.dispatchEvent(new reactDom.window.Event('webglcontextrestored'));
+
+  // Unmounting a lost viewer canvas without webglcontextrestored and mounting a replacement canvas
+  // that subsequently loses WebGL must dispatch a fresh WebGL notice!
+  dicompareCanvas.remove();
+  const replacementCanvas = reactDom.document.createElement('canvas');
+  replacementCanvas.setAttribute('data-neurodesk-viewer-canvas', '');
+  reactDom.document.body.append(replacementCanvas);
   await waitMs(20);
   assert.equal(restored.length, 1);
-  assert.equal(restored[0].kind, 'webgl');
+
+  replacementCanvas.dispatchEvent(new reactDom.window.Event('webglcontextlost'));
+  await waitMs(20);
+  assert.equal(notices.length, 3);
+  assert.equal(notices[2].kind, 'webgl');
+  replacementCanvas.dispatchEvent(new reactDom.window.Event('webglcontextrestored'));
+  await waitMs(20);
+  assert.equal(restored.length, 2);
+  assert.equal(restored[1].kind, 'webgl');
 });
 
 test('webglcontextlost and uncaught errors never disable active run cancellation, and restore only when all lost viewer canvases recover', async (t) => {

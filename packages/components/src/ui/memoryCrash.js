@@ -288,11 +288,13 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
   let interacted = false;
   let loaded = false;
   let immediateActiveDetail = '';
+  let workflowStartText = null;
   let recoveredFailure = null;
   let activeRunFailure = null;
   let monitorErrorStatus = '';
   let pendingConsoleMessage = '';
   const lostCanvases = new Set();
+  const notifiedWebglCanvases = new WeakSet();
   const seenConsoleTails = new WeakMap();
   let lostCanvasObserver = null;
   let webglNoticeDispatched = false;
@@ -384,12 +386,13 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
   const previous = readCheckpoint(view, key);
   if (previous && typeof previous === 'object') {
     const age = now() - Number(previous.updatedAt || 0);
-    const fresh = Number.isFinite(age) && age >= 0 && age <= maxAgeMs;
+    const validAge = Number.isFinite(age) && age >= 0;
+    const fresh = validAge && age <= maxAgeMs;
     const wasActive = previous.active === true;
     const wasDiscarded = previous.loaded === true && doc.wasDiscarded === true;
     const wasForegroundLoaded = previous.loaded === true && !previous.hidden;
-    if (fresh && (wasActive || wasDiscarded || wasForegroundLoaded)) {
-      const kind = wasActive ? 'reload-active' : wasDiscarded ? 'reload-discarded' : 'reload-loaded';
+    if ((fresh && (wasActive || wasForegroundLoaded)) || (validAge && wasDiscarded)) {
+      const kind = (fresh && wasActive) ? 'reload-active' : wasDiscarded ? 'reload-discarded' : 'reload-loaded';
       recoveredFailure = formatMemoryError('', { kind, detail: previous.detail });
       applyFailure(recoveredFailure, { respectExistingNonIdle: true });
     }
@@ -458,13 +461,17 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
       || runState === 'running'
       || (interacted && (cancelVisible || indeterminate || midProgress || verbActive)),
     );
+    if (workflowStartText !== null && text !== workflowStartText) {
+      workflowStartText = null;
+    }
     const terminalStatus = runState === 'succeeded'
       || runState === 'failed'
       || runState === 'cancelled'
-      || /^(?:done|complete|completed|finished|cancelled|canceled|failed|error\b)/i.test(text);
-    // Once real DOM active indicators take over or a terminal status appears, end the 250 ms click bridge immediately.
+      || (workflowStartText === null && /^(?:done|complete|completed|finished|cancelled|canceled|failed|error\b)/i.test(text));
+    // Once real DOM active indicators take over or a new terminal status appears, end the 250 ms click bridge immediately.
     if (immediateActiveDetail && (domActive || terminalStatus)) {
       immediateActiveDetail = '';
+      workflowStartText = null;
     }
     const active = Boolean(immediateActiveDetail || domActive);
     if (runState === 'ready' || runState === 'succeeded' || (interacted && active)) loaded = true;
@@ -507,6 +514,7 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
     recoveredFailure = null;
     activeRunFailure = null;
     monitorErrorStatus = '';
+    workflowStartText = cleanText(findStatusElement(doc)?.textContent);
     markConsoleTailsSeen();
     pruneDisconnectedLostCanvases();
     // Hold background service-worker update reloads only after the initial COI
@@ -520,6 +528,7 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
     if (view?.setTimeout) {
       reconcileTimer = view.setTimeout(() => {
         immediateActiveDetail = '';
+        workflowStartText = null;
         reconcileTimer = null;
         flushActiveRunFailure();
         reconcileStatusErrorClass();
@@ -529,6 +538,7 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
       reconcileTimer?.unref?.();
     } else {
       immediateActiveDetail = '';
+      workflowStartText = null;
     }
   }
 
@@ -601,11 +611,17 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
 
   function flushActiveRunFailure() {
     if (!activeRunFailure || applying || view?.[STATUS_MANAGED_KEY]) return;
+    const statusEl = findStatusElement(doc);
+    const current = cleanText(statusEl?.textContent);
+    const explicitNonMemoryOutcome = /^(?:done|complete|completed|finished|cancelled|canceled)$/i.test(current)
+      || (!GENERIC_FAILURE_STATUS.test(current) && !isMemoryErrorMessage(current) && /^(?:error\s*:|.*\bfailed\b)/i.test(current));
+    if (explicitNonMemoryOutcome) {
+      activeRunFailure = null;
+      return;
+    }
     if (!currentSessionState().active) {
       const finishedFailure = activeRunFailure;
       activeRunFailure = null;
-      const statusEl = findStatusElement(doc);
-      const current = cleanText(statusEl?.textContent);
       if (statusEl && GENERIC_FAILURE_STATUS.test(current)) {
         applying = true;
         try {
@@ -617,9 +633,7 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
       }
       return;
     }
-    const statusEl = findStatusElement(doc);
     if (!statusEl) return;
-    const current = cleanText(statusEl.textContent);
     if (current !== activeRunFailure.status && !ALREADY_EXPLAINED.test(current) && !isMemoryErrorMessage(current)) {
       applying = true;
       try {
@@ -673,8 +687,16 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
   }
 
   function pruneDisconnectedLostCanvases() {
+    const hadLost = lostCanvases.size > 0;
     for (const entry of [...lostCanvases]) {
       if (!entry.isConnected) lostCanvases.delete(entry);
+    }
+    if (lostCanvases.size === 0) {
+      if (hadLost && webglNoticeDispatched && view?.[STATUS_MANAGED_KEY] && typeof view.CustomEvent === 'function') {
+        webglNoticeDispatched = false;
+        view.dispatchEvent(new view.CustomEvent('neurodesk-memory-restored', { detail: { kind: 'webgl' } }));
+      }
+      webglNoticeDispatched = false;
     }
     syncLostCanvasVisibilityObserver();
   }
@@ -692,7 +714,14 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
     if (currentSessionState().active) return;
     const formatted = formatMemoryError('WebGL context lost', { kind: 'webgl' });
     if (view?.[STATUS_MANAGED_KEY]) {
-      if (!webglNoticeDispatched) {
+      let hasUnnotifiedCanvas = false;
+      for (const entry of lostCanvases) {
+        if (!notifiedWebglCanvases.has(entry) && (typeof entry.checkVisibility !== 'function' || entry.checkVisibility())) {
+          notifiedWebglCanvases.add(entry);
+          hasUnnotifiedCanvas = true;
+        }
+      }
+      if (!webglNoticeDispatched || hasUnnotifiedCanvas) {
         webglNoticeDispatched = true;
         applyFailure(formatted);
       }
@@ -728,6 +757,7 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
     const canvas = event?.target;
     pruneDisconnectedLostCanvases();
     if (!canvas || !lostCanvases.delete(canvas)) return;
+    notifiedWebglCanvases.delete(canvas);
     syncLostCanvasVisibilityObserver();
     if (lostCanvases.size > 0) return;
     webglNoticeDispatched = false;
