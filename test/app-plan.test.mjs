@@ -820,8 +820,10 @@ function registryUses(text, callees) {
     const before = code.slice(0, match.index).trimEnd();
     if (!before.endsWith('}')) continue;
     const pattern = code.slice(openingBrace(code, before.length - 1), before.length);
-    if (/\bsite\b|\.\.\./.test(pattern)) unknown.push(`destructures ${pattern.replace(/\s+/g, ' ')} from the loader`);
+    if (/\bsite\b|\.\.\.|\[/.test(pattern)) unknown.push(`destructures ${pattern.replace(/\s+/g, ' ')} from the loader`);
   }
+  // A computed member of the loader's result: `(await loadAppsRegistry())[key]`.
+  for (const match of code.matchAll(/(?:loadAppsRegistry|parseAppsRegistry)\([^()]*\)\s*\)?\s*\??\.?\s*\[/g)) unknown.push(`${match[0].replace(/\s+/g, ' ')} (a computed member of the loader's result)`);
   for (const name of names) {
     for (const match of code.matchAll(new RegExp(String.raw`(?:(?<=\.\.\.)|(?<![\w.$'"\`/-]))${name}(?![\w$'"\`/-])`, 'g'))) {
       const [before, after] = [code.slice(0, match.index), code.slice(match.index + name.length)];
@@ -832,7 +834,7 @@ function registryUses(text, callees) {
       if (/\}\s*=\s*(?:await\s+)?$/.test(before)) {
         const end = before.trimEnd().replace(/=\s*(?:await\s+)?$/, '').trimEnd().length - 1;
         const pattern = code.slice(openingBrace(code, end), end + 1);
-        if (/\bsite\b|\.\.\./.test(pattern)) unknown.push(`destructures ${pattern.replace(/\s+/g, ' ')} from ${name}`);
+        if (/\bsite\b|\.\.\.|\[/.test(pattern)) unknown.push(`destructures ${pattern.replace(/\s+/g, ' ')} from ${name}`);
         continue;
       }
       const callee = /[(,]\s*$/.test(before) && /^\s*[,)]/.test(after) && calleeOf(code, match.index);
@@ -920,6 +922,11 @@ test('the site key reader check finds the keys a text reads, and every key of wh
     'const copy = { ...registry };',
     'writeFile(out, JSON.stringify(registry));',
     'const value = registry[key];',
+    'const value = registry?.[key];',
+    "const key = 'site'; const { [key]: section } = registry; const host = section.hub.host;",
+    "const { [`si${'te'}`]: section } = await loadAppsRegistry();",
+    "const section = (await loadAppsRegistry())[key];",
+    'const section = parseAppsRegistry(text)[key];',
     'return registry;',
     'unknownHelper(registry, id);',
   ]) assert.ok(everything(text), text);
