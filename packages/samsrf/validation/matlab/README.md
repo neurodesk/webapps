@@ -1818,11 +1818,15 @@ held-out set. The Intel host's MKL solves in another order: there the rule gives
 equations: 1,382 values gain exactness and 8,185 lose it. In the CLI matrix, one
 Intel raw value gains exactness and seven lose it, despite unchanged exact-map
 totals and GIfTI bytes. These Intel counts measure the AMD branch's arithmetic on the
-Intel host's recording. The Intel host's own branch, `AVX512_E1`, gives all 42,000 Intel
+Intel host's recording. This cross-host tradeoff remains unresolved; improved AMD
+agreement does not establish Intel non-regression or an AMD-only reference policy.
+The test-only reference for the Intel host's branch, `AVX512_E1`, gives all 42,000 Intel
 residuals bit for bit (`samsrf-mkl-avx512`, [Intel AVX-512 and the reference
-host](#intel-avx-512-and-the-reference-host)), so each host's recording is reproduced by
-its own branch and neither reference is given up. Which branch the shipped port follows
-remains the maintainers' decision; it keeps the AMD branch until then.
+host](#intel-avx-512-and-the-reference-host)). This adds a separately tested reference,
+not a correction to the shipped engine. `samsrf-mkl-avx512` changes no shipped output:
+the module still loses the Intel residual and CLI values listed above. Reference
+selection for the shipped port remains undecided; the existing AMD arithmetic
+continues unchanged, and the production regression remains a merge blocker.
 
 Both precisions now run one function, and `revcor_reference.rs` holds the double
 residuals bit for bit on the AMD hosts (`1e-13` of the course's peak before).

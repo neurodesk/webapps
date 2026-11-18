@@ -179,7 +179,8 @@ jobs:
         run: |
           # The shipped module's feature graph must not contain the experimental model,
           # and a WebAssembly build that enables it must fail.
-          if cargo tree --manifest-path exes/samsrf/Cargo.toml -p samsrf-wasm --target wasm32-unknown-unknown -e features -i samsrf-core | grep -F polyshape-experimental; then
+          cargo tree --manifest-path exes/samsrf/Cargo.toml -p samsrf-wasm --target wasm32-unknown-unknown -e features -i samsrf-core > "$RUNNER_TEMP/samsrf-core-features.txt"
+          if grep -F polyshape-experimental "$RUNNER_TEMP/samsrf-core-features.txt"; then
             echo 'samsrf-wasm enables polyshape-experimental' >&2
             exit 1
           fi
@@ -197,7 +198,8 @@ jobs:
           # samsrf-mkl-avx512 reproduces MATLAB's least squares on Intel hosts for the
           # gates below only: the shipped module must not depend on it, and it must refuse
           # a WebAssembly build.
-          if cargo tree --manifest-path exes/samsrf/Cargo.toml -p samsrf-wasm --target wasm32-unknown-unknown --prefix none | grep -F samsrf-mkl-avx512; then
+          cargo tree --manifest-path exes/samsrf/Cargo.toml -p samsrf-wasm --target wasm32-unknown-unknown --prefix none > "$RUNNER_TEMP/samsrf-wasm-dependencies.txt"
+          if grep -F samsrf-mkl-avx512 "$RUNNER_TEMP/samsrf-wasm-dependencies.txt"; then
             echo 'samsrf-wasm depends on samsrf-mkl-avx512' >&2
             exit 1
           fi

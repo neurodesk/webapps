@@ -20,6 +20,35 @@ fn env(name: &str) -> Option<PathBuf> {
     std::env::var_os(name).map(PathBuf::from)
 }
 
+fn paired_roots(names: [&str; 2], roots: [Option<PathBuf>; 2]) -> Option<[PathBuf; 2]> {
+    match roots {
+        [None, None] => None,
+        [Some(first), Some(second)] => Some([first, second]),
+        _ => panic!("set both {} and {}", names[0], names[1]),
+    }
+}
+
+fn fixture_pair(names: [&str; 2]) -> Option<[PathBuf; 2]> {
+    paired_roots(names, names.map(env))
+}
+
+#[test]
+fn partial_fixture_configuration_is_rejected() {
+    for names in [
+        ["SAMSRF_QR_KERNELS_DIR", "SAMSRF_QR_REFERENCE_DIR"],
+        ["SAMSRF_CGG_DIR", "SAMSRF_CGG_RUNS_DIR"],
+        ["SAMSRF_REVCOR_REFERENCE_DIR", "SAMSRF_MATRIX_INPUT_DIR"],
+        ["SAMSRF_CLI_REFERENCE_DIR", "SAMSRF_CLI_COURSES_DIR"],
+    ] {
+        assert_eq!(paired_roots(names, [None, None]), None);
+        let roots = [PathBuf::from("recording"), PathBuf::from("inputs")];
+        assert_eq!(paired_roots(names, roots.clone().map(Some)), Some(roots));
+        for partial in [[Some(PathBuf::from("recording")), None], [None, Some(PathBuf::from("inputs"))]] {
+            assert!(std::panic::catch_unwind(|| paired_roots(names, partial)).is_err());
+        }
+    }
+}
+
 fn json(path: &Path) -> Value {
     serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap()
 }
@@ -102,7 +131,7 @@ fn preprocess_on_avx512(runs: &[RawRun], kept: &[usize], average: bool) -> Vec<V
 /// coefficients) and Q'Y and coefficients of its 190 real double eight-column solves.
 #[test]
 fn every_real_double_chain_matches_mkl_on_the_intel_host() {
-    let (Some(kernels), Some(designs_root)) = (env("SAMSRF_QR_KERNELS_DIR"), env("SAMSRF_QR_REFERENCE_DIR")) else { return };
+    let Some([kernels, designs_root]) = fixture_pair(["SAMSRF_QR_KERNELS_DIR", "SAMSRF_QR_REFERENCE_DIR"]) else { return };
     let designs_root = designs_root.join("ubuntu-24.04").join("compatible");
     let designs = json(&designs_root.join("qr.json"));
     let hosts = json(&kernels.join("hosts.json"));
@@ -218,7 +247,7 @@ fn cgg_intel_host(root: &Path) -> PathBuf {
 /// regenerated inputs (held out, frozen before reading).
 #[test]
 fn detrend_equals_matlab_on_the_intel_host() {
-    let (Some(root), Some(runs_dir)) = (env("SAMSRF_CGG_DIR"), env("SAMSRF_CGG_RUNS_DIR")) else { return };
+    let Some([root, runs_dir]) = fixture_pair(["SAMSRF_CGG_DIR", "SAMSRF_CGG_RUNS_DIR"]) else { return };
     let dir = cgg_intel_host(&root);
     let recorded = json(&dir.join("constants-direct.json"));
     let recorded = recorded["cases"].as_array().unwrap();
@@ -271,7 +300,7 @@ fn edited_runs(runs: &[RawRun], count: usize, tail: &[usize]) -> Vec<RawRun> {
 /// course on the Intel host (compared after the freeze).
 #[test]
 fn pipeline_courses_equal_matlab_on_the_intel_host() {
-    let (Some(root), Some(runs_dir)) = (env("SAMSRF_CGG_DIR"), env("SAMSRF_CGG_RUNS_DIR")) else { return };
+    let Some([root, runs_dir]) = fixture_pair(["SAMSRF_CGG_DIR", "SAMSRF_CGG_RUNS_DIR"]) else { return };
     let dir = cgg_intel_host(&root);
     let runs: Vec<RawRun> = (1..=2).map(|r| gifti::read_run(&std::fs::read(runs_dir.join(format!("lh_uBars{r}.gii"))).unwrap()).unwrap()).collect();
     let recorded = json(&dir.join("constants-pipeline.json"));
@@ -337,7 +366,7 @@ fn global_regression_equals_matlab_on_the_intel_host() {
 /// host (compared after the freeze): every recorded course.
 #[test]
 fn raw_preprocessing_equals_matlab_on_the_intel_host() {
-    let (Some(root), Some(input)) = (env("SAMSRF_REVCOR_REFERENCE_DIR"), env("SAMSRF_MATRIX_INPUT_DIR")) else { return };
+    let Some([root, input]) = fixture_pair(["SAMSRF_REVCOR_REFERENCE_DIR", "SAMSRF_MATRIX_INPUT_DIR"]) else { return };
     let dir = revcor_intel_host(&root);
     let matrix = json(&dir.join("revcor-matrix.json"));
     let manifest = json(&input.join("manifest.json"));
@@ -378,7 +407,7 @@ fn raw_preprocessing_equals_matlab_on_the_intel_host() {
 /// freeze), with this branch's detrend: every run whose `Srf.Y` is the preprocessing output.
 #[test]
 fn preprocessed_courses_equal_matlab_on_the_intel_host() {
-    let (Some(recording), Some(courses)) = (env("SAMSRF_CLI_REFERENCE_DIR"), env("SAMSRF_CLI_COURSES_DIR")) else { return };
+    let Some([recording, courses]) = fixture_pair(["SAMSRF_CLI_REFERENCE_DIR", "SAMSRF_CLI_COURSES_DIR"]) else { return };
     let manifest = json(&courses.join("manifest.json"));
     let plan = &manifest["plan"];
     let host = &manifest["hosts"]["intel"];
@@ -426,7 +455,7 @@ fn preprocessed_courses_equal_matlab_on_the_intel_host() {
         runs_compared += 1;
     }
     println!("SamSrfAnalysis double preprocessing on the Intel host: {runs_compared} runs, {compared} values equal MATLAB's");
-    assert!(runs_compared > 0, "no double runs compared");
+    assert_eq!((runs_compared, compared), (11, 84_000), "double run and value inventory");
 }
 
 /// `norm(x)` (`dnrm2`) and `norm(z)` (`dznrm2`, over interleaved parts) of the 24 BLAS
@@ -435,9 +464,9 @@ fn preprocessed_courses_equal_matlab_on_the_intel_host() {
 /// complex vectors). Discovery data for `nrm2`; no complex held-out set exists.
 #[test]
 fn numerics_norms_are_correctly_rounded_on_the_intel_hosts() {
-    let mut hosts = 0;
     for variable in ["SAMSRF_MATLAB_NUMERICS_DIR", "SAMSRF_MATLAB_NUMERICS2_DIR"] {
         let Some(root) = env(variable) else { continue };
+        let mut hosts = 0;
         for host in ["ubuntu-22.04", "ubuntu-24.04"] {
             let dir = root.join(host).join("compatible");
             let recording = json(&dir.join("numerics.json"));
@@ -458,9 +487,7 @@ fn numerics_norms_are_correctly_rounded_on_the_intel_hosts() {
             assert_eq!(cases, 24, "{variable} {host}: BLAS cases");
             hosts += 1;
         }
-    }
-    if hosts > 0 {
-        assert_eq!(hosts, 2, "one AVX512_E1 host per numerics recording");
+        assert_eq!(hosts, 1, "{variable}: exactly one AVX512_E1 host per configured recording");
     }
 }
 
@@ -471,9 +498,13 @@ fn numerics_norms_are_correctly_rounded_on_the_intel_hosts() {
 #[test]
 fn write_held_out_inputs() {
     let Some(out) = env("SAMSRF_HELDOUT_DUMP") else { return };
+    let [root, runs_dir] = fixture_pair(["SAMSRF_CGG_DIR", "SAMSRF_CGG_RUNS_DIR"])
+        .expect("SAMSRF_HELDOUT_DUMP requires the constants recording and raw runs");
+    let revcor = env("SAMSRF_REVCOR_REFERENCE_DIR")
+        .expect("SAMSRF_HELDOUT_DUMP requires the reverse-correlation recording");
     let write = |path: &Path, values: &[f64]| std::fs::write(path, values.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>()).unwrap();
     let mut index = Vec::new();
-    if let (Some(root), Some(runs_dir)) = (env("SAMSRF_CGG_DIR"), env("SAMSRF_CGG_RUNS_DIR")) {
+    {
         let run: RawRun = gifti::read_run(&std::fs::read(runs_dir.join("lh_uBars1.gii")).unwrap()).unwrap();
         let recorded = json(&cgg_intel_host(&root).join("constants-direct.json"));
         let recorded = recorded["cases"].as_array().unwrap();
@@ -499,9 +530,9 @@ fn write_held_out_inputs() {
             }
         }
     }
-    if let Some(root) = env("SAMSRF_REVCOR_REFERENCE_DIR") {
+    {
         for host in ["ubuntu-22.04", "ubuntu-24.04"] {
-            let dir = root.join(host);
+            let dir = revcor.join(host);
             let matrix = json(&dir.join("revcor-matrix.json"));
             let target = out.join("h4").join(host);
             std::fs::create_dir_all(&target).unwrap();
