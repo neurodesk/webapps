@@ -305,6 +305,8 @@ test('native.yml calls every workflow with shared paths, granting what its jobs 
   const starts = native.on.pull_request.paths.map(pathGlob);
   for (const [name, flow] of nativeCalls) {
     for (const filter of sharedPaths(flow)) assert.ok(starts.some((glob) => glob.test(filter.replace(/\*\*$/, 'any/file.js'))), `${name}: ${filter} starts native.yml`);
+    // native.yml tells whether GitHub started the workflow itself by matching these filters, without exclusions.
+    assert.deepEqual(pullRequestFilters(flow).filter((filter) => filter.startsWith('!')), [], `${name} excludes no path`);
     const call = native.jobs[name];
     assert.equal(call.uses, `./.github/workflows/${name}.yml`);
     assert.equal(call.needs, 'gate');
