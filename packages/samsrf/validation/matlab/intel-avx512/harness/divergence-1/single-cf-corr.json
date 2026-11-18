@@ -1,0 +1,62 @@
+{
+  "amd-7763-auto": {
+    "corr": [
+      378,
+      378
+    ],
+    "mean course": [
+      42,
+      42
+    ],
+    "mean seed": [
+      18,
+      18
+    ],
+    "sum seed": [
+      18,
+      18
+    ],
+    "vecnorm course": [
+      42,
+      42
+    ],
+    "vecnorm seed": [
+      18,
+      18
+    ],
+    "y'X (sgemv)": [
+      378,
+      378
+    ]
+  },
+  "intel-8573c-avx512": {
+    "corr": [
+      378,
+      121
+    ],
+    "mean course": [
+      42,
+      42
+    ],
+    "mean seed": [
+      18,
+      18
+    ],
+    "sum seed": [
+      18,
+      18
+    ],
+    "vecnorm course": [
+      42,
+      42
+    ],
+    "vecnorm seed": [
+      18,
+      18
+    ],
+    "y'X (sgemv)": [
+      378,
+      110
+    ]
+  }
+}

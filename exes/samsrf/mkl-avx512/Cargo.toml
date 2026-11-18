@@ -17,6 +17,7 @@ num-bigint = "0.4.8"
 libm = "0.2"
 
 [dev-dependencies]
+num-complex = "0.4.6"
 # Tests read MATLAB numbers written inline in JSON; only this parse is correctly rounded.
 serde_json = { version = "1", features = ["float_roundtrip"] }
 sha2 = "0.10"

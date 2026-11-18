@@ -1,0 +1,96 @@
+diff --git a/exes/samsrf/Cargo.lock b/exes/samsrf/Cargo.lock
+index d523399..7d07b5b 100644
+--- a/exes/samsrf/Cargo.lock
++++ b/exes/samsrf/Cargo.lock
+@@ -290,6 +290,7 @@ version = "0.1.0"
+ dependencies = [
+  "js-sys",
+  "samsrf-core",
++ "samsrf-mkl-avx512",
+  "serde",
+  "serde_json",
+  "wasm-bindgen",
+diff --git a/exes/samsrf/mkl-avx512/src/lib.rs b/exes/samsrf/mkl-avx512/src/lib.rs
+index 7634971..3853827 100644
+--- a/exes/samsrf/mkl-avx512/src/lib.rs
++++ b/exes/samsrf/mkl-avx512/src/lib.rs
+@@ -32,8 +32,8 @@ use num_bigint::BigUint;
+ 
+ pub mod blas;
+ 
+-#[cfg(target_arch = "wasm32")]
+-compile_error!("samsrf-mkl-avx512 must never be built for WebAssembly");
++// RESEARCH BUILD ONLY: the WebAssembly guard is removed so the research harness can run
++// these kernels in the engine (packages/samsrf/validation/matlab/intel-avx512/harness).
+ 
+ /// `xLARFG`'s rescaling threshold, `safmin / (eps / 2)` as LAPACK computes it.
+ const RESCALE: f64 = f64::MIN_POSITIVE / (f64::EPSILON * 0.5);
+diff --git a/exes/samsrf/wasm/Cargo.toml b/exes/samsrf/wasm/Cargo.toml
+index 167c4df..91de307 100644
+--- a/exes/samsrf/wasm/Cargo.toml
++++ b/exes/samsrf/wasm/Cargo.toml
+@@ -11,6 +11,8 @@ crate-type = ["cdylib", "rlib"]
+ 
+ [dependencies]
+ samsrf-core = { path = "../core" }
++# RESEARCH BUILD ONLY: the test-only Intel reference, installed at start (src/lib.rs).
++samsrf-mkl-avx512 = { path = "../mkl-avx512" }
+ serde = { version = "1", features = ["derive"] }
+ serde_json = "1"
+ wasm-bindgen = "0.2"
+diff --git a/exes/samsrf/wasm/src/lib.rs b/exes/samsrf/wasm/src/lib.rs
+index de12e84..19c2eef 100644
+--- a/exes/samsrf/wasm/src/lib.rs
++++ b/exes/samsrf/wasm/src/lib.rs
+@@ -17,9 +17,48 @@ use wasm_bindgen::prelude::*;
+ 
+ type Result<T> = std::result::Result<T, JsError>;
+ 
+-/// RESEARCH BUILD ONLY: installs this build's arithmetic reference. The hooks build has none, so
+-/// it computes what the shipped module computes; native research tests call this first.
+-pub fn install_research_reference() {}
++/// RESEARCH BUILD ONLY: a `samsrf_mkl_avx512::Design` as the core's reference design.
++struct IntelDesign(samsrf_mkl_avx512::Design);
++
++impl samsrf_core::reference::RealDesign for IntelDesign {
++    fn solve_with_qty(&self, y: &[f64], count: usize, index: usize) -> (Vec<f64>, Vec<f64>) {
++        self.0.solve_with_qty(y, count, index)
++    }
++    fn rank(&self) -> usize {
++        self.0.rank()
++    }
++    fn pivot(&self) -> &[usize] {
++        self.0.pivot()
++    }
++    fn packed(&self) -> &[Vec<f64>] {
++        self.0.packed()
++    }
++    fn taus(&self) -> &[f64] {
++        self.0.taus()
++    }
++}
++
++static INSTALL: std::sync::Once = std::sync::Once::new();
++
++/// RESEARCH BUILD ONLY: installs the test-only reference for MKL's AVX512_E1 branch (the
++/// recorded Intel hosts) for real double data, once; native research tests call this first.
++pub fn install_research_reference() {
++    INSTALL.call_once(|| {
++        samsrf_core::reference::install(samsrf_core::reference::Kernels {
++            name: "MKL AVX512_E1 research reference (samsrf-mkl-avx512): real double ddot from 51, dnrm2 candidate, y'*A, least squares",
++            ddot: samsrf_mkl_avx512::blas::ddot,
++            dnrm2: samsrf_mkl_avx512::nrm2,
++            gemv_t: samsrf_mkl_avx512::blas::gemv_t,
++            factor: |columns| Box::new(IntelDesign(samsrf_mkl_avx512::Design::new(columns))),
++        });
++    });
++}
++
++/// RESEARCH BUILD ONLY: the module installs the reference when it is instantiated.
++#[wasm_bindgen(start)]
++fn start() {
++    install_research_reference();
++}
+ 
+ /// RESEARCH BUILD ONLY: the arithmetic reference this module runs (`samsrf_core::reference`).
+ #[wasm_bindgen(js_name = arithmeticReference)]

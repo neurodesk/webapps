@@ -1,0 +1,761 @@
+{
+  "hosts": {
+    "ubuntu-22.04": {
+      "blas": "Intel(R) oneAPI Math Kernel Library Version 2021.3-Product Build 20220428 for Intel(R) 64 architecture applications (CNR branch AVX512_E1)",
+      "cases": {
+        "pipeline_double_css": {
+          "complexVertices": 57,
+          "maps[values, equal]": {
+            "Baseline": {
+              "imaginary complex": [
+                57,
+                2
+              ],
+              "imaginary real": [
+                39,
+                39
+              ],
+              "real complex": [
+                57,
+                2
+              ],
+              "real real": [
+                39,
+                27
+              ],
+              "saved real complex": [
+                57,
+                2
+              ],
+              "saved real real": [
+                39,
+                27
+              ]
+            },
+            "Beta": {
+              "imaginary complex": [
+                57,
+                4
+              ],
+              "imaginary real": [
+                39,
+                39
+              ],
+              "real complex": [
+                57,
+                4
+              ],
+              "real real": [
+                39,
+                27
+              ],
+              "saved real complex": [
+                57,
+                4
+              ],
+              "saved real real": [
+                39,
+                27
+              ]
+            },
+            "Exponent": {
+              "imaginary complex": [
+                57,
+                57
+              ],
+              "imaginary real": [
+                39,
+                39
+              ],
+              "real complex": [
+                57,
+                54
+              ],
+              "real real": [
+                39,
+                38
+              ],
+              "saved real complex": [
+                57,
+                54
+              ],
+              "saved real real": [
+                39,
+                38
+              ]
+            },
+            "Noise Ceiling": {
+              "imaginary complex": [
+                57,
+                57
+              ],
+              "imaginary real": [
+                39,
+                39
+              ],
+              "real complex": [
+                57,
+                57
+              ],
+              "real real": [
+                39,
+                39
+              ],
+              "saved real complex": [
+                57,
+                57
+              ],
+              "saved real real": [
+                39,
+                39
+              ]
+            },
+            "R^2": {
+              "imaginary complex": [
+                57,
+                7
+              ],
+              "imaginary real": [
+                39,
+                39
+              ],
+              "real complex": [
+                57,
+                12
+              ],
+              "real real": [
+                39,
+                31
+              ],
+              "saved real complex": [
+                57,
+                12
+              ],
+              "saved real real": [
+                39,
+                31
+              ]
+            },
+            "Sigma": {
+              "imaginary complex": [
+                57,
+                57
+              ],
+              "imaginary real": [
+                39,
+                39
+              ],
+              "real complex": [
+                57,
+                57
+              ],
+              "real real": [
+                39,
+                38
+              ],
+              "saved real complex": [
+                57,
+                57
+              ],
+              "saved real real": [
+                39,
+                38
+              ]
+            },
+            "nR^2": {
+              "imaginary complex": [
+                57,
+                10
+              ],
+              "imaginary real": [
+                39,
+                39
+              ],
+              "real complex": [
+                57,
+                12
+              ],
+              "real real": [
+                39,
+                31
+              ],
+              "saved real complex": [
+                57,
+                12
+              ],
+              "saved real real": [
+                39,
+                31
+              ]
+            },
+            "x0": {
+              "imaginary complex": [
+                57,
+                57
+              ],
+              "imaginary real": [
+                39,
+                39
+              ],
+              "real complex": [
+                57,
+                55
+              ],
+              "real real": [
+                39,
+                38
+              ],
+              "saved real complex": [
+                57,
+                55
+              ],
+              "saved real real": [
+                39,
+                38
+              ]
+            },
+            "y0": {
+              "imaginary complex": [
+                57,
+                57
+              ],
+              "imaginary real": [
+                39,
+                39
+              ],
+              "real complex": [
+                57,
+                55
+              ],
+              "real real": [
+                39,
+                38
+              ],
+              "saved real complex": [
+                57,
+                55
+              ],
+              "saved real real": [
+                39,
+                38
+              ]
+            }
+          },
+          "vertices": 96
+        },
+        "pipeline_double_css_nonnegative": {
+          "complexVertices": 0,
+          "maps[values, equal]": {
+            "Baseline": {
+              "imaginary real": [
+                96,
+                96
+              ],
+              "real real": [
+                96,
+                39
+              ],
+              "saved real real": [
+                96,
+                39
+              ]
+            },
+            "Beta": {
+              "imaginary real": [
+                96,
+                96
+              ],
+              "real real": [
+                96,
+                39
+              ],
+              "saved real real": [
+                96,
+                39
+              ]
+            },
+            "Exponent": {
+              "imaginary real": [
+                96,
+                96
+              ],
+              "real real": [
+                96,
+                94
+              ],
+              "saved real real": [
+                96,
+                94
+              ]
+            },
+            "Noise Ceiling": {
+              "imaginary real": [
+                96,
+                96
+              ],
+              "real real": [
+                96,
+                96
+              ],
+              "saved real real": [
+                96,
+                96
+              ]
+            },
+            "R^2": {
+              "imaginary real": [
+                96,
+                96
+              ],
+              "real real": [
+                96,
+                55
+              ],
+              "saved real real": [
+                96,
+                55
+              ]
+            },
+            "Sigma": {
+              "imaginary real": [
+                96,
+                96
+              ],
+              "real real": [
+                96,
+                94
+              ],
+              "saved real real": [
+                96,
+                94
+              ]
+            },
+            "nR^2": {
+              "imaginary real": [
+                96,
+                96
+              ],
+              "real real": [
+                96,
+                55
+              ],
+              "saved real real": [
+                96,
+                55
+              ]
+            },
+            "x0": {
+              "imaginary real": [
+                96,
+                96
+              ],
+              "real real": [
+                96,
+                94
+              ],
+              "saved real real": [
+                96,
+                94
+              ]
+            },
+            "y0": {
+              "imaginary real": [
+                96,
+                96
+              ],
+              "real real": [
+                96,
+                94
+              ],
+              "saved real real": [
+                96,
+                94
+              ]
+            }
+          },
+          "vertices": 96
+        }
+      },
+      "cpu": "INTEL(R) XEON(R) PLATINUM 8573C"
+    },
+    "ubuntu-24.04": {
+      "blas": "Intel(R) oneAPI Math Kernel Library Version 2021.3-Product Build 20220428 for Intel(R) 64 architecture applications (CNR branch auto)",
+      "cases": {
+        "pipeline_double_css": {
+          "complexVertices": 57,
+          "maps[values, equal]": {
+            "Baseline": {
+              "imaginary complex": [
+                57,
+                57
+              ],
+              "imaginary real": [
+                39,
+                39
+              ],
+              "real complex": [
+                57,
+                57
+              ],
+              "real real": [
+                39,
+                39
+              ],
+              "saved real complex": [
+                57,
+                57
+              ],
+              "saved real real": [
+                39,
+                39
+              ]
+            },
+            "Beta": {
+              "imaginary complex": [
+                57,
+                57
+              ],
+              "imaginary real": [
+                39,
+                39
+              ],
+              "real complex": [
+                57,
+                57
+              ],
+              "real real": [
+                39,
+                39
+              ],
+              "saved real complex": [
+                57,
+                57
+              ],
+              "saved real real": [
+                39,
+                39
+              ]
+            },
+            "Exponent": {
+              "imaginary complex": [
+                57,
+                57
+              ],
+              "imaginary real": [
+                39,
+                39
+              ],
+              "real complex": [
+                57,
+                57
+              ],
+              "real real": [
+                39,
+                39
+              ],
+              "saved real complex": [
+                57,
+                57
+              ],
+              "saved real real": [
+                39,
+                39
+              ]
+            },
+            "Noise Ceiling": {
+              "imaginary complex": [
+                57,
+                57
+              ],
+              "imaginary real": [
+                39,
+                39
+              ],
+              "real complex": [
+                57,
+                57
+              ],
+              "real real": [
+                39,
+                39
+              ],
+              "saved real complex": [
+                57,
+                57
+              ],
+              "saved real real": [
+                39,
+                39
+              ]
+            },
+            "R^2": {
+              "imaginary complex": [
+                57,
+                57
+              ],
+              "imaginary real": [
+                39,
+                39
+              ],
+              "real complex": [
+                57,
+                57
+              ],
+              "real real": [
+                39,
+                39
+              ],
+              "saved real complex": [
+                57,
+                57
+              ],
+              "saved real real": [
+                39,
+                39
+              ]
+            },
+            "Sigma": {
+              "imaginary complex": [
+                57,
+                57
+              ],
+              "imaginary real": [
+                39,
+                39
+              ],
+              "real complex": [
+                57,
+                57
+              ],
+              "real real": [
+                39,
+                39
+              ],
+              "saved real complex": [
+                57,
+                57
+              ],
+              "saved real real": [
+                39,
+                39
+              ]
+            },
+            "nR^2": {
+              "imaginary complex": [
+                57,
+                57
+              ],
+              "imaginary real": [
+                39,
+                39
+              ],
+              "real complex": [
+                57,
+                57
+              ],
+              "real real": [
+                39,
+                39
+              ],
+              "saved real complex": [
+                57,
+                57
+              ],
+              "saved real real": [
+                39,
+                39
+              ]
+            },
+            "x0": {
+              "imaginary complex": [
+                57,
+                57
+              ],
+              "imaginary real": [
+                39,
+                39
+              ],
+              "real complex": [
+                57,
+                57
+              ],
+              "real real": [
+                39,
+                39
+              ],
+              "saved real complex": [
+                57,
+                57
+              ],
+              "saved real real": [
+                39,
+                39
+              ]
+            },
+            "y0": {
+              "imaginary complex": [
+                57,
+                57
+              ],
+              "imaginary real": [
+                39,
+                39
+              ],
+              "real complex": [
+                57,
+                57
+              ],
+              "real real": [
+                39,
+                39
+              ],
+              "saved real complex": [
+                57,
+                57
+              ],
+              "saved real real": [
+                39,
+                39
+              ]
+            }
+          },
+          "vertices": 96
+        },
+        "pipeline_double_css_nonnegative": {
+          "complexVertices": 0,
+          "maps[values, equal]": {
+            "Baseline": {
+              "imaginary real": [
+                96,
+                96
+              ],
+              "real real": [
+                96,
+                96
+              ],
+              "saved real real": [
+                96,
+                96
+              ]
+            },
+            "Beta": {
+              "imaginary real": [
+                96,
+                96
+              ],
+              "real real": [
+                96,
+                96
+              ],
+              "saved real real": [
+                96,
+                96
+              ]
+            },
+            "Exponent": {
+              "imaginary real": [
+                96,
+                96
+              ],
+              "real real": [
+                96,
+                96
+              ],
+              "saved real real": [
+                96,
+                96
+              ]
+            },
+            "Noise Ceiling": {
+              "imaginary real": [
+                96,
+                96
+              ],
+              "real real": [
+                96,
+                96
+              ],
+              "saved real real": [
+                96,
+                96
+              ]
+            },
+            "R^2": {
+              "imaginary real": [
+                96,
+                96
+              ],
+              "real real": [
+                96,
+                96
+              ],
+              "saved real real": [
+                96,
+                96
+              ]
+            },
+            "Sigma": {
+              "imaginary real": [
+                96,
+                96
+              ],
+              "real real": [
+                96,
+                96
+              ],
+              "saved real real": [
+                96,
+                96
+              ]
+            },
+            "nR^2": {
+              "imaginary real": [
+                96,
+                96
+              ],
+              "real real": [
+                96,
+                96
+              ],
+              "saved real real": [
+                96,
+                96
+              ]
+            },
+            "x0": {
+              "imaginary real": [
+                96,
+                96
+              ],
+              "real real": [
+                96,
+                96
+              ],
+              "saved real real": [
+                96,
+                96
+              ]
+            },
+            "y0": {
+              "imaginary real": [
+                96,
+                96
+              ],
+              "real real": [
+                96,
+                96
+              ],
+              "saved real real": [
+                96,
+                96
+              ]
+            }
+          },
+          "vertices": 96
+        }
+      },
+      "cpu": "AMD EPYC 9V74 80-Core Processor"
+    }
+  },
+  "reference": "shipped (MKL CNR auto)"
+}

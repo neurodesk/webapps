@@ -228,9 +228,9 @@ jobs:
           SAMSRF_REVCOR_REFERENCE_DIR="$RUNNER_TEMP/samsrf-revcor-reference" SAMSRF_REVCOR_EDGES_DIR="$RUNNER_TEMP/samsrf-revcor-edges" SAMSRF_MATRIX_INPUT_DIR="$RUNNER_TEMP/samsrf-matrix-input" \
             cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test revcor_reference -- --nocapture
           # The Intel host's global regression and raw-file preprocessing, bit for bit, on
-          # MKL's AVX512_E1 branch (samsrf-mkl-avx512).
+          # MKL's AVX512_E1 branch (samsrf-mkl-avx512), and its double CF profiles (research).
           SAMSRF_REVCOR_REFERENCE_DIR="$RUNNER_TEMP/samsrf-revcor-reference" SAMSRF_MATRIX_INPUT_DIR="$RUNNER_TEMP/samsrf-matrix-input" \
-            cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-mkl-avx512 --test recordings -- --nocapture
+            cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-mkl-avx512 --test recordings --test blas_recordings -- --nocapture
           node packages/samsrf/validation/matlab/compare-revcor.mjs "$RUNNER_TEMP/samsrf-revcor-reference" "$RUNNER_TEMP/samsrf-matrix-input" "$RUNNER_TEMP/samsrf-revcor-comparison.json"
       - name: Preprocessed courses and the web engine's maps against the SamSrfAnalysis recording
         run: |
@@ -239,7 +239,7 @@ jobs:
           SAMSRF_CLI_REFERENCE_DIR="$RUNNER_TEMP/samsrf-cli" SAMSRF_CLI_COURSES_DIR="$RUNNER_TEMP/samsrf-cli-courses" \
             cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test cli_preprocess -- --nocapture
           SAMSRF_CLI_REFERENCE_DIR="$RUNNER_TEMP/samsrf-cli" SAMSRF_CLI_COURSES_DIR="$RUNNER_TEMP/samsrf-cli-courses" \
-            cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-mkl-avx512 --test recordings -- --nocapture
+            cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-mkl-avx512 --test recordings --test divergence -- --nocapture
           # The committed module on all 24 runs, held map by map to the frozen outcome
           # against the AMD source host (web-cli-outcome.json); any change fails.
           cli="$RUNNER_TEMP/samsrf-cli"
@@ -256,7 +256,7 @@ jobs:
           SAMSRF_CGG_DIR="$RUNNER_TEMP/samsrf-cgg" SAMSRF_CGG_RUNS_DIR="$RUNNER_TEMP/samsrf-x001-runs" \
             cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test constants_gemv -- --nocapture
           SAMSRF_CGG_DIR="$RUNNER_TEMP/samsrf-cgg" SAMSRF_CGG_RUNS_DIR="$RUNNER_TEMP/samsrf-x001-runs" \
-            cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-mkl-avx512 --test recordings -- --nocapture
+            cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-mkl-avx512 --test recordings --test blas_recordings -- --nocapture
           SAMSRF_CGG_DIR="$RUNNER_TEMP/samsrf-cgg" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --lib held_out_gamma -- --nocapture
           rm -rf "$RUNNER_TEMP/samsrf-x001-runs"
       - name: Single-precision Gaussian refusal evidence (MATLAB exp and host spread)
@@ -268,6 +268,9 @@ jobs:
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-gemv-order" packages/samsrf/validation/matlab/gemv-order-reference.json
           SAMSRF_SINGLE_KERNELS_DIR="$RUNNER_TEMP/samsrf-single-kernels" SAMSRF_GEMV_ORDER_DIR="$RUNNER_TEMP/samsrf-gemv-order/ubuntu-22.04" \
             cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test cf_single_replay -- --nocapture
+          # Where the single CF corr first departs on the Intel host (research, samsrf-mkl-avx512).
+          SAMSRF_SINGLE_KERNELS_DIR="$RUNNER_TEMP/samsrf-single-kernels" \
+            cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-mkl-avx512 --test divergence -- --nocapture
       - name: MATLAB geometry and real-template CF gates
         run: |
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-geometry" packages/samsrf/validation/matlab/geometry-reference.json
@@ -292,7 +295,7 @@ jobs:
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-numerics2" packages/samsrf/validation/matlab/numerics2-reference.json
           SAMSRF_MATLAB_NUMERICS2_DIR="$RUNNER_TEMP/samsrf-numerics2" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test matlab_numerics2
           SAMSRF_MATLAB_NUMERICS_DIR="$RUNNER_TEMP/samsrf-numerics" SAMSRF_MATLAB_NUMERICS2_DIR="$RUNNER_TEMP/samsrf-numerics2" \
-            cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-mkl-avx512 --test recordings -- --nocapture
+            cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-mkl-avx512 --test recordings --test divergence -- --nocapture
           SAMSRF_MATLAB_NUMERICS2_DIR="$RUNNER_TEMP/samsrf-numerics2" SAMSRF_SINGLE_KERNELS_DIR="$RUNNER_TEMP/samsrf-single-kernels" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test candidate_exclusions -- --nocapture
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-single-trig" packages/samsrf/validation/matlab/single-trig-reference.json
           SAMSRF_SINGLE_TRIG_DIR="$RUNNER_TEMP/samsrf-single-trig" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test single_trig -- --nocapture
@@ -303,7 +306,7 @@ jobs:
           SAMSRF_ARITHMETIC_ORDER_DIR="$RUNNER_TEMP/samsrf-arithmetic-order" SAMSRF_MATLAB_NUMERICS2_DIR="$RUNNER_TEMP/samsrf-numerics2" \
             cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test arithmetic_order -- --nocapture
           SAMSRF_ARITHMETIC_ORDER_DIR="$RUNNER_TEMP/samsrf-arithmetic-order" \
-            cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-mkl-avx512 --test recordings -- --nocapture
+            cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-mkl-avx512 --test recordings --test blas_recordings -- --nocapture
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-conv-boundary" packages/samsrf/validation/matlab/conv-boundary-reference.json
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-conv-blocks" packages/samsrf/validation/matlab/conv-blocks-reference.json
           SAMSRF_CONV_BOUNDARY_DIR="$RUNNER_TEMP/samsrf-conv-boundary" SAMSRF_CONV_BLOCKS_DIR="$RUNNER_TEMP/samsrf-conv-blocks" \
@@ -329,7 +332,7 @@ jobs:
           SAMSRF_QR_REFERENCE_DIR="$RUNNER_TEMP/samsrf-qr-reference" SAMSRF_QR_REPORT="$RUNNER_TEMP/samsrf-qr-port.json" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test qr_reference -- --nocapture
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-qr-kernels" packages/samsrf/validation/matlab/qr-kernels-reference.json
           SAMSRF_QR_REFERENCE_DIR="$RUNNER_TEMP/samsrf-qr-reference" SAMSRF_QR_KERNELS_DIR="$RUNNER_TEMP/samsrf-qr-kernels" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test qr_kernels -- --nocapture
-          SAMSRF_QR_REFERENCE_DIR="$RUNNER_TEMP/samsrf-qr-reference" SAMSRF_QR_KERNELS_DIR="$RUNNER_TEMP/samsrf-qr-kernels" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-mkl-avx512 --test recordings -- --nocapture
+          SAMSRF_QR_REFERENCE_DIR="$RUNNER_TEMP/samsrf-qr-reference" SAMSRF_QR_KERNELS_DIR="$RUNNER_TEMP/samsrf-qr-kernels" cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-mkl-avx512 --test recordings --test divergence -- --nocapture
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-controls" packages/samsrf/validation/matlab/controls-reference.json
           python3 -I packages/samsrf/validation/matlab/analyse-controls.py "$RUNNER_TEMP/samsrf-controls" "$RUNNER_TEMP/samsrf-qr-kernels"
           python3 -I packages/samsrf/validation/matlab/qr-accuracy.py "$RUNNER_TEMP/samsrf-qr-reference/ubuntu-24.04/compatible" "$RUNNER_TEMP/samsrf-qr-port.json" "$RUNNER_TEMP/samsrf-qr-accuracy.json"
