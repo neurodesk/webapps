@@ -328,6 +328,47 @@ test("a dropped folder fills every input slot", async ({ page }) => {
   await expect(page.locator("#runButton")).toBeEnabled();
 });
 
+/** A FreeSurfer surface as MATLAB's write_surf writes it: nothing after the faces. */
+function withoutTags(bytes) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const counts = bytes.indexOf(0x0a, bytes.indexOf(0x0a, 3) + 1) + 1;
+  const end = counts + 8 + (view.getInt32(counts, false) + view.getInt32(counts + 4, false)) * 12;
+  expect(end, "the example surface ends with FreeSurfer's tags").toBeLessThan(bytes.length);
+  return bytes.subarray(0, end);
+}
+
+test("maps draw on a FreeSurfer surface written without tags", async ({ page }) => {
+  test.setTimeout(900000);
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await loadExample(page);
+  await useSmallRoi(page);
+  const inflated = example.files.find((file) => file.role === "inflated");
+  const curv = example.files.find((file) => file.role === "curv");
+  await page.locator("#surfacesInput").setInputFiles([
+    { name: inflated.name, mimeType: "application/octet-stream", buffer: withoutTags(await exampleBytes(inflated)) },
+    { name: curv.name, mimeType: "application/octet-stream", buffer: await exampleBytes(curv) },
+  ]);
+  await expect(page.locator("#statusText")).toHaveText("Ready");
+  await expect(page.locator(".nd-viewer-empty")).toBeHidden();
+  await page.locator("#analysis").selectOption("rc");
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toContainText(RUNS.rc.outcome, { timeout: 600000 });
+  await expect(page.locator("#location")).toContainText("vertices with R²");
+  expect(errors).toEqual([]);
+});
+
+test("a surface the viewer cannot read is reported in the status bar", async ({ page }) => {
+  await page.goto("/");
+  const file = (name, text) => ({ name, mimeType: "application/octet-stream", buffer: Buffer.from(text) });
+  await page.locator("#surfacesInput").setInputFiles(file("lh.inflated", "not a surface"));
+  await expect(page.locator("#statusText")).toHaveText("The surface could not be shown: lh.inflated: FreeSurfer: unknown surface magic number 7237492");
+  await expect(page.locator(".nd-viewer-empty")).toBeVisible();
+  await page.locator("#surfacesInput").setInputFiles(file("lh.inflated.surf.gii", "<GIFTI"));
+  await expect(page.locator("#statusText")).toContainText("The surface could not be shown: lh.inflated.surf.gii: GIfTI: ");
+  await expect(page.locator(".nd-viewer-empty")).toBeVisible();
+});
+
 test("automation runs a reverse-correlation analysis on the example's files", async ({ page }, testInfo) => {
   test.setTimeout(1800000);
   const roles = { runs: example.files.filter(({ role }) => role === "run").slice(0, 1), apertures: [example.files[6]], roi: [example.files[7]], surfaces: [example.files[10], example.files[11]] };
