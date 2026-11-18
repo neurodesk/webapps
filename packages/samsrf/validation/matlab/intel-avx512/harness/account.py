@@ -16,7 +16,8 @@ Every value is labelled by the route of its final value (vertices are zero-based
   label does not establish that every kernel on its path is identified (the coarse fit's
   correlations, for example, are not modelled on either host).
 - `complex-double`: a vertex whose Srf.Data has an imaginary part on any side (the SamSrf
-  CSS convention). Complex least squares stays shipped. The original `avx512` variant
+  CSS convention). Complex least squares stays shipped except in `avx512-complex-qr`,
+  which adds the finite two-column complex-double candidate. The original `avx512` variant
   replaces only the real y norm inside complex corr; `avx512-real-corr` keeps that corr
   shipped; `avx512-complex-corr` also installs the complex dot and norm candidates. None
   identifies the whole complex route. Its fit may evaluate real predictions on the way.
@@ -312,7 +313,7 @@ def main():
     modules = {'shipped': sha256(options.committed),
                'control': read_json(options.control_build)['module']['samsrf_wasm_bg.wasm'],
                'research': read_json(options.research_build)['module']['samsrf_wasm_bg.wasm']}
-    if read_json(options.control_build)['variant'] != 'hooks' or read_json(options.research_build)['variant'] not in ('avx512', 'avx512-real-corr', 'avx512-complex-corr'):
+    if read_json(options.control_build)['variant'] != 'hooks' or read_json(options.research_build)['variant'] not in ('avx512', 'avx512-real-corr', 'avx512-complex-corr', 'avx512-complex-qr'):
         raise Refused('the build records name other variants')
     roots = {'shipped': Path(options.shipped), 'control': Path(options.control), 'research': Path(options.research)}
     reports = {}

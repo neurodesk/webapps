@@ -1,0 +1,35 @@
+{
+  "candidateFreeze": "129f6768b3c17a42649008c5f3224bc111f4ba63",
+  "fixedBase": "86937c35241eb8fad277406f2754b48dab1cb0ba",
+  "candidateSourceSha256": "183211bfedc14ae5e7f2ddd8d638c77ec7921b23cba424474d1544569f5ffa14",
+  "candidatePatchSha256": "1145206e594f7d549a245c719b8bb8918d6844d78b68531c13e266dfd5dbd521",
+  "executed": [
+    "9 Python discovery replay programs on existing pinned arrays",
+    "Rust complex QR gate on 1 Intel and 5 AMD hosts: 79 chains and 1264 eight-column RHS per host",
+    "19-test recordings/divergence invocation with QR and both numerics fixture pairs; unrelated fixture gates early-return",
+    "Clippy all targets of samsrf-mkl-avx512",
+    "82 app-version/workflow contracts under local Node 24.19.0 (not CI Node 22)",
+    "Unfused product and four-element-block mutants rejected at AMD candidate stage counts; restored gate passed",
+    "Research module build with pinned Rust 1.98.1 and wasm-pack 0.13.1",
+    "Fresh 24-run research CLI matrix on each host bundle, both comparator exits 0; two supported refusals per bundle",
+    "Fresh native double CSS pipeline runs, both hosts",
+    "Fresh bitwise accounting against committed module and prior research; baseline null controls and bundle independence rechecked",
+    "Shipping dependency tree excludes test crate; direct wasm target check rejected by explicit compile_error guard"
+  ],
+  "reused": [
+    "Committed cc528cf6 matrix runs and hooks e78af6fc null-control runs from final integrated baseline",
+    "Committed-arithmetic native CSS dump from cc5-hooks",
+    "Prior complex-corr research module/matrix/native dumps from 040fbe29e; diagnostic correction 86937c352 changes no engine arithmetic"
+  ],
+  "limits": [
+    "All recordings exposed; discovery and corroboration replays, no blind holdouts",
+    "Source MATLAB input bundles remain unattested",
+    "No actual container or browser UI acceptance run",
+    "No new MATLAB execution, shipping module change, CPU selection or production parity claim"
+  ],
+  "shipping": {
+    "samsrf_wasm.d.ts": "aaf8cc532c56ab2ab811589066a8c7934fca54ea8e4b836433931d42b4859215",
+    "samsrf_wasm.js": "9f657e55ab37edeab6050d68c42952a96279804ed91c64aa9ed2dce51933c360",
+    "samsrf_wasm_bg.wasm": "cc528cf6ec172367ee845296f197a686e671629386a595eaba5432ccfe0436b6"
+  }
+}

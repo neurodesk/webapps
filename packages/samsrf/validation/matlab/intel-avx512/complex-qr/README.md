@@ -92,3 +92,44 @@ Run the Rust divergence test with `SAMSRF_QR_KERNELS_DIR` and `SAMSRF_QR_REFEREN
 The full research evaluation uses `harness/build.sh avx512-complex-qr OUT`, the existing
 24-run matrix and native CSS pipeline drivers. Preserve baseline and earlier reports;
 account for every real, imaginary and GIfTI value against both hosts.
+
+## Frozen downstream replay
+
+The candidate was committed as `129f6768b` before any downstream evaluation. The research
+module is `05ae8063ba8ef52c2b1f5168c69019971de9905b724174fed04ae4d89952f021`.
+Its source and patch hashes, actual executions, and reused baseline artifacts are listed
+in [validation.json](../harness/cc528cf6-3/validation.json). No arithmetic was retuned after
+this freeze. Adding the new variant to the accounting tools' allowlists changes no bit
+comparison, host validation or null-control requirement.
+
+[The matrix](../harness/cc528cf6-3/matrix.json) compares the fresh research runs with the
+committed `cc528cf6` module; [the pipeline report](../harness/cc528cf6-3/pipelines.json)
+uses the corresponding native hooks baseline. Each bundle's 236-file null control was
+rechecked against the retained outputs, and all 236 research output files are identical
+between bundles. Source MATLAB receipt limitations still apply.
+
+| Intel result | Committed | Prior complex-corr research | Complex-QR candidate |
+| --- | --- | --- | --- |
+| Exact CLI maps / runs | 57 / 0 | 113 / 7 | 115 / 8 |
+| Complex CLI raw real equal | 68 / 135 | 107 / 135 | 135 / 135 |
+| Complex CLI raw imaginary equal | 79 / 135 | 108 / 135 | 135 / 135 |
+| Complex CLI GIfTI equal | 135 / 135 | 135 / 135 | 135 / 135 |
+| Native CSS scalar values equal | 2,798 / 3,456 | 3,240 / 3,456 | 3,456 / 3,456 |
+
+Against the preceding research build, Intel gains 28 real and 27 imaginary CLI values,
+plus 108 real and 108 imaginary pipeline values, with zero losses in either. All three
+previous CLI coefficient losses disappear. Both recorded double CSS conventions now
+match every scalar, including Beta and Baseline, on the Intel recording.
+
+Against the committed module, Intel gains 673 raw real, 56 raw imaginary and 69 GIfTI
+values, with zero losses. Native pipelines gain 453 real and 205 imaginary values with
+zero losses. Single remains unchanged: 521 real, 49 imaginary and 521 GIfTI values still
+differ on Intel. The 110 real-double CLI differences also remain. This is not whole
+SamSrf parity and does not repair or waive #876's production regression.
+
+The AMD controls remain distinct. Against committed arithmetic, the candidate loses
+798 CLI values (673 real, 56 imaginary, 69 GIfTI) and 637 pipeline values, with no gains.
+Against preceding research it gains three CLI values and loses 14, and loses 200 pipeline
+values with no gains. The [transition report](../harness/cc528cf6-3/relative-to-prior-research.json)
+retains every lost value and both host totals. No CPU/reference policy follows from these
+results. Fresh independent review and full affected CI remain the parent's next steps.

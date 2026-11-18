@@ -415,3 +415,13 @@ SAMSRF_CLI_REFERENCE_DIR="$PINS/cli" SAMSRF_CLI_COURSES_DIR="$PINS/cli-courses" 
   SAMSRF_MATLAB_NUMERICS2_DIR="$PINS/numerics2" SAMSRF_DIVERGENCE_REPORT_DIR="$TMPDIR/divergence" \
   cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-mkl-avx512 --test divergence
 ```
+
+## Subsequent complex QR replay
+
+The [complex two-column QR study](complex-qr/README.md) starts from #884 `86937c352`.
+Its candidate reproduces every recorded Intel complex-double QR stage and all 1,264
+multi-RHS columns. In the frozen downstream replay, the remaining three complex CLI
+losses disappear; the matrix reaches 115/168 maps and eight exact runs, and both recorded
+double CSS pipelines match every scalar on Intel. The [new reports](harness/cc528cf6-3/validation.json)
+retain both-host accounting, AMD losses, unchanged single/real residuals, and source-input
+limitations. Earlier reports and their baselines are unchanged; #876 remains blocked.

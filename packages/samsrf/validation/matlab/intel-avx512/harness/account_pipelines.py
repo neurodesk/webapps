@@ -204,7 +204,7 @@ def main():
         parser.add_argument(f'--{name}', required=True)
     options = parser.parse_args()
     builds = {'baseline': read_json(options.baseline_build), 'research': read_json(options.research_build)}
-    if builds['baseline']['variant'] != 'hooks' or builds['research']['variant'] not in ('avx512', 'avx512-real-corr', 'avx512-complex-corr'):
+    if builds['baseline']['variant'] != 'hooks' or builds['research']['variant'] not in ('avx512', 'avx512-real-corr', 'avx512-complex-corr', 'avx512-complex-qr'):
         raise SystemExit('the baseline must be the hooks build and the research an avx512 build')
     report = account(Path(options.pins), read_dump(options.baseline), read_dump(options.research))
     result = {
