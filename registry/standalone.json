@@ -546,8 +546,8 @@
       }
     },
     "msk": {
-      "version": "0.49.20261116",
-      "revision": "39b32f56a6d51644377ef2cd88648c281d38aae6",
+      "version": "0.49.20261118",
+      "revision": "fd08c1c20f078e6f50f0304d9bad4bf3a1227fc0",
       "apps": [
         {
           "id": "musclemap",
@@ -594,29 +594,29 @@
         {
           "kind": "desktop",
           "platform": "macos-arm64",
-          "version": "0.49.20261116",
-          "bytes": 378565354,
-          "url": "https://github.com/neurodesk/webapps/releases/download/msk-webapps-v0.49.20261116/msk-webapps-0.49.20261116-mac-arm64.zip",
-          "sha256": "32fe480ca254d8fe064f0b699f1bcfd2a4f97c46b7f4724ca85653f1a439235a",
-          "command": "unzip msk-webapps-0.49.20261116-mac-arm64.zip"
+          "version": "0.49.20261118",
+          "bytes": 378566021,
+          "url": "https://github.com/neurodesk/webapps/releases/download/msk-webapps-v0.49.20261118/msk-webapps-0.49.20261118-mac-arm64.zip",
+          "sha256": "e123cac64368e61cfe1f32cb2c55b21586eb3439aa4f74d44a5e30ac0ef6324f",
+          "command": "unzip msk-webapps-0.49.20261118-mac-arm64.zip"
         },
         {
           "kind": "desktop",
           "platform": "linux-x64",
-          "version": "0.49.20261116",
-          "bytes": 385284938,
-          "url": "https://github.com/neurodesk/webapps/releases/download/msk-webapps-v0.49.20261116/msk-webapps-0.49.20261116-linux-x64.tar.gz",
-          "sha256": "2b849627579204df8f5072dd94e0a9ad7453ddde3156b70353a033c6b91d807a",
-          "command": "tar -xzf msk-webapps-0.49.20261116-linux-x64.tar.gz"
+          "version": "0.49.20261118",
+          "bytes": 385285021,
+          "url": "https://github.com/neurodesk/webapps/releases/download/msk-webapps-v0.49.20261118/msk-webapps-0.49.20261118-linux-x64.tar.gz",
+          "sha256": "ed8689c1cb158c33f89957eb2ca32437ef7453e7d4b89e8f829aa006bd701685",
+          "command": "tar -xzf msk-webapps-0.49.20261118-linux-x64.tar.gz"
         },
         {
           "kind": "desktop",
           "platform": "windows-x64",
-          "version": "0.49.20261116",
-          "bytes": 409146785,
-          "url": "https://github.com/neurodesk/webapps/releases/download/msk-webapps-v0.49.20261116/msk-webapps-0.49.20261116-win-x64.zip",
-          "sha256": "f26b3b7c36608ba41ef8184e5c3491cebb4d0475b8e2ce167ee7c9f4a985021b",
-          "command": "Expand-Archive msk-webapps-0.49.20261116-win-x64.zip -DestinationPath MSKWebapps"
+          "version": "0.49.20261118",
+          "bytes": 409146412,
+          "url": "https://github.com/neurodesk/webapps/releases/download/msk-webapps-v0.49.20261118/msk-webapps-0.49.20261118-win-x64.zip",
+          "sha256": "cef4f8aba1f9d16c02736ce35bdc62d947eae6205eeab112fb661b472b3f3db5",
+          "command": "Expand-Archive msk-webapps-0.49.20261118-win-x64.zip -DestinationPath MSKWebapps"
         }
       ],
       "models": {
