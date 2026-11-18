@@ -770,7 +770,7 @@ fn pipelines_from_matlab_courses_match_matlab() {
                     let ok = if rounding.contains(&v) && !intel(host) {
                         // MATLAB fitted the rounding its global regression left, and the
                         // port's regression leaves the same rounding on the AMD hosts.
-                        same(a, e)
+                        a.to_bits() == e.to_bits()
                     } else if !single(case) {
                         within(a, e, 1e-12 * k * e.abs().max(1.0))
                     } else if single(case) && !intel(host) {
