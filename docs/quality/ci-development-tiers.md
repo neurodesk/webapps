@@ -156,30 +156,37 @@ budget only with the measurement that justifies it.
 
 After the budgets, the report shows whether the CI got cheaper and faster.
 These measures are report-only: none fails the job. Job minutes are the time
-each job held a runner, from the jobs of every run that was not skipped.
+each job held a runner, from the jobs of every run that was not skipped. They
+count the latest attempt of each run only, cancelled minutes too: the job
+listing leaves out the earlier attempts of a re-run.
 
 | Measure | Definition | Target |
 | --- | --- | --- |
-| Job minutes per merged pull request | For each pull request merged in the window: its runs of every workflow on its head branch from its opening to its merge (earlier days included), its merge queue runs, and the push runs of its merge commit. Median and the three largest. | - |
-| Fixed-job share | Of the job minutes of pull request `ci` runs, the share in `plan` and `fixed` jobs, for draft, ready, whole-catalogue and all runs. | Draft runs under 30% |
-| Ready to green | For each ready pull request `ci` run that succeeded, creation to completion. Median and 90th percentile, apart for whole-catalogue runs. | Median under 20 minutes |
-| Merge to live | For each push to main (the first run of its commit), to the completion of the first successful `deploy-github-pages` run of that commit or a later one, also after the window. Median and maximum; pushes not yet live are listed. | - |
+| Job minutes per merged pull request | For each pull request merged in the window: its runs of every workflow on its head branch from its opening to its merge (earlier days included), its merge queue runs, and the push runs of its merge commit, also those created after the window up to the report. Median and the three largest. | - |
+| Fixed-job share | Of the job minutes of pull request `ci` runs, the share in `plan` and `fixed` jobs, for draft, ready, whole-catalogue, unknown-tier and all runs. | Draft runs under 30% |
+| Ready to green | For each ready pull request `ci` run that succeeded, the start of its latest attempt to completion, so a late re-run does not count the wait before it; a re-run of failed jobs counts only the re-run. Median and 90th percentile, apart for whole-catalogue runs. | Median under 20 minutes |
+| Merge to live | For each push to main (the first run of its commit), to the completion of the first successful `deploy-github-pages` run on main of that commit or a later one, also after the window. A deploy on main runs main's head when it is created, so one of a commit the pushes do not name counts for the pushes created before it. Median and maximum; pushes not yet live are listed. | - |
 | Runs that tested nothing | Runs that were skipped, ran no job, or ran only `plan` and `report` jobs. Count and share of all runs. | - |
 | Cancelled minutes | Job minutes of cancelled runs. | - |
 
 A pull request `ci` run is whole-catalogue when it ran at least 100 jobs, ready
-when it started a job only a ready pull request starts (`full-plan`,
-`full-plan-withheld`, `composite-site`), and draft otherwise. A ready run that
-selects neither the site nor more than its draft plan counts as draft.
+when a job only a ready pull request starts (`full-plan`, `full-plan-withheld`,
+`composite-site`) took a runner, and draft otherwise. A ready run that selects
+neither the site nor more than its draft plan counts as draft. A cancelled run
+that lists such a job, neither skipped nor given a runner, is of unknown tier:
+a run cancelled while planning cancels those jobs whatever its plan. The
+report shows these runs in their own row.
 
 `WORKFLOWS` in `scripts/lib/ci-measures.mjs` gives each workflow, by name, and
-each `ci` job a role: `plan` (planner, gate, plan marker), `fixed` (tests every
+each `ci` job, by the name the API lists it under (its `name:`, else its id), a role: `plan` (planner, gate, plan marker), `fixed` (tests every
 `ci` run whatever changed: `workspace-contracts`, `homepage-easter-egg`), `app`,
 `site`, `test`, `deliver` or `report`. In a test workflow the reusable gate's
 jobs plan and every other job tests. A workflow or `ci` job the table does not
 name is `unclassified`: it counts in the totals and in no share, and the report
-lists it. `test/ci-measures.test.mjs` requires an entry for every workflow file
-and every job of `ci.yml`, so rename both together.
+lists it, also when it started no job. `test/ci-measures.test.mjs` requires an
+entry for every workflow file (`.yml` or `.yaml`) and every job of `ci.yml`
+under its API name, and that each test workflow's gate jobs plan, so rename
+both together.
 
 The targets are the CI optimisation program's goals of November 2026. In the
 48 hours to 18 November 2026 11:00 UTC the draft share was 58%, ready to
@@ -187,9 +194,19 @@ green 34 minutes and merge to live 20 minutes. They become budgets only once
 the changes that reach them have landed and the numbers have held; a budget
 opens an issue on every miss.
 
-Reading the jobs costs one request per 30 jobs of each run. The 48 hours to
-18 November took 1,019 requests, so a daily report makes about 510: half of
-the 1,000 an hour a workflow token may make. The report prints its count.
+The budgets come first, on about 80 requests a day (the run listings and one
+job count per `ci` pull request run that did work), and alone decide the exit
+code. The
+measures then read the deploys, the merged pull requests and their runs
+outside the window, and the jobs of every run that was not skipped, at one
+request per 30 jobs, under a cap of 600 requests (`--max-requests`). That is
+well below the 1,000 an hour a workflow token may make, which other workflows
+share. The 48 hours to 18 November took 984 measure requests, so an ordinary
+day needs about 490. Once the cap is reached, or a request is
+refused (a rate limit, for instance), the report starts no further request
+and shows each measure that lacks data as `unavailable:` with the reason;
+it never shows such a measure as zero, and the job does not fail. The report
+prints both request counts.
 
 ### Enforcement in CI
 
