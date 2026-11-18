@@ -1,5 +1,11 @@
 # @neurodesk/samsrf
 
+## 0.6.20261118
+
+### Patch Changes
+
+- Compute convex-hull centroids and areas as MATLAB R2023b's `polyshape` does, and use MATLAB's reverse-correlation pixel grid. Each boundary's area and centroid are taken relative to its bounding-box centre in the vertex order MATLAB stores, through MATLAB's own sequence of sums, reciprocals and area weighting; this reproduces MATLAB's bits for every hull of the four pinned polygon recordings on both hosts. Hulls are now listed in that stored order, and reverse-correlation pixels follow MATLAB's symmetric `linspace`, which MATLAB's saved 100-pixel grid equals at every point (the earlier grid differed at 59 of 100). On the SamSrfAnalysis matrix against source MATLAB, the double reverse-correlation hull `x0` and `y0` are now exact in both runs (up to 36 ULP before), CF hull `y0` differs only in one NaN's sign (17 vertices by 1 ULP before), and the double RC Gaussian fits equal MATLAB at every finite vertex; 133 of 168 maps are exact on AMD (129 before) and 46 on Intel (42 before). Still open: the reverse-correlation `Fwhm`, which keeps the earlier `convexHull` area (1-2 ULP at 15 of 42 vertices), MATLAB's ring decomposition of self-intersecting CF clusters (15 recorded template values per host within 1e-12), and the 93 near-collinear hull exceptions.
+
 ## 0.6.20261117
 
 ### Patch Changes
