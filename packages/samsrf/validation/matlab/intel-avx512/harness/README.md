@@ -59,9 +59,13 @@ sequence number. Reports are kept as written, so a later run never relabels an e
 - `4c1a23a8-1/`: the first run (at `8c5009fc1`), kept unchanged. Its CSS-pipeline files count
   each build's matches with MATLAB but no transitions, which hid six losses. Its
   `divergence/` reports were reproduced byte for byte at `a31a71baf`.
-- `4c1a23a8-2/`: the run after the review (at `a31a71baf`). It holds `matrix.json` and
-  `matrix-real-corr.json` (`account.py --summary`), and `pipelines.json` and
-  `pipelines-real-corr.json` (`account_pipelines.py`).
+- `4c1a23a8-2/`: the run after the review (builds at `9d4a73d33` and `a31a71baf`). It holds
+  `matrix.json` and `matrix-real-corr.json` (`account.py --summary`), and `pipelines.json`
+  and `pipelines-real-corr.json` (`account_pipelines.py`).
+- `cc528cf6-1/`: the rerun on the combined module (#876 merged with main, at `827dbcaad`):
+  `matrix.json` and `matrix-real-corr.json`. Its CSS-pipeline dumps, and so its pipeline
+  reports, were byte-identical to `4c1a23a8-2/`'s, and its departure reports to
+  `4c1a23a8-1/`'s; they are not duplicated.
 
 ## Reproducing
 

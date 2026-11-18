@@ -152,10 +152,12 @@ near-tie misses.
 
 What these comparisons are and are not:
 
-- The baseline ("committed module") is this stack's module, #876's `4c1a23a8`, not main's.
-  Each report folder is named after the module it compares with: `harness/4c1a23a8-1/` is
-  the first run (at `8c5009fc1`, kept unchanged) and `harness/4c1a23a8-2/` the run after
-  the review (at `a31a71baf`).
+- The baseline ("committed module") is this stack's module, never main's: #876's
+  `4c1a23a8` before main was merged into it, and `cc528cf6` (#876 merged with main
+  `36ac29932`) after. Each report folder is named after the module it compares with:
+  `harness/4c1a23a8-1/` is the first run (at `8c5009fc1`, kept unchanged),
+  `harness/4c1a23a8-2/` the run after the review (builds at `9d4a73d33` and `a31a71baf`),
+  and `harness/cc528cf6-1/` the rerun on the combined module (at `827dbcaad`).
 - MATLAB is the source recording's MATLAB processes (`source-1` on each host; `source-2`
   repeats it bit for bit), whose receipts do not attest the input bundle (the comparator's
   `--allow-unattested-source-inputs`). Nothing here is compiled-image (container) or browser
@@ -230,6 +232,31 @@ The committed module's matches of these 4 values combined the AMD host's `y` wit
 complex kernels; they are coincidences, not identified arithmetic. Run on the AMD host, the
 research build loses 784 values and the intervention build 781: neither is the AMD
 reference.
+
+### On the combined module (`harness/cc528cf6-1/`)
+
+After main's #874 was merged into #876 (canonical module `cc528cf6`), the same builds of
+the same patches were rerun from `827dbcaad`. The null control again writes the committed
+module's bytes in all 236 files on both bundles:
+
+| Route | Values | AMD 9V74, committed | AMD 9V74, research | Intel 8573C, committed | Intel 8573C, research | Intel 8573C, intervention |
+| --- | --- | --- | --- | --- | --- | --- |
+| real double, raw | 1,797 | 1,687 | 1,081 | 1,081 | 1,687 (+606, -0) | 1,687 (+606, -0) |
+| real double, GIfTI | 1,797 | 1,797 | 1,728 | 1,728 | 1,797 (+69, -0) | 1,797 (+69, -0) |
+| complex double (15 CSS vertices), raw real / imaginary | 135 / 135 | 135 / 135 | 77 / 83 | 68 / 79 | 85 / 81 (+23, -4) | 83 / 84 (+24, -4) |
+| complex double, GIfTI | 135 | 135 | 135 | 135 | 135 | 135 |
+| single, raw real / imaginary | 1,596 / 1,596 | 1,596 / 1,596 | 1,596 / 1,596 | 1,075 / 1,547 | 1,075 / 1,547 | 1,075 / 1,547 |
+| single, GIfTI | 1,596 | 1,596 | 1,596 | 1,075 | 1,075 | 1,075 |
+| exact maps / exact runs (comparator) | 168 / 24 | 160 / 18 | 102 / 10 | 57 / 0 | 111 / 7 | 111 / 7 |
+
+With #874's reverse-correlation grid, `rc_gaussian_lh_double` is also exact on the Intel
+host with both research builds (7 runs). The 110 raw values still missed are all at the
+committed module's AMD positions, with equal MATLAB values and equal module values on both
+hosts: the convex-hull geometry of the RC and CF hull fits (#732). The 4 Intel losses are
+the same values as on `4c1a23a8`, and so is their attribution. Run on the AMD host, the
+research build loses 785 values and the intervention build 782. The CSS-pipeline dumps of
+all three builds are byte-identical to those on `4c1a23a8`, and so are both pipeline
+reports and the departure reports; they are not duplicated.
 
 ### The recorded CSS pipelines (`harness/4c1a23a8-2/pipelines*.json`)
 
@@ -327,16 +354,19 @@ measured options for that decision, on the source recordings named above (no con
 UI evidence); the decision belongs to the maintainers, and nothing below is implemented.
 None of them resolves the Intel blocker of #876.
 
-1. Keep the AMD arithmetic only (this stack's module, `4c1a23a8`): AMD 157 of 168 maps and
-   17 runs exact; Intel 55 maps and no run exact.
+Figures are on the combined module `cc528cf6`; on `4c1a23a8` they are in the sections
+above.
+
+1. Keep the AMD arithmetic only (this stack's module): AMD 160 of 168 maps and 18 runs
+   exact; Intel 57 maps and no run exact.
 2. An explicit reference in the model, recorded in every output, with the AMD arithmetic as
    the default and the research build as an Intel option. When it is not selected, the AMD
-   results do not change. When it is selected on the Intel recordings: 108 maps and 6 runs
-   exact; the CLI matrix gains 628 raw values (605 real double, 23 complex) and 69 GIfTI
+   results do not change. When it is selected on the Intel recordings: 111 maps and 7 runs
+   exact; the CLI matrix gains 629 raw values (606 real double, 23 complex) and 69 GIfTI
    values and loses 4; the pipelines gain 263 values and lose 6. The 10 losses are all on
    complex vertices (attributed above). Single runs stay as they are, and the norm
    candidate keeps its two known near-tie misses.
-3. As 2, with the intervention build: the same maps and runs; the CLI matrix gains 629 raw
+3. As 2, with the intervention build: the same maps and runs; the CLI matrix gains 630 raw
    and 69 GIfTI values and loses the same 4; the pipelines gain 248 and lose none. Its
    complex `corr` stays entirely shipped, which is no closer to Intel's arithmetic; it only
    moves fewer unidentified values.
