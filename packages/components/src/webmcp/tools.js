@@ -119,7 +119,7 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
   });
 
   tool('app_describe', 'Describe this application',
-    `Read what ${contract.title} does: its operations with their inputs, parameters and outputs, its examples (and why any cannot be loaded), its viewers, the current run and the files each input role holds.`,
+    `Read what ${contract.title} does: its operations with their inputs, parameters and outputs, its examples (and why any cannot be loaded), its viewers, the current run, the files each input role holds and the files the user has loaded into the page (pageFiles).`,
     object({}), { ...readOnly, ...untrusted },
     async () => ({
       app: contract.app,
@@ -135,6 +135,7 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
       viewers: await dispatch('viewers.list'),
       run: await dispatch('snapshot'),
       inputs: inputs.held(),
+      pageFiles: inputs.page(),
     }));
 
   tool('inputs_request_files', 'Ask the user for input files',
@@ -150,6 +151,17 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
       if (!files) return { declined: true };
       inputs.adopt(role, files);
       return { role, files: describeFiles(files) };
+    });
+
+  tool('inputs_use_page_files', 'Use files the user loaded',
+    'Hold the files the user already loaded into one of the page\'s own inputs (pageFiles in app_describe) as the input for a role, without asking for them again.',
+    object({
+      role: { type: 'string', enum: [...roles.keys()], description: 'The input role to fill' },
+      input: { type: 'string', description: 'The input key from pageFiles' },
+    }, ['role', 'input']), untrusted,
+    async ({ role, input }) => {
+      if (!roles.has(role)) throw new Error(`Unknown file input role: ${role}`);
+      return { role, files: describeFiles(inputs.usePage(role, input)) };
     });
 
   tool('inputs_load_example', 'Load an example',
@@ -171,9 +183,10 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
 
   for (const [name, operation] of Object.entries(contract.operations)) {
     tool(runTools[name], operation.title,
-      `${operation.description} Runs on the files the input roles hold (see inputs_request_files and inputs_load_example) and shows the result in the page; a run uses up the held files. Waits up to waitSeconds, then returns the run; call runs_get to keep waiting. A failed run with code SERIES_SELECTION_REQUIRED lists candidates: ask the user with user_ask and run again with selections.`,
+      `${operation.description} Runs on the files the input roles hold (see inputs_request_files, inputs_use_page_files and inputs_load_example) and shows the result in the page. The files stay held, so run again with other parameters without asking for them again. Waits up to waitSeconds, then returns the run; call runs_get to keep waiting. A failed run with code SERIES_SELECTION_REQUIRED lists candidates: ask the user with user_ask and run again with selections.`,
       runSchema(operation), untrusted,
       async ({ parameters, inputs: sources, selections, waitSeconds: seconds = DEFAULT_WAIT_SECONDS }, { signal }) => {
+        await inputs.stage();
         const { runId } = await dispatch('start', { operation: name, parameters, inputs: sources, selections });
         const snapshot = await settle(dispatch, runId, seconds, signal);
         if (!signal?.aborted || snapshot.runId !== runId || terminal.has(snapshot.state)) return snapshot;

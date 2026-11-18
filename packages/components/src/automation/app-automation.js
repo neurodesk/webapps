@@ -222,6 +222,7 @@ export function registerAppAutomation({ app, operations, convertDicom, contractU
     artifacts.clear();
     transfer.value = '';
     snapshot = { schemaVersion: 2, app, appVersion: contract?.appVersion, runId: null, state: 'idle' };
+    target.dispatchEvent?.(new target.Event('neurodesk-automation-reset'));
   }
   const handle = {
     ready, dispatch, reset,
@@ -234,7 +235,6 @@ export function registerAppAutomation({ app, operations, convertDicom, contractU
       await ready;
       return adopt(role, files);
     },
-    held: () => Object.fromEntries([...adopted].map(([role, files]) => [role, files.map(file => ({ name: file.name, bytes: file.size }))])),
   });
   // The shell's WebMCP module loads apart from the app and may arrive before or after this registration.
   target.dispatchEvent?.(new target.Event('neurodesk-automation'));

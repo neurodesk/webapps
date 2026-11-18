@@ -7,6 +7,7 @@ import { registerAppAutomation } from '../src/automation/index.js';
 import { operationParametersSchema } from '../src/automation/parameters.js';
 import { registerWebMcpTools, webMcpTools } from '../src/webmcp/tools.js';
 import { exposeWebMcp } from '../src/webmcp/page.js';
+import { createToolInputs } from '../src/webmcp/inputs.js';
 
 const appsDir = new URL('../../../apps/', import.meta.url);
 const contract = () => ({ schemaVersion: 2, app: 'test', title: 'Test', description: 'Segments a test image.', appVersion: '0.1.20260928', defaultOperation: 'run', operations: {
@@ -24,24 +25,16 @@ const examples = [
 ];
 
 function page(t, operation, options = {}) {
-  const dom = new JSDOM('<body></body>', { url: 'https://example.test/test/' });
+  const dom = new JSDOM('<body><input type="file" id="t1" data-neurodesk-input="image" aria-label="T1 image"></body>', { url: 'https://example.test/test/' });
   t.after(() => dom.window.close());
   const downloads = [];
-  const { dispatch } = registerAppAutomation({ app: 'test', contract: contract(), operations: { run: operation },
+  const registration = registerAppAutomation({ app: 'test', contract: contract(), operations: { run: operation },
     document: dom.window.document, target: dom.window, download: file => downloads.push(file) });
-  const transfer = dom.window.document.getElementById('neurodesk-input-transfer');
-  const held = {};
-  const inputs = {
-    held: () => held,
-    async adopt(role, files) {
-      Object.defineProperty(transfer, 'files', { configurable: true, value: files });
-      await dispatch('adopt', { role });
-      held[role] = files.map(file => ({ name: file.name, bytes: file.size }));
-    },
-  };
-  const tools = webMcpTools({ contract: contract(), dispatch, inputs, examples: () => examples, ...options });
+  const automation = dom.window.neurodeskAutomation;
+  const inputs = createToolInputs({ doc: dom.window.document, automation });
+  const tools = webMcpTools({ contract: contract(), dispatch: automation.dispatch, inputs, examples: () => examples, ...options });
   const call = (name, input = {}, signal = new AbortController().signal) => tools.find(tool => tool.name === name).execute(input, { signal });
-  return { tools, call, dispatch, downloads, inputs };
+  return { tools, call, dispatch: automation.dispatch, downloads, inputs, registration, window: dom.window };
 }
 
 const labels = () => ({ artifacts: [{ role: 'labels', file: new File(['labels'], 'labels.nii') }] });
@@ -60,7 +53,7 @@ test('every app contract builds spec-valid tools whose run schemas accept what t
   assert.ok(apps.length >= 60);
   for (const app of apps) {
     const appContract = JSON.parse(await readFile(new URL(`${app}/automation.json`, appsDir), 'utf8'));
-    const tools = webMcpTools({ contract: appContract, dispatch: async () => ({}), inputs: { held: () => ({}), adopt() {} } });
+    const tools = webMcpTools({ contract: appContract, dispatch: async () => ({}), inputs: {} });
     const names = tools.map(tool => tool.name);
     assert.equal(new Set(names).size, names.length, `${app}: tool names are unique`);
     for (const tool of tools) {
@@ -256,4 +249,45 @@ test('the page module registers the tools for an app that registers before or af
     assert.equal(run.state, 'succeeded');
     assert.equal(run.report.inputs.image[0].filename, 'input.nii');
   }
+});
+
+// The person loads files through the page's own input, as a picker or a page drop delivers them.
+function personLoads(window, files) {
+  const input = window.document.getElementById('t1');
+  Object.defineProperty(input, 'files', { configurable: true, value: files });
+  input.dispatchEvent(new window.Event('change', { bubbles: true }));
+}
+
+const settled = () => new Promise(resolve => setTimeout(resolve, 10));
+
+test('held files serve every rerun until the person loads their own files or the app resets', async t => {
+  const seen = [];
+  let window;
+  const { call, inputs, registration, window: pageWindow } = page(t, async ({ inputs: files, parameters }) => {
+    seen.push([files.image[0].name, parameters.threshold]);
+    if (parameters.threshold === 0.9) personLoads(window, [new File(['fed'], 'fed-by-the-run.nii')]);
+    return labels();
+  });
+  window = pageWindow;
+  inputs.adopt('image', [new File(['input'], 'input.nii')]);
+  for (const threshold of [0.2, 0.8, 0.9]) assert.equal((await call('run_run', { parameters: { threshold } })).state, 'succeeded');
+  await settled();
+  assert.deepEqual(seen, [['input.nii', 0.2], ['input.nii', 0.8], ['input.nii', 0.9]]);
+  assert.deepEqual((await call('app_describe')).inputs, { image: [{ name: 'input.nii', bytes: 5 }] }, 'a load the run itself made keeps the held files');
+
+  personLoads(window, [new File(['mine'], 'mine.nii')]);
+  await settled();
+  const describe = await call('app_describe');
+  assert.deepEqual(describe.inputs, {}, 'the person moved on, so the tools release the files they held');
+  assert.deepEqual(describe.pageFiles, [{ input: 't1', kind: 'image', label: 'T1 image', files: [{ name: 'mine.nii', bytes: 4 }] }]);
+  assert.deepEqual(await call('inputs_use_page_files', { role: 'image', input: 't1' }), { role: 'image', files: [{ name: 'mine.nii', bytes: 4 }] });
+  assert.equal((await call('run_run')).report.inputs.image[0].filename, 'mine.nii');
+  assert.match((await call('inputs_use_page_files', { role: 'image', input: 'nowhere' })).error.message, /No files are loaded/);
+
+  personLoads(window, [new File(['newer'], 'newer.nii')]);
+  await settled();
+  assert.deepEqual((await call('app_describe')).pageFiles[0].files, [{ name: 'newer.nii', bytes: 5 }], 'an input\'s earlier files are forgotten');
+  inputs.adopt('image', [new File(['input'], 'input.nii')]);
+  registration.reset();
+  assert.deepEqual((await call('app_describe')).inputs, {}, 'a reset releases the held files');
 });

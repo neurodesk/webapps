@@ -1,4 +1,5 @@
 import { createAgentPrompts } from '../ui/agentPrompt.js';
+import { createToolInputs } from './inputs.js';
 import { registerWebMcpTools, webMcpTools } from './tools.js';
 
 // The shell loads this module apart from the app bundle, so the page's automation is reached through the
@@ -28,7 +29,7 @@ export async function exposeWebMcp(modelContext, doc = globalThis.document) {
   const tools = webMcpTools({
     contract,
     dispatch: automation.dispatch,
-    inputs: { adopt: automation.adopt, held: automation.held },
+    inputs: createToolInputs({ doc, automation }),
     examples: () => pageExamples(doc),
     askUser: prompts.ask,
     requestFiles: prompts.requestFiles,
