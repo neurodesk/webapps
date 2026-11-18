@@ -1226,12 +1226,17 @@ environment that names the runner and the SHA-256 of the plan file, the bundle
 manifest and the WebAssembly module.
 
 Each run's model is the CLI model plus `Data_Precision`, which carries the
-precision that `def_64bit` selects for MATLAB. Bundle paths replace `/input`,
+precision that `def_64bit` selects for MATLAB, and, for forward models,
+`Css_Convention: "samsrf"`: SamSrf always takes complex CSS powers, while the
+engine's default clips negative responses. Bundle paths replace `/input`,
 and CF reads the Benson GIfTI that `prepare_cli_bundle.m` converted into the
 per-precision `.mat`. The Node runner passes the subject-HRF file to the engine
 API as a kernel (`hrf.oldSchool` of the file's `fP`). The app's interface has no
 subject-HRF route, so the browser runner records those four runs as
-`unsupported`.
+`unsupported` when the engine stops with the core's subject-HRF text.
+`expectedEngineOutcome` names each run's expected refusal and its exact text,
+and both runners record `refused` or `unsupported` only for that text. Any
+other failure, a crash included, is `failed`.
 
 ```sh
 compare_web_cli.py PLAN BUNDLE_SHA256 WEB_ROOT MATLAB_ROOT REPORT \
@@ -1270,36 +1275,61 @@ Before that comparison, the run's inventory must hold, or the run is an
 - `maps.f64` must have exactly 8 x maps x vertices bytes and match its hash;
 - the labels and the files on each side must match the contract.
 
-A map is `exact` only if both comparisons agree bit for bit, including
-nonfinite values and the sign of zero, and MATLAB's imaginary part is zero.
-Otherwise it `differs`. The report then gives the differing vertices, how many
-differ only in the sign of zero, the largest absolute, relative and ULP
-differences, and whether the masks agree. ULPs count +0 and -0 as one ordinal,
+Where `Srf.Data` is complex (SamSrf's CSS powers of a negative response), its
+imaginary parts are compared bitwise with the engine's, which the runners write
+to `maps.imag.f64` from `Job.merge`'s `imaginary` (a run without that file has
++0 imaginary parts). A map is `exact` only if all of these agree bit for bit,
+including nonfinite values and the sign of zero. Otherwise it `differs`. The
+report then gives the differing vertices, how many differ only in the sign of
+zero, the largest absolute, relative and ULP differences, and whether the masks
+agree. ULPs count +0 and -0 as one ordinal,
 so the smallest subnormals of opposite sign are 2 apart; `signedZeroOnly`
 counts the sign-of-zero differences.
 
 A run is `refused` only where the engine is expected to refuse (single RC with
 a fitted profile, single CF Gaussian), and `unsupported` only for the browser's
-subject-HRF runs, in both cases with MATLAB succeeding. Any other combination
-is `failed`, with both sides' statuses kept. The polar angle and eccentricity
-GIfTIs that the web exports and SamSrfAnalysis does not are checked for shape
-and listed as not compared. MATLAB-only files are listed the same way. No
-tolerance is applied. Failed and inventory-error runs exit nonzero.
+subject-HRF runs, in both cases with MATLAB succeeding. The comparator does not
+take the runner's word for it: the record must carry exactly the core's text
+for that run (`expected_web_outcome`), or the run is `failed` and names
+`expectedMessage`. Any other combination is `failed`, with both sides'
+statuses kept. A MATLAB failure does not hide a wrong web result: the summary
+counts it in `matlabFailedRuns` and the web side in `webUnexpectedRuns`. The
+polar angle and eccentricity GIfTIs that the web exports and SamSrfAnalysis
+does not are checked for shape and listed as not compared. MATLAB-only files
+are listed the same way. No tolerance is applied. Failed and inventory-error
+runs exit nonzero.
 
-`test_web_cli.py` (24 tests) builds full-provenance fixtures and covers each
+`test_web_cli.py` (31 tests) builds full-provenance fixtures and covers each
 refusal and inventory rule with a negative control:
 
 - one ULP that the float32 GIfTI hides, a signed zero, a NaN and an imaginary
-  part;
+  part; equal imaginary parts, one ULP or a signed zero in one, a web run
+  without them, and a damaged, extra or unrecorded `maps.imag.f64`;
 - ULPs across zero in both precisions;
 - a MATLAB failure behind a web refusal, and unexpected web statuses;
+- a crash or another refusal recorded as the expected refusal, beside a MATLAB
+  failure too, and on the whole browser matrix through the command line;
+- each runner's `expectedEngineOutcome` and `failureStatus` against the
+  comparator, for every run;
 - an extra `maps.f64` byte, a duplicate, zero, out-of-range or fractional ROI,
   empty and one-vertex GIfTIs, and corrupt or extra files;
 - a stale plan or bundle hash and a model changed to TR 999;
 - source receipts presented as compiled, and malformed compiled receipts.
 
 Eight comparator mutations (the earlier ULP mapping, the ROI, argv, kind and
-GIfTI-length checks, MATLAB failures and truncation) each fail the suite.
+GIfTI-length checks, MATLAB failures and truncation) each fail the suite. So do
+three that drop the exact-text check, its count in `webUnexpectedRuns`, or
+`failureStatus`'s text match.
+
+The pull-request tests hold the committed module to one MATLAB execution:
+`run_web_matrix.mjs` on the pinned source recording (run 42928350417),
+`compare_web_cli.py` against its AMD host, then `web_cli_outcome.py check`
+against `web-cli-outcome.json`. That file names the host and, for each run, its
+class and, for each map, `exact` or the number of values that differ in
+`Srf.Data`, in its imaginary parts and in the GIfTI. Any change, better or worse,
+fails until `web_cli_outcome.py freeze` rewrites the file, so its diff shows what
+moved. This is agreement with source MATLAB on one AMD host, not compiled-image
+parity.
 
 The `runtime_cli` and `runtime_image` jobs run both runners and the comparator
 against every MATLAB execution they make. The build job runs them after
@@ -1382,15 +1412,152 @@ What the differences are (AMD host):
   the 11 diverged vertices of `cf_gaussian_lh_double`.
 - **CSS from SamSrfAnalysis.** MATLAB saves a complex `Srf.Data` in both
   precisions. Single CSS differs at 12 to 13 of 21 vertices and double CSS at
-  14 to 15, by up to 1.8 in x0. The zero masks of single CSS disagree.
+  14 to 15, by up to 1.8 in x0. The zero masks of single CSS disagree. (Since
+  resolved on the AMD host: [CSS through SamSrfAnalysis](#css-through-samsrfanalysis).)
 - **Single forward fits.** `prf_gaussian_lh_average_single` differs at one
   vertex in Beta (1 ULP) and Baseline (5 ULP); its other maps are exact.
-- **Signed zeros.** The `cf_hull` x0 and y0 maps, and Sigma, Beta and Baseline
+- **NaN sign bits.** The `cf_hull` x0 and y0 maps, and Sigma, Beta and Baseline
   at the 11 rejected vertices of `rc_gaussian_lh_double`, differ only in the
-  sign of zero.
+  sign bit of a NaN: MATLAB stores `0xFFC00000` (float32) where the engine has
+  `0x7FC00000`. This was first described as signed zeros; the bits were read on
+  the licensed host's source and compiled executions (2026-11-17), where
+  `compare_ui_cli.py` counts them as `nanSignOnly`. (Since resolved:
+  [NaN representation](#nan-representation).)
 
 These comparisons are with source MATLAB. They are not compiled-image parity,
 which needs the build.
+
+### Production interface against the CLI matrix
+
+`run_browser_matrix.mjs` calls the app's engine module from source; it does not
+show that the deployed app gives the same files. `run_ui_matrix.mjs` runs the
+24 runs through a built `apps/samsrf` bundle, served with its own COOP/COEP
+headers, by its interface. For each run it:
+
+1. chooses the analysis and loads the run's CLI model as a model JSON, with
+   `Data_Precision` added (the precision `def_64bit` selects for MATLAB) and,
+   for a forward model, `Css_Convention: "samsrf"`, as the engine harness gives
+   it (`matlabModel`; the app shows that control for a CSS model);
+2. sets how runs combine, keeps detrending and z-scoring on, and puts each
+   input into its field: the runs, the apertures `.mat`, the ROI and the
+   seed labels, `lh.white` and `lh.area`, and the Benson GIfTI that
+   `prepare_cli_bundle.m` converted for MATLAB;
+3. saves the model the app shows (`app-model.json`), presses Run and, when
+   the app offers a result, downloads the zip with "Download all".
+
+The app replaces the model's file fields with the names of the files it was
+given. The environment records the SHA-256 of the WebAssembly module the page
+actually fetched.
+
+`expectedOutcome` names what the app must do with each run, and the exact text
+of an expected refusal. Each run gets one status:
+
+- `refused`: when the model loaded, the app showed exactly the single-precision
+  refusal the run expects (single RC Gaussian, single CF Gaussian).
+- `unsupported`: after Run, the app showed exactly the core's subject-HRF
+  message (`model: Hrf hrf_custom is an old-school HRF fit file: ...`) and
+  offered nothing.
+- `succeeded`: the status line shows the run's outcome, "Download all" is
+  offered, and the page threw nothing.
+- `succeeded-ui-error`: the app offered a result, then showed an error or
+  threw. The zip is kept and the error is `uiError`. The workflow did not
+  complete.
+- `failed`: anything else, including a crash or a load failure on a run that
+  is expected to be refused.
+
+```sh
+compare_ui_cli.py PLAN BUNDLE_SHA256 UI_ROOT MATLAB_ROOT REPORT \
+  --expect source|compiled-runtime --engine-root WEB_ROOT [--allow-unattested-source-inputs]
+```
+
+`compare_ui_cli.py` refuses the comparison (exit 2) unless all of these hold:
+
+- PLAN is `cli_plan.py`'s whole matrix. A subset is never compared.
+- The bundle manifest and the MATLAB receipts pass `compare_web_cli.py`'s
+  checks, and WEB_ROOT, the `run_web_matrix.mjs` or `run_browser_matrix.mjs`
+  run of the same plan file, passes them as a web execution.
+- The page served the WebAssembly module that the engine harness ran.
+- UI_ROOT holds exactly the plan's records and their run directories.
+
+Each run directory must hold exactly the files its record names:
+
+- `app-model.json`, whose bytes hash to `appModelSha256` and whose content is
+  the plan model with `Data_Precision` added, `Css_Convention: "samsrf"` for a
+  forward model, and the file fields named as the app names them (`aps_bars`,
+  `seed`, `lh_benson`);
+- the zip, whose bytes hash to `zipSha256` and which holds exactly the
+  contract maps and the polar angle and eccentricity maps.
+
+The interface downloads float32 GIfTIs only, so each contract map is compared
+bitwise twice:
+
+- against MATLAB's GIfTI, over every vertex;
+- against MATLAB's `Srf.Data` column over `Srf.Roi`, cast to float32.
+
+A double run's double values cannot be observed through the interface; the
+report says which precision each comparison stands for, and
+`compare_web_cli.py` holds the engine's double rows. Nor can the imaginary
+parts of a complex `Srf.Data`, which SamSrf's own GIfTI export also drops: a map
+whose MATLAB values are complex stays `differs` even when every real part
+agrees, and `compare_web_cli.py` holds the engine's imaginary parts
+(`maps.imag.f64`, which the engine harness's run directory may hold when its
+record names the hash). `nanSignOnly` counts
+differing values that are NaN on both sides. The zip's own hash changes from
+run to run, because its entries carry the time of the download; its GIfTIs do
+not.
+
+The comparator classes each run from its record, and does not take the
+runner's status on trust:
+
+- `exact` or `differs`: a completed workflow (`succeeded`, no page error).
+- `ui-error`: the app offered a result and then failed. Its downloads are
+  compared and reported (`downloads`), and the run counts as a failure.
+- `refused` or `unsupported`: the record carries the expected text and no zip.
+- `failed` or `inventory-error`: as in `compare_web_cli.py`.
+
+Engine equality is a gate of its own. For every run the app computed, the zip
+must hold exactly the files the engine harness exported, each equal byte for
+byte. MATLAB numerical differences are reported and never gated. The exit
+status is 0 when every run is `exact`, `differs`, `refused` or `unsupported`
+and the engine gate holds, and 1 otherwise; the report's `failures` says why.
+
+`test_ui_cli.py` (34 tests) covers each status and class, the exact contents
+of the UI, engine and MATLAB roots, the saved model, the served module, the
+engine gate, and the command line's exit codes on the whole matrix and its
+refusal of a subset. It also covers a float32 ULP, a NaN sign, a GIfTI that
+agrees while `Srf.Data` does not, and a double ULP that float32 hides.
+`scripted_ui_page.mjs` stands in for the page, so `runOne`'s statuses are
+tested without a browser. Each of 17 mutations that reverts one of these
+checks fails it.
+
+```sh
+pnpm install --frozen-lockfile
+pnpm --filter samsrf build
+pnpm --filter samsrf preview --port 4291 --strictPort --host 127.0.0.1 &
+node $m/run_ui_matrix.mjs http://127.0.0.1:4291/samsrf/ $e/plan.json $e/bundle $e/bundle-sha256.json $e/ui-1
+python3 $m/compare_ui_cli.py $e/plan.json $e/bundle-sha256.json $e/ui-1 $e/compiled-1 \
+  ui-1-vs-compiled.json --expect compiled-runtime --engine-root $e/browser-1
+```
+
+What the interface cannot yet do on this matrix:
+
+- **Subject-HRF files.** It has no field for them, so the four `*_custom_hrf_*`
+  runs are `unsupported`; only the Node runner reaches them, through the
+  engine API.
+- **Showing the matrix's surface.** NiiVue cannot read the matrix's
+  synthetic 96-vertex `lh.white` (`Offset is outside the bounds of the
+  DataView`) and does not throw. `viewer.js` then treats the surface as
+  shown, and drawing the first map fails with `Cannot read properties of
+  undefined (reading 'layers')` after the result is offered. Every computed
+  run is therefore `succeeded-ui-error`, and none completes.
+- **Double values.** Only float32 GIfTIs are offered.
+
+On the retained runs of 2026-11-17 (`ui-2`, the production bundle with module
+`d5ae6ba2…`, against the compiled image and with `run_browser_matrix.mjs`'s
+`browser-1` as the engine root), the comparator exits 1: 18 runs are
+`ui-error` and none is completed, 2 are `refused` and 4 `unsupported`. The
+downloads of 11 of the 18 runs are exact (110 of 140 maps), and all 176
+downloaded files equal the engine harness's.
 
 ## Recorded inputs and focused diagnosis
 
@@ -1534,16 +1701,25 @@ the Node runner also accepts custom HRFs unavailable through the app interface.
 | MATLAB `conv` for every HRF convolution | 11 | 115 |
 | one QR for double RC profiles, `corr` order for RC `R^2` | 11 | 119 |
 | MATLAB's double `corr(Y, X)` for CF profiles (`lstsq::gemv_t_double`, run 43890832220's module `d5ae6ba2`; Intel 0 runs, 42 maps) | 13 | 129 |
+| `Css_Convention: "samsrf"` for forward models and MATLAB's complex `Srf.Data` (`imaginary`, [below](#css-through-samsrfanalysis); Intel 0 runs, 46 maps) | 15 | 145 |
+| MATLAB's NaN, `0xFFF8000000000000` (`0xFFC00000` in single), in every map and GIfTI ([below](#nan-representation); Intel 0 runs, 55 maps) | 17 | 154 |
 
 The two refused single fits stay refused. What still differs, earliest stage first:
 
-- double convex-hull RC centroids: resolved since 0.6.20261118 by MATLAB's
-  pixel grid and `polyshape` arithmetic and order; `Fwhm` keeps 1-2 ULP at 15
-  of 42 vertices ([hull area, centroid and vertex order](#hull-area-centroid-and-vertex-order-732)).
-- double RC Gaussian and CF Gaussian fits: `samsrf_fit2dprf`'s `errfun`
-  (`sum(Ds(:).^2)`) and `R^2` now use the modelled MATLAB `sum` and `mean`
-  orders in the double port. The fits still differ; the first optimizer
-  divergence requires a MATLAB trace to locate.
+- double convex-hull RC centroids and `Fwhm`: production keeps the previous
+  pixel grid and hull (`HullOrder::Listed`). From MATLAB's own profile, `x0`
+  and `y0` of `polyshape.centroid` differ by 1-3 ULP (one by 38 ULP); areas
+  are exact. On this matrix the previous grid differs from MATLAB's at 59 of
+  100 points, and from MATLAB's courses `x0`, `y0` and `Fwhm` are exact at 8,
+  21 and 15 of the 42 AMD vertices. The stored-order diagnostic gives all 42
+  `x0` and `y0` and 27 `Fwhm` but loses one `Fwhm`, so it stays out of
+  production ([hull area, centroid and vertex order](#hull-area-centroid-and-vertex-order-732)).
+  This is geometry (#732).
+- double RC Gaussian fits: `samsrf_fit2dprf`'s `errfun` (`sum(Ds(:).^2)`) and
+  `R^2` now use the modelled MATLAB `sum` and `mean` orders in the double port.
+  The fits still differ in the last bits (R^2 and x0 at 9 accepted vertices, y0
+  at 6); the first optimizer divergence requires a MATLAB trace to locate. The
+  double CF Gaussian run equals MATLAB's since the double CF profiles below.
 - double CF profiles: fixed since by `lstsq::gemv_t_double` (FPRev recording
   `constants-gamma-gemv-reference.json`): full blocks of four columns use two
   lanes, and the remaining columns the right-hand-side trees `?ormqr` uses at
@@ -1552,7 +1728,6 @@ The two refused single fits stay refused. What still differs, earliest stage fir
   4,914 values; `double_cf_profiles_equal_matlab_on_amd_hosts`).
 - double global-signal regression (`samsrf_removenoise`) still solves normal
   equations, where MATLAB solves `[X ones] \\ Y`.
-- CSS through SamSrfAnalysis: MATLAB saves a complex `Srf.Data`.
 - every Intel host.
 
 ```sh
@@ -1561,6 +1736,66 @@ python3 -I packages/samsrf/validation/matlab/extract_cli_courses.py "$TMPDIR/sam
 SAMSRF_CLI_REFERENCE_DIR="$TMPDIR/samsrf-cli" SAMSRF_CLI_COURSES_DIR="$TMPDIR/samsrf-cli-courses" \
   cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test cli_preprocess -- --nocapture
 ```
+
+### CSS through SamSrfAnalysis
+
+The two CSS runs (`prf_css_lh_double`, `prf_css_lh_single`) differed at 12 to 15
+of 21 vertices in every map but the noise ceiling, by up to 1.8 in x0. The first
+stage that differs is the power itself. The bars apertures (`aps_bars_vec`) hold
+36,203 negative values (down to -0.074, from their interpolation), so some
+predicted responses are negative. SamSrf raises them to the fitted exponent as
+complex numbers, which makes the objective, the fit and the betas complex, and it
+saves R^2, nR^2, Beta and Baseline with their imaginary parts. The runners passed
+the CLI model unchanged, so the engine used its default `Css_Convention`,
+`nonnegative`, which clips negative responses first. With `Css_Convention:
+"samsrf"`, the real part of every map equals MATLAB's on the AMD host, at every
+vertex in both precisions.
+
+The imaginary parts were then the only difference. The engine computed them but
+kept only the real parts. `Job.merge` now returns them (`imaginary`), and they
+equal MATLAB's bit for bit, zero signs included. A rejected fit is `0 + 0i`. At
+the four vertices whose noise ceiling is negative, MATLAB's nR^2 is `-0 + 0i`.
+Dividing the zeroed R^2 by the ceiling gives its real part the quotient's sign,
+while the zero imaginary part stays `+0`. Every nonzero part is the plain
+quotient. A zero real part with a nonzero imaginary part was not recorded. The
+exported GIfTIs keep only real parts, as `samsrf_expand_srf` does, and equal
+MATLAB's. Chromium gives the same bytes as Node. The engine's default convention
+is unchanged; the runners now declare SamSrf's, as they declare `Data_Precision`.
+
+The Intel host still differs. There the double fits reach MATLAB's x0, y0, Sigma
+and Exponent, but R^2, Beta and Baseline differ in its MKL's last bits, and the
+single fits differ at 10 to 14 vertices.
+
+### NaN representation
+
+The CF hull runs' x0 and y0 at one vertex each, and every map of the 11 rejected
+vertices of `rc_gaussian_lh_double`, differed only in their NaN. Earlier reports
+called these signed zeros; they are NaN sign bits. MATLAB's NaN is
+`0xFFF8000000000000` (`0xFFC00000` in single and in its GIfTIs), the negative quiet
+NaN that x86-64 returns for an invalid operation, and the `NaN` constant is the
+same: SamSrf fills rejected reverse-correlation fits from `NaN(...)`, and they
+hold it. The engine wrote Rust's positive NaN, `0x7FF8000000000000`.
+
+Every NaN of the 24-run CLI recording on both hosts is the negative NaN (89 double
+and 253 to 265 single values across `Srf.Data`, `Srf.ConFlds`, `Srf.Cortex_Steps`
+and every GIfTI). That was the discovery set. A candidate output convention was locally recorded with predictions before the
+other recordings were inspected, according to the decision log and file timestamp.
+The cited `1524218c...` identifies the prediction file SHA-256, not a Git commit;
+no prior prediction commit has been verified. The subsequent census found: every NaN of the 741-case, reverse-correlation and edge-case
+recordings (2,021, 92,600 and 22,476 values in 8,031 arrays) is the negative NaN,
+and none is positive. The inputs of these recordings hold no NaN, so a NaN that
+SamSrf only passes on from its input is not covered. Output canonicalization also
+changes such passed-through NaN payloads; that behavior is an explicit convention,
+not established MATLAB input-payload parity.
+
+`Job.merge` now writes `mapset::MATLAB_NAN` for every NaN of the maps, of
+`Srf.Raw_Data` and of the imaginary parts, and the GIfTI writer writes
+`0xFFC00000` for a NaN. Neither relies on the sign of an arithmetic NaN or of a
+float conversion: Rust and WebAssembly leave both unspecified, and a native build
+folds `MATLAB_NAN as f32` to the positive NaN. On the matrix this moved exactly the
+predicted entries: `cf_hull_lh_single` and `cf_hull_smooth_global_lh_single`
+became exact runs, and the CF hull x0 maps and the RC Gaussian Sigma, Beta and
+Baseline became exact maps (17 runs and 154 maps against the AMD host).
 
 ## Double forward fine fits (#730)
 

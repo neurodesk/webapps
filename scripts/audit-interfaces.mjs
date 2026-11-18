@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { chromium, expect } from '@playwright/test';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
 import { loadAppExamples } from './lib/app-examples.mjs';
-import { OFFLINE_AUDIT_APPS, absentZarrKey, auditedExampleFiles, auditedOfflineFiles, loadVerifiedExampleCache, pythonIndexAnswers, pythonIndexProject } from './lib/example-asset-cache.mjs';
+import { absentZarrKey, auditedExampleFiles, auditedOfflineFiles, loadVerifiedExampleCache, pythonIndexAnswers, pythonIndexProject } from './lib/example-asset-cache.mjs';
 import { refuseOtherHostWebSockets, trackExternalRequests } from './lib/external-requests.mjs';
 import { startDeadline, trackPendingRequests } from './lib/pending-requests.mjs';
 import { serveSite } from '../test-utils/serve-site.mjs';
@@ -27,8 +27,8 @@ const results = [];
 try {
   for (const app of selected) {
     const examples = await loadAppExamples(app);
-    // With the cache, what an offline app's page loads comes from it too and nothing may leave for another host.
-    const offline = Boolean(cacheDirectory) && OFFLINE_AUDIT_APPS.includes(app.id);
+    // With the cache, what a page loads comes from it too and nothing may leave for another host.
+    const offline = Boolean(cacheDirectory);
     const offlineFiles = offline ? auditedOfflineFiles(app, assetLock) : [];
     const indexAnswers = pythonIndexAnswers(offlineFiles, assetLock?.assets);
     const cachedExamples = cacheDirectory

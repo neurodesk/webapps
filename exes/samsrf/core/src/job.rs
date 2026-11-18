@@ -12,12 +12,13 @@
 use crate::apertures::Apertures;
 use crate::error::{Error, Result};
 use crate::hrf::{self, ResolvedHrf};
-use crate::mapset::{MapSet, Maps};
+use crate::mapset::{self, MapSet, Maps};
 use crate::model::Model;
 use crate::precision::Precision;
 use crate::surface::Surface;
 use crate::timeseries::{TimeSeries, VertexSelection};
 use crate::{fit_prf, preprocess, revcor_cf, revcor_prf};
+use num_complex::Complex64;
 
 /// The connective-field seed region and the template its coordinates come from.
 #[derive(Debug, Clone, PartialEq)]
@@ -80,7 +81,8 @@ pub struct Job {
 }
 
 /// The result of `Job::run` on one vertex range: `rows x (end - start)` values, row-major,
-/// plus the raw rows where the analysis keeps `Srf.Raw_Data`.
+/// plus the raw rows where the analysis keeps `Srf.Raw_Data`, and the imaginary parts of
+/// the rows (same layout) when any is not `+0` (see `MapSet::imaginary`), else empty.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Partial {
     pub kind: Kind,
@@ -90,26 +92,30 @@ pub struct Partial {
     pub data: Vec<f64>,
     pub raw_rows: usize,
     pub raw: Vec<f64>,
+    pub imaginary: Vec<f64>,
 }
 
 const PARTIAL_MAGIC: &[u8; 8] = b"SAMSRFPT";
-const PARTIAL_VERSION: u32 = 1;
+const PARTIAL_VERSION: u32 = 2;
+const PARTIAL_HEADER: usize = 8 + 7 * 4;
 
 impl Partial {
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut out = Vec::with_capacity(8 + 7 * 4 + 8 * (self.data.len() + self.raw.len()));
+        let imaginary_rows = if self.imaginary.is_empty() { 0 } else { self.rows };
+        let mut out = Vec::with_capacity(PARTIAL_HEADER + 8 * (self.data.len() + self.raw.len() + self.imaginary.len()));
         out.extend_from_slice(PARTIAL_MAGIC);
-        for value in [PARTIAL_VERSION, self.kind as u32, self.start as u32, self.end as u32, self.rows as u32, self.raw_rows as u32] {
+        for value in [PARTIAL_VERSION, self.kind as u32, self.start as u32, self.end as u32, self.rows as u32, self.raw_rows as u32, imaginary_rows as u32] {
             out.extend_from_slice(&value.to_le_bytes());
         }
-        out.extend(self.data.iter().flat_map(|value| value.to_le_bytes()));
-        out.extend(self.raw.iter().flat_map(|value| value.to_le_bytes()));
+        for values in [&self.data, &self.raw, &self.imaginary] {
+            out.extend(values.iter().flat_map(|value| value.to_le_bytes()));
+        }
         out
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Partial> {
         let format = |message: &str| Error::format("partial", message);
-        if bytes.len() < 8 + 6 * 4 || &bytes[..8] != PARTIAL_MAGIC {
+        if bytes.len() < PARTIAL_HEADER || &bytes[..8] != PARTIAL_MAGIC {
             return Err(format("not a SamSrf partial result"));
         }
         let u32_at = |offset: usize| u32::from_le_bytes([bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3]]);
@@ -126,17 +132,22 @@ impl Partial {
         let end = u32_at(20) as usize;
         let rows = u32_at(24) as usize;
         let raw_rows = u32_at(28) as usize;
+        let imaginary_rows = u32_at(32) as usize;
         if end < start {
             return Err(format("range end before start"));
         }
+        if imaginary_rows != 0 && imaginary_rows != rows {
+            return Err(format("imaginary parts must cover every row or none"));
+        }
         let count = end - start;
-        let expected = 32 + 8 * (rows + raw_rows) * count;
+        let expected = PARTIAL_HEADER + 8 * (rows + raw_rows + imaginary_rows) * count;
         if bytes.len() != expected {
             return Err(format("partial result length does not match its header"));
         }
-        let values: Vec<f64> = bytes[32..].as_chunks::<8>().0.iter().map(|chunk| f64::from_le_bytes(*chunk)).collect();
-        let (data, raw) = values.split_at(rows * count);
-        Ok(Partial { kind, start, end, rows, data: data.to_vec(), raw_rows, raw: raw.to_vec() })
+        let values: Vec<f64> = bytes[PARTIAL_HEADER..].as_chunks::<8>().0.iter().map(|chunk| f64::from_le_bytes(*chunk)).collect();
+        let (data, rest) = values.split_at(rows * count);
+        let (raw, imaginary) = rest.split_at(raw_rows * count);
+        Ok(Partial { kind, start, end, rows, data: data.to_vec(), raw_rows, raw: raw.to_vec(), imaginary: imaginary.to_vec() })
     }
 }
 
@@ -307,13 +318,14 @@ impl Job {
         let count = end - start;
         let rows = self.values().len();
         let mut data = vec![0.0; rows * count];
+        let mut imaginary = vec![0.0; rows * count];
         let (raw_rows, mut raw) = match &self.analysis {
             Analysis::RevCorPrf(_) => (revcor_prf::RAW_VALUES.len(), vec![0.0; revcor_prf::RAW_VALUES.len() * count]),
             _ => (0, Vec::new()),
         };
         for (i, position) in (start..end).enumerate() {
             let y = self.course(position);
-            let row = match &self.analysis {
+            let row: Vec<Complex64> = match &self.analysis {
                 Analysis::Prf(prepared) => {
                     let (pimg, rimg, prediction) = match &self.seed_fine_fit {
                         Some(seed) => {
@@ -330,23 +342,28 @@ impl Job {
                     for (r, value) in raw_row.iter().enumerate() {
                         raw[r * count + i] = *value;
                     }
-                    if prepared.model.prf_function.is_some() {
+                    let row = if prepared.model.prf_function.is_some() {
                         prepared.fit_model(&raw_row, &profile)?
                     } else {
                         prepared.convex_hull(&raw_row, &profile)
-                    }
+                    };
+                    real(row)
                 }
-                Analysis::RevCorCf(prepared) => prepared.estimate(y)?,
+                Analysis::RevCorCf(prepared) => real(prepared.estimate(y)?),
             };
             debug_assert_eq!(row.len(), rows);
             for (r, value) in row.iter().enumerate() {
-                data[r * count + i] = *value;
+                data[r * count + i] = value.re;
+                imaginary[r * count + i] = value.im;
             }
             if i % 8 == 7 || i + 1 == count {
                 progress(i + 1);
             }
         }
-        Ok(Partial { kind: self.kind(), start, end, rows, data, raw_rows, raw })
+        if imaginary.iter().all(|value| value.to_bits() == 0) {
+            imaginary.clear();
+        }
+        Ok(Partial { kind: self.kind(), start, end, rows, data, raw_rows, raw, imaginary })
     }
 
     /// Merges partials covering the ROI exactly once into `Srf.Data` over every vertex,
@@ -372,6 +389,7 @@ impl Job {
         // rest, so every map, the noise ceiling included, is 0 outside the ROI.
         let fill = 0.0;
         let mut maps = Maps { values: values.clone(), vertices: self.total_vertices, data: vec![fill; values.len() * self.total_vertices] };
+        let mut imaginary = vec![0.0; maps.data.len()];
         let mut raw = match &self.analysis {
             Analysis::RevCorPrf(_) => Some(Maps::zeros(revcor_prf::RAW_VALUES.iter().map(|value| value.to_string()).collect(), self.total_vertices)),
             _ => None,
@@ -381,10 +399,16 @@ impl Job {
             if partial.rows != values.len() || partial.data.len() != partial.rows * count {
                 return Err(Error::Shape("a partial result has the wrong number of rows".into()));
             }
+            if !partial.imaginary.is_empty() && partial.imaginary.len() != partial.data.len() {
+                return Err(Error::Shape("a partial result has the wrong number of imaginary parts".into()));
+            }
             for i in 0..count {
                 let vertex = self.mver[partial.start + i] as usize;
                 for r in 0..partial.rows {
                     maps.row_mut(r)[vertex] = partial.data[r * count + i];
+                    if let Some(&value) = partial.imaginary.get(r * count + i) {
+                        imaginary[r * self.total_vertices + vertex] = value;
+                    }
                 }
                 if let Some(raw) = &mut raw {
                     if partial.raw_rows != raw.rows() {
@@ -399,6 +423,7 @@ impl Job {
         // Concatenating the single noise-ceiling row in MATLAB converts the
         // parameter rows before normr2; compression also casts maps without it.
         self.precision.round_slice(&mut maps.data);
+        self.precision.round_slice(&mut imaginary);
         if let Some(ceiling) = &self.noise_ceiling {
             let mut row = vec![0.0; self.total_vertices];
             let mut known = vec![false; self.total_vertices];
@@ -408,14 +433,27 @@ impl Job {
             }
             maps.values.push("Noise Ceiling".into());
             maps.data.extend(row);
+            imaginary.resize(maps.data.len(), 0.0);
             if matches!(self.analysis, Analysis::Prf(_)) {
-                fit_prf::normr2(&mut maps, &known);
+                fit_prf::normr2(&mut maps, &mut imaginary, &known);
             }
         }
         self.precision.round_slice(&mut maps.data);
+        self.precision.round_slice(&mut imaginary);
+        mapset::matlab_nans(&mut maps.data);
+        mapset::matlab_nans(&mut imaginary);
+        if let Some(raw) = &mut raw {
+            mapset::matlab_nans(&mut raw.data);
+        }
+        let imaginary = imaginary.iter().any(|value| value.to_bits() != 0).then_some(imaginary);
         let analysed = if self.mver.len() == self.total_vertices { VertexSelection::All } else { VertexSelection::from_indices(self.mver.clone()) };
-        Ok(MapSet { maps, raw, analysed })
+        Ok(MapSet { maps, raw, analysed, imaginary })
     }
+}
+
+/// The rows of an analysis whose results MATLAB keeps real.
+fn real(row: Vec<f64>) -> Vec<Complex64> {
+    row.into_iter().map(|value| Complex64::new(value, 0.0)).collect()
 }
 
 #[cfg(test)]
@@ -424,10 +462,20 @@ mod tests {
 
     #[test]
     fn partial_round_trips_and_rejects_damage() {
-        let partial = Partial { kind: Kind::RevCorPrf, start: 3, end: 5, rows: 2, data: vec![1.0, 2.0, 3.0, 4.0], raw_rows: 1, raw: vec![5.0, 6.0] };
-        let bytes = partial.to_bytes();
-        assert_eq!(Partial::from_bytes(&bytes).unwrap(), partial);
-        assert!(Partial::from_bytes(&bytes[..bytes.len() - 1]).is_err());
+        let real = Partial { kind: Kind::RevCorPrf, start: 3, end: 5, rows: 2, data: vec![1.0, 2.0, 3.0, 4.0], raw_rows: 1, raw: vec![5.0, 6.0], imaginary: Vec::new() };
+        let complex = Partial { kind: Kind::Prf, start: 0, end: 2, rows: 2, data: vec![1.0, 2.0, 3.0, 4.0], raw_rows: 0, raw: Vec::new(), imaginary: vec![0.5, -0.0, 0.0, -2.0] };
+        for partial in [real, complex] {
+            let bytes = partial.to_bytes();
+            let decoded = Partial::from_bytes(&bytes).unwrap();
+            assert_eq!(decoded, partial);
+            let bits = |values: &[f64]| values.iter().map(|value| value.to_bits()).collect::<Vec<_>>();
+            assert_eq!(bits(&decoded.imaginary), bits(&partial.imaginary), "signed zeros survive");
+            assert!(Partial::from_bytes(&bytes[..bytes.len() - 1]).is_err());
+        }
         assert!(Partial::from_bytes(b"nope").is_err());
+        let mut partial_rows = Partial { kind: Kind::Prf, start: 0, end: 1, rows: 2, data: vec![1.0, 2.0], raw_rows: 0, raw: Vec::new(), imaginary: vec![1.0, 2.0] }.to_bytes();
+        partial_rows[32..36].copy_from_slice(&1u32.to_le_bytes());
+        partial_rows.truncate(partial_rows.len() - 8);
+        assert!(Partial::from_bytes(&partial_rows).is_err(), "imaginary parts of some rows only");
     }
 }

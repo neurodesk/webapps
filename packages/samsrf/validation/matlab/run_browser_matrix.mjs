@@ -8,13 +8,16 @@
 // maps.f64 holds the double map rows of the same computation: the shard bytes that
 // runShard returned and mergeShards exported are merged once more, and the GIfTIs
 // exported from that merge must equal mergeShards's files byte for byte, or the run
-// fails. This is an engine-module harness served from source; it does not exercise
-// the production Vite bundle or the app's interface.
+// fails. That merge's imaginary parts, where MATLAB's Srf.Data is complex, go to
+// maps.imag.f64. This is an engine-module harness served from source; it does not
+// exercise the production Vite bundle or the app's interface.
 //
 // Usage: node run_browser_matrix.mjs PLAN_JSON BUNDLE BUNDLE_SHA256_JSON OUTPUT_ROOT
 //
-// The app has no subject-HRF file route, so runs whose model names an hrf_*.mat are
-// written as `unsupported` with the engine's message. They are not agreement.
+// The app has no subject-HRF file route, so a run whose model names an hrf_*.mat is
+// `unsupported` when the engine stops with exactly the subject-HRF text that
+// expectedEngineOutcome names. Any other failure, a crash included, is `failed`.
+// Neither is agreement.
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -22,7 +25,7 @@ import { extname, join, normalize, relative, sep } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
-import { treeHashes, webRun } from './run_web_matrix.mjs';
+import { failureStatus, treeHashes, webRun } from './run_web_matrix.mjs';
 
 const repo = fileURLToPath(new URL('../../../../', import.meta.url));
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -54,7 +57,8 @@ window.runCase = async (request) => {
   await init();
   const handle = createJob(job.spec);
   let maps;
-  try { maps = handle.merge([shard]).maps; } finally { handle.free(); }
+  let imaginary;
+  try { ({ maps, imaginary } = handle.merge([shard])); } finally { handle.free(); }
   const hex = (array) => Array.from(array, (value) => value.toString(16).padStart(2, '0')).join('');
   const replay = new Map(exportGiis(maps, job.outName, null, job.exportConvention).map(({ name, bytes }) => [name, hex(bytes)]));
   const files = result.files.map(({ name, bytes }) => ({ name, hex: hex(bytes) }));
@@ -63,6 +67,7 @@ window.runCase = async (request) => {
     outName: result.outName, summary: job.summary, files, replayEqualsExport,
     values: maps.values, vertices: maps.vertices, roi: Array.from(job.spec.roi ?? []),
     data: hex(new Uint8Array(Float64Array.from(maps.data).buffer)),
+    imaginary: imaginary ? hex(new Uint8Array(Float64Array.from(imaginary).buffer)) : null,
   };
 };
 window.ready = true;
@@ -149,14 +154,20 @@ async function main([planPath, bundle, manifestPath, output, ...rest]) {
         for (const { name, hex } of result.files) writeFileSync(join(directory, name), Buffer.from(hex, 'hex'));
         const data = Buffer.from(result.data, 'hex');
         writeFileSync(join(directory, 'maps.f64'), data);
+        let imaginarySha256 = null;
+        if (result.imaginary) {
+          const imaginary = Buffer.from(result.imaginary, 'hex');
+          writeFileSync(join(directory, 'maps.imag.f64'), imaginary);
+          imaginarySha256 = sha256(imaginary);
+        }
         Object.assign(record, {
           status: 'succeeded', prefix: result.outName, values: result.values, vertices: result.vertices, roi: result.roi,
           files: result.files.map(({ name }) => name), replayEqualsExport: true, summary: result.summary, mapsSha256: sha256(data),
+          imaginarySha256,
         });
       } catch (error) {
         const message = error.message.replace(/^page\.evaluate: (Error: )?/, '').split('\n')[0];
-        record.status = /is not supported by this port/.test(message) ? 'refused'
-          : typeof run.model.Hrf === 'string' && run.model.Hrf.startsWith('hrf_') ? 'unsupported' : 'failed';
+        record.status = failureStatus(run, 'browser', message);
         record.message = message;
       }
       record.seconds = Number(((performance.now() - started) / 1000).toFixed(1));

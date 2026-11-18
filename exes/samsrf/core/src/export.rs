@@ -162,6 +162,21 @@ mod tests {
     }
 
     #[test]
+    fn exported_nans_are_matlabs_single_nan() {
+        use base64::Engine as _;
+        let mut maps = prf_maps();
+        maps.row_mut(3)[1] = f64::NAN;
+        maps.row_mut(3)[2] = crate::mapset::MATLAB_NAN;
+        let files = export_giis(&maps, "lh", &ExportSelection::Named(vec!["Sigma".into()]));
+        let xml = String::from_utf8(files[0].bytes.clone()).unwrap();
+        let encoded = xml.split("<Data>").nth(1).unwrap().split("</Data>").next().unwrap().trim();
+        let compressed = base64::engine::general_purpose::STANDARD.decode(encoded).unwrap();
+        let raw = miniz_oxide::inflate::decompress_to_vec_zlib(&compressed).unwrap();
+        let bits: Vec<u32> = raw.as_chunks::<4>().0.iter().map(|word| u32::from_le_bytes(*word)).collect();
+        assert_eq!(&bits[1..], [0xFFC0_0000, 0xFFC0_0000]);
+    }
+
+    #[test]
     fn named_selection_is_case_insensitive() {
         let selection = ExportSelection::Named(vec!["eccentricity".into(), "SIGMA".into()]);
         let files = export_giis(&prf_maps(), "rh", &selection);

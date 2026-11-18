@@ -6,13 +6,17 @@
 //
 // Usage: node run_web_matrix.mjs PLAN_JSON BUNDLE BUNDLE_SHA256_JSON OUTPUT_ROOT
 //
-// Each run's model is the CLI model with two translations, both recorded in the run's
+// Each run's model is the CLI model with these translations, all recorded in the run's
 // web.json: Data_Precision carries the precision that SamSrf_defaults.json's def_64bit
-// selects for MATLAB, and bundle paths replace /input. Inputs the web engine takes in
-// another form are named there too: the Benson template GIfTI (MATLAB reads the .mat
-// prepare_cli_bundle.m derived from it) and the subject-HRF file, which the engine API
-// takes as a kernel (`hrf.oldSchool`); the web app's interface has no subject-HRF route.
-// A run the engine refuses is written as refused with its message. It is never a pass.
+// selects for MATLAB, a forward model's Css_Convention is "samsrf" because SamSrf always
+// takes complex CSS powers (the engine's default clips negative responses instead), and
+// bundle paths replace /input. Inputs the web engine takes in another form are named
+// there too: the Benson template GIfTI (MATLAB reads the .mat prepare_cli_bundle.m
+// derived from it) and the subject-HRF file, which the engine API takes as a kernel
+// (`hrf.oldSchool`); the web app's interface has no subject-HRF route. Where MATLAB's
+// Srf.Data is complex, maps.imag.f64 holds the engine's imaginary parts beside maps.f64.
+// A run the engine refuses with exactly the text expectedEngineOutcome names is written
+// as refused, with its message; any other failure is failed. Neither is a pass.
 import { createHash } from 'node:crypto';
 import { cpus } from 'node:os';
 import { mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync, existsSync } from 'node:fs';
@@ -38,6 +42,39 @@ export function treeHashes(root) {
   return Object.fromEntries(Object.entries(hashes).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
 }
 
+/** What the engine must do with a plan run on this runner, with the exact text of an expected
+ * refusal; compare_web_cli.py's expected_web_outcome says the same. */
+export function expectedEngineOutcome({ algorithm, model, precision }, runner) {
+  // exes/samsrf/core/src/model.rs: Error::NotImplemented.
+  if (precision === 'single' && algorithm === 'rc' && (model.Prf_Function ?? 0) !== 0) {
+    return { status: 'refused', message: 'Data_Precision=single with a Prf_Function fit is not supported by this port' };
+  }
+  if (precision === 'single' && algorithm === 'cf' && model.Fit_pRF === 1) {
+    return { status: 'refused', message: 'Data_Precision=single with Fit_pRF=1 is not supported by this port' };
+  }
+  if (runner === 'browser' && typeof model.Hrf === 'string' && model.Hrf.startsWith('hrf_')) {
+    // exes/samsrf/core/src/hrf.rs resolve(): nothing in the browser loads the subject-HRF file.
+    return { status: 'unsupported', message: `model: Hrf ${model.Hrf} is an old-school HRF fit file: the caller must load its fP and call hrf::old_school` };
+  }
+  return { status: 'succeeded' };
+}
+
+/** The status of a run the engine did not finish: refused or unsupported only with exactly the expected text. */
+export function failureStatus(run, runner, message) {
+  const expected = expectedEngineOutcome(run, runner);
+  return expected.status !== 'succeeded' && message === expected.message ? expected.status : 'failed';
+}
+
+/** The plan model as both harnesses give it to the engine: the CLI model plus Data_Precision (the
+ * precision def_64bit selects for MATLAB) and, for a forward model, Css_Convention "samsrf", because
+ * SamSrf always takes complex CSS powers while the engine's default clips negative responses.
+ * compare_ui_cli.py's expected_app_model says the same of the model the app saves. */
+export function matlabModel(run) {
+  const model = { ...run.model, Data_Precision: run.precision };
+  if (run.algorithm === 'prf') model.Css_Convention = 'samsrf';
+  return model;
+}
+
 /** Translates one plan run into the readAnalysisInputs options, the model text and the HRF override. */
 export function webRun(run, bundle) {
   const local = (path) => path.replace(INPUT, bundle);
@@ -49,8 +86,11 @@ export function webRun(run, bundle) {
   const runFiles = readdirSync(dataset).filter((name) => new RegExp(`^${hemisphere}_ubars\\d+\\.gii$`).test(name)).sort().map((name) => join(dataset, name));
   if (runs !== `${INPUT}/${run.dataset}/${hemisphere}_ubars*.gii` || !runFiles.length) throw new Error(`${run.id}: unexpected run wildcard ${runs}`);
   if (option('norm') !== '1') throw new Error(`${run.id}: only -norm=1 is planned`);
-  const model = { ...run.model, Data_Precision: run.precision };
+  const model = matlabModel(run);
   const translations = { Data_Precision: run.precision };
+  if (model.Css_Convention) {
+    translations.Css_Convention = 'samsrf (SamSrf\'s complex CSS powers; the engine default clips negative responses)';
+  }
   const options = {
     runs: runFiles,
     roi: `${local(option('roi'))}.label`,
@@ -98,11 +138,11 @@ function runOne(run, bundle, directory) {
     try {
       job = samsrf.createJob(spec);
     } catch (error) {
-      record.status = /is not supported by this port/.test(error.message) ? 'refused' : 'failed';
+      record.status = failureStatus(run, 'node', error.message);
       record.message = error.message;
       return record;
     }
-    const { maps } = samsrf.runJob(job, 1);
+    const { maps, imaginary } = samsrf.runJob(job, 1);
     const prefix = `${translated.options.hemisphere}_${job.modelName}${job.outSuffix}`;
     mkdirSync(directory, { recursive: true });
     const files = samsrf.exportGiis(maps, prefix, null, translated.model.Export_Convention);
@@ -114,6 +154,12 @@ function runOne(run, bundle, directory) {
     record.roi = Array.from(inputs.roi ?? []);
     const data = Float64Array.from(maps.data);
     writeFileSync(join(directory, 'maps.f64'), new Uint8Array(data.buffer));
+    let imaginarySha256 = null;
+    if (imaginary) {
+      const bytes = new Uint8Array(Float64Array.from(imaginary).buffer);
+      writeFileSync(join(directory, 'maps.imag.f64'), bytes);
+      imaginarySha256 = sha256(bytes);
+    }
     Object.assign(record, {
       status: 'succeeded',
       prefix,
@@ -121,6 +167,7 @@ function runOne(run, bundle, directory) {
       vertices: maps.vertices,
       analysed: job.vertexCount,
       mapsSha256: sha256(new Uint8Array(data.buffer)),
+      imaginarySha256,
     });
   } catch (error) {
     record.status = 'failed';

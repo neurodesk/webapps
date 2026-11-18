@@ -18,15 +18,15 @@ export function auditedExampleFiles(examples) {
   return examples.length ? examples[0].files : [];
 }
 
-// Apps the audit must run without any request to another host. For these it also needs
-// what the offline lock pins for the desktop bundle and the page loads before a run:
+// With the cache, the audit runs every app without any request to another host. These apps'
+// pages also load, before a run, files the offline lock pins for the desktop bundle:
 // runtimes, fonts and the templates and support data an example is shown or checked against.
 // Models, atlases and tract geometry load only when a method runs, which the audit does not do.
-export const OFFLINE_AUDIT_APPS = ['dicompare', 'zarro', 'deface', 'disconnectome', 'qsmbly', 'surfannotate'];
+export const PAGE_ASSET_APPS = ['dicompare', 'zarro', 'deface', 'disconnectome', 'qsmbly', 'surfannotate'];
 const OFFLINE_KINDS = new Set(['runtime', 'python-runtime', 'python-wheel', 'runtime-cdn', 'font', 'example-template', 'example-or-support-data']);
 
 export function auditedOfflineFiles(app, lock) {
-  if (!OFFLINE_AUDIT_APPS.includes(app.id)) return [];
+  if (!PAGE_ASSET_APPS.includes(app.id)) return [];
   return (lock.apps[app.id] ?? []).filter(url => OFFLINE_KINDS.has(lock.assets[url]?.kind)).map(url => ({ url }));
 }
 

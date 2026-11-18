@@ -271,7 +271,7 @@ jobs:
         run: pnpm test:e2e:catalog --skip-build --output .e2e/workspace
       # The audit imports one example per app at two widths. Reading them from
       # this checked copy keeps a stalled or rate-limited download from failing it.
-      # It also holds the runtime of the apps the audit runs offline (OFFLINE_AUDIT_APPS).
+      # It also holds the pinned files some apps' pages load before a run (PAGE_ASSET_APPS).
       # Only main saves the copy: a pull request's would be a second one of its size.
       - name: Record free disk space before the examples are restored
         run: df -h
