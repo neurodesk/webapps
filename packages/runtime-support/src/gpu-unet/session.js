@@ -239,7 +239,7 @@ export async function createGpuSession(bytes, dims, {
       steps.push({name:node.name,op:node.op,pipeline,bind,dispatch:shader.dispatch});
     }
     const validation=await device.popErrorScope(),oom=await device.popErrorScope();
-    if(validation||oom)throw new Error(`${label} ${validation?gpuErrorText(validation):gpuErrorText(oom,true)}`);
+    if(oom||validation)throw new Error(`${label} ${oom?gpuErrorText(oom,true):gpuErrorText(validation)}`);
     const outputBytes=product(dims)*outputChannels*4;
     const read=createBuffer(outputBytes,GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ,`${label} output readback`);
     const unmapRead=()=>{if(mappedOutput){mappedOutput=null;read.unmap();}};
@@ -319,7 +319,7 @@ export async function createGpuSession(bytes, dims, {
           throw new Error(`${label} GPU inference failed: ${gpuErrorText(scopes[1].error, true)}`);
         }
         if (failed) throw failure || operationError;
-        const scopedIndex = scopes.findIndex(scope => scope.error);
+        const scopedIndex = scopes[1]?.error ? 1 : scopes.findIndex(scope => scope.error);
         if (scopedIndex >= 0) {
           unmapRead();
           throw new Error(`${label} GPU inference failed: ${gpuErrorText(scopes[scopedIndex].error, scopedIndex === 1)}`);

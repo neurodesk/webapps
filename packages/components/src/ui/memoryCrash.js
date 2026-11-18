@@ -80,7 +80,7 @@ const ACTIVE_STATUS_VERB = new RegExp(
 const ACTION_BUTTON_SELECTOR = '.nd-btn-primary, .btn-primary, #runButton, #processButton, #applyBtn';
 const NON_WORKFLOW_CLICK_SELECTOR = '.nd-app-bar, dialog, .modal-overlay, .nd-modal-overlay, .nd-console-container, .console-container, nd-console';
 const CONSOLE_OUTPUT_SELECTOR = 'nd-console .nd-console-output, .nd-console-output, .console-output, #consoleOutput';
-const VIEWER_CANVAS_SELECTOR = '#gl1, #viewer canvas, .nd-viewer-canvas-wrapper canvas, .viewer-canvas-wrapper canvas, .nvslide-pane-main canvas';
+const VIEWER_CANVAS_SELECTOR = '#gl1, #viewer canvas, [data-neurodesk-viewer-canvas], .nd-viewer-canvas-wrapper canvas, .viewer-canvas-wrapper canvas, .nvslide-pane-main canvas';
 const NON_VIEWER_CANVAS_CONTAINER = '.nd-viewer-report, .nd-chart, .nd-chart-figure';
 
 function cleanText(value) {
@@ -293,17 +293,22 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
   let monitorErrorStatus = '';
   let pendingConsoleMessage = '';
   const lostCanvases = new Set();
+  const seenConsoleTails = new WeakMap();
   let lostCanvasObserver = null;
   let webglNoticeDispatched = false;
+  let coiInitialSettled = !view?.coiWillReload?.then;
   let cleanedUp = false;
   let unloading = false;
   let reconcileTimer = null;
   let heartbeatTimer = null;
 
-  if (!view?.crossOriginIsolated && view?.coiWillReload?.then) {
+  if (view?.coiWillReload?.then) {
     view.coiWillReload.then((reloading) => {
       if (reloading) onCleanUnload();
-    }).catch(() => {});
+      else coiInitialSettled = true;
+    }).catch(() => {
+      coiInitialSettled = true;
+    });
   }
 
   function applyFailure(formatted, { preserveRawSubstring = '', respectExistingNonIdle = false } = {}) {
@@ -390,28 +395,41 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
     }
   }
 
+  function markConsoleTailsSeen() {
+    for (const output of doc.querySelectorAll(CONSOLE_OUTPUT_SELECTOR)) {
+      const marker = output.lastElementChild || output.textContent || '';
+      if (marker) seenConsoleTails.set(output, marker);
+    }
+  }
+
   function inspectLiveErrors() {
     if (applying || view?.[STATUS_MANAGED_KEY]) return;
     const statusEl = findStatusElement(doc);
     if (!statusEl) return;
     const current = cleanText(statusEl.textContent);
     if (isMemoryErrorMessage(current)) {
+      immediateActiveDetail = '';
       const active = currentSessionState().active;
       recoveredFailure = null;
       const formatted = formatMemoryError(current);
       activeRunFailure = active ? formatted : null;
       applyFailure(formatted, { preserveRawSubstring: current });
+      markConsoleTailsSeen();
       return;
     }
     if (GENERIC_FAILURE_STATUS.test(current)) {
       for (const output of doc.querySelectorAll(CONSOLE_OUTPUT_SELECTOR)) {
+        const marker = output.lastElementChild || output.textContent || '';
+        if (!marker || seenConsoleTails.get(output) === marker) continue;
         const last = output.lastElementChild?.textContent || output.textContent || '';
         if (isMemoryErrorMessage(last)) {
+          immediateActiveDetail = '';
           const active = currentSessionState().active;
           recoveredFailure = null;
           const formatted = formatMemoryError(last);
           activeRunFailure = active ? formatted : null;
           applyFailure(formatted, { preserveRawSubstring: cleanText(last) });
+          markConsoleTailsSeen();
           return;
         }
       }
@@ -434,17 +452,26 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
       && Number(progress.value) < Number(progress.max || 1),
     );
     const verbActive = Boolean(interacted && !statusEl?.classList.contains('error') && ACTIVE_STATUS_VERB.test(text));
-    const active = Boolean(
-      immediateActiveDetail
-      || exampleLoading
+    const domActive = Boolean(
+      exampleLoading
       || runState === 'loading'
       || runState === 'running'
       || (interacted && (cancelVisible || indeterminate || midProgress || verbActive)),
     );
+    const terminalStatus = runState === 'succeeded'
+      || runState === 'failed'
+      || runState === 'cancelled'
+      || /^(?:done|complete|completed|finished|cancelled|canceled|failed|error\b)/i.test(text);
+    // Once real DOM active indicators take over or a terminal status appears, end the 250 ms click bridge immediately.
+    if (immediateActiveDetail && (domActive || terminalStatus)) {
+      immediateActiveDetail = '';
+    }
+    const active = Boolean(immediateActiveDetail || domActive);
     if (runState === 'ready' || runState === 'succeeded' || (interacted && active)) loaded = true;
     const detail = cleanText(immediateActiveDetail || (!IDLE_STATUS.test(text) ? text : '')).slice(0, 80);
     return {
       active,
+      domActive,
       loaded,
       hidden: doc.visibilityState === 'hidden',
       detail: active ? detail : '',
@@ -480,10 +507,13 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
     recoveredFailure = null;
     activeRunFailure = null;
     monitorErrorStatus = '';
+    markConsoleTailsSeen();
     pruneDisconnectedLostCanvases();
-    // Hold service-worker update reloads only once a controller already isolates the page;
-    // holding on an uncontrolled first visit would prevent initial COOP/COEP activation.
-    if (view?.navigator?.serviceWorker?.controller) view?.coiHoldReloads?.();
+    // Hold background service-worker update reloads only after the initial COI
+    // bootstrap has settled as not reloading; even if clients.claim() sets a
+    // controller mid-activation on a first visit, holding before coiWillReload
+    // settles would suppress the initial COOP/COEP isolation reload.
+    if (coiInitialSettled && view?.navigator?.serviceWorker?.controller) view?.coiHoldReloads?.();
     immediateActiveDetail = cleanText(detail).slice(0, 80);
     syncCheckpoint();
     if (reconcileTimer && view?.clearTimeout) view.clearTimeout(reconcileTimer);
@@ -702,6 +732,10 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
     if (lostCanvases.size > 0) return;
     webglNoticeDispatched = false;
     monitorErrorStatus = '';
+    if (view?.[STATUS_MANAGED_KEY] && typeof view.CustomEvent === 'function') {
+      view.dispatchEvent(new view.CustomEvent('neurodesk-memory-restored', { detail: { kind: 'webgl' } }));
+      return;
+    }
     const statusEl = findStatusElement(doc);
     const expected = formatMemoryError('WebGL context lost', { kind: 'webgl' }).status;
     if (statusEl && cleanText(statusEl.textContent) === expected) {
@@ -771,6 +805,7 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
 
   flushPendingRecovery();
   inspectLiveErrors();
+  markConsoleTailsSeen();
   syncCheckpoint();
 
   return Object.freeze({

@@ -68,6 +68,48 @@ test('a memory recovery notice delivered before Pyodide startup survives until a
   act(() => finishSameBatch());
   expect(status).toHaveTextContent('Out of browser memory on this device');
   expect(status).toHaveClass('error');
+
+  // Nested validation activities inside an active outer workflow must NOT hide a live OOM!
+  let finishOuter!: () => void;
+  let finishNested!: () => void;
+  act(() => {
+    finishOuter = beginActivity('Matching acquisitions');
+  });
+  expect(status).toHaveTextContent('Matching acquisitions…');
+  act(() => {
+    logError('Match', new RangeError('Out of memory'));
+  });
+  expect(status).toHaveTextContent('Out of browser memory on this device');
+  act(() => {
+    finishNested = beginActivity('Validating series 1');
+  });
+  expect(status).toHaveTextContent('Out of browser memory on this device');
+  expect(status).toHaveClass('error');
+  act(() => finishNested());
+  expect(status).toHaveTextContent('Out of browser memory on this device');
+  act(() => finishOuter());
+  expect(status).toHaveTextContent('Out of browser memory on this device');
+
+  // WebGL context loss notice clears when neurodesk-memory-restored fires.
+  let clearForNext!: () => void;
+  act(() => { clearForNext = beginActivity('Reset'); });
+  act(() => clearForNext());
+  act(() => {
+    window.dispatchEvent(new CustomEvent('neurodesk-memory-notice', {
+      detail: {
+        kind: 'webgl',
+        status: 'Viewer graphics context lost (often low memory). Reload page or use Standalone.',
+        log: 'Error: The viewer WebGL graphics context was lost (WebGL context lost), often due to GPU memory pressure on mobile devices. Reload the page, close other tabs or apps, or open Standalone in the top bar to run on a computer.',
+      },
+    }));
+  });
+  expect(status).toHaveTextContent('Viewer graphics context lost');
+  expect(status).toHaveClass('error');
+  act(() => {
+    window.dispatchEvent(new CustomEvent('neurodesk-memory-restored', { detail: { kind: 'webgl' } }));
+  });
+  expect(status).toHaveTextContent('Ready · load DICOMs, a protocol or a schema');
+  expect(status).not.toHaveClass('error');
 });
 
 test('silent post-startup DicompareWorkerAPI crashes and message errors translate into memory guidance', async () => {

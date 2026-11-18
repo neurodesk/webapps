@@ -123,12 +123,13 @@ const activityListeners = new Set<Listener>();
 
 function recompute() {
   const current = activities[activities.length - 1] ?? null;
+  const root = activities[0] ?? null;
   const wasBusy = activityState.label !== null;
   activityState = {
     label: current?.label ?? null,
     progress: current?.progress ?? null,
     startedAt: current ? (wasBusy ? activityState.startedAt : Date.now()) : null,
-    logFloorId: current ? current.logFloorId : activityState.logFloorId,
+    logFloorId: root ? root.logFloorId : activityState.logFloorId,
   };
   activityListeners.forEach((listener) => listener());
 }
@@ -220,6 +221,14 @@ export function installConsoleCapture(target: Window & typeof globalThis = windo
       recoveryNotice = detail.status;
       emitRecovery();
     }
+  });
+  target.addEventListener('neurodesk-memory-restored', () => {
+    const webglStatus = formatMemoryError('WebGL context lost', { kind: 'webgl' })?.status;
+    if (webglStatus && entries[entries.length - 1]?.message === webglStatus) {
+      entries = entries.slice(0, -1);
+      emitLog();
+    }
+    if (recoveryNotice === webglStatus) clearRecoveryNotice();
   });
 }
 

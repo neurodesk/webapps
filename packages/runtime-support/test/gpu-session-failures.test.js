@@ -87,4 +87,16 @@ test('empty-message GPUOutOfMemoryError scopes and uncaptured errors name GPU ou
   };
   await assert.rejects(runner3.run(feeds(async () => new Float32Array(32 ** 3))), /GPU out of memory/);
   await runner3.release();
+
+  // 4. When BOTH validation ("Buffer is invalid") and out-of-memory scopes capture errors,
+  //    both initialization and post-readback inference report the root-cause GPU out of memory!
+  const device4 = fakeGpuDevice();
+  device4.popResults.push({ message: 'Buffer is invalid' }, new GPUOutOfMemoryError(''));
+  await assert.rejects(session(device4), /GPU out of memory/);
+
+  const device5 = fakeGpuDevice();
+  const runner5 = await session(device5);
+  device5.popResults.push({ message: 'Buffer is invalid' }, new GPUOutOfMemoryError(''));
+  await assert.rejects(runner5.run(feeds(async () => new Float32Array(32 ** 3))), /GPU out of memory/);
+  await runner5.release();
 });

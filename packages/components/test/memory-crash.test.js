@@ -121,18 +121,23 @@ test('a phone tab killed mid-run and reloaded shows honest guidance without re-t
   let clock = 1_700_000_000_000;
   const first = createWorkspaceDom(t, url);
   let holds = 0;
+  let settleInitialCoi;
   first.window.coiHoldReloads = () => { holds += 1; };
-  first.bind({ now: () => clock });
-
-  // Uncontrolled first visit does NOT call coiHoldReloads so initial COOP/COEP isolation can reload!
-  first.document.getElementById('runButton').click();
-  assert.equal(holds, 0);
-
-  // Once a service worker controls the page, workflow start holds background SW update reloads.
+  first.window.coiWillReload = new Promise((resolve) => { settleInitialCoi = resolve; });
   Object.defineProperty(first.window.navigator, 'serviceWorker', {
     value: { controller: {} },
     configurable: true,
   });
+  first.bind({ now: () => clock });
+
+  // Even if clients.claim() set a controller mid-activation on a first visit,
+  // coiHoldReloads must NOT run before coiWillReload settles!
+  first.document.getElementById('runButton').click();
+  assert.equal(holds, 0);
+
+  // Once coiWillReload settles false (initial bootstrap complete), workflow start holds SW update reloads.
+  settleInitialCoi(false);
+  await waitMs(10);
   first.document.getElementById('runButton').click();
   first.progressManager.begin('Segmenting brain · 42%');
   first.progressManager.setProgress(0.42, 'Segmenting brain · 42%');
@@ -308,9 +313,11 @@ test('live OOM errors route through shared owners, respect ConsoleOutput line ca
   assert.doesNotMatch(crashDedupPage.log.getText(), /Browser memory limit exceeded/);
   assert.match(crashDedupPage.log.getText(), /Processing terminated unexpectedly/);
 
-  // Raw footer (without ProgressManager): live OOM stays pinned over raw progress updates and clears .error on "Done"!
+  // Raw footer (without ProgressManager): live OOM stays pinned over raw progress updates,
+  // and finishing with "Done" or a specific app error INSIDE the 250 ms window is never overwritten!
   const rawFooterDom = new JSDOM(`<!doctype html><html><body>
     <header id="controls"><button id="runButton" class="nd-btn nd-btn-primary" type="button">Run</button></header>
+    <div id="rawConsole" class="console-output"></div>
     <footer id="status">
       <span id="statusText" class="nd-status-text">Drag and drop files</span>
       <progress id="progress" max="1" value="0.2"></progress>
@@ -332,13 +339,42 @@ test('live OOM errors route through shared owners, respect ConsoleOutput line ca
   await waitMs(20);
   assert.match(rawStatus.textContent, /Out of browser memory on this device/);
   assert.ok(rawStatus.classList.contains('error'));
+  // End the run INSIDE the 250 ms grace window (< 60 ms elapsed since click):
   rawFooterDom.window.document.getElementById('cancelButton').hidden = true;
   rawFooterDom.window.document.getElementById('progress').value = 1;
-  await waitMs(280);
   rawStatus.textContent = 'Done';
   await waitMs(20);
   assert.equal(rawStatus.textContent, 'Done');
   assert.equal(rawStatus.classList.contains('error'), false);
+  await waitMs(260);
+  assert.equal(rawStatus.textContent, 'Done');
+  assert.equal(rawStatus.classList.contains('error'), false);
+
+  // Specific non-memory error ending inside the 250 ms window is also preserved,
+  // and a subsequent retry failing with "Failed" does NOT inherit an earlier run's console OOM!
+  const rawConsole = rawFooterDom.window.document.getElementById('rawConsole');
+  const rawLogger = new ConsoleOutput({ element: rawConsole, mirrorToConsole: false });
+  rawFooterDom.window.document.getElementById('cancelButton').hidden = false;
+  rawFooterDom.window.document.getElementById('progress').value = 0.3;
+  rawFooterDom.window.document.getElementById('runButton').click();
+  rawLogger.log('RangeError: Out of memory', 'error');
+  rawStatus.textContent = 'Failed';
+  await waitMs(20);
+  assert.match(rawStatus.textContent, /Out of browser memory on this device/);
+  rawFooterDom.window.document.getElementById('cancelButton').hidden = true;
+  rawFooterDom.window.document.getElementById('progress').value = 0;
+  rawStatus.textContent = 'Error: Could not write output';
+  rawStatus.classList.add('error');
+  await waitMs(260);
+  assert.equal(rawStatus.textContent, 'Error: Could not write output');
+  assert.equal(rawStatus.classList.contains('error'), true);
+
+  // Retry fails with generic "Failed" and no new OOM line in console -> stays "Failed"!
+  rawFooterDom.window.document.getElementById('runButton').click();
+  rawLogger.log('Invalid NIfTI magic bytes', 'error');
+  rawStatus.textContent = 'Failed';
+  await waitMs(20);
+  assert.equal(rawStatus.textContent, 'Failed');
 
   // Legacy ConsoleOutput (without <nd-console>) respects its configured maxLines cap, custom lineClass,
   // and shell-first fallback -> app-owner handoff (so Copy includes recovery lines logged before app init).
@@ -404,17 +440,32 @@ test('live OOM errors route through shared owners, respect ConsoleOutput line ca
   assert.equal(dualConsole.getText('analysis'), '');
   assert.match(dualConsole.getText('technical'), /Browser memory limit exceeded/);
 
-  // React-managed status (dicompare) receives CustomEvent without direct DOM mutation.
+  // React-managed status (dicompare) receives CustomEvent without direct DOM mutation,
+  // and recognizes [data-neurodesk-viewer-canvas] context loss + restoration.
   const reactDom = createWorkspaceDom(t, 'https://webapps.neurodesk.org/dicompare/', {
     'neurodesk-memory-guard:/dicompare/': { active: true, loaded: true, hidden: false, detail: 'Validating…', updatedAt: 1000 },
   });
+  const dicompareCanvas = reactDom.document.createElement('canvas');
+  dicompareCanvas.setAttribute('data-neurodesk-viewer-canvas', '');
+  reactDom.document.body.append(dicompareCanvas);
   const notices = [];
+  const restored = [];
   reactDom.window[Symbol.for('neurodesk.statusManaged')] = true;
   reactDom.window.addEventListener('neurodesk-memory-notice', (event) => notices.push(event.detail));
+  reactDom.window.addEventListener('neurodesk-memory-restored', (event) => restored.push(event.detail));
   reactDom.bind({ now: () => 2000 });
   assert.equal(notices.length, 1);
   assert.equal(notices[0].kind, 'reload-active');
   assert.equal(reactDom.document.getElementById('statusText').textContent, 'Drag and drop files');
+
+  dicompareCanvas.dispatchEvent(new reactDom.window.Event('webglcontextlost'));
+  await waitMs(20);
+  assert.equal(notices.length, 2);
+  assert.equal(notices[1].kind, 'webgl');
+  dicompareCanvas.dispatchEvent(new reactDom.window.Event('webglcontextrestored'));
+  await waitMs(20);
+  assert.equal(restored.length, 1);
+  assert.equal(restored[0].kind, 'webgl');
 });
 
 test('webglcontextlost and uncaught errors never disable active run cancellation, and restore only when all lost viewer canvases recover', async (t) => {
