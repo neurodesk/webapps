@@ -1,0 +1,29 @@
+{
+  "sourceMergeHead": "f04a24e8de4920fbdbe475cd3d6f5ca36902032b",
+  "previousReviewedHead": "62eeb1a9568d2338cdb5ef205cce2d884d5fe67b",
+  "integrated880": "23c59cb21c3fa80d211c5b736c0db004b7d4bf36",
+  "integrated876": "f444a7abc49d3d314295ec327f92f21434e5ca71",
+  "main": "4cdc38d2074bd221ed60f21e95351c28d3e7c7c9",
+  "shippingWasm": "cc528cf6ec172367ee845296f197a686e671629386a595eaba5432ccfe0436b6",
+  "numericalSourcesRuntimeAndShippingFilesUnchanged": true,
+  "historicalReportsUnchanged": true,
+  "fresh": [
+    "Research hooks, avx512 and avx512-real-corr builds at sourceMergeHead, using Rust 1.98.1/wasm-pack 0.13.1",
+    "Full 24-run Node matrix per bundle for shipped and all three research modules; all eight comparator exits 0",
+    "236-file null control per bundle; all output hashes equal historical matrices; all modules produce identical files between bundles",
+    "CLI accounting with merged comparator, and native pipeline accounting with source-bound retained dumps",
+    "Eight CI fixture invocations each with its original configured fixture pair(s), unconfigured invocation, workspace Clippy",
+    "82 app-version and workflow contracts under local Node 24.19.0"
+  ],
+  "reused": [
+    "Prior native CSS pipeline dumps; source trees, patches, native tests and compiler are identical, as binding receipts show",
+    "Prior MATLAB source recordings with unattested input bundles",
+    "Parent #876 UI tests and frozen outcome receipt; no new browser/UI or container acceptance"
+  ],
+  "limits": [
+    "No canonical shipping rebuild or workflow dispatch executed in this unit",
+    "Original reviews remain scoped to previous heads; merged stack needs parent integration review/full affected CI",
+    "Unchanged production Intel regression of #876 remains blocked; no reference policy or loss waiver",
+    "Real-corr research executable is not byte-identical; static-data reordering is visible, and fresh full-matrix outputs/accounting are identical"
+  ]
+}
