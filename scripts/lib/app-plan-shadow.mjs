@@ -245,7 +245,8 @@ export function expectedPackages({ packages, changedPaths, workspace, lockClosur
 
 // How `text` names `path`: by its repository path or, for a file in a
 // workspace directory, as a sibling does (`../<id>/...`), the file itself or a
-// directory of it below the workspace directory. A shorter name (`src/main.js`)
+// directory of it below the workspace directory; a root file only by its
+// path. A shorter name (`src/main.js`)
 // says nothing about which app or package it is in, and a root file's bare
 // name (`AGENTS.md`, `package.json`) nothing about who reads it.
 function namedBy(text, path) {
@@ -253,7 +254,8 @@ function namedBy(text, path) {
   if (parts.length < 2) return undefined;
   const workspace = ['apps', 'packages', 'exes'].includes(parts[0]) && parts.length > 2;
   const forms = (tail) => [tail.join('/'), ...(workspace ? [`../${tail.slice(1).join('/')}`] : [])];
-  const directories = parts.slice(0, -1).map((_, end) => `${parts.slice(0, end + 1).join('/')}/`).filter((directory) => directory.split('/').length > (workspace ? 3 : 2));
+  // A root file is named by its path: scripts/lib/ is every root helper, not this one.
+  const directories = workspace ? parts.slice(0, -1).map((_, end) => `${parts.slice(0, end + 1).join('/')}/`).filter((directory) => directory.split('/').length > 3) : [];
   return [...forms(parts), ...directories.flatMap((directory) => forms(directory.split('/')))].find((needle) => text.includes(needle));
 }
 
