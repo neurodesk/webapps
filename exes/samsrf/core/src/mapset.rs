@@ -6,6 +6,20 @@
 //! Rows are row-major over all vertices of the hemisphere: `data[row * vertices + v]`,
 //! zero outside the analysed region, as `samsrf_expand_srf` expands `Srf.Roi`.
 
+/// MATLAB's NaN. R2023b on x86-64 writes every NaN it makes, from the `NaN` constant or an
+/// invalid operation, as this negative quiet NaN (`0xFFC00000` in single), and every NaN of
+/// the pinned SamSrf recordings is this one. Rust's `f64::NAN` is the positive NaN, and
+/// neither WebAssembly arithmetic nor float casts fix a NaN's sign, so `Job::merge` writes
+/// this one and `gifti::write_map` its single counterpart.
+pub const MATLAB_NAN: f64 = f64::from_bits(0xFFF8_0000_0000_0000);
+
+/// Replaces every NaN with `MATLAB_NAN`.
+pub fn matlab_nans(values: &mut [f64]) {
+    for value in values.iter_mut().filter(|value| value.is_nan()) {
+        *value = MATLAB_NAN;
+    }
+}
+
 /// One block of named rows.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Maps {
@@ -49,4 +63,19 @@ pub struct MapSet {
     pub raw: Option<Maps>,
     pub analysed: crate::timeseries::VertexSelection,
     pub imaginary: Option<Vec<f64>>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_nan_becomes_matlabs_and_other_values_keep_their_bits() {
+        let positive = f64::NAN;
+        let payload = f64::from_bits(0x7FF8_0000_0000_0001);
+        let mut values = [positive, -positive, payload, 1.5, -0.0, f64::INFINITY];
+        matlab_nans(&mut values);
+        let bits: Vec<u64> = values.iter().map(|value| value.to_bits()).collect();
+        assert_eq!(bits, [0xFFF8_0000_0000_0000, 0xFFF8_0000_0000_0000, 0xFFF8_0000_0000_0000, 1.5f64.to_bits(), (-0.0f64).to_bits(), f64::INFINITY.to_bits()]);
+    }
 }

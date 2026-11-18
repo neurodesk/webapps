@@ -138,9 +138,11 @@ fn columns3(array: &DataArray, intent: &str) -> Result<Vec<[f64; 3]>> {
 }
 
 /// Writes one per-vertex map as `samsrf_export_giis` does (float32, zlib-compressed
-/// base64, `RowMajorOrder`).
+/// base64, `RowMajorOrder`). A NaN is written as MATLAB's single NaN, `0xFFC00000`
+/// (`mapset::MATLAB_NAN` in single), which a float cast need not preserve.
 pub fn write_map(values: &[f64]) -> Vec<u8> {
-    let raw: Vec<u8> = values.iter().flat_map(|value| (*value as f32).to_le_bytes()).collect();
+    let single = |value: f64| if value.is_nan() { f32::from_bits(0xFFC0_0000) } else { value as f32 };
+    let raw: Vec<u8> = values.iter().flat_map(|value| single(*value).to_le_bytes()).collect();
     let compressed = miniz_oxide::deflate::compress_to_vec_zlib(&raw, 6);
     let encoded = base64::engine::general_purpose::STANDARD.encode(compressed);
     let count = values.len();
