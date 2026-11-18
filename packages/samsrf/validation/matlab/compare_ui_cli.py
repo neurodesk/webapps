@@ -77,7 +77,7 @@ MESSAGE_FIELD = {'model': 'message', 'run': 'runMessage'}
 
 def expected_ui_outcome(run):
     """What the app must do with a plan run; run_ui_matrix.mjs's expectedOutcome says the same. The app
-    refuses at model load what the engine would refuse, and shows the engine's subject-HRF text at Run."""
+    refuses at model load what the engine would refuse; a run that names a subject-HRF file gets it."""
     engine = expected_web_outcome(run, 'browser')
     if engine['status'] == 'refused':
         return {'status': 'refused', 'stage': 'model', 'message': MODEL_REFUSALS[run['algorithm']]}

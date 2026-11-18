@@ -203,11 +203,12 @@ class Statuses(Base):
     def classes(self, report=None):
         return {run['id']: run['class'] for run in (report or self.x.ui_report())['runs']}
 
-    def test_expected_refusal_and_unsupported_route_are_listed_not_agreement(self):
+    def test_expected_refusal_is_listed_not_agreement_and_a_subject_hrf_run_completes(self):
         report = self.x.ui_report()
         self.assertEqual(self.classes(report), {'rc_hull_lh_single': 'exact', 'rc_gaussian_lh_single': 'refused',
-                                                'prf_custom_hrf_lh_double': 'unsupported'})
-        self.assertEqual(report['summary']['completedRuns'], 1)
+                                                'prf_custom_hrf_lh_double': 'exact'})
+        self.assertEqual(report['summary']['completedRuns'], 2)
+        self.assertEqual(report['summary']['unsupportedRuns'], 0)
         self.assertEqual(report['failures'], [])
 
     def test_ui_error_after_a_result_is_compared_but_is_not_a_completed_workflow(self):
@@ -218,11 +219,11 @@ class Statuses(Base):
         self.assertEqual(run['class'], 'ui-error')
         self.assertEqual(run['downloads'], 'exact')
         self.assertEqual(run['uiError'], LAYERS)
-        self.assertEqual((report['summary']['completedRuns'], report['summary']['exactDownloadRuns']), (0, 1))
+        self.assertEqual((report['summary']['completedRuns'], report['summary']['exactDownloadRuns']), (1, 2))
         self.assertIn('did not complete', ' '.join(report['failures']))
 
     def test_a_page_error_makes_a_result_ui_error_and_a_refusal_failed(self):
-        for run_id, expected in (('rc_hull_lh_single', 'ui-error'), ('prf_custom_hrf_lh_double', 'failed'),
+        for run_id, expected in (('rc_hull_lh_single', 'ui-error'), ('prf_custom_hrf_lh_double', 'ui-error'),
                                  ('rc_gaussian_lh_single', 'failed')):
             with self.subTest(run=run_id):
                 self.x.write_ui()
@@ -230,25 +231,29 @@ class Statuses(Base):
                 self.assertEqual(self.classes()[run_id], expected)
 
     def test_refusals_count_only_with_the_exact_expected_text_and_nothing_offered(self):
-        for run_id, change in (('prf_custom_hrf_lh_double', {'runMessage': 'Worker crashed: out of memory'}),
-                               ('prf_custom_hrf_lh_double', {'runMessage': None, 'message': ui_cli.expected_ui_outcome(
-                                   PLAN['prf_custom_hrf_lh_double'])['message']}),
-                               ('rc_gaussian_lh_single', {'message': 'The model JSON is not valid: Unexpected end of JSON input'}),
+        for run_id, change in (('rc_gaussian_lh_single', {'message': 'The model JSON is not valid: Unexpected end of JSON input'}),
                                ('rc_gaussian_lh_single', {'message': 'Fit_pRF 2 is not supported by this port'})):
             with self.subTest(run=run_id, change=change):
                 self.x.write_ui()
                 self.x.edit_ui(run_id, **change)
                 self.assertEqual(self.classes()[run_id], 'failed')
         self.x.write_ui()
-        directory = self.x.ui / 'prf_custom_hrf_lh_double'
+        directory = self.x.ui / 'rc_gaussian_lh_single'
+        directory.mkdir()
         shutil.copyfile(next((self.x.ui / 'rc_hull_lh_single').glob('*.zip')), directory / 'maps.zip')
-        self.x.edit_ui('prf_custom_hrf_lh_double', zip='maps.zip', zipSha256=sha((directory / 'maps.zip').read_bytes()))
+        self.x.edit_ui('rc_gaussian_lh_single', zip='maps.zip', zipSha256=sha((directory / 'maps.zip').read_bytes()))
+        self.assertEqual(self.classes()['rc_gaussian_lh_single'], 'failed')
+
+    def test_the_former_subject_hrf_refusal_is_a_failure(self):
+        self.x.ui_status = {'prf_custom_hrf_lh_double': 'unsupported'}
+        self.x.write_ui()
+        self.x.edit_ui('prf_custom_hrf_lh_double', stage='run', runMessage='model: Hrf hrf_custom is an old-school HRF fit file: the caller must load its fP and call hrf::old_school')
         self.assertEqual(self.classes()['prf_custom_hrf_lh_double'], 'failed')
 
     def test_unexpected_statuses_fail(self):
         for run_id, status in (('rc_hull_lh_single', 'refused'), ('rc_hull_lh_single', 'failed'),
                                ('rc_hull_lh_single', 'unsupported'),
-                               ('rc_gaussian_lh_single', 'succeeded'), ('prf_custom_hrf_lh_double', 'succeeded')):
+                               ('rc_gaussian_lh_single', 'succeeded'), ('prf_custom_hrf_lh_double', 'unsupported')):
             with self.subTest(run=run_id, status=status):
                 self.x.ui_status = {run_id: status}
                 self.x.write_ui()
@@ -438,7 +443,7 @@ class CommandLine(unittest.TestCase):
         result, report = self.cli()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((report['summary']['completedRuns'], report['summary']['refusedRuns'],
-                          report['summary']['unsupportedRuns']), (18, 2, 4))
+                          report['summary']['unsupportedRuns']), (22, 2, 0))
         self.assertTrue(report['plan']['canonical'])
         run_id = 'rc_hull_lh_single'
         names = compare_cli.expected_results(PLAN[run_id])[2]
@@ -487,10 +492,10 @@ class CommandLine(unittest.TestCase):
                 self.assertEqual(result.returncode, 1, result.stderr)
                 run = next(run for run in report['runs'] if run['id'] == run_id)
                 self.assertEqual((run['class'], run['downloads']), ('ui-error', 'exact'))
-                self.assertEqual(report['summary']['completedRuns'], 17)
+                self.assertEqual(report['summary']['completedRuns'], 21)
 
     def test_ui_error_invalidates_an_otherwise_expected_refusal(self):
-        for run_id in ('rc_gaussian_lh_single', 'prf_custom_hrf_lh_double'):
+        for run_id in ('rc_gaussian_lh_single', 'cf_gaussian_lh_single'):
             with self.subTest(run=run_id):
                 self.x.write_ui()
                 self.x.edit_ui(run_id, uiError=LAYERS)
@@ -500,7 +505,7 @@ class CommandLine(unittest.TestCase):
                 self.assertEqual(run['class'], 'failed')
 
     def test_refused_routes_still_require_complete_matlab_outputs(self):
-        for run_id in ('rc_gaussian_lh_single', 'prf_custom_hrf_lh_double'):
+        for run_id in ('rc_gaussian_lh_single', 'cf_gaussian_lh_single'):
             for mutation in ('missing', 'extra'):
                 with self.subTest(run=run_id, mutation=mutation):
                     self.x.write()
@@ -586,7 +591,14 @@ class RunTranslation(unittest.TestCase):
         runs = cli_plan.plan()['runs']
         outcomes = json.loads(node(script, json.dumps(runs)))
         self.assertEqual(outcomes, [ui_cli.expected_ui_outcome(run) for run in runs])
-        self.assertEqual(sorted(outcome['status'] for outcome in outcomes).count('succeeded'), 18)
+        self.assertEqual(sorted(outcome['status'] for outcome in outcomes).count('succeeded'), 22)
+
+    def test_a_subject_hrf_run_gives_the_app_its_file(self):
+        for run_id in ('prf_custom_hrf_lh_double', 'rc_custom_hrf_lh_single'):
+            with self.subTest(run=run_id):
+                files = self.translate(PLAN[run_id], self.bundle)['files']
+                self.assertEqual(files['subjectHrf'], [str(self.bundle / 'hrf_custom.mat')])
+        self.assertNotIn('subjectHrf', self.translate(PLAN['prf_gaussian_lh_concatenate_single'], self.bundle)['files'])
 
 
 class Runner(unittest.TestCase):
@@ -598,7 +610,7 @@ class Runner(unittest.TestCase):
         self.bundle = self.root / 'bundle'
         for path in ('x001_lh/lh_ubars1.gii', 'x001_lh/lh_ubars2.gii', 'x001_lh/roi.label', 'x001_lh/seed.label',
                      'x001_lh/lh_benson.gii', 'x001_lh/surf/lh.white', 'x001_lh/surf/lh.area',
-                     'apertures/aps_bars.mat', 'apertures/aps_bars_vec.mat'):
+                     'apertures/aps_bars.mat', 'apertures/aps_bars_vec.mat', 'hrf_custom.mat'):
             (self.bundle / path).parent.mkdir(parents=True, exist_ok=True)
             (self.bundle / path).write_text('')
         self.cases = itertools.count()
@@ -614,15 +626,15 @@ class Runner(unittest.TestCase):
                                 capture_output=True, text=True, check=True)
         return json.loads(result.stdout)
 
-    def test_only_the_expected_subject_hrf_text_is_unsupported(self):
-        message = ui_cli.expected_ui_outcome(PLAN['prf_custom_hrf_lh_double'])['message']
-        record = self.record('prf_custom_hrf_lh_double', outcome=message)
-        self.assertEqual((record['status'], record['stage'], record['runMessage']), ('unsupported', 'run', message))
-        self.assertIn('appModelSha256', record)
-        for scenario in ({'outcome': 'Worker crashed: out of memory'}, {'ready': False},
-                         {'outcome': message, 'downloadable': True}):
+    def test_a_subject_hrf_run_completes_only_with_its_outcome(self):
+        record = self.record('prf_custom_hrf_lh_double', outcome='pRF maps ready (1.0 s)', downloadable=True)
+        self.assertEqual(record['status'], 'succeeded')
+        self.assertEqual(record['files']['subjectHrf'], ['hrf_custom.mat'])
+        self.assertIn('zipSha256', record)
+        for scenario in ({'outcome': 'model: Hrf hrf_custom is an old-school HRF fit file: the caller must load its fP and call hrf::old_school'}, {'outcome': 'Worker crashed: out of memory'},
+                         {'ready': False}):
             with self.subTest(scenario=scenario):
-                self.assertNotEqual(self.record('prf_custom_hrf_lh_double', **scenario)['status'], 'unsupported')
+                self.assertEqual(self.record('prf_custom_hrf_lh_double', **scenario)['status'], 'failed')
         self.assertEqual(self.record('rc_custom_hrf_lh_double', outcome='Worker crashed: out of memory')['status'], 'failed')
 
     def test_only_the_expected_model_refusal_is_refused(self):

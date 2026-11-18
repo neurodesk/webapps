@@ -11,7 +11,7 @@
 // selects for MATLAB, and bundle paths replace /input. Inputs the web engine takes in
 // another form are named there too: the Benson template GIfTI (MATLAB reads the .mat
 // prepare_cli_bundle.m derived from it) and the subject-HRF file, which the engine API
-// takes as a kernel (`hrf.oldSchool`); the web app's interface has no subject-HRF route.
+// takes as a kernel (`hrf.oldSchool` of its fP, as apps/samsrf/src/engine.js builds it).
 // A run the engine refuses with exactly the text expectedEngineOutcome names is written
 // as refused, with its message; any other failure is failed. Neither is a pass.
 import { createHash } from 'node:crypto';
@@ -48,10 +48,6 @@ export function expectedEngineOutcome({ algorithm, model, precision }, runner) {
   }
   if (precision === 'single' && algorithm === 'cf' && model.Fit_pRF === 1) {
     return { status: 'refused', message: 'Data_Precision=single with Fit_pRF=1 is not supported by this port' };
-  }
-  if (runner === 'browser' && typeof model.Hrf === 'string' && model.Hrf.startsWith('hrf_')) {
-    // exes/samsrf/core/src/hrf.rs resolve(): nothing in the browser loads the subject-HRF file.
-    return { status: 'unsupported', message: `model: Hrf ${model.Hrf} is an old-school HRF fit file: the caller must load its fP and call hrf::old_school` };
   }
   return { status: 'succeeded' };
 }
@@ -103,7 +99,7 @@ export function webRun(run, bundle) {
     const file = join(bundle, `${model.Hrf}.mat`);
     const fp = samsrf.readOldSchoolHrf(readFileSync(file));
     hrf = samsrf.hrf.oldSchool(model.TR, fp);
-    translations.Hrf = { route: 'engine API kernel (not in the web app interface)', file, fP: Array.from(fp) };
+    translations.Hrf = { route: 'engine API kernel hrf.oldSchool(TR, fP), as apps/samsrf/src/engine.js builds it', file, fP: Array.from(fp) };
   }
   return { algorithm, options, model, hrf, translations };
 }

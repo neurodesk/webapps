@@ -13,10 +13,9 @@
 //
 // Usage: node run_browser_matrix.mjs PLAN_JSON BUNDLE BUNDLE_SHA256_JSON OUTPUT_ROOT
 //
-// The app has no subject-HRF file route, so a run whose model names an hrf_*.mat is
-// `unsupported` when the engine stops with exactly the subject-HRF text that
-// expectedEngineOutcome names. Any other failure, a crash included, is `failed`.
-// Neither is agreement.
+// A run whose model names a subject-HRF file (hrf_*.mat) gives engine.js that file, as the
+// app's interface does. A run the engine refuses with exactly the text expectedEngineOutcome
+// names is `refused`; any other failure, a crash included, is `failed`. Neither is agreement.
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -47,6 +46,7 @@ window.runCase = async (request) => {
     runs: await Promise.all(request.runs.map(named)),
     apertures: await named(request.apertures), roi: await named(request.roi),
     template: await named(request.template), seed: await named(request.seed),
+    subjectHrf: await named(request.subjectHrf),
     surfaces, normalise: true, average: request.average,
   };
   const job = await engine.createJob(inputs);
@@ -92,7 +92,7 @@ function serve(bundle) {
 }
 
 function request(run, bundle) {
-  const { algorithm, options, model } = webRun(run, bundle);
+  const { algorithm, options, model, translations } = webRun(run, bundle);
   const file = (path) => path && { name: path.split(sep).pop(), url: `/bundle/${relative(bundle, path).split(sep).join('/')}` };
   const hemisphere = options.hemisphere;
   return {
@@ -103,6 +103,7 @@ function request(run, bundle) {
     roi: file(options.roi),
     template: file(options.template),
     seed: file(options.seed),
+    subjectHrf: file(translations.Hrf?.file),
     surfaces: algorithm === 'cf' ? { area: { ...file(options.area), name: `${hemisphere}.area` }, white: { ...file(options.white), name: `${hemisphere}.white` } } : {},
     average: options.combine === 'average',
   };
