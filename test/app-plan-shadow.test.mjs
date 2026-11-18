@@ -173,6 +173,9 @@ test('the package oracle expects a suite whose files name a changed file outside
   // A name without its app or package says nothing: samsrf's src/main.js is not every package's.
   const generic = new Map([['packages/util', "import './src/main.js';"]]);
   assert.deepEqual([...expectedPackages({ packages, changedPaths: ['apps/samsrf/src/main.js'], workspace, texts: generic }).keys()], []);
+  // Nor does a root file's bare name: packages/lcmodel's prose mentions AGENTS.md (#890).
+  const prose = new Map([['packages/util', 'Read AGENTS.md and package.json first.']]);
+  assert.deepEqual([...expectedPackages({ packages, changedPaths: ['AGENTS.md', 'package.json'], workspace, texts: prose }).keys()], []);
   const directory = expectedPackages({ packages, changedPaths: ['apps/calmar/tests/fixtures/synthstrip-mini/T1.nii.gz'], workspace, texts });
   assert.deepEqual([...directory.keys()], ['packages/local']);
   assert.deepEqual([...expectedPackages({ packages, changedPaths: ['README.md'], workspace, texts }).keys()], []);
