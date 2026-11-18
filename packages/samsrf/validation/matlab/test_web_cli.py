@@ -537,7 +537,8 @@ class BrowserRequests(unittest.TestCase):
         runs = cli_plan.plan()['runs']
         with scratch() as bundle:
             result = subprocess.run(['node', '--input-type=module', '-e', script, json.dumps([runs, bundle])],
-                                    capture_output=True, text=True, check=True)
+                                    capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
         files = json.loads(result.stdout)
         expected = [{'name': 'hrf_custom.mat', 'url': '/bundle/hrf_custom.mat'}
                     if str(run['model'].get('Hrf', '')).startswith('hrf_') else None for run in runs]

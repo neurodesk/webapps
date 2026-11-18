@@ -23,7 +23,6 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { extname, join, normalize, relative, sep } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { chromium } from 'playwright';
 import { failureStatus, isEntry, treeHashes, webRun } from './run_web_matrix.mjs';
 
 const repo = fileURLToPath(new URL('../../../../', import.meta.url));
@@ -115,6 +114,7 @@ export function request(run, bundle) {
 
 async function main([planPath, bundle, manifestPath, output, ...rest]) {
   if (!output || rest.length) throw new Error('Usage: node run_browser_matrix.mjs PLAN_JSON BUNDLE BUNDLE_SHA256_JSON OUTPUT_ROOT');
+  const { chromium } = await import('playwright');
   if (existsSync(output)) throw new Error(`${output} must not exist`);
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   const sorted = (object) => JSON.stringify(Object.fromEntries(Object.entries(object).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))));
