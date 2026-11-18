@@ -272,7 +272,9 @@ jobs:
             ${{ runner.temp }}/composite-site.tar.zst
             ${{ runner.temp }}/composite-site.tar.zst.sha256
           if-no-files-found: error
-          retention-days: 1
+          # Long enough to re-run a failed site check without rebuilding;
+          # .github/actions/composite-site says to re-run all jobs after that.
+          retention-days: 3
           compression-level: 0
       - name: Check that agent interactions can run
         id: agent-site
@@ -396,19 +398,6 @@ jobs:
           args=(--skip-build --site-dir dist --output .e2e/workspace)
           if [ -n "$SMOKE_APPS" ]; then args+=(--app "$SMOKE_APPS"); fi
           pnpm test:e2e:catalog "${args[@]}"
-      - name: Run requested Neurodesk processing workflows
-        if: github.event_name == 'workflow_dispatch' && inputs.agentic_mode == 'pipeline'
-        env:
-          NEURODESK_API_KEY: ${{ secrets.NEURODESK_API_KEY }}
-          AGENTIC_APPS: ${{ inputs.agentic_apps }}
-        run: |
-          if [ -z "$NEURODESK_API_KEY" ]; then
-            echo '::error::Processing workflows require the NEURODESK_API_KEY repository secret.'
-            exit 1
-          fi
-          args=(--skip-build --site-dir dist --target desktop --no-cache --output .e2e/pipeline)
-          if [ -n "$AGENTIC_APPS" ]; then args+=(--app "$AGENTIC_APPS"); fi
-          pnpm test:e2e:pipeline "${args[@]}"
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -482,10 +471,50 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # Live model calls start only once every deterministic site check passed.
+  processing-workflows:
+    needs: [composite-site, site-runtime, site-audit, site-e2e, site-mobile, site-catalog]
+    if: github.event_name == 'workflow_dispatch' && inputs.agentic_mode == 'pipeline'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install browser
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
+          node node_modules/@playwright/test/cli.js install --with-deps chromium
+      - uses: ./.github/actions/composite-site
+      - name: Run requested Neurodesk processing workflows
+        env:
+          NEURODESK_API_KEY: ${{ secrets.NEURODESK_API_KEY }}
+          AGENTIC_APPS: ${{ inputs.agentic_apps }}
+        run: |
+          if [ -z "$NEURODESK_API_KEY" ]; then
+            echo '::error::Processing workflows require the NEURODESK_API_KEY repository secret.'
+            exit 1
+          fi
+          args=(--skip-build --site-dir dist --target desktop --no-cache --output .e2e/pipeline)
+          if [ -n "$AGENTIC_APPS" ]; then args+=(--app "$AGENTIC_APPS"); fi
+          pnpm test:e2e:pipeline "${args[@]}"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: catalog-pipeline
+          path: .e2e/
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
+
   # The repository's caches share 10 GB, and GitHub evicts the least recently used
   # above it: a superseded copy of the examples would push out Rust and reference-data caches.
+  # Like the serial job it replaced, it waits for every site check to pass.
   example-cache-retention:
-    needs: site-audit
+    needs: [site-runtime, site-audit, site-e2e, site-mobile, site-catalog]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     # A cache left in place costs space, never a wrong result.

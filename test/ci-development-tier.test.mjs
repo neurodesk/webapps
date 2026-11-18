@@ -223,7 +223,7 @@ test('superseded per-commit caches are deleted by a job that holds nothing else'
     const job = flow.jobs[id];
     assert.ok(job, `${file} deletes superseded ${prefix} caches`);
     assert.ok(cacheKey(flow.jobs[saver], prefix), `${file}: ${saver} saves the ${prefix} caches`);
-    assert.equal(job.needs, saver, `${file}: ${id} runs once ${saver} has saved its cache`);
+    assert.ok([job.needs].flat().includes(saver), `${file}: ${id} runs once ${saver} has saved its cache`);
     assert.deepEqual(job.permissions, { actions: 'write' }, `${file}: ${id} can delete caches and nothing else`);
     assert.equal(job['continue-on-error'], true, `${file}: a failed cleanup does not fail the run`);
     assert.ok(job.steps.every(step => !step.uses), `${file}: ${id} runs no action with its write token`);

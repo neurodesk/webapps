@@ -46,8 +46,8 @@ export function testedBase({ runs, head, branch, git, workflow = 'ci', atHead = 
 // not pass are untested at its head. `jobs` ({ name, conclusion }) are the
 // listed attempt's, and `appIds` the registry's. The per-app jobs are named by
 // their matrix, whose first value is the app id (matrixEntry). Jobs every push
-// runs again whatever its plan, and jobs only the nightly runs (which tests
-// every app), need no carrying. Any other failed job (the plan itself), a job
+// runs again whatever its plan, and the agentic jobs only the nightly (which
+// tests every app) or a dispatch runs, need no carrying. Any other failed job (the plan itself), a job
 // that has not finished, or an app id the registry does not know cannot be
 // tied to an app. The site jobs check only the apps their run selected and the
 // canaries (scripts/lib/smoke-apps.mjs) and name no app, so a failure there is
@@ -55,7 +55,7 @@ export function testedBase({ runs, head, branch, git, workflow = 'ci', atHead = 
 export const APP_JOBS = ['app-tests', 'browser-e2e', 'browser-e2e-gpu'];
 export const RERUN_JOBS = ['workspace-contracts', 'homepage-easter-egg', 'example-cache-retention', 'full-plan', 'full-plan-withheld'];
 export const SITE_JOBS = ['composite-site', 'site-runtime', 'site-audit', 'site-e2e', 'site-mobile', 'site-catalog'];
-export const NIGHTLY_JOBS = ['agent-interactions'];
+export const NIGHTLY_JOBS = ['agent-interactions', 'processing-workflows'];
 const APP_JOB = new RegExp(`^(?:${APP_JOBS.join('|')}) \\(([^,)]+)[,)]`);
 const UNPASSED = new Set(['failure', 'cancelled', 'timed_out', 'startup_failure', 'action_required', 'stale']);
 const PASSED = new Set(['success', 'skipped', 'neutral']);

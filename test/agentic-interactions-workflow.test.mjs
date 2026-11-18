@@ -56,9 +56,10 @@ test('both full-catalog agent targets run in three shards on isolated runners an
   assert.equal(packaged.with['if-no-files-found'], 'error');
   assert.ok(job.steps.some(step => step.uses === './.github/actions/composite-site'));
   assert.equal(site.outputs.agent_site_ready, '${{ steps.agent-site.outputs.ready }}');
-  const processing = ci.jobs['site-e2e'].steps.find(step => step.run?.includes('pnpm test:e2e:pipeline'));
+  const processing = ci.jobs['processing-workflows'];
   assert.match(processing.if, /agentic_mode == 'pipeline'/);
-  assert.match(processing.run, /--target desktop --no-cache/);
+  assert.match(processing.steps.find(step => step.run?.includes('pnpm test:e2e:pipeline')).run, /--target desktop --no-cache/);
+  assert.ok(processing.steps.some(step => step.uses === './.github/actions/composite-site'));
 });
 
 test('the actual agent command runs each target shard without dropping cases and preserves optional app selection', async t => {

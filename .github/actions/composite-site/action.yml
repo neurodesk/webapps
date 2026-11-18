@@ -7,10 +7,19 @@ description: >-
 runs:
   using: composite
   steps:
-    - uses: actions/download-artifact@v8
+    - id: download
+      uses: actions/download-artifact@v8
+      continue-on-error: true
       with:
         name: composite-site-${{ github.sha }}
         path: ${{ runner.temp }}/composite-site
+    # ci.yml keeps the build 3 days; re-running one job later finds none.
+    - name: Explain a missing build
+      if: steps.download.outcome == 'failure'
+      shell: bash
+      run: |
+        echo "::error::The site this run built (composite-site-$GITHUB_SHA) is gone: ci.yml keeps it 3 days. Use \"Re-run all jobs\" to build it again; re-running one failed job cannot."
+        exit 1
     - name: Verify and unpack the built site
       shell: bash
       run: |
