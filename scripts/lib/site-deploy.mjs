@@ -24,7 +24,11 @@ const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const HEX64 = /^[0-9a-f]{64}$/;
 const HEX40 = /^[0-9a-f]{40}$/;
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?Z$/;
-const isInstant = (value) => typeof value === 'string' && ISO_INSTANT.test(value) && !Number.isNaN(Date.parse(value));
+// A calendar instant that reads back as written: 2026-02-31 or 24:00 is refused, not moved to another day.
+const isInstant = (value) => typeof value === 'string'
+  && ISO_INSTANT.test(value)
+  && !Number.isNaN(Date.parse(value))
+  && new Date(value).toISOString().slice(0, 19) === value.slice(0, 19);
 const message = (error) => String(error?.message ?? error);
 
 /** Every site a deploy publishes: the catalogues, then the hub. */

@@ -111,6 +111,8 @@ test('the usage report is refreshed once a day, by the first run after the sched
   assert.equal(analyticsStale(null, '2026-11-18T04:24:00Z'), true, 'a live report GA4 could not fill is replaced');
   assert.equal(analyticsStale(undefined, '2026-11-18T04:24:00Z'), true);
   assert.equal(analyticsStale('garbage', '2026-11-18T04:24:00Z'), true);
+  // 31 November is not 1 December: a live report from a date that does not exist is replaced.
+  assert.equal(analyticsStale('2026-11-31T10:00:00Z', '2026-11-18T12:00:00Z'), true);
   assert.equal(analyticsStale('2026-11-01T00:00:00Z', null), false, 'a build without a report never replaces one');
 });
 
@@ -164,6 +166,9 @@ test('a served record of the wrong shape is unreadable, so its site is published
     digest: { digest: 7 },
     analyticsGeneratedAt: { analyticsGeneratedAt: { at: 1 } },
     analyticsText: { analyticsGeneratedAt: 'yesterday' },
+    // Date.parse moves it to 3 March; a usage report from a date that does not exist is not read as current.
+    analyticsImpossibleDate: { analyticsGeneratedAt: '2026-02-31T10:00:00Z' },
+    analyticsHour24: { analyticsGeneratedAt: '2026-11-17T24:00:00Z' },
     commit: { commit: { sha: 'x' } },
     shortCommit: { commit: 'fd08c1c20' },
   };
