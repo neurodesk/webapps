@@ -36,7 +36,7 @@ function text(value, limit = 500) {
 const LOG_LIMIT = 64 * 1024 * 1024;
 const FAILED = new Set(['failure', 'timed_out']);
 
-// `notarizing` holds the paths of the workflows that notarize (notarizingWorkflowPaths in workflow-reports.mjs).
+// `notarizing` holds the paths of the workflows that notarize (workflowFacts in workflow-reports.mjs).
 export async function alertNotarization({ run, repository, client, notarizing, owner = NOTARIZATION_OWNER, dryRun = false }) {
   if (run.status !== 'completed' || !FAILED.has(run.conclusion)) return { skipped: 'Run did not fail' };
   if (run.event === 'pull_request' || !notarizing.includes(run.path)) return { skipped: 'Run does not notarize' };

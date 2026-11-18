@@ -26,29 +26,28 @@ async function paginated(path, jq) {
 }
 
 // Workflow runs of `workflow` (file name), newest first, created on or after `since` (YYYY-MM-DD).
-export function listRuns({ workflow = 'ci.yml', since, event, branch, status, limit = 1000 }) {
+export function listRuns({ workflow = 'ci.yml', since, event, branch, limit = 1000 }) {
   const query = new URLSearchParams({ per_page: '100', created: `>=${since}` });
   if (event) query.set('event', event);
   if (branch) query.set('branch', branch);
-  if (status) query.set('status', status);
   return paginated(`repos/${REPOSITORY}/actions/workflows/${workflow}/runs?${query}`, '.workflow_runs[] | @json')
     .then((runs) => runs.slice(0, limit));
 }
 
 // Completed and running runs of every workflow created in [since, until), as
 // the fields a usage report reads. The API returns at most 1,000 runs per
-// query, so the range is read in two-hour windows. `filter` adds query
-// parameters (event, branch, status) and `fields` replaces the jq projection.
+// query, so the range is read in two-hour windows.
 // A run as the usage report reads it: pull requests as numbers, the head
 // repository as its full name (scripts/lib/ci-usage.mjs, pullRequestOf).
 const RUN_FIELDS = '{id, name, event, status, conclusion, head_branch, head_sha, created_at, run_started_at, updated_at, pull_requests: [.pull_requests[].number], head_repository: .head_repository.full_name}';
 
-export async function listAllRuns({ since, until, windowHours = 2, filter = {}, fields = RUN_FIELDS }) {
+export async function listAllRuns({ since, until, windowHours = 2 }) {
+  const fields = RUN_FIELDS;
   const stamp = (time) => new Date(time).toISOString().replace(/\.\d+Z$/, 'Z');
   const runs = new Map();
   for (let from = since.getTime(); from < until.getTime(); from += windowHours * 3600e3) {
     const to = Math.min(from + windowHours * 3600e3, until.getTime()) - 1000;
-    const query = new URLSearchParams({ per_page: '100', ...filter, created: `${stamp(from)}..${stamp(to)}` });
+    const query = new URLSearchParams({ per_page: '100', created: `${stamp(from)}..${stamp(to)}` });
     for (const run of await paginated(`repos/${REPOSITORY}/actions/runs?${query}`, `.workflow_runs[] | ${fields} | @json`)) runs.set(run.id, run);
   }
   return [...runs.values()];

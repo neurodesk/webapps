@@ -1,9 +1,9 @@
 name: workflow failure reports
 
-# Four times a day, report the workflow runs that finished since the last
-# successful tick (scripts/lib/workflow-reports.mjs): an issue per failing
+# Four times a day, report every workflow run attempt of the last 14 days that
+# has no report yet (scripts/lib/workflow-reports.mjs): an issue per failing
 # scheduled workflow on the default branch, and the Apple notarization alert
-# for failed non-pull-request runs of every workflow that notarizes.
+# for failed non-pull-request attempts of every workflow that notarizes.
 
 on:
   schedule:
@@ -16,8 +16,8 @@ permissions:
   issues: write
 
 # One tick at a time, so two ticks never report the same run together. A
-# pending tick replaced by a newer one loses nothing: each tick starts from
-# the last successful one.
+# pending tick replaced by a newer one loses nothing: each tick reads the
+# whole lookback, and the report markers in the issues are the only state.
 concurrency:
   group: workflow-failure-reports
   cancel-in-progress: false

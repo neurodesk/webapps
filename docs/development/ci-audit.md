@@ -56,14 +56,36 @@ PR/push quality workflow does not run automatically.
 ## Scheduled failure reports
 
 `workflow-reports.yml` runs at 00:47, 06:47, 12:47 and 18:47 UTC and on
-manual dispatch (`scripts/report-workflow-failures.mjs`). It asks the Actions
-API for the scheduled runs and the failed runs created in the last seven days
-and checks every run attempt that finished since a successful reporter run
-last listed it (`scripts/lib/workflow-reports.mjs`). A failed or skipped tick
-therefore loses nothing: the next successful tick checks the same attempts.
-An attempt replaced by a rerun before any tick listed it is read from the
-attempts endpoint and checked too. Before the first successful tick, the
-reporter checks the last day only, so dispatch it once after merging it. A report arrives up to six hours after the run finishes.
+manual dispatch (`scripts/report-workflow-failures.mjs`). It keeps no cursor.
+Each tick asks the Actions API for the runs created in the last 14 days that
+a report can concern: scheduled runs on the default branch, and the runs of
+every event other than pull requests that a notarizing workflow runs on
+(`push` and `workflow_dispatch` today), whatever their latest conclusion. It
+reads every attempt of each run, the earlier ones from the attempts endpoint
+when a run was rerun, and reports each completed attempt that has no report
+marker in the issues yet (`scripts/lib/workflow-reports.mjs`). The markers are
+the only state, so a failed, cancelled, overlapping or late tick and a rerun
+lose nothing, and a repeated tick writes nothing. The reporter's own failed
+scheduled ticks are reported like any other scheduled workflow, so a broken
+reporter is noticed once a tick succeeds again. A report arrives up to six
+hours after the attempt finishes.
+
+What a tick does not report: an attempt of a run created more than 14 days
+before the tick, which is a rerun of an older run (GitHub allows reruns for
+30 days) or a failure missed by a reporter outage longer than 14 days; and an
+attempt that completed before `CUTOVER`, which the `workflow_run` reporters
+this one replaced handled with the same markers. In the 30 days to
+18 November 2026, every rerun of a scheduled or notarizing run started within
+43 hours of its run. The lookback is 14 days and not 30 because an attempt
+without a marker is read again on every tick: the failed notarizing attempts
+without a notarization failure (148 in those 30 days, 34 with a failed macOS
+job whose log is downloaded again) and the passing scheduled attempts of the
+workflows with a job that continues on error (`ci.yml` and `deploy-pages.yml`,
+whose passing run can contain a failed job).
+Measured on 18 November 2026 with every attempt of the lookback past the
+cutover, which is the steady state, a dry-run tick listed 3,318 runs, read
+2,070 attempts, re-read 141 attempts without a marker and made 305 HTTP
+requests in 7 minutes. A 30-day lookback would about double both.
 
 Every scheduled run on the default branch is checked; no workflow list is
 kept. The reporter opens one bot-authored issue per failing workflow,
@@ -87,15 +109,17 @@ others, and the tick then fails so the next one checks that run again.
 For read-only verification, set `GH_TOKEN` or `GITHUB_TOKEN` and
 `GITHUB_REPOSITORY`, then run
 `node scripts/report-workflow-failures.mjs --dry-run --since <ISO time> --until <ISO time>`.
-It reads the issues and prints, for each attempt that finished in that range,
-whether it would open an issue, comment on one, or was already reported.
+`--since` replaces the cutover and `--until` the tick time. It reads the issues
+and prints, for each attempt that completed in that range, whether it would
+open an issue, comment on one, or was already reported, and how many HTTP
+requests the tick made. A dry run writes nothing, not even the step summary.
 
 ## Apple notarization alerts
 
-The same tick checks the failed and timed-out runs of every workflow that
+The same tick checks the failed and timed-out attempts of every workflow that
 notarizes macOS packages, on any branch or tag, release dispatches included,
 but not pull requests. The workflows are derived from the workflow files
-(`notarizingWorkflowPaths`: a file that mentions notarization, `APPLE_ID` or
+(`workflowFacts`: a file that mentions notarization, `APPLE_ID` or
 calls `node-cli-portable.yml`, reusable workflows excluded). When a failed
 macOS job log shows Apple refusing a notarization (an expired agreement or
 bad credentials from the notary service, HTTP 401 or 403, or a submission whose
@@ -104,8 +128,8 @@ failing" assigned to the account owner, or comments on it, reopens it and
 assigns the owner again, once per run attempt. Ticks never overlap; two
 alert issues opened anyway merge into the oldest. It reads up to 64 MiB of each failed macOS job's log and warns when a log was
 longer. A Developer ID certificate or keychain failure before notarization is
-not detected. A failed attempt that is rerun to success before the next tick
-is not alerted: the rerun shows that notarization works again. Close the issue
+not detected. A failed attempt is alerted even when a rerun passed before the
+next tick. Close the issue
 after renewing the agreement and rerunning the failed jobs.
 
 ## Boundaries
