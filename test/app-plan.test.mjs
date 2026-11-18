@@ -1069,8 +1069,8 @@ test('package suites run for the packages a change reaches, and all of them for 
   const dependants = (node) => workspace.nodes.filter((candidate) => candidate.startsWith('packages/') && reachableFrom(workspace, candidate).has(node));
   // Suites whose code names a path the scan cannot bound read every file: they run on every change.
   // Keep this list short, or package tests stop narrowing (graph.unresolved lists the literals).
-  const everywhere = Object.keys(reasons(['scripts/read-by-nothing.mjs']).reasons).sort();
-  assert.deepEqual(everywhere, ['packages/desktop', 'packages/spinalcordtoolbox', 'packages/vesselboost', 'packages/white-matter-lesions']);
+  const everywhere = Object.keys(reasons(['registry/read-by-nothing.json']).reasons).sort();
+  assert.deepEqual(everywhere, ['packages/white-matter-lesions']);
   // A package's own change runs it and the packages that use it.
   const greedy = reasons(['exes/greedy/core/src/lib.rs']);
   assert.equal(greedy.all, null);
@@ -1086,7 +1086,7 @@ test('package suites run for the packages a change reaches, and all of them for 
   assert.ok(!Object.keys(app.reasons).includes('packages/niimath'));
   // Docs, changesets and other workflows run none; a contract test only the suites that read every file.
   assert.deepEqual(Object.keys(reasons(['docs/quality/ci-development-tiers.md', '.changeset/x.md', '.github/workflows/lcmodel-native.yml', 'AGENTS.md']).reasons), []);
-  assert.deepEqual(Object.keys(reasons(['test/app-plan.test.mjs']).reasons).sort(), everywhere);
+  assert.deepEqual(Object.keys(reasons(['test/app-plan.test.mjs']).reasons).sort(), ['packages/desktop', ...everywhere]);
   // The repository root's configuration, a full run and a plan of every app run all.
   for (const [paths, reason] of [
     [['package.json'], /^package\.json: every package suite and the easter egg install and run under it$/],
@@ -1162,7 +1162,7 @@ test("a package suite runs when a file its tests name through a sibling-relative
   assert.equal(plan.packages.all, null);
 });
 
-test('a relative literal reads the path it resolves to from its file, or the nearest one that exists', async (t) => {
+test('a relative literal reads the path it resolves to from its file, or every path it can name', async (t) => {
   const { root } = await plannerFixture(t);
   const write = async (path, text) => {
     await mkdir(join(root, path, '..'), { recursive: true });
@@ -1174,17 +1174,24 @@ test('a relative literal reads the path it resolves to from its file, or the nea
   await write('packages/a/test/a.test.js', [
     "const data = new URL('../../b/fixtures/data.bin', import.meta.url);",
     'const generated = new URL(`../../b/generated/${name}.bin`, import.meta.url);',
+    "const numbered = new URL('../../b/fixtures/data-' + index + '.bin', import.meta.url);",
     "const deleted = new URL('../../c/gone.bin', import.meta.url);",
-    'const anywhere = new URL(`../../../${path}`, import.meta.url);',
     "const repository = new URL('../../../', import.meta.url);",
     "const own = new URL('./fixtures/own.bin', import.meta.url);",
   ].join('\n'));
+  await write('packages/d/test/d.test.js', 'const anything = new URL(`../../../${path}`, import.meta.url);');
   const fixture = await loadConservativeWorkspaceGraph(root);
-  assert.deepEqual([...fixture.outside.get('packages/a/test')].sort(), ['.', 'packages', 'packages/b', 'packages/b/fixtures/data.bin'].sort());
-  // The computed and missing paths keep their nearest existing directory; the repository root is a base, not a read.
+  // A closed literal that names nothing reads it and what extends it; a continued one every path it starts.
+  assert.deepEqual([...fixture.outside.get('packages/a/test')].sort(), ['packages/b/fixtures/data-*', 'packages/b/fixtures/data.bin', 'packages/b/generated/*', 'packages/c/gone.bin*'].sort());
+  assert.deepEqual([...fixture.outside.get('packages/d/test')], ['*']);
   assert.deepEqual(fixture.unresolved.filter(({ file }) => file === 'packages/a/test/a.test.js').map(({ literal, path }) => `${literal} ${path}`).sort(), [
-    '../../b/generated/ packages/b', '../../c/gone.bin packages', './fixtures/own.bin packages/a/test',
+    '../../b/fixtures/data- packages/b/fixtures/data-*', '../../b/generated/ packages/b/generated/*', '../../c/gone.bin packages/c/gone.bin*', './fixtures/own.bin packages/a/test/fixtures/own.bin*',
   ].sort());
+  const registry = await loadAppsRegistry();
+  const suites = (path) => Object.keys(createAppPlan(registry, [path], fixture).packages.reasons).sort();
+  assert.deepEqual(suites('packages/b/fixtures/data-2.bin'), ['packages/a', 'packages/b', 'packages/d']);
+  assert.deepEqual(suites('packages/c/gone.bin'), ['packages/a', 'packages/d']);
+  assert.deepEqual(suites('packages/b/fixtures/other.bin'), ['packages/b', 'packages/d']);
 });
 
 test('an app with ci.e2e_shards gets one browser-e2e entry per shard', async () => {

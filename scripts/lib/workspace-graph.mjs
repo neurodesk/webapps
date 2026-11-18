@@ -17,14 +17,16 @@ import sourceParser from '@neurodesk/code-quality';
 // root file, the app, model and site files it names (`apps/x`, or `apps` for
 // a path computed at run time) and every repository path a relative literal
 // in it resolves to from the file that names it (`'../../components/test/x'`):
-// package tests read their app's fixtures and each other's. A literal that
-// resolves to nothing at head (computed, or deleted by the change) keeps its
-// nearest existing directory, the repository root (`.`) at worst; `unresolved`
-// lists them. A closed literal of `..` steps that names the repository root
-// (`new URL('../../../', import.meta.url)`) is a computed repository root,
-// not a read: what is joined onto it is followed through the root-relative
-// names above, as for root files. A false reference only widens the CI
-// selection.
+// package tests read their app's fixtures and each other's. A name ending in
+// `*` is a prefix: a literal continued at run time (`\`../fixtures/${name}\``,
+// `'../x-' + id`) reads every path that starts with it, `*` alone the whole
+// repository; a closed literal that names nothing at head (a file the change
+// deletes, an extensionless import) reads that path and every path that
+// extends it. `unresolved` lists both kinds. A closed literal of `..` steps
+// that names the repository root (`new URL('../../../', import.meta.url)`) is
+// a computed repository root, not a read: what is joined onto it is followed
+// through the root-relative names above, as for root files. A false reference
+// only widens the CI selection.
 
 const TOP_LEVEL = ['apps', 'packages', 'exes'];
 // Apps are leaves: a package that mentions an app does not use what that app uses.
@@ -68,7 +70,7 @@ const OUTSIDE_RELATIVE = new RegExp(String.raw`(?:\.\.\/)+${OUTSIDE_DIRS}(?:\/([
 const OUTSIDE_ROOTED = new RegExp(String.raw`['"\`]${OUTSIDE_DIRS}\/([\w.-]+)?`, 'g');
 const OUTSIDE_JOINED = new RegExp(String.raw`((?:[,/]|\.join\()\s*)?['"\`]${OUTSIDE_DIRS}['"\`](\s*[,/]\s*(?:['"\`]([\w.-]+)['"\`])?)?`, 'g');
 // A quoted relative path, up to its closing quote or a template expression: `'../x/y'`, `'./'`, `'..'`.
-const RELATIVE_LITERAL = /['"`](\.\.?(?:\/[^'"`\s$]*)?)(?=(['"`]|\$\{))/g;
+const RELATIVE_LITERAL = /['"`](\.\.?(?:\/[^'"`\s$]*)?)(?:(\$\{)|['"`](\s*\+)?)/g;
 const PARENT_STEPS = /^\.\.(?:\/\.\.)*\/?$/;
 // Lint and mutation-testing configs: their own workflows read them, composite-site never does.
 export const INDEPENDENT_CONFIG = /^(?:eslint|knip|stryker)\.config\.m?js$/;
@@ -170,20 +172,24 @@ export async function loadConservativeWorkspaceGraph(root) {
   // Packages, exes and root files a directory's text names, and what else it
   // reads: `reads(file)` is the set its outside references go to. `scripts`
   // keeps the package.json scripts a caller runs; a manifest it cannot parse is read whole.
-  // The repository paths the relative literals of `file` resolve to, each
-  // the nearest path that exists at head.
+  // The repository paths the relative literals of `file` resolve to: the
+  // path itself when it exists at head, else a prefix (`*`) of what it can name.
   const present = new Map();
   const unresolved = [];
   const relativeReferences = async (text, file) => {
     const found = new Set();
-    for (const [, literal, end] of text.matchAll(RELATIVE_LITERAL)) {
-      let path = relative(root, resolve(dirname(file), literal)).split(sep).join('/') || '.';
+    for (const [, literal, template, concatenated] of text.matchAll(RELATIVE_LITERAL)) {
+      const continued = Boolean(template || concatenated);
+      const path = relative(root, resolve(dirname(file), literal)).split(sep).join('/') || '.';
       if (path === '..' || path.startsWith('../') || isAbsolute(path)) continue;
-      if (path === '.' && end !== '${' && PARENT_STEPS.test(literal)) continue;
-      const named = path;
-      while (path !== '.' && !(present.has(path) ? present.get(path) : present.set(path, await exists(join(root, path))).get(path))) path = dirname(path);
-      if (path !== named) unresolved.push({ file: relative(root, file).split(sep).join('/'), literal, path });
-      found.add(path);
+      if (path === '.' && !continued && PARENT_STEPS.test(literal)) continue;
+      if (!continued && (present.has(path) ? present.get(path) : present.set(path, await exists(join(root, path))).get(path))) {
+        found.add(path);
+        continue;
+      }
+      const prefix = `${path === '.' ? '' : `${path}${continued && literal.endsWith('/') ? '/' : ''}`}*`;
+      unresolved.push({ file: relative(root, file).split(sep).join('/'), literal, path: prefix });
+      found.add(prefix);
     }
     return found;
   };
