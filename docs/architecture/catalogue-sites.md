@@ -207,8 +207,12 @@ Its model pack is tested with every app it serves that reads a model.
 
 ## Deployment
 
-`.github/workflows/deploy-pages.yml` builds once, then:
+`.github/workflows/deploy-pages.yml` runs on every push to `main`, daily at
+04:17 UTC and on dispatch. It builds once, then:
 
+- decides which sites to publish (`scripts/plan-site-deploy.mjs`,
+  `scripts/lib/site-deploy.mjs`), writes the decision and its reason for each
+  site to the job summary, and writes `site-digest.json` into each site;
 - uploads `dist-sites/neuro` to GitHub Pages;
 - deploys `dist-sites/msk`, `dist-sites/microscopy`, `dist-sites/preclinical` and `dist-sites/hub` with
   `wrangler deploy --config dist-sites/<site>.wrangler.json`, using the
@@ -216,6 +220,29 @@ Its model pack is tested with every app it serves that reads a model.
 - runs the deployed checks (`pnpm test:deployed`,
   `test/standalone-downloads.smoke.mjs`, `pnpm test:image-uploads`) once per host,
   with `SITE_CATALOG=<catalogue>` limiting them to that host's apps.
+
+Each step runs only for the sites the run publishes. A site's content digest is
+SHA-256 over its files' relative paths and bytes, plus its Wrangler
+configuration, leaving out the root `analytics.json` and `site-digest.json`.
+`site-digest.json` records the digest, the usage report's `generatedAt` and the
+commit. A site is published when:
+
+- the run was dispatched (every site);
+- its host does not serve a readable record of this site, so a failed deploy is
+  retried by the next run;
+- its digest differs from the served one;
+- its served usage report predates the last 04:17 UTC refresh. The daily
+  schedule exists for this: each catalogue's report is refreshed once a day,
+  by the first run after that time. The hub has no report.
+
+`pnpm test:runtime-startup` runs before a deploy only when some site's content
+may be new (the first three reasons). Content the hosts already serve passed it
+when it was published. The deployed checks run for every published site, so
+the daily refresh still checks each catalogue host once a day.
+
+Two builds of one commit differ only in `analytics.json`. `calmar/build-info.json`
+names the commit of calmar's last uncached build and stays in the digest, so a
+cold turbo cache republishes the neuro site.
 
 The Cloudflare API token needs Workers Scripts edit on the account, plus
 Workers Routes and DNS edit on the `sciget.org` zone. Wrangler needs these to
@@ -227,6 +254,6 @@ attach the custom domains.
    icon to `site/` (and to `sharedSiteAssets` in `scripts/build-site.mjs`) if it
    has a new brand.
 2. Set `catalog:` on its apps.
-3. Add its site to the `worker-sites` artifact, the `deploy-workers` and `verify-workers` matrices and the hub check in `deploy-pages.yml` (`test/catalog-site-projection.test.mjs` holds all four to the registry). The Pages deploy waits for `deploy-workers`, so the neuro 404 page never redirects to a host that is not live yet.
+3. Add its site to the `worker-sites` artifact and the hub check in `deploy-pages.yml` (`test/catalog-site-projection.test.mjs` holds both to the registry). The `deploy-workers` and `verify-workers` matrices come from the registry through the deploy plan. The Pages deploy waits for `deploy-workers`, so the neuro 404 page never redirects to a host that is not live yet.
 4. Build, then run `node --test test/catalog-sites.test.mjs` and
    `pnpm audit:artifacts`.
