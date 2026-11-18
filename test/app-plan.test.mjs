@@ -1640,8 +1640,9 @@ test('the CLI compares the lockfile at the merge base and reports why it selecte
   assert.equal(missingBase.status, 0, missingBase.stderr);
   const fallback = JSON.parse(missingBase.stdout);
   assert.equal(fallback.all_apps, 'true');
-  assert.match(fallback.fallback_reason, /no changed paths/);
-  assert.match(missingBase.stderr, /Full catalog and site selected: no changed paths/);
+  // A base git cannot compare is an unreadable diff, never an empty one.
+  assert.match(fallback.fallback_reason, /^the changed paths could not be read: git diff 0123456789abcdef0123456789abcdef01234567\.\.\.HEAD failed/);
+  assert.match(missingBase.stderr, /Full catalog and site selected: the changed paths could not be read/);
 });
 
 test('a push diffs from the nearest green run on the branch, not from a pull request or another branch', () => {
