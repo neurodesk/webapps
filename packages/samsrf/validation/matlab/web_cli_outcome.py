@@ -16,11 +16,24 @@ from pathlib import Path
 import sys
 
 
+def count(value, name):
+    if type(value) is not int or value < 0:
+        raise ValueError(f'{name} must be a nonnegative integer count')
+    return value
+
+
 def outcome(report):
     runs = {}
     for run in report['runs']:
         entry = {'class': run['class']}
         if run.get('maps'):
+            for item in run['maps']:
+                for part in ('srfData', 'imaginary', 'gifti'):
+                    comparison = item[part]
+                    total = count(comparison['count'], f'{part}.count')
+                    differing = count(comparison.get('differing', 0), f'{part}.differing')
+                    if differing > total or (comparison['exact'] and differing):
+                        raise ValueError(f'{part}.differing contradicts its count or exactness')
             entry['maps'] = {
                 item['label']: 'exact' if item['class'] == 'exact' else {
                     part: item[part].get('differing', 0) for part in ('srfData', 'imaginary', 'gifti')}
@@ -28,7 +41,7 @@ def outcome(report):
         runs[run['id']] = entry
     matlab = report['matlab']
     return {'matlab': {'kind': matlab['kind'], 'cpu': matlab.get('cpu')},
-            'summary': {key: report['summary'][key] for key in ('exactRuns', 'exactMaps', 'maps')},
+            'summary': {key: count(report['summary'][key], key) for key in ('exactRuns', 'exactMaps', 'maps')},
             'runs': runs}
 
 

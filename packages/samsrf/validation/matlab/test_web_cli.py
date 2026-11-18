@@ -261,6 +261,18 @@ class Imaginary(Base):
 class Outcome(Base):
     ids = ['rc_hull_lh_double', 'prf_css_lh_double']
 
+    def test_fractional_comparison_count_fails_public_command(self):
+        report = self.x.report()
+        frozen = self.x.root / 'outcome.json'
+        frozen.write_text(json.dumps(web_cli_outcome.outcome(report)))
+        report['runs'][0]['maps'][0]['srfData']['count'] = 3.5
+        path = self.x.root / 'report.json'
+        path.write_text(json.dumps(report))
+        result = subprocess.run([sys.executable, str(Path(web_cli_outcome.__file__)),
+                                 'check', str(frozen), str(path)], capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('count', result.stderr)
+
     def check(self, frozen):
         path = self.x.root / 'report.json'
         path.write_text(json.dumps(self.x.report()))
@@ -413,6 +425,20 @@ class InventoryErrors(Base):
     def test_web_roi_must_equal_matlab_roi_in_order(self):
         self.x.edit_record(self.id, roi=[ROI[1], ROI[0], ROI[2]])
         self.assertIn('ROI', self.assertInventory())
+
+    def test_roi_requires_a_numeric_matlab_class(self):
+        mat = compare_cli.expected_results(PLAN[self.id])[0]
+        with h5py.File(self.x.matlab / self.id / mat, 'r+') as handle:
+            handle['Srf/Roi'].attrs['MATLAB_class'] = numpy.bytes_('char')
+        self.assertIn('Srf.Roi', self.assertInventory())
+
+    def test_gifti_declared_array_count_is_an_exact_integer(self):
+        for declared in ('2.5', '2', '-1'):
+            with self.subTest(declared=declared):
+                self.x.write()
+                path = self.x.matlab / self.id / self.names[0]
+                path.write_text(path.read_text().replace('<GIFTI>', f'<GIFTI NumberOfDataArrays="{declared}">'))
+                self.assertIn('NumberOfDataArrays', self.assertInventory())
 
     def test_empty_or_one_vertex_gifti_on_both_sides(self):
         for values in (numpy.array([]), numpy.array([5.0])):

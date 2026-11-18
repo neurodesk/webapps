@@ -285,9 +285,14 @@ def matlab_results(entries, precision, labels):
     _, surface = entries.get('Srf.Vertices', (None, None))
     if surface is None or surface.ndim != 2 or surface.shape[0] != 3 or surface.shape[1] < 1:
         raise Inventory('Srf.Vertices is missing or not 3 x N')
-    _, roi = entries.get('Srf.Roi', (None, None))
+    roi_kind, roi = entries.get('Srf.Roi', (None, None))
     if roi is None:
         raise Inventory('Srf.Roi is missing')
+    roi_types = {'double': 'f8', 'single': 'f4', 'int8': 'i1', 'uint8': 'u1',
+                 'int16': 'i2', 'uint16': 'u2', 'int32': 'i4', 'uint32': 'u4',
+                 'int64': 'i8', 'uint64': 'u8'}
+    if roi_kind not in roi_types or roi.dtype != numpy.dtype(roi_types[roi_kind]):
+        raise Inventory('Srf.Roi must have a numeric MATLAB class and matching dtype')
     roi = numpy.asarray(roi, dtype=numpy.float64).ravel()
     count = surface.shape[1]
     if (roi.size != data.shape[0] or not numpy.all(numpy.isfinite(roi)) or not numpy.all(roi == numpy.round(roi))
