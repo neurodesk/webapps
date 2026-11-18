@@ -19,7 +19,8 @@ const contract = () => ({ schemaVersion: 2, app: 'test', title: 'Test', descript
 const examples = [
   { id: 'head', label: 'Head', description: 'A head.', expectedResult: 'Labels.', files: [{ role: 'image', name: 'head.nii', url: 'https://example.test/head.nii', sha256: 'a'.repeat(64), bytes: 4 }] },
   { id: 'other', label: 'Other', description: 'Wrong role.', expectedResult: 'None.', files: [{ role: 'scan', name: 'scan.nii', url: 'https://example.test/scan.nii' }] },
-  { id: 'mapped', label: 'Mapped', description: 'Its own role names.', expectedResult: 'Labels.', automation: { roles: { scan: 'image', notes: null }, reason: 'The notes are for people.' },
+  { id: 'mapped', label: 'Mapped', description: 'Its own role names.', expectedResult: 'Labels.', parameters: { threshold: 0.2, pageOnly: true },
+    automation: { roles: { scan: 'image', notes: null }, reason: 'The notes are for people.', parameters: { method: 'b' } },
     files: [{ role: 'scan', name: 'scan.nii', url: 'https://example.test/scan.nii', bytes: 4 }, { role: 'notes', name: 'notes.txt', url: 'https://example.test/notes.txt' }] },
   { id: 'remote', label: 'Remote', description: 'On a server.', expectedResult: 'None.', automation: { unavailable: 'Its data stay on the compute server.' }, files: [{ role: 'image', name: 'x.nii', url: 'https://example.test/x.nii' }] },
 ];
@@ -171,6 +172,8 @@ test('inputs_load_example verifies each file through the fetcher and holds it fo
   assert.deepEqual(describe.examples.map(example => example.id), ['head', 'mapped'], 'an example whose roles the contract lacks is not offered');
   assert.deepEqual(describe.examples[1].roles, ['image']);
   assert.equal(describe.examples[1].omitted, 'The notes are for people.');
+  assert.deepEqual(describe.examples[1].parameters, { threshold: 0.2, method: 'b' }, 'the run parameters an example needs, without the page-only ones');
+  assert.equal(describe.examples[0].parameters, undefined);
   assert.deepEqual(describe.unavailableExamples, [
     { id: 'other', label: 'Other', reason: 'Its scan file scan.nii matches no input of this application.' },
     { id: 'remote', label: 'Remote', reason: 'Its data stay on the compute server.' },

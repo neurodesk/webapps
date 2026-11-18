@@ -24,11 +24,11 @@ import { serveSite } from '../test-utils/serve-site.mjs';
 const FIXED_TOOLS = ['app_describe', 'inputs_request_files', 'inputs_use_page_files', 'inputs_load_example', 'runs_get', 'runs_cancel', 'outputs_download', 'user_ask',
   'viewers_list', 'viewers_state', 'viewers_crosshair', 'viewers_tab', 'viewers_regions', 'viewers_volumes', 'viewers_display', 'viewers_niivue'];
 const WIDTHS = [{ width: 1440, height: 900 }, { width: 390, height: 844 }];
+// Chromium keeps only the last --enable-features, so the WebMCP feature joins the GPU ones.
+const features = names => `--enable-features=${[...(process.platform === 'linux' ? ['Vulkan'] : []), ...names].join(',')}`;
 const GPU_ARGS = process.platform === 'linux'
-  ? ['--enable-unsafe-webgpu', '--use-angle=swiftshader', '--use-vulkan=swiftshader', '--enable-features=Vulkan', '--disable-vulkan-surface']
+  ? ['--enable-unsafe-webgpu', '--use-angle=swiftshader', '--use-vulkan=swiftshader', '--disable-vulkan-surface']
   : [];
-// Parameters an example needs that its files do not carry, as the example's automation.reason says.
-const RUN_PARAMETERS = { qsmbly: { echoTimesMs: [20], fieldStrength: 3 } };
 const RUN_SECONDS = Number(process.env.WEBMCP_RUN_SECONDS ?? 900);
 
 const registry = await loadAppsRegistry();
@@ -143,15 +143,17 @@ function chooseOperation(contract, example) {
   return [contract.defaultOperation, ...Object.keys(contract.operations)].find(covers);
 }
 
-async function runExample(page, app, describe) {
+async function runExample(page, app, describe, progress) {
   const example = describe.examples[0];
   if (!example) return { outcome: 'no loadable example', reasons: describe.unavailableExamples };
   const operation = chooseOperation(describe, example);
   if (!operation) return { outcome: `no operation takes example ${example.id}`, example: example.id };
+  progress.phase = `loading example ${example.id}`;
   const loaded = await call(page, 'inputs_load_example', { exampleId: example.id });
   if (loaded.error) return { outcome: 'example failed to load', example: example.id, error: loaded.error };
+  progress.phase = `running ${operation}`;
   const started = Date.now();
-  let run = await call(page, `run_${operation.replaceAll('-', '_')}`, { parameters: RUN_PARAMETERS[app.id] ?? {}, waitSeconds: Math.min(RUN_SECONDS, 600) });
+  let run = await call(page, `run_${operation.replaceAll('-', '_')}`, { parameters: example.parameters ?? {}, waitSeconds: Math.min(RUN_SECONDS, 600) });
   while (run.state === 'running' && Date.now() - started < RUN_SECONDS * 1000) run = await call(page, 'runs_get', { waitSeconds: 60 });
   const seconds = Math.round((Date.now() - started) / 1000);
   if (run.state === 'running') {
@@ -159,7 +161,9 @@ async function runExample(page, app, describe) {
     return { outcome: 'timed out', example: example.id, operation, seconds };
   }
   if (run.state !== 'succeeded') return { outcome: 'run failed', example: example.id, operation, seconds, error: run.error ?? run };
-  const [artifactId, artifact] = Object.entries(run.report.artifacts)[0];
+  progress.phase = 'saving an output';
+  // A viewer operation may write no file; its report is still an output.
+  const [artifactId, artifact] = Object.entries(run.report.artifacts)[0] ?? ['report', { filename: 'report.json' }];
   const download = page.waitForEvent('download', { timeout: 60000 });
   const saved = await call(page, 'outputs_download', { artifactId });
   assert.deepEqual(saved, { artifactId }, `${app.id}: outputs_download`);
@@ -169,15 +173,41 @@ async function runExample(page, app, describe) {
 
 const { origin, close } = await serveSite(dist);
 const report = [];
-const flagged = await chromium.launch({ args: [...GPU_ARGS, '--enable-features=WebMCPTesting'] });
-const plain = await chromium.launch({ args: GPU_ARGS });
-try {
+const flagged = await chromium.launch({ args: [...GPU_ARGS, features(['WebMCPTesting'])] });
+const plain = await chromium.launch({ args: [...GPU_ARGS, features([])] });
+async function flaggedContext() {
   const context = await flagged.newContext({ acceptDownloads: true });
   await context.addInitScript(standInModelContext);
   await context.route(/googletagmanager\.com|google-analytics\.com|cloudflareinsights\.com/, route => route.abort());
   if (cache) {
     await context.route(url => existsSync(exampleCachePath(cache, url.href)), async route => route.fulfill({ body: await readFile(exampleCachePath(cache, route.request().url())) }));
   }
+  return context;
+}
+
+// A run in its own context: a page that stops answering (a stalled download, a busy worker) is closed
+// with its context instead of stalling the catalogue.
+async function runInPage(app) {
+  const context = await flaggedContext();
+  const progress = { phase: 'opening the page' };
+  const attempt = (async () => {
+    const { page } = await openApp(context, app);
+    await until(page, async () => (await document.modelContext.getTools()).some(tool => tool.name === 'app_describe'), undefined, 90000);
+    return runExample(page, app, await call(page, 'app_describe'), progress);
+  })();
+  const deadline = delay((RUN_SECONDS + 180) * 1000, undefined, { ref: false }).then(() => ({ outcome: `no answer while ${progress.phase}` }));
+  try {
+    return await Promise.race([attempt, deadline]);
+  } catch (error) {
+    return { outcome: `failed while ${progress.phase}`, error: { message: error.message } };
+  } finally {
+    attempt.catch(() => {});
+    await context.close();
+  }
+}
+
+try {
+  const context = await flaggedContext();
   const without = await plain.newContext();
   for (const app of apps) {
     const entry = { app: app.id };
@@ -201,7 +231,6 @@ try {
           assert.deepEqual(entry.examples.sort(), audit.examples.filter(example => !example.unavailable).map(example => example.id).sort(), `${app.id}: every loadable example is offered`);
           await checkPrompts(page, app, contract, viewport);
           if (viewport === WIDTHS[0]) await checkPrivacy(page, app);
-          if (viewport === WIDTHS[0] && process.env.WEBMCP_RUNS) entry.run = await runExample(page, app, describe);
           entry.pageErrors = errors;
         } finally {
           await page.close();
@@ -214,6 +243,7 @@ try {
       assert.equal(await page.evaluate(() => 'modelContext' in document), false);
       assert.deepEqual(loaded, [], `${app.id}: a browser without WebMCP loads none of its modules`);
       await page.close();
+      if (process.env.WEBMCP_RUNS) entry.run = await runInPage(app);
       entry.passed = true;
       console.log(`PASS ${app.id}: ${names.length} tools (${entry.api}), examples ${entry.examples.join(', ') || 'none'}${entry.run ? `; run ${entry.run.outcome}${entry.run.seconds !== undefined ? ` in ${entry.run.seconds} s` : ''}` : ''}`);
     } catch (error) {

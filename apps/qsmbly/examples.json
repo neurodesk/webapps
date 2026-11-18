@@ -40,7 +40,13 @@
       "roles": {
         "metadata": null
       },
-      "reason": "The JSON sidecars are left out: pass their echo time and field strength as echoTimesMs [20] and fieldStrength 3."
+      "reason": "The JSON sidecars are left out: their echo time and field strength are the parameters.",
+      "parameters": {
+        "echoTimesMs": [
+          20
+        ],
+        "fieldStrength": 3
+      }
     }
   }
 ]

@@ -6,13 +6,16 @@
  *   "automation": { "roles": { "echo": "echoes" }, "files": { "PA.bval": null }, "reason": "Why files are left out" }
  *   "automation": { "unavailable": "Why no operation can take this example" }
  *
- * `files` (by file name) overrides `roles`; null leaves a file out, which needs a `reason`.
+ * `files` (by file name) overrides `roles`; null leaves a file out, which needs a `reason`. The run
+ * parameters the example needs are the contract-named keys of its `parameters`, which the page's own
+ * loader may read too, and `automation.parameters`.
  *
- * @param {{ files: { role: string, name: string }[], automation?: { roles?: Record<string, string|null>, files?: Record<string, string|null>, reason?: string, unavailable?: string } }} example
+ * @param {{ files: { role: string, name: string }[], parameters?: object, automation?: { roles?: Record<string, string|null>, files?: Record<string, string|null>, reason?: string, unavailable?: string, parameters?: object } }} example
  * @param {Set<string>|Map<string, unknown>} fileRoles The contract's file input roles.
+ * @param {Set<string>} parameterNames The contract's parameter names.
  */
-export function exampleInputs(example, fileRoles) {
-  const { roles = {}, files: byName = {}, reason, unavailable } = example.automation ?? {};
+export function exampleInputs(example, fileRoles, parameterNames = new Set()) {
+  const { roles = {}, files: byName = {}, reason, unavailable, parameters: needed = {} } = example.automation ?? {};
   if (unavailable) return { unavailable };
   const files = [];
   for (const file of example.files) {
@@ -22,5 +25,7 @@ export function exampleInputs(example, fileRoles) {
     files.push({ ...file, role });
   }
   if (!files.length) return { unavailable: reason ?? 'It leaves every file out.' };
-  return { files, ...(files.length < example.files.length && { omitted: reason }) };
+  const own = Object.entries(example.parameters ?? {}).filter(([name]) => parameterNames.has(name));
+  const parameters = { ...Object.fromEntries(own), ...needed };
+  return { files, ...(Object.keys(parameters).length && { parameters }), ...(files.length < example.files.length && { omitted: reason }) };
 }

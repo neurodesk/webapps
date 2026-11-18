@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { operationParametersSchema } from '../../packages/components/src/automation/parameters.js';
 import { exampleInputs } from '../../packages/components/src/webmcp/examples.js';
 import { repoRoot } from './apps-registry.mjs';
 
@@ -10,10 +11,16 @@ export async function auditAppExamples(appId, root = repoRoot) {
   const examples = JSON.parse(await readFile(join(root, 'apps', appId, 'examples.json'), 'utf8'));
   const fileRoles = new Set(Object.values(contract.operations).flatMap(operation => Object.entries(operation.inputs)
     .filter(([, field]) => field.source === 'files').map(([role]) => role)));
+  const parameterNames = new Set(Object.values(contract.operations).flatMap(operation => Object.keys(operation.parameters)));
   const problems = [];
   const results = [];
   for (const example of examples.filter(item => !item.rotation)) {
-    const { roles = {}, files = {}, reason, unavailable } = example.automation ?? {};
+    const { roles = {}, files = {}, reason, unavailable, parameters = {} } = example.automation ?? {};
+    for (const name of Object.keys(parameters)) if (!parameterNames.has(name)) problems.push(`${example.id}: automation.parameters names ${name}, which no operation takes`);
+    const takers = Object.values(contract.operations).filter(operation => Object.keys(parameters).every(name => Object.hasOwn(operation.parameters, name)));
+    if (Object.keys(parameters).length && !takers.some(operation => operationParametersSchema(operation.parameters).safeParse(parameters).success)) {
+      problems.push(`${example.id}: no operation accepts automation.parameters`);
+    }
     const exampleRoles = new Set(example.files.map(file => file.role));
     const names = new Set(example.files.map(file => file.name));
     for (const role of Object.keys(roles)) if (!exampleRoles.has(role)) problems.push(`${example.id}: automation.roles names ${role}, which no file has`);
@@ -22,10 +29,10 @@ export async function auditAppExamples(appId, root = repoRoot) {
       if (target !== null && !fileRoles.has(target)) problems.push(`${example.id}: automation maps a file to ${target}, which is not a file input of the contract`);
     }
     if (unavailable !== undefined && (typeof unavailable !== 'string' || !unavailable.trim())) problems.push(`${example.id}: automation.unavailable must say why`);
-    const outcome = exampleInputs(example, fileRoles);
+    const outcome = exampleInputs(example, fileRoles, parameterNames);
     if (outcome.undeclared) problems.push(`${example.id}: file role ${outcome.undeclared} is not a file input of the contract; map it in automation.roles or say why it is unavailable`);
     if (outcome.files && outcome.files.length < example.files.length && !reason?.trim()) problems.push(`${example.id}: files are left out without automation.reason`);
-    results.push({ id: example.id, ...(outcome.files ? { loads: outcome.files.length, of: example.files.length, ...(outcome.omitted && { omitted: outcome.omitted }) } : { unavailable: outcome.unavailable }) });
+    results.push({ id: example.id, ...(outcome.files ? { loads: outcome.files.length, of: example.files.length, ...(outcome.parameters && { parameters: outcome.parameters }), ...(outcome.omitted && { omitted: outcome.omitted }) } : { unavailable: outcome.unavailable }) });
   }
   return { app: appId, examples: results, problems };
 }

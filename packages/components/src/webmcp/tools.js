@@ -105,7 +105,8 @@ function failure(error) {
 export function webMcpTools({ contract, dispatch, inputs, examples = () => [], fetchAsset = fetchModel, askUser, requestFiles }) {
   const roles = fileRoles(contract);
   // A rotation entry cycles through examples that are offered on their own.
-  const catalog = async () => (await examples()).filter(example => !example.rotation).map(example => ({ example, ...exampleInputs(example, roles) }));
+  const parameterNames = new Set(Object.values(contract.operations).flatMap(operation => Object.keys(operation.parameters)));
+  const catalog = async () => (await examples()).filter(example => !example.rotation).map(example => ({ example, ...exampleInputs(example, roles, parameterNames) }));
   const runTools = Object.fromEntries(Object.keys(contract.operations).map(name => [name, toolName(name)]));
   const tools = [];
   const tool = (name, title, description, inputSchema, annotations, execute) => tools.push({
@@ -131,8 +132,8 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
         appVersion: contract.appVersion,
         defaultOperation: contract.defaultOperation,
         operations: Object.fromEntries(Object.entries(contract.operations).map(([name, operation]) => [name, { tool: runTools[name], ...structuredClone(operation) }])),
-        examples: entries.filter(entry => entry.files).map(({ example: { id, label, description, expectedResult }, files, omitted }) => ({
-          id, label, description, expectedResult, roles: [...new Set(files.map(file => file.role))], ...(omitted && { omitted }),
+        examples: entries.filter(entry => entry.files).map(({ example: { id, label, description, expectedResult }, files, parameters, omitted }) => ({
+          id, label, description, expectedResult, roles: [...new Set(files.map(file => file.role))], ...(parameters && { parameters }), ...(omitted && { omitted }),
         })),
         unavailableExamples: entries.filter(entry => entry.unavailable).map(({ example: { id, label }, unavailable }) => ({ id, label, reason: unavailable })),
         viewers: await dispatch('viewers.list'),
@@ -169,7 +170,7 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
     });
 
   tool('inputs_load_example', 'Load an example',
-    'Download one of the application\'s examples, verify its checksums and hold its files as the input for the next run.',
+    'Download one of the application\'s examples, verify its checksums and hold its files as the input for the next run. Run it with the example\'s parameters from app_describe.',
     object({ exampleId: { type: 'string', description: 'An example ID from app_describe' } }, ['exampleId']), {},
     async ({ exampleId }, { signal }) => {
       const entry = (await catalog()).find(item => item.example.id === exampleId);
