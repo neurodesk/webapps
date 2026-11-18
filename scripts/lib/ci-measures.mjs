@@ -197,7 +197,7 @@ export function readyToGreen(runs, jobs) {
 // window's push runs on main, at their first run's creation. `deploys` may
 // reach past the window. A deploy on main runs main's head when it is
 // created, so a deploy of a commit the pushes do not name covers the pushes
-// created before it.
+// created before it; one created in the same second may not have seen the push.
 export function mergeToLive(runs, deploys) {
   const pushes = new Map();
   for (const run of runs) {
@@ -207,7 +207,7 @@ export function mergeToLive(runs, deploys) {
   const order = [...pushes].sort((a, b) => a[1].localeCompare(b[1]));
   const index = new Map(order.map(([sha], position) => [sha, position]));
   const live = deploys.filter((run) => run.name === DEPLOY_WORKFLOW.name && run.head_branch === 'main' && run.conclusion === 'success');
-  const covers = (deploy, position, pushedAt) => (index.has(deploy.head_sha) ? index.get(deploy.head_sha) >= position : deploy.created_at >= pushedAt);
+  const covers = (deploy, position, pushedAt) => (index.has(deploy.head_sha) ? index.get(deploy.head_sha) >= position : deploy.created_at > pushedAt);
   const minutes = [];
   const pending = [];
   order.forEach(([sha, pushedAt], position) => {

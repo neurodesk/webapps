@@ -157,6 +157,9 @@ test('only a deploy on main, of the push or of a commit created after it, puts a
   const unnamed = deploy({ head_sha: 'y', created_at: '2026-11-10T10:30:00Z', updated_at: '2026-11-10T10:50:00Z' });
   assert.equal(mergeToLive(pushes, [unnamed]).median, 50);
   assert.deepEqual(mergeToLive([{ ...pushes[0], head_sha: 'b', created_at: '2026-11-10T11:00:00Z' }], [unnamed]).pending, ['b']);
+  // Created in the same second as the push, it may have run the commit before it.
+  const same = deploy({ head_sha: 'z', created_at: '2026-11-10T10:00:00Z', updated_at: '2026-11-10T10:20:00Z' });
+  assert.deepEqual(mergeToLive(pushes, [same]).pending, ['a']);
 });
 
 test('a pull request merged late in the window keeps the push runs its merge commit started after it', () => {
