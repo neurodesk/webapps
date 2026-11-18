@@ -1,0 +1,190 @@
+{
+  "source": "geometry/ubuntu-22.04/polygon_point_clouds:48",
+  "exposure": "previously recorded and inspected; never a new holdout",
+  "array_sha256": {
+    "polygon_point_clouds_counts.f64": "c7f4c88839ac6cfe1032e48467de0cac5ea6fc875f5afbd3bc9314699014dea1",
+    "polygon_point_clouds_points.f64": "3dfb66cbfe78af72a0c74fca9420b4bd0e22f3cd2d14e5048d52f069478983d9",
+    "polygon_point_clouds_simplified_counts.f64": "f2f43addf4ee88114890fd12bc946e6b99a5130a077e71f9997e4bc896a92404",
+    "polygon_point_clouds_simplified.f64": "bdba62cbf11f765601b208ae762229c811dbd3d4aa50981275132a08f82b9387",
+    "polygon_point_clouds_hull_counts.f64": "633eaa8fb37b8cc9faa3e9cc97783c382c72695374e2f0236af33135687e4d37",
+    "polygon_point_clouds_hull.f64": "ae5fc02a9d2ac0985f4b89540ec80441026e991873a8ac71f2b801c6e7b34802",
+    "polygon_point_clouds_estimate.f64": "9c54134b331bc765c713634b82d649fa61d72cec2d65b630e4d71033f4094949"
+  },
+  "points_bits": [
+    [
+      "3fe3333333333334",
+      "3fe6666666666666"
+    ],
+    [
+      "3fe999999999999a",
+      "3fe3333333333334"
+    ],
+    [
+      "3fd3333333333333",
+      "3fe6666666666666"
+    ],
+    [
+      "3fe3333333333334",
+      "3fd999999999999a"
+    ],
+    [
+      "3fe6666666666666",
+      "3fe6666666666666"
+    ],
+    [
+      "3fd999999999999a",
+      "3fe3333333333334"
+    ],
+    [
+      "3fe6666666666666",
+      "3fe0000000000000"
+    ]
+  ],
+  "matlab_shape_bits": [
+    [
+      "3fe3333333333334",
+      "3fe6666666666666"
+    ],
+    [
+      "3fe47ae147ae147b",
+      "3fe5c28f5c28f569"
+    ],
+    [
+      "3fe3a83a83a83a5e",
+      "3fe57c57c57c57b9"
+    ],
+    [
+      "fff8000000000000",
+      "fff8000000000000"
+    ],
+    [
+      "3fe999999999999a",
+      "3fe3333333333334"
+    ],
+    [
+      "3fe5999999999940",
+      "3fe4000000000000"
+    ],
+    [
+      "3fe5f15f15f15ee3",
+      "3fe5075075075035"
+    ],
+    [
+      "fff8000000000000",
+      "fff8000000000000"
+    ],
+    [
+      "3fd3333333333333",
+      "3fe6666666666666"
+    ],
+    [
+      "3fe199999999999a",
+      "3fe4cccccccccccd"
+    ],
+    [
+      "3fd999999999999a",
+      "3fe3333333333334"
+    ],
+    [
+      "3fe47ae147ae147b",
+      "3fe0a3d70a3d70a4"
+    ],
+    [
+      "3fe3333333333334",
+      "3fd999999999999a"
+    ],
+    [
+      "fff8000000000000",
+      "fff8000000000000"
+    ],
+    [
+      "3fe6666666666666",
+      "3fe6666666666666"
+    ],
+    [
+      "3fe5f15f15f15ee3",
+      "3fe5075075075035"
+    ],
+    [
+      "3fe47ae147ae147b",
+      "3fe5c28f5c28f569"
+    ],
+    [
+      "fff8000000000000",
+      "fff8000000000000"
+    ],
+    [
+      "3fe6666666666666",
+      "3fe0000000000000"
+    ],
+    [
+      "3fe47ae147ae147b",
+      "3fe0a3d70a3d70a4"
+    ],
+    [
+      "3fe51eb851eb84c5",
+      "3fe28f5c28f5c290"
+    ],
+    [
+      "fff8000000000000",
+      "fff8000000000000"
+    ],
+    [
+      "3fe199999999999a",
+      "3fe4cccccccccccd"
+    ],
+    [
+      "3fe3a83a83a83a5e",
+      "3fe57c57c57c57b9"
+    ],
+    [
+      "3fe4444444444427",
+      "3fe4444444444427"
+    ],
+    [
+      "fff8000000000000",
+      "fff8000000000000"
+    ],
+    [
+      "3fe51eb851eb84c5",
+      "3fe28f5c28f5c290"
+    ],
+    [
+      "3fe4444444444427",
+      "3fe4444444444427"
+    ],
+    [
+      "3fe5999999999940",
+      "3fe4000000000000"
+    ]
+  ],
+  "matlab_hull_bits": [
+    [
+      "3fd3333333333333",
+      "3fe6666666666666"
+    ],
+    [
+      "3fe6666666666666",
+      "3fe6666666666666"
+    ],
+    [
+      "3fe999999999999a",
+      "3fe3333333333334"
+    ],
+    [
+      "3fe3333333333334",
+      "3fd999999999999a"
+    ]
+  ],
+  "matlab_estimate_bits": [
+    "3fe2666666666665",
+    "3fe2eeeeeeeeeeef",
+    "3fb47ae147ae1479"
+  ],
+  "first_shape_input_index": 0,
+  "first_matlab_shape_vertex_surviving_hull_input_index": 1,
+  "actual_hull_start_input_index": 2,
+  "current_native_hull_start_input_index": 4,
+  "preclean_prediction_matches_existing_hull_and_estimate": true,
+  "warning": "Current native shape has 2 rings; recorded shape has 7. New simple one-ring variants isolate hull cleaning from this ring-decomposition error."
+}

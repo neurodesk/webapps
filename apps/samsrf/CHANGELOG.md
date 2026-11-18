@@ -4,6 +4,12 @@
 
 ### Patch Changes
 
+- a778fb3: SamSrf draws its maps on FreeSurfer surfaces that end at their faces, as MATLAB's `write_surf` writes them. NiiVue 1.0.0-rc.26 could not read such a surface: it logged the error, the app showed "Ready", and every run then ended with "Cannot read properties of undefined (reading 'layers')" after offering its maps. The viewer now reads every surface with the engine's own reader and draws it from mz3, so it shows the mesh the analysis reads, and a surface that cannot be shown is reported in the status bar. A surface still loading when Clear inputs or another surface replaces it never becomes the shown surface or reports an error: before, the replaced surface could stay on screen, and the next run could end with the same error after offering its maps.
+
+  A model whose `Hrf` names a subject's HRF fit (`hrf_*.mat`) now runs in the app. The app takes the file in a Subject HRF field or from a dropped folder and gives the engine SamSrf's old-school kernel built from the file's `fP`. A file not named `hrf_*.mat` is refused, a malformed one stops the run with its name, and vertex-wise HRF maps are still refused.
+
+  The CSS convention help now says that downloaded maps keep the real parts of SamSrf's complex results, as SamSrf's GIfTI export does.
+
 - b104599: Write MATLAB's NaN in every merged map and exported GIfTI: the negative quiet NaN `0xFFF8000000000000`, `0xFFC00000` in single, which MATLAB R2023b on x86-64 produces for its `NaN` constant and for invalid operations. The engine wrote Rust's positive NaN, so maps that agreed in every value still differed from MATLAB in their NaN bits: the connective-field hull x0 and y0 at one vertex each, and every map of the 11 rejected vertices of the double reverse-correlation Gaussian run. Earlier reports called these signed zeros. Every NaN of the pinned MATLAB recordings is the negative one (a locally recorded prediction followed by a census; no prior Git commit was verified). Against the AMD host of the pinned SamSrfAnalysis source recording, the Node/WASM matrix now matches 17 of 24 runs and 154 of 168 maps (15 and 145 before). A NaN that SamSrf passes on from its input is not covered by the recordings. Intel hosts, the global-signal sum, the double 2D reverse-correlation fits, geometry, and compiled-container and production-interface parity are still open, and both public single-fit refusals remain.
 - Updated dependencies [b104599]
   - @neurodesk/samsrf@0.6.20261118

@@ -152,6 +152,78 @@ them. Run the report for
 any day with `node scripts/ci-usage-report.mjs --until <ISO time>`. Change a
 budget only with the measurement that justifies it.
 
+### Daily measures
+
+After the budgets, the report shows whether the CI got cheaper and faster.
+These measures are report-only: none fails the job. Job minutes are the time
+each job held a runner, from the jobs of every run that was not skipped. They
+count the latest attempt of each run only, cancelled minutes too: the job
+listing leaves out the earlier attempts of a re-run.
+
+| Measure | Definition | Target |
+| --- | --- | --- |
+| Job minutes per merged pull request | For each pull request merged in the window: its runs of every workflow on its head branch from its opening to its merge (earlier days included), its merge queue runs, and the push runs of its merge commit, also those created after the window up to the report. Median and the three largest. | - |
+| Fixed-job share | Of the job minutes of pull request `ci` runs, the share in `plan` and `fixed` jobs, for draft, ready, whole-catalogue, unknown-tier and all runs. | Draft runs under 30% |
+| Ready to green | For each ready pull request `ci` run that succeeded, the start of its latest attempt to completion, so a late re-run does not count the wait before it; a re-run of failed jobs counts only the re-run. Median and 90th percentile, apart for whole-catalogue runs. | Median under 20 minutes |
+| Merge to live | For each push to main (the first run of its commit), to the completion of the first successful `deploy-github-pages` run on main of that commit or a later one, also after the window. A deploy on main runs main's head when it is created, so one of a commit the pushes do not name counts for the pushes created before it, not those created in the same second. Median and maximum; pushes not yet live are listed. | - |
+| Runs that tested nothing | Runs that were skipped, ran no job, or ran only `plan` and `report` jobs. Count and share of all runs. | - |
+| Cancelled minutes | Job minutes of cancelled runs. | - |
+
+A pull request `ci` run is whole-catalogue when it ran at least 100 jobs, ready
+when a job only a ready pull request starts (`full-plan`, `full-plan-withheld`,
+`composite-site`) took a runner, and draft otherwise. A ready run that selects
+neither the site nor more than its draft plan counts as draft. A cancelled run
+that lists such a job, neither skipped nor given a runner, is of unknown tier:
+a run cancelled while planning cancels those jobs whatever its plan. The
+report shows these runs in their own row.
+
+`WORKFLOWS` in `scripts/lib/ci-measures.mjs` gives each workflow, by name, and
+each `ci` job, by the name the API lists it under (its `name:`, else its id), a role: `plan` (planner, gate, plan marker), `fixed` (tests every
+`ci` run whatever changed: `workspace-contracts`, `homepage-easter-egg`), `app`,
+`site`, `test`, `deliver` or `report`. In a test workflow the reusable gate's
+jobs plan and every other job tests. A workflow or `ci` job the table does not
+name is `unclassified`: it counts in the totals and in no share, and the report
+lists it, also when it started no job. `test/ci-measures.test.mjs` requires an
+entry for every workflow file (`.yml` or `.yaml`) and every job of `ci.yml`
+under its API name, and that each test workflow's gate jobs plan, so rename
+both together.
+
+The targets are the CI optimisation program's goals of November 2026. In the
+48 hours to 18 November 2026 11:00 UTC the draft share was 58%, ready to
+green 34 minutes and merge to live 20 minutes. They become budgets only once
+the changes that reach them have landed and the numbers have held; a budget
+opens an issue on every miss.
+
+The budgets come first, on about 80 requests a day (the run listings and one
+job count per `ci` pull request run that did work), and alone decide the exit
+code; nothing the measures do changes it. The measures then read the deploys,
+the merged pull requests and their runs outside the window, and the jobs of
+every run that was not skipped. Every one of these reads goes through one
+runner, `limitedReads` in `scripts/lib/github-actions.mjs`. It reads listings
+a page at a time and charges each page and each retry before sending it, so the
+measures send at most 600 requests (`--max-requests`) however many listings run
+at once. That is well below the 1,000 an hour a workflow token may make, which
+other workflows share. The runner also kills every request 10 minutes after the
+report started (`--time-limit`), well below the job's `timeout-minutes` of 15.
+Each run, job, pull request and deploy record must have the fields the measures
+use, of the API's types, before a measure reads it. Once the cap or the time
+limit is reached or a request is refused (a rate limit, for instance), the
+report sends no further request. Each measure that lacks data, for that reason
+or because a record failed the check, shows `unavailable:` with the reason,
+never a zero, `undefined` or `NaN`. A step summary or a standard output that cannot be written loses
+the measures, not the exit code. The report prints both request counts.
+
+The 48 hours to 18 November took 987 measure requests in about four minutes,
+980 of them job pages. The two 24-hour halves of that window needed 304 and 676
+job pages and its one complete UTC day 240, so on a busy day the cap can leave
+the job measures unavailable. Of the 980 pages, 235 list runs of report-only
+workflows (185 `workflow_run` reporter runs and 50 scheduled reports). The
+report still reads them: they give the report role's 131 job minutes and tell a
+run that started no job from one that only reported. Two other pull requests of
+the CI optimisation program of November 2026 lower the need: one replaces the
+two `workflow_run` reporters with one scheduled reporter, and one replaces the
+194 runs that only ran a gate with one native run per pull request.
+
 ### Enforcement in CI
 
 The report fires the next morning, after the runners are spent: on 13 November

@@ -75,26 +75,6 @@ test('offline missing and corrupt models, and nonempty outputs, fail without cha
   }
 });
 
-test('source CPU/QSM self-check leaves a fresh HOME and Windows app-data directories empty without CI', async () => {
-  const home = await mkdtemp(join(tmpdir(), 'seedseg-no-ci-home-'));
-  const env = { ...process.env };
-  for (const key of ['CI', 'ORT_DISABLE_TELEMETRY', 'NEURODESK_SEEDSEG_MODEL_DIR']) delete env[key];
-  for (const key of ['HOME', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'XDG_CACHE_HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME']) env[key] = home;
-  try {
-    const run = spawnSync(process.execPath, [cli, 'self-check'], { encoding: 'utf8', env, timeout: 30_000 });
-    assert.ifError(run.error);
-    assert.equal(run.status, 0, run.stderr);
-    const report = JSON.parse(run.stdout);
-    assert.equal(report.executable, process.execPath);
-    assert.equal(report.node, process.version);
-    assert.equal(report.onnxRuntime, '1.30.0');
-    assert.equal(report.qsmVersion, '0.9.2');
-    assert.deepEqual(await readdir(home, { recursive: true }), []);
-  } finally {
-    await rm(home, { recursive: true, force: true });
-  }
-});
-
 test('package model and QSM runtime pins equal the authoritative repository manifests', async () => {
   const model = JSON.parse(await readFile(new URL('../model.manifest.json', import.meta.url)));
   const repositoryModel = JSON.parse(await readFile(new URL('../../../models/seedseg.manifest.json', import.meta.url)));

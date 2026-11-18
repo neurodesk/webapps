@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build && node ../../scripts/theme-app-dist.mjs --app brain-extraction",
     "preview": "vite preview",
-    "test": "pnpm --filter @neurodesk/brain-extraction test && node --test test/*.test.js",
+    "test": "pnpm --filter @neurodesk/brain-extraction test && pnpm --filter @neurodesk/brain-extraction test:reference && node --test test/*.test.js",
     "test:e2e": "playwright test",
     "lint": "node ../../scripts/lint.mjs --workspace"
   },

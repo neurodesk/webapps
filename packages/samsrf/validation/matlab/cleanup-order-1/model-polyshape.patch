@@ -1,0 +1,40 @@
+--- a/polyshape.rs
++++ b/polyshape.rs
+@@ -776,0 +777,37 @@
++
++// Exploratory alternate sequencing only. Never compiled into production.
++pub fn preclean_start(points: &[[f64; 2]]) -> Option<Vec<[f64; 2]>> {
++    let shape = Shape::of(points)?;
++    let survivors = shape.rings.iter().flatten().copied().collect();
++    let hull = integer_boundary(survivors);
++    let start = shape.rings.iter().flatten().find_map(|p| hull.iter().position(|k| k == p))?;
++    let n = hull.len();
++    let ordered: Vec<Point> = (0..n).map(|i| hull[(start + n - i) % n]).collect();
++    let cleaned = clean(&ordered, shape.grid.tolerance);
++    (cleaned.len() >= 3).then(|| cleaned.into_iter().map(|k| shape.coordinates(k)).collect())
++}
++fn integer_boundary(mut points: Vec<Point>) -> Vec<Point> {
++    points.sort_unstable();
++    points.dedup();
++    if points.len() < 3 {
++        return Vec::new();
++    }
++    let mut lower: Vec<Point> = Vec::new();
++    for &p in &points {
++        while lower.len() >= 2 && cross(lower[lower.len() - 2], lower[lower.len() - 1], p) < 0 {
++            lower.pop();
++        }
++        lower.push(p);
++    }
++    let mut upper: Vec<Point> = Vec::new();
++    for &p in points.iter().rev() {
++        while upper.len() >= 2 && cross(upper[upper.len() - 2], upper[upper.len() - 1], p) < 0 {
++            upper.pop();
++        }
++        upper.push(p);
++    }
++    lower.pop();
++    upper.pop();
++    lower.extend(upper);
++    if lower.len() < 3 { Vec::new() } else { lower }
++}
