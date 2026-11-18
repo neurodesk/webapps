@@ -30,6 +30,8 @@ use samsrf_core::timeseries::TimeSeries;
 use samsrf_core::{Error, Result};
 use num_bigint::BigUint;
 
+pub mod blas;
+
 #[cfg(target_arch = "wasm32")]
 compile_error!("samsrf-mkl-avx512 must never be built for WebAssembly");
 
@@ -134,13 +136,13 @@ fn larfg(alpha: f64, x: &mut [f64]) -> (f64, f64) {
 
 /// One term of `w = v^T c`: `c(1)` itself, or a product `v(i) c(i)`.
 #[derive(Clone, Copy)]
-enum Term {
+pub(crate) enum Term {
     Exact(f64),
     Product(f64, f64),
 }
 
 /// Adds a term to a lane: products are fused into the running sum.
-fn accumulate(lane: Option<f64>, term: Term) -> f64 {
+pub(crate) fn accumulate(lane: Option<f64>, term: Term) -> f64 {
     match (lane, term) {
         (None, Term::Exact(value)) => value,
         (None, Term::Product(a, b)) => a * b,
@@ -151,7 +153,7 @@ fn accumulate(lane: Option<f64>, term: Term) -> f64 {
 
 /// Folds `lanes` pairwise in `strides` order: lane k takes lane k + stride when k / stride
 /// is even and neither lane was taken before.
-fn fold(lanes: &mut [Option<f64>], strides: &[usize]) -> Option<f64> {
+pub(crate) fn fold(lanes: &mut [Option<f64>], strides: &[usize]) -> Option<f64> {
     let mut taken = vec![false; lanes.len()];
     for &stride in strides {
         for k in 0..lanes.len() {
@@ -170,7 +172,7 @@ fn fold(lanes: &mut [Option<f64>], strides: &[usize]) -> Option<f64> {
 
 /// Sixteen lanes: whole blocks of 16 terms round-robin, the rest in chunks of 8, 4, 2 and 1
 /// from lane 0, then folds with strides 8, 4, 1, 2 (`?gemv` and single-column `?ormqr`).
-fn sixteen_lanes(terms: &[Term]) -> Option<f64> {
+pub(crate) fn sixteen_lanes(terms: &[Term]) -> Option<f64> {
     let mut lanes = [None; 16];
     let blocked = terms.len() / 16 * 16;
     for (i, &term) in terms[..blocked].iter().enumerate() {
@@ -212,6 +214,12 @@ fn single_dot(v: &[f64], c: &[f64]) -> f64 {
 /// with strides 4, 1, 2; `c(1)` last.
 fn grouped_dot(v: &[f64], c: &[f64]) -> f64 {
     let terms: Vec<(f64, f64)> = v.iter().zip(&c[1..]).map(|(&v, &c)| (v, c)).collect();
+    grouped_sum(&terms).map_or(c[0], |sum| c[0] + sum)
+}
+
+/// The lanes of the grouped tree over `terms` (products `a b`), without `c(1)`; `None` when
+/// there are no terms. Shared by `?ormqr` and MATLAB's `y' * A` (`blas::gemv_t`).
+pub(crate) fn grouped_sum(terms: &[(f64, f64)]) -> Option<f64> {
     let mut lanes = [None; 8];
     let (chunks, rest) = terms.as_chunks::<16>();
     for chunk in chunks {
@@ -232,7 +240,7 @@ fn grouped_dot(v: &[f64], c: &[f64]) -> f64 {
         }
         chunk /= 2;
     }
-    fold(&mut lanes, &[4, 1, 2]).map_or(c[0], |sum| c[0] + sum)
+    fold(&mut lanes, &[4, 1, 2])
 }
 
 /// `xLARF` from the left, `c -= v (tau (v^T c))` with `v(1) = 1`, as `?geqp3` updates the

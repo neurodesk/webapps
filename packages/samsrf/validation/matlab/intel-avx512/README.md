@@ -104,6 +104,32 @@ pivots), reflectors that end in zeros, the `xLARFG` halving path, exact or near 
 ties of the norm, or nonfinite inputs: mutating those paths leaves every gate passing.
 Single and complex designs and every other MKL kernel are not part of the reference.
 
+## Research: `x' * y`, `y' * A`, `corr` and CF profiles (branch `t3/samsrf-intel-cf`)
+
+Not part of #880. `prereg-dot-gemv.md` was frozen (sha256 `f819c98b...`, 4,719 bytes)
+before any Intel model touched these data. Prior exposure, stated there: the
+arithmetic-order and constants-gamma-gemv draws had been compared, in aggregate, with AMD
+models only; the `corr` values at 25-50 elements had been evaluated with the norm candidate
+and are replay; the CF profiles had been counted against the AMD kernel. The held-out
+evaluators were written in the step that ran them; only the kernels were hashed first.
+
+| Kernel (Intel Xeon 6975P-C unless noted) | Discovery | Then |
+| --- | --- | --- |
+| `x' * y` from 51 elements (`dot/dot_kernel.py`) | 67,195 fingerprints, draws 1-25 (975) | draws 26-50: 975 / 975 |
+| `y' * A` (`gemv/gemv_kernel.py`, written a priori from `?ormqr`) | every fingerprint of 9 shapes, draws 0-49 | draws 50-99: 2,500 / 2,500 |
+| `corr` with both and the norm candidate (`downstream/downstream.py`) | | 51-250 elements: 679 / 680; 25-50 (replay): 519 / 520 |
+| double CF profiles, revcor run 42445033403 (Xeon 8370C) | | 3,402 / 3,402 |
+
+`x' * y` from 51 elements: 32 lanes over whole blocks of 32, a chunk of 16 and of 8 from
+lane 0 where they fit, the rest masked from lane 0, products fused, folds 8, 16, 4, 2, 1.
+`y' * A`: the Intel `?ormqr` trees without `c(1)` (grouped for columns in whole groups of
+four). Both `corr` misses (n = 36 pair 6, n = 75 pair 16) have the same signature: the exact
+y norm lies 6.4e-5 and 2.6e-4 ULP above a rounding midpoint and MATLAB's value needs that
+norm one ULP below the correctly rounded one. Rounding the exact sum of squares to double
+before the square root is refuted (it fails D, R(1,1) and `corr` widely), and a 2^-13 ULP
+band would not cover the second case: near-tie rounding stays unidentified, and the gates
+in `exes/samsrf/mkl-avx512/tests/blas_recordings.rs` pin both misses.
+
 ## Reproducing
 
 `PINS` holds the pinned recordings, each extracted by
