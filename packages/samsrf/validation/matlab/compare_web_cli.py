@@ -32,8 +32,9 @@ Each run is classed:
   signedZeroOnly counts them), and whether the masks agree.
 - `refused`: MATLAB succeeded and the engine refused a run it is expected to refuse
   (single RC with a fitted profile, single CF Gaussian) with exactly the core's text.
-- `unsupported`: MATLAB succeeded and the browser runner could not offer the run's
-  input (a subject-HRF file): the record carries exactly the core's subject-HRF text.
+- `unsupported`: MATLAB succeeded and the runner could not offer an input the run needs,
+  with exactly the core's text for it. No planned run is expected to be unsupported:
+  both runners give the engine the subject-HRF file.
 - `failed`: anything else: MATLAB failed, the web failed, the web status is not the
   expected one, or an expected refusal carries other text (a crash, for example; the
   run then names `expectedMessage`). Both sides' statuses are kept.
@@ -122,11 +123,6 @@ def expected_web_outcome(run, runner):
                 'message': 'Data_Precision=single with a Prf_Function fit is not supported by this port'}
     if single and run['algorithm'] == 'cf' and model.get('Fit_pRF') == 1:
         return {'status': 'refused', 'message': 'Data_Precision=single with Fit_pRF=1 is not supported by this port'}
-    hrf = model.get('Hrf')
-    if runner == 'browser' and isinstance(hrf, str) and hrf.startswith('hrf_'):
-        # exes/samsrf/core/src/hrf.rs resolve(): nothing in the browser loads the subject-HRF file.
-        return {'status': 'unsupported', 'message': f'model: Hrf {hrf} is an old-school HRF fit file: '
-                                                    'the caller must load its fP and call hrf::old_school'}
     return {'status': 'succeeded'}
 
 

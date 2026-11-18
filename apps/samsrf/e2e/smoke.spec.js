@@ -6,9 +6,10 @@
 // Numeric parity belongs to @neurodesk/samsrf's own tests.
 import { test, expect } from "@playwright/test";
 import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { unzipSync } from "fflate";
-import { analysisSpec, createJob, exportGiis, readAnalysisInputs, readGifti, runJob } from "@neurodesk/samsrf/node";
+import { analysisSpec, createJob, exportGiis, hrf, readAnalysisInputs, readGifti, readOldSchoolHrf, runJob } from "@neurodesk/samsrf/node";
+import { matFile } from "../../../packages/samsrf/test/fixtures.js";
 import { serveSite } from "../../../test-utils/serve-site.mjs";
 
 const examples = JSON.parse(readFileSync(new URL("../examples.json", import.meta.url), "utf8"));
@@ -328,6 +329,134 @@ test("a dropped folder fills every input slot", async ({ page }) => {
   await expect(page.locator("#runButton")).toBeEnabled();
 });
 
+/** A FreeSurfer surface as MATLAB's write_surf writes it: nothing after the faces. */
+function withoutTags(bytes) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const counts = bytes.indexOf(0x0a, bytes.indexOf(0x0a, 3) + 1) + 1;
+  const end = counts + 8 + (view.getInt32(counts, false) + view.getInt32(counts + 4, false)) * 12;
+  expect(end, "the example surface ends with FreeSurfer's tags").toBeLessThan(bytes.length);
+  return bytes.subarray(0, end);
+}
+
+test("maps draw on a FreeSurfer surface written without tags", async ({ page }) => {
+  test.setTimeout(900000);
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await loadExample(page);
+  await useSmallRoi(page);
+  const inflated = example.files.find((file) => file.role === "inflated");
+  const curv = example.files.find((file) => file.role === "curv");
+  await page.locator("#surfacesInput").setInputFiles([
+    { name: inflated.name, mimeType: "application/octet-stream", buffer: withoutTags(await exampleBytes(inflated)) },
+    { name: curv.name, mimeType: "application/octet-stream", buffer: await exampleBytes(curv) },
+  ]);
+  await expect(page.locator("#statusText")).toHaveText("Ready");
+  await expect(page.locator(".nd-viewer-empty")).toBeHidden();
+  await page.locator("#analysis").selectOption("rc");
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toContainText(RUNS.rc.outcome, { timeout: 600000 });
+  await expect(page.locator("#location")).toContainText("vertices with R²");
+  expect(errors).toEqual([]);
+});
+
+/** Hold the first read of each named file until the test releases it: the app and NiiVue read dropped files with arrayBuffer(). */
+async function holdFirstReads(page, names) {
+  await page.addInitScript((held) => {
+    const read = Blob.prototype.arrayBuffer;
+    const pending = new Set(held);
+    const waiting = new Map();
+    Blob.prototype.arrayBuffer = function () {
+      if (!(this instanceof File) || !pending.delete(this.name)) return read.call(this);
+      return new Promise((resolve, reject) => waiting.set(this.name, () => read.call(this).then(resolve, reject)));
+    };
+    globalThis.heldReads = () => [...waiting.keys()];
+    globalThis.releaseRead = (name) => {
+      waiting.get(name)();
+      waiting.delete(name);
+    };
+  }, names);
+}
+
+async function heldRead(page, name) {
+  await expect.poll(() => page.evaluate(() => globalThis.heldReads())).toEqual([name]);
+}
+
+/** The canvas once two screenshots a second apart agree. */
+async function settledCanvas(page) {
+  let previous = await page.locator("#gl1").screenshot();
+  for (let attempt = 0; attempt < 30; attempt++) {
+    await page.waitForTimeout(1000);
+    const next = await page.locator("#gl1").screenshot();
+    if (next.equals(previous)) return next;
+    previous = next;
+  }
+  throw new Error("the viewer kept changing");
+}
+
+const showingLines = async (page) => (await page.locator("#technicalLog").textContent()).match(/Showing lh\.inflated/g)?.length ?? 0;
+
+test("clearing the inputs while a surface loads leaves no surface for the next run", async ({ page }, testInfo) => {
+  test.setTimeout(900000);
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  // NiiVue reads the curvature layer after it has taken the mesh it will add the layer to.
+  await holdFirstReads(page, ["lh.curv.mz3"]);
+  await page.goto("/");
+  await page.locator("#analysis").selectOption("rc");
+  await page.locator("#surfacesInput").setInputFiles([await examplePath(testInfo, "lh.inflated"), await examplePath(testInfo, "lh.curv")]);
+  await heldRead(page, "lh.curv.mz3");
+  await page.getByRole("button", { name: "Clear inputs", exact: true }).click();
+  await page.evaluate(() => globalThis.releaseRead("lh.curv.mz3"));
+  await expect(page.locator(".nd-viewer-empty")).toBeVisible();
+  await page.waitForTimeout(3000);
+  await expect(page.locator(".nd-viewer-empty")).toBeVisible();
+  await expect(page.locator("#surfacesDrop")).toContainText("Drop surfaces");
+  expect(await showingLines(page)).toBe(0);
+  await page.locator("#runsInput").setInputFiles([await examplePath(testInfo, "lh_uBars1.gii"), await examplePath(testInfo, "aps_Bars.mat"), await smallRoiPath(testInfo)]);
+  await page.locator("#runButton").click();
+  await expect(page.locator("#downloadAll")).toBeEnabled({ timeout: 600000 });
+  await expect(page.locator("#statusText")).toHaveText(/^Reverse-correlation maps ready \(\d+\.\d s\)$/);
+  await expect(page.locator("#location")).toHaveText("");
+  expect(errors).toEqual([]);
+});
+
+test("a surface replaced while it loads leaves only the replacement on screen", async ({ page }, testInfo) => {
+  test.setTimeout(600000);
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await holdFirstReads(page, ["lh.inflated"]);
+  await page.goto("/");
+  await page.locator("#surfacesInput").setInputFiles([await examplePath(testInfo, "lh.inflated"), await examplePath(testInfo, "lh.curv")]);
+  await heldRead(page, "lh.inflated");
+  // The white surface under the inflated surface's name: same vertices, other geometry.
+  await page.locator("#surfacesInput").setInputFiles({ name: "lh.inflated", mimeType: "application/octet-stream", buffer: readFileSync(await examplePath(testInfo, "lh.white")) });
+  await expect(page.locator("#technicalLog")).toContainText("Showing lh.inflated shaded by lh.curv");
+  await expect(page.locator(".nd-viewer-empty")).toBeHidden();
+  const replacement = await settledCanvas(page);
+  await page.evaluate(() => globalThis.releaseRead("lh.inflated"));
+  await page.waitForTimeout(3000);
+  expect((await settledCanvas(page)).equals(replacement), "the viewer still shows the replacement").toBe(true);
+  expect(await showingLines(page)).toBe(1);
+  await expect(page.locator("#statusText")).toHaveText("Add the remaining inputs");
+  expect(errors).toEqual([]);
+});
+
+test("a surface the viewer cannot read is reported in the status bar", async ({ page }) => {
+  await page.goto("/");
+  const file = (name, text) => ({ name, mimeType: "application/octet-stream", buffer: Buffer.from(text) });
+  await page.locator("#surfacesInput").setInputFiles(file("lh.inflated", "not a surface"));
+  await expect(page.locator("#statusText")).toHaveText("The surface could not be shown: lh.inflated: FreeSurfer: unknown surface magic number 7237492");
+  await expect(page.locator(".nd-viewer-empty")).toBeVisible();
+  await page.locator("#surfacesInput").setInputFiles(file("lh.inflated.surf.gii", "<GIFTI"));
+  await expect(page.locator("#statusText")).toHaveText("The surface could not be shown: lh.inflated.surf.gii: GIFTI: tag at byte 0 is never closed");
+  await expect(page.locator(".nd-viewer-empty")).toBeVisible();
+  // The engine reads a surface without vertices; NiiVue logs that it cannot load it and adds nothing.
+  const empty = Buffer.concat([Buffer.from([0xff, 0xff, 0xfe]), Buffer.from("created by test\n\n"), Buffer.alloc(8)]);
+  await page.locator("#surfacesInput").setInputFiles({ name: "lh.inflated", mimeType: "application/octet-stream", buffer: empty });
+  await expect(page.locator("#statusText")).toHaveText("The surface could not be shown: lh.inflated: the viewer could not draw this surface.");
+  await expect(page.locator(".nd-viewer-empty")).toBeVisible();
+});
+
 test("automation runs a reverse-correlation analysis on the example's files", async ({ page }, testInfo) => {
   test.setTimeout(1800000);
   const roles = { runs: example.files.filter(({ role }) => role === "run").slice(0, 1), apertures: [example.files[6]], roi: [example.files[7]], surfaces: [example.files[10], example.files[11]] };
@@ -352,16 +481,24 @@ test("automation runs a reverse-correlation analysis on the example's files", as
 });
 
 /** Run each (analysis, precision) in the app on part of the example and require every downloaded map to equal the package's in-process job. */
-async function downloadsEqualInProcessJobs(page, testInfo, runs) {
-  const byName = (name) => example.files.find(file => file.name === name);
-  const file = async (name) => {
-    const path = local ? join(local, name) : testInfo.outputPath(name);
-    if (!local) writeFileSync(path, await exampleBytes(byName(name)));
-    return path;
-  };
+/** A path to an example file, written from Hugging Face unless SAMSRF_EXAMPLE_DIR has it. */
+async function examplePath(testInfo, name) {
+  const path = local ? join(local, name) : testInfo.outputPath(name);
+  if (!local) writeFileSync(path, await exampleBytes(example.files.find(file => file.name === name)));
+  return path;
+}
+
+/** The first SMALL_ROI vertices of the example's V1-V3 label, as a label file. */
+async function smallRoiPath(testInfo) {
   const roi = testInfo.outputPath("lh.V123_small.label");
-  const lines = (await exampleBytes(byName("lh.V123.label"))).toString("utf8").split("\n");
+  const lines = (await exampleBytes(example.files.find((file) => file.name === "lh.V123.label"))).toString("utf8").split("\n");
   writeFileSync(roi, [lines[0], String(SMALL_ROI), ...lines.slice(2, 2 + SMALL_ROI), ""].join("\n"));
+  return roi;
+}
+
+async function downloadsEqualInProcessJobs(page, testInfo, runs, { subjectHrf } = {}) {
+  const file = (name) => examplePath(testInfo, name);
+  const roi = await smallRoiPath(testInfo);
   const paths = {
     runs: [await file("lh_uBars1.gii")], apertures: [await file("aps_Bars.mat")], roi: [roi],
     surfaces: [await file("lh.white"), await file("lh.area")], template: [await file("lh_benson.gii")], seed: [await file("lh.V1_seed.label")],
@@ -375,17 +512,26 @@ async function downloadsEqualInProcessJobs(page, testInfo, runs) {
     });
     await page.locator("#analysis").selectOption(analysis);
     for (const role of roles[analysis]) await page.locator(`#${role}Input`).setInputFiles(paths[role]);
+    if (subjectHrf) {
+      // A drop reaches the first input, as the shell's page drop delivers it; the fit finds its own slot.
+      await page.locator("#runsInput").setInputFiles(subjectHrf);
+      await expect(page.locator("#subjectHrfDrop")).toContainText(basename(subjectHrf));
+      await expect(page.locator("#hrf")).toHaveValue("subject");
+    }
     await page.locator("#advancedSettings").evaluate(element => { element.open = true; });
     await page.locator("#dataPrecision").selectOption(precision);
     const model = JSON.parse(await page.locator("#modelJson").inputValue());
     expect(model.Data_Precision).toBe(precision);
+    if (subjectHrf) expect(model.Hrf).toBe(basename(subjectHrf, ".mat"));
     await expect(page.locator("#runButton")).toBeEnabled();
     await page.locator("#runButton").click();
     await expect(page.locator("#statusText")).toContainText(RUNS[analysis].outcome, { timeout: 1500000 });
     const zipped = page.waitForEvent("download");
     await page.locator("#downloadAll").click();
     const entries = unzipSync(readFileSync(await (await zipped).path()));
-    const job = createJob(analysisSpec(inputs, analysis, model));
+    const spec = analysisSpec(inputs, analysis, model);
+    if (subjectHrf) spec.hrf = hrf.oldSchool(model.TR, readOldSchoolHrf(readFileSync(subjectHrf)));
+    const job = createJob(spec);
     const prefix = `lh_${job.modelName}${job.outSuffix}`;
     let expected;
     try {
@@ -411,6 +557,49 @@ test("MATLAB single precision RC and CF downloads equal the package's in-process
 test("double pRF downloads equal the package's in-process job", async ({ page }, testInfo) => {
   test.setTimeout(1800000);
   await downloadsEqualInProcessJobs(page, testInfo, [["prf", "double"]]);
+});
+
+test("a dropped subject HRF fit runs reverse correlation and pRF fits as the package's jobs do", async ({ page }, testInfo) => {
+  test.setTimeout(1800000);
+  const subjectHrf = testInfo.outputPath("hrf_subject.mat");
+  writeFileSync(subjectHrf, matFile({ fP: { dims: [1, 4], data: [5.5, 15.5, 5, 2] } }));
+  await downloadsEqualInProcessJobs(page, testInfo, [["rc", "double"], ["prf", "single"]], { subjectHrf });
+});
+
+test("a subject HRF fit must be named hrf_*.mat; a malformed fit or a vertex-wise map stops the run", async ({ page }, testInfo) => {
+  test.setTimeout(600000);
+  const file = (name, text) => ({ name, mimeType: "application/octet-stream", buffer: Buffer.from(text) });
+  const roi = await smallRoiPath(testInfo);
+  await page.goto("/");
+  await page.locator("#analysis").selectOption("rc");
+  await page.locator("#runsInput").setInputFiles(await examplePath(testInfo, "lh_uBars1.gii"));
+  await page.locator("#aperturesInput").setInputFiles(await examplePath(testInfo, "aps_Bars.mat"));
+  await page.locator("#roiInput").setInputFiles(roi);
+  await expect(page.locator("#subjectHrfField")).toBeHidden();
+  await page.locator("#advancedSettings").evaluate(element => { element.open = true; });
+  const setHrf = async (value) => {
+    const model = JSON.parse(await page.locator("#modelJson").inputValue());
+    await page.locator("#modelJson").fill(JSON.stringify({ ...model, Hrf: value }));
+    await page.locator("#modelJson").dispatchEvent("change");
+  };
+  await setHrf("hrf_fit");
+  await expect(page.locator("#subjectHrfField")).toBeVisible();
+  await expect(page.locator("#runHint")).toHaveText("Needs the subject HRF hrf_fit.mat");
+  await expect(page.locator("#runButton")).toBeDisabled();
+  await page.locator("#subjectHrfInput").setInputFiles(file("fit.mat", "x"));
+  await expect(page.locator("#statusText")).toHaveText("fit.mat: SamSrf reads a subject HRF fit from a file named hrf_*.mat.");
+  await expect(page.locator("#runButton")).toBeDisabled();
+  await page.locator("#subjectHrfInput").setInputFiles(file("hrf_fit.mat", "not a MAT file"));
+  await expect(page.locator("#runButton")).toBeEnabled();
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toContainText("hrf_fit.mat: ", { timeout: 300000 });
+  await expect(page.locator("#statusText")).toHaveClass(/error/);
+  await expect(page.locator("#downloadAll")).toBeDisabled();
+  await setHrf("lh_hrf_fits");
+  await expect(page.locator("#hrf")).toHaveValue("custom");
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toHaveText("model: Hrf lh_hrf_fits is a vertex-wise HRF fit map: the caller must load it", { timeout: 300000 });
+  await expect(page.locator("#downloadAll")).toBeDisabled();
 });
 
 test("MATLAB fit settings round-trip through JSON and remain in collapsed settings", async ({ page }) => {
