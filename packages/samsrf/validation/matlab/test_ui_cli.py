@@ -232,6 +232,23 @@ class ComplexEngineRuns(Base):
         self.assertEqual(run['class'], 'inventory-error', run)
         self.assertIn('differs from its record', run['error'])
 
+    def test_engine_raw_and_imaginary_payloads_must_match_their_receipts(self):
+        for name, key in (('maps.f64', 'mapsSha256'), ('maps.imag.f64', 'imaginarySha256')):
+            for damage in ('truncated', 'changed-byte', 'wrong-hash'):
+                with self.subTest(name=name, damage=damage):
+                    self.x.write()
+                    path = self.x.web / self.id / name
+                    raw = path.read_bytes()
+                    if damage == 'truncated':
+                        path.write_bytes(raw[:-1])
+                    elif damage == 'changed-byte':
+                        path.write_bytes(bytes([raw[0] ^ 1]) + raw[1:])
+                    else:
+                        self.x.edit_record(self.id, **{key: '0' * 64})
+                    run = self.run_report()
+                    self.assertEqual(run['class'], 'inventory-error', run)
+                    self.assertIn(name, run['error'])
+
 
 class Statuses(Base):
     ids = ['rc_hull_lh_single', 'rc_gaussian_lh_single', 'prf_custom_hrf_lh_double']

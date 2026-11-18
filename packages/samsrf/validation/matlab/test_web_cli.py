@@ -275,6 +275,15 @@ class Imaginary(Base):
 class Outcome(Base):
     ids = ['rc_hull_lh_double', 'prf_css_lh_double']
 
+    def test_differing_count_cannot_exceed_total_or_contradict_exactness(self):
+        for part in ('srfData', 'imaginary', 'gifti'):
+            for exact, differing in ((False, 4), (True, 1)):
+                with self.subTest(part=part, exact=exact):
+                    report = self.x.report()
+                    report['runs'][0]['maps'][0][part].update(count=3, exact=exact, differing=differing)
+                    with self.assertRaisesRegex(ValueError, 'contradicts'):
+                        web_cli_outcome.outcome(report)
+
     def test_fractional_comparison_count_fails_public_command(self):
         report = self.x.report()
         frozen = self.x.root / 'outcome.json'
@@ -371,6 +380,21 @@ class Ulp(unittest.TestCase):
 
 class Statuses(Base):
     ids = ['rc_gaussian_lh_single', 'prf_custom_hrf_lh_double']
+
+    def test_expected_refusals_still_require_matlab_output_inventory(self):
+        for runner, run_id in (('node', 'rc_gaussian_lh_single'), ('browser', 'prf_custom_hrf_lh_double')):
+            for damage in ('missing', 'extra'):
+                with self.subTest(runner=runner, damage=damage):
+                    self.x.runner = runner
+                    self.x.status[run_id] = web_cli.expected_web_outcome(PLAN[run_id], runner)['status']
+                    self.x.write()
+                    directory = self.x.matlab / run_id
+                    if damage == 'missing':
+                        (directory / compare_cli.expected_results(PLAN[run_id])[2][0]).unlink()
+                    else:
+                        (directory / 'unexpected.bin').write_bytes(b'x')
+                    run = next(item for item in self.x.report()['runs'] if item['id'] == run_id)
+                    self.assertEqual(run['class'], 'inventory-error', run)
 
     def test_expected_refusal_is_listed_and_not_agreement(self):
         report = self.x.report()

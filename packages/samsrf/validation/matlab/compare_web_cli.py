@@ -322,8 +322,9 @@ def names_in(directory):
 def web_files(run, web, web_dir):
     """A succeeded web run's exported files: every contract map, at most the polar angle and
     eccentricity maps besides, and exactly what its directory holds beside maps.f64 and,
-    when the record names its hash, maps.imag.f64 (the imaginary parts of a complex Srf.Data)."""
-    mat, _, maps = expected_results(run)
+    when the record names its hash, maps.imag.f64 (the imaginary parts of a complex Srf.Data).
+    Returns the file lists and raw arrays after checking their lengths and recorded hashes."""
+    mat, labels, maps = expected_results(run)
     files = web.get('files')
     if not isinstance(files, list) or len(set(files)) != len(files) or not set(maps) <= set(files):
         raise Inventory('the web record does not list every contract map')
@@ -337,7 +338,22 @@ def web_files(run, web, web_dir):
     data_files = {'maps.f64', 'maps.imag.f64'} if imaginary_sha is not None else {'maps.f64'}
     if names_in(web_dir) != set(files) | data_files:
         raise Inventory('the web run directory differs from its record')
-    return files, web_only
+    vertices = web.get('vertices')
+    if type(vertices) is not int or vertices < 1:
+        raise Inventory('the web record must name a positive integer vertex count')
+
+    def rows(name, recorded_sha):
+        raw = (web_dir / name).read_bytes()
+        expected = 8 * len(labels) * vertices
+        if len(raw) != expected:
+            raise Inventory(f'{name} has {len(raw)} bytes, expected {expected}')
+        if not is_sha256(recorded_sha) or recorded_sha != sha256_bytes(raw):
+            raise Inventory(f'{name} differs from the hash its record names')
+        return numpy.frombuffer(raw, dtype='<f8').reshape(len(labels), vertices)
+
+    real = rows('maps.f64', web.get('mapsSha256'))
+    imaginary = numpy.zeros_like(real) if imaginary_sha is None else rows('maps.imag.f64', imaginary_sha)
+    return files, web_only, real, imaginary
 
 
 def matlab_outputs(run, matlab_dir):
@@ -358,7 +374,7 @@ def compare_maps(run, web, web_dir, matlab_dir):
     mat, labels, maps = expected_results(run)
     if web.get('values') != labels:
         raise Inventory(f'web map labels {web.get("values")} differ from the contract {labels}')
-    _, web_only = web_files(run, web, web_dir)
+    _, web_only, rows, imaginary_rows = web_files(run, web, web_dir)
     matlab_only = matlab_outputs(run, matlab_dir)
     entries = {key: (kind, values) for key, kind, values in read_mat(matlab_dir / mat)}
     data, imaginary, roi, vertices = matlab_results(entries, run['precision'], labels)
@@ -366,17 +382,6 @@ def compare_maps(run, web, web_dir, matlab_dir):
         raise Inventory(f'web vertices {web.get("vertices")} differ from MATLAB surface {vertices}')
     if web.get('roi') != roi.tolist():
         raise Inventory('the web ROI differs from MATLAB Srf.Roi (values or order)')
-    def web_rows(name, recorded_sha):
-        raw = (web_dir / name).read_bytes()
-        if len(raw) != 8 * len(labels) * vertices:
-            raise Inventory(f'{name} has {len(raw)} bytes, expected {8 * len(labels) * vertices}')
-        if recorded_sha != sha256_bytes(raw):
-            raise Inventory(f'{name} differs from the hash its record names')
-        return numpy.frombuffer(raw, dtype='<f8').reshape(len(labels), vertices)
-
-    rows = web_rows('maps.f64', web.get('mapsSha256'))
-    imaginary_sha = web.get('imaginarySha256')
-    imaginary_rows = numpy.zeros_like(rows) if imaginary_sha is None else web_rows('maps.imag.f64', imaginary_sha)
     results = []
     for index, (label, name) in enumerate(zip(labels, maps)):
         column = data[:, index]
@@ -416,10 +421,11 @@ def compare_run(run, web, matlab, runner, web_root, matlab_root):
             or 'expectedMessage' in report):
         report['class'] = 'failed'
         return report
-    if refusal:
-        report['class'] = expected['status']
-        return report
     try:
+        if refusal:
+            matlab_outputs(run, matlab_root / run['id'])
+            report['class'] = expected['status']
+            return report
         maps, complex_data, web_only, matlab_only = compare_maps(run, web, web_root / run['id'], matlab_root / run['id'])
     except Inventory as error:
         report['class'] = 'inventory-error'
