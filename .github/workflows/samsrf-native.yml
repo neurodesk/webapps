@@ -262,6 +262,11 @@ jobs:
         run: |
           SAMSRF_MATLAB_GEOMETRY_DIR="$RUNNER_TEMP/samsrf-geometry" SAMSRF_MATLAB_POLYSHAPE_PROBE_DIR="$RUNNER_TEMP/samsrf-polyshape-probe" SAMSRF_MATLAB_POLYSHAPE_CAUSAL_DIR="$RUNNER_TEMP/samsrf-polyshape-causal" SAMSRF_MATLAB_POLYSHAPE_REPRODUCERS_DIR="$RUNNER_TEMP/samsrf-polyshape-reproducers" \
             cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-core --test polyshape_arithmetic -- --nocapture
+      - name: convexHull K and the linspace grid against round hull-area-1 (hull-area-predictions.md)
+        run: |
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-hull-area" packages/samsrf/validation/matlab/hull-area-reference.json
+          python3 packages/samsrf/validation/matlab/hull_area_report.py check "$RUNNER_TEMP/samsrf-hull-area"
+          rm -rf "$RUNNER_TEMP/samsrf-hull-area"
       - name: CSS trace, MATLAB arithmetic, extreme-scale and rank regression gates
         run: |
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-css-diagnostics" packages/samsrf/validation/matlab/diagnostics-reference.json

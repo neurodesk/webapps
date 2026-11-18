@@ -4,7 +4,7 @@
 SamSrfAnalysis takes a reverse-correlation hull's Fwhm from
 [K, AV] = convexHull(delaunayTriangulation(txy)) and its pixel grid from
 linspace(-a, a, n) (samsrf_revcor_prf.m). The port's formula for AV is not
-MATLAB's (`delaunay_hull_area`), and the grid's end values are inferred. This
+MATLAB's (`ListedHull::of`, then `delaunay_hull_area`), and the grid's end values are inferred. This
 writes the point sets and grids MATLAB records (record_geometry(..., 'hull-area'))
 and every candidate's prediction, before any recording
 (hull-area-predictions.md).
@@ -113,7 +113,7 @@ def indices(points, ring):
 # Areas. Every sum runs left to right in double precision.
 
 def port_area(points):
-    """delaunay_hull_area: corners counter-clockwise from the lexicographically
+    """`ListedHull::of` (then `delaunay_hull_area`): corners counter-clockwise from the lexicographically
     smallest, cross products from that corner."""
     ordered = sorted(set(points))
     cross = lambda o, a, b: (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])

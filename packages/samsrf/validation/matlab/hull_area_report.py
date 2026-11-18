@@ -4,11 +4,14 @@
 Usage:
   hull_area_report.py discovery RECORDING DECISION_JSON
   hull_area_report.py heldout RECORDING DECISION_JSON REPORT_JSON
+  hull_area_report.py check RECORDING
 RECORDING holds one directory per host, each record_geometry(..., 'hull-area')
 output. `discovery` checks the frozen predictions digests, judges every model on
 the discovery sets and grids of each host and writes the models supported on
 every AMD host. `heldout` judges only those models, on the held-out and fresh
 sets and grids (the addendum's). Only AMD hosts decide; others are reported.
+`check` runs both on the pinned recording (hull-area-reference.json) and fails
+unless they reach the round's recorded outcome.
 """
 import hashlib
 import json
@@ -20,6 +23,8 @@ import sys
 import hull_area_design as design
 
 HERE = Path(__file__).resolve().parent
+# The round's outcome on dispatch 2 (hull-area-predictions.md, "Results").
+OUTCOME = ['K', 'L0']
 # Each inputs file and its frozen predictions digest (hull-area-predictions.md).
 FROZEN = {'hull-area-inputs.json': '14ec8549270429828f78c0c47276000d6b13237772553814d5bfdc481c06f567',
           'hull-area-inputs-2.json': '3a0966d7a1c9df424a2d16db9b0f6f77252d7e9fa514aa760f0542bb6a81c9d4'}
@@ -141,6 +146,17 @@ def main(arguments):
         report = judge(Path(arguments[1]), {'heldout', 'fresh'}, decision['supported'])
         report['discoveryDecisionSha256'] = hashlib.sha256(Path(arguments[2]).read_bytes()).hexdigest()
         Path(arguments[3]).write_text(json.dumps(report, indent=1) + '\n')
+    elif len(arguments) == 2 and arguments[0] == 'check':
+        recording = Path(arguments[1])
+        discovery = judge(recording, {'discovery'}, ['K', *design.AREA_MODELS, *CONDITIONAL, *design.GRID_MODELS])
+        report = judge(recording, {'heldout', 'fresh'}, discovery['supported'])
+        counts = {h: (v['sets'], v['grids']) for h, v in report['hosts'].items()}
+        if not discovery['decides'] or discovery['supported'] != OUTCOME or report['supported'] != OUTCOME:
+            raise SystemExit(f"outcome changed: discovery {discovery['supported']}, held out {report['supported']}")
+        if any(c != (300, 132) for c in counts.values()) or any(sum(v['failures'].values()) for v in report['hosts'].values()):
+            raise SystemExit(f'held-out inventory or failures changed: {counts}')
+        print(f'Round hull-area-1: {OUTCOME} supported on {len(report["hosts"])} hosts; every area model refuted on discovery.')
+        return
     else:
         raise SystemExit(__doc__)
     print(json.dumps({h: {k: v[k] for k in ('cpu', 'sets', 'grids', 'failures')} for h, v in report['hosts'].items()}, indent=1))

@@ -190,3 +190,59 @@ set is 40 blobs, 20 of them also reversed, and 20 small sets on the six held-out
 grids, and 44 grids (12 whose last symmetric value is not `a`), all role
 `fresh`. Its predictions digest, from `hull_area_design.py predict
 hull-area-inputs-2.json`: `3a0966d7a1c9df424a2d16db9b0f6f77252d7e9fa514aa760f0542bb6a81c9d4`.
+
+## Results
+
+Dispatch 2 (run
+[44229635416](https://github.com/neurodesk/webapps/actions/runs/44229635416),
+commit d725a2d3a) recorded on an AMD EPYC 7763 (ubuntu-22.04), which decides,
+and an Intel Xeon 6975P-C (ubuntu-24.04), which is reported. Both repeats were
+exact, all 5,080 arrays are byte-identical across the hosts, and the 4,112 arrays
+of the round's own inputs equal dispatch 1's. Pinned as
+`hull-area-reference.json`; `hull_area_report.py check` reruns the judgement below
+in CI.
+
+Discovery, AMD host (124 sets, 76 grids), sets or grids that differ:
+
+| Model | Differ | Model | Differ |
+| --- | ---: | --- | ---: |
+| K | 0 | L0 | 0 |
+| A0 | 86 | L1 | 13 |
+| A1, A1k | 105 | L2, L3 | 51 |
+| A2, A4, A5 and their k forms | 94 | T1 to T3 | 121 |
+| A3, A3k | 103 | T4, T5 | 122 |
+
+The discovery decision (SHA-256 `f8ee7fcb60c28021ddfdb5e6d79df792cff8259c7f2ecf9e4de50fb7fd1e1d49`)
+named K and L0. On the held-out and fresh sets (300 sets, 132 grids) neither differs
+anywhere, on either host. Both are supported:
+
+- **K** is the port's model: the exact boundary with collinear points kept,
+  counter-clockwise from the first input point on it.
+- **L0**: R2023b's `linspace(-a, a, n)` is `(2i - (n - 1)) * (a / (n - 1))` with
+  the ends set to `-a` and `a`. That holds on all 208 grids, 55 of them where the
+  ends matter. The port's grid already is this.
+
+**AV is not identified.** Every frozen and conditional model was refuted on
+discovery. What the recording shows about it:
+
+- It depends on the hull alone. It equals the corners variant's AV on every
+  set, so it is not a sum over the triangulation of the points.
+- It depends on where the listing starts. Reversing the input order changes it
+  in 31 of 42 CLI sets.
+- It is within 5 ULP of the exactly rounded area, and exact in 48 of 124.
+- It equals `polyarea` of the same vertices in 23 and the polyshape area in 48.
+
+The searches on dispatch 1's discovery sets reached at most 73 of 124: clockwise
+from K(1), cross products from the box centre, summed in order. They covered
+start, direction, term form, origin and summation order, triangle sums over the
+hull's own triangulation, and Qhull-style facet sums. So nothing could be frozen
+for dispatch 2, and both dispatches are spent.
+
+What follows for the port:
+
+- The grid is unchanged.
+- The convex-hull analysis keeps the previous grid and hull in production. On
+  MATLAB's grid its `Fwhm` loses a value the previous grid matched, through this
+  unidentified area (`revcor_prf::pixel_grid`).
+- `cli_rc_hulls.rs` holds MATLAB's grid and the stored-order hull as a diagnostic,
+  with the 15 `Fwhm` values that still differ.
