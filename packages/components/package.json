@@ -24,6 +24,10 @@
       "types": "./src/index.d.ts",
       "default": "./src/ui/index.js"
     },
+    "./ui/memory-crash": {
+      "types": "./src/index.d.ts",
+      "default": "./src/ui/memoryCrash.js"
+    },
     "./file-io": "./src/file-io/index.js",
     "./file-io/download": {
       "types": "./src/file-io/download-api.d.ts",

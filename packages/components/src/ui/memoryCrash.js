@@ -39,9 +39,12 @@ const WORKER_CRASH = new RegExp([
   String.raw`\bcould not be deserialized \(often low(?: device)? memory\)`,
 ].join('|'), 'i');
 
-const RAW_MEMORY_ERROR = new RegExp([
-  String.raw`\bout of memory\b`,
-  String.raw`\bout-of-memory\b`,
+// Engine signatures that only appear in raw, unexplained error text: the
+// strings browsers, Emscripten, Rust, ONNX Runtime and WebGPU produce, never
+// the plain-language prose apps write about memory.
+const RAW_ENGINE_SIGNATURES = [
+  String.raw`\b(?:[a-z]*error|aborted)\s*:\s*out of memory\b`,
+  String.raw`^out of memory\.?$`,
   String.raw`\bgpuoutofmemoryerror\b`,
   String.raw`\barray buffer allocation failed\b`,
   String.raw`\binvalid (?:array buffer|typed array) length\b`,
@@ -55,6 +58,15 @@ const RAW_MEMORY_ERROR = new RegExp([
   String.raw`\bmemory allocation of \d+ bytes failed\b`,
   String.raw`\bwasm memory\b.*\b(?:limit|exceed|allocat|fail)`,
   String.raw`\bgpu out of memory\b`,
+];
+
+const RAW_ENGINE_ERROR = new RegExp(RAW_ENGINE_SIGNATURES.join('|'), 'i');
+
+// Uncaught errors also count bare "out of memory" wording: nobody explained them.
+const RAW_MEMORY_ERROR = new RegExp([
+  String.raw`\bout of memory\b`,
+  String.raw`\bout-of-memory\b`,
+  ...RAW_ENGINE_SIGNATURES,
 ].join('|'), 'i');
 
 // Initial or idle status messages that boot code writes before the user acts;
@@ -116,6 +128,20 @@ export function isMemoryErrorMessage(value) {
 }
 
 /**
+ * True when status or log text an app wrote is a raw engine error it forwarded
+ * verbatim (`Aborted(OOM)`, `RangeError: Array buffer allocation failed`).
+ * App prose that mentions memory, such as a partial result "(out of memory)"
+ * or "the preview ran out of memory", is the app's own explanation and stays.
+ */
+export function isRawMemoryErrorText(value) {
+  const text = errorText(value);
+  if (!text) return false;
+  if (REMOTE_MEMORY_ERROR.test(text)) return false;
+  if (ALREADY_EXPLAINED.test(text)) return false;
+  return WEBGL_LOST.test(text) || WORKER_CRASH.test(text) || RAW_ENGINE_ERROR.test(text);
+}
+
+/**
  * Format a memory error, unexpected worker crash or interrupted-page reload
  * into a concise status-bar message (<= 90 chars for narrow phone viewports)
  * and a detailed technical-log entry. Returns `null` for other errors.
@@ -145,7 +171,7 @@ export function formatMemoryError(value, options = {}) {
     return {
       kind,
       raw,
-      status: 'Browser discarded this inactive tab (often to free memory). Reload or use Standalone.',
+      status: 'Browser discarded this tab to free memory. Load files again or use Standalone.',
       log,
       dedupLog: log,
     };
@@ -219,6 +245,10 @@ function writeCheckpoint(view, key, record) {
   } catch {
     // Private browsing or disabled storage leaves in-page error handling active.
   }
+}
+
+function checkpointSignature(state) {
+  return `${state.active}|${state.loaded}|${state.hidden}|${state.detail}`;
 }
 
 function clearCheckpoint(view, key) {
@@ -303,6 +333,7 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
   let unloading = false;
   let reconcileTimer = null;
   let heartbeatTimer = null;
+  let lastCheckpointSignature = '';
 
   if (view?.coiWillReload?.then) {
     view.coiWillReload.then((reloading) => {
@@ -382,7 +413,8 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
 
   // 1. Check whether the previous tab instance reloaded without pagehide /
   //    beforeunload while running a job, in the foreground with loaded data, or
-  //    via browser tab discard (`document.wasDiscarded`).
+  //    via browser tab discard (`document.wasDiscarded`, which only Chromium
+  //    browsers report; elsewhere a discard reads as a hidden idle tab).
   const previous = readCheckpoint(view, key);
   if (previous && typeof previous === 'object') {
     const age = now() - Number(previous.updatedAt || 0);
@@ -410,7 +442,7 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
     const statusEl = findStatusElement(doc);
     if (!statusEl) return;
     const current = cleanText(statusEl.textContent);
-    if (isMemoryErrorMessage(current)) {
+    if (isRawMemoryErrorText(current)) {
       immediateActiveDetail = '';
       const active = currentSessionState().active;
       recoveredFailure = null;
@@ -425,7 +457,7 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
         const marker = output.lastElementChild || output.textContent || '';
         if (!marker || seenConsoleTails.get(output) === marker) continue;
         const last = output.lastElementChild?.textContent || output.textContent || '';
-        if (isMemoryErrorMessage(last)) {
+        if (isRawMemoryErrorText(last)) {
           immediateActiveDetail = '';
           const active = currentSessionState().active;
           recoveredFailure = null;
@@ -492,7 +524,10 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
       heartbeatTimer = view.setInterval(() => {
         if (cleanedUp || unloading) return;
         const next = currentSessionState();
-        if (next.active || next.loaded) writeCheckpoint(view, key, next);
+        if (next.active || next.loaded) {
+          writeCheckpoint(view, key, next);
+          lastCheckpointSignature = checkpointSignature(next);
+        }
       }, HEARTBEAT_MS);
       heartbeatTimer?.unref?.();
     } else if (!shouldBeat && heartbeatTimer && view?.clearInterval) {
@@ -504,8 +539,19 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
   function syncCheckpoint() {
     if (cleanedUp || unloading) return;
     const state = currentSessionState();
-    if (state.active || state.loaded) writeCheckpoint(view, key, state);
-    else clearCheckpoint(view, key);
+    // Write only when the session changes: progress animation and log output
+    // mutate the page many times a second, and sessionStorage writes are
+    // synchronous. The heartbeat keeps `updatedAt` fresh in between.
+    if (state.active || state.loaded) {
+      const signature = checkpointSignature(state);
+      if (signature !== lastCheckpointSignature) {
+        writeCheckpoint(view, key, state);
+        lastCheckpointSignature = signature;
+      }
+    } else if (lastCheckpointSignature !== 'cleared') {
+      clearCheckpoint(view, key);
+      lastCheckpointSignature = 'cleared';
+    }
     syncHeartbeat(state);
   }
 
@@ -790,6 +836,7 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
     if (heartbeatTimer && view?.clearInterval) view.clearInterval(heartbeatTimer);
     reconcileTimer = null;
     heartbeatTimer = null;
+    lastCheckpointSignature = 'cleared';
     clearCheckpoint(view, key);
   }
 
@@ -800,8 +847,17 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
   }
 
   const observer = view?.MutationObserver
-    ? new view.MutationObserver(() => {
+    ? new view.MutationObserver((records) => {
       if (applying) return;
+      // Progress animation changes only a bar's value, often every frame;
+      // it cannot carry an error, so only the run state needs a look.
+      const progressOnly = records.every((record) => record.type === 'attributes'
+        && record.attributeName === 'value'
+        && record.target?.tagName === 'PROGRESS');
+      if (progressOnly) {
+        syncCheckpoint();
+        return;
+      }
       flushPendingRecovery();
       flushActiveRunFailure();
       reconcileStatusErrorClass();

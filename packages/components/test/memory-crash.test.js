@@ -8,6 +8,7 @@ import {
   bindMemoryCrashMonitor,
   formatMemoryError,
   isMemoryErrorMessage,
+  isRawMemoryErrorText,
 } from '../src/ui/memoryCrash.js';
 
 function createWorkspaceDom(t, url = 'https://webapps.neurodesk.org/synthsr/', sessionEntries = {}) {
@@ -217,7 +218,7 @@ test('idle hidden tabs and COI reloads do not trigger false memory warnings, whi
   });
   Object.defineProperty(discarded.document, 'wasDiscarded', { value: true, configurable: true });
   discarded.bind({ now: () => 1000 + 31 * 60 * 1000 });
-  assert.match(discarded.document.getElementById('statusText').textContent, /discarded this inactive tab \(often to free memory\)/);
+  assert.match(discarded.document.getElementById('statusText').textContent, /discarded this tab to free memory\. Load files again/);
 
   // 3a. COI reload marker recorded on window (after coi-serviceworker consumed coiReloadedBySelf) suppresses recovery.
   const coiReloadedWindow = createWorkspaceDom(t, url, {
@@ -258,6 +259,81 @@ test('idle hidden tabs and COI reloads do not trigger false memory warnings, whi
   assert.equal(navPage.window.sessionStorage.getItem('neurodesk-memory-guard:/ants/'), null);
   navPage.window.dispatchEvent(new navPage.window.Event('pageshow'));
   assert.ok(navPage.window.sessionStorage.getItem('neurodesk-memory-guard:/ants/'));
+});
+
+test('isRawMemoryErrorText leaves app prose about memory alone but catches forwarded engine errors', () => {
+  const appProse = [
+    'Partial: 1,200 streamlines from 5,000 of 9,000 seeds (out of memory).',
+    'TRX saved, but the 3D preview ran out of memory. Use “Save TRX” to download it.',
+    'Out of memory: raise the Seed/Stop FA thresholds or lower Density for the full set.',
+    'The 3D view shows 1 in 4 streamlines to fit in memory; the saved TRX holds all of them.',
+  ];
+  for (const sample of appProse) {
+    assert.equal(isRawMemoryErrorText(sample), false, sample);
+  }
+  const forwarded = [
+    'RangeError: Out of memory',
+    'Error: Out of memory',
+    'Out of memory',
+    'RuntimeError: Aborted(OOM)',
+    'RangeError: Array buffer allocation failed',
+    'Error: OrtRun() failed: std::bad_alloc',
+    'U-Net GPU out of memory',
+    'GPUOutOfMemoryError',
+    'Processing worker stopped unexpectedly (often low device memory)',
+  ];
+  for (const sample of forwarded) {
+    assert.equal(isRawMemoryErrorText(sample), true, sample);
+  }
+});
+
+test('the monitor never rewrites an app status that explains a memory limit itself', async (t) => {
+  const page = createWorkspaceDom(t, 'https://webapps.neurodesk.org/dwi2trx/');
+  page.bind();
+  const statusText = page.document.getElementById('statusText');
+  page.document.getElementById('runButton').click();
+  for (const [message, error] of [
+    ['Partial: 1,200 streamlines from 5,000 of 9,000 seeds (out of memory).', false],
+    ['TRX saved, but the 3D preview ran out of memory. Use “Save TRX” to download it.', true],
+  ]) {
+    statusText.textContent = message;
+    statusText.classList.toggle('error', error);
+    page.log.log(message, error ? 'error' : 'info');
+    await waitMs(20);
+    assert.equal(statusText.textContent, message);
+    assert.equal(statusText.classList.contains('error'), error);
+    assert.doesNotMatch(page.log.getText(), /Browser memory limit exceeded/);
+  }
+});
+
+test('progress animation does not rewrite the session checkpoint every frame', async (t) => {
+  const url = 'https://webapps.neurodesk.org/synthseg/';
+  const page = createWorkspaceDom(t, url);
+  page.bind({ now: () => 1000 });
+  page.document.getElementById('runButton').click();
+  page.progressManager.begin('Segmenting…');
+  await waitMs(280);
+  const key = 'neurodesk-memory-guard:/synthseg/';
+  assert.equal(JSON.parse(page.window.sessionStorage.getItem(key)).active, true);
+
+  const storage = Object.getPrototypeOf(page.window.sessionStorage);
+  const originalSetItem = storage.setItem;
+  let writes = 0;
+  storage.setItem = function countedSetItem(...args) {
+    writes += 1;
+    return originalSetItem.apply(this, args);
+  };
+  t.after(() => { storage.setItem = originalSetItem; });
+  const progress = page.document.getElementById('progress');
+  for (let frame = 1; frame <= 30; frame += 1) {
+    progress.value = frame / 100;
+    await waitMs(1);
+  }
+  assert.equal(writes, 0);
+  page.progressManager.setText('Segmenting · 50%');
+  await waitMs(20);
+  assert.equal(writes, 1);
+  assert.equal(JSON.parse(page.window.sessionStorage.getItem(key)).detail, 'Segmenting · 50%');
 });
 
 test('app-owned crash recovery messages win whether written before or after monitor bind', async (t) => {
