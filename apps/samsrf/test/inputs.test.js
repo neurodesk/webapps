@@ -20,6 +20,9 @@ test("files of a SamSrf data folder find their slots by name", () => {
     "lh.curv": { slot: "surfaces", role: "curv" },
     "lh.area": { slot: "surfaces", role: "area" },
     "2dGaussian.json": { slot: "model" },
+    "hrf_sub01.mat": { slot: "subjectHrf" },
+    "HRF_sub01.MAT": { slot: "subjectHrf" },
+    "sub01_hrf.mat": { slot: "apertures" },
   };
   for (const [name, expected] of Object.entries(cases)) assert.deepEqual(classifyFile(name), expected, name);
   assert.equal(classifyFile("notes.txt"), null);
@@ -51,10 +54,31 @@ test("each analysis names what it still needs", () => {
   assert.deepEqual(missingInputs("cf", { Smoothing: 2 }, inputs), ["a white surface"], "smoothing needs geodesic distances");
 });
 
+test("a model that names a subject HRF fit needs that file, and a folder brings it with the apertures", () => {
+  const { filled } = sortFiles(["lh_uBars1.gii", "aps_Bars.mat", "hrf_sub01.mat"].map(file));
+  assert.equal(filled.apertures.name, "aps_Bars.mat");
+  assert.equal(filled.subjectHrf.name, "hrf_sub01.mat");
+  const inputs = mergeInputs(emptyInputs(), { runs: filled.runs, apertures: filled.apertures });
+  for (const analysis of ["prf", "rc"]) {
+    assert.deepEqual(missingInputs(analysis, { Hrf: "hrf_sub01" }, inputs), ["the subject HRF hrf_sub01.mat"]);
+    assert.deepEqual(missingInputs(analysis, { Hrf: "hrf_sub01" }, mergeInputs(inputs, { subjectHrf: filled.subjectHrf })), []);
+  }
+  assert.deepEqual(missingInputs("rc", { Hrf: "lh_hrf_fits" }, inputs), [], "a vertex-wise HRF map is left to the engine, which refuses it");
+  assert.equal(emptyInputs().subjectHrf, null);
+});
+
 
 test("folder drops reject ambiguous single-file inputs before choosing anatomy", () => {
-  for (const names of [["lh.white", "rh.white"], ["lh_benson.gii", "rh_benson.gii"], ["a.label", "b.label"], ["a.json", "b.json"]]) {
-    assert.throws(() => sortFiles(names.map(file)), /ambiguous/);
+  for (const [names, slot] of [
+    [["lh.white", "rh.white"], "white file"],
+    [["lh_benson.gii", "rh_benson.gii"], "template map"],
+    [["a.label", "b.label"], "ROI label"],
+    [["a.json", "b.json"], "model JSON"],
+    [["aps_a.mat", "aps_b.mat"], "apertures file"],
+    [["lh.V1_seed.label", "lh.V2_seed.label"], "seed label"],
+    [["hrf_a.mat", "hrf_b.mat"], "subject HRF fit"],
+  ]) {
+    assert.throws(() => sortFiles(names.map(file)), { message: `Choose one ${slot}: ${names[0]} and ${names[1]} are ambiguous.` });
   }
   assert.throws(() => sortFiles(["lh_run.gii", "rh_run.gii"].map(file)), /different hemispheres/);
 });
