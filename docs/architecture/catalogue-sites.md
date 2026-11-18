@@ -230,16 +230,32 @@ instant or null) and the commit (40 hex digits, or null outside Actions). A site
 is published when:
 
 - the run was dispatched, by hand or by `standalone-catalog.yml` (every site);
-- the previous run of this workflow on `main` that started a job did not finish
-  green (failed, cancelled part-way or timed out), or that history cannot be
-  read (every site). A run cancelled while it waited never started a job, so
-  the run before it decides. A live digest proves the bytes are live, not that
-  their deploy and checks passed, so a failed Worker deploy, a sibling whose
-  checks it skipped, or a failed browser check is retried by the next run;
+- the run is a re-run (`GITHUB_RUN_ATTEMPT` above 1; every site). A re-run
+  keeps its run id, so it reads no history. "Re-run failed jobs" re-runs only
+  the jobs that failed and those that need them; the others, the build and its
+  plan included, keep their results and outputs from the attempt before. So a
+  re-run of a failed check checks the same sites, and a re-run build publishes
+  everything;
+- the deploy run before this one did not finish green (failed, cancelled
+  part-way or timed out), or the plan cannot be certain of it (every site). The
+  plan reads every run of this workflow created in the last 33 days, on every
+  ref, since all of them share the concurrency group and any of them can
+  publish. The run whose latest attempt started last (`run_started_at`, which
+  a re-run moves) decides, among those that started a job: a run cancelled
+  while it waited started none, so the run before it decides. GitHub re-runs a
+  run only up to 30 days after it, so that history is certain of a deciding run
+  that started in the last two days, and the daily schedule keeps one there.
+  An earlier run still queued or in progress, two runs that started at the same
+  instant, a re-run that started no job, a malformed field, a history that
+  changed while it was read or holds more than 2000 runs, an API error or a
+  timeout each publish every site. A live digest proves the bytes are live, not
+  that their deploy and checks passed, so a failed Worker deploy, a sibling
+  whose checks it skipped, or a failed browser check is retried by the next run;
 - its host does not serve a readable record of this site. Only a direct `200`
   answer with an `application/json` type and no `Age` above 0 counts: a
   redirect is not followed, and the request asks every cache to revalidate. A
-  record with a field of the wrong type is unreadable too;
+  record with a field of the wrong type, or a date that does not exist (such as
+  31 February), is unreadable too;
 - its digest differs from the served one;
 - its served usage report predates the last 04:17 UTC refresh. The daily
   schedule exists for this: each catalogue's report is refreshed once a day,
@@ -247,6 +263,12 @@ is published when:
 
 A site whose plan fails for any other reason is published. The job summary
 names each decision and, for a forced publish, the run that forced it.
+
+One deadline covers each whole exchange, headers and body: 30 seconds for each
+live record and 120 seconds for the whole history read. The plan reads the
+history while it digests the sites, so it writes its outputs within about two
+minutes whatever the network does; a read that runs out of time publishes. The
+plan step's 10 minute limit is a backstop.
 
 `pnpm test:runtime-startup` runs before a deploy only when some site's content
 may be new (every reason but the usage report). Content the hosts already serve
