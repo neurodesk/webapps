@@ -257,7 +257,7 @@ Results that hold file names, report text or answers typed by the person carry
 `viewers_screenshot` is left out because results are text only and a browser
 agent sees the page.
 
-Held files live in `webmcp/inputs.js`. They are released when the app clears
+Held files live in `webmcp/tool-inputs.js`. They are released when the app clears
 its examination (`registerAppAutomation`'s `reset` fires
 `neurodesk-automation-reset`) or when the person loads files into one of the
 app's classified inputs while no run is going. A page input's files are

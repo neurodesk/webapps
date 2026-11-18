@@ -1,5 +1,5 @@
 import { createAgentPrompts } from '../ui/agentPrompt.js';
-import { createToolInputs } from './inputs.js';
+import { createToolInputs } from './tool-inputs.js';
 import { registerWebMcpTools, webMcpTools } from './tools.js';
 
 // The shell loads this module apart from the app bundle, so the page's automation is reached through the

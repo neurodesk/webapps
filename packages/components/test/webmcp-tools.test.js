@@ -7,7 +7,7 @@ import { registerAppAutomation } from '../src/automation/index.js';
 import { operationParametersSchema } from '../src/automation/parameters.js';
 import { registerWebMcpTools, webMcpTools } from '../src/webmcp/tools.js';
 import { exposeWebMcp } from '../src/webmcp/page.js';
-import { createToolInputs } from '../src/webmcp/inputs.js';
+import { createToolInputs } from '../src/webmcp/tool-inputs.js';
 
 const appsDir = new URL('../../../apps/', import.meta.url);
 const contract = () => ({ schemaVersion: 2, app: 'test', title: 'Test', description: 'Segments a test image.', appVersion: '0.1.20260928', defaultOperation: 'run', operations: {

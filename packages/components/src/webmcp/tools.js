@@ -99,7 +99,7 @@ function failure(error) {
 
 /**
  * The WebMCP tools for one application page, built from its automation contract. `inputs` holds the
- * files per role and reads the page's own inputs (webmcp/inputs.js); `examples` lists the page's
+ * files per role and reads the page's own inputs (webmcp/tool-inputs.js); `examples` lists the page's
  * examples; `askUser` and `requestFiles` are the shared agent prompts.
  */
 export function webMcpTools({ contract, dispatch, inputs, examples = () => [], fetchAsset = fetchModel, askUser, requestFiles }) {
