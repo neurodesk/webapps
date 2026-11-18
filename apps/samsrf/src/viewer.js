@@ -23,8 +23,7 @@ async function meshFile(file) {
   return new File([writeMz3(vertices, faces)], `${file.name}.mz3`);
 }
 
-export function createSurfaceViewer(canvasId) {
-  const nv = new NiiVue({ isDragDropEnabled: false, backgroundColor: [0, 0, 0, 1] });
+export function createSurfaceViewer(canvasId, nv = new NiiVue({ isDragDropEnabled: false, backgroundColor: [0, 0, 0, 1] })) {
   const ready = nv.attachTo(canvasId).then(() => {
     nv.sliceType = SLICE_TYPE.RENDER;
     nv.isColorbarVisible = false;

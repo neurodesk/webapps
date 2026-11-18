@@ -359,6 +359,88 @@ test("maps draw on a FreeSurfer surface written without tags", async ({ page }) 
   expect(errors).toEqual([]);
 });
 
+/** Hold the first read of each named file until the test releases it: the app and NiiVue read dropped files with arrayBuffer(). */
+async function holdFirstReads(page, names) {
+  await page.addInitScript((held) => {
+    const read = Blob.prototype.arrayBuffer;
+    const pending = new Set(held);
+    const waiting = new Map();
+    Blob.prototype.arrayBuffer = function () {
+      if (!(this instanceof File) || !pending.delete(this.name)) return read.call(this);
+      return new Promise((resolve, reject) => waiting.set(this.name, () => read.call(this).then(resolve, reject)));
+    };
+    globalThis.heldReads = () => [...waiting.keys()];
+    globalThis.releaseRead = (name) => {
+      waiting.get(name)();
+      waiting.delete(name);
+    };
+  }, names);
+}
+
+async function heldRead(page, name) {
+  await expect.poll(() => page.evaluate(() => globalThis.heldReads())).toEqual([name]);
+}
+
+/** The canvas once two screenshots a second apart agree. */
+async function settledCanvas(page) {
+  let previous = await page.locator("#gl1").screenshot();
+  for (let attempt = 0; attempt < 30; attempt++) {
+    await page.waitForTimeout(1000);
+    const next = await page.locator("#gl1").screenshot();
+    if (next.equals(previous)) return next;
+    previous = next;
+  }
+  throw new Error("the viewer kept changing");
+}
+
+const showingLines = async (page) => (await page.locator("#technicalLog").textContent()).match(/Showing lh\.inflated/g)?.length ?? 0;
+
+test("clearing the inputs while a surface loads leaves no surface for the next run", async ({ page }, testInfo) => {
+  test.setTimeout(900000);
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  // NiiVue reads the curvature layer after it has taken the mesh it will add the layer to.
+  await holdFirstReads(page, ["lh.curv.mz3"]);
+  await page.goto("/");
+  await page.locator("#analysis").selectOption("rc");
+  await page.locator("#surfacesInput").setInputFiles([await examplePath(testInfo, "lh.inflated"), await examplePath(testInfo, "lh.curv")]);
+  await heldRead(page, "lh.curv.mz3");
+  await page.getByRole("button", { name: "Clear inputs", exact: true }).click();
+  await page.evaluate(() => globalThis.releaseRead("lh.curv.mz3"));
+  await expect(page.locator(".nd-viewer-empty")).toBeVisible();
+  await page.waitForTimeout(3000);
+  await expect(page.locator(".nd-viewer-empty")).toBeVisible();
+  await expect(page.locator("#surfacesDrop")).toContainText("Drop surfaces");
+  expect(await showingLines(page)).toBe(0);
+  await page.locator("#runsInput").setInputFiles([await examplePath(testInfo, "lh_uBars1.gii"), await examplePath(testInfo, "aps_Bars.mat"), await smallRoiPath(testInfo)]);
+  await page.locator("#runButton").click();
+  await expect(page.locator("#downloadAll")).toBeEnabled({ timeout: 600000 });
+  await expect(page.locator("#statusText")).toHaveText(/^Reverse-correlation maps ready \(\d+\.\d s\)$/);
+  await expect(page.locator("#location")).toHaveText("");
+  expect(errors).toEqual([]);
+});
+
+test("a surface replaced while it loads leaves only the replacement on screen", async ({ page }, testInfo) => {
+  test.setTimeout(600000);
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await holdFirstReads(page, ["lh.inflated"]);
+  await page.goto("/");
+  await page.locator("#surfacesInput").setInputFiles([await examplePath(testInfo, "lh.inflated"), await examplePath(testInfo, "lh.curv")]);
+  await heldRead(page, "lh.inflated");
+  // The white surface under the inflated surface's name: same vertices, other geometry.
+  await page.locator("#surfacesInput").setInputFiles({ name: "lh.inflated", mimeType: "application/octet-stream", buffer: readFileSync(await examplePath(testInfo, "lh.white")) });
+  await expect(page.locator("#technicalLog")).toContainText("Showing lh.inflated shaded by lh.curv");
+  await expect(page.locator(".nd-viewer-empty")).toBeHidden();
+  const replacement = await settledCanvas(page);
+  await page.evaluate(() => globalThis.releaseRead("lh.inflated"));
+  await page.waitForTimeout(3000);
+  expect((await settledCanvas(page)).equals(replacement), "the viewer still shows the replacement").toBe(true);
+  expect(await showingLines(page)).toBe(1);
+  await expect(page.locator("#statusText")).toHaveText("Add the remaining inputs");
+  expect(errors).toEqual([]);
+});
+
 test("a surface the viewer cannot read is reported in the status bar", async ({ page }) => {
   await page.goto("/");
   const file = (name, text) => ({ name, mimeType: "application/octet-stream", buffer: Buffer.from(text) });
