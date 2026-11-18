@@ -3,8 +3,11 @@ name: deploy-github-pages
 on:
   push:
     branches: [main]
+  # Refreshes each catalogue's usage report (analytics.json) once a day; the
+  # time is ANALYTICS_REFRESH_UTC in scripts/lib/site-deploy.mjs.
   schedule:
     - cron: '17 4 * * *'
+  # A manual run publishes every site.
   workflow_dispatch:
 
 permissions:
@@ -25,6 +28,10 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      pages: ${{ steps.plan.outputs.pages }}
+      workers: ${{ steps.plan.outputs.workers }}
+      verify_workers: ${{ steps.plan.outputs.verify_workers }}
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -54,22 +61,34 @@ jobs:
           GA4_SERVICE_ACCOUNT_KEY: ${{ secrets.GA4_SERVICE_ACCOUNT_KEY }}
       - run: pnpm build
       - run: pnpm audit:artifacts
+      - name: Verify each catalogue site holds its apps and everything they load
+        run: node --test test/catalog-sites.test.mjs
+      # Publishes a site only when its content differs from the digest record its
+      # host serves, or its usage report predates the daily refresh. A site whose
+      # record cannot be read is published, so a failed deploy is retried.
+      - name: Decide which sites to publish
+        id: plan
+        run: node scripts/plan-site-deploy.mjs ${{ github.event_name == 'workflow_dispatch' && '--deploy-all' || '' }}
+      # Content the hosts already serve passed these checks when it was published.
       - name: Install runtime startup test browser
+        if: steps.plan.outputs.verify_build == 'true'
         run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
           node node_modules/@playwright/test/cli.js install --with-deps chromium
       - name: Verify threaded model loading before deployment
+        if: steps.plan.outputs.verify_build == 'true'
         run: |
           node --test test/runtime-assets.test.mjs
           pnpm test:runtime-startup
-      - name: Verify each catalogue site holds its apps and everything they load
-        run: node --test test/catalog-sites.test.mjs
       - uses: actions/configure-pages@v6
+        if: steps.plan.outputs.pages == 'true'
       # webapps.neurodesk.org serves the neuro catalogue; the Worker sites deploy below.
       - uses: actions/upload-pages-artifact@v5
+        if: steps.plan.outputs.pages == 'true'
         with:
           path: dist-sites/neuro
       - uses: actions/upload-artifact@v7
+        if: steps.plan.outputs.workers != '[]'
         with:
           name: worker-sites
           path: |
@@ -110,8 +129,10 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     # The neuro site's 404 page redirects moved apps to the Worker hosts, so
-    # Pages deploys only once those hosts are live.
+    # Pages deploys only once those hosts are live: after the Worker sites this
+    # run publishes, or with none to publish, never after a failed one.
     needs: [build, deploy-workers]
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.build.outputs.pages == 'true' && (needs.deploy-workers.result == 'success' || needs.deploy-workers.result == 'skipped') }}
     steps:
       - name: Deploy composite site
         id: deployment
@@ -148,21 +169,16 @@ jobs:
 
   # mskapps.sciget.org, microscopyapps.sciget.org, preclinicalapps.sciget.org and the webapps.sciget.org hub are assets-only Cloudflare
   # Workers on custom domains (dist-sites/<site>.wrangler.json, written by the build).
+  # The matrices list the sites the build's plan publishes, from the registry
+  # (deploySites in scripts/lib/site-deploy.mjs).
   deploy-workers:
     runs-on: ubuntu-latest
     needs: build
+    if: needs.build.outputs.workers != '[]'
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - site: msk
-            url: https://mskapps.sciget.org/
-          - site: microscopy
-            url: https://microscopyapps.sciget.org/
-          - site: preclinical
-            url: https://preclinicalapps.sciget.org/
-          - site: hub
-            url: https://webapps.sciget.org/
+        include: ${{ fromJSON(needs.build.outputs.workers) }}
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -193,17 +209,12 @@ jobs:
   # the Pages deploy.
   verify-workers:
     runs-on: ubuntu-latest
-    needs: deploy-workers
+    needs: [build, deploy-workers]
+    if: needs.build.outputs.verify_workers != '[]'
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - site: msk
-            url: https://mskapps.sciget.org/
-          - site: microscopy
-            url: https://microscopyapps.sciget.org/
-          - site: preclinical
-            url: https://preclinicalapps.sciget.org/
+        include: ${{ fromJSON(needs.build.outputs.verify_workers) }}
     env:
       BASE_URL: ${{ matrix.url }}
       SITE_CATALOG: ${{ matrix.site }}
