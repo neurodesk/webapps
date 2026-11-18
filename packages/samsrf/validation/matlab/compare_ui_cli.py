@@ -49,6 +49,7 @@ report's `failures` says which); 2 when the comparison is refused.
 import argparse
 import io
 import json
+import re
 from pathlib import Path, PurePosixPath
 import sys
 import zipfile
@@ -63,6 +64,7 @@ from compare_web_cli import (Inventory, difference, expected_web_outcome, is_sha
 
 UI_STATUSES = {'succeeded', 'succeeded-ui-error', 'refused', 'unsupported', 'failed'}
 COMPUTED = {'succeeded', 'succeeded-ui-error'}
+OUTCOME = {'prf': 'pRF maps ready', 'rc': 'Reverse-correlation maps ready', 'cf': 'Connective field maps ready'}
 CLASSES = ('exact', 'differs', 'refused', 'unsupported', 'ui-error', 'failed', 'inventory-error')
 # apps/samsrf/src/models.js parseModel, shown when the model loads.
 MODEL_REFUSALS = {
@@ -195,7 +197,6 @@ def compare_downloads(run, record, run_dir, matlab_dir, engine, engine_dir, scra
         raise Inventory(f'the download is not the contract, polar angle and eccentricity maps: '
                         f'{sorted(set(files) ^ contract)}')
     ui_only = sorted(contract - set(maps))
-    matlab_only = matlab_outputs(run, matlab_dir)
     entries = {key: (kind, values) for key, kind, values in read_mat(matlab_dir / mat)}
     data, imaginary, roi, vertices = matlab_results(entries, run['precision'], labels)
     scratch.mkdir(parents=True)
@@ -217,7 +218,7 @@ def compare_downloads(run, record, run_dir, matlab_dir, engine, engine_dir, scra
         results.append(entry)
     for name in ui_only:
         surface_map(scratch / name, vertices)
-    return results, ui_only, matlab_only, engine_files(run, files, engine, engine_dir)
+    return results, ui_only, engine_files(run, files, engine, engine_dir)
 
 
 def compare_run(run, record, matlab, engine, roots, scratch):
@@ -234,20 +235,25 @@ def compare_run(run, record, matlab, engine, roots, scratch):
         check_run_directory(run, record, ui_root / run['id'])
         if matlab['status'] != 'succeeded':
             return {**report, 'class': 'failed'}
+        matlab_only = matlab_outputs(run, matlab_root / run['id'])
         if expected['status'] != 'succeeded':
             as_expected = (record['status'] == expected['status'] and 'zip' not in record
-                           and not record.get('pageErrors')
+                           and not record.get('pageErrors') and not record.get('uiError')
                            and record.get(MESSAGE_FIELD[expected['stage']]) == expected['message'])
             return {**report, 'class': expected['status'] if as_expected else 'failed'}
         if record['status'] not in COMPUTED:
             return {**report, 'class': 'failed'}
-        maps, ui_only, matlab_only, engine_result = compare_downloads(
+        maps, ui_only, engine_result = compare_downloads(
             run, record, ui_root / run['id'], matlab_root / run['id'], engine, engine_root / run['id'],
             scratch / run['id'])
     except Inventory as error:
         return {**report, 'class': 'inventory-error', 'error': str(error)}
     downloads = 'exact' if all(entry['class'] == 'exact' for entry in maps) else 'differs'
-    completed = record['status'] == 'succeeded' and not record.get('pageErrors')
+    status_text = record.get('statusText')
+    completion = (isinstance(status_text, str) and re.fullmatch(
+        re.escape(OUTCOME[run['algorithm']]) + r' \([0-9]+\.[0-9] s\)', status_text) is not None)
+    completed = (record['status'] == 'succeeded' and completion
+                 and not record.get('pageErrors') and not record.get('uiError'))
     report.update({'maps': maps, 'downloads': downloads, 'engineFiles': engine_result,
                    'notCompared': {'uiOnly': ui_only, 'matlabOnly': matlab_only},
                    'class': downloads if completed else 'ui-error'})

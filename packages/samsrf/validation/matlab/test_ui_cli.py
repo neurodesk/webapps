@@ -66,7 +66,9 @@ class UiFixture(Fixture):
                         if (self.web / run_id / name).exists():
                             shutil.copyfile(staged / name, self.web / run_id / name)
                         handle.write(staged / name, name)
-                record.update({'zip': archive.name, 'zipSha256': sha(archive.read_bytes())})
+                record.update({'zip': archive.name, 'zipSha256': sha(archive.read_bytes()),
+                               'statusText': {'prf': 'pRF maps ready', 'rc': 'Reverse-correlation maps ready',
+                                              'cf': 'Connective field maps ready'}[run['algorithm']] + ' (1.0 s)'})
                 if status == 'succeeded-ui-error':
                     record['uiError'] = LAYERS
             if status == expected['status'] and status in ('refused', 'unsupported'):
@@ -472,6 +474,46 @@ class CommandLine(unittest.TestCase):
         existing.write_text('{}')
         self.assertEqual(self.cli(report=existing)[0].returncode, 2)
         self.assertEqual(existing.read_text(), '{}')
+
+    def test_success_label_cannot_hide_errors_or_missing_completion_text(self):
+        run_id = 'rc_hull_lh_single'
+        for change in ({'uiError': LAYERS}, {'statusText': None}, {'statusText': ''},
+                       {'statusText': LAYERS}, {'statusText': 42}, {'statusText': 'pRF maps ready (1.0 s)'},
+                       {'statusText': 'Error: Reverse-correlation maps ready (1.0 s)'}):
+            with self.subTest(change=change):
+                self.x.write_ui()
+                self.x.edit_ui(run_id, **change)
+                result, report = self.cli()
+                self.assertEqual(result.returncode, 1, result.stderr)
+                run = next(run for run in report['runs'] if run['id'] == run_id)
+                self.assertEqual((run['class'], run['downloads']), ('ui-error', 'exact'))
+                self.assertEqual(report['summary']['completedRuns'], 17)
+
+    def test_ui_error_invalidates_an_otherwise_expected_refusal(self):
+        for run_id in ('rc_gaussian_lh_single', 'prf_custom_hrf_lh_double'):
+            with self.subTest(run=run_id):
+                self.x.write_ui()
+                self.x.edit_ui(run_id, uiError=LAYERS)
+                result, report = self.cli()
+                self.assertEqual(result.returncode, 1, result.stderr)
+                run = next(run for run in report['runs'] if run['id'] == run_id)
+                self.assertEqual(run['class'], 'failed')
+
+    def test_refused_routes_still_require_complete_matlab_outputs(self):
+        for run_id in ('rc_gaussian_lh_single', 'prf_custom_hrf_lh_double'):
+            for mutation in ('missing', 'extra'):
+                with self.subTest(run=run_id, mutation=mutation):
+                    self.x.write()
+                    if mutation == 'missing':
+                        name = compare_cli.expected_results(PLAN[run_id])[2][0]
+                        (self.x.matlab / run_id / name).unlink()
+                    else:
+                        (self.x.matlab / run_id / 'unexpected.bin').write_bytes(b'extra')
+                    result, report = self.cli()
+                    self.assertEqual(result.returncode, 1, result.stderr)
+                    run = next(run for run in report['runs'] if run['id'] == run_id)
+                    self.assertEqual(run['class'], 'inventory-error')
+                    self.assertIn('MATLAB', run['error'])
 
     def test_a_consistent_subset_of_the_matrix_is_refused(self):
         root = self.x.root / 'subset'
