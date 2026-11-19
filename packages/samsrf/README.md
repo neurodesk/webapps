@@ -170,11 +170,53 @@ a u32 count, that many u32 pixel indices and that many f64 values.
 | `writeGiftiMap(values) → Uint8Array` | One float32 per-vertex map as SPM's `gifti/save` writes it. |
 | `polarAndEccentricity({ values, vertices, data }, convention = 'samsrf-10.4') → { polar, eccentricity } \| null` | Polar angle in degrees and eccentricity from rows 2 and 3 (`x0`, `y0`), eccentricity 0 where row 1 (`R^2`) is 0; `null` without an `x0` row. |
 
+| `writeLossless(merged, { precision }) → Uint8Array` | The lossless file of a `job.merge` result: every `Srf.Data` value in float64, the imaginary parts, `Srf.Raw_Data` and the analysed vertices, bit for bit ([Lossless export](#lossless-export)). `precision` is the model's `Data_Precision`, `'double'` or `'single'`. |
+| `readLossless(bytes) → { maps, raw, analysed, imaginary, arithmeticReference, precision }` | Reads a lossless file back into the shape `job.merge` returns; throws on any other layout. |
+| `losslessName(prefix) → string` | `{prefix}_lossless.bin`, the name the app and the command line give the file. |
+
 `convention: 'samsrfx-10.003'` reproduces the older Neurodesk container's
 float32 derived maps and eccentricity offset of −0.5. The app and CLI read
 `Export_Convention` from model JSON; the app also exposes it under Advanced
 settings. This affects map display/export, not fitting precision. The geometric
 default has no offset. See the [actual container comparison](validation/container/README.md).
+
+### Lossless export
+
+The GIfTI maps are float32 and hold the real parts only, as SamSrf's export
+does. The lossless file keeps what they drop: each double, NaN payloads and
+signs and signed zeros included, and the imaginary parts of a complex
+`Srf.Data` (SamSrf-convention CSS). The app's downloads and the command line
+write it with `writeLossless`, so both give the same bytes for the same
+result. Each provenance JSON names it as `lossless: { file, sha256 }`.
+
+The file is little-endian:
+
+| Offset | Content |
+| --- | --- |
+| 0 | `SAMSRFLX` (8 ASCII bytes) |
+| 8 | Format version, uint32 (1) |
+| 12 | Header length `H`, uint32; `16 + H` is a multiple of 8 |
+| 16 | UTF-8 JSON header, padded with spaces to `H` bytes |
+| 16 + H | The sections below, in this order, with nothing after them |
+
+The header is `{"format":"samsrf-lossless-maps","version":1,"precision",
+"arithmeticReference","vertices","values","imaginary","raw","analysed"}`:
+`precision` is `double` or `single` (single results are float32 values held
+as float64), `values` the `Srf.Values` row names, `imaginary` whether the
+imaginary section follows, `raw` the `Srf.Raw_Data` row names (`[]` without
+it) and `analysed` the number of analysed vertices (`null` for every vertex).
+The sections:
+
+1. `Srf.Data`: float64, `values.length x vertices`, row by row over every
+   vertex (`data[row * vertices + vertex]`, as `maps.data`).
+2. Imaginary parts, the same shape, only when `imaginary` is true.
+3. `Srf.Raw_Data`: float64, `raw.length x vertices`.
+4. The analysed vertices, 0-based uint32, `analysed` of them.
+
+Typed arrays are copied as bytes, never through a JavaScript number, so a
+NaN keeps its bits. `validation/matlab/lossless.py` reads the format
+independently and compares a lossless file with the engine harness and a
+MATLAB execution.
 
 ### Analyses
 
@@ -287,10 +329,11 @@ after `--runs` up to the next option is a run. The other options:
 It reads the inputs with `readAnalysisInputs` (the runs keep the ROI and seed
 vertices, so the noise ceiling is 0 outside them), runs the job with a progress
 line on standard error, and writes `exportGiis(maps,
-'<hemisphere>_<Name><suffix>')` (`lh_pRF_Rcp_r^2.gii`, ...) and
+'<hemisphere>_<Name><suffix>')` (`lh_pRF_Rcp_r^2.gii`, ...), the
+[lossless file](#lossless-export) `<prefix>_lossless.bin` and
 `<prefix>_provenance.json`: the package and core versions, the model, the
-options, each input with its SHA-256, the analysed vertex count, the map names
-and the wall time. Errors print one line on standard error, starting with the
+options, each input with its SHA-256, the analysed vertex count, the map names,
+the lossless file with its SHA-256 and the wall time. Errors print one line on standard error, starting with the
 file they concern, and exit with status 1.
 
 `samsrf self-check` fits a coarse pRF to a course generated from a known
@@ -302,7 +345,8 @@ The portable archives come from `exes/node-cli` (`release.json`,
 `.github/workflows/samsrf-native.yml`). Each must pass
 `validation/cli-check.mjs`: `rc` on the example's whole V1-V3 label in three
 shards, and the Nelder-Mead `prf` fit and `cf` on its first 200 vertices, each
-GIfTI byte-identical to the same job run in-process through `src/node.js`, with
+GIfTI and the lossless file byte-identical to the same job run in-process
+through `src/node.js`, the provenance naming the lossless file's SHA-256, with
 fixed file names, 134260 values per map and pinned counts of vertices with
 R^2 > 0.1. It downloads the pinned example from `apps/samsrf/examples.json`
 into a cache under the temporary directory, or reads it from

@@ -366,6 +366,24 @@ def matlab_outputs(run, matlab_dir):
     return matlab_only
 
 
+def srf_data_entry(column, matlab_imaginary, web_values, web_imaginary):
+    """One map's float64 values and imaginary parts over Srf.Roi against MATLAB's Srf.Data column
+    (and its imaginary parts, None for a real Srf.Data), cast to MATLAB's class. The cast must be
+    exact (`castExact`); `srfData` and `imaginary` are bitwise differences."""
+    if matlab_imaginary is None:
+        matlab_imaginary = numpy.zeros_like(column)
+    cast = web_values.astype(column.dtype)
+    cast_imaginary = web_imaginary.astype(column.dtype)
+    entry = {'castExact': bool(numpy.array_equal(cast.astype(numpy.float64), web_values, equal_nan=True)
+                               and numpy.array_equal(cast_imaginary.astype(numpy.float64), web_imaginary, equal_nan=True)),
+             'srfData': difference(column, cast),
+             'imaginary': difference(numpy.ascontiguousarray(matlab_imaginary), cast_imaginary),
+             'imaginaryNonzero': int(numpy.count_nonzero(matlab_imaginary))}
+    if entry['imaginaryNonzero']:
+        entry['maxImaginary'] = float(numpy.max(numpy.abs(matlab_imaginary)))
+    return entry
+
+
 def compare_maps(run, web, web_dir, matlab_dir):
     mat, labels, maps = expected_results(run)
     if web.get('values') != labels:
@@ -380,20 +398,9 @@ def compare_maps(run, web, web_dir, matlab_dir):
         raise Inventory('the web ROI differs from MATLAB Srf.Roi (values or order)')
     results = []
     for index, (label, name) in enumerate(zip(labels, maps)):
-        column = data[:, index]
-        matlab_imaginary = numpy.zeros_like(column) if imaginary is None else imaginary[:, index]
-        web_values = rows[index, roi]
-        web_imaginary = imaginary_rows[index, roi]
-        cast = web_values.astype(column.dtype)
-        cast_imaginary = web_imaginary.astype(column.dtype)
         entry = {'label': label, 'file': name,
-                 'castExact': bool(numpy.array_equal(cast.astype(numpy.float64), web_values, equal_nan=True)
-                                   and numpy.array_equal(cast_imaginary.astype(numpy.float64), web_imaginary, equal_nan=True)),
-                 'srfData': difference(column, cast),
-                 'imaginary': difference(numpy.ascontiguousarray(matlab_imaginary), cast_imaginary)}
-        entry['imaginaryNonzero'] = int(numpy.count_nonzero(matlab_imaginary))
-        if entry['imaginaryNonzero']:
-            entry['maxImaginary'] = float(numpy.max(numpy.abs(matlab_imaginary)))
+                 **srf_data_entry(data[:, index], None if imaginary is None else imaginary[:, index],
+                                  rows[index, roi], imaginary_rows[index, roi])}
         entry['gifti'] = difference(surface_map(matlab_dir / name, vertices), surface_map(web_dir / name, vertices))
         entry['class'] = ('exact' if entry['castExact'] and entry['srfData']['exact']
                           and entry['imaginary']['exact'] and entry['gifti']['exact'] else 'differs')

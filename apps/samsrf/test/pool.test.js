@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { runAnalysis, shardRanges, workerCount } from "../src/pool.js";
 // Loads the WebAssembly module synchronously, so the engine's own init() has nothing to fetch.
-import { hrf } from "@neurodesk/samsrf/node";
+import { hrf, readLossless } from "@neurodesk/samsrf/node";
 import * as engine from "../src/engine.js";
 import { matFile } from "../../../packages/samsrf/test/fixtures.js";
 
@@ -95,6 +95,15 @@ test("an analysis prepares once, fits every shard and merges full-length maps", 
   const r2 = result.maps.find(({ name }) => name === "R^2").values;
   assert.deepEqual([...r2].map((value, vertex) => value !== 0 ? vertex : -1).filter((vertex) => vertex >= 0), [2, 5, 7], "only ROI vertices are fitted");
   assert.ok(result.files.every(({ map }) => result.maps.some(({ name }) => name === map)));
+  // The lossless file holds every Srf.Data row in float64; the maps are those rows in float32.
+  assert.equal(result.lossless.name, "lh_pRF_Rcp_lossless.bin");
+  const lossless = readLossless(result.lossless.bytes);
+  assert.equal(lossless.precision, "double");
+  assert.deepEqual(lossless.raw.values, ["R^2", "x0", "y0", "Fwhm", "Beta"]);
+  lossless.maps.values.forEach((name, row) => {
+    const values = result.maps.find((map) => map.name === name).values;
+    assert.deepEqual(values, Float32Array.from(lossless.maps.data.subarray(row * 10, (row + 1) * 10)), name);
+  });
   assert.equal(progress.at(-1), 1);
   assert.ok(workers.every((worker) => worker.terminated), "the pool ends its workers");
 });

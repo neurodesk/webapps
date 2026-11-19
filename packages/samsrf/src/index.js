@@ -3,6 +3,7 @@
 import wasmInit, * as core from '../wasm/samsrf_wasm.js';
 
 export { Apertures, Run } from '../wasm/samsrf_wasm.js';
+export { LOSSLESS_FORMAT, LOSSLESS_VERSION, losslessName, readLossless, writeLossless } from './lossless.js';
 
 export function init(input) {
   return wasmInit(input === undefined ? undefined : { module_or_path: input });

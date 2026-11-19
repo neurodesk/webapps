@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { hemisphereOf, main, parseCommandLine } from '../src/cli.js';
-import { analysisSpec, createJob, exportGiis, readAnalysisInputs, readGifti, runJob } from '../src/node.js';
+import { createHash } from 'node:crypto';
+import { analysisSpec, createJob, exportGiis, readAnalysisInputs, readGifti, readLossless, runJob, writeLossless } from '../src/node.js';
 import { MODELS } from '../validation/example-inputs.mjs';
 import { giftiRun, matFile } from './fixtures.js';
 
@@ -183,13 +184,25 @@ test('a single-precision rc run writes the in-process single job and refuses sin
   assert.equal(result.code, 0, result.stderr);
   const job = createJob(analysisSpec(readAnalysisInputs({ runs: [runPath], apertures, normalise: 'none', precision: 'single' }), 'rc', model));
   let expected;
+  let lossless;
   try {
-    expected = exportGiis(runJob(job).maps, `lh_${job.modelName}${job.outSuffix}`);
+    const merged = runJob(job);
+    expected = exportGiis(merged.maps, `lh_${job.modelName}${job.outSuffix}`);
+    lossless = writeLossless(merged, { precision: 'single' });
   } finally {
     job.free();
   }
   for (const { name, bytes } of expected) assert.ok(Buffer.from(bytes).equals(readFileSync(join(output, name))), name);
-  assert.equal(JSON.parse(readFileSync(join(output, 'lh_Single_Rcp_provenance.json'), 'utf8')).model.Data_Precision, 'single');
+  const provenance = JSON.parse(readFileSync(join(output, 'lh_Single_Rcp_provenance.json'), 'utf8'));
+  assert.equal(provenance.model.Data_Precision, 'single');
+  // The lossless file is the in-process merge, byte for byte; its values are float32 values held as float64.
+  const written = readFileSync(join(output, 'lh_Single_Rcp_lossless.bin'));
+  assert.ok(Buffer.from(lossless).equals(written));
+  assert.deepEqual(provenance.lossless, { file: 'lh_Single_Rcp_lossless.bin', sha256: createHash('sha256').update(written).digest('hex') });
+  const read = readLossless(new Uint8Array(written));
+  assert.equal(read.precision, 'single');
+  assert.ok(read.maps.data.every((value) => Object.is(Math.fround(value), value)));
+  assert.deepEqual(read.raw.values, ['R^2', 'x0', 'y0', 'Fwhm', 'Beta']);
   const fit = { ...model, Prf_Function: '@(P,ApWidth)prf_gaussian_rf(P(1),P(2),P(3),ApWidth)', Param_Names: ['x0', 'y0', 'Sigma'], Scaled_Param: [1, 1, 1], SeedPar_Function: '@(V)[V(2:3);V(4)]' };
   writeFileSync(modelPath, JSON.stringify(fit));
   const refused = await run(['rc', modelPath, join(work, 'refused'), '--runs', runPath, '--apertures', apertures, '--no-normalise']);
@@ -216,7 +229,8 @@ test('a short rc run writes the GIfTIs an in-process job writes', { skip: !dir &
   const job = createJob(analysisSpec(readAnalysisInputs({ runs, ...inputs }), 'rc', MODELS.rc));
   let expected;
   try {
-    expected = exportGiis(runJob(job).maps, `lh_${job.modelName}${job.outSuffix}`);
+    const merged = runJob(job);
+    expected = [...exportGiis(merged.maps, `lh_${job.modelName}${job.outSuffix}`), { name: 'lh_pRF_Rcp_lossless.bin', bytes: writeLossless(merged, { precision: 'double' }) }];
   } finally {
     job.free();
   }
@@ -245,11 +259,13 @@ test('CLI reference models preprocess, shard and record the selected arithmetic'
     const inputs = readAnalysisInputs({ runs: [runPath], apertures, arithmeticReference: reference });
     const job = createJob(analysisSpec(inputs, 'rc', model));
     try {
-      const expected = exportGiis(runJob(job).maps, 'lh_Reference_Rcp');
+      const merged = runJob(job);
+      const expected = [...exportGiis(merged.maps, 'lh_Reference_Rcp'), { name: 'lh_Reference_Rcp_lossless.bin', bytes: writeLossless(merged, { precision: 'double' }) }];
       for (const { name, bytes } of expected) assert.deepEqual(readFileSync(join(output, name)), Buffer.from(bytes));
     } finally { job.free(); }
     const provenance = JSON.parse(readFileSync(join(output, 'lh_Reference_Rcp_provenance.json')));
     assert.equal(provenance.arithmeticReference, reference);
+    assert.equal(readLossless(new Uint8Array(readFileSync(join(output, 'lh_Reference_Rcp_lossless.bin')))).arithmeticReference, reference);
     assert.equal(provenance.model.Arithmetic_Reference, reference);
   }
 });

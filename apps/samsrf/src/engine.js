@@ -7,7 +7,8 @@
 // An analysis is shardable by unit (a vertex of the ROI, or of the whole surface
 // without one): createJob reads the inputs once, runShard fits units
 // [start, end) and can run in any worker, and mergeShards turns the shards into
-// SamSrf's map set and the GIfTI files samsrf_export_giis writes.
+// SamSrf's map set, the GIfTI files samsrf_export_giis writes and the lossless file
+// (every Srf.Data value in float64, with any imaginary parts).
 //
 // Each worker holds one WebAssembly instance. createJob builds the `createJob`
 // spec of @neurodesk/samsrf and prepares the analysis once to validate it and
@@ -21,6 +22,7 @@ import {
   exportConvention,
   hrf,
   init,
+  losslessName,
   polarAndEccentricity,
   readApertures,
   readBensonTemplate,
@@ -31,6 +33,7 @@ import {
   readGiftiSurface,
   readOldSchoolHrf,
   RunAccumulator,
+  writeLossless,
 } from "@neurodesk/samsrf";
 import { resolveHemisphere } from "@neurodesk/samsrf/inputs";
 import { isSubjectHrf } from "./models.js";
@@ -66,6 +69,7 @@ import { isSubjectHrf } from "./models.js";
  *   units: number,          // shardable units; runShard takes 0 <= start < end <= units
  *   vertexCount: number,    // vertices of the full surface, the length of every map
  *   outName: string,        // SamSrf's OutFile, e.g. lh_pRF_Gaussian
+ *   precision: "double" | "single", // the model's Data_Precision
  *   summary: string[],      // lines for the analysis log (inputs, model, preprocessing)
  *   spec: object,           // the @neurodesk/samsrf createJob spec (typed arrays)
  *   prepared: number,       // Date.now() when the inputs were read, for the fit's timing
@@ -80,6 +84,7 @@ import { isSubjectHrf } from "./models.js";
  *   vertexCount: number,
  *   maps: { name: string, values: Float32Array }[], // Srf.Values rows, then Polar and Eccentricity when x0/y0 exist
  *   files: (NamedBytes & { map?: string })[],       // the GIfTI files samsrf_export_giis writes; map names the maps entry each holds
+ *   lossless: NamedBytes,                           // writeLossless of the merged result, <outName>_lossless.bin
  *   summary: string[],                              // lines for the analysis log
  * }} Result
  */
@@ -156,6 +161,7 @@ export async function createJob(inputs, onProgress) {
     units: job.vertexCount,
     vertexCount: data.totalVertices,
     outName: `${hemisphere}_${job.modelName}${job.outSuffix}`,
+    precision,
     exportConvention: convention,
     arithmeticReference: job.arithmeticReference,
     summary: [
@@ -190,7 +196,8 @@ export async function runShard(job, start, end, onProgress) {
 /** @param {Job} job @param {Shard[]} shards @returns {Promise<Result>} */
 export async function mergeShards(job, shards) {
   const handle = await jobHandle(job);
-  const { maps, arithmeticReference: reference } = handle.merge(shards);
+  const merged = handle.merge(shards);
+  const { maps, arithmeticReference: reference } = merged;
   const vertices = maps.vertices;
   const rows = maps.values.map((name, row) => ({ name, values: Float32Array.from(maps.data.subarray(row * vertices, (row + 1) * vertices)) }));
   const derived = polarAndEccentricity(maps, job.exportConvention);
@@ -207,6 +214,7 @@ export async function mergeShards(job, shards) {
     vertexCount: vertices,
     maps: rows,
     files,
+    lossless: { name: losslessName(job.outName), bytes: writeLossless(merged, { precision: job.precision }) },
     summary: [`Analysed ${job.units} vertices in ${seconds(Date.now() - job.prepared)}`],
   };
 }
