@@ -15,7 +15,7 @@ import { registerAppAutomation } from "@neurodesk/webapp-components/automation";
 import { zipSync } from "fflate";
 import { APP } from "./config.js";
 import { ENGINE } from "./engine.js";
-import { EXPORT_CONVENTIONS, exportConvention } from "@neurodesk/samsrf";
+import { ARITHMETIC_REFERENCES, arithmeticReference, EXPORT_CONVENTIONS, exportConvention } from "@neurodesk/samsrf";
 import { runAnalysis, workerCount } from "./pool.js";
 import { createSurfaceViewer } from "./viewer.js";
 import {
@@ -241,6 +241,7 @@ function fillPresets() {
   $("preset").replaceChildren(...presetsFor(analysis()).map(({ id, label }) => new Option(label, id)));
 }
 $("hrf").replaceChildren(...HRF_OPTIONS.map(({ value, label }) => new Option(label, value)));
+$("arithmeticReference").replaceChildren(...Object.entries(ARITHMETIC_REFERENCES).map(([value, label]) => new Option(label, value)));
 $("exportConvention").replaceChildren(...Object.entries(EXPORT_CONVENTIONS).map(([value, label]) => new Option(label, value)));
 
 function settings() {
@@ -251,6 +252,7 @@ function settings() {
     tr: tr > 0 ? tr : DEFAULT_SETTINGS.tr,
     exportConvention: $("exportConvention").value,
     dataPrecision: $("dataPrecision").value,
+    arithmeticReference: $("arithmeticReference").value,
     cssConvention: $("cssConvention").value,
   };
 }
@@ -296,6 +298,7 @@ function renderModel() {
   $("fineFitThreshold").value = String(model.Fine_Fit_Threshold ?? 0.01);
   $("coarseOnly").checked = Boolean(model.Coarse_Fit_Only);
   $("dataPrecision").value = model.Data_Precision ?? "double";
+  $("arithmeticReference").value = arithmeticReference(model.Arithmetic_Reference);
   $("cssConvention").value = model.Css_Convention ?? "nonnegative";
   $("cssConventionField").hidden = kind !== "prf" || !model.Compressive_Nonlinearity;
   $("exportConvention").value = exportConvention(model.Export_Convention);
@@ -345,6 +348,7 @@ $("coarseOnly").addEventListener("change", () => editModel((current) => {
 }));
 $("revcorThreshold").addEventListener("change", () => editModel((current) => ({ ...current, R2_Threshold: Number($("revcorThreshold").value) })));
 $("exportConvention").addEventListener("change", () => editModel(current => ({ ...current, Export_Convention: $("exportConvention").value })));
+$("arithmeticReference").addEventListener("change", () => editModel(current => ({ ...current, Arithmetic_Reference: $("arithmeticReference").value })));
 $("dataPrecision").addEventListener("change", () => editModel(current => ({ ...current, Data_Precision: $("dataPrecision").value })));
 $("cssConvention").addEventListener("change", () => editModel(current => ({ ...current, Css_Convention: $("cssConvention").value })));
 $("modelJson").addEventListener("change", () => {
@@ -446,8 +450,12 @@ function renderResult() {
 
 $("downloadAll").addEventListener("click", () => {
   if (!result) return;
-  void Promise.all(result.files.map(async (file) => [file.name, new Uint8Array(await file.arrayBuffer())]))
-    .then((entries) => downloadFile(new File([zipSync(Object.fromEntries(entries), { level: 6 })], `${result.outName}_maps.zip`, { type: "application/zip" })))
+  const completed = result;
+  void Promise.all(completed.files.map(async (file) => [file.name, new Uint8Array(await file.arrayBuffer())]))
+    .then((entries) => {
+      entries.push([`${completed.outName}_provenance.json`, new TextEncoder().encode(`${JSON.stringify({ arithmeticReference: completed.arithmeticReference, model: completed.model }, null, 2)}\n`)]);
+      downloadFile(new File([zipSync(Object.fromEntries(entries), { level: 6 })], `${completed.outName}_maps.zip`, { type: "application/zip" }));
+    })
     .catch((error) => status(error.message, { error: true }));
 });
 
@@ -479,7 +487,7 @@ function setBusy(controller) {
   busy = controller;
   const locked = Boolean(controller);
   for (const element of Object.values(fields)) element.disabled = locked;
-  for (const id of ["analysis", "preset", "tr", "scalingFactor", "hrf", "combine", "normalise", "fineFit", "fineFitThreshold", "coarseOnly", "revcorThreshold", "exportConvention", "dataPrecision", "cssConvention", "modelJson", "clearInputs"]) $(id).disabled = locked;
+  for (const id of ["analysis", "preset", "tr", "scalingFactor", "hrf", "combine", "normalise", "fineFit", "fineFitThreshold", "coarseOnly", "revcorThreshold", "exportConvention", "dataPrecision", "arithmeticReference", "cssConvention", "modelJson", "clearInputs"]) $(id).disabled = locked;
   exampleControl.setDisabled(locked);
   updateRunButton();
 }
@@ -511,6 +519,8 @@ async function runSelected(signal) {
     result = {
       analysis: kind,
       outName: output.outName,
+      arithmeticReference: output.arithmeticReference,
+      model: structuredClone(model),
       vertexCount: output.vertexCount,
       files,
       maps,
@@ -534,6 +544,7 @@ async function runSelected(signal) {
       provenance: {
         method: `samsrf-${kind}`,
         engine: ENGINE.name,
+        arithmeticReference: output.arithmeticReference,
         model: structuredClone(model),
         normalise: $("normalise").checked,
         average: $("combine").value === "average",

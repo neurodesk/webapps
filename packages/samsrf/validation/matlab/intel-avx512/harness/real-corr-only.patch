@@ -1,0 +1,15 @@
+diff --git a/exes/samsrf/core/src/css.rs b/exes/samsrf/core/src/css.rs
+index e110dc9..9570252 100644
+--- a/exes/samsrf/core/src/css.rs
++++ b/exes/samsrf/core/src/css.rs
+@@ -86,7 +86,9 @@ pub(crate) fn correlation(x: &[Complex64], y: &[f64], precision: Precision) -> C
+         let xc: Vec<f64> = real.iter().map(|value| value - mx).collect();
+         (Complex64::new(matlab_math::ddot(&xc, &yc), 0.0), crate::reference::dnrm2(&xc))
+     };
+-    let norm_y = crate::reference::dnrm2(&yc);
++    // RESEARCH VARIANT (real-corr-only.patch): a complex corr keeps the shipped norm of y, so
++    // every kernel of a complex corr is the shipped one.
++    let norm_y = if is_complex(x) { matlab_math::nrm2(yc.iter().copied()) } else { crate::reference::dnrm2(&yc) };
+     let r = Complex64::new(dot.re / norm_x / norm_y, dot.im / norm_x / norm_y);
+     let magnitude = if r.im == 0.0 { r.re.abs() } else { libm::hypot(r.re, r.im) };
+     if magnitude > 1.0 {

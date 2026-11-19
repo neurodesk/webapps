@@ -1,0 +1,260 @@
+{
+  "ubuntu-22.04-1": {
+    "avx512": false,
+    "chainsFirstDifferingStep": {
+      "double complex": {
+        "none": 79
+      },
+      "double real": {
+        "none": 95
+      },
+      "single complex": {
+        "none": 64
+      },
+      "single real": {
+        "none": 107
+      }
+    },
+    "cpu": "AMD EPYC 7763 64-Core Processor",
+    "eightColumnSolves[rhs, QHy equal, coefficients equal]": {
+      "double complex": [
+        1264,
+        1264,
+        1264
+      ],
+      "double real": [
+        1520,
+        1520,
+        1520
+      ],
+      "single complex": [
+        1072,
+        1072,
+        1072
+      ],
+      "single real": [
+        1712,
+        1712,
+        1712
+      ]
+    },
+    "unchained": 3
+  },
+  "ubuntu-22.04-2": {
+    "avx512": false,
+    "chainsFirstDifferingStep": {
+      "double complex": {
+        "none": 79
+      },
+      "double real": {
+        "none": 95
+      },
+      "single complex": {
+        "none": 64
+      },
+      "single real": {
+        "none": 107
+      }
+    },
+    "cpu": "AMD EPYC 9V45 96-Core Processor",
+    "eightColumnSolves[rhs, QHy equal, coefficients equal]": {
+      "double complex": [
+        1264,
+        1264,
+        1264
+      ],
+      "double real": [
+        1520,
+        1520,
+        1520
+      ],
+      "single complex": [
+        1072,
+        1072,
+        1072
+      ],
+      "single real": [
+        1712,
+        1712,
+        1712
+      ]
+    },
+    "unchained": 3
+  },
+  "ubuntu-22.04-3": {
+    "avx512": true,
+    "chainsFirstDifferingStep": {
+      "double complex": {
+        "R11": 23,
+        "R12": 49,
+        "v1": 7
+      },
+      "double real": {
+        "R11": 25,
+        "R12": 54,
+        "R22": 9,
+        "qty1": 1,
+        "v2": 6
+      },
+      "single complex": {
+        "R12": 41,
+        "v1": 21,
+        "v2": 2
+      },
+      "single real": {
+        "R12": 87,
+        "R22": 4,
+        "qty1": 2,
+        "qty2": 1,
+        "v2": 13
+      }
+    },
+    "cpu": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+    "eightColumnSolves[rhs, QHy equal, coefficients equal]": {
+      "double complex": [
+        1264,
+        0,
+        4
+      ],
+      "double real": [
+        1520,
+        0,
+        124
+      ],
+      "single complex": [
+        1072,
+        0,
+        56
+      ],
+      "single real": [
+        1712,
+        0,
+        334
+      ]
+    },
+    "unchained": 3
+  },
+  "ubuntu-24.04-1": {
+    "avx512": false,
+    "chainsFirstDifferingStep": {
+      "double complex": {
+        "none": 79
+      },
+      "double real": {
+        "none": 95
+      },
+      "single complex": {
+        "none": 64
+      },
+      "single real": {
+        "none": 107
+      }
+    },
+    "cpu": "AMD EPYC 7763 64-Core Processor",
+    "eightColumnSolves[rhs, QHy equal, coefficients equal]": {
+      "double complex": [
+        1264,
+        1264,
+        1264
+      ],
+      "double real": [
+        1520,
+        1520,
+        1520
+      ],
+      "single complex": [
+        1072,
+        1072,
+        1072
+      ],
+      "single real": [
+        1712,
+        1712,
+        1712
+      ]
+    },
+    "unchained": 3
+  },
+  "ubuntu-24.04-2": {
+    "avx512": false,
+    "chainsFirstDifferingStep": {
+      "double complex": {
+        "none": 79
+      },
+      "double real": {
+        "none": 95
+      },
+      "single complex": {
+        "none": 64
+      },
+      "single real": {
+        "none": 107
+      }
+    },
+    "cpu": "AMD EPYC 7763 64-Core Processor",
+    "eightColumnSolves[rhs, QHy equal, coefficients equal]": {
+      "double complex": [
+        1264,
+        1264,
+        1264
+      ],
+      "double real": [
+        1520,
+        1520,
+        1520
+      ],
+      "single complex": [
+        1072,
+        1072,
+        1072
+      ],
+      "single real": [
+        1712,
+        1712,
+        1712
+      ]
+    },
+    "unchained": 3
+  },
+  "ubuntu-24.04-3": {
+    "avx512": false,
+    "chainsFirstDifferingStep": {
+      "double complex": {
+        "none": 79
+      },
+      "double real": {
+        "none": 95
+      },
+      "single complex": {
+        "none": 64
+      },
+      "single real": {
+        "none": 107
+      }
+    },
+    "cpu": "AMD EPYC 9V74 80-Core Processor",
+    "eightColumnSolves[rhs, QHy equal, coefficients equal]": {
+      "double complex": [
+        1264,
+        1264,
+        1264
+      ],
+      "double real": [
+        1520,
+        1520,
+        1520
+      ],
+      "single complex": [
+        1072,
+        1072,
+        1072
+      ],
+      "single real": [
+        1712,
+        1712,
+        1712
+      ]
+    },
+    "unchained": 3
+  }
+}

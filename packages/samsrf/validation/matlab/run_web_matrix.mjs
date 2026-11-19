@@ -94,6 +94,7 @@ export function webRun(run, bundle) {
     normalise: 'zscore',
     combine: option('aver') === '1' ? 'average' : 'concatenate',
     precision: run.precision,
+    ...(model.Arithmetic_Reference ? { arithmeticReference: model.Arithmetic_Reference } : {}),
     apertures: null,
     seed: null,
     template: null,
@@ -120,7 +121,7 @@ export function webRun(run, bundle) {
   return { algorithm, options, model, hrf, translations };
 }
 
-function runOne(run, bundle, directory) {
+export function runOne(run, bundle, directory) {
   const started = performance.now();
   const record = { id: run.id, precision: run.precision, algorithm: run.algorithm };
   let job;

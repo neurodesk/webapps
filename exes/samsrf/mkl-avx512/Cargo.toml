@@ -1,0 +1,22 @@
+[package]
+name = "samsrf-mkl-avx512"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Native recording gates for the explicit Intel arithmetic reference in samsrf-core"
+publish = false
+
+[lib]
+name = "samsrf_mkl_avx512"
+path = "src/lib.rs"
+
+[dependencies]
+samsrf-core = { path = "../core" }
+
+[dev-dependencies]
+num-bigint = "0.4.8"
+num-complex = "0.4.6"
+# Tests read MATLAB numbers written inline in JSON; only this parse is correctly rounded.
+serde_json = { version = "1", features = ["float_roundtrip"] }
+sha2 = "0.10"

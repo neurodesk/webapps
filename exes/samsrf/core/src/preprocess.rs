@@ -19,6 +19,7 @@
 //! is 336 MB, 1 GB with the noise ceiling.
 //! Concatenating keeps 8 bytes per kept vertex and volume of every run.
 
+use crate::arithmetic::ArithmeticReference;
 use crate::error::{Error, Result};
 use crate::precision::Precision;
 use crate::timeseries::{RawRun, TimeSeries, VertexSelection};
@@ -54,6 +55,7 @@ pub struct PreprocessOptions {
 /// The combined, normalised data for the kept vertices.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Preprocessed {
+    pub arithmetic_reference: ArithmeticReference,
     pub kept: VertexSelection,
     /// Total vertex count of the hemisphere the runs came from.
     pub total_vertices: usize,
@@ -159,6 +161,7 @@ enum GlobalSignal {
 /// Accumulates runs pushed one at a time.
 #[derive(Debug)]
 pub struct RunAccumulator {
+    reference: ArithmeticReference,
     options: PreprocessOptions,
     kept: VertexSelection,
     total_vertices: usize,
@@ -170,7 +173,13 @@ pub struct RunAccumulator {
 
 impl RunAccumulator {
     pub fn new(total_vertices: usize, kept: VertexSelection, options: PreprocessOptions) -> Self {
-        Self {
+        Self::with_reference(total_vertices, kept, options, ArithmeticReference::Current).expect("current arithmetic supports both precisions")
+    }
+
+    pub fn with_reference(total_vertices: usize, kept: VertexSelection, options: PreprocessOptions, reference: ArithmeticReference) -> Result<Self> {
+        reference.validate(options.precision)?;
+        Ok(Self {
+            reference,
             options,
             kept,
             total_vertices,
@@ -178,7 +187,7 @@ impl RunAccumulator {
             volumes: 0,
             combined: None,
             global: GlobalSignal::Off,
-        }
+        })
     }
 
     /// Normalises `run` (every vertex) and folds it in. Every run must have the same
@@ -200,7 +209,7 @@ impl RunAccumulator {
         } else {
             Normalise::None
         };
-        let detrender = (normalise != Normalise::None).then(|| Detrender::new(volumes, self.total_vertices));
+        let detrender = (normalise != Normalise::None).then(|| Detrender::with_reference(volumes, self.total_vertices, self.reference));
         let course_of = |vertex: usize| {
             let mut course: Vec<f64> = run
                 .course(vertex)
@@ -337,7 +346,7 @@ impl RunAccumulator {
                     (0..kept_count)
                         .map(|position| {
                             let range = position * volumes..(position + 1) * volumes;
-                            noise_ceiling(&odd[range.clone()], &even[range])
+                            noise_ceiling_with_reference(&odd[range.clone()], &even[range], self.reference)
                         })
                         .collect()
                 });
@@ -377,6 +386,7 @@ impl RunAccumulator {
             }
         };
         Ok(Preprocessed {
+            arithmetic_reference: self.reference,
             kept: self.kept,
             total_vertices: self.total_vertices,
             runs: self.runs,
@@ -412,10 +422,14 @@ pub struct Detrender {
 impl Detrender {
     /// The fit for runs of `volumes` samples with `count` vertices. `volumes >= 2`.
     pub fn new(volumes: usize, count: usize) -> Self {
+        Self::with_reference(volumes, count, ArithmeticReference::Current)
+    }
+
+    pub fn with_reference(volumes: usize, count: usize, reference: ArithmeticReference) -> Self {
         let last = (volumes - 1) as f64;
         let time: Vec<f64> = (0..volumes).map(|i| i as f64 / last).collect();
         let ones = vec![1.0; volumes];
-        Detrender { design: crate::lstsq::DoubleDesign::new(&[&time, &ones]), time, count }
+        Detrender { design: crate::lstsq::DoubleDesign::with_reference(&[&time, &ones], reference), time, count }
     }
 
     /// Detrends vertex `index`'s course in place.
@@ -478,71 +492,97 @@ fn zscore_single(x: &[f32]) -> Vec<f32> {
 /// with `corr` in MATLAB's operation order (`css::correlation`). NaN when either course is
 /// constant or has a NaN.
 pub fn noise_ceiling(odd_mean: &[f64], even_mean: &[f64]) -> f64 {
+    noise_ceiling_with_reference(odd_mean, even_mean, ArithmeticReference::Current)
+}
+
+pub fn noise_ceiling_with_reference(odd_mean: &[f64], even_mean: &[f64], reference: ArithmeticReference) -> f64 {
     let odd: Vec<num_complex::Complex64> = odd_mean.iter().map(|&value| num_complex::Complex64::new(value, 0.0)).collect();
-    let rho = crate::css::correlation(&odd, even_mean, Precision::Double).re;
+    let rho = crate::css::correlation_with_reference(&odd, even_mean, Precision::Double, reference).re;
     (2.0 * rho) / (1.0 + rho)
 }
 
 /// `samsrf_removenoise(Srf, X, mver, true)`: z-scores each covariate column, appends an
-/// intercept, regresses them out of every kept time course by least squares and keeps
-/// the residual; a course containing NaN is set to zero. `covariates` is column-major
-/// (`volumes x n`), as the global signal is one column. In place on `data`.
-///
-/// MATLAB's `X \ Y` is QR; here the normal equations `X'X b = X'y`, solved by Gaussian
-/// elimination with partial pivoting. With one or two z-scored covariates and an intercept
-/// `X'X` is close to diagonal, so the two agree to rounding. A constant covariate z-scores
-/// to zeros; it is left out, which is the coefficient 0 MATLAB's basic solution gives it.
-/// Collinear covariates (rank deficiency beyond that) are not reproduced.
+/// intercept, regresses them out of every kept time course and keeps the residual; a
+/// course containing NaN is set to zero. `covariates` is column-major (`volumes x n`), as
+/// the global signal is one column. In place on `data`.
 pub fn remove_noise(data: &mut TimeSeries, covariates: &[f64], n_covariates: usize) -> Result<()> {
     remove_noise_in(data, covariates, n_covariates, Precision::Double)
 }
 
-/// `remove_noise` in the data's precision. Single data make `zscore`, `[X ones] \ Y`,
-/// `X * B` and the residuals single; one covariate (the global signal) is supported.
+/// Default production noise removal: normal equations in double precision and the
+/// existing mixed-single QR path. Use `remove_noise_with_reference` for an opt-in
+/// recorded-host QR evaluation. The default deliberately retains its original bits.
 pub fn remove_noise_in(data: &mut TimeSeries, covariates: &[f64], n_covariates: usize, precision: Precision) -> Result<()> {
-    if precision == Precision::Single {
-        if n_covariates != 1 || covariates.len() != data.volumes {
-            return Err(Error::Shape("single-precision noise removal takes one covariate per volume".into()));
-        }
-        if data.vertices == 0 {
-            return Ok(());
-        }
-        let x: Vec<f32> = zscore_single(&covariates.iter().map(|&value| value as f32).collect::<Vec<_>>());
-        let design: Vec<num_complex::Complex64> = x.iter().map(|&value| num_complex::Complex64::new(f64::from(value), 0.0)).collect();
-        let ones = vec![num_complex::Complex64::new(1.0, 0.0); design.len()];
-        // `B = [X ones] \ Y` over every course at once, as MATLAB solves it: each
-        // column's arithmetic depends on its place among the right-hand sides. A
-        // nonfinite course keeps its place as zeros so it cannot poison other RHS.
-        // Preserve the port's outputs: NaN-containing courses become zero; otherwise
-        // nonfinite single-converted courses become NaN. MATLAB's handling of these
-        // inputs was not recorded, so these replacements are not parity claims.
-        let replacements: Vec<Option<f64>> = (0..data.vertices).map(|v| {
-            let course = data.course(v);
-            if course.iter().any(|value| value.is_nan()) {
-                Some(0.0)
-            } else if course.iter().any(|&value| !(value as f32).is_finite()) {
-                Some(f64::NAN)
-            } else {
-                None
-            }
-        }).collect();
-        let zeros = vec![0.0; data.volumes];
-        let ys: Vec<&[f64]> = (0..data.vertices).map(|v| if replacements[v].is_some() { zeros.as_slice() } else { data.course(v) }).collect();
-        let solution = crate::lstsq::mldivide_many(&[&design, &ones], &ys, Precision::Single);
-        for (vertex, (&replacement, coefficients)) in replacements.iter().zip(&solution.coefficients).enumerate() {
-            let course = data.course_mut(vertex);
-            if let Some(value) = replacement {
-                course.fill(value);
-                continue;
-            }
-            let (beta, baseline) = (coefficients[0].re as f32, coefficients[1].re as f32);
-            for (value, &x) in course.iter_mut().zip(&x) {
-                let modelled = x * beta + baseline;
-                *value = f64::from(*value as f32 - modelled);
-            }
-        }
+    remove_noise_with_reference(data, covariates, n_covariates, precision, ArithmeticReference::Current)
+}
+
+pub fn remove_noise_with_reference(data: &mut TimeSeries, covariates: &[f64], n_covariates: usize, precision: Precision, reference: ArithmeticReference) -> Result<()> {
+    reference.validate(precision)?;
+    if reference == ArithmeticReference::Current && precision == Precision::Double {
+        return remove_noise_current(data, covariates, n_covariates);
+    }
+    if reference == ArithmeticReference::MatlabIntel && n_covariates != 1 {
+        return Err(Error::Shape("matlab-intel noise removal supports one covariate".into()));
+    }
+    let volumes = data.volumes;
+    if precision == Precision::Single && (n_covariates != 1 || covariates.len() != volumes) {
+        return Err(Error::Shape("single-precision noise removal takes one covariate per volume".into()));
+    }
+    if covariates.len() != volumes * n_covariates {
+        return Err(Error::Shape(format!(
+            "{} covariate values are not {n_covariates} columns of {volumes} volumes",
+            covariates.len()
+        )));
+    }
+    if data.vertices == 0 || volumes == 0 {
         return Ok(());
     }
+    let mut columns: Vec<Vec<f64>> = covariates
+        .chunks(volumes)
+        .map(|column| match precision {
+            Precision::Double => {
+                let mut column = column.to_vec();
+                zscore(&mut column);
+                column
+            }
+            Precision::Single => zscore_single(&column.iter().map(|&value| value as f32).collect::<Vec<_>>()).into_iter().map(f64::from).collect(),
+        })
+        .collect();
+    columns.push(vec![1.0; volumes]);
+    let design: Vec<Vec<num_complex::Complex64>> = columns.iter().map(|column| column.iter().map(|&value| num_complex::Complex64::new(value, 0.0)).collect()).collect();
+    let design: Vec<&[num_complex::Complex64]> = design.iter().map(Vec::as_slice).collect();
+    let replacements: Vec<Option<f64>> = (0..data.vertices).map(|v| {
+        let course = data.course(v);
+        if course.iter().any(|value| value.is_nan()) {
+            Some(0.0)
+        } else if course.iter().any(|&value| !precision.round(value).is_finite()) {
+            Some(f64::NAN)
+        } else {
+            None
+        }
+    }).collect();
+    let zeros = vec![0.0; volumes];
+    let ys: Vec<&[f64]> = (0..data.vertices).map(|v| if replacements[v].is_some() { zeros.as_slice() } else { data.course(v) }).collect();
+    let solution = crate::lstsq::mldivide_many_with_reference(&design, &ys, precision, reference);
+    for (vertex, (&replacement, coefficients)) in replacements.iter().zip(&solution.coefficients).enumerate() {
+        let course = data.course_mut(vertex);
+        if let Some(value) = replacement {
+            course.fill(value);
+            continue;
+        }
+        for (t, value) in course.iter_mut().enumerate() {
+            let product = |(column, beta): (&Vec<f64>, &num_complex::Complex64)| precision.round(column[t] * beta.re);
+            let mut terms = columns.iter().zip(coefficients).map(product);
+            let first = terms.next().expect("the intercept column");
+            let modelled = terms.fold(first, |sum, term| precision.round(sum + term));
+            *value = precision.round(precision.round(*value) - modelled);
+        }
+    }
+    Ok(())
+}
+
+/// Preserves the production double-global-regression arithmetic before the reference options.
+fn remove_noise_current(data: &mut TimeSeries, covariates: &[f64], n_covariates: usize) -> Result<()> {
     let volumes = data.volumes;
     if covariates.len() != volumes * n_covariates {
         return Err(Error::Shape(format!(
@@ -616,6 +656,7 @@ fn solve(a: &[Vec<f64>], mut b: Vec<f64>) -> Vec<f64> {
     }
     x
 }
+
 
 #[cfg(test)]
 #[allow(clippy::excessive_precision)]

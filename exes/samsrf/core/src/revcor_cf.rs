@@ -18,8 +18,6 @@ use crate::mapset::Maps;
 use crate::mesh::Adjacency;
 use crate::model::{CfModel, CfParameterEstimate, FineFit};
 use crate::optim::{self, FminsearchOptions};
-use crate::lstsq::gemv_t_double;
-use crate::matlab_math::nrm2;
 use crate::precision::{gemv_t_single, mean_double, sum_single, Precision};
 use crate::prf;
 use crate::surface::Surface;
@@ -92,7 +90,7 @@ impl Prepared {
             })
             .collect::<Result<_>>()?;
         let seed_centred_double: Vec<Vec<f64>> = seed_courses.iter().map(|course| centre_double(course)).collect();
-        let seed_norms_double = seed_centred_double.iter().map(|course| nrm2(course.iter().copied())).collect();
+        let seed_norms_double = seed_centred_double.iter().map(|course| model.arithmetic_reference.norm(course)).collect();
         let seed_centred: Vec<Vec<f32>> = seed_courses.iter().map(|course| centre_single(course)).collect();
         let seed_norms = seed_centred.iter().map(|course| norm_single(course)).collect();
         let weights = if model.smoothing > 0.0 {
@@ -165,9 +163,9 @@ impl Prepared {
         }
         let nsvx = self.seed_vertices.len();
         let yc = centre_double(y);
-        let ny = nrm2(yc.iter().copied());
+        let ny = self.model.arithmetic_reference.norm(&yc);
         let columns: Vec<&[f64]> = self.seed_centred_double.iter().map(Vec::as_slice).collect();
-        let r: Vec<f64> = gemv_t_double(&yc, &columns).iter().zip(&self.seed_norms_double).map(|(product, nx)| {
+        let r: Vec<f64> = self.model.arithmetic_reference.gemv(&yc, &columns).iter().zip(&self.seed_norms_double).map(|(product, nx)| {
             let r = (product / ny) / nx;
             if r.abs() > 1.0 { r / r.abs() } else { r }
         }).collect();

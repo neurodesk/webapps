@@ -4,6 +4,14 @@
 
 ### Patch Changes
 
+- Add explicit current, MATLAB AMD and MATLAB Intel arithmetic references. The default preserves existing numerical output; Intel requires double precision. Bind preprocessing and shards to the selected reference, and record it in CLI provenance and browser ZIP downloads. Keep documented hull and norm limitations explicit.
+- Updated dependencies
+  - @neurodesk/samsrf@0.6.20261118
+- fbfb3a4: With the explicit `matlab-amd` arithmetic reference, regress the global signal out of double courses as MATLAB R2023b does in `samsrf_removenoise`: `B = [X ones] \ Y` by column-pivoted QR over every course at once, then `Y - X * B` with each row's rounded products added in column order. The default `current` reference retains the previous normal-equation double path; this QR path is opt-in. On the AMD hosts of the pinned reverse-correlation recordings, every double residual now equals MATLAB's (52,500 of 52,500 values; 8,973 before), and the gate holds them bit for bit instead of within 1e-13 of a course's peak. Courses that the regression leaves as rounding now get MATLAB's maps there. On the pinned SamSrfAnalysis matrix, the double connective-field run with global-signal correction now matches MATLAB in R², Beta and Suppression; only its centroid y0 still differs. With main's reverse-correlation grid, the Node/WASM matrix matches 18 of 24 runs and 160 of 168 maps on the AMD host (157 before); on the Intel host one raw value gains exactness and seven lose it. The rule was chosen from two operation orders on all recorded AMD values, with no separate held-out set; Intel hosts differ.
+- Updated dependencies [fbfb3a4]
+
+  - @neurodesk/samsrf@0.6.20261118
+
 - a778fb3: SamSrf draws its maps on FreeSurfer surfaces that end at their faces, as MATLAB's `write_surf` writes them. NiiVue 1.0.0-rc.26 could not read such a surface: it logged the error, the app showed "Ready", and every run then ended with "Cannot read properties of undefined (reading 'layers')" after offering its maps. The viewer now reads every surface with the engine's own reader and draws it from mz3, so it shows the mesh the analysis reads, and a surface that cannot be shown is reported in the status bar. A surface still loading when Clear inputs or another surface replaces it never becomes the shown surface or reports an error: before, the replaced surface could stay on screen, and the next run could end with the same error after offering its maps.
 
   A model whose `Hrf` names a subject's HRF fit (`hrf_*.mat`) now runs in the app. The app takes the file in a Subject HRF field or from a dropped folder and gives the engine SamSrf's old-school kernel built from the file's `fP`. A file not named `hrf_*.mat` is refused, a malformed one stops the run with its name, and vertex-wise HRF maps are still refused.

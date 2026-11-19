@@ -13,6 +13,7 @@ use samsrf_core::model::{self, AnalysisKind, Model};
 use samsrf_core::precision::Precision;
 use samsrf_core::surface::{Faces, Surface};
 use samsrf_core::timeseries::TimeSeries;
+use samsrf_core::arithmetic::ArithmeticReference;
 use samsrf_core::preprocess::{Combine, Normalise, PreprocessOptions, Preprocessed, RunAccumulator};
 use samsrf_core::timeseries::VertexSelection;
 use samsrf_core::{freesurfer, gifti, preprocess, revcor_cf, revcor_prf, template};
@@ -111,7 +112,9 @@ fn kind(case: &Value) -> AnalysisKind {
 }
 
 fn parse(case: &Value) -> Result<Model, Error> {
-    model::parse_model_json(kind(case), &case["mapReplayModel"].to_string())
+    let mut json = case["mapReplayModel"].clone();
+    json["Arithmetic_Reference"] = Value::from("matlab-amd");
+    model::parse_model_json(kind(case), &json.to_string())
 }
 
 fn template_maps(host: &Host, case: &Value) -> Maps {
@@ -136,6 +139,7 @@ fn internal_model(case: &Value) -> Model {
     }
     let mut json = case["mapReplayModel"].clone();
     json["Data_Precision"] = Value::from("double");
+    json["Arithmetic_Reference"] = Value::from("matlab-amd");
     let mut model = model::parse_model_json(kind(case), &json.to_string()).unwrap();
     match &mut model {
         Model::RevCorCf(model) => model.data_precision = Precision::Single,
@@ -170,6 +174,7 @@ fn inputs_with(host: &Host, case: &Value, template: Option<Maps>, model: Model) 
     let courses = array(root, &pre["courses"]);
     let [volumes, count] = shape(&pre["courses"])[..] else { unreachable!() };
     let mut job = JobInputs {
+        preprocessing_reference: model.arithmetic_reference(),
         model,
         apertures: None,
         hrf: None,
@@ -273,7 +278,9 @@ fn courses_of(host: &Host, case: &Value) -> (Vec<f64>, Vec<f64>, usize, Vec<u32>
 
 /// Vertices whose course global regression reduces to rounding in MATLAB
 /// (at most 64 units of the input's precision times its peak): MATLAB's maps then
-/// follow that rounding, which the port does not reproduce (its residual is 0).
+/// follow that rounding. The port's regression leaves the same rounding on the AMD
+/// hosts, so their maps are held to MATLAB's exactly there; a limit scaled by the
+/// course's conditioning would hold nothing.
 fn rounding_courses(host: &Host, case: &Value) -> Vec<usize> {
     if case["mapReplayModel"]["Global_Signal_Correction"] != true {
         return Vec::new();
@@ -588,9 +595,11 @@ fn double_cf_profiles_equal_matlab_on_amd_hosts() {
     failures.assert_none();
 }
 
-/// `samsrf_removenoise` on the ROI: MATLAB's single residuals differ between hosts by
-/// up to 5.2 x 2^-24 of a course's peak; its single QR is not reproduced bit for bit.
-/// Limits are relative to the input course, which sets the residual's rounding.
+/// `samsrf_removenoise` on the ROI, from MATLAB's courses and global signal: every
+/// residual equals MATLAB's on the AMD hosts in both precisions (MATLAB solves every
+/// course at once, `lstsq::mldivide_many`, then adds `X * B`'s rounded products in
+/// order). The Intel host's MKL rounds the solve in another order; there the residual is
+/// held within a limit relative to the input course, which sets its rounding.
 #[test]
 fn global_regression_stays_within_rounding() {
     let Some(hosts) = hosts() else { return; };
@@ -608,7 +617,7 @@ fn global_regression_stays_within_rounding() {
                 series.course_mut(i).copy_from_slice(&courses[v as usize * volumes..(v as usize + 1) * volumes]);
             }
             let precision = if single(case) { Precision::Single } else { Precision::Double };
-            preprocess::remove_noise_in(&mut series, &array(&host.root, &case["globalSignal"]), 1, precision).unwrap();
+            preprocess::remove_noise_with_reference(&mut series, &array(&host.root, &case["globalSignal"]), 1, precision, ArithmeticReference::MatlabAmd).unwrap();
             let expected = array(&host.root, &case["recomputedCorrectedCourses"]);
             let relative = if single(case) { 32.0 * UNIT } else { 1e-13 };
             let (mut worst, mut identical, mut compared) = (0.0f64, 0usize, 0usize);
@@ -620,11 +629,9 @@ fn global_regression_stays_within_rounding() {
                     if peak > 0.0 && a.is_finite() && e.is_finite() {
                         worst = worst.max((a - e).abs() / peak);
                     }
-                    identical += usize::from(same(a, e));
+                    identical += usize::from(a.to_bits() == e.to_bits());
                     compared += 1;
-                    // Single residuals are bit-identical on the AMD (CNR auto) hosts:
-                    // MATLAB solves every course at once (`lstsq::mldivide_many`).
-                    let ok = if single(case) && !intel(host) { same(a, e) } else { within(a, e, relative * peak) };
+                    let ok = if intel(host) { within(a, e, relative * peak) } else { a.to_bits() == e.to_bits() };
                     failures.check(ok, || format!("{} {}: vertex {v} volume {t}: {a} vs {e}", host.name, case["id"]));
                 }
             }
@@ -635,16 +642,17 @@ fn global_regression_stays_within_rounding() {
     failures.assert_none();
 }
 
-/// A course with a NaN keeps its place among the right-hand sides of the single
-/// global regression and comes back zeroed; every other course is unchanged, so it
-/// still equals MATLAB's residual on the AMD hosts. MATLAB's own result for a
-/// missing course was not recorded, so only the other courses are compared.
+/// A course with a NaN keeps its place among the right-hand sides of the global
+/// regression and comes back zeroed; every other course is unchanged, so it still
+/// equals MATLAB's residual on the AMD hosts, in both precisions. MATLAB's own result
+/// for a missing course was not recorded, so only the other courses are compared.
 #[test]
-fn a_missing_course_keeps_its_place_in_the_single_regression() {
+fn a_missing_course_keeps_its_place_in_the_regression() {
     let Some(hosts) = hosts() else { return; };
     let mut cases = 0;
     for host in hosts.iter().filter(|host| !intel(host)) {
-        for case in pipelines(host, "cf").filter(|c| single(c) && c["id"].as_str().unwrap().ends_with("mode0_smooth0_global1")) {
+        for case in pipelines(host, "cf").filter(|c| c["id"].as_str().unwrap().ends_with("mode0_smooth0_global1")) {
+            let precision = if single(case) { Precision::Single } else { Precision::Double };
             let pre = find(&host.cases, case["preprocessing"].as_str().unwrap());
             let courses = array(&host.root, &pre["courses"]);
             let volumes = shape(&pre["courses"])[0];
@@ -655,21 +663,21 @@ fn a_missing_course_keeps_its_place_in_the_single_regression() {
                 series.course_mut(i).copy_from_slice(&courses[v as usize * volumes..(v as usize + 1) * volumes]);
             }
             series.course_mut(missing)[volumes / 3] = f64::NAN;
-            preprocess::remove_noise_in(&mut series, &array(&host.root, &case["globalSignal"]), 1, Precision::Single).unwrap();
+            preprocess::remove_noise_with_reference(&mut series, &array(&host.root, &case["globalSignal"]), 1, precision, ArithmeticReference::MatlabAmd).unwrap();
             assert!(series.course(missing).iter().all(|&value| value == 0.0), "{} {}: the missing course is zeroed", host.name, case["id"]);
             let expected = array(&host.root, &case["recomputedCorrectedCourses"]);
             for (i, &v) in roi.iter().enumerate().filter(|(i, _)| *i != missing) {
                 let e = &expected[v as usize * volumes..(v as usize + 1) * volumes];
                 for (t, (&a, &e)) in series.course(i).iter().zip(e).enumerate() {
-                    assert!(same(a, e), "{} {}: vertex {v} volume {t}: {a} vs {e}", host.name, case["id"]);
+                    assert_eq!(a.to_bits(), e.to_bits(), "{} {}: vertex {v} volume {t}: {a} vs {e}", host.name, case["id"]);
                 }
             }
             cases += 1;
         }
     }
     if !hosts.is_empty() {
-        // Three matrix cases on its AMD host and one edge case on each AMD host.
-        assert_eq!(cases, 5, "single global-regression cases on the AMD hosts");
+        // Per precision, three matrix cases on its AMD host and one edge case on each AMD host.
+        assert_eq!(cases, 10, "global-regression cases on the AMD hosts");
     }
 }
 
@@ -797,9 +805,10 @@ fn pipelines_from_matlab_courses_match_matlab() {
             for (r, name) in expected.values.iter().enumerate() {
                 for (v, (&a, &e)) in actual.row(r).iter().zip(expected.row(r)).enumerate() {
                     let k = conditioning[v];
-                    let ok = if rounding.contains(&v) {
-                        // MATLAB fitted its rounding residual; the port has none to fit.
-                        a == 0.0 || name == "Noise Ceiling"
+                    let ok = if rounding.contains(&v) && !intel(host) {
+                        // MATLAB fitted the rounding its global regression left, and the
+                        // port's regression leaves the same rounding on the AMD hosts.
+                        a.to_bits() == e.to_bits()
                     } else if !single(case) {
                         // Hull rows included: the job keeps the listed hull (the
                         // replay holds the stored order to MATLAB's bits).
@@ -888,7 +897,7 @@ fn raw_runs(host: &Host, case: &Value, input: &Path) -> (Preprocessed, PathBuf, 
     let mut accumulator = None;
     for run in entry["runs"].as_array().unwrap() {
         let run = gifti::read_run(&std::fs::read(dir.join(run.as_str().unwrap())).unwrap()).unwrap();
-        accumulator.get_or_insert_with(|| RunAccumulator::new(run.vertices, VertexSelection::All, options.clone())).push_run(&run).unwrap();
+        accumulator.get_or_insert_with(|| RunAccumulator::with_reference(run.vertices, VertexSelection::All, options.clone(), ArithmeticReference::MatlabAmd).unwrap()).push_run(&run).unwrap();
     }
     (accumulator.unwrap().finish().unwrap(), dir, entry["hemisphere"].as_str().unwrap().to_string())
 }
@@ -902,6 +911,7 @@ fn raw_cf_inputs(host: &Host, case: &Value, input: &Path, model: Model) -> (JobI
     let template = template::read_benson_gifti(&std::fs::read(dir.join(format!("{hemisphere}_benson.gii"))).unwrap(), hemisphere == "rh").unwrap();
     let count = data.total_vertices;
     let job = JobInputs {
+        preprocessing_reference: model.arithmetic_reference(),
         model,
         apertures: None,
         hrf: None,
