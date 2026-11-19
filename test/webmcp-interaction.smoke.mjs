@@ -33,6 +33,8 @@ const FEATURES = `--enable-features=${[...(process.platform === 'linux' ? ['Vulk
 const REMOVERS = /remove|clear|delete|reset|discard|^\s*[×✕]\s*$/i;
 const APP_SECONDS = Number(process.env.WEBMCP_APP_SECONDS ?? 600);
 const MAX_ACTIONS = Number(process.env.WEBMCP_INTERACTION_MAX ?? 40);
+// The longest the work one action starts (an example download, a reported removal) may take.
+const AFTER_ACTION_SECONDS = Number(process.env.WEBMCP_AFTER_ACTION_SECONDS ?? 120);
 // dicompare, a copy of an upstream app, opens on its own home route; its workspace is one link away.
 const WORKSPACE_LINKS = { dicompare: 'Open Workspace' };
 const WORKSPACE = ':not(#neurodeskAgentPrompt *):not(.nd-app-bar *):not(.nd-app-utility-bar *):not(dialog.nd-app-dialog *)';
@@ -65,9 +67,10 @@ async function tools(page) {
   }
 }
 
-// The app is ready to be listed: its example selectors hold their examples and are enabled (an app
-// disables them while it loads or works), no run shows a cancel × in the status bar, and nothing has
-// changed in the page for a second. Returns what did not settle, if anything, for the report.
+// The app is ready to be listed, or done with the work an action started: its example selectors hold
+// their examples, are enabled (an app disables them while it loads or works) and load no example, no
+// run shows a cancel × in the status bar, and nothing has changed in the page for a second. Returns
+// what did not settle, if anything, for the report.
 function ready(page, seconds = 60) {
   return page.evaluate(seconds => new Promise(resolve => {
     const deadline = Date.now() + seconds * 1000;
@@ -78,11 +81,12 @@ function ready(page, seconds = 60) {
       const selectors = [...document.querySelectorAll('nd-example-selector')].filter(selector => selector.isConnected && !selector.closest('#neurodeskAgentPrompt'));
       const empty = selectors.filter(selector => !selector.examples?.length);
       const disabled = selectors.filter(selector => selector.disabled);
+      const loading = selectors.filter(selector => selector.dataset.exampleState === 'loading');
       const busy = [...document.querySelectorAll('footer#status button')].some(button => button.checkVisibility?.() && !button.disabled);
-      const settled = !empty.length && !disabled.length && !busy && Date.now() - quietSince >= 1000;
+      const settled = !empty.length && !disabled.length && !loading.length && !busy && Date.now() - quietSince >= 1000;
       if (settled || Date.now() > deadline) {
         observer.disconnect();
-        resolve(settled ? null : `not settled after ${seconds} s (${empty.length} example selector(s) without examples, ${disabled.length} disabled${busy ? ', a run going' : ''})`);
+        resolve(settled ? null : `not settled after ${seconds} s (${empty.length} example selector(s) without examples, ${disabled.length} disabled, ${loading.length} loading${busy ? ', a run going' : ''})`);
       } else setTimeout(poll, 100);
     };
     poll();
@@ -104,12 +108,17 @@ async function hold(page, target) {
   }
 }
 
+// WEBMCP_HOLD_DELAY_MS delays each request, as a slow agent would, to show the answer goes to its own dialog.
+const HOLD_DELAY_MS = Number(process.env.WEBMCP_HOLD_DELAY_MS ?? 0);
+
 async function holdOnce(page, { role, count }) {
-  await page.evaluate(([role]) => {
-    globalThis.interactionHold = document.modelContext.getTools()
+  await page.evaluate(([role, delay]) => {
+    globalThis.interactionHold = new Promise(resolve => { setTimeout(resolve, delay); })
+      .then(() => document.modelContext.getTools())
       .then(tools => document.modelContext.executeTool(tools.find(tool => tool.name === 'inputs_request_files'), { role }));
-  }, [role]);
-  const field = page.locator(`${PROMPT} input[type="file"]`).first();
+  }, [role, HOLD_DELAY_MS]);
+  // The dialog element stays in the page once closed, with the last request's field in it: answer only an open one.
+  const field = page.locator(`${PROMPT}[open] input[type="file"]`).first();
   await field.waitFor({ state: 'attached', timeout: 10000 });
   await field.setInputFiles(Array.from({ length: count }, (_, index) => ({ name: `agent-held-${index + 1}.nii.gz`, mimeType: 'application/gzip', buffer: syntheticNifti({ dims: [8, 8, 8] }) })));
   const held = await page.evaluate(() => Promise.race([globalThis.interactionHold, new Promise(resolve => { setTimeout(() => resolve('{"pending":true}'), 10000); })]));
@@ -298,11 +307,13 @@ async function attempt(context, page, app, target, run, action, outcome) {
     }, action.selector).catch(() => 'unknown');
     return `not performed: ${error.message.split('\n')[0]} [${where}]`;
   }
-  // The app answers an action in its own time (a remove reported with nd-files after a click); wait for
-  // the page to settle rather than a fixed time.
+  // The app answers an action in its own time (a remove reported with nd-files after a click, an
+  // example it loads); wait for that work to finish, as the app reports it, before reading the page,
+  // so it is not taken for the effect of the next action.
   await page.waitForLoadState('domcontentloaded').catch(() => {});
   if (!page.url().startsWith(`${origin}/${app.path}/`)) return 'navigated away';
-  await ready(page, 10);
+  const unsettled = await ready(page, AFTER_ACTION_SECONDS);
+  if (unsettled) outcome.unsettled = unsettled;
   const shownAfter = await settledFiles(page);
   const replaced = shownAfter !== shownBefore;
   if (replaced) {
