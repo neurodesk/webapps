@@ -6,9 +6,11 @@ import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 
 // The ci.yml jobs the CI policy in AGENTS.md needs: the plan, the contract and
-// package tests, the per-app jobs, the composite site and the agentic checks
-// that consume it, and the homepage easter egg. example-cache-retention keeps
-// a cache and may fail without failing the run, so it is not one of them.
+// package tests, the per-app jobs, the composite site build, the five checks of
+// that build and the agentic jobs that wait for all of them, and the homepage
+// easter egg. example-cache-retention keeps a cache and may fail without
+// failing the run, so it is not one of them (test/ci-policy.test.mjs pins what
+// it waits for).
 //
 // This file runs twice in every ci run: in app-plan (`pnpm check:integration`,
 // before the plan) and in workspace-contracts (`pnpm test:contracts`, which
@@ -27,7 +29,13 @@ const REQUIRED = {
   'browser-e2e': { needs: ['app-plan'], if: "needs.app-plan.outputs.has_browser_apps == 'true'" },
   'browser-e2e-gpu': { needs: ['app-plan'], if: "needs.app-plan.outputs.has_gpu_apps == 'true' && (github.event_name != 'pull_request' || needs.app-plan.outputs.all_apps != 'true')" },
   'composite-site': { needs: ['app-plan'], if: "(github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name == 'push' || github.event_name == 'schedule' || needs.app-plan.outputs.has_site == 'true')" },
-  'agent-interactions': { needs: ['composite-site'], if: "needs.composite-site.outputs.agent_site_ready == 'true'" },
+  'site-runtime': { needs: ['composite-site'], if: "needs.composite-site.result == 'success'" },
+  'site-audit': { needs: ['composite-site'], if: "needs.composite-site.result == 'success'" },
+  'site-e2e': { needs: ['composite-site'], if: "needs.composite-site.result == 'success'" },
+  'site-mobile': { needs: ['composite-site'], if: "needs.composite-site.result == 'success'" },
+  'site-catalog': { needs: ['composite-site'], if: "needs.composite-site.result == 'success'" },
+  'agent-interactions': { needs: ['composite-site', 'site-runtime', 'site-audit', 'site-e2e', 'site-mobile', 'site-catalog'], if: "needs.composite-site.outputs.agent_site_ready == 'true'" },
+  'processing-workflows': { needs: ['composite-site', 'site-runtime', 'site-audit', 'site-e2e', 'site-mobile', 'site-catalog'], if: "github.event_name == 'workflow_dispatch' && inputs.agentic_mode == 'pipeline' && needs.composite-site.result == 'success'" },
   'homepage-easter-egg': { needs: ['app-plan'], if: "${{ !cancelled() && github.event.action != 'converted_to_draft' && inputs.scope != 'gpu' && (github.event_name != 'pull_request' || needs.app-plan.result != 'success' || needs.app-plan.outputs.easter_egg != 'skip') }}" },
 };
 const REQUIRED_JOBS = Object.keys(REQUIRED);
@@ -40,8 +48,7 @@ const STEP_CONDITIONS = {
   'browser-e2e': { 'Install Greedy WebAssembly toolchain': 'matrix.rust_wasm', 'Install Python reference dependencies': 'matrix.python_reference' },
   'browser-e2e-gpu': { 'Install Greedy WebAssembly toolchain': 'matrix.rust_wasm', 'Install Python reference dependencies': 'matrix.python_reference' },
   'composite-site': {
-    'Package the built catalog for agent interactions': "github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.agentic_mode == 'interactions')",
-    'Run requested Neurodesk processing workflows': "github.event_name == 'workflow_dispatch' && inputs.agentic_mode == 'pipeline'",
+    'Check that agent interactions can run': "github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.agentic_mode == 'interactions')",
   },
 };
 

@@ -12,12 +12,12 @@ const events = Object.keys(ci.on);
 function evaluate(expression, event, overrides = {}) {
   if (typeof expression !== 'string') return expression;
   // GitHub permits hyphens in property names; JavaScript requires brackets.
-  const source = expression.replace(/^\$\{\{\s*|\s*\}\}$/g, '').replaceAll('needs.app-plan.', "needs['app-plan'].");
+  const source = expression.replace(/^\$\{\{\s*|\s*\}\}$/g, '').replaceAll('needs.app-plan.', "needs['app-plan'].").replaceAll('needs.composite-site.', "needs['composite-site'].");
   return runInNewContext(source, {
     github: { event_name: event, workflow: 'ci', ref: 'refs/heads/main' },
     cancelled: () => false,
     inputs: { agentic_mode: 'interactions' },
-    needs: { 'app-plan': { outputs: { has_gpu_apps: 'true', all_apps: 'false' } } },
+    needs: { 'app-plan': { outputs: { has_gpu_apps: 'true', all_apps: 'false' } }, 'composite-site': { result: 'success' } },
     ...overrides,
   });
 }
@@ -27,6 +27,7 @@ function group(template, event) {
 }
 
 const commands = (job) => job.steps.flatMap((step) => step.run ? [step.run] : []);
+const SITE_CHECKS = ['site-runtime', 'site-audit', 'site-e2e', 'site-mobile', 'site-catalog'];
 
 test('new pushes cannot cancel scheduled or manually requested coverage', async () => {
   const quality = await workflow('quality');
@@ -56,15 +57,14 @@ test('manual CI defaults to full deterministic coverage with agent checks opt-in
   assert.equal(input.default, 'none');
   const manual = {
     inputs: { agentic_mode: input.default },
-    needs: { 'app-plan': { outputs: { has_browser_apps: 'true', has_gpu_apps: 'true', all_apps: 'true', has_site: 'true' } } },
+    needs: { 'app-plan': { outputs: { has_browser_apps: 'true', has_gpu_apps: 'true', all_apps: 'true', has_site: 'true' } }, 'composite-site': { result: 'success' } },
   };
   assert.equal(evaluate(ci.env.NEURODESK_E2E_SKIP_SLOW, 'workflow_dispatch', manual), '');
   for (const job of ['composite-site', 'browser-e2e', 'browser-e2e-gpu']) {
     assert.equal(evaluate(ci.jobs[job].if, 'workflow_dispatch', manual), true, job);
   }
-  const steps = ci.jobs['composite-site'].steps;
-  const interactions = steps.find((step) => step.id === 'agent-site');
-  const pipeline = steps.find((step) => step.run?.includes('pnpm test:e2e:pipeline'));
+  const interactions = ci.jobs['composite-site'].steps.find((step) => step.id === 'agent-site');
+  const pipeline = ci.jobs['processing-workflows'];
   for (const mode of input.options) {
     const context = { ...manual, inputs: { agentic_mode: mode } };
     assert.equal(evaluate(interactions.if, 'workflow_dispatch', context), mode === 'interactions', mode);
@@ -96,25 +96,101 @@ test('scientific CPU and hardware GPU tests keep independent builds and test-dat
 });
 
 test('every deterministic interface check runs before optional agent checks', () => {
-  const steps = ci.jobs['composite-site'].steps;
-  // Interactions consume the site only after this job succeeds; processing remains local.
-  const agentSteps = steps.map((step, index) => step.id === 'agent-site' || step.run?.includes('pnpm test:e2e:pipeline') ? index : -1).filter((index) => index >= 0);
-  assert.equal(agentSteps.length, 2);
+  // Interactions consume the site only after every site check passed; processing remains local.
   const interactions = ci.jobs['agent-interactions'];
-  assert.equal(interactions.needs, 'composite-site');
+  assert.deepEqual(interactions.needs, ['composite-site', ...SITE_CHECKS]);
   assert.equal(interactions.if, "needs.composite-site.outputs.agent_site_ready == 'true'");
   assert.equal(ci.jobs['composite-site'].outputs.agent_site_ready, '${{ steps.agent-site.outputs.ready }}');
   assert.deepEqual(interactions.strategy.matrix.target, ['desktop', 'phone']);
   assert.deepEqual(interactions.strategy.matrix.shard, [1, 2, 3]);
   assert.equal(interactions.steps.find((step) => step.run?.includes('pnpm test:e2e:agent'))['timeout-minutes'], 120);
   for (const command of ['pnpm audit:interfaces', 'pnpm test:interface-workflows', 'pnpm test:image-uploads', 'pnpm test:mobile']) {
-    const index = steps.findIndex((step) => step.run === command);
-    assert.ok(index >= 0 && agentSteps.every((agent) => index < agent), command);
+    assert.equal(SITE_CHECKS.filter((id) => commands(ci.jobs[id]).includes(command)).length, 1, command);
   }
-  for (const name of ['catalog-e2e', 'interface-audit']) {
-    const artifact = steps.find((step) => step.with?.name === name);
-    assert.equal(artifact.if, 'always()');
+  // Processing workflows make live model calls: like interactions, they start only after every check passed.
+  const processing = ci.jobs['processing-workflows'];
+  assert.deepEqual(processing.needs, ['composite-site', ...SITE_CHECKS]);
+  assert.ok(!SITE_CHECKS.some((id) => commands(ci.jobs[id]).some((run) => run.includes('pnpm test:e2e:pipeline'))), 'no site check runs processing');
+  const unpack = processing.steps.findIndex((step) => step.uses === './.github/actions/composite-site');
+  const run = processing.steps.findIndex((step) => step.run?.includes('pnpm test:e2e:pipeline'));
+  assert.ok(unpack >= 0 && run > unpack, 'processing tests the uploaded build');
+  // At the base the cache clean-up ran after the one serial site job passed.
+  assert.deepEqual(ci.jobs['example-cache-retention'].needs, SITE_CHECKS);
+  for (const [id, name] of [['site-e2e', 'catalog-e2e'], ['site-audit', 'interface-audit'], ['site-catalog', 'interface-elements'], ['processing-workflows', 'catalog-pipeline']]) {
+    const artifact = ci.jobs[id].steps.find((step) => step.with?.name === name);
+    assert.equal(artifact.if, 'always()', name);
   }
+});
+
+// The old composite-site job ran every one of these in sequence over the whole
+// catalogue. Each must keep running, once, in a job that tests the one build.
+const SITE_COMMANDS = {
+  'composite-site': ['pnpm build', 'pnpm audit:artifacts', 'node --test test/runtime-assets.test.mjs', 'node --test test/catalog-sites.test.mjs'],
+  'site-runtime': ['pnpm test:resource-cache', 'pnpm test:runtime-startup'],
+  'site-audit': ['node scripts/fetch-example-cache.mjs "$EXAMPLE_ASSET_CACHE" --prune', 'node test/external-requests.smoke.mjs', 'pnpm audit:interfaces'],
+  'site-e2e': ['pnpm test:smoke', 'pnpm test:e2e:types', 'pnpm test:e2e:catalog'],
+  'site-mobile': ['pnpm test:interface-workflows', 'pnpm test:image-uploads', 'pnpm test:mobile'],
+  'site-catalog': ['pnpm --filter @neurodesk/webapp-components test:elements:browser', 'pnpm --filter @neurodesk/webapp-components test:showcase:browser', 'pnpm --filter @neurodesk/webapp-components test:handoff:browser', 'node test/automation-catalog.smoke.mjs', 'pnpm test:app-handoff'],
+};
+// The checks that cover one page per app: SMOKE_APPS narrows them on pull requests and pushes.
+const SCOPED = ['pnpm test:runtime-startup', 'pnpm audit:interfaces', 'pnpm test:smoke', 'pnpm test:e2e:catalog', 'pnpm test:interface-workflows', 'pnpm test:mobile'];
+
+test('the site is built once and every site check runs in one job that tests that build', () => {
+  const site = ci.jobs['composite-site'];
+  assert.deepEqual(Object.keys(SITE_COMMANDS), ['composite-site', ...SITE_CHECKS]);
+  const every = Object.keys(SITE_COMMANDS).flatMap((id) => commands(ci.jobs[id]));
+  for (const [id, expected] of Object.entries(SITE_COMMANDS)) {
+    for (const command of expected) {
+      assert.equal(every.filter((run) => run.includes(command)).length, 1, `${command} runs once`);
+      assert.ok(commands(ci.jobs[id]).some((run) => run.includes(command)), `${id} runs ${command}`);
+    }
+  }
+  const upload = site.steps.find((step) => String(step.uses).startsWith('actions/upload-artifact@'));
+  assert.equal(upload.with.name, 'composite-site-${{ github.sha }}');
+  assert.equal(upload.with['if-no-files-found'], 'error');
+  // 283 MB per run: three days covers a late re-run of one failed check, not GitHub's 30-day re-run window.
+  assert.equal(upload.with['retention-days'], 3);
+  for (const id of SITE_CHECKS) {
+    const job = ci.jobs[id];
+    assert.equal(job.needs, 'composite-site', id);
+    assert.equal(job.if, "needs.composite-site.result == 'success'", `${id} starts whenever the build job succeeded`);
+    assert.equal(job.env, undefined, `${id} narrows single steps, never the whole job`);
+    const unpack = job.steps.findIndex((step) => step.uses === './.github/actions/composite-site');
+    const firstCheck = job.steps.findIndex((step) => SITE_COMMANDS[id].some((command) => step.run?.includes(command)));
+    assert.ok(unpack >= 0 && unpack < firstCheck, `${id} unpacks the build before its first check`);
+    assert.ok(!commands(job).some((run) => /\bpnpm build\b|turbo run/.test(run)), `${id} tests the uploaded build`);
+    for (const step of job.steps) {
+      const scoped = SCOPED.some((command) => step.run?.includes(command));
+      assert.equal(step.env?.SMOKE_APPS, scoped ? '${{ needs.composite-site.outputs.smoke_apps }}' : undefined, `${id}: ${step.name ?? step.run ?? step.uses}`);
+    }
+  }
+  assert.equal(site.outputs.smoke_apps, '${{ steps.check-apps.outputs.smoke_apps }}');
+  const choose = site.steps.find((step) => step.id === 'check-apps');
+  assert.equal(choose.run, 'node scripts/site-check-apps.mjs');
+  assert.deepEqual(choose.env, {
+    EVENT: '${{ github.event_name }}',
+    SCOPE: '${{ inputs.scope }}',
+    ALL_APPS: '${{ needs.app-plan.outputs.all_apps }}',
+    SITE_CODE: '${{ needs.app-plan.outputs.site_code }}',
+    SELECTED_IDS: '${{ needs.app-plan.outputs.selected_ids }}',
+  });
+  for (const output of ['all_apps', 'site_code', 'selected_ids']) {
+    assert.equal(ci.jobs['app-plan'].outputs[output], `\${{ steps.plan.outputs.${output} }}`, output);
+  }
+});
+
+test('a site check re-run after the build expired says to re-run all jobs', async () => {
+  const action = YAML.parse(await readFile(new URL('../.github/actions/composite-site/action.yml', import.meta.url), 'utf8'));
+  const steps = action.runs.steps;
+  const download = steps.findIndex((step) => String(step.uses).startsWith('actions/download-artifact@'));
+  assert.equal(steps[download].with.name, 'composite-site-${{ github.sha }}');
+  assert.equal(steps[download]['continue-on-error'], true);
+  const explain = steps[download + 1];
+  assert.equal(explain.if, `steps.${steps[download].id}.outcome == 'failure'`);
+  assert.match(explain.run, /::error::.*keeps it 3 days\. Use \\"Re-run all jobs\\" to build it again/);
+  assert.match(explain.run, /\nexit 1\n?$/);
+  const upload = ci.jobs['composite-site'].steps.find((step) => String(step.uses).startsWith('actions/upload-artifact@'));
+  assert.match(explain.run, new RegExp(`keeps it ${upload.with['retention-days']} days`), 'the message names the retention ci.yml sets');
 });
 
 test('correctness lint runs on every CI event with no duplicate routine gate', async () => {
@@ -228,5 +304,8 @@ test('contract and correctness owners replace duplicate invocations without losi
       assert.ok(!JSON.stringify((await workflow(name)).jobs).includes(`test/${file}.test.mjs`), `${file} is owned by contracts, not repeated in ${name}`);
     }
   }
-  assert.equal(composite.filter((command) => /install.*chromium/.test(command)).length, 1, 'one browser install per composite job');
+  assert.equal(composite.filter((command) => /install.*chromium/.test(command)).length, 0, 'the build job needs no browser');
+  for (const id of SITE_CHECKS) {
+    assert.equal(commands(ci.jobs[id]).filter((command) => /install.*chromium/.test(command)).length, 1, `one browser install in ${id}`);
+  }
 });

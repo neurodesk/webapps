@@ -10,11 +10,14 @@ import YAML from 'yaml';
 import { agenticCatalog } from '../test-utils/agentic-catalog.mjs';
 
 const ci = YAML.parse(await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8'));
+const unpackAction = YAML.parse(await readFile(new URL('../.github/actions/composite-site/action.yml', import.meta.url), 'utf8'));
 const site = ci.jobs['composite-site'];
 const job = ci.jobs['agent-interactions'];
-const packageSite = site.steps.find(step => step.id === 'agent-site');
-const verifySite = job.steps.find(step => step.name === 'Verify and unpack the tested composite site');
+const agentReady = site.steps.find(step => step.id === 'agent-site');
+const packageSite = site.steps.find(step => step.name === 'Package the built site for the check jobs');
+const verifySite = unpackAction.runs.steps.find(step => step.name === 'Verify and unpack the built site');
 const interact = job.steps.find(step => step.run?.includes('pnpm test:e2e:agent'));
+const catalogE2e = ci.jobs['site-e2e'].steps.find(step => step.run?.includes('pnpm test:e2e:catalog'));
 
 async function scratch(t) {
   const root = await mkdtemp(join(tmpdir(), 'agent-workflow-'));
@@ -35,25 +38,28 @@ test('both full-catalog agent targets run in three shards on isolated runners an
   assert.equal(upload.with.name, 'catalog-agent-${{ matrix.target }}-${{ matrix.shard }}');
   assert.equal(upload.with.path, '.e2e/agent-${{ matrix.target }}-${{ matrix.shard }}/');
   assert.equal(job.strategy['fail-fast'], false);
-  assert.equal(job.needs, 'composite-site');
+  assert.ok(job.needs.includes('composite-site'));
   assert.equal(job['runs-on'], 'ubuntu-latest');
   assert.equal(interact['timeout-minutes'], 120);
   assert.ok(!site.steps.some(step => step.run?.includes('pnpm test:e2e:agent')), 'the serial two-target call must not remain in composite-site');
   assert.match(await readFile(new URL('../e2e.config.ts', import.meta.url), 'utf8'), /workers: 1,/);
   for (const [event, mode, expected] of [['schedule', '', true], ['workflow_dispatch', 'interactions', true], ['workflow_dispatch', 'pipeline', false], ['push', '', false], ['pull_request', '', false]]) {
-    assert.equal(runInNewContext(packageSite.if, { github: { event_name: event }, inputs: { agentic_mode: mode } }), expected);
+    assert.equal(runInNewContext(agentReady.if, { github: { event_name: event }, inputs: { agentic_mode: mode } }), expected);
   }
   for (const ready of ['true', 'false', '']) {
     assert.equal(runInNewContext(job.if.replace('needs.composite-site', 'needs["composite-site"]'), { needs: { 'composite-site': { outputs: { agent_site_ready: ready } } } }), ready === 'true');
   }
-  const packaged = site.steps.find(step => step.with?.name === 'agent-catalog-site-${{ github.sha }}');
-  const download = job.steps.find(step => step.uses?.startsWith('actions/download-artifact@'));
+  // Interactions test the site every check job tested: the one the build job packaged.
+  const packaged = site.steps.find(step => step.with?.name === 'composite-site-${{ github.sha }}');
+  const download = unpackAction.runs.steps.find(step => step.uses?.startsWith('actions/download-artifact@'));
   assert.equal(download.with.name, packaged.with.name);
   assert.equal(packaged.with['if-no-files-found'], 'error');
+  assert.ok(job.steps.some(step => step.uses === './.github/actions/composite-site'));
   assert.equal(site.outputs.agent_site_ready, '${{ steps.agent-site.outputs.ready }}');
-  const processing = site.steps.find(step => step.run?.includes('pnpm test:e2e:pipeline'));
+  const processing = ci.jobs['processing-workflows'];
   assert.match(processing.if, /agentic_mode == 'pipeline'/);
-  assert.match(processing.run, /--target desktop --no-cache/);
+  assert.match(processing.steps.find(step => step.run?.includes('pnpm test:e2e:pipeline')).run, /--target desktop --no-cache/);
+  assert.ok(processing.steps.some(step => step.uses === './.github/actions/composite-site'));
 });
 
 test('the actual agent command runs each target shard without dropping cases and preserves optional app selection', async t => {
@@ -67,6 +73,21 @@ test('the actual agent command runs each target shard without dropping cases and
     shell(interact.run, root, { PATH: `${bin}${delimiter}${process.env.PATH}`, CAPTURE_ARGS: capture, AGENTIC_TARGET: target, AGENTIC_SHARD: `${shard}/${shards.length}`, AGENTIC_APPS: selection });
     assert.deepEqual(JSON.parse(await readFile(capture, 'utf8')), [
       'test:e2e:agent', '--skip-build', '--site-dir', 'dist', '--target', target, '--shard', `${shard}/${shards.length}`, '--output', `.e2e/agent-${target}-${shard}`,
+      ...(selection ? ['--app', selection] : []),
+    ]);
+  }
+});
+
+test('the workspace e2e catalog checks the apps SMOKE_APPS lists against the built site, or every app', async t => {
+  const root = await scratch(t);
+  const bin = join(root, 'bin');
+  await mkdir(bin);
+  await writeFile(join(bin, 'pnpm'), '#!/usr/bin/env node\nrequire("node:fs").writeFileSync(process.env.CAPTURE_ARGS, JSON.stringify(process.argv.slice(2)));\n', { mode: 0o755 });
+  for (const selection of ['', 'niimath,syncro']) {
+    const capture = join(root, 'args.json');
+    shell(catalogE2e.run, root, { PATH: `${bin}${delimiter}${process.env.PATH}`, CAPTURE_ARGS: capture, SMOKE_APPS: selection });
+    assert.deepEqual(JSON.parse(await readFile(capture, 'utf8')), [
+      'test:e2e:catalog', '--skip-build', '--site-dir', 'dist', '--output', '.e2e/workspace',
       ...(selection ? ['--app', selection] : []),
     ]);
   }
@@ -133,7 +154,7 @@ test('the real e2e selector partitions every catalog interaction exactly once pe
   }
 });
 
-test('the transferred composite is checksum-verified before use, and missing credentials do not create a partial artifact', async t => {
+test('the transferred composite is checksum-verified before use, and missing credentials start no interactions', async t => {
   const root = await scratch(t);
   const temporary = join(root, 'temporary');
   const destination = join(root, 'destination');
@@ -142,17 +163,18 @@ test('the transferred composite is checksum-verified before use, and missing cre
   await writeFile(join(root, 'dist', 'index.html'), 'the exact tested catalog bytes');
   const output = join(root, 'outputs');
   const environment = { RUNNER_TEMP: temporary, GITHUB_WORKSPACE: destination, GITHUB_OUTPUT: output, NEURODESK_API_KEY: '' };
-  shell(packageSite.run, root, environment);
+  shell(agentReady.run, root, environment);
   await assert.rejects(readFile(output), /ENOENT/);
-  shell(packageSite.run, root, { ...environment, NEURODESK_API_KEY: 'test-fixture-only' });
+  shell(agentReady.run, root, { ...environment, NEURODESK_API_KEY: 'test-fixture-only' });
   assert.equal(await readFile(output, 'utf8'), 'ready=true\n');
-  const transferred = join(temporary, 'agent-catalog-site');
+  shell(packageSite.run, root, environment);
+  const transferred = join(temporary, 'composite-site');
   await mkdir(transferred);
-  for (const name of ['agent-catalog-site.tar.gz', 'agent-catalog-site.tar.gz.sha256']) await writeFile(join(transferred, name), await readFile(join(temporary, name)));
+  for (const name of ['composite-site.tar.zst', 'composite-site.tar.zst.sha256']) await writeFile(join(transferred, name), await readFile(join(temporary, name)));
   shell(verifySite.run, root, environment);
   assert.equal(await readFile(join(destination, 'dist', 'index.html'), 'utf8'), 'the exact tested catalog bytes');
   await rm(destination, { recursive: true });
-  await writeFile(join(transferred, 'agent-catalog-site.tar.gz'), 'corrupt transfer');
+  await writeFile(join(transferred, 'composite-site.tar.zst'), 'corrupt transfer');
   assert.throws(() => shell(verifySite.run, root, environment), /Command failed/);
   await assert.rejects(readFile(join(destination, 'dist', 'index.html')), /ENOENT/);
 });

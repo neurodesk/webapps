@@ -207,10 +207,10 @@ test('DWI2TRX preserves manual tracking-only selection', async () => {
 });
 
 test('the interface audit reads the example cache the job restored, filled and saves from main', async () => {
-  const { steps } = (await workflow('ci.yml')).jobs['composite-site'];
+  const { steps } = (await workflow('ci.yml')).jobs['site-audit'];
   const position = (description, matches) => {
     const found = steps.flatMap((step, index) => matches(step) ? [index] : []);
-    assert.equal(found.length, 1, `composite-site has one step that ${description}`);
+    assert.equal(found.length, 1, `site-audit has one step that ${description}`);
     return found[0];
   };
   const restoreAt = position('restores the examples', step => String(step.uses).startsWith('actions/cache/restore@') && step.with.key.startsWith('example-assets-'));
@@ -227,6 +227,8 @@ test('the interface audit reads the example cache the job restored, filled and s
   assert.match(directory, /^\$\{\{ runner\.temp \}\}\/[\w-]+$/);
   assert.equal(fill.env.EXAMPLE_ASSET_CACHE, directory, 'the fill writes the restored directory');
   assert.match(fill.run, /fetch-example-cache\.mjs "\$EXAMPLE_ASSET_CACHE" --prune$/);
+  // The fill runs over every app, so main never saves a partial copy (and --prune refuses SMOKE_APPS).
+  assert.equal(fill.env.SMOKE_APPS, undefined);
   assert.equal(audit.env.EXAMPLE_ASSET_CACHE, directory, 'the audit reads the filled directory instead of the network');
   assert.equal(save.with.path, directory, 'the save stores the filled directory');
   assert.equal(save.with.key, `\${{ steps.${restore.id}.outputs.cache-primary-key }}`, 'the save uses the key the restore looked up');
@@ -244,13 +246,13 @@ test('superseded per-commit caches are deleted by a job that holds nothing else'
   const pages = await workflow('deploy-pages.yml');
   const cacheKey = (job, prefix) => job.steps.map(step => step.with?.key).find(key => key?.startsWith(prefix));
   for (const [file, flow, id, saver, prefix] of [
-    ['ci.yml', ci, 'example-cache-retention', 'composite-site', 'example-assets-'],
+    ['ci.yml', ci, 'example-cache-retention', 'site-audit', 'example-assets-'],
     ['deploy-pages.yml', pages, 'turbo-cache-retention', 'build', 'turbo-pages-'],
   ]) {
     const job = flow.jobs[id];
     assert.ok(job, `${file} deletes superseded ${prefix} caches`);
     assert.ok(cacheKey(flow.jobs[saver], prefix), `${file}: ${saver} saves the ${prefix} caches`);
-    assert.equal(job.needs, saver, `${file}: ${id} runs once ${saver} has saved its cache`);
+    assert.ok([job.needs].flat().includes(saver), `${file}: ${id} runs once ${saver} has saved its cache`);
     assert.deepEqual(job.permissions, { actions: 'write' }, `${file}: ${id} can delete caches and nothing else`);
     assert.equal(job['continue-on-error'], true, `${file}: a failed cleanup does not fail the run`);
     assert.ok(job.steps.every(step => !step.uses), `${file}: ${id} runs no action with its write token`);

@@ -4,8 +4,8 @@ import { LockfileAnalysisError, lockfileImpact } from './lockfile-impact.mjs';
 import { onlyAddsExports } from './module-closure.mjs';
 import { EMBEDDED_VERSION_FILES, releaseBookkeeping } from './release-bookkeeping.mjs';
 import { CATALOG, INDEPENDENT_CONFIG, SITE, reachableFrom } from './workspace-graph.mjs';
-import { validateAppInformation } from './app-information.mjs';
-import { parseAppsRegistry } from './apps-registry.mjs';
+import { handoffCatalogEntry, validateAppInformation } from './app-information.mjs';
+import { appCatalogIds, parseAppsRegistry } from './apps-registry.mjs';
 import { validateStandalone } from './standalone.mjs';
 
 const NON_CODE_PREFIXES = ['docs/', '.changeset/'];
@@ -65,6 +65,12 @@ const CI_WORKFLOW = '.github/workflows/ci.yml';
 // every app. test/app-plan.test.mjs holds the list to ci.yml.
 export const CI_JOB_SCOPES = Object.freeze({
   'composite-site': 'site',
+  'site-runtime': 'site',
+  'site-audit': 'site',
+  'site-e2e': 'site',
+  'site-mobile': 'site',
+  'site-catalog': 'site',
+  'processing-workflows': 'site',
   'agent-interactions': 'site',
   'example-cache-retention': 'site',
   'workspace-contracts': 'every-run',
@@ -99,6 +105,20 @@ export const SITE_KEY_READERS = Object.freeze(Object.fromEntries([
   ['site.analytics.period_days', []],
   ...keys('site.categories[]', ['id', 'title', 'description'], []),
 ].map(([key, readers]) => [key, Object.freeze(readers)])));
+// The site keys no app page carries. The composite build writes an app's home
+// catalogue id, host, title and brand and the analytics id into each page it
+// assembles (hostedThemeOptions in scripts/lib/catalog-sites.mjs), and the
+// per-app site checks read those pages, so a change to any other site key
+// makes them check every app. test/app-plan.test.mjs changes each key listed
+// here and requires every app's theme options to stay the same.
+export const SITE_DATA_KEYS = Object.freeze([
+  'site.domain',
+  ...keys('site.hub', ['host', 'title', 'heading', 'description', ...BRAND_KEYS], []).map(([key]) => key),
+  ...keys('site.catalogs[]', ['hosting', 'heading', 'description'], []).map(([key]) => key),
+  ...keys('site.catalogs[].desktop', ['product_name', 'app_id', 'release', 'executable'], []).map(([key]) => key),
+  'site.analytics.period_days',
+  ...keys('site.categories[]', ['id', 'title', 'description'], []).map(([key]) => key),
+]);
 
 function same(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
@@ -194,6 +214,29 @@ function changedSiteKeys(old, now, path = ['site']) {
   return [path];
 }
 
+// The fields of an app entry the planner has classified. Each reaches the
+// app's own build and jobs and the site build (landing page, 404 table,
+// desktop suite). Every app page also carries the handoff catalog
+// (handoffCatalogEntry, on the hosts appCatalogIds names), which the apps
+// naming HANDOFF_CATALOG_READERS render; the planner compares that projection
+// itself. A change to any other field could reach any app.
+export const CLASSIFIED_ENTRY_FIELDS = Object.freeze([
+  'id', 'path', 'catalog', 'also_in', 'title', 'description', 'categories', 'keywords', 'anatomy', 'modalities',
+  'inputs', 'hardware', 'legacy_domain', 'runtime', 'model_manifest', 'asset_manifest_schema', 'artifact_budget_bytes',
+  'source', 'license', 'maintainers', 'support_status', 'shell', 'app_scoped_runtime_families', 'ci', 'remote_compute',
+  'handoff', 'former_paths',
+]);
+// The handoff module's functions that read the catalog an app page carries
+// (packages/components/src/handoff/index.js); test/app-plan.test.mjs holds
+// the list to that module.
+export const HANDOFF_CATALOG_READERS = Object.freeze(['handoffTargets']);
+
+// What another app's handoff menu shows of an app entry, or null for none.
+function handoffMenuEntry(app) {
+  const entry = app ? handoffCatalogEntry(app) : null;
+  return entry ? { ...entry, hosts: appCatalogIds(app) } : null;
+}
+
 // The first path in a site section that SITE_KEY_READERS does not name: a key
 // it does not list at any depth or that holds a delimiter, or a value of
 // another kind than the table gives its path (a mapping or list where it
@@ -211,9 +254,11 @@ function unknownSiteKey(value, path = ['site']) {
   return siteEntry(path) ? null : path;
 }
 
-// The app entries and site keys a registry/apps.yml change touched, or why
-// the change is shared. Every app build validates the whole registry, so a
-// site change narrows only when the head registry is valid.
+// The app entries and site keys a registry/apps.yml change touched, whether
+// an entry changed what other apps' handoff menus list (`menu`), whether the
+// set of registered ids changed (`registered`), or why the change is shared.
+// Every app build validates the whole registry, so a site change narrows only
+// when the head registry is valid.
 function registryImpact({ before, after }) {
   let old;
   let now;
@@ -240,7 +285,18 @@ function registryImpact({ before, after }) {
   if (was.size !== entries(old).length || is.size !== entries(now).length || was.has(undefined) || is.has(undefined)) {
     return { shared: 'its app entries have missing or duplicate ids' };
   }
-  return { changed: [...new Set([...was.keys(), ...is.keys()])].filter((id) => !same(was.get(id), is.get(id))), siteKeys };
+  const changed = [...new Set([...was.keys(), ...is.keys()])].filter((id) => !same(was.get(id), is.get(id)));
+  for (const id of changed) {
+    const fields = [...new Set([...Object.keys(was.get(id) ?? {}), ...Object.keys(is.get(id) ?? {})])];
+    const unknown = fields.find((field) => !CLASSIFIED_ENTRY_FIELDS.includes(field) && !same(was.get(id)?.[field], is.get(id)?.[field]));
+    if (unknown) return { shared: `the ${id} entry's ${unknown} field is not one the planner classifies` };
+  }
+  return {
+    changed,
+    menu: changed.some((id) => !same(handoffMenuEntry(was.get(id)), handoffMenuEntry(is.get(id)))),
+    registered: !same([...was.keys()].sort(), [...is.keys()].sort()),
+    siteKeys,
+  };
 }
 
 // The jobs that need `id` (`direction` 'dependants') or that it needs
@@ -382,8 +438,8 @@ function changedRootScripts(manifest) {
 // The apps a change tests, whether it needs the composite site build, and why.
 // Without a workspace graph every packages/, exes/ or root file change counts
 // as shared. With one, a change selects the apps that reach it; a root file
-// that ci.yml's per-app jobs run selects every app, and one only the
-// composite-site job runs selects no app but the site build. `manifests` maps
+// that ci.yml's per-app jobs run selects every app, and one only its site
+// jobs run (siteJobNames) selects no app but the site build. `manifests` maps
 // a changed package.json, offline asset lock, pnpm-lock.yaml or
 // registry/apps.yml to its text before and after: root script edits count only
 // where ci.yml runs them, an asset lock change selects the apps whose assets
@@ -393,12 +449,14 @@ function changedRootScripts(manifest) {
 // only the apps that read that exact file.
 // `reasons.fallback` says why the whole catalog was selected; otherwise
 // `reasons.apps` maps each selected app, and `reasons.site` the site build, to
-// the changes that selected it.
+// the changes that selected it. `siteCode` is false when every site reason is
+// data the per-app site checks do not read (landing page files, registry
+// entries, the offline lock), so they can cover only the selected apps.
 // With `release`, a version bump selects what it reaches: release.yml picks
 // the apps to publish from the version changes themselves. `carried` maps app
 // ids a failed run on main left untested to the jobs that failed there.
 export function selectAffectedApps(registry, changedPaths = [], graph = null, manifests = new Map(), { release = false, carried = new Map() } = {}) {
-  const everything = (fallback) => ({ apps: registry.apps, site: true, reasons: { fallback, apps: {}, site: [] } });
+  const everything = (fallback) => ({ apps: registry.apps, site: true, siteCode: true, reasons: { fallback, apps: {}, site: [] } });
   if (!changedPaths.length) return everything('no changed paths: no base revision, an unreadable diff, or a full run');
 
   const appIds = new Set(registry.apps.map((app) => app.id));
@@ -413,7 +471,15 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
   const shared = (reason) => {
     fallback ??= reason;
   };
-  const siteBuild = (reason) => siteReasons.push(reason);
+  // A change to code the site jobs run (the checks, the composite build) needs
+  // those checks over every app; siteData is for data only the landing page,
+  // the catalogue or the named apps read.
+  let siteCode = false;
+  const siteBuild = (reason) => {
+    siteCode = true;
+    siteReasons.push(reason);
+  };
+  const siteData = (reason) => siteReasons.push(reason);
   // Selects whatever reaches `node` or a file below it.
   const selectReaching = (node, reason) => {
     const within = (candidate) => candidate === node || candidate.startsWith(`${node}/`);
@@ -433,6 +499,9 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     const appId = path.match(/^apps\/([^/]+)\//)?.[1] ?? path.match(MODEL_MANIFEST)?.[1];
     if (appIds.has(appId)) {
       select(appId, path);
+      for (const reader of graph?.appReaders?.(path) ?? []) {
+        if (appIds.has(reader)) select(reader, `${path}: ${reader}'s code reads it`);
+      }
       if (graph && AUTOMATION_CONTRACT.test(path)) {
         for (const reader of AUTOMATION_CATALOG_READERS) selectReaching(reader, `${path}: ${reader} generates tools from every app's contract`);
       }
@@ -463,7 +532,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
       continue;
     }
     if (SITE_ONLY_FILES.has(path)) {
-      siteBuild(`${path}: only the composite build copies it`);
+      siteData(`${path}: only the composite build copies it`);
       continue;
     }
     if (path === RUNTIME_MANIFEST && graph) {
@@ -491,7 +560,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
         shared(`${path}: ${impact.shared}`);
         continue;
       }
-      siteBuild(`${path}: the composite site serves the catalog${impact.suite ? ' and its desktop suite' : ''}`);
+      siteData(`${path}: the composite site serves the catalog${impact.suite ? ' and its desktop suite' : ''}`);
       for (const id of impact.changed) {
         if (appIds.has(id)) select(id, `${path}: the ${id} entry changed`);
       }
@@ -503,7 +572,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
         shared(`${path}: ${impact.shared}`);
         continue;
       }
-      siteBuild(`${path}: the composite site themes every app with it`);
+      siteData(`${path}: the composite site themes every app with it`);
       for (const id of impact.changed) {
         if (appIds.has(id)) select(id, `${path}: the ${id} entry changed`);
       }
@@ -515,13 +584,35 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
         shared(`${path}: ${impact.shared}`);
         continue;
       }
-      siteBuild(`${path}: the landing page lists the catalog`);
+      siteData(`${path}: the landing page lists the catalog`);
       for (const id of impact.changed) {
         if (appIds.has(id)) select(id, `${path}: the ${id} entry changed`);
       }
+      if (impact.registered) {
+        if (!graph) {
+          shared(`${path}: the registered apps changed, and without a workspace graph the builds that generate tools from every app are unknown`);
+          continue;
+        }
+        for (const reader of AUTOMATION_CATALOG_READERS) selectReaching(reader, `${path}: the registered apps changed, and ${reader} generates tools from every one`);
+      }
+      if (impact.menu) {
+        if (!graph?.appsNaming) {
+          shared(`${path}: an entry changed what the handoff menus list, and without a workspace graph the apps that render one are unknown`);
+          continue;
+        }
+        for (const id of HANDOFF_CATALOG_READERS.flatMap((reader) => graph.appsNaming(reader))) {
+          if (appIds.has(id)) select(id, `${path}: an entry changed what ${id}'s handoff menu lists`);
+        }
+      }
       for (const segments of impact.siteKeys) {
         const { name: key, readers } = siteEntry(segments);
-        if (!readers.length) siteBuild(`${path}: ${key} changed, and only the site build reads it`);
+        // The composite build writes some keys into every app page it assembles,
+        // which the per-app site checks then read: those are code for them.
+        if (SITE_DATA_KEYS.includes(key)) {
+          if (!readers.length) siteData(`${path}: ${key} changed, and only the site build reads it`);
+        } else {
+          siteBuild(`${path}: ${key} changed, and the composite build writes it into every app page`);
+        }
         if (readers.length && !graph) shared(`${path}: ${key} changed, and there is no workspace graph to find the apps that read it`);
         else for (const reader of readers) selectReaching(reader, `${path}: ${key} changed, and ${reader} reads it`);
       }
@@ -561,7 +652,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     }
     if (manifest && path === OFFLINE_LOCK) {
       for (const app of lockOwners(manifest)) if (appIds.has(app)) select(app, `${path}: its locked assets changed`);
-      siteBuild(path);
+      siteData(path);
       continue;
     }
     // New export entries resolve every existing import as before.
@@ -602,6 +693,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
   return {
     apps,
     site: siteReasons.length > 0,
+    siteCode,
     reasons: { fallback: null, apps: Object.fromEntries(apps.map((app) => [app.id, appReasons.get(app.id)])), site: siteReasons },
     bookkeeping,
   };
@@ -679,6 +771,7 @@ export function createAppPlan(registry, changedPaths = [], graph = null, manifes
     releaseApps: Object.freeze({ include: Object.freeze(releasable.map(matrixEntry)) }),
     allApps: selected.length === registry.apps.length,
     site: site || selected.length > 0,
+    siteCode: affected.siteCode,
     reasons: Object.freeze(reasons),
     bookkeeping: Object.freeze([...(affected.bookkeeping ?? [])]),
     // Why a pull request's homepage-easter-egg job runs; empty when it is skipped.

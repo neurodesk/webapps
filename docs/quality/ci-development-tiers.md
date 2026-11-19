@@ -286,7 +286,8 @@ listing leaves out the earlier attempts of a re-run.
 
 A pull request `ci` run is whole-catalogue when it ran at least 100 jobs, ready
 when a job only a ready pull request starts (`full-plan`, `full-plan-withheld`,
-`composite-site`) took a runner, and draft otherwise. A ready run that selects
+`composite-site` or one of the five site checks, which a re-run of one failed
+check runs alone) took a runner, and draft otherwise. A ready run that selects
 neither the site nor more than its draft plan counts as draft. A cancelled run
 that lists such a job, neither skipped nor given a runner, is of unknown tier:
 a run cancelled while planning cancels those jobs whatever its plan. The
@@ -403,6 +404,102 @@ runs every test, since the threshold is a CPU measurement: SynthSeg's four
 runs include every test. To run them before merging a shared change, dispatch
 `ci` on the branch.
 
+## Composite site checks
+
+`composite-site` builds the site once with `pnpm build`. It runs the three
+checks that read `dist-sites/` and the per-app builds (`audit:artifacts`,
+`runtime-assets.test.mjs`, `catalog-sites.test.mjs`) and uploads `dist/` as one
+zstd tar: 283 MB from 668 MB in 2.3 s on 18 November 2026. Five jobs download
+it through `.github/actions/composite-site` and check it in parallel:
+
+- `site-runtime`: resource cache and threaded runtime startup.
+- `site-audit`: the example cache and the interface audit.
+- `site-e2e`: composite smoke, e2e types and the workspace e2e catalog.
+- `site-mobile`: interface workflows, scan pickers and mobile layouts.
+- `site-catalog`: component browser checks, automation contracts and the
+  cross-browser handoff.
+
+`agent-interactions`, `processing-workflows` (a dispatch with
+`agentic_mode=pipeline`) and `example-cache-retention` wait for all five, as
+they waited for the one serial job before the split, which ran every check in
+sequence for 31 to 33 minutes and was the last job of every ready one-app pull
+request. The artifact is kept 3 days. Re-running one failed check after that
+fails at the download with a message to use "Re-run all jobs", which builds
+the site again.
+
+The per-app checks read `SMOKE_APPS` (`scripts/lib/smoke-apps.mjs`), which
+`composite-site` sets with `scripts/site-check-apps.mjs`:
+
+| Event | Apps the per-app site checks cover |
+| --- | --- |
+| Draft pull request | None: the site is not built |
+| Ready pull request, push, dispatch with `scope=affected` | The selected apps, the canaries seedseg, dicompare and syncro, and the apps a check compares them with or reads files from |
+| Any of these when the plan selects every app or `site_code` is true | Every app |
+| Nightly, dispatch with `scope=all` or `scope=site` | Every app |
+
+`site_code` is the planner's answer to "does the change reach code the site
+jobs run?". Every reason that selects the site build counts, except data the
+per-app checks do not read: the composite-only site files, registry, app
+information and standalone entries, the offline asset lock, and the `site`
+keys of `registry/apps.yml` that no app page carries (`SITE_DATA_KEYS`: the
+hub, categories, analytics period, domain, and a catalogue's heading,
+description, hosting and desktop suite). A change to a check, a helper it
+imports, `scripts/build-site.mjs`, a site job of `ci.yml`, or a `site` key the
+composite build writes into every app page (a catalogue's id, host, title or
+brand, the analytics id) checks every app.
+Catalogue-level checks (landing page, catalogue sites, runtime assembly,
+artifact budgets, automation contracts) run whenever the site is built. A
+canary that is not a registered app of its shell, or a shell without a canary,
+fails the selection.
+
+A narrowed check is sound only where its result for an app depends on that app
+alone. Two places keep the other dependencies inside the selection:
+
+- The planner selects every app whose built pages change with the change. An
+  app's page carries the handoff catalog of every app its hosts serve, so a
+  `registry/apps.yml` change to what that catalog lists (an app's id, path,
+  title, `handoff`, `support_status` or hosts) selects the apps that render it:
+  those whose code names `HANDOFF_CATALOG_READERS` (DICOM View). A change to
+  which apps are registered also selects the apps that reach
+  `AUTOMATION_CATALOG_READERS` (Pipeline Builder, whose bundle has a tool per
+  operation of every registered app). A file of one app that another app's code
+  names by a relative path selects that app too: DICOM View and SeedSeg stage
+  dicompare's embedding kit, and seven apps' tests read the CALMaR T1 fixture.
+  That rule sees literal relative paths to files and directories only; a glob,
+  an interpolated path or a repository-root-relative string selects nothing
+  more, so it adds to the selection without being a complete map.
+- A check whose result for one app depends on another declares it as `needs`,
+  and `smokeApps` adds those apps before the check runs (null runs every app):
+
+| Check | Listed app | Also runs |
+| --- | --- | --- |
+| MindGrab CPU parity (`parityPeers`) | A consumer of a shared CPU binary | One other consumer of it, from `runtime-assets/manifest.json` |
+| BET startup (`betNeeds`) | `calmar`, which owns the fixture | `qsmbly` and `brain-extraction` |
+| Asyncify startup (`asyncifyNeeds`) | `synthsr`, which installs the ONNX Runtime API it loads | Every `ort-web-asyncify` consumer in the registry |
+
+A parity peer runs only the binaries it shares with a listed app, so the peer
+of `lcmodel` segments with mindmap alone. The parity check now runs every
+shared CPU binary in two apps and fails one compared in a single app. Before, the nightly ran mindmap, mindsnap and
+16chan18cls in one app each, so their parity compared an output with itself.
+The three extra segmentations take about 125, 126 and 54 s (nightly run
+44230450914), so `site-runtime` takes about 5 minutes longer on a
+whole-catalogue run.
+
+A failed site job names no app, so the next push to main diffs from the last
+green `ci` run instead and carries no app: it checks the apps that the merges
+since that run reach, its own change's apps and the canaries. That covers what
+a failed push run checked, since that run's changes are among those merges. It
+does not cover an app that a failed nightly run found broken but no merge since
+the last green run reaches. The next nightly run checks it again, as does a
+dispatch with `scope=all` or `scope=site`.
+
+On 18 November 2026, against a full local build, the one-app selection
+`niimath` with the canaries took 23 s for runtime startup (9.7 minutes for the
+catalogue in CI), 125 s for the interface audit (8.1 minutes), 36 s for mobile
+layouts (1.8 minutes), 17 s for interface workflows (1.0 minute), 50 s for the
+composite smoke (1.8 minutes) and 49 s for the e2e catalog (2.4 minutes).
+dicompare, the only React app, takes 77 s of that audit.
+
 ## Site keys, ci.yml jobs and the fixed jobs
 
 Over 16 to 18 November 2026 two small changes cost 2,577 runner minutes of
@@ -441,7 +538,9 @@ changes nothing (`CI_JOB_SCOPES` in `scripts/lib/app-plan.mjs`). It narrows only
 when the base and head have the same jobs and every job that needs a changed
 job, or that a changed job needs (the plan aside), at the base or the head, has
 the changed job's scope. Then a change confined to `composite-site` or a job
-that only consumes its build selects the site build; one confined to
+that only consumes its build (the five site checks, `processing-workflows`,
+`agent-interactions`, `example-cache-retention`) selects the site build, with
+its per-app checks over every app because it changes code they run; one confined to
 `homepage-easter-egg` runs the easter egg; and one confined to
 `workspace-contracts`, which runs on every run anyway, or to the `full-plan`
 markers selects nothing more. An added or removed
@@ -482,7 +581,7 @@ every app. `test/ci-required-jobs.test.mjs` runs twice per run, in `app-plan`
 (`pnpm check:integration`) and in `workspace-contracts` (`pnpm
 test:contracts`). It fails when a required job is missing, carries
 `continue-on-error`, runs under another condition or waits for other jobs than
-it pins, or has a run step that can be skipped other than the ten it lists,
+it pins, or has a run step that can be skipped other than the nine it lists,
 and when either guard step is missing, conditional or soft. It also fails when
 a required job needs a job that can be skipped on a run where the required job
 is due: it simulates every trigger of `ci.yml` (each event, pull request
@@ -490,6 +589,10 @@ action and draft state, dispatch scope and branch) with every value of the
 outputs the job and the jobs it waits for read. A job whose condition admits a
 skipped dependency with a status function (`!cancelled()`, `always()`) may
 need one; a condition the simulation cannot evaluate fails it.
+The five site checks and `processing-workflows` are required and state that
+they are due when the site was built (`needs.composite-site.result ==
+'success'`), which GitHub's implicit `success()` already demanded; a dispatch
+with `scope=affected` and no site in its plan skips them with the build.
 `example-cache-retention` may fail by design and is not required. A change
 that removes both guards is caught only by review and by the full plan it
 triggers: a change to the plan job or to a root script `ci.yml` runs selects
@@ -606,12 +709,13 @@ push also selects the apps whose `app-tests` or browser jobs did not pass
 there (`resolveCiBase`, `carriedApps`): on 13 November 2026 synthsr's GPU job
 failed for 7 hours, and each push in that time tested all 63 apps from the
 last green run; replayed, the second of them selects synthsr alone. A failed
-job that belongs to no app, such as the plan itself, a job of that attempt
-that has not finished, or an app id the registry does not know sends the push
-back to the last green run. A carried app runs all its jobs again, but a push
+job that belongs to no app, such as the plan itself or a site job (it checked
+only the apps of its own run), a job of that attempt that has not finished, or
+an app id the registry does not know sends the push back to the last green run. A carried app runs all its jobs again, but a push
 leaves out `@slow` tests, so an app a nightly failed in a `@slow` test is
-retested in full only by the next nightly. Jobs only the nightly runs
-(`agent-interactions`) are not carried: the nightly runs them again. PR pushes cancel earlier runs
+retested in full only by the next nightly. The agentic jobs only the nightly
+or a dispatch runs (`agent-interactions`, `processing-workflows`) are not
+carried: the nightly runs the interactions again. PR pushes cancel earlier runs
 of the same PR. Schedule and manual runs keep their separate concurrency
 groups, and native release/signing conditions are unchanged.
 

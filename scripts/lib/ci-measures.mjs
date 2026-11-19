@@ -36,6 +36,12 @@ const CI_JOBS = Object.freeze({
   'browser-e2e': 'app',
   'browser-e2e-gpu': 'app',
   'composite-site': 'site',
+  'site-runtime': 'site',
+  'site-audit': 'site',
+  'site-e2e': 'site',
+  'site-mobile': 'site',
+  'site-catalog': 'site',
+  'processing-workflows': 'site',
   'example-cache-retention': 'site',
   'agent-interactions': 'site',
 });
@@ -43,7 +49,10 @@ const CI_JOBS = Object.freeze({
 // The ci jobs a pull request run starts only once the pull request is ready
 // for review. A run that started none of them is a draft run; a ready run that
 // selected neither the site nor more than its draft plan also counts as one.
-export const READY_ONLY_CI_JOBS = Object.freeze(['full-plan', 'full-plan-withheld', 'composite-site']);
+// The five site checks are listed too: re-running one that failed reuses the
+// earlier build, so that attempt, which the report reads alone, holds no
+// composite-site job.
+export const READY_ONLY_CI_JOBS = Object.freeze(['full-plan', 'full-plan-withheld', 'composite-site', 'site-runtime', 'site-audit', 'site-e2e', 'site-mobile', 'site-catalog']);
 
 // The workflow that puts the catalogue sites live, by name and file.
 export const DEPLOY_WORKFLOW = Object.freeze({ name: 'deploy-github-pages', file: 'deploy-pages.yml' });
