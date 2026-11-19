@@ -232,6 +232,11 @@ for (const [name, edit, message] of damagedIndexes) {
   });
 }
 
+test('a config larger than the metadata limit is refused before it is read', async (t) => {
+  const built = image({ before: (parts) => { parts.config.padding = 'x'.repeat(5 * 1024 * 1024); } });
+  await assert.rejects(readOciArchive(write(t, built)), /config is larger than \d+ bytes/u);
+});
+
 test('a truncated archive is refused', async (t) => {
   const built = image();
   const path = join(scratch(t), 'truncated.tar');

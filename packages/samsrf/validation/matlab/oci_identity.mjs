@@ -119,6 +119,7 @@ async function tarEntries(path) {
       const size = pax.size === undefined ? parseNumber(header.subarray(124, 136), 'size') : Number(pax.size);
       const data = offset + 512;
       if (data + size > archiveBytes) fail('truncated tar archive');
+      if ((type === 'x' || type === 'L' || type === 'g') && size > JSON_LIMIT) fail(`tar metadata record at byte ${offset} is larger than ${JSON_LIMIT} bytes`);
       if (type === 'x') {
         pax = parsePax(await readRange(handle, data, size));
       } else if (type === 'L') {
@@ -223,7 +224,9 @@ export async function readOciArchive(path) {
       const entry = blobs.get(digest);
       if (!entry) fail(`the archive has no blob for the ${what} ${digest}`);
       if (descriptor.size !== entry.size) fail(`the ${what} ${digest} is ${entry.size} bytes, not the ${descriptor.size} its descriptor declares`);
-      return json ? parseJson(await readRange(handle, entry.offset, entry.size), what) : entry;
+      if (!json) return entry;
+      if (entry.size > JSON_LIMIT) fail(`the ${what} is larger than ${JSON_LIMIT} bytes`);
+      return parseJson(await readRange(handle, entry.offset, entry.size), what);
     };
     const reachable = new Set();
     const readManifest = async (descriptor, what) => {

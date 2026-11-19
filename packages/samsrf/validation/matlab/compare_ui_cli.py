@@ -215,6 +215,9 @@ def compare_downloads(run, record, run_dir, matlab_dir, engine, engine_dir, scra
     stem = mat[:-4]
     files = downloaded(run_dir, record)
     provenance_name = f'{stem}_provenance.json'
+    for flag in ('arithmeticProvenance', 'losslessExport'):
+        if flag in record and type(record[flag]) is not bool:
+            raise Inventory(f'the UI record flag {flag} is not a boolean')
     if record.get('arithmeticProvenance') is True and provenance_name not in files:
         raise Inventory('downloaded arithmetic provenance is missing')
     if record.get('losslessExport') is True and lossless_name(stem) not in files:

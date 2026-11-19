@@ -92,6 +92,19 @@ class Format(unittest.TestCase):
                 with self.assertRaisesRegex(Inventory, message):
                     lossless.read_lossless(damaged)
 
+    def test_a_header_the_package_reader_refuses_is_refused_here(self):
+        data = package_bytes(self.CASE)
+        length = struct.unpack_from('<I', data, 12)[0]
+        header = json.loads(data[16:16 + length])
+        without = {key: value for key, value in header.items() if key != 'analysed'}
+        for edited in ({**header, 'version': True}, without):
+            text = json.dumps(edited, separators=(',', ':')).encode()
+            text += b' ' * (-(16 + len(text)) % 8)
+            damaged = data[:12] + struct.pack('<I', len(text)) + text + data[16 + length:]
+            with self.subTest(header=edited):
+                with self.assertRaisesRegex(Inventory, 'does not describe'):
+                    lossless.read_lossless(damaged)
+
 
 class CommandLine(unittest.TestCase):
     """lossless.py on a whole-matrix fixture: exit 0 when the file is the engine's, 1 when it is not, 2 refused."""

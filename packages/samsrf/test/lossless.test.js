@@ -42,6 +42,24 @@ test('a lossless file round-trips every bit: NaN payloads and signs, signed zero
   assert.deepEqual(samsrf.writeLossless(read, { precision: read.precision }), bytes, 'writing what was read gives the same bytes');
 });
 
+test('a Node Buffer inside a larger allocation reads as its own bytes', () => {
+  const original = merged();
+  const file = samsrf.writeLossless(original, { precision: 'double' });
+  const pool = Buffer.alloc(file.length + 4096, 0xff);
+  pool.set(file, 1024);
+  const read = samsrf.readLossless(pool.subarray(1024, 1024 + file.length));
+  assert.deepEqual(bitsOf(read.maps.data), bitsOf(original.maps.data));
+  assert.deepEqual(bitsOf(read.imaginary), bitsOf(original.imaginary));
+  assert.deepEqual([...read.analysed], [...original.analysed]);
+});
+
+test('a subject HRF kernel is refused when the fit or the TR cannot give one', () => {
+  const model = { Hrf: 'hrf_subject', TR: 1 };
+  assert.ok(samsrf.subjectHrfKernel(model, [5.5, 15.5, 5, 2]).length > 0);
+  assert.throws(() => samsrf.subjectHrfKernel(model, [5.5, 15.5, NaN, 2]), /fP holds a value that is not finite/);
+  assert.throws(() => samsrf.subjectHrfKernel({ ...model, TR: 0 }, [5.5, 15.5, 5, 2]), /TR must be a positive number/);
+});
+
 test('the layout is the documented one: magic, version, padded JSON header, then the sections', () => {
   const bytes = samsrf.writeLossless({
     maps: { values: ['R^2'], vertices: 2, data: Float64Array.of(-0, 0.5) },

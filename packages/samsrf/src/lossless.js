@@ -9,7 +9,9 @@ export const LOSSLESS_VERSION = 1;
 const PRECISIONS = ['double', 'single'];
 
 // Typed arrays are copied as bytes, never through a Number, which may not keep a NaN's bits.
-if (new Uint8Array(Uint16Array.of(1).buffer)[0] !== 1) throw new Error('The lossless export needs a little-endian platform');
+function requireLittleEndian() {
+  if (new Uint8Array(Uint16Array.of(1).buffer)[0] !== 1) fail('reading and writing need a little-endian platform');
+}
 
 /** The lossless file of the map set `prefix` (`lh_pRF_Gaussian` → `lh_pRF_Gaussian_lossless.bin`). */
 export function losslessName(prefix) {
@@ -35,6 +37,7 @@ function checkRows(name, rows, vertices) {
  * returns it, with the model's data precision ('double' or 'single'). Returns the file's bytes.
  */
 export function writeLossless({ maps, raw = null, analysed = null, imaginary = null, arithmeticReference }, { precision } = {}) {
+  requireLittleEndian();
   if (!PRECISIONS.includes(precision)) fail(`precision must be 'double' or 'single', not ${JSON.stringify(precision)}`);
   if (typeof arithmeticReference !== 'string' || !arithmeticReference) fail('arithmeticReference must name the reference');
   const vertices = maps?.vertices;
@@ -78,6 +81,7 @@ export function writeLossless({ maps, raw = null, analysed = null, imaginary = n
  * the shape `job.merge` returns plus the precision. Throws on any other layout.
  */
 export function readLossless(bytes) {
+  requireLittleEndian();
   if (!(bytes instanceof Uint8Array)) fail('read needs a Uint8Array');
   if (bytes.length < PREAMBLE || new TextDecoder().decode(bytes.subarray(0, 8)) !== MAGIC) fail('not a SamSrf lossless file');
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -100,9 +104,11 @@ export function readLossless(bytes) {
   const lengths = [values.length * vertices * 8, imaginary ? values.length * vertices * 8 : 0, raw.length * vertices * 8, (analysed ?? 0) * 4];
   if (PREAMBLE + headerLength + lengths.reduce((sum, length) => sum + length, 0) !== bytes.length) fail('the file length does not match its header');
   let offset = PREAMBLE + headerLength;
-  // slice copies the bytes into a buffer of their own, aligned for the typed array.
+  // ArrayBuffer.slice copies the section into a buffer of its own, aligned for the typed array.
+  // A Node Buffer's own slice is a view of its whole allocation.
   const take = (length, Type) => {
-    const section = new Type(bytes.slice(offset, offset + length).buffer);
+    const start = bytes.byteOffset + offset;
+    const section = new Type(bytes.buffer.slice(start, start + length));
     offset += length;
     return section;
   };

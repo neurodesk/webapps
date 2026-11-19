@@ -79,7 +79,8 @@ def read_lossless(data):
         raise Inventory(f'the lossless header is not JSON ({error})') from error
     names = lambda value: isinstance(value, list) and all(isinstance(item, str) for item in value)
     count = lambda value: type(value) is int and value >= 0
-    if (not isinstance(header, dict) or header.get('format') != FORMAT or header.get('version') != VERSION
+    if (not isinstance(header, dict) or header.get('format') != FORMAT or type(header.get('version')) is not int or header['version'] != VERSION
+            or 'analysed' not in header
             or header.get('precision') not in cli_plan.PRECISIONS or not isinstance(header.get('arithmeticReference'), str)
             or not count(header.get('vertices')) or header['vertices'] < 1 or not names(header.get('values'))
             or not isinstance(header.get('imaginary'), bool) or not names(header.get('raw'))
