@@ -1,9 +1,10 @@
 import { erodeCortex, findPatches, surfaceNormals, validatePatchOptions } from './patches.js';
-import { mapCortex, readCortexAtlas } from './cortex-atlas.js';
+import { nearestAtlasVertices, readCortexAtlas } from './cortex-atlas.js';
+import { REGION_ATLASES, readRegionAtlas, selectRegion } from './cortex-regions.js';
 import { patchQc } from './analysis-qc.js';
 import { roundEven } from './qc.js';
 import { inverseAffine, readVolume } from './volume.js';
-import { writeFreeSurfer } from './results.js';
+import { writeAnnotation, writeFreeSurfer } from './results.js';
 
 const encoder = new TextEncoder();
 const rows = (values, indices) => indices.map((i) => Array.from(values.subarray(i * 3, i * 3 + 3)));
@@ -18,12 +19,16 @@ export function readPatchRoi(buffer, source) {
   return roi;
 }
 
-export async function analyzeSurfaces({ source, vertices, faces, estimateNormals, patches: patchOptions, roi = null, loadAtlas, onProgress = () => {} }) {
+export async function analyzeSurfaces({ source, vertices, faces, estimateNormals, patches: patchOptions, roi = null, region: regionId = 'cortex', loadAtlas, loadRegions, onProgress = () => {} }) {
   const files = [];
   const flatPatches = {};
   const geometries = {};
   const settings = patchOptions ? validatePatchOptions(patchOptions) : null;
-  const atlas = settings ? readCortexAtlas(await loadAtlas()) : null;
+  const region = selectRegion(regionId, { patches: settings, roi });
+  const [atlasBytes, regionBytes] = settings ? await Promise.all([loadAtlas(), region ? loadRegions() : null]) : [];
+  const atlas = settings ? readCortexAtlas(atlasBytes) : null;
+  const regionAtlas = region ? readRegionAtlas(regionBytes, atlas.points.length / 3)[region.atlas] : null;
+  const regionLabels = region ? new Set(region.labels) : null;
   let eligibleFaceCount = 0;
   for (const hemisphere of ['lh', 'rh']) {
     const white = vertices[`${hemisphere}.white`];
@@ -36,11 +41,14 @@ export async function analyzeSurfaces({ source, vertices, faces, estimateNormals
     }
     if (!settings || !['both', hemisphere].includes(settings.hemisphere)) continue;
     onProgress(`Finding ${hemisphere === 'lh' ? 'left' : 'right'} cortical patches…`);
-    let eligible = mapCortex(vertices[`${hemisphere}.registration`], atlas, hemisphere);
+    const nearest = nearestAtlasVertices(vertices[`${hemisphere}.registration`], atlas.points);
+    let eligible = Uint8Array.from(nearest, (vertex) => atlas[hemisphere][vertex]);
     eligible = erodeCortex(middle, faces[hemisphere], eligible);
+    const parcellation = region ? Uint8Array.from(nearest, (vertex) => regionAtlas[hemisphere][vertex]) : null;
     const inverse = roi ? inverseAffine(roi.affine) : null;
     for (let i = 0; i < eligible.length; i += 1) {
       if (Math.hypot(...[0, 1, 2].map((axis) => pial[i * 3 + axis] - white[i * 3 + axis])) < 0.5) eligible[i] = 0;
+      if (region && !regionLabels.has(parcellation[i])) eligible[i] = 0;
       if (roi && eligible[i]) {
         const voxel = inverse.slice(0, 3).map((row) => roundEven(row[3] + row.slice(0, 3).reduce((sum, v, axis) => sum + v * middle[i * 3 + axis], 0)));
         const inside = voxel.every((v, axis) => v >= 0 && v < roi.dims[axis]);
@@ -86,15 +94,35 @@ export async function analyzeSurfaces({ source, vertices, faces, estimateNormals
       };
       files.push({ id, name: `${id}.mid.white`, mediaType: 'application/vnd.freesurfer.surface', bytes: writeFreeSurfer(Float64Array.from(geometries[id].mid_ras_mm.flat()), localFaces) });
     }
+    if (region) {
+      files.push({
+        id: `${hemisphere}-${region.atlas}-annot`,
+        name: `${hemisphere}.${region.atlas}.annot`,
+        mediaType: 'application/vnd.freesurfer.annotation',
+        bytes: writeAnnotation(parcellation, REGION_ATLASES[region.atlas].labels),
+      });
+    }
   }
-  if (settings && !eligibleFaceCount) throw new Error(roi ? 'ROI contains no eligible cortical patch.' : 'No eligible cortical faces in the requested hemisphere.');
+  if (settings && !eligibleFaceCount) {
+    if (region) throw new Error(`${region.name} (${REGION_ATLASES[region.atlas].name}) contains no eligible cortical faces in the requested hemisphere.`);
+    throw new Error(roi ? 'ROI contains no eligible cortical patch.' : 'No eligible cortical faces in the requested hemisphere.');
+  }
   const analysis = {
     depth_fraction: 0.5,
     coordinate_system: 'Scanner RAS (positions in mm; normals dimensionless)',
     patch_center_method: 'Mid-surface member vertex nearest the area-weighted patch centroid',
     patch_normal_method: 'Unit fitted-plane normal, oriented white-to-pial',
     normal_method: 'Area-weighted mid-surface vertex normals, oriented white-to-pial',
-    flat_patch_definition: settings ? { schema_version: 2, ...settings, cortex_mask: 'fsaverage_cortex_via_registration', medial_wall_margin_mm: 5, min_ribbon_separation_mm: 0.5, min_normal_coherence: 0.9, region: roi ? 'roi' : 'cortex' } : null,
+    flat_patch_definition: settings ? {
+      schema_version: 2,
+      ...settings,
+      cortex_mask: 'fsaverage_cortex_via_registration',
+      medial_wall_margin_mm: 5,
+      min_ribbon_separation_mm: 0.5,
+      min_normal_coherence: 0.9,
+      region: region ? region.id : roi ? 'roi' : 'cortex',
+      ...(region ? { region_atlas: REGION_ATLASES[region.atlas].name } : {}),
+    } : null,
     flat_patch_status: settings ? Object.keys(flatPatches).length ? 'PATCHES_FOUND' : 'NO_PATCH_MEETS_CRITERIA' : 'NOT_REQUESTED',
     flat_patches: flatPatches,
   };

@@ -17,7 +17,12 @@ export function readCortexAtlas(buffer) {
 }
 
 export function mapCortex(registration, atlas, hemisphere) {
-  const { points } = atlas;
+  return Uint8Array.from(nearestAtlasVertices(registration, atlas.points), (vertex) => atlas[hemisphere][vertex]);
+}
+
+// fsaverage's lh and rh spheres are the same icosahedron, so one point set serves
+// both hemispheres; each hemisphere's labels are then indexed by the nearest vertex.
+export function nearestAtlasVertices(registration, points) {
   const count = points.length / 3;
   const order = Array.from({ length: count }, (_, i) => i);
   const left = new Int32Array(count).fill(-1);
@@ -35,8 +40,8 @@ export function mapCortex(registration, atlas, hemisphere) {
     return node;
   };
   const root = build(order, 0);
-  const cortex = new Uint8Array(registration.length / 3);
-  for (let i = 0; i < cortex.length; i += 1) {
+  const nearestVertices = new Int32Array(registration.length / 3);
+  for (let i = 0; i < nearestVertices.length; i += 1) {
     const query = Array.from(registration.subarray(i * 3, i * 3 + 3));
     const length = Math.hypot(...query);
     if (!Number.isFinite(length) || length < 1e-6) throw new Error('Invalid cortical registration sphere.');
@@ -56,7 +61,7 @@ export function mapCortex(registration, atlas, hemisphere) {
       if (delta * delta <= best) visit(delta < 0 ? right[node] : left[node]);
     };
     visit(root);
-    cortex[i] = atlas[hemisphere][nearest];
+    nearestVertices[i] = nearest;
   }
-  return cortex;
+  return nearestVertices;
 }
