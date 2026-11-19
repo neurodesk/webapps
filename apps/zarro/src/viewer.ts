@@ -20,6 +20,7 @@ import {
 import examples from '../examples.json'
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace'
 import { createExampleAssetFetch } from './example_asset_fetch.js'
+import { confinedRequest, refuseRedirect } from './confined_store.js'
 import * as zarr from 'zarrita'
 import './styles.css'
 import {
@@ -2527,13 +2528,19 @@ function recordRequest(label: string): void {
   if (stats.lastRequests.length > 5) stats.lastRequests.pop()
 }
 
-function createTrackedZarrFetch(): (request: Request) => Promise<Response> {
+// The store roots an agent opened, which the person allowed in the WebMCP consent: every read of
+// such a store stays under its root, without following a redirect (confined_store.js).
+const agentStoreRoots = new Set<string>()
+
+function createTrackedZarrFetch(confineTo?: string): (request: Request) => Promise<Response> {
   const exampleAssets = examples.flatMap((example) => example.files)
   return async (request: Request): Promise<Response> => {
     const fetchAsset = createExampleAssetFetch(exampleAssets, {
       onRetry: ({ status }) => recordRequest(`${status} retry ${shortZarrPath(new URL(request.url).pathname)}`),
     })
-    const { response, wireBytes } = await fetchAsset(request)
+    const sent = confineTo === undefined ? request : confinedRequest(confineTo, request)
+    const { response, wireBytes } = await fetchAsset(sent)
+    if (confineTo !== undefined) refuseRedirect(response, request.url)
     const method = request.method || 'GET'
     const url = new URL(response.url || request.url)
     const pathname = url.pathname
@@ -2663,7 +2670,7 @@ async function openOmezarrSource(
   const isInitialCustomLoad = initializeWindow
   const storeUrl = profile.storeUrl()
   const baseStore = new zarr.FetchStore(storeUrl, {
-    fetch: createTrackedZarrFetch(),
+    fetch: createTrackedZarrFetch(agentStoreRoots.has(storeUrl) ? storeUrl : undefined),
   })
   const cachedStore = zarr.withByteCaching(
     withInflightReadDeduplication(baseStore),
@@ -5735,6 +5742,7 @@ async function openAutomationStore({ inputs, signal, progress }: OperationContex
   shouldInitializeCustomSource = true
   els.source.value = 'custom'
   els.customStainName.value = 'Agent volume'
+  agentStoreRoots.add(normalizeZarrStoreUrl(store.url))
   setCustomStoreUrls([store.url])
   syncSourceControls()
   const layer = commitCustomLayer()

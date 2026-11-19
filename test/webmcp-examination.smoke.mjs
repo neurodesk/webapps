@@ -4,9 +4,11 @@
 // (--enable-features=WebMCPTesting), as the person would: real file pickers, drops and selectors.
 //
 //   pnpm build && node test/webmcp-examination.smoke.mjs
+//   WEBMCP_CHECKS='ZARRo|frame' node test/webmcp-examination.smoke.mjs   (only the checks whose label matches)
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from '@playwright/test';
@@ -22,6 +24,7 @@ const cache = process.env.EXAMPLE_ASSET_CACHE;
 const scan = (name, size = 16) => ({ name, mimeType: 'application/gzip', buffer: syntheticNifti({ dims: [size, size, size], value: index => index % 7 }) });
 
 const CHECK_SECONDS = Number(process.env.WEBMCP_CHECK_SECONDS ?? 300);
+const ONLY = process.env.WEBMCP_CHECKS ? new RegExp(process.env.WEBMCP_CHECKS) : null;
 const scratch = await mkdtemp(join(tmpdir(), 'webmcp-examination-'));
 
 // The person's own pick, as Chrome reports a file chooser: a trusted change event. Playwright's
@@ -40,6 +43,7 @@ const browser = await chromium.launch({ args: [...GPU_ARGS, FEATURES] });
 const results = [];
 
 async function check(label, body) {
+  if (ONLY && !ONLY.test(label)) return;
   const context = await browser.newContext({ acceptDownloads: true, serviceWorkers: 'block' });
   await context.route(/googletagmanager\.com|google-analytics\.com|cloudflareinsights\.com/, route => route.abort());
   if (cache) await context.route(url => existsSync(exampleCachePath(cache, url.href)), async route => route.fulfill({ body: await readFile(exampleCachePath(cache, route.request().url())) }));
@@ -80,16 +84,44 @@ async function open(context, app) {
   }, [name, input]);
   const result = index => page.evaluate(index => globalThis.examinationCalls[index], index);
   const call = async (name, input) => result(await start(name, input));
-  // inputs_use_page_files always shows the person the files; `answer` is the button they press.
-  const usePageFiles = async (role, input, answer = 'Allow') => {
-    const asked = await start('inputs_use_page_files', { role, input });
-    const dialog = page.locator('dialog#neurodeskAgentPrompt');
+  const dialog = page.locator('dialog#neurodeskAgentPrompt');
+  // A call that shows the person a dialog; `answer` is the button they press.
+  const answered = async (name, input, answer) => {
+    const asked = await start(name, input);
     await dialog.getByRole('button', { name: answer }).waitFor();
+    const text = await dialog.textContent();
     const listed = await dialog.locator('li').allTextContents();
     await dialog.getByRole('button', { name: answer }).click();
-    return { listed, ...await result(asked) };
+    return { text, listed, ...await result(asked) };
   };
-  return { page, call, start, result, usePageFiles };
+  // inputs_use_page_files always shows the person the files.
+  const usePageFiles = (role, input, answer = 'Allow') => answered('inputs_use_page_files', { role, input }, answer);
+  return { page, call, start, result, answered, usePageFiles, dialog };
+}
+
+// The viewer's volumes once the image the person opened is shown in it.
+async function shownVolumes(page, call, name) {
+  let volumes = [];
+  await until(page, () => globalThis.neurodeskAutomation.dispatch('viewers.list').then(viewers => viewers.some(viewer => viewer.capabilities.niivue)));
+  for (const deadline = Date.now() + 60000; !volumes.some(volume => volume.name === name); await page.waitForTimeout(250)) {
+    if (Date.now() > deadline) throw new Error(`the viewer never showed ${name}: ${JSON.stringify(volumes)}`);
+    volumes = (await call('viewers_volumes', { viewerId: 'main' })).volumes ?? [];
+  }
+  return volumes;
+}
+
+// A server on its own port, as a remote host is, that answers CORS and records what it is asked.
+async function remoteHost(handler) {
+  const requests = [];
+  const server = createServer((request, response) => {
+    requests.push(request.url);
+    response.setHeader('Access-Control-Allow-Origin', '*');
+    response.setHeader('Access-Control-Allow-Headers', '*');
+    if (request.method === 'OPTIONS') return response.writeHead(204).end();
+    return handler(request, response);
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  return { origin: `http://127.0.0.1:${server.address().port}`, requests, close: () => new Promise(resolve => server.close(resolve)) };
 }
 
 const NO_CURRENT = entries => entries.every(entry => !Object.hasOwn(entry, 'current'));
@@ -273,7 +305,7 @@ try {
   await check('Brain Extraction: viewers_niivue exports no pixels and fetches only what the person allows', async context => {
     const { page, call, start, result } = await open(context, 'brain-extraction');
     await page.locator('input[type=file][data-neurodesk-input]:not(#neurodesk-input-transfer):not([webkitdirectory])').first().setInputFiles(join(repoRoot, 'exes/synthseg/test/fixtures/small.nii.gz'));
-    await until(page, async () => (await globalThis.neurodeskAutomation.dispatch('viewers.list')).some(viewer => viewer.capabilities.niivue));
+    await shownVolumes(page, call, 'small.nii.gz');
     const downloads = [];
     page.on('download', download => downloads.push(download.suggestedFilename()));
     for (const [method, params] of [['screenshot', {}], ['save', { what: 'bitmap', filename: 'agent.png' }]]) {
@@ -291,6 +323,7 @@ try {
     await dialog.getByRole('button', { name: 'Allow' }).waitFor();
     assert.match(await dialog.textContent(), /Let Brain extraction load the file at this address into the page\?/i);
     assert.match(await dialog.textContent(), /test-only\/remote-fixture\.nii\.gz/);
+    assert.match(await dialog.textContent(), /It replaces the images the viewer shows now\./, 'load_volume says it replaces what the person sees');
     await dialog.getByRole('button', { name: 'Decline' }).click();
     assert.deepEqual(await result(declined), { declined: true, addresses: [url] });
     assert.deepEqual(requests, [], 'a declined address is never requested');
@@ -314,6 +347,8 @@ try {
     await dialog.getByRole('button', { name: 'Allow' }).click();
     assert.equal((await result(redirected)).error?.code, 'REDIRECT_REFUSED');
     assert.ok(!requests.includes(target), `the redirect target is never fetched: ${JSON.stringify(requests)}`);
+    const replacing = await call('viewers_niivue', { viewerId: 'main', method: 'load_mesh', params: { url: `${origin}/test-only/mesh.obj`, replace: true } });
+    assert.equal(replacing.error?.code, 'INVALID_INPUT', `load_mesh may not remove the meshes already loaded: ${JSON.stringify(replacing)}`);
     const document = await call('viewers_niivue', { viewerId: 'main', method: 'load_document', params: { url: `${origin}/test-only/scene.nvd` } });
     assert.equal(document.error?.code, 'INVALID_INPUT', 'a document can name further addresses, so it is not offered');
     const scene = await call('viewers_niivue', { viewerId: 'main' });
@@ -345,8 +380,8 @@ try {
     }
   });
 
-  await check('NiiMath: a press, a drag, a wheel over the viewer, a same-origin frame and a shadow-root pick each release the agent\'s files', async context => {
-    const { page, call } = await open(context, 'niimath');
+  await check('NiiMath: a press, a drag, a wheel over the viewer and a click in a same-origin frame, navigated or inside a shadow root, each touch the examination; a shadow-root pick ends it', async context => {
+    const { page, call, answered } = await open(context, 'niimath');
     await page.evaluate(() => {
       const host = document.createElement('div');
       host.id = 'probe-shadow-host';
@@ -359,42 +394,131 @@ try {
       document.body.append(frame);
     });
     await page.frameLocator('#probe-frame').locator('#probe-frame-button').waitFor();
+    // Each action starts from an examination the person has not touched, in which the agent holds a file.
     const hold = async () => {
+      if ((await call('app_describe')).touched) {
+        const declined = await answered('run_binarize', { waitSeconds: 0 }, 'Decline');
+        assert.equal(declined.declined, true, JSON.stringify(declined));
+      }
       await page.evaluate(() => {
         globalThis.agentHold = document.modelContext.getTools().then(tools => document.modelContext.executeTool(tools.find(tool => tool.name === 'inputs_request_files'), { role: 'image' })).then(JSON.parse);
       });
       await page.locator('dialog#neurodeskAgentPrompt input[type="file"]:not([webkitdirectory])').setInputFiles(scan('agent-held.nii.gz'));
       assert.ok((await page.evaluate(() => globalThis.agentHold)).files, 'the agent holds a file');
     };
-    const held = async () => Object.keys((await call('app_describe')).inputs);
+    const state = async () => {
+      const described = await call('app_describe');
+      if (!Object.keys(described.inputs).length) return 'ended';
+      return described.touched ? 'touched' : 'kept';
+    };
     const viewer = await page.locator('canvas').first().boundingBox();
     const centre = { x: viewer.x + viewer.width / 2, y: viewer.y + viewer.height / 2 };
     await hold();
     await page.mouse.move(centre.x, centre.y);
     await page.mouse.wheel(0, 120);
-    assert.deepEqual(await held(), [], 'a wheel over the viewer');
+    assert.equal(await state(), 'touched', 'a wheel over the viewer');
     await hold();
     await page.mouse.move(centre.x, centre.y);
     await page.mouse.down();
     await page.mouse.move(centre.x + 20, centre.y + 20);
-    assert.deepEqual(await held(), [], 'a drag on the viewer, before release');
+    assert.equal(await state(), 'touched', 'a drag on the viewer, before release');
     await page.mouse.up();
     await hold();
     const heading = await page.locator('#controls .nd-section-title').first().boundingBox();
     await page.mouse.move(heading.x + heading.width / 2, heading.y + heading.height / 2);
     await page.mouse.wheel(0, 120);
-    assert.deepEqual(await held(), ['image'], 'a wheel over a sidebar section title scrolls the page and does not count');
+    assert.equal(await state(), 'kept', 'a wheel over a sidebar section title scrolls the page and does not count');
     await page.frameLocator('#probe-frame').locator('#probe-frame-button').click();
-    assert.deepEqual(await held(), [], 'a click in a same-origin frame');
+    assert.equal(await state(), 'touched', 'a click in a same-origin frame');
+    await hold();
+    await page.evaluate(() => { document.querySelector('#probe-frame').srcdoc = '<button id="probe-frame-button">Navigated</button>'; });
+    await page.frameLocator('#probe-frame').getByRole('button', { name: 'Navigated' }).waitFor();
+    await page.frameLocator('#probe-frame').getByRole('button', { name: 'Navigated' }).click();
+    assert.equal(await state(), 'touched', 'a click in the frame after it navigated');
+    await hold();
+    await page.evaluate(() => {
+      const host = document.createElement('div');
+      const root = host.attachShadow({ mode: 'open' });
+      document.body.append(host);
+      const frame = document.createElement('iframe');
+      frame.id = 'probe-shadow-frame';
+      frame.srcdoc = '<button>Shadow frame action</button>';
+      frame.style.cssText = 'position:fixed;z-index:99999;left:16px;bottom:64px;width:200px;height:80px;background:white';
+      root.append(frame);
+    });
+    const shadowFrame = page.frameLocator('#probe-shadow-frame');
+    await shadowFrame.getByRole('button', { name: 'Shadow frame action' }).waitFor();
+    await shadowFrame.getByRole('button', { name: 'Shadow frame action' }).click();
+    assert.equal(await state(), 'touched', 'a click in a frame added later inside an open shadow root');
     await hold();
     const shadowPick = join(scratch, 'shadow-pick.nii.gz');
     await writeFile(shadowPick, scan('shadow-pick.nii.gz').buffer);
     const cdp = await context.newCDPSession(page);
     const { result: shadowInput } = await cdp.send('Runtime.evaluate', { expression: 'document.querySelector("#probe-shadow-host").shadowRoot.querySelector("#probe-shadow-file")' });
     await cdp.send('DOM.setFileInputFiles', { objectId: shadowInput.objectId, files: [shadowPick] });
+    assert.equal(await state(), 'ended', 'a pick in a shadow-root input replaces the inputs');
     const described = await call('app_describe');
-    assert.deepEqual(Object.keys(described.inputs), [], 'a pick in a shadow-root input');
     assert.deepEqual(described.pageFiles.find(entry => entry.input === 'probe-shadow-file')?.files.map(file => file.name), ['shadow-pick.nii.gz'], `and it is listed: ${JSON.stringify(described.pageFiles)}`);
+  });
+
+  await check('NiiMath: after the person browses the agent\'s result, its report and download serve the agent once they allow it, and Decline releases them', async context => {
+    const { page, call, answered, dialog } = await open(context, 'niimath');
+    const downloads = [];
+    page.on('download', download => downloads.push(download.suggestedFilename()));
+    const loaded = await call('inputs_load_example', { exampleId: 't1-head' });
+    assert.deepEqual(loaded.inputs?.image?.map(file => file.name), ['T1_head.nii.gz'], JSON.stringify(loaded));
+    const run = await call('run_binarize', { waitSeconds: 300 });
+    assert.equal(run.state, 'succeeded', JSON.stringify(run.error));
+    const viewer = await page.locator('canvas').first().boundingBox();
+    await page.mouse.move(viewer.x + viewer.width / 2, viewer.y + viewer.height / 2);
+    await page.mouse.wheel(0, 120);
+    await page.mouse.click(viewer.x + viewer.width / 2, viewer.y + viewer.height / 3);
+    const described = await call('app_describe');
+    assert.equal(described.touched, true);
+    assert.deepEqual(described.inputs.image?.map(file => file.name), ['T1_head.nii.gz'], 'the agent still holds the example');
+    assert.equal(described.run.report, undefined, 'the report waits for the person');
+    assert.equal(described.run.touched, true);
+    const allowed = await answered('runs_get', { runId: run.runId }, 'Allow');
+    assert.deepEqual(allowed.listed.slice(0, 1), ['image: T1_head.nii.gz'], 'the dialog names the held file by role');
+    assert.match(allowed.listed[1] ?? '', /^Run: binarize, started /, 'and the run by operation and start');
+    assert.equal(allowed.report?.runId, run.runId, JSON.stringify(allowed).slice(0, 400));
+    const saved = await call('outputs_download', { runId: run.runId, artifactId: 'report' });
+    assert.deepEqual(saved, { runId: run.runId, artifactId: 'report' }, 'once allowed, the download asks nothing more');
+    for (const deadline = Date.now() + 10000; !downloads.length && Date.now() < deadline;) await page.waitForTimeout(100);
+    assert.deepEqual(downloads, ['report.json']);
+    await page.mouse.move(viewer.x + viewer.width / 2, viewer.y + viewer.height / 2);
+    await page.mouse.wheel(0, -120);
+    const declined = await answered('outputs_download', { runId: run.runId, artifactId: 'report' }, 'Decline');
+    assert.equal(declined.declined, true, 'a further interaction asks again, and the person declines');
+    assert.equal(await dialog.evaluate(element => element.open), false);
+    assert.deepEqual(downloads, ['report.json'], 'nothing more is saved');
+    const after = await call('app_describe');
+    assert.deepEqual(after.inputs, {});
+    assert.equal(after.run.stale, true);
+    for (const [name, input] of [['runs_get', { runId: run.runId }], ['outputs_download', { runId: run.runId, artifactId: 'report' }]]) {
+      assert.equal((await call(name, input)).error?.code, 'RUN_STALE', name);
+    }
+  });
+
+  await check('NiiMath: after the person opens their own file over the agent\'s, nothing can be resumed', async context => {
+    const { page, call, dialog } = await open(context, 'niimath');
+    await page.evaluate(() => {
+      globalThis.agentHold = document.modelContext.getTools().then(tools => document.modelContext.executeTool(tools.find(tool => tool.name === 'inputs_request_files'), { role: 'image' })).then(JSON.parse);
+    });
+    await page.locator('dialog#neurodeskAgentPrompt input[type="file"]:not([webkitdirectory])').setInputFiles(scan('agent-scan.nii.gz'));
+    assert.ok((await page.evaluate(() => globalThis.agentHold)).files);
+    const run = await call('run_binarize', { waitSeconds: 120 });
+    assert.equal(run.state, 'succeeded', JSON.stringify(run.error));
+    await personPicks(context, page, '#niftiInput', 'person-scan.nii.gz');
+    await page.waitForFunction(() => document.querySelector('#fileInfo')?.textContent === 'person-scan.nii.gz');
+    const described = await call('app_describe');
+    assert.deepEqual(described.inputs, {});
+    assert.equal(described.touched, false);
+    assert.equal(described.run.stale, true);
+    for (const [name, input] of [['runs_get', { runId: run.runId }], ['outputs_download', { runId: run.runId, artifactId: 'report' }], ['runs_cancel', { runId: run.runId }]]) {
+      assert.equal((await call(name, input)).error?.code, 'RUN_STALE', name);
+    }
+    assert.equal(await dialog.evaluate(element => element.open), false, 'no dialog offers to resume');
   });
 
   await check('ZARRo: the consent names the store root the app reads under, not the metadata file the agent named', async context => {
@@ -420,10 +544,32 @@ try {
     assert.deepEqual(requests.filter(url => !url.startsWith(`${root}/`)), [], `every read stays under the root the person allowed: ${JSON.stringify(requests)}`);
   });
 
+  await check('ZARRo: a store the agent opened is read only under its root, and a redirect to another server is never followed', async context => {
+    const { page, start, result } = await open(context, 'zarro');
+    const elsewhere = await remoteHost((request, response) => response.writeHead(200, { 'Content-Type': 'application/json' }).end('{}'));
+    const store = await remoteHost((request, response) => response.writeHead(302, { location: `${elsewhere.origin}/synthetic-metadata.json` }).end());
+    try {
+      const root = `${store.origin}/review/fixture.ome.zarr`;
+      const dialog = page.locator('dialog#neurodeskAgentPrompt');
+      const opened = await start('run_open_url', { inputs: { store: { url: `${root}/.zattrs` } }, waitSeconds: 60 });
+      await dialog.getByRole('button', { name: 'Allow' }).waitFor();
+      assert.deepEqual(await dialog.locator('li').allTextContents(), [root]);
+      await dialog.getByRole('button', { name: 'Allow' }).click();
+      const run = await result(opened);
+      assert.equal(run.state, 'failed', JSON.stringify(run));
+      assert.ok(store.requests.length > 0, 'the allowed store was asked');
+      assert.deepEqual(store.requests.filter(url => !url.startsWith('/review/fixture.ome.zarr')), [], `every read stayed under the root: ${JSON.stringify(store.requests)}`);
+      assert.deepEqual(elsewhere.requests, [], 'no request reached the server the store redirects to');
+    } finally {
+      await store.close();
+      await elsewhere.close();
+    }
+  });
+
   await check('Brain Extraction: set_volume refuses v1 and unknown parameters, load_signal is not offered, and a fetch answered after the person used the page loads nothing', async context => {
     const { page, call, start, result } = await open(context, 'brain-extraction');
     await page.locator('input[type=file][data-neurodesk-input]:not(#neurodesk-input-transfer):not([webkitdirectory])').first().setInputFiles(join(repoRoot, 'exes/synthseg/test/fixtures/small.nii.gz'));
-    await until(page, async () => (await globalThis.neurodeskAutomation.dispatch('viewers.list')).some(viewer => viewer.capabilities.niivue));
+    await shownVolumes(page, call, 'small.nii.gz');
     const before = await call('viewers_volumes', { viewerId: 'main' });
     for (const params of [{ volume: 0, v1: true }, { volume: 0, v1: { flip: [true, false, false] } }, { volume: 0, unknown_display: 1 }]) {
       const refused = await call('viewers_niivue', { viewerId: 'main', method: 'set_volume', params });
