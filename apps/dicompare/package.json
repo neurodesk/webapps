@@ -120,6 +120,9 @@
       ],
       "category": "Science"
     },
+    "deb": {
+      "maintainer": "Neurodesk <mail.neurodesk@gmail.com>"
+    },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
