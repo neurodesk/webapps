@@ -55,13 +55,10 @@ export async function analyzeSurfaces({ source, vertices, faces, estimateNormals
         if (!inside || !(roi.data[voxel[0] + roi.dims[0] * (voxel[1] + roi.dims[1] * voxel[2])] > 0)) eligible[i] = 0;
       }
     }
-    let hemisphereFaceCount = 0;
     for (let f = 0; f < faces[hemisphere].length; f += 3) {
-      if (faces[hemisphere].subarray(f, f + 3).every((i) => eligible[i])) hemisphereFaceCount += 1;
+      if (faces[hemisphere].subarray(f, f + 3).every((i) => eligible[i])) eligibleFaceCount += 1;
     }
-    eligibleFaceCount += hemisphereFaceCount;
-    // A named region can leave a hemisphere too little cortex to search: that is a search with no patch, not an error.
-    const candidates = region && hemisphereFaceCount < 3 ? [] : findPatches(middle, faces[hemisphere], eligible, settings);
+    const candidates = findPatches(middle, faces[hemisphere], eligible, settings, Boolean(region));
     for (const [index, patch] of candidates.entries()) {
       const id = `${hemisphere.toUpperCase()}${String(index + 1).padStart(2, '0')}`;
       const separation = patch.indices.map((i) => Math.hypot(...[0, 1, 2].map((axis) => pial[i * 3 + axis] - white[i * 3 + axis]))).sort((a, b) => a - b);

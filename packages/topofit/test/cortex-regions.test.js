@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { LOBES, REGIONS, REGION_ATLASES, readRegionAtlas, selectRegion } from '../src/cortex-regions.js';
+import { findPatches } from '../src/patches.js';
 import { runSurfaceAnalysis } from '../src/pipeline.js';
 import { writeAnnotation } from '../src/results.js';
 import { analyzeSurfaces } from '../src/surface-analysis.js';
@@ -236,4 +237,12 @@ test('annotations round-trip vertex colours and the embedded colour table', () =
   assert.deepEqual(header, { tag: 1, version: -2, maxStructure: table.length, file: 'NOFILE' });
   assert.deepEqual(entries, table.map(({ value: index, name, rgb }) => ({ index, name, rgba: [...rgb, 0] })));
   assert.throws(() => writeAnnotation(Uint8Array.of(table.length), table), /has no colour/);
+});
+
+test('a named region left with two faces finds no patch instead of failing', () => {
+  const vertices = Float64Array.of(0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0);
+  const faces = Int32Array.of(0, 1, 2, 1, 3, 2);
+  const eligible = Uint8Array.of(1, 1, 1, 1);
+  assert.deepEqual(findPatches(vertices, faces, eligible, {}, true), []);
+  assert.throws(() => findPatches(vertices, faces, eligible, {}), /at least three/);
 });
