@@ -82,17 +82,11 @@ export class ProgressManager {
     this.elapsedElement.textContent = `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
   }
 
-  /**
-   * A run begins: message, indeterminate bar, timer and cancel. It tells the page with `nd-run-start`,
-   * so the WebMCP tools see a run the person starts (webmcp/tool-inputs.js).
-   */
+  /** A run begins: message, indeterminate bar, timer and cancel. */
   begin(text = 'Working…', { cancellable = true } = {}) {
     this.setIndeterminate(text);
     this.startTimer();
     this.setCancellable(cancellable);
-    const target = this.textElement ?? this.barElement;
-    const view = target?.ownerDocument?.defaultView;
-    if (view) target.dispatchEvent(new view.CustomEvent('nd-run-start', { bubbles: true }));
   }
 
   /** A run ends: final message, full or empty bar, frozen timer, no cancel. */

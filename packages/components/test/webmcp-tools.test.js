@@ -7,7 +7,7 @@ import { registerAppAutomation } from '../src/automation/index.js';
 import { operationParametersSchema } from '../src/automation/parameters.js';
 import { fetchApproved, registerWebMcpTools, webMcpTools } from '../src/webmcp/tools.js';
 import { exposeWebMcp } from '../src/webmcp/page.js';
-import { createToolInputs } from '../src/webmcp/tool-inputs.js';
+import { createToolInputs, INTERACTIONS, PERSON_INPUT } from '../src/webmcp/tool-inputs.js';
 import { schemaIssues, unsupportedKeywords } from '../src/webmcp/schema.js';
 import { NIIVUE_METHODS, NIIVUE_PARAMETERS } from '../src/webmcp/niivue-methods.js';
 import { coreHandlers } from '@niivue/nv-mcp/browser';
@@ -55,7 +55,8 @@ function page(t, operation, options = {}) {
   const resumes = [];
   let resumeAnswer = true;
   const confirmResume = async (request, { signal } = {}) => {
-    resumes.push({ ...request, run: request.run && { operation: request.run.operation, started: typeof request.run.startedAt === 'number' }, signal: Boolean(signal) });
+    const { startedAt, ...run } = request.run ?? {};
+    resumes.push({ ...request, run: request.run && { ...run, started: typeof startedAt === 'number' }, signal: Boolean(signal) });
     return resumeAnswer;
   };
   const tools = webMcpTools({ contract: contract(), dispatch: automation.dispatch, inputs, examples: () => examples, confirmFiles, confirmResume, ...options });
@@ -461,7 +462,7 @@ test('a press in the workspace touches the examination: its files and run serve 
 
   const report = await call('runs_get', { runId: run.runId });
   assert.equal(report.report.artifacts.labels.filename, 'labels.nii', 'the person allowed it, so the run serves the call');
-  assert.deepEqual(resumes, [{ app: 'Test', files: [{ role: 'image', name: 'scan.nii' }], run: { operation: 'run', started: true }, signal: true }], 'the dialog names the files by role and the run by operation and start');
+  assert.deepEqual(resumes, [{ app: 'Test', files: [{ role: 'image', name: 'scan.nii', bytes: 4 }], run: { runId: run.runId, operation: 'run', inputs: [{ role: 'image', name: 'scan.nii', bytes: 4 }], started: true }, signal: true }], 'the dialog names the files it keeps by role, and the run by operation, start and the files it ran on');
   assert.deepEqual(await call('outputs_download', { runId: run.runId, artifactId: 'labels' }), { runId: run.runId, artifactId: 'labels' });
   assert.equal((await call('run_run')).state, 'succeeded', 'a rerun on the held files');
   assert.equal(resumes.length, 1, 'once allowed, no call asks again');
@@ -513,26 +514,25 @@ test('a remove the app reports with nd-files after the person pressed it ends th
   assert.equal(described.touched, false);
 });
 
-test('a run the person starts from the status bar ends a touched examination; the agent\'s own run does not', async t => {
-  let finish;
-  const { call, inputs, window } = page(t, () => new Promise(resolve => {
-    window.document.body.dispatchEvent(new window.CustomEvent('nd-run-start', { bubbles: true }));
-    finish = () => resolve(labels());
-  }));
+test('a run the person starts in the page leaves the agent\'s run to the resume dialog, which hands over only what that run ended with', async t => {
+  const { call, inputs, window, resumes, downloads } = page(t, async () => labels());
   hold(inputs, 'image', [new File(['a'], 'agent.nii')]);
-  const started = call('run_run', { waitSeconds: 5 });
-  while (!finish) await new Promise(resolve => setTimeout(resolve, 5));
+  const run = await call('run_run');
+  // The person presses the app's own Run; its result never reaches the automation.
   click(window, '#viewer');
-  window.document.body.dispatchEvent(new window.CustomEvent('nd-run-start', { bubbles: true }));
-  finish();
-  assert.equal((await started).error?.code, 'EXAMINATION_CHANGED');
-  assert.equal((await call('app_describe')).touched, true, 'the agent\'s run announcing itself while it goes is no run of the person');
-  while (window.neurodeskAutomation.running()) await new Promise(resolve => setTimeout(resolve, 5));
-  window.document.body.dispatchEvent(new window.CustomEvent('nd-run-start', { bubbles: true }));
-  const described = await call('app_describe');
-  assert.deepEqual(described.inputs, {}, 'a run the person started ends the examination');
-  assert.equal(described.run.stale, true);
+  const reported = await call('runs_get', { runId: run.runId });
+  assert.equal(resumes.length, 1, 'the press asks the person first');
+  assert.deepEqual(resumes[0].run.inputs, [{ role: 'image', name: 'agent.nii', bytes: 1 }]);
+  assert.deepEqual(reported.report, run.report, 'the report the agent\'s run ended with');
+  assert.deepEqual(await call('outputs_download', { runId: run.runId, artifactId: 'labels' }), { runId: run.runId, artifactId: 'labels' });
+  assert.equal(downloads[0].name, 'labels.nii');
+  assert.equal(await sha256Hex(downloads[0]), run.report.artifacts.labels.sha256, 'the bytes the run ended with');
 });
+
+async function sha256Hex(file) {
+  const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+  return Array.from(new Uint8Array(digest), value => value.toString(16).padStart(2, '0')).join('');
+}
 
 test('a prompt or download that answers after the person used the page commits nothing', async t => {
   let answer;
@@ -763,7 +763,7 @@ function viewerPage(t, options = {}) {
   const urlContract = contract();
   urlContract.operations.run.inputs.store = { source: 'url', type: 'neuro:volume', description: 'A remote store', minimum: 0, maximum: 1 };
   const turn = { controller: new AbortController() };
-  const tools = webMcpTools({ contract: urlContract, inputs: { turn: () => turn, touched: () => false, stage: async () => {}, claim() {}, runOf: () => 'current', held: () => ({}), page: () => [], toolLoaded() {} },
+  const tools = webMcpTools({ contract: urlContract, inputs: { turn: () => turn, touched: () => false, stage: async () => {}, claim() {}, settle() {}, settled: () => null, runOf: () => 'current', held: () => ({}), page: () => [], toolLoaded() {} },
     dispatch: async (command, request) => {
       if (command === 'sources') return Object.fromEntries(Object.entries(request.inputs).map(([role, { url }]) => [role, { address: url, root: url.replace(/\/\.zattrs$/, '') }]));
       if (command === 'viewers.niivue' && request.params) {
@@ -1198,7 +1198,6 @@ test('what each interaction does to the examination is decided in one place', as
   assert.equal(effect(document, new window.CustomEvent('nd-handoff', { detail: { files: [] } }), false), 'ended', 'a handoff');
   assert.equal(effect(window, new window.Event('neurodesk-automation-reset'), false), 'ended', 'the app resetting');
   assert.equal(effect(document.getElementById('t1'), new window.CustomEvent('nd-files', { bubbles: true, detail: { files: [] } }), false), 'kept', 'an app reporting its list on its own');
-  assert.equal(effect(document.body, new window.CustomEvent('nd-run-start', { bubbles: true }), false), 'kept', 'a run that starts with nobody at the page');
   const touchedThen = (event, target) => {
     hold(inputs, 'image', [new File(['x'], 'agent.nii')]);
     asPerson(viewer, new window.MouseEvent('pointerup', { bubbles: true, composed: true }));
@@ -1206,7 +1205,6 @@ test('what each interaction does to the examination is decided in one place', as
     return Object.keys(inputs.held()).length ? 'touched' : 'ended';
   };
   assert.equal(touchedThen(new window.CustomEvent('nd-files', { bubbles: true, detail: { files: [] } }), document.getElementById('t1')), 'ended', 'a remove the person pressed, reported with nd-files');
-  assert.equal(touchedThen(new window.CustomEvent('nd-run-start', { bubbles: true }), document.body), 'ended', 'a run the person started');
   const prompt = document.createElement('dialog');
   prompt.id = 'neurodeskAgentPrompt';
   const promptField = document.createElement('div');
@@ -1217,4 +1215,129 @@ test('what each interaction does to the examination is decided in one place', as
   Object.defineProperty(shadowed, 'files', { configurable: true, value: [new File(['s'], 'shadow-pick.nii')] });
   assert.equal(effect(shadowed, new window.Event('input', { bubbles: true, composed: true })), 'ended', 'a pick in a shadow root counts');
   assert.deepEqual(inputs.page(), [{ input: 'shadowed', kind: 'image', label: 'Shadowed image', files: [{ name: 'shadow-pick.nii', bytes: 1 }] }], 'and is listed, though its change event stays inside the shadow root');
+});
+
+const SITE = new URL('../../../site/', import.meta.url);
+
+test('the shell\'s first classic script sees every action of the person before a listener of the page or the shell can stop it', async t => {
+  const dom = new JSDOM(WORKSPACE, { url: 'https://example.test/test/', runScripts: 'outside-only' });
+  t.after(() => dom.window.close());
+  const { window } = dom;
+  window.document.modelContext = {};
+  window.eval(await readFile(new URL('theme.js', SITE), 'utf8'));
+  assert.deepEqual([...window[PERSON_INPUT].types], INTERACTIONS, 'the shell\'s script listens for every action the tools judge');
+  // The page's own capture listener on window, as the shell's page drop has for a drop on a canvas.
+  for (const type of ['drop', 'pointerdown', 'keydown']) window.addEventListener(type, event => event.stopImmediatePropagation(), true);
+  registerAppAutomation({ app: 'test', contract: contract(), operations: { run: async () => labels() }, document: window.document, target: window });
+  const inputs = createToolInputs({ doc: window.document, automation: window.neurodeskAutomation, isPerson });
+  hold(inputs, 'image', [new File(['a'], 'agent.nii')]);
+  asPerson(window.document.getElementById('viewer'), new window.MouseEvent('pointerdown', { bubbles: true, composed: true }));
+  assert.equal(inputs.touched(), true, 'a press the page stops at window');
+  const drop = new window.Event('drop', { bubbles: true, composed: true });
+  drop.dataTransfer = { types: ['Files'], items: [] };
+  asPerson(window.document.getElementById('viewer'), drop);
+  assert.deepEqual(inputs.held(), {}, 'a drop of files the shell takes on the canvas ends the examination');
+});
+
+test('without the shell\'s script the tools listen on window, so a drop the page drop stops on the way down is still seen', async t => {
+  const dom = new JSDOM(WORKSPACE, { url: 'https://example.test/test/' });
+  t.after(() => dom.window.close());
+  const { window } = dom;
+  window.addEventListener('drop', event => event.stopPropagation(), true);
+  const inputs = createToolInputs({ doc: window.document, automation: { running: () => false, adopt: async () => {} }, isPerson });
+  hold(inputs, 'image', [new File(['a'], 'agent.nii')]);
+  for (const type of ['dragenter', 'dragover']) {
+    if (inputs.touched()) inputs.resume(inputs.turn());
+    const drag = new window.Event(type, { bubbles: true, composed: true });
+    drag.dataTransfer = { types: ['Files'], items: [] };
+    asPerson(window.document.getElementById('viewer'), drag);
+    assert.equal(inputs.touched(), true, `${type} carrying files over the page`);
+  }
+  const drop = new window.Event('drop', { bubbles: true, composed: true });
+  drop.dataTransfer = { types: ['Files'], items: [] };
+  asPerson(window.document.getElementById('viewer'), drop);
+  assert.deepEqual(inputs.held(), {});
+});
+
+test('the resume dialog names the files of the run it discloses apart from the files the agent holds now', async t => {
+  const { call, inputs, window, resumes } = page(t, async () => labels());
+  hold(inputs, 'image', [new File(['first'], 'first.nii')]);
+  const run = await call('run_run');
+  hold(inputs, 'image', [new File(['second scan'], 'second.nii')]);
+  click(window, '#viewer');
+  const report = await call('runs_get', { runId: run.runId });
+  assert.equal(report.report.inputs.image[0].filename, 'first.nii');
+  assert.equal(resumes.length, 1);
+  assert.deepEqual(resumes[0].files, [{ role: 'image', name: 'second.nii', bytes: 11 }], 'the files it keeps');
+  assert.deepEqual(resumes[0].run.inputs, [{ role: 'image', name: 'first.nii', bytes: 5 }], 'the files the disclosed run ran on');
+});
+
+test('calls that need the person\'s answer after one touch share one dialog and its answer', async t => {
+  for (const allow of [true, false]) {
+    let asked = 0;
+    let answer;
+    const { call, inputs, window, downloads } = page(t, async () => labels(), {
+      confirmResume: () => {
+        asked += 1;
+        return new Promise(resolve => { answer = resolve; });
+      },
+    });
+    hold(inputs, 'image', [new File(['scan'], 'scan.nii')]);
+    const run = await call('run_run');
+    click(window, '#viewer');
+    const report = call('runs_get', { runId: run.runId });
+    const saved = call('outputs_download', { runId: run.runId, artifactId: 'labels' });
+    while (!answer) await new Promise(resolve => setTimeout(resolve, 5));
+    await new Promise(resolve => setTimeout(resolve, 20));
+    answer(allow);
+    const [reported, download] = await Promise.all([report, saved]);
+    assert.equal(asked, 1, `one dialog for one touch (${allow ? 'Allow' : 'Decline'})`);
+    if (allow) {
+      assert.equal(reported.state, 'succeeded');
+      assert.deepEqual(download, { runId: run.runId, artifactId: 'labels' });
+      assert.equal(downloads.length, 1);
+    } else {
+      assert.equal(reported.declined, true);
+      assert.equal(download.declined, true, 'the second call takes the same Decline');
+      assert.equal(downloads.length, 0);
+    }
+  }
+});
+
+test('after Allow the tools disclose only the run the dialog named, with the report it finished with', async t => {
+  let altered = null;
+  const holder = {};
+  const { call, inputs, window, downloads, resumes } = page(t, async () => labels(), {
+    dispatch: async (command, request) => {
+      const answer = await holder.dispatch(command, request);
+      if (command !== 'snapshot' || !altered || answer.runId !== altered) return answer;
+      return { ...answer, report: { ...answer.report, artifacts: { labels: { ...answer.report.artifacts.labels, sha256: '0'.repeat(64) } } } };
+    },
+  });
+  holder.dispatch = window.neurodeskAutomation.dispatch;
+  hold(inputs, 'image', [new File(['scan'], 'scan.nii')]);
+  const earlier = await call('run_run');
+  const latest = await call('run_run');
+  assert.equal(latest.state, 'succeeded');
+  click(window, '#viewer');
+  altered = latest.runId;
+  const reported = await call('runs_get', { runId: latest.runId });
+  assert.equal(resumes.length, 1);
+  assert.equal(resumes[0].run.runId, latest.runId, 'the dialog names the latest run');
+  assert.deepEqual(reported.report, latest.report, 'the report the run finished with, not what the page answers now');
+  const refused = await call('outputs_download', { runId: latest.runId, artifactId: 'labels' });
+  assert.equal(refused.error?.code, 'RUN_STALE', 'the page holds other outputs for that run now');
+  assert.match(refused.error.message, /other results/);
+  assert.equal(downloads.length, 0);
+  assert.equal((await call('runs_get', { runId: earlier.runId })).error?.code, 'RUN_STALE', 'a run the dialog did not name stays withheld');
+});
+
+test('the page download takes the checksum the tools recorded and saves nothing when the run\'s output differs', async t => {
+  const { call, inputs, dispatch, downloads } = page(t, async () => labels());
+  hold(inputs, 'image', [new File(['scan'], 'scan.nii')]);
+  const run = await call('run_run');
+  await assert.rejects(dispatch('download', { runId: run.runId, artifactId: 'labels', sha256: '0'.repeat(64) }), error => error.code === 'RUN_NOT_CURRENT');
+  assert.equal(downloads.length, 0);
+  assert.deepEqual(await dispatch('download', { runId: run.runId, artifactId: 'labels', sha256: run.report.artifacts.labels.sha256 }), { artifactId: 'labels' });
+  assert.equal(downloads.length, 1);
 });

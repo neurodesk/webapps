@@ -246,6 +246,10 @@ export function registerAppAutomation({ app, operations, convertDicom, sourceRoo
     if (command === 'download') {
       bound(request);
       if (snapshot.state !== 'succeeded' || !artifacts.has(request.artifactId)) throw new Error('The requested completed artifact is unavailable');
+      // The checksum the caller recorded for the output, which this run's file must still have.
+      if (request.sha256 !== undefined && snapshot.report.artifacts[request.artifactId]?.sha256 !== request.sha256) {
+        throw Object.assign(new Error(`Run ${request.runId ?? snapshot.runId} no longer holds the ${request.artifactId} output it ended with`), { code: 'RUN_NOT_CURRENT', current: snapshot.runId });
+      }
       await download(artifacts.get(request.artifactId));
       return { artifactId: request.artifactId };
     }

@@ -20,7 +20,8 @@ const toolName = operation => `run_${operation.replaceAll('-', '_')}`;
 //   EXAMINATION_CHANGED  the person used the page while this call was going; its result is withheld
 //                        and nothing more was done. The next call that needs the held files or the
 //                        run asks the person whether the agent may continue with them.
-//   RUN_STALE            the run belongs to an examination that had ended before this call began
+//   RUN_STALE            the run belongs to an examination that had ended before this call began, or
+//                        the page no longer holds the outputs the run ended with
 //   RUN_REPLACED         another run, or a reset of the page, replaced the run; its outputs are gone
 //   UNKNOWN_RUN          the tools did not start this run
 //   RUN_ACTIVE           a run is still going
@@ -29,6 +30,8 @@ const toolName = operation => `run_${operation.replaceAll('-', '_')}`;
 const STALE = 'The examination this run belongs to has ended: the person loaded other data, picked an example or declined to let the agent continue. Its report and outputs are withheld. Run it again if they still want it.';
 const CHANGED = 'The person used the page while this call was going, so its result is withheld and nothing more was done. Call again if they still want it; the person is then asked whether you may continue.';
 const TOUCHED = 'The person has used the page since your last step. The next call that uses the held files or this run asks them whether you may continue.';
+const OTHER_RESULTS = 'The page now holds other results than the ones this run ended with, so nothing was saved. Run it again if they still want it.';
+const sameJson = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const describeFiles = files => files.map(file => ({ name: file.name, bytes: file.size }));
 
 /** The JSON Schema of one contract parameter, accepting what operationParameterSchema accepts. */
@@ -190,16 +193,24 @@ export function webMcpTools({ contract, inputs, ...pageIo }) {
       return await call.dispatch(command, { ...request, runId });
     } catch (error) {
       if (error?.code !== 'RUN_NOT_CURRENT') throw error;
+      if (error.current === runId) throw toolError('RUN_STALE', `Run ${runId}: ${OTHER_RESULTS}`, { runId });
       throw toolError('RUN_REPLACED', `Run ${runId} was replaced by ${error.current ? `run ${error.current}` : 'a reset of the page'}; its report and outputs are gone.`, { runId, replacedBy: error.current ?? null });
     }
   }
-  // The named run's snapshot, while the tools may report it.
-  async function runSnapshot(call, runId) {
+  // The named run's snapshot as the page answers now, while the tools may report the run.
+  async function liveSnapshot(call, runId) {
     call.check();
     const known = inputs.runOf(runId);
     if (known === 'unknown') throw toolError('UNKNOWN_RUN', `Unknown run: ${runId}`, { runId });
     if (known === 'stale') throw toolError('RUN_STALE', `Run ${runId}: ${STALE}`, { runId });
-    return bound(call, 'snapshot', runId);
+    const snapshot = await bound(call, 'snapshot', runId);
+    if (terminal.has(snapshot.state)) inputs.settle(snapshot);
+    return snapshot;
+  }
+  // The named run's snapshot: once it has ended, the one it ended with, whatever the page answers later.
+  async function runSnapshot(call, runId) {
+    const snapshot = await liveSnapshot(call, runId);
+    return inputs.settled(runId) ?? snapshot;
   }
   // The named run's snapshot once it ends or the wait passes. It never returns another run's snapshot.
   async function settle(call, runId, seconds) {
@@ -212,20 +223,38 @@ export function webMcpTools({ contract, inputs, ...pageIo }) {
     }
   }
   const approved = async (call, addresses, options = {}) => !addresses.length || await call.confirmFetch({ app: contract.title, addresses, ...options }, { signal: call.waits });
-  // After the person used the page, the held files and the examination's runs serve a call only once
-  // they let the agent continue; declining ends the examination. True when the call may go on.
+  // After the person used the page, the held files and the examination's latest run serve a call only
+  // once they let the agent continue; declining ends the examination. Calls waiting on the same touch
+  // share one dialog and its answer, which is shown until the person answers or uses the page again.
+  // True when the call may go on.
+  let pending = null;
   async function resumed(call) {
     if (!inputs.touched()) return true;
-    const { files, run } = inputs.resumable();
-    if (files.length || run) {
-      if (!await call.confirmResume({ app: contract.title, files, run }, { signal: call.waits })) {
-        inputs.release(call.from);
-        call.rebind();
-        return false;
-      }
+    const from = call.from;
+    if (pending?.from !== from) {
+      const { files, run } = inputs.resumable();
+      const decide = async () => {
+        if ((files.length || run) && !await call.confirmResume({ app: contract.title, files, run }, { signal: from.controller.signal })) {
+          inputs.release(from);
+          return { allowed: false, turn: inputs.turn() };
+        }
+        inputs.resume(from);
+        return { allowed: true };
+      };
+      pending = { from, decision: decide() };
     }
-    inputs.resume(call.from);
-    return true;
+    const outcome = await (call.signal ? Promise.race([pending.decision, new Promise((_, reject) => {
+      call.signal.throwIfAborted();
+      call.signal.addEventListener('abort', () => reject(call.signal.reason), { once: true });
+    })]) : pending.decision);
+    if (outcome.allowed) {
+      call.check();
+      return true;
+    }
+    // The examination the Decline started, unless the person used the page after it.
+    if (inputs.turn() !== outcome.turn) call.check();
+    call.rebind();
+    return false;
   }
   const declined = { declined: true, message: 'The person declined: the held files are released and the earlier runs are withheld.' };
   const runTools = Object.fromEntries(Object.keys(contract.operations).map(name => [name, toolName(name)]));
@@ -254,7 +283,8 @@ export function webMcpTools({ contract, inputs, ...pageIo }) {
     if (!current.runId) return current;
     if (inputs.runOf(current.runId) !== 'current') return { runId: current.runId, state: current.state, stale: true, message: STALE };
     if (inputs.touched()) return { runId: current.runId, state: current.state, touched: true, message: TOUCHED };
-    return current;
+    if (terminal.has(current.state)) inputs.settle(current);
+    return inputs.settled(current.runId) ?? current;
   }
 
   tool('app_describe', 'Describe this application',
@@ -383,7 +413,13 @@ export function webMcpTools({ contract, inputs, ...pageIo }) {
     async ({ runId, artifactId }, call) => {
       await runSnapshot(call, runId);
       if (!await resumed(call)) return declined;
-      return { runId, ...await bound(call, 'download', runId, { artifactId }) };
+      // The outputs the run ended with, compared with what the page holds for it now.
+      const live = await liveSnapshot(call, runId);
+      const ended = inputs.settled(runId);
+      const recorded = artifactId === 'report' ? ended?.report : ended?.report?.artifacts?.[artifactId];
+      const current = artifactId === 'report' ? live.report : live.report?.artifacts?.[artifactId];
+      if (ended?.state === 'succeeded' && (live.state !== 'succeeded' || !sameJson(recorded, current))) throw toolError('RUN_STALE', `Run ${runId}: ${OTHER_RESULTS}`, { runId });
+      return { runId, ...await bound(call, 'download', runId, { artifactId, ...(recorded?.sha256 && { sha256: recorded.sha256 }) }) };
     });
 
   tool('user_ask', 'Ask the user',

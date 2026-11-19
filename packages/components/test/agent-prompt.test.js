@@ -171,21 +171,27 @@ test('confirming page files lists them and only Allow approves', async () => {
   assert.equal(await allowed, true);
 });
 
-test('a resume request names the held files by role and the run, keeps each line within 90 characters, and only Allow resumes', async () => {
+test('a resume request names the run\'s own files apart from the held ones, keeps each line within 90 characters, and only Allow resumes', async () => {
   const document = page();
   const prompts = createAgentPrompts(document);
   const startedAt = Date.UTC(2026, 10, 19, 9, 30, 5);
-  const answer = prompts.confirmResume({ app: 'NiiMath', files: [{ role: 'image', name: 'scan.nii.gz' }], run: { operation: 'binarize', startedAt } });
+  const run = { operation: 'binarize', startedAt, inputs: [{ role: 'image', name: 'first.nii.gz' }] };
+  const answer = prompts.confirmResume({ app: 'NiiMath', files: [{ role: 'image', name: 'scan.nii.gz' }], run });
   await tick();
-  const items = [...dialog(document).querySelectorAll('li')].map(item => item.textContent);
-  assert.deepEqual(items, ['image: scan.nii.gz', `Run: binarize, started ${new Date(startedAt).toLocaleTimeString()}`]);
-  assert.match(dialog(document).textContent, /Let the agent continue in NiiMath with these\?/);
+  const lists = [...dialog(document).querySelectorAll('ul')].map(list => [...list.querySelectorAll('li')].map(item => item.textContent));
+  assert.deepEqual(lists, [['image: first.nii.gz'], ['image: scan.nii.gz']], 'the run\'s files, then the files it keeps');
+  const text = dialog(document).textContent;
+  assert.match(text, /Let the agent continue in NiiMath\?/);
+  assert.ok(text.includes(`its binarize run from ${new Date(startedAt).toLocaleTimeString()}, on:`));
+  assert.match(text, /results that run ended with, even if the page shows others now/);
+  assert.match(text, /keeps these files for its next run/);
   for (const paragraph of dialog(document).querySelectorAll('p')) assert.ok(paragraph.textContent.length <= 90, paragraph.textContent);
   press(document, 'Allow');
   assert.equal(await answer, true);
   await tick();
-  const declined = prompts.confirmResume({ app: 'NiiMath', files: [], run: { operation: 'binarize', startedAt } });
+  const declined = prompts.confirmResume({ app: 'NiiMath', files: [], run });
   await tick();
+  assert.equal(dialog(document).querySelectorAll('ul').length, 1, 'no list of held files when it holds none');
   press(document, 'Decline');
   assert.equal(await declined, false);
 });

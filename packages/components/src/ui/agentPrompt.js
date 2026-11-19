@@ -122,18 +122,24 @@ export function createAgentPrompts(doc = globalThis.document) {
     },
 
     /**
-     * Asks whether the agent may continue with the files it held and its latest run after the person
-     * used the page. `files` lists `{ role, name }`; `run` is `{ operation, startedAt }` or null.
-     * Resolves true only when the person allows it.
+     * Asks whether the agent may continue after the person used the page, naming exactly what it gets
+     * back: `files`, the `{ role, name }` it holds for its next run, and `run`, its latest run as
+     * `{ operation, startedAt, inputs: [{ role, name }] }` or null, whose report and outputs are the
+     * ones it ended with. Resolves true only when the person allows it.
      */
     async confirmResume({ app, files = [], run = null }, { signal } = {}) {
-      const items = [
-        ...files.map(file => `${file.role}: ${file.name}`),
-        ...(run ? [`Run: ${run.operation}, started ${new Date(run.startedAt).toLocaleTimeString()}`] : []),
-      ];
+      const list = items => createElement('ul', { ownerDocument: doc }, items.map(file => createElement('li', { text: `${file.role}: ${file.name}`, ownerDocument: doc })));
       const answer = await show(finish => [
-        createElement('p', { text: `Let the agent continue in ${app} with these?`, ownerDocument: doc }),
-        createElement('ul', { ownerDocument: doc }, items.map(text => createElement('li', { text, ownerDocument: doc }))),
+        createElement('p', { text: `Let the agent continue in ${app}?`, ownerDocument: doc }),
+        ...(run ? [
+          createElement('p', { text: `It gets the report and outputs of its ${run.operation} run from ${new Date(run.startedAt).toLocaleTimeString()}, on:`, ownerDocument: doc }),
+          list(run.inputs),
+          createElement('p', { text: 'They are the results that run ended with, even if the page shows others now.', ownerDocument: doc }),
+        ] : []),
+        ...(files.length ? [
+          createElement('p', { text: 'It keeps these files for its next run:', ownerDocument: doc }),
+          list(files),
+        ] : []),
         createElement('p', { text: 'You used the page since its last step. Decline to make it let go of them.', ownerDocument: doc }),
         actions(finish, button('Allow', 'nd-btn-primary', () => finish(true))),
       ], signal);
