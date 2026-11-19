@@ -1992,35 +1992,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.7.20261113",
-          "url": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.7.20261113/noddi-0.7.20261113-linux-x64.tar.gz",
-          "sha256": "3f5312f827cdc6e0f45107017cd0fbef55f8a9562f2d4180293acab57ca6e948",
-          "bytes": 56032864,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.7.20261113/noddi-0.7.20261113-linux-x64.tar.gz.validation.txt",
+          "version": "0.7.20261119",
+          "url": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.7.20261119/noddi-0.7.20261119-linux-x64.tar.gz",
+          "sha256": "7be3896eb111501d6cac0bb60e44988721969210ccb5865406d0306fdab4c1cb",
+          "bytes": 56038874,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.7.20261119/noddi-0.7.20261119-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf noddi-0.7.20261113-linux-x64.tar.gz\n./noddi-0.7.20261113-linux-x64/noddi dwi.nii.gz dwi.bval dwi.bvec results"
+          "command": "tar -xzf noddi-0.7.20261119-linux-x64.tar.gz\n./noddi-0.7.20261119-linux-x64/noddi dwi.nii.gz dwi.bval dwi.bvec results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.7.20261113",
-          "url": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.7.20261113/noddi-0.7.20261113-macos-arm64.pkg",
-          "sha256": "b1e768061e322b6f1c0231f87a1a7e21583fe3ce04ae824860bdaa7d439c4bd8",
-          "bytes": 49743174,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.7.20261113/noddi-0.7.20261113-macos-arm64.pkg.validation.txt",
+          "version": "0.7.20261119",
+          "url": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.7.20261119/noddi-0.7.20261119-macos-arm64.pkg",
+          "sha256": "a3b7c3256c0f9010b26b7a8a91eed1c212717720624161f0389c04a80d0f619d",
+          "bytes": 49750889,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.7.20261119/noddi-0.7.20261119-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg noddi-0.7.20261113-macos-arm64.pkg -target /\nnoddi self-check\nnoddi dwi.nii.gz dwi.bval dwi.bvec results"
+          "command": "sudo installer -pkg noddi-0.7.20261119-macos-arm64.pkg -target /\nnoddi self-check\nnoddi dwi.nii.gz dwi.bval dwi.bvec results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.7.20261113",
-          "url": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.7.20261113/noddi-0.7.20261113-windows-x64.zip",
-          "sha256": "9f999f2323b9cf653799bea139e0ed2222c44fa398f8874c611e9869afc84004",
-          "bytes": 46812529,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.7.20261113/noddi-0.7.20261113-windows-x64.zip.validation.txt",
+          "version": "0.7.20261119",
+          "url": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.7.20261119/noddi-0.7.20261119-windows-x64.zip",
+          "sha256": "7f498920f5bcf10593db1c28dc45a489a54825bba4319b2d93f7e25e35888b6b",
+          "bytes": 46815736,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/noddi-v0.7.20261119/noddi-0.7.20261119-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\noddi-0.7.20261113-windows-x64.zip -DestinationPath .\n.\\noddi-0.7.20261113-windows-x64\\noddi.exe dwi.nii.gz dwi.bval dwi.bvec results"
+          "command": "Expand-Archive -Path .\\noddi-0.7.20261119-windows-x64.zip -DestinationPath .\n.\\noddi-0.7.20261119-windows-x64\\noddi.exe dwi.nii.gz dwi.bval dwi.bvec results"
         }
       ],
       "containers": []
