@@ -232,6 +232,8 @@ export function createToolInputs({ doc, automation, isPerson = event => event.is
   const followed = new WeakMap();
   // Frames last seen showing a document the page cannot reach.
   const hidden = new WeakSet();
+  // The frames being followed, each with its step, so a tool call can take a step before it reads the examination.
+  const following = new Set();
   function watchDocument(target, frame = null) {
     if (documents.has(target)) return;
     documents.add(target);
@@ -250,11 +252,11 @@ export function createToolInputs({ doc, automation, isPerson = event => event.is
   // loaded; after `leaving` hides, from the first frame its successor exists; while the frame shows
   // a document the page cannot reach, until it shows one it can and that one has loaded.
   function follow(frame, leaving = null) {
-    if (followed.has(frame)) followed.delete(frame);
     const run = {};
     followed.set(frame, run);
+    following.add(frame);
     const step = () => {
-      if (followed.get(frame) !== run) return;
+      if (followed.get(frame) !== run) return false;
       let frameDoc;
       try {
         frameDoc = frame.contentDocument;
@@ -267,11 +269,25 @@ export function createToolInputs({ doc, automation, isPerson = event => event.is
         watchDocument(frameDoc, frame);
       }
       const settled = frameDoc && frameDoc !== leaving && frameDoc.readyState === 'complete';
-      if (!frame.isConnected || settled) followed.delete(frame);
-      else if (view.requestAnimationFrame) view.requestAnimationFrame(step);
-      else view.setTimeout(step, 16);
+      if (!frame.isConnected || settled) {
+        followed.delete(frame);
+        following.delete(frame);
+        return false;
+      }
+      return true;
     };
-    step();
+    run.step = step;
+    const loop = () => {
+      if (!step()) return;
+      if (view.requestAnimationFrame) view.requestAnimationFrame(loop);
+      else view.setTimeout(loop, 16);
+    };
+    loop();
+  }
+  // A frame's document may have changed since the last animation frame (one of the page's origin
+  // replacing another's): every read of the examination looks first.
+  function sweep() {
+    for (const frame of following) followed.get(frame)?.step();
   }
   function watchTree(root) {
     if (trees.has(root)) return;
@@ -317,9 +333,15 @@ export function createToolInputs({ doc, automation, isPerson = event => event.is
 
   return {
     /** The current turn, which every counted event replaces: a call hands it back to show it is still current. */
-    turn: () => turn,
+    turn() {
+      sweep();
+      return turn;
+    },
     /** Whether the person has used the workspace since the agent last held files or the person let it continue. */
-    touched: () => examination.touched,
+    touched() {
+      sweep();
+      return examination.touched;
+    },
     held: () => Object.fromEntries([...examination.held].map(([role, files]) => [role, describe(files)])),
     /**
      * What letting the agent continue would hand back: the held files by role, and the examination's
