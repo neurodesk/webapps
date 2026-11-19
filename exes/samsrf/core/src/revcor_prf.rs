@@ -37,8 +37,9 @@ pub struct Prepared {
     pub mask: Vec<f64>,
     pub values: Vec<String>,
     pub hooke_jeeves_steps: Option<Vec<f64>>,
-    /// The convex-hull analysis's grid and hull (`Prf_Function = 0`): `Listed`
-    /// unless a gate asks for MATLAB's (`with_hull_order`).
+    /// The convex-hull analysis's grid and hull (`Prf_Function = 0`): the listed
+    /// ones under `Anchored` and `Listed`, MATLAB's when a gate asks for `Stored`
+    /// (`with_hull_order`).
     pub hull_order: HullOrder,
 }
 
@@ -179,7 +180,7 @@ impl Prepared {
             return vec![0.0; 5];
         };
         let [cx, cy] = match self.hull_order {
-            HullOrder::Listed => listed.centroid(),
+            HullOrder::Anchored | HullOrder::Listed => listed.centroid(),
             HullOrder::Stored => Hull::of_delaunay_boundary(&points).map_or([f64::NAN; 2], |hull| hull.centroid()),
         };
         vec![raw[0], cx, cy, listed.area().sqrt() / (2.0 * (2.0 * 2f64.ln()).sqrt()), raw[4]]
@@ -312,13 +313,13 @@ fn nan_min(values: &[f64]) -> f64 {
 /// `xc(:)` and `yc(:)` of `meshgrid(linspace(-a, a, cols), linspace(-a, a, rows))`
 /// with `yc` flipped, as `samsrf_revcor_prf` builds them. Every grid MATLAB saved
 /// is `symmetric_linspace`. The convex-hull analysis keeps the previous
-/// `listed_linspace` under `HullOrder::Listed`: with MATLAB's grid its `Fwhm`
+/// `listed_linspace` unless `HullOrder::Stored` is asked for: with MATLAB's grid its `Fwhm`
 /// loses a recorded value the previous grid matched, because `convexHull`'s area
 /// is not identified (`packages/samsrf/validation/matlab/README.md`, "Hull area,
 /// centroid and vertex order").
 fn pixel_grid(model: &RevCorPrfModel, rows: usize, cols: usize, order: HullOrder) -> (Vec<f64>, Vec<f64>) {
     let a = model.scaling_factor;
-    let line = |n: usize| if model.prf_function.is_none() && order == HullOrder::Listed { listed_linspace(-a, a, n) } else { symmetric_linspace(a, n) };
+    let line = |n: usize| if model.prf_function.is_none() && order != HullOrder::Stored { listed_linspace(-a, a, n) } else { symmetric_linspace(a, n) };
     let (xs, ys) = (line(cols), line(rows));
     (0..rows * cols).map(|p| (xs[p / rows], ys[rows - 1 - p % rows])).unzip()
 }

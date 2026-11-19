@@ -77,11 +77,7 @@ type Point = (i64, i64);
 /// [`boundaries`]) that lies on the hull. `None` when that shape is empty or its
 /// grid cannot be represented safely.
 pub(crate) fn convex_hull(points: &[[f64; 2]]) -> Option<Vec<[f64; 2]>> {
-    let shape = Shape::of(points)?;
-    let hull = shape.listed_hull()?;
-    let start = shape.rings.iter().flatten().find_map(|p| hull.iter().position(|k| k == p))?;
-    let n = hull.len();
-    Some((0..n).map(|i| shape.coordinates(hull[(start + n - i) % n])).collect())
+    convex_hull_and_start(points).map(|(listed, start)| stored_order(&listed, start))
 }
 
 /// The same hull as `clean` leaves it, counter-clockwise from the lowest grid
@@ -90,8 +86,23 @@ pub(crate) fn convex_hull(points: &[[f64; 2]]) -> Option<Vec<[f64; 2]>> {
 /// verify the polyshape reproducer rounds' predictions, made in that order,
 /// against it.
 pub(crate) fn convex_hull_as_listed(points: &[[f64; 2]]) -> Option<Vec<[f64; 2]>> {
+    convex_hull_and_start(points).map(|(listed, _)| listed)
+}
+
+/// [`convex_hull_as_listed`] and the position in it of the vertex
+/// [`convex_hull`] starts from, from one evaluation of the shape. Every hull
+/// vertex is a ring vertex, so the start always exists.
+pub(crate) fn convex_hull_and_start(points: &[[f64; 2]]) -> Option<(Vec<[f64; 2]>, usize)> {
     let shape = Shape::of(points)?;
-    Some(shape.listed_hull()?.into_iter().map(|k| shape.coordinates(k)).collect())
+    let hull = shape.listed_hull()?;
+    let start = shape.rings.iter().flatten().find_map(|p| hull.iter().position(|k| k == p))?;
+    Some((hull.into_iter().map(|k| shape.coordinates(k)).collect(), start))
+}
+
+/// A counter-clockwise hull, clockwise from `start`.
+pub(crate) fn stored_order(listed: &[[f64; 2]], start: usize) -> Vec<[f64; 2]> {
+    let n = listed.len();
+    (0..n).map(|i| listed[(start + n - i) % n]).collect()
 }
 
 /// The boundaries MATLAB's `polyshape(points)` stores, in its order: each

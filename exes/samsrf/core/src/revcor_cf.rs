@@ -494,7 +494,7 @@ mod tests {
         // MATLAB R2023b, SamSrf 41ed1e96: cf_double_cocircular, target 29.
         // The closing edge retraces the first edge, so polyshape removes (-1,-1).
         let points = [[-1.0, -1.0], [0.0, 0.0], [0.0, 1.0], [1.0, -1.0], [1.0, 0.0], [1.0, 1.0]];
-        for order in [HullOrder::Listed, HullOrder::Stored] {
+        for order in [HullOrder::Anchored, HullOrder::Listed, HullOrder::Stored] {
             let (x, y, sigma) = hull_estimate(&points, order);
             assert!((sigma - 1.5_f64.sqrt() / SIGMA_PER_FWHM).abs() < 1e-14);
             assert!(x.is_finite() && y.is_finite());
