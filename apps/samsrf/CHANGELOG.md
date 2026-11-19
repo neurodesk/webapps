@@ -1,5 +1,13 @@
 # samsrf
 
+## 0.6.20261119
+
+### Patch Changes
+
+- Updated dependencies [3db69e4]
+  - @neurodesk/webapp-components@0.28.1
+  - @neurodesk/samsrf@0.6.20261119
+
 ## 0.6.20261118
 
 ### Patch Changes

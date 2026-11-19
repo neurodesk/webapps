@@ -1,5 +1,13 @@
 # histo2mri
 
+## 0.1.20261119
+
+### Patch Changes
+
+- Updated dependencies [3db69e4]
+  - @neurodesk/webapp-components@0.28.1
+  - @neurodesk/greedy@0.9.20261119
+
 ## 0.1.20261113
 
 ### Patch Changes

@@ -1,5 +1,7 @@
 # @neurodesk/samsrf
 
+## 0.6.20261119
+
 ## 0.6.20261118
 
 ### Patch Changes
