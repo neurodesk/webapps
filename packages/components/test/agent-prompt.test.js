@@ -134,15 +134,15 @@ test('a fetch approval names the app and every address, resolved, and only Allow
   const shown = [...dialog(document).querySelectorAll('code')].map(code => code.textContent);
   assert.deepEqual(shown, ['https://elsewhere.test/scan.nii.gz', 'https://apps.test/brain-extraction/tables/atlas.json']);
   press(document, 'Allow');
-  assert.equal(await asked, true);
+  assert.deepEqual(await asked, { app: 'Brain Extraction', addresses: ['https://elsewhere.test/scan.nii.gz', 'tables/atlas.json'] }, 'Allow resolves to what the dialog named');
   const declined = prompts.confirmFetch({ app: 'Brain Extraction', addresses: ['https://elsewhere.test/x'] });
   await tick();
   press(document, 'Decline');
-  assert.equal(await declined, false);
+  assert.equal(await declined, null);
   const closed = prompts.confirmFetch({ app: 'Brain Extraction', addresses: ['https://elsewhere.test/x'] });
   await tick();
   dialog(document).close();
-  assert.equal(await closed, false);
+  assert.equal(await closed, null);
 });
 
 test('a store approval names the root the app reads under, and which server sees the requests', async () => {
@@ -152,7 +152,7 @@ test('a store approval names the root the app reads under, and which server sees
   assert.match(dialog(document).textContent, /Let ZARRo read the data stored under this address\?/);
   assert.match(dialog(document).textContent, /ZARRo reads the addresses under it, such as a store's metadata and chunks\. The server at https:\/\/data\.test sees every request\./);
   press(document, 'Allow');
-  assert.equal(await asked, true);
+  assert.ok(await asked);
 });
 
 test('confirming page files lists them and only Allow approves', async () => {
@@ -164,11 +164,11 @@ test('confirming page files lists them and only Allow approves', async () => {
   assert.match(dialog(document).textContent, /The page received them but may not show them now\./);
   assert.deepEqual([...dialog(document).querySelectorAll('li')].map(item => item.textContent), ['exam-a.nii.gz']);
   press(document, 'Decline');
-  assert.equal(await asked, false);
+  assert.equal(await asked, null);
   const allowed = prompts.confirmFiles({ app: 'NiiMath', label: 'Choose NIfTI files', files: [{ name: 'exam-a.nii.gz', bytes: 4 }] });
   await tick();
   press(document, 'Allow');
-  assert.equal(await allowed, true);
+  assert.ok(await allowed);
 });
 
 test('a resume request names the run\'s own files apart from the held ones, keeps each line within 90 characters, and only Allow resumes', async () => {
@@ -187,13 +187,13 @@ test('a resume request names the run\'s own files apart from the held ones, keep
   assert.match(text, /keeps these files for its next run/);
   for (const paragraph of dialog(document).querySelectorAll('p')) assert.ok(paragraph.textContent.length <= 90, paragraph.textContent);
   press(document, 'Allow');
-  assert.equal(await answer, true);
+  assert.ok(await answer);
   await tick();
   const declined = prompts.confirmResume({ app: 'NiiMath', files: [], run });
   await tick();
   assert.equal(dialog(document).querySelectorAll('ul').length, 1, 'no list of held files when it holds none');
   press(document, 'Decline');
-  assert.equal(await declined, false);
+  assert.equal(await declined, null);
 });
 
 test('a fetch approval that replaces what the viewer shows says so', async () => {
@@ -202,5 +202,63 @@ test('a fetch approval that replaces what the viewer shows says so', async () =>
   await tick();
   assert.match(dialog(document).textContent, /It replaces the images the viewer shows now\./);
   press(document, 'Decline');
-  assert.equal(await answer, false);
+  assert.equal(await answer, null);
 });
+
+test('a resume request names a run\'s address input by the root the person allowed', async () => {
+  const document = page();
+  const run = { operation: 'open-url', startedAt: 0, inputs: [{ role: 'store', url: 'https://data.test/brain.ome.zarr' }] };
+  const answer = createAgentPrompts(document).confirmResume({ app: 'ZARRo', files: [], run });
+  await tick();
+  assert.deepEqual([...dialog(document).querySelectorAll('li')].map(item => item.textContent), ['store: https://data.test/brain.ome.zarr']);
+  press(document, 'Decline');
+  assert.equal(await answer, null);
+});
+
+// Every prompt either names state the person decides on, and is then a consent prompt, or names none.
+// Each consent prompt here has two states to tell apart, and text that shows which one it named.
+const CONSENT = {
+  confirmFetch: {
+    states: [{ app: 'ZARRo', addresses: ['https://data.test/a.ome.zarr'], readsUnder: true }, { app: 'ZARRo', addresses: ['https://data.test/b.ome.zarr'], readsUnder: true }],
+    names: state => state.addresses[0],
+  },
+  confirmFiles: {
+    states: [{ app: 'NiiMath', label: 'Image', files: [{ name: 'first.nii.gz', bytes: 4 }], revision: 1 }, { app: 'NiiMath', label: 'Image', files: [{ name: 'first.nii.gz', bytes: 4 }], revision: 2 }],
+    names: state => state.files[0].name,
+  },
+  confirmResume: {
+    states: [{ app: 'NiiMath', files: [{ role: 'image', name: 'original.nii.gz' }], run: null, revision: 1 }, { app: 'NiiMath', files: [{ role: 'image', name: 'changed.nii.gz' }], run: null, revision: 2 }],
+    names: state => state.files[0].name,
+  },
+};
+const NAMES_NO_STATE = ['ask', 'requestFiles'];
+
+test('every agent prompt is either a consent prompt or names no state', () => {
+  const prompts = createAgentPrompts(page());
+  assert.deepEqual(Object.keys(prompts).sort(), [...Object.keys(CONSENT), ...NAMES_NO_STATE].sort(), 'classify a new prompt here');
+});
+
+for (const [name, { states: [first, second], names }] of Object.entries(CONSENT)) {
+  test(`${name} names the state as it is when it shows, and Allow applies only while it is still that state`, async () => {
+    const document = page();
+    const prompts = createAgentPrompts(document);
+    let state = first;
+    const ahead = prompts.ask({ question: 'Ahead?', options: ['OK'] });
+    const asked = prompts[name](() => state, {});
+    await tick();
+    state = second;
+    press(document, 'OK');
+    await ahead;
+    await tick();
+    assert.ok(dialog(document).textContent.includes(names(second)), `${name} read its state when it showed, not when it was queued`);
+    assert.doesNotMatch(dialog(document).textContent, /changed since it was shown/);
+    state = first;
+    press(document, 'Allow');
+    await tick();
+    assert.equal(dialog(document).open, true, `${name} asks again after its state changed while it was shown`);
+    assert.match(dialog(document).textContent, /This changed since it was shown\. Check it again\./);
+    assert.ok(dialog(document).textContent.includes(names(first)));
+    press(document, 'Allow');
+    assert.deepEqual(await asked, first, `${name} resolves to the state the person allowed`);
+  });
+}

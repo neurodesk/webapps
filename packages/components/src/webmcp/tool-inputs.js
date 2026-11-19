@@ -110,7 +110,7 @@ export function interactionEffect(event, doc, { person = event.isTrusted, touche
 export function createToolInputs({ doc, automation, isPerson = event => event.isTrusted }) {
   const view = doc.defaultView;
   let examination = { id: 1, held: new Map(), touched: false };
-  // runId → { examination, operation, startedAt, inputs: [{ role, name, bytes }], settled: snapshot | null }
+  // runId → { examination, operation, startedAt, inputs: [{ role, name, bytes } | { role, url }], settled: snapshot | null }
   let turn = { examination, controller: new AbortController() };
   const runs = new Map();
   let unseen = false;
@@ -120,6 +120,9 @@ export function createToolInputs({ doc, automation, isPerson = event => event.is
   const received = new Map();
   let pageExample = null;
   let loads = 0;
+  // Count the changes of what a consent dialog names: the held files and runs, and the page's entries.
+  let revision = 0;
+  let pageRevision = 0;
 
   const classified = () => [
     ...[...doc.querySelectorAll(CLASSIFIED)].filter(isClassified),
@@ -142,6 +145,7 @@ export function createToolInputs({ doc, automation, isPerson = event => event.is
 
   function end() {
     examination = { id: examination.id + 1, held: new Map(), touched: false };
+    revision += 1;
     nextTurn();
   }
 
@@ -150,19 +154,25 @@ export function createToolInputs({ doc, automation, isPerson = event => event.is
     pageFiles.set(input, files);
     received.clear();
     loads += 1;
+    pageRevision += 1;
+  }
+
+  function receive(name, entry) {
+    received.set(name, entry);
+    pageRevision += 1;
   }
 
   // Files the page held before this module loaded count as received now.
   for (const input of classified()) if (input.files?.length) record(input, [...input.files]);
   const handedOff = view[RECEIVED_HANDOFF];
-  if (handedOff?.files?.length) received.set('handoff', { label: `Sent from ${handedOff.source?.title ?? 'another app'}`, files: handedOff.files });
+  if (handedOff?.files?.length) receive('handoff', { label: `Sent from ${handedOff.source?.title ?? 'another app'}`, files: handedOff.files });
 
   function personDrop(event) {
     // The shell or the app may deliver the drop through a classified input, which records it instead.
     const at = examination;
     const before = loads;
     filesFromDataTransferItems(event.dataTransfer.items).then(files => {
-      if (examination === at && loads === before && files.length) received.set('drop', { label: 'Files dropped on the page', files });
+      if (examination === at && loads === before && files.length) receive('drop', { label: 'Files dropped on the page', files });
     }).catch(() => {
       if (examination === at) unseen = true;
     });
@@ -177,7 +187,7 @@ export function createToolInputs({ doc, automation, isPerson = event => event.is
       if (event.detail?.state === 'ready') pageExample = event.detail.exampleId ?? null;
     } else if (event.type === 'nd-handoff') {
       const files = event.detail?.files;
-      if (files?.length) received.set('handoff', { label: `Sent from ${event.detail.source?.title ?? 'another app'}`, files });
+      if (files?.length) receive('handoff', { label: `Sent from ${event.detail.source?.title ?? 'another app'}`, files });
     } else if (!person) {
       // Loads no person made: an app filling its own inputs, the shell delivering a drop or a handoff, a run.
       if (event.type === 'change' && isClassified(target)) record(target, [...(target.files ?? [])]);
@@ -301,13 +311,17 @@ export function createToolInputs({ doc, automation, isPerson = event => event.is
     /** Whether the person has used the workspace since the agent last held files or the person let it continue. */
     touched: () => examination.touched,
     held: () => Object.fromEntries([...examination.held].map(([role, files]) => [role, describe(files)])),
-    /** What letting the agent continue would hand back: the held files by role, and the examination's latest run with the files it ran on. */
+    /**
+     * What letting the agent continue would hand back: the held files by role, and the examination's
+     * latest run with what it ran on. `revision` changes whenever either does, even to files of the
+     * same names, so a dialog that named it can tell it is still what it named.
+     */
     resumable() {
       const files = [...examination.held].flatMap(([role, held]) => held.map(file => ({ role, name: file.name, bytes: file.size })));
       const latest = [...runs].reverse().find(([, run]) => run.examination === examination.id);
-      if (!latest) return { files, run: null };
+      if (!latest) return { files, run: null, revision };
       const [runId, { operation, startedAt, inputs }] = latest;
-      return { files, run: { runId, operation, startedAt, inputs: structuredClone(inputs) } };
+      return { files, run: { runId, operation, startedAt, inputs: structuredClone(inputs) }, revision };
     },
     /** The person let the agent continue with what `resumable` named: the held files and the latest run serve its calls again; the examination's earlier runs stay withheld. */
     resume(from) {
@@ -326,27 +340,30 @@ export function createToolInputs({ doc, automation, isPerson = event => event.is
     pageMayHoldOtherInputs: () => unseen,
     /** The example the person picked with the page's own example selector, until anything changes the page. */
     pageExample: () => pageExample,
-    /** The files a page entry lists and its label. */
+    /** The files a page entry lists, its label, and the revision of the page's entries they were read at. */
     pageEntry(inputKey) {
       const entry = entries().find(candidate => candidate.input === inputKey);
       if (!entry) throw new Error(`No files are loaded in the page input ${inputKey}`);
-      return { label: entry.label, files: entry.files };
+      return { label: entry.label, files: entry.files, revision: pageRevision };
     },
     /** Forgets the page's entries and example: a run or viewer load the tools start may change what the page shows. */
     toolLoaded() {
       pageFiles = new WeakMap();
       received.clear();
       pageExample = null;
+      pageRevision += 1;
     },
     /** Holds `files` for one role, beside the roles already held, if the turn is still `from`. */
     hold(from, role, files) {
       bound(from);
       examination.held.set(role, files);
+      revision += 1;
     },
     /** Holds `files` (role to files) as the whole held set, if the turn is still `from`. */
     replace(from, files) {
       bound(from);
       examination.held = new Map(files);
+      revision += 1;
     },
     /** Hands the held files for every file role to the app's automation for the next run, which takes them; a role the tools do not hold gets none. */
     async stage(from, roles = [...examination.held.keys()]) {
@@ -356,11 +373,16 @@ export function createToolInputs({ doc, automation, isPerson = event => event.is
         bound(from);
       }
     },
-    /** Records that a run the tools started, of `operation` on the files held in the turn `from`, belongs to that turn's examination. */
-    claim(from, runId, operation) {
-      const files = [...from.examination.held].flatMap(([role, held]) => held.map(file => ({ role, name: file.name, bytes: file.size })));
-      runs.set(runId, { examination: from.examination.id, operation, startedAt: Date.now(), inputs: files, settled: null });
+    /**
+     * Records that a run the tools started belongs to the examination of the turn `from`, with what it
+     * was given: the files held in that turn for the file `roles` its operation reads, and the
+     * `addresses` it reads under ({ role, url }, the roots the person allowed).
+     */
+    claim(from, runId, operation, { roles = [], addresses = [] } = {}) {
+      const files = roles.flatMap(role => (from.examination.held.get(role) ?? []).map(file => ({ role, name: file.name, bytes: file.size })));
+      runs.set(runId, { examination: from.examination.id, operation, startedAt: Date.now(), inputs: [...files, ...addresses.map(({ role, url }) => ({ role, url }))], settled: null });
       if (runs.size > RUNS_KEPT) runs.delete(runs.keys().next().value);
+      revision += 1;
     },
     /** Records the snapshot a run the tools started ended with, the first time the tools see it ended. */
     settle(snapshot) {

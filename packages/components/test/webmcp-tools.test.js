@@ -7,6 +7,7 @@ import { registerAppAutomation } from '../src/automation/index.js';
 import { operationParametersSchema } from '../src/automation/parameters.js';
 import { fetchApproved, registerWebMcpTools, webMcpTools } from '../src/webmcp/tools.js';
 import { exposeWebMcp } from '../src/webmcp/page.js';
+import { createAgentPrompts } from '../src/ui/agentPrompt.js';
 import { createToolInputs, INTERACTIONS, PERSON_INPUT } from '../src/webmcp/tool-inputs.js';
 import { schemaIssues, unsupportedKeywords } from '../src/webmcp/schema.js';
 import { NIIVUE_METHODS, NIIVUE_PARAMETERS } from '../src/webmcp/niivue-methods.js';
@@ -37,6 +38,10 @@ function asPerson(target, event) {
   target.dispatchEvent(event);
 }
 const hold = (inputs, role, files) => inputs.hold(inputs.turn(), role, files);
+// A consent prompt allowed as it shows: it resolves to the request it named.
+const allowing = request => (typeof request === 'function' ? request() : request);
+// What a consent dialog names, without the revision it carries to tell it is still current.
+const named = ({ revision, ...request }) => request;
 const WORKSPACE = '<body><header class="nd-app-bar"><button id="privacy">Privacy</button></header><main><input type="file" id="t1" data-neurodesk-input="image" aria-label="T1 image"><button id="remove">Remove</button><canvas id="viewer"></canvas></main></body>';
 
 function page(t, operation, options = {}) {
@@ -49,15 +54,17 @@ function page(t, operation, options = {}) {
   const inputs = createToolInputs({ doc: dom.window.document, automation, isPerson });
   const confirmations = [];
   const confirmFiles = async request => {
-    confirmations.push(request);
-    return true;
+    const shown = allowing(request);
+    confirmations.push(named(shown));
+    return shown;
   };
   const resumes = [];
   let resumeAnswer = true;
   const confirmResume = async (request, { signal } = {}) => {
-    const { startedAt, ...run } = request.run ?? {};
-    resumes.push({ ...request, run: request.run && { ...run, started: typeof startedAt === 'number' }, signal: Boolean(signal) });
-    return resumeAnswer;
+    const shown = allowing(request);
+    const { startedAt, ...run } = shown.run ?? {};
+    resumes.push({ ...named(shown), run: shown.run && { ...run, started: typeof startedAt === 'number' }, signal: Boolean(signal) });
+    return resumeAnswer ? shown : null;
   };
   const tools = webMcpTools({ contract: contract(), dispatch: automation.dispatch, inputs, examples: () => examples, confirmFiles, confirmResume, ...options });
   const call = (name, input = {}, signal = new AbortController().signal) => tools.find(tool => tool.name === name).execute(input, { signal });
@@ -780,8 +787,8 @@ function viewerPage(t, options = {}) {
       return { blob: new Blob([`bytes of ${address}`]), href: new URL(address, 'https://apps.test/test/').href };
     },
     confirmFetch: async (request, { signal } = {}) => {
-      confirmations.push({ ...request, signal: Boolean(signal) });
-      return approve;
+      confirmations.push({ ...allowing(request), signal: Boolean(signal) });
+      return approve && allowing(request);
     }, ...options });
   const call = (name, input) => tools.find(tool => tool.name === name).execute(input, { signal: new AbortController().signal });
   return { tools, call, sent, confirmations, fetched, allow: value => { approve = value; } };
@@ -863,7 +870,7 @@ function maskPage(t, operation, options = {}) {
   const automation = dom.window.neurodeskAutomation;
   const inputs = createToolInputs({ doc: dom.window.document, automation, isPerson });
   const tools = webMcpTools({ contract: maskContract, dispatch: automation.dispatch, inputs, examples: () => examples,
-    fetchAsset: async () => new TextEncoder().encode('head').buffer, confirmFiles: async () => true, ...options });
+    fetchAsset: async () => new TextEncoder().encode('head').buffer, confirmFiles: async request => allowing(request), ...options });
   const call = (name, input = {}) => tools.find(tool => tool.name === name).execute(input, { signal: new AbortController().signal });
   return { call, inputs, registration, window: dom.window };
 }
@@ -969,9 +976,9 @@ function racePage(t) {
     fetchAddress: gate('fetchAddress', async address => ({ blob: new Blob(['volume']), href: address })),
     askUser: gate('askUser', async () => ({ answer: 'yes' })),
     requestFiles: gate('requestFiles', async () => [new File(['input'], 'input.nii')]),
-    confirmFiles: gate('confirmFiles', async () => true),
-    confirmFetch: gate('confirmFetch', async () => true),
-    confirmResume: gate('confirmResume', async () => true) });
+    confirmFiles: gate('confirmFiles', async request => allowing(request)),
+    confirmFetch: gate('confirmFetch', async request => allowing(request)),
+    confirmResume: gate('confirmResume', async request => allowing(request)) });
   const call = (name, input = {}) => tools.find(tool => tool.name === name).execute(input, { signal: new AbortController().signal });
   return {
     tools, call, inputs, downloads, registration, requests, window: dom.window,
@@ -1279,9 +1286,9 @@ test('calls that need the person\'s answer after one touch share one dialog and 
     let asked = 0;
     let answer;
     const { call, inputs, window, downloads } = page(t, async () => labels(), {
-      confirmResume: () => {
+      confirmResume: request => {
         asked += 1;
-        return new Promise(resolve => { answer = resolve; });
+        return new Promise(resolve => { answer = value => resolve(value && allowing(request)); });
       },
     });
     hold(inputs, 'image', [new File(['scan'], 'scan.nii')]);
@@ -1342,4 +1349,98 @@ test('the page download takes the checksum the tools recorded and saves nothing 
   assert.equal(downloads.length, 0);
   assert.deepEqual(await dispatch('download', { runId: run.runId, artifactId: 'labels', sha256: run.report.artifacts.labels.sha256 }), { artifactId: 'labels' });
   assert.equal(downloads.length, 1);
+});
+
+test('a resume queued behind the agent\'s file request names the file chosen in it, and Allow hands back that file', async t => {
+  const dom = new JSDOM(WORKSPACE, { url: 'https://example.test/test/' });
+  t.after(() => dom.window.close());
+  const { window } = dom;
+  window.HTMLDialogElement.prototype.showModal = function showModal() { this.setAttribute('open', ''); };
+  window.HTMLDialogElement.prototype.close = function close() {
+    this.removeAttribute('open');
+    setTimeout(() => this.dispatchEvent(new window.Event('close')));
+  };
+  registerAppAutomation({ app: 'test', contract: contract(), operations: { run: async () => labels() }, document: window.document, target: window });
+  const automation = window.neurodeskAutomation;
+  const inputs = createToolInputs({ doc: window.document, automation, isPerson });
+  const prompts = createAgentPrompts(window.document);
+  const tools = webMcpTools({ contract: contract(), dispatch: automation.dispatch, inputs, examples: () => examples,
+    requestFiles: prompts.requestFiles, confirmResume: prompts.confirmResume });
+  const call = (name, input = {}) => tools.find(tool => tool.name === name).execute(input, { signal: new AbortController().signal });
+  const tick = () => new Promise(resolve => setTimeout(resolve, 5));
+  const prompt = () => window.document.getElementById('neurodeskAgentPrompt');
+  hold(inputs, 'image', [new File(['original'], 'original.nii')]);
+  const run = await call('run_run');
+  click(window, '#viewer');
+  const request = call('inputs_request_files', { role: 'image' });
+  await tick();
+  const report = call('runs_get', { runId: run.runId });
+  await tick();
+  const field = prompt().querySelector('nd-file-field');
+  Object.defineProperty(field.input, 'files', { configurable: true, value: [new File(['changed scan'], 'changed.nii')] });
+  field.input.dispatchEvent(new window.Event('change'));
+  assert.deepEqual((await request).files, [{ name: 'changed.nii', bytes: 12 }]);
+  await tick();
+  const lists = [...prompt().querySelectorAll('ul')].map(list => [...list.querySelectorAll('li')].map(item => item.textContent));
+  assert.deepEqual(lists, [['image: original.nii'], ['image: changed.nii']], 'the run\'s file, then the file chosen while the resume waited');
+  [...prompt().querySelectorAll('button')].find(button => button.textContent === 'Allow').click();
+  assert.equal((await report).report.runId, run.runId);
+  assert.equal((await call('run_run')).report.inputs.image[0].filename, 'changed.nii', 'the next run uses the file the dialog named');
+});
+
+test('Allow is applied only while the held files are still the ones the resume dialog named; otherwise it asks again', async t => {
+  const holder = {};
+  const shown = [];
+  const { call, inputs, window } = page(t, async () => labels(), {
+    confirmResume: async request => {
+      const state = request();
+      shown.push(state.files.map(file => file.name));
+      // The agent's file request answers after the dialog was read and before its answer is applied.
+      if (shown.length === 1) hold(holder.inputs, 'image', [new File(['b'], 'replacement.nii')]);
+      return state;
+    },
+  });
+  holder.inputs = inputs;
+  hold(inputs, 'image', [new File(['a'], 'original.nii')]);
+  const run = await call('run_run');
+  click(window, '#viewer');
+  assert.equal((await call('runs_get', { runId: run.runId })).report.runId, run.runId);
+  assert.deepEqual(shown, [['original.nii'], ['replacement.nii']], 'asked again with the files it now holds');
+});
+
+test('the resume dialog names the run by what its operation read: its own file roles and the root of each address', async t => {
+  const dom = new JSDOM(WORKSPACE, { url: 'https://example.test/test/' });
+  t.after(() => dom.window.close());
+  const twoOperations = contract();
+  const run = twoOperations.operations.run;
+  twoOperations.operations = {
+    correct: { ...structuredClone(run), inputs: { uni: { ...run.inputs.image, description: 'UNI image' } } },
+    denoise: { ...structuredClone(run), inputs: { inv1: { ...run.inputs.image, description: 'INV1 image' }, store: { source: 'url', type: 'neuro:volume', formats: ['ome-zarr'], description: 'A store', minimum: 0, maximum: 1 } } },
+  };
+  twoOperations.defaultOperation = 'correct';
+  registerAppAutomation({ app: 'test', contract: twoOperations, operations: { correct: async () => labels(), denoise: async () => labels() },
+    sourceRoots: { store: address => address.replace(/\/\.zattrs$/, '') }, document: dom.window.document, target: dom.window });
+  const automation = dom.window.neurodeskAutomation;
+  const inputs = createToolInputs({ doc: dom.window.document, automation, isPerson });
+  const resumes = [];
+  const tools = webMcpTools({ contract: twoOperations, dispatch: automation.dispatch, inputs, examples: () => [],
+    confirmFetch: async request => allowing(request),
+    confirmResume: async request => {
+      resumes.push(named(allowing(request)));
+      return allowing(request);
+    } });
+  const call = (name, input = {}) => tools.find(tool => tool.name === name).execute(input, { signal: new AbortController().signal });
+  hold(inputs, 'uni', [new File(['u'], 'uni.nii')]);
+  hold(inputs, 'inv1', [new File(['i'], 'inv1.nii')]);
+  const corrected = await call('run_correct');
+  assert.equal(corrected.state, 'succeeded', JSON.stringify(corrected.error));
+  click(dom.window, '#viewer');
+  await call('runs_get', { runId: corrected.runId });
+  assert.deepEqual(resumes[0].run.inputs, [{ role: 'uni', name: 'uni.nii', bytes: 1 }], 'only the role the correct operation reads');
+  assert.deepEqual(resumes[0].files.map(file => file.role), ['uni', 'inv1'], 'it keeps both roles for its next run');
+  const denoised = await call('run_denoise', { inputs: { store: { url: 'https://data.test/brain.ome.zarr/.zattrs' } } });
+  assert.equal(denoised.state, 'succeeded', JSON.stringify(denoised.error));
+  click(dom.window, '#viewer');
+  await call('runs_get', { runId: denoised.runId });
+  assert.deepEqual(resumes[1].run.inputs, [{ role: 'inv1', name: 'inv1.nii', bytes: 1 }, { role: 'store', url: 'https://data.test/brain.ome.zarr' }], 'its file role and the store root the person allowed');
 });

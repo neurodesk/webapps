@@ -117,6 +117,9 @@ function fileRoles(contract) {
   return roles;
 }
 
+// The file roles one operation reads.
+const fileRolesOf = operation => Object.keys(operation.inputs).filter(role => operation.inputs[role].source === 'files');
+
 // WebMCP reports a rejected tool call to the agent without its message, so failures travel in the result.
 function failure(error) {
   return { error: {
@@ -222,21 +225,28 @@ export function webMcpTools({ contract, inputs, ...pageIo }) {
       await sleep(Math.min(POLL_MS, remaining), call.waits);
     }
   }
-  const approved = async (call, addresses, options = {}) => !addresses.length || await call.confirmFetch({ app: contract.title, addresses, ...options }, { signal: call.waits });
+  const approved = async (call, addresses, options = {}) => !addresses.length || Boolean(await call.confirmFetch({ app: contract.title, addresses, ...options }, { signal: call.waits }));
   // After the person used the page, the held files and the examination's latest run serve a call only
   // once they let the agent continue; declining ends the examination. Calls waiting on the same touch
   // share one dialog and its answer, which is shown until the person answers or uses the page again.
-  // True when the call may go on.
+  // The dialog names what `resumable` gives when it shows; Allow applies only while that is still what
+  // it gives, else the person is asked again. True when the call may go on.
   let pending = null;
   async function resumed(call) {
     if (!inputs.touched()) return true;
     const from = call.from;
     if (pending?.from !== from) {
-      const { files, run } = inputs.resumable();
+      const request = () => ({ app: contract.title, ...inputs.resumable() });
       const decide = async () => {
-        if ((files.length || run) && !await call.confirmResume({ app: contract.title, files, run }, { signal: from.controller.signal })) {
-          inputs.release(from);
-          return { allowed: false, turn: inputs.turn() };
+        for (;;) {
+          const { files, run } = inputs.resumable();
+          if (!files.length && !run) break;
+          const allowed = await call.confirmResume(request, { signal: from.controller.signal });
+          if (!allowed) {
+            inputs.release(from);
+            return { allowed: false, turn: inputs.turn() };
+          }
+          if (sameJson(allowed, request())) break;
         }
         inputs.resume(from);
         return { allowed: true };
@@ -334,10 +344,19 @@ export function webMcpTools({ contract, inputs, ...pageIo }) {
       input: { type: 'string', description: 'The input key from pageFiles' },
     }, ['role', 'input']), {},
     async ({ role, input }, call) => {
-      const entry = inputs.pageEntry(input);
-      if (!await call.confirmFiles({ app: contract.title, label: entry.label, files: describeFiles(entry.files) }, { signal: call.waits })) return { declined: true };
-      inputs.hold(call.from, role, entry.files);
-      return { role, files: describeFiles(entry.files) };
+      // The dialog names the entry as it is when it shows; the files held are the ones it named.
+      const request = () => {
+        const entry = inputs.pageEntry(input);
+        return { app: contract.title, label: entry.label, files: describeFiles(entry.files), revision: entry.revision };
+      };
+      for (;;) {
+        const allowed = await call.confirmFiles(request, { signal: call.waits });
+        if (!allowed) return { declined: true };
+        const entry = inputs.pageEntry(input);
+        if (entry.revision !== allowed.revision) continue;
+        inputs.hold(call.from, role, entry.files);
+        return { role, files: describeFiles(entry.files) };
+      }
     });
 
   tool('inputs_load_example', 'Load an example',
@@ -365,7 +384,8 @@ export function webMcpTools({ contract, inputs, ...pageIo }) {
       async ({ parameters, inputs: sources = {}, selections, waitSeconds: seconds = DEFAULT_WAIT_SECONDS }, call) => {
         if (!await resumed(call)) return declined;
         // The app names the address it reads under for each url (a store's root), so the person allows that.
-        const roots = Object.keys(sources).length ? Object.values(await call.dispatch('sources', { operation: name, inputs: sources })).map(source => source.root) : [];
+        const addressed = Object.keys(sources).length ? Object.entries(await call.dispatch('sources', { operation: name, inputs: sources })).map(([role, source]) => ({ role, url: source.root })) : [];
+        const roots = addressed.map(source => source.url);
         if (!await approved(call, roots, { readsUnder: true })) return { declined: true, addresses: roots };
         const active = await call.dispatch('snapshot');
         if (!terminal.has(active.state)) {
@@ -377,7 +397,7 @@ export function webMcpTools({ contract, inputs, ...pageIo }) {
         call.check();
         inputs.toolLoaded();
         const { runId } = await call.dispatch('start', { operation: name, parameters, inputs: sources, selections });
-        inputs.claim(call.from, runId, name);
+        inputs.claim(call.from, runId, name, { roles: fileRolesOf(operation), addresses: addressed });
         const settled = await settle(call, runId, seconds);
         if (!call.signal?.aborted || terminal.has(settled.state)) return settled;
         await bound(call, 'cancel', runId);

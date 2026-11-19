@@ -11,6 +11,12 @@ const NOTICE = 'An AI agent you started in this browser sent this request. Closi
  * aborted signal closes it, or drops it before it shows: the tools abort a call's signal when the
  * person uses the page, so a question queued behind another is never shown once it is moot.
  *
+ * A consent prompt (`confirmFetch`, `confirmFiles`, `confirmResume`) names state the person decides
+ * on. Its request may be a function returning the request, which is read when the prompt shows and
+ * again when the person presses Allow: when the two differ, the prompt shows the current one and asks
+ * again. It resolves to the request the person allowed, or null; the caller applies the answer only
+ * while its state is still that request.
+ *
  *   const prompts = createAgentPrompts();
  *   await prompts.ask({ question: 'Which series?', options: ['T1', 'T2'] }, { signal });
  *   await prompts.requestFiles({ label: 'One anatomical head image', formats: ['nifti'] }, { signal });
@@ -22,7 +28,9 @@ export function createAgentPrompts(doc = globalThis.document) {
 
   function show(content, signal) {
     if (signal?.aborted) return Promise.resolve(null);
-    const turn = queue.then(() => (signal?.aborted ? null : present(content, signal)));
+    // The next prompt waits a task, so what the answer to the one before changed is settled when it reads its state.
+    const turn = queue.then(() => new Promise(resolve => doc.defaultView.setTimeout(resolve)))
+      .then(() => (signal?.aborted ? null : present(content, signal)));
     queue = turn.catch(() => null);
     if (!signal) return turn;
     const aborted = new Promise(resolve => signal.addEventListener('abort', () => resolve(null), { once: true }));
@@ -47,8 +55,8 @@ export function createAgentPrompts(doc = globalThis.document) {
         if (!root.open) finish(null);
       };
       const onAbort = () => finish(null);
-      const notice = createElement('p', { className: 'nd-hint', text: NOTICE, ownerDocument: doc });
-      dialog.open(TITLE, [notice, ...content(finish)]);
+      const render = nodes => dialog.open(TITLE, [createElement('p', { className: 'nd-hint', text: NOTICE, ownerDocument: doc }), ...nodes]);
+      render(content(finish, render));
       root.addEventListener('close', onClose);
       signal?.addEventListener('abort', onAbort, { once: true });
     });
@@ -56,6 +64,34 @@ export function createAgentPrompts(doc = globalThis.document) {
 
   function button(text, className, onclick) {
     return createElement('button', { type: 'button', className: `nd-btn ${className}`, text, onclick, ownerDocument: doc });
+  }
+
+  /**
+   * A prompt that names the state `request` gives, read as it shows. Allow resolves to that state
+   * only while `request` still gives it; otherwise the prompt shows the current state and asks again.
+   */
+  function consent(request, body, signal) {
+    const current = typeof request === 'function' ? request : () => request;
+    return show((finish, render) => {
+      const ask = (shown, changed) => {
+        const allow = () => {
+          let now;
+          try {
+            now = current();
+          } catch {
+            return finish(null);
+          }
+          if (JSON.stringify(now) === JSON.stringify(shown)) finish(shown);
+          else render(ask(now, true));
+        };
+        return [
+          ...(changed ? [createElement('p', { className: 'nd-message warning', role: 'status', text: 'This changed since it was shown. Check it again.', ownerDocument: doc })] : []),
+          ...body(shown),
+          actions(finish, button('Allow', 'nd-btn-primary', allow)),
+        ];
+      };
+      return ask(current(), false);
+    }, signal);
   }
 
   function actions(finish, ...buttons) {
@@ -85,51 +121,50 @@ export function createAgentPrompts(doc = globalThis.document) {
     /**
      * Asks whether the app may fetch the addresses the agent named. `readsUnder` says each address is
      * the root the app reads under, as a store's metadata and chunks; `replaces` that the file takes
-     * the place of the images the viewer shows. Resolves true only when the person allows it.
+     * the place of the images the viewer shows. Resolves to the request when the person allows it.
      */
-    async confirmFetch({ app, addresses, readsUnder = false, replaces = false }, { signal } = {}) {
-      const resolved = addresses.map(address => {
-        try {
-          return new URL(address, doc.baseURI);
-        } catch {
-          return null;
-        }
-      });
-      const origins = [...new Set(resolved.filter(Boolean).map(url => url.origin))];
-      const one = addresses.length === 1;
-      const servers = origins.length === 1 ? `The server at ${origins[0]} sees` : `The servers at ${origins.join(', ')} see`;
-      const answer = await show(finish => [
-        createElement('p', { text: readsUnder ? `Let ${app} read the data stored under ${one ? 'this address' : 'these addresses'}?` : `Let ${app} load ${one ? 'the file at this address' : 'the files at these addresses'} into the page?`, ownerDocument: doc }),
-        createElement('ul', { ownerDocument: doc }, resolved.map((url, index) => createElement('li', { ownerDocument: doc }, [createElement('code', { text: url?.href ?? addresses[index], ownerDocument: doc })]))),
-        createElement('p', { text: readsUnder
-          ? `${app} reads the addresses under ${one ? 'it' : 'each one'}, such as a store's metadata and chunks. ${servers} every request.`
-          : `The page loads only ${one ? 'this address' : 'these addresses'}, and nothing they redirect to. ${servers} the request.`, ownerDocument: doc }),
-        ...(replaces ? [createElement('p', { text: 'It replaces the images the viewer shows now.', ownerDocument: doc })] : []),
-        actions(finish, button('Allow', 'nd-btn-primary', () => finish(true))),
-      ], signal);
-      return answer === true;
+    confirmFetch(request, { signal } = {}) {
+      return consent(request, ({ app, addresses, readsUnder = false, replaces = false }) => {
+        const resolved = addresses.map(address => {
+          try {
+            return new URL(address, doc.baseURI);
+          } catch {
+            return null;
+          }
+        });
+        const origins = [...new Set(resolved.filter(Boolean).map(url => url.origin))];
+        const one = addresses.length === 1;
+        const servers = origins.length === 1 ? `The server at ${origins[0]} sees` : `The servers at ${origins.join(', ')} see`;
+        return [
+          createElement('p', { text: readsUnder ? `Let ${app} read the data stored under ${one ? 'this address' : 'these addresses'}?` : `Let ${app} load ${one ? 'the file at this address' : 'the files at these addresses'} into the page?`, ownerDocument: doc }),
+          createElement('ul', { ownerDocument: doc }, resolved.map((url, index) => createElement('li', { ownerDocument: doc }, [createElement('code', { text: url?.href ?? addresses[index], ownerDocument: doc })]))),
+          createElement('p', { text: readsUnder
+            ? `${app} reads the addresses under ${one ? 'it' : 'each one'}, such as a store's metadata and chunks. ${servers} every request.`
+            : `The page loads only ${one ? 'this address' : 'these addresses'}, and nothing they redirect to. ${servers} the request.`, ownerDocument: doc }),
+          ...(replaces ? [createElement('p', { text: 'It replaces the images the viewer shows now.', ownerDocument: doc })] : []),
+        ];
+      }, signal);
     },
 
-    /** Asks whether the agent may use files the page received, which the app may have refused or replaced since. Resolves true only when the person allows it. */
-    async confirmFiles({ app, label, files }, { signal } = {}) {
-      const answer = await show(finish => [
+    /** Asks whether the agent may use files the page received, which the app may have refused or replaced since. Resolves to the request when the person allows it. */
+    confirmFiles(request, { signal } = {}) {
+      return consent(request, ({ app, label, files }) => [
         createElement('p', { text: `Let the agent run ${app} on these files from ${label}?`, ownerDocument: doc }),
         createElement('ul', { ownerDocument: doc }, files.map(file => createElement('li', { text: file.name, ownerDocument: doc }))),
         createElement('p', { text: 'The page received them but may not show them now. Allow only if you mean these files.', ownerDocument: doc }),
-        actions(finish, button('Allow', 'nd-btn-primary', () => finish(true))),
       ], signal);
-      return answer === true;
     },
 
     /**
      * Asks whether the agent may continue after the person used the page, naming exactly what it gets
      * back: `files`, the `{ role, name }` it holds for its next run, and `run`, its latest run as
-     * `{ operation, startedAt, inputs: [{ role, name }] }` or null, whose report and outputs are the
-     * ones it ended with. Resolves true only when the person allows it.
+     * `{ operation, startedAt, inputs }` or null, whose report and outputs are the ones it ended with.
+     * A run's input is a file `{ role, name }` or an address `{ role, url }`. Resolves to the request
+     * when the person allows it.
      */
-    async confirmResume({ app, files = [], run = null }, { signal } = {}) {
-      const list = items => createElement('ul', { ownerDocument: doc }, items.map(file => createElement('li', { text: `${file.role}: ${file.name}`, ownerDocument: doc })));
-      const answer = await show(finish => [
+    confirmResume(request, { signal } = {}) {
+      const list = items => createElement('ul', { ownerDocument: doc }, items.map(item => createElement('li', { text: `${item.role}: ${item.name ?? item.url}`, ownerDocument: doc })));
+      return consent(request, ({ app, files = [], run = null }) => [
         createElement('p', { text: `Let the agent continue in ${app}?`, ownerDocument: doc }),
         ...(run ? [
           createElement('p', { text: `It gets the report and outputs of its ${run.operation} run from ${new Date(run.startedAt).toLocaleTimeString()}, on:`, ownerDocument: doc }),
@@ -141,9 +176,7 @@ export function createAgentPrompts(doc = globalThis.document) {
           list(files),
         ] : []),
         createElement('p', { text: 'You used the page since its last step. Decline to make it let go of them.', ownerDocument: doc }),
-        actions(finish, button('Allow', 'nd-btn-primary', () => finish(true))),
       ], signal);
-      return answer === true;
     },
 
     async requestFiles({ label, formats = [], message, minimum = 1, maximum = Infinity, folder = false }, { signal } = {}) {
