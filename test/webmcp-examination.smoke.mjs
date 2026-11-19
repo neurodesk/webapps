@@ -21,6 +21,7 @@ const FEATURES = `--enable-features=${[...(process.platform === 'linux' ? ['Vulk
 const cache = process.env.EXAMPLE_ASSET_CACHE;
 const scan = (name, size = 16) => ({ name, mimeType: 'application/gzip', buffer: syntheticNifti({ dims: [size, size, size], value: index => index % 7 }) });
 
+const CHECK_SECONDS = Number(process.env.WEBMCP_CHECK_SECONDS ?? 300);
 const scratch = await mkdtemp(join(tmpdir(), 'webmcp-examination-'));
 
 // The person's own pick, as Chrome reports a file chooser: a trusted change event. Playwright's
@@ -42,14 +43,18 @@ async function check(label, body) {
   const context = await browser.newContext({ acceptDownloads: true, serviceWorkers: 'block' });
   await context.route(/googletagmanager\.com|google-analytics\.com|cloudflareinsights\.com/, route => route.abort());
   if (cache) await context.route(url => existsSync(exampleCachePath(cache, url.href)), async route => route.fulfill({ body: await readFile(exampleCachePath(cache, route.request().url())) }));
+  let timer;
+  // A check that stops answering (a dialog nobody answers, a hold that never resolves) fails instead of stalling the run.
+  const deadline = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`no answer within ${CHECK_SECONDS} s`)), CHECK_SECONDS * 1000); });
   try {
-    await body(context);
+    await Promise.race([body(context), deadline]);
     results.push(true);
     console.log(`PASS ${label}`);
   } catch (error) {
     results.push(false);
     console.log(`FAIL ${label}: ${error.stack}`);
   } finally {
+    clearTimeout(timer);
     await context.close();
   }
 }
@@ -425,6 +430,8 @@ try {
       assert.equal(refused.error?.code, 'INVALID_INPUT', JSON.stringify(refused));
     }
     assert.deepEqual(await call('viewers_volumes', { viewerId: 'main' }), before, 'the volume is unchanged');
+    const offered = await page.evaluate(async () => (await document.modelContext.getTools()).find(tool => tool.name === 'viewers_niivue').inputSchema);
+    assert.ok(!JSON.parse(typeof offered === 'string' ? offered : JSON.stringify(offered)).properties.method.enum.includes('load_signal'), 'load_signal is not offered');
     const signal = await call('viewers_niivue', { viewerId: 'main', method: 'load_signal', params: { url: `${origin}/test-only/trace.tsv` } });
     assert.equal(signal.error?.code, 'INVALID_INPUT', JSON.stringify(signal));
 
