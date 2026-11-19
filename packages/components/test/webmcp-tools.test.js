@@ -1205,6 +1205,8 @@ test('what each interaction does to the examination is decided in one place', as
     return Object.keys(inputs.held()).length ? 'touched' : 'ended';
   };
   assert.equal(touchedThen(new window.CustomEvent('nd-files', { bubbles: true, detail: { files: [] } }), document.getElementById('t1')), 'ended', 'a remove the person pressed, reported with nd-files');
+  assert.equal(touchedThen(new window.Event('change', { bubbles: true }), document.getElementById('t1')), 'ended', 'the page putting other files on an input after a press, as Undo does');
+  assert.equal(effect(document.getElementById('t1'), new window.Event('change', { bubbles: true }), false), 'kept', 'the page or a run filling an input with nobody at the page');
   const prompt = document.createElement('dialog');
   prompt.id = 'neurodeskAgentPrompt';
   const promptField = document.createElement('div');

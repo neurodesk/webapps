@@ -1,13 +1,16 @@
 #!/usr/bin/env node
 // Whatever an app does with a control, the person using it never goes unseen by the agent's tools. For
 // every app of the built site (dist/), in Chromium with Chrome's own WebMCP: the agent holds a file, the
-// person performs one trusted action, and the examination must be touched or ended exactly as
-// interactionEffect (webmcp/tool-inputs.js) judges the events the action sent. An action the predicate
-// does not count fails. After a touch, the agent's next run must ask the person to let it continue,
-// naming the held files; the test declines, which ends the examination for the next action.
+// person performs one trusted action, and with no Allow given the agent must not get the held file
+// back: the examination is either ended or touched, and after a touch the agent's next run asks the
+// person first, naming the held files (the test declines). The expectation does not come from the
+// tools' own predicate: an action that changes the files the page shows (a pick, a removal, a clear,
+// a select that loads other data), read from the page itself, must end the examination, so that no
+// earlier run of the agent can be disclosed even after Allow.
 //
 // The actions: a pick in each classified file and folder input, a click on each remove or clear button,
-// and each visible select, checkbox, text field and canvas, at most WEBMCP_INTERACTION_MAX per app (40;
+// a change of value in each visible select (to another option, by keyboard), and a click on each
+// visible checkbox, text field and canvas, at most WEBMCP_INTERACTION_MAX per app (40;
 // the report gives how many were found). They are listed once the app is ready: its tools registered,
 // its example selectors filled and enabled, no run going, and its page quiet. An action that could not be performed, an app where
 // none was, and an app with no file role (the agent holds no file there) fail unless
@@ -104,33 +107,23 @@ async function hold(page, { role, count }) {
   return JSON.parse(held).files ? null : held;
 }
 
-// What interactionEffect makes of the events one action sends, followed as the tracker follows them:
-// 'ended' once any event ends the examination, else 'touched' once any touches it, else 'kept'.
-async function predict(page, touched) {
-  await page.evaluate(async ([href, touched]) => {
-    const { interactionEffect } = await import(href);
-    globalThis.interactionPrediction?.stop();
-    const prediction = { outcome: 'kept', touched };
-    const judge = event => {
-      const agentRunning = Boolean(globalThis.neurodeskAutomation?.running());
-      const effect = interactionEffect(event, document, { touched: prediction.touched, agentRunning });
-      if (effect === 'end') {
-        prediction.outcome = 'ended';
-        prediction.touched = false;
-      } else if (effect && prediction.outcome !== 'ended') {
-        prediction.outcome = 'touched';
-        prediction.touched = true;
+// The files the page shows: every name of a file the test gave it, in the workspace's text (shown or
+// collapsed) and in its classified inputs. Read from the page, not from the tools.
+const SHOWN_FILES = /\b(?:loaded-\d+|person-scan|slice)\.nii\.gz\b/g;
+function shownFiles(page) {
+  return page.evaluate(([workspace, pattern]) => {
+    const names = [];
+    const scan = root => {
+      for (const node of root.querySelectorAll(`*${workspace}`)) {
+        if (node.closest('#neurodeskAgentPrompt, .nd-app-bar, .nd-app-utility-bar, dialog.nd-app-dialog')) continue;
+        for (const child of node.childNodes) if (child.nodeType === 3) names.push(...(child.textContent.match(new RegExp(pattern, 'g')) ?? []));
+        if (node.matches('input[type="file"][data-neurodesk-input]')) names.push(...[...(node.files ?? [])].map(file => `input:${file.name}`));
+        if (node.shadowRoot) scan(node.shadowRoot);
       }
     };
-    const listeners = [
-      ...['pointerdown', 'pointerup', 'wheel', 'keydown', 'input', 'change', 'paste', 'drop'].map(type => [window, type, true]),
-      ...['nd-files', 'nd-example-status', 'nd-handoff', 'nd-run-start'].map(type => [document, type, false]),
-      [window, 'neurodesk-automation-reset', false],
-    ];
-    for (const [target, type, capture] of listeners) target.addEventListener(type, judge, capture);
-    prediction.stop = () => listeners.forEach(([target, type, capture]) => target.removeEventListener(type, judge, capture));
-    globalThis.interactionPrediction = prediction;
-  }, [`${origin}/shell-adapters/components/webmcp/tool-inputs.js`, touched]);
+    scan(document);
+    return names.sort().join('|');
+  }, [WORKSPACE, SHOWN_FILES.source]);
 }
 
 // Actions the person can take; each element is marked so the action finds it again.
@@ -178,8 +171,12 @@ async function perform(context, page, action) {
     await cdp.send('DOM.setFileInputFiles', { objectId: result.objectId, files: [action.directory ? folder : scanPath] });
     await cdp.detach();
   } else if (action.kind === 'select') {
-    await locator.click({ timeout: 5000 });
-    await page.keyboard.press('Escape');
+    // A trusted change of value: focus the closed select and step to the next option, or the previous one at the end.
+    const before = await locator.inputValue();
+    await locator.focus();
+    await page.keyboard.press('ArrowDown');
+    if (await locator.inputValue() === before) await page.keyboard.press('ArrowUp');
+    if (await locator.inputValue() === before) throw new Error('the select has no other option to choose');
   } else if (action.kind === 'text field') {
     await locator.click({ timeout: 5000 });
     await page.keyboard.type('1');
@@ -243,7 +240,7 @@ async function attempt(context, page, app, target, run, action, outcome) {
   if (refused) return `the agent could not hold a file: ${refused.slice(0, 200)}`;
   const before = await call(page, 'app_describe');
   const held = Object.values(before.inputs).flat().map(file => file.name);
-  await predict(page, before.touched);
+  const shownBefore = await shownFiles(page);
   try {
     await perform(context, page, action);
   } catch (error) {
@@ -262,16 +259,13 @@ async function attempt(context, page, app, target, run, action, outcome) {
   await page.waitForLoadState('domcontentloaded').catch(() => {});
   if (!page.url().startsWith(`${origin}/${app.path}/`)) return 'navigated away';
   await ready(page, 10);
-  const predicted = await page.evaluate(() => {
-    globalThis.interactionPrediction.stop();
-    return globalThis.interactionPrediction.outcome;
-  });
+  const replaced = (await shownFiles(page)) !== shownBefore;
   const after = await call(page, 'app_describe');
   const observed = !Object.keys(after.inputs).length ? 'ended' : after.touched ? 'touched' : 'kept';
-  outcome.predicted = predicted;
+  outcome.replaced = replaced;
   if (observed === 'touched') outcome.resume = await resumeDeclined(page, run, held);
-  if (predicted === 'kept') return 'NOT COUNTED';
-  if (observed !== predicted) return `MISMATCH: ${observed}, the predicate says ${predicted}`;
+  if (observed === 'kept') return 'NOT COUNTED';
+  if (replaced && observed !== 'ended') return `NOT ENDED: the page shows other files, yet the examination is ${observed}`;
   if (outcome.resume) return `RESUME: ${outcome.resume}`;
   return observed;
 }
@@ -326,8 +320,8 @@ try {
           }
         }
         const checked = entry.actions.filter(outcome => CHECKED.has(outcome.result));
-        const wrong = entry.actions.filter(outcome => /^(NOT COUNTED|MISMATCH|RESUME)/.test(outcome.result));
-        assert.deepEqual(wrong, [], `${app.id}: every trusted action touches or ends the examination as the predicate says, and a touch asks to resume`);
+        const wrong = entry.actions.filter(outcome => /^(NOT COUNTED|NOT ENDED|RESUME)/.test(outcome.result));
+        assert.deepEqual(wrong, [], `${app.id}: every trusted action touches or ends the examination, one that changes the files shown ends it, and a touch asks to resume`);
         const unexplained = entry.actions.filter(outcome => !CHECKED.has(outcome.result) && !expected[`${outcome.kind} ${outcome.name}`]);
         assert.deepEqual(unexplained, [], `${app.id}: every action is performed, or webmcp-interaction-skips.json says why not`);
         if (!checked.length) assert.ok(expected['*'], `${app.id}: no action was performed (${entry.actions.length} found), and webmcp-interaction-skips.json gives no reason under "*"`);

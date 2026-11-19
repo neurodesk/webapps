@@ -39,7 +39,8 @@ const isClassified = node => isElement(node) && node.matches(CLASSIFIED) && node
  *             held files are released and its runs become stale. A pick in any file input, files
  *             dropped on the page, the page's example selector starting a load, a handoff and the app's
  *             `automation.reset()`. Once the person has touched the examination, also a remove or
- *             clear the app reports with `nd-files`.
+ *             clear the app reports with `nd-files`, and files the page itself puts on a classified
+ *             input (the shell's Undo, the app reloading its own list).
  *   'touch'   the person used the workspace: a press, typing, a paste, a drag over the page, a wheel
  *             turned over the viewer or a control, any action inside a shadow root or a same-origin
  *             frame, and a watched frame navigating. The held files and the latest run wait until the
@@ -60,6 +61,8 @@ export function interactionEffect(event, doc, { person = event.isTrusted, touche
   if (event.type === 'nd-example-status') return event.detail?.state === 'loading' ? 'end' : null;
   if (event.type === 'nd-handoff' || event.type === 'neurodesk-automation-reset') return 'end';
   if (event.type === 'nd-files') return touched ? 'end' : null;
+  // The page putting other files on a classified input once the person touched the examination: the shell's Undo, or the app's own load.
+  if (!person && event.type === 'change' && isClassified(path[0])) return touched ? 'end' : null;
   if (!person) return null;
   const [target] = path;
   const inPage = !target || target.getRootNode() === doc;
