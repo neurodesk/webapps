@@ -29,7 +29,11 @@ fn shape(descriptor: &Value) -> Vec<usize> {
 /// Identical bits, the sign of zero included; NaN payloads and signs are not
 /// compared (the NaN export track owns them).
 fn exact(actual: f64, expected: f64, context: &str) {
-    assert!(actual.to_bits() == expected.to_bits() || actual.is_nan() && expected.is_nan(), "{context}: {actual:e} != {expected:e}");
+    assert!(same(actual, expected), "{context}: {actual:e} != {expected:e}");
+}
+
+fn same(actual: f64, expected: f64) -> bool {
+    actual.to_bits() == expected.to_bits() || actual.is_nan() && expected.is_nan()
 }
 
 /// Bitwise equality, NaN equal to NaN; a value with a tolerance otherwise.
@@ -92,6 +96,8 @@ fn revcor_matrix_cf_maps_follow_from_matlab_profiles() {
             let prepared = revcor_cf::Prepared::new(&model, &seeds, &courses, &template, &area, None).unwrap();
             let mut stored = prepared.clone();
             stored.hull_order = HullOrder::Stored;
+            let mut base = prepared.clone();
+            base.hull_order = HullOrder::Listed;
             let profiles = array(&root, &case["profiles"]);
             let maps = array(&root, &case["maps"]);
             let rows = shape(&case["maps"])[0];
@@ -104,14 +110,17 @@ fn revcor_matrix_cf_maps_follow_from_matlab_profiles() {
                 replayed += 1;
                 let actual = prepared.estimate_profile(profile).unwrap();
                 let diagnostic = stored.estimate_profile(profile).unwrap();
+                let listed = base.estimate_profile(profile).unwrap();
                 for (row, value) in actual.iter().enumerate() {
                     let label = &prepared.values[row];
                     let index = labels.iter().position(|l| l == label).unwrap_or_else(|| panic!("{id}: no {label} row"));
                     let expected = maps[vertex * rows + index];
                     let context = format!("{} {id} vertex {vertex} {label}", root.display());
-                    // Production keeps the listed hull; the stored order gives MATLAB's bits.
+                    // Production stays within 1e-12 and keeps every value the listed
+                    // evaluation gives exactly; the stored order gives MATLAB's bits.
                     close(*value, expected, 1e-12 * expected.abs().max(1.0), &context);
                     if fit == 0 {
+                        assert!(!same(listed[row], expected) || same(*value, expected), "{context}: production lost a listed value");
                         exact(diagnostic[row], expected, &format!("{context} (stored order)"));
                     }
                 }
@@ -237,9 +246,15 @@ const TEMPLATE_HULL_START: [(&str, usize, &str); 15] = [
     ("template_rh_double_hull", 33, "y0"),
 ];
 
+/// Hull-mode template values (single R^2 aside) that the listed evaluation and
+/// production give MATLAB's bits on each host, double then single. Production
+/// adds 26 per precision, from clusters whose first point starts the stored hull.
+const TEMPLATE_EXACT: [[usize; 2]; 2] = [[615, 641], [535, 561]];
+
 fn real_template_cf_maps_match_matlab_on(root: &Path, cases: &[Value]) {
     let mut count = 0;
     let mut listed = std::collections::BTreeSet::new();
+    let mut exact_values = [[0; 2]; 2];
     for case in cases.iter().filter(|c| c["kind"] == "template-cf") {
         count += 1;
         let id = case["id"].as_str().unwrap();
@@ -262,6 +277,8 @@ fn real_template_cf_maps_match_matlab_on(root: &Path, cases: &[Value]) {
         let prepared = revcor_cf::Prepared::new(&cf_model(fit), &seed_vx, &courses, &template_maps(&full, 5), &vec![1.0; columns], None).unwrap();
         let mut stored = prepared.clone();
         stored.hull_order = HullOrder::Stored;
+        let mut base = prepared.clone();
+        base.hull_order = HullOrder::Listed;
         let profiles = array(root, &case["profiles"]);
         let maps = array(root, &case["maps"]);
         let rows = shape(&case["maps"])[0];
@@ -272,6 +289,7 @@ fn real_template_cf_maps_match_matlab_on(root: &Path, cases: &[Value]) {
         for (vertex, profile) in profiles.chunks(seeds.len()).enumerate() {
             let actual = prepared.estimate_profile(profile).unwrap();
             let diagnostic = stored.estimate_profile(profile).unwrap();
+            let listed_estimate = base.estimate_profile(profile).unwrap();
             for (row, &index) in order.iter().enumerate() {
                 let label = &prepared.values[row];
                 // Single-precision squares, medians and fits are MATLAB single
@@ -281,8 +299,14 @@ fn real_template_cf_maps_match_matlab_on(root: &Path, cases: &[Value]) {
                 }
                 let expected = maps[vertex * rows + index];
                 let context = format!("{id} vertex {vertex} {label}");
-                // Production keeps the listed hull, within 1e-12 as before.
+                // Production stays within 1e-12 of MATLAB and keeps every value the
+                // listed evaluation (production before the anchored order) gives exactly.
                 close(actual[row], expected, 1e-12 * expected.abs().max(1.0), &context);
+                if fit == 0 {
+                    assert!(!same(listed_estimate[row], expected) || same(actual[row], expected), "{context}: production lost a listed value");
+                    exact_values[usize::from(single)][0] += usize::from(same(listed_estimate[row], expected));
+                    exact_values[usize::from(single)][1] += usize::from(same(actual[row], expected));
+                }
                 // These recorded values were exact before the stored-order experiment.
                 // Its three losses per precision and host must not enter the default CF path.
                 if [("template_lh_double_hull", 29, "Centre"),
@@ -308,6 +332,7 @@ fn real_template_cf_maps_match_matlab_on(root: &Path, cases: &[Value]) {
     }
     assert_eq!(count, 12, "missing real-template CF cases");
     assert_eq!(listed.len(), TEMPLATE_HULL_START.len(), "unvisited TEMPLATE_HULL_START entries");
+    assert_eq!(exact_values, TEMPLATE_EXACT, "{}: exact hull-mode template values, listed and production, double and single", root.display());
 }
 
 fn hull_intermediates(root: &Path, case: &Value, prepared: &revcor_cf::Prepared, profiles: &[f64]) {
@@ -513,8 +538,10 @@ fn polygon_hulls_match_matlab_on(root: &Path, cases: &[Value]) {
     }
     println!("{}", report.join("\n"));
     assert_eq!(families, 7, "missing polygon families");
-    // Frozen from the base evaluation at 3f90ac124, in recorder family/case order.
-    assert_eq!(format!("{:x}", production_bits.finalize()), "1f0fcb67e172c3b20e5038985121fa5ed37ba567ed65f68cc977313c92d56dc8", "production polygon bits changed");
+    // Frozen from the anchored evaluation, in recorder family/case order. It keeps
+    // every value the listed evaluation (frozen as 1f0fcb67 at 3f90ac124) gave
+    // MATLAB's bits: polyshape_arithmetic.rs holds that on all four recordings.
+    assert_eq!(format!("{:x}", production_bits.finalize()), "a756c6b64a7ba5b255fcef1c9e56cdce5f027d550513eb80364740527ac924b9", "production polygon bits changed");
     assert_eq!(checked_snapping, frozen_ids, "missing snapping regression cases");
     assert!(failures.is_empty(), "{} polygons differ from MATLAB:\n{}", failures.len(), failures[..failures.len().min(20)].join("\n"));
 }

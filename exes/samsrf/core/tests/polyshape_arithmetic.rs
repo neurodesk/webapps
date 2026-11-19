@@ -2,7 +2,8 @@
 //! vertices (`convhull(polyshape(P)).Vertices`): every hull of the four polygon
 //! recordings on both hosts, bit for bit, the sign of zero included. This holds
 //! `Hull::area` and `Hull::centroid` apart from the port's hull and vertex-order
-//! model, which matlab_geometry.rs gates.
+//! model, which matlab_geometry.rs gates. On the same polygons, the production
+//! estimate must keep every value the listed evaluation gives exactly.
 //!
 //!   SAMSRF_MATLAB_GEOMETRY_DIR, SAMSRF_MATLAB_POLYSHAPE_PROBE_DIR,
 //!   SAMSRF_MATLAB_POLYSHAPE_CAUSAL_DIR and SAMSRF_MATLAB_POLYSHAPE_REPRODUCERS_DIR:
@@ -13,7 +14,7 @@
 //! each; every array a real MATLAB double named after its family, with the
 //! recorded shape and byte length; whole-number counts and error indexes that
 //! account for every row.
-use samsrf_core::geometry::Hull;
+use samsrf_core::geometry::{polygon_hull_estimate, Hull, HullOrder};
 use serde_json::{json, Value};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -26,6 +27,9 @@ struct Recording {
     families: &'static [&'static str],
     /// Polygons MATLAB did not refuse whose hull has vertices, per host.
     hulls: usize,
+    /// Centroid and area values of the polygons MATLAB did not refuse, per host,
+    /// and those the listed evaluation and production give MATLAB's bits.
+    values: [usize; 3],
 }
 
 const RECORDINGS: [Recording; 4] = [
@@ -34,24 +38,28 @@ const RECORDINGS: [Recording; 4] = [
         mode: None,
         families: &["polygon_boundary_ulp", "polygon_boundary_relative", "polygon_random_thin", "polygon_collinear_vertex", "polygon_spikes", "polygon_degenerate", "polygon_point_clouds"],
         hulls: 16_871,
+        values: [78_171, 52_257, 75_787],
     },
     Recording {
         variable: "SAMSRF_MATLAB_POLYSHAPE_PROBE_DIR",
         mode: Some("polyshape-probe"),
         families: &["probe_grid_sweep", "probe_grid_bisection", "probe_heldout_collinear", "probe_heldout_clouds", "probe_extreme_grids", "probe_point_clouds"],
         hulls: 31_894,
+        values: [99_462, 38_762, 85_557],
     },
     Recording {
         variable: "SAMSRF_MATLAB_POLYSHAPE_CAUSAL_DIR",
         mode: Some("polyshape-causal"),
         families: &["causal_gap_sweep", "causal_gap_bisection", "causal_hole_contact", "causal_real", "causal_heldout"],
         hulls: 10_728,
+        values: [32_247, 7_045, 7_189],
     },
     Recording {
         variable: "SAMSRF_MATLAB_POLYSHAPE_REPRODUCERS_DIR",
         mode: Some("polyshape-reproducers"),
         families: &["reproducer_cases", "reproducer_round2", "reproducer_round3", "reproducer_round4", "reproducer_round5", "reproducer_round6", "reproducer_round7"],
         hulls: 27_805,
+        values: [83_454, 644, 7_656],
     },
 ];
 
@@ -186,6 +194,67 @@ fn another_starting_vertex_rounds_differently() {
     assert_eq!(rotated, 1_024, "hulls that change when started one vertex later, of {}", hulls.len());
 }
 
+/// One host's polygons MATLAB did not refuse, as recorded, with MATLAB's
+/// `[centroid x, centroid y, area]` of each `polyshape(P).convhull`.
+fn recorded_polygons(host: &Path, recording: &Recording) -> Vec<(String, Vec<[f64; 2]>, [f64; 3])> {
+    let listing: Value = serde_json::from_slice(&std::fs::read(host.join("geometry.json")).unwrap()).unwrap();
+    let mut polygons = Vec::new();
+    for case in listing["cases"].as_array().unwrap().iter().filter(|case| case["kind"] == "polygon-batch") {
+        let id = case["id"].as_str().unwrap();
+        let n = usize::try_from(case["cases"].as_u64().unwrap_or_else(|| panic!("{id}: cases"))).unwrap();
+        let (rows, points) = array(host, case, "points", "points", 2);
+        let (count_rows, counts) = array(host, case, "counts", "counts", 1);
+        let (estimate_rows, estimate) = array(host, case, "estimate", "estimate", 3);
+        let (error_rows, error) = array(host, case, "error", "error", 1);
+        assert_eq!([count_rows, estimate_rows, error_rows], [n; 3], "{id}: rows per polygon");
+        let mut offset = 0;
+        for i in 0..n {
+            let count = whole(counts[i], &format!("{id} point count {i}"));
+            assert!(offset + count <= rows, "{id}: point rows");
+            let polygon: Vec<[f64; 2]> = (offset..offset + count).map(|r| [points[r], points[rows + r]]).collect();
+            offset += count;
+            if whole(error[i], &format!("{id} error {i}")) == 0 {
+                polygons.push((format!("{} {id} {i}", host.display()), polygon, [estimate[i], estimate[n + i], estimate[2 * n + i]]));
+            }
+        }
+        assert_eq!(offset, rows, "{id}: point rows");
+    }
+    assert_eq!(polygons.len() * 3, recording.values[0], "{}: recorded values", host.display());
+    polygons
+}
+
+fn estimate(order: HullOrder, polygon: &[[f64; 2]]) -> [f64; 3] {
+    polygon_hull_estimate(polygon, order).map_or([f64::NAN, f64::NAN, 0.0], |([x, y], area)| [x, y, area])
+}
+
+/// Production's estimate keeps every centroid and area value of the four
+/// recordings that the listed evaluation (`HullOrder::Listed`, production before
+/// the anchored order) gives MATLAB's bits, and gives MATLAB's bits on exactly as
+/// many values as recorded in `RECORDINGS`.
+#[test]
+fn production_hulls_keep_every_listed_value() {
+    let Some(recordings) = recordings() else { return; };
+    for (root, recording) in recordings {
+        for host in ["ubuntu-22.04", "ubuntu-24.04"] {
+            let (mut listed_exact, mut production_exact, mut lost) = (0, 0, Vec::new());
+            for (id, polygon, matlab) in recorded_polygons(&root.join(host), recording) {
+                let listed = bits(estimate(HullOrder::Listed, &polygon));
+                let production = bits(estimate(HullOrder::default(), &polygon));
+                for (k, name) in ["x", "y", "area"].iter().enumerate() {
+                    let target = bits(matlab)[k];
+                    listed_exact += usize::from(listed[k] == target);
+                    production_exact += usize::from(production[k] == target);
+                    if listed[k] == target && production[k] != target {
+                        lost.push(format!("{id} {name}"));
+                    }
+                }
+            }
+            assert!(lost.is_empty(), "{}/{host}: production lost {} listed values: {:?}", root.display(), lost.len(), &lost[..lost.len().min(10)]);
+            assert_eq!([listed_exact, production_exact], [recording.values[1], recording.values[2]], "{}/{host}: exact values, listed and production", root.display());
+        }
+    }
+}
+
 #[test]
 fn partial_fixture_configuration_is_refused() {
     assert!(configured([None, None, None, None]).is_none());
@@ -198,7 +267,7 @@ fn partial_fixture_configuration_is_refused() {
     }
 }
 
-const SYNTHETIC: Recording = Recording { variable: "", mode: Some("polyshape-probe"), families: &["probe_one"], hulls: 1 };
+const SYNTHETIC: Recording = Recording { variable: "", mode: Some("polyshape-probe"), families: &["probe_one"], hulls: 1, values: [0; 3] };
 
 /// A recording as record_geometry.m writes it: one family of three polygons, a
 /// triangle MATLAB recorded (geometry.rs's unit test), an empty hull and a
