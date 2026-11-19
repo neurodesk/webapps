@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { writeSurfaceFiles } from '../../../packages/topofit/src/results.js';
+import { REGIONS } from '../../../packages/topofit/src/cortex-regions.js';
 import { automationArtifacts } from '../src/automation-results.js';
 
 test('all generated surfaces including registration geometry survive artifact export unchanged', async () => {
@@ -27,4 +29,17 @@ test('variable patch geometry and metadata preserve independent result identitie
     { id: 'lh-normals', name: 'normals.csv', mediaType: 'text/csv', bytes: new TextEncoder().encode('x,y,z') },
   ]);
   assert.deepEqual(artifacts.map(({ id, role }) => ({ id, role })), [{ id: 'lh01', role: 'surface' }, { id: 'surface-analysis', role: 'metadata' }, { id: 'lh-normals', role: 'table' }]);
+});
+
+test('mapped parcellations export as their own role', () => {
+  const [artifact] = automationArtifacts([{ id: 'lh-wang2015-annot', name: 'lh.wang2015.annot', mediaType: 'application/vnd.freesurfer.annotation', bytes: Uint8Array.of(1) }]);
+  assert.deepEqual({ id: artifact.id, role: artifact.role, name: artifact.file.name }, { id: 'lh-wang2015-annot', role: 'parcellation', name: 'lh.wang2015.annot' });
+});
+
+test('the automation patchRegion enum lists the whole cortex and every named region', async () => {
+  const contract = JSON.parse(await readFile(new URL('../automation.json', import.meta.url)));
+  const { patchRegion } = contract.operations.reconstruct.parameters;
+  assert.deepEqual(patchRegion.enum, ['cortex', ...REGIONS.map(({ id }) => id)]);
+  assert.equal(patchRegion.default, 'cortex');
+  assert.equal(contract.operations.reconstruct.artifacts.parcellation.mediaType, 'application/vnd.freesurfer.annotation');
 });

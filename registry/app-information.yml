@@ -1073,7 +1073,8 @@ apps:
   topofit:
     packages:
       - { name: OpenRecon TopoFit, url: https://github.com/neurodesk/neurocontainers/tree/main/recipes/topofit, role: cortical patch search and local surface normals }
-      - { name: FreeSurfer, url: https://surfer.nmr.mgh.harvard.edu/, role: fsaverage cortical eligibility atlas }
+      - { name: FreeSurfer, url: https://surfer.nmr.mgh.harvard.edu/, role: fsaverage cortical eligibility atlas and Desikan-Killiany search regions }
+      - { name: HCP 7T retinotopy dataset, url: https://osf.io/bw9ec/, role: Wang 2015 visual-area search regions on fsaverage (CC BY 4.0) }
       - { name: BrainNet, url: https://github.com/simnibs/brainnet, role: TopoFit and TReGA pretrained models }
       - { name: ONNX Runtime Web, url: https://onnxruntime.ai/docs/get-started/with-javascript/web.html, role: local model inference }
       - { name: FreeBrowse, url: https://github.com/pwighton/freebrowse/tree/eae80a127fdd99974c80952e890bf18aa6e9d5dd, role: interactive volume and surface viewer }
@@ -1094,6 +1095,19 @@ apps:
         title: TopoFit
         reference: "Hoopes A, Iglesias JE, Fischl B, Greve DN, Dalca AV. TopoFit: Rapid Reconstruction of Topologically-Correct Cortical Surfaces. Proceedings of Machine Learning Research. 2022;172:5086-5096."
         url: https://proceedings.mlr.press/v172/hoopes22a.html
+      - group: Search region atlases
+        title: Wang 2015 visual topography
+        reference: "Wang L, Mruczek REB, Arcaro MJ, Kastner S. Probabilistic maps of visual topography in human cortex. Cerebral Cortex. 2015;25(10):3911-3931."
+        doi: 10.1093/cercor/bhu277
+      - group: Search region atlases
+        title: HCP 7T retinotopy dataset (fsaverage atlas)
+        reference: "Benson NC, Jamison KW, Arcaro MJ, et al. The Human Connectome Project 7 Tesla retinotopy dataset: Description and population receptive field analysis. Journal of Vision. 2018;18(13):23."
+        doi: 10.1167/18.13.23
+        url: https://osf.io/bw9ec/
+      - group: Search region atlases
+        title: Desikan-Killiany atlas
+        reference: "Desikan RS, Ségonne F, Fischl B, et al. An automated labeling system for subdividing the human cerebral cortex on MRI scans into gyral based regions of interest. NeuroImage. 2006;31(3):968-980."
+        doi: 10.1016/j.neuroimage.2006.01.021
       - group: Image processing
         title: niimath
         reference: "Rorden C, Webster M, Drake C, et al. niimath and fslmaths: replication as a method to enhance testing and improve tool quality. Aperture Neuro. 2024;4."

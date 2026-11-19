@@ -78,6 +78,14 @@ Use **Surface analysis** before reconstruction to export mid-surface normals
 or find flat cortical patches. Patch radius, count and hemisphere are available
 when the search is enabled; quality thresholds and a native-grid ROI are under
 **Patch quality and region**. Advanced settings and Surface analysis stay visible.
+**Search region** can also name a cortical area: a Wang et al. 2015 visual area
+(V1, V2, V3 up to IPS5 and FEF, the union of the visual areas, or a ventral or
+dorsal half), a Desikan-Killiany lobe or one of its 34 regions. The atlases are
+fsaverage label maps carried through TopoFit's registration spheres; the regions
+are atlas estimates, not individual retinotopy. Every patch vertex lies in the
+region, and the mapped parcellation of each searched hemisphere is offered as a
+FreeSurfer annotation (`lh.wang2015.annot`, `rh.aparc.annot`) that Freeview
+opens on the output surfaces.
 
 Results include individual patch surfaces, patch-and-normal QC and paired ribbon
 geometry. Analysis measurements are recorded in the technical log. Patches are
@@ -110,4 +118,4 @@ keeps the previous outputs. Loading another scan clears the saved reconstruction
 
 ## Agent automation
 
-The `reconstruct` operation accepts an explicit `image` and optional `roi` as NIfTI or DICOM. Parameters expose the existing conforming, overlay thickness, normals and flat-patch controls. An ROI requires `findPatches`. The operation awaits the same worker as the interface and returns all actual files: eight surface files including registration spheres, source-grid QC, provenance and requested analysis tables, patch surfaces and metadata. Variable patch counts remain variable. The report retains model and asset checksums from the scientific pipeline. The image viewer exposes actual source/output stages and measured patches. Cancellation terminates the worker. Full model inference requires the published model assets and an adequate browser backend; routing/unit checks alone do not verify scientific inference.
+The `reconstruct` operation accepts an explicit `image` and optional `roi` as NIfTI or DICOM. Parameters expose the existing conforming, overlay thickness, normals and flat-patch controls. An ROI requires `findPatches`. `patchRegion` names a search region (`cortex`, the default, or an id such as `wang2015:V1` or `aparc:lobe-occipital`); a named region requires `findPatches` and excludes an ROI, and adds the `parcellation` annotation files. The operation awaits the same worker as the interface and returns all actual files: eight surface files including registration spheres, source-grid QC, provenance and requested analysis tables, patch surfaces and metadata. Variable patch counts remain variable. The report retains model and asset checksums from the scientific pipeline. The image viewer exposes actual source/output stages and measured patches. Cancellation terminates the worker. Full model inference requires the published model assets and an adequate browser backend; routing/unit checks alone do not verify scientific inference.
