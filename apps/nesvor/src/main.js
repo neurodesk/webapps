@@ -426,10 +426,10 @@ $('imageInput').addEventListener('change', event => {
   replaceStacks = false;
   event.target.value = '';
   if (files.length) void importFiles(Promise.resolve(files), { replace });
-  else if (replace) clearStacks();
 });
-
 // The shell's Undo puts back an empty list: the stacks and masks go, as a removal of each would.
+$('imageInput').addEventListener('nd-clear', () => clearStacks());
+
 function clearStacks() {
   if (job) return status('Wait for the current operation to finish, or cancel it first.', true);
   exampleControl.cancel();

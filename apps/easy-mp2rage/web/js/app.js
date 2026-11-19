@@ -687,6 +687,16 @@ function resetAll() {
 }
 $("#resetAll").onclick = resetAll;
 
+// The shell's Undo puts back the empty list reportFiles reported: the images and sidecars go, as removing each would.
+document.addEventListener("nd-clear", (event) => {
+  if (!event.target.closest?.("#fileControl")) return;
+  state.files = [];
+  state.jsons = [];
+  renderTable();
+  refreshRunState();
+  reportFiles();
+});
+
 // mismatched grids or a non-2-volume SA2RAGE fail with a clear message instead of
 // a silent all-NaN result or a raw WASM panic.
 function validateBeforeRun(sel) {

@@ -284,6 +284,11 @@ class SeedSegApp {
       if (files.length > 0) this._handleUnifiedFiles(files);
       fileInput.value = '';
     });
+    // The shell's Undo puts back the empty list this input reported.
+    fileInput.addEventListener('nd-clear', () => {
+      this.clearFile();
+      this._reportFiles();
+    });
 
     dropZone.addEventListener('dragover', (e) => {
       e.preventDefault();

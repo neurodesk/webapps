@@ -951,6 +951,56 @@ try {
     assert.deepEqual((await call('viewers_volumes', { viewerId: 'main' })).volumes ?? [], [], 'the viewer holds no stack');
   });
 
+  // An app that reports an emptied list with nd-files empties it again when Undo puts that list back.
+  for (const app of ['nesvor', 'easy-mp2rage', 'seedseg', 'samsrf', 'syncro', 'qsmbly', 'vesselboost', 'musclemap']) {
+    await check(`${app}: Undo after a drop onto the list the person emptied empties it again`, async context => {
+      const { page, call } = await open(context, app);
+      const narration = 'footer#status, nd-console, .nd-console-container, .console-container, #neurodeskAgentPrompt, .nd-app-bar, .nd-app-utility-bar, dialog.nd-app-dialog, script, style';
+      const shown = name => page.evaluate(([name, narration]) => {
+        const scan = root => [...root.querySelectorAll('*')].some(node => (!node.closest(narration) && [...node.childNodes].some(child => child.nodeType === 3 && child.textContent.includes(name))) || (node.shadowRoot && scan(node.shadowRoot)));
+        return scan(document);
+      }, [name, narration]);
+      const primary = await page.evaluate(() => {
+        const auxiliary = new Set(['gradients', 'model', 'protocol', 'metadata', 'mask']);
+        const inputs = [...document.querySelectorAll('input[type="file"][data-neurodesk-input]')].filter(input => input.id !== 'neurodesk-input-transfer' && !input.disabled && !input.hasAttribute('webkitdirectory') && !input.closest('[inert], dialog:not([open])'));
+        const input = inputs.find(candidate => !auxiliary.has(candidate.dataset.neurodeskInput)) ?? inputs[0];
+        input.dataset.emptiedList = '';
+        return input.id;
+      });
+      await page.locator('[data-emptied-list]').setInputFiles(scan('emptied-pick.nii.gz', 8));
+      await until(page, () => [...document.querySelectorAll('body *')].some(node => [...node.childNodes].some(child => child.nodeType === 3 && child.textContent.includes('emptied-pick'))), 30000);
+      const removers = await page.evaluate(narration => {
+        const names = [];
+        for (const button of document.querySelectorAll('button')) {
+          if (button.closest(narration) || button.disabled || !button.checkVisibility?.()) continue;
+          const name = (button.getAttribute('aria-label') || button.title || button.textContent).trim();
+          if (/remove|clear|delete|^\s*[×✕]\s*$/i.test(name)) {
+            button.dataset.emptiedRemover = String(names.length);
+            names.push(name);
+          }
+        }
+        return names;
+      }, narration);
+      let emptied = false;
+      for (const index of removers.keys()) {
+        await page.locator(`[data-emptied-remover="${index}"]`).click({ timeout: 3000 }).catch(() => {});
+        await page.waitForTimeout(800);
+        if (!(await shown('emptied-pick'))) {
+          emptied = true;
+          break;
+        }
+      }
+      assert.ok(emptied, `one of the app's own removers empties the list: ${removers.join(', ')}`);
+      await personDrops(context, page, 'emptied-drop.nii.gz', await centreOf(page, '#statusText'));
+      await until(page, () => Boolean(document.querySelector('button.nd-status-undo')), 30000);
+      for (const deadline = Date.now() + 30000; !(await shown('emptied-drop')); await page.waitForTimeout(250)) assert.ok(Date.now() < deadline, 'the dropped file is shown');
+      await page.locator('button.nd-status-undo').click();
+      for (const deadline = Date.now() + 10000; await shown('emptied-drop'); await page.waitForTimeout(250)) assert.ok(Date.now() < deadline, `Undo leaves the dropped file shown in ${primary}'s list`);
+      const listed = (await call('app_describe')).pageFiles.flatMap(entry => entry.files.map(file => file.name));
+      assert.ok(!listed.includes('emptied-drop.nii.gz'), JSON.stringify(listed));
+    });
+  }
+
   await check('Easy MP2RAGE: removing one JSON sidecar keeps the other listed', async context => {
     const { page, call } = await open(context, 'easy-mp2rage');
     const payload = name => ({ name, mimeType: 'application/json', buffer: Buffer.from('{}') });

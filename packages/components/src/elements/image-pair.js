@@ -216,6 +216,10 @@ export function defineImagePair(view = globalThis.window) {
         input.value = '';
         if (files.length && !this.disabled) void this.load(slot, Promise.resolve(files));
       });
+      // The shell's Undo puts back the empty slot this input reported.
+      input.addEventListener('nd-clear', () => {
+        if (!this.disabled) this.reset(slot);
+      });
       wrapper.append(input, element(doc, 'span', {}, text));
       parent.append(wrapper);
       return input;

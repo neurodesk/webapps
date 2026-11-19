@@ -67,6 +67,10 @@ export function routeFiles(files, inputs, primary, occupied = new Set()) {
  * `replace` first fires `nd-replace` on the input, so an app whose input adds
  * to a file list (marked `data-appends`) can clear it. Such an app fires
  * `nd-files` (detail.files) on the input whenever its list changes otherwise.
+ * A replacement with no files (Undo putting back a list the app had emptied)
+ * also fires `nd-clear` after the change, which an app's change handler
+ * ignores: every app that reports an emptied list with `nd-files` empties its
+ * list on `nd-clear`.
  */
 export function deliverFiles(input, files, { replace = false } = {}) {
   if (replace) input.dispatchEvent(new CustomEvent('nd-replace', { bubbles: true }));
@@ -74,6 +78,7 @@ export function deliverFiles(input, files, { replace = false } = {}) {
   for (const file of files) transfer.items.add(file);
   input.files = transfer.files;
   input.dispatchEvent(new Event('change', { bubbles: true }));
+  if (replace && !files.length) input.dispatchEvent(new CustomEvent('nd-clear', { bubbles: true }));
 }
 
 /**

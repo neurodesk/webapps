@@ -263,6 +263,25 @@ export class QsmInputSet {
   }
 
   /**
+   * Clear the image buckets, keeping the mask.
+   */
+  clearImageFiles() {
+    for (const key of Object.keys(this.buckets)) {
+      this.buckets[key] = [];
+    }
+    this._fireCallbacks();
+  }
+
+  /**
+   * Clear the custom mask files.
+   */
+  clearMaskFile() {
+    this.maskFile = [];
+    this.updateFileList('mask', []);
+    this._fireCallbacks();
+  }
+
+  /**
    * Fire all file-change callbacks.
    */
   _fireCallbacks() {

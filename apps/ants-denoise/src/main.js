@@ -121,6 +121,9 @@ function syncInputFiles(id, files) {
   $(id).dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files } }));
 }
 
+// The shell's Undo puts back the empty mask list clearMask reported.
+$("maskInput").addEventListener("nd-clear", () => clearMask());
+
 function clearMask() {
   mask = null;
   maskField.setText("Drop a mask on the image grid");

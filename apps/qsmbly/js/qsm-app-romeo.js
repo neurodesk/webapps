@@ -483,6 +483,12 @@ class QSMApp {
       await this.loadCustomMaskFile();
       this.updateEchoInfo();
     });
+    // The shell's Undo puts back the empty mask list this input reported.
+    document.getElementById('maskFiles')?.addEventListener('nd-clear', async () => {
+      this.fileIOController.clearMaskFile();
+      this.updateMaskSectionState();
+      await this.clearMask();
+    });
 
     // Remove buttons in the mask file list, which FileIOController.updateFileList rebuilds
     document.getElementById('maskList')?.addEventListener('click', (e) => {
@@ -875,6 +881,8 @@ class QSMApp {
       if (files.length > 0) this._handleUnifiedFiles(files);
       fileInput.value = '';
     });
+    // The shell's Undo puts back the empty list this input reported: the images go, the mask stays.
+    fileInput.addEventListener('nd-clear', () => this.fileIOController.clearImageFiles());
 
     // Drag and drop
     dropZone.addEventListener('dragover', (e) => {

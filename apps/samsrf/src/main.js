@@ -225,14 +225,17 @@ fields.model.onFiles((filesPromise) => {
     if (generation === inputGeneration) status(error.message, { error: true });
   });
 });
-$("clearInputs").addEventListener("click", () => {
+function clearInputs() {
   inputGeneration += 1;
   exampleControl.reset();
   for (const field of Object.values(fields)) {
     field.input.dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: [], cancelPending: true } }));
   }
   void setInputs(emptyInputs()).catch(report);
-});
+}
+$("clearInputs").addEventListener("click", clearInputs);
+// The shell's Undo puts back the empty list Clear inputs reported; the page drop fills only the runs field.
+fields.runs.input.addEventListener("nd-clear", clearInputs);
 
 // ---- Model ----
 

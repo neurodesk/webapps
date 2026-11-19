@@ -14,6 +14,8 @@ export class SimpleFileIOController {
       updateOutput: message => this.updateOutput(message),
       onConversionComplete: niftiFile => this._acceptFile(niftiFile)
     });
+    // The shell's Undo puts back the empty list clearFiles reported (ui/pageDrop.js).
+    document.getElementById('fileInput')?.addEventListener('nd-clear', () => this.clearFiles());
   }
 
   getActiveFile() { return this.file; }

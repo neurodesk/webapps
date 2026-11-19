@@ -281,6 +281,8 @@ function clear() {
   $('clearButton').disabled = true;
 }
 $('clearButton').onclick = clear;
+// The shell's Undo puts back the empty list Clear reported.
+$('imageInput').addEventListener('nd-clear', clear);
 
 // Batch callers make the same explicit assignments as the review table. No
 // automatic contrast decision is silently accepted by the automation contract.
