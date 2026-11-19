@@ -370,8 +370,12 @@ started is asking. Closing a dialog declines it, and an aborted call closes it.
   example, both dialogs, the Privacy statement, each light-DOM file input
   (folder inputs included) listing what it holds, and that a browser without
   WebMCP loads none of its modules. Inputs in shadow roots are reported as not
-  covered. On 18 November 2026 all 63 apps passed in
-  386 s; CI runs it in the composite-site job.
+  covered. On 19 November 2026 all 63 apps passed in 376 s. CI runs it in the
+  site-catalog job on the apps the plan selects (`SMOKE_APPS`), and on every
+  app when the plan covers the whole catalogue. The interaction smoke covered
+  62 apps the same day (ZARRo holds no files): 368 of 369 trusted actions ran
+  and each released the agent's files, in 449 s; the click on VesselBoost's
+  threshold field timed out.
 - **Full runs.** `WEBMCP_RUNS=1` also loads each app's loadable examples
   (`WEBMCP_EXAMPLES=first`: only the first), runs each with the tool and
   parameters `app_describe` gives and saves an output, through the tools
