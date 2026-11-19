@@ -2,8 +2,12 @@
 
 For actual MATLAB Runtime comparisons, see [the container harness](container/README.md).
 It distinguishes matched-precision fitting, legacy map exports and the residual
-differences from the container's default single precision. The results below
-are the separate Octave baseline.
+differences from the container's default single precision. The MATLAB R2023b
+source references, the explicit arithmetic references and the current
+acceptance state are in [matlab/README.md](matlab/README.md) and
+[acceptance.md](acceptance.md) ([open numerical limits](acceptance.md#open-numerical-limits)).
+The results below are the separate Octave baseline, dated as given; they use
+the default arithmetic and predate the explicit references.
 
 `parity.mjs` runs `@neurodesk/samsrf` on SamSrf's example subject X001 and
 compares every output with the reference that SamSrf's own `.m` files produced

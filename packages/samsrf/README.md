@@ -48,7 +48,10 @@ requires double precision and at least two volumes. Intel CSS requires
 Unsupported choices are refused, not silently routed to AMD. Hull geometry differences and two near-tie norm
 cases remain unresolved. The recorded complex QR evidence covers finite
 two-column designs; other numerical edge cases are not established by MATLAB
-recordings. See [the validation record](validation/matlab/README.md).
+recordings. See [the validation record](validation/matlab/README.md). The
+results of each reference on both recorded hosts, and every open limit with
+the product's behaviour, are in
+[validation/acceptance.md](validation/acceptance.md#open-numerical-limits).
 
 When using the API, pass the same `arithmeticReference` to `RunAccumulator` or
 `readAnalysisInputs` as the model's `Arithmetic_Reference`. Keep the returned
@@ -383,9 +386,13 @@ current pinned example when comparing CF maps.
 Presets follow SamSrf's model scripts except horizontal tuning, which follows
 the GUI `.mod` grid (unscaled Mu). Circular tuning fixes the scale at 1.
 Imported or manually edited JSON grids are preserved when the radius changes.
-Custom HRF kernels can be supplied in JSON; HRF file loading is not exposed by
-the app. Model wrapper scripts can additionally wrap angles or derive aspect
+Custom HRF kernels can be supplied in JSON. The app loads a subject's HRF fit
+(`hrf_*.mat`, SamSrf's `fP`) through its HRF field (#877). Model wrapper scripts can additionally wrap angles or derive aspect
 ratio; this app implements the `SamSrfAnalysis` path without those wrappers.
+
+Pick the `Arithmetic_Reference` for the MKL branch the MATLAB run reports:
+`matlab-amd` for `CNR branch auto` on AMD, `matlab-intel` for `AVX512_E1` on
+Intel (double only). The default `current` keeps the earlier production output.
 
 Run MATLAB in a fresh results directory. Its `src_<Name>.mat` search-space
 cache and `reg_<aperture>.mat` convolved-regressor cache validate dimensions,
@@ -434,6 +441,9 @@ reference is produced.
 MATLAB Runtime references, a controlled precision comparison and CI gates.
 [validation/matlab/README.md](validation/matlab/README.md) adds the pinned
 MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
+[validation/acceptance.md](validation/acceptance.md) maps the criteria of
+#729-#733 to that evidence, with the current state of each arithmetic reference
+and the [open numerical limits](validation/acceptance.md#open-numerical-limits).
 
 ## Divergences from SamSrf
 
@@ -547,8 +557,10 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   for imaginary zeros MATLAB stores as real. This is agreement on recorded
   designs on MATLAB's AMD hosts, not a proof for every input. MKL's AVX-512
   branch on Intel rounds
-  differently, and MATLAB ignores MKL branch requests, so results on Intel
-  hosts are not reproduced. `mldivide_many` solves several right-hand sides
+  differently, and MATLAB ignores MKL branch requests, so `current` and
+  `matlab-amd` do not reproduce results on Intel hosts. `matlab-intel` follows
+  that branch for the recorded finite double designs
+  ([Arithmetic reference](#arithmetic-reference)). `mldivide_many` solves several right-hand sides
   at once as MATLAB's `A \ B` does, which the single RC profile and global
   regression use; complex ones multiply by MKL's `?trsm` reciprocal. Nonfinite
   converted inputs give NaN coefficients.
@@ -603,7 +615,8 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   elements and every recorded `corr` objective from 25 to 250 elements equal
   the port's. MKL's Intel AVX-512 branch sums 51 or more elements in another
   tree, and Intel `corr` differs at shorter lengths too
-  ([arithmetic order](validation/matlab/README.md#arithmetic-order-729-730)).
+  ([arithmetic order](validation/matlab/README.md#arithmetic-order-729-730));
+  `matlab-intel` uses the research candidates for those trees.
   All 108 recorded CSS optimizer traces (54 double, 54 single) follow MATLAB's
   parameter sequences bit for bit. With the port's own HRF, which equals MATLAB's
   kernel, the recorded 96-vertex double pipelines (original apertures and a

@@ -31,6 +31,16 @@ The separately authorized [cleanup-order-1 experiment](cleanup-order-1/result.md
 finished with an undecided STOP on an unexpected warning. Its one-dispatch
 budget is exhausted; no hull-order prediction was adopted.
 
+`matlab-intel` is a product option in the app, the command line and the API,
+not a test-only crate: its kernels live in `exes/samsrf/core/src/arithmetic/intel`
+and ship in the WebAssembly module, and `samsrf-mkl-avx512` only re-exports
+them for the native gates. The per-reference outcome on the CLI matrix (both
+hosts) and every remaining limit, with the product's behaviour and the
+recording or decision that would move it, are in the acceptance matrix:
+[current state](../acceptance.md#current-state-after-895) and
+[open numerical limits](../acceptance.md#open-numerical-limits). Sections
+below that describe an earlier head keep their numbers as history.
+
 
 This recorder runs the web port's pinned SamSrf source in MATLAB R2023b Update 11. It
 uses MATLAB's own optimizers, correlation, single arithmetic and geometry.
@@ -947,22 +957,22 @@ rejects additional tracked changes, and checks the SPM commit before invoking
 MATLAB Compiler. It records the MATLAB environment and resulting local image
 ID. It does not publish the image.
 
-**Status: not built (#733).** The recipe has never been executed with MATLAB
-Compiler, and no compiled SamSrf 10.4 with these repairs was found in the
-SamSrf releases or the Neurodesk object store checked below. Nothing below is
-evidence about a compiled application until a `build` run has passed.
+**Status (2026-11-19): built locally on a licensed host, not published (#733).**
+The status table and the evidence in [acceptance.md](../acceptance.md#733-version-matched-matlab-runtime-reference-container)
+are current. In short:
 
 | Step | State |
 | --- | --- |
-| Builder | Written, run only up to the license check: `licensed-host/build_and_validate.sh` and the `runtime_cli=build` dispatch. On 2026-11-12 the host driver cloned, downloaded and repaired the sources and started MATLAB, which stopped at its license check (below). No Compiler step has run. |
-| Prerequisite | A MATLAB Compiler license for R2023b Update 11: a batch token (`MLM_LICENSE_TOKEN`) for the dispatch, or a host license or `PORT@HOST` server for `licensed-host/`. None is available to this repository; the search for one is finished (table below). |
-| Compiled versus source | Pending. The compiled image and source MATLAB must run on the same host and match bit for bit (`compare_cli.py`); no compiled run exists. |
-| Publication | Pending. Only a build that passes every gate pushes `ghcr.io/neurodesk/samsrf-reference`; after that, `runtime_image=NAME@sha256:...` validates it on Runtime-only hosts, which need no license. |
+| Builder | `licensed-host/build_and_validate.sh` ran on a licensed host. Build 2 (local ID `sha256:be7ae7aa…`, 2026-11-16) passed its gates; its receipts were audited on 2026-11-17, and it is in no reachable Docker store. Build 3 (2026-11-18) exists locally: OCI manifest digest `sha256:99f912afd57d59bde18976c5664328b1b50ee3a7be63924e92c9aba6a2c82857`, config digest `sha256:746944cc8c2f9acda96357f47071fe8ed3778f9fe8f16b80aa7b7441bad64518`. The `runtime_cli=build` dispatch still has no batch token. |
+| Compiled versus source | Equal bit for bit in all 24 runs on the build host, for build 2 and, as an independent audit of 2026-11-18 reports, for build 3. That evidence is local; this repository holds the tools, not the archives. Source inputs are unattested. |
+| Runtime-only | The 2026-11-18 audit restored build 3 from its OCI archive into an empty, isolated store and ran three fresh cases without network or licence; their arrays equal the retained outputs. No fresh restored 24-run matrix yet. |
+| Publication | Not done. [Publication steps that need the maintainer](#publication-steps-that-need-the-maintainer). After publication, `runtime_image=NAME@sha256:...` validates the image on Runtime-only hosts, which need no license. |
 
-The source-CLI recording below ([pinned source recording](#pinned-source-recording))
-is the only CLI evidence so far. The Runtime references in
-[`validation/container`](../container/README.md) come from Neurodesk's 2024
-SamSrfX image, which reports SamSrf 10.003 and lacks the repairs.
+History: until 2026-11-16 this section said the recipe had never been executed
+with MATLAB Compiler; the attempts that stopped at the licence check are below.
+The Runtime references in [`validation/container`](../container/README.md) come
+from Neurodesk's 2024 SamSrfX image, which reports SamSrf 10.003 and lacks the
+repairs; they stay a separate baseline.
 
 ### Compiler access, checked 2026-11-10, 2026-11-12 and 2026-11-16
 
@@ -1024,7 +1034,8 @@ Checked on 2026-11-12 without a license:
 - MATLAB then started in the builder container and stopped at its license check
   (`Feature: MATLAB`, error -2,413). A `PORT@HOST` value reached the same check.
 
-No compiled step has run.
+No compiled step had run then. The licensed host later built builds 2 and 3
+(status above).
 
 ### Operator handoff for a licensed host
 
@@ -1062,27 +1073,91 @@ local image sha256:...` and `Evidence: .../samsrf-cli`. In `$WORK/samsrf-cli`:
 | `compiled-1/receipts`, `compiled-2/receipts` | No network, read-only inputs, the image ID, input hashes unchanged. |
 | `interrupt/`, `failure/` | A prompt nonzero exit on SIGINT, and on a missing model. |
 | `web-1/`, `web-1-vs-source.json`, `web-1-vs-compiled.json` | The web engine (Node) on the same bundle, held against both executions on this host ([web engine against the CLI matrix](#web-engine-against-the-cli-matrix)). It lists exact, differing, refused and unsupported runs; the driver fails on inventory errors and failed runs, not on differing values. The Chromium run is a separate step on the returned evidence. |
+| `container-build/oci-identity.json` | The saved archive's target, manifest and config digests and layer diff_ids, and the local image ID the gates ran, which must be one of them ([image identity](#image-identity)). |
 
 The archive keeps `bundle/` (11 MB) because the web engine and the maintainers'
 browser run read those exact input bytes.
 
 Return two files and their SHA-256 through whatever channel the maintainers
-name, never with the license:
+name, never with the license. The driver's last step saved the image as an OCI
+archive (`docker save`, Docker 25 or later):
 
 ```sh
 tar -C "$WORK" -czf samsrf-cli-evidence.tar.gz samsrf-cli
-docker save samsrf-reference:41ed1e96-r2023b | gzip > samsrf-reference-41ed1e96-r2023b.tar.gz
-sha256sum samsrf-cli-evidence.tar.gz samsrf-reference-41ed1e96-r2023b.tar.gz
+sha256sum samsrf-cli-evidence.tar.gz "$WORK/samsrf-reference.oci.tar"
 ```
 
 A failed run is evidence too: return the evidence archive and the console log,
 from which the failing gate is clear (the driver stops at it).
 
-The maintainers then load the image, check that its ID equals
-`container-build/image.json`, push it to `ghcr.io/neurodesk/samsrf-reference`,
-record its digest beside `cli-reference.json`, and dispatch `samsrf-native`
-with `runtime_image=ghcr.io/neurodesk/samsrf-reference@sha256:...` for the
+The maintainers then check the archive and load it ([image identity](#image-identity)),
+and only after the [publication steps](#publication-steps-that-need-the-maintainer)
+push it to `ghcr.io/neurodesk/samsrf-reference`, record its registry digest
+beside `cli-reference.json`, and dispatch `samsrf-native` with
+`runtime_image=ghcr.io/neurodesk/samsrf-reference@sha256:...` for the
 Runtime-only check on other hosts. That last step needs no license.
+
+### Image identity
+
+Docker's local image ID is not a portable name for the image. In a containerd
+image store it is the digest that the archive's `index.json` names (the image
+manifest, or an image index around it when BuildKit adds attestations); in a
+classic store it is the config digest. A registry reports its own manifest
+digest. The 2026-11-18 audit found that the first standalone verifier for
+build 3 required the image ID to equal the OCI manifest digest, and so rejected
+a valid restore into a classic store, whose ID was the config digest
+`sha256:746944cc…`.
+
+`oci_identity.mjs` assumes neither. It checks the archive first: one image in
+`index.json`, every blob's SHA-256 equal to its name, every descriptor's blob
+present at its declared size, every layer decompressed to its config's diff_id,
+and the legacy `manifest.json` naming the same config and layers. It then
+accepts `docker image inspect` output only if the image ID is the target or the
+config digest and the RootFS layers are the config's diff_ids, in order, and
+prints the ID to run. `test/oci-identity.test.js` covers both stores, an index
+with an attestation manifest, and each refusal, offline in the package tests.
+The licensed-host driver runs it as its last step and requires the printed ID to
+be the one its gates ran. To check a returned archive:
+
+```sh
+m=packages/samsrf/validation/matlab
+node $m/oci_identity.mjs samsrf-reference.oci.tar            # the archive alone
+docker load --input samsrf-reference.oci.tar
+docker image inspect samsrf-reference:41ed1e96-r2023b > inspect.json
+image="$(node $m/oci_identity.mjs samsrf-reference.oci.tar inspect.json oci-identity.json)"
+python3 $m/run_runtime_cli.py run "$image" PLAN_JSON BUNDLE RESULTS_ROOT
+```
+
+### Publication steps that need the maintainer
+
+Nothing here is done by the repository's tooling, and none of it is authorized
+yet:
+
+- **Redistribution.** Permission to redistribute the compiled application with
+  MATLAB Runtime and its third-party components. The 2026-11-18 audit read no
+  licence terms and made no determination.
+- **Embedded metadata.** The 2026-11-18 audit found that the build 3 executable
+  embeds 61 `.git` entries (public SamSrf and SPM origins) and absolute build
+  paths, and that the evidence holds host names and machine details. Decide what may be published, or rebuild without
+  them; keep the audited originals and any corrections.
+- **Mutable build inputs.** MATLAB Compiler writes the Runtime-installer and
+  application Dockerfiles itself (`build_container.m`), with tag-based `FROM`
+  lines. The audit found the digest the installer tag resolved to in build 3's
+  log, which binds that build but not a future one. The builder image's apt packages
+  (`licensed-host/Dockerfile`) and the mpm installation are not pinned by
+  digest either; the driver checks the installed MATLAB version.
+- **Source-input attestation.** Source runs (`run_source_cli.m`) do not record
+  the bundle they read. Historical source receipts cannot be attested
+  afterwards; future source runs need a receipt of their inputs, as the compiled
+  runs write `receipts/inputs.json`.
+- **MKL threads.** The requested `MKL_NUM_THREADS`, `MKL_DYNAMIC` and
+  `OMP_*` settings are requests. MKL's effective thread count and dynamic
+  setting were never observed inside MATLAB or the Runtime
+  ([requested and effective MKL controls](#requested-and-effective-mkl-controls-730)).
+- **Publication itself.** Push only an approved image, record its registry
+  digest and the retained receipts, then run the `runtime_image` dispatch, and
+  repeat the compiled acceptance for the final production module under each
+  explicit reference.
 
 Checked without a license on 2026-11-13, and again on 2026-11-16 with
 `test_web_cli.py`: all 62 harness tests in this directory pass (Python 3.12
@@ -1387,7 +1462,8 @@ python3 $m/compare_web_cli.py $e/plan.json $e/bundle-sha256.json $e/browser-1 $e
   browser-1-vs-compiled.json --expect compiled-runtime
 ```
 
-**Interim result against source MATLAB (not the compiled image).** The pinned
+**Interim result against source MATLAB (not the compiled image), kept as
+history; the current outcome is in [acceptance.md](../acceptance.md#current-state-after-895).** The pinned
 source recording ([run 42928350417](#pinned-source-recording)) was compared on
 2026-11-16. The web engine was package 0.6.20261115 with WASM SHA-256
 `f069b06b0473a4538353063b5acda52c8da4351e812ed870e6dc177132a90f9f`, run on an
@@ -1449,13 +1525,15 @@ What the differences are (AMD host):
   double R², Beta, Baseline and reverse-correlation maps differ in the last
   bits. Fits that land on another optimum differ by more: one or two vertices
   in each double Gaussian pRF, one vertex of `prf_custom_hrf_lh_double`, and
-  the 11 diverged vertices of `cf_gaussian_lh_double`.
+  the 11 diverged vertices of `cf_gaussian_lh_double`. (Since resolved on the AMD
+  host: [double detrend and z-score](#double-detrend-and-z-score).)
 - **CSS from SamSrfAnalysis.** MATLAB saves a complex `Srf.Data` in both
   precisions. Single CSS differs at 12 to 13 of 21 vertices and double CSS at
   14 to 15, by up to 1.8 in x0. The zero masks of single CSS disagree. (Since
   resolved on the AMD host: [CSS through SamSrfAnalysis](#css-through-samsrfanalysis).)
 - **Single forward fits.** `prf_gaussian_lh_average_single` differs at one
-  vertex in Beta (1 ULP) and Baseline (5 ULP); its other maps are exact.
+  vertex in Beta (1 ULP) and Baseline (5 ULP); its other maps are exact. (Since
+  resolved: exact in `web-cli-outcome.json`.)
 - **NaN sign bits.** The `cf_hull` x0 and y0 maps, and Sigma, Beta and Baseline
   at the 11 rejected vertices of `rc_gaussian_lh_double`, differ only in the
   sign bit of a NaN: MATLAB stores `0xFFC00000` (float32) where the engine has
@@ -1465,7 +1543,8 @@ What the differences are (AMD host):
   [NaN representation](#nan-representation).)
 
 These comparisons are with source MATLAB. They are not compiled-image parity,
-which needs the build.
+which the licensed host's compiled executions test separately ([Runtime
+container status](#building-a-matching-runtime-container)).
 
 ### Production interface against the CLI matrix
 
@@ -1764,10 +1843,11 @@ connective-field runs with global-signal correction and smoothing save `Srf.Y`
 after `samsrf_removenoise` and smoothing and are counted, not compared. On the
 Intel host 88,033 of 168,000 are identical: its MKL orders the double solve
 differently, and AMD and Intel MATLAB themselves differ in 5,051 of 5,165
-values, so one output cannot equal both. The test-only Intel reference's detrend
-(`samsrf-mkl-avx512`) reproduces the 84,000 double `Srf.Y` values of the 11 double runs
-whose `Srf.Y` is this stage's output (the single values already equal the port's); the
-shipped module does not. Constant, ramp and near-constant raw
+values, so one output cannot equal both. The Intel reference's detrend, shipped
+since #895 as `Arithmetic_Reference: "matlab-intel"` (gated through
+`samsrf-mkl-avx512`), reproduces the 84,000 double `Srf.Y` values of the 11 double
+runs whose `Srf.Y` is this stage's output (the single values already equal the
+port's); `current` and `matlab-amd` do not. Constant, ramp and near-constant raw
 courses, one- and two-sample courses and runs of 134,257-134,259 vertices (every
 leftover position) were recorded later (`constants-gamma-gemv-predictions.md`,
 run 43882331042): on the AMD host the port matches every recorded selected
@@ -1782,8 +1862,9 @@ With the courses exact, the Node package API using the committed WASM was
 compared against the AMD source execution of the 24-run matrix. The copied
 `run_web_matrix.mjs` and `compare_web_cli.py` match #866 at `dd36baa32`.
 Recomparison with the corrected comparator at `d12064c9a` preserves the final
-11-run, 119-map result. This is not a browser or production UI comparison;
-the Node runner also accepts custom HRFs unavailable through the app interface.
+11-run, 119-map result. This is not a browser or production UI comparison.
+At the time the Node runner also accepted custom HRFs the app interface did
+not; since #877 the interface takes the subject-HRF file.
 
 | Change | Exact runs | Exact maps (of 168) |
 | --- | --- | --- |
@@ -1821,12 +1902,13 @@ The two refused single fits stay refused. What still differs, earliest stage fir
   their position. Every unsmoothed double CF profile of the pinned
   reverse-correlation recordings equals MATLAB's on its AMD hosts (26 cases,
   4,914 values; `double_cf_profiles_equal_matlab_on_amd_hosts`).
-- every Intel host, in the shipped (AMD-branch) arithmetic. A test-only reference for
-  the recorded finite real two-column least squares reproduces that host's double `Srf.Y`
-  and global regression values; the shipped module does not. Intel's CF profiles
-  (`y' * A`), `x' * y` from 51 elements, `dnrm2` near rounding ties and its single and
-  complex kernels are not identified ([Intel AVX-512 and the reference
-  host](#intel-avx-512-and-the-reference-host)).
+- every Intel host under `current` and `matlab-amd`. Since #895 `matlab-intel`
+  reproduces that host's double `Srf.Y` and global regression for the recorded finite
+  real two-column least squares, and 8 of the 12 double runs there; its single
+  analyses are refused. History: at #880 the Intel arithmetic was a test-only crate, and
+  Intel's CF profiles, `x' * y` from 51 elements and complex kernels were not in it
+  ([Intel AVX-512 and the reference host](#intel-avx-512-and-the-reference-host);
+  [open numerical limits](../acceptance.md#open-numerical-limits)).
 
 ```sh
 python3 packages/samsrf/validation/container/download.py "$TMPDIR/samsrf-cli" packages/samsrf/validation/matlab/cli-reference.json
@@ -1916,11 +1998,12 @@ Intel host's recording. This cross-host tradeoff remains unresolved; improved AM
 agreement does not establish Intel non-regression or an AMD-only reference policy.
 The test-only reference for the Intel host's branch, `AVX512_E1`, gives all 42,000 Intel
 residuals bit for bit (`samsrf-mkl-avx512`, [Intel AVX-512 and the reference
-host](#intel-avx-512-and-the-reference-host)). This adds a separately tested reference,
-not a correction to the shipped engine. `samsrf-mkl-avx512` changes no shipped output:
-the module still loses the Intel residual and CLI values listed above. Reference
-selection for the shipped port remains undecided; the existing AMD arithmetic
-continues unchanged, and the production regression remains a merge blocker.
+host](#intel-avx-512-and-the-reference-host)). History, before #895: this
+added a separately tested reference, not a correction to the shipped engine, and the
+production regression was a merge blocker (#876). #895 resolved that by making the
+reference explicit: this rule ships as `matlab-amd`, the Intel branch as
+`matlab-intel`, and the default `current` keeps the normal equations, so no default
+output changed and no Intel value is lost by default.
 
 Both precisions now run one function, and `revcor_reference.rs` holds the double
 residuals bit for bit on the AMD hosts (`1e-13` of the course's peak before).
@@ -1939,12 +2022,13 @@ value against main's module: on AMD, 29 values gain exactness (R^2 8, Beta 8,
 Suppression 13) and none lose it; on Intel, one value gains (Suppression) and seven lose
 it (R^2 and Beta at zero-based vertices 2, 6 and 11, Suppression at 6), the Intel loss
 described above. The matrix then has 18 of 24 runs and 160 of 168 maps exact on AMD (157
-on main) and 57 maps on Intel (57 on main); `web-cli-outcome.json` holds this AMD outcome.
+on main) and 57 maps on Intel (57 on main). Since #895 that is the `matlab-amd` outcome;
+`web-cli-outcome.json` holds the default's (157 of 168).
 No geometry value changes on either host. Canonical build
 [44286145940](https://github.com/neurodesk/webapps/actions/runs/44286145940) produced the
 combined module `cc528cf6`, whose maps equal its local rebuild's on both hosts; in
 Chromium it writes the same 196 files as Node (15 exact runs and 135 of 140 maps, with the
-4 subject-HRF runs unsupported in the browser).
+4 subject-HRF runs then unsupported in the browser; the interface takes them since #877).
 
 ## Double forward fine fits (#730)
 
@@ -2375,10 +2459,10 @@ AMD); it does not distinguish signed zeros.
 
 #### Remaining limits
 
-- The shipped port follows MKL's AMD branch only. The test-only `samsrf-mkl-avx512`
-  crate reproduces the Intel `AVX512_E1` branch for the recorded finite real two-column
-  designs only (next section); `dnrm2` near ties, the single and complex kernels and the
-  paths listed there are not identified.
+- The default and `matlab-amd` follow MKL's AMD branch. `matlab-intel` (#895) follows
+  the Intel `AVX512_E1` branch for the recorded finite real and complex two-column
+  designs (next section); `dnrm2` near ties, the single kernels and the paths listed
+  there are not identified, and Intel single analyses are refused.
 - Signed zeros of MATLAB results that MATLAB itself returns as real cannot be
   recorded through MATLAB. A MEX-level recording of `?trsm`'s own output could
   show MKL's sign there, but MATLAB's visible result has none, so it would not
@@ -2393,14 +2477,13 @@ AMD); it does not distinguish signed zeros.
 
 MATLAB on the recorded Intel hosts (Xeon 8370C, 8573C and 6975P-C) runs MKL's
 `AVX512_E1` branch ([Requested and effective MKL
-controls](#requested-and-effective-mkl-controls-730)). A test-only crate,
-`exes/samsrf/mkl-avx512` (`samsrf-mkl-avx512`), reproduces that branch's real double least
-squares for the recorded finite two-column designs. No shipped crate depends on it, a
-WebAssembly build refuses it, and the shipped module is byte-identical with and without
-it. It is a second reference for validation, not a correction: the shipped module still
-loses the Intel exact values listed in [Double global
-regression](#double-global-regression), and that production regression remains a merge
-blocker. Its gates (`mkl-avx512/tests/recordings.rs`, run by the native workflow) hold
+controls](#requested-and-effective-mkl-controls-730)). Since #895 the user selects that
+branch with `Arithmetic_Reference: "matlab-intel"`; its code is
+`exes/samsrf/core/src/arithmetic/intel` in the shipped module. History: this section was
+written at #880, when a test-only crate, `exes/samsrf/mkl-avx512`, held it and the shipped
+module was byte-identical with and without it; that crate now re-exports the core code
+for the gates. The default is unchanged, so the default still loses the Intel values
+listed in [Double global regression](#double-global-regression). Its gates (`mkl-avx512/tests/recordings.rs`, run by the native workflow) hold
 the recordings below to MATLAB's bits. The pre-registrations, their freezes and the
 corrections after review are in [`intel-avx512/`](intel-avx512/README.md).
 
@@ -2463,21 +2546,27 @@ targets, and an exploratory probe searched the global regression's coefficients 
 text, not when it was written, and the evaluator's switches (the `X * B` orders and the AMD
 control kernels) were outside the frozen model's hash.
 
-Not identified, and so not in the reference: the norm near rounding ties (above); single
+At #880, not identified and so not in the reference: the norm near rounding ties (above); single
 kernels (`sgemv` at 127, 128, 249 and 250 elements, single `?ormqr`); complex designs
 (`zgemv`, the complex reflector's scaling, which FPRev's real probes cannot see); MATLAB's
 `x' * y` from 51 elements and `y' * A` for CF profiles, and so `corr` beyond 50 elements and
 the CF and CSS fits that use them. Paths no recording reaches are not established either:
 more than two columns (norm downdating and later pivots), reflectors that end in zeros, the
 `xLARFG` halving path and nonfinite inputs. Changing any of them leaves every gate passing
-(mutation review, 2026-11-18).
+(mutation review, 2026-11-18). Since then #895 added the research `x' * y`, `y' * A`,
+`corr` and CF-profile kernels and two complex candidates (a mixed complex/real dot from
+24 seen vectors and a finite two-column complex QR) to `matlab-intel`; they are fitted
+candidates on recorded inputs, not identified general BLAS kernels. Single kernels, the
+norm near ties and the unrecorded paths above are still not identified
+([open numerical limits](../acceptance.md#open-numerical-limits)).
 
 Reference host: one output cannot equal both hosts. For the recorded finite real
-two-column least squares each host is now reproduced by its own branch, the AMD one in
-the shipped module and the Intel one only in the test-only crate. The shipped port keeps
-the AMD branch and still loses the Intel values listed in [Double global
-regression](#double-global-regression); nothing has been decided beyond that. The options
-for the maintainers:
+two-column least squares each host is now reproduced by its own branch. History: at #880
+the Intel branch was only in the test-only crate and the options below were open. #895
+shipped the Intel branch as an explicit choice per analysis for double analyses only,
+refusing Intel single analyses, with `current` as the default. Its kernels were fitted
+partly on recordings read before their freeze, which are replay evidence. It adopted
+no reference host and no CPU selection. The options as they were listed:
 
 - Keep the AMD branch as the only shipped arithmetic and the Intel crate for validation.
   Results are the same on every user's machine; agreement is reported per host.

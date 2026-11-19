@@ -28,9 +28,16 @@ if name == 'git':
 elif name == 'docker':
     if args[:2] == ['image', 'inspect']:
         print('sha256:stub')
+    elif args[0] == 'run' and any(arg.endswith('oci_identity.mjs') for arg in args):
+        with open(os.environ['TEST_COMMANDS'], 'a') as handle:
+            handle.write(json.dumps(['oci_identity'] + args[args.index('node') + 2:]) + '\n')
+        print(os.environ.get('TEST_SAVED_ID', 'sha256:stub'))
 elif name == 'python3':
     if args[0] == '-c':
         print('case 10' if 'seconds' in args[1] else 'pinned-commit')
+    elif pathlib.Path(args[0]).name == 'build_container.py':
+        # The real build writes its records into this new directory.
+        pathlib.Path(args[3]).mkdir(parents=True)
     elif pathlib.Path(args[0]).name == 'cli_plan.py' and args[1] == 'hash':
         bundle = pathlib.Path(args[2])
         bundle.mkdir(parents=True)
@@ -60,7 +67,7 @@ def spm_fixture(root, root_files=True):
 
 
 class LicensedHostCommands(unittest.TestCase):
-    def run_driver(self, root, exit_code=0, spm_root_files=True):
+    def run_driver(self, root, exit_code=0, spm_root_files=True, saved_id='sha256:stub'):
         fixture = spm_fixture(root, spm_root_files)
         repo = root / "O'Brien's repo"
         here = repo / 'packages/samsrf/validation/matlab/licensed-host'
@@ -84,6 +91,7 @@ class LicensedHostCommands(unittest.TestCase):
         env = dict(os.environ, PATH=str(binaries) + os.pathsep + os.environ['PATH'],
                    TEST_REPO=str(repo), TEST_COMMANDS=str(commands),
                    TEST_MATLAB_EXIT=str(exit_code), TEST_REAL_GIT=shutil.which('git'),
+                   TEST_SAVED_ID=saved_id,
                    GIT_CONFIG_COUNT='2',
                    GIT_CONFIG_KEY_0=f'url.{fixture.as_uri()}.insteadOf',
                    GIT_CONFIG_VALUE_0='https://github.com/spm/spm12.git',
@@ -107,6 +115,12 @@ class LicensedHostCommands(unittest.TestCase):
                 ('verify_cli_hrf', common + [cli / 'plan.json', cli / 'source-1', cli / 'source-1-direct']),
                 ('run_source_cli', common + [cli / 'plan.json', cli / 'source-2']),
             ]
+            cli = work / 'samsrf-cli'
+            identity = [command for command in commands if command[0] == 'oci_identity']
+            self.assertEqual(identity, [['oci_identity', str(work / 'samsrf-reference.oci.tar'),
+                                         str(cli / 'container-build/image-inspect.json'),
+                                         str(cli / 'container-build/oci-identity.json')]])
+            commands = [command for command in commands if command[0] != 'oci_identity']
             self.assertEqual(len(commands), len(expected))
             literal = r"'(?:[^']|'')*'"
             for arguments, (function, paths) in zip(commands, expected):
@@ -132,6 +146,13 @@ class LicensedHostCommands(unittest.TestCase):
             self.assertEqual(result.returncode, 1)
             self.assertIn('no spm.m', result.stderr)
             self.assertEqual(commands, [])
+
+    def test_saved_archive_of_another_image_fails_the_driver(self):
+        with scratch() as directory:
+            result, _, _, _ = self.run_driver(Path(directory), saved_id='sha256:other')
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("is not the image the gates ran", result.stderr)
+            self.assertNotIn('All gates passed', result.stdout)
 
     def test_matlab_failure_stops_driver(self):
         with scratch() as directory:
