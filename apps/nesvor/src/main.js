@@ -202,6 +202,11 @@ const results = createResultList({
   onDownload: (_stage, result) => downloadFile(result.file),
 });
 
+// The stack input adds to the list; the shell and the WebMCP tools learn the whole list from nd-files.
+function reportStacks() {
+  $('imageInput').dispatchEvent(new CustomEvent('nd-files', { bubbles: true, detail: { files: rows.map(row => row.file) } }));
+}
+
 function renderRows() {
   const body = $('stackRows');
   body.replaceChildren();
@@ -224,7 +229,7 @@ function renderRows() {
     remove.className = 'nd-download-btn';
     remove.textContent = 'Remove';
     remove.setAttribute('aria-label', `Remove ${row.file.name}`);
-    remove.addEventListener('click', () => { rows.splice(index, 1); renderRows(); syncRun(); });
+    remove.addEventListener('click', () => { rows.splice(index, 1); renderRows(); reportStacks(); syncRun(); });
     head.append(label, view, remove);
     const fields = document.createElement('div');
     fields.className = 'nd-row';
@@ -357,6 +362,7 @@ async function loadFiles(filesPromise, signal, { replace = false, asMasks = fals
     $('outputSection').open = false;
     $('progress').value = 0;
     renderRows();
+    reportStacks();
     if (stacks.length) await show(stacks[0], `${stacks[0].name} · stack ${rows.length - stacks.length + 1} of ${rows.length}`);
     status(`${rows.length} stack${rows.length === 1 ? '' : 's'} loaded${masks.length ? `, ${masks.length} mask${masks.length === 1 ? '' : 's'}` : ''}`);
   } finally {
@@ -394,10 +400,15 @@ function importMasks(filesPromise) {
   return importFiles(filesPromise, { asMasks: true });
 }
 
+// A page drop or its Undo replaces the stacks rather than adding to them.
+let replaceStacks = false;
+$('imageInput').addEventListener('nd-replace', () => { replaceStacks = true; });
 $('imageInput').addEventListener('change', event => {
   const files = Array.from(event.target.files);
+  const replace = replaceStacks;
+  replaceStacks = false;
   event.target.value = '';
-  if (files.length) void importFiles(Promise.resolve(files));
+  if (files.length) void importFiles(Promise.resolve(files), { replace });
 });
 $('maskInput').addEventListener('change', event => {
   const files = Array.from(event.target.files);
