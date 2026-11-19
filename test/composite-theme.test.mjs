@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { injectCompositeTheme } from '../scripts/lib/composite-theme.mjs';
+import { firstPageScript, injectCompositeTheme } from '../scripts/lib/composite-theme.mjs';
 import { neurodeskViteConfig } from '../scripts/lib/vite-app-config.mjs';
 
 const document = '<!doctype html><html lang="en"><head><title>Example</title></head><body></body></html>';
@@ -237,4 +237,16 @@ test('a host\'s origin trial token goes into its pages once, and a page themed w
   assert.equal(injectCompositeTheme(themed, { ...metadata, originTrial: token }), themed);
   assert.doesNotMatch(injectCompositeTheme(themed, metadata), /origin-trial/);
   assert.throws(() => injectCompositeTheme(document, { ...metadata, originTrial: '"><script>' }), /origin trial token/);
+});
+
+test('the theme controller, which installs the WebMCP recorder, is the first script of the page, after its metadata', () => {
+  const page = '<!doctype html><html><head>\n  <meta charset="utf-8">\n  <script src="./coi-serviceworker.js"></script>\n  <script type="application/json" id="data">{}</script>\n</head><body><script src="runtime.js"></script></body></html>';
+  const themed = injectCompositeTheme(page, { ...metadata, originTrial: 'dG9rZW4=' });
+  assert.equal(firstPageScript(themed), '<script src="../theme.js" data-neurodesk-theme-controller>');
+  assert.ok(themed.indexOf('origin-trial') < themed.indexOf('data-neurodesk-theme-controller'), 'the origin trial token, which exposes the model context, comes first');
+  const standalone = injectCompositeTheme(page, { ...metadata, themeHref: './theme.js' }).replace('<head>', '<head>\n  <script>window.early = true;</script>');
+  const rethemed = injectCompositeTheme(standalone, metadata);
+  assert.equal(firstPageScript(rethemed), '<script src="./theme.js" data-neurodesk-theme-controller>', 'a page themed before moves its controller ahead of a script added since');
+  assert.equal((rethemed.match(/data-neurodesk-theme-controller/g) ?? []).length, 1);
+  assert.equal(injectCompositeTheme(rethemed, metadata), rethemed);
 });

@@ -9,6 +9,7 @@ import { HUB_SITE, SITES_DIR, projectCatalogSite, runtimeClosure } from '../scri
 import { loadAppInformation } from '../scripts/lib/app-information.mjs';
 import { loadStandalone } from '../scripts/lib/standalone.mjs';
 import { loadNotFoundTemplate } from '../scripts/lib/not-found-page.mjs';
+import { firstPageScript } from '../scripts/lib/composite-theme.mjs';
 
 const registry = await loadAppsRegistry();
 const dist = join(repoRoot, 'dist');
@@ -134,6 +135,24 @@ test('webapps.neurodesk.org redirects the moved apps to mskapps.sciget.org', asy
   const routes = JSON.parse(page.match(/id="moved-apps">([\s\S]*?)<\/script>/)[1]);
   for (const moved of MOVED) assert.equal(routes[moved], `https://mskapps.sciget.org/${moved}`);
   assert.equal(routes.dicom2vid, '/mri2vid');
+});
+
+test('every app page of the assembly and of each site runs the theme controller, which installs the WebMCP recorder, before any other script', async () => {
+  const pages = [];
+  for (const root of [dist, ...registry.site.catalogs.map((catalog) => join(sites, catalog.id))]) {
+    for (const { path } of registry.apps) {
+      const directory = join(root, path);
+      if (!await exists(directory)) continue;
+      for (const file of await walk(directory)) {
+        if (extname(file) !== '.html') continue;
+        const html = await readFile(file, 'utf8');
+        if (/data-neurodesk-app-shell(?:\s|=|>)/.test(html)) pages.push([relative(repoRoot, file), html]);
+      }
+    }
+  }
+  assert.ok(pages.length >= registry.apps.length, `found ${pages.length} app pages`);
+  const late = pages.filter(([, html]) => !/\bdata-neurodesk-theme-controller\b/.test(firstPageScript(html) ?? '')).map(([file, html]) => `${file}: ${firstPageScript(html)}`);
+  assert.deepEqual(late, []);
 });
 
 test('the all-app assembly still holds every app the suites are projected from', async () => {
