@@ -654,11 +654,13 @@ try {
     let imageRequested;
     const requested = new Promise(resolve => { imageRequested = resolve; });
     const released = new Promise(resolve => { releaseImage = resolve; });
-    await context.route('**/frame-probe-content', route => route.fulfill({ contentType: 'text/html', body: '<button>Use frame</button><img src="/frame-probe-image">' }));
+    // The page is cross-origin isolated, so its frame's document must embed under the same policy.
+    const isolated = { 'Cross-Origin-Embedder-Policy': 'require-corp', 'Cross-Origin-Resource-Policy': 'same-origin' };
+    await context.route('**/frame-probe-content', route => route.fulfill({ contentType: 'text/html', headers: isolated, body: '<button>Use frame</button><img src="/frame-probe-image">' }));
     await context.route('**/frame-probe-image', async route => {
       imageRequested();
       await released;
-      await route.fulfill({ status: 404, body: '' });
+      await route.fulfill({ status: 404, headers: isolated, body: '' });
     });
     const { page, call, answered } = await open(context, 'niimath');
     try {
@@ -679,6 +681,8 @@ try {
       await page.evaluate(() => {
         const frame = document.querySelector('#probe-load-frame');
         delete frame.dataset.loaded;
+        // srcdoc wins over src, so it goes first.
+        frame.removeAttribute('srcdoc');
         frame.src = '/frame-probe-content';
       });
       await requested;

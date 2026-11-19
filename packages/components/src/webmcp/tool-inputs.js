@@ -216,7 +216,7 @@ export function createToolInputs({ doc, automation, isPerson = event => event.is
   // element that is neither inserted later nor a custom element defined later is not found.
   const documents = new WeakSet();
   const trees = new WeakSet();
-  const followed = new WeakSet();
+  const followed = new WeakMap();
   function watchDocument(target, frame = null) {
     if (documents.has(target)) return;
     documents.add(target);
@@ -226,24 +226,28 @@ export function createToolInputs({ doc, automation, isPerson = event => event.is
       targetView.addEventListener('pagehide', () => {
         // A frame being removed, or leaving the empty document it starts with, is no navigation of the person's.
         if (frame.isConnected && target.URL !== 'about:blank') touch();
-        follow(frame);
+        follow(frame, target);
       });
     }
     watchTree(target);
   }
-  // Watches each document the frame shows from the animation frame after it appears until it has loaded.
-  function follow(frame) {
-    if (followed.has(frame)) return;
-    followed.add(frame);
+  // Watches each document the frame shows from the animation frame after it appears until it has
+  // loaded; after `leaving` hides, from the first frame its successor exists.
+  function follow(frame, leaving = null) {
+    if (followed.has(frame)) followed.delete(frame);
+    const run = {};
+    followed.set(frame, run);
     const step = () => {
+      if (followed.get(frame) !== run) return;
       let frameDoc;
       try {
         frameDoc = frame.contentDocument;
       } catch {
         frameDoc = null;
       }
-      if (frameDoc) watchDocument(frameDoc, frame);
-      if (!frame.isConnected || !frameDoc || frameDoc.readyState === 'complete') followed.delete(frame);
+      if (frameDoc && frameDoc !== leaving) watchDocument(frameDoc, frame);
+      const settled = frameDoc && frameDoc !== leaving && frameDoc.readyState === 'complete';
+      if (!frame.isConnected || !frameDoc || settled) followed.delete(frame);
       else if (view.requestAnimationFrame) view.requestAnimationFrame(step);
       else view.setTimeout(step, 16);
     };
