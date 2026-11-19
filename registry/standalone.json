@@ -2266,35 +2266,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.4.20261113",
-          "url": "https://github.com/neurodesk/webapps/releases/download/hmc-v0.4.20261113/hmc-0.4.20261113-linux-x64.tar.gz",
-          "sha256": "6a0f7c23472b823e6a3bcd5812de3dddcec259488beb7a6dac19d1bfd92e3821",
-          "bytes": 59873348,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/hmc-v0.4.20261113/hmc-0.4.20261113-linux-x64.tar.gz.validation.txt",
+          "version": "0.4.20261119",
+          "url": "https://github.com/neurodesk/webapps/releases/download/hmc-v0.4.20261119/hmc-0.4.20261119-linux-x64.tar.gz",
+          "sha256": "f927c959934527617c48b64fb107cd6de6e5ae73bdf161850b9d29fe3326935c",
+          "bytes": 59873710,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/hmc-v0.4.20261119/hmc-0.4.20261119-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf hmc-0.4.20261113-linux-x64.tar.gz\n./hmc-0.4.20261113-linux-x64/hmc sub-01_dwi.nii.gz sub-01_dwi.bval sub-01_dwi.bvec results"
+          "command": "tar -xzf hmc-0.4.20261119-linux-x64.tar.gz\n./hmc-0.4.20261119-linux-x64/hmc sub-01_dwi.nii.gz sub-01_dwi.bval sub-01_dwi.bvec results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.4.20261113",
-          "url": "https://github.com/neurodesk/webapps/releases/download/hmc-v0.4.20261113/hmc-0.4.20261113-macos-arm64.pkg",
-          "sha256": "ebb2b3274776bb543093bbb360abe3c428ff598892766c5d1bd073ab0684803e",
-          "bytes": 53614587,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/hmc-v0.4.20261113/hmc-0.4.20261113-macos-arm64.pkg.validation.txt",
+          "version": "0.4.20261119",
+          "url": "https://github.com/neurodesk/webapps/releases/download/hmc-v0.4.20261119/hmc-0.4.20261119-macos-arm64.pkg",
+          "sha256": "ee69d8068f6c43d8f456d264fbdcc7ca5bf8f13c3cfe24e8de4fa7dee32da1d2",
+          "bytes": 53620963,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/hmc-v0.4.20261119/hmc-0.4.20261119-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg hmc-0.4.20261113-macos-arm64.pkg -target /\nhmc self-check\nhmc sub-01_dwi.nii.gz sub-01_dwi.bval sub-01_dwi.bvec results"
+          "command": "sudo installer -pkg hmc-0.4.20261119-macos-arm64.pkg -target /\nhmc self-check\nhmc sub-01_dwi.nii.gz sub-01_dwi.bval sub-01_dwi.bvec results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.4.20261113",
-          "url": "https://github.com/neurodesk/webapps/releases/download/hmc-v0.4.20261113/hmc-0.4.20261113-windows-x64.zip",
-          "sha256": "6bad2efdc2005efd1d3556c7b726c3e3bc0a81462cdbc324338bba0d9ea53b8d",
-          "bytes": 50682470,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/hmc-v0.4.20261113/hmc-0.4.20261113-windows-x64.zip.validation.txt",
+          "version": "0.4.20261119",
+          "url": "https://github.com/neurodesk/webapps/releases/download/hmc-v0.4.20261119/hmc-0.4.20261119-windows-x64.zip",
+          "sha256": "2589d1e86ac13f7191b81adb229676de3062d1c19ad4024fa3f7c76fe3f27d4c",
+          "bytes": 50685676,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/hmc-v0.4.20261119/hmc-0.4.20261119-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\hmc-0.4.20261113-windows-x64.zip -DestinationPath .\n.\\hmc-0.4.20261113-windows-x64\\hmc.exe sub-01_dwi.nii.gz sub-01_dwi.bval sub-01_dwi.bvec results"
+          "command": "Expand-Archive -Path .\\hmc-0.4.20261119-windows-x64.zip -DestinationPath .\n.\\hmc-0.4.20261119-windows-x64\\hmc.exe sub-01_dwi.nii.gz sub-01_dwi.bval sub-01_dwi.bvec results"
         }
       ],
       "containers": []
