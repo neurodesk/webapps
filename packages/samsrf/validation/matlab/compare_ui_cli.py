@@ -24,13 +24,18 @@ the arithmetic provenance JSON required by current runner receipts. That JSON
 must name the actual reference and equal the saved model; historical receipts
 without the provenance requirement remain readable.
 
-The interface downloads float32 GIfTIs only, so each contract map is compared bitwise
-twice: against MATLAB's exported GIfTI over every vertex, and against MATLAB's Srf.Data
-column over Srf.Roi cast to float32. A double-precision run's own double values are not
-observable through the interface; each map says which precision its Srf.Data comparison
-stands for (`srfDataPrecision`), and compare_web_cli.py holds the engine's double rows.
-Nor are the imaginary parts of a complex Srf.Data: such a map stays `differs`
-(`imaginaryNonzero`), and compare_web_cli.py holds the engine's imaginary parts.
+Each contract map's float32 GIfTI is compared bitwise twice: against MATLAB's exported GIfTI
+over every vertex, and against MATLAB's Srf.Data column over Srf.Roi cast to float32
+(`srfDataCast`; `srfDataPrecision` names the run's precision).
+
+The zip also holds <stem>_lossless.bin (lossless.py reads it; a record with `losslessExport`
+requires it, and the provenance JSON must name it with its SHA-256). Its float64 rows and
+imaginary parts are compared with MATLAB's Srf.Data over Srf.Roi as compare_web_cli.py compares
+the engine's (`lossless`: castExact, srfData, imaginary), so a double run's own double values and
+the imaginary parts of a complex Srf.Data are observable through the interface. With it a map is
+exact only if the GIfTI, the float32 cast and the float64 real and imaginary parts all agree bit
+for bit. A historical download without it cannot carry them: there a map whose MATLAB values are
+complex stays `differs` (`imaginaryNonzero`), and compare_web_cli.py holds the engine's rows.
 
 Each run is classed:
 
@@ -43,7 +48,8 @@ Each run is classed:
 - `failed`: anything else.
 
 Engine equality is its own gate: for every run the app computed, the zip must hold exactly
-the files the engine harness exported for that run, each equal byte for byte. MATLAB
+the files the engine harness exported for that run, each equal byte for byte, and the lossless
+file's rows and imaginary parts must equal the engine's maps.f64 and maps.imag.f64. MATLAB
 numerical differences are reported, never gated, and no tolerance is applied.
 
 Exit status: 0 when every run is exact, differs, refused or unsupported and the engine gate
@@ -66,6 +72,7 @@ from compare_cli import expected_results, read_mat
 from compare_web_cli import (Inventory, difference, expected_web_outcome, is_sha256, matlab_execution, matlab_outputs,
                              matlab_results, names_in, read_json, sha256_bytes, surface_map, validate_plan,
                              web_execution, web_files)
+from lossless import check_header, engine_agreement, lossless_name, matlab_maps, read_lossless
 
 UI_STATUSES = {'succeeded', 'succeeded-ui-error', 'refused', 'unsupported', 'failed'}
 COMPUTED = {'succeeded', 'succeeded-ui-error'}
@@ -182,17 +189,24 @@ def downloaded(run_dir, record):
         raise Inventory(f'the download is not a zip ({error})') from error
 
 
-def engine_files(run, files, engine, engine_dir):
-    """Each downloaded file against the engine harness's export of the same run, byte for byte."""
-    exported = set(web_files(run, engine, engine_dir)[0]) if engine['status'] == 'succeeded' else set()
+def engine_files(run, files, engine, engine_dir, lossless=None):
+    """Each downloaded file against the engine harness's export of the same run, byte for byte, and
+    the lossless file's arrays against the engine's maps.f64 and maps.imag.f64."""
+    exported = set()
+    result = {'engineStatus': engine['status']}
+    if engine['status'] == 'succeeded':
+        names, _, real, imaginary = web_files(run, engine, engine_dir)
+        exported = set(names)
+        if lossless is not None:
+            result['lossless'] = engine_agreement(lossless, real, imaginary, engine.get('imaginarySha256') is not None)
     shared = sorted(set(files) & exported)
     equal = [name for name in shared if (engine_dir / name).read_bytes() == files[name]]
-    return {'engineStatus': engine['status'], 'equal': equal, 'differ': sorted(set(shared) - set(equal)),
+    return {**result, 'equal': equal, 'differ': sorted(set(shared) - set(equal)),
             'onlyDownloaded': sorted(set(files) - exported), 'onlyEngine': sorted(exported - set(files))}
 
 
 def engine_equal(result):
-    return result['engineStatus'] == 'succeeded' and not (
+    return result['engineStatus'] == 'succeeded' and result.get('lossless', {'equal': True})['equal'] and not (
         result['differ'] or result['onlyDownloaded'] or result['onlyEngine'])
 
 
@@ -203,15 +217,22 @@ def compare_downloads(run, record, run_dir, matlab_dir, engine, engine_dir, scra
     provenance_name = f'{stem}_provenance.json'
     if record.get('arithmeticProvenance') is True and provenance_name not in files:
         raise Inventory('downloaded arithmetic provenance is missing')
+    if record.get('losslessExport') is True and lossless_name(stem) not in files:
+        raise Inventory('the downloaded lossless file is missing')
+    lossless_bytes = files.pop(lossless_name(stem), None)
+    if lossless_bytes is not None and provenance_name not in files:
+        raise Inventory('the downloaded lossless file has no provenance')
+    reference = run['model'].get('Arithmetic_Reference', 'current')
     if provenance_name in files:
         try:
             provenance = json.loads(files.pop(provenance_name))
         except (ValueError, UnicodeError) as error:
             raise Inventory('downloaded provenance is not JSON') from error
-        expected = {'arithmeticReference': run['model'].get('Arithmetic_Reference', 'current'),
-                    'model': expected_app_model(run)}
+        expected = {'arithmeticReference': reference, 'model': expected_app_model(run)}
+        if lossless_bytes is not None:
+            expected['lossless'] = {'file': lossless_name(stem), 'sha256': sha256_bytes(lossless_bytes)}
         if canonical(provenance) != canonical(expected):
-            raise Inventory('downloaded provenance differs from the analysis model or arithmetic reference')
+            raise Inventory('downloaded provenance differs from the analysis model, arithmetic reference or lossless file')
     contract = {*maps, f'{stem}_pol.gii', f'{stem}_ecc.gii'}
     if set(files) != contract:
         raise Inventory(f'the download is not the contract, polar angle and eccentricity maps: '
@@ -219,6 +240,11 @@ def compare_downloads(run, record, run_dir, matlab_dir, engine, engine_dir, scra
     ui_only = sorted(contract - set(maps))
     entries = {key: (kind, values) for key, kind, values in read_mat(matlab_dir / mat)}
     data, imaginary, roi, vertices = matlab_results(entries, run['precision'], labels)
+    lossless = lossless_entries = None
+    if lossless_bytes is not None:
+        lossless = read_lossless(lossless_bytes)
+        check_header(lossless, run, labels, roi, vertices, reference)
+        lossless_entries = matlab_maps(lossless, labels, data, imaginary, roi)
     scratch.mkdir(parents=True)
     for name, payload in files.items():
         (scratch / name).write_bytes(payload)
@@ -233,12 +259,16 @@ def compare_downloads(run, record, run_dir, matlab_dir, engine, engine_dir, scra
                  'srfDataCast': with_nan_signs(difference(cast, roi_values), cast, roi_values),
                  'srfDataPrecision': run['precision']}
         entry['imaginaryNonzero'] = 0 if imaginary is None else int(numpy.count_nonzero(imaginary[:, index]))
-        entry['class'] = ('exact' if not entry['imaginaryNonzero'] and entry['gifti']['exact']
-                          and entry['srfDataCast']['exact'] else 'differs')
+        if lossless_entries is None:
+            exact = not entry['imaginaryNonzero'] and entry['gifti']['exact'] and entry['srfDataCast']['exact']
+        else:
+            entry['lossless'] = {key: lossless_entries[index][key] for key in ('castExact', 'srfData', 'imaginary')}
+            exact = entry['gifti']['exact'] and entry['srfDataCast']['exact'] and lossless_entries[index]['exact']
+        entry['class'] = 'exact' if exact else 'differs'
         results.append(entry)
     for name in ui_only:
         surface_map(scratch / name, vertices)
-    return results, ui_only, engine_files(run, files, engine, engine_dir)
+    return results, ui_only, engine_files(run, files, engine, engine_dir, lossless)
 
 
 def compare_run(run, record, matlab, engine, roots, scratch):
@@ -310,6 +340,8 @@ def compare(plan, plan_sha, manifest, manifest_sha, ui_root, matlab_root, engine
         'exactMaps': count(maps, 'exact'),
         'differingMaps': count(maps, 'differs'),
         'uiOnlyFilesNotCompared': sum(len(run.get('notCompared', {}).get('uiOnly', [])) for run in runs),
+        'losslessDownloadRuns': sum('lossless' in result for result in engines.values()),
+        'losslessComparedMaps': sum('lossless' in entry for entry in maps),
         'engineFilesEqual': sum(len(result['equal']) for result in engines.values()),
         'engineFilesDiffer': sum(len(result['differ']) + len(result['onlyDownloaded']) + len(result['onlyEngine'])
                                  for result in engines.values()),
@@ -337,12 +369,15 @@ def compare(plan, plan_sha, manifest, manifest_sha, ui_root, matlab_root, engine
 def line(run):
     if 'downloads' in run:
         mark = lambda d: 'exact' if d['exact'] else f'{d["differing"]}' + (f'(nanSign {d["nanSignOnly"]})' if d.get('nanSignOnly') else '')
+        lossless = lambda m: (f' lossless(real={mark(m["lossless"]["srfData"])} imaginary={mark(m["lossless"]["imaginary"])} '
+                              f'castExact={m["lossless"]["castExact"]})' if 'lossless' in m else '')
         parts = [f'{m["label"]}: gifti={mark(m["gifti"])} '
-                 f'srfData(f32)={mark(m["srfDataCast"])} '
+                 f'srfData(f32)={mark(m["srfDataCast"])}{lossless(m)} '
                  f'imaginaryNonzero={m["imaginaryNonzero"]}' for m in run['maps']]
         engine = run['engineFiles']
         parts.append(f'engineFiles equal={len(engine["equal"])} differ={len(engine["differ"])} '
-                     f'onlyDownloaded={len(engine["onlyDownloaded"])} onlyEngine={len(engine["onlyEngine"])}')
+                     f'onlyDownloaded={len(engine["onlyDownloaded"])} onlyEngine={len(engine["onlyEngine"])}'
+                     + (f' lossless={"equal" if engine["lossless"]["equal"] else "differs"}' if 'lossless' in engine else ''))
         if run['class'] == 'ui-error':
             parts.append(f'downloads={run["downloads"]} uiError={run.get("uiError") or run.get("pageErrors")!r}')
         return ', '.join(parts)

@@ -13,12 +13,14 @@ import {
   createJob,
   exportGiis,
   exportConvention,
+  losslessName,
   predictTimecourse,
   prfProfile,
   readAnalysisInputs,
   runJob,
   shardRanges,
   version as coreVersion,
+  writeLossless,
 } from './node.js';
 
 const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
@@ -36,7 +38,8 @@ Runs SamSrf's SamSrfAnalysis on GIfTI time series, as the SamSrf web app does:
   rc   reverse-correlation pRF (samsrf_revcor_prf)
   cf   reverse-correlation connective fields (samsrf_revcor_cf)
 MODEL.json is a SamSrf model file (Models/Json). Writes SamSrf's GIfTI map set,
-<hemisphere>_<Name><suffix>_<map>.gii, and <prefix>_provenance.json into
+<hemisphere>_<Name><suffix>_<map>.gii, every map value in float64 (with any
+imaginary parts) in <prefix>_lossless.bin, and <prefix>_provenance.json into
 OUTPUT_DIR, which must be new or empty.
 
 Inputs:
@@ -228,8 +231,9 @@ export async function analyse(options, { log = () => {}, progress = () => {} } =
     }
     const prefix = `${options.hemisphere}_${job.modelName}${job.outSuffix}`;
     const files = exportGiis(merged.maps, prefix, null, convention);
+    const lossless = { name: losslessName(prefix), bytes: writeLossless(merged, { precision: model.json.Data_Precision === 'single' ? 'single' : 'double' }) };
     mkdirSync(options.output, { recursive: true });
-    for (const { name, bytes } of files) writeFileSync(join(options.output, name), bytes);
+    for (const { name, bytes } of [...files, lossless]) writeFileSync(join(options.output, name), bytes);
     const inputFiles = [
       ...options.runs.map((path) => ['run', path]),
       ['roi', options.roi], ['apertures', options.apertures], ['seed', options.seed],
@@ -250,11 +254,12 @@ export async function analyse(options, { log = () => {}, progress = () => {} } =
       analysedVertices: total,
       maps: merged.maps.values,
       outputs: files.map(({ name }) => name),
+      lossless: { file: lossless.name, sha256: sha256(lossless.bytes) },
       wallTimeSeconds: Number(((performance.now() - started) / 1000).toFixed(1)),
     };
     const provenanceName = `${prefix}_provenance.json`;
     writeFileSync(join(options.output, provenanceName), `${JSON.stringify(provenance, null, 2)}\n`);
-    return { prefix, files: [...files.map(({ name }) => name), provenanceName], analysedVertices: total, provenance };
+    return { prefix, files: [...files.map(({ name }) => name), lossless.name, provenanceName], analysedVertices: total, provenance };
   } finally {
     job.free();
   }

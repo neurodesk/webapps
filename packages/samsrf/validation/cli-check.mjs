@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // Runs a samsrf command line on the web app's pinned example (apps/samsrf/examples.json): reverse
 // correlation on the whole V1-V3 label in three worker shards, and the Nelder-Mead pRF fit and the
-// connective-field analysis on its first 200 vertices. Every GIfTI must be byte-identical to the same
-// job run in this process, in one piece, on the same files through src/node.js, and the fixed pins
-// below (file names, one value per vertex, R^2 above 0.1 inside the ROI) must hold.
+// connective-field analysis on its first 200 vertices. Every GIfTI and the lossless file must be
+// byte-identical to the same job run in this process, in one piece, on the same files through
+// src/node.js, and the fixed pins below (file names, one value per vertex, R^2 above 0.1 inside the
+// ROI, the lossless file's SHA-256 in the provenance) must hold.
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
@@ -11,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { analysisSpec, createJob, exportGiis, readAnalysisInputs, readGifti, runJob } from '../src/node.js';
+import { analysisSpec, createJob, exportGiis, losslessName, readAnalysisInputs, readGifti, runJob, writeLossless } from '../src/node.js';
 import { MODELS } from './example-inputs.mjs';
 
 const TOTAL_VERTICES = 134260;
@@ -92,16 +93,19 @@ try {
     const reference = readAnalysisInputs({ runs, ...inputs });
     const job = createJob(analysisSpec(reference, kind, MODELS[kind]));
     let expected;
+    let lossless;
     try {
-      expected = exportGiis(runJob(job).maps, `lh_${job.modelName}${job.outSuffix}`);
+      const merged = runJob(job);
+      expected = exportGiis(merged.maps, `lh_${job.modelName}${job.outSuffix}`);
+      lossless = { name: losslessName(`lh_${job.modelName}${job.outSuffix}`), bytes: writeLossless(merged, { precision: MODELS[kind].Data_Precision === 'single' ? 'single' : 'double' }) };
     } finally {
       job.free();
     }
     const names = (await readdir(output)).sort();
     const provenance = MAPS[kind][0].replace(/_pol\.gii$/, '_provenance.json');
     check(JSON.stringify(expected.map(({ name }) => name)) === JSON.stringify(MAPS[kind]), `${kind}: the in-process job exports ${MAPS[kind].length} maps`);
-    check(JSON.stringify(names) === JSON.stringify([...MAPS[kind], provenance].sort()), `${kind}: outputs ${names.join(', ')}`);
-    for (const { name, bytes } of expected) {
+    check(JSON.stringify(names) === JSON.stringify([...MAPS[kind], lossless.name, provenance].sort()), `${kind}: outputs ${names.join(', ')}`);
+    for (const { name, bytes } of [...expected, lossless]) {
       const actual = await readFile(join(output, name)).catch(() => Buffer.alloc(0));
       check(sha256(actual) === sha256(bytes), `${kind}: ${name} identical to the in-process job (${sha256(actual).slice(0, 12)})`);
     }
@@ -115,6 +119,8 @@ try {
     const inputCount = runs.length + Object.keys(inputs).length;
     check(record.analysedVertices === reference.roi.length && record.inputs?.length === inputCount,
       `${kind}: provenance records ${record.analysedVertices} vertices and ${record.inputs?.length} of ${inputCount} inputs`);
+    check(record.lossless?.file === lossless.name && record.lossless?.sha256 === sha256(lossless.bytes),
+      `${kind}: provenance names ${lossless.name} and its SHA-256`);
   }
 } finally {
   await rm(work, { recursive: true, force: true });

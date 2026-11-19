@@ -11,6 +11,7 @@ import {
   ProgressManager,
 } from "@neurodesk/webapp-components/ui";
 import { downloadFile } from "@neurodesk/webapp-components/file-io";
+import { sha256 } from "@neurodesk/webapp-components/file-io/hash";
 import { registerAppAutomation } from "@neurodesk/webapp-components/automation";
 import { zipSync } from "fflate";
 import { APP } from "./config.js";
@@ -428,6 +429,9 @@ threshold.addEventListener("input", () => {
 });
 opacity.addEventListener("input", () => void viewer.setOpacity(Number(opacity.value)));
 
+// The lossless file keeps what the float32 GIfTIs cannot: double values and imaginary parts (index.html CSS tooltip, README).
+const LOSSLESS_LABEL = "Lossless maps (float64)";
+
 function renderResult() {
   const rows = {};
   const order = mapOrder([...result.mapOf.values()]);
@@ -440,7 +444,8 @@ function renderResult() {
   });
   for (const file of files) {
     const name = result.mapOf.get(file.name);
-    rows[file.name] = { description: name ? mapLabel(name) : file.name, file, viewable: Boolean(name) && viewer.hasSurface };
+    const description = name ? mapLabel(name) : file.name === result.lossless.file ? LOSSLESS_LABEL : file.name;
+    rows[file.name] = { description, file, viewable: Boolean(name) && viewer.hasSurface };
   }
   results.render(rows, files.map((file) => file.name));
   $("downloadAll").disabled = false;
@@ -451,7 +456,8 @@ $("downloadAll").addEventListener("click", () => {
   const completed = result;
   void Promise.all(completed.files.map(async (file) => [file.name, new Uint8Array(await file.arrayBuffer())]))
     .then((entries) => {
-      entries.push([`${completed.outName}_provenance.json`, new TextEncoder().encode(`${JSON.stringify({ arithmeticReference: completed.arithmeticReference, model: completed.model }, null, 2)}\n`)]);
+      const provenance = { arithmeticReference: completed.arithmeticReference, model: completed.model, lossless: completed.lossless };
+      entries.push([`${completed.outName}_provenance.json`, new TextEncoder().encode(`${JSON.stringify(provenance, null, 2)}\n`)]);
       downloadFile(new File([zipSync(Object.fromEntries(entries), { level: 6 })], `${completed.outName}_maps.zip`, { type: "application/zip" }));
     })
     .catch((error) => status(error.message, { error: true }));
@@ -513,6 +519,8 @@ async function runSelected(signal) {
     });
     controller.signal.throwIfAborted();
     const files = output.files.map(({ name, bytes }) => new File([bytes], name, { type: "application/octet-stream" }));
+    const losslessFile = new File([output.lossless.bytes], output.lossless.name, { type: "application/octet-stream" });
+    const lossless = { file: losslessFile.name, sha256: await sha256(output.lossless.bytes, controller.signal) };
     const maps = new Map(output.maps.map(({ name, values }) => [name, values]));
     result = {
       analysis: kind,
@@ -520,14 +528,15 @@ async function runSelected(signal) {
       arithmeticReference: output.arithmeticReference,
       model: structuredClone(model),
       vertexCount: output.vertexCount,
-      files,
+      files: [...files, losslessFile],
+      lossless,
       maps,
       mapOf: new Map(output.files.filter(({ map }) => maps.has(map)).map(({ name, map }) => [name, map])),
       r2: output.maps.find(({ name }) => mapKind(name) === "r2")?.name,
       shown: null,
     };
     for (const line of output.summary) log.log(line, "info", "analysis");
-    for (const file of files) log.log(`Saved ${file.name}`, "info", "analysis");
+    for (const file of result.files) log.log(`Saved ${file.name}`, "info", "analysis");
     renderResult();
     $("outputSection").open = true;
     const firstMap = mapOrder([...result.mapOf.values()])[0];
@@ -538,12 +547,13 @@ async function runSelected(signal) {
     progress.end(outcome);
     status(`${outcome} (${seconds} s)`, { channel: "analysis" });
     return {
-      artifacts: files.map((file) => ({ role: "maps", file })),
+      artifacts: [...files.map((file) => ({ role: "maps", file })), { role: "lossless", file: losslessFile }],
       provenance: {
         method: `samsrf-${kind}`,
         engine: ENGINE.name,
         arithmeticReference: output.arithmeticReference,
         model: structuredClone(model),
+        lossless,
         normalise: $("normalise").checked,
         average: $("combine").value === "average",
       },

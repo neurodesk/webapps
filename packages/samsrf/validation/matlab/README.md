@@ -1587,6 +1587,30 @@ What the interface cannot show on this matrix:
   SamSrf's GIfTI export does, so a CSS map whose MATLAB values are complex
   stays `differs`, and only `compare_web_cli.py` holds its imaginary parts.
 
+**Lossless downloads (#897).** The app now adds `<stem>_lossless.bin` (the
+package README's "Lossless export") to the zip, and its provenance JSON names
+it with its SHA-256; `run_ui_matrix.mjs` records `losslessExport`, which makes
+the file required. `compare_ui_cli.py` then compares each map's float64 values
+and imaginary parts over `Srf.Roi` with MATLAB's `Srf.Data` as
+`compare_web_cli.py` compares the engine's (`lossless` in each map), and a map
+is exact only when those agree too; the engine gate also requires the file's
+arrays to equal the engine harness's `maps.f64` and `maps.imag.f64`. The two
+limits above do not apply to such a download. Downloads without the file are
+compared as before. `lossless.py` holds one lossless file, from a download or
+from the `samsrf` command line's output directory, to the engine harness and
+MATLAB for one plan run:
+
+```sh
+python3 $m/lossless.py $e/plan.json $e/bundle-sha256.json RUN_ID FILE $e/compiled-1 report.json \
+  --expect compiled-runtime --engine-root $e/browser-1
+```
+
+It exits 2 when refused, 1 when the file is not the engine's result, and 0
+otherwise; MATLAB differences are reported, not gated. `test_lossless.py`
+holds its reader and writer to the package's `writeLossless` byte for byte and
+covers its exit codes; `test_ui_cli.py` covers the lossless downloads. No
+matrix has been measured with lossless downloads yet.
+
 On the retained runs of 2026-11-17 (`ui-2`, the production bundle with module
 `d5ae6ba2…`, against the compiled image and with `run_browser_matrix.mjs`'s
 `browser-1` as the engine root), the comparator exits 1: 18 runs are
