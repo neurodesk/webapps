@@ -636,6 +636,10 @@ export function easterEggCannotRead(path) {
 // table to the job and to the skip trees.
 export const EASTER_EGG_INPUTS = Object.freeze(['site/', 'test/easter-egg.test.mjs', 'scripts/lib/landing-page.mjs', 'scripts/lib/apps-registry.mjs', 'registry/apps.yml', 'packages/analytics/src/', 'test-utils/test-durations-reporter.mjs', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']);
 
+// The app-plan job's easter_egg output: a pull request skips the job only on
+// `skip`; every other value, an empty one included, runs it (ci.yml).
+export const EASTER_EGG_OUTPUT = Object.freeze({ run: 'run', skip: 'skip' });
+
 // Why a pull request runs the homepage-easter-egg job: the changed paths
 // outside the trees it cannot read. Empty when every path lies in one.
 export function selectEasterEgg(changedPaths) {

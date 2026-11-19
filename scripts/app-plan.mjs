@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process';
 import { appendFile, readFile } from 'node:fs/promises';
-import { createAppPlan, changedManifests, changedPathsFromGit, UnreadableDiffError } from './lib/app-plan.mjs';
+import { createAppPlan, changedManifests, changedPathsFromGit, EASTER_EGG_OUTPUT, UnreadableDiffError } from './lib/app-plan.mjs';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
 import { FULL_CI_LABEL } from './lib/ci-usage.mjs';
 import { eventPullRequest, fullPlanBudget } from './lib/full-plan-budget.mjs';
@@ -149,7 +149,7 @@ const outputs = {
   full_plan: String(fullPlan),
   fallback_reason: fallback,
   selection_reasons: JSON.stringify(reasons),
-  easter_egg: String(easterEgg),
+  easter_egg: easterEgg ? EASTER_EGG_OUTPUT.run : EASTER_EGG_OUTPUT.skip,
 };
 
 // The same reasons for a person: the job summary on GitHub, stderr locally.

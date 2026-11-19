@@ -7,7 +7,7 @@ import { dirname, join, relative as relativePath, resolve as resolvePath } from 
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { parse, stringify } from 'yaml';
-import { AUTOMATION_CATALOG_READERS, changedPathsFromGit, CI_JOB_SCOPES, createAppPlan, EASTER_EGG_INPUTS, EASTER_EGG_JOB, EASTER_EGG_PACKAGES, easterEggCannotRead, INDEPENDENT_ROOT_DEV_DEPENDENCIES, RUNTIME_MANIFEST_READERS, UnreadableDiffError, SITE_KEY_READERS, SITE_ONLY_FILES } from '../scripts/lib/app-plan.mjs';
+import { AUTOMATION_CATALOG_READERS, changedPathsFromGit, CI_JOB_SCOPES, createAppPlan, EASTER_EGG_INPUTS, EASTER_EGG_JOB, EASTER_EGG_OUTPUT, EASTER_EGG_PACKAGES, easterEggCannotRead, INDEPENDENT_ROOT_DEV_DEPENDENCIES, RUNTIME_MANIFEST_READERS, UnreadableDiffError, SITE_KEY_READERS, SITE_ONLY_FILES } from '../scripts/lib/app-plan.mjs';
 import { APP_JOBS, carriedApps, NIGHTLY_JOBS, RERUN_JOBS, testedBase } from '../scripts/lib/tested-base.mjs';
 import { lockfileImpact } from '../scripts/lib/lockfile-impact.mjs';
 import { loadAppsRegistry, parseAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
@@ -1135,7 +1135,7 @@ test('the jobs a ci.yml change can narrow to test what CI_JOB_SCOPES says', asyn
   }
   // The plan decides the easter egg on a pull request only; workspace-contracts runs as on main, every package on every run.
   assert.equal(ci.jobs['homepage-easter-egg'].needs, 'app-plan');
-  assert.match(ci.jobs['homepage-easter-egg'].if, /\(github\.event_name != 'pull_request' \|\| needs\.app-plan\.result != 'success' \|\| needs\.app-plan\.outputs\.easter_egg == 'true'\) \}\}$/);
+  assert.match(ci.jobs['homepage-easter-egg'].if, new RegExp(String.raw`\(github\.event_name != 'pull_request' \|\| needs\.app-plan\.result != 'success' \|\| needs\.app-plan\.outputs\.easter_egg != '${EASTER_EGG_OUTPUT.skip}'\) \}\}$`));
   assert.equal(ci.jobs['app-plan'].outputs.easter_egg, '${{ steps.plan.outputs.easter_egg }}');
   assert.equal(ci.jobs['workspace-contracts'].needs, undefined);
   for (const step of ci.jobs['workspace-contracts'].steps.filter((step) => step.run)) assert.equal(step.if, step.run === 'pnpm lint:correctness' ? "${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}" : undefined, step.run);
@@ -1288,16 +1288,16 @@ test('the app-plan CLI runs the easter egg on every push, nightly and dispatch, 
   };
   // A docs-only pull request skips it; the same change pushed, scheduled or dispatched runs it.
   const pull = plan(docs, 'pull_request');
-  assert.equal(pull.easter_egg, 'false');
+  assert.equal(pull.easter_egg, EASTER_EGG_OUTPUT.skip);
   assert.deepEqual(pull.reasons.easter_egg, []);
-  for (const event of ['push', 'schedule', 'workflow_dispatch']) assert.equal(plan(docs, event).easter_egg, 'true', event);
+  for (const event of ['push', 'schedule', 'workflow_dispatch']) assert.equal(plan(docs, event).easter_egg, EASTER_EGG_OUTPUT.run, event);
   // A pull request that also edits the reporter (S10) runs it.
   const both = plan(reporter, 'pull_request');
-  assert.equal(both.easter_egg, 'true');
+  assert.equal(both.easter_egg, EASTER_EGG_OUTPUT.run);
   assert.deepEqual(both.reasons.easter_egg, ['test-utils/test-durations-reporter.mjs: outside the trees the job cannot read']);
   // A site dispatch runs it whatever changed; a gpu dispatch never does.
-  assert.equal(plan(docs, 'workflow_dispatch', '--scope', 'site').easter_egg, 'true');
-  assert.equal(plan(reporter, 'workflow_dispatch', '--scope', 'gpu').easter_egg, 'false');
+  assert.equal(plan(docs, 'workflow_dispatch', '--scope', 'site').easter_egg, EASTER_EGG_OUTPUT.run);
+  assert.equal(plan(reporter, 'workflow_dispatch', '--scope', 'gpu').easter_egg, EASTER_EGG_OUTPUT.skip);
   // workspace-contracts tests every package on every run; the plan lists none.
   for (const output of ['packages', 'all_packages', 'has_packages']) assert.equal(pull[output], undefined, output);
 });
@@ -1921,7 +1921,7 @@ test('a diff git cannot read is not an empty one: the plan tests everything', as
   assert.match(plan.fallback_reason, /^the changed paths could not be read: git diff 0123456789abcdef0123456789abcdef01234567\.\.\.HEAD failed/);
   assert.equal(plan.all_apps, 'true');
   assert.equal(plan.has_site, 'true');
-  assert.equal(plan.easter_egg, 'true');
+  assert.equal(plan.easter_egg, EASTER_EGG_OUTPUT.run);
   assert.match(JSON.parse(plan.selection_reasons).easter_egg[0], /^no changed paths/);
 });
 

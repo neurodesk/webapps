@@ -28,7 +28,7 @@ const REQUIRED = {
   'browser-e2e-gpu': { needs: ['app-plan'], if: "needs.app-plan.outputs.has_gpu_apps == 'true' && (github.event_name != 'pull_request' || needs.app-plan.outputs.all_apps != 'true')" },
   'composite-site': { needs: ['app-plan'], if: "(github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name == 'push' || github.event_name == 'schedule' || needs.app-plan.outputs.has_site == 'true')" },
   'agent-interactions': { needs: ['composite-site'], if: "needs.composite-site.outputs.agent_site_ready == 'true'" },
-  'homepage-easter-egg': { needs: ['app-plan'], if: "${{ !cancelled() && github.event.action != 'converted_to_draft' && inputs.scope != 'gpu' && (github.event_name != 'pull_request' || needs.app-plan.result != 'success' || needs.app-plan.outputs.easter_egg == 'true') }}" },
+  'homepage-easter-egg': { needs: ['app-plan'], if: "${{ !cancelled() && github.event.action != 'converted_to_draft' && inputs.scope != 'gpu' && (github.event_name != 'pull_request' || needs.app-plan.result != 'success' || needs.app-plan.outputs.easter_egg != 'skip') }}" },
 };
 const REQUIRED_JOBS = Object.keys(REQUIRED);
 const GUARDS = { 'app-plan': ['check:integration', 'pnpm check:integration'], 'workspace-contracts': ['test:contracts', 'pnpm test:contracts'] };
@@ -333,6 +333,37 @@ test('no required job needs a job that can be skipped on a run where it is due',
   // A condition the simulation cannot evaluate fails instead of passing.
   assert.throws(() => withEdit((copy) => { copy.jobs['app-tests'].if = "contains(github.event.pull_request.labels.*.name, 'x')"; }), /cannot read/);
   assert.throws(() => withEdit((copy) => { copy.jobs['app-tests'].if = "github.actor != 'bot'"; }), /reads github\.actor, which the guard does not model/);
+});
+
+// S10: running is the default. Only a plan that succeeded and wrote `skip` skips the easter egg on a pull request.
+test('a pull request skips the easter egg only when the plan succeeded and wrote skip', async () => {
+  const condition = compile((await loadCi()).jobs['homepage-easter-egg'].if);
+  const starts = ({ action = 'synchronize', draft = false, result = 'success', output }) => {
+    const values = {
+      'github.event_name': 'pull_request',
+      'github.event.action': action,
+      'github.event.pull_request.draft': draft,
+      'inputs.scope': null,
+      'needs.app-plan.result': result,
+      'needs.app-plan.outputs.easter_egg': output ?? '',
+    };
+    return condition({
+      call: (name) => ({ always: true, cancelled: false, failure: result === 'failure', success: result === 'success' })[name],
+      read: (path) => (Object.hasOwn(values, path) ? values[path] : fail(`the case does not set ${path}`)),
+    });
+  };
+  for (const [action, draft] of [['opened', true], ['opened', false], ['synchronize', true], ['synchronize', false], ['reopened', false], ['ready_for_review', false]]) {
+    const label = `${action}${draft ? ' draft' : ''}`;
+    assert.equal(starts({ action, draft, output: 'skip' }), false, label);
+    // GitHub compares strings without case; the planner writes only `run` or `skip`.
+    assert.equal(starts({ action, draft, output: 'SKIP' }), false, label);
+    for (const output of ['run', '', undefined, 'true', 'false', 'skipped', ' skip']) assert.equal(starts({ action, draft, output }), true, `${label}: ${JSON.stringify(output)}`);
+    for (const result of ['failure', 'cancelled', 'skipped']) {
+      for (const output of ['skip', '']) assert.equal(starts({ action, draft, result, output }), true, `${label}: app-plan ${result}, ${JSON.stringify(output)}`);
+    }
+  }
+  // Converting a pull request to draft starts nothing.
+  assert.equal(starts({ action: 'converted_to_draft', draft: true, result: 'skipped' }), false);
 });
 
 test('the guard evaluates conditions as GitHub does', () => {

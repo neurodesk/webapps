@@ -127,12 +127,13 @@ test('a dispatched run asks for its scope and only the jobs of that scope start'
   }
   assert.equal(starts('workspace-contracts', { scope: 'site' }), false);
   // A dispatch runs the easter egg in every scope but gpu, whatever the plan says, as a push and the nightly do.
-  for (const scope of ['affected', 'all', 'site']) assert.equal(starts('homepage-easter-egg', { scope }, { easter_egg: 'false' }), true, scope);
-  for (const event_name of ['push', 'schedule']) assert.equal(starts('homepage-easter-egg', {}, { easter_egg: 'false' }, { event_name, event: {} }), true, event_name);
-  // A pull request skips it only when the plan succeeded and said so.
+  for (const scope of ['affected', 'all', 'site']) assert.equal(starts('homepage-easter-egg', { scope }, { easter_egg: 'skip' }), true, scope);
+  for (const event_name of ['push', 'schedule']) assert.equal(starts('homepage-easter-egg', {}, { easter_egg: 'skip' }, { event_name, event: {} }), true, event_name);
+  // A pull request skips it only when the plan succeeded and wrote skip (every case: test/ci-required-jobs.test.mjs).
   const pull = { event_name: 'pull_request', event: { action: 'synchronize', pull_request: { draft: false } } };
-  assert.equal(starts('homepage-easter-egg', {}, { easter_egg: 'false' }, pull), false);
-  assert.equal(starts('homepage-easter-egg', {}, { easter_egg: 'true' }, pull), true);
+  assert.equal(starts('homepage-easter-egg', {}, { easter_egg: 'skip' }, pull), false);
+  assert.equal(starts('homepage-easter-egg', {}, { easter_egg: 'run' }, pull), true);
+  assert.equal(starts('homepage-easter-egg', {}, { easter_egg: '' }, pull), true);
   assert.equal(starts('homepage-easter-egg', {}, {}, pull, 'failure'), true);
   // The plan decides the site build of a dispatch (has_site is false for the gpu scope); pushes and the nightly always build it.
   assert.equal(starts('composite-site', { scope: 'gpu' }, { has_site: 'false' }), false);

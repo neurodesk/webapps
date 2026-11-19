@@ -612,9 +612,9 @@ jobs:
     needs: app-plan
     # It runs on every push, nightly and dispatch, as before, even when the plan
     # fails (!cancelled()). A pull request skips it only when the plan succeeded
-    # and found every changed path in a tree it cannot read
-    # (easterEggCannotRead in scripts/lib/app-plan.mjs).
-    if: ${{ !cancelled() && github.event.action != 'converted_to_draft' && inputs.scope != 'gpu' && (github.event_name != 'pull_request' || needs.app-plan.result != 'success' || needs.app-plan.outputs.easter_egg == 'true') }}
+    # and wrote `skip`, having found every changed path in a tree it cannot read
+    # (easterEggCannotRead in scripts/lib/app-plan.mjs); any other value runs it.
+    if: ${{ !cancelled() && github.event.action != 'converted_to_draft' && inputs.scope != 'gpu' && (github.event_name != 'pull_request' || needs.app-plan.result != 'success' || needs.app-plan.outputs.easter_egg != 'skip') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
