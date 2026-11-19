@@ -1827,35 +1827,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.5.20261111",
-          "url": "https://github.com/neurodesk/webapps/releases/download/white-matter-lesions-v0.5.20261111/flames-0.5.20261111-linux-x64.tar.gz",
-          "sha256": "c3df67d68a45573e3b0d618ae2e355b72a036a446226e7d06af5dfb2c58a66c8",
-          "bytes": 244854910,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/white-matter-lesions-v0.5.20261111/flames-0.5.20261111-linux-x64.tar.gz.validation.txt",
+          "version": "0.5.20261119",
+          "url": "https://github.com/neurodesk/webapps/releases/download/white-matter-lesions-v0.5.20261119/flames-0.5.20261119-linux-x64.tar.gz",
+          "sha256": "be19088cbe196209f3e6f8f91fe7a7d7f9c9286fc0cfb9fa962a6badc37360dd",
+          "bytes": 244857582,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/white-matter-lesions-v0.5.20261119/flames-0.5.20261119-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf flames-0.5.20261111-linux-x64.tar.gz\n./flames-0.5.20261111-linux-x64/flames flair.nii.gz results"
+          "command": "tar -xzf flames-0.5.20261119-linux-x64.tar.gz\n./flames-0.5.20261119-linux-x64/flames flair.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.5.20261111",
-          "url": "https://github.com/neurodesk/webapps/releases/download/white-matter-lesions-v0.5.20261111/flames-0.5.20261111-macos-arm64.pkg",
-          "sha256": "5e57dc8e7e428f32a405b9f900bb9f979a12f08c910d59e9589c5a6ff5089a9e",
-          "bytes": 249334084,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/white-matter-lesions-v0.5.20261111/flames-0.5.20261111-macos-arm64.pkg.validation.txt",
+          "version": "0.5.20261119",
+          "url": "https://github.com/neurodesk/webapps/releases/download/white-matter-lesions-v0.5.20261119/flames-0.5.20261119-macos-arm64.pkg",
+          "sha256": "769ca2be7c8a99e6021bfd94f7f637177cd97da8610cee61ca7853a07bc06b19",
+          "bytes": 249340101,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/white-matter-lesions-v0.5.20261119/flames-0.5.20261119-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg flames-0.5.20261111-macos-arm64.pkg -target /\nflames self-check\nflames flair.nii.gz results"
+          "command": "sudo installer -pkg flames-0.5.20261119-macos-arm64.pkg -target /\nflames self-check\nflames flair.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.5.20261111",
-          "url": "https://github.com/neurodesk/webapps/releases/download/white-matter-lesions-v0.5.20261111/flames-0.5.20261111-windows-x64.zip",
-          "sha256": "84f0c768cd630c0b058e1d8950b993e60610aeefde557728a5a36ad10a751b52",
-          "bytes": 249674876,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/white-matter-lesions-v0.5.20261111/flames-0.5.20261111-windows-x64.zip.validation.txt",
+          "version": "0.5.20261119",
+          "url": "https://github.com/neurodesk/webapps/releases/download/white-matter-lesions-v0.5.20261119/flames-0.5.20261119-windows-x64.zip",
+          "sha256": "dad004d70d631d667c3a8c1303f05d8007840b7e9c6b3f6ac8f63563a6ea715e",
+          "bytes": 250041865,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/white-matter-lesions-v0.5.20261119/flames-0.5.20261119-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\flames-0.5.20261111-windows-x64.zip -DestinationPath .\n.\\flames-0.5.20261111-windows-x64\\flames.exe flair.nii.gz results"
+          "command": "Expand-Archive -Path .\\flames-0.5.20261119-windows-x64.zip -DestinationPath .\n.\\flames-0.5.20261119-windows-x64\\flames.exe flair.nii.gz results"
         }
       ],
       "containers": []
