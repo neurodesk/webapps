@@ -1139,35 +1139,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.6.20261111",
-          "url": "https://github.com/neurodesk/webapps/releases/download/mri2vid-v0.6.20261111/mri2vid-0.6.20261111-linux-x64.tar.gz",
-          "sha256": "507650612fdb7d744e73d9e266ed3c7e301e79be8768c2ee8fc13f447191e0e4",
-          "bytes": 47945330,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/mri2vid-v0.6.20261111/mri2vid-0.6.20261111-linux-x64.tar.gz.validation.txt",
+          "version": "0.6.20261119",
+          "url": "https://github.com/neurodesk/webapps/releases/download/mri2vid-v0.6.20261119/mri2vid-0.6.20261119-linux-x64.tar.gz",
+          "sha256": "192d651552ac4ea3435cee01e46ecefed67d48dbfc48b5fa301b0ac370032529",
+          "bytes": 47947630,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/mri2vid-v0.6.20261119/mri2vid-0.6.20261119-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf mri2vid-0.6.20261111-linux-x64.tar.gz\n./mri2vid-0.6.20261111-linux-x64/mri2vid T1.nii.gz videos --orientation axial"
+          "command": "tar -xzf mri2vid-0.6.20261119-linux-x64.tar.gz\n./mri2vid-0.6.20261119-linux-x64/mri2vid T1.nii.gz videos --orientation axial"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.6.20261111",
-          "url": "https://github.com/neurodesk/webapps/releases/download/mri2vid-v0.6.20261111/mri2vid-0.6.20261111-macos-arm64.pkg",
-          "sha256": "e9c2e539dcd6ba500f7d827b4e0c9e2ae7af7c83beea546ba68d9a4d2da5c352",
-          "bytes": 41425244,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/mri2vid-v0.6.20261111/mri2vid-0.6.20261111-macos-arm64.pkg.validation.txt",
+          "version": "0.6.20261119",
+          "url": "https://github.com/neurodesk/webapps/releases/download/mri2vid-v0.6.20261119/mri2vid-0.6.20261119-macos-arm64.pkg",
+          "sha256": "5e77e52e222314a3808c83b552551ec47ab6d429b326f6094bbed5338ee39545",
+          "bytes": 41425996,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/mri2vid-v0.6.20261119/mri2vid-0.6.20261119-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg mri2vid-0.6.20261111-macos-arm64.pkg -target /\nmri2vid self-check\nmri2vid T1.nii.gz videos --orientation axial"
+          "command": "sudo installer -pkg mri2vid-0.6.20261119-macos-arm64.pkg -target /\nmri2vid self-check\nmri2vid T1.nii.gz videos --orientation axial"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.6.20261111",
-          "url": "https://github.com/neurodesk/webapps/releases/download/mri2vid-v0.6.20261111/mri2vid-0.6.20261111-windows-x64.zip",
-          "sha256": "4b4d986fa8d3f911130d36fc261c7e9774776c642d2ac06f1630d8e033b57609",
-          "bytes": 37667085,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/mri2vid-v0.6.20261111/mri2vid-0.6.20261111-windows-x64.zip.validation.txt",
+          "version": "0.6.20261119",
+          "url": "https://github.com/neurodesk/webapps/releases/download/mri2vid-v0.6.20261119/mri2vid-0.6.20261119-windows-x64.zip",
+          "sha256": "acbf2eaed05138a0fd8e62e0ec367cfc0a4c5b4dd6c14a092d0a55fa69421a2a",
+          "bytes": 37669198,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/mri2vid-v0.6.20261119/mri2vid-0.6.20261119-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\mri2vid-0.6.20261111-windows-x64.zip -DestinationPath .\n.\\mri2vid-0.6.20261111-windows-x64\\mri2vid.exe T1.nii.gz videos --orientation axial"
+          "command": "Expand-Archive -Path .\\mri2vid-0.6.20261119-windows-x64.zip -DestinationPath .\n.\\mri2vid-0.6.20261119-windows-x64\\mri2vid.exe T1.nii.gz videos --orientation axial"
         }
       ],
       "containers": []
