@@ -49,13 +49,14 @@ const isClassified = node => isElement(node) && node.matches(CLASSIFIED) && node
  * and `agentRunning` that a run the tools started is going.
  */
 export function interactionEffect(event, doc, { person = event.isTrusted, touched = false, agentRunning = false } = {}) {
+  const path = event.composedPath().filter(isElement);
+  // The agent's own file dialog reports its files with nd-files too.
+  if (path.some(node => node.matches(OUTSIDE))) return null;
   if (event.type === 'nd-example-status') return event.detail?.state === 'loading' ? 'end' : null;
   if (event.type === 'nd-handoff' || event.type === 'neurodesk-automation-reset') return 'end';
   if (event.type === 'nd-files') return touched ? 'end' : null;
   if (event.type === 'nd-run-start') return touched && !agentRunning ? 'end' : null;
   if (!person) return null;
-  const path = event.composedPath().filter(isElement);
-  if (path.some(node => node.matches(OUTSIDE))) return null;
   const [target] = path;
   const inPage = !target || target.getRootNode() === doc;
   const owner = target?.ownerDocument ?? doc;

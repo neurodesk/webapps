@@ -1207,6 +1207,12 @@ test('what each interaction does to the examination is decided in one place', as
   };
   assert.equal(touchedThen(new window.CustomEvent('nd-files', { bubbles: true, detail: { files: [] } }), document.getElementById('t1')), 'ended', 'a remove the person pressed, reported with nd-files');
   assert.equal(touchedThen(new window.CustomEvent('nd-run-start', { bubbles: true }), document.body), 'ended', 'a run the person started');
+  const prompt = document.createElement('dialog');
+  prompt.id = 'neurodeskAgentPrompt';
+  const promptField = document.createElement('div');
+  prompt.append(promptField);
+  document.body.append(prompt);
+  assert.equal(touchedThen(new window.CustomEvent('nd-files', { bubbles: true, composed: true, detail: { files: [] } }), promptField), 'touched', 'the agent\'s own file dialog reporting its files');
   const shadowed = shadow.getElementById('shadowed');
   Object.defineProperty(shadowed, 'files', { configurable: true, value: [new File(['s'], 'shadow-pick.nii')] });
   assert.equal(effect(shadowed, new window.Event('input', { bubbles: true, composed: true })), 'ended', 'a pick in a shadow root counts');

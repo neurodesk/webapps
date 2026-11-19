@@ -100,17 +100,17 @@ async function hold(page, { role, count }) {
   const field = page.locator(`${PROMPT} input[type="file"]`).first();
   await field.waitFor({ state: 'attached', timeout: 10000 });
   await field.setInputFiles(Array.from({ length: count }, (_, index) => ({ name: `agent-held-${index + 1}.nii.gz`, mimeType: 'application/gzip', buffer: syntheticNifti({ dims: [8, 8, 8] }) })));
-  const held = await page.evaluate(() => Promise.race([globalThis.interactionHold, new Promise(resolve => { setTimeout(() => resolve('{}'), 10000); })]));
-  return Boolean(JSON.parse(held).files);
+  const held = await page.evaluate(() => Promise.race([globalThis.interactionHold, new Promise(resolve => { setTimeout(() => resolve('{"pending":true}'), 10000); })]));
+  return JSON.parse(held).files ? null : held;
 }
 
 // What interactionEffect makes of the events one action sends, followed as the tracker follows them:
 // 'ended' once any event ends the examination, else 'touched' once any touches it, else 'kept'.
-async function predict(page) {
-  await page.evaluate(async href => {
+async function predict(page, touched) {
+  await page.evaluate(async ([href, touched]) => {
     const { interactionEffect } = await import(href);
     globalThis.interactionPrediction?.stop();
-    const prediction = { outcome: 'kept', touched: false };
+    const prediction = { outcome: 'kept', touched };
     const judge = event => {
       const agentRunning = Boolean(globalThis.neurodeskAutomation?.running());
       const effect = interactionEffect(event, document, { touched: prediction.touched, agentRunning });
@@ -130,7 +130,7 @@ async function predict(page) {
     for (const [target, type, capture] of listeners) target.addEventListener(type, judge, capture);
     prediction.stop = () => listeners.forEach(([target, type, capture]) => target.removeEventListener(type, judge, capture));
     globalThis.interactionPrediction = prediction;
-  }, `${origin}/shell-adapters/components/webmcp/tool-inputs.js`);
+  }, [`${origin}/shell-adapters/components/webmcp/tool-inputs.js`, touched]);
 }
 
 // Actions the person can take; each element is marked so the action finds it again.
@@ -239,9 +239,11 @@ async function resumeDeclined(page, run, held) {
 
 // One action on the page as it stands: the agent holds a file, the person acts, the tools answer.
 async function attempt(context, page, app, target, run, action, outcome) {
-  if (!await hold(page, target)) return 'the agent could not hold a file';
-  const held = Object.values((await call(page, 'app_describe')).inputs).flat().map(file => file.name);
-  await predict(page);
+  const refused = await hold(page, target);
+  if (refused) return `the agent could not hold a file: ${refused.slice(0, 200)}`;
+  const before = await call(page, 'app_describe');
+  const held = Object.values(before.inputs).flat().map(file => file.name);
+  await predict(page, before.touched);
   try {
     await perform(context, page, action);
   } catch (error) {
