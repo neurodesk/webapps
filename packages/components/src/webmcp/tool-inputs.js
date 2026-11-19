@@ -222,11 +222,16 @@ export function createToolInputs({ doc, automation, isPerson = event => event.is
   // Same-origin frames are part of the workspace, at any depth and inside open shadow roots; the
   // browser hides a cross-origin frame's events. Their windows get the same listeners. A frame's new
   // document is watched from the first animation frame after it exists, and the navigation itself
-  // touches the examination, so the person cannot act in it unseen. A shadow root attached to an
-  // element that is neither inserted later nor a custom element defined later is not found.
+  // touches the examination, so the person cannot act in it unseen. A frame whose document the page
+  // cannot reach (another origin's) is followed on every animation frame while it is attached, so a
+  // document of the page's origin that replaces it is watched from its first frame too, and that
+  // change touches the examination as a navigation does. A shadow root attached to an element that is
+  // neither inserted later nor a custom element defined later is not found.
   const documents = new WeakSet();
   const trees = new WeakSet();
   const followed = new WeakMap();
+  // Frames last seen showing a document the page cannot reach.
+  const hidden = new WeakSet();
   function watchDocument(target, frame = null) {
     if (documents.has(target)) return;
     documents.add(target);
@@ -242,7 +247,8 @@ export function createToolInputs({ doc, automation, isPerson = event => event.is
     watchTree(target);
   }
   // Watches each document the frame shows from the animation frame after it appears until it has
-  // loaded; after `leaving` hides, from the first frame its successor exists.
+  // loaded; after `leaving` hides, from the first frame its successor exists; while the frame shows
+  // a document the page cannot reach, until it shows one it can and that one has loaded.
   function follow(frame, leaving = null) {
     if (followed.has(frame)) followed.delete(frame);
     const run = {};
@@ -255,9 +261,13 @@ export function createToolInputs({ doc, automation, isPerson = event => event.is
       } catch {
         frameDoc = null;
       }
-      if (frameDoc && frameDoc !== leaving) watchDocument(frameDoc, frame);
+      if (!frameDoc) hidden.add(frame);
+      else if (frameDoc !== leaving) {
+        if (hidden.delete(frame)) touch();
+        watchDocument(frameDoc, frame);
+      }
       const settled = frameDoc && frameDoc !== leaving && frameDoc.readyState === 'complete';
-      if (!frame.isConnected || !frameDoc || settled) followed.delete(frame);
+      if (!frame.isConnected || settled) followed.delete(frame);
       else if (view.requestAnimationFrame) view.requestAnimationFrame(step);
       else view.setTimeout(step, 16);
     };
