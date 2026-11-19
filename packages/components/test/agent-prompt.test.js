@@ -14,7 +14,8 @@ function page(url = 'about:blank') {
   return window.document;
 }
 
-const tick = () => new Promise(resolve => setTimeout(resolve, 5));
+// A prompt shows a task after the one before it answers; under load that task can come late.
+const tick = () => new Promise(resolve => setTimeout(resolve, 30));
 const dialog = document => document.getElementById('neurodeskAgentPrompt');
 const buttons = document => [...dialog(document).querySelectorAll('.nd-dialog-actions button')];
 const press = (document, text) => buttons(document).find(button => button.textContent === text).click();

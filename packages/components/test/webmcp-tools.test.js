@@ -1367,7 +1367,7 @@ test('a resume queued behind the agent\'s file request names the file chosen in 
   const tools = webMcpTools({ contract: contract(), dispatch: automation.dispatch, inputs, examples: () => examples,
     requestFiles: prompts.requestFiles, confirmResume: prompts.confirmResume });
   const call = (name, input = {}) => tools.find(tool => tool.name === name).execute(input, { signal: new AbortController().signal });
-  const tick = () => new Promise(resolve => setTimeout(resolve, 5));
+  const tick = () => new Promise(resolve => setTimeout(resolve, 30));
   const prompt = () => window.document.getElementById('neurodeskAgentPrompt');
   hold(inputs, 'image', [new File(['original'], 'original.nii')]);
   const run = await call('run_run');
