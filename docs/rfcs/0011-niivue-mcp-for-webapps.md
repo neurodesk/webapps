@@ -442,12 +442,20 @@ started is asking. Closing a dialog declines it, and an aborted call closes it.
   can do to the agent's files: picking an example in NiiMath, opening a file
   during a run and after one, dropping a file, QSMbly's mask remove button,
   dcm2niix's settings and Clear, a drop on DWI2TRX's viewer, a handoff from
-  DICOM View to White matter lesions, ZARRo's store approval, and Brain
-  Extraction's viewer permissions, redirect refusal and fetch approval.
+  DICOM View to White matter lesions, ZARRo's store approval and its reads
+  against a local server that redirects to another (none reaches the second),
+  Brain Extraction's viewer permissions, redirect refusal and fetch approval,
+  touches from a wheel, a drag and clicks in same-origin frames (one that
+  navigates, one added inside an open shadow root), and the resume flow:
+  NiiMath's example run, a wheel and a click in the viewer, then `runs_get`
+  and `outputs_download` after Allow, a declined result after Decline, and
+  nothing to resume after the person opens their own file.
   `node test/webmcp-interaction.smoke.mjs` holds a file in every app and
-  performs each trusted action the workspace offers (every file input, every
-  remove or clear button, a select, a checkbox, a text field, a canvas); each
-  must release it.
+  performs each trusted action the workspace offers once the app is ready
+  (every classified file and folder input, every remove or clear button, and
+  every visible select, checkbox, text field and canvas, at most 40 per app);
+  each must touch or end the examination as `interactionEffect` judges the
+  events it sent, and each touch must make the agent's next run ask to resume.
   `node test/webmcp.smoke.mjs` checks every app of the built site at 1440 and
   390 px in Chrome's own WebMCP (it fails without it unless
   `WEBMCP_STAND_IN=1`): the full tool set, `app_describe` with every loadable
@@ -458,14 +466,18 @@ started is asking. Closing a dialog declines it, and an aborted call closes it.
   passed in 360 s. CI runs it in the site-catalog job on the apps the plan
   selects (`SMOKE_APPS`), and on every app when the plan covers the whole
   catalogue; the interaction smoke runs beside it the same way, and the
-  examination smoke over its fixed apps on every site build. The same day the
-  examination smoke passed its 16 checks in 35 s, and the interaction smoke
-  covered 62 apps (ZARRo holds no files) in 919 s: 371 of 372 trusted actions
-  ran and each released the agent's files. The one not performed is
-  VesselBoost's threshold field, which sits in a step the app keeps disabled
-  until preprocessing has run; `test/webmcp-interaction-skips.json` gives that
+  examination smoke over its fixed apps on every site build. On 19 November
+  2026, after the fourth review's fixes and on a fresh build of the final head,
+  the examination smoke passed its 19 checks in 43 to 56 s in each of seven
+  runs, two of them beside the interaction smoke. The interaction smoke ran in
+  four parallel shards in 758 s: 62 apps passed and ZARRo, which holds no
+  files, is named in `test/webmcp-interaction-skips.json`. Of 541 actions, 400
+  touched the examination and each made the next run ask to resume, 137 ended
+  it, and the 4 not performed are VesselBoost's inference controls, which the
+  app keeps disabled until preprocessing has run; the skip list gives that
   reason, and any other unperformed action, or an app with none performed,
-  fails.
+  fails. No app had more than 40 actions. `node test/webmcp.smoke.mjs` passed
+  all 63 apps in 432 s on that build.
 - **Full runs.** `WEBMCP_RUNS=1` also loads each app's loadable examples
   (`WEBMCP_EXAMPLES=first`: only the first), runs each with the tool and
   parameters `app_describe` gives and saves an output, through the tools
