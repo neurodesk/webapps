@@ -822,8 +822,11 @@ function registryUses(text, callees) {
     const pattern = code.slice(openingBrace(code, before.length - 1), before.length);
     if (/\bsite\b|\.\.\.|\[/.test(pattern)) unknown.push(`destructures ${pattern.replace(/\s+/g, ' ')} from the loader`);
   }
-  // A computed member of the loader's result: `(await loadAppsRegistry())[key]`.
-  for (const match of code.matchAll(/(?:loadAppsRegistry|parseAppsRegistry)\([^()]*\)\s*\)?\s*\??\.?\s*\[/g)) unknown.push(`${match[0].replace(/\s+/g, ' ')} (a computed member of the loader's result)`);
+  // A computed member of the loader's result: `(await loadAppsRegistry())[key]`, whatever its arguments hold.
+  for (const match of code.matchAll(/\b(?:loadAppsRegistry|parseAppsRegistry)\s*\(/g)) {
+    const after = code.slice(closing(code, match.index + match[0].length - 1) + 1);
+    if (/^\s*\)?\s*(?:\?\.)?\s*\[/.test(after)) unknown.push(`${match[0]}...)${after.slice(0, 20).split('\n')[0]} (a computed member of the loader's result)`);
+  }
   for (const name of names) {
     for (const match of code.matchAll(new RegExp(String.raw`(?:(?<=\.\.\.)|(?<![\w.$'"\`/-]))${name}(?![\w$'"\`/-])`, 'g'))) {
       const [before, after] = [code.slice(0, match.index), code.slice(match.index + name.length)];
@@ -927,6 +930,8 @@ test('the site key reader check finds the keys a text reads, and every key of wh
     "const { [`si${'te'}`]: section } = await loadAppsRegistry();",
     "const section = (await loadAppsRegistry())[key];",
     'const section = parseAppsRegistry(text)[key];',
+    "const section = parseAppsRegistry(readFileSync(path, 'utf8'))[key];",
+    "const section = (await loadAppsRegistry(join(root, 'registry'))) [key];",
     'return registry;',
     'unknownHelper(registry, id);',
   ]) assert.ok(everything(text), text);
