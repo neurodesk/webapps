@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       scope:
-        description: "affected: the apps the branch changes since it left main (main: like a push, since the last finished run); all: every app; gpu: only the macOS GPU suite of the affected apps; site: only the composite site and agentic checks"
+        description: "affected: the apps the branch changes since it left main (main: like a push, since the last finished run); all: every app; gpu: only the macOS GPU suite of the affected apps; site: only the composite site, agentic checks and homepage easter egg"
         type: choice
         options: [affected, all, gpu, site]
         default: affected
@@ -62,6 +62,7 @@ jobs:
       selected_ids: ${{ steps.plan.outputs.selected_ids }}
       withheld: ${{ steps.plan.outputs.withheld }}
       full_plan: ${{ steps.plan.outputs.full_plan }}
+      easter_egg: ${{ steps.plan.outputs.easter_egg }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -290,6 +291,8 @@ jobs:
 
   site-runtime:
     needs: composite-site
+    # Due when the site was built; a skipped build leaves nothing to check.
+    if: needs.composite-site.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -313,6 +316,8 @@ jobs:
 
   site-audit:
     needs: composite-site
+    # Due when the site was built; a skipped build leaves nothing to check.
+    if: needs.composite-site.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -371,6 +376,8 @@ jobs:
 
   site-e2e:
     needs: composite-site
+    # Due when the site was built; a skipped build leaves nothing to check.
+    if: needs.composite-site.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -409,6 +416,8 @@ jobs:
 
   site-mobile:
     needs: composite-site
+    # Due when the site was built; a skipped build leaves nothing to check.
+    if: needs.composite-site.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -437,6 +446,8 @@ jobs:
   # Catalogue-level and cross-browser checks: the same on every event.
   site-catalog:
     needs: composite-site
+    # Due when the site was built; a skipped build leaves nothing to check.
+    if: needs.composite-site.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -474,7 +485,8 @@ jobs:
   # Live model calls start only once every deterministic site check passed.
   processing-workflows:
     needs: [composite-site, site-runtime, site-audit, site-e2e, site-mobile, site-catalog]
-    if: github.event_name == 'workflow_dispatch' && inputs.agentic_mode == 'pipeline'
+    # A dispatch with scope affected builds the site only when its plan needs it (AGENTS.md).
+    if: github.event_name == 'workflow_dispatch' && inputs.agentic_mode == 'pipeline' && needs.composite-site.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -752,7 +764,12 @@ jobs:
           retention-days: 7
 
   homepage-easter-egg:
-    if: github.event.action != 'converted_to_draft' && inputs.scope != 'gpu'
+    needs: app-plan
+    # It runs on every push, nightly and dispatch, as before, even when the plan
+    # fails (!cancelled()). A pull request skips it only when the plan succeeded
+    # and wrote `skip`, having found every changed path in a tree it cannot read
+    # (easterEggCannotRead in scripts/lib/app-plan.mjs); any other value runs it.
+    if: ${{ !cancelled() && github.event.action != 'converted_to_draft' && inputs.scope != 'gpu' && (github.event_name != 'pull_request' || needs.app-plan.result != 'success' || needs.app-plan.outputs.easter_egg != 'skip') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

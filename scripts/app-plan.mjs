@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process';
 import { appendFile, readFile } from 'node:fs/promises';
-import { createAppPlan, changedManifests, changedPathsFromGit } from './lib/app-plan.mjs';
+import { createAppPlan, changedManifests, changedPathsFromGit, EASTER_EGG_OUTPUT, UnreadableDiffError } from './lib/app-plan.mjs';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
 import { FULL_CI_LABEL } from './lib/ci-usage.mjs';
 import { eventPullRequest, fullPlanBudget } from './lib/full-plan-budget.mjs';
@@ -42,9 +42,16 @@ if (base === TESTED_BASE) {
   carried = tested.carried;
   if (!base) baseFallback = tested.reason;
 }
-let changedPaths = process.argv.includes('--all') || baseFallback
-  ? []
-  : changedPathsFromGit({ base, head, cwd: repoRoot });
+// A diff git cannot read is never an empty one: the run tests everything.
+let changedPaths = [];
+if (!process.argv.includes('--all') && !baseFallback) {
+  try {
+    changedPaths = changedPathsFromGit({ base, head, cwd: repoRoot });
+  } catch (error) {
+    if (!(error instanceof UnreadableDiffError)) throw error;
+    baseFallback = `the changed paths could not be read: ${error.message}`;
+  }
+}
 const only = option('--only');
 if (only && only !== 'affected') {
   const ids = new Set(only.split(',').map((id) => id.trim()).filter(Boolean));
@@ -97,7 +104,7 @@ if (process.env.GITHUB_EVENT_NAME === 'pull_request' && !draft && process.env.GI
 }
 
 // A dispatched run's scope: `gpu` runs only the macOS GPU suite of the
-// selected apps, `site` only the composite site (and agentic checks).
+// selected apps, `site` only the composite site (and agentic checks) and the easter egg.
 const scope = option('--scope') || 'affected';
 if (!['affected', 'all', 'gpu', 'site'].includes(scope)) throw new Error(`Unknown scope ${scope}`);
 const none = { include: [] };
@@ -108,6 +115,9 @@ const scoped = {
   releaseApps: ['gpu', 'site'].includes(scope) ? none : plan.releaseApps,
   site: scope === 'site' || (scope !== 'gpu' && plan.site && !withheld),
 };
+// A push, the nightly and a dispatch run the easter egg every time; a pull request skips it only when no changed path can reach it.
+const everyRun = Boolean(process.env.GITHUB_EVENT_NAME) && process.env.GITHUB_EVENT_NAME !== 'pull_request';
+const easterEgg = scope === 'site' || (scope !== 'gpu' && (everyRun || plan.easterEgg.length > 0));
 const emptyMatrix = { include: [{ app: '__none__', path: '', runtime: '', rust_wasm: false, python_reference: false, shared_runtime: false, browser_test: false, hardware_gpu: false, app_scoped_runtime: false, release_test: 'test', heavy_tests: false }] };
 const fallback = (fallbackReason || (plan.reasons.fallback ?? '')).replace(/\s+/g, ' ');
 // A wide change gives every app the same long list; keep the outputs small.
@@ -121,6 +131,7 @@ const reasons = {
     .filter(([app]) => plan.selected.some((entry) => entry.id === app))
     .map(([app, list]) => [app, shorten(list)])),
   site: shorten(plan.reasons.site),
+  easter_egg: shorten(plan.easterEgg),
 };
 const outputs = {
   apps: JSON.stringify(scoped.apps.include.length ? scoped.apps : emptyMatrix),
@@ -139,6 +150,7 @@ const outputs = {
   full_plan: String(fullPlan),
   fallback_reason: fallback,
   selection_reasons: JSON.stringify(reasons),
+  easter_egg: easterEgg ? EASTER_EGG_OUTPUT.run : EASTER_EGG_OUTPUT.skip,
 };
 
 // The same reasons for a person: the job summary on GitHub, stderr locally.
@@ -149,9 +161,10 @@ const summary = fallback && !draft
     ...Object.entries(reasons.apps).map(([app, list]) => `- ${app}: ${list.join('; ')}`),
     ...reasons.site.map((reason) => `- site: ${reason}`),
   ];
+summary.push(easterEgg ? `Homepage easter egg runs: ${scope === 'site' ? 'scope site' : everyRun ? `it runs on every ${process.env.GITHUB_EVENT_NAME} run` : reasons.easter_egg.join('; ')}.` : scope === 'gpu' ? 'Homepage easter egg skipped: scope gpu.' : 'Homepage easter egg skipped: every changed path lies in a tree it cannot read.');
 if (plan.bookkeeping.length) summary.push(`Release bookkeeping set aside (changelogs and version bumps, checked by workspace-contracts): ${plan.bookkeeping.length} ${plan.bookkeeping.length === 1 ? 'file' : 'files'}.`);
 if (scope === 'gpu') summary.unshift('Scope gpu: only the macOS GPU suite of the selected apps runs.');
-if (scope === 'site') summary.unshift('Scope site: only the composite site and its agentic checks run.');
+if (scope === 'site') summary.unshift('Scope site: only the composite site, its agentic checks and the homepage easter egg run.');
 if (draft) summary.unshift('Draft feedback only: shared dependency coverage runs on ready_for_review and every subsequent ready PR push.');
 const withheldAdvice = `Full plan withheld: ${withheld}. This run tests only the apps the pull request edits. Convert the pull request to draft while iterating; to test every app at this head, add the ${FULL_CI_LABEL} label and use "Re-run all jobs" on this run.`;
 if (withheld) {

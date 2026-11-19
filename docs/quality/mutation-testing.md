@@ -71,8 +71,8 @@ otherwise stay behind. The reporting adapter clears the inherited
 
 ## CI and failures
 
-The independent `mutation-quality` workflow runs every module weekly and on
-manual dispatch. Pull requests run `pnpm quality:mutations:smoke`, which mutates
+The `mutation` job of the independent `quality` workflow runs every module
+weekly and on manual dispatch. Pull requests run `pnpm quality:mutations:smoke`, which mutates
 only the `tableName` function (`smoke` in the configuration). Its requirement to
 kill at least one mutant proves that instrumentation reaches the Node tests. It
 is not a mutation-score threshold.

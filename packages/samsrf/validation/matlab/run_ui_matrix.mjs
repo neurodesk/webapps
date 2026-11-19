@@ -40,7 +40,7 @@ const MODEL_REFUSALS = {
 };
 
 /** What the app must do with a plan run; compare_ui_cli.py's expected_ui_outcome says the same. The app
- * refuses at model load what the engine would refuse, and shows the engine's subject-HRF text at Run. */
+ * refuses at model load what the engine would refuse; a run that names a subject-HRF file gets it. */
 export function expectedOutcome(run) {
   const engine = expectedEngineOutcome(run, 'browser');
   if (engine.status === 'refused') return { status: 'refused', stage: 'model', message: MODEL_REFUSALS[run.algorithm] };
@@ -64,6 +64,7 @@ export function uiRun(run, bundle) {
     surfaces: ['white', 'area'].map((kind) => join(local(option('surf')), `${hemisphere}.${kind}`)),
   };
   if (model.Aperture_File) files.apertures = [`${local(model.Aperture_File)}.mat`];
+  if (typeof model.Hrf === 'string' && model.Hrf.startsWith('hrf_')) files.subjectHrf = [join(bundle, `${model.Hrf}.mat`)];
   if (algorithm === 'cf') {
     files.template = [join(dataset, `${hemisphere}_benson.gii`)];
     files.seed = [`${local(model.SeedRoi)}.label`];
@@ -108,7 +109,7 @@ export async function runOne(browser, url, run, bundle, directory, served) {
     }
     await page.locator('#combine').selectOption(plan.combine);
     await page.locator('#normalise').setChecked(true);
-    for (const slot of ['runs', 'apertures', 'roi', 'surfaces', 'template', 'seed']) {
+    for (const slot of ['runs', 'apertures', 'roi', 'surfaces', 'template', 'seed', 'subjectHrf']) {
       if (plan.files[slot]) await page.locator(`#${slot}Input`).setInputFiles(plan.files[slot].map(payload));
     }
     await page.waitForFunction(() => document.querySelector('#statusText')?.textContent?.trim() === 'Ready', null, { timeout: 120000 });

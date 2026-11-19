@@ -2,8 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { runAnalysis, shardRanges, workerCount } from "../src/pool.js";
 // Loads the WebAssembly module synchronously, so the engine's own init() has nothing to fetch.
-import "@neurodesk/samsrf/node";
+import { hrf } from "@neurodesk/samsrf/node";
 import * as engine from "../src/engine.js";
+import { matFile } from "../../../packages/samsrf/test/fixtures.js";
 
 test("shards cover every unit once, several per worker", () => {
   const ranges = shardRanges(1003, 3);
@@ -109,4 +110,29 @@ test("cancelling rejects with AbortError and terminates the workers", async () =
 
 test("an engine error reaches the caller", async () => {
   await assert.rejects(runAnalysis({ ...inputs, runs: [] }, { createWorker: () => fakeWorker([]) }), /at least one run/);
+});
+
+// fP of an old-school SamSrf HRF fit: peak and undershoot delays, their ratio, and the amplitude.
+const FP = [5.5, 15.5, 5, 2];
+const hrfFit = (variables = { fP: { dims: [1, 4], data: FP } }) => ({ name: "hrf_test.mat", bytes: matFile(variables) });
+const analyse = (overrides, onLog) => runAnalysis({ ...inputs, ...overrides }, { createWorker: () => fakeWorker([]), onLog });
+const fileBytes = (result) => result.files.map(({ name, bytes }) => [name, Buffer.from(bytes).toString("base64")]);
+
+test("a subject HRF fit gives the engine SamSrf's old-school kernel", async () => {
+  const lines = [];
+  const subject = await analyse({ model: { ...model, Hrf: "hrf_test" }, subjectHrf: hrfFit() }, (line) => lines.push(line));
+  const kernel = await analyse({ model: { ...model, Hrf: Array.from(hrf.oldSchool(model.TR, FP)) } });
+  const canonical = await analyse({ model: { ...model, Hrf: 0 } });
+  assert.deepEqual(fileBytes(subject), fileBytes(kernel));
+  assert.notDeepEqual(fileBytes(subject), fileBytes(canonical));
+  assert.ok(lines.includes(`Subject HRF hrf_test.mat: fP ${FP.join(", ")}`), lines.join("\n"));
+});
+
+test("a subject HRF fit that is missing or malformed stops the run with the file named", async () => {
+  const named = { ...model, Hrf: "hrf_test" };
+  await assert.rejects(analyse({ model: named }), /Add the subject HRF hrf_test\.mat/);
+  await assert.rejects(analyse({ model: named, subjectHrf: { name: "hrf_test.mat", bytes: new TextEncoder().encode("not a MAT file") } }), /^Error: hrf_test\.mat: /);
+  await assert.rejects(analyse({ model: named, subjectHrf: hrfFit({ beta: { dims: [1, 4], data: FP } }) }), /hrf_test\.mat: .*fP/);
+  await assert.rejects(analyse({ model: named, subjectHrf: hrfFit({ fP: { dims: [1, 3], data: FP.slice(0, 3) } }) }), /hrf_test\.mat: .*fP has 3 values/);
+  await assert.rejects(analyse({ model: { ...model, Hrf: "lh_hrf_fits" }, subjectHrf: hrfFit() }), /Hrf lh_hrf_fits is a vertex-wise HRF fit map: the caller must load it/);
 });

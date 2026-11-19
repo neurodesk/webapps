@@ -40,6 +40,14 @@ def repairs(cli):
     return REPAIRS + CLI_REPAIRS if cli else REPAIRS
 
 
+def source_record(cli):
+    """The pins and patch descriptions of a repair set, as every source.json records them."""
+    if not cli:
+        return dict(SOURCE)
+    return {**SOURCE, 'repairSet': 'samsrfanalysis-cli', 'patches': SOURCE['patches'] + [
+        'Keep the subject-HRF file route a column, as samsrf_doublegamma returns it']}
+
+
 def prepare(source, output, cli=False):
     commit = subprocess.check_output(
         ['git', '-C', str(source), 'rev-parse', 'HEAD'], text=True).strip()
@@ -63,11 +71,7 @@ def prepare(source, output, cli=False):
     output.mkdir(parents=True, exist_ok=True)
     for path, replacement, _ in changes:
         path.write_bytes(replacement)
-    record = {**SOURCE, 'files': [item for _, _, item in changes]}
-    if cli:
-        record['repairSet'] = 'samsrfanalysis-cli'
-        record['patches'] = SOURCE['patches'] + [
-            'Keep the subject-HRF file route a column, as samsrf_doublegamma returns it']
+    record = {**source_record(cli), 'files': [item for _, _, item in changes]}
     (output / 'source.json').write_text(json.dumps(record, indent=2) + '\n')
 
 

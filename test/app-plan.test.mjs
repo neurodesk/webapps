@@ -1,19 +1,21 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, relative as relativePath, resolve as resolvePath } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { parse, stringify } from 'yaml';
-import { AUTOMATION_CATALOG_READERS, CLASSIFIED_ENTRY_FIELDS, createAppPlan, HANDOFF_CATALOG_READERS, INDEPENDENT_ROOT_DEV_DEPENDENCIES, RUNTIME_MANIFEST_READERS, SITE_ONLY_FILES } from '../scripts/lib/app-plan.mjs';
+import { AUTOMATION_CATALOG_READERS, changedPathsFromGit, CI_JOB_SCOPES, CLASSIFIED_ENTRY_FIELDS, createAppPlan, EASTER_EGG_INPUTS, EASTER_EGG_JOB, EASTER_EGG_OUTPUT, EASTER_EGG_PACKAGES, easterEggCannotRead, HANDOFF_CATALOG_READERS, WORKSPACE_MANIFESTS, INDEPENDENT_ROOT_DEV_DEPENDENCIES, RUNTIME_MANIFEST_READERS, UnreadableDiffError, SITE_DATA_KEYS, SITE_KEY_READERS, SITE_ONLY_FILES } from '../scripts/lib/app-plan.mjs';
 import { siteCheckApps, smokeApps } from '../scripts/lib/smoke-apps.mjs';
+import { loadAppInformation } from '../scripts/lib/app-information.mjs';
+import { hostedThemeOptions } from '../scripts/lib/catalog-sites.mjs';
 import { betNeeds } from '../test-utils/qsm-bet-runtime-startup.mjs';
 import { assertParity, parityPeers, segmentationsToRun } from '../test-utils/shared-binary-startup.mjs';
 import { APP_JOBS, carriedApps, NIGHTLY_JOBS, RERUN_JOBS, SITE_JOBS, testedBase } from '../scripts/lib/tested-base.mjs';
 import { lockfileImpact } from '../scripts/lib/lockfile-impact.mjs';
-import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
+import { loadAppsRegistry, parseAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { CATALOG, CATALOG_JOBS, loadConservativeWorkspaceGraph, reachableFrom, siteJobNames, WorkspaceGraphConfigurationError } from '../scripts/lib/workspace-graph.mjs';
 
 const graph = loadConservativeWorkspaceGraph(repoRoot);
@@ -252,6 +254,18 @@ test('root package.json script edits count only where ci.yml runs them', async (
   assert.deepEqual(site.selected, []);
   assert.equal(site.site, true);
   assert.equal(plan({ scripts, devDependencies: { a: '1' } }).allApps, true);
+  // Every root script a ci.yml job runs is an input, read from ci.yml: the guard's
+  // check:integration (app-plan) and test:contracts (workspace-contracts) included.
+  const workspace = await graph;
+  assert.ok(workspace.jobScripts.get('app-plan').has('check:integration'));
+  assert.ok(workspace.jobScripts.get('workspace-contracts').has('test:contracts') && workspace.jobScripts.get('workspace-contracts').has('test:packages'));
+  for (const name of ['check:integration', 'test:contracts', 'test:packages']) {
+    const edited = plan({ scripts: { ...scripts, [name]: 'echo' } });
+    assert.equal(edited.allApps, true, name);
+    assert.match(edited.reasons.fallback, new RegExp(`^package\\.json: ci\\.yml's \\S+ job runs root script ${name}$`), name);
+  }
+  // The easter egg's pnpm install reads every package.json, so any edit to one runs it on a pull request.
+  assert.deepEqual(plan({ scripts: { ...scripts, 'new-app': 'B' } }).easterEgg, ['package.json: outside the trees the job cannot read']);
 });
 
 // Lockfile and registry changes are compared before and after: the apps whose
@@ -356,9 +370,9 @@ test('Knip and Stryker remain independent of app, native and browser inputs', as
   for (const path of paths) {
     assert.doesNotMatch(await readFile(join(repoRoot, path), 'utf8'), /\bknip\b|@stryker-mutator\/core|\bstryker\b/, `${path} now consumes an independent root tool; revisit its CI ownership`);
   }
-  for (const [file, command] of [['unused-code', 'pnpm quality:unused'], ['mutation-quality', 'pnpm quality:mutations:smoke']]) {
-    const workflow = parse(await readFile(join(repoRoot, `.github/workflows/${file}.yml`), 'utf8'));
-    assert.ok(Object.hasOwn(workflow.on, 'pull_request'), `${file} still runs on every PR`);
+  const workflow = parse(await readFile(join(repoRoot, '.github/workflows/quality.yml'), 'utf8'));
+  assert.ok(Object.hasOwn(workflow.on, 'pull_request'), 'the quality workflow still runs on every PR');
+  for (const command of ['pnpm quality:unused', 'pnpm quality:mutations:smoke']) {
     assert.ok(Object.values(workflow.jobs).some(job => job.steps.some(step => step.run === command)), command);
   }
 });
@@ -741,12 +755,12 @@ test("a file another app's code names selects that app too", async () => {
   assert.deepEqual(createAppPlan(registry, ['apps/dicompare/src/App.tsx'], await graph).selected.map((app) => app.id), ['dicompare']);
 });
 
-test('registry changes outside the app entries select the whole catalog with a reason', async () => {
+test('registry changes outside the app entries and site keys select the whole catalog with a reason', async () => {
   const plan = await registryPlan((registry) => {
-    registry.site.analytics.measurement_id = 'G-CHANGED';
+    registry.catalog_owner = 'someone';
   });
   assert.equal(plan.allApps, true);
-  assert.equal(plan.reasons.fallback, 'registry/apps.yml: its site section changed, and every app build reads it');
+  assert.equal(plan.reasons.fallback, 'registry/apps.yml: its catalog_owner section changed, and every app build reads it');
   const duplicate = await registryPlan((registry) => {
     registry.apps.push(entry(registry, 'niimath'));
   });
@@ -755,7 +769,7 @@ test('registry changes outside the app entries select the whole catalog with a r
   assert.equal(missingBase.reasons.fallback, 'registry/apps.yml: the base or head registry is unavailable');
 });
 
-test('a reworded or added site category selects only the site build', async () => {
+test('a reworded, added or unused site category selects only the site build', async () => {
   // A new app's pull request usually rewords its category; that used to test every app.
   const reworded = await registryPlan((registry) => {
     registry.site.categories[0].description = 'Reworded for a new app.';
@@ -765,21 +779,358 @@ test('a reworded or added site category selects only the site build', async () =
   assert.deepEqual(Object.keys(reworded.reasons.apps), []);
   assert.equal(reworded.site, true);
   assert.equal(reworded.siteCode, false);
+  assert.ok(reworded.reasons.site.includes('registry/apps.yml: site.categories[].description changed, and only the site build reads it'));
   const withEntry = await registryPlan((registry) => {
     registry.site.categories[0].title = 'Renamed';
     registry.apps.find((app) => app.id === 'niimath').description = 'Reworded too';
   });
   assert.deepEqual(Object.keys(withEntry.reasons.apps), ['niimath']);
-  // An app entry may still name a category that went away, and the builds read the rest of the section.
+  // A category no app names can go; one an app still names leaves the head registry invalid for every build.
+  const text = await readFile(join(repoRoot, 'registry/apps.yml'), 'utf8');
+  const withUnused = parse(text);
+  withUnused.site.categories.push({ id: 'unused', title: 'Unused', description: 'No app.' });
+  const dropped = createAppPlan(await loadAppsRegistry(), ['registry/apps.yml'], await graph, new Map([['registry/apps.yml', { before: stringify(withUnused), after: text }]]));
+  assert.deepEqual(dropped.selected, []);
+  assert.equal(dropped.reasons.fallback, null);
   const removed = await registryPlan((registry) => {
     registry.site.categories.pop();
   });
   assert.equal(removed.allApps, true);
+  assert.match(removed.reasons.fallback, /^registry\/apps\.yml: it is not valid at head \(Invalid app registry: - categories must be .* for fastprep\), and every app build validates it$/);
   const mixed = await registryPlan((registry) => {
     registry.site.categories[0].description = 'Reworded.';
-    registry.site.domain = 'example.org';
+    registry.site.mirror = 'example.org';
   });
-  assert.equal(mixed.reasons.fallback, 'registry/apps.yml: its site section changed, and every app build reads it');
+  assert.equal(mixed.reasons.fallback, 'registry/apps.yml: its site section has site.mirror, and no rule says which builds read it');
+});
+
+test('a site key the table does not name selects every app, whatever its depth or value', async () => {
+  // Both registries validate: an empty mapping has no leaf that differs, and hub.unclassified is no key of site.hub.
+  const cases = {
+    'site.unclassified': (registry) => { registry.site.unclassified = {}; },
+    'site.hub.unclassified': (registry) => { registry.site.hub.unclassified = 'one'; },
+    'site.catalogs[].desktop.notes': (registry) => { registry.site.catalogs[0].desktop.notes = []; },
+    'site.analytics.measurement_id': (registry) => { registry.site.analytics.measurement_id = { id: registry.site.analytics.measurement_id }; },
+    'site.categories': (registry) => { registry.site.categories.push(structuredClone(registry.site.categories[0])); },
+    // One key named brand.home, not brand then home: joined with dots it looks like a listed key.
+    'site.hub["brand.home"]': (registry) => { registry.site.hub['brand.home'] = 'https://example.org/'; },
+    'site.catalogs[]["desktop.release"]': (registry) => { registry.site.catalogs[0]['desktop.release'] = 'x'; },
+    'site["catalogs[]"]': (registry) => { registry.site['catalogs[]'] = []; },
+  };
+  for (const [key, edit] of Object.entries(cases)) {
+    const plan = await registryPlan(edit);
+    assert.equal(plan.allApps, true, key);
+    assert.match(plan.reasons.fallback ?? '', new RegExp(`^registry/apps\\.yml: (?:its site section has ${key.replace(/[.[\]]/g, '\\$&')}(?:\\.id)?, and no rule|it is not valid at head)`), key);
+  }
+  const text = await readFile(join(repoRoot, 'registry/apps.yml'), 'utf8');
+  for (const edit of [cases['site.unclassified'], cases['site.hub.unclassified'], cases['site.hub["brand.home"]']]) {
+    const after = parse(text);
+    edit(after);
+    assert.doesNotThrow(() => parseAppsRegistry(stringify(after)), 'the loader accepts it, so only the shape check stops it');
+  }
+  // Every key of today's site section is in the table.
+  const now = parse(text).site;
+  const leaves = (value, path) => Array.isArray(value) ? value.flatMap((entry) => leaves(entry, `${path}[]`))
+    : value !== null && typeof value === 'object' ? Object.entries(value).flatMap(([name, child]) => leaves(child, `${path}.${name}`)) : [path];
+  assert.deepEqual([...new Set(leaves(now, 'site'))].filter((key) => !Object.hasOwn(SITE_KEY_READERS, key)), []);
+});
+
+test('a site key selects the apps that reach a file reading it, and only the site build reads the rest', async () => {
+  const registry = await loadAppsRegistry();
+  const workspace = await graph;
+  // PR #872 moved the SciGet logo's link and reworded the hub's subheading.
+  const text = await readFile(join(repoRoot, 'registry/apps.yml'), 'utf8');
+  const before = parse(text);
+  before.site.hub.description = 'Scientific software that runs locally in your browser, grouped by field.';
+  for (const entry of [before.site.hub, ...before.site.catalogs.filter((catalog) => catalog.brand.name === 'SciGet')]) entry.brand.home = 'https://webapps.sciget.org/';
+  const reaching = (readers) => registry.apps.filter((app) => readers.some((reader) => reachableFrom(workspace, `apps/${app.id}`).has(reader))).map(({ id }) => id);
+  const links = createAppPlan(registry, ['registry/apps.yml'], workspace, new Map([['registry/apps.yml', { before: stringify(before), after: text }]]));
+  // A catalogue's brand is read by the desktop scripts that hold a whole catalogue entry.
+  assert.deepEqual(links.selected.map(({ id }) => id), reaching(SITE_KEY_READERS['site.catalogs[].brand.home']));
+  assert.ok(links.selected.length <= 2, 'only the apps that reach the desktop suite scripts');
+  assert.equal(links.reasons.fallback, null);
+  assert.equal(links.site, true);
+  assert.ok(links.reasons.site.includes('registry/apps.yml: site.hub.brand.home changed, and only the site build reads it'));
+  const hub = await registryPlan((after) => {
+    after.site.hub.description = 'Reworded.';
+    after.site.hub.brand.home = 'https://example.org/';
+  });
+  assert.deepEqual(hub.selected, []);
+  assert.equal(hub.reasons.fallback, null);
+  const suite = await registryPlan((after) => {
+    after.site.catalogs[1].desktop.product_name = 'MSK Desktop';
+  });
+  assert.deepEqual(suite.selected.map(({ id }) => id), reaching(SITE_KEY_READERS['site.catalogs[].desktop.product_name']));
+  assert.ok(suite.selected.length > 0 && suite.selected.length < registry.apps.length);
+  assert.match(suite.reasons.apps[suite.selected[0].id][0], /^registry\/apps\.yml: site\.catalogs\[\]\.desktop\.product_name changed, and scripts\/desktop\/\S+ reads it$/);
+  const measurement = await registryPlan((after) => {
+    after.site.analytics.measurement_id = 'G-CHANGED';
+  });
+  assert.deepEqual(measurement.selected.map(({ id }) => id), reaching(SITE_KEY_READERS['site.analytics.measurement_id']));
+  assert.equal(measurement.reasons.fallback, null);
+  // A catalogue that is added names a new id, which every themed build's standalone check reads.
+  const added = await registryPlan((after) => {
+    const desktop = { product_name: 'Spare Webapps', app_id: 'org.sciget.spare', release: 'spare-webapps', executable: 'spare-webapps' };
+    after.site.catalogs.push({ ...structuredClone(after.site.catalogs[1]), id: 'spare', host: 'spareapps.sciget.org', desktop });
+    const niimath = after.apps.find((app) => app.id === 'niimath');
+    niimath.also_in = [...(niimath.also_in ?? []), 'spare'];
+  });
+  assert.equal(added.reasons.fallback, null);
+  const ids = (plan) => plan.selected.map(({ id }) => id).sort();
+  assert.deepEqual(ids(added), [...new Set(['niimath', ...reaching(SITE_KEY_READERS['site.catalogs[].id'])])].sort());
+  assert.ok(added.reasons.apps.niimath.includes('registry/apps.yml: the niimath entry changed'));
+  // Without a graph a key some app reads cannot be followed.
+  const changed = parse(text);
+  changed.site.analytics.measurement_id = 'G-CHANGED';
+  const blind = createAppPlan(registry, ['registry/apps.yml'], null, new Map([['registry/apps.yml', { before: text, after: stringify(changed) }]]));
+  assert.match(blind.reasons.fallback, /site\.analytics\.measurement_id changed, and there is no workspace graph/);
+});
+
+// Files an app build or an app's tests run that load registry/apps.yml or
+// read its site section. The loader validates every key (only a valid head
+// registry narrows); siteKeysRead finds what each of the others reads.
+const REGISTRY_LOADER = 'scripts/lib/apps-registry.mjs';
+const SITE_SECTION_READERS = new Set([
+  REGISTRY_LOADER,
+  'scripts/theme-app-dist.mjs',
+  'scripts/lib/vite-app-config.mjs',
+  'scripts/dev-server.mjs',
+  'scripts/lib/standalone.mjs',
+  'scripts/desktop/suite.mjs',
+  'scripts/desktop/pack.mjs',
+  'scripts/desktop/models-pack.mjs',
+  'scripts/desktop/release-files.mjs',
+  // These read app entries only.
+  'scripts/lib/app-automation.mjs',
+  'scripts/lib/app-examples.mjs',
+  'scripts/lib/app-information.mjs',
+  'scripts/lib/neuroflow-bundle.mjs',
+  'test/easy-mp2rage-workspace.smoke.mjs',
+  'test/examples.smoke.mjs',
+  'apps/dicomview/e2e/smoke.spec.js',
+  'apps/hmc/test/runtime-assets.test.js',
+  'apps/pipeline-builder/e2e/smoke.spec.js',
+]);
+// Functions that read the site section for their caller: the keys each reads,
+// and whether it hands the caller a whole catalogue entry.
+const SITE_HELPERS = {
+  findCatalog: { reads: ['site.catalogs[].id'], entry: true },
+  primaryCatalog: { reads: ['site.domain', 'site.catalogs[].host'], entry: true },
+  suiteCatalog: { reads: ['site.domain', 'site.catalogs[].id', 'site.catalogs[].host'], entry: true },
+  appUrl: { reads: ['site.catalogs[].id', 'site.catalogs[].host'], entry: false },
+};
+const SITE_KEYS = Object.keys(SITE_KEY_READERS);
+const SITE_LISTS = new Set(SITE_KEYS.flatMap((key) => [...key.matchAll(/^(.*?)\[\]/g)].map(([, list]) => list)));
+const keysBelow = (path) => SITE_KEYS.filter((key) => key === path || key.startsWith(`${path}.`) || key.startsWith(`${path}[]`));
+// Follows a property chain from `path` while it names site keys.
+function walkSiteKeys(path, names) {
+  for (const [index, name] of names.entries()) {
+    const next = `${path}.${name}`;
+    if (SITE_LISTS.has(path) || !keysBelow(next).length) return { path, stopped: name, rest: names.slice(index) };
+    path = next;
+  }
+  return { path, stopped: null };
+}
+const chainNames = (chain) => chain.split(/\??\./).filter(Boolean);
+// The index of the bracket that closes the one at `open`.
+function closing(text, open) {
+  let depth = 0;
+  for (let index = open; index < text.length; index++) {
+    if ('([{'.includes(text[index])) depth++;
+    if (')]}'.includes(text[index]) && --depth === 0) return index;
+  }
+  return text.length;
+}
+// The site keys a file's text reads. A chain that names a key reads it; one
+// that stops at a mapping or list hands it on, spreads it or iterates it, and
+// reads every key below; a list iterated with a callback reads what the
+// callback reads of its entry; a helper's whole catalogue entry reads every
+// key of the entry, or of what is destructured from it. A chain that names a
+// key the table lacks reads that key, so the test names it.
+// Each use of the registry object in a file's code, besides `.site` chains:
+// what it reads of the site section. A use the check does not recognise reads
+// all of it. Recognised: `.apps`, a binding (`const registry = await
+// loadAppsRegistry()`, a parameter), a destructuring without `site`, and an
+// argument to a function in `callees` (defined in a listed reader, so its own
+// text is checked) or to a site helper (counted by siteKeysRead).
+const LOADERS = /\b(?:loadAppsRegistry|parseAppsRegistry)\(/;
+function registryUses(text, callees) {
+  // Comment lines and quoted strings are prose.
+  const code = text.split('\n').map((line) => (/^\s*(?:\/\/|\*|\/\*)/.test(line) ? '' : line)).join('\n').replace(/(['"])(?:\\.|(?!\1)[^\\\n])*\1/g, '""');
+  const names = new Set(['registry', ...[...code.matchAll(/\b(?:const|let|var)\s+(\w+)\s*=\s*(?:await\s+)?(?:loadAppsRegistry|parseAppsRegistry)\(/g)].map(([, name]) => name)]);
+  const unknown = [];
+  // Destructuring the loader's result directly.
+  for (const match of code.matchAll(/=\s*(?:await\s+)?(?:loadAppsRegistry|parseAppsRegistry)\(/g)) {
+    const before = code.slice(0, match.index).trimEnd();
+    if (!before.endsWith('}')) continue;
+    const pattern = code.slice(openingBrace(code, before.length - 1), before.length);
+    if (/\bsite\b|\.\.\.|\[/.test(pattern)) unknown.push(`destructures ${pattern.replace(/\s+/g, ' ')} from the loader`);
+  }
+  // A computed member of the loader's result: `(await loadAppsRegistry())[key]`, whatever its arguments hold.
+  for (const match of code.matchAll(/\b(?:loadAppsRegistry|parseAppsRegistry)\s*\(/g)) {
+    const after = code.slice(closing(code, match.index + match[0].length - 1) + 1);
+    if (/^\s*\)?\s*(?:\?\.)?\s*\[/.test(after)) unknown.push(`${match[0]}...)${after.slice(0, 20).split('\n')[0]} (a computed member of the loader's result)`);
+  }
+  for (const name of names) {
+    for (const match of code.matchAll(new RegExp(String.raw`(?:(?<=\.\.\.)|(?<![\w.$'"\`/-]))${name}(?![\w$'"\`/-])`, 'g'))) {
+      const [before, after] = [code.slice(0, match.index), code.slice(match.index + name.length)];
+      if (/^\s*\??\.\s*(?:site|apps)\b/.test(after)) continue;
+      if (/\b(?:const|let|var)\s+$/.test(before) && /^\s*=\s*(?:await\s+)?(?:loadAppsRegistry|parseAppsRegistry)\(/.test(after)) continue;
+      if (/(?:function\s*\w*\s*\([^()]*|\(\s*(?:\w+\s*,\s*)*)$/.test(before) && /^[^()]*\)\s*(?:=>|\{)/.test(after)) continue;
+      if (/^\s*=>/.test(after) && /[(,\s]$/.test(before)) continue;
+      if (/\}\s*=\s*(?:await\s+)?$/.test(before)) {
+        const end = before.trimEnd().replace(/=\s*(?:await\s+)?$/, '').trimEnd().length - 1;
+        const pattern = code.slice(openingBrace(code, end), end + 1);
+        if (/\bsite\b|\.\.\.|\[/.test(pattern)) unknown.push(`destructures ${pattern.replace(/\s+/g, ' ')} from ${name}`);
+        continue;
+      }
+      const callee = /[(,]\s*$/.test(before) && /^\s*[,)]/.test(after) && calleeOf(code, match.index);
+      if (callee && (callees.has(callee) || Object.hasOwn(SITE_HELPERS, callee))) continue;
+      unknown.push(`${name}${after.slice(0, 20).split('\n')[0]} (${callee ? `passed to ${callee}` : 'used'})`);
+    }
+  }
+  return unknown;
+}
+// The index of the `{` that opens the brace closing at `end`.
+function openingBrace(text, end) {
+  let depth = 0;
+  for (let index = end; index >= 0; index--) {
+    if (text[index] === '}') depth++;
+    if (text[index] === '{' && --depth === 0) return index;
+  }
+  return 0;
+}
+// The function whose argument list holds `index`: the name before the unclosed `(`.
+function calleeOf(text, index) {
+  let depth = 0;
+  for (let at = index - 1; at >= 0; at--) {
+    if (')]}'.includes(text[at])) depth++;
+    else if ('([{'.includes(text[at])) {
+      if (depth === 0) return text[at] === '(' ? text.slice(0, at).match(/([\w$.]+)\s*$/)?.[1]?.split('.').pop() : null;
+      depth--;
+    }
+  }
+  return null;
+}
+
+function siteKeysRead(text, callees = new Set()) {
+  const read = new Set();
+  if (registryUses(text, callees).length) return new Set(SITE_KEYS);
+  const add = (keys) => keys.forEach((key) => read.add(key));
+  const entryReads = (param, body, entry) => {
+    for (const [, chain] of body.matchAll(new RegExp(String.raw`\b${param}\b((?:\??\.\w+)*)`, 'g'))) add(keysBelow(walkSiteKeys(entry, chainNames(chain)).path));
+  };
+  for (const match of text.matchAll(/\.site\b((?:\??\.\w+)*)/g)) {
+    const { path, stopped } = walkSiteKeys('site', chainNames(match[1]));
+    const after = match.index + match[0].length;
+    const callback = stopped && SITE_LISTS.has(path) && text[after] === '('
+      && text.slice(after + 1, closing(text, after)).match(/^\s*(?:\(\s*)?(\w+)\s*\)?\s*=>([\s\S]*)$/);
+    if (callback) entryReads(callback[1], callback[2], `${path}[]`);
+    else if (stopped && !SITE_LISTS.has(path) && !/^(?:map|find|filter|some|every|flatMap|forEach|findIndex|length)$/.test(stopped)) read.add(`${path}.${stopped}`);
+    else add(keysBelow(path));
+  }
+  // `{ site } = registry`, `({ site }) =>` and `registry['site']` hand the whole section on.
+  if (/\{[^{}]*\bsite\b[^{}]*\}\s*(?:=[^=>]|\)\s*=>)|\[\s*['"`]site['"`]\s*\]/.test(text)) add(SITE_KEYS);
+  for (const match of text.matchAll(new RegExp(String.raw`\b(${Object.keys(SITE_HELPERS).join('|')})\(`, 'g'))) {
+    if (/function\s+$/.test(text.slice(0, match.index))) continue;
+    const helper = SITE_HELPERS[match[1]];
+    add(helper.reads);
+    if (!helper.entry) continue;
+    const chain = text.slice(closing(text, match.index + match[0].length - 1) + 1).match(/^(?:\??\.\w+)+/)?.[0];
+    const destructured = text.slice(0, match.index).match(/\{([\w\s,]*)\}\s*=\s*(?:await\s+)?$/)?.[1];
+    if (chain) add(keysBelow(walkSiteKeys('site.catalogs[]', chainNames(chain)).path));
+    else if (destructured) for (const name of destructured.split(',').map((name) => name.trim()).filter(Boolean)) add(keysBelow(`site.catalogs[].${name}`));
+    else add(keysBelow('site.catalogs[]'));
+  }
+  return read;
+}
+
+test('the site key reader check finds the keys a text reads, and every key of what it hands on', () => {
+  const reads = (text) => [...siteKeysRead(text)].sort();
+  assert.deepEqual(reads('measurementId: registry.site.analytics.measurement_id,\nhost: registry.site.hub.host'), ['site.analytics.measurement_id', 'site.hub.host']);
+  assert.deepEqual(reads('registry?.site?.hub?.brand?.home'), ['site.hub.brand.home']);
+  assert.deepEqual(reads('const ids = registry.site.catalogs.map(catalog => catalog.id);'), ['site.catalogs[].id']);
+  assert.deepEqual(reads('const { desktop } = findCatalog(registry, id);'), ['site.catalogs[].id', ...keysBelow('site.catalogs[].desktop')].sort());
+  assert.deepEqual(reads('primaryCatalog(registry).id'), ['site.catalogs[].host', 'site.catalogs[].id', 'site.domain']);
+  assert.deepEqual(reads('registry.site.hub.unclassified'), ['site.hub.unclassified']);
+  for (const whole of ['render(registry.site)', 'const copy = { ...registry.site.hub };', 'for (const key of Object.keys(registry.site.catalogs[0])) {}', "registry['site']", 'const { site } = registry;', 'export default ({ site }) => site;']) {
+    const keys = reads(whole);
+    assert.ok(keys.length > 1 && keys.every((key) => key.startsWith('site.')), whole);
+  }
+  assert.ok(reads('const catalog = findCatalog(registry, id); use(catalog);').length > 10, 'a whole catalogue entry');
+  assert.deepEqual(reads('const site = await serveSite(dist); await page.goto(site.origin);'), []);
+  // Any use of the registry object the check does not recognise reads every key (S6).
+  const known = new Set(['findApp']);
+  const everything = (text) => siteKeysRead(text, known).size === SITE_KEYS.length;
+  for (const text of [
+    'const { site: { hub: { host } } } = registry;',
+    'const { apps, ...rest } = registry;',
+    'const { site: { analytics } } = await loadAppsRegistry();',
+    'const copy = { ...registry };',
+    'writeFile(out, JSON.stringify(registry));',
+    'const value = registry[key];',
+    'const value = registry?.[key];',
+    "const key = 'site'; const { [key]: section } = registry; const host = section.hub.host;",
+    "const { [`si${'te'}`]: section } = await loadAppsRegistry();",
+    "const section = (await loadAppsRegistry())[key];",
+    'const section = parseAppsRegistry(text)[key];',
+    "const section = parseAppsRegistry(readFileSync(path, 'utf8'))[key];",
+    "const section = (await loadAppsRegistry(join(root, 'registry'))) [key];",
+    'return registry;',
+    'unknownHelper(registry, id);',
+  ]) assert.ok(everything(text), text);
+  for (const text of ['const registry = await loadAppsRegistry(); const app = findApp(registry, id);', 'const { apps } = registry;', 'export function f(registry, id) { return registry.apps.length; }', 'const ids = registry.apps.map((app) => app.id);', "test('reads the registry beside itself', () => {});"]) {
+    assert.deepEqual([...siteKeysRead(text, known)], [], text);
+  }
+});
+
+test('every file an app build or app test runs that loads the registry has its site keys routed', async () => {
+  const workspace = await graph;
+  const registry = await loadAppsRegistry();
+  const reached = new Set([...registry.apps.flatMap((app) => [...reachableFrom(workspace, `apps/${app.id}`)]), ...reachableFrom(workspace, CATALOG)]);
+  // A package's files are run where its node, or its tests' node, is reached.
+  const runs = (file) => file.startsWith('apps/') || reached.has(file) || reached.has(file.match(/^(?:packages|exes)\/[^/]+(?:\/tests?(?=\/))?/)?.[0]);
+  const helpers = Object.keys(SITE_HELPERS).join('|');
+  for (const file of filesNaming(String.raw`apps-registry|loadAppsRegistry|parseAppsRegistry|apps\.yml|\.site\b|\b(${helpers})\(`)) {
+    if (file.startsWith('registry/') || !runs(file)) continue;
+    assert.ok(SITE_SECTION_READERS.has(file), `${file} loads the registry or reads its site section; add it to SITE_SECTION_READERS and route the keys it reads in SITE_KEY_READERS`);
+  }
+  // Functions a reader may hand the registry to: those the listed readers define (their text is checked
+  // here too) and the loader's, whose site reads are only the SITE_HELPERS (checked below).
+  const callees = new Set();
+  for (const file of SITE_SECTION_READERS) {
+    for (const [, name] of (await readFile(join(repoRoot, file), 'utf8')).matchAll(/\bfunction\s+(\w+)\s*\(/g)) callees.add(name);
+  }
+  const readsOf = new Map();
+  for (const file of SITE_SECTION_READERS) {
+    assert.ok(runs(file), `${file} is no longer reached by an app; drop it`);
+    if (file === REGISTRY_LOADER) continue;
+    readsOf.set(file, siteKeysRead(await readFile(join(repoRoot, file), 'utf8'), callees));
+    for (const key of readsOf.get(file)) {
+      assert.ok(SITE_KEY_READERS[key]?.includes(file), `${file} reads ${key}; list it in SITE_KEY_READERS['${key}']`);
+    }
+  }
+  // A listed reader reads the key, so the table selects no more than it must.
+  for (const [key, readers] of Object.entries(SITE_KEY_READERS)) {
+    for (const reader of readers) assert.ok(readsOf.get(reader)?.has(key), `SITE_KEY_READERS lists ${reader} for ${key}, but its text does not read it`);
+  }
+  // The loader's own functions that read the site section are the helpers the check knows.
+  for (const file of [REGISTRY_LOADER, 'scripts/desktop/suite.mjs']) {
+    const text = await readFile(join(repoRoot, file), 'utf8');
+    for (const [, name, body] of text.matchAll(/^export (?:async )?function (\w+)\(([\s\S]*?)^}/gm)) {
+      if (/\.site\b/.test(body) && !['loadAppsRegistry', 'parseAppsRegistry'].includes(name)) assert.ok(Object.hasOwn(SITE_HELPERS, name), `${file} ${name} reads the site section for its caller; add it to SITE_HELPERS`);
+    }
+  }
+  // The files that read a key only for the site build are not run by any app.
+  for (const reader of ['scripts/build-site.mjs', 'scripts/lib/landing-page.mjs', 'scripts/lib/hub-page.mjs', 'scripts/lib/catalog-sites.mjs', 'scripts/lib/not-found-page.mjs', 'scripts/write-analytics.mjs']) {
+    assert.ok(!reached.has(reader), `${reader} is run by an app build or test; route the site keys it reads`);
+  }
+  // A reader added to a listed file is found: theme-app-dist.mjs reading the hub's host.
+  const themed = `${await readFile(join(repoRoot, 'scripts/theme-app-dist.mjs'), 'utf8')}\nconst hub = registry.site.hub.host;\n`;
+  assert.ok(siteKeysRead(themed, callees).has('site.hub.host') && !SITE_KEY_READERS['site.hub.host'].includes('scripts/theme-app-dist.mjs'));
+  // So is nested destructuring the check cannot follow: it counts as reading every key.
+  const nested = `${await readFile(join(repoRoot, 'scripts/theme-app-dist.mjs'), 'utf8')}\nconst { site: { hub: { host } } } = registry;\n`;
+  assert.equal(siteKeysRead(nested, callees).size, SITE_KEYS.length);
 });
 
 test('an offline asset lock change selects the apps whose assets changed', async () => {
@@ -804,6 +1155,265 @@ test('ci.yml runs the composite site build on pull requests that need it', async
   assert.equal(ci.jobs['app-plan'].outputs.has_site, '${{ steps.plan.outputs.has_site }}');
 });
 
+// A plan for a ci.yml edit, compared job by job with the repository's own workflow.
+async function workflowPlan(edit, options) {
+  const text = await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8');
+  const after = parse(text);
+  edit(after);
+  return createAppPlan(await loadAppsRegistry(), ['.github/workflows/ci.yml'], await graph, new Map([['.github/workflows/ci.yml', { before: text, after: stringify(after) }]]), options);
+}
+
+test('a ci.yml change confined to the composite site jobs selects only the site build, and its checks cover every app', async () => {
+  // PR #864 changed only the interface audit step, which site-audit now runs.
+  const audit = await workflowPlan((ci) => {
+    ci.jobs['site-audit'].steps.find((step) => step.name === 'Audit interface consistency across the catalog').env.EXAMPLE_ASSET_REFUSE_OTHER_HOSTS = '1';
+  });
+  assert.deepEqual(audit.selected, []);
+  assert.equal(audit.site, true);
+  // It changes code the site jobs run, so the per-app site checks cover every app.
+  assert.equal(audit.siteCode, true);
+  assert.equal(audit.reasons.fallback, null);
+  assert.deepEqual(audit.reasons.site, ['.github/workflows/ci.yml: its site-audit job changed, and it tests only the composite site']);
+  // A pull request that edits ci.yml runs the easter egg: .github/ is not a tree it cannot read.
+  assert.deepEqual(audit.easterEgg, ['.github/workflows/ci.yml: outside the trees the job cannot read']);
+  for (const job of Object.keys(CI_JOB_SCOPES).filter((id) => CI_JOB_SCOPES[id] === 'site')) {
+    const plan = await workflowPlan((ci) => {
+      ci.jobs[job]['timeout-minutes'] = 7;
+    });
+    assert.deepEqual(plan.selected, [], job);
+    assert.equal(plan.site, true, job);
+    assert.equal(plan.siteCode, true, job);
+  }
+  // A comment or a reordered mapping changes no job.
+  const text = await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8');
+  const comment = createAppPlan(await loadAppsRegistry(), ['.github/workflows/ci.yml'], await graph, new Map([['.github/workflows/ci.yml', { before: text, after: `${text}# a note\n` }]]));
+  assert.deepEqual(comment.selected, []);
+  assert.equal(comment.site, false);
+});
+
+test('a ci.yml change to a job that tests no app selects that job and no app', async () => {
+  // workspace-contracts runs on every run, so its own run tests the change.
+  const contracts = await workflowPlan((ci) => {
+    ci.jobs['workspace-contracts'].steps.at(-1).name = 'Lint every workspace';
+  });
+  assert.deepEqual(contracts.selected, []);
+  assert.equal(contracts.site, false);
+  assert.equal(contracts.reasons.fallback, null);
+  assert.deepEqual(contracts.easterEgg, ['.github/workflows/ci.yml: outside the trees the job cannot read']);
+  const egg = await workflowPlan((ci) => {
+    ci.jobs['homepage-easter-egg'].steps.push({ run: 'echo again' });
+  });
+  assert.deepEqual(egg.selected, []);
+  assert.equal(egg.site, false);
+  assert.deepEqual(egg.easterEgg, ['.github/workflows/ci.yml: outside the trees the job cannot read']);
+  for (const job of ['full-plan', 'full-plan-withheld']) {
+    const plan = await workflowPlan((ci) => {
+      ci.jobs[job].steps[0].name = 'Renamed';
+    });
+    assert.deepEqual(plan.selected, [], job);
+    assert.equal(plan.site, false, job);
+  }
+});
+
+test('a ci.yml change the job comparison cannot place selects every app with a reason', async () => {
+  const cases = {
+    'app-tests': (ci) => ci.jobs['app-tests'].steps.push({ run: 'echo' }),
+    'browser-e2e': (ci) => { ci.jobs['browser-e2e']['timeout-minutes'] = 9; },
+    'browser-e2e-gpu': (ci) => { ci.jobs['browser-e2e-gpu']['timeout-minutes'] = 9; },
+    'app-plan': (ci) => ci.jobs['app-plan'].steps.push({ run: 'echo' }),
+    'a new job': (ci) => { ci.jobs['new-check'] = { 'runs-on': 'ubuntu-latest', steps: [{ run: 'echo' }] }; },
+    on: (ci) => { ci.on.schedule[0].cron = '0 4 * * *'; },
+    env: (ci) => { ci.env.EXTRA = '1'; },
+    concurrency: (ci) => { ci.concurrency['cancel-in-progress'] = true; },
+    permissions: (ci) => { ci.permissions.actions = 'read'; },
+    defaults: (ci) => { ci.defaults = { run: { shell: 'bash' } }; },
+  };
+  for (const [label, edit] of Object.entries(cases)) {
+    const plan = await workflowPlan(edit);
+    assert.equal(plan.allApps, true, label);
+    assert.match(plan.reasons.fallback, /^\.github\/workflows\/ci\.yml: its \S+ (?:job|key) (?:changed|was added)/, label);
+    assert.ok(plan.easterEgg.length, label);
+  }
+  const registry = await loadAppsRegistry();
+  const text = await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8');
+  for (const [label, before, reason] of [['unparseable', 'jobs: [', /does not parse/], ['no jobs', 'name: ci\n', /has no jobs to compare/]]) {
+    const plan = createAppPlan(registry, ['.github/workflows/ci.yml'], await graph, new Map([['.github/workflows/ci.yml', { before, after: text }]]));
+    assert.equal(plan.allApps, true, label);
+    assert.match(plan.reasons.fallback, reason, label);
+  }
+  // Without the base text there is nothing to compare.
+  assert.equal(createAppPlan(registry, ['.github/workflows/ci.yml'], await graph).reasons.fallback, '.github/workflows/ci.yml: the base or head workflow is unavailable');
+});
+
+test('a ci.yml change narrows only within the same jobs and their own scope', async () => {
+  const registry = await loadAppsRegistry();
+  const text = await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8');
+  const plan = (editBase, editHead) => {
+    const [before, after] = [parse(text), parse(text)];
+    editBase(before);
+    editHead(after);
+    return graph.then((workspace) => createAppPlan(registry, ['.github/workflows/ci.yml'], workspace, new Map([['.github/workflows/ci.yml', { before: stringify(before), after: stringify(after) }]])));
+  };
+  const none = () => {};
+  // Deleting the job that runs the contract tests removes the test that would catch it.
+  const deleted = await plan(none, (ci) => { delete ci.jobs['workspace-contracts']; });
+  assert.equal(deleted.allApps, true);
+  assert.equal(deleted.reasons.fallback, '.github/workflows/ci.yml: its workspace-contracts job was removed, and only a change within the same jobs narrows');
+  assert.ok(deleted.easterEgg.length);
+  // app-tests consumes an output of workspace-contracts: changing it changes what every app job sees.
+  const consumed = (value) => (ci) => {
+    ci.jobs['app-tests'].needs = ['app-plan', 'workspace-contracts'];
+    ci.jobs['workspace-contracts'].outputs = { fixtures: value };
+  };
+  const output = await plan(consumed('a'), consumed('b'));
+  assert.equal(output.allApps, true);
+  assert.equal(output.reasons.fallback, '.github/workflows/ci.yml: its workspace-contracts job changed, and at the base app-tests needs it, which tests more than the every-run scope');
+  // A narrowed job that comes to need a per-app job is skipped whenever the plan skips that job.
+  const needing = await plan(none, (ci) => { ci.jobs['workspace-contracts'].needs = ['app-plan', 'app-tests']; });
+  assert.equal(needing.reasons.fallback, '.github/workflows/ci.yml: its workspace-contracts job changed, and at the head it needs app-tests, which tests more than the every-run scope');
+  // The site jobs need composite-site, which has their scope, so a change to it still narrows.
+  const site = await plan(none, (ci) => { ci.jobs['composite-site']['timeout-minutes'] = 61; });
+  assert.deepEqual(site.selected, []);
+  assert.equal(site.reasons.fallback, null);
+});
+
+test('the jobs a ci.yml change can narrow to test what CI_JOB_SCOPES says', async () => {
+  const ci = parse(await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8'));
+  for (const [job, scope] of Object.entries(CI_JOB_SCOPES)) {
+    assert.ok(ci.jobs[job], `${job} is not a ci.yml job`);
+    assert.ok(!CATALOG_JOBS.includes(job) && job !== 'app-plan', `${job} tests apps`);
+    assert.ok(!JSON.stringify(ci.jobs[job]).includes('matrix.app'), `${job} runs per app`);
+    // The site jobs are the composite build and jobs that only consume it, directly or through other site jobs.
+    if (scope === 'site' && job !== 'composite-site') {
+      const needs = [ci.jobs[job].needs].flat();
+      assert.ok(needs.length && needs.every((need) => CI_JOB_SCOPES[need] === 'site'), `${job} needs more than the composite site: ${needs.join(', ')}`);
+    }
+  }
+  // The plan decides the easter egg on a pull request only; workspace-contracts runs as on main, every package on every run.
+  assert.equal(ci.jobs['homepage-easter-egg'].needs, 'app-plan');
+  assert.match(ci.jobs['homepage-easter-egg'].if, new RegExp(String.raw`\(github\.event_name != 'pull_request' \|\| needs\.app-plan\.result != 'success' \|\| needs\.app-plan\.outputs\.easter_egg != '${EASTER_EGG_OUTPUT.skip}'\) \}\}$`));
+  assert.equal(ci.jobs['app-plan'].outputs.easter_egg, '${{ steps.plan.outputs.easter_egg }}');
+  assert.equal(ci.jobs['workspace-contracts'].needs, undefined);
+  for (const step of ci.jobs['workspace-contracts'].steps.filter((step) => step.run)) assert.equal(step.if, step.run === 'pnpm lint:correctness' ? "${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}" : undefined, step.run);
+  assert.ok(ci.jobs['workspace-contracts'].steps.some((step) => step.run === 'pnpm test:packages'));
+});
+
+test('a pull request skips the homepage easter egg only when every changed path lies in a tree it cannot read', async () => {
+  const registry = await loadAppsRegistry();
+  const workspace = await graph;
+  const egg = (paths, options) => createAppPlan(registry, paths, workspace, new Map(), options).easterEgg;
+  // The skip trees: apps, native executables, model manifests, documentation and the packages outside its closure.
+  for (const path of ['apps/niimath/main.js', 'apps/lcmodel/e2e/smoke.spec.js', 'exes/greedy/core/src/lib.rs', 'models/lcmodel.manifest.json', 'docs/quality/ci-development-tiers.md', 'packages/greedy/src/index.js', 'packages/components/src/ui/index.js', 'packages/runtime-support/vendor/freebrowse/dist/index.js']) {
+    assert.equal(easterEggCannotRead(path), true, path);
+    assert.deepEqual(egg([path]), [], path);
+  }
+  assert.deepEqual(egg(['apps/niimath/main.js', 'docs/x.md', 'packages/lcmodel/src/a.js', 'exes/synthsr/Makefile', 'models/synthsr.manifest.json']), []);
+  assert.deepEqual(egg(['apps/niimath/main.js'], { draft: true }), []);
+  // Anything else runs it: root files, .github/, scripts/, test-utils/, test/, registry/, site/, templates/, the
+  // lockfile and workspace files, the packages its commands reach, a package.json anywhere and a path no rule knows.
+  for (const path of ['README.md', 'AGENTS.md', '.npmrc', '.gitattributes', 'eslint.config.js', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.github/workflows/standalone.yml', '.github/workflows/ci.yml', 'scripts/lint.mjs', 'scripts/lib/landing-page.mjs', 'test-utils/test-durations-reporter.mjs', 'test-utils/dice.mjs', 'test/app-plan.test.mjs', 'registry/apps.yml', 'registry/app-information.yml', 'site/landing.js', 'site/easter-eggs/vessel-surfer/src/main.js', 'templates/app-template/index.html', 'packages/analytics/src/index.js', 'packages/analytics/test/report.test.js', 'packages/README.md', 'apps/niimath/package.json', 'packages/greedy/package.json', 'packages/runtime-support/vendor/freebrowse/package.json', '.changeset/brave-owls.md', 'an-unknown-directory/file.js']) {
+    assert.equal(easterEggCannotRead(path), false, path);
+    assert.deepEqual(egg([path]), [`${path}: outside the trees the job cannot read`], path);
+  }
+  // S11: pnpm reads package.json, package.json5 and package.yaml as a workspace project's manifest, and a
+  // second one beside package.json as a second project, which can take the easter egg's name. Each runs it.
+  assert.deepEqual(WORKSPACE_MANIFESTS, ['package.json', 'package.json5', 'package.yaml']);
+  for (const name of WORKSPACE_MANIFESTS) {
+    for (const path of [`apps/probe/${name}`, `apps/niimath/${name}`, `packages/greedy/${name}`, `exes/greedy/${name}`, `docs/${name}`, name]) {
+      assert.equal(easterEggCannotRead(path), false, path);
+      assert.deepEqual(egg([path]), [`${path}: outside the trees the job cannot read`], path);
+    }
+    // The reviewer's case: a pull request that adds only apps/probe/package.yaml. A new app directory selects every app, as on main.
+    const probe = createAppPlan(registry, [`apps/probe/${name}`], workspace);
+    assert.equal(probe.allApps, true, name);
+    assert.equal(probe.reasons.fallback, `apps/probe/${name}: no rule classifies it`);
+  }
+  for (const path of ['apps/niimath/package.json.orig', 'apps/niimath/my-package.yaml', 'apps/niimath/src/package.yaml.md']) assert.equal(easterEggCannotRead(path), true, path);
+  // One such path is enough, and the reasons stay short.
+  assert.deepEqual(egg(['apps/niimath/main.js', 'scripts/lint.mjs']), ['scripts/lint.mjs: outside the trees the job cannot read']);
+  assert.equal(egg(Array.from({ length: 9 }, (_, index) => `scripts/s${index}.mjs`)).at(-1), 'and 4 more');
+  // No changed paths (no base, an unreadable diff or a full run) runs it.
+  assert.match(egg([])[0], /^no changed paths/);
+  // It needs no workspace graph and no manifests.
+  assert.deepEqual(createAppPlan(registry, ['apps/niimath/main.js'], null).easterEgg, []);
+});
+
+// S10: Playwright loads the reporter ci.yml names in PW_TEST_REPORTER in every run, the easter egg's included.
+test('a change to the Playwright reporter ci.yml names runs the easter egg, as does any file its environment names', async () => {
+  const plan = createAppPlan(await loadAppsRegistry(), ['test-utils/test-durations-reporter.mjs'], await graph);
+  assert.deepEqual(plan.easterEgg, ['test-utils/test-durations-reporter.mjs: outside the trees the job cannot read']);
+  // The files named in the environment the job sees: the workflow's, its own and its steps'.
+  const ci = parse(await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8'));
+  const job = ci.jobs[EASTER_EGG_JOB];
+  const values = [ci.env, job.env, ...job.steps.map((step) => step.env)].flatMap((env) => Object.values(env ?? {})).map(String);
+  const named = values.flatMap((value) => [...value.matchAll(/(?:\$\{\{\s*github\.workspace\s*\}\}\/|^)((?:[\w.-]+\/)*[\w.-]+\.[A-Za-z]\w*)$/g)].map((match) => match[1]));
+  assert.ok(named.includes('test-utils/test-durations-reporter.mjs'), 'the reporter is still named');
+  for (const file of named) {
+    assert.equal(easterEggCannotRead(file), false, `${file} is named in the easter egg's environment but lies in a skip tree`);
+    assert.ok(EASTER_EGG_INPUTS.includes(file), `${file} is named in the easter egg's environment; add it to EASTER_EGG_INPUTS`);
+  }
+});
+
+test("the easter egg's input table holds every file its job reads", async () => {
+  const ci = parse(await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8'));
+  // The job's commands. A new one needs its inputs in EASTER_EGG_INPUTS before this list changes.
+  assert.deepEqual(ci.jobs[EASTER_EGG_JOB].steps.filter((step) => step.run).map((step) => step.run), [
+    'pnpm install --frozen-lockfile',
+    'node node_modules/@playwright/test/cli.js install --with-deps chromium',
+    'node --test test/easter-egg.test.mjs',
+    'pnpm --filter @neurodesk/vessel-surfer-easter-egg test',
+    'pnpm --filter @neurodesk/vessel-surfer-leaderboard test',
+    'pnpm --filter @neurodesk/vessel-surfer-easter-egg test:e2e',
+  ]);
+  // The package scripts those commands run, and the e2e server's (pnpm build && pnpm preview).
+  const scripts = async (dir) => JSON.parse(await readFile(join(repoRoot, dir, 'package.json'), 'utf8')).scripts;
+  const surfer = await scripts('site/easter-eggs/vessel-surfer');
+  assert.deepEqual([surfer.test, surfer['test:e2e'], surfer.build, surfer.preview], ['node scripts/fetch-data.mjs && node --test test/*.test.js', 'playwright test', 'node scripts/fetch-data.mjs && vite build && node scripts/finish-build.mjs', 'node scripts/preview-site.mjs']);
+  assert.equal((await scripts('site/easter-eggs/vessel-surfer-leaderboard')).test, 'node --test test/*.test.js');
+  assert.match(await readFile(join(repoRoot, 'site/easter-eggs/vessel-surfer/playwright.config.js'), 'utf8'), /command:\s*"pnpm build && pnpm preview --host 127\.0\.0\.1 --port 4178 --strictPort"/);
+  // Neither package depends on a workspace package; npm packages come from the lockfile.
+  for (const dir of ['site/easter-eggs/vessel-surfer', 'site/easter-eggs/vessel-surfer-leaderboard']) {
+    const manifest = JSON.parse(await readFile(join(repoRoot, dir, 'package.json'), 'utf8'));
+    for (const spec of Object.values({ ...manifest.dependencies, ...manifest.devDependencies })) assert.ok(!/^(?:workspace|link|file):/.test(spec), `${dir} depends on ${spec}`);
+  }
+  // The table is the evidence for the skip list: no input lies in a tree the plan skips it for.
+  for (const input of EASTER_EGG_INPUTS) assert.equal(easterEggCannotRead(input.endsWith('/') ? `${input}file.js` : input), false, `${input} is read by the easter egg but lies in a skip tree`);
+  assert.deepEqual(EASTER_EGG_PACKAGES, [...new Set(EASTER_EGG_INPUTS.map((input) => input.match(/^packages\/[^/]+/)?.[0]).filter(Boolean))]);
+  // Every file the job's code imports, and every path it builds on a URL, is in the table: the
+  // test file, the inputs' modules and every source file of the easter-egg packages.
+  const inTable = (path) => EASTER_EGG_INPUTS.some((input) => (input.endsWith('/') ? path.startsWith(input) : path === input));
+  const sources = async (dir) => (await readdir(join(repoRoot, dir), { recursive: true, withFileTypes: true }))
+    // eslint.config.js is lint configuration; the job runs no lint.
+    .filter((entry) => entry.isFile() && /\.(?:m?js|cjs|ts)$/.test(entry.name) && entry.name !== 'eslint.config.js' && !/(?:^|\/)(?:node_modules|dist|public|\.wrangler)(?:\/|$)/.test(relativePath(repoRoot, entry.parentPath)))
+    .map((entry) => relativePath(repoRoot, join(entry.parentPath, entry.name)));
+  const eggSources = [...await sources('site/easter-eggs/vessel-surfer'), ...await sources('site/easter-eggs/vessel-surfer-leaderboard')];
+  assert.ok(eggSources.includes('site/easter-eggs/vessel-surfer/scripts/preview-site.mjs') && eggSources.includes('site/easter-eggs/vessel-surfer/playwright.config.js'));
+  const pending = ['test/easter-egg.test.mjs', ...eggSources, ...EASTER_EGG_INPUTS.filter((input) => /\.m?js$/.test(input))];
+  const seen = new Set();
+  while (pending.length) {
+    const file = pending.pop();
+    if (seen.has(file)) continue;
+    seen.add(file);
+    const text = await readFile(join(repoRoot, file), 'utf8');
+    for (const [, specifier] of text.matchAll(/(?:\bfrom|\bimport\s*\()\s*["'`]([^"'`]+)["'`]/g)) {
+      if (!specifier.startsWith('.')) continue;
+      const target = relativePath(repoRoot, resolvePath(repoRoot, dirname(file), specifier));
+      assert.ok(inTable(target), `${file} imports ${target}; add it to EASTER_EGG_INPUTS`);
+      pending.push(target);
+    }
+    // URLs built on the file's own location or on a URL named from it (`const root = new URL('../', import.meta.url)`).
+    const bases = new Map([['import.meta.url', `${dirname(file)}/`]]);
+    for (const [, name, literal, base] of text.matchAll(/(?:const\s+(\w+)\s*=\s*)?new URL\(\s*["'`]([^"'`$]*)[^"'`]*["'`]\s*,\s*([\w.]+)\s*\)/g)) {
+      assert.ok(bases.has(base), `${file} builds a URL on ${base}, which this test cannot follow; list what it reads in EASTER_EGG_INPUTS and here`);
+      const target = `${relativePath(repoRoot, resolvePath(repoRoot, bases.get(base), literal))}${literal.endsWith('/') || !literal ? '/' : ''}`.replace(/^\/$/, '');
+      if (name) bases.set(name, target || '.');
+      // The repository root itself is a base, not a read.
+      if (target) assert.ok(inTable(target), `${file} reads ${target}; add it to EASTER_EGG_INPUTS`);
+    }
+  }
+  assert.ok(seen.has('scripts/lib/landing-page.mjs') && seen.has('scripts/lib/apps-registry.mjs'));
+});
+
 test('an app with ci.e2e_shards gets one browser-e2e entry per shard', async () => {
   const registry = await loadAppsRegistry();
   const plan = createAppPlan(registry, ['apps/browserqc/src/main.js'], await graph);
@@ -823,6 +1433,44 @@ test('the app-plan CLI selects explicit apps without a base revision', () => {
   assert.equal(plan.all_apps, 'false');
   assert.equal(plan.has_site, 'true');
   assert.equal(plan.site_code, 'false');
+});
+
+test('the app-plan CLI runs the easter egg on every push, nightly and dispatch, and on a pull request as its plan says', async (t) => {
+  const { root } = await plannerFixture(t);
+  const git = (...args) => execFileSync('git', ['-c', 'user.name=planner', '-c', 'user.email=planner@example.org', ...args], { cwd: root, encoding: 'utf8' }).trim();
+  git('init', '--quiet');
+  git('add', '-A');
+  git('commit', '--quiet', '-m', 'base');
+  const base = git('rev-parse', 'HEAD');
+  const commit = async (path) => {
+    await mkdir(join(root, dirname(path)), { recursive: true });
+    await writeFile(join(root, path), path);
+    git('add', '-A');
+    git('commit', '--quiet', '-m', path);
+    return git('rev-parse', 'HEAD');
+  };
+  const docs = await commit('docs/notes.md');
+  const reporter = await commit('test-utils/test-durations-reporter.mjs');
+  const plan = (head, event, ...args) => {
+    const env = { ...process.env, GITHUB_OUTPUT: '', GITHUB_EVENT_NAME: event };
+    for (const name of ['GITHUB_EVENT_PATH', 'CI_DRAFT']) delete env[name];
+    const output = JSON.parse(execFileSync(process.execPath, ['scripts/app-plan.mjs', '--base', base, '--head', head, ...args], { cwd: root, encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'pipe'] }));
+    return { ...output, reasons: JSON.parse(output.selection_reasons) };
+  };
+  // A docs-only pull request skips it; the same change pushed, scheduled or dispatched runs it.
+  const pull = plan(docs, 'pull_request');
+  assert.equal(pull.easter_egg, EASTER_EGG_OUTPUT.skip);
+  assert.deepEqual(pull.reasons.easter_egg, []);
+  for (const event of ['push', 'schedule', 'workflow_dispatch']) assert.equal(plan(docs, event).easter_egg, EASTER_EGG_OUTPUT.run, event);
+  // A pull request that also edits the reporter (S10) runs it.
+  const both = plan(reporter, 'pull_request');
+  assert.equal(both.easter_egg, EASTER_EGG_OUTPUT.run);
+  assert.deepEqual(both.reasons.easter_egg, ['test-utils/test-durations-reporter.mjs: outside the trees the job cannot read']);
+  // A site dispatch runs it whatever changed; a gpu dispatch never does.
+  assert.equal(plan(docs, 'workflow_dispatch', '--scope', 'site').easter_egg, EASTER_EGG_OUTPUT.run);
+  assert.equal(plan(reporter, 'workflow_dispatch', '--scope', 'gpu').easter_egg, EASTER_EGG_OUTPUT.skip);
+  // workspace-contracts tests every package on every run; the plan lists none.
+  for (const output of ['packages', 'all_packages', 'has_packages']) assert.equal(pull[output], undefined, output);
 });
 
 test('deleting an imported root helper still selects the app that imports it', async (t) => {
@@ -1015,8 +1663,10 @@ async function budgetFixture(t) {
   git('init', '--quiet');
   git('add', '.');
   git('commit', '--quiet', '-m', 'base');
-  // A change to ci.yml selects every app; the draft plan keeps none.
-  await writeFile(join(root, '.github/workflows/ci.yml'), `${await readFile(join(root, '.github/workflows/ci.yml'), 'utf8')}# change\n`);
+  // A change to a per-app job of ci.yml selects every app; the draft plan keeps none.
+  const ci = parse(await readFile(join(root, '.github/workflows/ci.yml'), 'utf8'));
+  ci.jobs['app-tests'].steps.push({ run: 'echo change' });
+  await writeFile(join(root, '.github/workflows/ci.yml'), stringify(ci));
   git('commit', '--quiet', '-am', 'head');
   const bin = join(root, 'stub-bin');
   await mkdir(bin);
@@ -1221,8 +1871,9 @@ test('the CLI compares the lockfile at the merge base and reports why it selecte
   assert.equal(missingBase.status, 0, missingBase.stderr);
   const fallback = JSON.parse(missingBase.stdout);
   assert.equal(fallback.all_apps, 'true');
-  assert.match(fallback.fallback_reason, /no changed paths/);
-  assert.match(missingBase.stderr, /Full catalog and site selected: no changed paths/);
+  // A base git cannot compare is an unreadable diff, never an empty one.
+  assert.match(fallback.fallback_reason, /^the changed paths could not be read: git diff 0123456789abcdef0123456789abcdef01234567\.\.\.HEAD failed/);
+  assert.match(missingBase.stderr, /Full catalog and site selected: the changed paths could not be read/);
 });
 
 test('a push diffs from the nearest green run on the branch, not from a pull request or another branch', () => {
@@ -1383,6 +2034,139 @@ test('a push run tests the merges whose own runs were cancelled, and falls back 
     assert.equal(fallback.all_apps, 'true', name);
     assert.match(fallback.fallback_reason, /ci run on main/, name);
   }
+});
+
+// A repository with one commit of `files`, and a function that commits more changes.
+async function diffRepository(t, files) {
+  const root = await mkdtemp(join(tmpdir(), 'app-plan-diff-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const git = (...args) => execFileSync('git', ['-c', 'user.name=planner', '-c', 'user.email=planner@example.org', ...args], { cwd: root, encoding: 'utf8' });
+  const write = async (files) => {
+    for (const [path, text] of Object.entries(files)) {
+      await mkdir(join(root, path, '..'), { recursive: true });
+      await writeFile(join(root, path), text);
+    }
+  };
+  git('init', '--quiet');
+  await write(files);
+  git('add', '-A');
+  git('commit', '--quiet', '-m', 'base');
+  const base = git('rev-parse', 'HEAD').trim();
+  return { root, git, base, commit: async (changes, moves = []) => {
+    await write(changes);
+    for (const [from, to] of moves) git('mv', from, to);
+    git('add', '-A');
+    git('commit', '--quiet', '-m', 'change');
+  } };
+}
+
+test('changed paths are read NUL-delimited, so git does not quote an unusual name', async (t) => {
+  const name = 'apps/niimath/ünï "quoted".js';
+  const { root, git, base, commit } = await diffRepository(t, { 'README.md': 'x' });
+  await commit({ [name]: 'x' });
+  assert.match(git('diff', '--name-only', `${base}...HEAD`), /^"apps\/niimath\/\\303/, 'git quotes the name in its line form');
+  assert.deepEqual(changedPathsFromGit({ base, cwd: root }), [name]);
+});
+
+test('changed paths keep leading and trailing spaces', async (t) => {
+  const name = 'apps/niimath/ padded.js ';
+  const { root, base, commit } = await diffRepository(t, { 'README.md': 'x' });
+  await commit({ [name]: 'x' });
+  assert.deepEqual(changedPathsFromGit({ base, cwd: root }), [name]);
+});
+
+test('changed paths hold both sides of a copy', async (t) => {
+  const source = 'packages/a/test/fixtures/data.txt';
+  const text = Array.from({ length: 40 }, (_, line) => `line ${line}`).join('\n');
+  const { root, git, base, commit } = await diffRepository(t, { [source]: text });
+  // A copy is found when its source changes in the same commit.
+  await commit({ 'apps/b/copied.txt': text, [source]: `${text}\nmore` });
+  assert.match(git('diff', '--name-status', '--find-copies', `${base}...HEAD`), /^C\d+\t/m);
+  assert.deepEqual(changedPathsFromGit({ base, cwd: root }).sort(), ['apps/b/copied.txt', source].sort());
+});
+
+test('a diff git cannot read is not an empty one: the plan tests everything', async (t) => {
+  const { root } = await diffRepository(t, { 'README.md': 'x' });
+  assert.throws(() => changedPathsFromGit({ base: '0123456789abcdef0123456789abcdef01234567', cwd: root }), UnreadableDiffError);
+  assert.deepEqual(changedPathsFromGit({ base: '', cwd: root }), [], 'no base is a full run');
+  // The CLI selects every app, the site build and the easter egg, and says why.
+  const { root: fixture, run } = await plannerFixture(t);
+  execFileSync('git', ['init', '--quiet'], { cwd: fixture });
+  execFileSync('git', ['-c', 'user.name=p', '-c', 'user.email=p@example.org', 'commit', '--quiet', '--allow-empty', '-m', 'x'], { cwd: fixture });
+  const result = run('--base', '0123456789abcdef0123456789abcdef01234567', '--head', 'HEAD');
+  assert.equal(result.status, 0, result.stderr);
+  const plan = JSON.parse(result.stdout);
+  assert.match(plan.fallback_reason, /^the changed paths could not be read: git diff 0123456789abcdef0123456789abcdef01234567\.\.\.HEAD failed/);
+  assert.equal(plan.all_apps, 'true');
+  assert.equal(plan.has_site, 'true');
+  assert.equal(plan.easter_egg, EASTER_EGG_OUTPUT.run);
+  assert.match(JSON.parse(plan.selection_reasons).easter_egg[0], /^no changed paths/);
+  // The site checks cover every app too.
+  assert.equal(plan.site_code, 'true');
+  assert.equal(siteCheckApps(await loadAppsRegistry(), { event: 'pull_request', plan }).value, '');
+});
+
+test('a site key no app page carries is data for the per-app site checks, and any other key is code', async () => {
+  const registry = await loadAppsRegistry();
+  const information = await loadAppInformation(registry);
+  const pages = (value) => JSON.stringify(value.apps.map((app) => hostedThemeOptions({ registry: value, information, app, version: 'x' })));
+  const changed = (key) => {
+    const copy = structuredClone(registry);
+    const segments = key.split('.').flatMap((part) => (part.endsWith('[]') ? [part.slice(0, -2), '[]'] : [part]));
+    const visit = (value, rest, parent, name) => {
+      if (!rest.length) {
+        parent[name] = typeof value === 'number' ? value + 1 : typeof value === 'boolean' ? !value : `${value ?? ''}-changed`;
+        return;
+      }
+      const [head, ...tail] = rest;
+      if (head === '[]') value.forEach((entry, index) => visit(entry, tail, value, index));
+      else visit(value?.[head], tail, value, head);
+    };
+    visit(copy, segments, null, null);
+    return copy;
+  };
+  const before = pages(registry);
+  for (const key of SITE_DATA_KEYS) {
+    assert.ok(Object.hasOwn(SITE_KEY_READERS, key), `${key} is a site key`);
+    assert.equal(pages(changed(key)), before, `${key} reaches an app page`);
+  }
+  assert.notEqual(pages(changed('site.catalogs[].brand.more_apps')), before, 'the check can see a page change');
+  // In the planner a data key leaves site_code false and a page key sets it.
+  const hub = await registryPlan((after) => {
+    after.site.hub.title = 'Renamed hub';
+  });
+  assert.equal(hub.allApps, false);
+  assert.equal(hub.siteCode, false);
+  const brand = await registryPlan((after) => {
+    after.site.catalogs[0].brand.more_apps = 'More apps';
+  });
+  assert.equal(brand.allApps, false);
+  assert.equal(brand.siteCode, true);
+  assert.ok(brand.reasons.site.includes('registry/apps.yml: site.catalogs[].brand.more_apps changed, and the composite build writes it into every app page'));
+});
+
+test('a rename lists both its paths, so what reads the old path is selected', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'app-plan-rename-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const git = (...args) => execFileSync('git', ['-c', 'user.name=planner', '-c', 'user.email=planner@example.org', ...args], { cwd: root, encoding: 'utf8' }).trim();
+  git('init', '--quiet');
+  // Deface's and Brain Extraction's package tests read CALMaR's fixture.
+  const fixture = 'apps/calmar/tests/fixtures/synthstrip-mini/T1.nii.gz';
+  await mkdir(join(root, fixture, '..'), { recursive: true });
+  await writeFile(join(root, fixture), await readFile(join(repoRoot, fixture)));
+  git('add', '-A');
+  git('commit', '--quiet', '-m', 'base');
+  const base = git('rev-parse', 'HEAD');
+  await mkdir(join(root, 'docs'));
+  git('mv', fixture, 'docs/T1.nii.gz');
+  git('commit', '--quiet', '-m', 'move');
+  assert.match(git('diff', '--name-status', `${base}...HEAD`), /^R100\t/, 'git pairs the move as a rename by default');
+  const paths = changedPathsFromGit({ base, cwd: root });
+  assert.deepEqual(paths.sort(), [fixture, 'docs/T1.nii.gz'].sort());
+  const plan = createAppPlan(await loadAppsRegistry(), paths, await graph);
+  // Without the old path the move would select nothing: docs/ is read by no test.
+  assert.ok(plan.selected.some((app) => app.id === 'calmar'));
+  assert.deepEqual(createAppPlan(await loadAppsRegistry(), ['docs/T1.nii.gz'], await graph).selected, []);
 });
 
 test('a .gitattributes change selects the apps whose files now check out differently', async (t) => {

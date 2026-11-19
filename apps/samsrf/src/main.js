@@ -28,12 +28,14 @@ import {
   fineFit,
   hrfModel,
   hrfValue,
+  isSubjectHrf,
   parseModel,
   presetsFor,
   setFineFit,
+  subjectHrfName,
   withInputNames,
 } from "./models.js";
-import { describeSurfaces, displaySurface, emptyInputs, mergeInputs, missingInputs, sortFiles } from "./inputs.js";
+import { classifyFile, describeSurfaces, displaySurface, emptyInputs, mergeInputs, missingInputs, sortFiles } from "./inputs.js";
 import { compareRunNames } from "@neurodesk/samsrf/inputs";
 import { countShown, encodeOverlay, hemisphereOf, mapKind, mapLabel, mapOrder, mapStyle } from "./display.js";
 import examples from "../examples.json";
@@ -137,6 +139,7 @@ const fields = {
   surfaces: field("surfaces", { kind: "surface", multiple: true, text: "Drop surfaces: white, inflated, curv, area", label: "Choose FreeSurfer surfaces, curvature and area" }),
   template: field("template", { kind: "surface", text: "Drop a template map GIfTI (e.g. Benson)", label: "Choose the template map" }),
   seed: field("seed", { kind: "surface", text: "Drop the seed region label", label: "Choose the seed region label" }),
+  subjectHrf: field("subjectHrf", { kind: "metadata", accept: ".mat", text: "Drop the subject HRF fit (hrf_*.mat)", label: "Choose the subject's HRF fit (hrf_*.mat)" }),
   model: field("model", { kind: "model", accept: ".json", text: "Load a model JSON", label: "Choose a SamSrf model JSON file" }),
 };
 const FIELD_TEXT = Object.fromEntries(Object.entries(fields).map(([slot, element]) => [slot, element.getAttribute("text")]));
@@ -148,7 +151,7 @@ function slotText(slot) {
 }
 
 function renderInputs() {
-  for (const slot of ["runs", "apertures", "roi", "surfaces", "template", "seed"]) {
+  for (const slot of ["runs", "apertures", "roi", "surfaces", "template", "seed", "subjectHrf"]) {
     const text = slotText(slot);
     fields[slot].setText(text ?? FIELD_TEXT[slot]);
     fields[slot].setHasFiles(Boolean(text));
@@ -168,6 +171,7 @@ async function addFiles(filesPromise, only, generation = inputGeneration) {
     for (const slot of Object.keys(filled)) if (slot !== "surfaces") ignored.push(...[filled[slot]].flat().map((file) => file.name));
     await setInputs(mergeInputs(inputs, { surfaces: filled.surfaces ?? {} }));
   } else if (only) {
+    if (only === "subjectHrf" && classifyFile(files[0].name)?.slot !== "subjectHrf") throw new Error(`${files[0].name}: SamSrf reads a subject HRF fit from a file named hrf_*.mat.`);
     await setInputs(mergeInputs(inputs, { [only]: only === "runs" ? [...files].sort(compareRunNames) : files[0] }));
   } else {
     if (filled.model) await loadModelFile(filled.model, generation);
@@ -178,25 +182,31 @@ async function addFiles(filesPromise, only, generation = inputGeneration) {
 }
 
 async function setInputs(next) {
+  // A subject HRF fit that arrives is the HRF to use; the select can switch back.
+  if (next.subjectHrf && next.subjectHrf !== inputs.subjectHrf && analysis() !== "cf") model = { ...model, Hrf: subjectHrfName(next.subjectHrf) };
   inputs = next;
   clearResult();
   renderInputs();
   const mesh = displaySurface(inputs.surfaces);
   const curv = inputs.surfaces.curv ?? null;
+  let surfaceError = null;
   if (mesh !== shownSurface.mesh || curv !== shownSurface.curv) {
     shownSurface = { mesh, curv };
     try {
-      await viewer.showSurface(mesh, curv);
+      // A later change of the inputs replaced this surface; that change shows and reports its own.
+      if (!(await viewer.showSurface(mesh, curv))) return;
       viewer.setView(view, hemisphere());
       $("emptyState").hidden = Boolean(mesh);
       if (mesh) log.log(`Showing ${mesh.name}${curv ? ` shaded by ${curv.name}` : ""}`, "info", "technical");
     } catch (error) {
       shownSurface = { mesh: null, curv: null };
-      status(`The surface could not be shown: ${error.message}`, { error: true });
+      $("emptyState").hidden = false;
+      surfaceError = `The surface could not be shown: ${error.message}`;
     }
   }
   updateRunButton();
-  status(missingInputs(analysis(), model, inputs).length ? "Add the remaining inputs" : "Ready");
+  if (surfaceError) status(surfaceError, { error: true });
+  else status(missingInputs(analysis(), model, inputs).length ? "Add the remaining inputs" : "Ready");
 }
 
 function importInto(slot) {
@@ -209,7 +219,7 @@ function importInto(slot) {
   };
 }
 fields.runs.onFiles(importInto(null));
-for (const slot of ["apertures", "roi", "surfaces", "template", "seed"]) fields[slot].onFiles(importInto(slot));
+for (const slot of ["apertures", "roi", "surfaces", "template", "seed", "subjectHrf"]) fields[slot].onFiles(importInto(slot));
 fields.model.onFiles((filesPromise) => {
   const generation = inputGeneration;
   void filesPromise.then(([file]) => loadModelFile(file, generation)).catch((error) => {
@@ -268,13 +278,20 @@ function renderModel() {
   if ("Hrf" in model) {
     const value = hrfValue(model.Hrf);
     $("hrf").querySelector('option[value="custom"]')?.remove();
+    $("hrf").querySelector('option[value="subject"]')?.remove();
     if (value === "custom") {
       const option = new Option("Custom HRF (model JSON)", "custom");
       option.disabled = true;
       $("hrf").append(option);
     }
+    if (value === "subject" || inputs.subjectHrf) {
+      const option = new Option(`Subject HRF (${inputs.subjectHrf?.name ?? `${model.Hrf}.mat`})`, "subject");
+      option.disabled = !inputs.subjectHrf;
+      $("hrf").append(option);
+    }
     $("hrf").value = value;
   }
+  $("subjectHrfField").hidden = kind === "cf" || !(isSubjectHrf(model.Hrf) || inputs.subjectHrf);
   $("fineFit").value = fineFit(model);
   $("fineFitThreshold").value = String(model.Fine_Fit_Threshold ?? 0.01);
   $("coarseOnly").checked = Boolean(model.Coarse_Fit_Only);
@@ -318,7 +335,7 @@ $("preset").addEventListener("change", () => {
 });
 $("tr").addEventListener("change", () => editModel((current) => ({ ...current, TR: settings().tr })));
 $("scalingFactor").addEventListener("change", () => editModel(current => changeScalingFactor(current, settings().scalingFactor, modelFromPreset ? presetId() : null)));
-$("hrf").addEventListener("change", () => editModel((current) => ({ ...current, Hrf: hrfModel($("hrf").value) })));
+$("hrf").addEventListener("change", () => editModel((current) => ({ ...current, Hrf: $("hrf").value === "subject" ? subjectHrfName(inputs.subjectHrf) : hrfModel($("hrf").value) })));
 $("fineFit").addEventListener("change", () => editModel((current) => setFineFit(current, $("fineFit").value, modelFromPreset ? PRESETS[presetId()] : null)));
 $("fineFitThreshold").addEventListener("change", () => editModel((current) => ({ ...current, Fine_Fit_Threshold: Number($("fineFitThreshold").value) })));
 $("coarseOnly").addEventListener("change", () => editModel((current) => {
@@ -452,6 +469,7 @@ async function jobInputs() {
     surfaces,
     template: await named(inputs.template),
     seed: await named(inputs.seed),
+    subjectHrf: await named(inputs.subjectHrf),
     normalise: $("normalise").checked,
     average: $("combine").value === "average",
   };

@@ -1,9 +1,10 @@
 // The input slots of a SamSrf session and how a dropped file finds its slot.
 // Pure: no DOM, so the rules are unit-tested under Node.
 import { compareRunNames, resolveHemisphere } from "@neurodesk/samsrf/inputs";
+import { isSubjectHrf } from "./models.js";
 
 /** @typedef {'white' | 'pial' | 'inflated' | 'sphere' | 'mesh' | 'curv' | 'area'} SurfaceRole */
-/** @typedef {'runs' | 'apertures' | 'roi' | 'surfaces' | 'template' | 'seed' | 'model'} Slot */
+/** @typedef {'runs' | 'apertures' | 'roi' | 'surfaces' | 'template' | 'seed' | 'subjectHrf' | 'model'} Slot */
 
 /**
  * @typedef {{
@@ -13,12 +14,13 @@ import { compareRunNames, resolveHemisphere } from "@neurodesk/samsrf/inputs";
  *   surfaces: Partial<Record<SurfaceRole, File>>,
  *   template: File | null,
  *   seed: File | null,
+ *   subjectHrf: File | null,
  * }} Inputs
  */
 
 /** @returns {Inputs} */
 export function emptyInputs() {
-  return { runs: [], apertures: null, roi: null, surfaces: {}, template: null, seed: null };
+  return { runs: [], apertures: null, roi: null, surfaces: {}, template: null, seed: null, subjectHrf: null };
 }
 
 const FREESURFER_SURFACE = /(?:^|[._-])(white|pial|inflated|sphere|orig|smoothwm|midthickness)(?:\.surf)?(?:\.gii)?$/i;
@@ -33,6 +35,7 @@ const MESH_GII = /\.surf\.gii$|(?:white|pial|inflated|sphere|midthickness)[^/]*\
 export function classifyFile(name) {
   const base = name.split("/").pop();
   if (/\.label$/i.test(base)) return { slot: /seed/i.test(base) ? "seed" : "roi" };
+  if (/\.mat$/i.test(base) && isSubjectHrf(base)) return { slot: "subjectHrf" };
   if (/\.(mat|gif)$|\.nii(\.gz)?$/i.test(base)) return { slot: "apertures" };
   if (/\.json$/i.test(base)) return { slot: "model" };
   if (/\.(curv|sulc)$/i.test(base)) return { slot: "surfaces", role: "curv" };
@@ -54,6 +57,9 @@ function surfaceRole(base) {
   return ["white", "pial", "inflated", "sphere"].includes(kind) ? kind : "mesh";
 }
 
+/** How the status bar names each slot that takes one file. */
+const SLOT_LABELS = { apertures: "apertures file", roi: "ROI label", template: "template map", seed: "seed label", subjectHrf: "subject HRF fit", model: "model JSON" };
+
 /**
  * Sort files into slots. Returns the slots they fill and the names nothing took.
  * Runs use lexical name order (1, 10, 2), matching MATLAB dir.
@@ -74,7 +80,7 @@ export function sortFiles(files) {
       (filled.surfaces ??= {})[target.role] = file;
     } else {
       const previous = filled[target.slot];
-      if (previous) throw new Error(`Choose one ${target.slot} file: ${previous.name} and ${file.name} are ambiguous.`);
+      if (previous) throw new Error(`Choose one ${SLOT_LABELS[target.slot]}: ${previous.name} and ${file.name} are ambiguous.`);
       filled[target.slot] = file;
     }
   }
@@ -119,8 +125,9 @@ export function missingInputs(analysis, model, inputs) {
     if (!inputs.seed) missing.push("a seed label");
     if (!inputs.surfaces.area) missing.push("a surface area file");
     if (Number(model.Smoothing) > 0 && !inputs.surfaces.white) missing.push("a white surface");
-  } else if (!inputs.apertures) {
-    missing.push("apertures");
+  } else {
+    if (!inputs.apertures) missing.push("apertures");
+    if (isSubjectHrf(model.Hrf) && !inputs.subjectHrf) missing.push(`the subject HRF ${model.Hrf}.mat`);
   }
   try {
     validateHemisphere(inputs);

@@ -251,11 +251,18 @@ export async function loadConservativeWorkspaceGraph(root) {
   // holding it, in another app's directory. `appsNaming(identifier)`: the app
   // ids whose code names `identifier`, read on first use.
   let moduleUsers;
+  // The root package.json scripts each ci.yml job runs, directly or through
+  // other scripts (`pnpm <script>`; a package's own scripts are not root ones).
+  const jobScripts = new Map(Object.entries(ci?.jobs ?? {}).map(([id, job]) => [id, namedByCommands(
+    (Array.isArray(job?.steps) ? job.steps : []).map((step) => String(step?.run ?? '').replace(/pnpm --filter \S+ (?:run )?\S+/g, '')),
+    rootScripts,
+  ).expanded]));
   const naming = new Map();
   const graph = {
     nodes: Object.freeze(nodes),
     edges,
     rootScriptsRun,
+    jobScripts,
     moduleUsers: (path) => (moduleUsers ??= sharedModuleUsers(root, graph))(path),
     appReaders: (path) => [...appReads]
       .filter(([, targets]) => [...targets].some((target) => path === target || path.startsWith(`${target}/`)))

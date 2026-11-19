@@ -56,9 +56,12 @@
             </div>
           </div>
           <div class="nd-field" id="hrfField">
-            <label for="hrf">HRF</label>
+            <label for="hrf">HRF
+              <span class="nd-info-icon" tabindex="0" aria-label="About the HRF">i<span class="nd-info-tooltip">To use a subject's HRF fit, drop its hrf_*.mat file (SamSrf's fP) or load a model JSON whose Hrf names it.</span></span>
+            </label>
             <select id="hrf"></select>
           </div>
+          <div id="subjectHrfField" hidden></div>
           <div class="nd-field">
             <label for="combine">Runs</label>
             <select id="combine">
@@ -95,7 +98,7 @@
               </div>
               <div class="nd-field" id="cssConventionField" hidden>
                 <label for="cssConvention">CSS convention
-                  <span class="nd-info-icon" tabindex="0" aria-label="About CSS conventions">i<span class="nd-info-tooltip">SamSrf keeps complex powers of negative responses and uses the final parameter for post-fit betas. With a fitted HRF that parameter is AmpRat. Nonnegative CSS clips negative responses and uses Exponent.</span></span>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About CSS conventions">i<span class="nd-info-tooltip">SamSrf keeps complex powers of negative responses and uses the final parameter for post-fit betas. With a fitted HRF that parameter is AmpRat. Nonnegative CSS clips negative responses and uses Exponent. Downloaded maps keep the real parts of complex results, as SamSrf's GIfTI export does.</span></span>
                 </label>
                 <select id="cssConvention">
                   <option value="nonnegative">Nonnegative CSS</option>
