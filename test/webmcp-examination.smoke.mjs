@@ -482,16 +482,22 @@ try {
     assert.deepEqual(allowed.listed, ['image: T1_head.nii.gz', 'image: T1_head.nii.gz'], 'the dialog names the file the run ran on and the file the agent keeps');
     assert.match(allowed.text, /report and outputs of its binarize run from /, 'and the run by operation and start');
     assert.equal(allowed.report?.runId, run.runId, JSON.stringify(allowed).slice(0, 400));
+    assert.deepEqual(allowed.report, run.report, 'the report the run ended with');
+    const maskSaved = page.waitForEvent('download');
+    assert.deepEqual(await call('outputs_download', { runId: run.runId, artifactId: 'mask' }), { runId: run.runId, artifactId: 'mask' }, 'once allowed, the download asks nothing more');
+    const maskPath = join(scratch, 'example-mask');
+    await (await maskSaved).saveAs(maskPath);
+    assert.equal(await sha256(maskPath), run.report.artifacts.mask.sha256, 'the saved bytes are the run\'s recorded output');
     const saved = await call('outputs_download', { runId: run.runId, artifactId: 'report' });
-    assert.deepEqual(saved, { runId: run.runId, artifactId: 'report' }, 'once allowed, the download asks nothing more');
-    for (const deadline = Date.now() + 10000; !downloads.length && Date.now() < deadline;) await page.waitForTimeout(100);
-    assert.deepEqual(downloads, ['report.json']);
+    assert.deepEqual(saved, { runId: run.runId, artifactId: 'report' });
+    for (const deadline = Date.now() + 10000; downloads.length < 2 && Date.now() < deadline;) await page.waitForTimeout(100);
+    assert.deepEqual(downloads, [run.report.artifacts.mask.filename, 'report.json']);
     await page.mouse.move(viewer.x + viewer.width / 2, viewer.y + viewer.height / 2);
     await page.mouse.wheel(0, -120);
     const declined = await answered('outputs_download', { runId: run.runId, artifactId: 'report' }, 'Decline');
     assert.equal(declined.declined, true, 'a further interaction asks again, and the person declines');
     assert.equal(await dialog.evaluate(element => element.open), false);
-    assert.deepEqual(downloads, ['report.json'], 'nothing more is saved');
+    assert.deepEqual(downloads, [run.report.artifacts.mask.filename, 'report.json'], 'nothing more is saved');
     const after = await call('app_describe');
     assert.deepEqual(after.inputs, {});
     assert.equal(after.run.stale, true);
@@ -547,6 +553,27 @@ try {
       assert.equal((await call(name, input)).error?.code, 'RUN_STALE', name);
     }
     assert.equal(await dialog.evaluate(element => element.open), false, 'no dialog offers the earlier run');
+  });
+
+  await check('NiiMath: after the example run, a scan dropped on the viewer leaves no dialog that leads to the old download', async context => {
+    const { page, call, dialog } = await open(context, 'niimath');
+    const downloads = [];
+    page.on('download', download => downloads.push(download.suggestedFilename()));
+    await call('inputs_load_example', { exampleId: 't1-head' });
+    const run = await call('run_binarize', { waitSeconds: 300 });
+    assert.equal(run.state, 'succeeded', JSON.stringify(run.error));
+    const centre = await centreOf(page, '#gl');
+    await page.mouse.move(...centre);
+    await page.mouse.wheel(0, 120);
+    await page.mouse.click(centre[0], centre[1] - 20);
+    await personDrops(context, page, 'person-other.nii.gz', centre);
+    await page.waitForFunction(() => document.querySelector('#fileInfo')?.textContent === 'person-other.nii.gz');
+    for (const [name, input] of [['outputs_download', { runId: run.runId, artifactId: 'mask' }], ['runs_get', { runId: run.runId }], ['outputs_download', { runId: run.runId, artifactId: 'report' }]]) {
+      assert.equal((await call(name, input)).error?.code, 'RUN_STALE', name);
+      assert.equal(await dialog.evaluate(element => element.open), false, `${name} opens no dialog`);
+    }
+    await page.waitForTimeout(1000);
+    assert.deepEqual(downloads, [], 'nothing is saved');
   });
 
   await check('NiiMath: Undo in the status bar, which puts the earlier scan back, ends the examination', async context => {
