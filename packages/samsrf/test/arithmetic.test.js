@@ -77,3 +77,30 @@ test('Intel CSS refuses an omitted or nonnegative convention at the WASM boundar
     assert.doesNotThrow(() => samsrf.parseModel('prf', JSON.stringify({ ...model, Arithmetic_Reference })));
   }
 });
+
+// Each refusal of the open-limits list (validation/acceptance.md) with its whole message:
+// the matrix comparators count a refusal only with the core's exact text.
+test('unsupported paths are refused with their exact messages', () => {
+  const refused = (fn, message) => assert.throws(fn, (error) => error.message === message);
+  const rc = { Name: 'test', TR: 1, Scaling_Factor: 1, Hrf: 1, Aperture_File: 'ap' };
+  const rcFit = { ...rc, Data_Precision: 'single', Prf_Function: '@(P,ApWidth)prf_gaussian_rf(P(1),P(2),P(3),ApWidth)', Param_Names: ['x0', 'y0', 'Sigma'], Scaled_Param: [1, 1, 1], SeedPar_Function: '@(V)[V(2:3);V(4)]' };
+  const cfFit = { Name: 'CF', SeedRoi: 'seed', Template: 'template', Data_Precision: 'single', Fit_pRF: 1 };
+  // The single Gaussian refusals come first, whatever the reference.
+  for (const Arithmetic_Reference of [undefined, 'current', 'matlab-amd', 'matlab-intel']) {
+    refused(() => samsrf.parseModel('rc', JSON.stringify({ ...rcFit, Arithmetic_Reference })), 'Data_Precision=single with a Prf_Function fit is not supported by this port');
+    refused(() => samsrf.parseModel('cf', JSON.stringify({ ...cfFit, Arithmetic_Reference })), 'Data_Precision=single with Fit_pRF=1 is not supported by this port');
+  }
+  const prf = JSON.parse(readFileSync(new URL('../../../exes/samsrf/core/tests/data/Example_2D_Gaussian_pRF.json', import.meta.url)));
+  const intelSingle = "model: matlab-intel arithmetic requires Data_Precision 'double'; Intel single-precision kernels are not implemented";
+  for (const [kind, model] of [['prf', { ...prf, Data_Precision: 'single' }], ['rc', { ...rc, Data_Precision: 'single' }], ['cf', { ...cfFit, Fit_pRF: 0 }], ['cf', { ...cfFit, Fit_pRF: -1 }]]) {
+    refused(() => samsrf.parseModel(kind, JSON.stringify({ ...model, Arithmetic_Reference: 'matlab-intel' })), intelSingle);
+  }
+  refused(() => new samsrf.RunAccumulator(3, null, { precision: 'single', arithmeticReference: 'matlab-intel' }), intelSingle);
+  refused(() => samsrf.parseModel('prf', JSON.stringify({ ...prf, Arithmetic_Reference: 'matlab-intel', Compressive_Nonlinearity: true, Css_Convention: 'nonnegative' })),
+    "model: MATLAB Intel CSS requires Css_Convention='samsrf'; nonnegative CSS is not supported by this reference");
+  const apertures = samsrf.readApertures(matFile({ ApFrm: { dims: [2, 2, 1], data: [1, 0, 0, 0] } }), 'mat');
+  try {
+    refused(() => samsrf.createJob({ kind: 'rc', model: JSON.stringify({ ...rc, Arithmetic_Reference: 'matlab-intel' }), totalVertices: 2, apertures: apertures.serialize(),
+      data: { volumes: 1, vertices: Uint32Array.of(0, 1), courses: Float64Array.of(1, 2), arithmeticReference: 'matlab-intel' } }), 'model: matlab-intel arithmetic requires at least two volumes');
+  } finally { apertures.free(); }
+});
