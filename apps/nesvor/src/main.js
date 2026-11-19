@@ -104,6 +104,17 @@ async function ensureViewer() {
 
 let viewerSequence = 0;
 let viewerQueue = Promise.resolve();
+// With no stack left the viewer goes back to its empty state, unloading what it showed.
+function showNothing() {
+  viewerSequence += 1;
+  $('gl1').hidden = true;
+  $('emptyState').hidden = false;
+  $('imageLabel').textContent = '';
+  $('viewerError').hidden = true;
+  viewerQueue = viewerQueue.then(() => viewer?.removeAllVolumes()).catch(() => {});
+  return viewerQueue;
+}
+
 function show(file, label) {
   const sequence = ++viewerSequence;
   $('emptyState').hidden = true;
@@ -229,7 +240,13 @@ function renderRows() {
     remove.className = 'nd-download-btn';
     remove.textContent = 'Remove';
     remove.setAttribute('aria-label', `Remove ${row.file.name}`);
-    remove.addEventListener('click', () => { rows.splice(index, 1); renderRows(); reportStacks(); syncRun(); });
+    remove.addEventListener('click', () => {
+      rows.splice(index, 1);
+      renderRows();
+      reportStacks();
+      syncRun();
+      if (!rows.length) void showNothing();
+    });
     head.append(label, view, remove);
     const fields = document.createElement('div');
     fields.className = 'nd-row';
@@ -409,7 +426,23 @@ $('imageInput').addEventListener('change', event => {
   replaceStacks = false;
   event.target.value = '';
   if (files.length) void importFiles(Promise.resolve(files), { replace });
+  else if (replace) clearStacks();
 });
+
+// The shell's Undo puts back an empty list: the stacks and masks go, as a removal of each would.
+function clearStacks() {
+  if (job) return status('Wait for the current operation to finish, or cancel it first.', true);
+  exampleControl.cancel();
+  loading?.abort();
+  rows.length = 0;
+  masks.length = 0;
+  results.render();
+  renderRows();
+  reportStacks();
+  syncRun();
+  void showNothing();
+  status('Drag and drop files');
+}
 $('maskInput').addEventListener('change', event => {
   const files = Array.from(event.target.files);
   event.target.value = '';
