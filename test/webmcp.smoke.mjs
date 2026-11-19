@@ -7,15 +7,21 @@
 // Each app, at desktop and phone width: the full tool set registers, app_describe answers with the
 // contract, user_ask and inputs_request_files render their dialogs and return what the person chose,
 // and the Privacy dialog carries the shared agent statement. A browser without WebMCP loads no WebMCP
-// module. WEBMCP_RUNS=1 also loads an example, runs it with the tool and parameters app_describe gives
-// and saves an output, through the tools only. A run that fails or outlasts WEBMCP_RUN_SECONDS fails its
-// app unless test/webmcp-run-skips.json names the app with the reason it cannot run here.
+// module. Every light-DOM file input, folder inputs included, keeps the files picked in it available to
+// inputs_use_page_files, or lists what the app reported it holds instead (nd-files). Inputs inside a
+// shadow root are not checked: the tools cannot see them and say so (pageMayHoldOtherInputs).
+//
+// WEBMCP_RUNS=1 also loads each loadable example (WEBMCP_EXAMPLES=first: only the first), runs it with
+// the tool and parameters app_describe gives and saves an output, through the tools only. Every run must
+// complete, unless test/webmcp-run-skips.json names the app with its expected outcome ("timed out",
+// "run failed" with an error pattern, or "no loadable example") and the reason; any other outcome fails.
 //
 //   pnpm build && node test/webmcp.smoke.mjs
 //   SMOKE_APPS=brain-extraction,n4 WEBMCP_RUNS=1 WEBMCP_REPORT=report.json WEBMCP_SHOTS=shots node test/webmcp.smoke.mjs
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from '@playwright/test';
@@ -36,6 +42,7 @@ const GPU_ARGS = process.platform === 'linux'
 const RUN_SECONDS = Number(process.env.WEBMCP_RUN_SECONDS ?? 900);
 const STAND_IN = process.env.WEBMCP_STAND_IN === '1';
 const RUN_SKIPS = JSON.parse(await readFile(new URL('./webmcp-run-skips.json', import.meta.url), 'utf8'));
+const ALL_EXAMPLES = process.env.WEBMCP_EXAMPLES !== 'first';
 
 const registry = await loadAppsRegistry();
 const requested = new Set((process.env.SMOKE_APPS ?? '').split(',').filter(Boolean));
@@ -144,42 +151,71 @@ async function checkPrivacy(page, app) {
 }
 
 // Many apps clear an input once they have read it, and some reset their examination as they load.
-// Whatever an app does, a file the person opens must stay available to inputs_use_page_files, unless
-// the app reports the input's files itself (nd-files), as it does when it refuses or replaces them.
+// Whatever an app does, the files picked in a page input stay listed for inputs_use_page_files, unless
+// the app reports with nd-files what the input holds instead; then pageFiles lists exactly that.
 async function checkPageFiles(page, app) {
   await page.evaluate(() => {
-    globalThis.webMcpSmokeReported = new Set();
-    document.addEventListener('nd-files', event => globalThis.webMcpSmokeReported.add(event.target), true);
+    globalThis.webMcpSmokeReported = new Map();
+    document.addEventListener('nd-files', event => {
+      if (event.detail?.files?.[Symbol.iterator]) globalThis.webMcpSmokeReported.set(event.target, [...event.detail.files].map(file => file.name));
+    }, true);
   });
-  const inputs = page.locator('input[type="file"][data-neurodesk-input]:not(#neurodesk-input-transfer):not([webkitdirectory])');
+  const inputs = page.locator('input[type="file"][data-neurodesk-input]:not(#neurodesk-input-transfer)');
   const offered = [];
+  let shadowed = 0;
   for (let index = 0; index < await inputs.count(); index += 1) {
     const input = inputs.nth(index);
-    if (!await input.evaluate(element => element.getRootNode() === document && !element.closest('#neurodeskAgentPrompt'))) continue;
+    const where = await input.evaluate(element => ({ light: element.getRootNode() === document && !element.closest('#neurodeskAgentPrompt'), folder: element.hasAttribute('webkitdirectory'), key: element.id }));
+    if (!where.light) continue;
     const name = `webmcp-page-file-${index + 1}.nii.gz`;
-    await input.setInputFiles({ name, mimeType: 'application/gzip', buffer: syntheticNifti({ dims: [8, 8, 8] }) });
-    offered.push({ input, name });
+    const file = { name, mimeType: 'application/gzip', buffer: syntheticNifti({ dims: [8, 8, 8] }) };
+    if (where.folder) {
+      const folder = join(folders, `${app.id}-${index + 1}`);
+      await mkdir(folder, { recursive: true });
+      await writeFile(join(folder, name), file.buffer);
+      await input.setInputFiles(folder);
+    } else await input.setInputFiles(file);
+    offered.push({ input, name, key: where.key, folder: where.folder });
   }
-  if (!offered.length) return 0;
+  shadowed = await page.evaluate(() => {
+    let count = 0;
+    const walk = root => root.querySelectorAll('*').forEach(element => {
+      if (element.shadowRoot) {
+        count += element.shadowRoot.querySelectorAll('input[type="file"]').length;
+        walk(element.shadowRoot);
+      }
+    });
+    walk(document);
+    return count;
+  });
+  if (!offered.length) return { checked: 0, shadowed };
   await delay(1500);
   const { pageFiles } = await call(page, 'app_describe');
-  const listed = pageFiles.flatMap(entry => entry.files.map(file => file.name));
-  const missing = [];
-  for (const { input, name } of offered) {
-    if (!listed.includes(name) && !await input.evaluate(element => globalThis.webMcpSmokeReported.has(element))) missing.push(name);
+  const wrong = [];
+  for (const { input, name, key, folder } of offered) {
+    const reported = await input.evaluate(element => globalThis.webMcpSmokeReported.get(element) ?? null);
+    const listed = pageFiles.find(entry => entry.input === key)?.files.map(file => file.name) ?? [];
+    const expected = reported ?? [name];
+    if (JSON.stringify(listed) !== JSON.stringify(expected)) wrong.push({ input: key, folder, picked: name, reported, listed });
   }
-  assert.deepEqual(missing, [], `${app.id}: every file opened in a page input stays available to the agent (pageFiles ${JSON.stringify(pageFiles)})`);
-  return offered.length;
+  assert.deepEqual(wrong, [], `${app.id}: every page input lists the files it holds (pageFiles ${JSON.stringify(pageFiles)})`);
+  return { checked: offered.length, shadowed };
 }
 
-async function runExample(page, app, describe, progress) {
-  const example = describe.examples[0];
-  if (!example) return { outcome: 'no loadable example', reasons: describe.unavailableExamples };
+// The outcome of one example run, which webmcp-run-skips.json may expect for its app.
+function expected(app, run) {
+  const skip = RUN_SKIPS[app.id];
+  if (!skip) return false;
+  if (run.outcome !== skip.expect) return false;
+  return !skip.error || new RegExp(skip.error, 'i').test(JSON.stringify(run.error ?? ''));
+}
+
+async function runExample(page, app, example, progress) {
   const operation = example.tool;
   progress.phase = `loading example ${example.id}`;
   const loaded = await call(page, 'inputs_load_example', { exampleId: example.id });
   if (loaded.error) return { outcome: 'example failed to load', example: example.id, error: loaded.error };
-  progress.phase = `running ${operation}`;
+  progress.phase = `running ${operation} on ${example.id}`;
   const started = Date.now();
   let run = await call(page, operation, { parameters: example.parameters ?? {}, waitSeconds: Math.min(RUN_SECONDS, 600) });
   while (run.state === 'running' && Date.now() - started < RUN_SECONDS * 1000) run = await call(page, 'runs_get', { runId: run.runId, waitSeconds: 60 });
@@ -189,7 +225,7 @@ async function runExample(page, app, describe, progress) {
     return { outcome: 'timed out', example: example.id, operation, seconds };
   }
   if (run.state !== 'succeeded') return { outcome: 'run failed', example: example.id, operation, seconds, error: run.error ?? run };
-  progress.phase = 'saving an output';
+  progress.phase = `saving an output of ${example.id}`;
   // A viewer operation may write no file; its report is still an output.
   const [artifactId, artifact] = Object.entries(run.report.artifacts)[0] ?? ['report', { filename: 'report.json' }];
   const download = page.waitForEvent('download', { timeout: 60000 });
@@ -199,6 +235,7 @@ async function runExample(page, app, describe, progress) {
   return { outcome: 'completed', example: example.id, operation, seconds, artifacts: Object.keys(run.report.artifacts), saved: artifact.filename };
 }
 
+const folders = await mkdtemp(join(tmpdir(), 'webmcp-smoke-'));
 const { origin, close } = await serveSite(dist);
 const report = [];
 const flagged = await chromium.launch({ args: [...GPU_ARGS, features(['WebMCPTesting'])] });
@@ -215,13 +252,13 @@ async function flaggedContext() {
 
 // A run in its own context: a page that stops answering (a stalled download, a busy worker) is closed
 // with its context instead of stalling the catalogue.
-async function runInPage(app) {
+async function runInPage(app, example) {
   const context = await flaggedContext();
   const progress = { phase: 'opening the page' };
   const attempt = (async () => {
     const { page } = await openApp(context, app);
     await until(page, async () => (await document.modelContext.getTools()).some(tool => tool.name === 'app_describe'), undefined, 90000);
-    return runExample(page, app, await call(page, 'app_describe'), progress);
+    return runExample(page, app, example, progress);
   })();
   const deadline = delay((RUN_SECONDS + 180) * 1000, undefined, { ref: false }).then(() => ({ outcome: `no answer while ${progress.phase}` }));
   try {
@@ -262,6 +299,7 @@ try {
           if (viewport === WIDTHS[0]) {
             await checkPrivacy(page, app);
             entry.pageInputs = await checkPageFiles(page, app);
+            entry.describe = describe;
           }
           entry.pageErrors = errors;
         } finally {
@@ -276,12 +314,19 @@ try {
       assert.deepEqual(loaded, [], `${app.id}: a browser without WebMCP loads none of its modules`);
       await page.close();
       if (process.env.WEBMCP_RUNS) {
-        entry.run = await runInPage(app);
-        if (entry.run.outcome !== 'completed' && !RUN_SKIPS[app.id]) throw new Error(`the example run ${entry.run.outcome}: ${JSON.stringify(entry.run.error ?? entry.run.reasons ?? '')}`);
-        if (entry.run.outcome === 'completed' && RUN_SKIPS[app.id]) console.log(`NOTE ${app.id}: completed although webmcp-run-skips.json expects it not to (${RUN_SKIPS[app.id]})`);
+        const loadable = entry.describe.examples;
+        delete entry.describe;
+        entry.runs = [];
+        if (!loadable.length) entry.runs.push({ outcome: 'no loadable example', reasons: entry.unavailableExamples });
+        for (const example of ALL_EXAMPLES ? loadable : loadable.slice(0, 1)) entry.runs.push(await runInPage(app, example));
+        const unexpected = entry.runs.filter(run => run.outcome !== 'completed' && !expected(app, run));
+        if (unexpected.length) throw new Error(`example runs ${unexpected.map(run => `${run.example ?? ''} ${run.outcome}: ${JSON.stringify(run.error ?? run.reasons ?? '')}`).join('; ')}`);
+        if (RUN_SKIPS[app.id] && entry.runs.every(run => run.outcome === 'completed')) console.log(`NOTE ${app.id}: completed although webmcp-run-skips.json expects ${RUN_SKIPS[app.id].expect}`);
       }
+      delete entry.describe;
       entry.passed = true;
-      console.log(`PASS ${app.id}: ${names.length} tools (${entry.api}), examples ${entry.examples.join(', ') || 'none'}${entry.run ? `; run ${entry.run.outcome}${entry.run.seconds !== undefined ? ` in ${entry.run.seconds} s` : ''}${entry.run.outcome !== 'completed' ? ` (expected: ${RUN_SKIPS[app.id]})` : ''}` : ''}`);
+      const runs = entry.runs?.map(run => `${run.example ?? ''} ${run.outcome}${run.seconds !== undefined ? ` in ${run.seconds} s` : ''}`).join(', ');
+      console.log(`PASS ${app.id}: ${names.length} tools (${entry.api}), examples ${entry.examples.join(', ') || 'none'}, ${entry.pageInputs?.checked ?? 0} page inputs checked${entry.pageInputs?.shadowed ? `, ${entry.pageInputs.shadowed} in shadow roots not covered` : ''}${runs ? `; runs: ${runs}` : ''}`);
     } catch (error) {
       entry.passed = false;
       entry.error = error.message;
@@ -292,6 +337,7 @@ try {
   await flagged.close();
   await plain.close();
   await close();
+  await rm(folders, { recursive: true, force: true });
   if (process.env.WEBMCP_REPORT) await writeFile(process.env.WEBMCP_REPORT, `${JSON.stringify(report, null, 2)}\n`);
 }
 const failed = report.filter(entry => !entry.passed).map(entry => entry.app);

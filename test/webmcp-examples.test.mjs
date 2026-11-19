@@ -58,8 +58,12 @@ test('an example must give every parameter its operation requires, and translate
 test('every app the full-run smoke may leave unrun is a registered app with the reason it cannot run here', async () => {
   const skips = JSON.parse(await readFile(join(repoRoot, 'test/webmcp-run-skips.json'), 'utf8'));
   const ids = new Set((await loadAppsRegistry()).apps.map(app => app.id));
-  for (const [app, reason] of Object.entries(skips)) {
+  for (const [app, { expect, error, reason, ...rest }] of Object.entries(skips)) {
     assert.ok(ids.has(app), `${app} is a registered app`);
+    assert.ok(['timed out', 'run failed', 'no loadable example'].includes(expect), `${app} names the outcome it expects`);
+    assert.equal(error === undefined, expect !== 'run failed', `${app}: a failed run names the error it expects, and only a failed run`);
+    if (error !== undefined) assert.doesNotThrow(() => new RegExp(error, 'i'));
     assert.ok(typeof reason === 'string' && reason.trim().length > 20, `${app} says why its example cannot run here`);
+    assert.deepEqual(rest, {}, `${app} has no other fields`);
   }
 });
