@@ -32,7 +32,13 @@ IGNORED = set(STAGED)
 
 def read_gifti(path):
     arrays = []
-    for index, element in enumerate(ElementTree.parse(path).getroot().iter('DataArray')):
+    root = ElementTree.parse(path).getroot()
+    elements = list(root.iter('DataArray'))
+    declared = root.get('NumberOfDataArrays')
+    if declared is not None and (not declared.isascii() or not declared.isdecimal()
+                                 or int(declared) != len(elements)):
+        raise ValueError(f'GIfTI NumberOfDataArrays does not match its arrays in {path}')
+    for index, element in enumerate(elements):
         kind = numpy.dtype(GIFTI_TYPES[element.get('DataType')])
         if element.get('Endian') == 'BigEndian':
             kind = kind.newbyteorder('>')

@@ -7,8 +7,9 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 import unittest
+
+from test_cli import scratch
 
 
 DRIVER = Path(__file__).parent / 'licensed-host' / 'build_and_validate.sh'
@@ -95,7 +96,7 @@ class LicensedHostCommands(unittest.TestCase):
         return result, recorded, here.parent, work
 
     def test_matlab_arguments_preserve_apostrophes_as_data(self):
-        with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as directory:
+        with scratch() as directory:
             result, commands, matlab, work = self.run_driver(Path(directory))
             self.assertEqual(result.returncode, 0, result.stderr)
             cli = work / 'samsrf-cli'
@@ -118,7 +119,7 @@ class LicensedHostCommands(unittest.TestCase):
                 self.assertEqual(decoded, [str(matlab)] + [str(path) for path in paths])
 
     def test_spm_checkout_keeps_root_files_and_only_the_three_classes(self):
-        with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as directory:
+        with scratch() as directory:
             result, _, _, work = self.run_driver(Path(directory))
             self.assertEqual(result.returncode, 0, result.stderr)
             spm = work / 'reference-spm'
@@ -126,14 +127,14 @@ class LicensedHostCommands(unittest.TestCase):
                              ['@file_array', '@gifti', '@xmltree', 'Contents.m', 'spm.m'])
 
     def test_spm_checkout_without_spm_m_stops_before_matlab(self):
-        with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as directory:
+        with scratch() as directory:
             result, commands, _, _ = self.run_driver(Path(directory), spm_root_files=False)
             self.assertEqual(result.returncode, 1)
             self.assertIn('no spm.m', result.stderr)
             self.assertEqual(commands, [])
 
     def test_matlab_failure_stops_driver(self):
-        with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as directory:
+        with scratch() as directory:
             result, commands, _, _ = self.run_driver(Path(directory), exit_code=37)
             self.assertEqual(result.returncode, 37, result.stderr)
             self.assertEqual(len(commands), 1)

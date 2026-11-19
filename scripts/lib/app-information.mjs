@@ -26,10 +26,18 @@ export async function loadAppInformation(registry, path = appInformationPath) {
     shared: deepFreeze(shared),
     apps: deepFreeze(apps),
     // Every app of the site, so one can open another with its data (the handoff menu).
-    catalog: deepFreeze(registry.apps
-      .filter((app) => app.support_status !== 'retired' && app.handoff !== 'none')
-      .map((app) => ({ id: app.id, path: app.path, title: app.title, receives: app.handoff ?? 'nifti' }))),
+    catalog: deepFreeze(registry.apps.map(handoffCatalogEntry).filter(Boolean)),
   });
+}
+
+/**
+ * An app's entry in the handoff catalog every app page carries, or null when no
+ * other app can open it with data. The planner compares these entries to find
+ * registry changes that reach the pages listing other apps.
+ */
+export function handoffCatalogEntry(app) {
+  if (app.support_status === 'retired' || app.handoff === 'none') return null;
+  return { id: app.id, path: app.path, title: app.title, receives: app.handoff ?? 'nifti' };
 }
 
 /** Throws when parsed app information is not what every app build accepts. */

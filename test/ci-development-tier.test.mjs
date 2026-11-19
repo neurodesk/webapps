@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { runInNewContext } from 'node:vm';
@@ -12,8 +13,22 @@ const workflow = async (name) => YAML.parse(await readFile(new URL(`../.github/w
 // What pr-gate.yml answers without a checkout: false for a draft, true for
 // every event other than pull_request. A ready pull request is decided by
 // scripts/lib/workflow-gate.mjs; `reached` stands for its answer.
-const gate = (github, reached = true) => ({ gate: { outputs: { run: String(github.event_name !== 'pull_request' || (!github.event?.pull_request?.draft && reached)) } } });
-const evaluate = (expression, github, inputs = {}, needs = gate(github)) => runInNewContext(expression.replace(/^\$\{\{\s*|\s*\}\}$/g, ''), { github, inputs, needs });
+// native.yml's gate names every workflow it may call in its skip list for a draft.
+const nativeCalls = JSON.stringify(YAML.parse(readFileSync(new URL('../.github/workflows/native.yml', import.meta.url), 'utf8')).jobs.gate.with.calls.split(' '));
+const gate = (github, reached = true) => {
+  const run = github.event_name !== 'pull_request' || (!github.event?.pull_request?.draft && reached);
+  return { gate: { result: 'success', outputs: { run: String(run), skips: run ? undefined : nativeCalls } } };
+};
+// GitHub's contains() and fromJSON(), as native.yml's calls use them.
+const text = (value) => (value === undefined || value === null ? '' : String(value)).toLowerCase();
+const functions = {
+  contains: (search, item) => (Array.isArray(search) ? search.includes(item) : text(search).includes(text(item))),
+  startsWith: (search, item) => text(search).startsWith(text(item)),
+  endsWith: (search, item) => text(search).endsWith(text(item)),
+  cancelled: () => false,
+  fromJSON: JSON.parse,
+};
+const evaluate = (expression, github, inputs = {}, needs = gate(github)) => runInNewContext(expression.replace(/^\$\{\{\s*|\s*\}\}$/g, ''), { github, inputs, needs, ...functions });
 
 test('draft feedback selects direct app edits; ready PRs retain shared coverage', async () => {
   const registry = await loadAppsRegistry();
@@ -36,7 +51,9 @@ test('ready and updated PRs run deferred native jobs; pushes and dispatches keep
     if (usesGate) {
       gated++;
       // The gate always finishes, so jobs after the entry jobs keep their default conditions.
-      assert.deepEqual(flow.jobs.gate, { uses: './.github/workflows/pr-gate.yml', permissions: { contents: 'read', actions: 'read', 'pull-requests': 'read' }, with: { workflow: file.slice(0, -'.yml'.length) } }, file);
+      const { shared_paths: shared, calls, sweeps, ...inputs } = flow.jobs.gate.with;
+      assert.deepEqual({ ...flow.jobs.gate, with: inputs }, { uses: './.github/workflows/pr-gate.yml', permissions: { contents: 'read', actions: 'read', 'pull-requests': 'read' }, with: { workflow: file.slice(0, -'.yml'.length) } }, file);
+      for (const list of [shared, calls, sweeps]) assert.ok(list === undefined || typeof list === 'string', `${file}: the gate's lists are strings`);
     }
     if (file !== 'ci.yml' && flow.on?.pull_request?.types?.includes('ready_for_review')) {
       for (const [id, job] of Object.entries(flow.jobs)) {
@@ -103,13 +120,21 @@ test('a dispatched run asks for its scope and only the jobs of that scope start'
   assert.equal(scope.default, 'affected');
   const dispatch = { event_name: 'workflow_dispatch', event: {} };
   const condition = (id) => flow.jobs[id].if.replaceAll('needs.app-plan', "needs['app-plan']");
-  const starts = (id, inputs, outputs = {}) => evaluate(condition(id), dispatch, inputs, { 'app-plan': { outputs: { has_site: 'true', has_gpu_apps: 'true', ...outputs } } });
+  const starts = (id, inputs, outputs = {}, github = dispatch, result = 'success') => evaluate(condition(id), github, inputs, { 'app-plan': { result, outputs: { has_site: 'true', has_gpu_apps: 'true', ...outputs } } });
   for (const id of ['workspace-contracts', 'homepage-easter-egg']) {
     assert.equal(starts(id, { scope: 'affected' }), true, id);
     assert.equal(starts(id, { scope: 'gpu' }), false, id);
   }
   assert.equal(starts('workspace-contracts', { scope: 'site' }), false);
-  assert.equal(starts('homepage-easter-egg', { scope: 'site' }), true);
+  // A dispatch runs the easter egg in every scope but gpu, whatever the plan says, as a push and the nightly do.
+  for (const scope of ['affected', 'all', 'site']) assert.equal(starts('homepage-easter-egg', { scope }, { easter_egg: 'skip' }), true, scope);
+  for (const event_name of ['push', 'schedule']) assert.equal(starts('homepage-easter-egg', {}, { easter_egg: 'skip' }, { event_name, event: {} }), true, event_name);
+  // A pull request skips it only when the plan succeeded and wrote skip (every case: test/ci-required-jobs.test.mjs).
+  const pull = { event_name: 'pull_request', event: { action: 'synchronize', pull_request: { draft: false } } };
+  assert.equal(starts('homepage-easter-egg', {}, { easter_egg: 'skip' }, pull), false);
+  assert.equal(starts('homepage-easter-egg', {}, { easter_egg: 'run' }, pull), true);
+  assert.equal(starts('homepage-easter-egg', {}, { easter_egg: '' }, pull), true);
+  assert.equal(starts('homepage-easter-egg', {}, {}, pull, 'failure'), true);
   // The plan decides the site build of a dispatch (has_site is false for the gpu scope); pushes and the nightly always build it.
   assert.equal(starts('composite-site', { scope: 'gpu' }, { has_site: 'false' }), false);
   assert.equal(starts('composite-site', { scope: 'site' }), true);
@@ -127,7 +152,11 @@ test('returning to draft cancels the prior run without starting CI jobs', async 
     const needs = [job.needs ?? []].flat();
     if (needs.length) {
       assert.ok(needs.every(dependency => skipped.has(dependency)), `${id} depends on skipped jobs`);
-      assert.doesNotMatch(job.if ?? '', /always\(|!cancelled\(/, `${id} must respect skipped dependencies`);
+      // A job that runs past a skipped dependency must not start on its own.
+      if (/always\(|!cancelled\(/.test(job.if ?? '')) {
+        const none = Object.fromEntries(needs.map((dependency) => [dependency, { result: 'skipped', outputs: {} }]));
+        assert.equal(evaluate(job.if.replace(/needs\.([\w-]+)/g, "needs['$1']"), { event_name: 'pull_request', event: { action: 'converted_to_draft', pull_request: { draft: true } } }, {}, none), false, `${id} must respect skipped dependencies`);
+      }
     } else {
       assert.equal(evaluate(job.if, { event: { action: 'converted_to_draft' } }), false, id);
       for (const action of ['opened', 'synchronize', 'reopened', 'ready_for_review', undefined]) {
@@ -178,10 +207,10 @@ test('DWI2TRX preserves manual tracking-only selection', async () => {
 });
 
 test('the interface audit reads the example cache the job restored, filled and saves from main', async () => {
-  const { steps } = (await workflow('ci.yml')).jobs['composite-site'];
+  const { steps } = (await workflow('ci.yml')).jobs['site-audit'];
   const position = (description, matches) => {
     const found = steps.flatMap((step, index) => matches(step) ? [index] : []);
-    assert.equal(found.length, 1, `composite-site has one step that ${description}`);
+    assert.equal(found.length, 1, `site-audit has one step that ${description}`);
     return found[0];
   };
   const restoreAt = position('restores the examples', step => String(step.uses).startsWith('actions/cache/restore@') && step.with.key.startsWith('example-assets-'));
@@ -198,6 +227,8 @@ test('the interface audit reads the example cache the job restored, filled and s
   assert.match(directory, /^\$\{\{ runner\.temp \}\}\/[\w-]+$/);
   assert.equal(fill.env.EXAMPLE_ASSET_CACHE, directory, 'the fill writes the restored directory');
   assert.match(fill.run, /fetch-example-cache\.mjs "\$EXAMPLE_ASSET_CACHE" --prune$/);
+  // The fill runs over every app, so main never saves a partial copy (and --prune refuses SMOKE_APPS).
+  assert.equal(fill.env.SMOKE_APPS, undefined);
   assert.equal(audit.env.EXAMPLE_ASSET_CACHE, directory, 'the audit reads the filled directory instead of the network');
   assert.equal(save.with.path, directory, 'the save stores the filled directory');
   assert.equal(save.with.key, `\${{ steps.${restore.id}.outputs.cache-primary-key }}`, 'the save uses the key the restore looked up');
@@ -215,13 +246,13 @@ test('superseded per-commit caches are deleted by a job that holds nothing else'
   const pages = await workflow('deploy-pages.yml');
   const cacheKey = (job, prefix) => job.steps.map(step => step.with?.key).find(key => key?.startsWith(prefix));
   for (const [file, flow, id, saver, prefix] of [
-    ['ci.yml', ci, 'example-cache-retention', 'composite-site', 'example-assets-'],
+    ['ci.yml', ci, 'example-cache-retention', 'site-audit', 'example-assets-'],
     ['deploy-pages.yml', pages, 'turbo-cache-retention', 'build', 'turbo-pages-'],
   ]) {
     const job = flow.jobs[id];
     assert.ok(job, `${file} deletes superseded ${prefix} caches`);
     assert.ok(cacheKey(flow.jobs[saver], prefix), `${file}: ${saver} saves the ${prefix} caches`);
-    assert.equal(job.needs, saver, `${file}: ${id} runs once ${saver} has saved its cache`);
+    assert.ok([job.needs].flat().includes(saver), `${file}: ${id} runs once ${saver} has saved its cache`);
     assert.deepEqual(job.permissions, { actions: 'write' }, `${file}: ${id} can delete caches and nothing else`);
     assert.equal(job['continue-on-error'], true, `${file}: a failed cleanup does not fail the run`);
     assert.ok(job.steps.every(step => !step.uses), `${file}: ${id} runs no action with its write token`);

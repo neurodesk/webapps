@@ -157,6 +157,7 @@ fn double_forward_pipelines_match_matlab() {
         let recorded_hrf = array(&root, &case["hrf"]);
         assert_eq!(kernel.iter().map(|v| v.to_bits()).collect::<Vec<_>>(), recorded_hrf.iter().map(|v| v.to_bits()).collect::<Vec<_>>(), "{id}: the port's HRF is MATLAB's");
         let inputs = job::JobInputs {
+        preprocessing_reference: samsrf_core::arithmetic::ArithmeticReference::Current,
             model: parsed,
             apertures: Some(apertures.clone()),
             hrf: None,

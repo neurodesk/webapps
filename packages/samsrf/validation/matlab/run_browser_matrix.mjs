@@ -8,23 +8,22 @@
 // maps.f64 holds the double map rows of the same computation: the shard bytes that
 // runShard returned and mergeShards exported are merged once more, and the GIfTIs
 // exported from that merge must equal mergeShards's files byte for byte, or the run
-// fails. This is an engine-module harness served from source; it does not exercise
-// the production Vite bundle or the app's interface.
+// fails. That merge's imaginary parts, where MATLAB's Srf.Data is complex, go to
+// maps.imag.f64. This is an engine-module harness served from source; it does not
+// exercise the production Vite bundle or the app's interface.
 //
 // Usage: node run_browser_matrix.mjs PLAN_JSON BUNDLE BUNDLE_SHA256_JSON OUTPUT_ROOT
 //
-// The app has no subject-HRF file route, so a run whose model names an hrf_*.mat is
-// `unsupported` when the engine stops with exactly the subject-HRF text that
-// expectedEngineOutcome names. Any other failure, a crash included, is `failed`.
-// Neither is agreement.
+// A run whose model names a subject-HRF file (hrf_*.mat) gives engine.js that file, as the
+// app's interface does. A run the engine refuses with exactly the text expectedEngineOutcome
+// names is `refused`; any other failure, a crash included, is `failed`. Neither is agreement.
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { extname, join, normalize, relative, sep } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { chromium } from 'playwright';
-import { failureStatus, treeHashes, webRun } from './run_web_matrix.mjs';
+import { failureStatus, isEntry, treeHashes, webRun } from './run_web_matrix.mjs';
 
 const repo = fileURLToPath(new URL('../../../../', import.meta.url));
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -47,6 +46,7 @@ window.runCase = async (request) => {
     runs: await Promise.all(request.runs.map(named)),
     apertures: await named(request.apertures), roi: await named(request.roi),
     template: await named(request.template), seed: await named(request.seed),
+    subjectHrf: await named(request.subjectHrf),
     surfaces, normalise: true, average: request.average,
   };
   const job = await engine.createJob(inputs);
@@ -56,7 +56,8 @@ window.runCase = async (request) => {
   await init();
   const handle = createJob(job.spec);
   let maps;
-  try { maps = handle.merge([shard]).maps; } finally { handle.free(); }
+  let imaginary;
+  try { ({ maps, imaginary } = handle.merge([shard])); } finally { handle.free(); }
   const hex = (array) => Array.from(array, (value) => value.toString(16).padStart(2, '0')).join('');
   const replay = new Map(exportGiis(maps, job.outName, null, job.exportConvention).map(({ name, bytes }) => [name, hex(bytes)]));
   const files = result.files.map(({ name, bytes }) => ({ name, hex: hex(bytes) }));
@@ -65,6 +66,7 @@ window.runCase = async (request) => {
     outName: result.outName, summary: job.summary, files, replayEqualsExport,
     values: maps.values, vertices: maps.vertices, roi: Array.from(job.spec.roi ?? []),
     data: hex(new Uint8Array(Float64Array.from(maps.data).buffer)),
+    imaginary: imaginary ? hex(new Uint8Array(Float64Array.from(imaginary).buffer)) : null,
   };
 };
 window.ready = true;
@@ -91,8 +93,9 @@ function serve(bundle) {
   return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(server)));
 }
 
-function request(run, bundle) {
-  const { algorithm, options, model } = webRun(run, bundle);
+/** The files and options the page's runCase gives engine.js for one plan run. */
+export function request(run, bundle) {
+  const { algorithm, options, model, translations } = webRun(run, bundle);
   const file = (path) => path && { name: path.split(sep).pop(), url: `/bundle/${relative(bundle, path).split(sep).join('/')}` };
   const hemisphere = options.hemisphere;
   return {
@@ -103,6 +106,7 @@ function request(run, bundle) {
     roi: file(options.roi),
     template: file(options.template),
     seed: file(options.seed),
+    subjectHrf: file(translations.Hrf?.file),
     surfaces: algorithm === 'cf' ? { area: { ...file(options.area), name: `${hemisphere}.area` }, white: { ...file(options.white), name: `${hemisphere}.white` } } : {},
     average: options.combine === 'average',
   };
@@ -110,6 +114,7 @@ function request(run, bundle) {
 
 async function main([planPath, bundle, manifestPath, output, ...rest]) {
   if (!output || rest.length) throw new Error('Usage: node run_browser_matrix.mjs PLAN_JSON BUNDLE BUNDLE_SHA256_JSON OUTPUT_ROOT');
+  const { chromium } = await import('playwright');
   if (existsSync(output)) throw new Error(`${output} must not exist`);
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   const sorted = (object) => JSON.stringify(Object.fromEntries(Object.entries(object).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))));
@@ -151,9 +156,16 @@ async function main([planPath, bundle, manifestPath, output, ...rest]) {
         for (const { name, hex } of result.files) writeFileSync(join(directory, name), Buffer.from(hex, 'hex'));
         const data = Buffer.from(result.data, 'hex');
         writeFileSync(join(directory, 'maps.f64'), data);
+        let imaginarySha256 = null;
+        if (result.imaginary) {
+          const imaginary = Buffer.from(result.imaginary, 'hex');
+          writeFileSync(join(directory, 'maps.imag.f64'), imaginary);
+          imaginarySha256 = sha256(imaginary);
+        }
         Object.assign(record, {
           status: 'succeeded', prefix: result.outName, values: result.values, vertices: result.vertices, roi: result.roi,
           files: result.files.map(({ name }) => name), replayEqualsExport: true, summary: result.summary, mapsSha256: sha256(data),
+          imaginarySha256,
         });
       } catch (error) {
         const message = error.message.replace(/^page\.evaluate: (Error: )?/, '').split('\n')[0];
@@ -173,4 +185,4 @@ async function main([planPath, bundle, manifestPath, output, ...rest]) {
   }
 }
 
-await main(process.argv.slice(2));
+if (isEntry(import.meta.url, process.argv[1])) await main(process.argv.slice(2));

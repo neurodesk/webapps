@@ -3,10 +3,11 @@
 //! connective fields of the raw-input RC/CF matrix (record_revcor_matrix.m),
 //! replayed from MATLAB's own profiles. The native workflow sets
 //! SAMSRF_MATLAB_GEOMETRY_DIR and SAMSRF_MATLAB_REVCOR_DIR.
-use samsrf_core::geometry::{cluster_roi, delaunay_triangles, unique_rows, Hull, Triangulation};
+use samsrf_core::geometry::{cluster_roi, delaunay_triangles, unique_rows, Hull, HullOrder, ListedHull, Triangulation};
 use samsrf_core::{mapset::Maps, model, revcor_cf};
 use std::collections::BTreeSet;
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
 fn load(root: &Path, name: &str) -> Vec<Value> {
@@ -23,6 +24,12 @@ fn array(root: &Path, descriptor: &Value) -> Vec<f64> {
 
 fn shape(descriptor: &Value) -> Vec<usize> {
     descriptor["shape"].as_array().unwrap().iter().map(|n| n.as_u64().unwrap() as usize).collect()
+}
+
+/// Identical bits, the sign of zero included; NaN payloads and signs are not
+/// compared (the NaN export track owns them).
+fn exact(actual: f64, expected: f64, context: &str) {
+    assert!(actual.to_bits() == expected.to_bits() || actual.is_nan() && expected.is_nan(), "{context}: {actual:e} != {expected:e}");
 }
 
 /// Bitwise equality, NaN equal to NaN; a value with a tolerance otherwise.
@@ -83,6 +90,8 @@ fn revcor_matrix_cf_maps_follow_from_matlab_profiles() {
             let courses = vec![vec![0.0; 2]; seeds.len()];
             let courses: Vec<&[f64]> = courses.iter().map(Vec::as_slice).collect();
             let prepared = revcor_cf::Prepared::new(&model, &seeds, &courses, &template, &area, None).unwrap();
+            let mut stored = prepared.clone();
+            stored.hull_order = HullOrder::Stored;
             let profiles = array(&root, &case["profiles"]);
             let maps = array(&root, &case["maps"]);
             let rows = shape(&case["maps"])[0];
@@ -94,11 +103,17 @@ fn revcor_matrix_cf_maps_follow_from_matlab_profiles() {
                 }
                 replayed += 1;
                 let actual = prepared.estimate_profile(profile).unwrap();
+                let diagnostic = stored.estimate_profile(profile).unwrap();
                 for (row, value) in actual.iter().enumerate() {
                     let label = &prepared.values[row];
                     let index = labels.iter().position(|l| l == label).unwrap_or_else(|| panic!("{id}: no {label} row"));
                     let expected = maps[vertex * rows + index];
-                    close(*value, expected, 1e-12 * expected.abs().max(1.0), &format!("{} {id} vertex {vertex} {label}", root.display()));
+                    let context = format!("{} {id} vertex {vertex} {label}", root.display());
+                    // Production keeps the listed hull; the stored order gives MATLAB's bits.
+                    close(*value, expected, 1e-12 * expected.abs().max(1.0), &context);
+                    if fit == 0 {
+                        exact(diagnostic[row], expected, &format!("{context} (stored order)"));
+                    }
                 }
             }
             assert!(replayed > 0, "{id}: no profiles");
@@ -197,8 +212,34 @@ fn real_template_cf_maps_match_matlab() {
     }
 }
 
+/// Double hull-mode values of the template cases whose MATLAB hull the stored-order
+/// diagnostic (`HullOrder::Stored`) lists from another starting vertex, so their
+/// sums round differently: the port does not reproduce how MATLAB splits these
+/// self-intersecting clusters into rings, which sets where `convhull` starts.
+/// Each must still differ from MATLAB and stay within 1e-12 relative; a fix
+/// shortens this list. Three per host (lh 29 Centre, lh 33 x0, rh 11 Centre)
+/// are exact under the listed hull that production keeps, which is why it keeps it.
+const TEMPLATE_HULL_START: [(&str, usize, &str); 15] = [
+    ("template_lh_double_hull", 7, "y0"),
+    ("template_lh_double_hull", 21, "y0"),
+    ("template_lh_double_hull", 25, "y0"),
+    ("template_lh_double_hull", 29, "y0"),
+    ("template_lh_double_hull", 29, "Centre"),
+    ("template_lh_double_hull", 33, "x0"),
+    ("template_lh_double_hull", 33, "Centre"),
+    ("template_lh_double_hull", 39, "y0"),
+    ("template_rh_double_hull", 9, "x0"),
+    ("template_rh_double_hull", 9, "Centre"),
+    ("template_rh_double_hull", 11, "x0"),
+    ("template_rh_double_hull", 11, "Centre"),
+    ("template_rh_double_hull", 19, "y0"),
+    ("template_rh_double_hull", 28, "y0"),
+    ("template_rh_double_hull", 33, "y0"),
+];
+
 fn real_template_cf_maps_match_matlab_on(root: &Path, cases: &[Value]) {
     let mut count = 0;
+    let mut listed = std::collections::BTreeSet::new();
     for case in cases.iter().filter(|c| c["kind"] == "template-cf") {
         count += 1;
         let id = case["id"].as_str().unwrap();
@@ -219,6 +260,8 @@ fn real_template_cf_maps_match_matlab_on(root: &Path, cases: &[Value]) {
         let courses = vec![vec![0.0; 2]; seeds.len()];
         let courses: Vec<&[f64]> = courses.iter().map(Vec::as_slice).collect();
         let prepared = revcor_cf::Prepared::new(&cf_model(fit), &seed_vx, &courses, &template_maps(&full, 5), &vec![1.0; columns], None).unwrap();
+        let mut stored = prepared.clone();
+        stored.hull_order = HullOrder::Stored;
         let profiles = array(root, &case["profiles"]);
         let maps = array(root, &case["maps"]);
         let rows = shape(&case["maps"])[0];
@@ -228,6 +271,7 @@ fn real_template_cf_maps_match_matlab_on(root: &Path, cases: &[Value]) {
         }
         for (vertex, profile) in profiles.chunks(seeds.len()).enumerate() {
             let actual = prepared.estimate_profile(profile).unwrap();
+            let diagnostic = stored.estimate_profile(profile).unwrap();
             for (row, &index) in order.iter().enumerate() {
                 let label = &prepared.values[row];
                 // Single-precision squares, medians and fits are MATLAB single
@@ -236,11 +280,34 @@ fn real_template_cf_maps_match_matlab_on(root: &Path, cases: &[Value]) {
                     continue;
                 }
                 let expected = maps[vertex * rows + index];
-                close(actual[row], expected, 1e-12 * expected.abs().max(1.0), &format!("{id} vertex {vertex} {label}"));
+                let context = format!("{id} vertex {vertex} {label}");
+                // Production keeps the listed hull, within 1e-12 as before.
+                close(actual[row], expected, 1e-12 * expected.abs().max(1.0), &context);
+                // These recorded values were exact before the stored-order experiment.
+                // Its three losses per precision and host must not enter the default CF path.
+                if [("template_lh_double_hull", 29, "Centre"),
+                    ("template_lh_double_hull", 33, "x0"),
+                    ("template_rh_double_hull", 11, "Centre"),
+                    ("template_lh_single_hull", 29, "Centre"),
+                    ("template_lh_single_hull", 33, "x0"),
+                    ("template_rh_single_hull", 11, "Centre")].contains(&(id, vertex, label.as_str())) {
+                    assert_eq!(actual[row].to_bits(), expected.to_bits(), "{context}: production lost an exact base value");
+                }
+                let stored_context = format!("{context} (stored order)");
+                if fit == 0 && !single && TEMPLATE_HULL_START.contains(&(id, vertex, label.as_str())) {
+                    assert_ne!(diagnostic[row].to_bits(), expected.to_bits(), "{stored_context} now equals MATLAB; remove it from TEMPLATE_HULL_START");
+                    close(diagnostic[row], expected, 1e-12 * expected.abs().max(1.0), &stored_context);
+                    listed.insert((id, vertex, label.clone()));
+                } else if fit == 0 && !single {
+                    exact(diagnostic[row], expected, &stored_context);
+                } else {
+                    close(diagnostic[row], expected, 1e-12 * expected.abs().max(1.0), &stored_context);
+                }
             }
         }
     }
     assert_eq!(count, 12, "missing real-template CF cases");
+    assert_eq!(listed.len(), TEMPLATE_HULL_START.len(), "unvisited TEMPLATE_HULL_START entries");
 }
 
 fn hull_intermediates(root: &Path, case: &Value, prepared: &revcor_cf::Prepared, profiles: &[f64]) {
@@ -306,11 +373,11 @@ fn sorted_vertices(vertices: &[[f64; 2]]) -> Vec<[f64; 2]> {
     result
 }
 
-/// Forward-error bounds of the shoelace area and centroid evaluated on the
-/// untranslated vertices, as MATLAB's `area` and `centroid` do (their hull
-/// vertices are checked first, after removing roundoff-collinear points). With
-/// unit roundoff u and n vertices, each cross term carries at most 2u relative
-/// error and each sum n u, so |dA| <= 2 n u sum(|x_i y_j| + |x_j y_i|) / 2,
+/// Forward-error bounds of the shoelace area and centroid on the untranslated
+/// vertices, which hold for any evaluation order: they cover a port hull with
+/// MATLAB's vertices but another starting vertex, whose sums round differently.
+/// With unit roundoff u and n vertices, each cross term carries at most 2u
+/// relative error and each sum n u, so |dA| <= 2 n u sum(|x_i y_j| + |x_j y_i|) / 2,
 /// doubled for headroom; the centroid adds its numerator's bound and the
 /// propagated area error.
 fn uncentred_error_bound(vertices: &[[f64; 2]], area: f64) -> [f64; 3] {
@@ -332,9 +399,27 @@ fn uncentred_error_bound(vertices: &[[f64; 2]], area: f64) -> [f64; 3] {
     [centroid(0), centroid(1), area_bound]
 }
 
+/// Hulls per family that the port lists in MATLAB's stored order, so their area
+/// and centroid must be MATLAB's bits: 15,840 of the 16,871 hulls MATLAB records
+/// on each host. Of the others, 948 have MATLAB's vertices in another order (the
+/// port's rings of a self-intersecting cloud are not MATLAB's) and are held to
+/// the forward-error bound; 79 with other vertices and 4 the port leaves empty
+/// are near-collinear clouds in `NEAR_COLLINEAR_SNAPPING`. A change in either
+/// direction must update this.
+const STORED_ORDER: [(&str, usize); 7] = [
+    ("polygon_boundary_ulp", 6523),
+    ("polygon_boundary_relative", 4902),
+    ("polygon_random_thin", 2062),
+    ("polygon_collinear_vertex", 656),
+    ("polygon_spikes", 498),
+    ("polygon_degenerate", 10),
+    ("polygon_point_clouds", 1189),
+];
+
 /// The 93 near-collinear clouds (kind 3 of record_geometry.m's point clouds:
 /// points within 1e-6 to 1e-10 of a line, in random order) whose hulls still
-/// differ. MATLAB resolves their crossings of nearly parallel edges by snapping
+/// differ: 83 that MATLAB gives a hull and 10 whose hull MATLAB leaves empty.
+/// MATLAB resolves their crossings of nearly parallel edges by snapping
 /// vertices up to about the 1e-8 tolerance (1e5 to 1e8 grid units) away from
 /// any exact intersection, which the port does not reproduce. Each must stay a
 /// near-collinear cloud and must still differ: a fix shortens this list.
@@ -345,8 +430,10 @@ const NEAR_COLLINEAR_SNAPPING: [usize; 93] = [27, 62, 77, 102, 117, 157, 162, 18
 /// nine scales, three offsets and rotations, a relative sweep, random thin
 /// triangles, near-collinear vertices, spikes, degenerate inputs and unordered
 /// clouds as SamSrf passes them. Emptiness must agree and the hull must have
-/// exactly MATLAB's vertices, bit for bit, before area and centroid are held to
-/// the error bound of MATLAB's uncentred evaluation.
+/// exactly MATLAB's vertices, bit for bit. Where the port also lists them in
+/// MATLAB's stored order, area and centroid must be MATLAB's bits; where only
+/// the starting vertex differs (the port does not reproduce MATLAB's ring
+/// decomposition of every cloud), they are held to the forward-error bound.
 #[test]
 fn polygon_hulls_match_matlab() {
     for (root, cases) in geometry_hosts() {
@@ -355,6 +442,7 @@ fn polygon_hulls_match_matlab() {
 }
 
 fn polygon_hulls_match_matlab_on(root: &Path, cases: &[Value]) {
+    let mut production_bits = Sha256::new();
     let frozen: Value = serde_json::from_str(include_str!("matlab_polygon_snapping.json")).unwrap();
     let outcomes = frozen["outcomes"].as_object().unwrap();
     let frozen_ids: BTreeSet<usize> = outcomes.keys().map(|id| id.parse().unwrap()).collect();
@@ -367,12 +455,34 @@ fn polygon_hulls_match_matlab_on(root: &Path, cases: &[Value]) {
         families += 1;
         let n = polygons.len();
         let mut agreeing = 0;
+        let mut stored_order = 0;
         for (i, polygon) in polygons.iter().enumerate() {
+            let production_estimate = samsrf_core::geometry::polygon_hull_estimate(polygon, HullOrder::default());
+            // Empty hulls have an explicit tag; all present values retain every bit.
+            production_bits.update([u8::from(production_estimate.is_some())]);
+            if let Some(([x, y], area)) = production_estimate {
+                for value in [x, y, area] {
+                    production_bits.update(value.to_le_bytes());
+                }
+            }
             let expected = [estimate[i], estimate[n + i], estimate[2 * n + i]];
             let hull = Hull::of_polygon(polygon);
             let vertices = hull.as_ref().map(|h| h.vertices.as_slice()).unwrap_or(&[]);
+            // Production keeps the listed hull: the same vertices, measured within the bound.
+            let production = ListedHull::of_polygon(polygon);
+            assert_eq!(sorted_vertices(production.as_ref().map(|h| h.vertices.as_slice()).unwrap_or(&[])), sorted_vertices(vertices), "{id} {i}: listed and stored hulls");
+            if let Some(listed) = production.as_ref().filter(|_| sorted_vertices(vertices) == sorted_vertices(&expected_hulls[i])) {
+                let (centre, area) = (listed.centroid(), listed.area());
+                let bound = uncentred_error_bound(&listed.vertices, area);
+                assert!((0..2).all(|axis| (centre[axis] - expected[axis]).abs() <= bound[axis]) && (area - expected[2]).abs() <= bound[2], "{id} {i}: listed hull outside the bound");
+            }
             let agrees = sorted_vertices(vertices) == sorted_vertices(&expected_hulls[i]) && match &hull {
                 None => expected[2] == 0.0 && expected[0].is_nan() && expected[1].is_nan(),
+                Some(hull) if hull.vertices == expected_hulls[i] => {
+                    stored_order += 1;
+                    let [x, y] = hull.centroid();
+                    [x, y, hull.area()].map(f64::to_bits) == expected.map(f64::to_bits)
+                }
                 Some(hull) => {
                     let (centre, area) = (hull.centroid(), hull.area());
                     let bound = uncentred_error_bound(&hull.vertices, area);
@@ -398,10 +508,13 @@ fn polygon_hulls_match_matlab_on(root: &Path, cases: &[Value]) {
                 failures.push(format!("{id} {i}: MATLAB hull {:?} {expected:?}, port {vertices:?}", expected_hulls[i]));
             }
         }
-        report.push(format!("{id}: {agreeing} of {n} polygons equal MATLAB's"));
+        report.push(format!("{id}: {agreeing} of {n} polygons equal MATLAB's; {stored_order} hulls in MATLAB's stored order with its area and centroid bits"));
+        assert_eq!(Some(stored_order), STORED_ORDER.iter().find(|(family, _)| *family == id).map(|(_, count)| *count), "{id}: hulls in MATLAB's stored order");
     }
     println!("{}", report.join("\n"));
     assert_eq!(families, 7, "missing polygon families");
+    // Frozen from the base evaluation at 3f90ac124, in recorder family/case order.
+    assert_eq!(format!("{:x}", production_bits.finalize()), "1f0fcb67e172c3b20e5038985121fa5ed37ba567ed65f68cc977313c92d56dc8", "production polygon bits changed");
     assert_eq!(checked_snapping, frozen_ids, "missing snapping regression cases");
     assert!(failures.is_empty(), "{} polygons differ from MATLAB:\n{}", failures.len(), failures[..failures.len().min(20)].join("\n"));
 }

@@ -97,6 +97,19 @@ test("a custom HRF kernel is not displayed as the de Haas preset", () => {
   assert.equal(hrfValue([0, 0.5, 1]), "custom");
 });
 
+test("an Hrf of hrf_* names a subject HRF fit, which follows the file given for it", () => {
+  assert.equal(hrfValue("hrf_custom"), "subject");
+  assert.equal(hrfValue("HRF_custom"), "subject");
+  assert.equal(hrfValue("lh_hrf_fits"), "custom", "SamSrf reads other names as vertex-wise HRF maps");
+  const given = { apertures: { name: "aps_Bars.mat" }, subjectHrf: { name: "hrf_sub01.mat" } };
+  for (const analysis of ["prf", "rc"]) {
+    assert.equal(withInputNames({ Name: "pRF", Hrf: "hrf_custom" }, analysis, given).Hrf, "hrf_sub01");
+    assert.equal(withInputNames({ Name: "pRF", Hrf: 0 }, analysis, given).Hrf, 0, "a chosen canonical HRF stays chosen");
+  }
+  assert.deepEqual(withInputNames({ Name: "CF" }, "cf", { ...given, seed: { name: "s.label" }, template: { name: "t.gii" } }), { Name: "CF", SeedRoi: "s", Template: "t" });
+  assert.equal(parseModel(JSON.stringify({ ...buildModel("example-gaussian"), Hrf: "hrf_custom" }), "prf").Hrf, "hrf_custom");
+});
+
 test("forward precision and CSS conventions survive JSON and radius edits", () => {
   const model = buildModel("gaussian", { dataPrecision: "single", cssConvention: "samsrf" });
   const changed = changeScalingFactor({ ...model, Compressive_Nonlinearity: true }, 12, "gaussian");
@@ -117,4 +130,36 @@ test("reverse correlation takes single precision except for 2D fits", () => {
   assert.equal(rc.Data_Precision, "single");
   assert.deepEqual(parseModel(JSON.stringify(rc), "rc"), rc);
   assert.throws(() => parseModel(JSON.stringify(buildModel("revcor-fit", { dataPrecision: "single" })), "rc"), /2D pRF fits need double precision/);
+});
+
+
+test("arithmetic references round-trip through presets and imported models without CPU selection", () => {
+  for (const arithmeticReference of ["current", "matlab-amd", "matlab-intel"]) {
+    const model = buildModel("example-gaussian", { arithmeticReference });
+    expectReference(model, arithmeticReference);
+    assert.deepEqual(parseModel(JSON.stringify(model), "prf"), model);
+  }
+  const model = buildModel("example-gaussian");
+  for (const value of ["auto", "intel", true, null, ["current"]]) {
+    assert.throws(() => parseModel(JSON.stringify({ ...model, Arithmetic_Reference: value }), "prf"), /arithmetic reference/);
+  }
+  assert.throws(() => parseModel(JSON.stringify({ ...model, Arithmetic_Reference: "matlab-intel", Data_Precision: "single" }), "prf"), /requires double precision/);
+});
+
+function expectReference(model, reference) {
+  assert.equal(model.Arithmetic_Reference ?? "current", reference);
+}
+
+test("Intel CSS requires the recorded SamSrf convention", () => {
+  const model = { ...buildModel("example-gaussian"), Compressive_Nonlinearity: true, Arithmetic_Reference: "matlab-intel" };
+  delete model.Css_Convention;
+  for (const Css_Convention of [undefined, "nonnegative"]) {
+    assert.throws(() => parseModel(JSON.stringify({ ...model, Css_Convention }), "prf"), /Intel CSS requires Css_Convention='samsrf'/);
+  }
+  assert.doesNotThrow(() => parseModel(JSON.stringify({ ...model, Css_Convention: "samsrf" }), "prf"));
+  assert.doesNotThrow(() => parseModel(JSON.stringify({ ...model, Compressive_Nonlinearity: [0] }), "prf"));
+  assert.throws(() => parseModel(JSON.stringify({ ...model, Compressive_Nonlinearity: [1] }), "prf"), /Intel CSS requires/);
+  for (const Arithmetic_Reference of ["current", "matlab-amd"]) {
+    assert.doesNotThrow(() => parseModel(JSON.stringify({ ...model, Arithmetic_Reference }), "prf"));
+  }
 });

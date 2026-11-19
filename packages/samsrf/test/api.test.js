@@ -453,6 +453,68 @@ function jobSpec() {
   };
 }
 
+test('a SamSrf-convention CSS fit returns the imaginary parts MATLAB keeps in Srf.Data', () => {
+  // 2 x 4 pixels: a bar sweeps across, then a blank frame slightly below zero, as
+  // interpolated apertures are, so the prediction there is negative.
+  const [height, width, volumes] = [2, 4, 16];
+  const movie = new Array(height * width * volumes).fill(0);
+  for (let t = 0; t < volumes; t++) {
+    const bar = t % (width + 1);
+    for (let y = 0; y < height; y++) {
+      if (bar < width) movie[y + height * (bar + width * t)] = 1;
+      else for (let x = 0; x < width; x++) movie[y + height * (x + width * t)] = -0.1;
+    }
+  }
+  const apertures = samsrf.readApertures(matFile({ ApFrm: { dims: [height, width, volumes], data: movie } }), 'mat');
+  const bytes = apertures.serialize();
+  apertures.free();
+  const courses = new Float64Array(2 * volumes);
+  for (let t = 0; t < volumes; t++) {
+    courses[t] = Math.sin(t * 1.3) + (t % 5 === 1 ? 1 : 0);
+    courses[volumes + t] = Math.cos(t * 0.7) + (t % 5 === 3 ? 0.8 : 0);
+  }
+  const fit = (convention) => {
+    const model = {
+      Name: 'css', Prf_Function: '@(P,ApWidth)prf_gaussian_rf(P(1),P(2),P(3),ApWidth)', Param_Names: ['x0', 'y0', 'Sigma'],
+      Scaled_Param: [1, 1, 1], Only_Positive: [0, 0, 1], Scaling_Factor: 1, TR: 1, Hrf: 1, Aperture_File: 'aps',
+      Param1: [-0.5, 0, 0.5], Param2: [0], Param3: [0.25, 0.5], Fine_Fit_Threshold: 0, Compressive_Nonlinearity: true, Css_Convention: convention,
+    };
+    const job = samsrf.createJob({ kind: 'prf', model: JSON.stringify(model), apertures: bytes, hrf: 'none', data: { volumes, vertices: Uint32Array.of(0, 1), courses }, totalVertices: 3 });
+    try {
+      return samsrf.mergePartials(job, [job.run(0, 2)]);
+    } finally {
+      job.free();
+    }
+  };
+  const { maps, imaginary } = fit('samsrf');
+  assert.deepEqual(maps.values, ['R^2', 'x0', 'y0', 'Sigma', 'Exponent', 'Beta', 'Baseline']);
+  assert.ok(imaginary instanceof Float64Array);
+  assert.equal(imaginary.length, maps.data.length);
+  const part = (row, vertex) => imaginary[row * maps.vertices + vertex];
+  for (const row of [0, 5, 6]) assert.notEqual(part(row, 0), 0, `${maps.values[row]} of the fitted vertex is complex`);
+  const real = Array.from(imaginary.entries()).filter(([index]) => ![0, 5, 6].includes(Math.floor(index / maps.vertices)) || index % maps.vertices !== 0);
+  assert.ok(real.every(([, value]) => Object.is(value, 0)), 'parameters, other vertices and the rest are +0');
+  assert.equal(fit('nonnegative').imaginary, null);
+});
+
+test('merged maps hold MATLAB\'s NaN, the negative quiet NaN', () => {
+  // The second course has a NaN: no grid point correlates, so the coarse fit's
+  // parameters are NaN, as MATLAB's mean over an empty selection is.
+  const spec = jobSpec();
+  spec.model = JSON.stringify({ ...JSON.parse(spec.model), Coarse_Fit_Only: 1, Param1: [0, 90], Param2: [0.5], Param3: [0.5, 1] });
+  spec.data.courses = Float64Array.of(1, 2, 3, 3, Number.NaN, 2);
+  const job = samsrf.createJob(spec);
+  try {
+    const { maps } = samsrf.mergePartials(job, [job.run(0, 2)]);
+    const bits = new BigUint64Array(maps.data.buffer, maps.data.byteOffset, maps.data.length);
+    const nans = Array.from(maps.data.keys()).filter((index) => Number.isNaN(maps.data[index]));
+    assert.deepEqual(nans.map((index) => maps.values[Math.floor(index / maps.vertices)]), ['x0', 'y0', 'Sigma']);
+    assert.ok(nans.every((index) => bits[index] === 0xfff8000000000000n), 'every NaN is 0xfff8000000000000');
+  } finally {
+    job.free();
+  }
+});
+
 test('createJob validates its spec and runs a tiny coarse-only fit', () => {
   assert.throws(() => samsrf.createJob({ ...jobSpec(), kind: 'glm' }), /kind must be one of prf, rc, cf/);
   assert.throws(() => samsrf.createJob({ ...jobSpec(), model: '{}' }), /Analysis name is undefined/);
@@ -472,10 +534,11 @@ test('createJob validates its spec and runs a tiny coarse-only fit', () => {
     const first = job.run(0, 1);
     const second = job.run(1, 2);
     assert.ok(first instanceof Uint8Array);
-    const { maps, raw, analysed } = samsrf.mergePartials(job, [second, first]);
+    const { maps, raw, analysed, imaginary } = samsrf.mergePartials(job, [second, first]);
     assert.deepEqual(maps.values, ['R^2', 'x0', 'y0', 'Sigma', 'Beta', 'Baseline']);
     assert.equal(maps.data.length, 6 * 4);
     assert.equal(raw, null);
+    assert.equal(imaginary, null);
     assert.deepEqual(Array.from(analysed), [0, 2]);
     assert.throws(() => job.merge([first]), /cover 1 of 2/);
     assert.throws(() => samsrf.mergePartials(job, 'x'), /array of the Uint8Arrays/);

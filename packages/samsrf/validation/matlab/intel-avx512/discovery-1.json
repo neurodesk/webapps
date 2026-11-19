@@ -1,0 +1,142 @@
+{
+ "discovery": {
+  "lengths": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11,
+   12,
+   13,
+   14,
+   15,
+   16,
+   17,
+   18,
+   19,
+   20,
+   33,
+   64,
+   250,
+   1000
+  ],
+  "intelHostsAgree": true,
+  "amdHostsAgree": true,
+  "candidates": 2761,
+  "refAmd": 24,
+  "passing": [],
+  "bestIntel": [
+   [
+    "L16/2-8-4-1/mod/mul/none",
+    {
+     "intel": 23,
+     "amd": 15
+    }
+   ],
+   [
+    "L16/2-8-4-1/mod/fma/none",
+    {
+     "intel": 23,
+     "amd": 15
+    }
+   ],
+   [
+    "L16/2-8-4-1/pow2/mul/none",
+    {
+     "intel": 23,
+     "amd": 15
+    }
+   ],
+   [
+    "L32/16-2-8-4-1/mod/fma/none",
+    {
+     "intel": 23,
+     "amd": 15
+    }
+   ],
+   [
+    "L4/2-1/pow2/fma/none",
+    {
+     "intel": 22,
+     "amd": 16
+    }
+   ],
+   [
+    "L16/2-8-4-1/pow2/fma/none",
+    {
+     "intel": 22,
+     "amd": 15
+    }
+   ],
+   [
+    "L16/2-4-1-8/pow2/mul/none",
+    {
+     "intel": 22,
+     "amd": 16
+    }
+   ],
+   [
+    "L32/16-4-2-8-1/mod/mul/none",
+    {
+     "intel": 22,
+     "amd": 14
+    }
+   ],
+   [
+    "L32/16-4-2-8-1/mod/fma/none",
+    {
+     "intel": 22,
+     "amd": 14
+    }
+   ],
+   [
+    "L32/16-2-8-4-1/mod/mul/none",
+    {
+     "intel": 22,
+     "amd": 16
+    }
+   ],
+   [
+    "L32/16-2-8-4-1/pow2/mul/none",
+    {
+     "intel": 22,
+     "amd": 16
+    }
+   ],
+   [
+    "L32/16-2-4-1-8/pow2/mul/none",
+    {
+     "intel": 22,
+     "amd": 16
+    }
+   ],
+   [
+    "L32/16-2-4-1-8/pow2/fma/none",
+    {
+     "intel": 22,
+     "amd": 15
+    }
+   ],
+   [
+    "L32/4-16-2-8-1/mod/mul/none",
+    {
+     "intel": 22,
+     "amd": 14
+    }
+   ],
+   [
+    "L32/4-16-2-8-1/mod/fma/none",
+    {
+     "intel": 22,
+     "amd": 14
+    }
+   ]
+  ]
+ }
+}

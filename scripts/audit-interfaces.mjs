@@ -6,13 +6,11 @@ import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
 import { loadAppExamples } from './lib/app-examples.mjs';
 import { absentZarrKey, auditedExampleFiles, auditedOfflineFiles, loadVerifiedExampleCache, pythonIndexAnswers, pythonIndexProject } from './lib/example-asset-cache.mjs';
 import { refuseOtherHostWebSockets, trackExternalRequests } from './lib/external-requests.mjs';
+import { smokeApps } from './lib/smoke-apps.mjs';
 import { startDeadline, trackPendingRequests } from './lib/pending-requests.mjs';
 import { serveSite } from '../test-utils/serve-site.mjs';
 
-const { apps } = await loadAppsRegistry();
-const requested = new Set((process.env.SMOKE_APPS ?? '').split(',').filter(Boolean));
-const selected = requested.size ? apps.filter(app => requested.has(app.id)) : apps;
-if (requested.size && selected.length !== requested.size) throw new Error('SMOKE_APPS contains an unknown app');
+const { apps: selected } = smokeApps((await loadAppsRegistry()).apps);
 const cacheDirectory = process.env.EXAMPLE_ASSET_CACHE;
 const assetLock = cacheDirectory ? JSON.parse(await readFile(join(repoRoot, 'registry/offline-assets.lock.json'), 'utf8')) : null;
 if (cacheDirectory) console.log(`Example source: checksum-verified-cache (${cacheDirectory}); every example file the audit imports must match the offline lock, with no missing-file network fallback`);

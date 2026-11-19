@@ -198,7 +198,8 @@ function connected(triangles, support, seed) {
   return [...found].sort((a, b) => a - b);
 }
 
-export function findPatches(vertices, faces, eligible, options = {}) {
+// sparseIsEmpty: a named region may leave fewer than three faces, which is a search with no patch.
+export function findPatches(vertices, faces, eligible, options = {}, sparseIsEmpty = false) {
   const settings = validatePatchOptions(options);
   const triangles = [];
   const sums = new Float64Array(vertices.length);
@@ -220,6 +221,7 @@ export function findPatches(vertices, faces, eligible, options = {}) {
     for (const i of indices) for (let axis = 0; axis < 3; axis += 1) sums[i * 3 + axis] += vector[axis];
   }
   if (!triangles.length) return [];
+  if (triangles.length < 3 && sparseIsEmpty) return [];
   if (triangles.length < 3) throw new Error('Flat-patch analysis requires at least three non-degenerate faces.');
   for (const face of triangles) {
     face.bending = 1 - face.indices.reduce((sum, i) => sum + Math.max(-1, Math.min(1, dot(face.normal, unit(point(sums, i))))), 0) / 3;

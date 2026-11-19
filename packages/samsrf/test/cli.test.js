@@ -228,3 +228,28 @@ test('a short rc run writes the GIfTIs an in-process job writes', { skip: !dir &
   assert.deepEqual(provenance.inputs.map(({ role }) => role), ['run', 'run', 'roi', 'apertures']);
   assert.match(provenance.inputs[0].sha256, /^[0-9a-f]{64}$/);
 });
+
+test('CLI reference models preprocess, shard and record the selected arithmetic', async t => {
+  const work = scratch(t);
+  const runPath = join(work, 'lh_run.gii');
+  const apertures = join(work, 'aps.mat');
+  const modelPath = join(work, 'model.json');
+  writeFileSync(runPath, giftiRun(Array.from({ length: 3 }, (_, v) => Array.from({ length: 16 }, (_, n) => Math.sin(n + v) + n / 13))));
+  writeFileSync(apertures, matFile({ ApFrm: { dims: [2, 2, 16], data: Array.from({ length: 64 }, (_, n) => Number(n % 5 === 0)) } }));
+  for (const reference of ['current', 'matlab-amd', 'matlab-intel']) {
+    const model = { Name: 'Reference', Scaling_Factor: 1, TR: 1, Hrf: 1, Aperture_File: 'aps', Arithmetic_Reference: reference };
+    writeFileSync(modelPath, JSON.stringify(model));
+    const output = join(work, reference);
+    const actual = await run(['rc', modelPath, output, '--runs', runPath, '--apertures', apertures, '--shards', '2']);
+    assert.equal(actual.code, 0, actual.stderr);
+    const inputs = readAnalysisInputs({ runs: [runPath], apertures, arithmeticReference: reference });
+    const job = createJob(analysisSpec(inputs, 'rc', model));
+    try {
+      const expected = exportGiis(runJob(job).maps, 'lh_Reference_Rcp');
+      for (const { name, bytes } of expected) assert.deepEqual(readFileSync(join(output, name)), Buffer.from(bytes));
+    } finally { job.free(); }
+    const provenance = JSON.parse(readFileSync(join(output, 'lh_Reference_Rcp_provenance.json')));
+    assert.equal(provenance.arithmeticReference, reference);
+    assert.equal(provenance.model.Arithmetic_Reference, reference);
+  }
+});

@@ -308,6 +308,14 @@
       "kind": "atlas-template",
       "dependencies": []
     },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/7ec5394736769ea0e9d6a11b22ab67fa4ac3f0df/topofit/0.5.1/cortex-regions-20261119/fsaverage-regions.bin": {
+      "sha256": "16cd2abfefc14d0705966e2ec0e1b8e457dafa6ae1a95e702cac81d969fadd54",
+      "bytes": 655372,
+      "contentType": "application/octet-stream",
+      "kind": "atlas-template",
+      "license": "Wang 2015 labels CC-BY-4.0 (OSF bw9ec); Desikan-Killiany labels FreeSurfer Software License",
+      "dependencies": []
+    },
     "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/models/synthseg-2.0.onnx": {
       "sha256": "94412cd4ece229cee1ec21ac05d9aa6f084ea7b600303d2e598707d86a9a9b13",
       "bytes": 52983030,
@@ -5914,6 +5922,7 @@
     ],
     "topofit": [
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1c3a4b2c508b01171540e3870272d39f66b04004/topofit/0.5.1/surface-analysis-20260914/fsaverage-cortex.bin",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/7ec5394736769ea0e9d6a11b22ab67fa4ac3f0df/topofit/0.5.1/cortex-regions-20261119/fsaverage-regions.bin",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/b438d1162e7192ca425ca47282b06fe62340c85a/topofit/0.5.1/onnx-20260911/faces-lh.i32",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/b438d1162e7192ca425ca47282b06fe62340c85a/topofit/0.5.1/onnx-20260911/faces-rh.i32",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/b438d1162e7192ca425ca47282b06fe62340c85a/topofit/0.5.1/onnx-20260911/registration-lh.f32",

@@ -4,8 +4,8 @@
 //! a Delaunay triangulation.
 //!
 //! A hull needs three non-collinear points. With fewer, MATLAB's `polyshape` is empty
-//! (area 0, centroid NaN) and `convexHull` errors; `Hull::of` returns `None` and each
-//! caller applies SamSrf's own fallback.
+//! (area 0, centroid NaN) and `convexHull` errors; the constructors return `None` and
+//! each caller applies SamSrf's own fallback.
 
 /// MATLAB `[C, ia] = unique(A, 'rows')`: rows sorted lexicographically, `ia` the first
 /// occurrence of each. NaN rows sort last and are all distinct, as in MATLAB.
@@ -38,24 +38,41 @@ fn nan_last(a: f64, b: f64) -> std::cmp::Ordering {
     }
 }
 
-/// A convex polygon: its vertices counter-clockwise, without a repeated closing vertex.
+/// Which evaluation a hull estimate takes. `Listed` is the port's evaluation
+/// before it followed MATLAB's stored order, and the analyses' default. `Stored`
+/// follows the order and arithmetic fitted to MATLAB's recordings (`Hull`): it
+/// matches far more recorded values but loses some that `Listed` matched,
+/// because the port's rings of a self-intersecting polygon are not MATLAB's
+/// (`packages/samsrf/validation/matlab/README.md`, "Hull area, centroid and vertex
+/// order"). It stays diagnostic until it loses none.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HullOrder {
+    #[default]
+    Listed,
+    Stored,
+}
+
+/// `polyshape(points).convhull` as the port evaluated it before #732's
+/// stored-order work: the same vertices, counter-clockwise from the lowest grid
+/// point, with area and centroid summed from the first vertex.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Hull {
+pub struct ListedHull {
     pub vertices: Vec<[f64; 2]>,
 }
 
-impl Hull {
-    /// `polyshape(points).convhull`, as MATLAB R2023b computes it on its
-    /// fixed-point grid with the even-odd rule and its 1e-8 cleaning tolerance
-    /// (see `polyshape.rs`). `None` where that shape is empty.
-    pub fn of_polygon(points: &[[f64; 2]]) -> Option<Hull> {
-        let hull = Hull { vertices: crate::polyshape::convex_hull(points)? };
+impl ListedHull {
+    /// `None` where the shape is empty or its hull spans no area.
+    pub fn of_polygon(points: &[[f64; 2]]) -> Option<ListedHull> {
+        let hull = ListedHull { vertices: crate::polyshape::convex_hull_as_listed(points)? };
         (hull.area() > 0.0).then_some(hull)
     }
 
-    /// The convex hull of `points` (Andrew's monotone chain), or `None` when the points
-    /// span no area (fewer than three distinct points, or all collinear).
-    pub fn of(points: &[[f64; 2]]) -> Option<Hull> {
+    /// The convex hull of `points` (Andrew's monotone chain): its corners
+    /// counter-clockwise from the lexicographically smallest, or `None` when the
+    /// points span no area. Its area is also what the port takes for
+    /// `[K, AV] = convexHull(delaunayTriangulation(points))`, whose arithmetic is
+    /// not identified (`packages/samsrf/validation/matlab/hull-area-predictions.md`).
+    pub fn of(points: &[[f64; 2]]) -> Option<ListedHull> {
         let mut sorted: Vec<[f64; 2]> = points.iter().copied().filter(|p| p[0].is_finite() && p[1].is_finite()).collect();
         sorted.sort_by(row_order);
         sorted.dedup();
@@ -63,54 +80,42 @@ impl Hull {
             return None;
         }
         let cross = |o: &[f64; 2], a: &[f64; 2], b: &[f64; 2]| (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
-        let mut lower: Vec<[f64; 2]> = Vec::new();
-        for p in &sorted {
-            while lower.len() >= 2 && cross(&lower[lower.len() - 2], &lower[lower.len() - 1], p) <= 0.0 {
-                lower.pop();
+        let chain = |ordered: &mut dyn Iterator<Item = &[f64; 2]>| {
+            let mut half: Vec<[f64; 2]> = Vec::new();
+            for p in ordered {
+                while half.len() >= 2 && cross(&half[half.len() - 2], &half[half.len() - 1], p) <= 0.0 {
+                    half.pop();
+                }
+                half.push(*p);
             }
-            lower.push(*p);
-        }
-        let mut upper: Vec<[f64; 2]> = Vec::new();
-        for p in sorted.iter().rev() {
-            while upper.len() >= 2 && cross(&upper[upper.len() - 2], &upper[upper.len() - 1], p) <= 0.0 {
-                upper.pop();
-            }
-            upper.push(*p);
-        }
-        lower.pop();
-        upper.pop();
-        lower.extend(upper);
-        if lower.len() < 3 {
-            return None;
-        }
-        let hull = Hull { vertices: lower };
-        if hull.area() <= 0.0 {
+            half.pop();
+            half
+        };
+        let mut corners = chain(&mut sorted.iter());
+        corners.extend(chain(&mut sorted.iter().rev()));
+        let hull = ListedHull { vertices: corners };
+        if hull.vertices.len() < 3 || hull.area() <= 0.0 {
             return None;
         }
         Some(hull)
     }
 
-    /// Shoelace area, translated to avoid cancellation far from the origin.
+    /// Shoelace area, translated to the first vertex.
     pub fn area(&self) -> f64 {
-        let n = self.vertices.len();
-        let origin = self.vertices[0];
-        let mut twice = 0.0;
-        for i in 0..n {
-            let a = [self.vertices[i][0] - origin[0], self.vertices[i][1] - origin[1]];
-            let next = self.vertices[(i + 1) % n];
-            let b = [next[0] - origin[0], next[1] - origin[1]];
-            twice += a[0] * b[1] - b[0] * a[1];
-        }
-        twice.abs() / 2.0
+        self.sums().0.abs() / 2.0
     }
 
-    /// The polygon centroid, as `polyshape.centroid`.
+    /// The polygon centroid from the same sums.
     pub fn centroid(&self) -> [f64; 2] {
+        let (twice, cx, cy) = self.sums();
+        let origin = self.vertices[0];
+        [origin[0] + cx / (3.0 * twice), origin[1] + cy / (3.0 * twice)]
+    }
+
+    fn sums(&self) -> (f64, f64, f64) {
         let n = self.vertices.len();
         let origin = self.vertices[0];
-        let mut twice = 0.0;
-        let mut cx = 0.0;
-        let mut cy = 0.0;
+        let (mut twice, mut cx, mut cy) = (0.0, 0.0, 0.0);
         for i in 0..n {
             let a = [self.vertices[i][0] - origin[0], self.vertices[i][1] - origin[1]];
             let next = self.vertices[(i + 1) % n];
@@ -120,8 +125,192 @@ impl Hull {
             cx += (a[0] + b[0]) * cross;
             cy += (a[1] + b[1]) * cross;
         }
-        [origin[0] + cx / (3.0 * twice), origin[1] + cy / (3.0 * twice)]
+        (twice, cx, cy)
     }
+}
+
+/// `(centroid, area)` of `polyshape(points).convhull` under `order`, or `None`
+/// where that hull is empty.
+pub fn polygon_hull_estimate(points: &[[f64; 2]], order: HullOrder) -> Option<([f64; 2], f64)> {
+    match order {
+        HullOrder::Listed => ListedHull::of_polygon(points).map(|hull| (hull.centroid(), hull.area())),
+        HullOrder::Stored => Hull::of_polygon(points).map(|hull| (hull.centroid(), hull.area())),
+    }
+}
+
+/// A diagnostic boundary model fitted to recorded MATLAB R2023b `polyshape`
+/// output: clockwise, without a repeated closing vertex. Agreement of `area`
+/// and `centroid` depends on the stored vertex order; other inputs are unestablished.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Hull {
+    pub vertices: Vec<[f64; 2]>,
+}
+
+impl Hull {
+    /// Empirical model of `polyshape(points).convhull`, using a fixed-point grid,
+    /// the even-odd rule and a 1e-8 cleaning tolerance (see `polyshape.rs`).
+    /// This does not identify MATLAB's internal algorithm. `None` for empty shapes.
+    pub fn of_polygon(points: &[[f64; 2]]) -> Option<Hull> {
+        let hull = Hull { vertices: crate::polyshape::convex_hull(points)? };
+        (hull.area() > 0.0).then_some(hull)
+    }
+
+    /// `polyshape(DT.Points(convexHull(DT), :))` for `DT = delaunayTriangulation(points)`:
+    /// the boundary of the points' hull, exactly collinear points included and
+    /// counter-clockwise from the first input point on it, cleaned and stored as
+    /// `polyshape` does. `None` where that shape is empty or the points span no area.
+    pub fn of_delaunay_boundary(points: &[[f64; 2]]) -> Option<Hull> {
+        let boundary = delaunay_boundary(points)?;
+        let mut stored = crate::polyshape::boundaries(&boundary);
+        if stored.len() != 1 {
+            return None;
+        }
+        let hull = Hull { vertices: stored.remove(0) };
+        (hull.area() > 0.0).then_some(hull)
+    }
+
+    /// `polyshape.area`: half the absolute sum, in stored order, of the cross
+    /// products of consecutive vertices taken from the centre of their bounding box.
+    pub fn area(&self) -> f64 {
+        let sums = self.sums();
+        times_power_of_two(sums.twice.abs() / 2.0, 2 * sums.exponent)
+    }
+
+    /// Empirical arithmetic fit to recorded `polyshape.centroid` values on the
+    /// stored vertices: relative to the bounding-box centre, the sum of cross
+    /// products `a`, then `sum((x1 + x2) * (t * (1/a)))` times `1/3`, back in
+    /// place, weighted by the clockwise-positive area `-a/2` and multiplied by
+    /// its reciprocal, as for one boundary of a multi-boundary shape.
+    ///
+    /// Where these steps underflow they stay MATLAB's: the recorded triangle of
+    /// side 1e-300 has area 0 and centroid NaN. No recording shows MATLAB
+    /// overflowing, and there the port keeps the centroid finite: sums that
+    /// would overflow are taken on the vertices divided by a power of two
+    /// (`Sums`), and where `-a/2` times a coordinate would overflow, the
+    /// product is taken on that coordinate's significand and its power of two
+    /// restored last. Either rounds as the steps would with an unbounded
+    /// exponent, so a hull scaled by a power of two has its centroid scaled.
+    pub fn centroid(&self) -> [f64; 2] {
+        let Sums { twice, centre, w, exponent } = self.sums();
+        let inverse = 1.0 / twice;
+        let n = w.len();
+        let (mut cx, mut cy) = (0.0, 0.0);
+        for i in 0..n {
+            let (p, q) = (w[i], w[(i + 1) % n]);
+            let share = (p[0] * q[1] - p[1] * q[0]) * inverse;
+            cx += (p[0] + q[0]) * share;
+            cy += (p[1] + q[1]) * share;
+        }
+        let third = 1.0 / 3.0;
+        let local = [times_power_of_two(cx * third, exponent) + centre[0], times_power_of_two(cy * third, exponent) + centre[1]];
+        // In units of 2^(2 exponent) and its inverse, which cancel.
+        let weight = -(twice / 2.0);
+        let total = 0.0 + weight;
+        let reciprocal = 1.0 / total;
+        local.map(|value| {
+            let k = if exponent == 0 && (weight * value).is_finite() { 0 } else { binade(value) };
+            times_power_of_two((0.0 + weight * times_power_of_two(value, -k)) * reciprocal, k)
+        })
+    }
+
+    fn sums(&self) -> Sums {
+        let (low, high) = self.vertices.iter().fold(([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]), |(low, high), p| {
+            ([low[0].min(p[0]), low[1].min(p[1])], [high[0].max(p[0]), high[1].max(p[1])])
+        });
+        let centre = [midpoint(low[0], high[0]), midpoint(low[1], high[1])];
+        let w: Vec<[f64; 2]> = self.vertices.iter().map(|p| [p[0] - centre[0], p[1] - centre[1]]).collect();
+        let twice = twice_area(&w);
+        if twice.is_finite() {
+            return Sums { twice, centre, w, exponent: 0 };
+        }
+        let exponent = binade(w.iter().fold(0.0_f64, |m, p| m.max(p[0].abs()).max(p[1].abs())));
+        let w: Vec<[f64; 2]> = w.iter().map(|p| p.map(|v| times_power_of_two(v, -exponent))).collect();
+        Sums { twice: twice_area(&w), centre, w, exponent }
+    }
+}
+
+/// The stored vertices relative to the centre of their bounding box and twice
+/// their signed area, in units of `2^exponent` (`2^2exponent` for the area). The
+/// exponent is 0 unless the area overflows; then it brings the largest coordinate
+/// into [1, 2), which rounds nothing unless a coordinate is 2^1022 times smaller.
+struct Sums {
+    twice: f64,
+    centre: [f64; 2],
+    w: Vec<[f64; 2]>,
+    exponent: i32,
+}
+
+fn twice_area(w: &[[f64; 2]]) -> f64 {
+    let n = w.len();
+    let mut twice = 0.0;
+    for i in 0..n {
+        let (p, q) = (w[i], w[(i + 1) % n]);
+        twice += p[0] * q[1] - p[1] * q[0];
+    }
+    twice
+}
+
+/// `(low + high) / 2`, or `low/2 + high/2`, which rounds the same, where the sum overflows.
+fn midpoint(low: f64, high: f64) -> f64 {
+    let sum = low + high;
+    if sum.is_infinite() && low.is_finite() && high.is_finite() { low / 2.0 + high / 2.0 } else { sum / 2.0 }
+}
+
+/// `k` with `2^k <= |x| < 2^(k+1)`; 0 where `x` is zero or not finite.
+fn binade(x: f64) -> i32 {
+    if x == 0.0 || !x.is_finite() {
+        return 0;
+    }
+    let bits = x.abs().to_bits();
+    match (bits >> 52) as i32 {
+        0 => 63 - bits.leading_zeros() as i32 - 1074,
+        biased => biased - 1023,
+    }
+}
+
+/// `x * 2^k`: exact unless the result overflows or is subnormal.
+fn times_power_of_two(mut x: f64, mut k: i32) -> f64 {
+    let power = |k: i32| f64::from_bits(((k + 1023) as u64) << 52);
+    while k > 1023 {
+        x *= power(1023);
+        k -= 1023;
+    }
+    while k < -1022 {
+        x *= power(-1022);
+        k += 1022;
+    }
+    x * power(k)
+}
+
+/// The boundary of the convex hull of `points` that `convexHull` of their
+/// Delaunay triangulation lists: decided with exact predicates, exactly
+/// collinear points included, counter-clockwise from the first input point on
+/// it. `None` where the points span no area.
+fn delaunay_boundary(points: &[[f64; 2]]) -> Option<Vec<[f64; 2]>> {
+    let finite: Vec<[f64; 2]> = points.iter().copied().filter(|p| p[0].is_finite() && p[1].is_finite()).collect();
+    let mut sorted = finite.clone();
+    sorted.sort_by(row_order);
+    sorted.dedup();
+    let turn = |a: &[f64; 2], b: &[f64; 2], c: &[f64; 2]| robust::orient2d(coord(a), coord(b), coord(c));
+    if sorted.len() < 3 || (2..sorted.len()).all(|k| turn(&sorted[0], &sorted[1], &sorted[k]) == 0.0) {
+        return None;
+    }
+    let chain = |ordered: &mut dyn Iterator<Item = &[f64; 2]>| {
+        let mut half: Vec<[f64; 2]> = Vec::new();
+        for p in ordered {
+            while half.len() >= 2 && turn(&half[half.len() - 2], &half[half.len() - 1], p) < 0.0 {
+                half.pop();
+            }
+            half.push(*p);
+        }
+        half.pop();
+        half
+    };
+    let mut boundary = chain(&mut sorted.iter());
+    boundary.extend(chain(&mut sorted.iter().rev()));
+    let start = finite.iter().find_map(|p| boundary.iter().position(|b| b == p))?;
+    boundary.rotate_left(start);
+    Some(boundary)
 }
 
 /// A Delaunay triangulation reduced to what `samsrf_clusterroi` needs: each point's
@@ -345,21 +534,143 @@ mod tests {
         assert_eq!(first, vec![1, 0]);
     }
 
+    /// MATLAB R2023b's `centroid` and `area` of hulls it stored in this vertex
+    /// order (record_geometry.m, `geometry-reference.json`, both hosts).
     #[test]
-    fn hull_of_a_square_with_interior_points() {
-        let points = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.5, 0.5], [0.25, 0.75]];
-        let hull = Hull::of(&points).unwrap();
-        assert_eq!(hull.vertices.len(), 4);
-        assert!((hull.area() - 1.0).abs() < 1e-15);
-        let [cx, cy] = hull.centroid();
-        assert!((cx - 0.5).abs() < 1e-15 && (cy - 0.5).abs() < 1e-15);
+    fn centroid_and_area_round_as_matlab_on_its_stored_vertices() {
+        let cases: [(&[[f64; 2]], [f64; 3]); 7] = [
+            // From the box centre, 1/3 lands one ULP above its correct rounding.
+            (&[[0.0, 0.0], [1.0, 1.0], [1.0, 0.0]], [0.6666666666666666, 0.33333333333333337, 0.5]),
+            // Exact sums; MATLAB's y is one ULP below the correctly rounded 13/9.
+            (&[[1.0, 2.0], [2.0, 2.0], [2.0, 1.0], [0.0, 1.0]], [1.2222222222222223, 1.4444444444444442, 1.5]),
+            (&[[0.5, 0.0], [0.0, 2.0], [2.0, 1.0], [2.0, 0.5]], [0.9509803921568628, 0.9117647058823529, 2.125]),
+            // Cross products cancel by about 4e6 ULP.
+            (&[[0.0, 0.0], [7.64842058440951e-05, 6.442178402061286e-05], [0.001529684374568977, 0.001288435374475382]], [0.0005353895268043573, 0.00045095238616533166, 2.0000000072549875e-14]),
+            // A centroid on the axes is +0, not -0.
+            (&[[-0.5, -1.0], [-1.0, 0.0], [0.5, 1.0], [1.0, 0.0]], [0.0, 0.0, 2.0]),
+            // The extreme grids of the polyshape probe: at 1e-300 every cross
+            // product underflows to 0, so MATLAB's area is 0 and its centroid NaN.
+            (&[[0.0, 0.0], [0.0, 1e-300], [1e-300, 0.0]], [f64::NAN, f64::NAN, 0.0]),
+            (&[[1e12, 1e12], [1e12, 1000000000000.001], [1000000000000.001, 1e12]], [1000000000000.0004, 1000000000000.0004, 4.76837158203125e-07]),
+        ];
+        let bits = |v: f64| if v.is_nan() { f64::NAN.to_bits() } else { v.to_bits() };
+        for (vertices, expected) in cases {
+            let hull = Hull { vertices: vertices.to_vec() };
+            let [x, y] = hull.centroid();
+            assert_eq!([x, y, hull.area()].map(bits), expected.map(bits), "{vertices:?}");
+        }
+    }
+
+    /// Recorded cases scaled by powers of two: within range (2^-300), and above
+    /// it, where `-a/2` times the centroid would overflow (from about 2^341
+    /// here) and then the cross products (from 2^511). The bits scale with them.
+    #[test]
+    fn scaled_cases_scale_their_bits() {
+        let cases: [(&[[f64; 2]], [f64; 3]); 3] = [
+            (&[[0.0, 0.0], [1.0, 1.0], [1.0, 0.0]], [0.6666666666666666, 0.33333333333333337, 0.5]),
+            (&[[0.0, 0.0], [7.64842058440951e-05, 6.442178402061286e-05], [0.001529684374568977, 0.001288435374475382]], [0.0005353895268043573, 0.00045095238616533166, 2.0000000072549875e-14]),
+            (&[[-0.5, -1.0], [-1.0, 0.0], [0.5, 1.0], [1.0, 0.0]], [0.0, 0.0, 2.0]),
+        ];
+        for (vertices, expected) in cases {
+            for k in [-300, 350, 600, 900] {
+                let hull = Hull { vertices: vertices.iter().map(|p| p.map(|v| times_power_of_two(v, k))).collect() };
+                let [x, y] = hull.centroid();
+                assert_eq!([x, y].map(f64::to_bits), [expected[0], expected[1]].map(|v| times_power_of_two(v, k).to_bits()), "{vertices:?} times 2^{k}");
+                let area = times_power_of_two(expected[2], 2 * k);
+                if area.is_normal() {
+                    assert_eq!(hull.area().to_bits(), area.to_bits(), "{vertices:?} times 2^{k}");
+                }
+            }
+        }
+    }
+
+    /// Rectangles far out, whose centroid is the middle of their bounding box.
+    #[test]
+    fn extreme_hulls_have_finite_centroids() {
+        for (offset, side) in [(1e115, 1e100), (1e150, 1e140), (1e300, 1e290), (-1e307, 1e306), (1.7e308, 1e295)] {
+            let corners = vec![[offset, 0.0], [offset + side, 0.0], [offset + side, side], [offset, side]];
+            let direct = Hull { vertices: corners.clone() };
+            let mut hulls = vec![direct];
+            if offset.abs() < 1e200 && offset.abs() > 1.0 {
+                hulls.push(Hull::of_polygon(&corners).unwrap());
+            }
+            for hull in hulls {
+                let (low, high) = (offset, offset + side);
+                let middle = [low / 2.0 + high / 2.0, side / 2.0];
+                let [x, y] = hull.centroid();
+                assert!(x.is_finite() && y.is_finite(), "{offset} {side}: {x} {y}");
+                for (got, want) in [(x, middle[0]), (y, middle[1])] {
+                    assert!(got.to_bits().abs_diff(want.to_bits()) <= 2, "{offset} {side}: {got} vs {want}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn powers_of_two_are_carried_exactly() {
+        assert_eq!([binade(1.0), binade(1.5), binade(0.75), binade(-8.0), binade(f64::MAX), binade(f64::MIN_POSITIVE)], [0, 0, -1, 3, 1023, -1022]);
+        assert_eq!([binade(5e-324), binade(3.0 * 5e-324), binade(0.0), binade(f64::NAN)], [-1074, -1073, 0, 0]);
+        assert_eq!(times_power_of_two(1.5, 2000), f64::INFINITY);
+        assert_eq!(times_power_of_two(times_power_of_two(1.5, 2000), -2000), f64::INFINITY);
+        assert_eq!(times_power_of_two(times_power_of_two(1.5e-300, 1500), -1500), 1.5e-300);
+        assert_eq!(times_power_of_two(times_power_of_two(1e300, -2000), 2000), 1e300);
+        assert_eq!(times_power_of_two(times_power_of_two(1.5, -1050), 1050), 1.5);
+        assert_eq!(times_power_of_two(1.0, -1074), 5e-324);
+        assert_eq!(midpoint(f64::MAX, f64::MAX), f64::MAX);
+        assert_eq!(midpoint(1.0, 2.0), 1.5);
+    }
+
+    /// A recorded cloud of distinct points: MATLAB's hull, in its stored order, and its bits.
+    #[test]
+    fn polygon_hull_is_stored_and_rounded_as_matlab_stores_it() {
+        let points = [[0.4549171866074128, 1.9098343775159823], [0.9804315476094008, 2.960863106026634], [0.29706208837477277, 1.594123948026354], [0.1567924020000721, 1.3135849239128334]];
+        let hull = Hull::of_polygon(&points).unwrap();
+        assert_eq!(hull.vertices, vec![[0.9804315476094008, 2.960863106026634], [0.29706208837477277, 1.594123948026354], [0.1567924020000721, 1.3135849239128334]]);
+        let [x, y] = hull.centroid();
+        assert_eq!([x, y, hull.area()].map(f64::to_bits), [0.4780953459852008, 1.9561906593028449, 1.3592302744447338e-07].map(f64::to_bits));
+    }
+
+    #[test]
+    fn delaunay_boundary_keeps_collinear_points_from_the_first_input_point() {
+        // A 3 x 3 grid listed column by column, top first, as the pixel order lists it.
+        let points: Vec<[f64; 2]> = (0..3).flat_map(|x| (0..3).rev().map(move |y| [f64::from(x), f64::from(y)])).collect();
+        let boundary = delaunay_boundary(&points).unwrap();
+        assert_eq!(boundary, vec![[0.0, 2.0], [0.0, 1.0], [0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [2.0, 1.0], [2.0, 2.0], [1.0, 2.0]]);
+        let hull = Hull::of_delaunay_boundary(&points).unwrap();
+        assert_eq!(hull.vertices, vec![[0.0, 2.0], [2.0, 2.0], [2.0, 0.0], [0.0, 0.0]], "polyshape drops the collinear points and turns the ring clockwise");
+        assert_eq!(ListedHull::of(&points).map(|hull| hull.area()), Some(4.0));
+    }
+
+    /// `[K, AV] = convexHull(delaunayTriangulation(P))`'s `K` as MATLAB R2023b
+    /// recorded it (round hull-area-1: every one of 424 point sets, here two):
+    /// collinear points kept, counter-clockwise from the first input point on the hull.
+    #[test]
+    fn delaunay_boundary_lists_matlabs_convex_hull() {
+        let cases: [(&[[f64; 2]], &[usize]); 2] = [
+            (&[[4.5101010101010095, 0.6717171717171717], [4.5101010101010095, 0.4797979797979798], [4.7020202020202015, 0.6717171717171717], [4.7020202020202015, 0.4797979797979798]], &[1, 2, 4, 3]),
+            (&[[2.015151515151515, -7.388888888888888], [2.015151515151515, -7.58080808080808], [2.015151515151515, -7.7727272727272725], [2.2070707070707067, -7.388888888888888], [2.2070707070707067, -7.58080808080808], [2.2070707070707067, -7.7727272727272725], [2.398989898989899, -7.388888888888888], [2.398989898989899, -7.58080808080808]], &[1, 2, 3, 6, 8, 7, 4]),
+        ];
+        for (points, k) in cases {
+            let boundary = delaunay_boundary(points).unwrap();
+            let listed: Vec<usize> = boundary.iter().map(|b| points.iter().position(|p| p == b).unwrap() + 1).collect();
+            assert_eq!(listed, k);
+        }
     }
 
     #[test]
     fn degenerate_sets_have_no_hull() {
-        assert_eq!(Hull::of(&[[0.0, 0.0], [1.0, 1.0]]), None);
-        assert_eq!(Hull::of(&[[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]), None);
-        assert_eq!(Hull::of(&[[0.0, 0.0], [0.0, 0.0], [0.0, 0.0]]), None);
+        for points in [&[[0.0, 0.0], [1.0, 1.0]][..], &[[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]], &[[0.0, 0.0], [0.0, 0.0], [0.0, 0.0]]] {
+            assert_eq!(ListedHull::of(points), None);
+            assert_eq!(Hull::of_delaunay_boundary(points), None);
+            assert_eq!(Hull::of_polygon(points), None);
+        }
+    }
+
+    #[test]
+    fn listed_hull_preserves_base_nan_area_after_overflow() {
+        let points = [[0.0, 0.0], [2e200, 1e200], [1e200, 1e200]];
+        let hull = ListedHull::of(&points).expect("base retains a hull when its area is NaN");
+        assert!(hull.area().is_nan());
     }
 
     #[test]
@@ -390,16 +701,7 @@ mod tests {
     /// Every triangle is counter-clockwise, the triangles tile the hull (Euler's
     /// count) and no point lies strictly inside the circle of a triangle.
     fn assert_delaunay(points: &[[f64; 2]], triangles: &[[usize; 3]]) {
-        let hull_points = (0..points.len()).filter(|&i| {
-            let hull = Hull::of(points).unwrap();
-            let n = hull.vertices.len();
-            (0..n).any(|k| {
-                let (a, b) = (hull.vertices[k], hull.vertices[(k + 1) % n]);
-                robust::orient2d(coord(&a), coord(&b), coord(&points[i])) == 0.0
-                    && points[i][0] >= a[0].min(b[0]) && points[i][0] <= a[0].max(b[0])
-                    && points[i][1] >= a[1].min(b[1]) && points[i][1] <= a[1].max(b[1])
-            })
-        }).count();
+        let hull_points = delaunay_boundary(points).unwrap().len();
         assert_eq!(triangles.len(), 2 * points.len() - hull_points - 2);
         for t in triangles {
             assert!(orient(points, t[0], t[1], t[2]) > 0.0);

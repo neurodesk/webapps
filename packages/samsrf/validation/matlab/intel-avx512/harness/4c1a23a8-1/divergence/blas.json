@@ -1,0 +1,138 @@
+{
+  "SAMSRF_MATLAB_NUMERICS2_DIR ubuntu-22.04": {
+    "avx512": false,
+    "cpu": "AMD EPYC 7763 64-Core Processor",
+    "kernels[vectors, equal]": {
+      "norm(x) correctly rounded": [
+        24,
+        14
+      ],
+      "norm(x) shipped": [
+        24,
+        24
+      ],
+      "norm(z) correctly rounded": [
+        24,
+        11
+      ],
+      "norm(z) shipped": [
+        24,
+        24
+      ],
+      "x'y avx512": [
+        24,
+        22
+      ],
+      "x'y shipped": [
+        24,
+        24
+      ],
+      "z'y shipped": [
+        24,
+        24
+      ]
+    }
+  },
+  "SAMSRF_MATLAB_NUMERICS2_DIR ubuntu-24.04": {
+    "avx512": true,
+    "cpu": "INTEL(R) XEON(R) PLATINUM 8573C",
+    "kernels[vectors, equal]": {
+      "norm(x) correctly rounded": [
+        24,
+        24
+      ],
+      "norm(x) shipped": [
+        24,
+        14
+      ],
+      "norm(z) correctly rounded": [
+        24,
+        24
+      ],
+      "norm(z) shipped": [
+        24,
+        11
+      ],
+      "x'y avx512": [
+        24,
+        24
+      ],
+      "x'y shipped": [
+        24,
+        22
+      ],
+      "z'y shipped": [
+        24,
+        5
+      ]
+    }
+  },
+  "SAMSRF_MATLAB_NUMERICS_DIR ubuntu-22.04": {
+    "avx512": true,
+    "cpu": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+    "kernels[vectors, equal]": {
+      "norm(x) correctly rounded": [
+        24,
+        24
+      ],
+      "norm(x) shipped": [
+        24,
+        14
+      ],
+      "norm(z) correctly rounded": [
+        24,
+        24
+      ],
+      "norm(z) shipped": [
+        24,
+        11
+      ],
+      "x'y avx512": [
+        24,
+        24
+      ],
+      "x'y shipped": [
+        24,
+        22
+      ],
+      "z'y shipped": [
+        24,
+        5
+      ]
+    }
+  },
+  "SAMSRF_MATLAB_NUMERICS_DIR ubuntu-24.04": {
+    "avx512": false,
+    "cpu": "AMD EPYC 7763 64-Core Processor",
+    "kernels[vectors, equal]": {
+      "norm(x) correctly rounded": [
+        24,
+        14
+      ],
+      "norm(x) shipped": [
+        24,
+        24
+      ],
+      "norm(z) correctly rounded": [
+        24,
+        11
+      ],
+      "norm(z) shipped": [
+        24,
+        24
+      ],
+      "x'y avx512": [
+        24,
+        22
+      ],
+      "x'y shipped": [
+        24,
+        24
+      ],
+      "z'y shipped": [
+        24,
+        24
+      ]
+    }
+  }
+}

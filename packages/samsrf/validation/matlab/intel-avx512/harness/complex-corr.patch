@@ -1,0 +1,45 @@
+diff --git a/exes/samsrf/core/src/css.rs b/exes/samsrf/core/src/css.rs
+--- a/exes/samsrf/core/src/css.rs
++++ b/exes/samsrf/core/src/css.rs
+@@ -78,8 +78,13 @@
+     let (dot, norm_x) = if is_complex(x) {
+         let mx = precision::mean_complex(x);
+         let xc: Vec<Complex64> = x.iter().map(|&value| value - mx).collect();
+-        let norm = matlab_math::nrm2(xc.iter().flat_map(|value| [value.re, value.im]));
+-        (matlab_math::zdotc_real(&xc, &yc), norm)
++        let parts: Vec<f64> = xc.iter().flat_map(|value| [value.re, value.im]).collect();
++        let norm = crate::reference::dnrm2(&parts);
++        let dot = match crate::reference::active() {
++            Some(kernels) => (kernels.zdotc_real)(&xc, &yc),
++            None => matlab_math::zdotc_real(&xc, &yc),
++        };
++        (dot, norm)
+     } else {
+         let real: Vec<f64> = x.iter().map(|value| value.re).collect();
+         let mx = precision::mean_double(&real);
+diff --git a/exes/samsrf/core/src/reference.rs b/exes/samsrf/core/src/reference.rs
+--- a/exes/samsrf/core/src/reference.rs
++++ b/exes/samsrf/core/src/reference.rs
+@@ -27,6 +27,8 @@
+     pub name: &'static str,
+     /// MATLAB's real `x' * y`, from `matlab_math::DDOT_MKL_MIN_LENGTH` elements (MKL `ddot`).
+     pub ddot: fn(&[f64], &[f64]) -> f64,
++    /// Candidate mixed complex/real dot; installed only by the complex research variant.
++    pub zdotc_real: fn(&[num_complex::Complex64], &[f64]) -> num_complex::Complex64,
+     /// MATLAB's `norm` of a real double vector (MKL `dnrm2`).
+     pub dnrm2: fn(&[f64]) -> f64,
+     /// MATLAB's double `y' * A` (MKL `dgemv` with `trans`), one value per column.
+diff --git a/exes/samsrf/wasm/src/lib.rs b/exes/samsrf/wasm/src/lib.rs
+--- a/exes/samsrf/wasm/src/lib.rs
++++ b/exes/samsrf/wasm/src/lib.rs
+@@ -45,8 +45,9 @@
+ pub fn install_research_reference() {
+     INSTALL.call_once(|| {
+         samsrf_core::reference::install(samsrf_core::reference::Kernels {
+-            name: "MKL AVX512_E1 research reference (samsrf-mkl-avx512): real double ddot from 51, dnrm2 candidate, y'*A, least squares",
++            name: "MKL AVX512_E1 research reference (samsrf-mkl-avx512): real double kernels plus complex dot candidate and complex norm candidate",
+             ddot: samsrf_mkl_avx512::blas::ddot,
++            zdotc_real: samsrf_mkl_avx512::complex::zdotc_real,
+             dnrm2: samsrf_mkl_avx512::nrm2,
+             gemv_t: samsrf_mkl_avx512::blas::gemv_t,
+             factor: |columns| Box::new(IntelDesign(samsrf_mkl_avx512::Design::new(columns))),

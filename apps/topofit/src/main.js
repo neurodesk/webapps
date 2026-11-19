@@ -18,6 +18,7 @@ import {
 import { registerAppAutomation, registerViewer, createNiivueAdapter } from '@neurodesk/webapp-components/automation';
 import { automationArtifacts } from './automation-results.js';
 import manifest from '@neurodesk/topofit/manifest';
+import { REGIONS, REGION_ATLASES } from '@neurodesk/topofit/regions';
 
 const $ = (id) => document.getElementById(id);
 const assetBase = import.meta.env.VITE_TOPOFIT_ASSET_BASE || manifest.base_url;
@@ -253,9 +254,16 @@ $('stlButton').onclick = () => {
   };
 };
 
+// A parcellation is download-only: its View button stays disabled whatever the busy state.
+const resultControls = () => [...$('resultList').querySelectorAll('button, input')]
+  .filter((control) => !(control.matches('.nd-view-btn') && control.closest('[data-stage$="-annot"]')));
+
 function resultLabel(stage) {
   const patch = /^(LH|RH)(\d+)$/.exec(stage);
-  return patch ? `${patch[1] === 'LH' ? 'Left' : 'Right'} flat patch ${Number(patch[2])}` : stageLabels[stage] || stage;
+  if (patch) return `${patch[1] === 'LH' ? 'Left' : 'Right'} flat patch ${Number(patch[2])}`;
+  const parcellation = /^(lh|rh)-(\w+)-annot$/.exec(stage);
+  if (parcellation) return `${parcellation[1] === 'lh' ? 'Left' : 'Right'} ${REGION_ATLASES[parcellation[2]].name} parcellation`;
+  return stageLabels[stage] || stage;
 }
 
 function showPatchMeasurements(patch) {
@@ -294,7 +302,7 @@ function setBusy(value) {
   $('freebrowseViewer').inert = value || viewerBusy;
   exampleControl.setDisabled(value);
   for (const input of $('controls').querySelectorAll('input, select')) input.disabled = value || viewerBusy;
-  for (const control of $('resultList').querySelectorAll('button, input')) control.disabled = value || viewerBusy;
+  for (const control of resultControls()) control.disabled = value || viewerBusy;
   $('copyPatchCoordinates').disabled = value;
   $('runButton').disabled = value || viewerBusy || !source;
   $('analyzeButton').disabled = value || viewerBusy || !reconstruction;
@@ -309,7 +317,7 @@ function setViewerBusy(value) {
   $('freebrowseViewer').inert = value || busy;
   exampleControl.setDisabled(value || busy);
   for (const input of $('controls').querySelectorAll('input, select')) input.disabled = value || busy;
-  for (const control of $('resultList').querySelectorAll('button, input')) control.disabled = value || busy;
+  for (const control of resultControls()) control.disabled = value || busy;
   $('runButton').disabled = value || busy || !source;
   $('analyzeButton').disabled = value || busy || !reconstruction;
   $('stlButton').disabled = value || busy;
@@ -633,6 +641,15 @@ $('exampleControl').replaceWith(exampleControl);
 
 $('findPatches').onchange = () => { $('patchSettings').hidden = !$('findPatches').checked; };
 $('patchRegion').onchange = () => { $('patchRoiField').hidden = $('patchRegion').value !== 'roi'; };
+{
+  const groups = new Map();
+  for (const region of REGIONS) {
+    if (!groups.has(region.group)) groups.set(region.group, createElement('optgroup', { label: region.group }));
+    groups.get(region.group).append(createElement('option', { value: region.id, text: region.name }));
+  }
+  $('patchRegion').append(...groups.values());
+}
+const namedRegion = () => $('findPatches').checked && !['cortex', 'roi'].includes($('patchRegion').value) ? $('patchRegion').value : 'cortex';
 
 // localStorage may be unavailable (privacy modes); the app then keeps defaults.
 const stored = {
@@ -817,15 +834,17 @@ async function run(analysisOnly = false, { signal, progress = () => {}, roiFile 
               files: new Map([...outputs].filter(([id]) => surfaceStages.has(id) || id === 'qc')),
             };
           }
-          results.render(Object.fromEntries([...outputs].map(([id]) => [
+          results.render(Object.fromEntries([...outputs].map(([id, file]) => [
             id,
-            surfaceStages.has(id) ? { visible: false, viewable: true } : { description: resultLabel(id) },
+            surfaceStages.has(id) ? { visible: false, viewable: true }
+              : file.name.endsWith('.annot') ? { description: resultLabel(id), viewable: false }
+                : { description: resultLabel(id) },
           ])));
           $('stlButton').hidden = !reconstruction;
           $('outputSection').open = true;
           $('progress').value = 1;
           status(analysisOnly ? `Surface analysis ready · ${Math.round(data.elapsedSeconds)} s` : `Surfaces ready · ${data.provenance.surfaceVertices.toLocaleString()} vertices per hemisphere · ${Math.round(data.elapsedSeconds)} s`);
-          if (surfaceAnalysis?.flat_patch_status === 'NO_PATCH_MEETS_CRITERIA') status('Surfaces ready · no cortical patch meets the selected criteria');
+          if (surfaceAnalysis?.flat_patch_status === 'NO_PATCH_MEETS_CRITERIA') status(['cortex', 'roi'].includes(surfaceAnalysis.flat_patch_definition.region) ? 'Surfaces ready · no cortical patch meets the selected criteria' : 'Surfaces ready · no patch fits the search region; try a smaller patch radius');
           await loadResultSurfaces();
           await showResult(outputs.has('patch-qc') ? 'patch-qc' : 'qc', { duringRun: true });
           finish(null, { artifacts: automationArtifacts(data.files), provenance: data.provenance, measurements: { elapsedSeconds: data.elapsedSeconds, ...(data.provenance.surfaceAnalysis ? { surfaceAnalysis: data.provenance.surfaceAnalysis } : {}) } });
@@ -857,6 +876,7 @@ async function run(analysisOnly = false, { signal, progress = () => {}, roiFile 
         minAreaFraction: Number($('patchMinArea').value),
       } : null,
       roiBuffer,
+      region: namedRegion(),
       assetBase,
     });
   });
@@ -917,10 +937,12 @@ registerAppAutomation({
       for (const id of ['conform', 'estimateNormals', 'findPatches']) $(id).checked = parameters[id];
       if (parameters.parallelHemispheres !== undefined) $('parallelHemispheres').checked = parameters.parallelHemispheres;
       for (const id of ['model', 'thickness', 'patchCount', 'patchRadius', 'patchHemisphere', 'patchMaxRms', 'patchMinArea']) $(id).value = String(parameters[id]);
-      $('patchRegion').value = inputs.roi.length ? 'roi' : 'cortex';
+      $('patchRegion').value = inputs.roi.length ? 'roi' : parameters.patchRegion;
       $('patchSettings').hidden = !parameters.findPatches;
       $('patchRoiField').hidden = !inputs.roi.length;
       if (inputs.roi.length && !parameters.findPatches) throw new Error('An ROI requires findPatches to be enabled.');
+      if (parameters.patchRegion !== 'cortex' && !parameters.findPatches) throw new Error('A named patchRegion requires findPatches to be enabled.');
+      if (parameters.patchRegion !== 'cortex' && inputs.roi.length) throw new Error('Choose a named patchRegion or an ROI, not both.');
       return run(false, { signal, progress, roiFile: inputs.roi[0] });
     },
   },

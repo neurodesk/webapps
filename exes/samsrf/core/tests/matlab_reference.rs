@@ -41,7 +41,7 @@ fn regression_rank_and_coefficients_match_matlab_across_scales() {
         let precision = if case["precision"] == "single" { Precision::Single } else { Precision::Double };
         let (beta, baseline) = css::fit_betas(&prediction, &observations, precision);
         assert_eq!(expected.len(), 2);
-        for (index, actual) in [baseline, beta].into_iter().enumerate() {
+        for (index, actual) in [baseline.re, beta.re].into_iter().enumerate() {
             // These synthetic observations have a nonzero intercept. A zero
             // coefficient identifies the column MATLAB rejected as deficient.
             assert_eq!(actual == 0.0, expected[index] == 0.0, "{} coefficient {index}: rank decision", case["id"]);

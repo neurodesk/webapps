@@ -19,7 +19,9 @@ DIGEST = 'ghcr.io/neurodesk/samsrf-reference@sha256:' + '0' * 64
 
 
 def scratch():
-    return tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR'))
+    # Node's path.join normalizes '..', so a TMPDIR that has one is normalized here too.
+    tmpdir = os.environ.get('TMPDIR')
+    return tempfile.TemporaryDirectory(dir=os.path.abspath(tmpdir) if tmpdir else None)
 
 
 def write_gifti(path, values, dimensions=None, order='RowMajorOrder'):

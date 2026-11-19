@@ -19,13 +19,29 @@ const reproducerSpec = name => {
 };
 export const REPRODUCER_POLYGONS = { reproducer_cases: reproducerSpec('./polyshape-reproducers.json'), reproducer_round2: reproducerSpec('./polyshape-reproducers-2.json'), reproducer_round3: reproducerSpec('./polyshape-reproducers-3.json'), reproducer_round4: reproducerSpec('./polyshape-reproducers-4.json'), reproducer_round5: reproducerSpec('./polyshape-reproducers-5.json'), reproducer_round6: reproducerSpec('./polyshape-reproducers-6.json'), reproducer_round7: reproducerSpec('./polyshape-reproducers-7.json') };
 export const PROBE_POLYGONS = { probe_grid_sweep: 24120, probe_heldout_collinear: 1500, probe_heldout_clouds: 1500, probe_extreme_grids: 7, probe_point_clouds: 2500 };
+// record_geometry(..., 'hull-area'): each inputs file's point sets, then its grids.
+export const HULL_AREA_FIELDS = ['points', 'dtPoints', 'triangles', 'hull', 'area', 'polyarea', 'shape', 'estimate', 'cornersTriangles', 'cornersHull', 'cornersArea'];
+export function hullAreaCases() {
+  return ['./hull-area-inputs.json', './hull-area-inputs-2.json'].flatMap(name => {
+    const spec = JSON.parse(fs.readFileSync(new URL(name, import.meta.url), 'utf8'));
+    return [...spec.sets.map(item => `area_${item.identity}`), ...spec.linspace.map(item => `linspace_${item.identity}`)];
+  });
+}
 
 export function validateGeometry(root) {
   const recording = JSON.parse(fs.readFileSync(path.join(root, 'geometry.json'), 'utf8'));
   const counts = {};
   for (const item of recording.cases) counts[item.kind] = (counts[item.kind] ?? 0) + 1;
-  const probe = ['polyshape-probe', 'polyshape-causal', 'polyshape-reproducers'].includes(recording.mode);
-  if (recording.mode === 'polyshape-reproducers') {
+  const probe = ['polyshape-probe', 'polyshape-causal', 'polyshape-reproducers', 'hull-area'].includes(recording.mode);
+  if (recording.mode === 'hull-area') {
+    assert.deepEqual(recording.cases.map(item => item.id), hullAreaCases(), 'Incomplete hull-area recording');
+    for (const item of recording.cases.filter(item => item.kind === 'hull-area')) {
+      assert.equal(item.error, '', `${item.id}: ${item.error}`);
+      for (const field of HULL_AREA_FIELDS) assert.ok(item[field], `${item.id}: missing ${field}`);
+    }
+    const environment = JSON.parse(fs.readFileSync(path.join(root, 'environment.json'), 'utf8'));
+    assert.equal(environment.mode, 'hull-area', 'Hull-area provenance does not name its mode');
+  } else if (recording.mode === 'polyshape-reproducers') {
     assert.deepEqual(recording.cases.map(item => item.id), Object.keys(REPRODUCER_POLYGONS), 'Incomplete polyshape reproducer recording');
     for (const item of recording.cases) {
       const polygons = REPRODUCER_POLYGONS[item.id];

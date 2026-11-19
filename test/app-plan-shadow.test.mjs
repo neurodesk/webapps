@@ -9,6 +9,7 @@ import {
   parseableClosure,
   republishedPackages,
   supersededMerges,
+  uncheckedRules,
   workspaceClosures,
 } from '../scripts/lib/app-plan-shadow.mjs';
 
@@ -143,4 +144,13 @@ test('a merge whose own push run was cancelled reports the apps it left untested
     ['m3', { pr: 3, merge: 'm3', fallback: 'shared', selected: [] }],
   ]);
   assert.deepEqual(supersededMerges({ history, selections }), [{ pr: 1, run: 1, apps: ['alpha'] }]);
+});
+
+test('the shadow report names the rule families it cannot check', () => {
+  const plan = { reasons: { fallback: null } };
+  const site = (home) => stringify({ site: { hub: { brand: { home } } }, apps: [] });
+  const manifests = new Map([['registry/apps.yml', { before: site('https://a.org/'), after: site('https://b.org/') }]]);
+  assert.deepEqual(uncheckedRules({ plan, changedPaths: ['.github/workflows/ci.yml', 'registry/apps.yml'], manifests }), ['ci.yml jobs', 'registry site keys']);
+  assert.deepEqual(uncheckedRules({ plan, changedPaths: ['registry/apps.yml'], manifests: new Map([['registry/apps.yml', { before: site('x'), after: site('x') }]]) }), []);
+  assert.deepEqual(uncheckedRules({ plan: { reasons: { fallback: 'everything' } }, changedPaths: ['.github/workflows/ci.yml'], manifests }), []);
 });

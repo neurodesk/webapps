@@ -52,6 +52,7 @@ fn load() -> Example {
 fn inputs(example: &Example, kind: AnalysisKind, json: &str) -> JobInputs {
     let model = parse_model_json(kind, json).unwrap();
     JobInputs {
+        preprocessing_reference: samsrf_core::arithmetic::ArithmeticReference::Current,
         model,
         apertures: Some(mat::read_apertures(&example.apertures_bytes).unwrap()),
         hrf: None,

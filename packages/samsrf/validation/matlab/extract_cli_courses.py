@@ -76,6 +76,8 @@ def main(arguments):
                 raise ValueError(f'{run["id"]}: Srf.Y {values.shape} does not cover Srf.Roi ({roi.size})')
             file = f'{run["id"]}.Y.f64'
             numpy.ascontiguousarray(values, dtype='<f8').tofile(output / key / file)
+            if not numpy.all(numpy.isfinite(roi) & (roi >= 1) & (roi == numpy.floor(roi))) or numpy.unique(roi).size != roi.size:
+                raise ValueError(f'{run["id"]}: Srf.Roi is not distinct whole vertex numbers')
             runs.append({'id': run['id'], 'mat': name, 'precision': kind, 'vertices': int(values.shape[0]),
                          'volumes': int(values.shape[1]), 'roi': [int(vertex) for vertex in roi], 'file': file})
         manifest['hosts'][key] = {**receipt, 'runs': runs}

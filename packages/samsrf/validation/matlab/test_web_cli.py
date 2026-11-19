@@ -14,6 +14,7 @@ import cli_plan
 import compare_cli
 import compare_web_cli as web_cli
 from compare_web_cli import Inventory
+import web_cli_outcome
 from test_cli import scratch, write_gifti
 
 PLAN = {run['id']: run for run in cli_plan.plan()['runs']}
@@ -75,6 +76,8 @@ class Fixture:
             if PLAN[run_id]['precision'] == 'single':
                 values = values.astype('<f4').astype('<f8')
             self.maps[run_id] = values
+        # Imaginary parts over every vertex, written to both executions where set.
+        self.imaginary = {}
         self.status = {i: web_cli.expected_web_outcome(PLAN[i], runner)['status'] for i in ids}
         self.receipt = {i: 'succeeded' for i in ids}
         self.write()
@@ -110,8 +113,9 @@ class Fixture:
             mat, labels, names = compare_cli.expected_results(run)
             if self.receipt[run_id] == 'succeeded':
                 (self.matlab / run_id).mkdir()
+                imaginary = self.imaginary.get(run_id)
                 write_srf(self.matlab / run_id / mat, self.maps[run_id][:, ROI].T, [v + 1 for v in ROI],
-                          run['precision'], labels)
+                          run['precision'], labels, imaginary=None if imaginary is None else imaginary[:, ROI].T)
                 for index, name in enumerate(names):
                     write_gifti(self.matlab / run_id / name, self.maps[run_id][index])
             if self.status[run_id] == 'succeeded':
@@ -124,6 +128,10 @@ class Fixture:
                 for index, name in enumerate(files):
                     write_gifti(directory / name, self.maps[run_id][min(index, len(names) - 1)])
                 record.update({'values': labels, 'vertices': VERTICES, 'roi': ROI, 'files': files, 'mapsSha256': sha(data)})
+                if run_id in self.imaginary:
+                    parts = numpy.asarray(self.imaginary[run_id], '<f8').tobytes()
+                    (directory / 'maps.imag.f64').write_bytes(parts)
+                    record['imaginarySha256'] = sha(parts)
             (self.web / f'{run_id}.web.json').write_text(json.dumps(record))
 
     def report(self, expect=None, allow=True):
@@ -193,7 +201,129 @@ class Values(Base):
         self.assertEqual(run['maps'][1]['srfData']['maxAbsolute'], 0)
         self.assertFalse(run['maps'][0]['srfData']['nonfiniteMaskEqual'])
         self.assertEqual(run['maps'][3]['imaginaryNonzero'], 1)
+        self.assertEqual(run['maps'][3]['imaginary']['differing'], 1)
+        self.assertEqual(run['maps'][3]['class'], 'differs')
         self.assertTrue(run['matlabComplex'])
+
+
+class Imaginary(Base):
+    ids = ['prf_css_lh_double']
+
+    def complex_maps(self):
+        imaginary = numpy.zeros_like(self.x.maps[self.id])
+        imaginary[0, ROI] = [-2e-3, 0.0, 5e-4]
+        imaginary[-3, ROI] = [1e-3, -7e-4, 0.0]
+        self.x.imaginary[self.id] = imaginary
+        self.x.write()
+        return imaginary
+
+    def test_matching_imaginary_parts_are_exact(self):
+        self.complex_maps()
+        run = self.x.report()['runs'][0]
+        self.assertEqual(run['class'], 'exact')
+        self.assertTrue(run['matlabComplex'])
+        self.assertEqual([entry['imaginaryNonzero'] for entry in run['maps']][0], 2)
+        self.assertTrue(all(entry['imaginary']['exact'] for entry in run['maps']))
+
+    def test_one_ulp_or_a_signed_zero_in_an_imaginary_part_differs(self):
+        imaginary = self.complex_maps()
+        mat, labels, _ = compare_cli.expected_results(PLAN[self.id])
+        matlab = imaginary[:, ROI].T.copy()
+        matlab[0, 0] = numpy.nextafter(matlab[0, 0], numpy.inf)
+        matlab[1, 0] = -0.0
+        write_srf(self.x.matlab / self.id / mat, self.x.maps[self.id][:, ROI].T, [v + 1 for v in ROI], 'double', labels,
+                  imaginary=matlab)
+        entry = self.x.report()['runs'][0]['maps'][0]
+        self.assertEqual(entry['class'], 'differs')
+        self.assertEqual(entry['imaginary']['differing'], 2)
+        self.assertEqual(entry['imaginary']['signedZeroOnly'], 1)
+        self.assertEqual(entry['imaginary']['maxUlp'], 1)
+        self.assertTrue(entry['srfData']['exact'] and entry['gifti']['exact'])
+
+    def test_a_web_run_without_imaginary_parts_differs_from_complex_matlab_maps(self):
+        self.complex_maps()
+        (self.x.web / self.id / 'maps.imag.f64').unlink()
+        self.x.edit_record(self.id, imaginarySha256=None)
+        run = self.x.report()['runs'][0]
+        self.assertEqual(run['class'], 'differs')
+        self.assertEqual(run['maps'][0]['imaginary']['differing'], 2)
+        self.assertTrue(run['maps'][0]['srfData']['exact'])
+
+    def test_an_imaginary_hash_must_be_a_sha256(self):
+        self.complex_maps()
+        good = json.loads((self.x.web / f'{self.id}.web.json').read_text())['imaginarySha256']
+        for value in (good.upper(), good + '\n', 1, ''):
+            with self.subTest(value=value):
+                self.x.edit_record(self.id, imaginarySha256=value)
+                run = self.x.report()['runs'][0]
+                self.assertEqual(run['class'], 'inventory-error', run)
+                self.assertIn('invalid imaginarySha256', run['error'])
+
+    def test_imaginary_file_damage_is_an_inventory_error(self):
+        self.complex_maps()
+        path = self.x.web / self.id / 'maps.imag.f64'
+        good = path.read_bytes()
+        path.write_bytes(good + bytes(8))
+        self.assertEqual(self.run_class(), 'inventory-error')
+        path.write_bytes(good[:-8] + numpy.float64(1.0).tobytes())
+        self.assertIn('hash', self.x.report()['runs'][0]['error'])
+        path.write_bytes(good)
+        self.x.edit_record(self.id, imaginarySha256=None)
+        self.assertIn('differs from its record', self.x.report()['runs'][0]['error'])
+
+
+class Outcome(Base):
+    ids = ['rc_hull_lh_double', 'prf_css_lh_double']
+
+    def test_differing_count_cannot_exceed_total_or_contradict_exactness(self):
+        for part in ('srfData', 'imaginary', 'gifti'):
+            for exact, differing in ((False, 4), (True, 1)):
+                with self.subTest(part=part, exact=exact):
+                    report = self.x.report()
+                    report['runs'][0]['maps'][0][part].update(count=3, exact=exact, differing=differing)
+                    with self.assertRaisesRegex(ValueError, 'contradicts'):
+                        web_cli_outcome.outcome(report)
+
+    def test_fractional_comparison_count_fails_public_command(self):
+        report = self.x.report()
+        frozen = self.x.root / 'outcome.json'
+        frozen.write_text(json.dumps(web_cli_outcome.outcome(report)))
+        report['runs'][0]['maps'][0]['srfData']['count'] = 3.5
+        path = self.x.root / 'report.json'
+        path.write_text(json.dumps(report))
+        result = subprocess.run([sys.executable, str(Path(web_cli_outcome.__file__)),
+                                 'check', str(frozen), str(path)], capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('count', result.stderr)
+
+    def check(self, frozen):
+        path = self.x.root / 'report.json'
+        path.write_text(json.dumps(self.x.report()))
+        return web_cli_outcome.differences(frozen, web_cli_outcome.outcome(json.loads(path.read_text())))
+
+    def test_an_unchanged_outcome_passes_and_any_change_fails(self):
+        frozen = web_cli_outcome.outcome(self.x.report())
+        self.assertEqual(frozen['runs']['rc_hull_lh_double'], {'class': 'exact', 'maps': {name: 'exact' for name in compare_cli.expected_results(PLAN['rc_hull_lh_double'])[1]}})
+        self.assertEqual(self.check(frozen), [])
+        mat, labels, _ = compare_cli.expected_results(PLAN[self.id])
+        data = self.x.maps[self.id][:, ROI].T.copy()
+        data[0, 1] = numpy.nextafter(data[0, 1], numpy.inf)
+        write_srf(self.x.matlab / self.id / mat, data, [v + 1 for v in ROI], 'double', labels)
+        found = self.check(frozen)
+        self.assertIn(f'/runs/{self.id}/class: expected "exact", found "differs"', found)
+        self.assertIn(f'/runs/{self.id}/maps/{labels[1]}: expected "exact", found {{"srfData": 1, "imaginary": 0, "gifti": 0}}', found)
+
+    def test_a_better_outcome_or_another_host_also_fails(self):
+        mat, labels, _ = compare_cli.expected_results(PLAN[self.id])
+        data = self.x.maps[self.id][:, ROI].T.copy()
+        data[0, 1] = numpy.nextafter(data[0, 1], numpy.inf)
+        write_srf(self.x.matlab / self.id / mat, data, [v + 1 for v in ROI], 'double', labels)
+        frozen = web_cli_outcome.outcome(self.x.report())
+        self.x.write()
+        self.assertIn('/summary/exactRuns: expected 1, found 2', self.check(frozen))
+        frozen = web_cli_outcome.outcome(self.x.report())
+        frozen['matlab']['cpu'] = 'Intel(R) Xeon(R) Platinum 8573C'
+        self.assertEqual(self.check(frozen), ['/matlab/cpu: expected "Intel(R) Xeon(R) Platinum 8573C", found "AMD EPYC 9V74 80-Core Processor"'])
 
 
 class CommandLine(Base):
@@ -251,6 +381,21 @@ class Ulp(unittest.TestCase):
 class Statuses(Base):
     ids = ['rc_gaussian_lh_single', 'prf_custom_hrf_lh_double']
 
+    def test_expected_refusals_still_require_matlab_output_inventory(self):
+        for runner, run_id in (('node', 'rc_gaussian_lh_single'), ('browser', 'rc_gaussian_lh_single')):
+            for damage in ('missing', 'extra'):
+                with self.subTest(runner=runner, damage=damage):
+                    self.x.runner = runner
+                    self.x.status[run_id] = web_cli.expected_web_outcome(PLAN[run_id], runner)['status']
+                    self.x.write()
+                    directory = self.x.matlab / run_id
+                    if damage == 'missing':
+                        (directory / compare_cli.expected_results(PLAN[run_id])[2][0]).unlink()
+                    else:
+                        (directory / 'unexpected.bin').write_bytes(b'x')
+                    run = next(item for item in self.x.report()['runs'] if item['id'] == run_id)
+                    self.assertEqual(run['class'], 'inventory-error', run)
+
     def test_expected_refusal_is_listed_and_not_agreement(self):
         report = self.x.report()
         self.assertEqual(self.run_class(report), 'refused')
@@ -299,16 +444,17 @@ class BrowserStatuses(Base):
     ids = ['prf_custom_hrf_lh_double']
     runner = 'browser'
 
-    def test_browser_subject_hrf_is_unsupported_and_matlab_failure_still_fails(self):
-        self.assertEqual(self.run_class(), 'unsupported')
+    def test_browser_subject_hrf_run_is_computed_and_matlab_failure_still_fails(self):
+        self.assertEqual(web_cli.expected_web_outcome(PLAN[self.id], 'browser'), {'status': 'succeeded'})
+        self.assertEqual(self.run_class(), 'exact')
         self.x.receipt[self.id] = 'failed'
         self.x.write()
         self.assertEqual(self.run_class(), 'failed')
 
-    def test_a_crash_on_a_subject_hrf_run_is_not_unsupported(self):
-        other_file = web_cli.expected_web_outcome(PLAN[self.id], 'browser')['message'].replace('hrf_custom', 'hrf_other')
-        for message in (CRASH, other_file):
-            with self.subTest(message=message):
+    def test_the_former_subject_hrf_refusal_or_a_crash_is_a_failure(self):
+        for status, message in (('unsupported', 'model: Hrf hrf_custom is an old-school HRF fit file: the caller must load its fP and call hrf::old_school'), ('failed', CRASH)):
+            with self.subTest(status=status):
+                self.x.status[self.id] = status
                 self.x.write()
                 self.x.edit_record(self.id, message=message)
                 report = self.x.report()
@@ -322,7 +468,7 @@ class BrowserCommandLine(Base):
     kind = 'compiled-runtime'
     runner = 'browser'
 
-    def test_a_crash_relabelled_unsupported_fails_the_command(self):
+    def test_a_crash_on_a_subject_hrf_run_fails_the_command(self):
         self.x.plan = cli_plan.plan()
         plan = self.x.root / 'plan.json'
         manifest = self.x.root / 'manifest.json'
@@ -333,6 +479,8 @@ class BrowserCommandLine(Base):
         for crash, code in ((False, 0), (True, 1)):
             with self.subTest(crash=crash):
                 if crash:
+                    self.x.status['prf_custom_hrf_lh_double'] = 'failed'
+                    self.x.write()
                     self.x.edit_record('prf_custom_hrf_lh_double', message=CRASH)
                 report = self.x.root / f'report-{crash}.json'
                 result = subprocess.run([sys.executable, str(Path(web_cli.__file__).resolve()), str(plan), str(manifest),
@@ -340,7 +488,7 @@ class BrowserCommandLine(Base):
                                         capture_output=True, text=True, check=False)
                 self.assertEqual(result.returncode, code, result.stderr)
                 summary = json.loads(report.read_text())['summary']
-                self.assertEqual((summary['unsupportedRuns'], summary['failedRuns']), (3, 1) if crash else (4, 0))
+                self.assertEqual((summary['unsupportedRuns'], summary['failedRuns']), (0, 1) if crash else (0, 0))
 
 
 class EngineRunnerStatuses(unittest.TestCase):
@@ -373,6 +521,31 @@ class EngineRunnerStatuses(unittest.TestCase):
                                  {'failed'})
 
 
+class BrowserRequests(unittest.TestCase):
+    """run_browser_matrix.mjs's request: the files Chromium's engine.js receives for each plan run."""
+
+    def test_a_subject_hrf_run_gives_engine_js_its_file(self):
+        here = Path(web_cli.__file__).resolve().parent
+        script = ("import { mkdirSync, writeFileSync } from 'node:fs'; import { join } from 'node:path';"
+                  "import { matFile } from " + json.dumps((here.parents[1] / 'test' / 'fixtures.js').as_uri()) + ";"
+                  "import { request } from " + json.dumps((here / 'run_browser_matrix.mjs').as_uri()) + ";"
+                  "const [runs, bundle] = JSON.parse(process.argv[1]);"
+                  "for (const run of runs) { mkdirSync(join(bundle, run.dataset), { recursive: true });"
+                  "  writeFileSync(join(bundle, run.dataset, `${run.dataset.slice(-2)}_ubars1.gii`), ''); }"
+                  "writeFileSync(join(bundle, 'hrf_custom.mat'), matFile({ fP: { dims: [1, 4], data: [5.5, 15.5, 5, 2] } }));"
+                  "console.log(JSON.stringify(runs.map((run) => request(run, bundle).subjectHrf ?? null)));")
+        runs = cli_plan.plan()['runs']
+        with scratch() as bundle:
+            result = subprocess.run(['node', '--input-type=module', '-e', script, json.dumps([runs, bundle])],
+                                    capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        files = json.loads(result.stdout)
+        expected = [{'name': 'hrf_custom.mat', 'url': '/bundle/hrf_custom.mat'}
+                    if str(run['model'].get('Hrf', '')).startswith('hrf_') else None for run in runs]
+        self.assertEqual(files, expected)
+        self.assertEqual(sum(file is not None for file in files), 4)
+
+
 class InventoryErrors(Base):
     def assertInventory(self):
         run = self.x.report()['runs'][0]
@@ -403,6 +576,20 @@ class InventoryErrors(Base):
     def test_web_roi_must_equal_matlab_roi_in_order(self):
         self.x.edit_record(self.id, roi=[ROI[1], ROI[0], ROI[2]])
         self.assertIn('ROI', self.assertInventory())
+
+    def test_roi_requires_a_numeric_matlab_class(self):
+        mat = compare_cli.expected_results(PLAN[self.id])[0]
+        with h5py.File(self.x.matlab / self.id / mat, 'r+') as handle:
+            handle['Srf/Roi'].attrs['MATLAB_class'] = numpy.bytes_('char')
+        self.assertIn('Srf.Roi', self.assertInventory())
+
+    def test_gifti_declared_array_count_is_an_exact_integer(self):
+        for declared in ('2.5', '2', '-1'):
+            with self.subTest(declared=declared):
+                self.x.write()
+                path = self.x.matlab / self.id / self.names[0]
+                path.write_text(path.read_text().replace('<GIFTI>', f'<GIFTI NumberOfDataArrays="{declared}">'))
+                self.assertIn('NumberOfDataArrays', self.assertInventory())
 
     def test_empty_or_one_vertex_gifti_on_both_sides(self):
         for values in (numpy.array([]), numpy.array([5.0])):

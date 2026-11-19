@@ -1,3 +1,4 @@
+import { readdirSync, readFileSync } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { parse } from 'yaml';
 import { sharedModuleUsers } from './shared-module-users.mjs';
@@ -11,7 +12,7 @@ import sourceParser from '@neurodesk/code-quality';
 // (`../../scripts/theme-app-dist.mjs`, `../../test-utils/dice.mjs`, and the
 // registry files those read) are nodes of their own, followed through their
 // imports to the packages they copy or bundle. SITE is a node for what ci.yml's
-// composite-site and dependent agent-interactions jobs run, CATALOG for what its per-app jobs run.
+// site jobs run (siteJobNames), CATALOG for what its per-app jobs run.
 // A false reference only widens the CI selection.
 
 const TOP_LEVEL = ['apps', 'packages', 'exes'];
@@ -44,12 +45,34 @@ const SOURCE_FILE = /\.[cm]?[jt]s$/;
 // `/// <reference path>` directives are compiler inputs.
 const LINE_COMMENT = /^[ \t]*\/\/(?!\/).*$/gm;
 const ROOT_SCRIPT_CALL = /\bpnpm (?:run )?([\w:-]+)/g;
+// An app's code names a file of another app by a relative path: a kit its build
+// stages, a fixture its tests read.
+const APP_CODE = /\.[cm]?[jt]sx?$/;
+const RELATIVE_PATH = /(['"`])((?:\.\.\/)+[^'"`\s$]*)\1/g;
 // Lint and mutation-testing configs: their own workflows read them, composite-site never does.
 export const INDEPENDENT_CONFIG = /^(?:eslint|knip|stryker)\.config\.m?js$/;
 export const CATALOG = '(catalog)';
 export const SITE = '(site)';
 // The ci.yml jobs that run once per selected app.
 export const CATALOG_JOBS = ['app-tests', 'browser-e2e', 'browser-e2e-gpu'];
+
+// ci.yml's site jobs: composite-site, which builds the site, every job that
+// waits for a site job (the site-* checks of that build, agent-interactions)
+// and agent-interactions, which older layouts ran inside composite-site.
+export function siteJobNames(ci) {
+  const jobs = ci?.jobs ?? {};
+  const names = ['composite-site'];
+  if (Object.hasOwn(jobs, 'agent-interactions')) names.push('agent-interactions');
+  for (let added = true; added;) {
+    added = false;
+    for (const [name, job] of Object.entries(jobs)) {
+      if (names.includes(name) || ![job?.needs ?? []].flat().some((need) => names.includes(need))) continue;
+      names.push(name);
+      added = true;
+    }
+  }
+  return names;
+}
 
 // Root files a set of CI commands names, following `pnpm <root script>` calls.
 function namedByCommands(commands, rootScripts) {
@@ -123,6 +146,8 @@ export async function loadConservativeWorkspaceGraph(root) {
 
   const edges = new Map();
   const pendingRootFiles = [];
+  // App id -> the paths in other app directories its code names.
+  const appReads = new Map();
   for (const node of nodes) {
     const uses = new Set();
     const manifest = manifests.get(node);
@@ -148,6 +173,13 @@ export async function loadConservativeWorkspaceGraph(root) {
         uses.add(rootFile);
         pendingRootFiles.push(rootFile);
       }
+      if (node.startsWith('apps/') && APP_CODE.test(file)) {
+        for (const [, , path] of text.matchAll(RELATIVE_PATH)) {
+          const target = relative(root, resolve(dirname(file), path)).split(sep).join('/');
+          const owner = target.match(/^apps\/[^/]+/)?.[0];
+          if (owner && owner !== node && nodeSet.has(owner)) appReads.set(node, new Set([...(appReads.get(node) ?? []), target]));
+        }
+      }
     }
     uses.delete(node);
     edges.set(node, uses);
@@ -162,12 +194,8 @@ export async function loadConservativeWorkspaceGraph(root) {
     }
     return steps.map((step) => step.run ?? '');
   }).map((run) => run.replace(/pnpm --filter \S+ (?:run )?\S+/g, ''));
-  // Older workflow revisions ran interactions inside composite-site. Both layouts
-  // consume the site, so moving the command must preserve its site-only selection.
-  const siteJobs = ['composite-site'];
-  if (Object.hasOwn(ci?.jobs ?? {}, 'agent-interactions')) siteJobs.push('agent-interactions');
   const entries = [
-    [SITE, runs(siteJobs)],
+    [SITE, runs(siteJobNames(ci))],
     [CATALOG, runs(CATALOG_JOBS)],
   ];
   // Root tool configs (e2e.config.ts, tsconfig.agentic.json) are read implicitly
@@ -219,9 +247,41 @@ export async function loadConservativeWorkspaceGraph(root) {
   }
   // `moduleUsers(path)`: the nodes that load one module of the shared component
   // package, or null for a file the planner ties to the whole package.
+  // `appReaders(path)`: the app ids whose code names `path`, or a directory
+  // holding it, in another app's directory. `appsNaming(identifier)`: the app
+  // ids whose code names `identifier`, read on first use.
   let moduleUsers;
-  const graph = { nodes: Object.freeze(nodes), edges, rootScriptsRun, moduleUsers: (path) => (moduleUsers ??= sharedModuleUsers(root, graph))(path) };
+  // The root package.json scripts each ci.yml job runs, directly or through
+  // other scripts (`pnpm <script>`; a package's own scripts are not root ones).
+  const jobScripts = new Map(Object.entries(ci?.jobs ?? {}).map(([id, job]) => [id, namedByCommands(
+    (Array.isArray(job?.steps) ? job.steps : []).map((step) => String(step?.run ?? '').replace(/pnpm --filter \S+ (?:run )?\S+/g, '')),
+    rootScripts,
+  ).expanded]));
+  const naming = new Map();
+  const graph = {
+    nodes: Object.freeze(nodes),
+    edges,
+    rootScriptsRun,
+    jobScripts,
+    moduleUsers: (path) => (moduleUsers ??= sharedModuleUsers(root, graph))(path),
+    appReaders: (path) => [...appReads]
+      .filter(([, targets]) => [...targets].some((target) => path === target || path.startsWith(`${target}/`)))
+      .map(([node]) => node.slice('apps/'.length)),
+    appsNaming: (identifier) => {
+      if (!naming.has(identifier)) naming.set(identifier, appsNamingIdentifier(root, nodes, identifier));
+      return naming.get(identifier);
+    },
+  };
   return Object.freeze(graph);
+}
+
+function appsNamingIdentifier(root, nodes, identifier) {
+  const word = new RegExp(String.raw`\b${identifier}\b`);
+  const names = (dir) => readdirSync(dir, { withFileTypes: true }).some((entry) => {
+    if (entry.isDirectory()) return !SKIPPED_DIRS.has(entry.name) && names(join(dir, entry.name));
+    return entry.isFile() && APP_CODE.test(entry.name) && word.test(readFileSync(join(dir, entry.name), 'utf8'));
+  });
+  return nodes.filter((node) => node.startsWith('apps/') && names(join(root, node))).map((node) => node.slice('apps/'.length));
 }
 
 // Every directory or root file `node` uses, directly or through others.

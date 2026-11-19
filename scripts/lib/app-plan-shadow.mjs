@@ -207,6 +207,24 @@ export function expectedApps({ apps, changedPaths, workspace, lockClosures = nul
   return { expected, exempt, unattributed: changedPaths.filter((path) => !owned.has(path)) };
 }
 
+// Rule families the oracle has no independent expectation for: a row whose
+// plan narrowed through one of them reads `0 misses` without being checked.
+// `manifests` maps a changed file to its { before, after } texts.
+export function uncheckedRules({ plan, changedPaths, manifests }) {
+  if (plan.reasons.fallback) return [];
+  const unchecked = [];
+  if (changedPaths.includes('.github/workflows/ci.yml')) unchecked.push('ci.yml jobs');
+  const registry = manifests.get('registry/apps.yml');
+  if (registry) {
+    try {
+      if (!same(parse(registry.before)?.site, parse(registry.after)?.site)) unchecked.push('registry site keys');
+    } catch {
+      unchecked.push('registry site keys');
+    }
+  }
+  return unchecked;
+}
+
 // Planner selection versus the oracle and the full catalog.
 export function compareSelection({ catalog, plan, oracle }) {
   const selected = new Set(plan.selected.map((app) => app.id));

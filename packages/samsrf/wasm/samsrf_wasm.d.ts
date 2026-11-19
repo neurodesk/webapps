@@ -31,6 +31,7 @@ export class Job {
     merge(partials: Array<any>): any;
     run(start: number, end: number, progress?: Function | null): Uint8Array;
     values(): Array<any>;
+    readonly arithmeticReference: string;
     readonly modelName: string;
     readonly outSuffix: string;
     readonly vertexCount: number;
@@ -55,11 +56,11 @@ export class RunAccumulator {
     free(): void;
     [Symbol.dispose](): void;
     finish(): any;
-    constructor(total_vertices: number, keep: Uint32Array | number[] | null | undefined, normalise: string, combine: string, noise_ceiling: boolean, global_signal: boolean, precision?: string | null);
+    constructor(total_vertices: number, keep: Uint32Array | number[] | null | undefined, normalise: string, combine: string, noise_ceiling: boolean, global_signal: boolean, precision?: string | null, arithmetic_reference?: string | null);
     pushRun(run: Run): void;
 }
 
-export function createJob(kind: string, model_json: string, apertures: Uint8Array | number[] | null | undefined, hrf_mode: string, hrf_kernel: Float64Array | number[] | null | undefined, volumes: number, kept: Uint32Array | number[], courses: Float64Array | number[], roi: Uint32Array | number[] | null | undefined, noise_ceiling: Float64Array | number[] | null | undefined, global_signal: Float64Array | number[] | null | undefined, seed_vertices: Uint32Array | number[] | null | undefined, template_values: string[] | null | undefined, template_data: Float64Array | number[] | null | undefined, surface_vertices: Float64Array | number[] | null | undefined, surface_faces: Uint32Array | number[] | null | undefined, area: Float64Array | number[] | null | undefined, seed_fine_fit_values: string[] | null | undefined, seed_fine_fit_data: Float64Array | number[] | null | undefined, total_vertices: number, progress?: Function | null): Job;
+export function createJob(kind: string, model_json: string, apertures: Uint8Array | number[] | null | undefined, hrf_mode: string, hrf_kernel: Float64Array | number[] | null | undefined, volumes: number, kept: Uint32Array | number[], courses: Float64Array | number[], roi: Uint32Array | number[] | null | undefined, noise_ceiling: Float64Array | number[] | null | undefined, global_signal: Float64Array | number[] | null | undefined, seed_vertices: Uint32Array | number[] | null | undefined, template_values: string[] | null | undefined, template_data: Float64Array | number[] | null | undefined, surface_vertices: Float64Array | number[] | null | undefined, surface_faces: Uint32Array | number[] | null | undefined, area: Float64Array | number[] | null | undefined, seed_fine_fit_values: string[] | null | undefined, seed_fine_fit_data: Float64Array | number[] | null | undefined, total_vertices: number, progress?: Function | null, preprocessing_reference?: string | null): Job;
 
 export function detrend(x: Float64Array | number[]): Float64Array;
 
@@ -155,7 +156,7 @@ export interface InitOutput {
     readonly apertures_toDense: (a: number) => [number, number];
     readonly apertures_volumes: (a: number) => number;
     readonly apertures_width: (a: number) => number;
-    readonly createJob: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number, s: number, t: number, u: number, v: number, w: number, x: number, y: number, z: number, a1: number, b1: number, c1: number, d1: number, e1: number, f1: number, g1: number, h1: number, i1: number, j1: number, k1: number, l1: number, m1: number) => [number, number, number];
+    readonly createJob: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number, s: number, t: number, u: number, v: number, w: number, x: number, y: number, z: number, a1: number, b1: number, c1: number, d1: number, e1: number, f1: number, g1: number, h1: number, i1: number, j1: number, k1: number, l1: number, m1: number, n1: number, o1: number) => [number, number, number];
     readonly detrend: (a: number, b: number) => [number, number];
     readonly errfun: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number) => [number, number, number];
     readonly evaluateExpression: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number];
@@ -167,6 +168,7 @@ export interface InitOutput {
     readonly hrfResolve: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
     readonly hrfSpmCanonical: (a: number) => [number, number];
     readonly job_analysed: (a: number) => any;
+    readonly job_arithmeticReference: (a: number) => [number, number];
     readonly job_merge: (a: number, b: any) => [number, number, number];
     readonly job_modelName: (a: number) => [number, number];
     readonly job_outSuffix: (a: number) => [number, number];
@@ -196,7 +198,7 @@ export interface InitOutput {
     readonly run_vertices: (a: number) => number;
     readonly run_volumes: (a: number) => number;
     readonly runaccumulator_finish: (a: number) => [number, number, number];
-    readonly runaccumulator_new: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number, number];
+    readonly runaccumulator_new: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number) => [number, number, number];
     readonly runaccumulator_pushRun: (a: number, b: number) => [number, number];
     readonly version: () => [number, number];
     readonly writeGiftiMap: (a: number, b: number) => [number, number];

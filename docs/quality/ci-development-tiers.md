@@ -1,7 +1,8 @@
 # CI development tiers
 
 Keep iterative PRs in draft. Drafts run repository contracts, package tests,
-lint, and app unit/browser tests for directly edited `apps/<id>/` files and
+lint, the homepage easter egg unless every changed path lies in a tree it
+cannot read, and app unit/browser tests for directly edited `apps/<id>/` files and
 `models/<id>.manifest.json`. If the diff cannot be determined, the app planner
 keeps its conservative full selection. Changes confined to shared packages
 receive package tests during development; their downstream applications run
@@ -26,9 +27,12 @@ them: over 7-9 November 2026, 25,817 of the 27,539 pull request minutes in
 path-filtered workflows came from runs whose pull request touched none of the
 workflow's own code.
 
-Every workflow with such a filter now starts with a `gate` job that calls
-`.github/workflows/pr-gate.yml`, and its entry jobs wait for
-`needs.gate.outputs.run`. `scripts/lib/workflow-gate.mjs` decides:
+Every workflow that builds on such a tree now starts with a `gate` job that
+calls `.github/workflows/pr-gate.yml`, and its entry jobs wait for
+`needs.gate.outputs.run`. It lists the shared filters in the gate job's
+`shared_paths` and only its own paths in `on.pull_request.paths`
+([one run for shared paths](#one-run-for-shared-paths)).
+`scripts/lib/workflow-gate.mjs` decides with both kinds of filter:
 
 - A changed file under any other filter (the workflow's own package, app,
   `exes/` directory, workflow file, or a single generated import) runs it.
@@ -61,7 +65,111 @@ job after the entry jobs. `test/workflow-gate.test.mjs` holds the rules, and
 fails when a workflow adds a shared filter without the gate.
 
 Replay a pull request locally with
-`node scripts/workflow-gate.mjs --workflow <name> --base <sha> --head <sha>`.
+`node scripts/workflow-gate.mjs --workflow <name> --base <sha> --head <sha>`,
+or for every workflow `native.yml` calls with
+`node scripts/workflow-gate.mjs --native --base <sha> --head <sha>`.
+
+### One run for shared paths
+
+GitHub starts every workflow whose filters match, so a shared filter in 30
+workflows started 30 runs for each push to a pull request that touched the
+tree, and most of them only ran their gate. Over 16-18 November 2026, 194
+native workflow runs did nothing but answer "do not run", and each night
+started 29 sweeps.
+
+A shared filter now lives in the gate job's `shared_paths`, and a pull
+request that changes one starts `native.yml` instead. Its gate
+(`pr-gate.yml` with `workflow: native`) decides for every workflow with
+`shared_paths` at once (`dispatchDecision`), and `native.yml` calls the ones
+that run through `workflow_call`:
+
+- A workflow one of whose own paths changed was started by GitHub itself,
+  and its own gate decides with both kinds of filter. `native.yml` skips it,
+  with the explicit verdict "starts itself", only when that start is certain
+  (`certainOwnStart`): fewer than 3,000
+  changed files, and an own match that is neither side of a rename or copy,
+  is a plain ASCII path, and falls under a literal filter, a directory
+  followed by `**` or one `*` in the last segment, without a hidden file
+  under a wildcard, in a filter list without exclusions. Anything else it
+  decides too, so a workflow can run twice, never not at all.
+- A workflow none of whose shared paths changed is one GitHub would not have
+  started. Shared filters match as GitHub's do (`*` any character but `/`,
+  `**` any character, a newline included), and a path outside the plain
+  ASCII set counts as matching all of them. Any other workflow gets the
+  decision its own gate would have given.
+- A called workflow runs on the pull request's own event, commit and ref:
+  GitHub gives a called workflow its caller's `github` context. Its own gate
+  answers `true` without a checkout, because `github.workflow_ref` names
+  `native.yml`.
+- A draft names every workflow in the gate's `calls` list, generated into
+  `native.yml`, without a checkout.
+
+Running is the default. The gate answers with the workflows it decided to
+skip, each by an explicit verdict (`skips`), and each call's generated `if:`
+(`callCondition`) skips it only when a gate that succeeded names it there.
+Absence means run: a workflow the answer leaves out, through a dropped,
+truncated, recased or unknown name or an empty list, runs. The decide step
+passes on the script's answer only when `jq` finds exactly one array whose
+names all come from `calls` (`sweeps` on the schedule), and fails, with a
+warning, when the script fails or prints anything else. So a failed
+checkout, install or script, a gate that hits its timeout or is skipped,
+and any answer the step does not pass on run every workflow `native.yml`
+calls (on the schedule, every one it sweeps). The one outcome that skips
+calls without being named is a budget denial the gate confirmed: the script
+writes `withheld=true` before any other output, summary or annotation, the
+step then succeeds so that the output arrives, every call skips, and the
+`full-plan-withheld` job fails the run. A missing or unreadable budget
+answer, or one not read within the deadline, is no denial.
+
+Inside the gate the decision fails open too (`scripts/lib/native-decision.mjs`):
+every workflow it may call starts selected, and a stage that throws, cannot
+be read or is cut off by the five-minute deadline, which covers the budget
+reads, leaves the workflows it was deciding selected, never named in
+`skips`. An unreadable diff
+(read NUL-delimited by `readChangedPaths`, so a name keeps its spaces, and
+never taken for an empty one) selects every workflow; a workflow file or
+registry that cannot be read selects every workflow not certainly started by
+its own paths; a failed decision selects its workflow; a summary that cannot
+be written changes nothing. `test/native-decision.test.mjs` evaluates every
+call condition for each gate outcome and for a seeded stream of corrupted
+skip lists passed through the real decide step, runs that step under
+`bash -eo pipefail` with failing stubs, and makes each stage fail in turn.
+
+`test/workflow-gate.test.mjs` checks, over every workflow `native.yml` calls
+and sample diffs of its own and shared paths, that the two routes together
+run a workflow exactly when its own gate did before, and twice only where
+its own start is not certain.
+
+`node scripts/native-workflow.mjs` writes `native.yml` from the workflow
+files: its pull request paths are the union of every `shared_paths` and the
+gate's own files, and it has one job per workflow, granting the permissions
+that workflow's jobs ask for and passing the secrets on. Adding
+`shared_paths` to a workflow means adding `workflow_call` to its triggers and
+running the script; the test fails when `native.yml` is stale.
+
+GitHub's limits on reusable workflows shape the rest
+([reusing workflows](https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations)):
+
+- One workflow file can call at most 50 unique reusable workflows, nested
+  ones included, through at most ten levels. In November 2026 `native.yml`
+  reached 32 (30 workflows, `node-cli-portable` and `pr-gate`). The test fails
+  before the count passes 50; the next step then is one called workflow for the
+  portable command lines, which build through `node-cli-portable` from each
+  package's `release.json` and differ only in their inputs.
+- `uses` takes no expressions, so each called workflow is a job of its own.
+- A called workflow reads `native` in `github.workflow`. Each one names its
+  concurrency group after itself, and none reads `github.workflow`.
+- Every called workflow runs in one workflow run, where an artifact name
+  must be unique: `node-cli-portable` names its archives after the package.
+- Re-running failed jobs of `native.yml` reruns the called workflows' failed
+  jobs at the first attempt's commit.
+
+A workflow that runs inside `native.yml` reports under it: its checks are
+named `native / <workflow> / <job>`, and a failed sweep is a failed
+scheduled `native` run, whose report names every affected workflow before
+its per-job details. `native.yml` counts as notarizing because the workflows
+it calls do, so a notarization refused inside it is alerted too. Its
+workflows' pushes and release dispatches still run as the workflow itself.
 
 ## Pushes to main and the nightly sweep
 
@@ -78,28 +186,34 @@ workflow runs unless every path under its `push` filter that changed since it
 last finished green on main, by a push or a sweep, is release bookkeeping
 (below). A skipped push still finishes green and moves the base the sweep
 reads, and a skipped sweep the base the next push reads, so each also asks
-the other's question: a push runs when a path under a shared pull request
-filter changed, and the sweep runs when one of the workflow's own paths
+the other's question: a push runs when a path under its `shared_paths`
+changed, and the sweep runs when one of the workflow's own paths
 changed beyond bookkeeping (a merge whose push run failed or was cancelled).
 Without a green run, or when no changed path matches a push filter, a push
 runs. Every workflow whose `push` filter covers a whole app, package or
 `exes/` directory, where each release writes its bumps and changelogs, calls
-the gate too, even without a shared pull request filter; for those the
+the gate too, even without `shared_paths`; for those the
 schedule (NeuroFlow, the SDC registration gate) stays a plain nightly run,
 since there is nothing to sweep.
 `release.yml` plans with `--release`, so its version bumps still select the
 apps to publish.
 
-Shared paths reach a gated workflow on main through its nightly sweep. Each
-has one `schedule`, and for that event the gate runs the workflow when a path
-under one of its shared pull request filters changed on main since the
-workflow last finished green there, by a merge or an earlier sweep
-(`sweepWorkflow`, `resolveTestedBase`). A sweep that fails, or that GitHub
-drops, leaves that commit where it was, so the next sweep still sees the
-change. Without such a run the workflow runs. The sweep does not ask whether the change reaches
+Shared paths reach a gated workflow on main through the nightly sweep:
+`native.yml`'s schedule, for every workflow it calls that a push also starts.
+Its gate runs a workflow when a path under the workflow's `shared_paths`
+changed on main since the workflow last finished green there, by a merge or
+an earlier sweep (`sweepWorkflow`). That is the newest green push run of the
+workflow, or the newest scheduled `native.yml` run in which the workflow's
+part was green: the gate decided and each of its jobs passed or was skipped
+(`dispatchedRuns`). A sweep that fails, or that GitHub drops, leaves that
+commit where it was, so the next sweep still sees the change. Without such a
+run the workflow runs, and so it does when a history read fails or the
+deadline cuts it off: the reads list jobs in pages of 30 and retry gateway
+errors (`createGitHubClient`), and a registry that cannot be read runs all of
+them. The sweep does not ask whether the change reaches
 the workflow: it is what first tests a file read through a computed path, and
 what builds every target for a shared change the pull request built on Linux
-only. A night without such a change costs each workflow one gate job.
+only. A night without such a change costs one gate job in all.
 
 Release bookkeeping is left aside, because every release writes it into the
 shared packages: a `CHANGELOG.md`, a workspace `package.json` whose only
@@ -120,10 +234,11 @@ notices is the one thing such a skipped sweep leaves a day stale.
   file there when a push must test it at once.
 - To test a shared change on every target before merging, dispatch the
   workflow on the branch.
-- A failed sweep opens an issue through `nightly-failures.yml`, like every
-  scheduled workflow.
+- A failed sweep fails the scheduled `native` run and opens an issue through
+  `workflow-reports.yml`, like every scheduled workflow; the failed jobs
+  carry the workflow's name.
 - Replay a sweep with
-  `GITHUB_REPOSITORY=neurodesk/webapps GITHUB_TOKEN=$(gh auth token) node scripts/workflow-gate.mjs --workflow <name> --sweep`.
+  `GITHUB_REPOSITORY=neurodesk/webapps GITHUB_TOKEN=$(gh auth token) node scripts/workflow-gate.mjs --native --sweep`.
 
 ## Daily usage budget
 
@@ -152,6 +267,83 @@ them. Run the report for
 any day with `node scripts/ci-usage-report.mjs --until <ISO time>`. Change a
 budget only with the measurement that justifies it.
 
+### Daily measures
+
+After the budgets, the report shows whether the CI got cheaper and faster.
+These measures are report-only: none fails the job. Job minutes are the time
+each job held a runner, from the jobs of every run that was not skipped. They
+count the latest attempt of each run only, cancelled minutes too: the job
+listing leaves out the earlier attempts of a re-run.
+
+| Measure | Definition | Target |
+| --- | --- | --- |
+| Job minutes per merged pull request | For each pull request merged in the window: its runs of every workflow on its head branch from its opening to its merge (earlier days included), its merge queue runs, and the push runs of its merge commit, also those created after the window up to the report. Median and the three largest. | - |
+| Fixed-job share | Of the job minutes of pull request `ci` runs, the share in `plan` and `fixed` jobs, for draft, ready, whole-catalogue, unknown-tier and all runs. | Draft runs under 30% |
+| Ready to green | For each ready pull request `ci` run that succeeded, the start of its latest attempt to completion, so a late re-run does not count the wait before it; a re-run of failed jobs counts only the re-run. Median and 90th percentile, apart for whole-catalogue runs. | Median under 20 minutes |
+| Merge to live | For each push to main (the first run of its commit), to the completion of the first successful `deploy-github-pages` run on main of that commit or a later one, also after the window. A deploy on main runs main's head when it is created, so one of a commit the pushes do not name counts for the pushes created before it, not those created in the same second. Median and maximum; pushes not yet live are listed. | - |
+| Runs that tested nothing | Runs that were skipped, ran no job, or ran only `plan` and `report` jobs. Count and share of all runs. | - |
+| Cancelled minutes | Job minutes of cancelled runs. | - |
+
+A pull request `ci` run is whole-catalogue when it ran at least 100 jobs, ready
+when a job only a ready pull request starts (`full-plan`, `full-plan-withheld`,
+`composite-site` or one of the five site checks, which a re-run of one failed
+check runs alone) took a runner, and draft otherwise. A ready run that selects
+neither the site nor more than its draft plan counts as draft. A cancelled run
+that lists such a job, neither skipped nor given a runner, is of unknown tier:
+a run cancelled while planning cancels those jobs whatever its plan. The
+report shows these runs in their own row.
+
+`WORKFLOWS` in `scripts/lib/ci-measures.mjs` gives each workflow, by name, and
+each `ci` job, by the name the API lists it under (its `name:`, else its id), a role: `plan` (planner, gate, plan marker), `fixed` (the baseline
+group the share is measured against: `workspace-contracts`, which still runs on
+every `ci` run, and `homepage-easter-egg`, which still runs on every push,
+nightly and dispatch and which a pull request skips only when every changed
+path lies in a tree it cannot read), `app`,
+`site`, `test`, `deliver` or `report`. In a test workflow the reusable gate's
+jobs plan, also inside a workflow `native.yml` calls (`bison-native / gate /
+decide`), and every other job tests. A workflow or `ci` job the table does not
+name is `unclassified`: it counts in the totals and in no share, and the report
+lists it, also when it started no job. `test/ci-measures.test.mjs` requires an
+entry for every workflow file (`.yml` or `.yaml`) and every job of `ci.yml`
+under its API name, and that each test workflow's gate jobs plan, so rename
+both together.
+
+The targets are the CI optimisation program's goals of November 2026. In the
+48 hours to 18 November 2026 11:00 UTC the draft share was 58%, ready to
+green 34 minutes and merge to live 20 minutes. They become budgets only once
+the changes that reach them have landed and the numbers have held; a budget
+opens an issue on every miss.
+
+The budgets come first, on about 80 requests a day (the run listings and one
+job count per `ci` pull request run that did work), and alone decide the exit
+code; nothing the measures do changes it. The measures then read the deploys,
+the merged pull requests and their runs outside the window, and the jobs of
+every run that was not skipped. Every one of these reads goes through one
+runner, `limitedReads` in `scripts/lib/github-actions.mjs`. It reads listings
+a page at a time and charges each page and each retry before sending it, so the
+measures send at most 600 requests (`--max-requests`) however many listings run
+at once. That is well below the 1,000 an hour a workflow token may make, which
+other workflows share. The runner also kills every request 10 minutes after the
+report started (`--time-limit`), well below the job's `timeout-minutes` of 15.
+Each run, job, pull request and deploy record must have the fields the measures
+use, of the API's types, before a measure reads it. Once the cap or the time
+limit is reached or a request is refused (a rate limit, for instance), the
+report sends no further request. Each measure that lacks data, for that reason
+or because a record failed the check, shows `unavailable:` with the reason,
+never a zero, `undefined` or `NaN`. A step summary or a standard output that cannot be written loses
+the measures, not the exit code. The report prints both request counts.
+
+The 48 hours to 18 November took 987 measure requests in about four minutes,
+980 of them job pages. The two 24-hour halves of that window needed 304 and 676
+job pages and its one complete UTC day 240, so on a busy day the cap can leave
+the job measures unavailable. Of the 980 pages, 235 list runs of report-only
+workflows (185 `workflow_run` reporter runs and 50 scheduled reports). The
+report still reads them: they give the report role's 131 job minutes and tell a
+run that started no job from one that only reported. `workflow-reports.yml`
+has since replaced the two `workflow_run` reporters with four scheduled runs a
+day, and another pull request of the CI optimisation program of November 2026
+replaces the 194 runs that only ran a gate with one native run per pull request.
+
 ### Enforcement in CI
 
 The report fires the next morning, after the runners are spent: on 13 November
@@ -174,8 +366,10 @@ workflows skip at the same commits ([gate](#pull-request-gate-for-shared-path-fi
 The window is rolling rather than the report's UTC day.
 
 To test every app at that head, add the `full-ci` label and use **Re-run all
-jobs** on the run and **Re-run failed jobs** on each native workflow whose gate
-failed (that re-runs the gate and what waits for it); the planner and the gate
+jobs** on the run and on `native` (whose gate succeeds with the denial, so
+only re-running all its jobs reads the label), and **Re-run failed jobs** on
+each other native workflow whose gate failed (that re-runs the gate and what
+waits for it); the planner and the gate
 read the labels when they run, so no new trigger is needed. Pushing a new
 commit after adding the label also starts every check again. **Re-run failed jobs** keeps the withheld plan. The label stays until
 someone removes it, and every later push then gets the full plan again, so
@@ -198,17 +392,245 @@ for an app the change edits:
 its `apps/`, `packages/` or `exes/` directory or its model manifest, release
 bookkeeping aside, or an app a failed run on main left untested. An app a
 change reaches only through shared code, such as a `packages/runtime-support`
-edit or a `ci.yml` change, leaves them to the nightly run, so a shared change
+edit or a change to a per-app job of `ci.yml`, leaves them to the nightly run, so a shared change
 that breaks only such a path is found the next night rather than before merge.
 The planner marks each browser matrix entry with `heavy_tests`, and the jobs
 set `NEURODESK_E2E_SKIP_HEAVY`, which `e2eTier` turns into a `grepInvert`.
-A whole-catalogue plan for a change the planner could not narrow, such as a
-`ci.yml` edit, counts as shared. Only a plan with no diff at all (the nightly,
+A whole-catalogue plan for a change the planner could not narrow, such as an
+edit to a per-app job of `ci.yml`, counts as shared. Only a plan with no diff at all (the nightly,
 a dispatch of every app, an unknown base) is a full run. The macOS GPU job
 runs every test, since the threshold is a CPU measurement: SynthSeg's four
 `@heavy` tests take 12 to 25 seconds on Metal. Dispatched, nightly and release
 runs include every test. To run them before merging a shared change, dispatch
 `ci` on the branch.
+
+## Composite site checks
+
+`composite-site` builds the site once with `pnpm build`. It runs the three
+checks that read `dist-sites/` and the per-app builds (`audit:artifacts`,
+`runtime-assets.test.mjs`, `catalog-sites.test.mjs`) and uploads `dist/` as one
+zstd tar: 283 MB from 668 MB in 2.3 s on 18 November 2026. Five jobs download
+it through `.github/actions/composite-site` and check it in parallel:
+
+- `site-runtime`: resource cache and threaded runtime startup.
+- `site-audit`: the example cache and the interface audit.
+- `site-e2e`: composite smoke, e2e types and the workspace e2e catalog.
+- `site-mobile`: interface workflows, scan pickers and mobile layouts.
+- `site-catalog`: component browser checks, automation contracts and the
+  cross-browser handoff.
+
+`agent-interactions`, `processing-workflows` (a dispatch with
+`agentic_mode=pipeline`) and `example-cache-retention` wait for all five, as
+they waited for the one serial job before the split, which ran every check in
+sequence for 31 to 33 minutes and was the last job of every ready one-app pull
+request. The artifact is kept 3 days. Re-running one failed check after that
+fails at the download with a message to use "Re-run all jobs", which builds
+the site again.
+
+The per-app checks read `SMOKE_APPS` (`scripts/lib/smoke-apps.mjs`), which
+`composite-site` sets with `scripts/site-check-apps.mjs`:
+
+| Event | Apps the per-app site checks cover |
+| --- | --- |
+| Draft pull request | None: the site is not built |
+| Ready pull request, push, dispatch with `scope=affected` | The selected apps, the canaries seedseg, dicompare and syncro, and the apps a check compares them with or reads files from |
+| Any of these when the plan selects every app or `site_code` is true | Every app |
+| Nightly, dispatch with `scope=all` or `scope=site` | Every app |
+
+`site_code` is the planner's answer to "does the change reach code the site
+jobs run?". Every reason that selects the site build counts, except data the
+per-app checks do not read: the composite-only site files, registry, app
+information and standalone entries, the offline asset lock, and the `site`
+keys of `registry/apps.yml` that no app page carries (`SITE_DATA_KEYS`: the
+hub, categories, analytics period, domain, and a catalogue's heading,
+description, hosting and desktop suite). A change to a check, a helper it
+imports, `scripts/build-site.mjs`, a site job of `ci.yml`, or a `site` key the
+composite build writes into every app page (a catalogue's id, host, title or
+brand, the analytics id) checks every app.
+Catalogue-level checks (landing page, catalogue sites, runtime assembly,
+artifact budgets, automation contracts) run whenever the site is built. A
+canary that is not a registered app of its shell, or a shell without a canary,
+fails the selection.
+
+A narrowed check is sound only where its result for an app depends on that app
+alone. Two places keep the other dependencies inside the selection:
+
+- The planner selects every app whose built pages change with the change. An
+  app's page carries the handoff catalog of every app its hosts serve, so a
+  `registry/apps.yml` change to what that catalog lists (an app's id, path,
+  title, `handoff`, `support_status` or hosts) selects the apps that render it:
+  those whose code names `HANDOFF_CATALOG_READERS` (DICOM View). A change to
+  which apps are registered also selects the apps that reach
+  `AUTOMATION_CATALOG_READERS` (Pipeline Builder, whose bundle has a tool per
+  operation of every registered app). A file of one app that another app's code
+  names by a relative path selects that app too: DICOM View and SeedSeg stage
+  dicompare's embedding kit, and seven apps' tests read the CALMaR T1 fixture.
+  That rule sees literal relative paths to files and directories only; a glob,
+  an interpolated path or a repository-root-relative string selects nothing
+  more, so it adds to the selection without being a complete map.
+- A check whose result for one app depends on another declares it as `needs`,
+  and `smokeApps` adds those apps before the check runs (null runs every app):
+
+| Check | Listed app | Also runs |
+| --- | --- | --- |
+| MindGrab CPU parity (`parityPeers`) | A consumer of a shared CPU binary | One other consumer of it, from `runtime-assets/manifest.json` |
+| BET startup (`betNeeds`) | `calmar`, which owns the fixture | `qsmbly` and `brain-extraction` |
+| Asyncify startup (`asyncifyNeeds`) | `synthsr`, which installs the ONNX Runtime API it loads | Every `ort-web-asyncify` consumer in the registry |
+
+A parity peer runs only the binaries it shares with a listed app, so the peer
+of `lcmodel` segments with mindmap alone. The parity check now runs every
+shared CPU binary in two apps and fails one compared in a single app. Before, the nightly ran mindmap, mindsnap and
+16chan18cls in one app each, so their parity compared an output with itself.
+The three extra segmentations take about 125, 126 and 54 s (nightly run
+44230450914), so `site-runtime` takes about 5 minutes longer on a
+whole-catalogue run.
+
+A failed site job names no app, so the next push to main diffs from the last
+green `ci` run instead and carries no app: it checks the apps that the merges
+since that run reach, its own change's apps and the canaries. That covers what
+a failed push run checked, since that run's changes are among those merges. It
+does not cover an app that a failed nightly run found broken but no merge since
+the last green run reaches. The next nightly run checks it again, as does a
+dispatch with `scope=all` or `scope=site`.
+
+On 18 November 2026, against a full local build, the one-app selection
+`niimath` with the canaries took 23 s for runtime startup (9.7 minutes for the
+catalogue in CI), 125 s for the interface audit (8.1 minutes), 36 s for mobile
+layouts (1.8 minutes), 17 s for interface workflows (1.0 minute), 50 s for the
+composite smoke (1.8 minutes) and 49 s for the e2e catalog (2.4 minutes).
+dicompare, the only React app, takes 77 s of that audit.
+
+## Site keys, ci.yml jobs and the fixed jobs
+
+Over 16 to 18 November 2026 two small changes cost 2,577 runner minutes of
+whole-catalogue runs. PR #864 changed a comment in the `composite-site` job of
+`ci.yml` and the interface audit it runs; PR #872 changed a link in the `site`
+section of `registry/apps.yml`. The planner then tied any `ci.yml` edit and any
+`site` change but a category to every app.
+
+A `site` change now narrows per key. `SITE_KEY_READERS` lists every key of the
+section (`[]` is each entry of a list) with the files an app build or an app's
+tests run that read it: the analytics measurement id (every themed build), the
+catalogue ids (the standalone check every themed build runs), and the desktop
+identities, catalogue hosts and primary domain (the desktop scripts that
+dicompare and Pipeline builder reach). `suite.mjs` and `pack.mjs` hold a whole
+catalogue entry, so every catalogue key counts as read by them. A changed key
+selects the apps that reach a reader, once the head registry passes the
+validation every build runs; the hub, the analytics period and the categories
+select only the site build. A key the table does not list, at any depth and
+whatever its value (an empty mapping, a list, a new key under `site.hub`),
+anywhere in the base or head section, selects every app. Key paths are
+compared as arrays of raw segments, so a single key named `brand.home` is not
+the listed `brand` then `home`: a key with a dot or bracket is one the table
+does not list. `test/app-plan.test.mjs` lists every file an app build or app
+test runs that loads the registry or reads its `site` section, reads each
+one's text for the keys it reads (a chain from `.site`, a list iterated with a
+callback, the catalogue helpers; a chain that stops at a mapping or list, or a
+whole catalogue entry, reads every key below it) and fails when the table does
+not list the file for one. Any other use of the registry object the check does
+not recognise, such as nested destructuring, a spread or a call to an unknown
+function, a computed member (`registry[key]`) or computed destructuring
+(`const { [key]: section } = registry`), reads every key. The easter egg reads
+`registry/apps.yml`, so a pull request that changes the registry runs it.
+
+A `ci.yml` change is compared job by job on the parsed workflow, so a comment
+changes nothing (`CI_JOB_SCOPES` in `scripts/lib/app-plan.mjs`). It narrows only
+when the base and head have the same jobs and every job that needs a changed
+job, or that a changed job needs (the plan aside), at the base or the head, has
+the changed job's scope. Then a change confined to `composite-site` or a job
+that only consumes its build (the five site checks, `processing-workflows`,
+`agent-interactions`, `example-cache-retention`) selects the site build, with
+its per-app checks over every app because it changes code they run; one confined to
+`homepage-easter-egg` runs the easter egg; and one confined to
+`workspace-contracts`, which runs on every run anyway, or to the `full-plan`
+markers selects nothing more. An added or removed
+job, a `needs` link to a job of another scope, the plan, the per-app jobs and
+every key outside `jobs` still select every app, as does a change whose base
+text is unknown. The nightly run tests every app, so a narrowed `ci.yml`
+change that breaks an app job is found there.
+
+`workspace-contracts`, `homepage-easter-egg` and `app-plan` used 1,015 minutes
+in 63 draft runs, the two fixed jobs alone 956; the easter egg used 445 minutes
+in 102 runs in which no pull request touched it. `workspace-contracts` still
+runs on every run and tests every package (`pnpm test:packages`), as before.
+`homepage-easter-egg` runs on every push, nightly and dispatch but
+`scope=gpu`, as before, and also when the plan fails (`!cancelled()`). A pull
+request skips it only on proof: the plan succeeded and wrote `skip` to its
+`easter_egg` output, which it does only when every changed path lies in a tree
+the job cannot read (`easterEggCannotRead` in `scripts/lib/app-plan.mjs`). Any
+other output, an empty one included, runs it. The trees are `apps/`, `exes/`,
+`models/`, `docs/` and every package outside the job's closure, which is
+`packages/analytics` alone. A workspace manifest in them still runs it
+(`WORKSPACE_MANIFESTS`: `package.json`, `package.json5` and `package.yaml`).
+pnpm reads each as its own project, a second one beside `package.json`
+included, so one can take the easter egg's name; the job's `pnpm install`
+reads every manifest and runs their install scripts. Any other path runs it: every root file, `.github/`, `.changeset/`,
+`scripts/`, `test-utils/`, `test/`, `registry/`, `site/`, `templates/`, the
+lockfile and workspace files, and a path no rule knows. `EASTER_EGG_INPUTS`
+lists the files the job reads, the evidence that no skip tree holds one:
+`test/app-plan.test.mjs` pins the job's commands and the package scripts they
+run, follows the imports and URLs of the test, the inputs and every source
+file of the easter-egg packages, and requires every file the job's
+environment names (the Playwright reporter in `PW_TEST_REPORTER`) to be in
+the table and outside the skip trees.
+
+Every root `package.json` script a `ci.yml` job runs, directly or through
+another script, is a planner input, read from `ci.yml` (`jobScripts` in the
+workspace graph): one only the site jobs run selects the site build, any other
+every app. `test/ci-required-jobs.test.mjs` runs twice per run, in `app-plan`
+(`pnpm check:integration`) and in `workspace-contracts` (`pnpm
+test:contracts`). It fails when a required job is missing, carries
+`continue-on-error`, runs under another condition or waits for other jobs than
+it pins, or has a run step that can be skipped other than the nine it lists,
+and when either guard step is missing, conditional or soft. It also fails when
+a required job needs a job that can be skipped on a run where the required job
+is due: it simulates every trigger of `ci.yml` (each event, pull request
+action and draft state, dispatch scope and branch) with every value of the
+outputs the job and the jobs it waits for read. A job whose condition admits a
+skipped dependency with a status function (`!cancelled()`, `always()`) may
+need one; a condition the simulation cannot evaluate fails it.
+The five site checks and `processing-workflows` are required and state that
+they are due when the site was built (`needs.composite-site.result ==
+'success'`), which GitHub's implicit `success()` already demanded; a dispatch
+with `scope=affected` and no site in its plan skips them with the build.
+`example-cache-retention` may fail by design and is not required. A change
+that removes both guards is caught only by review and by the full plan it
+triggers: a change to the plan job or to a root script `ci.yml` runs selects
+every app.
+
+Package suites can be narrowed safely only from recorded evidence of what each
+suite reads at run time, not from scanning text for paths. The wall time of
+the package tests can be cut without any selection risk by running them in
+parallel shards.
+
+Text references widen the selection: a JavaScript comment line naming a path
+is skipped, any other mention counts, and a path built at run time
+(`join(root, 'apps', id)`) reaches every app. The changed paths are read
+NUL-delimited (`changedPathsFromGit`), so git neither quotes nor trims a name,
+and hold both sides of every rename and copy, so a moved input still selects
+what read it. A diff git cannot produce is never an empty one: the plan then
+tests every app, the site build and the easter egg, and the workflow gate runs
+its workflow.
+
+Replayed over 22 merged pull requests, #864, #872 and the 20 merged up to
+#887 (`scripts/app-plan-shadow.mjs`, the planner before and after the review
+fixes against the same oracle), the planner had 0 app misses before and after.
+The fixes cost 35 instead of 31 of 1,386 app-test jobs: #872 and #861 now test
+dicompare and Pipeline builder, whose desktop scripts read every catalogue key.
+Under the skip list a pull request skips the easter egg in 7 of the 22 (#883,
+#875, #871, #869, #867, #865, #855); the others change `.github/`, a root file,
+`test/`, `scripts/`, `registry/`, `site/`, `.changeset/` or a `package.json`.
+The second replay, of the planner before and after the skip list, selected the
+same apps with 0 misses. The oracle has no expectation of
+its own for site keys or `ci.yml` jobs, and the report lists the 4 rows
+narrowed through them (#864, #872, #861, #854); an independent oracle for both
+is a follow-up. Replayed over every `ci` run of 16 to 18 November (each pull
+request diffed from main as it stood when its run started, each push from its
+parent), the planner leaves out 2,288 minutes of per-app jobs (2,304 before the
+fixes, the #864 and #872 runs). The easter egg used 437 minutes in those runs,
+376 in 93 pull request runs and 62 in 12 pushes; the skip list leaves it out
+of 19 of the pull request runs, 79 minutes. 57 of the 74 pull request runs that
+still run it changed `.github/`, most of them this CI work itself.
 
 ## Module-level selection in the component package
 
@@ -273,8 +695,8 @@ run during draft feedback.
 A manual `ci` run plans like a pull request: `gh workflow run ci --ref
 <branch>` tests the apps the branch changed since it left main (on main,
 since the last finished run, as a push does). `-f scope=gpu` runs only the macOS GPU suite of
-those apps, `-f scope=site` only the composite site and its agentic checks
-(with `agentic_mode`), and `-f scope=all` every app. Like a pull request,
+those apps, `-f scope=site` only the composite site, its agentic checks (with
+`agentic_mode`) and the homepage easter egg, and `-f scope=all` every app. Like a pull request,
 `affected` builds the composite site only when its plan needs it. On 13 November 2026 all
 three manual runs tested every app (3,037 runner minutes) to reach the GPU
 suite or the agentic checks. A dispatch no longer moves the tested base main's
@@ -287,12 +709,13 @@ push also selects the apps whose `app-tests` or browser jobs did not pass
 there (`resolveCiBase`, `carriedApps`): on 13 November 2026 synthsr's GPU job
 failed for 7 hours, and each push in that time tested all 63 apps from the
 last green run; replayed, the second of them selects synthsr alone. A failed
-job that belongs to no app, such as the plan itself, a job of that attempt
-that has not finished, or an app id the registry does not know sends the push
-back to the last green run. A carried app runs all its jobs again, but a push
+job that belongs to no app, such as the plan itself or a site job (it checked
+only the apps of its own run), a job of that attempt that has not finished, or
+an app id the registry does not know sends the push back to the last green run. A carried app runs all its jobs again, but a push
 leaves out `@slow` tests, so an app a nightly failed in a `@slow` test is
-retested in full only by the next nightly. Jobs only the nightly runs
-(`agent-interactions`) are not carried: the nightly runs them again. PR pushes cancel earlier runs
+retested in full only by the next nightly. The agentic jobs only the nightly
+or a dispatch runs (`agent-interactions`, `processing-workflows`) are not
+carried: the nightly runs the interactions again. PR pushes cancel earlier runs
 of the same PR. Schedule and manual runs keep their separate concurrency
 groups, and native release/signing conditions are unchanged.
 

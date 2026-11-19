@@ -57,15 +57,17 @@ fn convex_hull_clusters_match_samsrf() {
         let threshold = case["threshold"].as_f64().unwrap();
         let peak = unique_statistic.iter().position(|&v| v == unique_statistic.iter().cloned().fold(f64::NAN, f64::max)).unwrap();
         let triangulation = Triangulation::delaunay(&unique);
-        let mut cluster = cluster_roi(peak, &unique_statistic, threshold, &triangulation);
-        cluster.sort_unstable();
+        let cluster = cluster_roi(peak, &unique_statistic, threshold, &triangulation);
+        let mut sorted = cluster.clone();
+        sorted.sort_unstable();
         let mut expected_cluster = indices(&case["pos"]);
         expected_cluster.sort_unstable();
-        assert_eq!(cluster, expected_cluster, "{name}: cluster");
+        assert_eq!(sorted, expected_cluster, "{name}: cluster");
+        // polyshape(txy(pos, :)).convhull, in the cluster's breadth-first order.
         let hull_points: Vec<[f64; 2]> = cluster.iter().map(|&i| unique[i]).collect();
         let expected_area = case["area"].as_f64().unwrap();
         let expected_centroid = numbers(&case["centroid"]);
-        match Hull::of(&hull_points) {
+        match Hull::of_polygon(&hull_points) {
             Some(hull) => {
                 assert!((hull.area() - expected_area).abs() < 1e-12, "{name}: area {} vs {expected_area}", hull.area());
                 let [cx, cy] = hull.centroid();

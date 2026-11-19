@@ -7,12 +7,123 @@ import YAML from 'yaml';
 import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
 import { createAppPlan } from '../scripts/lib/app-plan.mjs';
 import { commandLineClosure } from '../scripts/lib/module-closure.mjs';
-import { isSharedFilter, pathGlob } from '../scripts/lib/workflow-gate.mjs';
+import { pathGlob, pullRequestFilters, sharedPaths, swept } from '../scripts/lib/workflow-gate.mjs';
 import { repoRoot } from '../scripts/lib/apps-registry.mjs';
 
 async function workflow(name) {
   return YAML.parse(await readFile(new URL(`../.github/workflows/${name}.yml`, import.meta.url), 'utf8'));
 }
+
+// The samsrf-mkl-avx512 integration suites (exes/samsrf/mkl-avx512/tests/*.rs) and the fixture
+// variables each reads, from its source: every "SAMSRF_..." literal except the outputs below,
+// and the pairs it requires together. A suite that is not in the workflow, a fixture no
+// invocation of its suite configures, or a half-configured pair fails the contract.
+const INTEL_OUTPUTS = new Set(['SAMSRF_DIVERGENCE_REPORT_DIR', 'SAMSRF_HELDOUT_DUMP']);
+
+async function intelSuites() {
+  const directory = new URL('../exes/samsrf/mkl-avx512/tests/', import.meta.url);
+  const suites = new Map();
+  for (const file of (await readdir(directory)).filter((name) => name.endsWith('.rs')).sort()) {
+    const source = await readFile(new URL(file, directory), 'utf8');
+    const variables = new Set([...source.matchAll(/"(SAMSRF_[A-Z0-9_]+)"/g)].map((match) => match[1]).filter((name) => !INTEL_OUTPUTS.has(name)));
+    const pairs = [...source.matchAll(/\b(?:fixture_pair|pair)\(\["(SAMSRF_\w+)", "(SAMSRF_\w+)"\]\)/g)].map((match) => match.slice(1));
+    suites.set(file.slice(0, -'.rs'.length), { variables, pairs });
+  }
+  return suites;
+}
+
+// Every command of the test job that runs the crate's suites: `-p samsrf-mkl-avx512` with
+// `--test NAME` flags (those suites), `--tests` or no target filter (every suite), and
+// `cargo test` of the whole samsrf workspace (every suite). Configured fixtures are the
+// command's own assignments and the step's and job's environment.
+function intelInvocations(flow, suites) {
+  const job = flow.jobs.test;
+  const invocations = [];
+  for (const step of job.steps) {
+    const inherited = [...Object.keys(flow.env || {}), ...Object.keys(job.env || {}), ...Object.keys(step.env || {})];
+    for (const command of (step.run || '').replace(/\\\r?\n/g, ' ').split('\n')) {
+      if (!/\bcargo\s+(?:\+\S+\s+)?test\b/.test(command) || !command.includes('exes/samsrf/Cargo.toml')) continue;
+      const packages = [...command.matchAll(/(?:^|\s)(?:-p|--package)[ =](\S+)/g)].map((match) => match[1]);
+      if (packages.length && !packages.includes('samsrf-mkl-avx512')) continue;
+      const named = [...command.matchAll(/(?:^|\s)--test[ =](\S+)/g)].map((match) => match[1]);
+      const filtered = named.length > 0 || /(?:^|\s)--(?:lib|bins?|bin|examples?|example|benches?|bench|doc)\b/.test(command);
+      const run = named.length && !/(?:^|\s)--tests\b/.test(command) ? named : filtered && !/(?:^|\s)--tests\b/.test(command) ? [] : [...suites.keys()];
+      const own = [...command.matchAll(/\b(SAMSRF_\w+)=/g)].map((match) => match[1]);
+      invocations.push({ step: step.name, command: command.trim(), run, own: new Set(own), configured: new Set([...inherited, ...own]) });
+    }
+  }
+  return invocations;
+}
+
+function checkIntelContract(flow, suites) {
+  const invocations = intelInvocations(flow, suites);
+  assert.ok(invocations.length > 0, 'find the samsrf-mkl-avx512 invocations');
+  for (const invocation of invocations) {
+    for (const name of invocation.run) assert.ok(suites.has(name), `${invocation.step}: no suite ${name}`);
+    const read = new Set(invocation.run.flatMap((name) => [...suites.get(name).variables]));
+    for (const variable of invocation.own) {
+      assert.ok(read.has(variable), `${invocation.step}: no suite it runs reads ${variable}`);
+    }
+    for (const name of invocation.run) {
+      for (const [first, second] of suites.get(name).pairs) {
+        assert.equal(invocation.configured.has(first), invocation.configured.has(second),
+          `${invocation.step}: ${name} needs both ${first} and ${second}`);
+      }
+    }
+  }
+  for (const [name, { variables }] of suites) {
+    const runs = invocations.filter((invocation) => invocation.run.includes(name));
+    assert.ok(runs.length > 0, `${name} runs in CI`);
+    for (const variable of variables) {
+      assert.ok(runs.some((invocation) => invocation.configured.has(variable)), `${name} runs in CI with ${variable}`);
+    }
+  }
+  return invocations;
+}
+
+// A copy of the workflow with each logical command of the test job rewritten (continuations joined).
+function rewriteCommands(flow, rewrite) {
+  const copy = structuredClone(flow);
+  for (const step of copy.jobs.test.steps) {
+    if (step.run) step.run = step.run.replace(/\\\r?\n/g, ' ').split('\n').map(rewrite).filter((line) => line !== null).join('\n');
+  }
+  return copy;
+}
+
+const intelCommand = (line) => /cargo\s+test\b/.test(line) && /-p samsrf-mkl-avx512\b/.test(line);
+
+test('each samsrf-mkl-avx512 suite runs in CI with every fixture it reads, in complete pairs', async () => {
+  const suites = await intelSuites();
+  assert.deepEqual([...suites.keys()], ['blas_recordings', 'divergence', 'recordings'], 'the crate\'s integration suites');
+  const invocations = checkIntelContract(await workflow('samsrf-native'), suites);
+  for (const name of suites.keys()) assert.ok(invocations.some((invocation) => invocation.run.includes(name) && invocation.own.size > 0), `${name} runs with fixtures`);
+});
+
+test('the samsrf-mkl-avx512 CI contract rejects a dropped suite, invocation, fixture or half pair', async () => {
+  const suites = await intelSuites();
+  const flow = await workflow('samsrf-native');
+  const mutants = {
+    'every --test blas_recordings and --test divergence removed': rewriteCommands(flow, (line) =>
+      intelCommand(line) ? line.replaceAll(' --test blas_recordings', '').replaceAll(' --test divergence', '') : line),
+    '--test divergence removed from the QR command': rewriteCommands(flow, (line) =>
+      intelCommand(line) && line.includes('SAMSRF_QR_KERNELS_DIR') ? line.replace(' --test divergence', '') : line),
+    'the single-kernels divergence invocation removed': rewriteCommands(flow, (line) =>
+      intelCommand(line) && line.includes('SAMSRF_SINGLE_KERNELS_DIR') ? null : line),
+    'SAMSRF_ARITHMETIC_ORDER_DIR removed from the crate command': rewriteCommands(flow, (line) =>
+      intelCommand(line) ? line.replace(/SAMSRF_ARITHMETIC_ORDER_DIR="[^"]*"\s+/, '') : line),
+    'SAMSRF_CGG_DIR removed from the crate command': rewriteCommands(flow, (line) =>
+      intelCommand(line) ? line.replace(/SAMSRF_CGG_DIR="[^"]*"\s+/, '') : line),
+    'half of the CLI pair': rewriteCommands(flow, (line) =>
+      intelCommand(line) ? line.replace(/SAMSRF_CLI_COURSES_DIR="[^"]*"\s+/, '') : line),
+    'a fixture no suite of the command reads': rewriteCommands(flow, (line) =>
+      intelCommand(line) && line.includes('SAMSRF_SINGLE_KERNELS_DIR') ? line.replace(' --test divergence', ' --test recordings') : line),
+  };
+  for (const [name, mutant] of Object.entries(mutants)) {
+    assert.notDeepEqual(mutant, flow, `${name}: the mutation changed the workflow`);
+    assert.throws(() => checkIntelContract(mutant, suites), assert.AssertionError, name);
+  }
+  assert.doesNotThrow(() => checkIntelContract(rewriteCommands(flow, (line) => line), suites), 'the unmutated workflow passes after the rewrite');
+});
 
 // Every workflow whose portable job calls the shared Node packager, with its package directory.
 async function portableCallers() {
@@ -207,7 +318,7 @@ test('portable Node command lines build on target runners and publish through on
   assert.deepEqual(shared.permissions,{contents:'read'});
   assert.deepEqual(shared.jobs.portable.permissions,{contents:'read', 'id-token':'write'});
   assert.equal(shared.jobs.release.if,'inputs.publish_release');
-  assert.deepEqual(shared.jobs.release.needs,['portable']);
+  assert.deepEqual(shared.jobs.release.needs,['runners','portable']);
   assert.equal(shared.jobs.release.permissions.contents,'write');
   assert.equal(shared.jobs.release['runs-on'],"${{ inputs.sign_release && 'macos-15' || 'ubuntu-latest' }}");
   const signing=['APPLEID','APPLEIDPASS','APPLE_TEAM_ID','CSC_LINK','CSC_KEY_PASSWORD','CSC_INSTALLER_LINK','CSC_INSTALLER_KEY_PASSWORD'];
@@ -220,7 +331,11 @@ test('portable Node command lines build on target runners and publish through on
   const unsigned=shared.jobs.release.steps.filter(step=>step!==sign);
   assert.ok(!JSON.stringify(unsigned).includes('secrets.'),'signing secrets reach only the signing step');
   const upload=shared.jobs.portable.steps.find(step=>step.uses?.startsWith('actions/upload-artifact@'));
-  assert.equal(upload.with.name,"${{ runner.os == 'macOS' && 'test-installer' || 'portable' }}-${{ matrix.platform }}");
+  // native.yml runs several callers in one workflow run, where an artifact name must be unique.
+  assert.equal(upload.with.name,"${{ runner.os == 'macOS' && 'test-installer' || 'portable' }}-${{ needs.runners.outputs.package }}-${{ matrix.platform }}");
+  assert.equal(shared.jobs.runners.outputs.package,'${{ steps.select.outputs.package }}');
+  const download=shared.jobs.release.steps.find(step=>step.uses?.startsWith('actions/download-artifact@'));
+  assert.equal(download.with.pattern,'portable-${{ needs.runners.outputs.package }}-*');
   const build=JSON.stringify(shared.jobs.portable);
   for(const command of ['portable_release\\.py package','portable_release\\.py verify','test_portable_release\\.py','cargo test --manifest-path exes/node-cli/Cargo\\.toml','cargo clippy --manifest-path exes/node-cli/Cargo\\.toml --locked -- -D warnings','cargo fmt --manifest-path exes/node-cli/Cargo\\.toml --check']) {
     assert.match(build,new RegExp(command));
@@ -258,7 +373,7 @@ test('portable Node command lines build on target runners and publish through on
     const installer=Object.values(release.targets).some(target=>target.archive==='pkg');
     // A release with a macOS installer is published only by signing it.
     const publishInput=installer?'sign_release':'publish_release';
-    const referenceInputs = name === 'dwi2trx-native' ? ['tracking_only'] : name === 'samsrf-native' ? ['record_matlab', 'include_matrix', 'diagnostics_only', 'geometry_only', 'geometry_probe', 'geometry_causal', 'geometry_reproducers', 'revcor_only', 'revcor_edges', 'wasm_only', 'qr_only', 'qr_kernels', 'numerics_only', 'css_pipelines_only', 'kernels_only', 'gemv_order', 'focused_probes', 'arithmetic_order', 'fitted_hrf', 'probes', 'controls_only', 'runtime_cli', 'runtime_image'] : [];
+    const referenceInputs = name === 'dwi2trx-native' ? ['tracking_only'] : name === 'samsrf-native' ? ['record_matlab', 'include_matrix', 'diagnostics_only', 'geometry_only', 'geometry_probe', 'geometry_causal', 'geometry_reproducers', 'geometry_hull_area', 'revcor_only', 'revcor_edges', 'wasm_only', 'qr_only', 'qr_kernels', 'numerics_only', 'css_pipelines_only', 'kernels_only', 'gemv_order', 'focused_probes', 'arithmetic_order', 'fitted_hrf', 'probes', 'controls_only', 'runtime_cli', 'runtime_image'] : [];
     assert.deepEqual(Object.keys(flow.on.workflow_dispatch.inputs), [publishInput, ...referenceInputs], name);
     assert.equal(flow.jobs.portable.with.publish_release,`\${{ github.event_name == 'workflow_dispatch' && inputs.${publishInput} }}`,name);
     assert.equal(flow.jobs.portable.with.sign_release,installer?"${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}":undefined,name);
@@ -720,13 +835,14 @@ test('a native or CLI workflow runs when a file its command line imports changes
   for (const file of files) {
     const flow = await workflow(file.slice(0, -'.yml'.length));
     for (const event of ['pull_request', 'push']) {
-      const filters = flow.on?.[event]?.paths;
+      // A pull request reaches a workflow through its own paths or, by native.yml, its shared_paths.
+      const filters = event === 'pull_request' ? pullRequestFilters(flow) : flow.on?.[event]?.paths;
       if (!Array.isArray(filters)) continue;
       // These start for a pull request only on their own paths; their pushes hold the rule.
       if (event === 'pull_request' && OWN_PATHS_ONLY.includes(file)) continue;
       const patterns = filters.filter((filter) => !filter.startsWith('!')).map(pathGlob);
-      // A gated workflow's pushes leave its shared pull request filters to the nightly sweep.
-      if (event === 'push' && flow.jobs.gate && flow.on.schedule) patterns.push(...flow.on.pull_request.paths.filter(isSharedFilter).map(pathGlob));
+      // A gated workflow's pushes leave its shared paths to native.yml's nightly sweep.
+      if (event === 'push' && swept(flow)) patterns.push(...sharedPaths(flow).map(pathGlob));
       // A workflow owns the packages it filters on whole.
       const owned = filters.map((filter) => filter.match(/^((?:packages|exes)\/[^/*]+)\/\*\*$/)?.[1]).filter(Boolean);
       for (const directory of owned) {

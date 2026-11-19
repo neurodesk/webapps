@@ -4,7 +4,8 @@ import { LockfileAnalysisError, lockfileImpact } from './lockfile-impact.mjs';
 import { onlyAddsExports } from './module-closure.mjs';
 import { EMBEDDED_VERSION_FILES, releaseBookkeeping } from './release-bookkeeping.mjs';
 import { CATALOG, INDEPENDENT_CONFIG, SITE, reachableFrom } from './workspace-graph.mjs';
-import { validateAppInformation } from './app-information.mjs';
+import { handoffCatalogEntry, validateAppInformation } from './app-information.mjs';
+import { appCatalogIds, parseAppsRegistry } from './apps-registry.mjs';
 import { validateStandalone } from './standalone.mjs';
 
 const NON_CODE_PREFIXES = ['docs/', '.changeset/'];
@@ -34,9 +35,9 @@ const REGISTRY = 'registry/apps.yml';
 const STANDALONE = 'registry/standalone.json';
 const APP_INFORMATION = 'registry/app-information.yml';
 // Root tools no per-app or composite-site job executes: Knip and Stryker run
-// in the unused-code and mutation workflows, ESLint (scripts/lint.mjs,
-// eslint.config.js) in workspace-contracts and code-quality on every pull
-// request. test/app-plan.test.mjs fails when an app's CI scripts load one.
+// in the quality workflow's unused-code and mutation jobs, ESLint
+// (scripts/lint.mjs, eslint.config.js) in workspace-contracts and its
+// correctness job on every pull request. test/app-plan.test.mjs fails when an app's CI scripts load one.
 export const INDEPENDENT_ROOT_DEV_DEPENDENCIES = ['knip', '@stryker-mutator/core', 'eslint', '@eslint/js', 'globals'];
 const GITATTRIBUTES = '.gitattributes';
 // Outside the composite build and its own tests, only these root files read
@@ -54,6 +55,70 @@ const AUTOMATION_CONTRACT = /^apps\/[^/]+\/automation\.json$/;
 // app shell, theme, fonts and logo go into every app and stay shared.
 // test/app-plan.test.mjs fails when anything else names them.
 export const SITE_ONLY_FILES = new Set(['site/landing.css', 'site/landing.js', 'site/analytics.json', 'site/404.html', 'site/dicompare-routes.js']);
+const CI_WORKFLOW = '.github/workflows/ci.yml';
+// What each ci.yml job tests, for a change confined to it: the composite site
+// (`site`: composite-site and the jobs that only consume its build), the
+// homepage easter egg (`easter-egg`), nothing more than the run itself
+// (`every-run`: workspace-contracts runs on every run, so its own run tests
+// the change), or nothing (`none`: the plan's marker jobs). The plan, the
+// per-app jobs, a job not listed here and every key outside `jobs` reach
+// every app. test/app-plan.test.mjs holds the list to ci.yml.
+export const CI_JOB_SCOPES = Object.freeze({
+  'composite-site': 'site',
+  'site-runtime': 'site',
+  'site-audit': 'site',
+  'site-e2e': 'site',
+  'site-mobile': 'site',
+  'site-catalog': 'site',
+  'processing-workflows': 'site',
+  'agent-interactions': 'site',
+  'example-cache-retention': 'site',
+  'workspace-contracts': 'every-run',
+  'homepage-easter-egg': 'easter-egg',
+  'full-plan': 'none',
+  'full-plan-withheld': 'none',
+});
+// Every key of registry/apps.yml's site section (`[]` is each entry of a
+// list), and the files an app build or an app's tests run that read it. The
+// composite build (scripts/build-site.mjs and the landing, hub and 404 pages it
+// writes) reads all of it, and package suites and the easter egg follow the
+// file itself through the workspace graph. Every app build validates the whole
+// registry, so a head registry that fails validation reaches every app; a
+// valid one reaches the apps that reach a reader of a key that changed. A key
+// with no readers selects only the site build. A key not listed here, at any
+// depth and whatever its value, selects every app. test/app-plan.test.mjs
+// reads each reader's text for the keys it reads and fails when one is not
+// listed; a file that holds a whole catalogue entry (suite.mjs, pack.mjs)
+// reads every key of it.
+const DESKTOP_SUITE = ['scripts/desktop/suite.mjs', 'scripts/desktop/pack.mjs', 'scripts/desktop/models-pack.mjs', 'scripts/desktop/release-files.mjs'];
+const CATALOG_ENTRY = ['scripts/desktop/suite.mjs', 'scripts/desktop/pack.mjs'];
+const BRAND_KEYS = ['name', 'logo', 'icon', 'theme', 'home', 'more_apps'].map((key) => `brand.${key}`);
+const keys = (prefix, names, readers) => names.map((name) => [`${prefix}.${name}`, readers]);
+export const SITE_KEY_READERS = Object.freeze(Object.fromEntries([
+  ['site.domain', ['scripts/desktop/suite.mjs', 'scripts/desktop/release-files.mjs']],
+  ...keys('site.hub', ['host', 'title', 'heading', 'description', ...BRAND_KEYS], []),
+  ['site.catalogs[].id', ['scripts/lib/standalone.mjs', ...DESKTOP_SUITE]],
+  ['site.catalogs[].host', [...CATALOG_ENTRY, 'scripts/desktop/release-files.mjs']],
+  ...keys('site.catalogs[]', ['hosting', 'title', 'heading', 'description', ...BRAND_KEYS], CATALOG_ENTRY),
+  ...keys('site.catalogs[].desktop', ['product_name', 'app_id', 'release', 'executable'], DESKTOP_SUITE),
+  ['site.analytics.measurement_id', ['scripts/theme-app-dist.mjs', 'scripts/lib/vite-app-config.mjs', 'scripts/dev-server.mjs']],
+  ['site.analytics.period_days', []],
+  ...keys('site.categories[]', ['id', 'title', 'description'], []),
+].map(([key, readers]) => [key, Object.freeze(readers)])));
+// The site keys no app page carries. The composite build writes an app's home
+// catalogue id, host, title and brand and the analytics id into each page it
+// assembles (hostedThemeOptions in scripts/lib/catalog-sites.mjs), and the
+// per-app site checks read those pages, so a change to any other site key
+// makes them check every app. test/app-plan.test.mjs changes each key listed
+// here and requires every app's theme options to stay the same.
+export const SITE_DATA_KEYS = Object.freeze([
+  'site.domain',
+  ...keys('site.hub', ['host', 'title', 'heading', 'description', ...BRAND_KEYS], []).map(([key]) => key),
+  ...keys('site.catalogs[]', ['hosting', 'heading', 'description'], []).map(([key]) => key),
+  ...keys('site.catalogs[].desktop', ['product_name', 'app_id', 'release', 'executable'], []).map(([key]) => key),
+  'site.analytics.period_days',
+  ...keys('site.categories[]', ['id', 'title', 'description'], []).map(([key]) => key),
+]);
 
 function same(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
@@ -114,19 +179,86 @@ function appInformationImpact({ before, after }, registry) {
   }
 }
 
-// Only the landing page renders the site categories, so a new category or a
-// reworded title or description reaches no app build. A category that goes
-// away can leave an app entry invalid, so that stays a shared change.
-function onlyDescribesCategories(old, now) {
-  const fields = [...new Set([...Object.keys(old ?? {}), ...Object.keys(now ?? {})])];
-  if (fields.some((field) => field !== 'categories' && !same(old?.[field], now?.[field]))) return false;
-  if (!Array.isArray(old?.categories) || !Array.isArray(now?.categories)) return false;
-  const kept = new Set(now.categories.map((category) => category?.id));
-  return old.categories.every((category) => category?.id && kept.has(category.id));
+// Site key paths are arrays of raw segments, `[]` standing for each entry of
+// a list, and are compared only as arrays: SITE_KEY_READERS' dotted names are
+// split once, into a table keyed by the segments' JSON. A raw key that
+// contains a delimiter (`brand.home` written as one key) or is empty can
+// never equal a table path, so it is a key the table does not name.
+const siteSegments = (name) => name.split('.').flatMap((part) => (part.endsWith('[]') ? [part.slice(0, -2), '[]'] : [part]));
+const SITE_TABLE = new Map(Object.entries(SITE_KEY_READERS).map(([name, readers]) => [JSON.stringify(siteSegments(name)), { name, readers }]));
+const siteEntry = (segments) => SITE_TABLE.get(JSON.stringify(segments));
+// Whether some table path continues `segments` (a mapping or list the table names).
+const siteContainer = (segments) => [...SITE_TABLE.keys()].some((key) => {
+  const path = JSON.parse(key);
+  return path.length > segments.length && segments.every((segment, index) => path[index] === segment);
+});
+const plainKey = (key) => key !== '' && key !== '[]' && !/[.[\]]/.test(key);
+const showSegments = (segments) => segments.map((segment, index) => (segment === '[]' ? '[]' : plainKey(segment) ? `${index ? '.' : ''}${segment}` : `[${JSON.stringify(segment)}]`)).join('');
+
+// The site key paths two registries differ in: lists of entries with unique
+// ids compare entry by entry (`[]`), and an entry that is added, removed or
+// moved changes `[]`/`id` and every key below it. Any other list that changed
+// is one path the table does not name.
+function changedSiteKeys(old, now, path = ['site']) {
+  if (same(old, now)) return [];
+  const record = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+  const entries = (value) => Array.isArray(value) && value.every((entry) => record(entry) && typeof entry.id === 'string') && new Set(value.map((entry) => entry.id)).size === value.length;
+  if (entries(old) && entries(now)) {
+    const [before, after] = [new Map(old.map((entry) => [entry.id, entry])), new Map(now.map((entry) => [entry.id, entry]))];
+    const moved = same(old.map((entry) => entry.id), now.map((entry) => entry.id)) ? [] : [[...path, '[]', 'id']];
+    return [...moved, ...[...new Set([...before.keys(), ...after.keys()])].flatMap((id) => changedSiteKeys(before.get(id), after.get(id), [...path, '[]']))];
+  }
+  if ((record(old) || old === undefined) && (record(now) || now === undefined)) {
+    return [...new Set([...Object.keys(old ?? {}), ...Object.keys(now ?? {})])].flatMap((key) => changedSiteKeys(old?.[key], now?.[key], [...path, key]));
+  }
+  return [path];
 }
 
-// The app entries a registry/apps.yml change touched, or why the change is
-// shared: every app build embeds the site section's analytics id.
+// The fields of an app entry the planner has classified. Each reaches the
+// app's own build and jobs and the site build (landing page, 404 table,
+// desktop suite). Every app page also carries the handoff catalog
+// (handoffCatalogEntry, on the hosts appCatalogIds names), which the apps
+// naming HANDOFF_CATALOG_READERS render; the planner compares that projection
+// itself. A change to any other field could reach any app.
+export const CLASSIFIED_ENTRY_FIELDS = Object.freeze([
+  'id', 'path', 'catalog', 'also_in', 'title', 'description', 'categories', 'keywords', 'anatomy', 'modalities',
+  'inputs', 'hardware', 'legacy_domain', 'runtime', 'model_manifest', 'asset_manifest_schema', 'artifact_budget_bytes',
+  'source', 'license', 'maintainers', 'support_status', 'shell', 'app_scoped_runtime_families', 'ci', 'remote_compute',
+  'handoff', 'former_paths',
+]);
+// The handoff module's functions that read the catalog an app page carries
+// (packages/components/src/handoff/index.js); test/app-plan.test.mjs holds
+// the list to that module.
+export const HANDOFF_CATALOG_READERS = Object.freeze(['handoffTargets']);
+
+// What another app's handoff menu shows of an app entry, or null for none.
+function handoffMenuEntry(app) {
+  const entry = app ? handoffCatalogEntry(app) : null;
+  return entry ? { ...entry, hosts: appCatalogIds(app) } : null;
+}
+
+// The first path in a site section that SITE_KEY_READERS does not name: a key
+// it does not list at any depth or that holds a delimiter, or a value of
+// another kind than the table gives its path (a mapping or list where it
+// lists a scalar, or the reverse). An empty mapping under a new key is a path
+// the table does not name too.
+function unknownSiteKey(value, path = ['site']) {
+  if (Array.isArray(value)) {
+    if (!siteContainer([...path, '[]'])) return path;
+    return value.reduce((issue, entry) => issue ?? unknownSiteKey(entry, [...path, '[]']), null);
+  }
+  if (value !== null && typeof value === 'object') {
+    if (!siteContainer(path)) return path;
+    return Object.entries(value).reduce((issue, [name, child]) => issue ?? (plainKey(name) ? unknownSiteKey(child, [...path, name]) : [...path, name]), null);
+  }
+  return siteEntry(path) ? null : path;
+}
+
+// The app entries and site keys a registry/apps.yml change touched, whether
+// an entry changed what other apps' handoff menus list (`menu`), whether the
+// set of registered ids changed (`registered`), or why the change is shared.
+// Every app build validates the whole registry, so a site change narrows only
+// when the head registry is valid.
 function registryImpact({ before, after }) {
   let old;
   let now;
@@ -135,15 +267,106 @@ function registryImpact({ before, after }) {
   } catch (error) {
     return { shared: `it does not parse (${error.message})` };
   }
-  const section = [...new Set([...Object.keys(old ?? {}), ...Object.keys(now ?? {})])].find((key) => key !== 'apps' && !same(old?.[key], now?.[key]));
-  if (section && !(section === 'site' && onlyDescribesCategories(old.site, now.site))) return { shared: `its ${section} section changed, and every app build reads it` };
+  const section = [...new Set([...Object.keys(old ?? {}), ...Object.keys(now ?? {})])].find((key) => key !== 'apps' && key !== 'site' && !same(old?.[key], now?.[key]));
+  if (section) return { shared: `its ${section} section changed, and every app build reads it` };
+  const siteKeys = [...new Map(changedSiteKeys(old?.site, now?.site).map((key) => [JSON.stringify(key), key])).values()];
+  if (!same(old?.site, now?.site)) {
+    try {
+      parseAppsRegistry(after);
+    } catch (error) {
+      return { shared: `it is not valid at head (${error.message.split('\n').slice(0, 2).join(' ')}), and every app build validates it` };
+    }
+    const unknown = unknownSiteKey(old?.site) ?? unknownSiteKey(now?.site) ?? siteKeys.find((key) => !siteEntry(key));
+    if (unknown) return { shared: `its site section has ${showSegments(unknown)}, and no rule says which builds read it` };
+  }
   const entries = (registry) => (Array.isArray(registry?.apps) ? registry.apps : []);
   const byId = (registry) => new Map(entries(registry).map((app) => [app?.id, app]));
   const [was, is] = [byId(old), byId(now)];
   if (was.size !== entries(old).length || is.size !== entries(now).length || was.has(undefined) || is.has(undefined)) {
     return { shared: 'its app entries have missing or duplicate ids' };
   }
-  return { changed: [...new Set([...was.keys(), ...is.keys()])].filter((id) => !same(was.get(id), is.get(id))) };
+  const changed = [...new Set([...was.keys(), ...is.keys()])].filter((id) => !same(was.get(id), is.get(id)));
+  for (const id of changed) {
+    const fields = [...new Set([...Object.keys(was.get(id) ?? {}), ...Object.keys(is.get(id) ?? {})])];
+    const unknown = fields.find((field) => !CLASSIFIED_ENTRY_FIELDS.includes(field) && !same(was.get(id)?.[field], is.get(id)?.[field]));
+    if (unknown) return { shared: `the ${id} entry's ${unknown} field is not one the planner classifies` };
+  }
+  return {
+    changed,
+    menu: changed.some((id) => !same(handoffMenuEntry(was.get(id)), handoffMenuEntry(is.get(id)))),
+    registered: !same([...was.keys()].sort(), [...is.keys()].sort()),
+    siteKeys,
+  };
+}
+
+// The jobs that need `id` (`direction` 'dependants') or that it needs
+// ('dependencies'), directly or through other jobs, in one workflow's jobs.
+function relatedJobs(jobs, id, direction) {
+  const needs = (job) => [jobs[job]?.needs ?? []].flat();
+  const next = direction === 'dependencies' ? needs : (job) => Object.keys(jobs).filter((other) => needs(other).includes(job));
+  const seen = new Set();
+  const pending = [id];
+  while (pending.length) {
+    for (const job of next(pending.pop())) {
+      if (!seen.has(job)) {
+        seen.add(job);
+        pending.push(job);
+      }
+    }
+  }
+  seen.delete(id);
+  return [...seen];
+}
+
+// The ci.yml jobs a workflow change touched, or why it is shared. It narrows
+// only when the base and head have the same jobs, each changed job is one
+// CI_JOB_SCOPES places, and every job that needs a changed job, or that a
+// changed job needs (the plan aside), at the base or the head, has the same
+// scope: a job of another scope could consume what changed while the
+// narrowed plan skips it, or skip the changed job by being skipped itself. A
+// key outside `jobs` reaches every app.
+export function ciImpact({ before, after }) {
+  let old;
+  let now;
+  try {
+    [old, now] = [parse(before), parse(after)];
+  } catch (error) {
+    return { shared: `it does not parse (${error.message.split('\n')[0]})` };
+  }
+  const record = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+  if (!record(old?.jobs) || !record(now?.jobs)) return { shared: 'it has no jobs to compare' };
+  try {
+    const key = [...new Set([...Object.keys(old), ...Object.keys(now)])].find((name) => name !== 'jobs' && !same(old[name], now[name]));
+    if (key) return { shared: `its ${key} key changed, and every job runs under it` };
+    const membership = [...new Set([...Object.keys(old.jobs), ...Object.keys(now.jobs)])].find((id) => !Object.hasOwn(old.jobs, id) || !Object.hasOwn(now.jobs, id));
+    if (membership) return { shared: `its ${membership} job was ${Object.hasOwn(now.jobs, membership) ? 'added' : 'removed'}, and only a change within the same jobs narrows` };
+    const jobs = Object.keys(now.jobs).filter((id) => !same(old.jobs[id], now.jobs[id]));
+    const unplaced = jobs.find((id) => !Object.hasOwn(CI_JOB_SCOPES, id));
+    if (unplaced) return { shared: `its ${unplaced} job changed, and only a change to ${Object.keys(CI_JOB_SCOPES).join(', ')} narrows` };
+    for (const id of jobs) {
+      for (const [side, workflow] of [['base', old], ['head', now]]) {
+        for (const direction of ['dependants', 'dependencies']) {
+          const other = relatedJobs(workflow.jobs, id, direction).find((job) => job !== 'app-plan' && CI_JOB_SCOPES[job] !== CI_JOB_SCOPES[id]);
+          if (other) return { shared: `its ${id} job changed, and at the ${side} ${direction === 'dependants' ? `${other} needs it` : `it needs ${other}`}, which tests more than the ${CI_JOB_SCOPES[id]} scope` };
+        }
+      }
+    }
+    return { jobs };
+  } catch (error) {
+    // A recursive alias parses but has no JSON form to compare.
+    return { shared: `its jobs cannot be compared (${error.message.split('\n')[0]})` };
+  }
+}
+
+// The workspace graph nodes a changed file belongs to. A package's tests
+// reach only those that read them and a document only those that read that
+// file; any other file reaches its package's users and, if a root file names
+// it, that file's.
+function graphNodes(path, graph) {
+  const packageTests = path.match(/^packages\/[^/]+\/tests?(?=\/)/)?.[0];
+  const document = /^(?:packages|exes)\/.*\.md$/.test(path) && path;
+  if (packageTests || document) return [packageTests || document];
+  return [path.match(/^(packages|exes)\/[^/]+(?=\/)/)?.[0], ROOT_FILE.test(path) || graph?.edges.has(path) ? path : null].filter(Boolean);
 }
 
 function shardedEntries(app) {
@@ -215,8 +438,8 @@ function changedRootScripts(manifest) {
 // The apps a change tests, whether it needs the composite site build, and why.
 // Without a workspace graph every packages/, exes/ or root file change counts
 // as shared. With one, a change selects the apps that reach it; a root file
-// that ci.yml's per-app jobs run selects every app, and one only the
-// composite-site job runs selects no app but the site build. `manifests` maps
+// that ci.yml's per-app jobs run selects every app, and one only its site
+// jobs run (siteJobNames) selects no app but the site build. `manifests` maps
 // a changed package.json, offline asset lock, pnpm-lock.yaml or
 // registry/apps.yml to its text before and after: root script edits count only
 // where ci.yml runs them, an asset lock change selects the apps whose assets
@@ -226,12 +449,14 @@ function changedRootScripts(manifest) {
 // only the apps that read that exact file.
 // `reasons.fallback` says why the whole catalog was selected; otherwise
 // `reasons.apps` maps each selected app, and `reasons.site` the site build, to
-// the changes that selected it.
+// the changes that selected it. `siteCode` is false when every site reason is
+// data the per-app site checks do not read (landing page files, registry
+// entries, the offline lock), so they can cover only the selected apps.
 // With `release`, a version bump selects what it reaches: release.yml picks
 // the apps to publish from the version changes themselves. `carried` maps app
 // ids a failed run on main left untested to the jobs that failed there.
 export function selectAffectedApps(registry, changedPaths = [], graph = null, manifests = new Map(), { release = false, carried = new Map() } = {}) {
-  const everything = (fallback) => ({ apps: registry.apps, site: true, reasons: { fallback, apps: {}, site: [] } });
+  const everything = (fallback) => ({ apps: registry.apps, site: true, siteCode: true, reasons: { fallback, apps: {}, site: [] } });
   if (!changedPaths.length) return everything('no changed paths: no base revision, an unreadable diff, or a full run');
 
   const appIds = new Set(registry.apps.map((app) => app.id));
@@ -246,7 +471,15 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
   const shared = (reason) => {
     fallback ??= reason;
   };
-  const siteBuild = (reason) => siteReasons.push(reason);
+  // A change to code the site jobs run (the checks, the composite build) needs
+  // those checks over every app; siteData is for data only the landing page,
+  // the catalogue or the named apps read.
+  let siteCode = false;
+  const siteBuild = (reason) => {
+    siteCode = true;
+    siteReasons.push(reason);
+  };
+  const siteData = (reason) => siteReasons.push(reason);
   // Selects whatever reaches `node` or a file below it.
   const selectReaching = (node, reason) => {
     const within = (candidate) => candidate === node || candidate.startsWith(`${node}/`);
@@ -266,6 +499,9 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     const appId = path.match(/^apps\/([^/]+)\//)?.[1] ?? path.match(MODEL_MANIFEST)?.[1];
     if (appIds.has(appId)) {
       select(appId, path);
+      for (const reader of graph?.appReaders?.(path) ?? []) {
+        if (appIds.has(reader)) select(reader, `${path}: ${reader}'s code reads it`);
+      }
       if (graph && AUTOMATION_CONTRACT.test(path)) {
         for (const reader of AUTOMATION_CATALOG_READERS) selectReaching(reader, `${path}: ${reader} generates tools from every app's contract`);
       }
@@ -296,7 +532,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
       continue;
     }
     if (SITE_ONLY_FILES.has(path)) {
-      siteBuild(`${path}: only the composite build copies it`);
+      siteData(`${path}: only the composite build copies it`);
       continue;
     }
     if (path === RUNTIME_MANIFEST && graph) {
@@ -324,7 +560,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
         shared(`${path}: ${impact.shared}`);
         continue;
       }
-      siteBuild(`${path}: the composite site serves the catalog${impact.suite ? ' and its desktop suite' : ''}`);
+      siteData(`${path}: the composite site serves the catalog${impact.suite ? ' and its desktop suite' : ''}`);
       for (const id of impact.changed) {
         if (appIds.has(id)) select(id, `${path}: the ${id} entry changed`);
       }
@@ -336,7 +572,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
         shared(`${path}: ${impact.shared}`);
         continue;
       }
-      siteBuild(`${path}: the composite site themes every app with it`);
+      siteData(`${path}: the composite site themes every app with it`);
       for (const id of impact.changed) {
         if (appIds.has(id)) select(id, `${path}: the ${id} entry changed`);
       }
@@ -348,9 +584,48 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
         shared(`${path}: ${impact.shared}`);
         continue;
       }
-      siteBuild(`${path}: the landing page lists the catalog`);
+      siteData(`${path}: the landing page lists the catalog`);
       for (const id of impact.changed) {
         if (appIds.has(id)) select(id, `${path}: the ${id} entry changed`);
+      }
+      if (impact.registered) {
+        if (!graph) {
+          shared(`${path}: the registered apps changed, and without a workspace graph the builds that generate tools from every app are unknown`);
+          continue;
+        }
+        for (const reader of AUTOMATION_CATALOG_READERS) selectReaching(reader, `${path}: the registered apps changed, and ${reader} generates tools from every one`);
+      }
+      if (impact.menu) {
+        if (!graph?.appsNaming) {
+          shared(`${path}: an entry changed what the handoff menus list, and without a workspace graph the apps that render one are unknown`);
+          continue;
+        }
+        for (const id of HANDOFF_CATALOG_READERS.flatMap((reader) => graph.appsNaming(reader))) {
+          if (appIds.has(id)) select(id, `${path}: an entry changed what ${id}'s handoff menu lists`);
+        }
+      }
+      for (const segments of impact.siteKeys) {
+        const { name: key, readers } = siteEntry(segments);
+        // The composite build writes some keys into every app page it assembles,
+        // which the per-app site checks then read: those are code for them.
+        if (SITE_DATA_KEYS.includes(key)) {
+          if (!readers.length) siteData(`${path}: ${key} changed, and only the site build reads it`);
+        } else {
+          siteBuild(`${path}: ${key} changed, and the composite build writes it into every app page`);
+        }
+        if (readers.length && !graph) shared(`${path}: ${key} changed, and there is no workspace graph to find the apps that read it`);
+        else for (const reader of readers) selectReaching(reader, `${path}: ${key} changed, and ${reader} reads it`);
+      }
+      continue;
+    }
+    if (path === CI_WORKFLOW) {
+      const impact = manifests.get(path) ? ciImpact(manifests.get(path)) : { shared: 'the base or head workflow is unavailable' };
+      if (impact.shared) {
+        shared(`${path}: ${impact.shared}`);
+        continue;
+      }
+      for (const job of impact.jobs) {
+        if (CI_JOB_SCOPES[job] === 'site') siteBuild(`${path}: its ${job} job changed, and it tests only the composite site`);
       }
       continue;
     }
@@ -364,16 +639,20 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
       }
       const scripts = changedRootScripts(manifest);
       if (scripts) {
-        const catalogScripts = scripts.filter((name) => graph.rootScriptsRun.get(CATALOG).has(name));
-        const siteScripts = scripts.filter((name) => graph.rootScriptsRun.get(SITE).has(name));
-        if (catalogScripts.length) shared(`${path}: ci.yml's per-app jobs run root scripts ${catalogScripts.join(', ')}`);
-        if (siteScripts.length) siteBuild(`${path}: the site CI jobs run root scripts ${siteScripts.join(', ')}`);
+        // Every root script a ci.yml job runs is an input: one only the site jobs run
+        // selects the site build, any other every app; a script no job runs, nothing.
+        for (const name of scripts) {
+          const jobs = [...graph.jobScripts].filter(([, run]) => run.has(name)).map(([id]) => id);
+          if (!jobs.length) continue;
+          if (jobs.every((id) => CI_JOB_SCOPES[id] === 'site')) siteBuild(`${path}: the site CI jobs run root script ${name}`);
+          else shared(`${path}: ci.yml's ${jobs.join(', ')} ${jobs.length === 1 ? 'job runs' : 'jobs run'} root script ${name}`);
+        }
         continue;
       }
     }
     if (manifest && path === OFFLINE_LOCK) {
       for (const app of lockOwners(manifest)) if (appIds.has(app)) select(app, `${path}: its locked assets changed`);
-      siteBuild(path);
+      siteData(path);
       continue;
     }
     // New export entries resolve every existing import as before.
@@ -388,13 +667,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
       }
       continue;
     }
-    // A package's tests reach only the apps that read them; any other file
-    // reaches its package's users and, if a root file names it, that file's.
-    const packageTests = path.match(/^packages\/[^/]+\/tests?(?=\/)/)?.[0];
-    const document = /^(?:packages|exes)\/.*\.md$/.test(path) && path;
-    const nodes = packageTests || document
-      ? [packageTests || document]
-      : [path.match(/^(packages|exes)\/[^/]+(?=\/)/)?.[0], ROOT_FILE.test(path) || graph?.edges.has(path) ? path : null].filter(Boolean);
+    const nodes = graphNodes(path, graph);
     if (graph && nodes.length) {
       // Per-app jobs name packages only to provision their own app's data.
       if (ROOT_FILE.test(path) && catalog.has(path)) {
@@ -420,9 +693,58 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
   return {
     apps,
     site: siteReasons.length > 0,
+    siteCode,
     reasons: { fallback: null, apps: Object.fromEntries(apps.map((app) => [app.id, appReasons.get(app.id)])), site: siteReasons },
     bookkeeping,
   };
+}
+
+export const EASTER_EGG_JOB = 'homepage-easter-egg';
+// The file names pnpm reads as a workspace project's manifest (its
+// MANIFEST_BASE_NAMES). It globs each workspace pattern for all three and reads
+// every match as its own project, so a package.yaml beside a package.json is a
+// second project, which can take any package name.
+export const WORKSPACE_MANIFESTS = Object.freeze(['package.json', 'package.json5', 'package.yaml']);
+// The homepage-easter-egg job runs on every push, nightly and dispatch, as
+// before (ci.yml). On a pull request it runs unless every changed path lies in
+// a tree it cannot read: apps/, exes/, models/, docs/ and every package outside
+// its dependency closure (EASTER_EGG_PACKAGES). Any other path runs it, as do a
+// workspace manifest anywhere (its pnpm install reads every one and runs their
+// install scripts, and its pnpm --filter runs every project of that name) and a
+// path no rule knows.
+export const EASTER_EGG_PACKAGES = Object.freeze(['packages/analytics']);
+const EASTER_EGG_SKIP_TREE = /^(?:apps|exes|models|docs)\//;
+export function easterEggCannotRead(path) {
+  if (WORKSPACE_MANIFESTS.includes(path.slice(path.lastIndexOf('/') + 1))) return false;
+  if (EASTER_EGG_SKIP_TREE.test(path)) return true;
+  const workspacePackage = path.match(/^packages\/[^/]+(?=\/)/)?.[0];
+  return Boolean(workspacePackage) && !EASTER_EGG_PACKAGES.includes(workspacePackage);
+}
+// The files the job reads, from its commands and the code they run, kept as
+// the evidence that no skip tree holds one (a path ending in / is a
+// directory): `pnpm install` and the Playwright install read root
+// configuration, every workspace package.json and the lockfile;
+// `node --test test/easter-egg.test.mjs` reads that file, the landing page it
+// renders (scripts/lib/landing-page.mjs, scripts/lib/apps-registry.mjs,
+// registry/apps.yml) and the easter eggs' manifests under site/; the two
+// `pnpm --filter` test scripts and `test:e2e` run the packages under
+// site/easter-eggs, whose e2e server renders the landing page and copies
+// site/ files and packages/analytics/src/index.js; Playwright loads the
+// reporter ci.yml names in PW_TEST_REPORTER. test/app-plan.test.mjs holds the
+// table to the job and to the skip trees.
+export const EASTER_EGG_INPUTS = Object.freeze(['site/', 'test/easter-egg.test.mjs', 'scripts/lib/landing-page.mjs', 'scripts/lib/apps-registry.mjs', 'registry/apps.yml', 'packages/analytics/src/', 'test-utils/test-durations-reporter.mjs', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']);
+
+// The app-plan job's easter_egg output: a pull request skips the job only on
+// `skip`; every other value, an empty one included, runs it (ci.yml).
+export const EASTER_EGG_OUTPUT = Object.freeze({ run: 'run', skip: 'skip' });
+
+// Why a pull request runs the homepage-easter-egg job: the changed paths
+// outside the trees it cannot read. Empty when every path lies in one.
+export function selectEasterEgg(changedPaths) {
+  if (!changedPaths.length) return ['no changed paths: no base revision, an unreadable diff, or a full run'];
+  const read = changedPaths.filter((path) => !easterEggCannotRead(path));
+  const shown = read.slice(0, 5).map((path) => `${path}: outside the trees the job cannot read`);
+  return read.length > shown.length ? [...shown, `and ${read.length - shown.length} more`] : shown;
 }
 
 export function createAppPlan(registry, changedPaths = [], graph = null, manifests = new Map(), { draft = false, release = false, carried = new Map() } = {}) {
@@ -438,6 +760,8 @@ export function createAppPlan(registry, changedPaths = [], graph = null, manifes
   const heavy = (entry) => ({ ...entry, heavy_tests: editsApp(registry.apps.find((app) => app.id === entry.app), changedPaths, edited, carried) });
   const browserTested = selected.filter((app) => app.ci.browser_test);
   const gpuTested = selected.filter((app) => app.ci.hardware_gpu);
+  // What a pull request's homepage-easter-egg job does; a draft plans it as a ready pull request does.
+  const easterEgg = selectEasterEgg(changedPaths);
   return Object.freeze({
     changedPaths: Object.freeze([...changedPaths]),
     selected: Object.freeze(selected),
@@ -447,28 +771,56 @@ export function createAppPlan(registry, changedPaths = [], graph = null, manifes
     releaseApps: Object.freeze({ include: Object.freeze(releasable.map(matrixEntry)) }),
     allApps: selected.length === registry.apps.length,
     site: site || selected.length > 0,
+    siteCode: affected.siteCode,
     reasons: Object.freeze(reasons),
     bookkeeping: Object.freeze([...(affected.bookkeeping ?? [])]),
+    // Why a pull request's homepage-easter-egg job runs; empty when it is skipped.
+    easterEgg: Object.freeze([...easterEgg]),
   });
 }
 
+// A diff git could not produce. It is never an empty diff: callers that
+// cannot read the change test everything (app-plan.mjs), run the workflow
+// (workflow-gate.mjs) or report the row as unknown (app-plan-shadow.mjs).
+export class UnreadableDiffError extends Error {}
+
+// The paths changed from the merge base of `base` and `head` to `head`, read
+// NUL-delimited so that git neither quotes nor splits a name and none is
+// trimmed, with both sides of every rename and copy: a moved input changes
+// what reads its old path. Without a base it is [], a full run. A diff git
+// cannot produce throws UnreadableDiffError.
 export function changedPathsFromGit({ base, head = 'HEAD', cwd }) {
   if (!base || /^0+$/.test(base)) return [];
+  let output;
   try {
-    return execFileSync('git', ['diff', '--name-only', `${base}...${head}`], {
+    output = execFileSync('git', ['diff', '-z', '--name-status', '--find-renames', '--find-copies', `${base}...${head}`], {
       cwd,
       encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).split('\n').map((path) => path.trim()).filter(Boolean);
-  } catch {
-    return [];
+      maxBuffer: 256 * 1024 * 1024,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch (error) {
+    throw new UnreadableDiffError(`git diff ${base}...${head} failed: ${String(error.stderr || error.message).trim().split('\n')[0]}`);
   }
+  const fields = output.split('\0');
+  const paths = new Set();
+  // Each entry is a status, then one path, or two for a rename (R) or copy (C).
+  for (let index = 0; index < fields.length - 1;) {
+    const status = fields[index++];
+    const names = fields.slice(index, index += /^[RC]/.test(status) ? 2 : 1);
+    if (!/^[A-Z]\d*$/.test(status) || names.length < (/^[RC]/.test(status) ? 2 : 1) || names.some((name) => !name)) {
+      throw new UnreadableDiffError(`git diff ${base}...${head} printed an entry it cannot be read from (${JSON.stringify(status)})`);
+    }
+    for (const name of names) paths.add(name);
+  }
+  return [...paths];
 }
 
-const MANIFEST = /^(?:(?:packages|apps|exes)\/[^/]+\/)?package\.json$|^registry\/(?:offline-assets\.lock\.json|apps\.yml|app-information\.yml|standalone\.json)$|^pnpm-lock\.yaml$|^\.gitattributes$/;
+const MANIFEST = /^(?:(?:packages|apps|exes)\/[^/]+\/)?package\.json$|^registry\/(?:offline-assets\.lock\.json|apps\.yml|app-information\.yml|standalone\.json)$|^pnpm-lock\.yaml$|^\.gitattributes$|^\.github\/workflows\/ci\.yml$/;
 
-// The text of each changed manifest and the lockfile for root manifest edits,
-// at the merge base (changedPathsFromGit diffs from there) and at head. A manifest
+// The text of each changed manifest (ci.yml included) and the lockfile for
+// root manifest edits, at the merge base (changedPathsFromGit diffs from there)
+// and at head. A manifest
 // missing on either side, or every manifest when there is no merge base, is left
 // out and counts as an ordinary code change.
 export function changedManifests({ base, head = 'HEAD', cwd, changedPaths }) {

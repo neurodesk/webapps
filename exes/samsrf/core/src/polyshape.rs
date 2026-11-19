@@ -16,6 +16,11 @@
 //!    neighbours are that close goes with its successor, and a vertex goes when
 //!    the point geometrically between its neighbours lies within the tolerance
 //!    of the line through the other two.
+//! 4. The fitted storage model orders boundaries by their earliest input point,
+//!    each from that point, solids clockwise; its hull starts at the first
+//!    stored vertex on the hull and runs clockwise. Area and centroid round
+//!    differently in another order (`geometry::Hull`), so the order is part of
+//!    the model.
 //!
 //! Intersection coordinates here are exact and rounded half away from zero.
 //! Turning and parity decisions use floating-point arithmetic. MATLAB's are
@@ -67,25 +72,83 @@ use std::collections::HashMap;
 
 type Point = (i64, i64);
 
-/// The hull MATLAB's `polyshape(points).convhull` returns, counter-clockwise, or
-/// `None` when that shape is empty or its grid cannot be represented safely.
+/// The hull MATLAB's `polyshape(points).convhull` returns, in the order MATLAB
+/// stores it: clockwise from the first vertex of the stored boundaries (see
+/// [`boundaries`]) that lies on the hull. `None` when that shape is empty or its
+/// grid cannot be represented safely.
 pub(crate) fn convex_hull(points: &[[f64; 2]]) -> Option<Vec<[f64; 2]>> {
-    let points: Vec<[f64; 2]> = points.iter().copied().filter(|p| p[0].is_finite() && p[1].is_finite()).collect();
-    let grid = Grid::new(&points)?;
-    let ring: Vec<Point> = points.iter().map(|p| grid.snap(p)).collect();
-    let mut original: HashMap<Point, [f64; 2]> = HashMap::new();
-    for (k, p) in ring.iter().zip(&points) {
-        original.entry(*k).or_insert(*p);
+    let shape = Shape::of(points)?;
+    let hull = shape.listed_hull()?;
+    let start = shape.rings.iter().flatten().find_map(|p| hull.iter().position(|k| k == p))?;
+    let n = hull.len();
+    Some((0..n).map(|i| shape.coordinates(hull[(start + n - i) % n])).collect())
+}
+
+/// The same hull as `clean` leaves it, counter-clockwise from the lowest grid
+/// point unless cleaning removed that point: the order the port used before it
+/// followed MATLAB's, which `geometry::ListedHull` keeps. The experimental gates
+/// verify the polyshape reproducer rounds' predictions, made in that order,
+/// against it.
+pub(crate) fn convex_hull_as_listed(points: &[[f64; 2]]) -> Option<Vec<[f64; 2]>> {
+    let shape = Shape::of(points)?;
+    Some(shape.listed_hull()?.into_iter().map(|k| shape.coordinates(k)).collect())
+}
+
+/// The boundaries MATLAB's `polyshape(points)` stores, in its order: each
+/// boundary starts at its input point that comes first among `points`, and the
+/// boundaries follow those points' order (a boundary with no input point comes
+/// last). Solid boundaries run clockwise and holes counter-clockwise. Empty when
+/// the shape is.
+pub(crate) fn boundaries(points: &[[f64; 2]]) -> Vec<Vec<[f64; 2]>> {
+    Shape::of(points).map_or_else(Vec::new, |shape| shape.rings.iter().map(|ring| ring.iter().map(|&k| shape.coordinates(k)).collect()).collect())
+}
+
+/// `polyshape(points)` on the grid: its cleaned rings in MATLAB's stored order.
+struct Shape {
+    grid: Grid,
+    original: HashMap<Point, [f64; 2]>,
+    rings: Vec<Vec<Point>>,
+}
+
+impl Shape {
+    fn of(points: &[[f64; 2]]) -> Option<Shape> {
+        let points: Vec<[f64; 2]> = points.iter().copied().filter(|p| p[0].is_finite() && p[1].is_finite()).collect();
+        let grid = Grid::new(&points)?;
+        let ring: Vec<Point> = points.iter().map(|p| grid.snap(p)).collect();
+        let mut original: HashMap<Point, [f64; 2]> = HashMap::new();
+        let mut first: HashMap<Point, usize> = HashMap::new();
+        for (i, (k, p)) in ring.iter().zip(&points).enumerate() {
+            original.entry(*k).or_insert(*p);
+            first.entry(*k).or_insert(i);
+        }
+        // Faces are traced with the filled region on their left; MATLAB keeps
+        // the opposite winding and starts each boundary at its earliest input point.
+        let mut rings: Vec<(usize, Vec<Point>)> = filled_rings(&ring)
+            .iter()
+            .map(|face| clean(face, grid.tolerance))
+            .filter(|cleaned| !cleaned.is_empty())
+            .map(|cleaned| {
+                let earliest = cleaned.iter().enumerate().filter_map(|(at, k)| first.get(k).map(|&i| (i, at))).min();
+                let (rank, at) = earliest.unwrap_or((usize::MAX, 0));
+                let n = cleaned.len();
+                (rank, (0..n).map(|i| cleaned[(at + n - i) % n]).collect())
+            })
+            .collect();
+        rings.sort_by_key(|(rank, _)| *rank);
+        Some(Shape { grid, original, rings: rings.into_iter().map(|(_, ring)| ring).collect() })
     }
-    let mut survivors = Vec::new();
-    for face in filled_rings(&ring) {
-        survivors.extend(clean(&face, grid.tolerance));
+
+    /// The cleaned hull of every ring's vertices, as `clean` leaves it.
+    fn listed_hull(&self) -> Option<Vec<Point>> {
+        let survivors: Vec<Point> = self.rings.iter().flatten().copied().collect();
+        let hull = clean(&integer_hull(survivors), self.grid.tolerance);
+        (hull.len() >= 3).then_some(hull)
     }
-    let hull = clean(&integer_hull(survivors), grid.tolerance);
-    if hull.len() < 3 {
-        return None;
+
+    /// An input vertex keeps its original coordinates; a new one is unsnapped.
+    fn coordinates(&self, k: Point) -> [f64; 2] {
+        self.original.get(&k).copied().unwrap_or_else(|| self.grid.unsnap(k))
     }
-    Some(hull.iter().map(|k| original.get(k).copied().unwrap_or_else(|| grid.unsnap(*k))).collect())
 }
 
 struct Grid {

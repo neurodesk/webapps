@@ -8,8 +8,11 @@
 // with "Save model JSON" just before running (what the app actually ran), the status
 // line and the app's own refusal text. Nothing is translated by this script beyond
 // what a person would do: the model is the CLI model plus Data_Precision (the
-// precision SamSrf_defaults.json's def_64bit selects for MATLAB); the app itself
-// replaces the model's file fields with the names of the files given to it.
+// precision SamSrf_defaults.json's def_64bit selects for MATLAB) and, for a forward
+// model, Css_Convention "samsrf" (SamSrf's complex CSS powers, which the app's CSS
+// convention control shows for a CSS model), as run_web_matrix.mjs's matlabModel gives
+// the engine; the app itself replaces the model's file fields with the names of the
+// files given to it.
 //
 // Usage: node run_ui_matrix.mjs APP_URL PLAN_JSON BUNDLE BUNDLE_SHA256_JSON OUTPUT_ROOT
 //
@@ -25,7 +28,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { expectedEngineOutcome, isEntry, treeHashes } from './run_web_matrix.mjs';
+import { expectedEngineOutcome, isEntry, matlabModel, treeHashes } from './run_web_matrix.mjs';
 
 const INPUT = '/input';
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -37,7 +40,7 @@ const MODEL_REFUSALS = {
 };
 
 /** What the app must do with a plan run; compare_ui_cli.py's expected_ui_outcome says the same. The app
- * refuses at model load what the engine would refuse, and shows the engine's subject-HRF text at Run. */
+ * refuses at model load what the engine would refuse; a run that names a subject-HRF file gets it. */
 export function expectedOutcome(run) {
   const engine = expectedEngineOutcome(run, 'browser');
   if (engine.status === 'refused') return { status: 'refused', stage: 'model', message: MODEL_REFUSALS[run.algorithm] };
@@ -54,13 +57,14 @@ export function uiRun(run, bundle) {
   const dataset = join(bundle, run.dataset);
   if (runs !== `${INPUT}/${run.dataset}/${hemisphere}_ubars*.gii`) throw new Error(`${run.id}: unexpected run wildcard ${runs}`);
   if (option('norm') !== '1') throw new Error(`${run.id}: only -norm=1 is planned`);
-  const model = { ...run.model, Data_Precision: run.precision };
+  const model = matlabModel(run);
   const files = {
     runs: readdirSync(dataset).filter((name) => new RegExp(`^${hemisphere}_ubars\\d+\\.gii$`).test(name)).sort().map((name) => join(dataset, name)),
     roi: [`${local(option('roi'))}.label`],
     surfaces: ['white', 'area'].map((kind) => join(local(option('surf')), `${hemisphere}.${kind}`)),
   };
   if (model.Aperture_File) files.apertures = [`${local(model.Aperture_File)}.mat`];
+  if (typeof model.Hrf === 'string' && model.Hrf.startsWith('hrf_')) files.subjectHrf = [join(bundle, `${model.Hrf}.mat`)];
   if (algorithm === 'cf') {
     files.template = [join(dataset, `${hemisphere}_benson.gii`)];
     files.seed = [`${local(model.SeedRoi)}.label`];
@@ -105,7 +109,7 @@ export async function runOne(browser, url, run, bundle, directory, served) {
     }
     await page.locator('#combine').selectOption(plan.combine);
     await page.locator('#normalise').setChecked(true);
-    for (const slot of ['runs', 'apertures', 'roi', 'surfaces', 'template', 'seed']) {
+    for (const slot of ['runs', 'apertures', 'roi', 'surfaces', 'template', 'seed', 'subjectHrf']) {
       if (plan.files[slot]) await page.locator(`#${slot}Input`).setInputFiles(plan.files[slot].map(payload));
     }
     await page.waitForFunction(() => document.querySelector('#statusText')?.textContent?.trim() === 'Ready', null, { timeout: 120000 });
@@ -132,7 +136,7 @@ export async function runOne(browser, url, run, bundle, directory, served) {
     const [archive] = await Promise.all([page.waitForEvent('download'), page.locator('#downloadAll').click()]);
     const zipBytes = readFileSync(await archive.path());
     writeFileSync(join(directory, archive.suggestedFilename()), zipBytes);
-    Object.assign(record, { zip: archive.suggestedFilename(), zipSha256: sha256(zipBytes) });
+    Object.assign(record, { zip: archive.suggestedFilename(), zipSha256: sha256(zipBytes), arithmeticProvenance: true });
     if (outcome.includes(OUTCOME[plan.algorithm]) && !pageErrors.length) {
       record.status = 'succeeded';
     } else {

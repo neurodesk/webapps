@@ -152,8 +152,8 @@ fn complex_css_rank_threshold_drops_the_recorded_baseline_column() {
     let expected = array(&root, &case["candidateBeta"]);
     let (beta, baseline) = css::fit_betas(&x, &y, Precision::Double);
     assert_eq!(expected[0], 0.0);
-    assert_eq!(baseline, expected[0]);
-    assert_eq!(beta.to_bits(), expected[1].to_bits());
+    assert_eq!(baseline.re, expected[0]);
+    assert_eq!(beta.re.to_bits(), expected[1].to_bits());
     // QR's untruncated solve retains the baseline, unlike mldivide. It is
     // essential that this gate uses the recorded mldivide coefficients.
     assert_eq!(case["qrMatchesMldivide"], false);
@@ -176,9 +176,9 @@ fn overflowing_css_design_matches_the_recorded_tiny_coefficient() {
     assert!(x.iter().map(|v| v.norm_sqr()).sum::<f64>().is_infinite());
     let (beta, baseline) = css::fit_betas(&x, &y, Precision::Double);
     assert_eq!(expected[0], 0.0);
-    assert_eq!(baseline, expected[0]);
+    assert_eq!(baseline.re, expected[0]);
     assert!(expected[1] > 0.0 && expected[1] < 1e-307);
-    assert_eq!(beta.to_bits(), expected[1].to_bits(), "{beta} != {}", expected[1]);
+    assert_eq!(beta.re.to_bits(), expected[1].to_bits(), "{beta} != {}", expected[1]);
 }
 
 /// The pinned pipeline inputs (apertures, HRF) that every trace was recorded with.

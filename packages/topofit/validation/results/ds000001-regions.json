@@ -1,0 +1,440 @@
+{
+  "surfaces": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/b438d1162e7192ca425ca47282b06fe62340c85a/topofit/0.5.1/onnx-20260911/validation/browser/controlled/",
+  "regionsSha256": "16cd2abfefc14d0705966e2ec0e1b8e457dafa6ae1a95e702cac81d969fadd54",
+  "hemispheres": {
+    "lh": {
+      "v1Vertices": 5377,
+      "pericalcarineVertices": 3112,
+      "v1PericalcarineDice": 0.43091059017552125,
+      "fsaverageV1PericalcarineDice": 0.4314883148831488,
+      "v1InOccipitalLobe": 1,
+      "v1CentroidRas": [
+        -11.747967229626404,
+        -84.01043179976534,
+        -32.98114449236946
+      ],
+      "hemisphereCentroidRas": [
+        -31.68148907906459,
+        -23.043986237399025,
+        1.4406710578121313
+      ],
+      "v1PosteriorFraction": 0.07857423458841244,
+      "v1MidlineDistanceMm": 8.855074060654745,
+      "hemisphereMidlineDistanceMm": 28.78859591009293
+    },
+    "rh": {
+      "v1Vertices": 4973,
+      "pericalcarineVertices": 3653,
+      "v1PericalcarineDice": 0.5049849292835613,
+      "fsaverageV1PericalcarineDice": 0.516979219462747,
+      "v1InOccipitalLobe": 1,
+      "v1CentroidRas": [
+        3.232811942178192,
+        -80.8766339741409,
+        -33.10333565190935
+      ],
+      "hemisphereCentroidRas": [
+        25.895702741121273,
+        -23.442766298166525,
+        3.524678204938355
+      ],
+      "v1PosteriorFraction": 0.09014789672806425,
+      "v1MidlineDistanceMm": 6.12570511114985,
+      "hemisphereMidlineDistanceMm": 28.78859591009293
+    }
+  },
+  "regions": {
+    "wang2015:visual": {
+      "lh": 3,
+      "rh": 3,
+      "minRmsMm": 0.2987098243484068
+    },
+    "wang2015:V1": {
+      "lh": 2,
+      "rh": 3,
+      "minRmsMm": 0.268376687433565
+    },
+    "wang2015:V2": {
+      "lh": 1,
+      "rh": 1,
+      "minRmsMm": 0.4172754406029511
+    },
+    "wang2015:V3": {
+      "lh": 1,
+      "rh": 1,
+      "minRmsMm": 0.2794458941610547
+    },
+    "wang2015:hV4": {
+      "lh": 0,
+      "rh": 1,
+      "minRmsMm": 0.45823691349158396
+    },
+    "wang2015:VO1": {
+      "lh": 0,
+      "rh": 0,
+      "minRmsMm": null
+    },
+    "wang2015:VO2": {
+      "lh": 0,
+      "rh": 1,
+      "minRmsMm": 0.39177353992933117
+    },
+    "wang2015:PHC1": {
+      "lh": 0,
+      "rh": 0,
+      "minRmsMm": null
+    },
+    "wang2015:PHC2": {
+      "lh": 0,
+      "rh": 2,
+      "minRmsMm": 0.40868299033367833
+    },
+    "wang2015:TO1": {
+      "lh": 1,
+      "rh": 0,
+      "minRmsMm": 0.34738414543540286
+    },
+    "wang2015:TO2": {
+      "lh": 0,
+      "rh": 0,
+      "minRmsMm": null
+    },
+    "wang2015:LO1": {
+      "lh": 0,
+      "rh": 1,
+      "minRmsMm": 0.2447958474005823
+    },
+    "wang2015:LO2": {
+      "lh": 0,
+      "rh": 1,
+      "minRmsMm": 0.3244004657144947
+    },
+    "wang2015:V3A": {
+      "lh": 1,
+      "rh": 0,
+      "minRmsMm": 0.44539496125061806
+    },
+    "wang2015:V3B": {
+      "lh": 0,
+      "rh": 0,
+      "minRmsMm": null
+    },
+    "wang2015:IPS0": {
+      "lh": 1,
+      "rh": 0,
+      "minRmsMm": 0.29572547580355923
+    },
+    "wang2015:IPS1": {
+      "lh": 0,
+      "rh": 1,
+      "minRmsMm": 0.46518278688431847
+    },
+    "wang2015:IPS2": {
+      "lh": 0,
+      "rh": 0,
+      "minRmsMm": null
+    },
+    "wang2015:IPS3": {
+      "lh": 2,
+      "rh": 1,
+      "minRmsMm": 0.3294570445632685
+    },
+    "wang2015:IPS4": {
+      "lh": 0,
+      "rh": 0,
+      "minRmsMm": null
+    },
+    "wang2015:IPS5": {
+      "lh": 0,
+      "rh": 0,
+      "minRmsMm": null
+    },
+    "wang2015:SPL1": {
+      "lh": 0,
+      "rh": 0,
+      "minRmsMm": null
+    },
+    "wang2015:FEF": {
+      "lh": 1,
+      "rh": 0,
+      "minRmsMm": 0.4383738477851036
+    },
+    "wang2015:V1v": {
+      "lh": 1,
+      "rh": 2,
+      "minRmsMm": 0.268376687433565
+    },
+    "wang2015:V1d": {
+      "lh": 1,
+      "rh": 0,
+      "minRmsMm": 0.4369764282687909
+    },
+    "wang2015:V2v": {
+      "lh": 0,
+      "rh": 1,
+      "minRmsMm": 0.48457904719597367
+    },
+    "wang2015:V2d": {
+      "lh": 1,
+      "rh": 0,
+      "minRmsMm": 0.4172754406029511
+    },
+    "wang2015:V3v": {
+      "lh": 1,
+      "rh": 1,
+      "minRmsMm": 0.2794458941610547
+    },
+    "wang2015:V3d": {
+      "lh": 0,
+      "rh": 0,
+      "minRmsMm": null
+    },
+    "aparc:lobe-frontal": {
+      "lh": 3,
+      "rh": 3,
+      "minRmsMm": 0.29195667814614457
+    },
+    "aparc:lobe-parietal": {
+      "lh": 3,
+      "rh": 3,
+      "minRmsMm": 0.226343162858977
+    },
+    "aparc:lobe-temporal": {
+      "lh": 3,
+      "rh": 3,
+      "minRmsMm": 0.2965378435242274
+    },
+    "aparc:lobe-occipital": {
+      "lh": 3,
+      "rh": 3,
+      "minRmsMm": 0.32089423750078383
+    },
+    "aparc:lobe-cingulate": {
+      "lh": 3,
+      "rh": 3,
+      "minRmsMm": 0.2253448700396605
+    },
+    "aparc:lobe-insula": {
+      "lh": 1,
+      "rh": 2,
+      "minRmsMm": 0.3604648487814997
+    },
+    "aparc:bankssts": {
+      "lh": 2,
+      "rh": 2,
+      "minRmsMm": 0.29901072661579764
+    },
+    "aparc:caudalanteriorcingulate": {
+      "lh": 2,
+      "rh": 1,
+      "minRmsMm": 0.20838837324826
+    },
+    "aparc:caudalmiddlefrontal": {
+      "lh": 3,
+      "rh": 3,
+      "minRmsMm": 0.29010614882049995
+    },
+    "aparc:cuneus": {
+      "lh": 1,
+      "rh": 1,
+      "minRmsMm": 0.3611162390502977
+    },
+    "aparc:entorhinal": {
+      "lh": 2,
+      "rh": 2,
+      "minRmsMm": 0.2266448055536672
+    },
+    "aparc:frontalpole": {
+      "lh": 0,
+      "rh": 0,
+      "minRmsMm": null
+    },
+    "aparc:fusiform": {
+      "lh": 3,
+      "rh": 3,
+      "minRmsMm": 0.2471923327779859
+    },
+    "aparc:inferiorparietal": {
+      "lh": 3,
+      "rh": 3,
+      "minRmsMm": 0.27425118893941985
+    },
+    "aparc:inferiortemporal": {
+      "lh": 3,
+      "rh": 3,
+      "minRmsMm": 0.2997296310735396
+    },
+    "aparc:insula": {
+      "lh": 1,
+      "rh": 2,
+      "minRmsMm": 0.3604648487814997
+    },
+    "aparc:isthmuscingulate": {
+      "lh": 1,
+      "rh": 2,
+      "minRmsMm": 0.3319778730213403
+    },
+    "aparc:lateraloccipital": {
+      "lh": 3,
+      "rh": 3,
+      "minRmsMm": 0.26477405458182895
+    },
+    "aparc:lateralorbitofrontal": {
+      "lh": 3,
+      "rh": 3,
+      "minRmsMm": 0.26791140052092743
+    },
+    "aparc:lingual": {
+      "lh": 3,
+      "rh": 3,
+      "minRmsMm": 0.2509810134610875
+    },
+    "aparc:medialorbitofrontal": {
+      "lh": 3,
+      "rh": 3,
+      "minRmsMm": 0.26608886071332283
+    },
+    "aparc:middletemporal": {
+      "lh": 3,
+      "rh": 3,
+      "minRmsMm": 0.34277869885923656
+    },
+    "aparc:paracentral": {
+      "lh": 0,
+      "rh": 0,
+      "minRmsMm": null
+    },
+    "aparc:parahippocampal": {
+      "lh": 2,
+      "rh": 3,
+      "minRmsMm": 0.263311018739885
+    },
+    "aparc:parsopercularis": {
+      "lh": 3,
+      "rh": 0,
+      "minRmsMm": 0.3332756899756125
+    },
+    "aparc:parsorbitalis": {
+      "lh": 1,
+      "rh": 2,
+      "minRmsMm": 0.3345552526503192
+    },
+    "aparc:parstriangularis": {
+      "lh": 1,
+      "rh": 2,
+      "minRmsMm": 0.3258456585509474
+    },
+    "aparc:pericalcarine": {
+      "lh": 0,
+      "rh": 2,
+      "minRmsMm": 0.42486326437852406
+    },
+    "aparc:postcentral": {
+      "lh": 3,
+      "rh": 3,
+      "minRmsMm": 0.2576739371406353
+    },
+    "aparc:posteriorcingulate": {
+      "lh": 2,
+      "rh": 2,
+      "minRmsMm": 0.2603706992651693
+    },
+    "aparc:precentral": {
+      "lh": 3,
+      "rh": 3,
+      "minRmsMm": 0.2406496411553439
+    },
+    "aparc:precuneus": {
+      "lh": 3,
+      "rh": 3,
+      "minRmsMm": 0.27788648873547356
+    },
+    "aparc:rostralanteriorcingulate": {
+      "lh": 2,
+      "rh": 2,
+      "minRmsMm": 0.36351812352348706
+    },
+    "aparc:rostralmiddlefrontal": {
+      "lh": 3,
+      "rh": 3,
+      "minRmsMm": 0.3362355767767411
+    },
+    "aparc:superiorfrontal": {
+      "lh": 3,
+      "rh": 3,
+      "minRmsMm": 0.2807755250095856
+    },
+    "aparc:superiorparietal": {
+      "lh": 3,
+      "rh": 3,
+      "minRmsMm": 0.226343162858977
+    },
+    "aparc:superiortemporal": {
+      "lh": 3,
+      "rh": 3,
+      "minRmsMm": 0.24208262830936383
+    },
+    "aparc:supramarginal": {
+      "lh": 2,
+      "rh": 3,
+      "minRmsMm": 0.2709077469159234
+    },
+    "aparc:temporalpole": {
+      "lh": 2,
+      "rh": 1,
+      "minRmsMm": 0.2501472592882673
+    },
+    "aparc:transversetemporal": {
+      "lh": 1,
+      "rh": 0,
+      "minRmsMm": 0.43262683176836064
+    }
+  },
+  "v1Patches": {
+    "LH01": {
+      "area_mm2": 80.70620519408101,
+      "rms_distance_mm": 0.268376687433565,
+      "center_ras_mm": [
+        -5.417728424072266,
+        -76.02020645141602,
+        -40.43212699890137
+      ]
+    },
+    "LH02": {
+      "area_mm2": 82.28994368316238,
+      "rms_distance_mm": 0.4369764282687909,
+      "center_ras_mm": [
+        -7.096626281738281,
+        -89.11865997314453,
+        -20.33698844909668
+      ]
+    },
+    "RH01": {
+      "area_mm2": 78.87600913095702,
+      "rms_distance_mm": 0.4840897820755602,
+      "center_ras_mm": [
+        2.392070770263672,
+        -63.91752624511719,
+        -17.724246978759766
+      ]
+    },
+    "RH02": {
+      "area_mm2": 131.64768736619612,
+      "rms_distance_mm": 0.4448789422289685,
+      "center_ras_mm": [
+        3.7714614868164062,
+        -78.67606353759766,
+        -41.570884704589844
+      ]
+    },
+    "RH03": {
+      "area_mm2": 102.4880414411257,
+      "rms_distance_mm": 0.4312517769821209,
+      "center_ras_mm": [
+        6.375156402587891,
+        -84.44005584716797,
+        -39.135948181152344
+      ]
+    }
+  }
+}

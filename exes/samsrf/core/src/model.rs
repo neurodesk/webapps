@@ -13,6 +13,7 @@
 //! struct fields. JSON has no `Inf`, so `Hrf = Inf` (fit the HRF) is the string
 //! `"Inf"`.
 
+use crate::arithmetic::ArithmeticReference;
 use crate::error::{Error, Result};
 use crate::expr::AnonymousFunction;
 use crate::precision::Precision;
@@ -53,6 +54,7 @@ pub enum FineFit {
 pub struct PrfModel {
     pub name: String,
     pub data_precision: Precision,
+    pub arithmetic_reference: ArithmeticReference,
     pub css_convention: crate::css::Convention,
     pub prf_function: AnonymousFunction,
     pub param_names: Vec<String>,
@@ -88,6 +90,7 @@ pub struct PrfModel {
 pub struct RevCorPrfModel {
     pub name: String,
     pub data_precision: Precision,
+    pub arithmetic_reference: ArithmeticReference,
     pub scaling_factor: f64,
     pub tr: f64,
     pub hrf: HrfSpec,
@@ -125,6 +128,7 @@ pub enum CfParameterEstimate {
 pub struct CfModel {
     pub name: String,
     pub data_precision: Precision,
+    pub arithmetic_reference: ArithmeticReference,
     pub seed_roi: String,
     pub template: String,
     pub smoothing: f64,
@@ -147,6 +151,16 @@ pub enum Model {
     RevCorPrf(RevCorPrfModel),
     #[serde(rename = "cf")]
     RevCorCf(CfModel),
+}
+
+impl Model {
+    pub fn arithmetic_reference(&self) -> ArithmeticReference {
+        match self {
+            Self::Prf(model) => model.arithmetic_reference,
+            Self::RevCorPrf(model) => model.arithmetic_reference,
+            Self::RevCorCf(model) => model.arithmetic_reference,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -191,6 +205,12 @@ pub fn parse_model_json(kind: AnalysisKind, json: &str) -> Result<Model> {
 struct Fields(Map<String, Value>);
 
 impl Fields {
+    fn arithmetic_reference(&self) -> Result<ArithmeticReference> {
+        let reference = ArithmeticReference::parse(&self.string_or("Arithmetic_Reference", "current")?)?;
+        reference.validate(self.precision()?)?;
+        Ok(reference)
+    }
+
     fn precision(&self) -> Result<Precision> {
         match self.string_or("Data_Precision", "double")?.as_str() {
             "double" => Ok(Precision::Double),
@@ -339,6 +359,16 @@ impl Fields {
         let coarse_fit_percentile = self.number_or("Coarse_Fit_Percentile", 100.0)?;
         let aperture_mean_response = self.flag_or("Aperture_Mean_Response", false)?;
         let compressive_nonlinearity = self.flag_or("Compressive_Nonlinearity", false)?;
+        let arithmetic_reference = self.arithmetic_reference()?;
+        let css_convention = match self.string_or("Css_Convention", "nonnegative")?.as_str() {
+            "nonnegative" => crate::css::Convention::Nonnegative,
+            "samsrf" => crate::css::Convention::Samsrf,
+            _ => return Err(Error::Model("Css_Convention must be 'nonnegative' or 'samsrf'".into())),
+        };
+        if arithmetic_reference == ArithmeticReference::MatlabIntel
+            && compressive_nonlinearity && css_convention == crate::css::Convention::Nonnegative {
+            return Err(Error::Model("MATLAB Intel CSS requires Css_Convention='samsrf'; nonnegative CSS is not supported by this reference".into()));
+        }
         if !(0.0..=100.0).contains(&coarse_fit_percentile) {
             return Err(Error::Model("Coarse fit percentile invalid! It should probably be between 99.9-100...".into()));
         }
@@ -361,11 +391,8 @@ impl Fields {
         Ok(PrfModel {
             name,
             data_precision: self.precision()?,
-            css_convention: match self.string_or("Css_Convention", "nonnegative")?.as_str() {
-                "nonnegative" => crate::css::Convention::Nonnegative,
-                "samsrf" => crate::css::Convention::Samsrf,
-                _ => return Err(Error::Model("Css_Convention must be 'nonnegative' or 'samsrf'".into())),
-            },
+            arithmetic_reference,
+            css_convention,
             prf_function,
             param_names,
             scaled_param: scaled_param.iter().map(|value| *value != 0.0).collect(),
@@ -441,6 +468,7 @@ impl Fields {
         Ok(RevCorPrfModel {
             name,
             data_precision,
+            arithmetic_reference: self.arithmetic_reference()?,
             scaling_factor,
             tr,
             hrf,
@@ -489,6 +517,7 @@ impl Fields {
         Ok(CfModel {
             name,
             data_precision,
+            arithmetic_reference: self.arithmetic_reference()?,
             seed_roi,
             template,
             smoothing,
@@ -608,6 +637,7 @@ mod tests {
         let expected = PrfModel {
             name: "pRF_Gaussian".into(),
             data_precision: Precision::Double,
+            arithmetic_reference: crate::arithmetic::ArithmeticReference::Current,
             css_convention: crate::css::Convention::Nonnegative,
             prf_function: AnonymousFunction::parse("@(P,ApWidth)prf_gaussian_rf(P(1),P(2),P(3),ApWidth)").unwrap(),
             param_names: vec!["x0".into(), "y0".into(), "Sigma".into()],
@@ -642,6 +672,7 @@ mod tests {
         let expected = RevCorPrfModel {
             name: "pRF".into(),
             data_precision: Precision::Double,
+            arithmetic_reference: crate::arithmetic::ArithmeticReference::Current,
             scaling_factor: 9.5,
             tr: 1.0,
             hrf: HrfSpec::SpmCanonical,
@@ -668,6 +699,7 @@ mod tests {
         let expected = CfModel {
             name: "CF_Rcp".into(),
             data_precision: Precision::Double,
+            arithmetic_reference: crate::arithmetic::ArithmeticReference::Current,
             seed_roi: "../benson/ROIs_Benson/V1".into(),
             template: "../benson/bi_benson".into(),
             smoothing: 0.0,
@@ -737,6 +769,30 @@ mod tests {
         assert_eq!(parse_model_json(AnalysisKind::RevCorCf, &gaussian).unwrap_err(), Error::NotImplemented("Data_Precision=single with Fit_pRF=1"));
         let double = with(serde_json::from_str(REVCOR_CF).unwrap(), "Fit_pRF", serde_json::json!(1));
         assert_eq!(revcor_cf(&double).unwrap().fit_prf, CfParameterEstimate::Gaussian);
+    }
+
+    #[test]
+    fn intel_css_requires_the_samsrf_convention() {
+        let mut map = minimal_prf();
+        map.insert("Arithmetic_Reference".into(), serde_json::json!("matlab-intel"));
+        map.insert("Compressive_Nonlinearity".into(), serde_json::json!(true));
+        for convention in [None, Some("nonnegative")] {
+            if let Some(value) = convention {
+                map.insert("Css_Convention".into(), serde_json::json!(value));
+            }
+            assert_eq!(model_error(&Value::Object(map.clone()).to_string(), AnalysisKind::Prf),
+                "MATLAB Intel CSS requires Css_Convention='samsrf'; nonnegative CSS is not supported by this reference");
+        }
+        map.insert("Css_Convention".into(), serde_json::json!("samsrf"));
+        assert!(prf(&Value::Object(map.clone()).to_string()).is_ok());
+        map.insert("Css_Convention".into(), serde_json::json!("nonnegative"));
+        for reference in ["current", "matlab-amd"] {
+            map.insert("Arithmetic_Reference".into(), serde_json::json!(reference));
+            assert!(prf(&Value::Object(map.clone()).to_string()).is_ok());
+        }
+        map.insert("Arithmetic_Reference".into(), serde_json::json!("matlab-intel"));
+        map.insert("Compressive_Nonlinearity".into(), serde_json::json!(false));
+        assert!(prf(&Value::Object(map).to_string()).is_ok());
     }
 
     #[test]
