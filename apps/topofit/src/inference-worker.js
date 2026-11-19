@@ -115,7 +115,7 @@ self.onmessage = async ({ data: job }) => {
         release: manifest.release,
         assets: Object.fromEntries(manifest.assets.map(({ filename, sha256 }) => [filename, sha256])),
         ...(job.patches ? { cortexAtlasSha256: cortexAtlas.sha256 } : {}),
-        ...(job.region !== 'cortex' ? { cortexRegionsSha256: cortexRegions.sha256 } : {}),
+        ...(job.region && job.region !== 'cortex' ? { cortexRegionsSha256: cortexRegions.sha256 } : {}),
         ...browserRuntime(),
       },
     });

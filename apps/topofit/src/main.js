@@ -844,7 +844,7 @@ async function run(analysisOnly = false, { signal, progress = () => {}, roiFile 
           $('outputSection').open = true;
           $('progress').value = 1;
           status(analysisOnly ? `Surface analysis ready · ${Math.round(data.elapsedSeconds)} s` : `Surfaces ready · ${data.provenance.surfaceVertices.toLocaleString()} vertices per hemisphere · ${Math.round(data.elapsedSeconds)} s`);
-          if (surfaceAnalysis?.flat_patch_status === 'NO_PATCH_MEETS_CRITERIA') status('Surfaces ready · no cortical patch meets the selected criteria');
+          if (surfaceAnalysis?.flat_patch_status === 'NO_PATCH_MEETS_CRITERIA') status(surfaceAnalysis.flat_patch_definition.region === 'cortex' ? 'Surfaces ready · no cortical patch meets the selected criteria' : 'Surfaces ready · no patch fits the search region; try a smaller patch radius');
           await loadResultSurfaces();
           await showResult(outputs.has('patch-qc') ? 'patch-qc' : 'qc', { duringRun: true });
           finish(null, { artifacts: automationArtifacts(data.files), provenance: data.provenance, measurements: { elapsedSeconds: data.elapsedSeconds, ...(data.provenance.surfaceAnalysis ? { surfaceAnalysis: data.provenance.surfaceAnalysis } : {}) } });
