@@ -2,11 +2,36 @@
 
 Keep iterative PRs in draft. Drafts run repository contracts, package tests,
 lint, the homepage easter egg unless every changed path lies in a tree it
-cannot read, and app unit/browser tests for directly edited `apps/<id>/` files and
-`models/<id>.manifest.json`. If the diff cannot be determined, the app planner
-keeps its conservative full selection. Changes confined to shared packages
-receive package tests during development; their downstream applications run
-when the PR is ready.
+cannot read, and app unit and build tests (`app-tests`) for directly edited
+`apps/<id>/` files and `models/<id>.manifest.json`. If the diff cannot be
+determined, the app planner keeps its conservative full selection. Changes
+confined to shared packages receive package tests during development; their
+downstream applications run when the PR is ready.
+
+A draft starts no browser job (`browser-e2e`, `browser-e2e-gpu`). To run the
+browser tests of a draft, dispatch `ci` on its branch:
+
+```sh
+gh workflow run ci.yml --ref <branch> -f scope=affected
+gh run list --workflow ci.yml --branch <branch> --event workflow_dispatch --limit 1
+```
+
+The dispatch plans what the branch changed since it left `main` as a ready
+pull request would (unit, browser and macOS GPU tests of those apps, and the
+composite site when the plan needs it), not the draft's narrower plan. Its
+result shows in Actions and on the commit, not in the pull request's checks
+list: PR #681's checks held only its pull request run while a newer dispatch
+run of the same commit held 115 more. It does not count against the
+full-plan budget, which counts only pull request runs (`listPullRequestRuns`).
+
+This costs feedback. In a snapshot of the 48 hours to 18 November 2026, 46 of
+63 draft `ci` runs ran browser jobs: 61 jobs, 548 minutes on Linux and 56 on
+macOS, 262 of them in runs a later push cancelled. No failure was recorded
+among the 61 (two were still running when the snapshot was taken), so no draft
+run in that window is known to have found a browser failure first. A person or agent who relied
+on draft browser runs now dispatches `ci` or marks the pull request ready,
+where a ready pull request has a budget of two full-plan runs in 24 hours
+([enforcement](#enforcement-in-ci)).
 
 Mark the PR ready when it is ready for integration testing. `ready_for_review`
 and every subsequent push to a ready PR run the complete affected-app plan,
@@ -314,6 +339,16 @@ green 34 minutes and merge to live 20 minutes. They become budgets only once
 the changes that reach them have landed and the numbers have held; a budget
 opens an issue on every miss.
 
+The draft share reads worse as drafts get cheaper. Since drafts start no
+browser job, the same 68 draft runs of that window would hold 1,015 fixed
+minutes of 1,139 instead of 1,743, counting completed job times: the share
+rises from about 58% to about 89%, while a
+draft run falls from 25.6 to 16.8 minutes, 14.9 of them fixed. With only the
+apps it edits left to test, a draft is mostly its fixed jobs, so a share
+under 30% is out of reach until the fixed jobs themselves shrink. Read the
+fixed and total minutes the row prints next to the share, and the minutes per
+draft run they give.
+
 The budgets come first, on about 80 requests a day (the run listings and one
 job count per `ci` pull request run that did work), and alone decide the exit
 code; nothing the measures do changes it. The measures then read the deploys,
@@ -356,7 +391,7 @@ When the complete plan would select more apps than the draft plan, the run
 starts the `full-plan` marker job, and the planner counts the pull request's
 earlier full-plan runs from the last 24 hours (`fullPlanDecision` in
 `scripts/lib/ci-usage.mjs`): runs that started the marker, and whole-catalogue
-runs, whatever event started them, `ready_for_review` and cancelled runs
+runs, of any pull request activity type, `ready_for_review` and cancelled runs
 included. A partial plan counts as much as a whole-catalogue one: on
 13 November 2026 one pull request ran its 14 selected apps nine times. Once
 the runs fill the budget of 2, the run uses the draft plan, skips the
@@ -375,6 +410,23 @@ commit after adding the label also starts every check again. **Re-run failed job
 someone removes it, and every later push then gets the full plan again, so
 remove it once the head you will merge has passed. A failure to read the runs
 or labels keeps the full plan.
+
+## Parked: merge queue support and a required check
+
+Both were built, measured or reviewed in November 2026 and parked on the
+branch `ci/merge-queue-support`, for the maintainer to decide:
+
+- Merge queue support (a `merge_group` trigger, and a push to `main` that skips
+  what a green queue run of each of its commits tested). With one entry per
+  queue run it adds about 12% runner minutes over the 12 pushes of 16 to 18
+  November 2026: the pushes repeat 1,294 fewer minutes and the queue runs add
+  about 1,508.
+- `ci-required`, one aggregate job a ruleset could require. A review found
+  that it does not yet mean "the ready run of this head was green": a matrix
+  leg can be cancelled while `needs` reads success, a draft run publishes the
+  same check on the same commit, unexpected skips pass, it pushed a 99-job
+  plan over the 100-job budget threshold, and the standalone publisher has
+  no supported bypass. The branch lists each with its fix.
 
 ## Heavy browser tests
 
@@ -689,8 +741,8 @@ head or a green draft run does not satisfy that requirement.
 
 No label or previous successful commit opts a new commit out of testing.
 The existing wide-PR macOS GPU policy remains: full-catalog GPU validation
-runs on main, nightly, or manual dispatch. Directly selected GPU apps still
-run during draft feedback.
+runs on main, nightly, or manual dispatch. A draft runs no GPU job; a ready
+pull request runs its directly selected GPU apps.
 
 A manual `ci` run plans like a pull request: `gh workflow run ci --ref
 <branch>` tests the apps the branch changed since it left main (on main,

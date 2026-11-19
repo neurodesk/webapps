@@ -593,7 +593,9 @@ jobs:
 
   browser-e2e:
     needs: app-plan
-    if: needs.app-plan.outputs.has_browser_apps == 'true'
+    # A draft runs unit and build tests only; dispatch ci on the branch for its
+    # browser tests (docs/quality/ci-development-tiers.md).
+    if: needs.app-plan.outputs.has_browser_apps == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -682,7 +684,8 @@ jobs:
   # data; SYNcro's full normalizations make it the slowest by far.
   browser-e2e-gpu:
     needs: app-plan
-    if: needs.app-plan.outputs.has_gpu_apps == 'true' && (github.event_name != 'pull_request' || needs.app-plan.outputs.all_apps != 'true')
+    # A draft starts no browser job; a ready pull request leaves a whole-catalogue suite to main.
+    if: needs.app-plan.outputs.has_gpu_apps == 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && needs.app-plan.outputs.all_apps != 'true'))
     runs-on: macos-15
     timeout-minutes: 300
     strategy:
