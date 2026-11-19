@@ -141,8 +141,9 @@ export const hrf = {
 export function subjectHrfKernel(model, fP) {
   if (!isSubjectHrf(model.Hrf)) throw new Error(`model: Hrf ${JSON.stringify(model.Hrf ?? null)} does not name a subject HRF fit (hrf_*)`);
   if (!(Number.isFinite(model.TR) && model.TR > 0)) throw new Error(`model: TR must be a positive number to build the subject HRF, not ${JSON.stringify(model.TR ?? null)}`);
-  if (![...fP].every(Number.isFinite)) throw new Error('subject HRF fit: fP holds a value that is not finite');
-  const kernel = hrf.oldSchool(model.TR, fP);
+  const parameters = Float64Array.from(fP);
+  if (!parameters.every(Number.isFinite)) throw new Error('subject HRF fit: fP holds a value that is not finite');
+  const kernel = hrf.oldSchool(model.TR, parameters);
   if (!kernel.length || !kernel.every(Number.isFinite)) throw new Error('subject HRF fit: fP gives an empty or non-finite kernel');
   return kernel;
 }

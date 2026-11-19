@@ -55,7 +55,9 @@ test('a Node Buffer inside a larger allocation reads as its own bytes', () => {
 
 test('a subject HRF kernel is refused when the fit or the TR cannot give one', () => {
   const model = { Hrf: 'hrf_subject', TR: 1 };
-  assert.ok(samsrf.subjectHrfKernel(model, [5.5, 15.5, 5, 2]).length > 0);
+  const kernel = samsrf.subjectHrfKernel(model, [5.5, 15.5, 5, 2]);
+  assert.ok(kernel.length > 0);
+  assert.deepEqual(samsrf.subjectHrfKernel(model, [5.5, 15.5, 5, 2].values()), kernel);
   assert.throws(() => samsrf.subjectHrfKernel(model, [5.5, 15.5, NaN, 2]), /fP holds a value that is not finite/);
   assert.throws(() => samsrf.subjectHrfKernel({ ...model, TR: 0 }, [5.5, 15.5, 5, 2]), /TR must be a positive number/);
 });

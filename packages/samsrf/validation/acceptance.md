@@ -243,9 +243,10 @@ matlab-intel arithmetic requires at least two volumes".
   zero signs included.
 - Product: runs, the same in every reference. No recorded HRF has a shape below
   1, so no user-facing failure is shown; a custom or fitted HRF with such a
-  shape would use the closed form. Its density differs from MATLAB's recorded
-  one by up to 59 ULP (shape 0.3, scale 1, x = 29.875). The effect on a fitted
-  HRF's results is not measured.
+  shape would use the closed form. Measured against MATLAB's recorded
+  densities it differs by 59 ULP at shape 0.3, scale 1, x = 29.875 and by
+  1,356 ULP at shape 0.95, scale 1, x = 584. These are examples, not a bound.
+  The effect on a fitted HRF's results is not measured.
 - To move it: identify MATLAB's small-shape `gampdf` and its zero-sign rule on
   held-out recordings.
 
