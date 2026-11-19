@@ -110,6 +110,8 @@ async function hold(page, target) {
 
 // WEBMCP_HOLD_DELAY_MS delays each request, as a slow agent would, to show the answer goes to its own dialog.
 const HOLD_DELAY_MS = Number(process.env.WEBMCP_HOLD_DELAY_MS ?? 0);
+// WEBMCP_EXAMPLE_DELAY_MS holds each example download that long, as a slow network does.
+const EXAMPLE_DELAY_MS = Number(process.env.WEBMCP_EXAMPLE_DELAY_MS ?? 0);
 
 async function holdOnce(page, { role, count }) {
   await page.evaluate(([role, delay]) => {
@@ -340,6 +342,11 @@ try {
     report.push(entry);
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true, serviceWorkers: 'block' });
     await context.route(/googletagmanager\.com|google-analytics\.com|cloudflareinsights\.com/, route => route.abort());
+    // A slow network for the examples, to show that the work an action starts is waited for.
+    if (EXAMPLE_DELAY_MS) await context.route(/huggingface\.co/, async route => {
+      await new Promise(resolve => { setTimeout(resolve, EXAMPLE_DELAY_MS); });
+      await route.fallback();
+    });
     const progress = { phase: 'opening the page' };
     const timer = { id: null };
     // A page that stops answering (a busy worker after a click) fails its app instead of stalling the catalogue.
