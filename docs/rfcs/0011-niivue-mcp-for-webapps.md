@@ -238,14 +238,14 @@ same thing.
 
 | Tool | What it does |
 | --- | --- |
-| `app_describe` | Returns the contract's operations, the examples that the page's example selectors offer with the run tool and parameters each needs, `unavailableExamples` with the reason each cannot be loaded, the viewers, the current run, the files each input role holds (`inputs`), the files the person loaded into the page's own inputs (`pageFiles`) and the example the person loaded in the page (`pageExample`). |
+| `app_describe` | Returns the contract's operations, the examples that the page's example selectors offer with the run tool and parameters each needs, `unavailableExamples` with the reason each cannot be loaded, the viewers, the current run, the files each input role holds (`inputs`), the files the person loaded into the page (`pageFiles`, each entry marked `current` while the person has done nothing else in the page since), whether the page may hold inputs the tools cannot list (`pageMayHoldOtherInputs`) and the example the person loaded in the page (`pageExample`). A run the tools did not start in this examination is reported as `stale`, without its report. |
 | `inputs_request_files { role, message? }` | Asks the person to choose files for a role in a shared dialog and holds them. Returns names and sizes, or `{ declined: true }`. A DICOM role also offers a folder. |
-| `inputs_use_page_files { role, input }` | Holds the files of one `pageFiles` entry for a role, so an agent runs on what the person already opened. |
+| `inputs_use_page_files { role, input }` | Holds the files of one `pageFiles` entry for a role, so an agent runs on what the person already opened. An entry that is not current needs the person's confirmation in a shared dialog; refusing returns `{ declined: true }`. |
 | `inputs_load_example { exampleId }` | Downloads an example through `fetchModel`, which checks its checksums, and holds its files by role in place of everything held before. |
-| `run_<operation>` | One per operation. Takes `parameters`, with a JSON Schema written from the contract (a `required: true` parameter is required), `selections` for DICOM roles, `inputs` for URL roles and `waitSeconds` (default 30, at most 600). Refuses with `RUN_ACTIVE` while another run is going. Asks the person before it lets the app fetch a URL input. Hands the held files to the app, starts the run and returns the run when it ends or when `waitSeconds` passes. The files stay held, so a rerun with other parameters asks for nothing. Aborting the call cancels the run. |
-| `runs_get { runId?, waitSeconds? }` | Returns the named run, or the current one, and can wait for it to end. A run another run replaced returns `RUN_REPLACED`, never the other run. |
-| `runs_cancel { runId? }` | Cancels the current run. |
-| `outputs_download { runId, artifactId }` | Saves an output of the named run, or `report`, to the person's downloads, if that run is still the current one. |
+| `run_<operation>` | One per operation. Takes `parameters`, with a JSON Schema written from the contract (a `required: true` parameter is required), `selections` for DICOM roles, `inputs` for URL roles and `waitSeconds` (default 30, at most 600). Refuses with `RUN_ACTIVE` while another run is going. Asks the person before it lets the app fetch a URL input, naming its origin and saying that the app reads the addresses under it. Hands the held files to the app, starts the run and returns the run when it ends or when `waitSeconds` passes. The files stay held, so a rerun with other parameters asks for nothing. Aborting the call cancels the run. |
+| `runs_get { runId?, waitSeconds? }` | Returns the named run, or the current one, and can wait for it to end. A run another run replaced returns `RUN_REPLACED`, never the other run; a run from an earlier examination returns `RUN_STALE`. |
+| `runs_cancel { runId? }` | Cancels the named or current run. The automation checks the run ID as it cancels, so a cancel never reaches a run that replaced the named one. |
+| `outputs_download { runId, artifactId }` | Saves an output of the named run, or `report`, to the person's downloads, if that run is still the current one and belongs to this examination. |
 | `user_ask { question, options?, allowText? }` | Asks the person a question in a shared dialog. Returns `{ answer }` or `{ dismissed: true }`. An agent uses it to resolve `SERIES_SELECTION_REQUIRED` from the candidates in the failed run. |
 | `viewers_list`, `viewers_state`, `viewers_crosshair`, `viewers_tab`, `viewers_regions`, `viewers_volumes`, `viewers_display`, `viewers_niivue` | Send the matching `viewers.*` command. They are registered before any viewer exists, so the command's own error answers a call that comes too early. `viewers_niivue` offers only the nv-mcp methods described below. |
 
@@ -263,28 +263,50 @@ agent sees the page.
 
 `viewers_niivue` offers only the nv-mcp methods that
 `webmcp/niivue-methods.js` classifies as reading the scene, changing the
-display, or fetching an address. Methods that export pixels or files
-(`screenshot`, `save`), edit or remove data, add page controls or take
-settings that can name an address are not offered. A test holds the table to
-nv-mcp's method list, so a method nv-mcp adds stays out until someone
-classifies it. Before a call that names an address (any `url`, or a label
-table other than `freesurfer`) and before a run with URL inputs, the shared
-prompt asks the person, naming the app and each resolved address. Declining
-returns `{ declined: true, addresses }` and nothing is fetched. The desktop
-agent server and the nv-mcp WebSocket keep nv-mcp's full vocabulary.
+display, or loading one file. Methods that export pixels or files
+(`screenshot`, `save`), edit or remove data (`set_slide` and `set_signal`
+among them), load a payload that can name further addresses
+(`load_document`), add page controls or take settings that can name an
+address are not offered, and `set_volume` refuses `affine`, `reset_affine`,
+`transform` and `load_all_frames`. A test holds the table to nv-mcp's method
+list, so a method nv-mcp adds stays out until someone classifies it, and
+holds an audit of every offered method against the pinned nv-mcp version, so
+a version bump fails until the audit is redone. Before a call that names an
+address (any `url`, or a label table address) and before a run with URL
+inputs, the shared prompt asks the person, naming the app, each resolved
+address and the server that sees the request. Declining returns
+`{ declined: true, addresses }` and nothing is fetched. The tool does not
+predict what NiiVue would fetch: it fetches each approved address itself,
+without cookies, refuses a redirect (`REDIRECT_REFUSED`), and passes NiiVue a
+`blob:` URL of the bytes with the file name, so NiiVue never receives an
+address the agent wrote. A run with URL inputs is different: ZARRo reads a
+store's chunks itself, so its prompt says that the app reads the addresses
+under the approved one. The desktop agent server and the nv-mcp WebSocket
+keep nv-mcp's full vocabulary.
 
-Held files live in `webmcp/tool-inputs.js` and belong to one examination.
-Anything the person does to change what the page shows starts a new one with
-nothing held: a trusted change on a classified input or a trusted file drop
-(also during a run), an untrusted load while no run is going (a page drop or a
-handoff through the inputs), the page's example selector starting a load, a
-`takeHandoff` receiver taking files (`nd-handoff`), and the app's `reset`. A
-load an operation makes while its run is going is untrusted and changes
-nothing, so reruns keep their files. A reset in the same task as the person's
-load is part of that load and keeps it, so an app that clears its picker and
-resets as it reads (dcm2niix) still offers those files. An example that
-finishes downloading after the examination changed is discarded with
-`EXAMINATION_CHANGED`. The page files come only from loads the module saw.
+An examination (`webmcp/tool-inputs.js`) lasts while the person leaves the
+workspace alone. The tools do not list the app events that change what the
+page shows; any trusted `pointerup`, `keydown`, `input`, `change`, `paste` or
+`drop` in the workspace ends it, outside the agent's dialogs, the shared bar
+and its dialogs, and scroll or modifier keys. The page's example selector, a
+handoff and the app's `automation.reset()` end it too. A new examination
+holds no files, the runs started before it are stale (`app_describe.run`
+says so; `runs_get`, `runs_cancel` and `outputs_download` return
+`RUN_STALE`), and a file prompt, page-file confirmation or example download
+that answers afterwards commits nothing (`EXAMINATION_CHANGED`). A run's own
+loads are untrusted and change nothing, so reruns keep their files.
+
+`pageFiles` lists each classified input's files from its change and
+`nd-files` events, and files dropped on the page or handed over by
+`takeHandoff` that reach no input (`received:drop`, `received:handoff`). An
+entry is `current` while the person has done nothing else in the page since
+it was loaded; `inputs_use_page_files` asks the person to confirm any other.
+A pick made while a run is going is not recorded, since the busy app may
+ignore it. `pageMayHoldOtherInputs` turns true once the person has done
+something whose effect the tracker cannot see, such as using a control or an
+input inside a shadow root. An app whose list changes without a change event
+reports it with `nd-files`, as QSMbly's remove buttons and dcm2niix's drop
+zone and Clear do.
 
 An example's file roles serve the page's example selector and sometimes differ
 from the contract's. The example's `automation` field in `examples.json` maps
@@ -324,27 +346,40 @@ started is asking. Closing a dialog declines it, and an aborted call closes it.
 - **Tested.** Node tests build the table from every app's `automation.json`
   and check that each run schema accepts and refuses the same parameters as
   the contract, both through a JSON Schema reader and through the tools' own
-  input check; they also cover the examination lifetime, run binding, the
-  nv-mcp method table and fetch approval.
+  input check, including inherited names, near multiples and unsafe
+  integers; they also cover the examination lifetime, run binding in the
+  automation, the bounded run memory, the nv-mcp method table and its audit,
+  redirect refusal and fetch approval.
   `pnpm --filter @neurodesk/agent-server validate:webmcp` runs a whole Brain
   Extraction analysis through Chrome's own WebMCP: example, run, viewer, both
   dialogs, the real file chooser, a rerun with another threshold, a file the
   person opened in the sidebar, and a download.
   `node test/webmcp-examination.smoke.mjs` drives in Chromium what a person
   can do to the agent's files: picking an example in NiiMath, opening a file
-  during a run (a trusted file pick), dropping a file, dcm2niix's picker, and
-  Brain Extraction's viewer permissions and fetch approval.
+  during a run and after one, dropping a file, QSMbly's mask remove button,
+  dcm2niix's settings and Clear, a drop on DWI2TRX's viewer, a handoff from
+  DICOM View to White matter lesions, ZARRo's store approval, and Brain
+  Extraction's viewer permissions, redirect refusal and fetch approval.
+  `node test/webmcp-interaction.smoke.mjs` holds a file in every app and
+  performs each trusted action the workspace offers (every file input, every
+  remove or clear button, a select, a checkbox, a text field, a canvas); each
+  must release it.
   `node test/webmcp.smoke.mjs` checks every app of the built site at 1440 and
   390 px in Chrome's own WebMCP (it fails without it unless
   `WEBMCP_STAND_IN=1`): the full tool set, `app_describe` with every loadable
-  example, both dialogs, the Privacy statement, a file opened in each of the
-  app's inputs staying available to the agent, and that a browser without
-  WebMCP loads none of its modules. On 18 November 2026 all 63 apps passed in
+  example, both dialogs, the Privacy statement, each light-DOM file input
+  (folder inputs included) listing what it holds, and that a browser without
+  WebMCP loads none of its modules. Inputs in shadow roots are reported as not
+  covered. On 18 November 2026 all 63 apps passed in
   386 s; CI runs it in the composite-site job.
-- **Full runs.** `WEBMCP_RUNS=1` also loads each app's first loadable example,
-  runs it with the tool and parameters `app_describe` gives and saves an
-  output, through the tools only. A run that fails or outlasts its limit fails
-  its app unless `test/webmcp-run-skips.json` names the app with its reason.
+- **Full runs.** `WEBMCP_RUNS=1` also loads each app's loadable examples
+  (`WEBMCP_EXAMPLES=first`: only the first), runs each with the tool and
+  parameters `app_describe` gives and saves an output, through the tools
+  only. A run that does not complete fails its app unless
+  `test/webmcp-run-skips.json` names the app with the outcome it expects
+  (`timed out`, `run failed` with an error pattern, or `no loadable example`)
+  and the reason; any other outcome fails. The 18 November figures below
+  ran the first example only.
   On 18 November 2026, on 16 cores with SwiftShader WebGPU, 53 apps
   completed. 45 completed within 420 s in four parallel shards: ants,
   ants-denoise, brain-extraction, brain2print, calcium-imaging, carotid-flow,
