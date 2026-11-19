@@ -14,7 +14,7 @@ function evaluate(expression, event, overrides = {}) {
   // GitHub permits hyphens in property names; JavaScript requires brackets.
   const source = expression.replace(/^\$\{\{\s*|\s*\}\}$/g, '').replaceAll('needs.app-plan.', "needs['app-plan'].").replaceAll('needs.composite-site.', "needs['composite-site'].");
   return runInNewContext(source, {
-    github: { event_name: event, workflow: 'ci', ref: 'refs/heads/main' },
+    github: { event_name: event, workflow: 'ci', ref: 'refs/heads/main', event: { pull_request: { draft: false } } },
     cancelled: () => false,
     inputs: { agentic_mode: 'interactions' },
     needs: { 'app-plan': { outputs: { has_gpu_apps: 'true', all_apps: 'false' } }, 'composite-site': { result: 'success' } },
@@ -41,8 +41,14 @@ test('new pushes cannot cancel scheduled or manually requested coverage', async 
 });
 
 test('routine events omit slow repeats while nightly, manual and release retain the full tier', async () => {
+  // A merge queue run is the pre-merge twin of the push that follows it.
   for (const event of [...events, 'release']) {
-    assert.equal(evaluate(ci.env.NEURODESK_E2E_SKIP_SLOW, event), ['pull_request', 'push'].includes(event) ? '1' : '', event);
+    assert.equal(evaluate(ci.env.NEURODESK_E2E_SKIP_SLOW, event), ['pull_request', 'push', 'merge_group'].includes(event) ? '1' : '', event);
+  }
+  const heavy = ci.jobs['browser-e2e'].steps.find((step) => step.env?.NEURODESK_E2E_SKIP_HEAVY).env.NEURODESK_E2E_SKIP_HEAVY;
+  for (const event of [...events, 'release']) {
+    assert.equal(evaluate(heavy, event, { matrix: { heavy_tests: false } }), ['pull_request', 'push', 'merge_group'].includes(event) ? '1' : '', event);
+    assert.equal(evaluate(heavy, event, { matrix: { heavy_tests: true } }), '', `${event}: an edited app runs its @heavy tests`);
   }
   for (const ref of ['refs/tags/v1.0.20261015', 'refs/heads/feature']) {
     assert.equal(evaluate(ci.env.NEURODESK_E2E_SKIP_SLOW, 'push', { github: { event_name: 'push', ref } }), '', ref);
@@ -91,7 +97,8 @@ test('scientific CPU and hardware GPU tests keep independent builds and test-dat
   assert.equal(ci.jobs['browser-e2e'].steps.find((step) => step.name === 'Download ${{ matrix.app }} test data').env.CPU_ONLY, "${{ matrix.hardware_gpu && '--cpu' || '' }}");
   for (const event of events) {
     assert.equal(evaluate(gpu.if, event), true, `${event} retains selected GPU apps`);
-    assert.equal(evaluate(gpu.if, event, { needs: { 'app-plan': { outputs: { has_gpu_apps: 'true', all_apps: 'true' } } } }), event !== 'pull_request', `${event} catalog coverage`);
+    // A ready pull request and a merge queue run leave a whole-catalogue suite to the push.
+    assert.equal(evaluate(gpu.if, event, { needs: { 'app-plan': { outputs: { has_gpu_apps: 'true', all_apps: 'true' } } } }), !['pull_request', 'merge_group'].includes(event), `${event} catalog coverage`);
   }
 });
 
@@ -218,7 +225,8 @@ test('correctness lint runs on every CI event with no duplicate routine gate', a
   assert.match(full.if, /!cancelled\(\)/);
   for (const event of events) {
     assert.equal(evaluate(full.if, event, { cancelled: () => true }), false, `${event} respects cancellation`);
-    assert.equal(evaluate(full.if, event), !['pull_request', 'push'].includes(event), event);
+    // quality.yml lints pull requests and pushes; a merge queue run's commit is linted by the push that lands it.
+    assert.equal(evaluate(full.if, event), ['schedule', 'workflow_dispatch'].includes(event), event);
   }
   const workspace = ci.jobs['workspace-contracts'].steps.find((step) => step.run === 'node scripts/lint-workspaces.mjs');
   assert.ok(workspace);

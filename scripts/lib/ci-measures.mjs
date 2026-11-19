@@ -30,6 +30,8 @@ const CI_JOBS = Object.freeze({
   'app-plan': 'plan',
   'full-plan': 'plan',
   'full-plan-withheld': 'plan',
+  // The aggregate required check reads the other jobs' results and tests nothing itself.
+  'ci-required': 'plan',
   'workspace-contracts': 'fixed',
   'homepage-easter-egg': 'fixed',
   'app-tests': 'app',

@@ -7,6 +7,7 @@ import { CATALOG, INDEPENDENT_CONFIG, SITE, reachableFrom } from './workspace-gr
 import { handoffCatalogEntry, validateAppInformation } from './app-information.mjs';
 import { appCatalogIds, parseAppsRegistry } from './apps-registry.mjs';
 import { validateStandalone } from './standalone.mjs';
+import { AGGREGATE_JOBS } from './tested-base.mjs';
 
 const NON_CODE_PREFIXES = ['docs/', '.changeset/'];
 // Self-contained packages outside apps/ with their own CI job (the homepage
@@ -323,8 +324,11 @@ function relatedJobs(jobs, id, direction) {
 // CI_JOB_SCOPES places, and every job that needs a changed job, or that a
 // changed job needs (the plan aside), at the base or the head, has the same
 // scope: a job of another scope could consume what changed while the
-// narrowed plan skips it, or skip the changed job by being skipped itself. A
-// key outside `jobs` reaches every app.
+// narrowed plan skips it, or skip the changed job by being skipped itself. The
+// aggregate required check (AGGREGATE_JOBS) needs every job but reads only
+// their results and runs whatever the plan selects, so it is no such
+// dependant; a change to it is a change to an unplaced job. A key outside
+// `jobs` reaches every app.
 export function ciImpact({ before, after }) {
   let old;
   let now;
@@ -346,7 +350,7 @@ export function ciImpact({ before, after }) {
     for (const id of jobs) {
       for (const [side, workflow] of [['base', old], ['head', now]]) {
         for (const direction of ['dependants', 'dependencies']) {
-          const other = relatedJobs(workflow.jobs, id, direction).find((job) => job !== 'app-plan' && CI_JOB_SCOPES[job] !== CI_JOB_SCOPES[id]);
+          const other = relatedJobs(workflow.jobs, id, direction).find((job) => job !== 'app-plan' && !(direction === 'dependants' && AGGREGATE_JOBS.includes(job)) && CI_JOB_SCOPES[job] !== CI_JOB_SCOPES[id]);
           if (other) return { shared: `its ${id} job changed, and at the ${side} ${direction === 'dependants' ? `${other} needs it` : `it needs ${other}`}, which tests more than the ${CI_JOB_SCOPES[id]} scope` };
         }
       }
@@ -745,6 +749,29 @@ export function selectEasterEgg(changedPaths) {
   const read = changedPaths.filter((path) => !easterEggCannotRead(path));
   const shown = read.slice(0, 5).map((path) => `${path}: outside the trees the job cannot read`);
   return read.length > shown.length ? [...shown, `and ${read.length - shown.length} more`] : shown;
+}
+
+// What the planner may do on each event that starts ci.yml. `draft`: plan a
+// draft pull request's direct edits; `budget`: apply a ready pull request's
+// full-plan budget; `everyRun`: the easter egg runs whatever changed;
+// `queueProof`: a push may skip what a green merge queue run of its commits
+// tested (queueCoverage in tested-base.mjs). A merge queue run is no pull
+// request's retry: it plans in full with no budget. An event not listed,
+// including none (a local run), plans as before and skips nothing.
+export function eventPolicy(eventName, { draft = '' } = {}) {
+  const none = { draft: false, budget: false, everyRun: false, queueProof: false };
+  switch (eventName) {
+    case 'pull_request':
+      return { ...none, draft: draft === 'true', budget: draft !== 'true' };
+    case 'push':
+      return { ...none, everyRun: true, queueProof: true };
+    case 'merge_group':
+    case 'schedule':
+    case 'workflow_dispatch':
+      return { ...none, everyRun: true };
+    default:
+      return { ...none, everyRun: Boolean(eventName) };
+  }
 }
 
 export function createAppPlan(registry, changedPaths = [], graph = null, manifests = new Map(), { draft = false, release = false, carried = new Map() } = {}) {

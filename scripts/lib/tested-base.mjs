@@ -56,6 +56,9 @@ export const APP_JOBS = ['app-tests', 'browser-e2e', 'browser-e2e-gpu'];
 export const RERUN_JOBS = ['workspace-contracts', 'homepage-easter-egg', 'example-cache-retention', 'full-plan', 'full-plan-withheld'];
 export const SITE_JOBS = ['composite-site', 'site-runtime', 'site-audit', 'site-e2e', 'site-mobile', 'site-catalog'];
 export const NIGHTLY_JOBS = ['agent-interactions', 'processing-workflows'];
+// The required check of pull requests and merge queue runs. It fails only when
+// another job of its run did not pass, and that job is listed itself.
+export const AGGREGATE_JOBS = ['ci-required'];
 const APP_JOB = new RegExp(`^(?:${APP_JOBS.join('|')}) \\(([^,)]+)[,)]`);
 const UNPASSED = new Set(['failure', 'cancelled', 'timed_out', 'startup_failure', 'action_required', 'stale']);
 const PASSED = new Set(['success', 'skipped', 'neutral']);
@@ -68,7 +71,7 @@ export function carriedApps(jobs, appIds) {
     const base = job.name.replace(/ \(.*$/, '');
     if (!UNPASSED.has(job.conclusion)) unattributed.push(`${job.name} (not finished)`);
     else if (app && (!appIds || appIds.has(app))) carried.set(app, [...(carried.get(app) ?? []), job.name]);
-    else if (app || ![...RERUN_JOBS, ...NIGHTLY_JOBS].includes(base)) unattributed.push(job.name);
+    else if (app || ![...RERUN_JOBS, ...NIGHTLY_JOBS, ...AGGREGATE_JOBS].includes(base)) unattributed.push(job.name);
   }
   return { carried, unattributed };
 }
@@ -173,4 +176,97 @@ export async function resolveTestedBase({ head, branch = 'main', workflow = 'ci.
     return { base: null, reason: `the last successful ${workflow.replace(/\.yml$/, '')} run on ${branch} is unknown: ${error.message}` };
   }
   return testedBase({ runs, head: sha, branch, git, workflow: workflow.replace(/\.yml$/, ''), atHead, events });
+}
+
+// A push to main whose commits a merge queue already tested. GitHub alone
+// starts `merge_group` runs, and a queue run tests the very commit that then
+// lands on main, with the complete plan from the queue's base. A push is
+// covered when every commit it adds since its base (resolveCiBase) has a
+// completed, successful ci run of this repository with event merge_group for
+// that commit's own SHA. Running is the default: no base, apps the base run
+// left untested, a commit without such a run, more than QUEUE_COMMIT_LIMIT
+// commits, a git or API error, a timeout and an answer of any other shape
+// leave the push as it was.
+export const QUEUE_EVENT = 'merge_group';
+export const QUEUE_COMMIT_LIMIT = 20;
+const CI_WORKFLOW_PATH = '.github/workflows/ci.yml';
+const QUEUE_DEADLINE_MS = 60_000;
+
+// Whether one run record of the Actions API proves that ci passed in a merge
+// queue at `sha` in `repository`. Every field is checked, none is assumed.
+export function queueRunProves(run, { sha, repository }) {
+  return run !== null && typeof run === 'object' && !Array.isArray(run)
+    && Number.isSafeInteger(run.id) && run.id > 0
+    && run.event === QUEUE_EVENT
+    && run.status === 'completed'
+    && run.conclusion === 'success'
+    && typeof sha === 'string' && /^[0-9a-f]{40}$/.test(sha) && run.head_sha === sha
+    && typeof run.path === 'string' && run.path.replace(/@.*$/, '') === CI_WORKFLOW_PATH
+    && typeof repository === 'string' && repository !== ''
+    && run.repository?.full_name === repository
+    && run.head_repository?.full_name === repository;
+}
+
+// The commits `head` adds to `base`, newest first, or null when git cannot say.
+function addedCommits(base, head, cwd) {
+  try {
+    const listed = execFileSync('git', ['rev-list', `${base}..${head}`], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split('\n').filter(Boolean);
+    return listed.every((sha) => /^[0-9a-f]{40}$/.test(sha)) ? listed : null;
+  } catch {
+    return null;
+  }
+}
+
+// Whether a merge queue tested every commit of a push to main, and the runs
+// that prove it. `tested` is resolveCiBase's answer for the push.
+export async function queueCoverage({ tested, head, cwd, env = process.env, fetchImpl = fetch, deadlineMs = QUEUE_DEADLINE_MS }) {
+  const no = (reason) => ({ covered: false, runs: [], reason });
+  if (!tested?.base) return no('the push has no tested base');
+  if (!(tested.carried instanceof Map) || tested.carried.size > 0) return no('the base run left apps untested');
+  const commits = addedCommits(tested.base, head, cwd);
+  if (!commits?.length) return no(`git cannot list the commits from ${tested.base} to ${head}`);
+  if (commits.length > QUEUE_COMMIT_LIMIT) return no(`the push adds ${commits.length} commits, more than ${QUEUE_COMMIT_LIMIT}`);
+  const repository = env.GITHUB_REPOSITORY;
+  const token = env.GITHUB_TOKEN;
+  if (!repository || !token) return no('GITHUB_REPOSITORY and GITHUB_TOKEN are needed to read merge queue runs');
+  const apiUrl = env.GITHUB_API_URL || 'https://api.github.com';
+  const server = env.GITHUB_SERVER_URL || 'https://github.com';
+  // One deadline for every request and every body: it aborts the request and
+  // ends a wait on a body that never finishes, whatever fetch does with it.
+  const controller = new AbortController();
+  const { signal } = controller;
+  let timer;
+  const expired = new Promise((resolve, reject) => {
+    timer = setTimeout(() => {
+      const reason = new Error(`no answer within ${deadlineMs} ms`);
+      controller.abort(reason);
+      reject(reason);
+    }, deadlineMs);
+  });
+  expired.catch(() => {});
+  const inTime = (promise) => Promise.race([promise, expired]);
+  const runs = [];
+  try {
+    for (const sha of commits) {
+      const url = `${apiUrl}/repos/${repository}/actions/workflows/ci.yml/runs?event=${QUEUE_EVENT}&head_sha=${sha}&status=success&per_page=100`;
+      const response = await inTime(fetchImpl(url, {
+        headers: { accept: 'application/vnd.github+json', authorization: `Bearer ${token}`, 'x-github-api-version': '2022-11-28' },
+        redirect: 'error',
+        signal,
+      }));
+      if (!response.ok) return no(`the Actions API answered ${response.status} for merge queue runs of ${sha}`);
+      const body = await inTime(response.json());
+      const listed = Array.isArray(body?.workflow_runs) ? body.workflow_runs : null;
+      if (!listed) return no(`the Actions API listed no workflow_runs for ${sha}`);
+      const proof = listed.find((run) => queueRunProves(run, { sha, repository }));
+      if (!proof) return no(`no successful merge queue ci run tested ${sha}`);
+      runs.push({ sha, id: proof.id, url: `${server}/${repository}/actions/runs/${proof.id}` });
+    }
+  } catch (error) {
+    return no(`merge queue runs could not be read: ${error.message}`);
+  } finally {
+    clearTimeout(timer);
+  }
+  const named = runs.map((run) => `${run.sha.slice(0, 9)} in ${run.url}`).join(', ');
+  return { covered: true, runs, reason: `a merge queue ci run passed at every commit since ${tested.base.slice(0, 9)}: ${named}` };
 }

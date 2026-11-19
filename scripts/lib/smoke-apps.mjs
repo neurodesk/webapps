@@ -78,7 +78,7 @@ export function siteCheckApps(registry, { event, scope, plan }) {
   const whole = (reason) => ({ value: '', reason: `every app: ${reason}` });
   if (event === 'schedule') return whole('the nightly run checks the whole catalogue');
   if (event === 'workflow_dispatch' && ['all', 'site'].includes(scope)) return whole(`a dispatch with scope ${scope}`);
-  if (!['pull_request', 'push', 'workflow_dispatch'].includes(event)) return whole(`${event} is not a planned event`);
+  if (!['pull_request', 'push', 'workflow_dispatch', 'merge_group'].includes(event)) return whole(`${event} is not a planned event`);
   if (plan.all_apps === 'true') return whole('the plan selected every app');
   if (plan.site_code === 'true') return whole('the change reaches code the site jobs run');
   if (plan.site_code !== 'false') return whole('the plan does not say whether the change reaches code the site jobs run');

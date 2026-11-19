@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process';
 import { appendFile, readFile } from 'node:fs/promises';
-import { createAppPlan, changedManifests, changedPathsFromGit, EASTER_EGG_OUTPUT, UnreadableDiffError } from './lib/app-plan.mjs';
+import { createAppPlan, changedManifests, changedPathsFromGit, EASTER_EGG_OUTPUT, eventPolicy, UnreadableDiffError } from './lib/app-plan.mjs';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
 import { FULL_CI_LABEL } from './lib/ci-usage.mjs';
 import { eventPullRequest, fullPlanBudget } from './lib/full-plan-budget.mjs';
-import { resolveCiBase, TESTED_BASE } from './lib/tested-base.mjs';
+import { queueCoverage, resolveCiBase, TESTED_BASE } from './lib/tested-base.mjs';
 import { loadConservativeWorkspaceGraph, WorkspaceGraphConfigurationError } from './lib/workspace-graph.mjs';
 
 function option(name) {
@@ -16,6 +16,9 @@ function option(name) {
 const registry = await loadAppsRegistry();
 const head = option('--head') || 'HEAD';
 let base = option('--base');
+const policy = eventPolicy(process.env.GITHUB_EVENT_NAME, { draft: process.env.CI_DRAFT });
+// A push whose commits a green merge queue run already tested (queueCoverage).
+let queue = null;
 // `--base last-success`: diff from the last commit a ci run finished on the
 // branch (resolveCiBase), so merges whose own push run was cancelled are still
 // tested, and select again the apps a failed run there left untested.
@@ -41,6 +44,11 @@ if (base === TESTED_BASE) {
   base = tested.base;
   carried = tested.carried;
   if (!base) baseFallback = tested.reason;
+  // Only ci's own push run, planning from its tested base, reads the proof.
+  if (policy.queueProof && option('--base') === TESTED_BASE && !process.argv.includes('--release')) {
+    queue = await queueCoverage({ tested, head, cwd: repoRoot });
+    console.error(`App planner: ${queue.covered ? '' : 'no merge queue proof: '}${queue.reason}`);
+  }
 }
 // A diff git cannot read is never an empty one: the run tests everything.
 let changedPaths = [];
@@ -71,7 +79,7 @@ try {
   fallbackReason = error.message;
   console.error(`App planner: selecting the full catalog and site because ${fallbackReason}`);
 }
-const draft = process.env.GITHUB_EVENT_NAME === 'pull_request' && process.env.CI_DRAFT === 'true';
+const { draft } = policy;
 // `--release` (release.yml): the apps to publish are the ones the version
 // bumps reach, so release bookkeeping counts.
 const release = process.argv.includes('--release');
@@ -83,7 +91,7 @@ let plan = createAppPlan(registry, fallbackReason ? [] : changedPaths, graph, ma
 // the `full-plan` job, which is what the budget counts.
 let withheld = '';
 let fullPlan = false;
-if (process.env.GITHUB_EVENT_NAME === 'pull_request' && !draft && process.env.GITHUB_EVENT_PATH) {
+if (policy.budget && process.env.GITHUB_EVENT_PATH) {
   const draftPlan = createAppPlan(registry, fallbackReason ? [] : changedPaths, graph, manifests, { draft: true });
   if (draftPlan.selected.length < plan.selected.length) {
     fullPlan = true;
@@ -108,15 +116,19 @@ if (process.env.GITHUB_EVENT_NAME === 'pull_request' && !draft && process.env.GI
 const scope = option('--scope') || 'affected';
 if (!['affected', 'all', 'gpu', 'site'].includes(scope)) throw new Error(`Unknown scope ${scope}`);
 const none = { include: [] };
+// A push the merge queue tested runs no app job and no site build again. It
+// keeps the macOS GPU suite of its plan: a queue run defers that suite for a
+// whole-catalogue plan, as a ready pull request does.
+const tested = queue?.covered === true;
 const scoped = {
-  apps: ['gpu', 'site'].includes(scope) ? none : plan.apps,
-  browserApps: ['gpu', 'site'].includes(scope) ? none : plan.browserApps,
+  apps: tested || ['gpu', 'site'].includes(scope) ? none : plan.apps,
+  browserApps: tested || ['gpu', 'site'].includes(scope) ? none : plan.browserApps,
   gpuApps: scope === 'site' ? none : plan.gpuApps,
   releaseApps: ['gpu', 'site'].includes(scope) ? none : plan.releaseApps,
-  site: scope === 'site' || (scope !== 'gpu' && plan.site && !withheld),
+  site: !tested && (scope === 'site' || (scope !== 'gpu' && plan.site && !withheld)),
 };
-// A push, the nightly and a dispatch run the easter egg every time; a pull request skips it only when no changed path can reach it.
-const everyRun = Boolean(process.env.GITHUB_EVENT_NAME) && process.env.GITHUB_EVENT_NAME !== 'pull_request';
+// A push, the nightly, a dispatch and a merge queue run run the easter egg every time; a pull request skips it only when no changed path can reach it.
+const { everyRun } = policy;
 const easterEgg = scope === 'site' || (scope !== 'gpu' && (everyRun || plan.easterEgg.length > 0));
 const emptyMatrix = { include: [{ app: '__none__', path: '', runtime: '', rust_wasm: false, python_reference: false, shared_runtime: false, browser_test: false, hardware_gpu: false, app_scoped_runtime: false, release_test: 'test', heavy_tests: false }] };
 const fallback = (fallbackReason || (plan.reasons.fallback ?? '')).replace(/\s+/g, ' ');
@@ -151,6 +163,8 @@ const outputs = {
   fallback_reason: fallback,
   selection_reasons: JSON.stringify(reasons),
   easter_egg: easterEgg ? EASTER_EGG_OUTPUT.run : EASTER_EGG_OUTPUT.skip,
+  // `true` only with the proof; composite-site reads anything else as "build it".
+  queue_tested: String(tested),
 };
 
 // The same reasons for a person: the job summary on GitHub, stderr locally.
@@ -164,6 +178,9 @@ const summary = fallback && !draft
 summary.push(easterEgg ? `Homepage easter egg runs: ${scope === 'site' ? 'scope site' : everyRun ? `it runs on every ${process.env.GITHUB_EVENT_NAME} run` : reasons.easter_egg.join('; ')}.` : scope === 'gpu' ? 'Homepage easter egg skipped: scope gpu.' : 'Homepage easter egg skipped: every changed path lies in a tree it cannot read.');
 if (plan.bookkeeping.length) summary.push(`Release bookkeeping set aside (changelogs and version bumps, checked by workspace-contracts): ${plan.bookkeeping.length} ${plan.bookkeeping.length === 1 ? 'file' : 'files'}.`);
 if (scope === 'gpu') summary.unshift('Scope gpu: only the macOS GPU suite of the selected apps runs.');
+if (tested) summary.unshift(`Tested in the merge queue: ${queue.runs.map((run) => `${run.sha.slice(0, 9)} passed in ${run.url}`).join(', ')}. This push runs no app job and no site build again; the macOS GPU suite of the plan below still runs, as do workspace-contracts and the easter egg.`);
+else if (queue) summary.push(`Not covered by a merge queue run: ${queue.reason}.`);
+if (process.env.GITHUB_EVENT_NAME === 'merge_group') summary.unshift('Merge queue run: the complete plan from the queue\'s base to the commit that will land on main, with the composite site as a push builds it.');
 if (scope === 'site') summary.unshift('Scope site: only the composite site, its agentic checks and the homepage easter egg run.');
 if (draft) summary.unshift('Draft feedback only: shared dependency coverage runs on ready_for_review and every subsequent ready PR push.');
 const withheldAdvice = `Full plan withheld: ${withheld}. This run tests only the apps the pull request edits. Convert the pull request to draft while iterating; to test every app at this head, add the ${FULL_CI_LABEL} label and use "Re-run all jobs" on this run.`;

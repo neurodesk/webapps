@@ -27,8 +27,8 @@ const REQUIRED = {
   'workspace-contracts': { needs: [], if: "github.event.action != 'converted_to_draft' && inputs.scope != 'gpu' && inputs.scope != 'site'" },
   'app-tests': { needs: ['app-plan'], if: "needs.app-plan.outputs.has_apps == 'true'" },
   'browser-e2e': { needs: ['app-plan'], if: "needs.app-plan.outputs.has_browser_apps == 'true'" },
-  'browser-e2e-gpu': { needs: ['app-plan'], if: "needs.app-plan.outputs.has_gpu_apps == 'true' && (github.event_name != 'pull_request' || needs.app-plan.outputs.all_apps != 'true')" },
-  'composite-site': { needs: ['app-plan'], if: "(github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name == 'push' || github.event_name == 'schedule' || needs.app-plan.outputs.has_site == 'true')" },
+  'browser-e2e-gpu': { needs: ['app-plan'], if: "needs.app-plan.outputs.has_gpu_apps == 'true' && ((github.event_name != 'pull_request' && github.event_name != 'merge_group') || needs.app-plan.outputs.all_apps != 'true')" },
+  'composite-site': { needs: ['app-plan'], if: "(github.event_name != 'pull_request' || !github.event.pull_request.draft) && ((github.event_name == 'push' && needs.app-plan.outputs.queue_tested != 'true') || github.event_name == 'merge_group' || github.event_name == 'schedule' || needs.app-plan.outputs.has_site == 'true')" },
   'site-runtime': { needs: ['composite-site'], if: "needs.composite-site.result == 'success'" },
   'site-audit': { needs: ['composite-site'], if: "needs.composite-site.result == 'success'" },
   'site-e2e': { needs: ['composite-site'], if: "needs.composite-site.result == 'success'" },
@@ -37,7 +37,24 @@ const REQUIRED = {
   'agent-interactions': { needs: ['composite-site', 'site-runtime', 'site-audit', 'site-e2e', 'site-mobile', 'site-catalog'], if: "needs.composite-site.outputs.agent_site_ready == 'true'" },
   'processing-workflows': { needs: ['composite-site', 'site-runtime', 'site-audit', 'site-e2e', 'site-mobile', 'site-catalog'], if: "github.event_name == 'workflow_dispatch' && inputs.agentic_mode == 'pipeline' && needs.composite-site.result == 'success'" },
   'homepage-easter-egg': { needs: ['app-plan'], if: "${{ !cancelled() && github.event.action != 'converted_to_draft' && inputs.scope != 'gpu' && (github.event_name != 'pull_request' || needs.app-plan.result != 'success' || needs.app-plan.outputs.easter_egg != 'skip') }}" },
+  // The check a ruleset requires: every other job but the cache clean-up, which
+  // runs only on main's ref and may fail by design (AGGREGATE_EXEMPT).
+  'ci-required': { needs: 'every job', if: "${{ always() && (github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.action != 'converted_to_draft')) }}" },
 };
+const AGGREGATE = 'ci-required';
+const AGGREGATE_EXEMPT = ['example-cache-retention'];
+// What the aggregate waits for: every job of ci.yml but itself and the exempt one, in file order.
+const aggregateNeeds = (ci) => Object.keys(ci?.jobs ?? {}).filter((id) => id !== AGGREGATE && !AGGREGATE_EXEMPT.includes(id));
+// The aggregate's one step: it prints every job's result and fails unless
+// PASSES, the jq filter in its env, is true. Malformed or missing input fails it.
+const AGGREGATE_RUN = `jq -rn --argjson needs "$NEEDS" '$needs | to_entries[] | "\\(.key): \\(.value.result)"'
+jq -en --argjson needs "$NEEDS" "$PASSES" > /dev/null || {
+  echo '::error title=ci-required::app-plan did not succeed, or a job failed, was cancelled or timed out. Read the jobs above.'
+  exit 1
+}
+`;
+const AGGREGATE_PASSES = '$needs | type == "object" and (.["app-plan"].result == "success") and ([.[] | .result] | all(. == "success" or . == "skipped"))';
+const pinnedNeeds = (ci, id) => (REQUIRED[id].needs === 'every job' ? aggregateNeeds(ci) : REQUIRED[id].needs);
 const REQUIRED_JOBS = Object.keys(REQUIRED);
 const GUARDS = { 'app-plan': ['check:integration', 'pnpm check:integration'], 'workspace-contracts': ['test:contracts', 'pnpm test:contracts'] };
 const GUARD_FILE = 'test/ci-required-jobs.test.mjs';
@@ -68,12 +85,14 @@ function guardProblems(ci, scripts, contractFiles) {
     }
     if (job['continue-on-error'] !== undefined && job['continue-on-error'] !== false) problems.push(`${id} may fail without failing the run (continue-on-error)`);
     if (job.if !== REQUIRED[id].if) problems.push(`${id} runs when ${JSON.stringify(job.if)}, not as the policy says`);
-    if (JSON.stringify(needsOf(job)) !== JSON.stringify(REQUIRED[id].needs)) problems.push(`${id} needs ${JSON.stringify(needsOf(job))}, not ${JSON.stringify(REQUIRED[id].needs)}`);
+    if (JSON.stringify(needsOf(job)) !== JSON.stringify(pinnedNeeds(ci, id))) problems.push(`${id} needs ${JSON.stringify(needsOf(job))}, not ${JSON.stringify(pinnedNeeds(ci, id))}`);
     for (const step of job.steps) {
       if (step['continue-on-error'] !== undefined && step['continue-on-error'] !== false) problems.push(`a step of ${id} may fail without failing it (continue-on-error)`);
       if (step.run && step.if !== undefined && STEP_CONDITIONS[id]?.[step.name] !== step.if) problems.push(`${id} step ${step.name ?? step.run} can be skipped (if: ${step.if})`);
     }
   }
+  const decide = ci?.jobs?.[AGGREGATE]?.steps;
+  if (!Array.isArray(decide) || decide.length !== 1 || decide[0].run !== AGGREGATE_RUN || decide[0].env?.NEEDS !== '${{ toJSON(needs) }}' || decide[0].env?.PASSES !== AGGREGATE_PASSES || decide[0].if !== undefined) problems.push(`${AGGREGATE} does not decide with its one tested step`);
   if (REQUIRED_JOBS.every((id) => ci?.jobs?.[id])) problems.push(...skippableNeeds(ci));
   for (const [id, [script, command]] of Object.entries(GUARDS)) {
     const step = ci?.jobs?.[id]?.steps?.find((each) => each.run === command);
@@ -103,6 +122,9 @@ function skippableNeeds(ci) {
   const found = new Map();
   const runs = runContexts(ci);
   for (const required of REQUIRED_JOBS) {
+    // A condition that calls always() or !cancelled() and neither success() nor
+    // failure() reads no need's outcome, so no skipped need can skip the job.
+    if (condition(required)?.status && !/\b(?:success|failure)\(\)/.test(String(jobs[required].if))) continue;
     // The job and every job it waits for, directly or not.
     const closure = new Set();
     const visit = (id) => {
@@ -146,6 +168,7 @@ function runContexts(ci) {
   const options = (name) => inputs[name]?.options ?? [inputs[name]?.default ?? null];
   const runs = [];
   for (const event of ['push', 'schedule']) runs.push({ event_name: event, ref: 'refs/heads/main', event: {}, inputs: {} });
+  if (ci.on?.merge_group) runs.push({ event_name: 'merge_group', ref: 'refs/heads/gh-readonly-queue/main/pr-1-0123456789abcdef0123456789abcdef01234567', event: { action: 'checks_requested' }, inputs: {} });
   for (const ref of ['refs/heads/main', 'refs/heads/feature']) {
     for (const scope of options('scope')) {
       for (const agentic of options('agentic_mode')) runs.push({ event_name: 'workflow_dispatch', ref, event: {}, inputs: { scope, agentic_mode: agentic } });
@@ -388,4 +411,227 @@ test('the guard evaluates conditions as GitHub does', () => {
   assert.equal(run('${{ !cancelled() && success() }}'), true);
   assert.equal(compile('${{ !cancelled() }}').status, true);
   assert.equal(compile("needs.a.outputs.b == 'true'").status, false);
+});
+
+// The jobs a run starts, given the outputs its jobs write: a job starts when its
+// own condition holds and, unless that condition calls a status function, every
+// job it needs started. Every started job is taken to succeed.
+function startedJobs(ci, run, values) {
+  const ran = new Map();
+  const simulate = (id) => {
+    if (!ran.has(id)) {
+      const succeeded = needsOf(ci.jobs[id]).map(simulate).every(Boolean);
+      const own = ci.jobs[id].if === undefined ? null : compile(String(ci.jobs[id].if));
+      const context = {
+        call: (name) => ({ always: true, cancelled: false, failure: false, success: succeeded })[name] ?? fail(`${id} calls ${name}()`),
+        read: (path) => read(path, { run, ran, values, id }),
+      };
+      ran.set(id, own ? own(context) && (own.status || succeeded) : succeeded);
+    }
+    return ran.get(id);
+  };
+  return Object.keys(ci.jobs).filter(simulate);
+}
+
+// The outputs a one-app plan of a hardware-GPU app writes, with overrides.
+const planOutputs = (overrides = {}) => ({
+  'app-plan.has_apps': 'true',
+  'app-plan.has_browser_apps': 'true',
+  'app-plan.has_gpu_apps': 'true',
+  'app-plan.all_apps': 'false',
+  'app-plan.has_site': 'true',
+  'app-plan.queue_tested': 'false',
+  'app-plan.withheld': 'false',
+  'app-plan.full_plan': 'false',
+  'app-plan.easter_egg': 'run',
+  'composite-site.agent_site_ready': '',
+  ...Object.fromEntries(Object.entries(overrides).map(([key, value]) => [key.includes('.') ? key : `app-plan.${key}`, value])),
+});
+const pullRequest = (action, draft) => ({ event_name: 'pull_request', ref: 'refs/pull/1/merge', event: { action, pull_request: { draft } }, inputs: {} });
+const queue = { event_name: 'merge_group', ref: 'refs/heads/gh-readonly-queue/main/pr-1-0123456789abcdef0123456789abcdef01234567', event: { action: 'checks_requested' }, inputs: {} };
+const onMain = (event_name) => ({ event_name, ref: 'refs/heads/main', event: {}, inputs: {} });
+const dispatch = (scope, agentic_mode = 'none', ref = 'refs/heads/feature') => ({ event_name: 'workflow_dispatch', ref, event: {}, inputs: { scope, agentic_mode } });
+const noApps = { has_apps: 'false', has_browser_apps: 'false', has_gpu_apps: 'false', has_site: 'false' };
+// Each event, with the outputs the planner writes for it (scripts/app-plan.mjs).
+export const JOB_GRAPH_SCENARIOS = {
+  'draft pull request, one GPU app': [pullRequest('synchronize', true), planOutputs()],
+  'ready pull request, one GPU app': [pullRequest('synchronize', false), planOutputs()],
+  'ready pull request, whole catalogue': [pullRequest('ready_for_review', false), planOutputs({ all_apps: 'true', full_plan: 'true' })],
+  'ready pull request over its budget': [pullRequest('synchronize', false), planOutputs({ withheld: 'true', has_site: 'false' })],
+  'pull request converted to draft': [pullRequest('converted_to_draft', true), planOutputs()],
+  'merge queue, one GPU app': [queue, planOutputs()],
+  'merge queue, whole catalogue': [queue, planOutputs({ all_apps: 'true' })],
+  'merge queue, docs only': [queue, planOutputs(noApps)],
+  'push, no queue proof, one GPU app': [onMain('push'), planOutputs()],
+  'push, no queue proof, docs only': [onMain('push'), planOutputs(noApps)],
+  'push tested by a green queue run, one GPU app': [onMain('push'), planOutputs({ has_apps: 'false', has_browser_apps: 'false', has_site: 'false', queue_tested: 'true' })],
+  'push tested by a green queue run, one app without GPU': [onMain('push'), planOutputs({ ...noApps, queue_tested: 'true' })],
+  nightly: [onMain('schedule'), planOutputs({ all_apps: 'true', 'composite-site.agent_site_ready': 'true' })],
+  'dispatch, scope affected': [dispatch('affected'), planOutputs()],
+  'dispatch on main, scope affected': [dispatch('affected', 'none', 'refs/heads/main'), planOutputs()],
+  'dispatch, scope all': [dispatch('all'), planOutputs({ all_apps: 'true' })],
+  'dispatch, scope gpu': [dispatch('gpu'), planOutputs({ ...noApps, has_gpu_apps: 'true', all_apps: 'true' })],
+  'dispatch, scope site, interactions': [dispatch('site', 'interactions'), planOutputs({ ...noApps, has_site: 'true', 'composite-site.agent_site_ready': 'true' })],
+  'dispatch, scope site, pipeline': [dispatch('site', 'pipeline'), planOutputs({ ...noApps, has_site: 'true' })],
+};
+const SITE_CHECK_JOBS = ['site-runtime', 'site-audit', 'site-e2e', 'site-mobile', 'site-catalog'];
+const PLAN_RUN = ['app-plan', 'workspace-contracts'];
+const APP_RUN = ['app-tests', 'browser-e2e', 'browser-e2e-gpu'];
+const SITE_RUN = ['composite-site', ...SITE_CHECK_JOBS];
+// What each scenario starts, read off ci.yml by startedJobs. A change to a job
+// condition that moves a job in or out of a row changes this table.
+const EXPECTED_JOB_GRAPH = {
+  'draft pull request, one GPU app': [...PLAN_RUN, ...APP_RUN, 'homepage-easter-egg', 'ci-required'],
+  'ready pull request, one GPU app': [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, 'homepage-easter-egg', 'ci-required'],
+  'ready pull request, whole catalogue': [...PLAN_RUN, 'full-plan', 'app-tests', ...SITE_RUN, 'browser-e2e', 'homepage-easter-egg', 'ci-required'],
+  'ready pull request over its budget': [...PLAN_RUN.slice(0, 1), 'full-plan-withheld', 'workspace-contracts', ...APP_RUN, 'homepage-easter-egg', 'ci-required'],
+  'pull request converted to draft': [],
+  'merge queue, one GPU app': [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, 'homepage-easter-egg', 'ci-required'],
+  'merge queue, whole catalogue': [...PLAN_RUN, 'app-tests', ...SITE_RUN, 'browser-e2e', 'homepage-easter-egg', 'ci-required'],
+  'merge queue, docs only': [...PLAN_RUN, ...SITE_RUN, 'homepage-easter-egg', 'ci-required'],
+  'push, no queue proof, one GPU app': [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, 'example-cache-retention', 'homepage-easter-egg'],
+  'push, no queue proof, docs only': [...PLAN_RUN, ...SITE_RUN, 'example-cache-retention', 'homepage-easter-egg'],
+  'push tested by a green queue run, one GPU app': [...PLAN_RUN, 'browser-e2e-gpu', 'homepage-easter-egg'],
+  'push tested by a green queue run, one app without GPU': [...PLAN_RUN, 'homepage-easter-egg'],
+  nightly: [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, 'example-cache-retention', 'agent-interactions', 'homepage-easter-egg'],
+  'dispatch, scope affected': [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, 'homepage-easter-egg'],
+  'dispatch on main, scope affected': [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, 'example-cache-retention', 'homepage-easter-egg'],
+  'dispatch, scope all': [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, 'homepage-easter-egg'],
+  'dispatch, scope gpu': ['app-plan', 'browser-e2e-gpu'],
+  'dispatch, scope site, interactions': ['app-plan', ...SITE_RUN, 'agent-interactions', 'homepage-easter-egg'],
+  'dispatch, scope site, pipeline': ['app-plan', ...SITE_RUN, 'processing-workflows', 'homepage-easter-egg'],
+};
+
+test('every event starts the jobs the job-graph table says, read off ci.yml', async () => {
+  const ci = await loadCi();
+  const order = Object.keys(ci.jobs);
+  const sorted = (ids) => [...ids].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+  const graph = Object.fromEntries(Object.entries(JOB_GRAPH_SCENARIOS).map(([name, [run, values]]) => [name, startedJobs(ci, run, values)]));
+  if (process.env.PRINT_JOB_GRAPH) {
+    const short = (id) => id.replace(/^site-/, 's-');
+    console.log(`| Run | ${order.map(short).join(' | ')} |\n| --- |${order.map(() => ' :-: |').join('')}`);
+    for (const [name, started] of Object.entries(graph)) console.log(`| ${name} | ${order.map((id) => (started.includes(id) ? 'x' : '')).join(' | ')} |`);
+  }
+  for (const [name, expected] of Object.entries(EXPECTED_JOB_GRAPH)) assert.deepEqual(graph[name], sorted(expected), name);
+  assert.deepEqual(Object.keys(graph), Object.keys(EXPECTED_JOB_GRAPH));
+});
+
+// Runs the aggregate's step as GitHub runs a bash step, with `needs` as the
+// raw text GitHub would pass.
+function stepPasses(ci, text) {
+  const step = ci.jobs[AGGREGATE].steps[0];
+  try {
+    execFileSync('bash', ['--noprofile', '--norc', '-eo', 'pipefail', '-c', step.run], { env: { PATH: process.env.PATH, NEEDS: text, PASSES: step.env.PASSES }, stdio: ['ignore', 'ignore', 'ignore'] });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// The step's verdict for each well-formed `needs` (an object), from its own
+// filter in one jq process. A jq error, which fails the step, reads as fail.
+function aggregatePasses(ci, cases) {
+  const filter = `inputs as $needs | try (${ci.jobs[AGGREGATE].steps[0].env.PASSES}) catch false`;
+  const output = execFileSync('jq', ['-cn', filter], { input: cases.map((needs) => JSON.stringify(needs)).join('\n'), encoding: 'utf8' });
+  const verdicts = output.trim().split('\n').map((verdict) => verdict === 'true');
+  assert.equal(verdicts.length, cases.length);
+  return verdicts;
+}
+
+// The needs context of the aggregate for one run: a started job gets `result`,
+// every other job `skipped`, and a job whose implicit success() a failed or
+// cancelled need denies is skipped too, as GitHub skips it.
+function needsContext(ci, started, results = {}) {
+  const context = {};
+  const outcome = (id) => {
+    if (context[id]) return context[id].result;
+    const blocked = needsOf(ci.jobs[id]).map(outcome).some((result) => result !== 'success');
+    const status = /\b(?:always|cancelled|failure)\(\)/.test(String(ci.jobs[id].if ?? ''));
+    const result = !started.includes(id) || (blocked && !status) ? 'skipped' : results[id] ?? 'success';
+    context[id] = { result, outputs: {} };
+    return result;
+  };
+  for (const id of needsOf(ci.jobs[AGGREGATE])) outcome(id);
+  return context;
+}
+
+test('the aggregate passes only when the plan succeeded and every job succeeded or was skipped', async () => {
+  const ci = await loadCi();
+  const ids = needsOf(ci.jobs[AGGREGATE]);
+  const all = (result) => Object.fromEntries(ids.map((id) => [id, { result, outputs: {} }]));
+  const cases = [];
+  const expect = (needs, pass, label) => cases.push({ needs, pass, label });
+  // Every job passed, or every job but the plan was skipped by its condition.
+  expect(all('success'), true, 'every job passed');
+  expect({ ...all('skipped'), 'app-plan': { result: 'success', outputs: {} } }, true, 'only the plan ran');
+  // One job in each other state, the rest passed or skipped.
+  for (const id of ids) {
+    for (const rest of ['success', 'skipped']) {
+      for (const result of ['failure', 'cancelled', 'timed_out', 'neutral', 'action_required', 'SUCCESS', '', null]) {
+        expect({ ...all(rest), 'app-plan': { result: 'success', outputs: {} }, [id]: { result, outputs: {} } }, false, `${id} ${JSON.stringify(result)} among ${rest}`);
+      }
+    }
+    // A job with no result.
+    expect({ ...all('success'), [id]: { outputs: {} } }, false, `${id} without a result`);
+  }
+  // The plan must have succeeded: skipped (converted to draft, or a condition) is not enough.
+  for (const result of ['skipped', 'failure', 'cancelled']) expect({ ...all('skipped'), 'app-plan': { result, outputs: {} } }, false, `app-plan ${result}`);
+  const { 'app-plan': plan, ...withoutPlan } = all('success');
+  assert.ok(plan);
+  expect(withoutPlan, false, 'no app-plan record');
+  const verdicts = aggregatePasses(ci, cases.map((each) => each.needs));
+  cases.forEach((each, index) => assert.equal(verdicts[index], each.pass, each.label));
+  // The step itself, as GitHub runs it: the filter decides, and malformed or empty input fails.
+  assert.equal(stepPasses(ci, JSON.stringify(all('success'))), true, 'the step passes every job passed');
+  assert.equal(stepPasses(ci, JSON.stringify({ ...all('success'), 'site-audit': { result: 'failure', outputs: {} } })), false, 'the step fails a failed job');
+  assert.equal(stepPasses(ci, JSON.stringify({ ...all('skipped'), 'app-plan': { result: 'cancelled', outputs: {} } })), false, 'the step fails a cancelled plan');
+  for (const text of ['', 'null', '[]', '{}', '"success"', '{"app-plan":', 'not json', '{"app-plan":"success"}']) assert.equal(stepPasses(ci, text), false, JSON.stringify(text));
+});
+
+test('the aggregate fails every run in which a started job failed, also through the jobs that failure skips', async () => {
+  const ci = await loadCi();
+  const cases = [];
+  for (const [name, [run, values]] of Object.entries(JOB_GRAPH_SCENARIOS)) {
+    const started = startedJobs(ci, run, values);
+    if (!started.includes(AGGREGATE)) continue;
+    cases.push({ needs: needsContext(ci, started), pass: true, label: `${name}: every started job passed` });
+    for (const id of started.filter((each) => each !== AGGREGATE)) {
+      for (const result of ['failure', 'cancelled']) {
+        const context = needsContext(ci, started, { [id]: result });
+        cases.push({ needs: context, pass: false, label: `${name}: ${id} ${result}` });
+        // The jobs that failure skips read as skipped, and the failure itself still fails the check.
+        if (id === 'composite-site') assert.ok(SITE_CHECK_JOBS.every((check) => context[check].result === 'skipped'), name);
+      }
+    }
+  }
+  assert.ok(cases.length > 100);
+  const verdicts = aggregatePasses(ci, cases.map((each) => each.needs));
+  cases.forEach((each, index) => assert.equal(verdicts[index], each.pass, each.label));
+});
+
+test('the aggregate waits for every job but the main-only cache clean-up and runs on every pull request and queue run', async () => {
+  const ci = await loadCi();
+  assert.deepEqual(needsOf(ci.jobs[AGGREGATE]), aggregateNeeds(ci));
+  assert.equal(ci.jobs['example-cache-retention'].if, "github.ref == 'refs/heads/main'", 'the exempt job never runs in a pull request or queue run');
+  assert.equal(ci.jobs['example-cache-retention']['continue-on-error'], true);
+  const condition = compile(ci.jobs[AGGREGATE].if);
+  const due = (run) => condition({ call: (name) => ({ always: true, cancelled: true, failure: true, success: false })[name], read: (path) => read(path, { run, ran: new Map(), values: {}, id: AGGREGATE }) });
+  // Even when the run was cancelled or a job failed, so the check never reads as a skipped pass.
+  for (const action of ['opened', 'synchronize', 'reopened', 'ready_for_review']) {
+    for (const draft of [true, false]) assert.equal(due(pullRequest(action, draft)), true, `${action} ${draft}`);
+  }
+  assert.equal(due(queue), true);
+  assert.equal(due(pullRequest('converted_to_draft', true)), false);
+  for (const run of [onMain('push'), onMain('schedule'), dispatch('affected')]) assert.equal(due(run), false, run.event_name);
+  // The guard fails when a job is added without the aggregate waiting for it, or the step changes.
+  const edited = (edit) => {
+    const copy = structuredClone(ci);
+    edit(copy);
+    return guardProblems(copy, { 'check:integration': `node --test ${GUARD_FILE} x`, 'test:contracts': 'x' }, [GUARD_FILE]).join('\n');
+  };
+  assert.match(edited((copy) => { copy.jobs['new-check'] = { needs: 'app-plan', 'runs-on': 'ubuntu-latest', steps: [{ run: 'true' }] }; }), /ci-required needs .*, not .*new-check/);
+  assert.match(edited((copy) => { copy.jobs[AGGREGATE].needs = copy.jobs[AGGREGATE].needs.filter((id) => id !== 'site-audit'); }), /ci-required needs/);
+  assert.match(edited((copy) => { copy.jobs[AGGREGATE].steps[0].run = 'exit 0'; }), /does not decide with its one tested step/);
+  assert.match(edited((copy) => { copy.jobs[AGGREGATE].if = '${{ !cancelled() }}'; }), /ci-required runs when/);
+  assert.match(edited((copy) => { copy.jobs[AGGREGATE]['continue-on-error'] = true; }), /ci-required may fail without failing the run/);
 });

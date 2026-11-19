@@ -141,13 +141,13 @@ test('nightly, scope all or site, a whole-catalogue plan and site code changes c
   assert.equal(whole('push', '', { site_code: 'true' }), '');
   // An output the plan did not write is read as the wider answer.
   assert.equal(whole('pull_request', '', { site_code: undefined }), '');
-  assert.equal(whole('merge_group', ''), '');
+  assert.equal(whole('repository_dispatch', ''), '', 'an event the selection does not know checks every app');
 });
 
 test('pull requests, pushes and affected dispatches check the selected apps and one canary per shell', () => {
   const canaries = Object.values(CANARY_APPS);
   const order = (list) => registry.apps.map((app) => app.id).filter((id) => list.includes(id));
-  for (const [event, scope] of [['pull_request', ''], ['push', ''], ['workflow_dispatch', 'affected']]) {
+  for (const [event, scope] of [['pull_request', ''], ['push', ''], ['workflow_dispatch', 'affected'], ['merge_group', '']]) {
     const scoped = siteCheckApps(registry, { event, scope, plan: plan(['zarro', 'niimath']) });
     assert.equal(scoped.value, order(['zarro', 'niimath', ...canaries]).join(','), event);
     assert.match(scoped.reason, /selected apps \(zarro, niimath\) and the canaries/);
