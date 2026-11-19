@@ -16,13 +16,16 @@
     "./results": "./src/results.js",
     "./normal-arrows": "./src/normal-arrows.js",
     "./manifest": "./model.manifest.json",
-    "./cortex-atlas-manifest": "./cortex-atlas.manifest.json"
+    "./cortex-atlas-manifest": "./cortex-atlas.manifest.json",
+    "./regions": "./src/cortex-regions.js",
+    "./cortex-regions-manifest": "./cortex-regions.manifest.json"
   },
   "files": [
     "bin",
     "src",
     "model.manifest.json",
     "cortex-atlas.manifest.json",
+    "cortex-regions.manifest.json",
     "LICENSE",
     "NOTICE",
     "README.md"

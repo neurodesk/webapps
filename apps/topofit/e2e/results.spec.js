@@ -3,6 +3,7 @@ import { test, expect } from '@playwright/test';
 import { writeSurfaceFiles } from '../../../packages/topofit/src/results.js';
 import { analyzeSurfaces } from '../../../packages/topofit/src/surface-analysis.js';
 import { readVolume } from '../../../packages/topofit/src/volume.js';
+import { REGIONS } from '../../../packages/topofit/src/cortex-regions.js';
 
 async function patchPixels(page, clip) {
   const screenshot = await page.screenshot({ clip });
@@ -437,6 +438,86 @@ test('computed patches, local normals and QC can be viewed and downloaded', asyn
   await page.locator('#imageInput').setInputFiles(scan());
   await expect(page.locator('#patchMeasurements')).toBeHidden();
   await expect(page.locator('#patchCenter')).toHaveValue('');
+});
+
+test('a named search region lists atlas groups, reaches the worker and offers its parcellation', async ({ page }, testInfo) => {
+  test.setTimeout(90_000);
+  const white = [];
+  const faces = [];
+  for (let y = 0; y < 14; y += 1) {
+    for (let x = 0; x < 14; x += 1) {
+      white.push(x + 1, y + 1, 6);
+      const i = x + y * 14;
+      if (x < 13 && y < 13) faces.push(i, i + 1, i + 14, i + 1, i + 15, i + 14);
+    }
+  }
+  const vertices = {};
+  for (const h of ['lh', 'rh']) {
+    vertices[`${h}.white`] = Float64Array.from(white);
+    vertices[`${h}.pial`] = Float64Array.from(white, (v, i) => i % 3 === 2 ? v + 2 : v);
+    vertices[`${h}.registration`] = Float64Array.from(white, (_, i) => i % 3 === 0 ? 1 : 0);
+  }
+  const atlas = new ArrayBuffer(18);
+  new DataView(atlas).setUint32(0, 1, true);
+  new DataView(atlas).setFloat32(4, 1, true);
+  new Uint8Array(atlas).set([1, 1], 16);
+  const regionAtlas = Uint8Array.of(1, 0, 0, 0, 1, 1, 0, 0);
+  const input = scan().buffer;
+  const result = await analyzeSurfaces({
+    source: readVolume(input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength)),
+    vertices,
+    faces: { lh: Int32Array.from(faces), rh: Int32Array.from(faces) },
+    patches: { hemisphere: 'lh', count: 1 },
+    region: 'wang2015:V1',
+    loadAtlas: async () => atlas,
+    loadRegions: async () => regionAtlas.buffer.slice(0),
+  });
+  expect(result.analysis.flat_patch_definition.region).toBe('wang2015:V1');
+  await deliverSurfaces(page, result);
+  await page.locator('#surfaceAnalysisSettings > summary').click();
+  await page.locator('#findPatches').check();
+  await page.locator('#patchQuality > summary').click();
+  const groups = await page.locator('#patchRegion optgroup').evaluateAll((elements) => elements.map((group) => [group.label, group.children.length]));
+  expect(groups).toEqual([...new Set(REGIONS.map(({ group }) => group))].map((group) => [group, REGIONS.filter((region) => region.group === group).length]));
+  await expect(page.locator('#patchRegion > option')).toHaveText(['Whole eligible cortex', 'ROI mask']);
+  await page.locator('#patchRegion').selectOption({ label: 'V1' });
+  await expect(page.locator('#patchRoiField')).toBeHidden();
+  await page.locator('#patchRegion').focus();
+  await page.screenshot({ path: testInfo.outputPath('region-desktop.png') });
+  await page.locator('#runButton').click();
+  await expect.poll(() => page.evaluate(() => window.reconstructionRuns)).toBe(2);
+  expect(await page.evaluate(() => window.lastTopofitJob.region)).toBe('wang2015:V1');
+  expect(await page.evaluate(() => window.lastTopofitJob.patches)).not.toBeNull();
+  const parcellation = page.locator('.nd-volume-toggle').filter({ hasText: 'Left Wang 2015 visual topography parcellation' });
+  await expect(parcellation.getByRole('button', { name: 'View', exact: true })).toBeDisabled();
+  const downloading = page.waitForEvent('download');
+  await parcellation.getByRole('button', { name: 'Download', exact: true }).click();
+  const download = await downloading;
+  expect(download.suggestedFilename()).toBe('lh.wang2015.annot');
+  expect(new Uint8Array(await readFile(await download.path()))).toEqual(new Uint8Array(result.files.find(({ name }) => name === 'lh.wang2015.annot').bytes));
+  await expect(page.locator('#technicalLog')).toContainText('"region":"wang2015:V1","region_atlas":"Wang 2015 visual topography"');
+
+  // The surface-analysis worker downloads the region atlas only for a named region.
+  const regionRequests = [];
+  await page.context().route('**/fsaverage-cortex.bin', () => {});
+  await page.context().route('**/fsaverage-regions.bin', (route) => {
+    regionRequests.push(route.request().url());
+    return route.fulfill({ body: '' });
+  });
+  await page.locator('#patchRegion').selectOption('cortex');
+  await page.locator('#analyzeButton').click();
+  await expect(page.locator('#statusText')).toContainText('Analyzing reconstructed surfaces');
+  await page.locator('#cancelButton').click();
+  await expect(page.locator('#statusText')).toContainText('Surface analysis cancelled');
+  expect(regionRequests).toEqual([]);
+  await page.locator('#patchRegion').selectOption('aparc:lobe-occipital');
+  await page.locator('#analyzeButton').click();
+  await expect(page.locator('#statusText')).toContainText('Model size mismatch');
+  expect(regionRequests).toHaveLength(1);
+  await expect(page.locator('#patchRegion')).toHaveValue('aparc:lobe-occipital');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('#patchRegion').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('region-phone.png'), fullPage: true });
 });
 
 test('settings open on demand and pass edited values to the worker', async ({ page }, testInfo) => {
