@@ -2225,35 +2225,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.2.20261111",
-          "url": "https://github.com/neurodesk/webapps/releases/download/bison-v0.2.20261111/bison-0.2.20261111-linux-x64.tar.gz",
-          "sha256": "32c67311c7549d498555ef8a1e3a7a91a74a319e0e386aa77df4e141eaed884c",
-          "bytes": 143372270,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/bison-v0.2.20261111/bison-0.2.20261111-linux-x64.tar.gz.validation.txt",
+          "version": "0.2.20261119",
+          "url": "https://github.com/neurodesk/webapps/releases/download/bison-v0.2.20261119/bison-0.2.20261119-linux-x64.tar.gz",
+          "sha256": "53be9fea9f85414c443d30863fd3dfb87e4da1451794abef027be6957a3bd9c9",
+          "bytes": 143372919,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/bison-v0.2.20261119/bison-0.2.20261119-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf bison-0.2.20261111-linux-x64.tar.gz\n./bison-0.2.20261111-linux-x64/bison --t1 sub-01_T1w.nii.gz --flair sub-01_FLAIR.nii.gz --output results"
+          "command": "tar -xzf bison-0.2.20261119-linux-x64.tar.gz\n./bison-0.2.20261119-linux-x64/bison --t1 sub-01_T1w.nii.gz --flair sub-01_FLAIR.nii.gz --output results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.2.20261111",
-          "url": "https://github.com/neurodesk/webapps/releases/download/bison-v0.2.20261111/bison-0.2.20261111-macos-arm64.pkg",
-          "sha256": "5b5a121ff5d9b9f571811c5e216dd6fb367399e0e2ccfedd102009effd5324ac",
-          "bytes": 145574456,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/bison-v0.2.20261111/bison-0.2.20261111-macos-arm64.pkg.validation.txt",
+          "version": "0.2.20261119",
+          "url": "https://github.com/neurodesk/webapps/releases/download/bison-v0.2.20261119/bison-0.2.20261119-macos-arm64.pkg",
+          "sha256": "0b3d447374571a1c41f8a172d27e8c1c40b79714b885ec4f149dea3d896d1021",
+          "bytes": 145577495,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/bison-v0.2.20261119/bison-0.2.20261119-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg bison-0.2.20261111-macos-arm64.pkg -target /\nbison self-check\nbison --t1 sub-01_T1w.nii.gz --flair sub-01_FLAIR.nii.gz --output results"
+          "command": "sudo installer -pkg bison-0.2.20261119-macos-arm64.pkg -target /\nbison self-check\nbison --t1 sub-01_T1w.nii.gz --flair sub-01_FLAIR.nii.gz --output results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.2.20261111",
-          "url": "https://github.com/neurodesk/webapps/releases/download/bison-v0.2.20261111/bison-0.2.20261111-windows-x64.zip",
-          "sha256": "74f09881bdc11f5cea0361bcc4f4a3ef3f1f8e0a8771d753e0f6c0b94f51e485",
-          "bytes": 146366151,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/bison-v0.2.20261111/bison-0.2.20261111-windows-x64.zip.validation.txt",
+          "version": "0.2.20261119",
+          "url": "https://github.com/neurodesk/webapps/releases/download/bison-v0.2.20261119/bison-0.2.20261119-windows-x64.zip",
+          "sha256": "2cb9679c663d90f5baf99bb78443978079b797526db6114021902131b0e11ac7",
+          "bytes": 146730809,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/bison-v0.2.20261119/bison-0.2.20261119-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\bison-0.2.20261111-windows-x64.zip -DestinationPath .\n.\\bison-0.2.20261111-windows-x64\\bison.exe --t1 sub-01_T1w.nii.gz --flair sub-01_FLAIR.nii.gz --output results"
+          "command": "Expand-Archive -Path .\\bison-0.2.20261119-windows-x64.zip -DestinationPath .\n.\\bison-0.2.20261119-windows-x64\\bison.exe --t1 sub-01_T1w.nii.gz --flair sub-01_FLAIR.nii.gz --output results"
         }
       ],
       "containers": []
