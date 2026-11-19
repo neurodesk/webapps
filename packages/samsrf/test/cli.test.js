@@ -306,7 +306,9 @@ function appStyleFiles(kind, model, paths) {
   spec.hrf = hrf.oldSchool(model.TR, readOldSchoolHrf(readFileSync(paths.fit)));
   const job = createJob(spec);
   try {
-    return exportGiis(runJob(job).maps, `lh_${job.modelName}${job.outSuffix}`);
+    const merged = runJob(job);
+    const prefix = `lh_${job.modelName}${job.outSuffix}`;
+    return [...exportGiis(merged.maps, prefix), { name: `${prefix}_lossless.bin`, bytes: writeLossless(merged, { precision: 'double' }) }];
   } finally {
     job.free();
   }
