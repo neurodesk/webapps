@@ -7,7 +7,7 @@ import { dirname, join, relative as relativePath, resolve as resolvePath } from 
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { parse, stringify } from 'yaml';
-import { AUTOMATION_CATALOG_READERS, changedPathsFromGit, CI_JOB_SCOPES, createAppPlan, EASTER_EGG_INPUTS, EASTER_EGG_JOB, EASTER_EGG_OUTPUT, EASTER_EGG_PACKAGES, easterEggCannotRead, INDEPENDENT_ROOT_DEV_DEPENDENCIES, RUNTIME_MANIFEST_READERS, UnreadableDiffError, SITE_KEY_READERS, SITE_ONLY_FILES } from '../scripts/lib/app-plan.mjs';
+import { AUTOMATION_CATALOG_READERS, changedPathsFromGit, CI_JOB_SCOPES, createAppPlan, EASTER_EGG_INPUTS, EASTER_EGG_JOB, EASTER_EGG_OUTPUT, EASTER_EGG_PACKAGES, easterEggCannotRead, WORKSPACE_MANIFESTS, INDEPENDENT_ROOT_DEV_DEPENDENCIES, RUNTIME_MANIFEST_READERS, UnreadableDiffError, SITE_KEY_READERS, SITE_ONLY_FILES } from '../scripts/lib/app-plan.mjs';
 import { APP_JOBS, carriedApps, NIGHTLY_JOBS, RERUN_JOBS, testedBase } from '../scripts/lib/tested-base.mjs';
 import { lockfileImpact } from '../scripts/lib/lockfile-impact.mjs';
 import { loadAppsRegistry, parseAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
@@ -1159,6 +1159,20 @@ test('a pull request skips the homepage easter egg only when every changed path 
     assert.equal(easterEggCannotRead(path), false, path);
     assert.deepEqual(egg([path]), [`${path}: outside the trees the job cannot read`], path);
   }
+  // S11: pnpm reads package.json, package.json5 and package.yaml as a workspace project's manifest, and a
+  // second one beside package.json as a second project, which can take the easter egg's name. Each runs it.
+  assert.deepEqual(WORKSPACE_MANIFESTS, ['package.json', 'package.json5', 'package.yaml']);
+  for (const name of WORKSPACE_MANIFESTS) {
+    for (const path of [`apps/probe/${name}`, `apps/niimath/${name}`, `packages/greedy/${name}`, `exes/greedy/${name}`, `docs/${name}`, name]) {
+      assert.equal(easterEggCannotRead(path), false, path);
+      assert.deepEqual(egg([path]), [`${path}: outside the trees the job cannot read`], path);
+    }
+    // The reviewer's case: a pull request that adds only apps/probe/package.yaml. A new app directory selects every app, as on main.
+    const probe = createAppPlan(registry, [`apps/probe/${name}`], workspace);
+    assert.equal(probe.allApps, true, name);
+    assert.equal(probe.reasons.fallback, `apps/probe/${name}: no rule classifies it`);
+  }
+  for (const path of ['apps/niimath/package.json.orig', 'apps/niimath/my-package.yaml', 'apps/niimath/src/package.yaml.md']) assert.equal(easterEggCannotRead(path), true, path);
   // One such path is enough, and the reasons stay short.
   assert.deepEqual(egg(['apps/niimath/main.js', 'scripts/lint.mjs']), ['scripts/lint.mjs: outside the trees the job cannot read']);
   assert.equal(egg(Array.from({ length: 9 }, (_, index) => `scripts/s${index}.mjs`)).at(-1), 'and 4 more');

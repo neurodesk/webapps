@@ -608,16 +608,22 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
 }
 
 export const EASTER_EGG_JOB = 'homepage-easter-egg';
+// The file names pnpm reads as a workspace project's manifest (its
+// MANIFEST_BASE_NAMES). It globs each workspace pattern for all three and reads
+// every match as its own project, so a package.yaml beside a package.json is a
+// second project, which can take any package name.
+export const WORKSPACE_MANIFESTS = Object.freeze(['package.json', 'package.json5', 'package.yaml']);
 // The homepage-easter-egg job runs on every push, nightly and dispatch, as
 // before (ci.yml). On a pull request it runs unless every changed path lies in
 // a tree it cannot read: apps/, exes/, models/, docs/ and every package outside
 // its dependency closure (EASTER_EGG_PACKAGES). Any other path runs it, as do a
-// package.json anywhere (its pnpm install reads every workspace manifest and
-// runs their install scripts) and a path no rule knows.
+// workspace manifest anywhere (its pnpm install reads every one and runs their
+// install scripts, and its pnpm --filter runs every project of that name) and a
+// path no rule knows.
 export const EASTER_EGG_PACKAGES = Object.freeze(['packages/analytics']);
 const EASTER_EGG_SKIP_TREE = /^(?:apps|exes|models|docs)\//;
 export function easterEggCannotRead(path) {
-  if (/(?:^|\/)package\.json$/.test(path)) return false;
+  if (WORKSPACE_MANIFESTS.includes(path.slice(path.lastIndexOf('/') + 1))) return false;
   if (EASTER_EGG_SKIP_TREE.test(path)) return true;
   const workspacePackage = path.match(/^packages\/[^/]+(?=\/)/)?.[0];
   return Boolean(workspacePackage) && !EASTER_EGG_PACKAGES.includes(workspacePackage);
