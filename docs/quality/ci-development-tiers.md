@@ -21,7 +21,9 @@ pull request would (unit, browser and macOS GPU tests of those apps, and the
 composite site when the plan needs it), not the draft's narrower plan. Its
 result shows in Actions and on the commit, not in the pull request's checks
 list: PR #681's checks held only its pull request run while a newer dispatch
-run of the same commit held 115 more. It does not satisfy `ci-required`.
+run of the same commit held 115 more. It does not satisfy `ci-required`, and
+it does not count against the full-plan budget, which counts only pull request
+runs (`listPullRequestRuns`).
 
 This costs feedback. In the 48 hours to 18 November 2026, 46 of 63 draft
 `ci` runs ran browser jobs: 61 jobs, 548 minutes on Linux and 56 on macOS,
@@ -29,8 +31,7 @@ This costs feedback. In the 48 hours to 18 November 2026, 46 of 63 draft
 run in that window found a browser failure first. A person or agent who relied
 on draft browser runs now dispatches `ci` or marks the pull request ready,
 where a ready pull request has a budget of two full-plan runs in 24 hours
-([enforcement](#enforcement-in-ci)). A dispatch does not count against that
-budget: the planner counts only pull request runs (`listPullRequestRuns`).
+([enforcement](#enforcement-in-ci)).
 
 Mark the PR ready when it is ready for integration testing. `ready_for_review`
 and every subsequent push to a ready PR run the complete affected-app plan,
@@ -38,8 +39,7 @@ composite checks, and path-selected native/reference suites. Reopening also
 refreshes the checks. Converting a PR back to draft cancels the previous PR
 run without starting CI test jobs on the unchanged head. GitHub prevents merging
 a draft PR. Before merging a ready PR, verify the full checks on its current
-head; branch protection is not configured, and the merge queue is ready but
-off ([merge queue](#merge-queue-and-the-required-check)). A ready PR
+head; no check is required yet ([the required check](#the-required-check)). A ready PR
 that has already used its whole-catalogue runs gets the draft plan and a
 failing `full-plan-withheld` job instead ([enforcement](#enforcement-in-ci)).
 
@@ -401,123 +401,49 @@ someone removes it, and every later push then gets the full plan again, so
 remove it once the head you will merge has passed. A failure to read the runs
 or labels keeps the full plan.
 
-## Merge queue and the required check
+## The required check
 
-In the 48 hours to 18 November 2026 a one-app pull request was tested on
-each draft push, again when ready, and again after the merge: 12 pushes to
-`main` used 1,830 `ci` runner minutes, 581 of them in the 10 one-app pushes.
-`main` has no required check, so a push run is also the first test of the
-commit that lands. `ci` is ready for a merge queue, which tests that commit
-before it lands, so the push after it need not test it again.
-
-**Until the merge queue is turned on, this changes nothing on pull requests
-and pushes except the new `ci-required` job.** No `merge_group` run starts, so
-no push finds a queue run to skip on.
-
-### The merge queue run
-
-`ci` starts on `merge_group` (`checks_requested`). GitHub alone starts these
-runs, each on the commit that will become `main`, under a
-`gh-readonly-queue/main/...` ref of its own, so its concurrency group holds
-no other run and nothing cancels it. The plan is the complete plan, as for a
-ready pull request, from `github.event.merge_group.base_sha` to that commit,
-which holds the pull requests ahead of it in the queue too. The full-plan
-budget and `full-plan-withheld` do not apply: a queue run is not a pull
-request's retry (`eventPolicy` in `scripts/lib/app-plan.mjs`). As on a ready
-pull request it skips `@slow` tests and the `@heavy` tests of apps it does not
-edit, and leaves the macOS GPU suite of a whole-catalogue plan to the push.
-As on a push it builds the composite site on every run and runs the easter
-egg. The site checks cover the selected apps and the canaries. An empty base
-plans every app, as does any event the planner does not know.
-
-### The required check
-
-`ci-required` waits for every other job of `ci` but `example-cache-retention`,
+`main` has no required check, so a pull request can merge while its `ci` run
+is red or still running. `ci-required` is the one job a ruleset can require
+instead of the dozens of per-app and site checks, whose names change with the
+plan. It waits for every other job of `ci` but `example-cache-retention`,
 which runs only on `main`'s ref and may fail by design. It runs on every pull
-request and merge queue run, a draft included, but not on `converted_to_draft`.
-Its condition starts with `always()`: a skipped required check reads as passing,
-so even a cancelled run must start it, and fail. It decides from `needs` alone
-with jq (`PASSES` in its step): it passes only when `app-plan` succeeded and
-every job it waits for succeeded or was skipped by its condition. A failed,
-cancelled or timed-out job fails it. A job skipped because a job it needs
-failed fails it through that job, which it waits for too, and a withheld plan
-fails it through `full-plan-withheld`. A draft passes with what its plan ran;
-GitHub merges no draft. `test/ci-required-jobs.test.mjs` pins its needs (every
-job, so a new job must be added), its condition and its step, runs the step
-under `bash -eo pipefail` on malformed input, and runs its filter over every
-job in every failing state and over every run of the job-graph table with each
-started job failed or cancelled.
+request run, a draft included, but not on `converted_to_draft`, and not on a
+push, the nightly or a dispatch: nothing requires a check there. Its condition
+starts with `always()`: a skipped required check reads as passing, so even a
+cancelled run must start it, and fail.
 
-### The push after the queue
+It decides from `needs` alone with jq (`PASSES` in its step) and passes only
+when `app-plan` succeeded and every job it waits for succeeded or was skipped
+by its condition. A failed, cancelled or timed-out job fails it. A job skipped
+because a job it needs failed fails it through that job, which it waits for
+too, and a withheld plan fails it through `full-plan-withheld`. A draft passes
+with what its plan ran; GitHub merges no draft.
 
-A push to `main` plans as before: from the head of the nearest finished push
-or nightly run (`resolveCiBase`). It then asks whether a merge queue tested it
-(`queueCoverage` in `scripts/lib/tested-base.mjs`). It is covered only when
-the base run left no app untested and every commit from that base to its head,
-at most 20, has a `ci` run of this repository, read from the Actions API by
-that commit's own SHA, with event `merge_group`, status `completed` and
-conclusion `success`. Checking every commit, not only the head, covers merges
-whose own push runs were cancelled and commits pushed past the queue. No base,
-apps carried from a failed run, a commit without such a run, an API error,
-any answer of another shape, or no answer within 60 seconds, body included,
-leaves the push exactly as before. The proof is read only by `ci`'s push run:
-not by a dispatch on `main`, the nightly or `release.yml`.
+`test/ci-required-jobs.test.mjs` pins its needs (every other job, so a new job
+must be added to them), its condition and its step. It runs the step under
+`bash -eo pipefail` on malformed input, runs its filter over every job in
+every failing state and over every run of the job-graph table with each
+started job failed or cancelled, and reads the table itself off `ci.yml` for
+draft, ready, over-budget, reopened and converted pull requests, pushes, the
+nightly and every dispatch scope. The planner does not count the aggregate as
+a job that consumes a narrowed `ci.yml` change (`ciImpact`): it needs every
+job, so otherwise every `ci.yml` edit would select every app. The daily
+measures class it as a `plan` job (`WORKFLOWS` in `scripts/lib/ci-measures.mjs`).
 
-A covered push sets `queue_tested=true`, runs no `app-tests`, `browser-e2e`
-or site build, and links the queue runs in its summary. Every job it
-still owes runs:
+### Requiring a green run
 
-| Push duty | How it is met |
-| --- | --- |
-| `app-plan`, `workspace-contracts`, `homepage-easter-egg` | Run on the push as before, about 18 minutes a push in the window. |
-| macOS GPU suite of a whole-catalogue plan, which the queue defers | The push runs the GPU suite of its own plan whenever that plan has GPU apps, so for a GPU app the queue already tested it runs twice. The push cannot read what the queue deferred without inferring it from run history. |
-| Composite site build on every push | The queue run builds it on every run. |
-| Example cache saved under `main` and `example-cache-retention` | The nightly run, on `main`'s ref, saves and prunes it. Until then a pull request restores the older copy and downloads what it lacks. |
-| Turbo, Rust and test-data caches saved under `main` | Saved by the nightly and by pushes that are not covered. A pull request in between restores an older key. |
-| Correctness lint | `quality.yml` lints every push, queue or not. |
-
-The covered push run finishes like any push run, so the next push diffs from
-its head: it counts as tested with the coverage of the queue run, and its
-failure in a job every push reruns carries no app. A queue run is never a base
-itself, since its head is not on `main` when it finishes. Until the covered
-push run finishes, the next push diffs from the older base and is covered
-only if the queue tested every commit since. `test/merge-queue.test.mjs` runs
-that sequence. A residual case: a commit pushed past the queue whose own push
-run was cancelled, then a queue batch in which one pull request reverts a file
-another changed. Each queue run tested its own diff, which no longer shows
-that file, and the push skips. The nightly run tests every app.
-
-The daily measures count queue runs in a merged pull request's minutes (by
-their `gh-readonly-queue/main/pr-<number>-` branch), not in the fixed-job
-share or ready to green, which measure pull request runs. `ci-required` is a
-`plan` job. A queue run is no pull request run, so the whole-catalogue budgets
-do not count it.
-
-### Turning on the merge queue
-
-The maintainer creates one ruleset on `main`, with the merge queue and the one
-required check, squash as the repository merges:
+The check does nothing until a maintainer requires it. The ruleset below
+requires `ci-required` on `main` without a merge queue. It is not applied:
 
 ```sh
 gh api --method POST repos/neurodesk/webapps/rulesets --input - <<'JSON'
 {
-  "name": "main merge queue",
+  "name": "main requires a green ci run",
   "target": "branch",
   "enforcement": "active",
   "conditions": { "ref_name": { "include": ["~DEFAULT_BRANCH"], "exclude": [] } },
   "rules": [
-    {
-      "type": "merge_queue",
-      "parameters": {
-        "merge_method": "SQUASH",
-        "grouping_strategy": "ALLGREEN",
-        "max_entries_to_build": 5,
-        "min_entries_to_merge": 1,
-        "max_entries_to_merge": 1,
-        "min_entries_to_merge_wait_minutes": 0,
-        "check_response_timeout_minutes": 180
-      }
-    },
     {
       "type": "required_status_checks",
       "parameters": {
@@ -527,36 +453,41 @@ gh api --method POST repos/neurodesk/webapps/rulesets --input - <<'JSON'
       }
     }
   ],
-  "bypass_actors": []
+  "bypass_actors": [
+    { "actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always" },
+    { "actor_id": 15368, "actor_type": "Integration", "bypass_mode": "always" }
+  ]
 }
 JSON
 ```
 
-`integration_id` 15368 is GitHub Actions. `ALLGREEN` merges an entry only when
-its own run and those of the entries ahead passed. `max_entries_to_merge: 1`
-lands each pull request as its own push, so each push finds its own queue run.
-180 minutes leaves room for a whole-catalogue run without the GPU suite.
+`integration_id` 15368 is GitHub Actions, so only a check from a `ci` run
+counts. Role 5 is the repository admin role. The Actions integration as a
+bypass actor keeps `standalone-catalog.yml` working: it pushes its
+`chore(standalone)` commits straight to `main` with `GITHUB_TOKEN`, and a
+required check would reject a push whose commit has no `ci-required`. Confirm
+that push on the first catalogue publish after the ruleset is created.
 
 What changes for people and agents:
 
-- Merging becomes adding to the queue: **Merge when ready** in the web page,
-  and `gh pr merge <number> --squash` queues the pull request instead of
-  merging it. Pass `--match-head-commit` as before. The pull request needs a
-  green `ci-required` on its head first.
-- The queue run takes about as long as a ready run. A failed queue run removes
-  the pull request from the queue; fix it, push and queue it again.
-- The native workflows, `native.yml` and `quality.yml` do not run in the queue
-  and are not required. Read their results on the pull request before queueing.
-- A push to `main` from outside the queue needs a bypass actor; its push run
-  is not covered and tests as before.
+- A pull request cannot merge until the `ci` run of its head is green. A
+  ready run that is still going, red, cancelled or over its full-plan budget
+  blocks the merge; `gh pr merge` refuses it.
+- A draft cannot merge anyway. Its `ci-required` passes with what the draft
+  plan ran, and marking it ready starts the run that counts.
+- A dispatched run does not satisfy the check: it is not a pull request run.
+- An administrator can still merge or push past it, and the ruleset's bypass
+  list says who else can.
+- The native workflows and `quality.yml` are not required. Read their results
+  on the pull request before merging, as now.
 
 To turn it off, delete the ruleset (`gh api repos/neurodesk/webapps/rulesets`
 lists its id; `gh api --method DELETE repos/neurodesk/webapps/rulesets/<id>`).
-No queue run starts after that, so every push tests as it did before.
 
-What only a real queue can show: that `merge_group.base_sha` is the base the
-queue builds on, that the queued commit lands on `main` with the same SHA, that
-the queue reads `ci-required` from the `merge_group` run, and the wait it adds.
+Merge queue support (a `merge_group` trigger, and a push to `main` that skips
+what a green queue run of each of its commits tested) was built, measured and
+parked on the branch `ci/merge-queue-support`: with one entry per queue run it
+adds about 12% runner minutes over the 12 pushes of 16 to 18 November 2026.
 
 ## Heavy browser tests
 
@@ -869,9 +800,7 @@ head or a green draft run does not satisfy that requirement.
 
 ## Workflow coverage
 
-No label or previous successful commit opts a new commit out of testing; a
-push to `main` skips only what a green merge queue run of each of its commits
-tested ([merge queue](#merge-queue-and-the-required-check)).
+No label or previous successful commit opts a new commit out of testing.
 The existing wide-PR macOS GPU policy remains: full-catalog GPU validation
 runs on main, nightly, or manual dispatch. A draft runs no GPU job; a ready
 pull request runs its directly selected GPU apps.

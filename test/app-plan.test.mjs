@@ -1151,8 +1151,7 @@ test('a root-relative path joined onto a computed repository root selects its ap
 
 test('ci.yml runs the composite site build on pull requests that need it', async () => {
   const ci = parse(await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8'));
-  // A merge queue run builds it every time, and a push unless the merge queue tested every commit it adds.
-  assert.equal(ci.jobs['composite-site'].if, "(github.event_name != 'pull_request' || !github.event.pull_request.draft) && ((github.event_name == 'push' && needs.app-plan.outputs.queue_tested != 'true') || github.event_name == 'merge_group' || github.event_name == 'schedule' || needs.app-plan.outputs.has_site == 'true')");
+  assert.equal(ci.jobs['composite-site'].if, "(github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name == 'push' || github.event_name == 'schedule' || needs.app-plan.outputs.has_site == 'true')");
   assert.equal(ci.jobs['app-plan'].outputs.has_site, '${{ steps.plan.outputs.has_site }}');
 });
 
@@ -2050,73 +2049,6 @@ test('a push run tests the merges whose own runs were cancelled, and falls back 
     assert.equal(fallback.all_apps, 'true', name);
     assert.match(fallback.fallback_reason, /ci run on main/, name);
   }
-});
-
-test('a push a green merge queue run tested runs no app job and no site build, and keeps its GPU apps', async (t) => {
-  const { root } = await plannerFixture(t);
-  const git = (...args) => execFileSync('git', ['-c', 'user.name=planner', '-c', 'user.email=planner@example.org', ...args], { cwd: root, encoding: 'utf8' }).trim();
-  const commit = async (path) => {
-    await mkdir(join(root, path, '..'), { recursive: true });
-    await writeFile(join(root, path), path);
-    git('add', path);
-    git('commit', '--quiet', '-m', path);
-    return git('rev-parse', 'HEAD');
-  };
-  git('init', '--quiet');
-  const tested = await commit('README.md');
-  // synthseg is a hardware-GPU app, niimath is not.
-  const head = await commit('apps/synthseg/head.js');
-  let queue = [];
-  let status = 200;
-  const server = createServer((request, response) => {
-    const url = new URL(request.url, 'http://localhost');
-    const queued = url.searchParams.get('event') === 'merge_group';
-    response.writeHead(queued ? status : 200, { 'content-type': 'application/json' });
-    response.end(JSON.stringify({ workflow_runs: queued ? queue.filter((run) => run.head_sha === url.searchParams.get('head_sha')) : [{ id: 1, event: 'push', head_branch: 'main', head_sha: tested, conclusion: 'success' }] }));
-  });
-  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-  t.after(() => server.close());
-  const env = { ...process.env, GITHUB_OUTPUT: '', GITHUB_EVENT_NAME: 'push', GITHUB_REPOSITORY: 'neurodesk/webapps', GITHUB_TOKEN: 'token', GITHUB_API_URL: `http://127.0.0.1:${server.address().port}` };
-  const plan = async (event = 'push') => {
-    const result = await new Promise((resolve) => {
-      const child = spawn(process.execPath, ['scripts/app-plan.mjs', '--base', 'last-success', '--head', head], { cwd: root, env: { ...env, GITHUB_EVENT_NAME: event } });
-      let stdout = '';
-      let stderr = '';
-      child.stdout.on('data', (chunk) => { stdout += chunk; });
-      child.stderr.on('data', (chunk) => { stderr += chunk; });
-      child.on('close', (code) => resolve({ code, stdout, stderr }));
-    });
-    assert.equal(result.code, 0, result.stderr);
-    return { ...JSON.parse(result.stdout), stderr: result.stderr };
-  };
-  const green = { id: 77, event: 'merge_group', status: 'completed', conclusion: 'success', head_sha: head, path: '.github/workflows/ci.yml', repository: { full_name: 'neurodesk/webapps' }, head_repository: { full_name: 'neurodesk/webapps' } };
-
-  // No queue run: the push plans as before, and composite-site runs on every push anyway.
-  const before = await plan();
-  assert.equal(before.queue_tested, 'false');
-  assert.equal(before.has_apps, 'true');
-  assert.equal(before.has_browser_apps, 'true');
-  assert.match(before.stderr, /no merge queue proof: no successful merge queue ci run tested/);
-
-  queue = [green];
-  const covered = await plan();
-  assert.equal(covered.queue_tested, 'true', covered.stderr);
-  assert.deepEqual(JSON.parse(covered.selected_ids), ['synthseg']);
-  for (const output of ['has_apps', 'has_browser_apps', 'has_site']) assert.equal(covered[output], 'false', output);
-  assert.equal(covered.has_gpu_apps, 'true', 'the GPU suite the queue may have deferred still runs');
-  assert.deepEqual(JSON.parse(covered.gpu_apps).include.map((entry) => entry.app), ['synthseg']);
-  assert.match(covered.stderr, /Tested in the merge queue: [0-9a-f]{9} passed in https:\/\/github\.com\/neurodesk\/webapps\/actions\/runs\/77/);
-
-  // The proof is read only on a push: a dispatch on main and an unknown event plan as before.
-  for (const event of ['workflow_dispatch', 'repository_dispatch']) assert.equal((await plan(event)).queue_tested, 'false', event);
-  // A failed queue run, or an API error, leaves the push as it was.
-  queue = [{ ...green, conclusion: 'failure' }];
-  assert.equal((await plan()).has_apps, 'true');
-  queue = [green];
-  status = 502;
-  const failed = await plan();
-  assert.equal(failed.queue_tested, 'false');
-  assert.equal(failed.has_apps, 'true');
 });
 
 // A repository with one commit of `files`, and a function that commits more changes.

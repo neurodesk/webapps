@@ -5,9 +5,6 @@ on:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   push:
     branches: [main]
-  # A merge queue run tests the commit that will land on main; only GitHub starts one.
-  merge_group:
-    types: [checks_requested]
   schedule:
     - cron: '23 3 * * *'
   workflow_dispatch:
@@ -32,8 +29,6 @@ permissions:
 
 concurrency:
   # Keep the nightly full-catalog backstop independent of narrowed push runs.
-  # Each merge queue entry has its own ref, so queue runs cancel neither each
-  # other nor a pull request's run.
   group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
@@ -41,7 +36,7 @@ env:
   # CI never uses the CUDA providers; parallel postinstalls of two versions race on one temp path.
   ONNXRUNTIME_NODE_INSTALL: skip
   PW_TEST_REPORTER: ${{ github.workspace }}/test-utils/test-durations-reporter.mjs
-  NEURODESK_E2E_SKIP_SLOW: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && '1' || '' }}
+  NEURODESK_E2E_SKIP_SLOW: ${{ (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && '1' || '' }}
 
 jobs:
   app-plan:
@@ -68,7 +63,6 @@ jobs:
       withheld: ${{ steps.plan.outputs.withheld }}
       full_plan: ${{ steps.plan.outputs.full_plan }}
       easter_egg: ${{ steps.plan.outputs.easter_egg }}
-      queue_tested: ${{ steps.plan.outputs.queue_tested }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -86,10 +80,8 @@ jobs:
         env:
           # Pending pushes coalesce; compare with the last finished run (and
           # the apps it failed) so every intervening merge is covered. A dispatch diffs from where
-          # its branch left main unless its scope is all; the nightly tests all. A merge queue
-          # run diffs from the queue's base, which holds the pull requests ahead of it too.
-          # Any other event, or an empty base, tests every app.
-          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'merge_group' && github.event.merge_group.base_sha || github.event_name == 'push' && 'last-success' || github.event_name == 'workflow_dispatch' && inputs.scope != 'all' && 'merge-base' || '' }}
+          # its branch left main unless its scope is all; the nightly tests all.
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && 'last-success' || github.event_name == 'workflow_dispatch' && inputs.scope != 'all' && 'merge-base' || '' }}
           HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           CI_DRAFT: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft }}
           SCOPE: ${{ inputs.scope }}
@@ -219,11 +211,9 @@ jobs:
     # App-scoped changes can break composite assembly (runtime-store rewrites,
     # artifact budgets), so any PR that selects at least one app runs the
     # composite checks; only docs-only changes skip them. A dispatch follows
-    # its plan too, so its gpu scope skips them. A merge queue run builds it
-    # every time, as a push did, and a push skips it only when the plan proved
-    # a merge queue run passed at every commit it adds (queue_tested).
+    # its plan too, so its gpu scope skips them.
     # This job builds the site once; the site-* jobs check that build in parallel.
-    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && ((github.event_name == 'push' && needs.app-plan.outputs.queue_tested != 'true') || github.event_name == 'merge_group' || github.event_name == 'schedule' || needs.app-plan.outputs.has_site == 'true')
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name == 'push' || github.event_name == 'schedule' || needs.app-plan.outputs.has_site == 'true')
     runs-on: ubuntu-latest
     outputs:
       smoke_apps: ${{ steps.check-apps.outputs.smoke_apps }}
@@ -674,7 +664,7 @@ jobs:
           NEURODESK_E2E_PREBUILT: '1'
           NEURODESK_E2E_SHARD: ${{ matrix.shard }}
           # An app reached only through shared code leaves its @heavy tests to the nightly run.
-          NEURODESK_E2E_SKIP_HEAVY: ${{ !matrix.heavy_tests && (github.event_name == 'pull_request' || github.event_name == 'merge_group' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && '1' || '' }}
+          NEURODESK_E2E_SKIP_HEAVY: ${{ !matrix.heavy_tests && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && '1' || '' }}
         run: pnpm --filter ${{ matrix.app }} test:e2e
       # A failed test's error-context.md holds the page's accessibility snapshot, so
       # the status text behind a wrong example state or empty file info survives the run.
@@ -694,10 +684,8 @@ jobs:
   # data; SYNcro's full normalizations make it the slowest by far.
   browser-e2e-gpu:
     needs: app-plan
-    # A ready pull request and a merge queue run leave a whole-catalogue plan's
-    # suite to the push, which runs its plan's GPU apps even when the queue tested it.
-    # A draft starts no browser job.
-    if: needs.app-plan.outputs.has_gpu_apps == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) && ((github.event_name != 'pull_request' && github.event_name != 'merge_group') || needs.app-plan.outputs.all_apps != 'true')
+    # A draft starts no browser job; a ready pull request leaves a whole-catalogue suite to main.
+    if: needs.app-plan.outputs.has_gpu_apps == 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && needs.app-plan.outputs.all_apps != 'true'))
     runs-on: macos-15
     timeout-minutes: 300
     strategy:
@@ -800,17 +788,19 @@ jobs:
       - run: pnpm --filter @neurodesk/vessel-surfer-leaderboard test
       - run: pnpm --filter @neurodesk/vessel-surfer-easter-egg test:e2e
 
-  # The one check a ruleset requires for pull requests and the merge queue. It
-  # waits for every other job and passes only when app-plan succeeded and every
-  # job it waits for succeeded or was skipped by its condition: a failed,
-  # cancelled or timed-out job fails it, and so does a job skipped because a
-  # job it needs failed, since that job is waited for too. always() keeps it
-  # from being skipped, which GitHub would read as a pass, when the run is
-  # cancelled. A draft passes with what its plan ran; GitHub merges no draft.
+  # The one check a ruleset can require so that main receives no pull request
+  # whose ci run is not green. It waits for every other job and passes only
+  # when app-plan succeeded and every job it waits for succeeded or was skipped
+  # by its condition: a failed, cancelled or timed-out job fails it, and so does
+  # a job skipped because a job it needs failed, since that job is waited for
+  # too, and a withheld plan, through full-plan-withheld. always() keeps it from
+  # being skipped, which GitHub would read as a pass, when the run is cancelled.
+  # A draft passes with what its plan ran; GitHub merges no draft. It runs only
+  # for pull requests: nothing requires a check on a push, nightly or dispatch.
   # example-cache-retention runs only on main's ref and may fail by design.
   ci-required:
     needs: [app-plan, full-plan, full-plan-withheld, workspace-contracts, app-tests, composite-site, site-runtime, site-audit, site-e2e, site-mobile, site-catalog, processing-workflows, agent-interactions, browser-e2e, browser-e2e-gpu, homepage-easter-egg]
-    if: ${{ always() && (github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.action != 'converted_to_draft')) }}
+    if: ${{ always() && github.event_name == 'pull_request' && github.event.action != 'converted_to_draft' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

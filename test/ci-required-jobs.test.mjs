@@ -27,8 +27,8 @@ const REQUIRED = {
   'workspace-contracts': { needs: [], if: "github.event.action != 'converted_to_draft' && inputs.scope != 'gpu' && inputs.scope != 'site'" },
   'app-tests': { needs: ['app-plan'], if: "needs.app-plan.outputs.has_apps == 'true'" },
   'browser-e2e': { needs: ['app-plan'], if: "needs.app-plan.outputs.has_browser_apps == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)" },
-  'browser-e2e-gpu': { needs: ['app-plan'], if: "needs.app-plan.outputs.has_gpu_apps == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) && ((github.event_name != 'pull_request' && github.event_name != 'merge_group') || needs.app-plan.outputs.all_apps != 'true')" },
-  'composite-site': { needs: ['app-plan'], if: "(github.event_name != 'pull_request' || !github.event.pull_request.draft) && ((github.event_name == 'push' && needs.app-plan.outputs.queue_tested != 'true') || github.event_name == 'merge_group' || github.event_name == 'schedule' || needs.app-plan.outputs.has_site == 'true')" },
+  'browser-e2e-gpu': { needs: ['app-plan'], if: "needs.app-plan.outputs.has_gpu_apps == 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && needs.app-plan.outputs.all_apps != 'true'))" },
+  'composite-site': { needs: ['app-plan'], if: "(github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name == 'push' || github.event_name == 'schedule' || needs.app-plan.outputs.has_site == 'true')" },
   'site-runtime': { needs: ['composite-site'], if: "needs.composite-site.result == 'success'" },
   'site-audit': { needs: ['composite-site'], if: "needs.composite-site.result == 'success'" },
   'site-e2e': { needs: ['composite-site'], if: "needs.composite-site.result == 'success'" },
@@ -39,7 +39,7 @@ const REQUIRED = {
   'homepage-easter-egg': { needs: ['app-plan'], if: "${{ !cancelled() && github.event.action != 'converted_to_draft' && inputs.scope != 'gpu' && (github.event_name != 'pull_request' || needs.app-plan.result != 'success' || needs.app-plan.outputs.easter_egg != 'skip') }}" },
   // The check a ruleset requires: every other job but the cache clean-up, which
   // runs only on main's ref and may fail by design (AGGREGATE_EXEMPT).
-  'ci-required': { needs: 'every job', if: "${{ always() && (github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.action != 'converted_to_draft')) }}" },
+  'ci-required': { needs: 'every job', if: "${{ always() && github.event_name == 'pull_request' && github.event.action != 'converted_to_draft' }}" },
 };
 const AGGREGATE = 'ci-required';
 const AGGREGATE_EXEMPT = ['example-cache-retention'];
@@ -168,7 +168,6 @@ function runContexts(ci) {
   const options = (name) => inputs[name]?.options ?? [inputs[name]?.default ?? null];
   const runs = [];
   for (const event of ['push', 'schedule']) runs.push({ event_name: event, ref: 'refs/heads/main', event: {}, inputs: {} });
-  if (ci.on?.merge_group) runs.push({ event_name: 'merge_group', ref: 'refs/heads/gh-readonly-queue/main/pr-1-0123456789abcdef0123456789abcdef01234567', event: { action: 'checks_requested' }, inputs: {} });
   for (const ref of ['refs/heads/main', 'refs/heads/feature']) {
     for (const scope of options('scope')) {
       for (const agentic of options('agentic_mode')) runs.push({ event_name: 'workflow_dispatch', ref, event: {}, inputs: { scope, agentic_mode: agentic } });
@@ -440,7 +439,6 @@ const planOutputs = (overrides = {}) => ({
   'app-plan.has_gpu_apps': 'true',
   'app-plan.all_apps': 'false',
   'app-plan.has_site': 'true',
-  'app-plan.queue_tested': 'false',
   'app-plan.withheld': 'false',
   'app-plan.full_plan': 'false',
   'app-plan.easter_egg': 'run',
@@ -448,7 +446,6 @@ const planOutputs = (overrides = {}) => ({
   ...Object.fromEntries(Object.entries(overrides).map(([key, value]) => [key.includes('.') ? key : `app-plan.${key}`, value])),
 });
 const pullRequest = (action, draft) => ({ event_name: 'pull_request', ref: 'refs/pull/1/merge', event: { action, pull_request: { draft } }, inputs: {} });
-const queue = { event_name: 'merge_group', ref: 'refs/heads/gh-readonly-queue/main/pr-1-0123456789abcdef0123456789abcdef01234567', event: { action: 'checks_requested' }, inputs: {} };
 const onMain = (event_name) => ({ event_name, ref: 'refs/heads/main', event: {}, inputs: {} });
 const dispatch = (scope, agentic_mode = 'none', ref = 'refs/heads/feature') => ({ event_name: 'workflow_dispatch', ref, event: {}, inputs: { scope, agentic_mode } });
 const noApps = { has_apps: 'false', has_browser_apps: 'false', has_gpu_apps: 'false', has_site: 'false' };
@@ -459,13 +456,11 @@ export const JOB_GRAPH_SCENARIOS = {
   'ready pull request, whole catalogue': [pullRequest('ready_for_review', false), planOutputs({ all_apps: 'true', full_plan: 'true' })],
   'ready pull request over its budget': [pullRequest('synchronize', false), planOutputs({ withheld: 'true', has_site: 'false' })],
   'pull request converted to draft': [pullRequest('converted_to_draft', true), planOutputs()],
-  'merge queue, one GPU app': [queue, planOutputs()],
-  'merge queue, whole catalogue': [queue, planOutputs({ all_apps: 'true' })],
-  'merge queue, docs only': [queue, planOutputs(noApps)],
-  'push, no queue proof, one GPU app': [onMain('push'), planOutputs()],
-  'push, no queue proof, docs only': [onMain('push'), planOutputs(noApps)],
-  'push tested by a green queue run, one GPU app': [onMain('push'), planOutputs({ has_apps: 'false', has_browser_apps: 'false', has_site: 'false', queue_tested: 'true' })],
-  'push tested by a green queue run, one app without GPU': [onMain('push'), planOutputs({ ...noApps, queue_tested: 'true' })],
+  'draft pull request opened, docs only': [pullRequest('opened', true), planOutputs(noApps)],
+  'ready pull request, docs only': [pullRequest('synchronize', false), planOutputs(noApps)],
+  'pull request reopened, one GPU app': [pullRequest('reopened', false), planOutputs()],
+  'push, one GPU app': [onMain('push'), planOutputs()],
+  'push, docs only': [onMain('push'), planOutputs(noApps)],
   nightly: [onMain('schedule'), planOutputs({ all_apps: 'true', 'composite-site.agent_site_ready': 'true' })],
   'dispatch, scope affected': [dispatch('affected'), planOutputs()],
   'dispatch on main, scope affected': [dispatch('affected', 'none', 'refs/heads/main'), planOutputs()],
@@ -487,13 +482,12 @@ const EXPECTED_JOB_GRAPH = {
   'ready pull request, whole catalogue': [...PLAN_RUN, 'full-plan', 'app-tests', ...SITE_RUN, 'browser-e2e', 'homepage-easter-egg', 'ci-required'],
   'ready pull request over its budget': [...PLAN_RUN.slice(0, 1), 'full-plan-withheld', 'workspace-contracts', ...APP_RUN, 'homepage-easter-egg', 'ci-required'],
   'pull request converted to draft': [],
-  'merge queue, one GPU app': [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, 'homepage-easter-egg', 'ci-required'],
-  'merge queue, whole catalogue': [...PLAN_RUN, 'app-tests', ...SITE_RUN, 'browser-e2e', 'homepage-easter-egg', 'ci-required'],
-  'merge queue, docs only': [...PLAN_RUN, ...SITE_RUN, 'homepage-easter-egg', 'ci-required'],
-  'push, no queue proof, one GPU app': [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, 'example-cache-retention', 'homepage-easter-egg'],
-  'push, no queue proof, docs only': [...PLAN_RUN, ...SITE_RUN, 'example-cache-retention', 'homepage-easter-egg'],
-  'push tested by a green queue run, one GPU app': [...PLAN_RUN, 'browser-e2e-gpu', 'homepage-easter-egg'],
-  'push tested by a green queue run, one app without GPU': [...PLAN_RUN, 'homepage-easter-egg'],
+  'draft pull request opened, docs only': [...PLAN_RUN, 'homepage-easter-egg', 'ci-required'],
+  'ready pull request, docs only': [...PLAN_RUN, 'homepage-easter-egg', 'ci-required'],
+  'pull request reopened, one GPU app': [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, 'homepage-easter-egg', 'ci-required'],
+  // A push builds the site whatever its plan, and no check is required of it.
+  'push, one GPU app': [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, 'example-cache-retention', 'homepage-easter-egg'],
+  'push, docs only': [...PLAN_RUN, ...SITE_RUN, 'example-cache-retention', 'homepage-easter-egg'],
   nightly: [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, 'example-cache-retention', 'agent-interactions', 'homepage-easter-egg'],
   'dispatch, scope affected': [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, 'homepage-easter-egg'],
   'dispatch on main, scope affected': [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, 'example-cache-retention', 'homepage-easter-egg'],
@@ -610,10 +604,10 @@ test('the aggregate fails every run in which a started job failed, also through 
   cases.forEach((each, index) => assert.equal(verdicts[index], each.pass, each.label));
 });
 
-test('the aggregate waits for every job but the main-only cache clean-up and runs on every pull request and queue run', async () => {
+test('the aggregate waits for every job but the main-only cache clean-up and runs on every pull request run', async () => {
   const ci = await loadCi();
   assert.deepEqual(needsOf(ci.jobs[AGGREGATE]), aggregateNeeds(ci));
-  assert.equal(ci.jobs['example-cache-retention'].if, "github.ref == 'refs/heads/main'", 'the exempt job never runs in a pull request or queue run');
+  assert.equal(ci.jobs['example-cache-retention'].if, "github.ref == 'refs/heads/main'", 'the exempt job never runs in a pull request run');
   assert.equal(ci.jobs['example-cache-retention']['continue-on-error'], true);
   const condition = compile(ci.jobs[AGGREGATE].if);
   const due = (run) => condition({ call: (name) => ({ always: true, cancelled: true, failure: true, success: false })[name], read: (path) => read(path, { run, ran: new Map(), values: {}, id: AGGREGATE }) });
@@ -621,9 +615,9 @@ test('the aggregate waits for every job but the main-only cache clean-up and run
   for (const action of ['opened', 'synchronize', 'reopened', 'ready_for_review']) {
     for (const draft of [true, false]) assert.equal(due(pullRequest(action, draft)), true, `${action} ${draft}`);
   }
-  assert.equal(due(queue), true);
   assert.equal(due(pullRequest('converted_to_draft', true)), false);
-  for (const run of [onMain('push'), onMain('schedule'), dispatch('affected')]) assert.equal(due(run), false, run.event_name);
+  // Nothing requires a check of a push, the nightly or a dispatch, so it does not run there.
+  for (const run of [onMain('push'), onMain('schedule'), dispatch('affected'), dispatch('all', 'none', 'refs/heads/main')]) assert.equal(due(run), false, `${run.event_name} ${run.ref}`);
   // The guard fails when a job is added without the aggregate waiting for it, or the step changes.
   const edited = (edit) => {
     const copy = structuredClone(ci);
