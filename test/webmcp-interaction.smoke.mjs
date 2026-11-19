@@ -18,6 +18,8 @@
 //
 //   pnpm build && node test/webmcp-interaction.smoke.mjs
 //   SMOKE_APPS=qsmbly,dcm2niix WEBMCP_REPORT=interaction.json node test/webmcp-interaction.smoke.mjs
+//   SMOKE_APPS=vesselboost WEBMCP_HOLD_DELAY_MS=200 node test/webmcp-interaction.smoke.mjs   (a slow agent)
+//   SMOKE_APPS=browserqc WEBMCP_EXAMPLE_DELAY_MS=20000 node test/webmcp-interaction.smoke.mjs   (a slow network)
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

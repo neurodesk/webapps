@@ -321,8 +321,10 @@ alike or reached no listener. The guarantee therefore rests on one event fact
 only, whether the person did anything trusted in the page since the agent last
 had their Allow, and on what the tools recorded, not on what the page answers.
 
-- **Seeing the person first.** `site/theme.js`, the one classic script of
-  every page, runs before any module. When the browser exposes a model
+- **Seeing the person first.** `site/theme.js` is the first script of every
+  app page: the build puts it before any other script element, after the
+  page's metadata and origin trial token, and `test/catalog-sites.test.mjs`
+  fails on a built app page whose first script is another. When the browser exposes a model
   context, it adds capture listeners on window for every press, key, input,
   change, paste, wheel, `dragenter`, `dragover` and drop, and hands each event
   to the tools. A capture listener on window that is added first runs before
@@ -331,15 +333,24 @@ had their Allow, and on what the tools recorded, not on what the page answers.
   window too. Same-origin frames, found at any depth and inside open shadow
   roots, get the same listeners on their windows from the first animation
   frame after each new document appears, and a frame navigating away from a
-  document it showed touches the examination itself.
+  document it showed touches the examination itself. A frame whose document
+  the page cannot reach (another origin's) is followed on every animation
+  frame while it is attached, so a document of the page's origin that
+  replaces it is watched from its first frame too, and that change also
+  touches the examination.
 - **Touch.** A trusted action in the workspace touches the examination. The
   held files and the latest run stay, but the agent gets nothing from them
   without the shared resume dialog: `app_describe` reports `touched` without
   the report, and the next run, `runs_get`, `runs_cancel` or
   `outputs_download` asks first. Calls waiting on one touch share one dialog
   and its one answer. The dialog names exactly what Allow hands back: the
-  latest run, by operation and start time, with the input files it ran on, and
-  apart from them the files the agent keeps for its next run. It says the
+  latest run, by operation and start time, with what it was given (the files
+  of the roles its operation reads, and for each url input the root the
+  person allowed), and apart from them the files the agent keeps for its next
+  run. It reads them when it shows, not when it was queued, and Allow applies
+  only while they are still what it named: when the agent's own file request
+  or example changed the held files meanwhile, the dialog shows the change and
+  asks again. It says the
   agent gets the results that run ended with, even if the page shows others
   now. Allow discloses that run and those files and clears the touch until the
   next one; the examination's earlier runs stay withheld (`RUN_STALE`).
@@ -361,7 +372,12 @@ had their Allow, and on what the tools recorded, not on what the page answers.
   in any file input, files dropped on the page, the page's example selector
   starting a load, a handoff and the app's `automation.reset()`, and on a
   touched examination a list change the app reports with `nd-files` or files
-  the page itself puts on a classified input (the shell's Undo). A new
+  the page itself puts on a classified input (the shell's Undo). When Undo
+  puts back a list the app had emptied, it fires `nd-clear` after the empty
+  change, and every app that reports an emptied list empties its list on it
+  (NeSVoR, Easy MP2RAGE, SeedSeg, SamSrf, QSMbly, dcm2niix, Spinal Cord
+  Toolbox, ANTs denoise's mask, Deconvolution's PSF, the shared image pair
+  and `SimpleFileIOController`). A new
   examination holds no files and the runs started before it are stale
   (`app_describe.run` says so; `runs_get`, `runs_cancel` and
   `outputs_download` return `RUN_STALE`). An end the tools miss is a touch,
@@ -420,6 +436,12 @@ the questions, file requests and fetch approvals as `dialog.nd-dialog`
 dialogs. One shows at a time and the others wait; a prompt that fails to
 render rejects only its own call. Each says that an AI agent the person
 started is asking. Closing a dialog declines it, and an aborted call closes it.
+A consent dialog (fetch approval, page files, resume) names state: it takes a
+function for its request, reads it when it shows and again when the person
+presses Allow, shows the current state and asks again when the two differ, and
+resolves to the request the person allowed, which the tools apply only while
+it is still current. A components test enumerates every prompt and fails on
+one that is neither such a consent dialog nor free of state.
 
 - **On by default.** The tools register wherever the browser exposes the API,
   with no `?agent` switch. The person starts the browser's agent, and the page
