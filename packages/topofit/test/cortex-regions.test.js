@@ -189,9 +189,11 @@ test('a named region restricts every patch vertex to the region and writes its p
   assert.deepEqual(readAnnotation(annotations[0].bytes).values, expected);
 });
 
-test('a region outside the searched cortex fails and names the region', async () => {
+test('a region outside the searched cortex finds no patch and still writes its parcellation', async () => {
   const data = fixture({ wang2015: { lh: [3, 3], rh: [1, 1] } });
-  await assert.rejects(analyzeSurfaces({ ...data, region: 'wang2015:V1' }), /^Error: V1 \(Wang 2015 visual topography\) contains no eligible cortical faces/);
+  const empty = await analyzeSurfaces({ ...data, region: 'wang2015:V1' });
+  assert.equal(empty.analysis.flat_patch_status, 'NO_PATCH_MEETS_CRITERIA');
+  assert.equal(empty.files.filter(({ name }) => name.endsWith('.annot')).length, 1);
   await assert.rejects(analyzeSurfaces({ ...data, region: 'wang2015:V1', roi: data.source }), /not both/);
   await assert.rejects(analyzeSurfaces({ ...data, region: 'wang2015:XX' }), /Unknown cortical region/);
 });

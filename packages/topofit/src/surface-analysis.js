@@ -55,10 +55,13 @@ export async function analyzeSurfaces({ source, vertices, faces, estimateNormals
         if (!inside || !(roi.data[voxel[0] + roi.dims[0] * (voxel[1] + roi.dims[1] * voxel[2])] > 0)) eligible[i] = 0;
       }
     }
+    let hemisphereFaceCount = 0;
     for (let f = 0; f < faces[hemisphere].length; f += 3) {
-      if (faces[hemisphere].subarray(f, f + 3).every((i) => eligible[i])) eligibleFaceCount += 1;
+      if (faces[hemisphere].subarray(f, f + 3).every((i) => eligible[i])) hemisphereFaceCount += 1;
     }
-    const candidates = findPatches(middle, faces[hemisphere], eligible, settings);
+    eligibleFaceCount += hemisphereFaceCount;
+    // A named region can leave a hemisphere too little cortex to search: that is a search with no patch, not an error.
+    const candidates = region && hemisphereFaceCount < 3 ? [] : findPatches(middle, faces[hemisphere], eligible, settings);
     for (const [index, patch] of candidates.entries()) {
       const id = `${hemisphere.toUpperCase()}${String(index + 1).padStart(2, '0')}`;
       const separation = patch.indices.map((i) => Math.hypot(...[0, 1, 2].map((axis) => pial[i * 3 + axis] - white[i * 3 + axis]))).sort((a, b) => a - b);
@@ -103,10 +106,7 @@ export async function analyzeSurfaces({ source, vertices, faces, estimateNormals
       });
     }
   }
-  if (settings && !eligibleFaceCount) {
-    if (region) throw new Error(`${region.name} (${REGION_ATLASES[region.atlas].name}) contains no eligible cortical faces in the requested hemisphere.`);
-    throw new Error(roi ? 'ROI contains no eligible cortical patch.' : 'No eligible cortical faces in the requested hemisphere.');
-  }
+  if (settings && !region && !eligibleFaceCount) throw new Error(roi ? 'ROI contains no eligible cortical patch.' : 'No eligible cortical faces in the requested hemisphere.');
   const analysis = {
     depth_fraction: 0.5,
     coordinate_system: 'Scanner RAS (positions in mm; normals dimensionless)',
