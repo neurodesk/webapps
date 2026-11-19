@@ -15,6 +15,8 @@ const WHEEL_TARGETS = 'canvas, input, select, textarea, [contenteditable=""], [c
 const IGNORED_KEYS = new Set(['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'Tab']);
 const SCROLL_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End', ' ']);
 const INTERACTIONS = ['pointerdown', 'pointerup', 'wheel', 'keydown', 'input', 'change', 'paste', 'drop'];
+// Events the page's own code sends, which interactionEffect also judges.
+const PAGE_EVENTS = ['nd-files', 'nd-example-status', 'nd-handoff', 'nd-run-start'];
 const CLASSIFIED = 'input[type="file"][data-neurodesk-input]';
 const RUNS_KEPT = 64;
 // takeHandoff (handoff/index.js) leaves what it received here as well, for a tracker that starts later.
@@ -25,24 +27,36 @@ const isElement = node => node?.nodeType === 1;
 const isClassified = node => isElement(node) && node.matches(CLASSIFIED) && node.id !== TRANSFER && !node.closest(PROMPT);
 
 /**
- * What one trusted event does to the examination, or null when it does not count. This is the one
- * place that decides which of the person's interactions start a new examination:
+ * What one event does to the agent's examination. This is the one place that decides it:
  *
- *   'pick'    a pick in a classified file input, which the tracker records as a page entry
- *   'drop'    files dropped on the page
- *   'loader'  opening a file chooser or the example selector, which loads nothing until it answers
- *   'unseen'  anything else in the workspace: a control, the viewer, typing, a drag, a wheel turned
- *             over the viewer or a control, any action inside a shadow root or a same-origin frame
+ *   'end'     the examination is over: its held files are released and its runs become stale, with no
+ *             way back. A pick in any file input, files dropped on the page, the page's example
+ *             selector starting a load, a handoff and the app's `automation.reset()`. Once the person
+ *             has touched the examination, also a remove or clear the app reports with `nd-files`, and
+ *             a run the status bar starts (`nd-run-start`, from ProgressManager.begin) while no run the
+ *             tools started is going: the person started it.
+ *   'touch'   the person used the workspace: a press, typing, a drag, a wheel turned over the viewer or
+ *             a control, any action inside an open shadow root or a same-origin frame. The held files
+ *             and the run wait until the person lets the agent continue with them.
+ *   'loader'  a touch that opens a file chooser or the example selector, whose result the tracker sees
+ *             when it answers.
+ *   null      not counted: the agent's dialogs, the shared application bar and the shell's own
+ *             dialogs, page scrolling (a wheel elsewhere, a scroll key with nothing focused), modifier
+ *             keys and Tab, pointer movement without a press, and focus changes. A cross-origin frame's
+ *             events never reach the page.
  *
- * Not counted: the agent's dialogs, the shared application bar and the shell's own dialogs, page
- * scrolling (a wheel elsewhere, a scroll key with nothing focused), modifier keys and Tab, pointer
- * movement without a press, and focus changes. A cross-origin frame's events never reach the page.
+ * `person` says the person sent the event (a trusted event), `touched` that the examination is touched
+ * and `agentRunning` that a run the tools started is going.
  */
-export function interactionEffect(event, doc) {
+export function interactionEffect(event, doc, { person = event.isTrusted, touched = false, agentRunning = false } = {}) {
+  if (event.type === 'nd-example-status') return event.detail?.state === 'loading' ? 'end' : null;
+  if (event.type === 'nd-handoff' || event.type === 'neurodesk-automation-reset') return 'end';
+  if (event.type === 'nd-files') return touched ? 'end' : null;
+  if (event.type === 'nd-run-start') return touched && !agentRunning ? 'end' : null;
+  if (!person) return null;
   const path = event.composedPath().filter(isElement);
   if (path.some(node => node.matches(OUTSIDE))) return null;
   const [target] = path;
-  // Inside a shadow root or a frame the tracker cannot list what the action changed.
   const inPage = !target || target.getRootNode() === doc;
   const owner = target?.ownerDocument ?? doc;
   const scroller = !target || target === owner.body || target === owner.documentElement;
@@ -51,26 +65,26 @@ export function interactionEffect(event, doc) {
     if (SCROLL_KEYS.has(event.key) && scroller) return null;
   }
   if (event.type === 'wheel' && !path.some(node => node.matches(WHEEL_TARGETS))) return null;
-  if (event.type === 'drop') return event.dataTransfer?.types?.includes('Files') && inPage ? 'drop' : 'unseen';
+  if (event.type === 'drop') return event.dataTransfer?.types?.includes('Files') ? 'end' : 'touch';
   if (target?.matches('input[type="file"]') && (event.type === 'change' || event.type === 'input')) {
     // A file chooser fires input and then change; change does not leave a shadow root, input does.
-    if (inPage && event.type === 'input') return null;
-    return isClassified(target) && owner === doc ? 'pick' : 'unseen';
+    return inPage && event.type === 'input' ? null : 'end';
   }
   // A control's change follows the keydown or pointerup already seen, and can come later, on blur.
   if (event.type === 'change') return null;
   if (inPage && path.some(node => node.matches(LOADERS) || (node.localName === 'label' && node.control?.type === 'file'))) return 'loader';
-  return 'unseen';
+  return 'touch';
 }
 
 /**
  * What the WebMCP tools hold for one examination, and the files the page received.
  *
- * An examination lasts while the person leaves the workspace alone: interactionEffect decides which
- * of their actions start a new one, and so do an example picked in the page, a handoff and the app's
- * `automation.reset()`. A new examination holds no files, the runs the tools started before it are
- * stale, and a prompt or download that answers afterwards commits nothing. No list of app events
- * decides this, so an app cannot change what the page shows without ending the examination.
+ * interactionEffect decides what each of the person's actions and each page event does. A touch keeps
+ * the held files and the runs, but the tools use them again only once the person allows it (`touched`,
+ * `resume`); an end starts a new examination that holds no files, in which the earlier runs are stale.
+ * Every counted event also starts a new turn: a tool call belongs to the turn it began in
+ * (webmcp/tools.js), and the turn's signal aborts its prompts, fetches and waits when the turn ends.
+ * No list of app events decides this, so an app cannot change what the page shows unseen.
  *
  * The page's entries record what its classified inputs (`data-neurodesk-input`, in the light DOM or an
  * open shadow root) received as each change, input or `nd-files` event arrived, and files dropped or
@@ -84,7 +98,8 @@ export function interactionEffect(event, doc) {
  */
 export function createToolInputs({ doc, automation, isPerson = event => event.isTrusted }) {
   const view = doc.defaultView;
-  let examination = { id: 0, held: new Map() };
+  let examination = { id: 1, held: new Map(), touched: false };
+  let turn = { examination, controller: new AbortController() };
   const runs = new Map();
   let unseen = false;
   let pageFiles = new WeakMap();
@@ -102,9 +117,20 @@ export function createToolInputs({ doc, automation, isPerson = event => event.is
   const label = input => input.getAttribute('aria-label') || input.labels?.[0]?.textContent.trim() || input.dataset.neurodeskInput;
   const running = () => Boolean(automation.running?.());
 
-  function begin() {
-    examination = { id: examination.id + 1, held: new Map() };
+  function nextTurn() {
+    turn.controller.abort();
+    turn = { examination, controller: new AbortController() };
     pageExample = null;
+  }
+
+  function touch() {
+    examination.touched = true;
+    nextTurn();
+  }
+
+  function end() {
+    examination = { id: examination.id + 1, held: new Map(), touched: false };
+    nextTurn();
   }
 
   function record(input, files) {
@@ -119,17 +145,7 @@ export function createToolInputs({ doc, automation, isPerson = event => event.is
   const handedOff = view[RECEIVED_HANDOFF];
   if (handedOff?.files?.length) received.set('handoff', { label: `Sent from ${handedOff.source?.title ?? 'another app'}`, files: handedOff.files });
 
-  function unseenChange() {
-    begin();
-    unseen = true;
-  }
-
   function personDrop(event) {
-    begin();
-    if (running()) {
-      unseen = true;
-      return;
-    }
     // The shell or the app may deliver the drop through a classified input, which records it instead.
     const at = examination;
     const before = loads;
@@ -140,81 +156,123 @@ export function createToolInputs({ doc, automation, isPerson = event => event.is
     });
   }
 
-  function interaction(event) {
-    if (!isPerson(event)) return;
-    const effect = interactionEffect(event, doc);
-    if (effect === 'loader') begin();
-    else if (effect === 'drop') personDrop(event);
-    else if (effect === 'unseen') unseenChange();
-    else if (effect === 'pick') {
-      const [target] = event.composedPath();
+  // What the page received from an event, recorded after the examination took the event's effect.
+  function recordLoad(event, person, effect) {
+    const [target] = event.composedPath();
+    if (event.type === 'nd-files') {
+      if (isClassified(event.target) && event.detail?.files?.[Symbol.iterator]) record(event.target, [...event.detail.files]);
+    } else if (event.type === 'nd-example-status') {
+      if (event.detail?.state === 'ready') pageExample = event.detail.exampleId ?? null;
+    } else if (event.type === 'nd-handoff') {
+      const files = event.detail?.files;
+      if (files?.length) received.set('handoff', { label: `Sent from ${event.detail.source?.title ?? 'another app'}`, files });
+    } else if (!person) {
+      // Loads no person made: an app filling its own inputs, the shell delivering a drop or a handoff, a run.
+      if (event.type === 'change' && isClassified(target)) record(target, [...(target.files ?? [])]);
+      if (event.type === 'input' && isClassified(target) && target.getRootNode() !== doc) record(target, [...(target.files ?? [])]);
+    } else if (effect === 'end' && event.type === 'drop') {
+      const inPage = !isElement(target) || target.getRootNode() === doc;
+      if (inPage && !running()) personDrop(event);
+      else unseen = true;
+    } else if (effect === 'end') {
       // A pick made while a run is going may be ignored by the busy app.
-      if (running()) return unseenChange();
-      begin();
-      record(target, [...(target.files ?? [])]);
+      if (isClassified(target) && target.ownerDocument === doc && !running()) record(target, [...(target.files ?? [])]);
+      else unseen = true;
+    } else if (effect === 'touch') {
+      unseen = true;
     }
   }
 
-  // Same-origin frames are part of the workspace; the browser hides a cross-origin frame's events.
-  const watched = new WeakSet();
-  function watch(win) {
-    if (watched.has(win)) return;
-    watched.add(win);
-    for (const type of INTERACTIONS) win.addEventListener(type, interaction, true);
+  function observe(event) {
+    const person = isPerson(event);
+    const effect = interactionEffect(event, doc, { person, touched: examination.touched, agentRunning: running() });
+    if (effect === 'end') end();
+    else if (effect) touch();
+    recordLoad(event, person, effect);
   }
-  function watchFrames(frameDoc) {
-    if (watched.has(frameDoc)) return;
-    watched.add(frameDoc);
-    frameDoc.addEventListener('load', event => {
+
+  // Same-origin frames are part of the workspace, at any depth and inside open shadow roots; the
+  // browser hides a cross-origin frame's events. The listeners go on each document, so a frame that
+  // navigates is watched again when its new document loads. A shadow root attached to an element that
+  // is neither inserted later nor a custom element defined later is not found.
+  const documents = new WeakSet();
+  const trees = new WeakSet();
+  function watchDocument(target) {
+    if (documents.has(target)) return;
+    documents.add(target);
+    for (const type of INTERACTIONS) target.addEventListener(type, observe, true);
+    watchTree(target);
+  }
+  function watchTree(root) {
+    if (trees.has(root)) return;
+    trees.add(root);
+    const rootView = root.defaultView ?? root.ownerDocument.defaultView;
+    root.addEventListener('load', event => {
       if (event.target?.localName === 'iframe') watchFrame(event.target);
     }, true);
-    for (const frame of frameDoc.querySelectorAll('iframe')) watchFrame(frame);
+    new rootView.MutationObserver(mutations => {
+      for (const mutation of mutations) for (const node of mutation.addedNodes) if (isElement(node)) scan(node);
+    }).observe(root, { childList: true, subtree: true });
+    scan(root);
+  }
+  function scan(node) {
+    for (const element of [...(isElement(node) ? [node] : []), ...node.querySelectorAll('*')]) {
+      if (element.localName === 'iframe') watchFrame(element);
+      if (element.shadowRoot) watchTree(element.shadowRoot);
+      else if (element.localName.includes('-')) {
+        const registry = element.ownerDocument.defaultView?.customElements;
+        if (registry && !registry.get(element.localName)) {
+          registry.whenDefined(element.localName).then(() => {
+            if (element.shadowRoot) watchTree(element.shadowRoot);
+          });
+        }
+      }
+    }
   }
   function watchFrame(frame) {
     let frameDoc;
     try {
-      frameDoc = frame.contentWindow?.document;
+      frameDoc = frame.contentDocument;
     } catch {
       return;
     }
-    if (!frameDoc) return;
-    watch(frame.contentWindow);
-    watchFrames(frameDoc);
+    if (frameDoc) watchDocument(frameDoc);
   }
-  watch(view);
-  watchFrames(doc);
-
-  // Loads no person made: an app filling its own inputs, the shell delivering a drop or a handoff, a run.
-  doc.addEventListener('change', event => {
-    if (!isPerson(event) && isClassified(event.target)) record(event.target, [...(event.target.files ?? [])]);
-  }, true);
-  doc.addEventListener('input', event => {
-    const [target] = event.composedPath();
-    if (!isPerson(event) && isClassified(target) && target.getRootNode() !== doc) record(target, [...(target.files ?? [])]);
-  }, true);
-  doc.addEventListener('nd-files', event => {
-    if (isClassified(event.target) && event.detail?.files?.[Symbol.iterator]) record(event.target, [...event.detail.files]);
-  });
-  doc.addEventListener('nd-example-status', event => {
-    if (event.detail?.state === 'loading') begin();
-    if (event.detail?.state === 'ready') pageExample = event.detail.exampleId ?? null;
-  });
-  doc.addEventListener('nd-handoff', event => {
-    begin();
-    const files = event.detail?.files;
-    if (files?.length) received.set('handoff', { label: `Sent from ${event.detail.source?.title ?? 'another app'}`, files });
-  });
-  view.addEventListener('neurodesk-automation-reset', begin);
+  watchDocument(doc);
+  for (const type of PAGE_EVENTS) doc.addEventListener(type, observe);
+  view.addEventListener('neurodesk-automation-reset', observe);
 
   const entries = () => [
     ...classified().map((input, index) => ({ input: key(input, index), kind: input.dataset.neurodeskInput, label: label(input), files: pageFiles.get(input) })),
     ...[...received].map(([name, entry]) => ({ input: `received:${name}`, ...entry })),
   ].filter(entry => entry.files?.length);
 
+  const bound = from => {
+    if (from !== turn) throw changed();
+  };
+
   return {
-    /** The current examination, to hand back once an asynchronous step finishes. */
-    examination: () => examination,
+    /** The current turn, which every counted event replaces: a call hands it back to show it is still current. */
+    turn: () => turn,
+    /** Whether the person has used the workspace since the agent last held files or the person let it continue. */
+    touched: () => examination.touched,
     held: () => Object.fromEntries([...examination.held].map(([role, files]) => [role, describe(files)])),
+    /** What letting the agent continue would hand back: the held files by role, and the examination's latest run. */
+    resumable() {
+      const files = [...examination.held].flatMap(([role, held]) => held.map(file => ({ role, name: file.name })));
+      const latest = [...runs].reverse().find(([, run]) => run.examination === examination.id);
+      return { files, run: latest ? { runId: latest[0], operation: latest[1].operation, startedAt: latest[1].startedAt } : null };
+    },
+    /** The person let the agent continue: the held files and the runs serve its calls again. */
+    resume(from) {
+      bound(from);
+      examination.touched = false;
+    },
+    /** The person declined to let the agent continue: the examination ends. */
+    release(from) {
+      bound(from);
+      end();
+    },
     page: () => entries().map(({ files, ...entry }) => ({ ...entry, files: describe(files) })),
     /** Whether the person has done something in the page whose effect the tracker cannot list. */
     pageMayHoldOtherInputs: () => unseen,
@@ -232,33 +290,33 @@ export function createToolInputs({ doc, automation, isPerson = event => event.is
       received.clear();
       pageExample = null;
     },
-    /** Holds `files` for one role, beside the roles already held, if the examination is still `from`. */
+    /** Holds `files` for one role, beside the roles already held, if the turn is still `from`. */
     hold(from, role, files) {
-      if (from !== examination) throw changed();
+      bound(from);
       examination.held.set(role, files);
     },
-    /** Holds `files` (role to files) as the whole held set, if the examination is still `from`. */
+    /** Holds `files` (role to files) as the whole held set, if the turn is still `from`. */
     replace(from, files) {
-      if (from !== examination) throw changed();
+      bound(from);
       examination.held = new Map(files);
     },
     /** Hands the held files for every file role to the app's automation for the next run, which takes them; a role the tools do not hold gets none. */
     async stage(from, roles = [...examination.held.keys()]) {
-      if (from !== examination) throw changed();
+      bound(from);
       for (const role of roles) {
         await automation.adopt(role, examination.held.get(role) ?? []);
-        if (from !== examination) throw changed();
+        bound(from);
       }
     },
-    /** Records that a run the tools started belongs to the examination `from`. */
-    claim(from, runId) {
-      runs.set(runId, from.id);
+    /** Records that a run the tools started, of `operation`, belongs to the examination of the turn `from`. */
+    claim(from, runId, operation) {
+      runs.set(runId, { examination: from.examination.id, operation, startedAt: Date.now() });
       if (runs.size > RUNS_KEPT) runs.delete(runs.keys().next().value);
     },
     /** 'current' for a run the tools started in this examination, 'stale' for one before it, else 'unknown'. */
     runOf(runId) {
       if (!runs.has(runId)) return 'unknown';
-      return runs.get(runId) === examination.id ? 'current' : 'stale';
+      return runs.get(runId).examination === examination.id ? 'current' : 'stale';
     },
   };
 }

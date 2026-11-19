@@ -6,8 +6,9 @@
  *
  *   read     reads the scene
  *   display  changes what the viewer shows, not the data
- *   fetch    loads one file from an address the person approves first: the tool fetches it, refusing
+ *   fetch    adds one file from an address the person approves first: the tool fetches it, refusing
  *            redirects, and the viewer receives the bytes, never the address
+ *   replace  a fetch whose file takes the place of the volumes the viewer shows; the consent says so
  *   denied   not offered: exports pixels or files, edits or removes data, loads a payload that can
  *            name further addresses, reads a file's format from its address, adds page controls, or
  *            takes settings that can name an address
@@ -46,7 +47,7 @@ export const NIIVUE_METHODS = Object.freeze({
   add_mesh_layer: 'fetch',
   add_overlay: 'fetch',
   load_mesh: 'fetch',
-  load_volume: 'fetch',
+  load_volume: 'replace',
 
   // NiiVue picks a signal's reader from its address and looks for a sidecar beside it, so it cannot be
   // given the approved bytes under a local address.
@@ -87,12 +88,13 @@ export const offeredNiivueMethods = () => Object.keys(NIIVUE_METHODS).filter(met
 
 /**
  * The parameters each offered method takes over WebMCP: those that read the scene, change what it
- * shows, or name the one file a fetch method loads. Any other parameter is refused, so a parameter
- * nv-mcp adds stays out until someone classifies it here; the components tests hold this table to
- * nv-mcp's own schemas at the pinned version. Left out on purpose: `tab` (the desktop server's tab
- * choice), and set_volume's `affine`, `reset_affine` and `transform` (move the volume),
- * `load_all_frames` (fetches from the volume's own address) and `v1` (turns a vector volume into a
- * one-frame colour image for good).
+ * shows, or name the one file a fetch method adds and how it is shown. Any other is refused, so a
+ * parameter nv-mcp adds stays out until someone classifies it here; the components tests hold this
+ * table to nv-mcp's own schemas at the pinned version and record the effect each parameter was audited
+ * as. Left out on purpose: `tab` (the desktop server's tab choice), set_volume's `affine`,
+ * `reset_affine` and `transform` (move the volume), `load_all_frames` (fetches from the volume's own
+ * address) and `v1` (turns a vector volume into a one-frame colour image for good), and load_mesh's
+ * `replace` (removes the meshes already loaded, which the consent for the new mesh does not name).
  */
 export const NIIVUE_PARAMETERS = Object.freeze(Object.fromEntries(Object.entries({
   capabilities: '',
@@ -123,7 +125,7 @@ export const NIIVUE_PARAMETERS = Object.freeze(Object.fromEntries(Object.entries
   set_volume: 'volume colormap colormap_negative opacity cal_min cal_max cal_min_neg cal_max_neg colormap_type transparent_below_cal_min frame invert colorbar nearest atlas_outline modulate_alpha labels modulate auto_window chunk_grid spread',
   add_mesh_layer: 'mesh url name colormap colormap_negative cal_min cal_max cal_min_neg cal_max_neg opacity colorbar invert transparent_below_cal_min additive outline_width',
   add_overlay: 'url name labels colormap opacity cal_min cal_max colormap_negative cal_min_neg cal_max_neg colorbar',
-  load_mesh: 'url name replace opacity color shader slice_shader visible colorbar legend layers',
+  load_mesh: 'url name opacity color shader slice_shader visible colorbar legend layers',
   load_volume: 'url name colormap mni',
 }).map(([method, names]) => [method, Object.freeze(names.split(' ').filter(Boolean))])));
 

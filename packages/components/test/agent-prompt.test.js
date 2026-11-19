@@ -170,3 +170,31 @@ test('confirming page files lists them and only Allow approves', async () => {
   press(document, 'Allow');
   assert.equal(await allowed, true);
 });
+
+test('a resume request names the held files by role and the run, keeps each line within 90 characters, and only Allow resumes', async () => {
+  const document = page();
+  const prompts = createAgentPrompts(document);
+  const startedAt = Date.UTC(2026, 10, 19, 9, 30, 5);
+  const answer = prompts.confirmResume({ app: 'NiiMath', files: [{ role: 'image', name: 'scan.nii.gz' }], run: { operation: 'binarize', startedAt } });
+  await tick();
+  const items = [...dialog(document).querySelectorAll('li')].map(item => item.textContent);
+  assert.deepEqual(items, ['image: scan.nii.gz', `Run: binarize, started ${new Date(startedAt).toLocaleTimeString()}`]);
+  assert.match(dialog(document).textContent, /Let the agent continue in NiiMath with these\?/);
+  for (const paragraph of dialog(document).querySelectorAll('p')) assert.ok(paragraph.textContent.length <= 90, paragraph.textContent);
+  press(document, 'Allow');
+  assert.equal(await answer, true);
+  await tick();
+  const declined = prompts.confirmResume({ app: 'NiiMath', files: [], run: { operation: 'binarize', startedAt } });
+  await tick();
+  press(document, 'Decline');
+  assert.equal(await declined, false);
+});
+
+test('a fetch approval that replaces what the viewer shows says so', async () => {
+  const document = page('https://apps.test/x/');
+  const answer = createAgentPrompts(document).confirmFetch({ app: 'Brain extraction', addresses: ['https://data.test/t1.nii.gz'], replaces: true });
+  await tick();
+  assert.match(dialog(document).textContent, /It replaces the images the viewer shows now\./);
+  press(document, 'Decline');
+  assert.equal(await answer, false);
+});

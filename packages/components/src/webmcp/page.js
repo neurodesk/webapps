@@ -50,6 +50,7 @@ export async function exposeWebMcp(modelContext, doc = globalThis.document) {
     requestFiles: prompts.requestFiles,
     confirmFiles: prompts.confirmFiles,
     confirmFetch: prompts.confirmFetch,
+    confirmResume: prompts.confirmResume,
   });
   return registerWebMcpTools(modelContext, tools);
 }

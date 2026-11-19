@@ -8,7 +8,8 @@ const NOTICE = 'An AI agent you started in this browser sent this request. Closi
 /**
  * The dialogs through which a browser AI agent asks the person at the page for an answer or for files.
  * One prompt shows at a time and the rest wait their turn. Closing a prompt declines it, and an
- * aborted signal closes it, or drops it before it shows.
+ * aborted signal closes it, or drops it before it shows: the tools abort a call's signal when the
+ * person uses the page, so a question queued behind another is never shown once it is moot.
  *
  *   const prompts = createAgentPrompts();
  *   await prompts.ask({ question: 'Which series?', options: ['T1', 'T2'] }, { signal });
@@ -83,9 +84,10 @@ export function createAgentPrompts(doc = globalThis.document) {
 
     /**
      * Asks whether the app may fetch the addresses the agent named. `readsUnder` says each address is
-     * the root the app reads under, as a store's metadata and chunks. Resolves true only when the person allows it.
+     * the root the app reads under, as a store's metadata and chunks; `replaces` that the file takes
+     * the place of the images the viewer shows. Resolves true only when the person allows it.
      */
-    async confirmFetch({ app, addresses, readsUnder = false }, { signal } = {}) {
+    async confirmFetch({ app, addresses, readsUnder = false, replaces = false }, { signal } = {}) {
       const resolved = addresses.map(address => {
         try {
           return new URL(address, doc.baseURI);
@@ -102,6 +104,7 @@ export function createAgentPrompts(doc = globalThis.document) {
         createElement('p', { text: readsUnder
           ? `${app} reads the addresses under ${one ? 'it' : 'each one'}, such as a store's metadata and chunks. ${servers} every request.`
           : `The page loads only ${one ? 'this address' : 'these addresses'}, and nothing they redirect to. ${servers} the request.`, ownerDocument: doc }),
+        ...(replaces ? [createElement('p', { text: 'It replaces the images the viewer shows now.', ownerDocument: doc })] : []),
         actions(finish, button('Allow', 'nd-btn-primary', () => finish(true))),
       ], signal);
       return answer === true;
@@ -113,6 +116,25 @@ export function createAgentPrompts(doc = globalThis.document) {
         createElement('p', { text: `Let the agent run ${app} on these files from ${label}?`, ownerDocument: doc }),
         createElement('ul', { ownerDocument: doc }, files.map(file => createElement('li', { text: file.name, ownerDocument: doc }))),
         createElement('p', { text: 'The page received them but may not show them now. Allow only if you mean these files.', ownerDocument: doc }),
+        actions(finish, button('Allow', 'nd-btn-primary', () => finish(true))),
+      ], signal);
+      return answer === true;
+    },
+
+    /**
+     * Asks whether the agent may continue with the files it held and its latest run after the person
+     * used the page. `files` lists `{ role, name }`; `run` is `{ operation, startedAt }` or null.
+     * Resolves true only when the person allows it.
+     */
+    async confirmResume({ app, files = [], run = null }, { signal } = {}) {
+      const items = [
+        ...files.map(file => `${file.role}: ${file.name}`),
+        ...(run ? [`Run: ${run.operation}, started ${new Date(run.startedAt).toLocaleTimeString()}`] : []),
+      ];
+      const answer = await show(finish => [
+        createElement('p', { text: `Let the agent continue in ${app} with these?`, ownerDocument: doc }),
+        createElement('ul', { ownerDocument: doc }, items.map(text => createElement('li', { text, ownerDocument: doc }))),
+        createElement('p', { text: 'You used the page since its last step. Decline to make it let go of them.', ownerDocument: doc }),
         actions(finish, button('Allow', 'nd-btn-primary', () => finish(true))),
       ], signal);
       return answer === true;

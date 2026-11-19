@@ -36,7 +36,7 @@ function asPerson(target, event) {
   people.add(event);
   target.dispatchEvent(event);
 }
-const hold = (inputs, role, files) => inputs.hold(inputs.examination(), role, files);
+const hold = (inputs, role, files) => inputs.hold(inputs.turn(), role, files);
 const WORKSPACE = '<body><header class="nd-app-bar"><button id="privacy">Privacy</button></header><main><input type="file" id="t1" data-neurodesk-input="image" aria-label="T1 image"><button id="remove">Remove</button><canvas id="viewer"></canvas></main></body>';
 
 function page(t, operation, options = {}) {
@@ -52,9 +52,15 @@ function page(t, operation, options = {}) {
     confirmations.push(request);
     return true;
   };
-  const tools = webMcpTools({ contract: contract(), dispatch: automation.dispatch, inputs, examples: () => examples, confirmFiles, ...options });
+  const resumes = [];
+  let resumeAnswer = true;
+  const confirmResume = async (request, { signal } = {}) => {
+    resumes.push({ ...request, run: request.run && { operation: request.run.operation, started: typeof request.run.startedAt === 'number' }, signal: Boolean(signal) });
+    return resumeAnswer;
+  };
+  const tools = webMcpTools({ contract: contract(), dispatch: automation.dispatch, inputs, examples: () => examples, confirmFiles, confirmResume, ...options });
   const call = (name, input = {}, signal = new AbortController().signal) => tools.find(tool => tool.name === name).execute(input, { signal });
-  return { tools, call, dispatch: automation.dispatch, downloads, inputs, registration, confirmations, window: dom.window };
+  return { tools, call, dispatch: automation.dispatch, downloads, inputs, registration, confirmations, resumes, answerResume: value => { resumeAnswer = value; }, window: dom.window };
 }
 
 const labels = () => ({ artifacts: [{ role: 'labels', file: new File(['labels'], 'labels.nii') }] });
@@ -171,17 +177,21 @@ test('aborting a run tool call cancels the run, and runs_cancel cancels a runnin
   assert.equal(result.run.state, 'cancelled');
 });
 
-test('user_ask returns the injected answer or the dismissal and passes the call signal', async t => {
+test('user_ask returns the injected answer or the dismissal and passes a signal that follows the call\'s', async t => {
   const asked = [];
   const answers = [{ answer: 'T2' }, { dismissed: true }];
   const { call } = page(t, async () => labels(), { askUser: async (request, { signal }) => {
     asked.push({ ...request, signal });
     return answers.shift();
   } });
-  const signal = new AbortController().signal;
-  assert.deepEqual(await call('user_ask', { question: 'Which?', options: ['T1', 'T2'] }, signal), { answer: 'T2' });
+  const controller = new AbortController();
+  assert.deepEqual(await call('user_ask', { question: 'Which?', options: ['T1', 'T2'] }, controller.signal), { answer: 'T2' });
   assert.deepEqual(await call('user_ask', { question: 'Why?' }), { dismissed: true });
-  assert.deepEqual(asked[0], { question: 'Which?', options: ['T1', 'T2'], allowText: undefined, signal });
+  const { signal, ...request } = asked[0];
+  assert.deepEqual(request, { question: 'Which?', options: ['T1', 'T2'], allowText: undefined });
+  assert.equal(signal.aborted, false);
+  controller.abort();
+  assert.equal(signal.aborted, true, 'the prompt closes when the agent aborts the call');
 });
 
 test('inputs_request_files tells the prompt the role and returns declined when the user declines', async t => {
@@ -428,13 +438,8 @@ test('held files serve every rerun until the person uses the page', async t => {
   assert.match((await call('inputs_use_page_files', { role: 'image', input: 'nowhere' })).error.message, /No files are loaded/);
 });
 
-test('any use of the workspace ends the examination: held files go, the last run is withheld, page files need confirming', async t => {
-  const confirmations = [];
-  let answer = true;
-  const { call, inputs, window, downloads } = page(t, async () => labels(), { confirmFiles: async request => {
-    confirmations.push(request);
-    return answer;
-  } });
+test('a press in the workspace touches the examination: its files and run serve a call again only once the person allows it', async t => {
+  const { call, inputs, window, downloads, resumes, answerResume } = page(t, async () => labels());
   personLoads(window, [new File(['scan'], 'scan.nii')]);
   await call('inputs_use_page_files', { role: 'image', input: 't1' });
   const run = await call('run_run');
@@ -443,27 +448,90 @@ test('any use of the workspace ends the examination: held files go, the last run
   click(window, '#privacy');
   asPerson(window.document.body, new window.KeyboardEvent('keydown', { key: 'PageDown', bubbles: true }));
   asPerson(window.document.body, new window.KeyboardEvent('keydown', { key: 'Shift', bubbles: true }));
-  assert.deepEqual(Object.keys((await call('app_describe')).inputs), ['image'], 'the shared bar, scrolling and modifier keys are not the workspace');
+  assert.equal((await call('app_describe')).touched, false, 'the shared bar, scrolling and modifier keys are not the workspace');
 
-  click(window, '#remove');
+  click(window, '#viewer');
+  const describe = await call('app_describe');
+  assert.equal(describe.touched, true);
+  assert.deepEqual(describe.inputs, { image: [{ name: 'scan.nii', bytes: 4 }] }, 'the agent still holds its files, by name');
+  assert.deepEqual(describe.run, { runId: run.runId, state: 'succeeded', touched: true, message: describe.run.message }, 'the report waits for the person');
+  assert.match(describe.run.message, /asks them whether you may continue/);
+  assert.equal(describe.pageMayHoldOtherInputs, true);
+  assert.deepEqual(resumes, [], 'reading the page asks nothing');
+
+  const report = await call('runs_get', { runId: run.runId });
+  assert.equal(report.report.artifacts.labels.filename, 'labels.nii', 'the person allowed it, so the run serves the call');
+  assert.deepEqual(resumes, [{ app: 'Test', files: [{ role: 'image', name: 'scan.nii' }], run: { operation: 'run', started: true }, signal: true }], 'the dialog names the files by role and the run by operation and start');
+  assert.deepEqual(await call('outputs_download', { runId: run.runId, artifactId: 'labels' }), { runId: run.runId, artifactId: 'labels' });
+  assert.equal((await call('run_run')).state, 'succeeded', 'a rerun on the held files');
+  assert.equal(resumes.length, 1, 'once allowed, no call asks again');
+  assert.equal(downloads.length, 1);
+
+  const latest = (await call('app_describe')).run.runId;
+  asPerson(window.document.getElementById('viewer'), new window.WheelEvent('wheel', { bubbles: true, composed: true }));
+  answerResume(false);
+  assert.deepEqual(await call('outputs_download', { runId: latest, artifactId: 'labels' }), { declined: true, message: 'The person declined: the held files are released and the earlier runs are withheld.' });
+  assert.equal(resumes.length, 2, 'a further interaction asks again');
+  assert.equal(downloads.length, 1, 'nothing is saved after Decline');
+  const released = await call('app_describe');
+  assert.deepEqual(released.inputs, {});
+  assert.equal(released.touched, false);
+  assert.equal(released.run.stale, true);
+  for (const [name, input] of [['runs_get', { runId: latest }], ['runs_cancel', { runId: latest }], ['outputs_download', { runId: latest, artifactId: 'labels' }]]) {
+    assert.equal((await call(name, input)).error?.code, 'RUN_STALE', `${name} after Decline`);
+  }
+  assert.equal(resumes.length, 2, 'nothing is left to resume, so nothing asks');
+});
+
+test('a load that replaces the inputs ends the examination: nothing can be resumed', async t => {
+  const { call, inputs, window, resumes } = page(t, async () => labels());
+  hold(inputs, 'image', [new File(['a'], 'agent.nii')]);
+  const run = await call('run_run');
+  click(window, '#viewer');
+  personLoads(window, [new File(['mine'], 'mine.nii')]);
   const describe = await call('app_describe');
   assert.deepEqual(describe.inputs, {});
-  assert.deepEqual(describe.run, { runId: run.runId, state: 'succeeded', stale: true, message: describe.run.message });
-  assert.match(describe.run.message, /used the page since this run started/);
-  assert.deepEqual(describe.pageFiles, [], 'the run the tools started may have changed what the page shows, so its record is gone');
-  assert.equal(describe.pageMayHoldOtherInputs, true);
-  for (const [name, input] of [['runs_get', { runId: run.runId }], ['runs_get', {}], ['runs_cancel', { runId: run.runId }], ['outputs_download', { runId: run.runId, artifactId: 'labels' }]]) {
-    assert.equal((await call(name, input)).error?.code, 'RUN_STALE', `${name} ${JSON.stringify(input)}`);
+  assert.equal(describe.touched, false);
+  assert.equal(describe.run.stale, true);
+  for (const [name, input] of [['runs_get', { runId: run.runId }], ['outputs_download', { runId: run.runId, artifactId: 'labels' }]]) {
+    assert.equal((await call(name, input)).error?.code, 'RUN_STALE', name);
   }
-  assert.deepEqual(downloads, [], 'nothing of the stale run is saved');
+  assert.equal((await call('run_run')).error?.message ?? (await call('runs_get')).error?.message, 'Missing input: image');
+  assert.deepEqual(resumes, []);
+});
 
-  personLoads(window, [new File(['next'], 'next.nii')]);
-  answer = false;
-  assert.deepEqual(await call('inputs_use_page_files', { role: 'image', input: 't1' }), { declined: true });
-  assert.deepEqual(confirmations.map(request => request.files[0].name), ['scan.nii', 'next.nii']);
-  assert.deepEqual((await call('app_describe')).inputs, {});
-  answer = true;
-  assert.deepEqual(await call('inputs_use_page_files', { role: 'image', input: 't1' }), { role: 'image', files: [{ name: 'next.nii', bytes: 4 }] });
+test('a remove the app reports with nd-files after the person pressed it ends the examination; the app filling its list alone does not', async t => {
+  const { call, inputs, window } = page(t, async () => labels());
+  hold(inputs, 'image', [new File(['a'], 'agent.nii')]);
+  const input = window.document.getElementById('t1');
+  input.dispatchEvent(new window.CustomEvent('nd-files', { bubbles: true, detail: { files: [new File(['x'], 'own.nii')] } }));
+  assert.deepEqual(Object.keys((await call('app_describe')).inputs), ['image'], 'an nd-files the person did not cause changes nothing held');
+  click(window, '#remove');
+  input.dispatchEvent(new window.CustomEvent('nd-files', { bubbles: true, detail: { files: [] } }));
+  const described = await call('app_describe');
+  assert.deepEqual(described.inputs, {});
+  assert.equal(described.touched, false);
+});
+
+test('a run the person starts from the status bar ends a touched examination; the agent\'s own run does not', async t => {
+  let finish;
+  const { call, inputs, window } = page(t, () => new Promise(resolve => {
+    window.document.body.dispatchEvent(new window.CustomEvent('nd-run-start', { bubbles: true }));
+    finish = () => resolve(labels());
+  }));
+  hold(inputs, 'image', [new File(['a'], 'agent.nii')]);
+  const started = call('run_run', { waitSeconds: 5 });
+  while (!finish) await new Promise(resolve => setTimeout(resolve, 5));
+  click(window, '#viewer');
+  window.document.body.dispatchEvent(new window.CustomEvent('nd-run-start', { bubbles: true }));
+  finish();
+  assert.equal((await started).error?.code, 'EXAMINATION_CHANGED');
+  assert.equal((await call('app_describe')).touched, true, 'the agent\'s run announcing itself while it goes is no run of the person');
+  while (window.neurodeskAutomation.running()) await new Promise(resolve => setTimeout(resolve, 5));
+  window.document.body.dispatchEvent(new window.CustomEvent('nd-run-start', { bubbles: true }));
+  const described = await call('app_describe');
+  assert.deepEqual(described.inputs, {}, 'a run the person started ends the examination');
+  assert.equal(described.run.stale, true);
 });
 
 test('a prompt or download that answers after the person used the page commits nothing', async t => {
@@ -558,7 +626,7 @@ test('every tool marks its result untrusted except the few whose results only th
 
 test('every nv-mcp method is classified, so a method nv-mcp adds stays out of WebMCP until it is', () => {
   assert.deepEqual(Object.keys(NIIVUE_METHODS).sort(), Object.keys(coreHandlers({ view: {} })).sort());
-  assert.ok(Object.values(NIIVUE_METHODS).every(kind => ['read', 'display', 'fetch', 'denied'].includes(kind)));
+  assert.ok(Object.values(NIIVUE_METHODS).every(kind => ['read', 'display', 'fetch', 'replace', 'denied'].includes(kind)));
 });
 
 // What each method viewers_niivue offers does, read from nv-mcp's dist/browser.js at the version below.
@@ -593,8 +661,47 @@ const NIIVUE_AUDIT = {
   set_volume: ['display', 'setVolume display fields, label tables, modulation, chunk grid and spread. affine, reset_affine and transform move the volume, load_all_frames fetches from its address and v1 turns a vector volume into a one-frame colour image for good: refused.'],
   add_mesh_layer: ['fetch', 'addMeshLayer from url.'],
   add_overlay: ['fetch', 'addVolume from url, and a label table from labels.'],
-  load_mesh: ['fetch', 'addMesh from url and each layer url; replace removes the meshes before it.'],
-  load_volume: ['fetch', 'loadVolumes from url, replacing the volumes.'],
+  load_mesh: ['fetch', 'addMesh from url and each layer url; replace removes the meshes before it, so it is refused.'],
+  load_volume: ['replace', 'loadVolumes from url, replacing the volumes: the consent says so.'],
+};
+
+// What each parameter a method takes over WebMCP does, read from the same source:
+//   read     chooses what a read returns
+//   display  changes only how what is loaded is shown: camera, crosshair, colours, layout, labels drawn
+//            over the scene, or how the file a fetch adds is named and shown
+//   address  names a file the call adds, which the person approves before the tool fetches it
+// No taken parameter removes, moves or converts what is loaded; those are refused below.
+const NIIVUE_PARAMETER_EFFECTS = {
+  capabilities: {},
+  describe_volume: { read: 'volume stats mask mask_labels drawing affine' },
+  get_options: { read: 'names describe' },
+  list_annotations: { read: 'polygons json svg slice slice_position' },
+  list_measurements: {},
+  list_meshes: {},
+  list_regions: { read: 'query' },
+  list_signals: {},
+  map_point: { read: 'canvas mm vox' },
+  where_am_i: {},
+  animate: { display: 'azimuth elevation zoom render_pan pan_2d crosshair_mm clip_planes volumes meshes duration_ms easing angles interrupt_on_input wait stop' },
+  go_to_point: { display: 'mm vox plane label' },
+  go_to_region: { display: 'region plane' },
+  nudge_crosshair: { display: 'vox' },
+  set_boxes: { display: 'focus boxes' },
+  set_camera: { display: 'azimuth elevation pan_2d render_pan pivot center_on global' },
+  set_clip_plane: { display: 'plane azimuth elevation index planes depth face' },
+  set_custom_layout: { display: 'tiles clear' },
+  set_graph: { display: 'cursor step zoom pan range reset' },
+  set_instances: { display: 'instances camera clear' },
+  set_labels: { display: 'labels dim_others clear' },
+  set_mesh: { display: 'mesh name opacity color shader slice_shader visible colorbar legend tract connectome' },
+  set_mesh_layer: { display: 'mesh layer colormap colormap_negative cal_min cal_max cal_min_neg cal_max_neg opacity colorbar invert transparent_below_cal_min additive outline_width frame' },
+  set_view: { display: 'slice layout mosaic show_render radiological colorbar' },
+  set_viewport: { display: 'pan zoom bounds reset' },
+  set_volume: { display: 'volume colormap colormap_negative opacity cal_min cal_max cal_min_neg cal_max_neg colormap_type transparent_below_cal_min frame invert colorbar nearest atlas_outline modulate_alpha modulate auto_window chunk_grid spread', address: 'labels' },
+  add_mesh_layer: { address: 'url', display: 'mesh name colormap colormap_negative cal_min cal_max cal_min_neg cal_max_neg opacity colorbar invert transparent_below_cal_min additive outline_width' },
+  add_overlay: { address: 'url labels', display: 'name colormap opacity cal_min cal_max colormap_negative cal_min_neg cal_max_neg colorbar' },
+  load_mesh: { address: 'url layers', display: 'name opacity color shader slice_shader visible colorbar legend' },
+  load_volume: { address: 'url', display: 'name colormap mni' },
 };
 
 test('every method viewers_niivue offers is audited against the pinned nv-mcp source', async () => {
@@ -611,13 +718,16 @@ test('every method viewers_niivue offers is audited against the pinned nv-mcp so
 // nv-mcp's schema lists is in NIIVUE_PARAMETERS. A parameter nv-mcp adds fails this test until it is
 // classified in one or the other.
 const REFUSED_NIIVUE_PARAMETERS = {
-  '*': { tab: 'chooses a tab of the desktop server; a page answers for itself' },
+  '*': { tab: ['desktop', 'chooses a tab of the desktop server; a page answers for itself'] },
   set_volume: {
-    affine: 'sets the voxel-to-world matrix: moves the volume',
-    reset_affine: 'puts the file\'s matrix back: moves the volume',
-    transform: 'moves, turns or scales the volume',
-    load_all_frames: 'fetches the remaining frames from the volume\'s own address',
-    v1: 'turns a three-frame vector volume into a one-frame colour image, which only a reload undoes',
+    affine: ['moves', 'sets the voxel-to-world matrix: moves the volume'],
+    reset_affine: ['moves', 'puts the file\'s matrix back: moves the volume'],
+    transform: ['moves', 'moves, turns or scales the volume'],
+    load_all_frames: ['fetches', 'fetches the remaining frames from the volume\'s own address'],
+    v1: ['converts', 'turns a three-frame vector volume into a one-frame colour image, which only a reload undoes'],
+  },
+  load_mesh: {
+    replace: ['removes', 'removes every mesh loaded before, which the consent for the new mesh does not name'],
   },
 };
 
@@ -630,6 +740,21 @@ test('every parameter of an offered NiiVue method is either taken or refused wit
   }
 });
 
+test('every parameter viewers_niivue takes was audited as reading, changing the display or naming the approved file, and none removes or alters what is loaded', () => {
+  assert.deepEqual(Object.keys(NIIVUE_PARAMETER_EFFECTS).sort(), Object.keys(NIIVUE_PARAMETERS).sort());
+  for (const [method, effects] of Object.entries(NIIVUE_PARAMETER_EFFECTS)) {
+    assert.ok(Object.keys(effects).every(effect => ['read', 'display', 'address'].includes(effect)), `${method}: only read, display and address are taken`);
+    const audited = Object.values(effects).flatMap(names => names.split(' '));
+    assert.deepEqual(audited.sort(), [...NIIVUE_PARAMETERS[method]].sort(), `${method}: each taken parameter records the effect it was audited as`);
+    const kind = NIIVUE_METHODS[method];
+    if (kind === 'read') assert.deepEqual(Object.keys(effects).filter(effect => effect !== 'read'), [], `${method} only reads`);
+    if (kind === 'fetch' || kind === 'replace') assert.ok(effects.address, `${method} names the file it adds`);
+  }
+  for (const reasons of Object.values(REFUSED_NIIVUE_PARAMETERS)) {
+    for (const [name, [effect, reason]] of Object.entries(reasons)) assert.ok(['desktop', 'moves', 'fetches', 'converts', 'removes'].includes(effect) && reason, `${name} is refused for its effect`);
+  }
+});
+
 function viewerPage(t, options = {}) {
   const sent = [];
   const confirmations = [];
@@ -637,8 +762,8 @@ function viewerPage(t, options = {}) {
   let approve = false;
   const urlContract = contract();
   urlContract.operations.run.inputs.store = { source: 'url', type: 'neuro:volume', description: 'A remote store', minimum: 0, maximum: 1 };
-  const examination = {};
-  const tools = webMcpTools({ contract: urlContract, inputs: { examination: () => examination, stage: async () => {}, claim() {}, runOf: () => 'current', held: () => ({}), page: () => [], toolLoaded() {} },
+  const turn = { controller: new AbortController() };
+  const tools = webMcpTools({ contract: urlContract, inputs: { turn: () => turn, touched: () => false, stage: async () => {}, claim() {}, runOf: () => 'current', held: () => ({}), page: () => [], toolLoaded() {} },
     dispatch: async (command, request) => {
       if (command === 'sources') return Object.fromEntries(Object.entries(request.inputs).map(([role, { url }]) => [role, { address: url, root: url.replace(/\/\.zattrs$/, '') }]));
       if (command === 'viewers.niivue' && request.params) {
@@ -673,7 +798,7 @@ test('viewers_niivue offers only methods that read the scene, change the display
   for (const method of ['screenshot', 'save', 'load_document']) {
     assert.equal((await call('viewers_niivue', { viewerId: 'main', method, params: { what: 'bitmap' } })).error.code, 'INVALID_INPUT');
   }
-  for (const [method, key] of [...Object.keys(REFUSED_NIIVUE_PARAMETERS.set_volume).map(key => ['set_volume', key]), ['set_volume', 'tab'], ['set_volume', 'not_a_parameter'], ['where_am_i', 'volume'], ['load_volume', 'headers']]) {
+  for (const [method, key] of [...Object.keys(REFUSED_NIIVUE_PARAMETERS.set_volume).map(key => ['set_volume', key]), ['load_mesh', 'replace'], ['set_volume', 'tab'], ['set_volume', 'not_a_parameter'], ['where_am_i', 'volume'], ['load_volume', 'headers']]) {
     const refused = await call('viewers_niivue', { viewerId: 'main', method, params: { [key]: true } });
     assert.equal(refused.error?.code, 'INVALID_INPUT', `${method} ${key}`);
     assert.match(refused.error.message, new RegExp(`does not take ${key}`));
@@ -683,7 +808,7 @@ test('viewers_niivue offers only methods that read the scene, change the display
 
   const url = 'https://elsewhere.test/scan.nii.gz';
   assert.deepEqual(await call('viewers_niivue', { viewerId: 'main', method: 'load_volume', params: { url } }), { declined: true, addresses: [url] });
-  assert.deepEqual(confirmations, [{ app: 'Test', addresses: [url], signal: true }]);
+  assert.deepEqual(confirmations, [{ app: 'Test', addresses: [url], replaces: true, signal: true }], 'load_volume replaces what the viewer shows, and the consent says so');
   assert.deepEqual(fetched, [], 'a declined address is never fetched');
   assert.deepEqual((await call('viewers_niivue', { viewerId: 'main', method: 'set_volume', params: { volume: 0, labels: 'tables/atlas.json' } })).declined, true, 'a label table address asks too');
   assert.deepEqual(confirmations[1].addresses, ['tables/atlas.json']);
@@ -845,7 +970,8 @@ function racePage(t) {
     askUser: gate('askUser', async () => ({ answer: 'yes' })),
     requestFiles: gate('requestFiles', async () => [new File(['input'], 'input.nii')]),
     confirmFiles: gate('confirmFiles', async () => true),
-    confirmFetch: gate('confirmFetch', async () => true) });
+    confirmFetch: gate('confirmFetch', async () => true),
+    confirmResume: gate('confirmResume', async () => true) });
   const call = (name, input = {}) => tools.find(tool => tool.name === name).execute(input, { signal: new AbortController().signal });
   return {
     tools, call, inputs, downloads, registration, requests, window: dom.window,
@@ -878,7 +1004,7 @@ const RACE_CALLS = {
   viewers_niivue: () => ({ viewerId: 'main', method: 'load_volume', params: { url: 'https://example.test/scan.nii.gz' } }),
 };
 
-async function racePrepared(t) {
+async function racePrepared(t, touched = false) {
   const race = racePage(t);
   personLoads(race.window, [new File(['scan'], 'scan.nii')]);
   await race.call('inputs_request_files', { role: 'image' });
@@ -887,6 +1013,7 @@ async function racePrepared(t) {
   await race.call('inputs_request_files', { role: 'image' });
   const current = await race.call('run_run');
   appLoads(race.window, [new File(['scan'], 'scan.nii')]);
+  if (touched) click(race.window, '#viewer');
   race.requests.length = 0;
   return { race, runId: current.runId ?? runId };
 }
@@ -894,27 +1021,73 @@ async function racePrepared(t) {
 test('every tool call that the person interrupts after any answer it awaited withholds its result and does nothing more', async t => {
   const { tools } = racePage(t);
   assert.deepEqual(tools.map(tool => tool.name).sort(), Object.keys(RACE_CALLS).sort(), 'every tool has a call in RACE_CALLS');
-  for (const name of Object.keys(RACE_CALLS)) {
-    const { race, runId } = await racePrepared(t);
+  const resuming = new Set();
+  for (const [name, touched] of Object.keys(RACE_CALLS).flatMap(tool => [[tool, false], [tool, true]])) {
+    const { race, runId } = await racePrepared(t, touched);
     const result = await race.call(name, RACE_CALLS[name](runId));
     const steps = race.requests.length;
     assert.ok(steps > 0, `${name} awaits at least one answer (${JSON.stringify(result)})`);
+    if (race.requests.includes('confirmResume')) resuming.add(name);
     for (let index = 0; index < steps; index += 1) {
-      const { race: interrupted, runId: run } = await racePrepared(t);
+      const { race: interrupted, runId: run } = await racePrepared(t, touched);
       const reached = interrupted.holdAt(index);
       const pending = interrupted.call(name, RACE_CALLS[name](run));
       const { release } = await reached;
       click(interrupted.window, '#viewer');
       const issued = interrupted.requests.length;
       const saved = interrupted.downloads.length;
+      const held = interrupted.inputs.held();
       release();
       const outcome = await pending;
       assert.equal(outcome.error?.code, 'EXAMINATION_CHANGED', `${name}, interrupted after ${interrupted.requests[index]} (step ${index + 1} of ${steps}): ${JSON.stringify(outcome)}`);
       assert.deepEqual(interrupted.requests.slice(issued), [], `${name} asks nothing more after step ${index + 1}`);
       assert.equal(interrupted.downloads.length, saved, `${name} saves nothing more`);
-      assert.deepEqual(interrupted.inputs.held(), {}, `${name} holds nothing`);
+      assert.deepEqual(interrupted.inputs.held(), held, `${name} holds nothing more`);
+      assert.equal(interrupted.inputs.touched(), true, `${name}: the person's press leaves the examination touched, to resume on the next call`);
     }
   }
+  assert.deepEqual([...resuming].sort(), ['outputs_download', 'run_run', 'runs_cancel', 'runs_get'], 'on a touched examination, exactly the calls that use the held files or the run ask to resume');
+});
+
+test('a call interrupted between two polls of a run returns EXAMINATION_CHANGED, as any interrupted call does', async t => {
+  let finish;
+  const { call, inputs, registration, window } = page(t, () => new Promise(resolve => { finish = () => resolve(labels()); }));
+  hold(inputs, 'image', [new File(['a'], 'agent.nii')]);
+  const { runId } = await call('run_run', { waitSeconds: 0 });
+  for (const interrupt of [() => click(window, '#viewer'), () => registration.reset()]) {
+    const waiting = call('runs_get', { runId, waitSeconds: 5 });
+    await new Promise(resolve => setTimeout(resolve, 60));
+    interrupt();
+    const outcome = await waiting;
+    assert.equal(outcome.error?.code, 'EXAMINATION_CHANGED', JSON.stringify(outcome));
+  }
+  finish();
+});
+
+test('a question queued behind another is dropped, never shown, once the person resets the page', async t => {
+  const dom = new JSDOM('<body></body>', { url: 'https://example.test/test/' });
+  t.after(() => dom.window.close());
+  const { document } = dom.window;
+  dom.window.HTMLDialogElement.prototype.showModal = function showModal() { this.setAttribute('open', ''); };
+  dom.window.HTMLDialogElement.prototype.close = function close() { this.removeAttribute('open'); };
+  dom.window.fetch = async () => ({ ok: false, json: async () => [] });
+  const registered = new Map();
+  const registration = registerAppAutomation({ app: 'test', contract: contract(), operations: { run: async () => labels() }, document, target: dom.window });
+  await exposeWebMcp({ async registerTool(tool) { registered.set(tool.name, tool); } }, document);
+  const ask = question => registered.get('user_ask').execute({ question, options: ['Yes'] }, { signal: new AbortController().signal });
+  const shown = [];
+  new dom.window.MutationObserver(() => {
+    const text = document.querySelector('#neurodeskAgentPrompt[open]')?.textContent ?? '';
+    for (const question of ['First question', 'Queued question']) if (text.includes(question) && !shown.includes(question)) shown.push(question);
+  }).observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });
+  const first = ask('First question');
+  const queued = ask('Queued question');
+  while (!shown.length) await new Promise(resolve => setTimeout(resolve, 5));
+  registration.reset();
+  assert.equal((await first).error?.code, 'EXAMINATION_CHANGED');
+  assert.equal((await queued).error?.code, 'EXAMINATION_CHANGED');
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.deepEqual(shown, ['First question'], 'the queued question never reached the person');
 });
 
 test('a runs_get that the page answers after a reset returns no report of the run before', async t => {
@@ -985,28 +1158,56 @@ test('the automation names the address an app reads under for a url input, compu
   await assert.rejects(dispatch('sources', { inputs: { mask: { url: 'https://store.test/a.nii' } } }), /Unknown input role/);
 });
 
-test('which interactions start a new examination is decided in one place', async t => {
-  const dom = new JSDOM(`${WORKSPACE.replace('</main>', '<div id="host"></div></main>')}`, { url: 'https://example.test/test/' });
+test('what each interaction does to the examination is decided in one place', async t => {
+  const dom = new JSDOM(`${WORKSPACE.replace('</main>', '<div id="host"></div><input type="file" id="plain"><select id="choice"><option>a</option></select></main>')}`, { url: 'https://example.test/test/' });
   t.after(() => dom.window.close());
   const { window } = dom;
   const host = window.document.getElementById('host');
   const shadow = host.attachShadow({ mode: 'open' });
   shadow.innerHTML = '<input type="file" id="shadowed" data-neurodesk-input="image" aria-label="Shadowed image"><button id="inner">Inner</button>';
   const inputs = createToolInputs({ doc: window.document, automation: { running: () => false, adopt: async () => {} }, isPerson });
-  const effect = (target, event) => {
-    hold(inputs, 'image', [new File(['x'], 'agent.nii')]);
-    asPerson(target, event);
-    return Object.keys(inputs.held()).length ? 'kept' : 'released';
+  const effect = (target, event, person = true) => {
+    if (!Object.keys(inputs.held()).length || inputs.touched()) hold(inputs, 'image', [new File(['x'], 'agent.nii')]);
+    if (inputs.touched()) inputs.resume(inputs.turn());
+    if (person) asPerson(target, event);
+    else target.dispatchEvent(event);
+    if (!Object.keys(inputs.held()).length) return 'ended';
+    return inputs.touched() ? 'touched' : 'kept';
   };
   const viewer = window.document.getElementById('viewer');
-  assert.equal(effect(viewer, new window.WheelEvent('wheel', { bubbles: true, composed: true })), 'released', 'a wheel over the viewer changes what it shows');
-  assert.equal(effect(window.document.body, new window.WheelEvent('wheel', { bubbles: true, composed: true })), 'kept', 'a wheel elsewhere scrolls the page');
-  assert.equal(effect(viewer, new window.MouseEvent('pointerdown', { bubbles: true, composed: true })), 'released', 'a drag starts on press, before release');
+  const { document } = window;
+  assert.equal(effect(viewer, new window.WheelEvent('wheel', { bubbles: true, composed: true })), 'touched', 'a wheel over the viewer changes what it shows');
+  assert.equal(effect(document.body, new window.WheelEvent('wheel', { bubbles: true, composed: true })), 'kept', 'a wheel elsewhere scrolls the page');
+  assert.equal(effect(viewer, new window.MouseEvent('pointerdown', { bubbles: true, composed: true })), 'touched', 'a drag starts on press, before release');
   assert.equal(effect(viewer, new window.MouseEvent('pointermove', { bubbles: true, composed: true })), 'kept', 'moving the pointer over the page does not count');
-  assert.equal(effect(window.document.getElementById('privacy'), new window.MouseEvent('pointerdown', { bubbles: true, composed: true })), 'kept', 'the shared bar is not the workspace');
-  assert.equal(effect(shadow.getElementById('inner'), new window.MouseEvent('pointerup', { bubbles: true, composed: true })), 'released', 'an action inside a shadow root counts');
+  assert.equal(effect(document.getElementById('privacy'), new window.MouseEvent('pointerdown', { bubbles: true, composed: true })), 'kept', 'the shared bar is not the workspace');
+  assert.equal(effect(document.getElementById('choice'), new window.KeyboardEvent('keydown', { key: 'a', bubbles: true })), 'touched', 'typing in a control');
+  assert.equal(effect(shadow.getElementById('inner'), new window.MouseEvent('pointerup', { bubbles: true, composed: true })), 'touched', 'an action inside a shadow root counts');
+  const plain = document.getElementById('plain');
+  assert.equal(effect(plain, new window.Event('change', { bubbles: true })), 'ended', 'a pick in any file input replaces the inputs');
+  const drop = new window.Event('drop', { bubbles: true, composed: true });
+  drop.dataTransfer = { types: ['Files'], items: [] };
+  assert.equal(effect(viewer, drop), 'ended', 'files dropped on the page');
+  const textDrop = new window.Event('drop', { bubbles: true, composed: true });
+  textDrop.dataTransfer = { types: ['text/plain'], items: [] };
+  assert.equal(effect(viewer, textDrop), 'touched', 'a drop without files');
+  const status = state => new window.CustomEvent('nd-example-status', { bubbles: true, detail: { state } });
+  assert.equal(effect(document.body, status('loading'), false), 'ended', 'the example selector starting a load');
+  assert.equal(effect(document.body, status('ready'), false), 'kept');
+  assert.equal(effect(document, new window.CustomEvent('nd-handoff', { detail: { files: [] } }), false), 'ended', 'a handoff');
+  assert.equal(effect(window, new window.Event('neurodesk-automation-reset'), false), 'ended', 'the app resetting');
+  assert.equal(effect(document.getElementById('t1'), new window.CustomEvent('nd-files', { bubbles: true, detail: { files: [] } }), false), 'kept', 'an app reporting its list on its own');
+  assert.equal(effect(document.body, new window.CustomEvent('nd-run-start', { bubbles: true }), false), 'kept', 'a run that starts with nobody at the page');
+  const touchedThen = (event, target) => {
+    hold(inputs, 'image', [new File(['x'], 'agent.nii')]);
+    asPerson(viewer, new window.MouseEvent('pointerup', { bubbles: true, composed: true }));
+    target.dispatchEvent(event);
+    return Object.keys(inputs.held()).length ? 'touched' : 'ended';
+  };
+  assert.equal(touchedThen(new window.CustomEvent('nd-files', { bubbles: true, detail: { files: [] } }), document.getElementById('t1')), 'ended', 'a remove the person pressed, reported with nd-files');
+  assert.equal(touchedThen(new window.CustomEvent('nd-run-start', { bubbles: true }), document.body), 'ended', 'a run the person started');
   const shadowed = shadow.getElementById('shadowed');
   Object.defineProperty(shadowed, 'files', { configurable: true, value: [new File(['s'], 'shadow-pick.nii')] });
-  assert.equal(effect(shadowed, new window.Event('input', { bubbles: true, composed: true })), 'released', 'a pick in a shadow root counts');
+  assert.equal(effect(shadowed, new window.Event('input', { bubbles: true, composed: true })), 'ended', 'a pick in a shadow root counts');
   assert.deepEqual(inputs.page(), [{ input: 'shadowed', kind: 'image', label: 'Shadowed image', files: [{ name: 'shadow-pick.nii', bytes: 1 }] }], 'and is listed, though its change event stays inside the shadow root');
 });
