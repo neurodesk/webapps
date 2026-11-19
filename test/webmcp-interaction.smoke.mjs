@@ -3,15 +3,19 @@
 // of the built site (dist/), in Chromium with Chrome's own WebMCP: the agent holds a file, the person
 // performs one trusted action (a pick in each file input, a click on each remove or clear button, the
 // first select, checkbox, text field and viewer canvas), and the tools must hold nothing afterwards.
+// An action that could not be performed fails its app unless test/webmcp-interaction-skips.json names
+// it with the reason, and so does an app where no action was performed: a check that acted on nothing
+// proves nothing.
 //
 //   pnpm build && node test/webmcp-interaction.smoke.mjs
 //   SMOKE_APPS=qsmbly,dcm2niix WEBMCP_REPORT=interaction.json node test/webmcp-interaction.smoke.mjs
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from '@playwright/test';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
+import { requireChecked, smokeApps } from '../scripts/lib/smoke-apps.mjs';
 import { serveSite } from '../test-utils/serve-site.mjs';
 import { syntheticNifti } from '../test-utils/nifti-fixture.mjs';
 
@@ -19,11 +23,17 @@ const GPU_ARGS = process.platform === 'linux' ? ['--enable-unsafe-webgpu', '--us
 const FEATURES = `--enable-features=${[...(process.platform === 'linux' ? ['Vulkan'] : []), 'WebMCPTesting'].join(',')}`;
 const REMOVERS = /remove|clear|delete|reset|discard|^\s*[×✕]\s*$/i;
 const APP_SECONDS = Number(process.env.WEBMCP_APP_SECONDS ?? 300);
+// dicompare, a copy of an upstream app, opens on its own home route; its workspace is one link away.
+const WORKSPACE_LINKS = { dicompare: 'Open Workspace' };
 const WORKSPACE = ':not(#neurodeskAgentPrompt *):not(.nd-app-bar *):not(.nd-app-utility-bar *):not(dialog.nd-app-dialog *)';
 
+// Per app, the actions expected not to be performed ("<kind> <name>": reason), or "*" for an app where
+// no action can be.
+const SKIPS = JSON.parse(await readFile(new URL('./webmcp-interaction-skips.json', import.meta.url), 'utf8'));
 const registry = await loadAppsRegistry();
-const requested = new Set((process.env.SMOKE_APPS ?? '').split(',').filter(Boolean));
-const apps = requested.size ? registry.apps.filter(({ id }) => requested.has(id)) : registry.apps;
+const selection = smokeApps(registry.apps);
+const { apps } = selection;
+for (const id of Object.keys(SKIPS)) assert.ok(registry.apps.some(app => app.id === id), `webmcp-interaction-skips.json names ${id}, which the registry does not have`);
 const scratch = await mkdtemp(join(tmpdir(), 'webmcp-interaction-'));
 const scanPath = join(scratch, 'person-scan.nii.gz');
 await writeFile(scanPath, syntheticNifti({ dims: [8, 8, 8] }));
@@ -34,6 +44,7 @@ await writeFile(join(folder, 'slice.nii.gz'), syntheticNifti({ dims: [8, 8, 8] }
 const { origin, close } = await serveSite(join(repoRoot, 'dist'));
 const browser = await chromium.launch({ args: [...GPU_ARGS, FEATURES] });
 const report = [];
+const PERFORMED = new Set(['released', 'FILES STILL HELD']);
 
 async function tools(page) {
   const deadline = Date.now() + 90000;
@@ -86,8 +97,20 @@ async function actions(page) {
   }, [WORKSPACE, String(REMOVERS)]);
 }
 
+// Whether the control is the topmost element at its centre, where a person's click lands.
+const onTop = selector => {
+  const element = document.querySelector(selector);
+  if (!element) return false;
+  element.scrollIntoView({ block: 'center' });
+  const box = element.getBoundingClientRect();
+  const top = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+  return box.width > 0 && (top === element || element.contains(top));
+};
+
 async function perform(context, page, action) {
   const locator = page.locator(action.selector);
+  // A busy app may cover its controls for a while after the previous action; wait for it, not a fixed time.
+  if (!action.kind.endsWith('input')) await page.waitForFunction(onTop, action.selector, { timeout: 20000, polling: 250 }).catch(() => {});
   if (action.kind.endsWith('input')) {
     const cdp = await context.newCDPSession(page);
     const { result } = await cdp.send('Runtime.evaluate', { expression: `document.querySelector('${action.selector}')` });
@@ -110,6 +133,7 @@ async function prepare(context, app) {
   const page = await context.newPage();
   await page.goto(`${origin}/${app.path}/`, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await tools(page);
+  if (WORKSPACE_LINKS[app.id]) await page.getByRole('link', { name: WORKSPACE_LINKS[app.id] }).click();
   const fileInputs = page.locator(`input[type="file"][data-neurodesk-input]${WORKSPACE}:not(#neurodesk-input-transfer):not([webkitdirectory])`);
   for (let index = 0; index < await fileInputs.count(); index += 1) {
     await fileInputs.nth(index).setInputFiles({ name: `loaded-${index + 1}.nii.gz`, mimeType: 'application/gzip', buffer: syntheticNifti({ dims: [8, 8, 8] }) }).catch(() => {});
@@ -124,7 +148,15 @@ async function attempt(context, page, app, target, action, outcome) {
   try {
     await perform(context, page, action);
   } catch (error) {
-    return `not performed: ${error.message.split('\n')[0]}`;
+    const where = await page.evaluate(selector => {
+      const element = document.querySelector(selector);
+      if (!element) return 'absent';
+      const box = element.getBoundingClientRect();
+      const top = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+      if (top === element || element.contains(top)) return `on top, ${Math.round(box.width)}x${Math.round(box.height)} at ${Math.round(box.x)},${Math.round(box.y)}`;
+      return `under ${top ? top.outerHTML.slice(0, 160) : 'nothing (outside the viewport)'}`;
+    }, action.selector).catch(() => 'unknown');
+    return `not performed: ${error.message.split('\n')[0]} [${where}]`;
   }
   await page.waitForTimeout(300);
   if (!page.url().startsWith(`${origin}/${app.path}/`)) return 'navigated away';
@@ -173,10 +205,17 @@ try {
             }
           }
         }
+        const expected = SKIPS[app.id] ?? {};
+        const performed = entry.actions.filter(outcome => PERFORMED.has(outcome.result));
         const kept = entry.actions.filter(outcome => outcome.result === 'FILES STILL HELD');
         assert.deepEqual(kept, [], `${app.id}: every trusted action releases the agent's files`);
+        const unexplained = entry.actions.filter(outcome => !PERFORMED.has(outcome.result) && !expected[`${outcome.kind} ${outcome.name}`]);
+        assert.deepEqual(unexplained, [], `${app.id}: every action is performed, or webmcp-interaction-skips.json says why not`);
+        if (!performed.length) assert.ok(expected['*'], `${app.id}: no action was performed (${entry.actions.length} found), and webmcp-interaction-skips.json gives no reason under "*"`);
+        for (const outcome of performed) if (expected[`${outcome.kind} ${outcome.name}`]) console.log(`NOTE ${app.id}: ${outcome.kind} ${outcome.name} was performed although webmcp-interaction-skips.json expects it not to be`);
         entry.passed = true;
-        console.log(`PASS ${app.id}: ${entry.actions.map(outcome => `${outcome.kind} ${outcome.name}: ${outcome.result}`).join('; ')}`);
+        entry.checked = performed.length > 0;
+        console.log(`PASS ${app.id}: ${entry.actions.map(outcome => `${outcome.kind} ${outcome.name}: ${outcome.result}${PERFORMED.has(outcome.result) ? '' : ` (expected: ${expected[`${outcome.kind} ${outcome.name}`]})`}`).join('; ') || `no action (expected: ${expected['*']})`}`);
       })()]);
     } catch (error) {
       entry.passed = false;
@@ -196,5 +235,13 @@ try {
 const failed = report.filter(entry => entry.passed === false).map(entry => entry.app);
 const outcomes = report.flatMap(entry => entry.actions);
 const released = outcomes.filter(outcome => outcome.result === 'released').length;
-console.log(`webmcp interaction: ${report.length - failed.length} apps pass, ${failed.length} fail; ${released} of ${outcomes.length} trusted actions performed and released the agent's files, ${outcomes.length - released} not performed`);
-process.exitCode = failed.length ? 1 : 0;
+const skipped = report.filter(entry => entry.note).length;
+console.log(`webmcp interaction: ${report.length - failed.length - skipped} apps pass, ${failed.length} fail, ${skipped} skipped; ${released} of ${outcomes.length} trusted actions performed and released the agent's files, ${outcomes.length - released} not performed`);
+let unchecked = null;
+try {
+  requireChecked(report.filter(entry => entry.checked).length, selection, 'webmcp interaction');
+} catch (error) {
+  unchecked = error;
+  console.log(`FAIL ${error.message}`);
+}
+process.exitCode = failed.length || unchecked ? 1 : 0;

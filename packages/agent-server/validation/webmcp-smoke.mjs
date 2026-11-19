@@ -152,11 +152,15 @@ try {
   });
   const { pageFiles } = await call('app_describe');
   log.push(`the person opened a file in the sidebar; the tools released theirs and see ${JSON.stringify(pageFiles)}`);
-  const used = await call('inputs_use_page_files', { role: 'image', input: pageFiles[0].input });
+  const confirm = await start('inputs_use_page_files', { role: 'image', input: pageFiles[0].input });
+  await dialog.getByRole('button', { name: 'Allow' }).waitFor();
+  assert.deepEqual(await dialog.locator('li').allTextContents(), ['small.nii.gz'], 'the person sees the files before the agent gets them');
+  await dialog.getByRole('button', { name: 'Allow' }).click();
+  const used = await confirm();
   assert.equal(used.files[0].name, 'small.nii.gz', JSON.stringify(used));
   const onPage = await call('run_extract', { parameters: { method: 'bet' }, waitSeconds: 300 });
   assert.equal(onPage.state, 'succeeded', JSON.stringify(onPage.error ?? onPage));
-  log.push(`inputs_use_page_files then run_extract: ${onPage.state} on the file the person opened`);
+  log.push(`inputs_use_page_files, confirmed in its dialog, then run_extract: ${onPage.state} on the file the person opened`);
 
   const download = page.waitForEvent('download');
   assert.deepEqual(await call('outputs_download', { runId: onPage.runId, artifactId: 'mask' }), { runId: onPage.runId, artifactId: 'mask' });

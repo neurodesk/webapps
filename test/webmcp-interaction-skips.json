@@ -1,0 +1,5 @@
+{
+  "vesselboost": {
+    "text field thresholdInput": "It is in the inference step, which the app keeps disabled (inert, pointer-events none) until preprocessing has run, so a person cannot type in it either."
+  }
+}

@@ -7,9 +7,10 @@
 // Each app, at desktop and phone width: the full tool set registers, app_describe answers with the
 // contract, user_ask and inputs_request_files render their dialogs and return what the person chose,
 // and the Privacy dialog carries the shared agent statement. A browser without WebMCP loads no WebMCP
-// module. Every light-DOM file input, folder inputs included, keeps the files picked in it available to
-// inputs_use_page_files, or lists what the app reported it holds instead (nd-files). Inputs inside a
-// shadow root are not checked: the tools cannot see them and say so (pageMayHoldOtherInputs).
+// module. Every light-DOM file input, folder inputs included, lists the files picked in it in pageFiles,
+// or what the app reported it holds instead (nd-files). This checks what the tools offer the person to
+// confirm, not what the app accepted: an entry the app refused is still listed, and the person decides.
+// Inputs inside shadow roots are counted, not checked.
 //
 // WEBMCP_RUNS=1 also loads each loadable example (WEBMCP_EXAMPLES=first: only the first), runs it with
 // the tool and parameters app_describe gives and saves an output, through the tools only. Every run must
@@ -151,8 +152,9 @@ async function checkPrivacy(page, app) {
 }
 
 // Many apps clear an input once they have read it, and some reset their examination as they load.
-// Whatever an app does, the files picked in a page input stay listed for inputs_use_page_files, unless
-// the app reports with nd-files what the input holds instead; then pageFiles lists exactly that.
+// Whatever an app does, the files picked in a page input stay listed in pageFiles, which
+// inputs_use_page_files shows the person before the agent gets them, unless the app reports with
+// nd-files what the input holds instead; then pageFiles lists exactly that.
 async function checkPageFiles(page, app) {
   await page.evaluate(() => {
     globalThis.webMcpSmokeReported = new Map();
@@ -198,7 +200,7 @@ async function checkPageFiles(page, app) {
     const expected = reported ?? [name];
     if (JSON.stringify(listed) !== JSON.stringify(expected)) wrong.push({ input: key, folder, picked: name, reported, listed });
   }
-  assert.deepEqual(wrong, [], `${app.id}: every page input lists the files it holds (pageFiles ${JSON.stringify(pageFiles)})`);
+  assert.deepEqual(wrong, [], `${app.id}: every page input lists the files picked in it, or what the app reported (pageFiles ${JSON.stringify(pageFiles)})`);
   return { checked: offered.length, shadowed };
 }
 
