@@ -1,5 +1,12 @@
 # @neurodesk/dwi2trx
 
+## 0.8.20261119
+
+### Patch Changes
+
+- Updated dependencies [3db69e4]
+  - @neurodesk/webapp-components@0.28.1
+
 ## 0.8.20261113
 
 ### Patch Changes
