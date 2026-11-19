@@ -171,7 +171,8 @@ function guessRole(name) {
 // A Remove or a reset changes the loaded list without a change event; the shell and the WebMCP tools
 // learn the list from nd-files on the file input, and that the folder inputs now hold nothing.
 function reportFiles() {
-  const loaded = state.files.map((record) => record.file).filter(Boolean);
+  // The images and their JSON sidecars, which the app keeps apart.
+  const loaded = [...state.files, ...state.jsons].map((record) => record.file).filter(Boolean);
   for (const input of document.querySelectorAll('#controls input[type="file"][data-neurodesk-input]')) {
     const files = input.closest("#fileControl") ? loaded : [];
     input.dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files } }));
@@ -202,7 +203,7 @@ async function addFiles(fileList) {
     if (lower.endsWith(".json")) {
       try {
         const js = JSON.parse(new TextDecoder().decode(buf));
-        state.jsons.push({ name: file.name, json: js });
+        state.jsons.push({ name: file.name, json: js, file });
         if ($("#paramSource").value === "json") applySidecar(file.name, js);
         log(`sidecar: ${file.name}`);
       } catch (e) {
@@ -2354,6 +2355,7 @@ async function loadBidsEntry(ses, opts = {}) {
         state.jsons.push({
           name: baseName(sc.path),
           json: JSON.parse(await sc.file.text()),
+          file: sc.file,
         });
       } catch (e) {
         /* ignore */
