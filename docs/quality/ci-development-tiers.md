@@ -286,7 +286,8 @@ listing leaves out the earlier attempts of a re-run.
 
 A pull request `ci` run is whole-catalogue when it ran at least 100 jobs, ready
 when a job only a ready pull request starts (`full-plan`, `full-plan-withheld`,
-`composite-site`) took a runner, and draft otherwise. A ready run that selects
+`composite-site` or one of the five site checks, which a re-run of one failed
+check runs alone) took a runner, and draft otherwise. A ready run that selects
 neither the site nor more than its draft plan counts as draft. A cancelled run
 that lists such a job, neither skipped nor given a runner, is of unknown tier:
 a run cancelled while planning cancels those jobs whatever its plan. The

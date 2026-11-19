@@ -4,7 +4,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { extname, join, normalize } from 'node:path';
 import { chromium } from '@playwright/test';
-import { findCatalog, loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
+import { findCatalog, loadAppsRegistry, primaryCatalog, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { smokeApps } from '../scripts/lib/smoke-apps.mjs';
 import { verifyMuscleMapFullPipeline } from './musclemap-full-pipeline-smoke.mjs';
 import { verifyDicompareRoutes } from '../test-utils/dicompare-routes.mjs';
@@ -156,6 +156,9 @@ try {
   await landing.context().route(/googletagmanager\.com|google-analytics\.com|analytics\.google\.com/,
     (route) => route.fulfill({ status: 200, contentType: 'application/javascript', body: '' }));
   await landing.goto(`${origin}/`, { waitUntil: 'domcontentloaded' });
+  // The primary catalogue's title, from site.domain and site.catalogs: catalogue data, checked once here.
+  const landingTitle = await landing.title();
+  if (landingTitle !== primaryCatalog(registry).title) failures.push(`landing page title is "${landingTitle}", expected "${primaryCatalog(registry).title}"`);
   const cards = await landing.locator('a.app-card').count();
   const expectedCards = registry.apps.reduce((count, app) => count + app.categories.length, 0);
   const landingText = await landing.locator('body').innerText();
@@ -451,13 +454,11 @@ try {
       failures.push(`${app.id}: More Apps link is missing`);
     } else {
       returningHome = true;
+      // The landing page's own content is checked once above; here only where the link returns.
       await Promise.all([
         page.waitForURL(`${origin}/`),
         moreApps.click(),
       ]);
-      if (await page.title() !== 'Neurodesk Webapps') {
-        failures.push(`${app.id}: More Apps did not render the composite start page`);
-      }
     }
 
     console.log(`PASS /${app.path}/ — ${title}`);
