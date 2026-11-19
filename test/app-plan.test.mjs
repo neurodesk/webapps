@@ -13,7 +13,7 @@ import { loadAppInformation } from '../scripts/lib/app-information.mjs';
 import { hostedThemeOptions } from '../scripts/lib/catalog-sites.mjs';
 import { betNeeds } from '../test-utils/qsm-bet-runtime-startup.mjs';
 import { assertParity, parityPeers, segmentationsToRun } from '../test-utils/shared-binary-startup.mjs';
-import { AGGREGATE_JOBS, APP_JOBS, carriedApps, NIGHTLY_JOBS, RERUN_JOBS, SITE_JOBS, testedBase } from '../scripts/lib/tested-base.mjs';
+import { APP_JOBS, carriedApps, NIGHTLY_JOBS, RERUN_JOBS, SITE_JOBS, testedBase } from '../scripts/lib/tested-base.mjs';
 import { lockfileImpact } from '../scripts/lib/lockfile-impact.mjs';
 import { loadAppsRegistry, parseAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { CATALOG, CATALOG_JOBS, loadConservativeWorkspaceGraph, reachableFrom, siteJobNames, WorkspaceGraphConfigurationError } from '../scripts/lib/workspace-graph.mjs';
@@ -1275,18 +1275,6 @@ test('a ci.yml change narrows only within the same jobs and their own scope', as
   const site = await plan(none, (ci) => { ci.jobs['composite-site']['timeout-minutes'] = 61; });
   assert.deepEqual(site.selected, []);
   assert.equal(site.reasons.fallback, null);
-  // The aggregate check waits for every job but reads only results, so it does not widen a narrowed change;
-  // a change to the aggregate itself is unplaced.
-  assert.ok(parse(text).jobs['ci-required'].needs.includes('composite-site'));
-  const aggregate = await plan(none, (ci) => { ci.jobs['ci-required']['timeout-minutes'] = 9; });
-  assert.equal(aggregate.allApps, true);
-  assert.match(aggregate.reasons.fallback, /its ci-required job changed/);
-  // Any other job that comes to need a narrowed job still widens it.
-  const watcher = await plan(none, (ci) => {
-    ci.jobs['composite-site']['timeout-minutes'] = 61;
-    ci.jobs['app-tests'].needs = ['app-plan', 'composite-site'];
-  });
-  assert.equal(watcher.allApps, true);
 });
 
 test('the jobs a ci.yml change can narrow to test what CI_JOB_SCOPES says', async () => {
@@ -1938,14 +1926,11 @@ test('a failed run carries the apps whose jobs did not pass, and nothing it cann
 // carriedApps reads a failed run's jobs by name: every ci job must be one it knows.
 test('every ci job is the plan, a per-app job named by its app, or one a push or the nightly runs again', async () => {
   const ci = parse(await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8'));
-  const known = new Set(['app-plan', ...APP_JOBS, ...RERUN_JOBS, ...SITE_JOBS, ...NIGHTLY_JOBS, ...AGGREGATE_JOBS]);
+  const known = new Set(['app-plan', ...APP_JOBS, ...RERUN_JOBS, ...SITE_JOBS, ...NIGHTLY_JOBS]);
   for (const id of Object.keys(ci.jobs)) assert.ok(known.has(id), `${id} is a job carriedApps cannot place`);
-  // The aggregate fails only with another job, which is listed and placed itself.
-  assert.deepEqual(carriedApps([{ name: 'ci-required', conclusion: 'failure' }]), { carried: new Map(), unattributed: [] });
   // A site job checks the apps its own plan selected, so a push after its failure diffs from the last green run.
   for (const id of SITE_JOBS) assert.deepEqual(carriedApps([{ name: id, conclusion: 'failure' }]).unattributed, [id]);
-  // The aggregate waits for composite-site too; its one step names no root file.
-  assert.deepEqual(siteJobNames(ci).filter((id) => !SITE_JOBS.includes(id)).sort(), ['agent-interactions', 'ci-required', 'example-cache-retention', 'processing-workflows']);
+  assert.deepEqual(siteJobNames(ci).filter((id) => !SITE_JOBS.includes(id)).sort(), ['agent-interactions', 'example-cache-retention', 'processing-workflows']);
   const outputs = { 'app-tests': 'apps', 'browser-e2e': 'browser_apps', 'browser-e2e-gpu': 'gpu_apps' };
   for (const id of APP_JOBS) {
     const job = ci.jobs[id];

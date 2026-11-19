@@ -7,7 +7,6 @@ import { CATALOG, INDEPENDENT_CONFIG, SITE, reachableFrom } from './workspace-gr
 import { handoffCatalogEntry, validateAppInformation } from './app-information.mjs';
 import { appCatalogIds, parseAppsRegistry } from './apps-registry.mjs';
 import { validateStandalone } from './standalone.mjs';
-import { AGGREGATE_JOBS } from './tested-base.mjs';
 
 const NON_CODE_PREFIXES = ['docs/', '.changeset/'];
 // Self-contained packages outside apps/ with their own CI job (the homepage
@@ -324,12 +323,8 @@ function relatedJobs(jobs, id, direction) {
 // CI_JOB_SCOPES places, and every job that needs a changed job, or that a
 // changed job needs (the plan aside), at the base or the head, has the same
 // scope: a job of another scope could consume what changed while the
-// narrowed plan skips it, or skip the changed job by being skipped itself. The
-// aggregate required check (AGGREGATE_JOBS) needs every job but reads only
-// their results and runs whatever the plan selects, so it is no such
-// dependant: without this, every ci.yml edit would select every app. A change
-// to the aggregate itself is a change to an unplaced job. A key outside
-// `jobs` reaches every app.
+// narrowed plan skips it, or skip the changed job by being skipped itself. A
+// key outside `jobs` reaches every app.
 export function ciImpact({ before, after }) {
   let old;
   let now;
@@ -351,7 +346,7 @@ export function ciImpact({ before, after }) {
     for (const id of jobs) {
       for (const [side, workflow] of [['base', old], ['head', now]]) {
         for (const direction of ['dependants', 'dependencies']) {
-          const other = relatedJobs(workflow.jobs, id, direction).find((job) => job !== 'app-plan' && !(direction === 'dependants' && AGGREGATE_JOBS.includes(job)) && CI_JOB_SCOPES[job] !== CI_JOB_SCOPES[id]);
+          const other = relatedJobs(workflow.jobs, id, direction).find((job) => job !== 'app-plan' && CI_JOB_SCOPES[job] !== CI_JOB_SCOPES[id]);
           if (other) return { shared: `its ${id} job changed, and at the ${side} ${direction === 'dependants' ? `${other} needs it` : `it needs ${other}`}, which tests more than the ${CI_JOB_SCOPES[id]} scope` };
         }
       }

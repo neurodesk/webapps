@@ -165,7 +165,7 @@ summary.push(easterEgg ? `Homepage easter egg runs: ${scope === 'site' ? 'scope 
 if (plan.bookkeeping.length) summary.push(`Release bookkeeping set aside (changelogs and version bumps, checked by workspace-contracts): ${plan.bookkeeping.length} ${plan.bookkeeping.length === 1 ? 'file' : 'files'}.`);
 if (scope === 'gpu') summary.unshift('Scope gpu: only the macOS GPU suite of the selected apps runs.');
 if (scope === 'site') summary.unshift('Scope site: only the composite site, its agentic checks and the homepage easter egg run.');
-if (draft) summary.unshift('Draft feedback only: unit and build tests of the apps it edits. Browser tests and shared dependency coverage run on ready_for_review and every later ready push; for browser tests on a draft, run `gh workflow run ci.yml --ref <branch> -f scope=affected`.');
+if (draft) summary.unshift('Draft feedback only: shared dependency coverage runs on ready_for_review and every subsequent ready PR push.');
 const withheldAdvice = `Full plan withheld: ${withheld}. This run tests only the apps the pull request edits. Convert the pull request to draft while iterating; to test every app at this head, add the ${FULL_CI_LABEL} label and use "Re-run all jobs" on this run.`;
 if (withheld) {
   summary.unshift(withheldAdvice);

@@ -26,7 +26,6 @@ const functions = {
   startsWith: (search, item) => text(search).startsWith(text(item)),
   endsWith: (search, item) => text(search).endsWith(text(item)),
   cancelled: () => false,
-  always: () => true,
   fromJSON: JSON.parse,
 };
 const evaluate = (expression, github, inputs = {}, needs = gate(github)) => runInNewContext(expression.replace(/^\$\{\{\s*|\s*\}\}$/g, ''), { github, inputs, needs, ...functions });

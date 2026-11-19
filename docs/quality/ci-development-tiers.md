@@ -21,9 +21,8 @@ pull request would (unit, browser and macOS GPU tests of those apps, and the
 composite site when the plan needs it), not the draft's narrower plan. Its
 result shows in Actions and on the commit, not in the pull request's checks
 list: PR #681's checks held only its pull request run while a newer dispatch
-run of the same commit held 115 more. It does not satisfy `ci-required`, and
-it does not count against the full-plan budget, which counts only pull request
-runs (`listPullRequestRuns`).
+run of the same commit held 115 more. It does not count against the
+full-plan budget, which counts only pull request runs (`listPullRequestRuns`).
 
 This costs feedback. In the 48 hours to 18 November 2026, 46 of 63 draft
 `ci` runs ran browser jobs: 61 jobs, 548 minutes on Linux and 56 on macOS,
@@ -39,7 +38,7 @@ composite checks, and path-selected native/reference suites. Reopening also
 refreshes the checks. Converting a PR back to draft cancels the previous PR
 run without starting CI test jobs on the unchanged head. GitHub prevents merging
 a draft PR. Before merging a ready PR, verify the full checks on its current
-head; no check is required yet ([the required check](#the-required-check)). A ready PR
+head; this change does not configure repository branch protection. A ready PR
 that has already used its whole-catalogue runs gets the draft plan and a
 failing `full-plan-withheld` job instead ([enforcement](#enforcement-in-ci)).
 
@@ -339,6 +338,15 @@ green 34 minutes and merge to live 20 minutes. They become budgets only once
 the changes that reach them have landed and the numbers have held; a budget
 opens an issue on every miss.
 
+The draft share reads worse as drafts get cheaper. Since drafts start no
+browser job, the same 68 draft runs of that window would hold 1,015 fixed
+minutes of 1,139 instead of 1,743: the share rises from 58% to 89%, while a
+draft run falls from 25.6 to 16.8 minutes, 14.9 of them fixed. With only the
+apps it edits left to test, a draft is mostly its fixed jobs, so a share
+under 30% is out of reach until the fixed jobs themselves shrink. Read the
+fixed and total minutes the row prints next to the share, and the minutes per
+draft run they give.
+
 The budgets come first, on about 80 requests a day (the run listings and one
 job count per `ci` pull request run that did work), and alone decide the exit
 code; nothing the measures do changes it. The measures then read the deploys,
@@ -401,93 +409,22 @@ someone removes it, and every later push then gets the full plan again, so
 remove it once the head you will merge has passed. A failure to read the runs
 or labels keeps the full plan.
 
-## The required check
+## Parked: merge queue support and a required check
 
-`main` has no required check, so a pull request can merge while its `ci` run
-is red or still running. `ci-required` is the one job a ruleset can require
-instead of the dozens of per-app and site checks, whose names change with the
-plan. It waits for every other job of `ci` but `example-cache-retention`,
-which runs only on `main`'s ref and may fail by design. It runs on every pull
-request run, a draft included, but not on `converted_to_draft`, and not on a
-push, the nightly or a dispatch: nothing requires a check there. Its condition
-starts with `always()`: a skipped required check reads as passing, so even a
-cancelled run must start it, and fail.
+Both were built, measured or reviewed in November 2026 and parked on the
+branch `ci/merge-queue-support`, for the maintainer to decide:
 
-It decides from `needs` alone with jq (`PASSES` in its step) and passes only
-when `app-plan` succeeded and every job it waits for succeeded or was skipped
-by its condition. A failed, cancelled or timed-out job fails it. A job skipped
-because a job it needs failed fails it through that job, which it waits for
-too, and a withheld plan fails it through `full-plan-withheld`. A draft passes
-with what its plan ran; GitHub merges no draft.
-
-`test/ci-required-jobs.test.mjs` pins its needs (every other job, so a new job
-must be added to them), its condition and its step. It runs the step under
-`bash -eo pipefail` on malformed input, runs its filter over every job in
-every failing state and over every run of the job-graph table with each
-started job failed or cancelled, and reads the table itself off `ci.yml` for
-draft, ready, over-budget, reopened and converted pull requests, pushes, the
-nightly and every dispatch scope. The planner does not count the aggregate as
-a job that consumes a narrowed `ci.yml` change (`ciImpact`): it needs every
-job, so otherwise every `ci.yml` edit would select every app. The daily
-measures class it as a `plan` job (`WORKFLOWS` in `scripts/lib/ci-measures.mjs`).
-
-### Requiring a green run
-
-The check does nothing until a maintainer requires it. The ruleset below
-requires `ci-required` on `main` without a merge queue. It is not applied:
-
-```sh
-gh api --method POST repos/neurodesk/webapps/rulesets --input - <<'JSON'
-{
-  "name": "main requires a green ci run",
-  "target": "branch",
-  "enforcement": "active",
-  "conditions": { "ref_name": { "include": ["~DEFAULT_BRANCH"], "exclude": [] } },
-  "rules": [
-    {
-      "type": "required_status_checks",
-      "parameters": {
-        "strict_required_status_checks_policy": false,
-        "do_not_enforce_on_create": false,
-        "required_status_checks": [{ "context": "ci-required", "integration_id": 15368 }]
-      }
-    }
-  ],
-  "bypass_actors": [
-    { "actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always" },
-    { "actor_id": 15368, "actor_type": "Integration", "bypass_mode": "always" }
-  ]
-}
-JSON
-```
-
-`integration_id` 15368 is GitHub Actions, so only a check from a `ci` run
-counts. Role 5 is the repository admin role. The Actions integration as a
-bypass actor keeps `standalone-catalog.yml` working: it pushes its
-`chore(standalone)` commits straight to `main` with `GITHUB_TOKEN`, and a
-required check would reject a push whose commit has no `ci-required`. Confirm
-that push on the first catalogue publish after the ruleset is created.
-
-What changes for people and agents:
-
-- A pull request cannot merge until the `ci` run of its head is green. A
-  ready run that is still going, red, cancelled or over its full-plan budget
-  blocks the merge; `gh pr merge` refuses it.
-- A draft cannot merge anyway. Its `ci-required` passes with what the draft
-  plan ran, and marking it ready starts the run that counts.
-- A dispatched run does not satisfy the check: it is not a pull request run.
-- An administrator can still merge or push past it, and the ruleset's bypass
-  list says who else can.
-- The native workflows and `quality.yml` are not required. Read their results
-  on the pull request before merging, as now.
-
-To turn it off, delete the ruleset (`gh api repos/neurodesk/webapps/rulesets`
-lists its id; `gh api --method DELETE repos/neurodesk/webapps/rulesets/<id>`).
-
-Merge queue support (a `merge_group` trigger, and a push to `main` that skips
-what a green queue run of each of its commits tested) was built, measured and
-parked on the branch `ci/merge-queue-support`: with one entry per queue run it
-adds about 12% runner minutes over the 12 pushes of 16 to 18 November 2026.
+- Merge queue support (a `merge_group` trigger, and a push to `main` that skips
+  what a green queue run of each of its commits tested). With one entry per
+  queue run it adds about 12% runner minutes over the 12 pushes of 16 to 18
+  November 2026: the pushes repeat 1,294 fewer minutes and the queue runs add
+  about 1,508.
+- `ci-required`, one aggregate job a ruleset could require. A review found
+  that it does not yet mean "the ready run of this head was green": a matrix
+  leg can be cancelled while `needs` reads success, a draft run publishes the
+  same check on the same commit, unexpected skips pass, it pushed a 99-job
+  plan over the 100-job budget threshold, and the standalone publisher has
+  no supported bypass. The branch lists each with its fix.
 
 ## Heavy browser tests
 

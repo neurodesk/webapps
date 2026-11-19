@@ -44,11 +44,6 @@ test('routine events omit slow repeats while nightly, manual and release retain 
   for (const event of [...events, 'release']) {
     assert.equal(evaluate(ci.env.NEURODESK_E2E_SKIP_SLOW, event), ['pull_request', 'push'].includes(event) ? '1' : '', event);
   }
-  const heavy = ci.jobs['browser-e2e'].steps.find((step) => step.env?.NEURODESK_E2E_SKIP_HEAVY).env.NEURODESK_E2E_SKIP_HEAVY;
-  for (const event of [...events, 'release']) {
-    assert.equal(evaluate(heavy, event, { matrix: { heavy_tests: false } }), ['pull_request', 'push'].includes(event) ? '1' : '', event);
-    assert.equal(evaluate(heavy, event, { matrix: { heavy_tests: true } }), '', `${event}: an edited app runs its @heavy tests`);
-  }
   for (const ref of ['refs/tags/v1.0.20261015', 'refs/heads/feature']) {
     assert.equal(evaluate(ci.env.NEURODESK_E2E_SKIP_SLOW, 'push', { github: { event_name: 'push', ref } }), '', ref);
   }

@@ -56,9 +56,6 @@ export const APP_JOBS = ['app-tests', 'browser-e2e', 'browser-e2e-gpu'];
 export const RERUN_JOBS = ['workspace-contracts', 'homepage-easter-egg', 'example-cache-retention', 'full-plan', 'full-plan-withheld'];
 export const SITE_JOBS = ['composite-site', 'site-runtime', 'site-audit', 'site-e2e', 'site-mobile', 'site-catalog'];
 export const NIGHTLY_JOBS = ['agent-interactions', 'processing-workflows'];
-// The required check of pull requests. It runs on no push or nightly run, and
-// it fails only with another job of its run, which is listed itself.
-export const AGGREGATE_JOBS = ['ci-required'];
 const APP_JOB = new RegExp(`^(?:${APP_JOBS.join('|')}) \\(([^,)]+)[,)]`);
 const UNPASSED = new Set(['failure', 'cancelled', 'timed_out', 'startup_failure', 'action_required', 'stale']);
 const PASSED = new Set(['success', 'skipped', 'neutral']);
@@ -71,7 +68,7 @@ export function carriedApps(jobs, appIds) {
     const base = job.name.replace(/ \(.*$/, '');
     if (!UNPASSED.has(job.conclusion)) unattributed.push(`${job.name} (not finished)`);
     else if (app && (!appIds || appIds.has(app))) carried.set(app, [...(carried.get(app) ?? []), job.name]);
-    else if (app || ![...RERUN_JOBS, ...NIGHTLY_JOBS, ...AGGREGATE_JOBS].includes(base)) unattributed.push(job.name);
+    else if (app || ![...RERUN_JOBS, ...NIGHTLY_JOBS].includes(base)) unattributed.push(job.name);
   }
   return { carried, unattributed };
 }
