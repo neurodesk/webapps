@@ -24,10 +24,11 @@ list: PR #681's checks held only its pull request run while a newer dispatch
 run of the same commit held 115 more. It does not count against the
 full-plan budget, which counts only pull request runs (`listPullRequestRuns`).
 
-This costs feedback. In the 48 hours to 18 November 2026, 46 of 63 draft
-`ci` runs ran browser jobs: 61 jobs, 548 minutes on Linux and 56 on macOS,
-262 of them in runs a later push cancelled. None of the 61 failed, so no draft
-run in that window found a browser failure first. A person or agent who relied
+This costs feedback. In a snapshot of the 48 hours to 18 November 2026, 46 of
+63 draft `ci` runs ran browser jobs: 61 jobs, 548 minutes on Linux and 56 on
+macOS, 262 of them in runs a later push cancelled. No failure was recorded
+among the 61 (two were still running when the snapshot was taken), so no draft
+run in that window is known to have found a browser failure first. A person or agent who relied
 on draft browser runs now dispatches `ci` or marks the pull request ready,
 where a ready pull request has a budget of two full-plan runs in 24 hours
 ([enforcement](#enforcement-in-ci)).
@@ -340,7 +341,8 @@ opens an issue on every miss.
 
 The draft share reads worse as drafts get cheaper. Since drafts start no
 browser job, the same 68 draft runs of that window would hold 1,015 fixed
-minutes of 1,139 instead of 1,743: the share rises from 58% to 89%, while a
+minutes of 1,139 instead of 1,743, counting completed job times: the share
+rises from about 58% to about 89%, while a
 draft run falls from 25.6 to 16.8 minutes, 14.9 of them fixed. With only the
 apps it edits left to test, a draft is mostly its fixed jobs, so a share
 under 30% is out of reach until the fixed jobs themselves shrink. Read the
@@ -389,7 +391,7 @@ When the complete plan would select more apps than the draft plan, the run
 starts the `full-plan` marker job, and the planner counts the pull request's
 earlier full-plan runs from the last 24 hours (`fullPlanDecision` in
 `scripts/lib/ci-usage.mjs`): runs that started the marker, and whole-catalogue
-runs, whatever event started them, `ready_for_review` and cancelled runs
+runs, of any pull request activity type, `ready_for_review` and cancelled runs
 included. A partial plan counts as much as a whole-catalogue one: on
 13 November 2026 one pull request ran its 14 selected apps nine times. Once
 the runs fill the budget of 2, the run uses the draft plan, skips the
