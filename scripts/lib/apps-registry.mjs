@@ -2,9 +2,8 @@ import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isScalar, parse, parseDocument, visit } from 'yaml';
+import { ORIGIN_TRIAL_TOKEN } from './composite-theme.mjs';
 
-// A Chrome origin trial token is base64.
-export const ORIGIN_TRIAL_TOKEN = /^[A-Za-z0-9+/]*={0,2}$/;
 export const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 export const registryPath = join(repoRoot, 'registry', 'apps.yml');
 

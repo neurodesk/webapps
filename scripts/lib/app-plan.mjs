@@ -100,6 +100,7 @@ export const SITE_KEY_READERS = Object.freeze(Object.fromEntries([
   ['site.catalogs[].id', ['scripts/lib/standalone.mjs', ...DESKTOP_SUITE]],
   ['site.catalogs[].host', [...CATALOG_ENTRY, 'scripts/desktop/release-files.mjs']],
   ...keys('site.catalogs[]', ['hosting', 'title', 'heading', 'description', ...BRAND_KEYS], CATALOG_ENTRY),
+  ['site.catalogs[].webmcp_origin_trial', []],
   ...keys('site.catalogs[].desktop', ['product_name', 'app_id', 'release', 'executable'], DESKTOP_SUITE),
   ['site.analytics.measurement_id', ['scripts/theme-app-dist.mjs', 'scripts/lib/vite-app-config.mjs', 'scripts/dev-server.mjs']],
   ['site.analytics.period_days', []],
