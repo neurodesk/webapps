@@ -1003,35 +1003,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "1.4.20261111",
-          "url": "https://github.com/neurodesk/webapps/releases/download/deface-v1.4.20261111/deface-1.4.20261111-linux-x64.tar.gz",
-          "sha256": "cfe9b5e579df86ef84a368c7028082bc8731c6bc73dedd2b98e085c313968a72",
-          "bytes": 83772182,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/deface-v1.4.20261111/deface-1.4.20261111-linux-x64.tar.gz.validation.txt",
+          "version": "1.4.20261119",
+          "url": "https://github.com/neurodesk/webapps/releases/download/deface-v1.4.20261119/deface-1.4.20261119-linux-x64.tar.gz",
+          "sha256": "24572d44271aada75ab638d085024792a0dc26e96ef1e22d6a9152435f07b123",
+          "bytes": 83774011,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/deface-v1.4.20261119/deface-1.4.20261119-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf deface-1.4.20261111-linux-x64.tar.gz\n./deface-1.4.20261111-linux-x64/deface head.nii.gz results"
+          "command": "tar -xzf deface-1.4.20261119-linux-x64.tar.gz\n./deface-1.4.20261119-linux-x64/deface head.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "1.4.20261111",
-          "url": "https://github.com/neurodesk/webapps/releases/download/deface-v1.4.20261111/deface-1.4.20261111-macos-arm64.pkg",
-          "sha256": "1d194e0a106c3f221ba103ac3ec753a8d09024dba4bedf1c0e70db3f5af41500",
-          "bytes": 77443721,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/deface-v1.4.20261111/deface-1.4.20261111-macos-arm64.pkg.validation.txt",
+          "version": "1.4.20261119",
+          "url": "https://github.com/neurodesk/webapps/releases/download/deface-v1.4.20261119/deface-1.4.20261119-macos-arm64.pkg",
+          "sha256": "e83a952e456d1429554863b26c2743faf7b98cab278e87dfcbb658e59aab8d58",
+          "bytes": 77449907,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/deface-v1.4.20261119/deface-1.4.20261119-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg deface-1.4.20261111-macos-arm64.pkg -target /\ndeface self-check\ndeface head.nii.gz results"
+          "command": "sudo installer -pkg deface-1.4.20261119-macos-arm64.pkg -target /\ndeface self-check\ndeface head.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "1.4.20261111",
-          "url": "https://github.com/neurodesk/webapps/releases/download/deface-v1.4.20261111/deface-1.4.20261111-windows-x64.zip",
-          "sha256": "efc01885b2ebc465b7513ac8c1a8e3a3a791ac72e45f03358e3ac7fc993df309",
-          "bytes": 75391919,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/deface-v1.4.20261111/deface-1.4.20261111-windows-x64.zip.validation.txt",
+          "version": "1.4.20261119",
+          "url": "https://github.com/neurodesk/webapps/releases/download/deface-v1.4.20261119/deface-1.4.20261119-windows-x64.zip",
+          "sha256": "c4509c4dd7f5ee268e193630b7ddeb1c1145e868f0cb80935ec73548d20fe84e",
+          "bytes": 75400042,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/deface-v1.4.20261119/deface-1.4.20261119-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\deface-1.4.20261111-windows-x64.zip -DestinationPath .\n.\\deface-1.4.20261111-windows-x64\\deface.exe head.nii.gz results"
+          "command": "Expand-Archive -Path .\\deface-1.4.20261119-windows-x64.zip -DestinationPath .\n.\\deface-1.4.20261119-windows-x64\\deface.exe head.nii.gz results"
         }
       ],
       "containers": []
