@@ -31,6 +31,12 @@ class ContractTests(unittest.TestCase):
             dest = root / name
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(cls.source.parents[4] / name, dest)
+        # This fixture tests the current evaluator, not a new scientific freeze.
+        # Shared workflow edits must not invalidate its synthetic trust anchor.
+        # Only the temporary contract is changed; the recorded contract stays frozen.
+        for row in c["files"]:
+            row["sha256"] = gate.sha(root / row["path"])
+        (root / relative / "contract.json").write_text(json.dumps(c))
         for command in (["init", "--quiet"], ["add", "."],
                         ["-c", "user.name=Protocol Test", "-c", "user.email=protocol@example.invalid", "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "Synthetic protocol trust anchor"]):
             subprocess.run(["git", *command], cwd=root, check=True, capture_output=True)

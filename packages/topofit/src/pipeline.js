@@ -3,6 +3,7 @@ import { conformVolume } from './conform.js';
 import { createQcVolume } from './qc.js';
 import { analyzeSurfaces, readPatchRoi } from './surface-analysis.js';
 import { validatePatchOptions } from './patches.js';
+import { selectRegion } from './cortex-regions.js';
 import { shareAssets } from './shared-assets.js';
 import { readFloat32Asset, readInt32Asset, writeSurfaceFiles } from './results.js';
 import {
@@ -57,6 +58,7 @@ export async function runTopofit(options) {
   const source = readVolume(buffer);
   const patches = options.patches ? validatePatchOptions(options.patches) : null;
   const roi = patches ? readPatchRoi(options.roiBuffer, source) : null;
+  selectRegion(options.region, { patches, roi });
   lap('read input');
   let inference = source;
   let conformed = false;
@@ -198,8 +200,10 @@ export async function runTopofit(options) {
     onProgress(0.94, 'Estimating cortical surface normals…');
     const result = await analyzeSurfaces({
       source, vertices, faces, roi, patches,
+      region: options.region,
       estimateNormals: options.estimateNormals,
       loadAtlas: options.loadAtlas,
+      loadRegions: options.loadRegions,
       onProgress: (message) => onProgress(0.96, message),
     });
     files.push(...result.files);
@@ -331,25 +335,27 @@ export async function reconstructHemisphere({
   return { white: vertices, pial, registration };
 }
 
-export async function runSurfaceAnalysis({ buffer, surfaces, provenance: reconstruction, estimateNormals, patches, roiBuffer, loadAtlas, cortexAtlasSha256, onProgress = () => {} }) {
+export async function runSurfaceAnalysis({ buffer, surfaces, provenance: reconstruction, estimateNormals, patches, roiBuffer, region, loadAtlas, loadRegions, cortexAtlasSha256, cortexRegionsSha256, onProgress = () => {} }) {
   if (!estimateNormals && !patches) throw new Error('Choose normals, flat patches, or both.');
   const started = performance.now();
   const source = readVolume(buffer);
   const roi = readPatchRoi(roiBuffer, source);
   onProgress(0.05, 'Analyzing reconstructed surfaces…');
   const result = await analyzeSurfaces({
-    source, ...surfaces, estimateNormals, patches, roi, loadAtlas,
+    source, ...surfaces, estimateNormals, patches, roi, region, loadAtlas, loadRegions,
     onProgress: (message) => onProgress(0.5, message),
   });
   const provenance = structuredClone(reconstruction);
   delete provenance.roiSha256;
   delete provenance.runtime.cortexAtlasSha256;
+  delete provenance.runtime.cortexRegionsSha256;
   provenance.surfaceAnalysis = result.analysis;
   provenance.outputSha256 = Object.fromEntries(
     [...Object.keys(surfaces.vertices), 'lh.mid.white', 'rh.mid.white', 'topofit_qc.nii'].map((name) => [name, reconstruction.outputSha256[name]]),
   );
   if (roi) provenance.roiSha256 = await sha256(roiBuffer);
   if (patches) provenance.runtime.cortexAtlasSha256 = cortexAtlasSha256;
+  if (region && region !== 'cortex') provenance.runtime.cortexRegionsSha256 = cortexRegionsSha256;
   for (const file of result.files) provenance.outputSha256[file.name] = await sha256(file.bytes);
   result.files.push({
     id: 'provenance', name: 'topofit_manifest.json', mediaType: 'application/json',

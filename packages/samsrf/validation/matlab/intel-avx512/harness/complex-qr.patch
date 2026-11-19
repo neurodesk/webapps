@@ -1,0 +1,88 @@
+diff --git a/exes/samsrf/core/src/lstsq.rs b/exes/samsrf/core/src/lstsq.rs
+--- a/exes/samsrf/core/src/lstsq.rs
++++ b/exes/samsrf/core/src/lstsq.rs
+@@ -864,6 +864,20 @@
+     }
+ }
+ 
++fn solve_complex_reference(kernels: &crate::reference::Kernels, columns: &[&[Complex64]], ys: &[&[f64]], keep_qty: bool) -> Solved {
++    let design = (kernels.complex_factor)(columns);
++    let (mut coefficients, mut qty) = (Vec::new(), Vec::new());
++    for (index, y) in ys.iter().enumerate() {
++        let (x, q) = design.solve(y, ys.len(), index);
++        coefficients.push(x);
++        qty.push(if keep_qty { q } else { Vec::new() });
++    }
++    let packed = design.packed().to_vec();
++    let r = (0..2).map(|i| (0..2).map(|j| if j < i { Complex64::new(0.0, 0.0) } else { packed[j][i] }).collect()).collect();
++    Solved { coefficients, qty, rank: design.rank(), pivot: design.pivot().to_vec(),
++        r, packed, tau: design.tau().to_vec() }
++}
++
+ fn solve<T: Real>(columns: &[&[Complex64]], ys: &[&[f64]], keep_qty: bool) -> Solved {
+     let n = columns.len();
+     let m = ys.first().map_or(0, |y| y.len());
+@@ -889,6 +903,9 @@
+     }
+     if let Some(kernels) = crate::reference::active() {
+         let real = a.iter().flatten().all(|value| value.im == T::ZERO);
++        if std::mem::size_of::<T>() == 8 && !real && m >= 2 && n == 2 {
++            return solve_complex_reference(kernels, columns, ys, keep_qty);
++        }
+         if std::mem::size_of::<T>() == 8 && real && m > 0 {
+             return solve_with_reference(kernels, columns, ys, keep_qty);
+         }
+diff --git a/exes/samsrf/core/src/reference.rs b/exes/samsrf/core/src/reference.rs
+--- a/exes/samsrf/core/src/reference.rs
++++ b/exes/samsrf/core/src/reference.rs
+@@ -23,7 +23,19 @@
+ }
+ 
+ /// One reference's real double kernels.
++pub use num_complex::Complex64;
++
++pub trait ComplexDesign {
++    fn solve(&self, y: &[f64], count: usize, index: usize) -> (Vec<num_complex::Complex64>, Vec<num_complex::Complex64>);
++    fn packed(&self) -> &[Vec<num_complex::Complex64>];
++    fn tau(&self) -> &[num_complex::Complex64];
++    fn pivot(&self) -> &[usize];
++    fn rank(&self) -> usize;
++}
++
+ pub struct Kernels {
++    /// Candidate for finite two-column complex double designs only.
++    pub complex_factor: fn(&[&[num_complex::Complex64]]) -> Box<dyn ComplexDesign>,
+     pub name: &'static str,
+     /// MATLAB's real `x' * y`, from `matlab_math::DDOT_MKL_MIN_LENGTH` elements (MKL `ddot`).
+     pub ddot: fn(&[f64], &[f64]) -> f64,
+diff --git a/exes/samsrf/wasm/src/lib.rs b/exes/samsrf/wasm/src/lib.rs
+--- a/exes/samsrf/wasm/src/lib.rs
++++ b/exes/samsrf/wasm/src/lib.rs
+@@ -38,6 +38,17 @@
+     }
+ }
+ 
++struct IntelComplexDesign(samsrf_mkl_avx512::complex_qr::Design);
++impl samsrf_core::reference::ComplexDesign for IntelComplexDesign {
++    fn solve(&self, y: &[f64], count: usize, index: usize) -> (Vec<samsrf_core::reference::Complex64>, Vec<samsrf_core::reference::Complex64>) {
++        self.0.solve(y, count, index)
++    }
++    fn packed(&self) -> &[Vec<samsrf_core::reference::Complex64>] { &self.0.packed }
++    fn tau(&self) -> &[samsrf_core::reference::Complex64] { &self.0.tau }
++    fn pivot(&self) -> &[usize] { &self.0.pivot }
++    fn rank(&self) -> usize { self.0.rank }
++}
++
+ static INSTALL: std::sync::Once = std::sync::Once::new();
+ 
+ /// RESEARCH BUILD ONLY: installs the test-only reference for MKL's AVX512_E1 branch (the
+@@ -45,7 +56,8 @@
+ pub fn install_research_reference() {
+     INSTALL.call_once(|| {
+         samsrf_core::reference::install(samsrf_core::reference::Kernels {
+-            name: "MKL AVX512_E1 research reference (samsrf-mkl-avx512): real double kernels plus complex dot candidate and complex norm candidate",
++            name: "MKL AVX512_E1 research reference: real double, complex dot/norm and two-column complex QR candidates",
++            complex_factor: |columns| Box::new(IntelComplexDesign(samsrf_mkl_avx512::complex_qr::Design::new(columns))),
+             ddot: samsrf_mkl_avx512::blas::ddot,
+             zdotc_real: samsrf_mkl_avx512::complex::zdotc_real,
+             dnrm2: samsrf_mkl_avx512::nrm2,

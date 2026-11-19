@@ -13,3 +13,17 @@ The fsaverage sphere and cortex labels are distributed separately on Hugging
 Face. Original asset checksums and sources are in cortex-atlas.manifest.json.
 FreeSurfer software license and attribution:
 https://surfer.nmr.mgh.harvard.edu/fswiki/FreeSurferSoftwareLicense
+
+The fsaverage search-region labels (fsaverage-regions.bin) are distributed
+separately on Hugging Face; sources and checksums are in
+cortex-regions.manifest.json.
+- Wang 2015 visual topography: Wang L, Mruczek REB, Arcaro MJ, Kastner S.
+  Probabilistic maps of visual topography in human cortex. Cerebral Cortex.
+  2015;25(10):3911-3931. doi:10.1093/cercor/bhu277. fsaverage maps from the HCP
+  7T retinotopy dataset (Benson NC et al. Journal of Vision. 2018;18(13):23.
+  doi:10.1167/18.13.23), https://osf.io/bw9ec/, licensed under CC BY 4.0
+  (https://creativecommons.org/licenses/by/4.0/). Changed: NaN set to 0, stored
+  as uint8, display colours added.
+- Desikan-Killiany labels: FreeSurfer fsaverage lh/rh.aparc.annot, under the
+  FreeSurfer software license above. Desikan RS et al. NeuroImage.
+  2006;31(3):968-980. doi:10.1016/j.neuroimage.2006.01.021.

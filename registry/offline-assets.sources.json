@@ -2704,6 +2704,13 @@
         "kind": "atlas-template"
       },
       {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/7ec5394736769ea0e9d6a11b22ab67fa4ac3f0df/topofit/0.5.1/cortex-regions-20261119/fsaverage-regions.bin",
+        "sha256": "16cd2abfefc14d0705966e2ec0e1b8e457dafa6ae1a95e702cac81d969fadd54",
+        "bytes": 655372,
+        "kind": "atlas-template",
+        "license": "Wang 2015 labels CC-BY-4.0 (OSF bw9ec); Desikan-Killiany labels FreeSurfer Software License"
+      },
+      {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/b438d1162e7192ca425ca47282b06fe62340c85a/topofit/0.5.1/onnx-20260911/template-lh.f32",
         "sha256": "6ed358bac79f459c218a1a74e0bac4ee2d5c268ede23d53245de16d672f07df7",
         "bytes": 744,

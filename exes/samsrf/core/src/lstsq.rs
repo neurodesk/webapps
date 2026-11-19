@@ -13,6 +13,7 @@
 //! differently; the package README lists the measured agreement.
 
 use crate::precision::Precision;
+use crate::arithmetic::{ArithmeticReference, intel};
 use num_complex::Complex64;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
@@ -64,6 +65,37 @@ pub fn mldivide_many(columns: &[&[Complex64]], ys: &[&[f64]], precision: Precisi
         Precision::Single => solve::<f32>(columns, ys, false),
     };
     Solutions { coefficients: solved.coefficients, rank: solved.rank, pivot: solved.pivot }
+}
+
+/// Explicit reference, held by the caller for the whole analysis.
+pub fn mldivide_many_with_reference(columns: &[&[Complex64]], ys: &[&[f64]], precision: Precision, reference: ArithmeticReference) -> Solutions {
+    if reference != ArithmeticReference::MatlabIntel {
+        return mldivide_many(columns, ys, precision);
+    }
+    assert_eq!(precision, Precision::Double, "Intel arithmetic requires double precision");
+    assert_eq!(columns.len(), 2, "Intel arithmetic supports two-column designs");
+    let rows = columns[0].len();
+    assert!(columns.iter().all(|c| c.len() == rows) && ys.iter().all(|y| y.len() == rows));
+    // Preserve the existing nonfinite result policy; these are not identified MATLAB kernels.
+    if rows < 2 || columns.iter().flat_map(|c| c.iter()).any(|v| !v.re.is_finite() || !v.im.is_finite()) {
+        return Solutions { coefficients: vec![vec![Complex64::new(f64::NAN, f64::NAN); 2]; ys.len()], rank: 0, pivot: vec![0, 1] };
+    }
+    if columns.iter().flat_map(|c| c.iter()).any(|v| v.im != 0.0) {
+        let design = intel::complex_qr::Design::new(columns);
+        let coefficients = ys.iter().enumerate().map(|(i, y)| if y.iter().any(|v| !v.is_finite()) { vec![Complex64::new(f64::NAN, f64::NAN); 2] } else { design.solve(y, ys.len(), i).0 }).collect();
+        Solutions { coefficients, rank: design.rank, pivot: design.pivot }
+    } else {
+        let real: Vec<Vec<f64>> = columns.iter().map(|c| c.iter().map(|v| v.re).collect()).collect();
+        let design = intel::Design::new(&real.iter().map(Vec::as_slice).collect::<Vec<_>>());
+        let coefficients = ys.iter().enumerate().map(|(i, y)| if y.iter().any(|v| !v.is_finite()) { vec![Complex64::new(f64::NAN, f64::NAN); 2] } else { design.solve(y, ys.len(), i).into_iter().map(|v| Complex64::new(v, 0.0)).collect() }).collect();
+        Solutions { coefficients, rank: design.rank(), pivot: design.pivot().to_vec() }
+    }
+}
+
+pub fn regress_on_ones_with_reference(x: &[Complex64], y: &[f64], precision: Precision, reference: ArithmeticReference) -> (Complex64, Complex64) {
+    let ones = vec![Complex64::new(1.0, 0.0); x.len()];
+    let result = mldivide_many_with_reference(&[&ones, x], &[y], precision, reference);
+    (result.coefficients[0][1], result.coefficients[0][0])
 }
 
 /// `mldivide_many` with `Q^H y` of every right-hand side, for the kernel test.
@@ -796,23 +828,40 @@ impl<T: Real> Factored<T> {
 /// A real double design factored once, for right-hand sides solved one at a
 /// time but rounded as MATLAB's `A \ Y` rounds column `index` of `count`
 /// (`mldivide_many` on every column at once gives the same coefficients).
-pub struct DoubleDesign(Factored<f64>);
+pub struct DoubleDesign(DoubleFactor);
+
+enum DoubleFactor {
+    Amd(Factored<f64>),
+    Intel(intel::Design),
+}
 
 impl DoubleDesign {
     /// The columns must be finite and of equal length.
     pub fn new(columns: &[&[f64]]) -> Self {
+        Self::with_reference(columns, ArithmeticReference::Current)
+    }
+
+    pub fn with_reference(columns: &[&[f64]], reference: ArithmeticReference) -> Self {
+        if reference == ArithmeticReference::MatlabIntel {
+            assert_eq!(columns.len(), 2, "Intel arithmetic supports two-column designs");
+            return Self(DoubleFactor::Intel(intel::Design::new(columns)));
+        }
         let rows = columns.first().map_or(0, |column| column.len());
         assert!(columns.iter().all(|column| column.len() == rows), "design columns differ in length");
         assert!(columns.iter().all(|column| column.iter().all(|value| value.is_finite())), "the design must be finite");
-        DoubleDesign(Factored::new(columns.iter().map(|column| column.iter().map(|&v| C::real(v)).collect()).collect()))
+        DoubleDesign(DoubleFactor::Amd(Factored::new(columns.iter().map(|column| column.iter().map(|&v| C::real(v)).collect()).collect())))
     }
 
     /// The real coefficients of right-hand side `index` of `count`.
     pub fn solve(&self, y: &[f64], count: usize, index: usize) -> Vec<f64> {
-        assert_eq!(y.len(), self.0.a.first().map_or(0, Vec::len), "design columns and observations differ in length");
+        let factor = match &self.0 {
+            DoubleFactor::Intel(design) => return design.solve(y, count, index),
+            DoubleFactor::Amd(factor) => factor,
+        };
+        assert_eq!(y.len(), factor.a.first().map_or(0, Vec::len), "design columns and observations differ in length");
         assert!(index < count, "right-hand side {index} of {count}");
         let mut b: Vec<C<f64>> = y.iter().map(|&v| C::real(v)).collect();
-        self.0.solve(&mut b, count, index).into_iter().map(|value| value.re).collect()
+        factor.solve(&mut b, count, index).into_iter().map(|value| value.re).collect()
     }
 }
 

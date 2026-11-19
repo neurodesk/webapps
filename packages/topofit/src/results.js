@@ -72,3 +72,43 @@ export function writeSurfaceFiles(vertices, faces) {
     }));
   });
 }
+
+// FreeSurfer .annot with an embedded colour table (version -2), as nibabel's
+// write_annot writes it. `table[i]` describes label value i; label 0 is written
+// as annotation 0, which Freeview leaves uncoloured.
+export function writeAnnotation(labels, table) {
+  const names = table.map(({ name }) => encoder.encode(`${name}\0`));
+  const tableName = encoder.encode('NOFILE\0');
+  const tableBytes = names.reduce((sum, name) => sum + 24 + name.length, 0);
+  const buffer = new ArrayBuffer(4 + labels.length * 8 + 16 + tableName.length + 4 + tableBytes);
+  const view = new DataView(buffer);
+  const bytes = new Uint8Array(buffer);
+  let offset = 0;
+  const write = (value) => {
+    view.setInt32(offset, value, false);
+    offset += 4;
+  };
+  const writeBytes = (value) => {
+    write(value.length);
+    bytes.set(value, offset);
+    offset += value.length;
+  };
+  const colours = table.map(({ rgb }) => rgb[0] + rgb[1] * 256 + rgb[2] * 65536);
+  write(labels.length);
+  for (let vertex = 0; vertex < labels.length; vertex += 1) {
+    if (labels[vertex] >= table.length) throw new Error(`Label ${labels[vertex]} has no colour.`);
+    write(vertex);
+    write(labels[vertex] ? colours[labels[vertex]] : 0);
+  }
+  write(1);
+  write(-2);
+  write(table.length);
+  writeBytes(tableName);
+  write(table.length);
+  for (const [index, { rgb }] of table.entries()) {
+    write(index);
+    writeBytes(names[index]);
+    for (const value of [...rgb, 0]) write(value);
+  }
+  return buffer;
+}

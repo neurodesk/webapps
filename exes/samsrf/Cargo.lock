@@ -264,11 +264,23 @@ dependencies = [
  "libm",
  "miniz_oxide",
  "neurodesk-nifti",
+ "num-bigint",
  "num-complex",
  "num-rational",
  "num-traits",
  "robust",
  "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "samsrf-mkl-avx512"
+version = "0.1.0"
+dependencies = [
+ "num-bigint",
+ "num-complex",
+ "samsrf-core",
  "serde_json",
  "sha2",
 ]

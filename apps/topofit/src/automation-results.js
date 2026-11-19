@@ -3,7 +3,8 @@ export function automationArtifacts(files) {
     const role = mediaType === 'application/vnd.freesurfer.surface' ? id.endsWith('-registration') ? 'registration' : 'surface'
       : mediaType === 'application/nifti' ? 'qc'
         : mediaType === 'text/csv' ? 'table'
-          : mediaType === 'application/json' ? 'metadata' : null;
+          : mediaType === 'application/json' ? 'metadata'
+            : mediaType === 'application/vnd.freesurfer.annotation' ? 'parcellation' : null;
     if (!role) throw new Error(`Unsupported TopoFit result format: ${mediaType}`);
     return { id: id.toLowerCase(), role, file: new File([bytes], name, { type: mediaType }) };
   });

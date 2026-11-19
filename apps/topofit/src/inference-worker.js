@@ -2,6 +2,7 @@ import { runTopofit, shareAssets } from '@neurodesk/topofit';
 import { Tensor, browserRuntime } from './onnx-runtime.js';
 import manifest from '@neurodesk/topofit/manifest';
 import cortexAtlas from '@neurodesk/topofit/cortex-atlas-manifest';
+import cortexRegions from '@neurodesk/topofit/cortex-regions-manifest';
 import { fetchModel } from '@neurodesk/webapp-components/worker';
 import { createAssetLoader } from './model-assets.js';
 
@@ -98,10 +99,12 @@ self.onmessage = async ({ data: job }) => {
       estimateNormals: job.estimateNormals,
       patches: job.patches,
       roiBuffer: job.roiBuffer,
+      region: job.region,
       loadAtlas: async () => fetchModel({
         url: cortexAtlas.url,
         integrity: cortexAtlas,
       }),
+      loadRegions: () => fetchModel({ url: cortexRegions.url, integrity: cortexRegions }),
       loadAsset,
       createSession,
       reconstructHemispheres: reconstructHemispheres({ mode: job.hemispheres, loadAsset }),
@@ -112,6 +115,7 @@ self.onmessage = async ({ data: job }) => {
         release: manifest.release,
         assets: Object.fromEntries(manifest.assets.map(({ filename, sha256 }) => [filename, sha256])),
         ...(job.patches ? { cortexAtlasSha256: cortexAtlas.sha256 } : {}),
+        ...(job.region && job.region !== 'cortex' ? { cortexRegionsSha256: cortexRegions.sha256 } : {}),
         ...browserRuntime(),
       },
     });

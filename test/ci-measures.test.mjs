@@ -137,6 +137,12 @@ test('ready to green times the green ready runs from the start of their latest a
   // A re-run 21 hours after the run was created counts from the re-run.
   const rerun = run({ run_started_at: at(21 * 60), updated_at: at(21 * 60 + 30) });
   assert.equal(readyToGreen([rerun], new Map([[rerun.id, [job('composite-site', 1)]]])).ready.median, 30);
+  // Re-running one failed site check reuses the build: its attempt lists that check alone.
+  for (const check of ['site-runtime', 'site-audit', 'site-e2e', 'site-mobile', 'site-catalog']) {
+    const retried = run({ run_started_at: at(60), updated_at: at(75) });
+    assert.equal(ciPullRequestTier([job(check, 12)]), 'ready', check);
+    assert.equal(readyToGreen([retried], new Map([[retried.id, [job(check, 12)]]])).ready.median, 15, check);
+  }
 });
 
 test('a push is live when a deploy of it or of a later commit succeeds', () => {

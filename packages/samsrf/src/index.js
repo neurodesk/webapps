@@ -132,14 +132,14 @@ export const hrf = {
   },
 };
 
-const PREPROCESS_DEFAULTS = { normalise: 'zscore', combine: 'average', noiseCeiling: true, globalSignal: false, precision: 'double' };
+const PREPROCESS_DEFAULTS = { normalise: 'zscore', combine: 'average', noiseCeiling: true, globalSignal: false, precision: 'double', arithmeticReference: 'current' };
 
 export class RunAccumulator {
   #inner;
 
   constructor(totalVertices, keep = null, options = {}) {
-    const { normalise, combine, noiseCeiling, globalSignal, precision } = { ...PREPROCESS_DEFAULTS, ...options };
-    this.#inner = new core.RunAccumulator(totalVertices, keep ?? undefined, normalise, combine, noiseCeiling, globalSignal, precision);
+    const { normalise, combine, noiseCeiling, globalSignal, precision, arithmeticReference: reference } = { ...PREPROCESS_DEFAULTS, ...options };
+    this.#inner = new core.RunAccumulator(totalVertices, keep ?? undefined, normalise, combine, noiseCeiling, globalSignal, precision, arithmeticReference(reference));
   }
 
   pushRun(run) {
@@ -169,6 +169,17 @@ export function noiseCeiling(odd, even) {
 
 export function removeNoise({ volumes, vertices, data }, covariates, nCovariates) {
   return core.removeNoise(volumes, vertices, data, covariates, nCovariates);
+}
+
+export const ARITHMETIC_REFERENCES = Object.freeze({
+  current: 'Current (default)',
+  'matlab-amd': 'MATLAB AMD reference',
+  'matlab-intel': 'MATLAB Intel reference (double only)',
+});
+
+export function arithmeticReference(value = 'current') {
+  if (typeof value !== 'string' || !Object.hasOwn(ARITHMETIC_REFERENCES, value)) throw new Error(`Unknown arithmetic reference ${JSON.stringify(value)}.`);
+  return value;
 }
 
 export const EXPORT_CONVENTIONS = Object.freeze({
@@ -219,6 +230,7 @@ function validateJobSpec(spec) {
   check(ANALYSES.includes(kind), `kind must be one of ${ANALYSES.join(', ')}`);
   check(typeof model === 'string', 'model must be the model JSON text');
   parseModel(kind, model);
+  check(arithmeticReference(data?.arithmeticReference) === arithmeticReference(JSON.parse(model).Arithmetic_Reference), 'preprocessing and model must use the same arithmetic reference');
   check(Number.isInteger(totalVertices) && totalVertices > 0, 'totalVertices must be a positive integer');
   if (apertures !== undefined) {
     check(apertures instanceof Uint8Array, 'apertures must be the bytes of Apertures.serialize()');
@@ -262,6 +274,10 @@ export class Job {
 
   constructor(inner) {
     this.#inner = inner;
+  }
+
+  get arithmeticReference() {
+    return this.#inner.arithmeticReference;
   }
 
   get vertexCount() {
@@ -333,6 +349,7 @@ export function createJob(spec, onProgress) {
     seedFineFit?.data ?? undefined,
     totalVertices,
     onProgress ?? undefined,
+    arithmeticReference(data.arithmeticReference),
   );
   return new Job(inner);
 }

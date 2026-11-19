@@ -32,6 +32,37 @@ GIFTI export, and the three analyses (`samsrf_fit_prf`, `samsrf_revcor_prf`,
 `samsrf_revcor_cf`) behind `createJob`. The options each analysis does not
 support are listed under [Analyses](#analyses).
 
+## Arithmetic reference
+
+The **Arithmetic reference** setting in the app, or `Arithmetic_Reference` in a
+CLI/API model, accepts `current` (default), `matlab-amd`, and `matlab-intel`.
+The default preserves the existing production output, including its double
+normal-equation global regression. `matlab-amd` selects the recorded AMD QR
+regression; `matlab-intel` selects the reviewed Intel double real and complex
+kernels. Selection never depends on the machine running the analysis.
+
+These are arithmetic references, not a promise of universal MATLAB parity.
+The recorded AMD and Intel MATLAB builds disagree for identical inputs. Intel
+requires double precision and at least two volumes. Intel CSS requires
+`Css_Convention: "samsrf"`; its nonnegative CSS objective is not implemented.
+Unsupported choices are refused, not silently routed to AMD. Hull geometry differences and two near-tie norm
+cases remain unresolved. The recorded complex QR evidence covers finite
+two-column designs; other numerical edge cases are not established by MATLAB
+recordings. See [the validation record](validation/matlab/README.md).
+
+When using the API, pass the same `arithmeticReference` to `RunAccumulator` or
+`readAnalysisInputs` as the model's `Arithmetic_Reference`. Keep the returned
+`data.arithmeticReference` in the job spec. A mismatched preprocessing reference
+or a shard from another reference is rejected. Choices belong to each job;
+separate jobs and workers may use different references safely. Low-level helper
+functions without a reference argument retain the default arithmetic.
+
+`job.arithmeticReference` and merged results report the choice. CLI provenance
+and the browser's **Download all** archive record it explicitly, together with
+the model. Individual GIfTI files retain their existing format; retain the
+provenance JSON when sharing them. Older models that omit the field mean
+`current`.
+
 ## API
 
 Every function is synchronous after `init`. Errors are JavaScript `Error`s
@@ -122,14 +153,14 @@ a u32 count, that many u32 pixel indices and that many f64 values.
 
 | Signature | Description |
 | --- | --- |
-| `new RunAccumulator(totalVertices, keep, options)` | Combines runs as `samsrf_gii2srf` does, one run at a time. `keep` is a `Uint32Array` of the vertices to keep, or `null` for all. `options` defaults to `{ normalise: 'zscore', combine: 'average', noiseCeiling: true, globalSignal: false, precision: 'double' }`: `normalise` is `'none'`, `'detrend'` or `'zscore'` (detrend, then z-score); `combine` is `'average'` or `'concatenate'`; `noiseCeiling` applies when averaging two or more runs; `globalSignal` keeps the mean across every vertex, kept or not; `precision` (`'double'` or `'single'`, the model's `Data_Precision`) computes that mean as MATLAB does on data of that class. |
+| `new RunAccumulator(totalVertices, keep, options)` | Combines runs as `samsrf_gii2srf` does, one run at a time. `keep` is a `Uint32Array` of the vertices to keep, or `null` for all. `options` defaults to `{ normalise: 'zscore', combine: 'average', noiseCeiling: true, globalSignal: false, precision: 'double', arithmeticReference: 'current' }`: `normalise` is `'none'`, `'detrend'` or `'zscore'` (detrend, then z-score); `combine` is `'average'` or `'concatenate'`; `noiseCeiling` applies when averaging two or more runs; `globalSignal` keeps the mean across every vertex, kept or not; `precision` (`'double'` or `'single'`, the model's `Data_Precision`) computes that mean as MATLAB does on data of that class. |
 | `accumulator.pushRun(run)` | Normalises a `Run` and folds it in. Every run must have the same size. |
 | `accumulator.finish() → { kept, totalVertices, runs, volumes, vertices, data, noiseCeiling, globalSignal }` | The combined, vertex-major `data` of the kept vertices (`kept` is `null` when all are kept), with `noiseCeiling` and `globalSignal` as `Float64Array`s or `null`. |
 | `accumulator.free()` | Releases the accumulator. |
 | `detrend(x) → Float64Array` | MATLAB `detrend`: removes the least-squares line. |
 | `zscore(x) → Float64Array` | MATLAB `zscore` with the `n - 1` standard deviation. |
 | `noiseCeiling(odd, even) → number` | The Spearman-Brown noise ceiling `2r / (1 + r)` of the odd-run and even-run means. |
-| `removeNoise({ volumes, vertices, data }, covariates, nCovariates) → Float64Array` | `samsrf_removenoise`: regresses z-scored covariates (column-major, `volumes x nCovariates`) and an intercept out of every course; a course containing `NaN` becomes zeros. |
+| `removeNoise({ volumes, vertices, data }, covariates, nCovariates) → Float64Array` | `samsrf_removenoise`: regresses z-scored covariates (column-major, `volumes x nCovariates`) and an intercept out of every course, as MATLAB's `[X ones] \ Y` over every course at once; a course containing `NaN` becomes zeros. |
 
 ### Export
 

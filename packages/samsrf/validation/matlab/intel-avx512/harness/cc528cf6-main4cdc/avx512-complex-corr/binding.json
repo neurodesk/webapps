@@ -1,0 +1,80 @@
+{
+  "oldBuildHead": "040fbe29e72f0bedd033cef572d472f2866ece8a",
+  "newBuildHead": "8c4b3a2c6c14ecad49c0f867ca3867cbcb54fa73",
+  "freshBuildClean": true,
+  "sourceTrees": {
+    "exes/samsrf": {
+      "files": 92,
+      "oldTreeSha256": "9b65c7dac8c2db0f2866bc7afbe24f4bd673afa34b76b3d6a1cadec3af6acf12",
+      "newTreeSha256": "45d60ee5423f1ed9aa724bce9708a0fc201569454111ba89cb64f1967cb49054",
+      "byteIdentical": false,
+      "declaredNonNumericalDifferences": [
+        {
+          "path": "mkl-avx512/Cargo.toml",
+          "oldSha256": "ab843d7882b782ff7d2d0cf39779dd72d1cf290f89a077803523fc2b655f0d8d",
+          "newSha256": "e74c1bad3f8c54d217355c430b012e82173f7e128f4818d922f8e6399a579169",
+          "reason": "package description only; dependency and build configuration identical"
+        },
+        {
+          "path": "mkl-avx512/src/lib.rs",
+          "oldSha256": "9b4899fb71cf088b56701d9bcd8885449cf5df3fda74a3dd6a1b0f88a873ae24",
+          "newSha256": "01dfed5660aeba442ea215c791cbc4adf5567829bb94617cb8b69b70baad692a",
+          "reason": "module-level documentation only; all other Rust text identical"
+        }
+      ],
+      "arithmeticSourcesUnchanged": true
+    },
+    "exes/nifti": {
+      "files": 6,
+      "oldTreeSha256": "906000d09abdba20295ff860576b7092ba01662731f7617f8843b2eb76ebbf91",
+      "newTreeSha256": "906000d09abdba20295ff860576b7092ba01662731f7617f8843b2eb76ebbf91",
+      "byteIdentical": true,
+      "declaredNonNumericalDifferences": [],
+      "arithmeticSourcesUnchanged": true
+    },
+    "packages/samsrf/src": {
+      "files": 5,
+      "oldTreeSha256": "b0176ab720e124d73b237ea3c5b3c3626f6e595177385347535d49e2d4ed42e0",
+      "newTreeSha256": "b0176ab720e124d73b237ea3c5b3c3626f6e595177385347535d49e2d4ed42e0",
+      "byteIdentical": true,
+      "declaredNonNumericalDifferences": [],
+      "arithmeticSourcesUnchanged": true
+    }
+  },
+  "patchesAndNativeTestHashesIdentical": true,
+  "toolchainAndWasmPackIdentical": true,
+  "allNonCustomWasmSectionsIdentical": false,
+  "changedNonCustomSections": [
+    {
+      "id": 3,
+      "oldLength": 1454,
+      "newLength": 1454,
+      "oldSha256": "a7cefafd0c8f3e0de5c639295ed22b11c7b668babc114336e4c7c864b75b4fb4",
+      "newSha256": "14e633c243a932d1f7999a480e5c8b2cb44bf6e08a9805d7f94004771faa999b"
+    },
+    {
+      "id": 10,
+      "oldLength": 1009322,
+      "newLength": 1009322,
+      "oldSha256": "267509c7c8b530bf1641958e01ec3dff8e3c172cc0fc0c226a239ac8c18fb922",
+      "newSha256": "d22a8690e0a73f03a30b12f5129fbc9c4566cb4e05f31897732916aa8f4b448e"
+    },
+    {
+      "id": 11,
+      "oldLength": 95559,
+      "newLength": 95559,
+      "oldSha256": "e45787067c15ffb8100faea0357e6003605cc58eeebc799aa5990e6fa851239a",
+      "newSha256": "ce5c7abfc68178360d01b72b639e6453e48e9e1503e4a446ea59f189845eb3ad"
+    }
+  ],
+  "changedCustomSections": [
+    "name"
+  ],
+  "oldModule": "f8620bbca9d384cd3726bb1db8e8f629fdcc665a5a09032439a519fb57a03a14",
+  "newModule": "53fb607ee538bd47d902ada1fbf31827555051c7dd86ed291594d93e735f6f52",
+  "runner": {
+    "old": "db66ec23ae2c53a64bee9a75251cdef92eaf5de2e2a87f158e6ce2a2249fa544",
+    "new": "ef5d5a98cd68921fed0efa3ae1809905daa7a3144f9b853de965f45dabf9ca5a"
+  },
+  "nativeReuse": "Retained native dumps are bound to unchanged Rust arithmetic, patches, native test and compiler version. Any documentation/package-description differences are declared above. They were not reexecuted for this integration. Fresh Node matrices use the new runner and newly built module. No canonical shipping rebuild or browser/container acceptance is claimed."
+}

@@ -342,6 +342,23 @@ class InventoryErrors(Base):
                 self.x.edit_ui(self.id, zipSha256=value)
                 self.assertInventory('hash its record names')
 
+    def test_arithmetic_provenance_is_bound_to_the_saved_model(self):
+        stem = compare_cli.expected_results(PLAN[self.id])[0][:-4]
+        name = f'{stem}_provenance.json'
+        valid = {'arithmeticReference': 'current', 'model': ui_cli.expected_app_model(PLAN[self.id])}
+        self.x.edit_ui(self.id, arithmeticProvenance=True)
+        self.assertInventory('arithmetic provenance is missing')
+        for value in (valid, {**valid, 'arithmeticReference': 'matlab-intel'},
+                      {**valid, 'model': {}}, {**valid, 'extra': True}):
+            with self.subTest(value=value):
+                self.x.write_ui()
+                self.x.edit_ui(self.id, arithmeticProvenance=True)
+                self.rewrite_zip(lambda entries: entries.update({name: json.dumps(value).encode()}))
+                if value == valid:
+                    self.assertEqual(self.run_report()['class'], 'exact')
+                else:
+                    self.assertInventory('provenance differs')
+
     def test_missing_contract_map_and_unexpected_file(self):
         stem = compare_cli.expected_results(PLAN[self.id])[0][:-4]
         for change in (lambda entries: entries.pop(self.names[0]),

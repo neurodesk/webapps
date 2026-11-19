@@ -1,0 +1,1264 @@
+{
+  "cli": {
+    "amd": {
+      "exact": {
+        "base": {
+          "exactRuns": 10,
+          "exactMaps": 102,
+          "maps": 168
+        },
+        "candidate": {
+          "exactRuns": 10,
+          "exactMaps": 102,
+          "maps": 168
+        }
+      },
+      "counts": {
+        "real real-double": [
+          1797,
+          1081,
+          0,
+          0,
+          716
+        ],
+        "imaginary real-double": [
+          1797,
+          1797,
+          0,
+          0,
+          0
+        ],
+        "gifti outside-roi": [
+          12360,
+          12360,
+          0,
+          0,
+          0
+        ],
+        "gifti real-double": [
+          1797,
+          1728,
+          0,
+          0,
+          69
+        ],
+        "real single": [
+          1596,
+          1596,
+          0,
+          0,
+          0
+        ],
+        "imaginary single": [
+          1596,
+          1596,
+          0,
+          0,
+          0
+        ],
+        "gifti single": [
+          1596,
+          1596,
+          0,
+          0,
+          0
+        ],
+        "real complex-double": [
+          135,
+          74,
+          0,
+          3,
+          58
+        ],
+        "imaginary complex-double": [
+          135,
+          83,
+          1,
+          0,
+          51
+        ],
+        "gifti complex-double": [
+          135,
+          135,
+          0,
+          0,
+          0
+        ]
+      },
+      "gains": {
+        "prf_css_lh_double nR^2 imaginary": 1
+      },
+      "losses": [
+        {
+          "run": "prf_css_lh_double",
+          "map": "nR^2",
+          "kind": "real",
+          "vertex0": 7,
+          "route": "complex-double",
+          "matlab": "3fe946bd3a555942",
+          "base": "3fe946bd3a555942",
+          "candidate": "3fe946bd3a55594e"
+        },
+        {
+          "run": "prf_css_lh_double",
+          "map": "R^2",
+          "kind": "real",
+          "vertex0": 5,
+          "route": "complex-double",
+          "matlab": "3fe7a7e701a7e3ee",
+          "base": "3fe7a7e701a7e3ee",
+          "candidate": "3fe7a7e701a7e3f3"
+        },
+        {
+          "run": "prf_css_lh_double",
+          "map": "R^2",
+          "kind": "real",
+          "vertex0": 7,
+          "route": "complex-double",
+          "matlab": "3fe821de0e51881d",
+          "base": "3fe821de0e51881d",
+          "candidate": "3fe821de0e518829"
+        }
+      ]
+    },
+    "intel": {
+      "exact": {
+        "base": {
+          "exactRuns": 7,
+          "exactMaps": 111,
+          "maps": 168
+        },
+        "candidate": {
+          "exactRuns": 7,
+          "exactMaps": 113,
+          "maps": 168
+        }
+      },
+      "counts": {
+        "real real-double": [
+          1797,
+          1687,
+          0,
+          0,
+          110
+        ],
+        "imaginary real-double": [
+          1797,
+          1797,
+          0,
+          0,
+          0
+        ],
+        "gifti outside-roi": [
+          12360,
+          12360,
+          0,
+          0,
+          0
+        ],
+        "gifti real-double": [
+          1797,
+          1797,
+          0,
+          0,
+          0
+        ],
+        "real single": [
+          1596,
+          1075,
+          0,
+          0,
+          521
+        ],
+        "imaginary single": [
+          1596,
+          1547,
+          0,
+          0,
+          49
+        ],
+        "gifti single": [
+          1596,
+          1075,
+          0,
+          0,
+          521
+        ],
+        "real complex-double": [
+          135,
+          85,
+          22,
+          0,
+          28
+        ],
+        "imaginary complex-double": [
+          135,
+          81,
+          27,
+          0,
+          27
+        ],
+        "gifti complex-double": [
+          135,
+          135,
+          0,
+          0,
+          0
+        ]
+      },
+      "gains": {
+        "prf_css_lh_double nR^2 real": 11,
+        "prf_css_lh_double nR^2 imaginary": 13,
+        "prf_css_lh_double R^2 real": 11,
+        "prf_css_lh_double R^2 imaginary": 14
+      },
+      "losses": []
+    }
+  },
+  "pipelines": {
+    "totals": {
+      "amd": {
+        "real complex": [
+          513,
+          415,
+          12,
+          40,
+          46
+        ],
+        "real real": [
+          1215,
+          969,
+          0,
+          0,
+          246
+        ],
+        "imaginary complex": [
+          513,
+          406,
+          2,
+          41,
+          64
+        ],
+        "imaginary real": [
+          1215,
+          1215,
+          0,
+          0,
+          0
+        ]
+      },
+      "intel": {
+        "real complex": [
+          513,
+          318,
+          87,
+          0,
+          108
+        ],
+        "real real": [
+          1215,
+          1215,
+          0,
+          0,
+          0
+        ],
+        "imaginary complex": [
+          513,
+          307,
+          98,
+          0,
+          108
+        ],
+        "imaginary real": [
+          1215,
+          1215,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "losses": {
+      "amd": [
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "real",
+          "vertex0": 7,
+          "route": "complex",
+          "matlab": "3fe727d1b6b10044",
+          "baseline": "3fe727d1b6b10044",
+          "research": "3fe727d1b6b10046",
+          "ulpBaseline": 0,
+          "ulpResearch": 2
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "real",
+          "vertex0": 8,
+          "route": "complex",
+          "matlab": "3fe62101e847b9a5",
+          "baseline": "3fe62101e847b9a5",
+          "research": "3fe62101e847b9ac",
+          "ulpBaseline": 0,
+          "ulpResearch": 7
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "real",
+          "vertex0": 16,
+          "route": "complex",
+          "matlab": "3fdcc347767d9bad",
+          "baseline": "3fdcc347767d9bad",
+          "research": "3fdcc347767d9ba1",
+          "ulpBaseline": 0,
+          "ulpResearch": 12
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "real",
+          "vertex0": 24,
+          "route": "complex",
+          "matlab": "3feb552da751cc24",
+          "baseline": "3feb552da751cc24",
+          "research": "3feb552da751cc13",
+          "ulpBaseline": 0,
+          "ulpResearch": 17
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "real",
+          "vertex0": 29,
+          "route": "complex",
+          "matlab": "3fecac15f87a7031",
+          "baseline": "3fecac15f87a7031",
+          "research": "3fecac15f87a702d",
+          "ulpBaseline": 0,
+          "ulpResearch": 4
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "real",
+          "vertex0": 32,
+          "route": "complex",
+          "matlab": "3fec70273f3bb3f1",
+          "baseline": "3fec70273f3bb3f1",
+          "research": "3fec70273f3bb3ef",
+          "ulpBaseline": 0,
+          "ulpResearch": 2
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "real",
+          "vertex0": 38,
+          "route": "complex",
+          "matlab": "3feaaf6664b99308",
+          "baseline": "3feaaf6664b99308",
+          "research": "3feaaf6664b99302",
+          "ulpBaseline": 0,
+          "ulpResearch": 6
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "real",
+          "vertex0": 53,
+          "route": "complex",
+          "matlab": "3fe49e83c183eddd",
+          "baseline": "3fe49e83c183eddd",
+          "research": "3fe49e83c183edd6",
+          "ulpBaseline": 0,
+          "ulpResearch": 7
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "real",
+          "vertex0": 54,
+          "route": "complex",
+          "matlab": "3fe228e2c2943348",
+          "baseline": "3fe228e2c2943348",
+          "research": "3fe228e2c294333b",
+          "ulpBaseline": 0,
+          "ulpResearch": 13
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "real",
+          "vertex0": 57,
+          "route": "complex",
+          "matlab": "3ff67e9c5d236808",
+          "baseline": "3ff67e9c5d236808",
+          "research": "3ff67e9c5d2367f2",
+          "ulpBaseline": 0,
+          "ulpResearch": 22
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "real",
+          "vertex0": 67,
+          "route": "complex",
+          "matlab": "3fec169c121cee55",
+          "baseline": "3fec169c121cee55",
+          "research": "3fec169c121cee5c",
+          "ulpBaseline": 0,
+          "ulpResearch": 7
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "real",
+          "vertex0": 69,
+          "route": "complex",
+          "matlab": "3fd53fbf1b62bd1b",
+          "baseline": "3fd53fbf1b62bd1b",
+          "research": "3fd53fbf1b62bd1e",
+          "ulpBaseline": 0,
+          "ulpResearch": 3
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "real",
+          "vertex0": 72,
+          "route": "complex",
+          "matlab": "3fe460ef2265292b",
+          "baseline": "3fe460ef2265292b",
+          "research": "3fe460ef2265292f",
+          "ulpBaseline": 0,
+          "ulpResearch": 4
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "real",
+          "vertex0": 84,
+          "route": "complex",
+          "matlab": "3fe8d6dd2e4af3a9",
+          "baseline": "3fe8d6dd2e4af3a9",
+          "research": "3fe8d6dd2e4af3a7",
+          "ulpBaseline": 0,
+          "ulpResearch": 2
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "imaginary",
+          "vertex0": 7,
+          "route": "complex",
+          "matlab": "bf82df69335b1624",
+          "baseline": "bf82df69335b1624",
+          "research": "bf82df69335b1627",
+          "ulpBaseline": 0,
+          "ulpResearch": 3
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "imaginary",
+          "vertex0": 8,
+          "route": "complex",
+          "matlab": "bf4015f19ae457c3",
+          "baseline": "bf4015f19ae457c3",
+          "research": "bf4015f19ae457c4",
+          "ulpBaseline": 0,
+          "ulpResearch": 1
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "imaginary",
+          "vertex0": 16,
+          "route": "complex",
+          "matlab": "bf81ba37da9db7a0",
+          "baseline": "bf81ba37da9db7a0",
+          "research": "bf81ba37da9db3a9",
+          "ulpBaseline": 0,
+          "ulpResearch": 1015
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "imaginary",
+          "vertex0": 20,
+          "route": "complex",
+          "matlab": "bf7170229b177785",
+          "baseline": "bf7170229b177785",
+          "research": "bf7170229b177787",
+          "ulpBaseline": 0,
+          "ulpResearch": 2
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "imaginary",
+          "vertex0": 23,
+          "route": "complex",
+          "matlab": "bf5ef2a0bdc66422",
+          "baseline": "bf5ef2a0bdc66422",
+          "research": "bf5ef2a0bdc66426",
+          "ulpBaseline": 0,
+          "ulpResearch": 4
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "imaginary",
+          "vertex0": 24,
+          "route": "complex",
+          "matlab": "bf40a2ddfe2ab84b",
+          "baseline": "bf40a2ddfe2ab84b",
+          "research": "bf40a2ddfe2ab843",
+          "ulpBaseline": 0,
+          "ulpResearch": 8
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "imaginary",
+          "vertex0": 26,
+          "route": "complex",
+          "matlab": "3f198d1ed375a121",
+          "baseline": "3f198d1ed375a121",
+          "research": "3f198d1ed375a124",
+          "ulpBaseline": 0,
+          "ulpResearch": 3
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "imaginary",
+          "vertex0": 29,
+          "route": "complex",
+          "matlab": "bf66fc87411379d6",
+          "baseline": "bf66fc87411379d6",
+          "research": "bf66fc87411379d1",
+          "ulpBaseline": 0,
+          "ulpResearch": 5
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "imaginary",
+          "vertex0": 32,
+          "route": "complex",
+          "matlab": "bf45173c12e5a443",
+          "baseline": "bf45173c12e5a443",
+          "research": "bf45173c12e5a441",
+          "ulpBaseline": 0,
+          "ulpResearch": 2
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "imaginary",
+          "vertex0": 37,
+          "route": "complex",
+          "matlab": "bd9d254c8913b107",
+          "baseline": "bd9d254c8913b107",
+          "research": "bd9d254c8913b10a",
+          "ulpBaseline": 0,
+          "ulpResearch": 3
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "imaginary",
+          "vertex0": 38,
+          "route": "complex",
+          "matlab": "3dcc11a6057557c1",
+          "baseline": "3dcc11a6057557c1",
+          "research": "3dcc11a6057557bb",
+          "ulpBaseline": 0,
+          "ulpResearch": 6
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "imaginary",
+          "vertex0": 53,
+          "route": "complex",
+          "matlab": "bf7132d91f1757f1",
+          "baseline": "bf7132d91f1757f1",
+          "research": "bf7132d91f1757eb",
+          "ulpBaseline": 0,
+          "ulpResearch": 6
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "imaginary",
+          "vertex0": 54,
+          "route": "complex",
+          "matlab": "3f4a0bec6a8de067",
+          "baseline": "3f4a0bec6a8de067",
+          "research": "3f4a0bec6a8de057",
+          "ulpBaseline": 0,
+          "ulpResearch": 16
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "imaginary",
+          "vertex0": 57,
+          "route": "complex",
+          "matlab": "bfc42130e46f3199",
+          "baseline": "bfc42130e46f3199",
+          "research": "bfc42130e46f318f",
+          "ulpBaseline": 0,
+          "ulpResearch": 10
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "imaginary",
+          "vertex0": 69,
+          "route": "complex",
+          "matlab": "3f3366dbc637607a",
+          "baseline": "3f3366dbc637607a",
+          "research": "3f3366dbc6376081",
+          "ulpBaseline": 0,
+          "ulpResearch": 7
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "imaginary",
+          "vertex0": 72,
+          "route": "complex",
+          "matlab": "bf49d02af3a4badd",
+          "baseline": "bf49d02af3a4badd",
+          "research": "bf49d02af3a4bae4",
+          "ulpBaseline": 0,
+          "ulpResearch": 7
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "nR^2",
+          "kind": "imaginary",
+          "vertex0": 84,
+          "route": "complex",
+          "matlab": "bdfe440f96ec8d74",
+          "baseline": "bdfe440f96ec8d74",
+          "research": "bdfe440f96ec8d70",
+          "ulpBaseline": 0,
+          "ulpResearch": 4
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "x0",
+          "kind": "real",
+          "vertex0": 15,
+          "route": "complex",
+          "matlab": "3f9e2f469d35aff4",
+          "baseline": "3f9e2f469d35aff4",
+          "research": "3f9e2f469d35aff2",
+          "ulpBaseline": 0,
+          "ulpResearch": 2
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "x0",
+          "kind": "real",
+          "vertex0": 16,
+          "route": "complex",
+          "matlab": "3f422e83d0ec2f5f",
+          "baseline": "3f422e83d0ec2f5f",
+          "research": "3f422e83d0ec2f7f",
+          "ulpBaseline": 0,
+          "ulpResearch": 32
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "y0",
+          "kind": "real",
+          "vertex0": 15,
+          "route": "complex",
+          "matlab": "bfabe6fd73c1b346",
+          "baseline": "bfabe6fd73c1b346",
+          "research": "bfabe6fd73c1b344",
+          "ulpBaseline": 0,
+          "ulpResearch": 2
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "y0",
+          "kind": "real",
+          "vertex0": 16,
+          "route": "complex",
+          "matlab": "bf6787355dae5e2b",
+          "baseline": "bf6787355dae5e2b",
+          "research": "bf6787355dae5e1d",
+          "ulpBaseline": 0,
+          "ulpResearch": 14
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "Exponent",
+          "kind": "real",
+          "vertex0": 14,
+          "route": "complex",
+          "matlab": "3f9a5dcbcf59e4a1",
+          "baseline": "3f9a5dcbcf59e4a1",
+          "research": "3f9a5dcbcf59e470",
+          "ulpBaseline": 0,
+          "ulpResearch": 49
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "Exponent",
+          "kind": "real",
+          "vertex0": 15,
+          "route": "complex",
+          "matlab": "3fa21050cd532dca",
+          "baseline": "3fa21050cd532dca",
+          "research": "3fa21050cd532de2",
+          "ulpBaseline": 0,
+          "ulpResearch": 24
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "Exponent",
+          "kind": "real",
+          "vertex0": 16,
+          "route": "complex",
+          "matlab": "3fa17b4cb05645d8",
+          "baseline": "3fa17b4cb05645d8",
+          "research": "3fa17b4cb0563a60",
+          "ulpBaseline": 0,
+          "ulpResearch": 2936
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "Beta",
+          "kind": "real",
+          "vertex0": 14,
+          "route": "complex",
+          "matlab": "3feeaf9b9068a775",
+          "baseline": "3feeaf9b9068a775",
+          "research": "3feeaf9b9068a772",
+          "ulpBaseline": 0,
+          "ulpResearch": 3
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "Beta",
+          "kind": "real",
+          "vertex0": 16,
+          "route": "complex",
+          "matlab": "3fef33f73e3fdce3",
+          "baseline": "3fef33f73e3fdce3",
+          "research": "3fef33f73e3fdc3d",
+          "ulpBaseline": 0,
+          "ulpResearch": 166
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "Beta",
+          "kind": "imaginary",
+          "vertex0": 14,
+          "route": "complex",
+          "matlab": "bf8e7fa1459d13a3",
+          "baseline": "bf8e7fa1459d13a3",
+          "research": "bf8e7fa1459d137d",
+          "ulpBaseline": 0,
+          "ulpResearch": 38
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "Beta",
+          "kind": "imaginary",
+          "vertex0": 15,
+          "route": "complex",
+          "matlab": "bf82cf8f9c5cd4d9",
+          "baseline": "bf82cf8f9c5cd4d9",
+          "research": "bf82cf8f9c5cd4dd",
+          "ulpBaseline": 0,
+          "ulpResearch": 4
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "Beta",
+          "kind": "imaginary",
+          "vertex0": 16,
+          "route": "complex",
+          "matlab": "bf833ac687b0b5cb",
+          "baseline": "bf833ac687b0b5cb",
+          "research": "bf833ac687b0b11a",
+          "ulpBaseline": 0,
+          "ulpResearch": 1201
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "Baseline",
+          "kind": "real",
+          "vertex0": 14,
+          "route": "complex",
+          "matlab": "bf7b0f5df234a096",
+          "baseline": "bf7b0f5df234a096",
+          "research": "bf7b0f5df234a0ae",
+          "ulpBaseline": 0,
+          "ulpResearch": 24
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "Baseline",
+          "kind": "real",
+          "vertex0": 15,
+          "route": "complex",
+          "matlab": "bf7c877e0f4a32a6",
+          "baseline": "bf7c877e0f4a32a6",
+          "research": "bf7c877e0f4a32aa",
+          "ulpBaseline": 0,
+          "ulpResearch": 4
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "Baseline",
+          "kind": "real",
+          "vertex0": 16,
+          "route": "complex",
+          "matlab": "bf7cb98ecc3d7bb0",
+          "baseline": "bf7cb98ecc3d7bb0",
+          "research": "bf7cb98ecc3d80f3",
+          "ulpBaseline": 0,
+          "ulpResearch": 1347
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "Baseline",
+          "kind": "imaginary",
+          "vertex0": 14,
+          "route": "complex",
+          "matlab": "befd35e35452a2df",
+          "baseline": "befd35e35452a2df",
+          "research": "befd35e35452a204",
+          "ulpBaseline": 0,
+          "ulpResearch": 219
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "Baseline",
+          "kind": "imaginary",
+          "vertex0": 15,
+          "route": "complex",
+          "matlab": "bf09eb83f6909779",
+          "baseline": "bf09eb83f6909779",
+          "research": "bf09eb83f69097bb",
+          "ulpBaseline": 0,
+          "ulpResearch": 66
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "Baseline",
+          "kind": "imaginary",
+          "vertex0": 16,
+          "route": "complex",
+          "matlab": "bf09a0e180339e0a",
+          "baseline": "bf09a0e180339e0a",
+          "research": "bf09a0e18033a449",
+          "ulpBaseline": 0,
+          "ulpResearch": 1599
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "real",
+          "vertex0": 7,
+          "route": "complex",
+          "matlab": "3fe61b853f72f92a",
+          "baseline": "3fe61b853f72f92a",
+          "research": "3fe61b853f72f92c",
+          "ulpBaseline": 0,
+          "ulpResearch": 2
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "real",
+          "vertex0": 8,
+          "route": "complex",
+          "matlab": "3fe4fd6a74594391",
+          "baseline": "3fe4fd6a74594391",
+          "research": "3fe4fd6a74594398",
+          "ulpBaseline": 0,
+          "ulpResearch": 7
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "real",
+          "vertex0": 16,
+          "route": "complex",
+          "matlab": "3fdb388fcd3a56fc",
+          "baseline": "3fdb388fcd3a56fc",
+          "research": "3fdb388fcd3a56f0",
+          "ulpBaseline": 0,
+          "ulpResearch": 12
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "real",
+          "vertex0": 24,
+          "route": "complex",
+          "matlab": "3fe510d588a62edd",
+          "baseline": "3fe510d588a62edd",
+          "research": "3fe510d588a62ed0",
+          "ulpBaseline": 0,
+          "ulpResearch": 13
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "real",
+          "vertex0": 29,
+          "route": "complex",
+          "matlab": "3fe9dd433552b76c",
+          "baseline": "3fe9dd433552b76c",
+          "research": "3fe9dd433552b768",
+          "ulpBaseline": 0,
+          "ulpResearch": 4
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "real",
+          "vertex0": 32,
+          "route": "complex",
+          "matlab": "3fe98b008fdb7e07",
+          "baseline": "3fe98b008fdb7e07",
+          "research": "3fe98b008fdb7e05",
+          "ulpBaseline": 0,
+          "ulpResearch": 2
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "real",
+          "vertex0": 38,
+          "route": "complex",
+          "matlab": "3fe61f0cf40a8a28",
+          "baseline": "3fe61f0cf40a8a28",
+          "research": "3fe61f0cf40a8a23",
+          "ulpBaseline": 0,
+          "ulpResearch": 5
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "real",
+          "vertex0": 53,
+          "route": "complex",
+          "matlab": "3fd2ebd5d3575430",
+          "baseline": "3fd2ebd5d3575430",
+          "research": "3fd2ebd5d357542a",
+          "ulpBaseline": 0,
+          "ulpResearch": 6
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "real",
+          "vertex0": 54,
+          "route": "complex",
+          "matlab": "3fb5e80d86852fe8",
+          "baseline": "3fb5e80d86852fe8",
+          "research": "3fb5e80d86852fd8",
+          "ulpBaseline": 0,
+          "ulpResearch": 16
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "real",
+          "vertex0": 57,
+          "route": "complex",
+          "matlab": "3fa012eafdb95480",
+          "baseline": "3fa012eafdb95480",
+          "research": "3fa012eafdb95470",
+          "ulpBaseline": 0,
+          "ulpResearch": 16
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "real",
+          "vertex0": 67,
+          "route": "complex",
+          "matlab": "3fe366f766d5ef78",
+          "baseline": "3fe366f766d5ef78",
+          "research": "3fe366f766d5ef7d",
+          "ulpBaseline": 0,
+          "ulpResearch": 5
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "real",
+          "vertex0": 69,
+          "route": "complex",
+          "matlab": "3fcbb699fc800f34",
+          "baseline": "3fcbb699fc800f34",
+          "research": "3fcbb699fc800f38",
+          "ulpBaseline": 0,
+          "ulpResearch": 4
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "real",
+          "vertex0": 72,
+          "route": "complex",
+          "matlab": "3fe1d5db47106202",
+          "baseline": "3fe1d5db47106202",
+          "research": "3fe1d5db47106205",
+          "ulpBaseline": 0,
+          "ulpResearch": 3
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "real",
+          "vertex0": 84,
+          "route": "complex",
+          "matlab": "3fe5eef64cb5c6a7",
+          "baseline": "3fe5eef64cb5c6a7",
+          "research": "3fe5eef64cb5c6a5",
+          "ulpBaseline": 0,
+          "ulpResearch": 2
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "imaginary",
+          "vertex0": 7,
+          "route": "complex",
+          "matlab": "bf8204bc999278f8",
+          "baseline": "bf8204bc999278f8",
+          "research": "bf8204bc999278fb",
+          "ulpBaseline": 0,
+          "ulpResearch": 3
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "imaginary",
+          "vertex0": 8,
+          "route": "complex",
+          "matlab": "bf3e83f76de5aecc",
+          "baseline": "bf3e83f76de5aecc",
+          "research": "bf3e83f76de5aecd",
+          "ulpBaseline": 0,
+          "ulpResearch": 1
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "imaginary",
+          "vertex0": 16,
+          "route": "complex",
+          "matlab": "bf80c6f108d518cc",
+          "baseline": "bf80c6f108d518cc",
+          "research": "bf80c6f108d5150b",
+          "ulpBaseline": 0,
+          "ulpResearch": 961
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "imaginary",
+          "vertex0": 20,
+          "route": "complex",
+          "matlab": "bf6c9d519c19dc3e",
+          "baseline": "bf6c9d519c19dc3e",
+          "research": "bf6c9d519c19dc42",
+          "ulpBaseline": 0,
+          "ulpResearch": 4
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "imaginary",
+          "vertex0": 23,
+          "route": "complex",
+          "matlab": "bf5085e517a90620",
+          "baseline": "bf5085e517a90620",
+          "research": "bf5085e517a90622",
+          "ulpBaseline": 0,
+          "ulpResearch": 2
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "imaginary",
+          "vertex0": 24,
+          "route": "complex",
+          "matlab": "bf39a4c0107aa33d",
+          "baseline": "bf39a4c0107aa33d",
+          "research": "bf39a4c0107aa330",
+          "ulpBaseline": 0,
+          "ulpResearch": 13
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "imaginary",
+          "vertex0": 26,
+          "route": "complex",
+          "matlab": "3f0177e8c80bb4d3",
+          "baseline": "3f0177e8c80bb4d3",
+          "research": "3f0177e8c80bb4d5",
+          "ulpBaseline": 0,
+          "ulpResearch": 2
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "imaginary",
+          "vertex0": 28,
+          "route": "complex",
+          "matlab": "bf8e804193f1a511",
+          "baseline": "bf8e804193f1a511",
+          "research": "bf8e804193f1a512",
+          "ulpBaseline": 0,
+          "ulpResearch": 1
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "imaginary",
+          "vertex0": 29,
+          "route": "complex",
+          "matlab": "bf64bc3fe01c4086",
+          "baseline": "bf64bc3fe01c4086",
+          "research": "bf64bc3fe01c4081",
+          "ulpBaseline": 0,
+          "ulpResearch": 5
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "imaginary",
+          "vertex0": 32,
+          "route": "complex",
+          "matlab": "bf42f191b79e9e6b",
+          "baseline": "bf42f191b79e9e6b",
+          "research": "bf42f191b79e9e69",
+          "ulpBaseline": 0,
+          "ulpResearch": 2
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "imaginary",
+          "vertex0": 37,
+          "route": "complex",
+          "matlab": "bd97bdda32f15dec",
+          "baseline": "bd97bdda32f15dec",
+          "research": "bd97bdda32f15def",
+          "ulpBaseline": 0,
+          "ulpResearch": 3
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "imaginary",
+          "vertex0": 38,
+          "route": "complex",
+          "matlab": "3dc744b69b8717c8",
+          "baseline": "3dc744b69b8717c8",
+          "research": "3dc744b69b8717c3",
+          "ulpBaseline": 0,
+          "ulpResearch": 5
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "imaginary",
+          "vertex0": 53,
+          "route": "complex",
+          "matlab": "bf5f908ec0d854c4",
+          "baseline": "bf5f908ec0d854c4",
+          "research": "bf5f908ec0d854b9",
+          "ulpBaseline": 0,
+          "ulpResearch": 11
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "imaginary",
+          "vertex0": 54,
+          "route": "complex",
+          "matlab": "3f1f6ba98c4fef61",
+          "baseline": "3f1f6ba98c4fef61",
+          "research": "3f1f6ba98c4fef4e",
+          "ulpBaseline": 0,
+          "ulpResearch": 19
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "imaginary",
+          "vertex0": 57,
+          "route": "complex",
+          "matlab": "bf6cc49bdd4fa3f1",
+          "baseline": "bf6cc49bdd4fa3f1",
+          "research": "bf6cc49bdd4fa3e4",
+          "ulpBaseline": 0,
+          "ulpResearch": 13
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "imaginary",
+          "vertex0": 69,
+          "route": "complex",
+          "matlab": "3f294dda886763a7",
+          "baseline": "3f294dda886763a7",
+          "research": "3f294dda886763af",
+          "ulpBaseline": 0,
+          "ulpResearch": 8
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "imaginary",
+          "vertex0": 72,
+          "route": "complex",
+          "matlab": "bf4697769026613f",
+          "baseline": "bf4697769026613f",
+          "research": "bf46977690266145",
+          "ulpBaseline": 0,
+          "ulpResearch": 6
+        },
+        {
+          "pipeline": "pipeline_double_css",
+          "map": "R^2",
+          "kind": "imaginary",
+          "vertex0": 84,
+          "route": "complex",
+          "matlab": "bdfab9a43f792b9d",
+          "baseline": "bdfab9a43f792b9d",
+          "research": "bdfab9a43f792b99",
+          "ulpBaseline": 0,
+          "ulpResearch": 4
+        }
+      ],
+      "intel": []
+    }
+  },
+  "baseline": "avx512 research from cc528cf6-1; not the committed module",
+  "fullReportSha256": {
+    "transitions-old-research.json": "3643e5fe7249fcaa55f774193c970b793b310806edc8e69183e9b6ffbacc83d2",
+    "pipeline-transitions-old-research.json": "6f2729b5319ffe632e7c754732d057c2297f537dc602261f979dedfd22513301"
+  }
+}

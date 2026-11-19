@@ -172,6 +172,35 @@ candidates that share no vertices with a higher-ranked patch, up to `count`
 (default 3, at most 50), and numbers them in that order. Empty ROIs fail; failed quality searches return
 `NO_PATCH_MEETS_CRITERIA` without lowering thresholds.
 
+### Named search regions
+
+`region` restricts the search to a named cortical area; `'cortex'` (the default)
+searches the whole eligible cortex. `REGIONS` in `@neurodesk/topofit/regions`
+lists the ids: Wang et al. 2015 visual topographic areas (`wang2015:visual`, the
+union of every Wang area except FEF; `wang2015:V1`, V2 and V3 merging their
+ventral and dorsal halves; hV4 to SPL1 and FEF; the halves themselves, such as
+`wang2015:V1v`), FreeSurfer's `--lobesStrict` lobes of the Desikan-Killiany
+atlas plus the insula (`aparc:lobe-occipital`) and its 34 regions
+(`aparc:precentral`). `loadRegions()` supplies the verified bytes of
+`cortex-regions.manifest.json`, fetched only for a named region. Both atlases
+are fsaverage label maps: the nearest fsaverage vertex of each registration-sphere
+vertex, the lookup that maps the cortex mask, gives its labels. They are atlas
+estimates, not an individual's retinotopy or parcellation.
+
+A region removes every vertex outside it after the cortex mask, medial-wall
+erosion and ribbon check, as an ROI does, so every patch vertex lies in the
+region. The region itself is not eroded, so a patch may reach its boundary. A
+region and an ROI together, a region without `patches`, and an unknown id are
+refused. `flat_patch_definition.region` then records the id and `region_atlas`
+the atlas; the processing manifest records the asset's SHA-256 as
+`runtime.cortexRegionsSha256`. Each searched hemisphere also gets the mapped
+parcellation of that atlas as a FreeSurfer annotation for the output surfaces,
+such as `lh.wang2015.annot`, with the manifest's colour table; unlabelled
+vertices have annotation 0. With `'cortex'` or an ROI, the outputs are those of
+a search without the option. `pack_cortex_regions.py` rebuilds the asset, and
+`validation/region-check.mjs` checks the mapping on a real reconstruction
+(`validation/surface-analysis.md`).
+
 Each accepted patch has a viewable FreeSurfer mid-surface. The analysis JSON
 records its RAS and LPS center and outward fitted-plane unit normal, area, RMS,
 coherence, score and median ribbon separation. `topofit_patch_geometry.json`
@@ -194,10 +223,11 @@ at 4095. The browser supplies the original anatomy underneath. The 4 mm center
 ring and 20 mm projected normal follow OpenRecon's source-slice convention.
 Patch IDs are selectable result rows rather than rasterized image text.
 
-Rebuild the atlas outside the repository:
+Rebuild the atlases outside the repository:
 
 ```bash
 python3 scripts/pack_cortex_atlas.py "$TMPDIR/topofit-atlas"
+python3 -I scripts/pack_cortex_regions.py "$TMPDIR/topofit-regions"
 ```
 
 Compare against a downloaded OpenRecon recipe directory containing
@@ -220,7 +250,8 @@ Synthetic cases additionally compare triangle-to-voxel intersection masks.
 `runTopofit()` also returns `surfaces`, containing the reconstructed vertex arrays
 and hemisphere face arrays. Retain it with the original source buffer and
 provenance, then call `runSurfaceAnalysis({ buffer, surfaces, provenance,
-estimateNormals, patches, roiBuffer, loadAtlas, cortexAtlasSha256, onProgress })`.
+estimateNormals, patches, roiBuffer, region, loadAtlas, loadRegions, cortexAtlasSha256,
+cortexRegionsSha256, onProgress })`.
 The analysis call returns analysis files and an updated processing manifest. It
 does not invoke reconstruction or change the retained geometry. It replaces
 previous analysis hashes and ROI/atlas metadata while preserving reconstruction
