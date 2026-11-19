@@ -52,6 +52,8 @@ export class SimpleFileIOController {
     }
     if (fileList) fileList.innerHTML = '';
     this._resetNativeInput();
+    // Clearing changes the input's list without a change event; the shell and the WebMCP tools learn it from nd-files.
+    document.getElementById('fileInput')?.dispatchEvent(new CustomEvent('nd-files', { bubbles: true, detail: { files: [] } }));
   }
 
   async _acceptFile(file, announce = false) {

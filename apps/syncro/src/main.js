@@ -476,6 +476,8 @@ function clearOptionalInput(slot) {
   clearResults();
   rebuildViewItems('input:primary');
   setStatus(`${slot === 'lesion' ? 'Lesion map' : 'Pathological modality'} removed`);
+  // The removal changes no input; the shell and the WebMCP tools learn it from nd-files.
+  fileFields[slot].input.dispatchEvent(new CustomEvent('nd-files', { bubbles: true, detail: { files: [] } }));
 }
 
 $('clearLesion').onclick = () => clearOptionalInput('lesion');

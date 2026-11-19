@@ -168,9 +168,20 @@ function guessRole(name) {
   return "(ignore)";
 }
 
+// A Remove or a reset changes the loaded list without a change event; the shell and the WebMCP tools
+// learn the list from nd-files on the file input, and that the folder inputs now hold nothing.
+function reportFiles() {
+  const loaded = state.files.map((record) => record.file).filter(Boolean);
+  for (const input of document.querySelectorAll('#controls input[type="file"][data-neurodesk-input]')) {
+    const files = input.closest("#fileControl") ? loaded : [];
+    input.dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files } }));
+  }
+}
+
 async function readImageRecord(file, buffer) {
   const nii = await readNifti(buffer);
   return {
+    file,
     name: file.name,
     size: file.size,
     dims: nii.dims,
@@ -295,6 +306,7 @@ function renderTable() {
       state.files.splice(i, 1);
       renderTable();
       refreshRunState();
+      reportFiles();
     };
     del.appendChild(b);
     tr.appendChild(del);
@@ -314,6 +326,7 @@ function renderTable() {
     b.onclick = () => {
       state.jsons.splice(i, 1);
       renderTable();
+      reportFiles();
     };
     del.appendChild(b);
     tr.appendChild(del);
@@ -668,6 +681,7 @@ function resetAll() {
   if ($("#deid")) $("#deid").checked = true;
   if ($("#verbose")) $("#verbose").checked = false;
   refreshRunState();
+  reportFiles();
   log("↺ reset, all inputs, parameters and results cleared.");
 }
 $("#resetAll").onclick = resetAll;
