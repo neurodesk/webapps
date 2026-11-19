@@ -114,6 +114,8 @@ export function createToolInputs({ doc, automation, isPerson = event => event.is
       if (event.dataTransfer?.types?.includes('Files')) return personDrop(event);
       return unseenChange();
     }
+    // A control's change follows the keydown or pointerup already seen, and can come later, on blur.
+    if (event.type === 'change' && !target?.matches('input[type="file"]')) return;
     if (target?.matches('input[type="file"]') && (event.type === 'change' || event.type === 'input')) {
       if (event.type === 'input') return;
       if (!isClassified(target)) return unseenChange();
