@@ -2,7 +2,7 @@ import { fetchModel } from '../worker/fetchModel.js';
 import { convertsDicom } from '../automation/files.js';
 import { exampleInputs } from './examples.js';
 import { schemaIssues } from './schema.js';
-import { niivueAddresses, offeredNiivueMethods, REFUSED_PARAMETERS, withLocalAddresses } from './niivue-methods.js';
+import { niivueAddresses, niivueParameterIssues, offeredNiivueMethods, withLocalAddresses } from './niivue-methods.js';
 
 const terminal = new Set(['idle', 'succeeded', 'failed', 'cancelled']);
 const POLL_MS = 250;
@@ -16,6 +16,7 @@ const object = (properties, required = []) => ({ type: 'object', properties, ...
 const viewerId = { type: 'string', description: 'A viewer ID from viewers_list' };
 const toolName = operation => `run_${operation.replaceAll('-', '_')}`;
 const STALE = 'The person has used the page since this run started, so its report and outputs are withheld from the agent. Run it again if they still want it.';
+const CHANGED = 'The person used the page while this call was going, so its result is withheld and nothing more was done. Call again if they still want it.';
 const describeFiles = files => files.map(file => ({ name: file.name, bytes: file.size }));
 
 /** The JSON Schema of one contract parameter, accepting what operationParameterSchema accepts. */
@@ -112,43 +113,73 @@ function failure(error) {
 }
 
 /**
+ * Every tool call belongs to the examination it began in. A call reaches the page, the prompts and the
+ * fetchers only through the functions this returns, which check the examination before each request
+ * and after each answer, so nothing a call awaited is acted on or returned once the person has used the
+ * page; the tool wrapper checks once more before the call returns.
+ */
+function examinedCall(io, inputs) {
+  const from = inputs.examination();
+  const check = () => {
+    if (inputs.examination() !== from) throw toolError('EXAMINATION_CHANGED', CHANGED);
+  };
+  const guarded = Object.fromEntries(Object.entries(io).map(([name, request]) => [name, async (...args) => {
+    check();
+    try {
+      return await request(...args);
+    } finally {
+      check();
+    }
+  }]));
+  return { ...guarded, from, check };
+}
+
+/**
  * The WebMCP tools for one application page, built from its automation contract. `inputs` holds the
  * examination: the files per role, the runs the tools started and the page's own loads
- * (webmcp/tool-inputs.js); `examples` lists the page's examples; `askUser`, `requestFiles`,
- * `confirmFiles` and `confirmFetch` are the shared agent prompts.
+ * (webmcp/tool-inputs.js). Everything else is how a call reaches the page: `dispatch` (the page's
+ * automation), `examples` (the page's examples), the shared agent prompts `askUser`, `requestFiles`,
+ * `confirmFiles` and `confirmFetch`, and the fetchers. A tool reaches them only through examinedCall.
  */
-export function webMcpTools({ contract, dispatch, inputs, examples = () => [], fetchAsset = fetchModel, fetchAddress = fetchApproved, askUser, requestFiles, confirmFiles, confirmFetch }) {
+export function webMcpTools({ contract, inputs, ...pageIo }) {
   const roles = fileRoles(contract);
+  const io = {
+    examples: () => [],
+    fetchAsset: fetchModel,
+    fetchAddress: fetchApproved,
+    ...pageIo,
+    stage: from => inputs.stage(from, [...roles.keys()]),
+  };
   // A rotation entry cycles through examples that are offered on their own.
-  const catalog = async () => (await examples()).filter(example => !example.rotation)
+  const catalog = async call => (await call.examples()).filter(example => !example.rotation)
     .map(example => ({ example, ...exampleInputs(example, contract.operations, contract.defaultOperation) }));
   // A command bound to a run, which the page's automation refuses once another run replaced it.
-  async function bound(command, runId, request = {}) {
+  async function bound(call, command, runId, request = {}) {
     try {
-      return await dispatch(command, { ...request, runId });
+      return await call.dispatch(command, { ...request, runId });
     } catch (error) {
       if (error?.code !== 'RUN_NOT_CURRENT') throw error;
       throw toolError('RUN_REPLACED', `Run ${runId} was replaced by ${error.current ? `run ${error.current}` : 'a reset of the page'}; its report and outputs are gone.`, { runId, replacedBy: error.current ?? null });
     }
   }
   // The named run's snapshot, while the tools may report it.
-  async function runSnapshot(runId) {
+  async function runSnapshot(call, runId) {
     const known = inputs.runOf(runId);
     if (known === 'unknown') throw toolError('UNKNOWN_RUN', `Unknown run: ${runId}`, { runId });
     if (known === 'stale') throw toolError('RUN_STALE', `Run ${runId}: ${STALE}`, { runId });
-    return bound('snapshot', runId);
+    return bound(call, 'snapshot', runId);
   }
   // The named run's snapshot once it ends or the wait passes. It never returns another run's snapshot.
-  async function settle(runId, seconds, signal) {
+  async function settle(call, runId, seconds) {
     const deadline = Date.now() + seconds * 1000;
     for (;;) {
-      const current = await runSnapshot(runId);
+      const current = await runSnapshot(call, runId);
       const remaining = deadline - Date.now();
-      if (terminal.has(current.state) || remaining <= 0 || signal?.aborted) return current;
-      await sleep(Math.min(POLL_MS, remaining), signal);
+      if (terminal.has(current.state) || remaining <= 0 || call.signal?.aborted) return current;
+      await sleep(Math.min(POLL_MS, remaining), call.signal);
     }
   }
-  const approved = async (addresses, signal, options = {}) => !addresses.length || await confirmFetch({ app: contract.title, addresses, ...options }, { signal });
+  const approved = async (call, addresses, options = {}) => !addresses.length || await call.confirmFetch({ app: contract.title, addresses, ...options }, { signal: call.signal });
   const runTools = Object.fromEntries(Object.keys(contract.operations).map(name => [name, toolName(name)]));
   const tools = [];
   const tool = (name, title, description, inputSchema, annotations, execute) => tools.push({
@@ -158,7 +189,10 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
       const issues = schemaIssues(inputSchema, input);
       if (issues.length) return { error: { code: 'INVALID_INPUT', message: issues.join('; ') } };
       try {
-        return await execute(input, options);
+        const call = { ...examinedCall(io, inputs), signal: options.signal };
+        const result = await execute(input, call);
+        call.check();
+        return result;
       } catch (error) {
         return failure(error);
       }
@@ -166,17 +200,17 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
   });
 
   // The current run as the tools may report it: one they did not start in this examination is withheld.
-  async function currentRun() {
-    const current = await dispatch('snapshot');
+  async function currentRun(call) {
+    const current = await call.dispatch('snapshot');
     if (!current.runId || inputs.runOf(current.runId) === 'current') return current;
     return { runId: current.runId, state: current.state, stale: true, message: STALE };
   }
 
   tool('app_describe', 'Describe this application',
-    `Read what ${contract.title} does: its operations with their inputs, parameters and outputs, its examples (and why any cannot be loaded), its viewers, the current run, the files each input role holds (inputs), the files the user has loaded into the page (pageFiles), whether the page may hold inputs the tools cannot list (pageMayHoldOtherInputs; then ask the user) and the example the user loaded in the page (pageExample). A pageFiles entry is current when the user has not used the page since loading it; inputs_use_page_files asks the user to confirm one that is not. Whenever the user uses the page, the held files are released and earlier runs become stale.`,
+    `Read what ${contract.title} does: its operations with their inputs, parameters and outputs, its examples (and why any cannot be loaded), its viewers, the current run, the files each input role holds (inputs), the files the page's inputs, drops and handoffs received (pageFiles), whether the page may hold inputs the tools cannot list (pageMayHoldOtherInputs; then ask the user) and the example the user last picked in the page (pageExample). pageFiles is what the page was given, not necessarily what it shows: inputs_use_page_files shows the user the files and asks before the agent gets them. A run or viewer load the tools start clears pageFiles and pageExample. Whenever the user uses the page, the held files are released and earlier runs become stale.`,
     object({}), readOnly,
-    async () => {
-      const entries = await catalog();
+    async (_, call) => {
+      const entries = await catalog(call);
       return {
         app: contract.app,
         title: contract.title,
@@ -188,8 +222,8 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
           id, label, description, expectedResult, roles: [...new Set(files.map(file => file.role))], tool: runTools[operation], ...(parameters && { parameters }), ...(omitted && { omitted }),
         })),
         unavailableExamples: entries.filter(entry => entry.unavailable).map(({ example: { id, label }, unavailable }) => ({ id, label, reason: unavailable })),
-        viewers: await dispatch('viewers.list'),
-        run: await currentRun(),
+        viewers: await call.dispatch('viewers.list'),
+        run: await currentRun(call),
         inputs: inputs.held(),
         pageFiles: inputs.page(),
         pageMayHoldOtherInputs: inputs.pageMayHoldOtherInputs(),
@@ -203,96 +237,96 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
       role: { type: 'string', enum: [...roles.keys()], description: 'The input role to fill' },
       message: { type: 'string', description: 'Why these files are needed, shown to the user' },
     }, ['role']), {},
-    async ({ role, message }, { signal }) => {
-      const from = inputs.examination();
+    async ({ role, message }, call) => {
       const field = roles.get(role);
-      const files = await requestFiles({ label: field.description, formats: field.formats, message, minimum: field.minimum, maximum: field.maximum, folder: field.folder }, { signal });
+      const files = await call.requestFiles({ label: field.description, formats: field.formats, message, minimum: field.minimum, maximum: field.maximum, folder: field.folder }, { signal: call.signal });
       if (!files) return { declined: true };
-      inputs.hold(from, role, files);
+      inputs.hold(call.from, role, files);
       return { role, files: describeFiles(files) };
     });
 
-  tool('inputs_use_page_files', 'Use files the user loaded',
-    'Hold the files the user already loaded into the page (an entry of pageFiles in app_describe) as the input for a role. A current entry needs no question; for one that is not current, the user confirms the files in a dialog first, and the result is declined if they refuse.',
+  tool('inputs_use_page_files', 'Use files the page received',
+    'Hold the files of one pageFiles entry from app_describe as the input for a role. The user sees the files in a dialog and confirms them first; the result is declined if they refuse.',
     object({
       role: { type: 'string', enum: [...roles.keys()], description: 'The input role to fill' },
       input: { type: 'string', description: 'The input key from pageFiles' },
     }, ['role', 'input']), {},
-    async ({ role, input }, { signal }) => {
-      const from = inputs.examination();
+    async ({ role, input }, call) => {
       const entry = inputs.pageEntry(input);
-      if (!entry.current && !await confirmFiles({ app: contract.title, label: entry.label, files: describeFiles(entry.files) }, { signal })) return { declined: true };
-      inputs.hold(from, role, entry.files);
+      if (!await call.confirmFiles({ app: contract.title, label: entry.label, files: describeFiles(entry.files) }, { signal: call.signal })) return { declined: true };
+      inputs.hold(call.from, role, entry.files);
       return { role, files: describeFiles(entry.files) };
     });
 
   tool('inputs_load_example', 'Load an example',
     'Download one of the application\'s examples, verify its checksums and hold its files as the input for the next run, replacing every file held before. Run it with the example\'s tool and parameters from app_describe.',
     object({ exampleId: { type: 'string', description: 'An example ID from app_describe' } }, ['exampleId']), {},
-    async ({ exampleId }, { signal }) => {
-      const entry = (await catalog()).find(item => item.example.id === exampleId);
+    async ({ exampleId }, call) => {
+      const entry = (await catalog(call)).find(item => item.example.id === exampleId);
       if (!entry) throw new Error(`Unknown example: ${exampleId}`);
       if (entry.unavailable) throw new Error(`Example ${exampleId} cannot be loaded here: ${entry.unavailable}`);
-      const from = inputs.examination();
       const files = new Map();
       for (const asset of entry.files) {
-        const bytes = await fetchAsset({ url: asset.url, integrity: { bytes: asset.bytes, sha256: asset.sha256 } }, { signal, retries: 4 });
+        const bytes = await call.fetchAsset({ url: asset.url, integrity: { bytes: asset.bytes, sha256: asset.sha256 } }, { signal: call.signal, retries: 4 });
         files.set(asset.role, [...(files.get(asset.role) ?? []), new File([bytes], asset.name)]);
       }
-      signal?.throwIfAborted();
-      inputs.replace(from, files);
+      call.signal?.throwIfAborted();
+      inputs.replace(call.from, files);
       return { exampleId, inputs: Object.fromEntries([...files].map(([role, held]) => [role, describeFiles(held)])) };
     });
 
   for (const [name, operation] of Object.entries(contract.operations)) {
+    const takesAddresses = Object.values(operation.inputs).some(field => field.source !== 'files');
     tool(runTools[name], operation.title,
-      `${operation.description} Runs on the files the input roles hold (see inputs_request_files, inputs_use_page_files and inputs_load_example) and shows the result in the page. The files stay held, so run again with other parameters without asking for them again. Waits up to waitSeconds, then returns the run; call runs_get to keep waiting. A failed run with code SERIES_SELECTION_REQUIRED lists candidates: ask the user with user_ask and run again with selections.`,
-      runSchema(operation), Object.values(operation.inputs).some(field => field.source !== 'files') ? { consequentialHint: true } : {},
-      async ({ parameters, inputs: sources = {}, selections, waitSeconds: seconds = DEFAULT_WAIT_SECONDS }, { signal }) => {
-        const from = inputs.examination();
-        const addresses = Object.values(sources).map(source => source.url);
-        if (!await approved(addresses, signal, { readsUnder: true })) return { declined: true, addresses };
-        const active = await dispatch('snapshot');
+      `${operation.description} Runs on the files the input roles hold (see inputs_request_files, inputs_use_page_files and inputs_load_example) and shows the result in the page. The files stay held, so run again with other parameters without asking for them again. Waits up to waitSeconds, then returns the run; call runs_get to keep waiting. A failed run with code SERIES_SELECTION_REQUIRED lists candidates: ask the user with user_ask and run again with selections.${takesAddresses ? ' The user is asked first whether the app may read under the address it will use for each url input.' : ''}`,
+      runSchema(operation), takesAddresses ? { consequentialHint: true } : {},
+      async ({ parameters, inputs: sources = {}, selections, waitSeconds: seconds = DEFAULT_WAIT_SECONDS }, call) => {
+        // The app names the address it reads under for each url (a store's root), so the person allows that.
+        const roots = Object.keys(sources).length ? Object.values(await call.dispatch('sources', { operation: name, inputs: sources })).map(source => source.root) : [];
+        if (!await approved(call, roots, { readsUnder: true })) return { declined: true, addresses: roots };
+        const active = await call.dispatch('snapshot');
         if (!terminal.has(active.state)) {
           throw toolError('RUN_ACTIVE', inputs.runOf(active.runId) === 'current'
             ? `Run ${active.runId} is still going. Wait for it with runs_get, or cancel it with runs_cancel, before starting another.`
             : 'A run is still going in the page. Wait for it to finish, or ask the user to cancel it with the × in the status bar.', { runId: active.runId });
         }
-        await inputs.stage(from);
-        const { runId } = await dispatch('start', { operation: name, parameters, inputs: sources, selections });
-        inputs.claim(from, runId);
-        const settled = await settle(runId, seconds, signal);
-        if (!signal?.aborted || terminal.has(settled.state)) return settled;
-        await bound('cancel', runId);
-        return runSnapshot(runId);
+        await call.stage(call.from);
+        call.check();
+        inputs.toolLoaded();
+        const { runId } = await call.dispatch('start', { operation: name, parameters, inputs: sources, selections });
+        inputs.claim(call.from, runId);
+        const settled = await settle(call, runId, seconds);
+        if (!call.signal?.aborted || terminal.has(settled.state)) return settled;
+        await bound(call, 'cancel', runId);
+        return runSnapshot(call, runId);
       });
   }
 
   tool('runs_get', 'Read the current run',
     'Read the current run: its state, progress, report or error. Waits up to waitSeconds for a running run to finish.',
     object({ runId: { type: 'string' }, waitSeconds: waitSeconds(0) }), readOnly,
-    async ({ runId, waitSeconds: seconds = 0 }, { signal }) => {
-      const target = runId ?? (await dispatch('snapshot')).runId;
-      return target ? settle(target, seconds, signal) : currentRun();
+    async ({ runId, waitSeconds: seconds = 0 }, call) => {
+      const target = runId ?? (await call.dispatch('snapshot')).runId;
+      return target ? settle(call, target, seconds) : currentRun(call);
     });
 
   tool('runs_cancel', 'Cancel the current run',
     'Cancel the current run. A finished run stays as it is.',
     object({ runId: { type: 'string' } }), {},
-    async ({ runId }) => {
-      const target = runId ?? (await dispatch('snapshot')).runId;
-      if (!target) return { cancelled: false, run: await currentRun() };
-      await runSnapshot(target);
-      const { cancelled } = await bound('cancel', target);
-      return { cancelled, run: await runSnapshot(target) };
+    async ({ runId }, call) => {
+      const target = runId ?? (await call.dispatch('snapshot')).runId;
+      if (!target) return { cancelled: false, run: await currentRun(call) };
+      await runSnapshot(call, target);
+      const { cancelled } = await bound(call, 'cancel', target);
+      return { cancelled, run: await runSnapshot(call, target) };
     });
 
   tool('outputs_download', 'Save an output file',
     'Save a file from a successful run to the user\'s downloads. runId names the run; artifactId is a key of its report\'s artifacts, or report for the report itself. Only the current run\'s files can be saved.',
     object({ runId: { type: 'string' }, artifactId: { type: 'string' } }, ['runId', 'artifactId']), { consequentialHint: true },
-    async ({ runId, artifactId }) => {
-      await runSnapshot(runId);
-      return { runId, ...await bound('download', runId, { artifactId }) };
+    async ({ runId, artifactId }, call) => {
+      await runSnapshot(call, runId);
+      return { runId, ...await bound(call, 'download', runId, { artifactId }) };
     });
 
   tool('user_ask', 'Ask the user',
@@ -302,7 +336,7 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
       options: { type: 'array', items: { type: 'string', minLength: 1 }, maxItems: 8 },
       allowText: { type: 'boolean' },
     }, ['question']), {},
-    ({ question, options, allowText }, { signal }) => askUser({ question, options, allowText }, { signal }));
+    ({ question, options, allowText }, call) => call.askUser({ question, options, allowText }, { signal: call.signal }));
 
   const position = object({
     frame: { type: 'string', enum: ['mm'] },
@@ -328,25 +362,27 @@ export function webMcpTools({ contract, dispatch, inputs, examples = () => [], f
       sliceType: { type: 'string', enum: ['axial', 'coronal', 'sagittal', 'multiplanar', 'render'] },
       volumes: { type: 'array', items: volumeDisplay },
     }, ['viewerId'], {}],
-    ['niivue', 'Call an nv-mcp NiiVue tool on a viewer by method name and params; without a method, read the scene. Only tools that read the scene, change what it shows or load one file are offered. A call that loads from an address asks the user first and returns declined if they refuse; the page then fetches exactly that address, refuses a redirect, and gives the viewer the bytes. set_volume refuses affine, reset_affine, transform and load_all_frames.', {
+    ['niivue', 'Call an nv-mcp NiiVue tool on a viewer by method name and params; without a method, read the scene. Only tools that read the scene, change what it shows or load one file are offered. Each method takes only the parameters that change what the viewer shows; any other is refused. A call that loads from an address asks the user first and returns declined if they refuse; the page then fetches exactly that address, refuses a redirect, and gives the viewer the bytes.', {
       viewerId,
       method: { type: 'string', enum: offeredNiivueMethods() },
       params: { type: 'object' },
     }, ['viewerId'], { consequentialHint: true }],
   ]) {
-    tool(`viewers_${name}`, `Viewer ${name}`, description, object(properties, required), annotations, async (args, { signal }) => {
+    tool(`viewers_${name}`, `Viewer ${name}`, description, object(properties, required), annotations, async (args, call) => {
       if (name !== 'niivue') {
-        const value = await dispatch(`viewers.${name}`, args);
+        const value = await call.dispatch(`viewers.${name}`, args);
         return wrap ? { [wrap]: value } : value;
       }
-      const refused = (REFUSED_PARAMETERS[args.method] ?? []).filter(key => Object.hasOwn(args.params ?? {}, key));
-      if (refused.length) return { error: { code: 'INVALID_INPUT', message: `${args.method} over WebMCP does not take ${refused.join(', ')}: they move, edit or load data` } };
+      const issues = niivueParameterIssues(args.method, args.params);
+      if (issues.length) return { error: { code: 'INVALID_INPUT', message: issues.join('; ') } };
       const addresses = niivueAddresses(args.params);
-      if (!await approved(addresses, signal)) return { declined: true, addresses };
-      if (!addresses.length) return dispatch('viewers.niivue', args);
-      const local = await withLocalAddresses(args.params, address => fetchAddress(address, { signal }));
+      if (!await approved(call, addresses)) return { declined: true, addresses };
+      if (!addresses.length) return call.dispatch('viewers.niivue', args);
+      const local = await withLocalAddresses(args.params, address => call.fetchAddress(address, { signal: call.signal }));
       try {
-        return await dispatch('viewers.niivue', { ...args, params: local.params });
+        call.check();
+        inputs.toolLoaded();
+        return await call.dispatch('viewers.niivue', { ...args, params: local.params });
       } finally {
         local.release();
       }

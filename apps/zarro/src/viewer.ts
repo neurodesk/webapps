@@ -5760,6 +5760,7 @@ async function openAutomationStore({ inputs, signal, progress }: OperationContex
 const automation = registerAppAutomation({
   app: 'zarro',
   operations: { 'open-url': openAutomationStore, 'open-directory': openAutomationStore },
+  sourceRoots: { store: normalizeZarrStoreUrl },
 })
 const initialized = main()
 void initialized.catch((err: unknown) => { status(errorText(err), { error: true }) })

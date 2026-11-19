@@ -9,7 +9,8 @@
  *   fetch    loads one file from an address the person approves first: the tool fetches it, refusing
  *            redirects, and the viewer receives the bytes, never the address
  *   denied   not offered: exports pixels or files, edits or removes data, loads a payload that can
- *            name further addresses, adds page controls, or takes settings that can name an address
+ *            name further addresses, reads a file's format from its address, adds page controls, or
+ *            takes settings that can name an address
  *
  * The desktop agent server and the nv-mcp WebSocket connection keep nv-mcp's full vocabulary.
  */
@@ -45,8 +46,11 @@ export const NIIVUE_METHODS = Object.freeze({
   add_mesh_layer: 'fetch',
   add_overlay: 'fetch',
   load_mesh: 'fetch',
-  load_signal: 'fetch',
   load_volume: 'fetch',
+
+  // NiiVue picks a signal's reader from its address and looks for a sidecar beside it, so it cannot be
+  // given the approved bytes under a local address.
+  load_signal: 'denied',
 
   load_document: 'denied',
   save: 'denied',
@@ -81,10 +85,55 @@ export const NIIVUE_METHODS = Object.freeze({
 /** The methods viewers_niivue offers. */
 export const offeredNiivueMethods = () => Object.keys(NIIVUE_METHODS).filter(method => NIIVUE_METHODS[method] !== 'denied').sort();
 
-/** Parameters of an offered method that move, edit or load data, which viewers_niivue refuses. */
-export const REFUSED_PARAMETERS = Object.freeze({
-  set_volume: Object.freeze(['affine', 'reset_affine', 'transform', 'load_all_frames']),
-});
+/**
+ * The parameters each offered method takes over WebMCP: those that read the scene, change what it
+ * shows, or name the one file a fetch method loads. Any other parameter is refused, so a parameter
+ * nv-mcp adds stays out until someone classifies it here; the components tests hold this table to
+ * nv-mcp's own schemas at the pinned version. Left out on purpose: `tab` (the desktop server's tab
+ * choice), and set_volume's `affine`, `reset_affine` and `transform` (move the volume),
+ * `load_all_frames` (fetches from the volume's own address) and `v1` (turns a vector volume into a
+ * one-frame colour image for good).
+ */
+export const NIIVUE_PARAMETERS = Object.freeze(Object.fromEntries(Object.entries({
+  capabilities: '',
+  describe_volume: 'volume stats mask mask_labels drawing affine',
+  get_options: 'names describe',
+  list_annotations: 'polygons json svg slice slice_position',
+  list_measurements: '',
+  list_meshes: '',
+  list_regions: 'query',
+  list_signals: '',
+  map_point: 'canvas mm vox',
+  where_am_i: '',
+  animate: 'azimuth elevation zoom render_pan pan_2d crosshair_mm clip_planes volumes meshes duration_ms easing angles interrupt_on_input wait stop',
+  go_to_point: 'mm vox plane label',
+  go_to_region: 'region plane',
+  nudge_crosshair: 'vox',
+  set_boxes: 'focus boxes',
+  set_camera: 'azimuth elevation pan_2d render_pan pivot center_on global',
+  set_clip_plane: 'plane azimuth elevation index planes depth face',
+  set_custom_layout: 'tiles clear',
+  set_graph: 'cursor step zoom pan range reset',
+  set_instances: 'instances camera clear',
+  set_labels: 'labels dim_others clear',
+  set_mesh: 'mesh name opacity color shader slice_shader visible colorbar legend tract connectome',
+  set_mesh_layer: 'mesh layer colormap colormap_negative cal_min cal_max cal_min_neg cal_max_neg opacity colorbar invert transparent_below_cal_min additive outline_width frame',
+  set_view: 'slice layout mosaic show_render radiological colorbar',
+  set_viewport: 'pan zoom bounds reset',
+  set_volume: 'volume colormap colormap_negative opacity cal_min cal_max cal_min_neg cal_max_neg colormap_type transparent_below_cal_min frame invert colorbar nearest atlas_outline modulate_alpha labels modulate auto_window chunk_grid spread',
+  add_mesh_layer: 'mesh url name colormap colormap_negative cal_min cal_max cal_min_neg cal_max_neg opacity colorbar invert transparent_below_cal_min additive outline_width',
+  add_overlay: 'url name labels colormap opacity cal_min cal_max colormap_negative cal_min_neg cal_max_neg colorbar',
+  load_mesh: 'url name replace opacity color shader slice_shader visible colorbar legend layers',
+  load_volume: 'url name colormap mni',
+}).map(([method, names]) => [method, Object.freeze(names.split(' ').filter(Boolean))])));
+
+/** Why viewers_niivue refuses these parameters of `method`, if it does. */
+export function niivueParameterIssues(method, params = {}) {
+  if (method === undefined) return Object.keys(params).length ? ['params need a method'] : [];
+  const allowed = NIIVUE_PARAMETERS[method] ?? [];
+  const refused = Object.keys(params).filter(name => !allowed.includes(name));
+  return refused.length ? [`${method} over WebMCP does not take ${refused.join(', ')}: it takes only ${allowed.join(', ') || 'no parameters'}`] : [];
+}
 
 // set_volume and add_overlay take a label table's address in `labels`; a name without a slash is built in.
 const isAddress = (key, value) => typeof value === 'string' && (key === 'url' || (key === 'labels' && value.includes('/')));

@@ -60,7 +60,19 @@ async function makeArtifacts(result, operation, signal) {
   return { files, records };
 }
 
-export function registerAppAutomation({ app, operations, convertDicom, contractUrl = 'automation.json', contract: providedContract, document: doc = globalThis.document, target = globalThis, download = downloadFile }) {
+// The address an operation receives for a url input, or null when the request leaves it out.
+function sourceAddress(role, source) {
+  if (!object(source) || typeof source.url !== 'string') return null;
+  const url = new URL(source.url);
+  if (!['https:', 'http:'].includes(url.protocol)) throw new Error(`Unsupported source URL: ${role}`);
+  return url.href;
+}
+
+/**
+ * `sourceRoots` maps a url input role to the app's own function from the address it receives to the
+ * address it reads under (a store's root), which the WebMCP tools ask the person to allow before a run.
+ */
+export function registerAppAutomation({ app, operations, convertDicom, sourceRoots = {}, contractUrl = 'automation.json', contract: providedContract, document: doc = globalThis.document, target = globalThis, download = downloadFile }) {
   const adopted = new Map();
   const viewers = createViewerRegistry();
   let contract;
@@ -99,17 +111,15 @@ export function registerAppAutomation({ app, operations, convertDicom, contractU
       for (const [role, field] of Object.entries(operation.inputs)) {
         signal.throwIfAborted();
         if (field.source !== 'files') {
-          const source = request.inputs?.[role];
-          if (!object(source) || typeof source.url !== 'string') {
+          const href = sourceAddress(role, request.inputs?.[role]);
+          if (href === null) {
             if (field.minimum > 0) throw new Error(`Missing input: ${role}`);
             inputs[role] = [];
             inputRecords[role] = [];
             continue;
           }
-          const url = new URL(source.url);
-          if (!['https:', 'http:'].includes(url.protocol)) throw new Error(`Unsupported source URL: ${role}`);
-          inputs[role] = { url: url.href };
-          inputRecords[role] = { url: url.href };
+          inputs[role] = { url: href };
+          inputRecords[role] = { url: href };
           continue;
         }
         const files = sourceFiles.get(role) ?? [];
@@ -177,6 +187,17 @@ export function registerAppAutomation({ app, operations, convertDicom, contractU
     }
   }
 
+  function requestedOperation(request, fields) {
+    const name = request.operation ?? contract.defaultOperation;
+    if (!Object.hasOwn(contract.operations, name)) throw new Error(`Unknown operation: ${name}`);
+    const operation = contract.operations[name];
+    for (const field of fields) {
+      if (request[field] !== undefined && !object(request[field])) throw new Error(`${field} must be an object`);
+      for (const role of Object.keys(request[field] ?? {})) if (!Object.hasOwn(operation.inputs, role)) throw new Error(`Unknown input role: ${role}`);
+    }
+    return operation;
+  }
+
   async function dispatch(command, request = {}) {
     await ready;
     if (!object(request)) throw new Error('Automation command arguments must be an object');
@@ -198,15 +219,20 @@ export function registerAppAutomation({ app, operations, convertDicom, contractU
       transfer.value = '';
       return adoption;
     }
+    if (command === 'sources') {
+      const operation = requestedOperation(request, ['inputs']);
+      return Object.fromEntries(Object.entries(request.inputs ?? {}).map(([role, source]) => {
+        if (operation.inputs[role].source === 'files') throw new Error(`Input ${role} takes files, not an address`);
+        const address = sourceAddress(role, source);
+        if (address === null) throw new Error(`Input ${role} needs a url`);
+        const root = sourceRoots[role]?.(address) ?? address;
+        return [role, { address, root: new URL(root).href }];
+      }));
+    }
     if (command === 'start') {
       if (!terminal.has(snapshot.state)) throw new Error('An operation is already running');
+      const operation = requestedOperation(request, ['inputs', 'selections']);
       const name = request.operation ?? contract.defaultOperation;
-      if (!Object.hasOwn(contract.operations, name)) throw new Error(`Unknown operation: ${name}`);
-      const operation = contract.operations[name];
-      for (const field of ['inputs', 'selections']) {
-        if (request[field] !== undefined && !object(request[field])) throw new Error(`${field} must be an object`);
-        for (const role of Object.keys(request[field] ?? {})) if (!Object.hasOwn(operation.inputs, role)) throw new Error(`Unknown input role: ${role}`);
-      }
       const parameters = operationParametersSchema(operation.parameters).parse(request.parameters);
       const run = { id: crypto.randomUUID(), operation: name, controller: new AbortController(), parameters };
       active = run;

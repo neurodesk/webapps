@@ -9,8 +9,9 @@ import { fetchApproved, registerWebMcpTools, webMcpTools } from '../src/webmcp/t
 import { exposeWebMcp } from '../src/webmcp/page.js';
 import { createToolInputs } from '../src/webmcp/tool-inputs.js';
 import { schemaIssues, unsupportedKeywords } from '../src/webmcp/schema.js';
-import { NIIVUE_METHODS } from '../src/webmcp/niivue-methods.js';
+import { NIIVUE_METHODS, NIIVUE_PARAMETERS } from '../src/webmcp/niivue-methods.js';
 import { coreHandlers } from '@niivue/nv-mcp/browser';
+import { CORE_SCHEMAS } from '@niivue/nv-mcp/server';
 
 const appsDir = new URL('../../../apps/', import.meta.url);
 const contract = () => ({ schemaVersion: 2, app: 'test', title: 'Test', description: 'Segments a test image.', appVersion: '0.1.20260928', defaultOperation: 'run', operations: {
@@ -46,9 +47,14 @@ function page(t, operation, options = {}) {
     document: dom.window.document, target: dom.window, download: file => downloads.push(file) });
   const automation = dom.window.neurodeskAutomation;
   const inputs = createToolInputs({ doc: dom.window.document, automation, isPerson });
-  const tools = webMcpTools({ contract: contract(), dispatch: automation.dispatch, inputs, examples: () => examples, ...options });
+  const confirmations = [];
+  const confirmFiles = async request => {
+    confirmations.push(request);
+    return true;
+  };
+  const tools = webMcpTools({ contract: contract(), dispatch: automation.dispatch, inputs, examples: () => examples, confirmFiles, ...options });
   const call = (name, input = {}, signal = new AbortController().signal) => tools.find(tool => tool.name === name).execute(input, { signal });
-  return { tools, call, dispatch: automation.dispatch, downloads, inputs, registration, window: dom.window };
+  return { tools, call, dispatch: automation.dispatch, downloads, inputs, registration, confirmations, window: dom.window };
 }
 
 const labels = () => ({ artifacts: [{ role: 'labels', file: new File(['labels'], 'labels.nii') }] });
@@ -397,7 +403,7 @@ const click = (window, selector) => asPerson(window.document.querySelector(selec
 test('held files serve every rerun until the person uses the page', async t => {
   const seen = [];
   let window;
-  const { call, inputs, window: pageWindow } = page(t, async ({ inputs: files, parameters }) => {
+  const { call, inputs, confirmations, window: pageWindow } = page(t, async ({ inputs: files, parameters }) => {
     seen.push([files.image[0].name, parameters.threshold]);
     if (parameters.threshold === 0.9) appLoads(window, [new File(['fed'], 'fed-by-the-run.nii')]);
     return labels();
@@ -408,22 +414,23 @@ test('held files serve every rerun until the person uses the page', async t => {
   assert.deepEqual(seen, [['input.nii', 0.2], ['input.nii', 0.8], ['input.nii', 0.9]]);
   const described = await call('app_describe');
   assert.deepEqual(described.inputs, { image: [{ name: 'input.nii', bytes: 5 }] }, 'a load the run itself made keeps the held files');
-  assert.deepEqual(described.pageFiles, [{ input: 't1', kind: 'image', label: 'T1 image', files: [{ name: 'fed-by-the-run.nii', bytes: 3 }], current: true }], 'the page lists what the run loaded into it');
+  assert.deepEqual(described.pageFiles, [{ input: 't1', kind: 'image', label: 'T1 image', files: [{ name: 'fed-by-the-run.nii', bytes: 3 }] }], 'the page lists what the run loaded into it');
 
   personLoads(window, [new File(['mine'], 'mine.nii')]);
   const describe = await call('app_describe');
   assert.deepEqual(describe.inputs, {}, 'the person moved on, so the tools release the files they held');
   assert.equal(describe.run.stale, true, 'and the run before is stale');
-  assert.deepEqual(describe.pageFiles, [{ input: 't1', kind: 'image', label: 'T1 image', files: [{ name: 'mine.nii', bytes: 4 }], current: true }]);
+  assert.deepEqual(describe.pageFiles, [{ input: 't1', kind: 'image', label: 'T1 image', files: [{ name: 'mine.nii', bytes: 4 }] }]);
   assert.equal(describe.pageMayHoldOtherInputs, false);
   assert.deepEqual(await call('inputs_use_page_files', { role: 'image', input: 't1' }), { role: 'image', files: [{ name: 'mine.nii', bytes: 4 }] });
+  assert.deepEqual(confirmations, [{ app: 'Test', label: 'T1 image', files: [{ name: 'mine.nii', bytes: 4 }] }], 'the person confirms even a file they have just loaded');
   assert.equal((await call('run_run')).report.inputs.image[0].filename, 'mine.nii');
   assert.match((await call('inputs_use_page_files', { role: 'image', input: 'nowhere' })).error.message, /No files are loaded/);
 });
 
 test('any use of the workspace ends the examination: held files go, the last run is withheld, page files need confirming', async t => {
   const confirmations = [];
-  let answer = false;
+  let answer = true;
   const { call, inputs, window, downloads } = page(t, async () => labels(), { confirmFiles: async request => {
     confirmations.push(request);
     return answer;
@@ -443,18 +450,20 @@ test('any use of the workspace ends the examination: held files go, the last run
   assert.deepEqual(describe.inputs, {});
   assert.deepEqual(describe.run, { runId: run.runId, state: 'succeeded', stale: true, message: describe.run.message });
   assert.match(describe.run.message, /used the page since this run started/);
-  assert.equal(describe.pageFiles[0].current, false, 'the remove button may have removed the scan');
+  assert.deepEqual(describe.pageFiles, [], 'the run the tools started may have changed what the page shows, so its record is gone');
   assert.equal(describe.pageMayHoldOtherInputs, true);
   for (const [name, input] of [['runs_get', { runId: run.runId }], ['runs_get', {}], ['runs_cancel', { runId: run.runId }], ['outputs_download', { runId: run.runId, artifactId: 'labels' }]]) {
     assert.equal((await call(name, input)).error?.code, 'RUN_STALE', `${name} ${JSON.stringify(input)}`);
   }
   assert.deepEqual(downloads, [], 'nothing of the stale run is saved');
 
+  personLoads(window, [new File(['next'], 'next.nii')]);
+  answer = false;
   assert.deepEqual(await call('inputs_use_page_files', { role: 'image', input: 't1' }), { declined: true });
-  assert.deepEqual(confirmations, [{ app: 'Test', label: 'T1 image', files: [{ name: 'scan.nii', bytes: 4 }] }]);
+  assert.deepEqual(confirmations.map(request => request.files[0].name), ['scan.nii', 'next.nii']);
   assert.deepEqual((await call('app_describe')).inputs, {});
   answer = true;
-  assert.deepEqual(await call('inputs_use_page_files', { role: 'image', input: 't1' }), { role: 'image', files: [{ name: 'scan.nii', bytes: 4 }] });
+  assert.deepEqual(await call('inputs_use_page_files', { role: 'image', input: 't1' }), { role: 'image', files: [{ name: 'next.nii', bytes: 4 }] });
 });
 
 test('a prompt or download that answers after the person used the page commits nothing', async t => {
@@ -476,7 +485,7 @@ test('a prompt or download that answers after the person used the page commits n
   assert.deepEqual((await call('app_describe')).inputs, {});
 });
 
-test('a pick made while a run is going is not taken as what the page shows', async t => {
+test('a pick made while a run is going is not recorded, and the run the tools started clears the record', async t => {
   let finish;
   const { call, inputs, window } = page(t, () => new Promise(resolve => { finish = () => resolve(labels()); }));
   appLoads(window, [new File(['a'], 'exam-a.nii')]);
@@ -488,7 +497,7 @@ test('a pick made while a run is going is not taken as what the page shows', asy
   const describe = await call('app_describe');
   assert.equal(describe.run.stale, true);
   assert.equal(describe.run.report, undefined, 'the report of exam A is withheld');
-  assert.deepEqual(describe.pageFiles.map(entry => [entry.files[0].name, entry.current]), [['exam-a.nii', false]], 'the busy app may have ignored exam B');
+  assert.deepEqual(describe.pageFiles, [], 'the busy app may have ignored exam B, and the run may have replaced exam A');
   assert.equal(describe.pageMayHoldOtherInputs, true);
   assert.equal((await call('outputs_download', { runId: running.runId, artifactId: 'report' })).error.code, 'RUN_STALE');
 });
@@ -499,7 +508,7 @@ test('files handed over or dropped on the page that reach no input are listed as
   window.document.dispatchEvent(new window.CustomEvent('nd-handoff', { detail: { source: { app: 'dicomview', title: 'DICOM View' }, files: [new File(['sent'], 'sent.nii')] } }));
   let describe = await call('app_describe');
   assert.deepEqual(describe.inputs, {}, 'a handoff ends the examination');
-  assert.deepEqual(describe.pageFiles, [{ input: 'received:handoff', label: 'Sent from DICOM View', files: [{ name: 'sent.nii', bytes: 4 }], current: true }]);
+  assert.deepEqual(describe.pageFiles, [{ input: 'received:handoff', label: 'Sent from DICOM View', files: [{ name: 'sent.nii', bytes: 4 }] }]);
   assert.deepEqual(await call('inputs_use_page_files', { role: 'image', input: 'received:handoff' }), { role: 'image', files: [{ name: 'sent.nii', bytes: 4 }] });
   appLoads(window, [new File(['sent'], 'sent.nii')]);
   assert.deepEqual((await call('app_describe')).pageFiles.map(entry => entry.input), ['t1'], 'a handoff delivered into an input is listed once');
@@ -509,7 +518,7 @@ test('files handed over or dropped on the page that reach no input are listed as
   asPerson(window.document.getElementById('viewer'), drop);
   await new Promise(resolve => setTimeout(resolve, 10));
   describe = await call('app_describe');
-  assert.deepEqual(describe.pageFiles.map(entry => [entry.input, entry.current]), [['t1', false], ['received:drop', true]]);
+  assert.deepEqual(describe.pageFiles.map(entry => entry.input), ['t1', 'received:drop']);
   assert.deepEqual(describe.pageFiles[1].files, [{ name: 'dropped.nii', bytes: 7 }]);
 });
 
@@ -581,11 +590,10 @@ const NIIVUE_AUDIT = {
   set_mesh_layer: ['display', 'setMeshLayerProperty display fields and the layer\'s frame.'],
   set_view: ['display', 'Slice type, layout, mosaic, render visibility, radiological convention, colorbar.'],
   set_viewport: ['display', 'Pan, zoom and drawing bounds of the canvas.'],
-  set_volume: ['display', 'setVolume display fields, label tables, modulation, chunk grid and spread. affine, reset_affine and transform move the volume and load_all_frames fetches from its address: refused.'],
+  set_volume: ['display', 'setVolume display fields, label tables, modulation, chunk grid and spread. affine, reset_affine and transform move the volume, load_all_frames fetches from its address and v1 turns a vector volume into a one-frame colour image for good: refused.'],
   add_mesh_layer: ['fetch', 'addMeshLayer from url.'],
   add_overlay: ['fetch', 'addVolume from url, and a label table from labels.'],
   load_mesh: ['fetch', 'addMesh from url and each layer url; replace removes the meshes before it.'],
-  load_signal: ['fetch', 'addSignal or loadSignals from url; NiiVue looks for a sibling .json sidecar beside it.'],
   load_volume: ['fetch', 'loadVolumes from url, replacing the volumes.'],
 };
 
@@ -596,6 +604,30 @@ test('every method viewers_niivue offers is audited against the pinned nv-mcp so
   const offered = Object.entries(NIIVUE_METHODS).filter(([, kind]) => kind !== 'denied');
   assert.deepEqual(Object.fromEntries(offered), Object.fromEntries(Object.entries(NIIVUE_AUDIT).map(([method, [kind]]) => [method, kind])));
   for (const method of ['set_slide', 'set_signal', 'load_document']) assert.equal(NIIVUE_METHODS[method], 'denied', `${method} edits annotations or loads a document that names further addresses`);
+  assert.equal(NIIVUE_METHODS.load_signal, 'denied', 'NiiVue reads a signal\'s format from its address, so it cannot take the approved bytes');
+});
+
+// The parameters of each offered method that viewers_niivue refuses, with why; every other parameter
+// nv-mcp's schema lists is in NIIVUE_PARAMETERS. A parameter nv-mcp adds fails this test until it is
+// classified in one or the other.
+const REFUSED_NIIVUE_PARAMETERS = {
+  '*': { tab: 'chooses a tab of the desktop server; a page answers for itself' },
+  set_volume: {
+    affine: 'sets the voxel-to-world matrix: moves the volume',
+    reset_affine: 'puts the file\'s matrix back: moves the volume',
+    transform: 'moves, turns or scales the volume',
+    load_all_frames: 'fetches the remaining frames from the volume\'s own address',
+    v1: 'turns a three-frame vector volume into a one-frame colour image, which only a reload undoes',
+  },
+};
+
+test('every parameter of an offered NiiVue method is either taken or refused with a reason, against nv-mcp\'s schemas', () => {
+  assert.deepEqual(Object.keys(NIIVUE_PARAMETERS).sort(), Object.keys(NIIVUE_AUDIT).sort());
+  for (const [method, allowed] of Object.entries(NIIVUE_PARAMETERS)) {
+    const refused = Object.keys({ ...REFUSED_NIIVUE_PARAMETERS['*'], ...REFUSED_NIIVUE_PARAMETERS[method] });
+    assert.deepEqual([...allowed, ...refused].sort(), Object.keys(CORE_SCHEMAS[method]).sort(), `${method}: nv-mcp's parameters are each classified`);
+    assert.deepEqual(allowed.filter(name => refused.includes(name)), [], `${method}: no parameter is both taken and refused`);
+  }
 });
 
 function viewerPage(t, options = {}) {
@@ -606,8 +638,9 @@ function viewerPage(t, options = {}) {
   const urlContract = contract();
   urlContract.operations.run.inputs.store = { source: 'url', type: 'neuro:volume', description: 'A remote store', minimum: 0, maximum: 1 };
   const examination = {};
-  const tools = webMcpTools({ contract: urlContract, inputs: { examination: () => examination, stage: async () => {}, claim() {}, runOf: () => 'current', held: () => ({}), page: () => [] },
+  const tools = webMcpTools({ contract: urlContract, inputs: { examination: () => examination, stage: async () => {}, claim() {}, runOf: () => 'current', held: () => ({}), page: () => [], toolLoaded() {} },
     dispatch: async (command, request) => {
+      if (command === 'sources') return Object.fromEntries(Object.entries(request.inputs).map(([role, { url }]) => [role, { address: url, root: url.replace(/\/\.zattrs$/, '') }]));
       if (command === 'viewers.niivue' && request.params) {
         const urls = Object.values(request.params).filter(value => typeof value === 'string' && value.startsWith('blob:'));
         request.bytes = await Promise.all(urls.map(async url => (await fetch(url)).text()));
@@ -640,11 +673,12 @@ test('viewers_niivue offers only methods that read the scene, change the display
   for (const method of ['screenshot', 'save', 'load_document']) {
     assert.equal((await call('viewers_niivue', { viewerId: 'main', method, params: { what: 'bitmap' } })).error.code, 'INVALID_INPUT');
   }
-  for (const key of ['affine', 'reset_affine', 'transform', 'load_all_frames']) {
-    const refused = await call('viewers_niivue', { viewerId: 'main', method: 'set_volume', params: { volume: 0, [key]: true } });
-    assert.equal(refused.error?.code, 'INVALID_INPUT', key);
-    assert.match(refused.error.message, new RegExp(key));
+  for (const [method, key] of [...Object.keys(REFUSED_NIIVUE_PARAMETERS.set_volume).map(key => ['set_volume', key]), ['set_volume', 'tab'], ['set_volume', 'not_a_parameter'], ['where_am_i', 'volume'], ['load_volume', 'headers']]) {
+    const refused = await call('viewers_niivue', { viewerId: 'main', method, params: { [key]: true } });
+    assert.equal(refused.error?.code, 'INVALID_INPUT', `${method} ${key}`);
+    assert.match(refused.error.message, new RegExp(`does not take ${key}`));
   }
+  assert.equal((await call('viewers_niivue', { viewerId: 'main', params: { slice: 'axial' } })).error?.code, 'INVALID_INPUT', 'params need a method');
   assert.deepEqual(sent, [], 'no pixel export, save, document or data change reached the viewer');
 
   const url = 'https://elsewhere.test/scan.nii.gz';
@@ -686,8 +720,8 @@ test('a run that would fetch an address the agent supplied asks the person first
   assert.equal(tools.find(tool => tool.name === 'run_run').annotations.consequentialHint, true, 'a run tool that takes addresses is consequential');
   assert.equal(tools.find(tool => tool.name === 'outputs_download').annotations.consequentialHint, true);
   const store = 'https://store.test/brain.zarr';
-  assert.deepEqual(await call('run_run', { inputs: { store: { url: store } }, waitSeconds: 0 }), { declined: true, addresses: [store] });
-  assert.deepEqual(confirmations.map(request => [request.addresses, request.readsUnder]), [[[store], true]], 'the person learns the app reads under the store\'s address');
+  assert.deepEqual(await call('run_run', { inputs: { store: { url: `${store}/.zattrs` } }, waitSeconds: 0 }), { declined: true, addresses: [store] });
+  assert.deepEqual(confirmations.map(request => [request.addresses, request.readsUnder]), [[[store], true]], 'the person allows the root the app reads under, as the app computes it, not the metadata file the agent named');
   assert.ok(!sent.some(([command]) => command === 'start'), 'a declined run never starts');
   allow(true);
   assert.equal((await call('run_run', { inputs: { store: { url: store } }, waitSeconds: 0 })).runId, 'R');
@@ -704,7 +738,7 @@ function maskPage(t, operation, options = {}) {
   const automation = dom.window.neurodeskAutomation;
   const inputs = createToolInputs({ doc: dom.window.document, automation, isPerson });
   const tools = webMcpTools({ contract: maskContract, dispatch: automation.dispatch, inputs, examples: () => examples,
-    fetchAsset: async () => new TextEncoder().encode('head').buffer, ...options });
+    fetchAsset: async () => new TextEncoder().encode('head').buffer, confirmFiles: async () => true, ...options });
   const call = (name, input = {}) => tools.find(tool => tool.name === name).execute(input, { signal: new AbortController().signal });
   return { call, inputs, registration, window: dom.window };
 }
@@ -742,7 +776,7 @@ test('the person picking an example in the page releases held files and names th
   status({ state: 'ready', exampleId: 't1-head' });
   const describe = await call('app_describe');
   assert.deepEqual(describe.inputs, {}, 'the scan the person replaced is no longer held');
-  assert.deepEqual(describe.pageFiles.map(entry => entry.current), [false], 'nor offered as what the page shows');
+  assert.deepEqual(describe.pageFiles.map(entry => entry.files[0].name), ['new-exam.nii'], 'it stays listed as what the page received, to confirm');
   assert.equal(describe.pageExample, 't1-head');
   assert.equal((await call('run_run')).error?.message ?? (await call('runs_get')).error.message, 'Missing input: image');
   click(window, '#viewer');
@@ -757,7 +791,7 @@ test('an app that resets as it reads a load keeps that load listed, and the rese
     registration.reset();
   });
   personLoads(window, [new File(['scan'], 'picked.nii')]);
-  assert.deepEqual((await call('app_describe')).pageFiles, [{ input: 't1', kind: 'image', label: 'T1 image', files: [{ name: 'picked.nii', bytes: 4 }], current: true }]);
+  assert.deepEqual((await call('app_describe')).pageFiles, [{ input: 't1', kind: 'image', label: 'T1 image', files: [{ name: 'picked.nii', bytes: 4 }] }]);
   assert.deepEqual(await call('inputs_use_page_files', { role: 'image', input: 't1' }), { role: 'image', files: [{ name: 'picked.nii', bytes: 4 }] });
   registration.reset();
   assert.deepEqual((await call('app_describe')).inputs, {}, 'a later reset releases the held files');
@@ -777,4 +811,202 @@ test('a parameter the contract requires is published as required and refused whe
   assert.deepEqual(run.inputSchema.properties.parameters.required, ['prompts']);
   assert.match((await run.execute({ parameters: { threshold: 0.2 } })).error.message, /input.parameters.prompts is required/);
   await assert.rejects(dom.window.neurodeskAutomation.dispatch('start', { parameters: {} }), /prompts/, 'the desktop dispatch refuses it too');
+});
+
+// A page whose every request to the app, the prompts and the fetchers can be held after it settles, so a
+// test can change the examination at exactly that point. The requests reach the real automation.
+function racePage(t) {
+  const dom = new JSDOM(WORKSPACE, { url: 'https://example.test/test/' });
+  t.after(() => dom.window.close());
+  const downloads = [];
+  const registration = registerAppAutomation({ app: 'test', contract: contract(), operations: { run: async () => labels() },
+    document: dom.window.document, target: dom.window, download: file => downloads.push(file) });
+  const automation = dom.window.neurodeskAutomation;
+  const inputs = createToolInputs({ doc: dom.window.document, automation, isPerson });
+  const requests = [];
+  let holdAt = -1;
+  let held;
+  const gate = (name, request) => async (...args) => {
+    const index = requests.push(name) - 1;
+    const answer = Promise.resolve().then(() => request(...args));
+    if (index !== holdAt) return answer;
+    const [settled] = await Promise.allSettled([answer]);
+    const release = Promise.withResolvers();
+    held.resolve({ index, release: release.resolve });
+    await release.promise;
+    if (settled.status === 'rejected') throw settled.reason;
+    return settled.value;
+  };
+  const tools = webMcpTools({ contract: contract(), inputs,
+    dispatch: gate('dispatch', automation.dispatch),
+    examples: gate('examples', () => examples),
+    fetchAsset: gate('fetchAsset', async () => new TextEncoder().encode('head').buffer),
+    fetchAddress: gate('fetchAddress', async address => ({ blob: new Blob(['volume']), href: address })),
+    askUser: gate('askUser', async () => ({ answer: 'yes' })),
+    requestFiles: gate('requestFiles', async () => [new File(['input'], 'input.nii')]),
+    confirmFiles: gate('confirmFiles', async () => true),
+    confirmFetch: gate('confirmFetch', async () => true) });
+  const call = (name, input = {}) => tools.find(tool => tool.name === name).execute(input, { signal: new AbortController().signal });
+  return {
+    tools, call, inputs, downloads, registration, requests, window: dom.window,
+    holdAt(index) {
+      holdAt = index;
+      held = Promise.withResolvers();
+      return held.promise;
+    },
+  };
+}
+
+// One valid call per tool, on a page where the person loaded a scan and the tools hold a file and ran once.
+const RACE_CALLS = {
+  app_describe: () => ({}),
+  inputs_request_files: () => ({ role: 'image' }),
+  inputs_use_page_files: () => ({ role: 'image', input: 't1' }),
+  inputs_load_example: () => ({ exampleId: 'head' }),
+  run_run: () => ({ waitSeconds: 5 }),
+  runs_get: () => ({}),
+  runs_cancel: () => ({}),
+  outputs_download: runId => ({ runId, artifactId: 'labels' }),
+  user_ask: () => ({ question: 'Which?' }),
+  viewers_list: () => ({}),
+  viewers_state: () => ({ viewerId: 'main' }),
+  viewers_crosshair: () => ({ viewerId: 'main', position: { frame: 'mm', value: [0, 0, 0] } }),
+  viewers_tab: () => ({ viewerId: 'main', tabId: 'a' }),
+  viewers_regions: () => ({ viewerId: 'main' }),
+  viewers_volumes: () => ({ viewerId: 'main' }),
+  viewers_display: () => ({ viewerId: 'main', sliceType: 'axial' }),
+  viewers_niivue: () => ({ viewerId: 'main', method: 'load_volume', params: { url: 'https://example.test/scan.nii.gz' } }),
+};
+
+async function racePrepared(t) {
+  const race = racePage(t);
+  personLoads(race.window, [new File(['scan'], 'scan.nii')]);
+  await race.call('inputs_request_files', { role: 'image' });
+  const { runId } = await race.call('run_run');
+  personLoads(race.window, [new File(['scan'], 'scan.nii')]);
+  await race.call('inputs_request_files', { role: 'image' });
+  const current = await race.call('run_run');
+  appLoads(race.window, [new File(['scan'], 'scan.nii')]);
+  race.requests.length = 0;
+  return { race, runId: current.runId ?? runId };
+}
+
+test('every tool call that the person interrupts after any answer it awaited withholds its result and does nothing more', async t => {
+  const { tools } = racePage(t);
+  assert.deepEqual(tools.map(tool => tool.name).sort(), Object.keys(RACE_CALLS).sort(), 'every tool has a call in RACE_CALLS');
+  for (const name of Object.keys(RACE_CALLS)) {
+    const { race, runId } = await racePrepared(t);
+    const result = await race.call(name, RACE_CALLS[name](runId));
+    const steps = race.requests.length;
+    assert.ok(steps > 0, `${name} awaits at least one answer (${JSON.stringify(result)})`);
+    for (let index = 0; index < steps; index += 1) {
+      const { race: interrupted, runId: run } = await racePrepared(t);
+      const reached = interrupted.holdAt(index);
+      const pending = interrupted.call(name, RACE_CALLS[name](run));
+      const { release } = await reached;
+      click(interrupted.window, '#viewer');
+      const issued = interrupted.requests.length;
+      const saved = interrupted.downloads.length;
+      release();
+      const outcome = await pending;
+      assert.equal(outcome.error?.code, 'EXAMINATION_CHANGED', `${name}, interrupted after ${interrupted.requests[index]} (step ${index + 1} of ${steps}): ${JSON.stringify(outcome)}`);
+      assert.deepEqual(interrupted.requests.slice(issued), [], `${name} asks nothing more after step ${index + 1}`);
+      assert.equal(interrupted.downloads.length, saved, `${name} saves nothing more`);
+      assert.deepEqual(interrupted.inputs.held(), {}, `${name} holds nothing`);
+    }
+  }
+});
+
+test('a runs_get that the page answers after a reset returns no report of the run before', async t => {
+  const { race, runId } = await racePrepared(t);
+  const reached = race.holdAt(0);
+  const pending = race.call('runs_get', { runId });
+  const { release } = await reached;
+  race.registration.reset();
+  release();
+  const outcome = await pending;
+  assert.equal(outcome.error?.code, 'EXAMINATION_CHANGED');
+  assert.equal(JSON.stringify(outcome).includes('labels.nii'), false, 'nothing of the old report');
+});
+
+test('an outputs_download whose run check answers after the person picks an example in the page saves nothing', async t => {
+  const { race, runId } = await racePrepared(t);
+  const reached = race.holdAt(0);
+  const pending = race.call('outputs_download', { runId, artifactId: 'labels' });
+  const { release } = await reached;
+  race.window.document.body.dispatchEvent(new race.window.CustomEvent('nd-example-status', { bubbles: true, detail: { state: 'loading' } }));
+  release();
+  assert.equal((await pending).error?.code, 'EXAMINATION_CHANGED');
+  assert.deepEqual(race.downloads, []);
+});
+
+test('an approved viewer fetch that finishes after the person used the workspace loads nothing', async t => {
+  const { race } = await racePrepared(t);
+  const reached = race.holdAt(1);
+  const pending = race.call('viewers_niivue', RACE_CALLS.viewers_niivue());
+  const { index, release } = await reached;
+  assert.equal(race.requests[index], 'fetchAddress');
+  click(race.window, '#viewer');
+  release();
+  assert.equal((await pending).error?.code, 'EXAMINATION_CHANGED');
+  assert.deepEqual(race.requests, ['confirmFetch', 'fetchAddress'], 'the viewer is never asked to load');
+});
+
+test('a run the tools start forgets what the page received, since the app may show the run\'s files without saying so', async t => {
+  let window;
+  const { call, inputs, confirmations, window: pageWindow } = page(t, async () => {
+    window.document.getElementById('t1').title = 'shows agent-b.nii without a change event, as NiiMath does';
+    return labels();
+  });
+  window = pageWindow;
+  personLoads(window, [new File(['a'], 'person-a.nii')]);
+  assert.deepEqual((await call('app_describe')).pageFiles.map(entry => entry.files[0].name), ['person-a.nii']);
+  hold(inputs, 'image', [new File(['b'], 'agent-b.nii')]);
+  assert.equal((await call('run_run')).report.inputs.image[0].filename, 'agent-b.nii');
+  const described = await call('app_describe');
+  assert.deepEqual(described.pageFiles, [], 'person-a.nii is no longer offered as what the page has');
+  assert.equal(described.pageExample, null);
+  assert.match((await call('inputs_use_page_files', { role: 'image', input: 't1' })).error.message, /No files are loaded/);
+  assert.deepEqual(confirmations, []);
+});
+
+test('the automation names the address an app reads under for a url input, computed by the app itself', async t => {
+  const dom = new JSDOM('<body></body>', { url: 'https://example.test/test/' });
+  t.after(() => dom.window.close());
+  const urlContract = contract();
+  urlContract.operations.run.inputs.store = { source: 'url', type: 'neuro:volume', formats: ['ome-zarr'], description: 'A store', minimum: 0, maximum: 1 };
+  const strip = url => url.replace(/\/\.zattrs$/, '');
+  registerAppAutomation({ app: 'test', contract: urlContract, operations: { run: async () => labels() }, document: dom.window.document, target: dom.window, sourceRoots: { store: strip } });
+  const { dispatch } = dom.window.neurodeskAutomation;
+  assert.deepEqual(await dispatch('sources', { inputs: { store: { url: 'https://store.test/a.zarr/.zattrs' } } }),
+    { store: { address: 'https://store.test/a.zarr/.zattrs', root: 'https://store.test/a.zarr' } });
+  await assert.rejects(dispatch('sources', { inputs: { store: { url: 's3://bucket/a.zarr' } } }), /Unsupported source URL/, 'refused before the person is asked, as the run would refuse it');
+  await assert.rejects(dispatch('sources', { inputs: { image: { url: 'https://store.test/a.nii' } } }), /takes files/);
+  await assert.rejects(dispatch('sources', { inputs: { mask: { url: 'https://store.test/a.nii' } } }), /Unknown input role/);
+});
+
+test('which interactions start a new examination is decided in one place', async t => {
+  const dom = new JSDOM(`${WORKSPACE.replace('</main>', '<div id="host"></div></main>')}`, { url: 'https://example.test/test/' });
+  t.after(() => dom.window.close());
+  const { window } = dom;
+  const host = window.document.getElementById('host');
+  const shadow = host.attachShadow({ mode: 'open' });
+  shadow.innerHTML = '<input type="file" id="shadowed" data-neurodesk-input="image" aria-label="Shadowed image"><button id="inner">Inner</button>';
+  const inputs = createToolInputs({ doc: window.document, automation: { running: () => false, adopt: async () => {} }, isPerson });
+  const effect = (target, event) => {
+    hold(inputs, 'image', [new File(['x'], 'agent.nii')]);
+    asPerson(target, event);
+    return Object.keys(inputs.held()).length ? 'kept' : 'released';
+  };
+  const viewer = window.document.getElementById('viewer');
+  assert.equal(effect(viewer, new window.WheelEvent('wheel', { bubbles: true, composed: true })), 'released', 'a wheel over the viewer changes what it shows');
+  assert.equal(effect(window.document.body, new window.WheelEvent('wheel', { bubbles: true, composed: true })), 'kept', 'a wheel elsewhere scrolls the page');
+  assert.equal(effect(viewer, new window.MouseEvent('pointerdown', { bubbles: true, composed: true })), 'released', 'a drag starts on press, before release');
+  assert.equal(effect(viewer, new window.MouseEvent('pointermove', { bubbles: true, composed: true })), 'kept', 'moving the pointer over the page does not count');
+  assert.equal(effect(window.document.getElementById('privacy'), new window.MouseEvent('pointerdown', { bubbles: true, composed: true })), 'kept', 'the shared bar is not the workspace');
+  assert.equal(effect(shadow.getElementById('inner'), new window.MouseEvent('pointerup', { bubbles: true, composed: true })), 'released', 'an action inside a shadow root counts');
+  const shadowed = shadow.getElementById('shadowed');
+  Object.defineProperty(shadowed, 'files', { configurable: true, value: [new File(['s'], 'shadow-pick.nii')] });
+  assert.equal(effect(shadowed, new window.Event('input', { bubbles: true, composed: true })), 'released', 'a pick in a shadow root counts');
+  assert.deepEqual(inputs.page(), [{ input: 'shadowed', kind: 'image', label: 'Shadowed image', files: [{ name: 'shadow-pick.nii', bytes: 1 }] }], 'and is listed, though its change event stays inside the shadow root');
 });

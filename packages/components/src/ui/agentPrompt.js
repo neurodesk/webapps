@@ -82,8 +82,8 @@ export function createAgentPrompts(doc = globalThis.document) {
     },
 
     /**
-     * Asks whether the app may fetch the addresses the agent named. `readsUnder` says the app reads
-     * further addresses below each one, as a store's chunks. Resolves true only when the person allows it.
+     * Asks whether the app may fetch the addresses the agent named. `readsUnder` says each address is
+     * the root the app reads under, as a store's metadata and chunks. Resolves true only when the person allows it.
      */
     async confirmFetch({ app, addresses, readsUnder = false }, { signal } = {}) {
       const resolved = addresses.map(address => {
@@ -97,22 +97,22 @@ export function createAgentPrompts(doc = globalThis.document) {
       const one = addresses.length === 1;
       const servers = origins.length === 1 ? `The server at ${origins[0]} sees` : `The servers at ${origins.join(', ')} see`;
       const answer = await show(finish => [
-        createElement('p', { text: readsUnder ? `Let ${app} read ${one ? 'the data at this address' : 'the data at these addresses'}?` : `Let ${app} load ${one ? 'the file at this address' : 'the files at these addresses'} into the page?`, ownerDocument: doc }),
+        createElement('p', { text: readsUnder ? `Let ${app} read the data stored under ${one ? 'this address' : 'these addresses'}?` : `Let ${app} load ${one ? 'the file at this address' : 'the files at these addresses'} into the page?`, ownerDocument: doc }),
         createElement('ul', { ownerDocument: doc }, resolved.map((url, index) => createElement('li', { ownerDocument: doc }, [createElement('code', { text: url?.href ?? addresses[index], ownerDocument: doc })]))),
         createElement('p', { text: readsUnder
-          ? `${app} also reads the addresses under ${one ? 'it' : 'each one'}, such as a store's chunks. ${servers} every request.`
+          ? `${app} reads the addresses under ${one ? 'it' : 'each one'}, such as a store's metadata and chunks. ${servers} every request.`
           : `The page loads only ${one ? 'this address' : 'these addresses'}, and nothing they redirect to. ${servers} the request.`, ownerDocument: doc }),
         actions(finish, button('Allow', 'nd-btn-primary', () => finish(true))),
       ], signal);
       return answer === true;
     },
 
-    /** Asks whether the agent may use files the page holds that the person may have changed since. Resolves true only when the person allows it. */
+    /** Asks whether the agent may use files the page received, which the app may have refused or replaced since. Resolves true only when the person allows it. */
     async confirmFiles({ app, label, files }, { signal } = {}) {
       const answer = await show(finish => [
-        createElement('p', { text: `Let the agent run ${app} on the files loaded in ${label}?`, ownerDocument: doc }),
+        createElement('p', { text: `Let the agent run ${app} on these files from ${label}?`, ownerDocument: doc }),
         createElement('ul', { ownerDocument: doc }, files.map(file => createElement('li', { text: file.name, ownerDocument: doc }))),
-        createElement('p', { text: 'You have used the page since they were loaded. Allow only if the page still shows them.', ownerDocument: doc }),
+        createElement('p', { text: 'The page received them but may not show them now. Allow only if you mean these files.', ownerDocument: doc }),
         actions(finish, button('Allow', 'nd-btn-primary', () => finish(true))),
       ], signal);
       return answer === true;
