@@ -12,7 +12,11 @@ import { LARGE_RUN_JOBS, ofPullRequest } from './ci-usage.mjs';
 
 // What a job spends its runner on.
 //   plan: decides what to run (planner, gate, plan marker); tests nothing
-//   fixed: tests every ci run, whatever the change
+//   fixed: the baseline group the fixed-job share is measured against, the
+//     jobs that tested every ci run on 16-18 November: workspace-contracts,
+//     which still does, and homepage-easter-egg, which still runs on every
+//     push, nightly and dispatch, and which a pull request skips only when
+//     every changed path lies in a tree it cannot read.
 //   app: tests the apps the plan selected
 //   site: builds and checks the composite site
 //   test: a test job of another workflow

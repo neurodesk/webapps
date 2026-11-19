@@ -16,8 +16,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { parse } from 'yaml';
-import { changedManifests, changedPathsFromGit, createAppPlan } from './lib/app-plan.mjs';
-import { compareSelection, expectedApps, failureCandidates, parseableClosure, republishedPackages, supersededMerges, workspaceClosures } from './lib/app-plan-shadow.mjs';
+import { changedManifests, changedPathsFromGit, createAppPlan, UnreadableDiffError } from './lib/app-plan.mjs';
+import { compareSelection, expectedApps, failureCandidates, parseableClosure, republishedPackages, supersededMerges, uncheckedRules, workspaceClosures } from './lib/app-plan-shadow.mjs';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
 import { listJobs, listRuns, mapLimited, mergedPullRequests } from './lib/github-actions.mjs';
 import { loadConservativeWorkspaceGraph, WorkspaceGraphConfigurationError } from './lib/workspace-graph.mjs';
@@ -101,7 +101,13 @@ async function shadow(pr, scratch) {
   const parents = git('rev-list', '--parents', '-n', '1', merge).split(' ').slice(1);
   const [base, head] = parents.length === 2 ? parents : [parents[0], merge];
   const mergeBase = git('merge-base', base, head);
-  const changedPaths = changedPathsFromGit({ base, head, cwd: repoRoot });
+  let changedPaths;
+  try {
+    changedPaths = changedPathsFromGit({ base, head, cwd: repoRoot });
+  } catch (error) {
+    if (!(error instanceof UnreadableDiffError)) throw error;
+    return { ...row, skipped: `the changed paths could not be read: ${error.message}` };
+  }
   const dir = join(scratch, String(pr.number));
   await extract(head, join(dir, 'head'));
   await extract(mergeBase, join(dir, 'base'));
@@ -144,6 +150,8 @@ async function shadow(pr, scratch) {
       changed: changedPaths.length,
       ...comparison,
       site: plan.site,
+      easterEgg: plan.easterEgg,
+      unchecked: uncheckedRules({ plan, changedPaths, manifests }),
       expected: Object.fromEntries(oracle.expected),
       reasons: plan.reasons,
       exempt: oracle.exempt,
@@ -183,11 +191,13 @@ function markdown(rows, candidates, superseded) {
     '',
     `Oracle misses: ${done.reduce((sum, row) => sum + row.misses.length, 0)}.`,
     '',
-    '| PR | Selected | Full | Misses | Fallback or reasons |',
-    '| --- | --- | --- | --- | --- |',
+    `Not checked: the oracle has no expectation of its own for registry site keys (SITE_KEY_READERS) or ci.yml jobs (CI_JOB_SCOPES), so a row narrowed through them reads 0 misses unchecked. Rows narrowed through them: ${done.filter((row) => row.unchecked?.length).map((row) => `#${row.pr} (${row.unchecked.join(', ')})`).join(', ') || 'none'}. Easter egg runs: ${done.filter((row) => row.easterEgg?.length).length}/${done.length}.`,
+    '',
+    '| PR | Selected | Full | Misses | Egg | Fallback or reasons |',
+    '| --- | --- | --- | --- | --- | --- |',
     ...rows.map((row) => (row.skipped
-      ? `| #${row.pr} | - | - | - | skipped: ${row.skipped} |`
-      : `| #${row.pr} | ${row.fallback ? 'all' : row.selected.length ? row.selected.join(', ') : 'none'} | ${row.full} | ${row.misses.map((miss) => `**${miss.app}**: ${miss.reasons.join('; ')}`).join('<br>') || '0'} | ${(row.fallback ?? (row.site ? `site build: ${row.reasons.site[0] ?? 'selected apps'}` : 'no site build')).replaceAll('|', '\\|').slice(0, 160)} |`)),
+      ? `| #${row.pr} | - | - | - | - | skipped: ${row.skipped} |`
+      : `| #${row.pr} | ${row.fallback ? 'all' : row.selected.length ? row.selected.join(', ') : 'none'} | ${row.full} | ${row.misses.map((miss) => `**${miss.app}**: ${miss.reasons.join('; ')}`).join('<br>') || (row.unchecked?.length ? `0, unchecked: ${row.unchecked.join(', ')}` : '0')} | ${row.easterEgg ? (row.easterEgg.length ? 'yes' : 'no') : '-'} | ${(row.fallback ?? (row.site ? `site build: ${row.reasons.site[0] ?? 'selected apps'}` : 'no site build')).replaceAll('|', '\\|').slice(0, 160)} |`)),
   ];
   if (candidates) {
     lines.push('', `Apps that failed on main after a narrowed PR skipped them: ${candidates.length}.`, '');

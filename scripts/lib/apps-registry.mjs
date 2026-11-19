@@ -147,7 +147,12 @@ function validateCatalogs(registry, errors) {
 }
 
 export async function loadAppsRegistry(path = registryPath) {
-  const registry = parse(await readFile(path, 'utf8'));
+  return parseAppsRegistry(await readFile(path, 'utf8'));
+}
+
+/** The registry in `text`, validated as every app build validates it; throws on an invalid registry. */
+export function parseAppsRegistry(text) {
+  const registry = parse(text);
   const errors = [];
   const ids = new Set();
   const paths = new Set();

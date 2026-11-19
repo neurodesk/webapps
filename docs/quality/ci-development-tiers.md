@@ -1,7 +1,8 @@
 # CI development tiers
 
 Keep iterative PRs in draft. Drafts run repository contracts, package tests,
-lint, and app unit/browser tests for directly edited `apps/<id>/` files and
+lint, the homepage easter egg unless every changed path lies in a tree it
+cannot read, and app unit/browser tests for directly edited `apps/<id>/` files and
 `models/<id>.manifest.json`. If the diff cannot be determined, the app planner
 keeps its conservative full selection. Changes confined to shared packages
 receive package tests during development; their downstream applications run
@@ -292,8 +293,11 @@ a run cancelled while planning cancels those jobs whatever its plan. The
 report shows these runs in their own row.
 
 `WORKFLOWS` in `scripts/lib/ci-measures.mjs` gives each workflow, by name, and
-each `ci` job, by the name the API lists it under (its `name:`, else its id), a role: `plan` (planner, gate, plan marker), `fixed` (tests every
-`ci` run whatever changed: `workspace-contracts`, `homepage-easter-egg`), `app`,
+each `ci` job, by the name the API lists it under (its `name:`, else its id), a role: `plan` (planner, gate, plan marker), `fixed` (the baseline
+group the share is measured against: `workspace-contracts`, which still runs on
+every `ci` run, and `homepage-easter-egg`, which still runs on every push,
+nightly and dispatch and which a pull request skips only when every changed
+path lies in a tree it cannot read), `app`,
 `site`, `test`, `deliver` or `report`. In a test workflow the reusable gate's
 jobs plan, also inside a workflow `native.yml` calls (`bison-native / gate /
 decide`), and every other job tests. A workflow or `ci` job the table does not
@@ -387,17 +391,143 @@ for an app the change edits:
 its `apps/`, `packages/` or `exes/` directory or its model manifest, release
 bookkeeping aside, or an app a failed run on main left untested. An app a
 change reaches only through shared code, such as a `packages/runtime-support`
-edit or a `ci.yml` change, leaves them to the nightly run, so a shared change
+edit or a change to a per-app job of `ci.yml`, leaves them to the nightly run, so a shared change
 that breaks only such a path is found the next night rather than before merge.
 The planner marks each browser matrix entry with `heavy_tests`, and the jobs
 set `NEURODESK_E2E_SKIP_HEAVY`, which `e2eTier` turns into a `grepInvert`.
-A whole-catalogue plan for a change the planner could not narrow, such as a
-`ci.yml` edit, counts as shared. Only a plan with no diff at all (the nightly,
+A whole-catalogue plan for a change the planner could not narrow, such as an
+edit to a per-app job of `ci.yml`, counts as shared. Only a plan with no diff at all (the nightly,
 a dispatch of every app, an unknown base) is a full run. The macOS GPU job
 runs every test, since the threshold is a CPU measurement: SynthSeg's four
 `@heavy` tests take 12 to 25 seconds on Metal. Dispatched, nightly and release
 runs include every test. To run them before merging a shared change, dispatch
 `ci` on the branch.
+
+## Site keys, ci.yml jobs and the fixed jobs
+
+Over 16 to 18 November 2026 two small changes cost 2,577 runner minutes of
+whole-catalogue runs. PR #864 changed a comment in the `composite-site` job of
+`ci.yml` and the interface audit it runs; PR #872 changed a link in the `site`
+section of `registry/apps.yml`. The planner then tied any `ci.yml` edit and any
+`site` change but a category to every app.
+
+A `site` change now narrows per key. `SITE_KEY_READERS` lists every key of the
+section (`[]` is each entry of a list) with the files an app build or an app's
+tests run that read it: the analytics measurement id (every themed build), the
+catalogue ids (the standalone check every themed build runs), and the desktop
+identities, catalogue hosts and primary domain (the desktop scripts that
+dicompare and Pipeline builder reach). `suite.mjs` and `pack.mjs` hold a whole
+catalogue entry, so every catalogue key counts as read by them. A changed key
+selects the apps that reach a reader, once the head registry passes the
+validation every build runs; the hub, the analytics period and the categories
+select only the site build. A key the table does not list, at any depth and
+whatever its value (an empty mapping, a list, a new key under `site.hub`),
+anywhere in the base or head section, selects every app. Key paths are
+compared as arrays of raw segments, so a single key named `brand.home` is not
+the listed `brand` then `home`: a key with a dot or bracket is one the table
+does not list. `test/app-plan.test.mjs` lists every file an app build or app
+test runs that loads the registry or reads its `site` section, reads each
+one's text for the keys it reads (a chain from `.site`, a list iterated with a
+callback, the catalogue helpers; a chain that stops at a mapping or list, or a
+whole catalogue entry, reads every key below it) and fails when the table does
+not list the file for one. Any other use of the registry object the check does
+not recognise, such as nested destructuring, a spread or a call to an unknown
+function, a computed member (`registry[key]`) or computed destructuring
+(`const { [key]: section } = registry`), reads every key. The easter egg reads
+`registry/apps.yml`, so a pull request that changes the registry runs it.
+
+A `ci.yml` change is compared job by job on the parsed workflow, so a comment
+changes nothing (`CI_JOB_SCOPES` in `scripts/lib/app-plan.mjs`). It narrows only
+when the base and head have the same jobs and every job that needs a changed
+job, or that a changed job needs (the plan aside), at the base or the head, has
+the changed job's scope. Then a change confined to `composite-site` or a job
+that only consumes its build selects the site build; one confined to
+`homepage-easter-egg` runs the easter egg; and one confined to
+`workspace-contracts`, which runs on every run anyway, or to the `full-plan`
+markers selects nothing more. An added or removed
+job, a `needs` link to a job of another scope, the plan, the per-app jobs and
+every key outside `jobs` still select every app, as does a change whose base
+text is unknown. The nightly run tests every app, so a narrowed `ci.yml`
+change that breaks an app job is found there.
+
+`workspace-contracts`, `homepage-easter-egg` and `app-plan` used 1,015 minutes
+in 63 draft runs, the two fixed jobs alone 956; the easter egg used 445 minutes
+in 102 runs in which no pull request touched it. `workspace-contracts` still
+runs on every run and tests every package (`pnpm test:packages`), as before.
+`homepage-easter-egg` runs on every push, nightly and dispatch but
+`scope=gpu`, as before, and also when the plan fails (`!cancelled()`). A pull
+request skips it only on proof: the plan succeeded and wrote `skip` to its
+`easter_egg` output, which it does only when every changed path lies in a tree
+the job cannot read (`easterEggCannotRead` in `scripts/lib/app-plan.mjs`). Any
+other output, an empty one included, runs it. The trees are `apps/`, `exes/`,
+`models/`, `docs/` and every package outside the job's closure, which is
+`packages/analytics` alone. A workspace manifest in them still runs it
+(`WORKSPACE_MANIFESTS`: `package.json`, `package.json5` and `package.yaml`).
+pnpm reads each as its own project, a second one beside `package.json`
+included, so one can take the easter egg's name; the job's `pnpm install`
+reads every manifest and runs their install scripts. Any other path runs it: every root file, `.github/`, `.changeset/`,
+`scripts/`, `test-utils/`, `test/`, `registry/`, `site/`, `templates/`, the
+lockfile and workspace files, and a path no rule knows. `EASTER_EGG_INPUTS`
+lists the files the job reads, the evidence that no skip tree holds one:
+`test/app-plan.test.mjs` pins the job's commands and the package scripts they
+run, follows the imports and URLs of the test, the inputs and every source
+file of the easter-egg packages, and requires every file the job's
+environment names (the Playwright reporter in `PW_TEST_REPORTER`) to be in
+the table and outside the skip trees.
+
+Every root `package.json` script a `ci.yml` job runs, directly or through
+another script, is a planner input, read from `ci.yml` (`jobScripts` in the
+workspace graph): one only the site jobs run selects the site build, any other
+every app. `test/ci-required-jobs.test.mjs` runs twice per run, in `app-plan`
+(`pnpm check:integration`) and in `workspace-contracts` (`pnpm
+test:contracts`). It fails when a required job is missing, carries
+`continue-on-error`, runs under another condition or waits for other jobs than
+it pins, or has a run step that can be skipped other than the ten it lists,
+and when either guard step is missing, conditional or soft. It also fails when
+a required job needs a job that can be skipped on a run where the required job
+is due: it simulates every trigger of `ci.yml` (each event, pull request
+action and draft state, dispatch scope and branch) with every value of the
+outputs the job and the jobs it waits for read. A job whose condition admits a
+skipped dependency with a status function (`!cancelled()`, `always()`) may
+need one; a condition the simulation cannot evaluate fails it.
+`example-cache-retention` may fail by design and is not required. A change
+that removes both guards is caught only by review and by the full plan it
+triggers: a change to the plan job or to a root script `ci.yml` runs selects
+every app.
+
+Package suites can be narrowed safely only from recorded evidence of what each
+suite reads at run time, not from scanning text for paths. The wall time of
+the package tests can be cut without any selection risk by running them in
+parallel shards.
+
+Text references widen the selection: a JavaScript comment line naming a path
+is skipped, any other mention counts, and a path built at run time
+(`join(root, 'apps', id)`) reaches every app. The changed paths are read
+NUL-delimited (`changedPathsFromGit`), so git neither quotes nor trims a name,
+and hold both sides of every rename and copy, so a moved input still selects
+what read it. A diff git cannot produce is never an empty one: the plan then
+tests every app, the site build and the easter egg, and the workflow gate runs
+its workflow.
+
+Replayed over 22 merged pull requests, #864, #872 and the 20 merged up to
+#887 (`scripts/app-plan-shadow.mjs`, the planner before and after the review
+fixes against the same oracle), the planner had 0 app misses before and after.
+The fixes cost 35 instead of 31 of 1,386 app-test jobs: #872 and #861 now test
+dicompare and Pipeline builder, whose desktop scripts read every catalogue key.
+Under the skip list a pull request skips the easter egg in 7 of the 22 (#883,
+#875, #871, #869, #867, #865, #855); the others change `.github/`, a root file,
+`test/`, `scripts/`, `registry/`, `site/`, `.changeset/` or a `package.json`.
+The second replay, of the planner before and after the skip list, selected the
+same apps with 0 misses. The oracle has no expectation of
+its own for site keys or `ci.yml` jobs, and the report lists the 4 rows
+narrowed through them (#864, #872, #861, #854); an independent oracle for both
+is a follow-up. Replayed over every `ci` run of 16 to 18 November (each pull
+request diffed from main as it stood when its run started, each push from its
+parent), the planner leaves out 2,288 minutes of per-app jobs (2,304 before the
+fixes, the #864 and #872 runs). The easter egg used 437 minutes in those runs,
+376 in 93 pull request runs and 62 in 12 pushes; the skip list leaves it out
+of 19 of the pull request runs, 79 minutes. 57 of the 74 pull request runs that
+still run it changed `.github/`, most of them this CI work itself.
 
 ## Module-level selection in the component package
 
@@ -462,8 +592,8 @@ run during draft feedback.
 A manual `ci` run plans like a pull request: `gh workflow run ci --ref
 <branch>` tests the apps the branch changed since it left main (on main,
 since the last finished run, as a push does). `-f scope=gpu` runs only the macOS GPU suite of
-those apps, `-f scope=site` only the composite site and its agentic checks
-(with `agentic_mode`), and `-f scope=all` every app. Like a pull request,
+those apps, `-f scope=site` only the composite site, its agentic checks (with
+`agentic_mode`) and the homepage easter egg, and `-f scope=all` every app. Like a pull request,
 `affected` builds the composite site only when its plan needs it. On 13 November 2026 all
 three manual runs tested every app (3,037 runner minutes) to reach the GPU
 suite or the agentic checks. A dispatch no longer moves the tested base main's
