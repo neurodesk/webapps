@@ -1,4 +1,7 @@
 {
+  "musclemap": {
+    "select file-role-1": "The loaded file's role select is rebuilt with a new id each time the file list changes, so after the earlier actions, and on a fresh page, no select by this name exists; the row's Remove button is exercised."
+  },
   "vesselboost": {
     "select modelSelect": "It is in the inference step, which the app keeps disabled (inert, pointer-events none) until preprocessing has run, so a person cannot use it either.",
     "select overlapSelect": "It is in the inference step, which the app keeps disabled (inert, pointer-events none) until preprocessing has run, so a person cannot use it either.",
