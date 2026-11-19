@@ -6,6 +6,7 @@
 import { ConsoleOutput } from './ConsoleOutput.js';
 
 const STORAGE_PREFIX = 'neurodesk-memory-guard:';
+const USER_SCROLL_EVENTS = ['wheel', 'touchmove', 'keydown'];
 const GUARD_ATTR = 'data-nd-memory-guard';
 const MAX_CRASH_AGE_MS = 30 * 60 * 1000;
 const HEARTBEAT_MS = 15 * 1000;
@@ -450,14 +451,18 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
 
   // Reveal after the app has laid out; a reload notice is written before boot.
   // One reveal per notice: rewriting the same notice during boot does not
-  // scroll again, and a user scroll before it runs cancels it.
+  // scroll again, and the user scrolling before it runs cancels it. Only
+  // input counts as the user scrolling: a plain scroll event also fires when
+  // the technical log follows its newest line during boot.
   function scheduleReveal() {
     if (!view?.setTimeout || !monitorErrorStatus) return;
     if (monitorErrorStatus === revealedStatus || pendingRevealStatus === monitorErrorStatus) return;
     pendingRevealStatus = monitorErrorStatus;
-    const cancel = () => { pendingRevealStatus = ''; };
+    const stopListening = () => {
+      for (const type of USER_SCROLL_EVENTS) view.removeEventListener?.(type, onUserScroll, true);
+    };
     const reveal = () => {
-      view.removeEventListener?.('scroll', onUserScroll, true);
+      stopListening();
       if (cleanedUp || !pendingRevealStatus) return;
       const status = pendingRevealStatus;
       pendingRevealStatus = '';
@@ -466,15 +471,12 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
       revealStatus(doc, view);
     };
     const onUserScroll = () => {
-      view.removeEventListener?.('scroll', onUserScroll, true);
-      cancel();
+      stopListening();
+      pendingRevealStatus = '';
     };
-    const run = () => {
-      view.addEventListener?.('scroll', onUserScroll, { capture: true, passive: true });
-      if (doc.readyState === 'complete') view.setTimeout(reveal, 0);
-      else view.addEventListener?.('load', () => view.setTimeout(reveal, 0), { once: true });
-    };
-    run();
+    for (const type of USER_SCROLL_EVENTS) view.addEventListener?.(type, onUserScroll, { capture: true, passive: true });
+    if (doc.readyState === 'complete') view.setTimeout(reveal, 0);
+    else view.addEventListener?.('load', () => view.setTimeout(reveal, 0), { once: true });
   }
 
   // 1. Check whether the previous tab instance reloaded without pagehide

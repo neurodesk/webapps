@@ -783,6 +783,29 @@ test('clearing an optional input keeps the session; an app id keys the checkpoin
   assert.equal(page.window.sessionStorage.getItem(key), null);
 });
 
+test('the technical log scrolling itself does not cancel the phone reveal; the user scrolling does', async (t) => {
+  const url = 'https://webapps.neurodesk.org/musclemap/';
+  for (const [trigger, expected] of [['scroll', 1], ['wheel', 0], ['touchmove', 0], ['keydown', 0]]) {
+    const page = createWorkspaceDom(t, url, {
+      'neurodesk-memory-guard:/musclemap/': { active: true, loaded: true, hidden: false, detail: 'Segmenting…', updatedAt: 1000 },
+    });
+    Object.defineProperty(page.window, 'innerWidth', { value: 320, configurable: true });
+    Object.defineProperty(page.window, 'innerHeight', { value: 568, configurable: true });
+    const statusText = page.document.getElementById('statusText');
+    let scrolls = 0;
+    statusText.getBoundingClientRect = () => ({ top: 1134, bottom: 1170 });
+    statusText.scrollIntoView = () => { scrolls += 1; };
+    page.bind({ now: () => 2000 });
+    // Before the deferred reveal runs: the console auto-scrolls to its newest
+    // line (a plain scroll event on an inner scroller), or the user scrolls the page themselves.
+    const target = trigger === 'scroll' ? page.document.getElementById('viewer') : page.document;
+    target.dispatchEvent(new page.window.Event(trigger, { bubbles: trigger !== 'scroll' }));
+    await waitMs(20);
+    assert.match(statusText.textContent, /reloaded mid-run/);
+    assert.equal(scrolls, expected, trigger);
+  }
+});
+
 test('a recovery notice below the fold scrolls into view once on a phone', async (t) => {
   const url = 'https://webapps.neurodesk.org/musclemap/';
   const page = createWorkspaceDom(t, url, {

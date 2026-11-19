@@ -86,6 +86,10 @@ export async function verifyMobileMeasurement(page, origin) {
   await expect(page.locator('#measurementStatus')).toContainText('mm');
 }
 
+// MuscleMap shows a loaded volume on software WebGL for 3-8 s of main-thread
+// work, during which an evaluate cannot answer.
+const LOAD_TIMEOUT_MS = 30000;
+
 export async function verifyMobileMemoryCrash(page, origin) {
   await page.setViewportSize({ width: 320, height: 568 });
   const buffer = createTestNiftiBuffer();
@@ -99,6 +103,8 @@ export async function verifyMobileMemoryCrash(page, origin) {
     await expect(crashPage.locator('.nd-app-bar:visible').first()).toBeVisible();
     // MuscleMap binds its file input after viewer setup; its example selector comes next.
     await expect(crashPage.locator('select[data-neurodesk-example]')).toBeAttached();
+    // The shell imports the monitor asynchronously; files set before it binds go unseen.
+    await expect(crashPage.locator('html')).toHaveAttribute('data-nd-memory-guard', '');
 
     // 1. Load real NIfTI data so a live session checkpoint exists, then perform a
     //    normal user reload and confirm pagehide clears the checkpoint cleanly.
@@ -107,10 +113,11 @@ export async function verifyMobileMemoryCrash(page, origin) {
     await expect.poll(() => crashPage.evaluate(() => {
       const raw = window.sessionStorage.getItem('neurodesk-memory-guard:app:musclemap');
       return raw ? JSON.parse(raw).loaded === true : false;
-    })).toBe(true);
+    }), { timeout: LOAD_TIMEOUT_MS }).toBe(true);
     await crashPage.reload({ waitUntil: 'domcontentloaded' });
     await expect(crashPage.locator('#statusText')).toHaveText('Drag and drop files');
     await expect(crashPage.locator('select[data-neurodesk-example]')).toBeAttached();
+    await expect(crashPage.locator('html')).toHaveAttribute('data-nd-memory-guard', '');
     await expect(crashPage.locator('#statusText')).not.toHaveClass(/\berror\b/);
 
     // 2. Drive the real workflow again (load NIfTI + click #runSegmentation), wait for
@@ -125,7 +132,7 @@ export async function verifyMobileMemoryCrash(page, origin) {
     await expect.poll(() => crashPage.evaluate(() => {
       const raw = window.sessionStorage.getItem('neurodesk-memory-guard:app:musclemap');
       return raw ? JSON.parse(raw).active === true : false;
-    })).toBe(true);
+    }), { timeout: LOAD_TIMEOUT_MS }).toBe(true);
 
     const { targetInfos } = await browserCdp.send('Target.getTargets');
     crashTargetId = targetInfos.find((info) => info.type === 'page' && info.url.includes('crashProbe=1'))?.targetId;
