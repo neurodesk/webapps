@@ -1,5 +1,5 @@
-// A Chrome origin trial token is base64. The registry validates each catalogue's token with it too.
-export const ORIGIN_TRIAL_TOKEN = /^[A-Za-z0-9+/]*={0,2}$/;
+// A Chrome origin trial token is base64, as the registry validates each catalogue's token.
+const ORIGIN_TRIAL_TOKEN = /^[A-Za-z0-9+/]*={0,2}$/;
 const appIdPattern = /^[a-z][a-z0-9-]*$/;
 const titlePattern = /<title\b[^>]*>[\s\S]*?<\/title>/i;
 const iconLinkPattern = /\s*<link\b[^>]*\brel=["']?[^"'>]*\bicon\b[^>]*>/gi;
