@@ -72,14 +72,16 @@ No browser turns WebMCP on by default yet. To try it in Chrome:
    the example and save the mask.
 
 The browser's agent works only with what you allow. It runs on files you
-choose in its dialog, files you opened in the app, or the app's examples. As
-soon as you use the page yourself, it lets go of the files it held and no
-longer reports its earlier runs, so it asks again. To use files you opened and
-then changed settings around, it asks you to confirm them. It can move and
+choose in its dialog, files you opened in the app once you confirm them in a
+dialog, or the app's examples. As soon as you use the page yourself, it lets
+go of the files it held and no longer reports its earlier runs, so it asks
+again; a request it already started does nothing more. It can move and
 restyle the viewer but cannot capture it or save images from it. Before the
 page fetches a web address the agent names, a dialog shows the address and
-asks you; the viewer then gets that one file, not a redirect. The
-WebSocket connection above keeps nv-mcp's full set of tools.
+asks you; the viewer then gets that one file, not a redirect. For a store
+such as an OME-Zarr in ZARRo, the dialog shows the store's address, which the
+app reads under. The WebSocket connection above keeps nv-mcp's full set of
+tools.
 
 Each app's Privacy dialog says what the agent can read. A host that holds a
 Chrome origin trial token (`webmcp_origin_trial` in `registry/apps.yml`) offers
