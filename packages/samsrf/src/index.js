@@ -1,6 +1,7 @@
 // SamSrf's readers, models, HRFs, pRF functions and preprocessing on one WebAssembly
 // module, for browsers and Node. README.md documents every export.
 import wasmInit, * as core from '../wasm/samsrf_wasm.js';
+import { isSubjectHrf } from './inputs.js';
 
 export { Apertures, Run } from '../wasm/samsrf_wasm.js';
 
@@ -131,6 +132,15 @@ export const hrf = {
     return core.hrfResolve(spec.type, values, spec.file, tr);
   },
 };
+
+/**
+ * The kernel of the subject HRF fit a model's Hrf names (hrf_*): `hrf.oldSchool(model.TR, fP)` with fP
+ * from `readOldSchoolHrf`. createJob takes it as `spec.hrf`; the engine leaves file-backed HRFs to its caller.
+ */
+export function subjectHrfKernel(model, fP) {
+  if (!isSubjectHrf(model.Hrf)) throw new Error(`model: Hrf ${JSON.stringify(model.Hrf ?? null)} does not name a subject HRF fit (hrf_*)`);
+  return hrf.oldSchool(model.TR, fP);
+}
 
 const PREPROCESS_DEFAULTS = { normalise: 'zscore', combine: 'average', noiseCeiling: true, globalSignal: false, precision: 'double', arithmeticReference: 'current' };
 

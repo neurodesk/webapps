@@ -8,7 +8,7 @@ import { test, expect } from "@playwright/test";
 import { readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { unzipSync } from "fflate";
-import { analysisSpec, createJob, exportGiis, hrf, readAnalysisInputs, readGifti, readOldSchoolHrf, runJob } from "@neurodesk/samsrf/node";
+import { analysisSpec, createJob, exportGiis, readAnalysisInputs, readGifti, runJob } from "@neurodesk/samsrf/node";
 import { giftiRun, matFile } from "../../../packages/samsrf/test/fixtures.js";
 import { serveSite } from "../../../test-utils/serve-site.mjs";
 
@@ -481,6 +481,51 @@ test("automation runs a reverse-correlation analysis on the example's files", as
   expect(report.provenance.model.Scaling_Factor).toBe(9.5);
 });
 
+test("automation takes a subject HRF fit for reverse correlation and refuses a misnamed one", async ({ page }, testInfo) => {
+  test.setTimeout(1800000);
+  const roi = await smallRoiPath(testInfo);
+  const subjectHrf = testInfo.outputPath("hrf_subject.mat");
+  writeFileSync(subjectHrf, matFile({ fP: { dims: [1, 4], data: [5.5, 15.5, 5, 2] } }));
+  const misnamed = testInfo.outputPath("fit.mat");
+  writeFileSync(misnamed, readFileSync(subjectHrf));
+  const paths = { runs: [await examplePath(testInfo, "lh_uBars1.gii")], apertures: [await examplePath(testInfo, "aps_Bars.mat")], roi: [roi] };
+  await page.goto("/");
+  const adopt = async (role, files) => {
+    await page.locator("#neurodesk-input-transfer").setInputFiles(files);
+    await page.evaluate((target) => globalThis.neurodeskAutomation.dispatch("adopt", { role: target }), role);
+  };
+  const finished = () => expect.poll(() => page.evaluate(async () => (await globalThis.neurodeskAutomation.dispatch("snapshot")).state), { timeout: 1500000 });
+  for (const [role, files] of Object.entries(paths)) await adopt(role, files);
+  await adopt("subjectHrf", [misnamed]);
+  await page.evaluate(() => globalThis.neurodeskAutomation.dispatch("start", { operation: "rc", parameters: { preset: "example-revcor" } }));
+  await finished().toBe("failed");
+  const refused = await page.evaluate(async () => (await globalThis.neurodeskAutomation.dispatch("snapshot")).error.message);
+  expect(refused).toBe("fit.mat: SamSrf reads a subject HRF fit from a file named hrf_*.mat.");
+
+  await page.goto("/");
+  for (const [role, files] of Object.entries(paths)) await adopt(role, files);
+  await adopt("subjectHrf", [subjectHrf]);
+  await page.evaluate(() => globalThis.neurodeskAutomation.dispatch("start", { operation: "rc", parameters: { preset: "example-revcor" } }));
+  await finished().toBe("succeeded");
+  const report = await page.evaluate(async () => (await globalThis.neurodeskAutomation.dispatch("snapshot")).report);
+  expect(report.provenance.method).toBe("samsrf-rc");
+  expect(report.provenance.model.Hrf).toBe("hrf_subject");
+  await expect(page.locator("#hrf")).toHaveValue("subject");
+  const zipped = page.waitForEvent("download");
+  await page.locator("#downloadAll").click();
+  const entries = unzipSync(readFileSync(await (await zipped).path()));
+  const inputs = readAnalysisInputs({ runs: paths.runs, roi, apertures: paths.apertures[0], subjectHrf, hemisphere: "lh" });
+  const job = createJob(analysisSpec(inputs, "rc", report.provenance.model));
+  let expected;
+  try {
+    expected = exportGiis(runJob(job).maps, `lh_${job.modelName}${job.outSuffix}`, null, report.provenance.model.Export_Convention);
+  } finally {
+    job.free();
+  }
+  for (const { name, bytes } of expected) expect(Buffer.from(entries[name]).equals(Buffer.from(bytes)), `${name} equals the package's map`).toBe(true);
+  expect(giftiMap(entries["lh_pRF_Rcp_r^2.gii"]).filter(value => value > 0).length).toBeGreaterThan(0);
+});
+
 /** Run each (analysis, precision) in the app on part of the example and require every downloaded map to equal the package's in-process job. */
 /** A path to an example file, written from Hugging Face unless SAMSRF_EXAMPLE_DIR has it. */
 async function examplePath(testInfo, name) {
@@ -509,7 +554,7 @@ async function downloadsEqualInProcessJobs(page, testInfo, runs, { subjectHrf } 
   for (const [analysis, precision] of runs) {
     const inputs = readAnalysisInputs({
       runs: paths.runs, roi, seed: paths.seed[0], apertures: paths.apertures[0], template: paths.template[0],
-      white: paths.surfaces[0], area: paths.surfaces[1], hemisphere: "lh", precision,
+      white: paths.surfaces[0], area: paths.surfaces[1], subjectHrf: analysis === "cf" ? null : subjectHrf ?? null, hemisphere: "lh", precision,
     });
     await page.locator("#analysis").selectOption(analysis);
     for (const role of roles[analysis]) await page.locator(`#${role}Input`).setInputFiles(paths[role]);
@@ -530,8 +575,9 @@ async function downloadsEqualInProcessJobs(page, testInfo, runs, { subjectHrf } 
     const zipped = page.waitForEvent("download");
     await page.locator("#downloadAll").click();
     const entries = unzipSync(readFileSync(await (await zipped).path()));
+    // With a subject HRF fit, the spec carries the kernel the samsrf command line's --hrf builds.
     const spec = analysisSpec(inputs, analysis, model);
-    if (subjectHrf) spec.hrf = hrf.oldSchool(model.TR, readOldSchoolHrf(readFileSync(subjectHrf)));
+    if (subjectHrf) expect(spec.hrf).toBeInstanceOf(Float64Array);
     const job = createJob(spec);
     const prefix = `lh_${job.modelName}${job.outSuffix}`;
     let expected;

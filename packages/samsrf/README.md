@@ -104,6 +104,7 @@ All readers take the file's bytes as a `Uint8Array`.
 | `readAnatomy({ white, pial, inflated, sphere, curv, area, thickness? }) → { white, pial, inflated, sphere, curvature, area, thickness, normals }` | A FreeSurfer `surf` folder for one hemisphere. `white` is a mesh, the others `Float64Array`s; `thickness` is `null` when not given; `normals` is pial minus white. Every file must have the white surface's vertex count. |
 | `readMat(bytes) → { [name]: { class, dims, data } }` | The numeric variables of a MAT v5 file. `class` is the MATLAB class name; `data` is a column-major `Float64Array`. Character, cell and struct variables are skipped; v7.3 files are refused. |
 | `readOldSchoolHrf(bytes) → Float64Array` | The four `fP` values of an old-school `hrf_*.mat` fit. |
+| `subjectHrfKernel(model, fP) → Float64Array` | The kernel of the subject HRF fit a model's `Hrf` names (`hrf_*`, any case): `hrf.oldSchool(model.TR, fP)`, for `createJob`'s `spec.hrf`. Throws when `Hrf` names no subject fit. The web app and the command line both build the kernel with it. |
 
 ### Apertures
 
@@ -248,12 +249,18 @@ re-exports the whole API, plus:
 | `readLabelFile(path)` | `readFreeSurferLabel` on a file. |
 | `readAnatomyFolder(dir, hemisphere)` | `readAnatomy` on `dir/<hemisphere>.white`, `.pial`, `.inflated`, `.sphere`, `.curv`, `.area` and, when present, `.thickness`. `hemisphere` is `'lh'` or `'rh'`. |
 | `preprocessRuns(paths, { keep, ...options }) → result` | Reads the runs one at a time into a `RunAccumulator`, freeing each, and returns `finish()`. |
-| `readAnalysisInputs({ runs, roi?, seed?, apertures?, template?, white?, area?, hemisphere?, normalise = 'zscore', combine = 'average', precision = 'double' }) → inputs` | Reads an analysis's files as the web app does: the runs preprocessed keeping the ROI and seed vertices (every vertex without `roi`), with the noise ceiling and global signal (`precision` is the model's `Data_Precision`); the serialised apertures; the Benson template (`x0` flipped for `'rh'`); the white surface and areas. Paths left out are `null`. |
-| `analysisSpec(inputs, kind, model, { roi }?) → spec` | The `createJob` spec for `kind` on `readAnalysisInputs` output. `model` is the JSON text or object; `roi` overrides the label's vertices. |
+| `readSubjectHrfFile(path) → Float64Array` | `readOldSchoolHrf` on a file named `hrf_*.mat`; refuses any other name and a missing file. |
+| `readAnalysisInputs({ runs, roi?, seed?, apertures?, template?, white?, area?, subjectHrf?, hemisphere?, normalise = 'zscore', combine = 'average', precision = 'double' }) → inputs` | Reads an analysis's files as the web app does: the runs preprocessed keeping the ROI and seed vertices (every vertex without `roi`), with the noise ceiling and global signal (`precision` is the model's `Data_Precision`); the serialised apertures; the Benson template (`x0` flipped for `'rh'`); the white surface and areas; the subject HRF fit's `fP` (`readSubjectHrfFile`, read before the runs). Paths left out are `null`. |
+| `analysisSpec(inputs, kind, model, { roi }?) → spec` | The `createJob` spec for `kind` on `readAnalysisInputs` output. `model` is the JSON text or object; `roi` overrides the label's vertices. With a subject HRF fit, `spec.hrf` is `subjectHrfKernel(model, fP)`. |
 | `runJob(job, shards = 1, onProgress?) → merged` | `job.run` over `[0, vertexCount)` in `shards` pieces in this thread, then `job.merge`. |
 | `shardRanges(total, shards) → [[start, end], ...]` | The ranges `runJob` and the command line split the vertices into. |
 
-Errors from `readRunFile`, `readAperturesFile` and `readLabelFile` start with the file's path.
+Errors from `readRunFile`, `readAperturesFile`, `readLabelFile` and `readSubjectHrfFile` start with the file's path.
+
+`@neurodesk/samsrf/inputs` holds the file-name rules the app and the command line share, without the
+module: `hemisphereOf`, `resolveHemisphere`, `compareRunNames`, and `isSubjectHrf(hrf)` (an `Hrf` that
+starts with `hrf_` in any case, as the engine's model parser reads it), `isSubjectHrfFile(path)`
+(`hrf_*.mat`) and `subjectHrfName(path)` (the `Hrf` that names a fit file).
 
 ## Command line
 
@@ -267,6 +274,8 @@ samsrf prf pRF_Gaussian.json results --runs lh_uBars*.gii --roi lh.V123.label \
   --apertures aps_Bars.mat --shards 8
 samsrf cf CF_Rcp.json results --runs lh_uBars*.gii --roi lh.V123.label \
   --seed lh.V1_seed.label --template lh_benson.gii --surf surf
+samsrf prf pRF_subject_hrf.json results --runs lh_uBars*.gii --roi lh.V123.label \
+  --apertures aps_Bars.mat --hrf hrf_fit.mat
 ```
 
 The first argument is the analysis (`prf`, `rc` or `cf`), then a SamSrf model
@@ -280,6 +289,7 @@ after `--runs` up to the next option is a run. The other options:
 | `--seed FILE`, `--template FILE` | Seed label and Benson template GIfTI; required by `cf`. |
 | `--surf DIR` | Reads `<hemisphere>.white` (for `Smoothing`) and `<hemisphere>.area` (for `cf`) from a FreeSurfer `surf` folder. `--white FILE` and `--area FILE` name them one by one. |
 | `--hemisphere NAME` | `lh`, `rh`, `bi` or `srf`. Inferred from matching FreeSurfer or BIDS names across runs, labels, template and anatomy. CF requires `lh` or `rh`; conflicting names are rejected. |
+| `--hrf FILE` | The subject HRF fit (`hrf_*.mat` holding `fP`) that the model's `Hrf` names, for `prf` and `rc`: `Hrf: "hrf_fit"` reads `hrf_fit.mat`. The kernel is `hrf.oldSchool(TR, fP)`, as the web app builds it, so the maps equal the app's. The command line refuses a file not named `hrf_*.mat`, a model whose `Hrf` names a fit without `--hrf`, `--hrf` with a model whose `Hrf` names none or another file, and `--hrf` with `cf`; a missing file, a file that is not a MAT file, and an `fP` that is missing or not four values stop the run before it reads the runs. It does not look for the file next to the model, and vertex-wise HRF maps (an `Hrf` naming any other file) stay refused. |
 | `--no-normalise` | Keeps each run as it is (`samsrf_gii2srf` with normalisation off); default detrend and z-score. |
 | `--concatenate` | Concatenates the runs; default average, with the noise ceiling for two or more runs. |
 | `--shards N` | Splits the vertices over N worker threads, each with its own module. The maps do not depend on N. |
@@ -289,7 +299,7 @@ vertices, so the noise ceiling is 0 outside them), runs the job with a progress
 line on standard error, and writes `exportGiis(maps,
 '<hemisphere>_<Name><suffix>')` (`lh_pRF_Rcp_r^2.gii`, ...) and
 `<prefix>_provenance.json`: the package and core versions, the model, the
-options, each input with its SHA-256, the analysed vertex count, the map names
+options, each input with its SHA-256 (the fit with role `subjectHrf`), the analysed vertex count, the map names
 and the wall time. Errors print one line on standard error, starting with the
 file they concern, and exit with status 1.
 
@@ -307,8 +317,8 @@ fixed file names, 134260 values per map and pinned counts of vertices with
 R^2 > 0.1. It downloads the pinned example from `apps/samsrf/examples.json`
 into a cache under the temporary directory, or reads it from
 `SAMSRF_WEBAPP_EXAMPLE_DIR` when the bytes match. `test/cli.test.js` covers the
-argument errors, `self-check` and, with `SAMSRF_WEBAPP_EXAMPLE_DIR`, a short
-sharded `rc` run.
+argument errors, `self-check`, `--hrf` runs and refusals and, with `SAMSRF_WEBAPP_EXAMPLE_DIR`, short
+sharded `rc` runs with and without a subject HRF fit.
 
 ## Comparing with MATLAB
 

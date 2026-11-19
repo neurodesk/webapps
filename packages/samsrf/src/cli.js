@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { Worker } from 'node:worker_threads';
-import { resolveHemisphere } from './inputs.js';
+import { isSubjectHrf, isSubjectHrfFile, resolveHemisphere, subjectHrfName } from './inputs.js';
 export { hemisphereOf } from './inputs.js';
 import {
   Apertures,
@@ -53,6 +53,8 @@ Inputs:
   --area FILE            Vertex areas (lh.area), for cf
   --hemisphere NAME      Hemisphere (lh, rh, bi or srf); inferred from matching
                          FreeSurfer/BIDS input names when omitted
+  --hrf FILE             Subject HRF fit (hrf_*.mat holding fP) that the model's
+                         Hrf names, e.g. Hrf "hrf_fit" reads hrf_fit.mat; prf and rc
 
 Preprocessing (samsrf_gii2srf):
   --no-normalise         Keep the raw time series (SamSrf -norm off); default
@@ -80,6 +82,7 @@ const OPTIONS = {
   white: { type: 'string' },
   area: { type: 'string' },
   hemisphere: { type: 'string' },
+  hrf: { type: 'string' },
   'no-normalise': { type: 'boolean' },
   concatenate: { type: 'boolean' },
   shards: { type: 'string' },
@@ -120,6 +123,8 @@ export function parseCommandLine(argv) {
   if (runs.length === 0) throw new Error('Give the functional runs with --runs.');
   if (command !== 'cf' && values.apertures === undefined) throw new Error(`${command} needs --apertures.`);
   if (command === 'cf' && (values.seed === undefined || values.template === undefined)) throw new Error('cf needs --seed and --template.');
+  if (command === 'cf' && values.hrf !== undefined) throw new Error('--hrf applies to prf and rc: connective fields have no HRF.');
+  if (values.hrf !== undefined && !isSubjectHrfFile(values.hrf)) throw new Error(`${values.hrf}: SamSrf reads a subject HRF fit from a file named hrf_*.mat.`);
   if (values.surf !== undefined && (values.white !== undefined || values.area !== undefined)) throw new Error('Give either --surf or --white and --area, not both.');
   if (values.hemisphere && !/^[A-Za-z0-9_-]+$/.test(values.hemisphere)) throw new Error(`--hemisphere must be a plain name such as lh or rh, not ${JSON.stringify(values.hemisphere)}.`);
   const hemisphere = resolveHemisphere([...runs, values.roi, values.seed, values.template, values.white, values.area], { hemisphere: values.hemisphere, required: command === 'cf' });
@@ -138,6 +143,7 @@ export function parseCommandLine(argv) {
     template: values.template ?? null,
     white: values.surf === undefined ? values.white ?? null : join(values.surf, `${hemisphere}.white`),
     area: values.surf === undefined ? values.area ?? null : join(values.surf, `${hemisphere}.area`),
+    subjectHrf: values.hrf ?? null,
     hemisphere,
     normalise: values['no-normalise'] ? 'none' : 'zscore',
     combine: values.concatenate ? 'concatenate' : 'average',
@@ -154,6 +160,14 @@ function readModel(path) {
   } catch (error) {
     throw new Error(`${path}: not a JSON model file (${error.message})`, { cause: error });
   }
+}
+
+// SamSrf loads the fit an hrf_* Hrf names; the command line takes it from --hrf and holds the two to each other.
+function checkSubjectHrf(path, model, subjectHrf) {
+  const named = isSubjectHrf(model.Hrf);
+  if (named && subjectHrf === null) throw new Error(`${path}: Hrf ${model.Hrf} names a subject HRF fit: give it with --hrf ${model.Hrf}.mat.`);
+  if (!named && subjectHrf !== null) throw new Error(`${path}: --hrf gives a subject HRF fit, but the model's Hrf is ${JSON.stringify(model.Hrf ?? null)}: set Hrf to "${subjectHrfName(subjectHrf)}" to use it.`);
+  if (named && model.Hrf !== subjectHrfName(subjectHrf)) throw new Error(`${path}: Hrf ${model.Hrf} names ${model.Hrf}.mat, but --hrf gives ${subjectHrfName(subjectHrf)}.mat.`);
 }
 
 // Checked before the analysis and created after it, so a failed run leaves nothing behind.
@@ -189,6 +203,7 @@ export async function analyse(options, { log = () => {}, progress = () => {} } =
   const started = performance.now();
   const model = readModel(options.model);
   const convention = exportConvention(model.json.Export_Convention);
+  if (options.kind !== 'cf') checkSubjectHrf(options.model, model.json, options.subjectHrf ?? null);
   checkOutput(options.output);
   log(`Reading and preprocessing ${options.runs.length} run${options.runs.length === 1 ? '' : 's'}`);
   const inputs = readAnalysisInputs({ ...options, precision: model.json.Data_Precision === 'single' ? 'single' : 'double', arithmeticReference: model.json.Arithmetic_Reference });
@@ -219,6 +234,7 @@ export async function analyse(options, { log = () => {}, progress = () => {} } =
       ...options.runs.map((path) => ['run', path]),
       ['roi', options.roi], ['apertures', options.apertures], ['seed', options.seed],
       ['template', options.template], ['white', options.white], ['area', options.area],
+      ['subjectHrf', options.subjectHrf ?? null],
     ].filter(([, path]) => path !== null);
     const provenance = {
       tool: 'samsrf',

@@ -19,7 +19,6 @@ import {
   createJob as createSamsrfJob,
   exportGiis,
   exportConvention,
-  hrf,
   init,
   polarAndEccentricity,
   readApertures,
@@ -31,9 +30,9 @@ import {
   readGiftiSurface,
   readOldSchoolHrf,
   RunAccumulator,
+  subjectHrfKernel,
 } from "@neurodesk/samsrf";
-import { resolveHemisphere } from "@neurodesk/samsrf/inputs";
-import { isSubjectHrf } from "./models.js";
+import { isSubjectHrf, resolveHemisphere } from "@neurodesk/samsrf/inputs";
 
 /** @typedef {import('./models.js').Analysis} Analysis */
 /** @typedef {import('./inputs.js').SurfaceRole} SurfaceRole */
@@ -129,8 +128,7 @@ export async function createJob(inputs, onProgress) {
     if (isSubjectHrf(inputs.model.Hrf)) {
       if (!inputs.subjectHrf) throw new Error(`Add the subject HRF ${inputs.model.Hrf}.mat.`);
       const fp = fromFile(inputs.subjectHrf, readOldSchoolHrf);
-      // The engine leaves file-backed HRFs to its caller; hrf.oldSchool is SamSrf's kernel from fP.
-      spec.hrf = hrf.oldSchool(inputs.model.TR, fp);
+      spec.hrf = subjectHrfKernel(inputs.model, fp);
       hrfLine = `Subject HRF ${inputs.subjectHrf.name}: fP ${[...fp].join(", ")}`;
     }
     spec.apertures = fromFile(inputs.apertures, (bytes) => {

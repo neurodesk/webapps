@@ -28,15 +28,13 @@ import {
   fineFit,
   hrfModel,
   hrfValue,
-  isSubjectHrf,
   parseModel,
   presetsFor,
   setFineFit,
-  subjectHrfName,
   withInputNames,
 } from "./models.js";
 import { classifyFile, describeSurfaces, displaySurface, emptyInputs, mergeInputs, missingInputs, sortFiles } from "./inputs.js";
-import { compareRunNames } from "@neurodesk/samsrf/inputs";
+import { compareRunNames, isSubjectHrf, isSubjectHrfFile, subjectHrfName } from "@neurodesk/samsrf/inputs";
 import { countShown, encodeOverlay, hemisphereOf, mapKind, mapLabel, mapOrder, mapStyle } from "./display.js";
 import examples from "../examples.json";
 
@@ -183,7 +181,7 @@ async function addFiles(filesPromise, only, generation = inputGeneration) {
 
 async function setInputs(next) {
   // A subject HRF fit that arrives is the HRF to use; the select can switch back.
-  if (next.subjectHrf && next.subjectHrf !== inputs.subjectHrf && analysis() !== "cf") model = { ...model, Hrf: subjectHrfName(next.subjectHrf) };
+  if (next.subjectHrf && next.subjectHrf !== inputs.subjectHrf && analysis() !== "cf") model = { ...model, Hrf: subjectHrfName(next.subjectHrf.name) };
   inputs = next;
   clearResult();
   renderInputs();
@@ -338,7 +336,7 @@ $("preset").addEventListener("change", () => {
 });
 $("tr").addEventListener("change", () => editModel((current) => ({ ...current, TR: settings().tr })));
 $("scalingFactor").addEventListener("change", () => editModel(current => changeScalingFactor(current, settings().scalingFactor, modelFromPreset ? presetId() : null)));
-$("hrf").addEventListener("change", () => editModel((current) => ({ ...current, Hrf: $("hrf").value === "subject" ? subjectHrfName(inputs.subjectHrf) : hrfModel($("hrf").value) })));
+$("hrf").addEventListener("change", () => editModel((current) => ({ ...current, Hrf: $("hrf").value === "subject" ? subjectHrfName(inputs.subjectHrf.name) : hrfModel($("hrf").value) })));
 $("fineFit").addEventListener("change", () => editModel((current) => setFineFit(current, $("fineFit").value, modelFromPreset ? PRESETS[presetId()] : null)));
 $("fineFitThreshold").addEventListener("change", () => editModel((current) => ({ ...current, Fine_Fit_Threshold: Number($("fineFitThreshold").value) })));
 $("coarseOnly").addEventListener("change", () => editModel((current) => {
@@ -615,6 +613,8 @@ function automationOperation(kind) {
     const next = emptyInputs();
     next.runs = [...given.runs];
     for (const slot of ["apertures", "roi", "template", "seed"]) next[slot] = given[slot]?.[0] ?? null;
+    if (kind !== "cf") next.subjectHrf = given.subjectHrf?.[0] ?? null;
+    if (next.subjectHrf && !isSubjectHrfFile(next.subjectHrf.name)) throw new Error(`${next.subjectHrf.name}: SamSrf reads a subject HRF fit from a file named hrf_*.mat.`);
     next.surfaces = sortFiles(given.surfaces ?? []).filled.surfaces ?? {};
     await setInputs(next);
     return runSelected(signal);

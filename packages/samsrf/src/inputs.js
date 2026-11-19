@@ -25,3 +25,22 @@ export function resolveHemisphere(names, { hemisphere, required = false } = {}) 
 export function compareRunNames(a, b) {
   return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
 }
+
+/**
+ * SamSrf reads an Hrf that starts with hrf_ (any case, as the engine's model parser does) as the name
+ * of a subject's old-school HRF fit, hrf_*.mat holding fP; any other name is a vertex-wise HRF map.
+ */
+export function isSubjectHrf(hrf) {
+  return typeof hrf === 'string' && /^hrf_/i.test(hrf);
+}
+
+/** Whether a file name (or path) is a subject HRF fit: hrf_*.mat. */
+export function isSubjectHrfFile(path) {
+  const name = path.split(/[\\/]/).pop();
+  return /\.mat$/i.test(name) && isSubjectHrf(name);
+}
+
+/** The Hrf a model gives to name a subject HRF fit file: its base name without .mat. */
+export function subjectHrfName(path) {
+  return path.split(/[\\/]/).pop().replace(/\.mat$/i, '');
+}
