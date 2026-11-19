@@ -439,8 +439,13 @@ The per-app checks read `SMOKE_APPS` (`scripts/lib/smoke-apps.mjs`), which
 `site_code` is the planner's answer to "does the change reach code the site
 jobs run?". Every reason that selects the site build counts, except data the
 per-app checks do not read: the composite-only site files, registry, app
-information and standalone entries, and the offline asset lock. A change to a
-check, a helper it imports or `scripts/build-site.mjs` checks every app.
+information and standalone entries, the offline asset lock, and the `site`
+keys of `registry/apps.yml` that no app page carries (`SITE_DATA_KEYS`: the
+hub, categories, analytics period, domain, and a catalogue's heading,
+description, hosting and desktop suite). A change to a check, a helper it
+imports, `scripts/build-site.mjs`, a site job of `ci.yml`, or a `site` key the
+composite build writes into every app page (a catalogue's id, host, title or
+brand, the analytics id) checks every app.
 Catalogue-level checks (landing page, catalogue sites, runtime assembly,
 artifact budgets, automation contracts) run whenever the site is built. A
 canary that is not a registered app of its shell, or a shell without a canary,
@@ -532,7 +537,9 @@ changes nothing (`CI_JOB_SCOPES` in `scripts/lib/app-plan.mjs`). It narrows only
 when the base and head have the same jobs and every job that needs a changed
 job, or that a changed job needs (the plan aside), at the base or the head, has
 the changed job's scope. Then a change confined to `composite-site` or a job
-that only consumes its build selects the site build; one confined to
+that only consumes its build (the five site checks, `processing-workflows`,
+`agent-interactions`, `example-cache-retention`) selects the site build, with
+its per-app checks over every app because it changes code they run; one confined to
 `homepage-easter-egg` runs the easter egg; and one confined to
 `workspace-contracts`, which runs on every run anyway, or to the `full-plan`
 markers selects nothing more. An added or removed
@@ -573,7 +580,7 @@ every app. `test/ci-required-jobs.test.mjs` runs twice per run, in `app-plan`
 (`pnpm check:integration`) and in `workspace-contracts` (`pnpm
 test:contracts`). It fails when a required job is missing, carries
 `continue-on-error`, runs under another condition or waits for other jobs than
-it pins, or has a run step that can be skipped other than the ten it lists,
+it pins, or has a run step that can be skipped other than the nine it lists,
 and when either guard step is missing, conditional or soft. It also fails when
 a required job needs a job that can be skipped on a run where the required job
 is due: it simulates every trigger of `ci.yml` (each event, pull request
@@ -581,6 +588,10 @@ action and draft state, dispatch scope and branch) with every value of the
 outputs the job and the jobs it waits for read. A job whose condition admits a
 skipped dependency with a status function (`!cancelled()`, `always()`) may
 need one; a condition the simulation cannot evaluate fails it.
+The five site checks and `processing-workflows` are required and state that
+they are due when the site was built (`needs.composite-site.result ==
+'success'`), which GitHub's implicit `success()` already demanded; a dispatch
+with `scope=affected` and no site in its plan skips them with the build.
 `example-cache-retention` may fail by design and is not required. A change
 that removes both guards is caught only by review and by the full plan it
 triggers: a change to the plan job or to a root script `ci.yml` runs selects
@@ -701,8 +712,9 @@ job that belongs to no app, such as the plan itself or a site job (it checked
 only the apps of its own run), a job of that attempt that has not finished, or
 an app id the registry does not know sends the push back to the last green run. A carried app runs all its jobs again, but a push
 leaves out `@slow` tests, so an app a nightly failed in a `@slow` test is
-retested in full only by the next nightly. Jobs only the nightly runs
-(`agent-interactions`) are not carried: the nightly runs them again. PR pushes cancel earlier runs
+retested in full only by the next nightly. The agentic jobs only the nightly
+or a dispatch runs (`agent-interactions`, `processing-workflows`) are not
+carried: the nightly runs the interactions again. PR pushes cancel earlier runs
 of the same PR. Schedule and manual runs keep their separate concurrency
 groups, and native release/signing conditions are unchanged.
 
