@@ -364,7 +364,7 @@ try {
     await page.evaluate(() => {
       globalThis.agentHold = document.modelContext.getTools().then(tools => document.modelContext.executeTool(tools.find(tool => tool.name === 'inputs_request_files'), { role: 'image' })).then(JSON.parse);
     });
-    await page.locator('dialog#neurodeskAgentPrompt input[type="file"]:not([webkitdirectory])').setInputFiles(scan('agent-B.nii.gz'));
+    await page.locator('dialog#neurodeskAgentPrompt[open] input[type="file"]:not([webkitdirectory])').setInputFiles(scan('agent-B.nii.gz'));
     assert.equal((await page.evaluate(() => globalThis.agentHold)).files?.[0].name, 'agent-B.nii.gz');
     const run = await call('run_binarize', { waitSeconds: 120 });
     assert.equal(run.report?.inputs.image[0].filename, 'agent-B.nii.gz', JSON.stringify(run.error));
@@ -403,7 +403,7 @@ try {
       await page.evaluate(() => {
         globalThis.agentHold = document.modelContext.getTools().then(tools => document.modelContext.executeTool(tools.find(tool => tool.name === 'inputs_request_files'), { role: 'image' })).then(JSON.parse);
       });
-      await page.locator('dialog#neurodeskAgentPrompt input[type="file"]:not([webkitdirectory])').setInputFiles(scan('agent-held.nii.gz'));
+      await page.locator('dialog#neurodeskAgentPrompt[open] input[type="file"]:not([webkitdirectory])').setInputFiles(scan('agent-held.nii.gz'));
       assert.ok((await page.evaluate(() => globalThis.agentHold)).files, 'the agent holds a file');
     };
     const state = async () => {
@@ -511,7 +511,7 @@ try {
     await page.evaluate(() => {
       globalThis.agentHold = document.modelContext.getTools().then(tools => document.modelContext.executeTool(tools.find(tool => tool.name === 'inputs_request_files'), { role: 'image' })).then(JSON.parse);
     });
-    await page.locator('dialog#neurodeskAgentPrompt input[type="file"]:not([webkitdirectory])').setInputFiles(scan(name));
+    await page.locator('dialog#neurodeskAgentPrompt[open] input[type="file"]:not([webkitdirectory])').setInputFiles(scan(name));
     assert.ok((await page.evaluate(() => globalThis.agentHold)).files, 'the agent holds a file');
     const run = await call('run_binarize', { waitSeconds: 120 });
     assert.equal(run.state, 'succeeded', JSON.stringify(run.error));
@@ -620,7 +620,7 @@ try {
     await page.evaluate(() => {
       globalThis.agentHold = document.modelContext.getTools().then(tools => document.modelContext.executeTool(tools.find(tool => tool.name === 'inputs_request_files'), { role: 'image' })).then(JSON.parse);
     });
-    await page.locator('dialog#neurodeskAgentPrompt input[type="file"]:not([webkitdirectory])').setInputFiles(scan('second-agent.nii.gz'));
+    await page.locator('dialog#neurodeskAgentPrompt[open] input[type="file"]:not([webkitdirectory])').setInputFiles(scan('second-agent.nii.gz'));
     assert.ok((await page.evaluate(() => globalThis.agentHold)).files);
     const [x, y] = await centreOf(page, '#gl');
     await page.mouse.click(x, y);
@@ -667,7 +667,7 @@ try {
     await page.evaluate(() => {
       globalThis.agentHold = document.modelContext.getTools().then(tools => document.modelContext.executeTool(tools.find(tool => tool.name === 'inputs_request_files'), { role: 'stacks' })).then(JSON.parse);
     });
-    await page.locator('dialog#neurodeskAgentPrompt input[type="file"]:not([webkitdirectory])').first().setInputFiles(scan('agent-stack.nii.gz'));
+    await page.locator('dialog#neurodeskAgentPrompt[open] input[type="file"]:not([webkitdirectory])').first().setInputFiles(scan('agent-stack.nii.gz'));
     assert.ok((await page.evaluate(() => globalThis.agentHold)).files);
     await remove.click();
     await remove.waitFor({ state: 'detached' });
@@ -694,7 +694,7 @@ try {
       await page.evaluate(() => {
         globalThis.agentHold = document.modelContext.getTools().then(tools => document.modelContext.executeTool(tools.find(tool => tool.name === 'inputs_request_files'), { role: 'image' })).then(JSON.parse);
       });
-      await page.locator('dialog#neurodeskAgentPrompt input[type="file"]:not([webkitdirectory])').setInputFiles(scan('held.nii.gz'));
+      await page.locator('dialog#neurodeskAgentPrompt[open] input[type="file"]:not([webkitdirectory])').setInputFiles(scan('held.nii.gz'));
       assert.ok((await page.evaluate(() => globalThis.agentHold)).files);
       await page.evaluate(() => {
         const frame = document.createElement('iframe');
@@ -730,7 +730,7 @@ try {
     await page.evaluate(() => {
       globalThis.agentHold = document.modelContext.getTools().then(tools => document.modelContext.executeTool(tools.find(tool => tool.name === 'inputs_request_files'), { role: 'image' })).then(JSON.parse);
     });
-    await page.locator('dialog#neurodeskAgentPrompt input[type="file"]:not([webkitdirectory])').setInputFiles(scan('agent-scan.nii.gz'));
+    await page.locator('dialog#neurodeskAgentPrompt[open] input[type="file"]:not([webkitdirectory])').setInputFiles(scan('agent-scan.nii.gz'));
     assert.ok((await page.evaluate(() => globalThis.agentHold)).files);
     const run = await call('run_binarize', { waitSeconds: 120 });
     assert.equal(run.state, 'succeeded', JSON.stringify(run.error));
@@ -840,7 +840,7 @@ try {
     await page.mouse.click(x, y);
     assert.equal((await call('app_describe')).touched, true);
     const request = await start('inputs_request_files', { role: 'image' });
-    const fileInput = dialog.locator('input[type="file"]:not([webkitdirectory])');
+    const fileInput = page.locator('dialog#neurodeskAgentPrompt[open] input[type="file"]:not([webkitdirectory])');
     await fileInput.waitFor();
     const resume = await start('runs_get', { runId: run.runId });
     await page.waitForTimeout(500);
