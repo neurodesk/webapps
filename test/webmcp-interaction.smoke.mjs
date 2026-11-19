@@ -9,7 +9,7 @@
 // The actions: a pick in each classified file and folder input, a click on each remove or clear button,
 // and each visible select, checkbox, text field and canvas, at most WEBMCP_INTERACTION_MAX per app (40;
 // the report gives how many were found). They are listed once the app is ready: its tools registered,
-// its example selectors filled, and its page quiet. An action that could not be performed, an app where
+// its example selectors filled and enabled, no run going, and its page quiet. An action that could not be performed, an app where
 // none was, and an app with no file role (the agent holds no file there) fail unless
 // test/webmcp-interaction-skips.json names them with the reason.
 //
@@ -62,24 +62,28 @@ async function tools(page) {
   }
 }
 
-// The app is ready to be listed: its example selectors hold their examples and nothing has changed in the
-// page for a second. Returns what did not settle, if anything, for the report.
-function ready(page) {
-  return page.evaluate(() => new Promise(resolve => {
-    const deadline = Date.now() + 30000;
+// The app is ready to be listed: its example selectors hold their examples and are enabled (an app
+// disables them while it loads or works), no run shows a cancel × in the status bar, and nothing has
+// changed in the page for a second. Returns what did not settle, if anything, for the report.
+function ready(page, seconds = 60) {
+  return page.evaluate(seconds => new Promise(resolve => {
+    const deadline = Date.now() + seconds * 1000;
     let quietSince = Date.now();
     const observer = new MutationObserver(() => { quietSince = Date.now(); });
     observer.observe(document, { subtree: true, childList: true, attributes: true });
     const poll = () => {
-      const empty = [...document.querySelectorAll('nd-example-selector')].filter(selector => selector.isConnected && !selector.examples?.length);
-      const settled = !empty.length && Date.now() - quietSince >= 1000;
+      const selectors = [...document.querySelectorAll('nd-example-selector')].filter(selector => selector.isConnected && !selector.closest('#neurodeskAgentPrompt'));
+      const empty = selectors.filter(selector => !selector.examples?.length);
+      const disabled = selectors.filter(selector => selector.disabled);
+      const busy = [...document.querySelectorAll('footer#status button')].some(button => button.checkVisibility?.() && !button.disabled);
+      const settled = !empty.length && !disabled.length && !busy && Date.now() - quietSince >= 1000;
       if (settled || Date.now() > deadline) {
         observer.disconnect();
-        resolve(settled ? null : `not settled after 30 s (${empty.length} example selector(s) without examples)`);
+        resolve(settled ? null : `not settled after ${seconds} s (${empty.length} example selector(s) without examples, ${disabled.length} disabled${busy ? ', a run going' : ''})`);
       } else setTimeout(poll, 100);
     };
     poll();
-  }));
+  }), seconds);
 }
 
 const call = (page, name, input = {}) => page.evaluate(async ([name, input]) => {
@@ -255,7 +259,7 @@ async function attempt(context, page, app, target, run, action, outcome) {
   // the page to settle rather than a fixed time.
   await page.waitForLoadState('domcontentloaded').catch(() => {});
   if (!page.url().startsWith(`${origin}/${app.path}/`)) return 'navigated away';
-  await ready(page);
+  await ready(page, 10);
   const predicted = await page.evaluate(() => {
     globalThis.interactionPrediction.stop();
     return globalThis.interactionPrediction.outcome;

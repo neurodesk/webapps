@@ -1084,9 +1084,10 @@ test('a question queued behind another is dropped, never shown, once the person 
   const queued = ask('Queued question');
   while (!shown.length) await new Promise(resolve => setTimeout(resolve, 5));
   registration.reset();
-  assert.equal((await first).error?.code, 'EXAMINATION_CHANGED');
-  assert.equal((await queued).error?.code, 'EXAMINATION_CHANGED');
-  await new Promise(resolve => setTimeout(resolve, 20));
+  // A question that the reset does not close or drop stays open for an answer that never comes.
+  const pending = new Promise(resolve => { setTimeout(() => resolve({ error: { code: 'STILL OPEN OR QUEUED' } }), 2000); });
+  assert.equal((await Promise.race([first, pending])).error?.code, 'EXAMINATION_CHANGED');
+  assert.equal((await Promise.race([queued, pending])).error?.code, 'EXAMINATION_CHANGED');
   assert.deepEqual(shown, ['First question'], 'the queued question never reached the person');
 });
 
