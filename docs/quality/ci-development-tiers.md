@@ -558,6 +558,42 @@ What only a real queue can show: that `merge_group.base_sha` is the base the
 queue builds on, that the queued commit lands on `main` with the same SHA, that
 the queue reads `ci-required` from the `merge_group` run, and the wait it adds.
 
+### Parked: open problems before any rule requires `ci-required`
+
+This branch is parked: with one entry per queue run it adds about 12% runner
+minutes over the 12 pushes of 16 to 18 November 2026, and nothing uses
+`ci-required` until a ruleset requires it. An independent review of PR #898
+(head 64f151af3) found that `ci-required` does not yet mean "the ready run of
+this head was green". Fix each before a ruleset requires it:
+
+1. A matrix job's `needs.<job>.result` can read `success` while one leg was
+   `cancelled` (a macOS leg that never got a runner). Only the jobs API shows
+   the leg. Fix: verify every matrix leg's conclusion through the jobs API of
+   the run, not `needs`.
+2. A draft run and a ready run publish the same check name on the same head
+   SHA, so a green draft `ci-required` can satisfy a ruleset while the ready
+   run is still testing; a run skipped by `converted_to_draft` reports a
+   skipped check, which a ruleset counts as passing. Fix: publish draft
+   feedback under another check name, and prove that conversion to draft and
+   re-runs on the same SHA cannot leave an old green result eligible.
+3. "Skipped" is accepted without knowing which jobs were due, so a job skipped
+   unexpectedly passes: a deleted planner output reads as empty,
+   `continue-on-error` on `full-plan-withheld` hides the withheld plan, a due
+   job skipped through `!cancelled()`. Fix: derive the set of due jobs from the
+   planner's outputs and require `success` for each of them.
+4. The aggregate adds a job to every run, so a 99-job plan reached 100 jobs,
+   the whole-catalogue threshold (`LARGE_RUN_JOBS` in
+   `scripts/lib/ci-usage.mjs`), and the full-plan budget withheld the next
+   full plan. Fix: leave the aggregate (and any plan-only job) out of every
+   job-count threshold.
+5. The Rulesets API has rejected the built-in GitHub Actions integration as a
+   bypass actor, so the bypass for `standalone-catalog.yml`'s direct pushes to
+   `main` cannot be relied on. Fix: give the publisher a supported identity
+   (a GitHub App token that can be a bypass actor) or a pull request path
+   before any rule is turned on.
+
+The same holds for a queue: the ruleset's required check is `ci-required`.
+
 ## Heavy browser tests
 
 In a whole-catalogue run on 15 November 2026 the CPU browser jobs spent 359
