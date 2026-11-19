@@ -16,10 +16,14 @@ const types = {
   string: value => typeof value === 'string',
   boolean: value => typeof value === 'boolean',
   number: value => typeof value === 'number' && Number.isFinite(value),
-  integer: value => Number.isInteger(value),
+  integer: value => Number.isSafeInteger(value),
 };
-// Decimal steps such as 0.1 are not exact in binary, so a quotient within rounding of an integer passes.
-const multiple = (value, step) => Math.abs(value / step - Math.round(value / step)) < 1e-9;
+// The page checks run parameters with zod (automation/parameters.js), so a step is checked as zod's
+// floatSafeRemainder checks it: the quotient within four scaled epsilons of an integer.
+function multiple(value, step) {
+  const ratio = value / step;
+  return Math.abs(ratio - Math.round(ratio)) < 4 * Number.EPSILON * Math.max(Math.abs(ratio), 1);
+}
 
 function uri(value) {
   try {
@@ -31,7 +35,7 @@ function uri(value) {
 
 /** The ways `value` breaks `schema`, one sentence each with the path; empty when it conforms. */
 export function schemaIssues(schema, value, path = 'input') {
-  if (schema.type && !types[schema.type](value)) return [`${path} must be ${schema.type === 'integer' ? 'an integer' : `${schema.type === 'array' || schema.type === 'object' ? 'an' : 'a'} ${schema.type}`}`];
+  if (schema.type && !types[schema.type](value)) return [`${path} must be ${schema.type === 'integer' ? 'a safe integer' : `${schema.type === 'array' || schema.type === 'object' ? 'an' : 'a'} ${schema.type}`}`];
   if (schema.enum && !schema.enum.some(option => option === value)) return [`${path} must be one of ${schema.enum.map(option => JSON.stringify(option)).join(', ')}`];
   const issues = [];
   if (typeof value === 'number') {
@@ -52,8 +56,7 @@ export function schemaIssues(schema, value, path = 'input') {
   if (isObject(value)) {
     for (const key of schema.required ?? []) if (!Object.hasOwn(value, key)) issues.push(`${path}.${key} is required`);
     for (const [key, item] of Object.entries(value)) {
-      const property = schema.properties?.[key];
-      if (property) issues.push(...schemaIssues(property, item, `${path}.${key}`));
+      if (schema.properties && Object.hasOwn(schema.properties, key)) issues.push(...schemaIssues(schema.properties[key], item, `${path}.${key}`));
       else if (schema.additionalProperties === false) issues.push(`${path}.${key} is not a known field`);
     }
   }

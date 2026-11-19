@@ -852,6 +852,15 @@ class QSMApp {
     });
   }
 
+  // The shared page drop and a browser agent's tools read each input's list from nd-files, which
+  // follow removals and the drop zone's loads that never pass through the inputs.
+  _reportPageFiles() {
+    const io = this.fileIOController;
+    const report = (id, items) => document.getElementById(id)?.dispatchEvent(new CustomEvent('nd-files', { bubbles: true, detail: { files: items.map(item => item.file) } }));
+    report('unifiedFiles', Object.values(io.buckets).flat());
+    report('maskFiles', io.maskFile);
+  }
+
   /**
    * Set up the unified drop zone for all file types (NIfTI, DICOM, JSON).
    */
@@ -992,6 +1001,7 @@ class QSMApp {
    * Replaces scattered switchInputMode/updateEchoInfo calls.
    */
   _onBucketsChanged(changeType) {
+    this._reportPageFiles();
     if (this.maskAlignmentActive && (this.maskAlignmentSession?.reference !== this.getMaskReferenceFile()
         || this.maskAlignmentSession?.file !== this.fileIOController.getMaskFile())) this.resetMaskAlignmentRepair();
     // Render file triage UI

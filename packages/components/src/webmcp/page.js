@@ -32,16 +32,23 @@ function pageExamples(doc) {
  * automation. The shell imports this module only when the browser exposes a model context.
  */
 export async function exposeWebMcp(modelContext, doc = globalThis.document) {
-  const automation = await pageAutomation(doc.defaultView);
+  const view = doc.defaultView;
+  // The examination starts before the app registers, so the person's first actions are seen too.
+  const inputs = createToolInputs({ doc, automation: {
+    running: () => view.neurodeskAutomation?.running() ?? false,
+    adopt: (role, files) => view.neurodeskAutomation.adopt(role, files),
+  } });
+  const automation = await pageAutomation(view);
   const contract = await automation.dispatch('describe');
   const prompts = createAgentPrompts(doc);
   const tools = webMcpTools({
     contract,
     dispatch: automation.dispatch,
-    inputs: createToolInputs({ doc, automation }),
+    inputs,
     examples: pageExamples(doc),
     askUser: prompts.ask,
     requestFiles: prompts.requestFiles,
+    confirmFiles: prompts.confirmFiles,
     confirmFetch: prompts.confirmFetch,
   });
   return registerWebMcpTools(modelContext, tools);

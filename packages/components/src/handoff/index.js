@@ -254,8 +254,10 @@ export async function takeHandoff({ document = globalThis.document, signal } = {
   try {
     const files = await Promise.all(entry.files.map((file) => copyOut(file, signal)));
     signal?.throwIfAborted();
-    // The page now shows what another app sent; a browser agent's held files belong to what it showed before.
-    document.dispatchEvent(new window.CustomEvent('nd-handoff', { detail: { source: entry.source } }));
+    // The page now shows what another app sent: a browser agent's tools (webmcp/tool-inputs.js) start a
+    // new examination and list the files, from the event or, when they load later, from the window.
+    window[Symbol.for('neurodesk.handoff')] = { source: entry.source, files };
+    document.dispatchEvent(new window.CustomEvent('nd-handoff', { detail: { source: entry.source, files } }));
     return { source: entry.source, files };
   } catch (error) {
     if (signal?.aborted) throw signal.reason;

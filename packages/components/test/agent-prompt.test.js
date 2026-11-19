@@ -129,7 +129,8 @@ test('a fetch approval names the app and every address, resolved, and only Allow
   const prompts = createAgentPrompts(document);
   const asked = prompts.confirmFetch({ app: 'Brain Extraction', addresses: ['https://elsewhere.test/scan.nii.gz', 'tables/atlas.json'] });
   await tick();
-  assert.match(dialog(document).textContent, /Let Brain Extraction load these addresses into the page\?/);
+  assert.match(dialog(document).textContent, /Let Brain Extraction load the files at these addresses into the page\?/);
+  assert.match(dialog(document).textContent, /nothing they redirect to\. The servers at https:\/\/elsewhere\.test, https:\/\/apps\.test see the request/);
   const shown = [...dialog(document).querySelectorAll('code')].map(code => code.textContent);
   assert.deepEqual(shown, ['https://elsewhere.test/scan.nii.gz', 'https://apps.test/brain-extraction/tables/atlas.json']);
   press(document, 'Allow');
@@ -142,4 +143,29 @@ test('a fetch approval names the app and every address, resolved, and only Allow
   await tick();
   dialog(document).close();
   assert.equal(await closed, false);
+});
+
+test('a store approval says the app also reads the addresses under it, and which server sees them', async () => {
+  const document = page('https://apps.test/zarro/');
+  const asked = createAgentPrompts(document).confirmFetch({ app: 'ZARRo', addresses: ['https://data.test/brain.ome.zarr'], readsUnder: true });
+  await tick();
+  assert.match(dialog(document).textContent, /Let ZARRo read the data at this address\?/);
+  assert.match(dialog(document).textContent, /ZARRo also reads the addresses under it, such as a store's chunks\. The server at https:\/\/data\.test sees every request\./);
+  press(document, 'Allow');
+  assert.equal(await asked, true);
+});
+
+test('confirming page files lists them and only Allow approves', async () => {
+  const document = page();
+  const prompts = createAgentPrompts(document);
+  const asked = prompts.confirmFiles({ app: 'NiiMath', label: 'Choose NIfTI files', files: [{ name: 'exam-a.nii.gz', bytes: 4 }] });
+  await tick();
+  assert.match(dialog(document).textContent, /Let the agent run NiiMath on the files loaded in Choose NIfTI files\?/);
+  assert.deepEqual([...dialog(document).querySelectorAll('li')].map(item => item.textContent), ['exam-a.nii.gz']);
+  press(document, 'Decline');
+  assert.equal(await asked, false);
+  const allowed = prompts.confirmFiles({ app: 'NiiMath', label: 'Choose NIfTI files', files: [{ name: 'exam-a.nii.gz', bytes: 4 }] });
+  await tick();
+  press(document, 'Allow');
+  assert.equal(await allowed, true);
 });

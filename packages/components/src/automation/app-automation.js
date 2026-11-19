@@ -169,12 +169,24 @@ export function registerAppAutomation({ app, operations, convertDicom, contractU
     return { role, count: files.length };
   }
 
+  // A command that names a run acts only while that run is the current one, checked here so that no
+  // other command can start a run between the check and the act.
+  function bound(request) {
+    if (request.runId !== undefined && request.runId !== snapshot.runId) {
+      throw Object.assign(new Error(`Run ${request.runId} is not the current run; its outputs are gone`), { code: 'RUN_NOT_CURRENT', current: snapshot.runId });
+    }
+  }
+
   async function dispatch(command, request = {}) {
     await ready;
     if (!object(request)) throw new Error('Automation command arguments must be an object');
     if (command === 'describe') return copy(contract);
-    if (command === 'snapshot') return copy(snapshot);
+    if (command === 'snapshot') {
+      bound(request);
+      return copy(snapshot);
+    }
     if (command === 'cancel') {
+      bound(request);
       if (!active || terminal.has(snapshot.state)) return { cancelled: false };
       artifacts.clear();
       snapshot = { ...snapshot, state: 'cancelled' };
@@ -206,7 +218,7 @@ export function registerAppAutomation({ app, operations, convertDicom, contractU
       return { runId: run.id, state: 'running' };
     }
     if (command === 'download') {
-      if (request.runId !== undefined && request.runId !== snapshot.runId) throw new Error(`Run ${request.runId} is not the current run; its outputs are gone`);
+      bound(request);
       if (snapshot.state !== 'succeeded' || !artifacts.has(request.artifactId)) throw new Error('The requested completed artifact is unavailable');
       await download(artifacts.get(request.artifactId));
       return { artifactId: request.artifactId };
