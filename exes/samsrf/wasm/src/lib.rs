@@ -556,6 +556,7 @@ fn optional_u32s(values: Option<&[u32]>) -> JsValue {
 #[wasm_bindgen]
 impl RunAccumulator {
     #[wasm_bindgen(constructor)]
+    #[allow(clippy::too_many_arguments)] // Positional wasm-bindgen ABI; the JS wrapper takes an options object.
     pub fn new(
         total_vertices: usize,
         keep: Option<Vec<u32>>,
@@ -564,6 +565,7 @@ impl RunAccumulator {
         noise_ceiling: bool,
         global_signal: bool,
         precision: Option<String>,
+        arithmetic_reference: Option<String>,
     ) -> Result<RunAccumulator> {
         let normalise = match normalise {
             "none" => Normalise::None,
@@ -583,7 +585,8 @@ impl RunAccumulator {
             Some(other) => return Err(JsError::new(&format!("precision {other:?} is not 'double' or 'single'"))),
         };
         let options = PreprocessOptions { normalise, combine, global_signal, precision };
-        Ok(RunAccumulator { inner: Some(preprocess::RunAccumulator::new(total_vertices, kept, options)) })
+        let reference = samsrf_core::arithmetic::ArithmeticReference::parse(arithmetic_reference.as_deref().unwrap_or("current")).map_err(fail)?;
+        Ok(RunAccumulator { inner: Some(preprocess::RunAccumulator::with_reference(total_vertices, kept, options, reference).map_err(fail)?) })
     }
 
     #[wasm_bindgen(js_name = pushRun)]
@@ -592,7 +595,7 @@ impl RunAccumulator {
     }
 
     pub fn finish(&mut self) -> Result<JsValue> {
-        let Preprocessed { kept, total_vertices, runs, data, noise_ceiling, global_signal } =
+        let Preprocessed { arithmetic_reference, kept, total_vertices, runs, data, noise_ceiling, global_signal } =
             self.inner.take().ok_or_else(finished)?.finish().map_err(fail)?;
         let kept = match &kept {
             VertexSelection::All => JsValue::NULL,
@@ -607,6 +610,7 @@ impl RunAccumulator {
             ("data", f64s(&data.data)),
             ("noiseCeiling", noise_ceiling.as_deref().map_or(JsValue::NULL, f64s)),
             ("globalSignal", global_signal.as_deref().map_or(JsValue::NULL, f64s)),
+            ("arithmeticReference", JsValue::from_str(arithmetic_reference.name())),
         ]))
     }
 }
@@ -743,6 +747,7 @@ pub fn create_job(
     seed_fine_fit_data: Option<Vec<f64>>,
     total_vertices: usize,
     progress: Option<js_sys::Function>,
+    preprocessing_reference: Option<String>,
 ) -> Result<Job> {
     let analysis = AnalysisKind::parse(kind).ok_or_else(|| JsError::new(&format!("analysis kind {kind:?} is not 'prf', 'rc' or 'cf'")))?;
     let model = model::parse_model_json(analysis, model_json).map_err(fail)?;
@@ -773,7 +778,8 @@ pub fn create_job(
         (None, None) => None,
         _ => return Err(shape("seed fine-fit maps need values and data".into())),
     };
-    let inputs = job::JobInputs { model, apertures, hrf, data, kept, roi, noise_ceiling, global_signal, seed, surface, area, seed_fine_fit, total_vertices };
+    let preprocessing_reference = samsrf_core::arithmetic::ArithmeticReference::parse(preprocessing_reference.as_deref().unwrap_or("current")).map_err(fail)?;
+    let inputs = job::JobInputs { preprocessing_reference, model, apertures, hrf, data, kept, roi, noise_ceiling, global_signal, seed, surface, area, seed_fine_fit, total_vertices };
     let inner = job::Job::prepare(inputs, &mut |done, total| call_progress(&progress, done, total)).map_err(fail)?;
     Ok(Job { inner })
 }
@@ -804,6 +810,9 @@ impl Job {
         self.inner.model_name().to_string()
     }
 
+    #[wasm_bindgen(getter, js_name = arithmeticReference)]
+    pub fn arithmetic_reference(&self) -> String { self.inner.arithmetic_reference().name().to_string() }
+
     pub fn run(&self, start: usize, end: usize, progress: Option<js_sys::Function>) -> Result<Vec<u8>> {
         let total = end.saturating_sub(start);
         let partial = self.inner.run(start, end, &mut |done| call_progress(&progress, done, total)).map_err(fail)?;
@@ -823,6 +832,7 @@ impl Job {
         };
         Ok(object(vec![
             ("maps", maps_object(&set.maps)),
+            ("arithmeticReference", JsValue::from_str(self.inner.arithmetic_reference().name())),
             ("raw", set.raw.as_ref().map_or(JsValue::NULL, maps_object)),
             ("analysed", analysed),
             ("imaginary", set.imaginary.as_deref().map_or(JsValue::NULL, f64s)),

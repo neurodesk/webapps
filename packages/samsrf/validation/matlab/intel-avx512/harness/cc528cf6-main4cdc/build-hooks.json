@@ -1,0 +1,23 @@
+{
+  "variant": "hooks",
+  "arithmeticReference": "shipped (MKL CNR auto)",
+  "checkout": {
+    "head": "f04a24e8de4920fbdbe475cd3d6f5ca36902032b",
+    "clean": true
+  },
+  "patches": {
+    "hooks.patch": "02c47d6960f1d6ed3e2712ca1a894822db1c649f770f4157359fc59bf3a424d6"
+  },
+  "copied": {
+    "native/css_pipelines.rs": "213d75b1cfb94c9e773ba25b19efb43fbe0b9c51770570ab51a7e5383dbe5aa8",
+    "run_web_matrix.mjs": "ef5d5a98cd68921fed0efa3ae1809905daa7a3144f9b853de965f45dabf9ca5a"
+  },
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8",
+  "wasmPack": "wasm-pack 0.13.1",
+  "wasmOpt": "not run",
+  "module": {
+    "samsrf_wasm.js": "77bcee20ea153ea336b33a561e43767b2b3954092f0d4d65defe8e95205696c4",
+    "samsrf_wasm_bg.wasm": "a45502069e5dd16843ebce3d4780eeaf5bc5e97a4a0f1446bf4071aca2132d43",
+    "samsrf_wasm.d.ts": "dbef50c13cc36e9d499d5716b833b3a0f47619264f2057035ea501709ccbddaa"
+  }
+}

@@ -191,7 +191,7 @@ export async function analyse(options, { log = () => {}, progress = () => {} } =
   const convention = exportConvention(model.json.Export_Convention);
   checkOutput(options.output);
   log(`Reading and preprocessing ${options.runs.length} run${options.runs.length === 1 ? '' : 's'}`);
-  const inputs = readAnalysisInputs({ ...options, precision: model.json.Data_Precision === 'single' ? 'single' : 'double' });
+  const inputs = readAnalysisInputs({ ...options, precision: model.json.Data_Precision === 'single' ? 'single' : 'double', arithmeticReference: model.json.Arithmetic_Reference });
   const spec = analysisSpec(inputs, options.kind, model.text);
   log(options.kind === 'prf' ? 'Generating the search space' : `Preparing the ${options.kind} analysis`);
   let job;
@@ -228,6 +228,7 @@ export async function analyse(options, { log = () => {}, progress = () => {} } =
       analysis: options.kind,
       model: model.json,
       exportConvention: convention,
+      arithmeticReference: merged.arithmeticReference,
       options: { hemisphere: options.hemisphere, normalise: options.normalise, combine: options.combine, shards: options.shards },
       inputs: inputFiles.map(([role, path]) => ({ role, path, sha256: sha256(readFileSync(path)) })),
       analysedVertices: total,

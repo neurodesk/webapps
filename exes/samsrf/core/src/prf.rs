@@ -397,6 +397,23 @@ pub fn errfun_with_convention(
     precision: Precision,
     css_convention: crate::css::Convention,
 ) -> Result<num_complex::Complex64> {
+    errfun_with_reference(prf_function, apertures, xy, hrf, p, observed, downsampling, css_nonlinearity, precision, css_convention, crate::arithmetic::ArithmeticReference::Current)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn errfun_with_reference(
+    prf_function: &crate::expr::AnonymousFunction,
+    apertures: &Apertures,
+    xy: &[[f64; 2]],
+    hrf: &crate::hrf::ErrfunHrf,
+    p: &[f64],
+    observed: &[f64],
+    downsampling: usize,
+    css_nonlinearity: bool,
+    precision: Precision,
+    css_convention: crate::css::Convention,
+    reference: crate::arithmetic::ArithmeticReference,
+) -> Result<num_complex::Complex64> {
     use crate::hrf::ErrfunHrf;
     use num_complex::Complex64;
     let n = p.len();
@@ -441,7 +458,7 @@ pub fn errfun_with_convention(
         })?;
         if css_convention == crate::css::Convention::Samsrf {
             let yp = crate::css::predict(&yp, exponent, &kernel, downsampling);
-            return Ok(crate::css::objective(&yp, observed, precision));
+            return Ok(crate::css::objective_with_reference(&yp, observed, precision, reference));
         }
         compress(&mut yp, exponent);
     } else if precision == Precision::Double {
@@ -450,7 +467,7 @@ pub fn errfun_with_convention(
         // the same with and without CSS; only the real prediction differs.
         let yp = crate::matlab_math::convolve_real(&yp, &kernel, downsampling);
         let yp: Vec<Complex64> = yp.into_iter().map(|value| Complex64::new(value, 0.0)).collect();
-        return Ok(crate::css::objective(&yp, observed, precision));
+        return Ok(crate::css::objective_with_reference(&yp, observed, precision, reference));
     }
     let yp = crate::hrf::convolve(&yp, &kernel, downsampling);
     Ok(Complex64::new(

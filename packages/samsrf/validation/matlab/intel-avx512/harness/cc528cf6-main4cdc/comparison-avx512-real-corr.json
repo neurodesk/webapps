@@ -1,0 +1,11 @@
+{
+  "variant": "avx512-real-corr",
+  "matrixHostsCountsLossesIdentical": true,
+  "allMatrixOutputHashesIdentical": true,
+  "nullAndBundleControlsIdentical": true,
+  "pipelineCountsLossesDumpHashesIdentical": true,
+  "nativePipelinesReexecuted": false,
+  "oldMatrix": "packages/samsrf/validation/matlab/intel-avx512/harness/cc528cf6-1/matrix-real-corr.json",
+  "oldPipelines": "/storage/home/ubuntu/.tmp/samsrf-num6/final-codex/pipelines-realcorr.json",
+  "newResearchModule": "3766452868c32a12ea7436bd99f20be5b2671a6f8c93b101e4e15da369d824f3"
+}

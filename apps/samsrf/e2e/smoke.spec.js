@@ -9,7 +9,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { unzipSync } from "fflate";
 import { analysisSpec, createJob, exportGiis, hrf, readAnalysisInputs, readGifti, readOldSchoolHrf, runJob } from "@neurodesk/samsrf/node";
-import { matFile } from "../../../packages/samsrf/test/fixtures.js";
+import { giftiRun, matFile } from "../../../packages/samsrf/test/fixtures.js";
 import { serveSite } from "../../../test-utils/serve-site.mjs";
 
 const examples = JSON.parse(readFileSync(new URL("../examples.json", import.meta.url), "utf8"));
@@ -88,12 +88,12 @@ async function runEveryAnalysis(page, timeout) {
     const run = page.locator("#runButton");
     await expect(run).toBeEnabled();
     await run.click();
-    for (const setting of ["exportConvention", "dataPrecision", "cssConvention"]) {
+    for (const setting of ["exportConvention", "dataPrecision", "arithmeticReference", "cssConvention"]) {
       await expect(page.locator(`#${setting}`)).toBeDisabled();
     }
     // The previous analysis leaves the output section open; its status line names the analysis.
     await expect(page.locator("#statusText")).toContainText(expected.outcome, { timeout });
-    for (const setting of ["exportConvention", "dataPrecision", "cssConvention"]) {
+    for (const setting of ["exportConvention", "dataPrecision", "arithmeticReference", "cssConvention"]) {
       await expect(page.locator(`#${setting}`)).toBeEnabled();
     }
     await expect(page.locator("#exportConvention")).toHaveValue("samsrfx-10.003");
@@ -115,6 +115,7 @@ async function runEveryAnalysis(page, timeout) {
     const archive = await zipped;
     expect(archive.suggestedFilename()).toBe(`${expected.outName}_maps.zip`);
     const entries = unzipSync(readFileSync(await archive.path()));
+    expect(JSON.parse(new TextDecoder().decode(entries[`${expected.outName}_provenance.json`])).arithmeticReference).toBe("current");
     for (const map of expected.maps) expect(Object.keys(entries)).toContain(`${expected.outName}_${map}.gii`);
     const r2 = giftiMap(entries[`${expected.outName}_r^2.gii`]);
     expect(r2).toHaveLength(VERTICES);
@@ -627,4 +628,51 @@ test("MATLAB fit settings round-trip through JSON and remain in collapsed settin
   await expect(page.locator("#dataPrecision")).toHaveValue("single");
   expect(JSON.parse(await page.locator("#modelJson").inputValue()).Data_Precision).toBe("single");
   await expect(page.locator("#cssConvention")).toBeHidden();
+});
+
+
+test("explicit arithmetic references run through workers and are retained in downloads", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#analysis").selectOption("rc");
+  const model = { Name: "reference", TR: 1, Scaling_Factor: 1, Hrf: 1, Aperture_File: "ap" };
+  const payload = (name, buffer) => ({ name, mimeType: "application/octet-stream", buffer: Buffer.from(buffer) });
+  await page.locator("#modelInput").setInputFiles(payload("model.json", JSON.stringify(model)));
+  await page.locator("#runsInput").setInputFiles([
+    payload("lh_run.gii", giftiRun(Array.from({ length: 3 }, (_, v) => Array.from({ length: 16 }, (_, t) => Math.sin(t + v) + t / 13)))),
+    payload("ap.mat", matFile({ ApFrm: { dims: [2, 2, 16], data: Array.from({ length: 64 }, (_, i) => Number(i % 5 === 0)) } })),
+  ]);
+  await page.locator("#advancedSettings").evaluate(element => { element.open = true; });
+  await expect(page.locator("#arithmeticReference")).toHaveValue("current");
+  for (const reference of ["matlab-intel", "matlab-amd", "current"]) {
+    await page.locator("#arithmeticReference").selectOption(reference);
+    await page.locator("#advancedSettings").evaluate(element => { element.open = false; });
+    await page.locator("#runButton").click();
+    await expect(page.locator("#statusText")).toContainText("Reverse-correlation maps ready");
+    const pending = page.waitForEvent("download");
+    await page.locator("#downloadAll").click();
+    const archive = await pending;
+    const entries = unzipSync(readFileSync(await archive.path()));
+    const provenance = JSON.parse(new TextDecoder().decode(entries["lh_reference_Rcp_provenance.json"]));
+    expect(provenance.arithmeticReference).toBe(reference);
+    expect(provenance.model.Arithmetic_Reference).toBe(reference);
+    expect(giftiMap(entries["lh_reference_Rcp_r^2.gii"])).toHaveLength(3);
+    await page.locator("#advancedSettings").evaluate(element => { element.open = true; });
+    await expect(page.locator("#arithmeticReference")).toHaveValue(reference);
+  }
+  await page.locator("#arithmeticReference").selectOption("matlab-intel");
+  await page.locator("#dataPrecision").selectOption("single");
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toContainText("Intel single-precision kernels are not implemented");
+  await expect(page.locator("#downloadAll")).toBeDisabled();
+  await page.locator("#analysis").selectOption("prf");
+  const css = {
+    Name: "css", TR: 1, Scaling_Factor: 1, Hrf: 1,
+    Prf_Function: "@(P,ApWidth)prf_gaussian_rf(P(1),P(2),P(3),ApWidth)",
+    Param_Names: ["x0", "y0", "Sigma"], Scaled_Param: [1, 1, 1], Only_Positive: [0, 0, 1],
+    Param1: [0], Param2: [0], Param3: [1], Compressive_Nonlinearity: true,
+    Arithmetic_Reference: "matlab-intel", Css_Convention: "nonnegative",
+  };
+  await page.locator("#modelInput").setInputFiles(payload("css.json", JSON.stringify(css)));
+  await expect(page.locator("#statusText")).toContainText("Intel CSS requires Css_Convention='samsrf'");
+  await expect(page.locator("#downloadAll")).toBeDisabled();
 });

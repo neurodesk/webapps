@@ -136,7 +136,7 @@ export async function runOne(browser, url, run, bundle, directory, served) {
     const [archive] = await Promise.all([page.waitForEvent('download'), page.locator('#downloadAll').click()]);
     const zipBytes = readFileSync(await archive.path());
     writeFileSync(join(directory, archive.suggestedFilename()), zipBytes);
-    Object.assign(record, { zip: archive.suggestedFilename(), zipSha256: sha256(zipBytes) });
+    Object.assign(record, { zip: archive.suggestedFilename(), zipSha256: sha256(zipBytes), arithmeticProvenance: true });
     if (outcome.includes(OUTCOME[plan.algorithm]) && !pageErrors.length) {
       record.status = 'succeeded';
     } else {

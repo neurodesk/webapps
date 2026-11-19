@@ -1,0 +1,262 @@
+diff --git a/exes/samsrf/core/src/css.rs b/exes/samsrf/core/src/css.rs
+index f6939ef..e110dc9 100644
+--- a/exes/samsrf/core/src/css.rs
++++ b/exes/samsrf/core/src/css.rs
+@@ -84,9 +84,9 @@ pub(crate) fn correlation(x: &[Complex64], y: &[f64], precision: Precision) -> C
+         let real: Vec<f64> = x.iter().map(|value| value.re).collect();
+         let mx = precision::mean_double(&real);
+         let xc: Vec<f64> = real.iter().map(|value| value - mx).collect();
+-        (Complex64::new(matlab_math::ddot(&xc, &yc), 0.0), matlab_math::nrm2(xc.iter().copied()))
++        (Complex64::new(matlab_math::ddot(&xc, &yc), 0.0), crate::reference::dnrm2(&xc))
+     };
+-    let norm_y = matlab_math::nrm2(yc.iter().copied());
++    let norm_y = crate::reference::dnrm2(&yc);
+     let r = Complex64::new(dot.re / norm_x / norm_y, dot.im / norm_x / norm_y);
+     let magnitude = if r.im == 0.0 { r.re.abs() } else { libm::hypot(r.re, r.im) };
+     if magnitude > 1.0 {
+diff --git a/exes/samsrf/core/src/lib.rs b/exes/samsrf/core/src/lib.rs
+index 61a6f3a..f1e6d2b 100644
+--- a/exes/samsrf/core/src/lib.rs
++++ b/exes/samsrf/core/src/lib.rs
+@@ -36,6 +36,7 @@ pub mod optim;
+ pub mod precision;
+ pub mod preprocess;
+ pub mod prf;
++pub mod reference;
+ pub mod revcor_cf;
+ pub mod revcor_prf;
+ pub mod searchspace;
+diff --git a/exes/samsrf/core/src/lstsq.rs b/exes/samsrf/core/src/lstsq.rs
+index 08280d8..b2f19a0 100644
+--- a/exes/samsrf/core/src/lstsq.rs
++++ b/exes/samsrf/core/src/lstsq.rs
+@@ -604,6 +604,9 @@ fn rhs_kernel(complex: bool, single: bool, count: usize, index: usize) -> Kernel
+ /// pinned double CF profiles by `record_constants_gamma_gemv.m`
+ /// (validation/matlab/constants-gamma-gemv-predictions.md).
+ pub fn gemv_t_double(y: &[f64], columns: &[&[f64]]) -> Vec<f64> {
++    if let Some(kernels) = crate::reference::active() {
++        return (kernels.gemv_t)(y, columns);
++    }
+     columns
+         .iter()
+         .enumerate()
+@@ -796,7 +799,15 @@ impl<T: Real> Factored<T> {
+ /// A real double design factored once, for right-hand sides solved one at a
+ /// time but rounded as MATLAB's `A \ Y` rounds column `index` of `count`
+ /// (`mldivide_many` on every column at once gives the same coefficients).
+-pub struct DoubleDesign(Factored<f64>);
++pub struct DoubleDesign {
++    rows: usize,
++    factored: DoubleFactored,
++}
++
++enum DoubleFactored {
++    Port(Factored<f64>),
++    Reference(Box<dyn crate::reference::RealDesign>),
++}
+ 
+ impl DoubleDesign {
+     /// The columns must be finite and of equal length.
+@@ -804,15 +815,52 @@ impl DoubleDesign {
+         let rows = columns.first().map_or(0, |column| column.len());
+         assert!(columns.iter().all(|column| column.len() == rows), "design columns differ in length");
+         assert!(columns.iter().all(|column| column.iter().all(|value| value.is_finite())), "the design must be finite");
+-        DoubleDesign(Factored::new(columns.iter().map(|column| column.iter().map(|&v| C::real(v)).collect()).collect()))
++        let factored = match crate::reference::active() {
++            Some(kernels) if rows > 0 => DoubleFactored::Reference((kernels.factor)(columns)),
++            _ => DoubleFactored::Port(Factored::new(columns.iter().map(|column| column.iter().map(|&v| C::real(v)).collect()).collect())),
++        };
++        DoubleDesign { rows, factored }
+     }
+ 
+     /// The real coefficients of right-hand side `index` of `count`.
+     pub fn solve(&self, y: &[f64], count: usize, index: usize) -> Vec<f64> {
+-        assert_eq!(y.len(), self.0.a.first().map_or(0, Vec::len), "design columns and observations differ in length");
++        assert_eq!(y.len(), self.rows, "design columns and observations differ in length");
+         assert!(index < count, "right-hand side {index} of {count}");
+-        let mut b: Vec<C<f64>> = y.iter().map(|&v| C::real(v)).collect();
+-        self.0.solve(&mut b, count, index).into_iter().map(|value| value.re).collect()
++        match &self.factored {
++            DoubleFactored::Port(factored) => {
++                let mut b: Vec<C<f64>> = y.iter().map(|&v| C::real(v)).collect();
++                factored.solve(&mut b, count, index).into_iter().map(|value| value.re).collect()
++            }
++            DoubleFactored::Reference(design) => design.solve_with_qty(y, count, index).0,
++        }
++    }
++}
++
++/// `solve` of a finite real double design with at least one row through the installed
++/// reference: coefficients with +0 imaginary parts, and the diagnostics `solve` returns.
++fn solve_with_reference(kernels: &crate::reference::Kernels, columns: &[&[Complex64]], ys: &[&[f64]], keep_qty: bool) -> Solved {
++    let real: Vec<Vec<f64>> = columns.iter().map(|column| column.iter().map(|value| value.re).collect()).collect();
++    let real: Vec<&[f64]> = real.iter().map(Vec::as_slice).collect();
++    let design = (kernels.factor)(&real);
++    let count = ys.len();
++    let wide = |values: &[f64]| values.iter().map(|&value| Complex64::new(value, 0.0)).collect::<Vec<_>>();
++    let (mut coefficients, mut qty) = (Vec::with_capacity(count), Vec::with_capacity(count));
++    for (index, y) in ys.iter().enumerate() {
++        let (x, b) = design.solve_with_qty(y, count, index);
++        coefficients.push(wide(&x));
++        qty.push(if keep_qty { wide(&b) } else { Vec::new() });
++    }
++    let (n, m) = (columns.len(), ys.first().map_or(0, |y| y.len()));
++    let packed = design.packed();
++    let r = (0..m.min(n)).map(|i| (0..n).map(|j| if j < i { Complex64::new(0.0, 0.0) } else { Complex64::new(packed[j][i], 0.0) }).collect()).collect();
++    Solved {
++        coefficients,
++        qty,
++        rank: design.rank(),
++        pivot: design.pivot().to_vec(),
++        r,
++        packed: packed.iter().map(|column| wide(column)).collect(),
++        tau: wide(design.taus()),
+     }
+ }
+ 
+@@ -839,6 +887,12 @@ fn solve<T: Real>(columns: &[&[Complex64]], ys: &[&[f64]], keep_qty: bool) -> So
+             tau: Vec::new(),
+         };
+     }
++    if let Some(kernels) = crate::reference::active() {
++        let real = a.iter().flatten().all(|value| value.im == T::ZERO);
++        if std::mem::size_of::<T>() == 8 && real && m > 0 {
++            return solve_with_reference(kernels, columns, ys, keep_qty);
++        }
++    }
+     let factored = Factored::new(a);
+     let count = bs.len();
+     let coefficients = bs.iter_mut().enumerate().map(|(index, b)| factored.solve(b, count, index)).collect();
+diff --git a/exes/samsrf/core/src/matlab_math.rs b/exes/samsrf/core/src/matlab_math.rs
+index 5e9795f..887f8ad 100644
+--- a/exes/samsrf/core/src/matlab_math.rs
++++ b/exes/samsrf/core/src/matlab_math.rs
+@@ -534,6 +534,8 @@ pub const DDOT_MKL_MIN_LENGTH: usize = 51;
+ pub fn ddot(x: &[f64], y: &[f64]) -> f64 {
+     if x.len().min(y.len()) < DDOT_MKL_MIN_LENGTH {
+         ddot_pairs(x, y)
++    } else if let Some(kernels) = crate::reference::active() {
++        (kernels.ddot)(x, y)
+     } else {
+         ddot_mkl(x, y)
+     }
+diff --git a/exes/samsrf/core/src/reference.rs b/exes/samsrf/core/src/reference.rs
+new file mode 100644
+index 0000000..a976150
+--- /dev/null
++++ b/exes/samsrf/core/src/reference.rs
+@@ -0,0 +1,62 @@
++//! RESEARCH BUILD ONLY (packages/samsrf/validation/matlab/intel-avx512/harness): the MKL
++//! kernels whose rounding differs between MATLAB's recorded hosts, as replaceable hooks.
++//! Unset, every call runs the shipped port's kernels (MKL CNR `auto`, AMD hosts), so a
++//! build of this patch that installs nothing computes what the shipped module computes.
++//! The harness's WebAssembly crate installs the test-only `samsrf-mkl-avx512` kernels
++//! (MKL's AVX512_E1 branch on the recorded Intel hosts) for real double data only:
++//! `x' * y` from 51 elements, `norm`, `y' * A` and the least-squares chain. Single and
++//! complex kernels are not replaced; no recording identifies their Intel arithmetic.
++
++use std::sync::OnceLock;
++
++/// A real double design factored by one reference's `?geqp3`. Unwind-safe like the port's
++/// own factorisation, so a `DoubleDesign` stays usable across `catch_unwind`.
++pub trait RealDesign: std::panic::RefUnwindSafe + std::panic::UnwindSafe {
++    /// Coefficients in column order and `Q' y` of right-hand side `index` of `count`.
++    fn solve_with_qty(&self, y: &[f64], count: usize, index: usize) -> (Vec<f64>, Vec<f64>);
++    fn rank(&self) -> usize;
++    /// The design column in each pivoted position.
++    fn pivot(&self) -> &[usize];
++    /// Packed columns in pivoted order: R on and above the diagonal, reflectors below.
++    fn packed(&self) -> &[Vec<f64>];
++    fn taus(&self) -> &[f64];
++}
++
++/// One reference's real double kernels.
++pub struct Kernels {
++    pub name: &'static str,
++    /// MATLAB's real `x' * y`, from `matlab_math::DDOT_MKL_MIN_LENGTH` elements (MKL `ddot`).
++    pub ddot: fn(&[f64], &[f64]) -> f64,
++    /// MATLAB's `norm` of a real double vector (MKL `dnrm2`).
++    pub dnrm2: fn(&[f64]) -> f64,
++    /// MATLAB's double `y' * A` (MKL `dgemv` with `trans`), one value per column.
++    pub gemv_t: fn(&[f64], &[&[f64]]) -> Vec<f64>,
++    /// `?geqp3` of a finite real double design with at least one row.
++    pub factor: fn(&[&[f64]]) -> Box<dyn RealDesign>,
++}
++
++static ACTIVE: OnceLock<Kernels> = OnceLock::new();
++
++/// Installs a reference's kernels for the life of the module; a second install panics.
++pub fn install(kernels: Kernels) {
++    if ACTIVE.set(kernels).is_err() {
++        panic!("a reference is already installed");
++    }
++}
++
++pub fn active() -> Option<&'static Kernels> {
++    ACTIVE.get()
++}
++
++/// The installed reference's name, or the shipped port's.
++pub fn name() -> &'static str {
++    active().map_or("shipped (MKL CNR auto)", |kernels| kernels.name)
++}
++
++/// `norm` of a real double vector in the installed reference, else the shipped `nrm2`.
++pub fn dnrm2(values: &[f64]) -> f64 {
++    match active() {
++        Some(kernels) => (kernels.dnrm2)(values),
++        None => crate::matlab_math::nrm2(values.iter().copied()),
++    }
++}
+diff --git a/exes/samsrf/core/src/revcor_cf.rs b/exes/samsrf/core/src/revcor_cf.rs
+index e156abe..253aad5 100644
+--- a/exes/samsrf/core/src/revcor_cf.rs
++++ b/exes/samsrf/core/src/revcor_cf.rs
+@@ -19,7 +19,7 @@ use crate::mesh::Adjacency;
+ use crate::model::{CfModel, CfParameterEstimate, FineFit};
+ use crate::optim::{self, FminsearchOptions};
+ use crate::lstsq::gemv_t_double;
+-use crate::matlab_math::nrm2;
++use crate::reference::dnrm2;
+ use crate::precision::{gemv_t_single, mean_double, sum_single, Precision};
+ use crate::prf;
+ use crate::surface::Surface;
+@@ -89,7 +89,7 @@ impl Prepared {
+             })
+             .collect::<Result<_>>()?;
+         let seed_centred_double: Vec<Vec<f64>> = seed_courses.iter().map(|course| centre_double(course)).collect();
+-        let seed_norms_double = seed_centred_double.iter().map(|course| nrm2(course.iter().copied())).collect();
++        let seed_norms_double = seed_centred_double.iter().map(|course| dnrm2(course)).collect();
+         let seed_centred: Vec<Vec<f32>> = seed_courses.iter().map(|course| centre_single(course)).collect();
+         let seed_norms = seed_centred.iter().map(|course| norm_single(course)).collect();
+         let weights = if model.smoothing > 0.0 {
+@@ -161,7 +161,7 @@ impl Prepared {
+         }
+         let nsvx = self.seed_vertices.len();
+         let yc = centre_double(y);
+-        let ny = nrm2(yc.iter().copied());
++        let ny = dnrm2(&yc);
+         let columns: Vec<&[f64]> = self.seed_centred_double.iter().map(Vec::as_slice).collect();
+         let r: Vec<f64> = gemv_t_double(&yc, &columns).iter().zip(&self.seed_norms_double).map(|(product, nx)| {
+             let r = (product / ny) / nx;
+diff --git a/exes/samsrf/wasm/src/lib.rs b/exes/samsrf/wasm/src/lib.rs
+index ea4db16..de12e84 100644
+--- a/exes/samsrf/wasm/src/lib.rs
++++ b/exes/samsrf/wasm/src/lib.rs
+@@ -17,6 +17,16 @@ use wasm_bindgen::prelude::*;
+ 
+ type Result<T> = std::result::Result<T, JsError>;
+ 
++/// RESEARCH BUILD ONLY: installs this build's arithmetic reference. The hooks build has none, so
++/// it computes what the shipped module computes; native research tests call this first.
++pub fn install_research_reference() {}
++
++/// RESEARCH BUILD ONLY: the arithmetic reference this module runs (`samsrf_core::reference`).
++#[wasm_bindgen(js_name = arithmeticReference)]
++pub fn arithmetic_reference() -> String {
++    samsrf_core::reference::name().to_string()
++}
++
+ fn fail(error: Error) -> JsError {
+     JsError::new(&error.to_string())
+ }

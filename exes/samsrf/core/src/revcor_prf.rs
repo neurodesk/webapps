@@ -113,7 +113,7 @@ impl Prepared {
         // `[Y ones] \ X` with every pixel's regressor as one right-hand side, as
         // MATLAB solves it: each column's arithmetic depends on its place among them.
         let regressors: Vec<&[f64]> = (0..self.pixels).map(|p| self.regressor(p)).collect();
-        crate::lstsq::mldivide_many(&[&course, &ones], &regressors, precision).coefficients.iter().map(|c| c[0].re).collect()
+        crate::lstsq::mldivide_many_with_reference(&[&course, &ones], &regressors, precision, self.model.arithmetic_reference).coefficients.iter().map(|c| c[0].re).collect()
     }
 
     /// The reverse-correlation rows `[R^2, x0, y0, Fwhm, Beta]` of one time course, and
@@ -144,7 +144,7 @@ impl Prepared {
         let r2 = match model.data_precision {
             Precision::Double => {
                 let course: Vec<num_complex::Complex64> = y.iter().map(|&value| num_complex::Complex64::new(value, 0.0)).collect();
-                let r = crate::css::correlation(&course, self.regressor(m), Precision::Double).re;
+                let r = crate::css::correlation_with_reference(&course, self.regressor(m), Precision::Double, self.model.arithmetic_reference).re;
                 r * r
             }
             Precision::Single => {

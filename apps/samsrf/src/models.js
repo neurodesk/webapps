@@ -1,7 +1,7 @@
 // SamSrf analyses and model presets. A model is the JSON object SamSrf reads
 // (Models/Json/*.json); presets reproduce the three example JSON files and the
 // standard models at commit 41ed1e96 (horizontal tuning follows the GUI .mod).
-import { exportConvention } from "@neurodesk/samsrf";
+import { arithmeticReference, exportConvention } from "@neurodesk/samsrf";
 
 /** @typedef {'prf' | 'rc' | 'cf'} Analysis */
 
@@ -222,6 +222,7 @@ export function buildModel(presetId, settings = DEFAULT_SETTINGS) {
   const model = preset.build({ ...DEFAULT_SETTINGS, ...settings });
   if (settings.dataPrecision === "single") model.Data_Precision = "single";
   if (preset.analysis === "prf" && settings.cssConvention === "samsrf") model.Css_Convention = "samsrf";
+  if (arithmeticReference(settings.arithmeticReference) !== "current") model.Arithmetic_Reference = settings.arithmeticReference;
   const convention = exportConvention(settings.exportConvention);
   return convention === "samsrf-10.4" ? model : { ...model, Export_Convention: convention };
 }
@@ -277,8 +278,11 @@ export function parseModel(text, analysis) {
   if (!model || typeof model !== "object" || Array.isArray(model)) throw new Error("The model JSON must be an object.");
   if (typeof model.Name !== "string" || !model.Name) throw new Error("The model needs a Name.");
   exportConvention(model.Export_Convention);
+  arithmeticReference(model.Arithmetic_Reference);
+  if (model.Arithmetic_Reference === "matlab-intel" && model.Data_Precision === "single") throw new Error("MATLAB Intel reference requires double precision.");
   if (model.Data_Precision !== undefined && !["single", "double"].includes(model.Data_Precision)) throw new Error("Data_Precision must be single or double.");
   if (model.Css_Convention !== undefined && !["nonnegative", "samsrf"].includes(model.Css_Convention)) throw new Error("Css_Convention must be nonnegative or samsrf.");
+  if (analysis === "prf" && model.Arithmetic_Reference === "matlab-intel" && Number(model.Compressive_Nonlinearity ?? 0) !== 0 && model.Css_Convention !== "samsrf") throw new Error("MATLAB Intel CSS requires Css_Convention='samsrf'; select the SamSrf CSS convention.");
   if (analysis === "cf" && model.Data_Precision === "single" && Number(model.Fit_pRF) === 1) throw new Error("Single precision connective fields support Fit_pRF 0 or -1; Gaussian fits need double precision.");
   if (analysis === "rc" && model.Data_Precision === "single" && typeof model.Prf_Function === "string") throw new Error("Single precision reverse correlation supports the convex hull; 2D pRF fits need double precision.");
   if (analysis === "prf") {

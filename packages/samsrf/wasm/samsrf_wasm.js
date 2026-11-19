@@ -114,6 +114,21 @@ export class Job {
         return ret;
     }
     /**
+     * @returns {string}
+     */
+    get arithmeticReference() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.job_arithmeticReference(this.__wbg_ptr);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
      * @param {Array<any>} partials
      * @returns {any}
      */
@@ -268,12 +283,13 @@ export class RunAccumulator {
      * @param {boolean} noise_ceiling
      * @param {boolean} global_signal
      * @param {string | null} [precision]
+     * @param {string | null} [arithmetic_reference]
      */
-    constructor(total_vertices, keep, normalise, combine, noise_ceiling, global_signal, precision) {
-        const val5 = +total_vertices;
-        const val6 = +noise_ceiling;
-        const val7 = +global_signal;
-        let ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3;
+    constructor(total_vertices, keep, normalise, combine, noise_ceiling, global_signal, precision, arithmetic_reference) {
+        const val6 = +total_vertices;
+        const val7 = +noise_ceiling;
+        const val8 = +global_signal;
+        let ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4;
         try {
             ptr0 = isLikeNone(keep) ? 0 : passArray32ToWasm0(keep, wasm.__wbindgen_malloc);
             len0 = WASM_VECTOR_LEN;
@@ -283,14 +299,17 @@ export class RunAccumulator {
             len2 = WASM_VECTOR_LEN;
             ptr3 = isLikeNone(precision) ? 0 : passStringToWasm0(precision, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
             len3 = WASM_VECTOR_LEN;
+            ptr4 = isLikeNone(arithmetic_reference) ? 0 : passStringToWasm0(arithmetic_reference, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            len4 = WASM_VECTOR_LEN;
         } catch (e) {
+            if (ptr4) { wasm.__wbindgen_free(ptr4, len4 * 1, 1); }
             if (ptr3) { wasm.__wbindgen_free(ptr3, len3 * 1, 1); }
             if (ptr2) { wasm.__wbindgen_free(ptr2, len2 * 1, 1); }
             if (ptr1) { wasm.__wbindgen_free(ptr1, len1 * 1, 1); }
             if (ptr0) { wasm.__wbindgen_free(ptr0, len0 * 4, 4); }
             throw e;
         }
-        const ret = wasm.runaccumulator_new(val5, ptr0, len0, ptr1, len1, ptr2, len2, val6, val7, ptr3, len3);
+        const ret = wasm.runaccumulator_new(val6, ptr0, len0, ptr1, len1, ptr2, len2, val7, val8, ptr3, len3, ptr4, len4);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -333,12 +352,13 @@ if (Symbol.dispose) RunAccumulator.prototype[Symbol.dispose] = RunAccumulator.pr
  * @param {Float64Array | number[] | null | undefined} seed_fine_fit_data
  * @param {number} total_vertices
  * @param {Function | null} [progress]
+ * @param {string | null} [preprocessing_reference]
  * @returns {Job}
  */
-export function createJob(kind, model_json, apertures, hrf_mode, hrf_kernel, volumes, kept, courses, roi, noise_ceiling, global_signal, seed_vertices, template_values, template_data, surface_vertices, surface_faces, area, seed_fine_fit_values, seed_fine_fit_data, total_vertices, progress) {
-    const val19 = +volumes;
-    const val20 = +total_vertices;
-    let ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, ptr5, len5, ptr6, len6, ptr7, len7, ptr8, len8, ptr9, len9, ptr10, len10, ptr11, len11, ptr12, len12, ptr13, len13, ptr14, len14, ptr15, len15, ptr16, len16, ptr17, len17;
+export function createJob(kind, model_json, apertures, hrf_mode, hrf_kernel, volumes, kept, courses, roi, noise_ceiling, global_signal, seed_vertices, template_values, template_data, surface_vertices, surface_faces, area, seed_fine_fit_values, seed_fine_fit_data, total_vertices, progress, preprocessing_reference) {
+    const val20 = +volumes;
+    const val21 = +total_vertices;
+    let ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, ptr5, len5, ptr6, len6, ptr7, len7, ptr8, len8, ptr9, len9, ptr10, len10, ptr11, len11, ptr12, len12, ptr13, len13, ptr14, len14, ptr15, len15, ptr16, len16, ptr17, len17, ptr18, len18;
     try {
         ptr0 = passStringToWasm0(kind, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         len0 = WASM_VECTOR_LEN;
@@ -376,7 +396,10 @@ export function createJob(kind, model_json, apertures, hrf_mode, hrf_kernel, vol
         len16 = WASM_VECTOR_LEN;
         ptr17 = isLikeNone(seed_fine_fit_data) ? 0 : passArrayF64ToWasm0(seed_fine_fit_data, wasm.__wbindgen_malloc);
         len17 = WASM_VECTOR_LEN;
+        ptr18 = isLikeNone(preprocessing_reference) ? 0 : passStringToWasm0(preprocessing_reference, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        len18 = WASM_VECTOR_LEN;
     } catch (e) {
+        if (ptr18) { wasm.__wbindgen_free(ptr18, len18 * 1, 1); }
         if (ptr17) { wasm.__wbindgen_free(ptr17, len17 * 8, 8); }
         if (ptr16) { wasm.__externref_drop_slice(ptr16, len16); wasm.__wbindgen_free(ptr16, len16 * 4, 4); }
         if (ptr15) { wasm.__wbindgen_free(ptr15, len15 * 8, 8); }
@@ -397,7 +420,7 @@ export function createJob(kind, model_json, apertures, hrf_mode, hrf_kernel, vol
         if (ptr0) { wasm.__wbindgen_free(ptr0, len0 * 1, 1); }
         throw e;
     }
-    const ret = wasm.createJob(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, val19, ptr5, len5, ptr6, len6, ptr7, len7, ptr8, len8, ptr9, len9, ptr10, len10, ptr11, len11, ptr12, len12, ptr13, len13, ptr14, len14, ptr15, len15, ptr16, len16, ptr17, len17, val20, isLikeNone(progress) ? 0 : addToExternrefTable0(progress));
+    const ret = wasm.createJob(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, val20, ptr5, len5, ptr6, len6, ptr7, len7, ptr8, len8, ptr9, len9, ptr10, len10, ptr11, len11, ptr12, len12, ptr13, len13, ptr14, len14, ptr15, len15, ptr16, len16, ptr17, len17, val21, isLikeNone(progress) ? 0 : addToExternrefTable0(progress), ptr18, len18);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }

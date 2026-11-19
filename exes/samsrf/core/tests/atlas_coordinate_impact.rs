@@ -124,6 +124,7 @@ fn atlas_coordinate_differences_change_cf_maps() {
         for (mode, fit, smoothing) in [("hull", 0, 0.0), ("summary", -1, 0.0), ("Gaussian, smoothed", 1, 3.0)] {
             let run = |template: &Maps| -> Maps {
                 let inputs = JobInputs {
+        preprocessing_reference: samsrf_core::arithmetic::ArithmeticReference::Current,
                     model: cf_model(fit, smoothing),
                     apertures: None,
                     hrf: None,
