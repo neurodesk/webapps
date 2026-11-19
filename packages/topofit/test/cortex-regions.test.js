@@ -239,9 +239,9 @@ test('annotations round-trip vertex colours and the embedded colour table', () =
   assert.throws(() => writeAnnotation(Uint8Array.of(table.length), table), /has no colour/);
 });
 
-test('a named region left with two faces finds no patch instead of failing', () => {
+test('a named region left with two non-degenerate faces finds no patch instead of failing', () => {
   const vertices = Float64Array.of(0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0);
-  const faces = Int32Array.of(0, 1, 2, 1, 3, 2);
+  const faces = Int32Array.of(0, 1, 2, 1, 3, 2, 0, 0, 1);
   const eligible = Uint8Array.of(1, 1, 1, 1);
   assert.deepEqual(findPatches(vertices, faces, eligible, {}, true), []);
   assert.throws(() => findPatches(vertices, faces, eligible, {}), /at least three/);
