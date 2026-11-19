@@ -456,13 +456,16 @@ in 102 runs in which no pull request touched it. `workspace-contracts` still
 runs on every run and tests every package (`pnpm test:packages`), as before.
 `homepage-easter-egg` runs on every push, nightly and dispatch but
 `scope=gpu`, as before, and also when the plan fails (`!cancelled()`). A pull
-request skips it only on proof: the plan succeeded and every changed path lies
-in a tree the job cannot read (`easterEggCannotRead` in
-`scripts/lib/app-plan.mjs`). The trees are `apps/`, `exes/`, `models/`,
-`docs/` and every package outside the job's closure, which is
-`packages/analytics` alone. A `package.json` in them still runs it, because
-its `pnpm install` reads every workspace manifest and runs their install
-scripts. Any other path runs it: every root file, `.github/`, `.changeset/`,
+request skips it only on proof: the plan succeeded and wrote `skip` to its
+`easter_egg` output, which it does only when every changed path lies in a tree
+the job cannot read (`easterEggCannotRead` in `scripts/lib/app-plan.mjs`). Any
+other output, an empty one included, runs it. The trees are `apps/`, `exes/`,
+`models/`, `docs/` and every package outside the job's closure, which is
+`packages/analytics` alone. A workspace manifest in them still runs it
+(`WORKSPACE_MANIFESTS`: `package.json`, `package.json5` and `package.yaml`).
+pnpm reads each as its own project, a second one beside `package.json`
+included, so one can take the easter egg's name; the job's `pnpm install`
+reads every manifest and runs their install scripts. Any other path runs it: every root file, `.github/`, `.changeset/`,
 `scripts/`, `test-utils/`, `test/`, `registry/`, `site/`, `templates/`, the
 lockfile and workspace files, and a path no rule knows. `EASTER_EGG_INPUTS`
 lists the files the job reads, the evidence that no skip tree holds one:
