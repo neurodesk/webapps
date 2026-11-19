@@ -833,6 +833,166 @@ try {
     assert.deepEqual((await call('viewers_volumes', { viewerId: 'main' })).volumes.map(volume => volume.name), shown, 'the viewer still shows what it showed');
   });
 
+  await check('NiiMath: a resume queued behind the agent\'s file request names the file chosen in it, and hands back that file', async context => {
+    const { page, call, start, result, dialog } = await open(context, 'niimath');
+    const run = await agentRun(page, call, 'original-agent.nii.gz');
+    const [x, y] = await centreOf(page, '#gl');
+    await page.mouse.click(x, y);
+    assert.equal((await call('app_describe')).touched, true);
+    const request = await start('inputs_request_files', { role: 'image' });
+    const fileInput = dialog.locator('input[type="file"]:not([webkitdirectory])');
+    await fileInput.waitFor();
+    const resume = await start('runs_get', { runId: run.runId });
+    await page.waitForTimeout(500);
+    await fileInput.setInputFiles(scan('changed-agent.nii.gz'));
+    assert.equal((await result(request)).files[0].name, 'changed-agent.nii.gz');
+    await dialog.getByRole('button', { name: 'Allow', exact: true }).waitFor();
+    const named = await dialog.locator('ul').last().locator('li').allTextContents();
+    await dialog.getByRole('button', { name: 'Allow', exact: true }).click();
+    const resumed = await result(resume);
+    assert.deepEqual(resumed.report, run.report);
+    assert.deepEqual(named, ['image: changed-agent.nii.gz'], 'the dialog names the file the agent holds when it shows');
+    assert.deepEqual((await call('app_describe')).inputs.image.map(file => `image: ${file.name}`), named, 'the files handed back are the ones it named');
+    const rerun = await call('run_binarize', { waitSeconds: 120 });
+    assert.equal(rerun.report?.inputs.image[0].filename, 'changed-agent.nii.gz');
+  });
+
+  await check('ZARRo: the resume dialog names the store root a successful run read', async context => {
+    const assets = {
+      '/review/volume.ome.zarr/.zgroup': { zarr_format: 2 },
+      '/review/volume.ome.zarr/.zattrs': { multiscales: [{ version: '0.4', axes: ['z', 'y', 'x'].map(name => ({ name, type: 'space', unit: 'micrometer' })), datasets: [{ path: '0', coordinateTransformations: [{ type: 'scale', scale: [1, 1, 1] }] }] }] },
+      '/review/volume.ome.zarr/0/.zarray': { zarr_format: 2, chunks: [8, 8, 8], shape: [8, 8, 8], dtype: '<u2', order: 'C', compressor: null, filters: null, fill_value: 0 },
+      '/review/volume.ome.zarr/0/.zattrs': {},
+      '/review/volume.ome.zarr/0/0.0.0': Buffer.from(new Uint16Array(512).map((_, index) => index).buffer),
+    };
+    const store = await remoteHost((request, response) => {
+      const asset = assets[new URL(request.url, 'http://127.0.0.1').pathname];
+      if (asset === undefined) return response.writeHead(404).end();
+      const bytes = Buffer.isBuffer(asset);
+      return response.writeHead(200, { 'Content-Type': bytes ? 'application/octet-stream' : 'application/json' }).end(bytes ? asset : JSON.stringify(asset));
+    });
+    try {
+      const { page, call, answered } = await open(context, 'zarro');
+      const root = `${store.origin}/review/volume.ome.zarr`;
+      const run = await answered('run_open_url', { inputs: { store: { url: root } }, waitSeconds: 60 }, 'Allow');
+      assert.equal(run.state, 'succeeded', JSON.stringify({ run, requests: store.requests }));
+      const [x, y] = await centreOf(page, 'main canvas:visible >> nth=0');
+      await page.mouse.click(x, y);
+      assert.equal((await call('app_describe')).touched, true);
+      const allowed = await answered('runs_get', { runId: run.runId }, 'Allow');
+      assert.deepEqual(allowed.report, run.report);
+      assert.deepEqual(allowed.listed, [`store: ${root}`], 'the run is named by the root the person allowed');
+    } finally {
+      await store.close();
+    }
+  });
+
+  await check('a frame that comes back to the page\'s origin from another is watched before it loads', async context => {
+    const isolated = { 'Cross-Origin-Embedder-Policy': 'require-corp', 'Cross-Origin-Resource-Policy': 'same-origin' };
+    const elsewhere = await remoteHost((request, response) => response.writeHead(200, {
+      'Content-Type': 'text/html',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+      'Cross-Origin-Resource-Policy': 'cross-origin',
+    }).end('<button>Other origin</button>'));
+    let release;
+    let asked;
+    const requestSeen = new Promise(resolve => { asked = resolve; });
+    const releaseImage = new Promise(resolve => { release = resolve; });
+    try {
+      await context.route('**/return-frame-content', route => route.fulfill({ contentType: 'text/html', headers: isolated, body: '<button>Use frame</button><img src="/return-frame-image">' }));
+      await context.route('**/return-frame-image', async route => {
+        asked();
+        await releaseImage;
+        await route.fulfill({ status: 404, headers: isolated, body: '' });
+      });
+      const { page, call, answered } = await open(context, 'niimath');
+      await page.evaluate(url => {
+        const frame = document.createElement('iframe');
+        frame.id = 'return-frame';
+        frame.style.cssText = 'position:fixed;bottom:60px;left:0;z-index:99999;background:white';
+        frame.src = url;
+        frame.addEventListener('load', () => { frame.dataset.loaded = 'yes'; });
+        document.body.append(frame);
+      }, elsewhere.origin);
+      await page.frameLocator('#return-frame').getByRole('button', { name: 'Other origin' }).waitFor();
+      await page.waitForFunction(() => document.querySelector('#return-frame').dataset.loaded === 'yes');
+      const run = await agentRun(page, call, 'frame-input.nii.gz');
+      await page.evaluate(() => {
+        const frame = document.querySelector('#return-frame');
+        delete frame.dataset.loaded;
+        frame.src = '/return-frame-content';
+      });
+      await requestSeen;
+      assert.equal((await call('app_describe')).touched, true, 'the frame\'s document turning same-origin touches the examination');
+      assert.equal((await answered('runs_get', { runId: run.runId }, 'Allow')).report?.runId, run.runId, 'the report after Allow');
+      assert.equal((await call('app_describe')).touched, false);
+      await page.frameLocator('#return-frame').getByRole('button', { name: 'Use frame' }).click();
+      assert.equal(await page.locator('#return-frame').getAttribute('data-loaded'), null, 'the frame has not loaded');
+      const described = await call('app_describe');
+      assert.equal(described.touched, true, 'a click in the returned frame before it loads touches the examination');
+      assert.equal(described.run.report, undefined, 'and withholds the report');
+    } finally {
+      release();
+      await elsewhere.close();
+    }
+  });
+
+  await check('NeSVoR: Undo after a page drop onto an emptied stack list empties the list and the viewer again', async context => {
+    const { page, call } = await open(context, 'nesvor');
+    await personPicks(context, page, '#imageInput', 'removed-before-drop.nii.gz');
+    await page.getByRole('button', { name: 'Remove removed-before-drop.nii.gz', exact: true }).click();
+    await personDrops(context, page, 'nesvor-drop.nii.gz', await centreOf(page, '#viewer'));
+    const remove = page.getByRole('button', { name: 'Remove nesvor-drop.nii.gz', exact: true });
+    await remove.waitFor({ timeout: 30000 });
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
+    await remove.waitFor({ state: 'detached', timeout: 10000 });
+    assert.deepEqual((await call('app_describe')).pageFiles, []);
+    assert.equal(await page.locator('#emptyState').isVisible(), true, 'the viewer shows its empty state');
+    assert.deepEqual((await call('viewers_volumes', { viewerId: 'main' })).volumes ?? [], [], 'the viewer holds no stack');
+  });
+
+  await check('Easy MP2RAGE: removing one JSON sidecar keeps the other listed', async context => {
+    const { page, call } = await open(context, 'easy-mp2rage');
+    const payload = name => ({ name, mimeType: 'application/json', buffer: Buffer.from('{}') });
+    await page.locator('#fileControl input[type="file"]').setInputFiles([scan('subject_UNI.nii.gz'), payload('drop.json'), payload('keep.json')]);
+    const row = name => page.getByRole('row').filter({ hasText: name });
+    await row('keep.json').waitFor();
+    const names = async () => (await call('app_describe')).pageFiles.flatMap(entry => entry.files.map(file => file.name)).sort();
+    assert.deepEqual(await names(), ['drop.json', 'keep.json', 'subject_UNI.nii.gz']);
+    await row('drop.json').getByRole('button').click();
+    await row('drop.json').waitFor({ state: 'detached' });
+    assert.equal(await row('keep.json').isVisible(), true);
+    assert.deepEqual(await names(), ['keep.json', 'subject_UNI.nii.gz']);
+  });
+
+  await check('a browser without a model context loads no WebMCP code and gets no recorder', async () => {
+    const plainBrowser = await chromium.launch();
+    try {
+      const plain = await plainBrowser.newContext({ serviceWorkers: 'block' });
+      await plain.addInitScript(() => {
+        globalThis.themeListeners = [];
+        const add = EventTarget.prototype.addEventListener;
+        EventTarget.prototype.addEventListener = function addEventListener(type, listener, options) {
+          if (this === window && /\/theme\.js:/.test(new Error().stack ?? '')) globalThis.themeListeners.push(type);
+          return Reflect.apply(add, this, [type, listener, options]);
+        };
+      });
+      const page = await plain.newPage();
+      const imported = [];
+      page.on('request', request => {
+        if (/\/webmcp\/|agentPrompt\.js/.test(request.url())) imported.push(request.url());
+      });
+      await page.goto(`${origin}/niimath/`, { waitUntil: 'load' });
+      const state = await page.evaluate(() => ({ context: Boolean(document.modelContext ?? navigator.modelContext), recorder: Boolean(window[Symbol.for('neurodesk.personInput')]), listeners: globalThis.themeListeners }));
+      assert.equal(state.context, false);
+      assert.equal(state.recorder, false, 'no recorder');
+      assert.deepEqual(imported, [], 'no WebMCP module is fetched');
+      assert.deepEqual(state.listeners, ['storage'], 'the theme script listens only for the stored theme');
+    } finally {
+      await plainBrowser.close();
+    }
+  });
+
   await check('NiiMath: a malformed call returns INVALID_INPUT and the next question still opens', async context => {
     const { page, call, start, result } = await open(context, 'niimath');
     assert.equal((await call('runs_get', { waitSeconds: 'invalid' })).error?.code, 'INVALID_INPUT');
