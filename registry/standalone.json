@@ -330,8 +330,8 @@
       }
     },
     "microscopy": {
-      "version": "0.49.20261118",
-      "revision": "fd08c1c20f078e6f50f0304d9bad4bf3a1227fc0",
+      "version": "0.49.20261119",
+      "revision": "3cf5c9cfd8811e71dafab7882081bee11d94b60f",
       "apps": [
         {
           "id": "niimath",
@@ -406,29 +406,29 @@
         {
           "kind": "desktop",
           "platform": "macos-arm64",
-          "version": "0.49.20261118",
-          "bytes": 366042391,
-          "url": "https://github.com/neurodesk/webapps/releases/download/microscopy-webapps-v0.49.20261118/microscopy-webapps-0.49.20261118-mac-arm64.zip",
-          "sha256": "a64fa4c55e33a6ce9b546ef424cfccd41eb7c924fd6309e4ec41356b6c4db480",
-          "command": "unzip microscopy-webapps-0.49.20261118-mac-arm64.zip"
+          "version": "0.49.20261119",
+          "bytes": 366042358,
+          "url": "https://github.com/neurodesk/webapps/releases/download/microscopy-webapps-v0.49.20261119/microscopy-webapps-0.49.20261119-mac-arm64.zip",
+          "sha256": "8359a02e2fb669ae43d2410751419dd3f2cf629c042e332de0c7716523e2321a",
+          "command": "unzip microscopy-webapps-0.49.20261119-mac-arm64.zip"
         },
         {
           "kind": "desktop",
           "platform": "linux-x64",
-          "version": "0.49.20261118",
-          "bytes": 373298343,
-          "url": "https://github.com/neurodesk/webapps/releases/download/microscopy-webapps-v0.49.20261118/microscopy-webapps-0.49.20261118-linux-x64.tar.gz",
-          "sha256": "79f074e493e4e41c3c698775897288d652d4c2a5c79b4afc28ab5e702a9c4a70",
-          "command": "tar -xzf microscopy-webapps-0.49.20261118-linux-x64.tar.gz"
+          "version": "0.49.20261119",
+          "bytes": 373298033,
+          "url": "https://github.com/neurodesk/webapps/releases/download/microscopy-webapps-v0.49.20261119/microscopy-webapps-0.49.20261119-linux-x64.tar.gz",
+          "sha256": "e2d2bba4024e600e9ca4a600220f5e743d4ed061c424d0fbb91c7402b714cbe7",
+          "command": "tar -xzf microscopy-webapps-0.49.20261119-linux-x64.tar.gz"
         },
         {
           "kind": "desktop",
           "platform": "windows-x64",
-          "version": "0.49.20261118",
-          "bytes": 397091691,
-          "url": "https://github.com/neurodesk/webapps/releases/download/microscopy-webapps-v0.49.20261118/microscopy-webapps-0.49.20261118-win-x64.zip",
-          "sha256": "c2008cd0b02facd2ae7e5525cba2079801bc2a9615245301e3ee21046a9cebf6",
-          "command": "Expand-Archive microscopy-webapps-0.49.20261118-win-x64.zip -DestinationPath MicroscopyWebapps"
+          "version": "0.49.20261119",
+          "bytes": 397091687,
+          "url": "https://github.com/neurodesk/webapps/releases/download/microscopy-webapps-v0.49.20261119/microscopy-webapps-0.49.20261119-win-x64.zip",
+          "sha256": "a3fe4fcb23b85607980ee81407830608973bf1b8d095aa137973ed4bd663b838",
+          "command": "Expand-Archive microscopy-webapps-0.49.20261119-win-x64.zip -DestinationPath MicroscopyWebapps"
         }
       ],
       "models": {
