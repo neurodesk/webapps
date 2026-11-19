@@ -95,6 +95,13 @@ test('scientific CPU and hardware GPU tests keep independent builds and test-dat
   assert.equal(gpu.env.NEURODESK_HARDWARE_GPU, '1');
   assert.equal(gpu['runs-on'], 'macos-15');
   assert.equal(ci.jobs['browser-e2e'].steps.find((step) => step.name === 'Download ${{ matrix.app }} test data').env.CPU_ONLY, "${{ matrix.hardware_gpu && '--cpu' || '' }}");
+  // A draft pull request starts neither browser job; a ready one, and every other event, does.
+  const draft = { github: { event_name: 'pull_request', ref: 'refs/pull/1/merge', event: { pull_request: { draft: true } } }, needs: { 'app-plan': { outputs: { has_browser_apps: 'true', has_gpu_apps: 'true', all_apps: 'false' } } } };
+  for (const name of ['browser-e2e', 'browser-e2e-gpu']) {
+    assert.equal(evaluate(ci.jobs[name].if, 'pull_request', draft), false, `${name} on a draft`);
+    assert.equal(evaluate(ci.jobs[name].if, 'pull_request', { ...draft, github: { ...draft.github, event: { pull_request: { draft: false } } } }), true, `${name} when ready`);
+  }
+  assert.equal(evaluate(ci.jobs['app-tests'].if, 'pull_request', { ...draft, needs: { 'app-plan': { outputs: { has_apps: 'true' } } } }), true, 'a draft still runs unit and build tests');
   for (const event of events) {
     assert.equal(evaluate(gpu.if, event), true, `${event} retains selected GPU apps`);
     // A ready pull request and a merge queue run leave a whole-catalogue suite to the push.

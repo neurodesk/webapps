@@ -26,8 +26,8 @@ const REQUIRED = {
   'app-plan': { needs: [], if: "github.event.action != 'converted_to_draft'" },
   'workspace-contracts': { needs: [], if: "github.event.action != 'converted_to_draft' && inputs.scope != 'gpu' && inputs.scope != 'site'" },
   'app-tests': { needs: ['app-plan'], if: "needs.app-plan.outputs.has_apps == 'true'" },
-  'browser-e2e': { needs: ['app-plan'], if: "needs.app-plan.outputs.has_browser_apps == 'true'" },
-  'browser-e2e-gpu': { needs: ['app-plan'], if: "needs.app-plan.outputs.has_gpu_apps == 'true' && ((github.event_name != 'pull_request' && github.event_name != 'merge_group') || needs.app-plan.outputs.all_apps != 'true')" },
+  'browser-e2e': { needs: ['app-plan'], if: "needs.app-plan.outputs.has_browser_apps == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)" },
+  'browser-e2e-gpu': { needs: ['app-plan'], if: "needs.app-plan.outputs.has_gpu_apps == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) && ((github.event_name != 'pull_request' && github.event_name != 'merge_group') || needs.app-plan.outputs.all_apps != 'true')" },
   'composite-site': { needs: ['app-plan'], if: "(github.event_name != 'pull_request' || !github.event.pull_request.draft) && ((github.event_name == 'push' && needs.app-plan.outputs.queue_tested != 'true') || github.event_name == 'merge_group' || github.event_name == 'schedule' || needs.app-plan.outputs.has_site == 'true')" },
   'site-runtime': { needs: ['composite-site'], if: "needs.composite-site.result == 'success'" },
   'site-audit': { needs: ['composite-site'], if: "needs.composite-site.result == 'success'" },
@@ -481,7 +481,8 @@ const SITE_RUN = ['composite-site', ...SITE_CHECK_JOBS];
 // What each scenario starts, read off ci.yml by startedJobs. A change to a job
 // condition that moves a job in or out of a row changes this table.
 const EXPECTED_JOB_GRAPH = {
-  'draft pull request, one GPU app': [...PLAN_RUN, ...APP_RUN, 'homepage-easter-egg', 'ci-required'],
+  // A draft runs unit and build tests; its browser tests run on a dispatch.
+  'draft pull request, one GPU app': [...PLAN_RUN, 'app-tests', 'homepage-easter-egg', 'ci-required'],
   'ready pull request, one GPU app': [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, 'homepage-easter-egg', 'ci-required'],
   'ready pull request, whole catalogue': [...PLAN_RUN, 'full-plan', 'app-tests', ...SITE_RUN, 'browser-e2e', 'homepage-easter-egg', 'ci-required'],
   'ready pull request over its budget': [...PLAN_RUN.slice(0, 1), 'full-plan-withheld', 'workspace-contracts', ...APP_RUN, 'homepage-easter-egg', 'ci-required'],

@@ -2,11 +2,35 @@
 
 Keep iterative PRs in draft. Drafts run repository contracts, package tests,
 lint, the homepage easter egg unless every changed path lies in a tree it
-cannot read, and app unit/browser tests for directly edited `apps/<id>/` files and
-`models/<id>.manifest.json`. If the diff cannot be determined, the app planner
-keeps its conservative full selection. Changes confined to shared packages
-receive package tests during development; their downstream applications run
-when the PR is ready.
+cannot read, and app unit and build tests (`app-tests`) for directly edited
+`apps/<id>/` files and `models/<id>.manifest.json`. If the diff cannot be
+determined, the app planner keeps its conservative full selection. Changes
+confined to shared packages receive package tests during development; their
+downstream applications run when the PR is ready.
+
+A draft starts no browser job (`browser-e2e`, `browser-e2e-gpu`). To run the
+browser tests of a draft, dispatch `ci` on its branch:
+
+```sh
+gh workflow run ci.yml --ref <branch> -f scope=affected
+gh run list --workflow ci.yml --branch <branch> --event workflow_dispatch --limit 1
+```
+
+The dispatch plans what the branch changed since it left `main` as a ready
+pull request would (unit, browser and macOS GPU tests of those apps, and the
+composite site when the plan needs it), not the draft's narrower plan. Its
+result shows in Actions and on the commit, not in the pull request's checks
+list: PR #681's checks held only its pull request run while a newer dispatch
+run of the same commit held 115 more. It does not satisfy `ci-required`.
+
+This costs feedback. In the 48 hours to 18 November 2026, 46 of 63 draft
+`ci` runs ran browser jobs: 61 jobs, 548 minutes on Linux and 56 on macOS,
+262 of them in runs a later push cancelled. None of the 61 failed, so no draft
+run in that window found a browser failure first. A person or agent who relied
+on draft browser runs now dispatches `ci` or marks the pull request ready,
+where a ready pull request has a budget of two full-plan runs in 24 hours
+([enforcement](#enforcement-in-ci)). A dispatch does not count against that
+budget: the planner counts only pull request runs (`listPullRequestRuns`).
 
 Mark the PR ready when it is ready for integration testing. `ready_for_review`
 and every subsequent push to a ready PR run the complete affected-app plan,
@@ -844,10 +868,12 @@ head or a green draft run does not satisfy that requirement.
 
 ## Workflow coverage
 
-No label or previous successful commit opts a new commit out of testing.
+No label or previous successful commit opts a new commit out of testing; a
+push to `main` skips only what a green merge queue run of each of its commits
+tested ([merge queue](#merge-queue-and-the-required-check)).
 The existing wide-PR macOS GPU policy remains: full-catalog GPU validation
-runs on main, nightly, or manual dispatch. Directly selected GPU apps still
-run during draft feedback.
+runs on main, nightly, or manual dispatch. A draft runs no GPU job; a ready
+pull request runs its directly selected GPU apps.
 
 A manual `ci` run plans like a pull request: `gh workflow run ci --ref
 <branch>` tests the apps the branch changed since it left main (on main,

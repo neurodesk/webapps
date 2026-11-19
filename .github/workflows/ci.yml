@@ -603,7 +603,9 @@ jobs:
 
   browser-e2e:
     needs: app-plan
-    if: needs.app-plan.outputs.has_browser_apps == 'true'
+    # A draft runs unit and build tests only; dispatch ci on the branch for its
+    # browser tests (docs/quality/ci-development-tiers.md).
+    if: needs.app-plan.outputs.has_browser_apps == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -694,7 +696,8 @@ jobs:
     needs: app-plan
     # A ready pull request and a merge queue run leave a whole-catalogue plan's
     # suite to the push, which runs its plan's GPU apps even when the queue tested it.
-    if: needs.app-plan.outputs.has_gpu_apps == 'true' && ((github.event_name != 'pull_request' && github.event_name != 'merge_group') || needs.app-plan.outputs.all_apps != 'true')
+    # A draft starts no browser job.
+    if: needs.app-plan.outputs.has_gpu_apps == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) && ((github.event_name != 'pull_request' && github.event_name != 'merge_group') || needs.app-plan.outputs.all_apps != 'true')
     runs-on: macos-15
     timeout-minutes: 300
     strategy:

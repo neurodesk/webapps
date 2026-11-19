@@ -182,7 +182,7 @@ if (tested) summary.unshift(`Tested in the merge queue: ${queue.runs.map((run) =
 else if (queue) summary.push(`Not covered by a merge queue run: ${queue.reason}.`);
 if (process.env.GITHUB_EVENT_NAME === 'merge_group') summary.unshift('Merge queue run: the complete plan from the queue\'s base to the commit that will land on main, with the composite site as a push builds it.');
 if (scope === 'site') summary.unshift('Scope site: only the composite site, its agentic checks and the homepage easter egg run.');
-if (draft) summary.unshift('Draft feedback only: shared dependency coverage runs on ready_for_review and every subsequent ready PR push.');
+if (draft) summary.unshift('Draft feedback only: unit and build tests of the apps it edits. Browser tests and shared dependency coverage run on ready_for_review and every later ready push; for browser tests on a draft, run `gh workflow run ci.yml --ref <branch> -f scope=affected`.');
 const withheldAdvice = `Full plan withheld: ${withheld}. This run tests only the apps the pull request edits. Convert the pull request to draft while iterating; to test every app at this head, add the ${FULL_CI_LABEL} label and use "Re-run all jobs" on this run.`;
 if (withheld) {
   summary.unshift(withheldAdvice);
