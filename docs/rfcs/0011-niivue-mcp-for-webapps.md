@@ -513,6 +513,16 @@ started is asking. Closing a dialog declines it, and an aborted call closes it.
   reason, and any other unperformed action, or an app with none performed,
   fails. No app had more than 40 actions. `node test/webmcp.smoke.mjs` passed
   all 63 apps in 432 s on that build.
+  On 19 November 2026, after the fifth review's fixes and on a fresh build of
+  the final head, the examination smoke passed its 27 checks in 77 to 110 s in
+  each of three runs beside the other two smokes, and `node
+  test/webmcp.smoke.mjs` passed all 63 apps in 453 s. The interaction smoke,
+  now holding each action to what the page shows, ran in four parallel shards
+  in up to 1,277 s: 61 apps passed and ZARRo is named in the skip list. Of 528
+  actions, 313 touched the examination and each made the next run ask to
+  resume, 213 ended it and 2 were not performed. VesselBoost failed in that
+  run when the agent's file dialog did not take its file within 30 s; it
+  passed both of two runs on its own.
 - **Full runs.** `WEBMCP_RUNS=1` also loads each app's loadable examples
   (`WEBMCP_EXAMPLES=first`: only the first), runs each with the tool and
   parameters `app_describe` gives and saves an output, through the tools
