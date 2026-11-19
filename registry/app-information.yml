@@ -28,11 +28,13 @@ shared:
     If you start an AI agent built into your browser, it can use this app's tools only while you keep the page open.
     Nothing reaches the agent until it calls a tool.
     Through them it can read run reports with your file names and checksums, measurements, the viewer's state (including the image value under the crosshair, volume names and image statistics) and the answers you type into its questions.
+    It can read what the viewer shows whenever it asks, including images you opened yourself, because you see the same image.
     It can run the app only on files you choose in its dialog, files you opened in the app once you confirm them in a dialog, or the app's own examples.
     It can move the viewer and change how images are shown, but it cannot take a picture of the viewer or save images from it.
-    Once you use the page yourself, it lets go of the files it held, no longer sees the results of its earlier runs, and a request it already started does nothing more.
+    Once you use the page yourself, a request it already started does nothing more, and it uses the files it held and the results of its earlier runs again only after you allow it in a dialog.
+    When you open other files, pick an example or decline that dialog, it lets go of those files and no longer sees those runs.
     It loads data from a web address only after you allow that address in a dialog.
-    The viewer then receives that one file, not what the address redirects to or names; for an app that reads a stored dataset by address, such as ZARRo, the dialog names the store's address, and the app reads the addresses under it.
+    The viewer then receives that one file, not what the address redirects to or names; for an app that reads a stored dataset by address, such as ZARRo, the dialog names the store's address, and the app reads only the addresses under it, following no redirect.
     It can save a run's output files to your downloads folder.
     An agent that runs in the cloud sends what it reads to its provider.
   platform_citation:

@@ -238,20 +238,32 @@ same thing.
 
 | Tool | What it does |
 | --- | --- |
-| `app_describe` | Returns the contract's operations, the examples that the page's example selectors offer with the run tool and parameters each needs, `unavailableExamples` with the reason each cannot be loaded, the viewers, the current run, the files each input role holds (`inputs`), the files the page's inputs, drops and handoffs received (`pageFiles`), whether the page may hold inputs the tools cannot list (`pageMayHoldOtherInputs`) and the example the person loaded in the page (`pageExample`). A run the tools did not start in this examination is reported as `stale`, without its report. |
+| `app_describe` | Returns the contract's operations, the examples that the page's example selectors offer with the run tool and parameters each needs, `unavailableExamples` with the reason each cannot be loaded, the viewers, the current run, the files each input role holds (`inputs`), the files the page's inputs, drops and handoffs received (`pageFiles`), whether the page may hold inputs the tools cannot list (`pageMayHoldOtherInputs`) and the example the person loaded in the page (`pageExample`), and whether the person has touched the examination (`touched`). A run the tools did not start in this examination is reported as `stale`, and this examination's run as `touched` while the person has not let the agent continue, both without the report. |
 | `inputs_request_files { role, message? }` | Asks the person to choose files for a role in a shared dialog and holds them. Returns names and sizes, or `{ declined: true }`. A DICOM role also offers a folder. |
 | `inputs_use_page_files { role, input }` | Holds the files of one `pageFiles` entry for a role, so an agent runs on what the person already opened. The person always sees the files in a shared dialog and confirms them first; refusing returns `{ declined: true }`. |
 | `inputs_load_example { exampleId }` | Downloads an example through `fetchModel`, which checks its checksums, and holds its files by role in place of everything held before. |
-| `run_<operation>` | One per operation. Takes `parameters`, with a JSON Schema written from the contract (a `required: true` parameter is required), `selections` for DICOM roles, `inputs` for URL roles and `waitSeconds` (default 30, at most 600). Refuses with `RUN_ACTIVE` while another run is going. Asks the person before it lets the app fetch a URL input, naming the address the app reads under (computed by the app's own `sourceRoots` function through the automation's `sources` command) and its origin. Hands the held files to the app, starts the run and returns the run when it ends or when `waitSeconds` passes. The files stay held, so a rerun with other parameters asks for nothing. Aborting the call cancels the run. |
-| `runs_get { runId?, waitSeconds? }` | Returns the named run, or the current one, and can wait for it to end. A run another run replaced returns `RUN_REPLACED`, never the other run; a run from an earlier examination returns `RUN_STALE`. |
-| `runs_cancel { runId? }` | Cancels the named or current run. The automation checks the run ID as it cancels, so a cancel never reaches a run that replaced the named one. |
-| `outputs_download { runId, artifactId }` | Saves an output of the named run, or `report`, to the person's downloads, if that run is still the current one and belongs to this examination. |
+| `run_<operation>` | One per operation. Takes `parameters`, with a JSON Schema written from the contract (a `required: true` parameter is required), `selections` for DICOM roles, `inputs` for URL roles and `waitSeconds` (default 30, at most 600). Refuses with `RUN_ACTIVE` while another run is going. Asks the person before it lets the app fetch a URL input, naming the address the app reads under (computed by the app's own `sourceRoots` function through the automation's `sources` command) and its origin. Hands the held files to the app, starts the run and returns the run when it ends or when `waitSeconds` passes. The files stay held, so a rerun with other parameters asks for nothing. On a touched examination it first asks to resume. Aborting the call cancels the run; the person using the page does not. |
+| `runs_get { runId?, waitSeconds? }` | Returns the named run, or the current one, and can wait for it to end. A run another run replaced returns `RUN_REPLACED`, never the other run; a run from an earlier examination returns `RUN_STALE`. On a touched examination it first asks to resume. |
+| `runs_cancel { runId? }` | Cancels the named or current run. The automation checks the run ID as it cancels, so a cancel never reaches a run that replaced the named one. On a touched examination it first asks to resume. |
+| `outputs_download { runId, artifactId }` | Saves an output of the named run, or `report`, to the person's downloads, if that run is still the current one and belongs to this examination. On a touched examination it first asks to resume. |
 | `user_ask { question, options?, allowText? }` | Asks the person a question in a shared dialog. Returns `{ answer }` or `{ dismissed: true }`. An agent uses it to resolve `SERIES_SELECTION_REQUIRED` from the candidates in the failed run. |
 | `viewers_list`, `viewers_state`, `viewers_crosshair`, `viewers_tab`, `viewers_regions`, `viewers_volumes`, `viewers_display`, `viewers_niivue` | Send the matching `viewers.*` command. They are registered before any viewer exists, so the command's own error answers a call that comes too early. `viewers_niivue` offers only the nv-mcp methods described below. |
 
 Tool results are JSON text. A tool reports a failure as `{ error: { message,
 code?, ... } }` rather than rejecting, because the browser gives the agent a
-rejection without its message. The browser does not check arguments against
+rejection without its message. The codes, listed once in `webmcp/tools.js`:
+
+| Code | Meaning |
+| --- | --- |
+| `INVALID_INPUT` | The input does not match the tool's published schema; nothing ran. |
+| `EXAMINATION_CHANGED` | The person used the page while the call was going: its result is withheld and nothing more was done. The next call that needs the held files or the run asks to resume. |
+| `RUN_STALE` | The run belongs to an examination that had ended before the call began. |
+| `RUN_REPLACED` | Another run, or a reset of the page, replaced the run; its outputs are gone. |
+| `UNKNOWN_RUN` | The tools did not start this run. |
+| `RUN_ACTIVE` | A run is still going. |
+| `ADDRESS_REFUSED`, `REDIRECT_REFUSED`, `FETCH_FAILED` | An approved fetch that could not be made. |
+
+A person refusing a dialog is not an error: the result is `{ declined: true }`. The browser does not check arguments against
 `inputSchema`, so every tool checks its input against the schema it publishes
 first (`webmcp/schema.js`) and returns `INVALID_INPUT` without running. Pure
 reads carry `readOnlyHint`. Every result carries `untrustedContentHint` except
@@ -271,7 +283,12 @@ add page controls or take settings that can name an address are not offered.
 Each offered method takes only the parameters `NIIVUE_PARAMETERS` lists, and
 any other is refused: `set_volume` leaves out `affine`, `reset_affine`,
 `transform`, `load_all_frames` and `v1`, which turns a vector volume into a
-one-frame colour image for good, and no method takes `tab`. A test holds the
+one-frame colour image for good, `load_mesh` leaves out `replace`, which removes
+the meshes already loaded, and no method takes `tab`. Every taken parameter
+was audited as reading the scene, changing only the display, or naming the
+file the person approves, and the components test records that effect for each
+one. `load_volume` replaces the volumes the viewer shows, so its consent says
+so. A test holds the
 table to nv-mcp's method list, so a method nv-mcp adds stays out until
 someone classifies it; holds each method's allowed and refused parameters to
 nv-mcp's own schemas (`CORE_SCHEMAS`), so a parameter nv-mcp adds stays out
@@ -289,32 +306,68 @@ address the agent wrote. A run with URL inputs is different: ZARRo reads a
 store's metadata and chunks itself, so its prompt names the store root that
 ZARRo's own normaliser computes from the address (an agent that names
 `.../store.ome.zarr/.zattrs` is asked about `.../store.ome.zarr`) and says
-that the app reads the addresses under it. The desktop agent server and the nv-mcp WebSocket
-keep nv-mcp's full vocabulary.
+that the app reads the addresses under it. The consent alone does not keep
+the reads there, so ZARRo enforces it where it fetches (`src/confined_store.js`):
+for a store an agent opened, a read outside the approved root is refused
+before it is sent, and a redirect is refused instead of followed. Stores the
+person opens are not confined. The desktop agent server and the nv-mcp
+WebSocket keep nv-mcp's full vocabulary.
 
-An examination (`webmcp/tool-inputs.js`) lasts while the person leaves the
-workspace alone. The tools do not list the app events that change what the
-page shows. One predicate, `interactionEffect`, decides which trusted events
-end it: a press (`pointerdown` or `pointerup`), typing, `input`, `change`,
-`paste`, a drop, and a wheel turned over the viewer or a control, in the page,
-in an open shadow root or in a same-origin frame. It leaves out the agent's
-dialogs, the shared bar and its dialogs, page scrolling (a wheel elsewhere, a
-scroll key with nothing focused), pointer movement, modifier keys, Tab and
-focus changes; a cross-origin frame's events never reach the page. The page's
-example selector, a handoff and the app's `automation.reset()` end it too. A
-new examination holds no files and the runs started before it are stale
-(`app_describe.run` says so; `runs_get`, `runs_cancel` and `outputs_download`
-return `RUN_STALE`). A run's own loads are untrusted and change nothing, so
-reruns keep their files.
+An examination (`webmcp/tool-inputs.js`) holds the files the agent holds and
+the runs it started. The tools do not list the app events that change what the
+page shows. One predicate, `interactionEffect`, decides what every event does
+to the examination: it touches it, ends it, or does not count.
+
+- **Touch.** A trusted press (`pointerdown` or `pointerup`), typing, `paste`,
+  a drop without files, and a wheel turned over the viewer or a control, in the
+  page, in an open shadow root or in a same-origin frame. The held files, the
+  runs, their reports and downloads stay, but they are unavailable without the
+  person's leave: `app_describe` reports `touched` and withholds the report, and
+  the next run, `runs_get`, `runs_cancel` or `outputs_download` first shows the
+  shared resume dialog. It names the held files by role and the examination's
+  latest run by operation and start time, and asks whether the agent may
+  continue with them. Allow clears the touch until the next interaction, so no
+  later call asks again; Decline ends the examination and the call returns
+  `{ declined: true }`.
+- **End.** A pick in any file input, files dropped on the page, the page's
+  example selector starting a load, a handoff and the app's
+  `automation.reset()`; on a touched examination also a remove or clear the
+  app reports with `nd-files`, and a run that `ProgressManager.begin` announces
+  (`nd-run-start`) while no run the tools started is going, which is a run the
+  person started. An app that does not drive its status bar with
+  `ProgressManager.begin` reports no run of its own, and the press that started
+  it only touches the examination. A new examination holds no files and the
+  runs started before it are stale (`app_describe.run` says so; `runs_get`,
+  `runs_cancel` and `outputs_download` return `RUN_STALE`); nothing can be
+  resumed.
+- **Not counted.** The agent's dialogs, the shared bar and its dialogs, page
+  scrolling (a wheel elsewhere, a scroll key with nothing focused), pointer
+  movement, modifier keys, Tab and focus changes; a cross-origin frame's events
+  never reach the page. A run's own loads are untrusted and change nothing, so
+  reruns keep their files.
+
+The listeners go on each document: the page's, and each same-origin frame's,
+found at any depth and inside open shadow roots, including frames added later
+(a mutation observer on the document and on every open shadow root) and a
+frame's new document after it navigates (its `load` event). A shadow root
+attached to an element that is neither inserted later nor a custom element
+defined later is not found.
 
 A check when a call starts is not enough: a call awaits the page, a prompt or
-a fetch, and the person can act meanwhile. Every tool call therefore reaches
-the page's automation, the prompts and the fetchers only through
-`examinedCall`, which checks the examination before each request and after
-each answer, and the tool checks once more before it returns. A call the
-person interrupts returns `EXAMINATION_CHANGED` and does nothing more: no
-report, download, viewer load or held file from it. A components test
-enumerates every tool and interrupts it after each answer it awaits.
+a fetch, and the person can act meanwhile. Every counted event therefore
+starts a new turn, and every tool call reaches the page's automation, the
+prompts and the fetchers only through `examinedCall`, which checks the turn
+before each request and after each answer, and the tool checks once more
+before it returns. A call the person interrupts returns `EXAMINATION_CHANGED`
+and does nothing more: no report, download, viewer load or held file from it.
+The turn's signal also closes its prompts, drops those still queued unshown,
+and stops its fetches and waits; the agent's own signal is kept apart, so the
+person looking at the viewer never cancels the agent's run. A components test
+enumerates every tool, on an untouched and on a touched examination, and
+interrupts it after each answer it awaits.
+
+The read-only viewer tools read what the viewer shows whatever the
+examination's state, because the person sees the same image.
 
 `pageFiles` lists what each classified input received from its change,
 `input` (for an input in an open shadow root) and `nd-files` events, and files
@@ -360,15 +413,18 @@ started is asking. Closing a dialog declines it, and an aborted call closes it.
   Privacy dialog, the app's own included: nothing reaches the agent until it
   calls a tool; it can read run reports with file names and checksums,
   measurements, viewer state (including the value under the crosshair, volume
-  names and image statistics) and the answers typed into its dialogs; it runs
+  names and image statistics) and the answers typed into its dialogs; it can
+  read what the viewer shows whenever it asks, as the person sees it; it runs
   the app only on files the person chose, already opened, or the app's
   examples, using opened files only once the person confirms them; once the
-  person uses the page it lets go of its files and a request it already
-  started does nothing more; it can move and restyle the viewer but not
-  capture it or save images from it; it fetches an address only after the
-  person allows it, and for a store the dialog names the address the app reads
-  under; it can save run outputs to downloads; an agent in the cloud sends
-  what it reads to its provider.
+  person uses the page a request it already started does nothing more, and it
+  uses its files and earlier results again only after the person allows it,
+  while opening other files, picking an example or declining releases them;
+  it can move and restyle the viewer but not capture it or save images from
+  it; it fetches an address only after the person allows it, and for a store
+  the dialog names the address the app reads under, and the app reads only
+  under it, following no redirect; it can save run outputs to downloads; an
+  agent in the cloud sends what it reads to its provider.
 - **Tested.** Node tests build the table from every app's `automation.json`
   and check that each run schema accepts and refuses the same parameters as
   the contract, both through a JSON Schema reader and through the tools' own
