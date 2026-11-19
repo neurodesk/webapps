@@ -75,9 +75,10 @@ The browser's agent works only with what you allow. It runs on files you
 choose in its dialog, files you opened in the app once you confirm them in a
 dialog, or the app's examples. When you use the page yourself, a request it
 already started does nothing more, and before it uses its files or the results
-of its earlier run again, a dialog names them and asks you; declining releases
-them. Opening other files, picking an example or a handoff releases them at
-once. It can read what the viewer shows at any time, as you see it. It can
+of its latest run again, a dialog names them, with the files that run used, and
+asks you; declining releases them. It then gets that run's report and outputs
+as the run ended, even if the page shows other results by then. Opening other
+files, picking an example or a handoff releases them at once. It can read what the viewer shows at any time, as you see it. It can
 move and restyle the viewer but cannot capture it or save images from it.
 Before the page fetches a web address the agent names, a dialog shows the
 address and asks you; the viewer then gets that one file, not a redirect, and

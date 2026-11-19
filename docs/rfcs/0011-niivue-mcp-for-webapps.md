@@ -243,9 +243,9 @@ same thing.
 | `inputs_use_page_files { role, input }` | Holds the files of one `pageFiles` entry for a role, so an agent runs on what the person already opened. The person always sees the files in a shared dialog and confirms them first; refusing returns `{ declined: true }`. |
 | `inputs_load_example { exampleId }` | Downloads an example through `fetchModel`, which checks its checksums, and holds its files by role in place of everything held before. |
 | `run_<operation>` | One per operation. Takes `parameters`, with a JSON Schema written from the contract (a `required: true` parameter is required), `selections` for DICOM roles, `inputs` for URL roles and `waitSeconds` (default 30, at most 600). Refuses with `RUN_ACTIVE` while another run is going. Asks the person before it lets the app fetch a URL input, naming the address the app reads under (computed by the app's own `sourceRoots` function through the automation's `sources` command) and its origin. Hands the held files to the app, starts the run and returns the run when it ends or when `waitSeconds` passes. The files stay held, so a rerun with other parameters asks for nothing. On a touched examination it first asks to resume. Aborting the call cancels the run; the person using the page does not. |
-| `runs_get { runId?, waitSeconds? }` | Returns the named run, or the current one, and can wait for it to end. A run another run replaced returns `RUN_REPLACED`, never the other run; a run from an earlier examination returns `RUN_STALE`. On a touched examination it first asks to resume. |
+| `runs_get { runId?, waitSeconds? }` | Returns the named run, or the current one, and can wait for it to end. A run another run replaced returns `RUN_REPLACED`, never the other run; a run from an earlier examination returns `RUN_STALE`. A run that has ended is returned as the tools recorded it when it ended. On a touched examination it first asks to resume. |
 | `runs_cancel { runId? }` | Cancels the named or current run. The automation checks the run ID as it cancels, so a cancel never reaches a run that replaced the named one. On a touched examination it first asks to resume. |
-| `outputs_download { runId, artifactId }` | Saves an output of the named run, or `report`, to the person's downloads, if that run is still the current one and belongs to this examination. On a touched examination it first asks to resume. |
+| `outputs_download { runId, artifactId }` | Saves an output of the named run, or `report`, to the person's downloads, if that run is still the current one, belongs to this examination and still holds the output with the checksum recorded when it ended (else `RUN_STALE`). On a touched examination it first asks to resume. |
 | `user_ask { question, options?, allowText? }` | Asks the person a question in a shared dialog. Returns `{ answer }` or `{ dismissed: true }`. An agent uses it to resolve `SERIES_SELECTION_REQUIRED` from the candidates in the failed run. |
 | `viewers_list`, `viewers_state`, `viewers_crosshair`, `viewers_tab`, `viewers_regions`, `viewers_volumes`, `viewers_display`, `viewers_niivue` | Send the matching `viewers.*` command. They are registered before any viewer exists, so the command's own error answers a call that comes too early. `viewers_niivue` offers only the nv-mcp methods described below. |
 
@@ -257,7 +257,7 @@ rejection without its message. The codes, listed once in `webmcp/tools.js`:
 | --- | --- |
 | `INVALID_INPUT` | The input does not match the tool's published schema; nothing ran. |
 | `EXAMINATION_CHANGED` | The person used the page while the call was going: its result is withheld and nothing more was done. The next call that needs the held files or the run asks to resume. |
-| `RUN_STALE` | The run belongs to an examination that had ended before the call began. |
+| `RUN_STALE` | The run belongs to an examination that had ended before the call began, or the page no longer holds the output the run ended with. |
 | `RUN_REPLACED` | Another run, or a reset of the page, replaced the run; its outputs are gone. |
 | `UNKNOWN_RUN` | The tools did not start this run. |
 | `RUN_ACTIVE` | A run is still going. |
@@ -314,44 +314,67 @@ person opens are not confined. The desktop agent server and the nv-mcp
 WebSocket keep nv-mcp's full vocabulary.
 
 An examination (`webmcp/tool-inputs.js`) holds the files the agent holds and
-the runs it started. The tools do not list the app events that change what the
-page shows. One predicate, `interactionEffect`, decides what every event does
-to the examination: it touches it, ends it, or does not count.
+the runs it started. Five reviews found that the tools cannot tell from page
+events what the person did: a drop the shell took on a canvas, an Undo, an
+app's own Remove button, a run the person started and a redisplay all looked
+alike or reached no listener. The guarantee therefore rests on one event fact
+only, whether the person did anything trusted in the page since the agent last
+had their Allow, and on what the tools recorded, not on what the page answers.
 
-- **Touch.** A trusted press (`pointerdown` or `pointerup`), typing, `paste`,
-  a drop without files, and a wheel turned over the viewer or a control, in the
-  page, in an open shadow root or in a same-origin frame. The held files, the
-  runs, their reports and downloads stay, but they are unavailable without the
-  person's leave: `app_describe` reports `touched` and withholds the report, and
-  the next run, `runs_get`, `runs_cancel` or `outputs_download` first shows the
-  shared resume dialog. It names the held files by role and the examination's
-  latest run by operation and start time, and asks whether the agent may
-  continue with them. Allow clears the touch until the next interaction, so no
-  later call asks again; Decline ends the examination and the call returns
-  `{ declined: true }`.
-- **End.** A pick in any file input, files dropped on the page, the page's
-  example selector starting a load, a handoff and the app's
-  `automation.reset()`; on a touched examination also a remove or clear the
-  app reports with `nd-files`, and a run that `ProgressManager.begin` announces
-  (`nd-run-start`) while no run the tools started is going, which is a run the
-  person started. An app that does not drive its status bar with
-  `ProgressManager.begin` reports no run of its own, and the press that started
-  it only touches the examination. A new examination holds no files and the
-  runs started before it are stale (`app_describe.run` says so; `runs_get`,
-  `runs_cancel` and `outputs_download` return `RUN_STALE`); nothing can be
-  resumed.
+- **Seeing the person first.** `site/theme.js`, the one classic script of
+  every page, runs before any module. When the browser exposes a model
+  context, it adds capture listeners on window for every press, key, input,
+  change, paste, wheel, `dragenter`, `dragover` and drop, and hands each event
+  to the tools. A capture listener on window that is added first runs before
+  every other listener, so no listener of the page or the shell can stop an
+  event before the tools see it. Composed events from inside shadow roots pass
+  window too. Same-origin frames, found at any depth and inside open shadow
+  roots, get the same listeners on their windows from the first animation
+  frame after each new document appears, and a frame navigating away from a
+  document it showed touches the examination itself.
+- **Touch.** A trusted action in the workspace touches the examination. The
+  held files and the latest run stay, but the agent gets nothing from them
+  without the shared resume dialog: `app_describe` reports `touched` without
+  the report, and the next run, `runs_get`, `runs_cancel` or
+  `outputs_download` asks first. Calls waiting on one touch share one dialog
+  and its one answer. The dialog names exactly what Allow hands back: the
+  latest run, by operation and start time, with the input files it ran on, and
+  apart from them the files the agent keeps for its next run. It says the
+  agent gets the results that run ended with, even if the page shows others
+  now. Allow discloses that run and those files and clears the touch until the
+  next one; the examination's earlier runs stay withheld (`RUN_STALE`).
+  Decline ends the examination.
+- **Truth at disclosure.** When a run the tools started ends, the tools record
+  its input files and the snapshot it ended with: its report and the identity
+  of each output (file name, size and SHA-256, as the report gives them).
+  After Allow, `runs_get` returns that record, never what the page answers
+  later. `outputs_download` takes a fresh snapshot of the run and saves only
+  while it still holds the recorded output, and the automation checks the
+  recorded checksum again as it saves; otherwise the call returns `RUN_STALE`
+  and says the page holds other results. Every app registers through
+  `registerAppAutomation`, which keeps each run's own output files and their
+  checksums, so every app can establish this identity and none has to refuse
+  a download after a touch. A run the person starts through the app's own
+  controls never reaches the automation, so it cannot make the agent's run
+  stale; the dialog's wording covers it instead.
+- **End.** A convenience that spares the person a dialog with no point: a pick
+  in any file input, files dropped on the page, the page's example selector
+  starting a load, a handoff and the app's `automation.reset()`, and on a
+  touched examination a list change the app reports with `nd-files` or files
+  the page itself puts on a classified input (the shell's Undo). A new
+  examination holds no files and the runs started before it are stale
+  (`app_describe.run` says so; `runs_get`, `runs_cancel` and
+  `outputs_download` return `RUN_STALE`). An end the tools miss is a touch,
+  which only asks.
 - **Not counted.** The agent's dialogs, the shared bar and its dialogs, page
   scrolling (a wheel elsewhere, a scroll key with nothing focused), pointer
   movement, modifier keys, Tab and focus changes; a cross-origin frame's events
   never reach the page. A run's own loads are untrusted and change nothing, so
   reruns keep their files.
 
-The listeners go on each document: the page's, and each same-origin frame's,
-found at any depth and inside open shadow roots, including frames added later
-(a mutation observer on the document and on every open shadow root) and a
-frame's new document after it navigates (its `load` event). A shadow root
-attached to an element that is neither inserted later nor a custom element
-defined later is not found.
+A shadow root attached to an element that is neither inserted later nor a
+custom element defined later is not searched for frames; its own events still
+pass window.
 
 A check when a call starts is not enough: a call awaits the page, a prompt or
 a fetch, and the person can act meanwhile. Every counted event therefore
@@ -453,9 +476,12 @@ started is asking. Closing a dialog declines it, and an aborted call closes it.
   `node test/webmcp-interaction.smoke.mjs` holds a file in every app and
   performs each trusted action the workspace offers once the app is ready
   (every classified file and folder input, every remove or clear button, and
-  every visible select, checkbox, text field and canvas, at most 40 per app);
-  each must touch or end the examination as `interactionEffect` judges the
-  events it sent, and each touch must make the agent's next run ask to resume.
+  every visible select, changed to another option by keyboard, checkbox, text
+  field and canvas, at most 40 per app). Its expectation does not come from
+  `interactionEffect`: after each action, with no Allow given, the agent must
+  not get the held file back, so the examination is ended or touched and a
+  touch makes the next run ask to resume; an action that changes the file
+  names the workspace shows or its classified inputs hold must end it.
   `node test/webmcp.smoke.mjs` checks every app of the built site at 1440 and
   390 px in Chrome's own WebMCP (it fails without it unless
   `WEBMCP_STAND_IN=1`): the full tool set, `app_describe` with every loadable
