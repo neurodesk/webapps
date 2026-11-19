@@ -469,10 +469,19 @@ started is asking. Closing a dialog declines it, and an aborted call closes it.
   against a local server that redirects to another (none reaches the second),
   Brain Extraction's viewer permissions, redirect refusal and fetch approval,
   touches from a wheel, a drag and clicks in same-origin frames (one that
-  navigates, one added inside an open shadow root), and the resume flow:
-  NiiMath's example run, a wheel and a click in the viewer, then `runs_get`
-  and `outputs_download` after Allow, a declined result after Decline, and
-  nothing to resume after the person opens their own file.
+  navigates, one added inside an open shadow root, and a click in a frame's
+  new document before it loads), and the resume flow: NiiMath's example run,
+  a wheel and a click in the viewer, then `runs_get` and `outputs_download`
+  after Allow, with the saved mask's SHA-256 equal to the recorded one, a
+  declined result after Decline, and nothing to resume after the person opens
+  their own file. It also drops a scan on NiiMath's viewer canvas, which the
+  shell takes at window (the example run is then stale with no dialog), uses
+  the status bar's Undo, runs the person's own command after an agent run
+  (Allow returns the agent run's recorded report and bytes), names a run's
+  own file apart from a file the agent took since, shares one dialog between
+  a report and a download asked for together, removes a NeSVoR stack, and
+  loads in ZARRo by hand, in the same tab, a store an agent attempt failed
+  on.
   `node test/webmcp-interaction.smoke.mjs` holds a file in every app and
   performs each trusted action the workspace offers once the app is ready
   (every classified file and folder input, every remove or clear button, and

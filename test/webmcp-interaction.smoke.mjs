@@ -95,7 +95,16 @@ const call = (page, name, input = {}) => page.evaluate(async ([name, input]) => 
 }, [name, input]);
 
 // The agent asks for a file and the test answers inside the agent's own dialog, which is not the workspace.
-async function hold(page, { role, count }) {
+async function hold(page, target) {
+  // An app may still be answering the last action and end the examination while the agent asks; ask again then.
+  for (let attempt = 0; ; attempt += 1) {
+    const refused = await holdOnce(page, target);
+    if (!refused || attempt === 2 || !refused.includes('EXAMINATION_CHANGED')) return refused;
+    await ready(page, 10);
+  }
+}
+
+async function holdOnce(page, { role, count }) {
   await page.evaluate(([role]) => {
     globalThis.interactionHold = document.modelContext.getTools()
       .then(tools => document.modelContext.executeTool(tools.find(tool => tool.name === 'inputs_request_files'), { role }));
@@ -104,26 +113,46 @@ async function hold(page, { role, count }) {
   await field.waitFor({ state: 'attached', timeout: 10000 });
   await field.setInputFiles(Array.from({ length: count }, (_, index) => ({ name: `agent-held-${index + 1}.nii.gz`, mimeType: 'application/gzip', buffer: syntheticNifti({ dims: [8, 8, 8] }) })));
   const held = await page.evaluate(() => Promise.race([globalThis.interactionHold, new Promise(resolve => { setTimeout(() => resolve('{"pending":true}'), 10000); })]));
-  return JSON.parse(held).files ? null : held;
+  if (JSON.parse(held).files) return null;
+  // Leave no dialog open behind a request that did not finish, or the next one queues behind it.
+  await page.locator(PROMPT).getByRole('button', { name: 'Decline' }).click({ timeout: 2000 }).catch(() => {});
+  return held;
 }
 
-// The files the page shows: every name of a file the test gave it, in the workspace's text (shown or
-// collapsed) and in its classified inputs. Read from the page, not from the tools.
+// The files the page holds, read from the page and not from the tools: the distinct names of files the
+// test gave it in the workspace's text, shown or collapsed, and in its classified inputs. The status bar
+// and the technical console are left out: they narrate what happened, not what is loaded.
 const SHOWN_FILES = /\b(?:loaded-\d+|person-scan|slice)\.nii\.gz\b/g;
+const NARRATION = 'footer#status, nd-console, .nd-console-container, .console-container, #neurodeskAgentPrompt, .nd-app-bar, .nd-app-utility-bar, dialog.nd-app-dialog';
 function shownFiles(page) {
-  return page.evaluate(([workspace, pattern]) => {
-    const names = [];
+  return page.evaluate(([workspace, pattern, narration]) => {
+    const names = new Set();
     const scan = root => {
       for (const node of root.querySelectorAll(`*${workspace}`)) {
-        if (node.closest('#neurodeskAgentPrompt, .nd-app-bar, .nd-app-utility-bar, dialog.nd-app-dialog')) continue;
-        for (const child of node.childNodes) if (child.nodeType === 3) names.push(...(child.textContent.match(new RegExp(pattern, 'g')) ?? []));
-        if (node.matches('input[type="file"][data-neurodesk-input]')) names.push(...[...(node.files ?? [])].map(file => `input:${file.name}`));
+        if (node.closest(narration)) continue;
+        for (const child of node.childNodes) if (child.nodeType === 3) for (const name of child.textContent.match(new RegExp(pattern, 'g')) ?? []) names.add(name);
+        if (node.matches('input[type="file"][data-neurodesk-input]')) for (const file of node.files ?? []) names.add(`input ${node.id}: ${file.name}`);
         if (node.shadowRoot) scan(node.shadowRoot);
       }
     };
     scan(document);
-    return names.sort().join('|');
-  }, [WORKSPACE, SHOWN_FILES.source]);
+    return [...names].sort().join('|');
+  }, [WORKSPACE, SHOWN_FILES.source, NARRATION]);
+}
+
+// The files the page holds once they stop changing (2 s unchanged, at most 20 s): an app finishes
+// answering an earlier action in its own time, and that must not count against the next one.
+async function settledFiles(page) {
+  let last = await shownFiles(page);
+  for (let since = Date.now(), deadline = Date.now() + 20000; Date.now() - since < 2000 && Date.now() < deadline;) {
+    await page.waitForTimeout(250);
+    const now = await shownFiles(page);
+    if (now !== last) {
+      last = now;
+      since = Date.now();
+    }
+  }
+  return last;
 }
 
 // Actions the person can take; each element is marked so the action finds it again.
@@ -140,12 +169,17 @@ async function actions(page) {
       if (input.id !== 'neurodesk-input-transfer') mark(input, { kind: input.hasAttribute('webkitdirectory') ? 'folder input' : 'file input', name: named(input, 'file input'), directory: input.hasAttribute('webkitdirectory') });
     }
     const pattern = new RegExp(removers.slice(1, removers.lastIndexOf('/')), removers.slice(removers.lastIndexOf('/') + 1));
-    for (const button of document.querySelectorAll(`button${workspace}`)) {
+    // The status bar's × cancels a run; it removes no input.
+    for (const button of document.querySelectorAll(`button${workspace}:not(footer#status button)`)) {
       const name = (button.getAttribute('aria-label') || button.title || button.textContent).trim();
       if (visible(button) && !button.disabled && pattern.test(name)) mark(button, { kind: 'remove or clear button', name });
     }
     for (const [kind, selector] of [['select', `select${workspace}`], ['checkbox', `input[type="checkbox"]${workspace}`], ['text field', `input[type="text"]${workspace}, input[type="number"]${workspace}, textarea${workspace}`], ['viewer canvas', `canvas${workspace}`]]) {
-      for (const element of document.querySelectorAll(selector)) if (visible(element) && !element.disabled) mark(element, { kind, name: named(element, kind) });
+      for (const element of document.querySelectorAll(selector)) {
+        // A select with one option offers no change to make.
+        if (kind === 'select' && [...element.options].filter(option => !option.disabled).length < 2) continue;
+        if (visible(element) && !element.disabled) mark(element, { kind, name: named(element, kind) });
+      }
     }
     return list;
   }, [WORKSPACE, String(REMOVERS)]);
@@ -172,11 +206,16 @@ async function perform(context, page, action) {
     await cdp.detach();
   } else if (action.kind === 'select') {
     // A trusted change of value: focus the closed select and step to the next option, or the previous one at the end.
-    const before = await locator.inputValue();
+    // An app may answer the change by resetting the select, so the change event, not the value, says it changed.
+    await locator.evaluate(select => {
+      select.dataset.interactionChanged = '';
+      select.addEventListener('change', () => { select.dataset.interactionChanged = 'yes'; }, { once: true });
+    });
+    const changed = () => locator.evaluate(select => select.dataset.interactionChanged === 'yes');
     await locator.focus();
     await page.keyboard.press('ArrowDown');
-    if (await locator.inputValue() === before) await page.keyboard.press('ArrowUp');
-    if (await locator.inputValue() === before) throw new Error('the select has no other option to choose');
+    if (!await changed()) await page.keyboard.press('ArrowUp');
+    if (!await changed()) throw new Error('the select has no other option to choose');
   } else if (action.kind === 'text field') {
     await locator.click({ timeout: 5000 });
     await page.keyboard.type('1');
@@ -225,7 +264,12 @@ async function resumeDeclined(page, run, held) {
   }, [run.tool, run.input]);
   const decline = page.locator(PROMPT).getByRole('button', { name: 'Decline' });
   const shown = await decline.waitFor({ timeout: 10000 }).then(() => true, () => false);
-  if (!shown) return `no resume dialog: ${JSON.stringify(await page.evaluate(() => Promise.race([globalThis.interactionResume, new Promise(resolve => { setTimeout(() => resolve(null), 2000); })])))}`;
+  if (!shown) {
+    const answer = await page.evaluate(() => Promise.race([globalThis.interactionResume, new Promise(resolve => { setTimeout(() => resolve(null), 2000); })]));
+    // The app ended the examination after the touch was read (a late load or reported removal): nothing is left to resume.
+    if (!Object.keys((await call(page, 'app_describe')).inputs).length) return 'ended';
+    return `no resume dialog: ${JSON.stringify(answer)}`;
+  }
   const listed = await page.locator(`${PROMPT} li`).allTextContents();
   await decline.click();
   const answer = await page.evaluate(() => globalThis.interactionResume);
@@ -240,7 +284,7 @@ async function attempt(context, page, app, target, run, action, outcome) {
   if (refused) return `the agent could not hold a file: ${refused.slice(0, 200)}`;
   const before = await call(page, 'app_describe');
   const held = Object.values(before.inputs).flat().map(file => file.name);
-  const shownBefore = await shownFiles(page);
+  const shownBefore = await settledFiles(page);
   try {
     await perform(context, page, action);
   } catch (error) {
@@ -259,11 +303,20 @@ async function attempt(context, page, app, target, run, action, outcome) {
   await page.waitForLoadState('domcontentloaded').catch(() => {});
   if (!page.url().startsWith(`${origin}/${app.path}/`)) return 'navigated away';
   await ready(page, 10);
-  const replaced = (await shownFiles(page)) !== shownBefore;
+  const shownAfter = await settledFiles(page);
+  const replaced = shownAfter !== shownBefore;
+  if (replaced) {
+    const [was, now] = [shownBefore, shownAfter].map(list => list.split('|').filter(Boolean));
+    outcome.shown = { gone: was.filter(name => !now.includes(name)), added: now.filter(name => !was.includes(name)) };
+  }
   const after = await call(page, 'app_describe');
   const observed = !Object.keys(after.inputs).length ? 'ended' : after.touched ? 'touched' : 'kept';
   outcome.replaced = replaced;
   if (observed === 'touched') outcome.resume = await resumeDeclined(page, run, held);
+  if (outcome.resume === 'ended') {
+    delete outcome.resume;
+    return 'ended';
+  }
   if (observed === 'kept') return 'NOT COUNTED';
   if (replaced && observed !== 'ended') return `NOT ENDED: the page shows other files, yet the examination is ${observed}`;
   if (outcome.resume) return `RESUME: ${outcome.resume}`;

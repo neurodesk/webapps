@@ -556,7 +556,7 @@ try {
   });
 
   await check('NiiMath: after the example run, a scan dropped on the viewer leaves no dialog that leads to the old download', async context => {
-    const { page, call, dialog } = await open(context, 'niimath');
+    const { page, call } = await open(context, 'niimath');
     const downloads = [];
     page.on('download', download => downloads.push(download.suggestedFilename()));
     await call('inputs_load_example', { exampleId: 't1-head' });
@@ -570,7 +570,7 @@ try {
     await page.waitForFunction(() => document.querySelector('#fileInfo')?.textContent === 'person-other.nii.gz');
     for (const [name, input] of [['outputs_download', { runId: run.runId, artifactId: 'mask' }], ['runs_get', { runId: run.runId }], ['outputs_download', { runId: run.runId, artifactId: 'report' }]]) {
       assert.equal((await call(name, input)).error?.code, 'RUN_STALE', name);
-      assert.equal(await dialog.evaluate(element => element.open), false, `${name} opens no dialog`);
+      assert.equal(await page.evaluate(() => Boolean(document.querySelector('dialog#neurodeskAgentPrompt')?.open)), false, `${name} opens no dialog`);
     }
     await page.waitForTimeout(1000);
     assert.deepEqual(downloads, [], 'nothing is saved');
@@ -623,8 +623,8 @@ try {
     await page.locator('dialog#neurodeskAgentPrompt input[type="file"]:not([webkitdirectory])').setInputFiles(scan('second-agent.nii.gz'));
     assert.ok((await page.evaluate(() => globalThis.agentHold)).files);
     const [x, y] = await centreOf(page, '#gl');
-    await page.mouse.move(x, y);
-    await page.mouse.wheel(0, 120);
+    await page.mouse.click(x, y);
+    assert.equal((await call('app_describe')).touched, true, 'a click in the viewer');
     const allowed = await answered('runs_get', { runId: run.runId }, 'Allow');
     assert.deepEqual(allowed.listed, ['image: first-agent.nii.gz', 'image: second-agent.nii.gz'], allowed.text);
     assert.equal(allowed.report.inputs.image[0].filename, 'first-agent.nii.gz', 'the report is of the run the dialog named');
