@@ -1426,35 +1426,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.5.20261111",
-          "url": "https://github.com/neurodesk/webapps/releases/download/edgereg-v0.5.20261111/edgereg-0.5.20261111-linux-x64.tar.gz",
-          "sha256": "1ae94e8033e1d0b56a4ba085c8761eee77f5d6763eefb7db0dbd50c11937a0d1",
-          "bytes": 47984661,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/edgereg-v0.5.20261111/edgereg-0.5.20261111-linux-x64.tar.gz.validation.txt",
+          "version": "0.5.20261119",
+          "url": "https://github.com/neurodesk/webapps/releases/download/edgereg-v0.5.20261119/edgereg-0.5.20261119-linux-x64.tar.gz",
+          "sha256": "3a4a3f1f0dca76c13242a3a20329341cd641ca64e523311014b8fa921674f0ef",
+          "bytes": 47982888,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/edgereg-v0.5.20261119/edgereg-0.5.20261119-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf edgereg-0.5.20261111-linux-x64.tar.gz\n./edgereg-0.5.20261111-linux-x64/edgereg moving.nii.gz fixed.nii.gz results"
+          "command": "tar -xzf edgereg-0.5.20261119-linux-x64.tar.gz\n./edgereg-0.5.20261119-linux-x64/edgereg moving.nii.gz fixed.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.5.20261111",
-          "url": "https://github.com/neurodesk/webapps/releases/download/edgereg-v0.5.20261111/edgereg-0.5.20261111-macos-arm64.pkg",
-          "sha256": "25acf419b76619d3f4d588b4f1cbf1d556ad05a0b235632020cc5435e2a15209",
-          "bytes": 41679865,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/edgereg-v0.5.20261111/edgereg-0.5.20261111-macos-arm64.pkg.validation.txt",
+          "version": "0.5.20261119",
+          "url": "https://github.com/neurodesk/webapps/releases/download/edgereg-v0.5.20261119/edgereg-0.5.20261119-macos-arm64.pkg",
+          "sha256": "197193146d2535804e079f2170a2f45172a1a71d2825b509b6e8f3d992e74cc8",
+          "bytes": 41685688,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/edgereg-v0.5.20261119/edgereg-0.5.20261119-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg edgereg-0.5.20261111-macos-arm64.pkg -target /\nedgereg self-check\nedgereg moving.nii.gz fixed.nii.gz results"
+          "command": "sudo installer -pkg edgereg-0.5.20261119-macos-arm64.pkg -target /\nedgereg self-check\nedgereg moving.nii.gz fixed.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.5.20261111",
-          "url": "https://github.com/neurodesk/webapps/releases/download/edgereg-v0.5.20261111/edgereg-0.5.20261111-windows-x64.zip",
-          "sha256": "e10491390e6b9bf2ea6122c7dc0a2847b5cfdbc759e158868bc8174f95a0196c",
-          "bytes": 38741024,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/edgereg-v0.5.20261111/edgereg-0.5.20261111-windows-x64.zip.validation.txt",
+          "version": "0.5.20261119",
+          "url": "https://github.com/neurodesk/webapps/releases/download/edgereg-v0.5.20261119/edgereg-0.5.20261119-windows-x64.zip",
+          "sha256": "39f663e944e8457798298da3510510d8cf8e223491ae373b95be3613940930f4",
+          "bytes": 38746357,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/edgereg-v0.5.20261119/edgereg-0.5.20261119-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\edgereg-0.5.20261111-windows-x64.zip -DestinationPath .\n.\\edgereg-0.5.20261111-windows-x64\\edgereg.exe moving.nii.gz fixed.nii.gz results"
+          "command": "Expand-Archive -Path .\\edgereg-0.5.20261119-windows-x64.zip -DestinationPath .\n.\\edgereg-0.5.20261119-windows-x64\\edgereg.exe moving.nii.gz fixed.nii.gz results"
         }
       ],
       "containers": []
