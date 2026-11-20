@@ -777,6 +777,7 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
   }
 
   function onRuntimeError(event) {
+    if (view?.[STATUS_MANAGED_KEY]) return;
     const candidate = event?.error ?? event?.reason ?? event?.message ?? event;
     if (!isMemoryErrorMessage(candidate)) return;
     const raw = errorText(candidate);
@@ -977,6 +978,13 @@ export function bindMemoryCrashMonitor(doc = globalThis.document, options = {}) 
   view?.addEventListener?.('pagehide', onCleanUnload);
   view?.addEventListener?.('pageshow', onPageShow);
 
+  for (const input of doc.querySelectorAll('input[type="file"][data-neurodesk-input]')) {
+    if (input.files?.length) committedInputs.set(input, input.files.length);
+  }
+  if (committedInputs.size > 0) {
+    loaded = true;
+    interacted = true;
+  }
   flushPendingRecovery();
   inspectLiveErrors();
   markConsoleTailsSeen();

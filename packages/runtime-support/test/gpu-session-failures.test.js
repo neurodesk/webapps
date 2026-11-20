@@ -9,12 +9,25 @@ const graph = {
   sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
   input: 'image', output: 'image', nodes: [], tensors: {},
 };
-async function session(device) {
+async function session(device, model = graph) {
   return createGpuSession(new ArrayBuffer(0), [32, 32, 32], {
-    graph, gpu: { async requestAdapter() { return { ...device, async requestDevice() { return device; } }; } },
+    graph: model, gpu: { async requestAdapter() { return { ...device, async requestDevice() { return device; } }; } },
   });
 }
 const feeds = getData => ({ image: { type: 'float32', dims: [1, 1, 32, 32, 32], getData } });
+
+test('GPU setup reports the scoped allocation failure when pipeline creation rejects', async () => {
+  const device = fakeGpuDevice();
+  device.createComputePipelineAsync = async () => { throw new Error('Pipeline creation failed'); };
+  device.popResults.push(new Error('Validation scope rejected'), { message: '' });
+  await assert.rejects(session(device, {
+    ...graph,
+    output: 'result',
+    nodes: [{ name: 'elu', op: 'Elu', inputs: ['image'], output: 'result', attrs: { alpha: 1 } }],
+  }), /GPU out of memory/);
+  assert.equal(device.scopes, 0);
+  assert.equal(device.popped, 2);
+});
 
 test('GPU run preserves input failure, drains both scopes and clears busy state', async () => {
   const device = fakeGpuDevice();

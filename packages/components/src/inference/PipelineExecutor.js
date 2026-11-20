@@ -30,6 +30,8 @@ export class PipelineExecutor {
     this.workerSession = null;
     this.workerReady = false;
     this.workerInitializing = false;
+    this.workerHasInput = false;
+    this.workerInputLost = false;
     this.running = false;
     this.results = {};
     this.stageOrder = [];
@@ -62,7 +64,10 @@ export class PipelineExecutor {
   getStepStatus(step) { return this.stepStatus[step] || 'pending'; }
   getVolumeInfo() { return this.volumeInfo; }
 
-  async initialize() {
+  async initialize({ replacingInput = false } = {}) {
+    if (this.workerInputLost && !replacingInput) {
+      throw new Error('The processing worker stopped. Load your input files again.');
+    }
     this.setupWorker();
     if (this.workerReady) return;
     if (this.workerInitializing) return this.waitUntilReady();
@@ -88,14 +93,14 @@ export class PipelineExecutor {
     const session = new WorkerSession({
       createWorker: this.createWorker || (() => new Worker(this.workerUrl, this.workerType ? { type: this.workerType } : undefined)),
       onError: (message) => {
+        if (this.workerSession !== session) return;
         this.updateOutput(`Worker error: ${message}`);
-        // handleError discards a worker that fails while initializing. After
-        // initialization the worker holds loaded inputs, so it stays: a fresh
-        // worker would run the next step without them.
-        this.handleError(message);
+        this.handleError(message, { fatal: true });
       },
     });
-    session.subscribe((message) => this.handleMessage(message));
+    session.subscribe((message) => {
+      if (this.workerSession === session) this.handleMessage(message);
+    });
     // Publish only a started session: a Worker constructor that throws (for
     // example out of memory) must leave the next retry free to start again.
     session.start();
@@ -147,7 +152,7 @@ export class PipelineExecutor {
         this.workerLog(data.message, data);
         break;
       case WorkerEventType.ERROR:
-        this.handleError(data.message || data.error || 'Worker failed');
+        this.handleError(data.message || data.error || 'Worker failed', { fatal: data.fatal === true });
         break;
       case WorkerEventType.INITIALIZED:
         this.workerReady = true;
@@ -195,7 +200,7 @@ export class PipelineExecutor {
     }
   }
 
-  handleError(message) {
+  handleError(message, { fatal = false } = {}) {
     const wasInitializing = this.workerInitializing;
     this.updateOutput(`Error: ${message}`);
     this.setProgress(0, 'Failed');
@@ -206,11 +211,12 @@ export class PipelineExecutor {
     this.currentRunningStep = null;
     if (wasInitializing) {
       this.lastInitError = message;
-      if (this.workerSession) {
-        this.workerSession.failed = true;
-        this.workerSession.failureReason = message;
-        this.terminateWorker();
-      }
+    }
+    if ((wasInitializing || fatal) && this.workerSession) {
+      this.workerSession.failed = true;
+      this.workerSession.failureReason = message;
+      this.workerInputLost ||= this.workerHasInput;
+      this.terminateWorker();
     }
     this.onError(message);
   }
@@ -269,14 +275,14 @@ export class PipelineExecutor {
   }
 
   async load(inputData, payload = {}) {
-    await this.initialize();
+    await this.initialize({ replacingInput: true });
     this.running = true;
     this.stepStatus.load = 'running';
     this.post(WorkerRequestType.LOAD, { ...payload, inputData });
   }
 
   async loadVolume(inputData, payload = {}, { assertCurrent } = {}) {
-    await this.initialize();
+    await this.initialize({ replacingInput: true });
     assertCurrent?.();
     this.inputVolumeBuffer = inputData.slice(0);
     this.running = true;
@@ -323,7 +329,7 @@ export class PipelineExecutor {
   }
 
   async restoreState(data = {}) {
-    await this.initialize();
+    await this.initialize({ replacingInput: true });
     return new Promise((resolve, reject) => {
       this.pendingRestore = { resolve, reject };
       this.post(WorkerRequestType.RESTORE_STATE, data);
@@ -331,7 +337,7 @@ export class PipelineExecutor {
   }
 
   async resetState(data = {}) {
-    await this.initialize();
+    await this.initialize({ replacingInput: true });
     this.results = {};
     this.stageOrder = [];
     this.stepStatus = {};
@@ -341,7 +347,7 @@ export class PipelineExecutor {
   }
 
   async resetWorkerState(data = {}) {
-    await this.initialize();
+    await this.initialize({ replacingInput: true });
     this.postRaw({ type: WorkerRequestType.RESET_STATE, data }, { transfer: false });
     this.stepStatus = Object.fromEntries(this.steps.map(step => [step, 'pending']));
     this.volumeInfo = null;
@@ -390,7 +396,7 @@ export class PipelineExecutor {
   }
 
   async restoreCheckpoint(checkpoint) {
-    await this.initialize();
+    await this.initialize({ replacingInput: true });
     const payload = await this.createRestorePayload(checkpoint);
     return new Promise((resolve, reject) => {
       this.pendingRestore = { resolve, reject };
@@ -476,6 +482,7 @@ export class PipelineExecutor {
     this.workerSession = null;
     this.workerReady = false;
     this.workerInitializing = false;
+    this.workerHasInput = false;
     this.pendingRestore = null;
   }
 
@@ -499,16 +506,20 @@ export class PipelineExecutor {
   }
 
   post(type, data = {}, options = {}) {
-    if (!this.workerSession) throw new Error('The worker stopped before the request could be sent.');
-    const payload = { type, data };
-    const transferables = options.transfer === false ? [] : collectTransferables(data);
-    this.workerSession.send(payload, transferables);
+    this.postRaw({ type, data }, options);
   }
 
   postRaw(message, options = {}) {
     if (!this.workerSession) throw new Error('The worker stopped before the request could be sent.');
     const transferables = options.transfer === false ? [] : collectTransferables(message.data || {});
     this.workerSession.send(message, transferables);
+    if (message.type === WorkerRequestType.LOAD || message.type === WorkerRequestType.RESTORE_STATE) {
+      this.workerHasInput = true;
+      this.workerInputLost = false;
+    } else if (message.type === WorkerRequestType.RESET_STATE) {
+      this.workerHasInput = false;
+      this.workerInputLost = false;
+    }
   }
 }
 

@@ -126,7 +126,7 @@ export interface FormattedMemoryError {
 export function isMemoryErrorMessage(value: unknown): boolean;
 export function isRawMemoryErrorText(value: unknown): boolean;
 export function formatMemoryError(value: unknown, options?: { kind?: FormattedMemoryError['kind']; detail?: string }): FormattedMemoryError | null;
-export function bindMemoryCrashMonitor(doc?: Document, options?: { now?: () => number; maxAgeMs?: number }): { destroy(): void } | null;
+export function bindMemoryCrashMonitor(doc?: Document, options?: { appId?: string; now?: () => number; maxAgeMs?: number }): { destroy(): void } | null;
 
 export * from './elements/index.js';
 export * from './ui/templates.js';

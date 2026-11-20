@@ -88,7 +88,7 @@ test('initialization failure releases the readiness wait and preserves the worke
   await rejected;
 });
 
-test('an init failure starts fresh on retry, while a mid-run worker crash rejects pending restore and keeps loaded state', async () => {
+test('worker failure retires the session and recovery requires any lost inputs', async () => {
   const workers = [];
   const errors = [];
   let failOnInit = true;
@@ -123,30 +123,34 @@ test('an init failure starts fresh on retry, while a mid-run worker crash reject
   assert.equal(workers.length, 2);
   assert.equal(executor.isReady(), true);
 
-  // 3. Worker error during restoreState() rejects the restore promise instead of stranding it,
-  //    and keeps the initialized worker: it holds the loaded inputs a retry needs.
+  // A failed restore rejects its waiter and retires the worker holding the input.
   const restoring = executor.restoreState({ inputData: new ArrayBuffer(4) });
   const rejectedRestore = assert.rejects(restoring, /stopped unexpectedly \(often low device memory\)/);
   await Promise.resolve();
   workers[1].onerror({});
   await rejectedRestore;
-  assert.equal(workers[1].terminated, false);
-  assert.equal(executor.isReady(), true);
+  assert.equal(workers[1].terminated, true);
+  assert.equal(executor.isReady(), false);
   assert.equal(executor.isRunning(), false);
   assert.match(errors.at(-1), /stopped unexpectedly \(often low device memory\)/);
 
-  // 4. A retry reuses that worker instead of starting one without the loaded volume.
-  await executor.run({ label: 'segmentation' });
+  await assert.rejects(executor.run({ label: 'segmentation' }), /Load your input files again/);
   assert.equal(workers.length, 2);
 
-  // 5. A fatal worker message (such as installWorkerRouter unhandledrejection) reports the error
-  //    without discarding the worker's loaded state.
-  executor.handleMessage({ type: 'error', message: 'Out of memory', fatal: true });
-  assert.equal(workers[1].terminated, false);
-  assert.match(errors.at(-1), /Out of memory/);
+  await executor.loadVolume(new ArrayBuffer(4));
+  assert.equal(workers.length, 3);
   await executor.run({ label: 'segmentation' });
-  assert.equal(workers.length, 2);
-  assert.equal(executor.isReady(), true);
+
+  executor.handleMessage({ type: 'error', message: 'Model unavailable' });
+  assert.equal(workers[2].terminated, false);
+  await executor.run({ label: 'segmentation' });
+  assert.equal(workers.length, 3);
+
+  executor.handleMessage({ type: 'error', message: 'Out of memory', fatal: true });
+  assert.equal(workers[2].terminated, true);
+  assert.match(errors.at(-1), /Out of memory/);
+  await assert.rejects(executor.run({ label: 'segmentation' }), /Load your input files again/);
+  assert.equal(executor.isRunning(), false);
 });
 
 test('synchronous postMessage throws and init timeouts clear the failed session so retry spawns a fresh worker', async () => {

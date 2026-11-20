@@ -64,6 +64,19 @@ function createWorkspaceDom(t, url = 'https://webapps.neurodesk.org/synthsr/', s
 
 const waitMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+test('files picked before the monitor starts still produce a loaded-session checkpoint', (t) => {
+  const page = createWorkspaceDom(t);
+  const input = page.document.getElementById('imageInput');
+  Object.defineProperty(input, 'files', { value: [new page.window.File(['scan'], 'scan.nii')] });
+  input.dispatchEvent(new page.window.Event('change', { bubbles: true }));
+
+  page.bind();
+
+  const checkpoint = JSON.parse(page.window.sessionStorage.getItem('neurodesk-memory-guard:/synthsr/'));
+  assert.equal(checkpoint.loaded, true);
+  assert.equal(checkpoint.active, false);
+});
+
 test('isMemoryErrorMessage and formatMemoryError keep status messages phone-sized and distinguish causes', () => {
   const rawMemoryFailures = [
     ['RangeError: Out of memory', 'oom'],
@@ -541,6 +554,11 @@ test('live OOM errors route through shared owners, respect ConsoleOutput line ca
   assert.equal(notices.length, 1);
   assert.equal(notices[0].kind, 'reload-active');
   assert.equal(reactDom.document.getElementById('statusText').textContent, 'Drag and drop files');
+
+  reactDom.window.dispatchEvent(new reactDom.window.ErrorEvent('error', {
+    error: new RangeError('Out of memory'),
+  }));
+  assert.equal(notices.length, 1, 'the React status owner handles live runtime errors');
 
   dicompareCanvas.dispatchEvent(new reactDom.window.Event('webglcontextlost'));
   await waitMs(20);
