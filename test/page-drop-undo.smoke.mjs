@@ -208,7 +208,8 @@ async function remove(page) {
 async function changeSettings(page) {
   await page.evaluate(narration => {
     for (const element of document.querySelectorAll('select, input[type="text"], input[type="number"]')) {
-      if (element.closest(narration) || element.disabled || !element.checkVisibility?.()) continue;
+      // The example selector loads data rather than setting anything.
+      if (element.closest(narration) || element.closest('nd-example-selector') || element.disabled || !element.checkVisibility?.()) continue;
       if (element.localName === 'select') {
         const other = [...element.options].find(option => !option.disabled && option.value !== element.value);
         if (!other) continue;
