@@ -1,6 +1,6 @@
 // The synthetic two-hemisphere sheet of the region tests, shared with the compatibility
 // check that compares a search's outputs with recorded hashes.
-function source(dims) {
+export function source(dims) {
   const header = new ArrayBuffer(348);
   const view = new DataView(header);
   view.setInt32(0, 348, true);
@@ -64,4 +64,29 @@ export function fixture(labels = {}) {
     loadAtlas: async () => atlas.slice(0),
     loadRegions: async () => regions.buffer.slice(0),
   };
+}
+
+// A NIfTI-2 float32 scan. `srow` is written whatever the codes; the qform comes from the
+// quaternion (b, c, d), `offset`, `pixdim` and `qfac` (pixdim[0]).
+export function nifti2Buffer(dims, srow, { sformCode = 1, qformCode = 0, quaternion = [0, 0, 0], offset = [0, 0, 0], pixdim = srow.map((row, axis) => row[axis]), qfac = 1 } = {}) {
+  const count = dims[0] * dims[1] * dims[2];
+  const buffer = new ArrayBuffer(544 + count * 4);
+  const view = new DataView(buffer);
+  view.setInt32(0, 540, true);
+  new Uint8Array(buffer).set([110, 43, 50, 0, 13, 10, 26, 10], 4);
+  view.setInt16(12, 16, true);
+  view.setInt16(14, 32, true);
+  view.setBigInt64(16, 3n, true);
+  for (let i = 1; i < 8; i += 1) view.setBigInt64(16 + i * 8, BigInt(dims[i - 1] ?? 1), true);
+  view.setFloat64(104, qfac, true);
+  pixdim.forEach((size, axis) => view.setFloat64(112 + axis * 8, size, true));
+  view.setBigInt64(168, 544n, true);
+  view.setFloat64(176, 1, true);
+  view.setInt32(344, qformCode, true);
+  view.setInt32(348, sformCode, true);
+  [...quaternion, ...offset].forEach((value, index) => view.setFloat64(352 + index * 8, value, true));
+  srow.forEach((row, axis) => row.forEach((value, column) => view.setFloat64(400 + (axis * 4 + column) * 8, value, true)));
+  view.setInt32(500, 2, true);
+  for (let i = 0; i < count; i += 1) view.setFloat32(544 + i * 4, i % 17, true);
+  return buffer;
 }

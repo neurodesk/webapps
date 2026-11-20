@@ -8,7 +8,7 @@ import { runSurfaceAnalysis } from '../src/pipeline.js';
 import { readAnnotation as readParcellation, writeAnnotation } from '../src/results.js';
 import { REGION_MASK_VALUES, analyzeSurfaces } from '../src/surface-analysis.js';
 import { writeInt16Nifti } from '../src/qc.js';
-import { fixture } from './region-fixture.js';
+import { fixture, nifti2Buffer } from './region-fixture.js';
 import { readVolume } from '../src/volume.js';
 import { regionMask } from '../src/analysis-qc.js';
 
@@ -305,29 +305,7 @@ test('a named region adds only the mask, and the manifest only its hash', async 
 `)), manifestHash);
 });
 
-// A NIfTI-2 float32 scan. `srow` is written whatever the codes; the qform comes from the
-// quaternion (b, c, d), `offset`, `pixdim` and `qfac` (pixdim[0]).
-function nifti2Source(dims, srow, { sformCode = 1, qformCode = 0, quaternion = [0, 0, 0], offset = [0, 0, 0], pixdim = srow.map((row, axis) => row[axis]), qfac = 1 } = {}) {
-  const count = dims[0] * dims[1] * dims[2];
-  const buffer = new ArrayBuffer(544 + count * 4);
-  const view = new DataView(buffer);
-  view.setInt32(0, 540, true);
-  new Uint8Array(buffer).set([110, 43, 50, 0, 13, 10, 26, 10], 4);
-  view.setInt16(12, 16, true);
-  view.setInt16(14, 32, true);
-  view.setBigInt64(16, 3n, true);
-  for (let i = 1; i < 8; i += 1) view.setBigInt64(16 + i * 8, BigInt(dims[i - 1] ?? 1), true);
-  view.setFloat64(104, qfac, true);
-  pixdim.forEach((size, axis) => view.setFloat64(112 + axis * 8, size, true));
-  view.setBigInt64(168, 544n, true);
-  view.setFloat64(176, 1, true);
-  view.setInt32(344, qformCode, true);
-  view.setInt32(348, sformCode, true);
-  [...quaternion, ...offset].forEach((value, index) => view.setFloat64(352 + index * 8, value, true));
-  srow.forEach((row, axis) => row.forEach((value, column) => view.setFloat64(400 + (axis * 4 + column) * 8, value, true)));
-  view.setInt32(500, 2, true);
-  return readVolume(buffer);
-}
+const nifti2Source = (...args) => readVolume(nifti2Buffer(...args));
 
 const closeAffine = (actual, expected, message) => {
   for (let row = 0; row < 4; row += 1) {
@@ -357,6 +335,15 @@ test('a NIfTI-2 scan takes its affine by the NIfTI-1 rule and its outputs keep t
       closeAffine(written.affine, volume.affine, `${name}: ${output} header`);
     }
   }
+});
+
+test('a rounded 180 degree NIfTI-2 qform is a rotation and a broken geometry is refused', () => {
+  assert.ok(2 * Math.SQRT1_2 ** 2 > 1, 'the quaternion squares to just over 1');
+  const zeros = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
+  const turned = nifti2Source([5, 6, 7], zeros, { sformCode: 0, qformCode: 1, quaternion: [Math.SQRT1_2, Math.SQRT1_2, 0], offset: [1, 2, 3], pixdim: [2, 2.5, 3] });
+  closeAffine(turned.affine, [[0, 2.5, 0, 1], [2, 0, 0, 2], [0, 0, -3, 3], [0, 0, 0, 1]], '180 degree qform');
+  assert.throws(() => nifti2Source([5, 6, 7], [[NaN, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]]), /not a finite affine/);
+  assert.throws(() => nifti2Source([5, 6, 7], zeros), /singular/);
 });
 
 test('the region mask and QC images keep a NIfTI-2 source grid in a NIfTI-1 header', async () => {

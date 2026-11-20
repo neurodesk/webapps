@@ -41,12 +41,7 @@ export function readVolume(buffer) {
     data[i] = view[type[0]](i * type[1], header.littleEndian) * slope + intercept;
     if (!Number.isFinite(data[i])) throw new Error('The image contains non-finite intensities.');
   }
-  const unit = header.xyzt_units & 7;
-  const scale = unit === 1 ? 1000 : unit === 3 ? 0.001 : 1;
-  const affine = (header instanceof nifti.NIFTI2 ? nifti2Affine(header) : header.affine).map((row, rowIndex) =>
-    row.map((value) => (rowIndex < 3 ? value * scale : value)),
-  );
-  inverseAffine(affine);
+  const affine = headerAffine(header);
   const scaled = Boolean(header.scl_slope) && (slope !== 1 || intercept !== 0);
   return {
     data,
@@ -59,19 +54,40 @@ export function readVolume(buffer) {
   };
 }
 
+// The voxel-to-scanner affine in millimetres that TopoFit works on. Throws when it is not
+// finite or not invertible.
+export function headerAffine(header) {
+  const unit = header.xyzt_units & 7;
+  const scale = unit === 1 ? 1000 : unit === 3 ? 0.001 : 1;
+  const affine = (header instanceof nifti.NIFTI2 ? nifti2Affine(header) : header.affine).map((row, rowIndex) =>
+    row.map((value) => (rowIndex < 3 ? value * scale : value)),
+  );
+  if (!affine.flat().every(Number.isFinite)) throw new Error('The NIfTI orientation is not a finite affine.');
+  inverseAffine(affine);
+  return affine;
+}
+
 // nifti-reader-js takes a NIfTI-2 affine from the srows whatever the codes say. This picks
 // it by the rule its NIfTI-1 reader applies: the qform when its code is set and above the
 // sform code (qfac from pixdim[0]), else the sform when its code is set, else the pixdims.
+// The quaternion's a follows nifti_quatern_to_dmat44 in nifti2_io.c, so a rounded 180
+// degree rotation, whose b, c and d square to just over 1, gives a = 0 instead of NaN.
 function nifti2Affine(header) {
   const affine = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
   if (header.qform_code < 1 && header.sform_code < 1) {
     for (let axis = 0; axis < 3; axis += 1) affine[axis][axis] = header.pixDims[axis + 1];
   }
   if (header.qform_code > 0 && header.sform_code < header.qform_code) {
-    const b = header.quatern_b;
-    const c = header.quatern_c;
-    const d = header.quatern_d;
-    const a = Math.sqrt(1 - (b * b + c * c + d * d));
+    let b = header.quatern_b;
+    let c = header.quatern_c;
+    let d = header.quatern_d;
+    let a = 1 - (b * b + c * c + d * d);
+    if (a < 1e-7) {
+      const norm = Math.sqrt(b * b + c * c + d * d);
+      [a, b, c, d] = [0, b / norm, c / norm, d / norm];
+    } else {
+      a = Math.sqrt(a);
+    }
     const qfac = header.pixDims[0] === 0 ? 1 : header.pixDims[0];
     const rotation = [
       [a * a + b * b - c * c - d * d, 2 * b * c - 2 * a * d, 2 * b * d + 2 * a * c],
@@ -230,7 +246,7 @@ export function inverseAffine(matrix) {
     for (let row = column + 1; row < 4; row += 1) {
       if (Math.abs(augmented[row][column]) > Math.abs(augmented[pivot][column])) pivot = row;
     }
-    if (Math.abs(augmented[pivot][column]) < 1e-12) throw new Error('The NIfTI affine is singular.');
+    if (!(Math.abs(augmented[pivot][column]) >= 1e-12)) throw new Error('The NIfTI affine is singular.');
     [augmented[column], augmented[pivot]] = [augmented[pivot], augmented[column]];
     const divisor = augmented[column][column];
     for (let entry = 0; entry < 8; entry += 1) augmented[column][entry] /= divisor;
