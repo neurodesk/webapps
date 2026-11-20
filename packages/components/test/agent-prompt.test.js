@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { JSDOM } from 'jsdom';
-import { CONSENT_CHANGES, createAgentPrompts } from '../src/ui/agentPrompt.js';
+import { createAgentPrompts } from '../src/ui/agentPrompt.js';
 
 function page(url = 'about:blank') {
   const { window } = new JSDOM('<!doctype html><body></body>', { url });
@@ -269,7 +269,8 @@ test('a consent request that keeps changing while it shows closes as declined', 
   let state = 0;
   const asked = createAgentPrompts(document).confirmResume(() => ({ app: 'NiiMath', files: [{ role: 'image', name: `scan-${state}.nii` }], run: null }));
   await tick();
-  for (let change = 1; change < CONSENT_CHANGES; change += 1) {
+  // The limit is written out: a test that read it from the source would follow any change to it.
+  for (let change = 1; change <= 2; change += 1) {
     state = change;
     press(document, 'Allow');
     assert.ok(dialog(document).textContent.includes(`scan-${change}.nii`), 'the refreshed dialog names the new request');
@@ -277,6 +278,6 @@ test('a consent request that keeps changing while it shows closes as declined', 
   }
   state += 1;
   press(document, 'Allow');
+  assert.equal(dialog(document).open, false, 'the third change closes the dialog');
   assert.equal(await asked, null, 'the third change declines');
-  assert.equal(dialog(document).open, false);
 });
