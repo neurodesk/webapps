@@ -442,97 +442,97 @@
       }
     },
     "preclinical": {
-      "version": "0.49.20261119",
-      "revision": "3cf5c9cfd8811e71dafab7882081bee11d94b60f",
+      "version": "0.49.20261120",
+      "revision": "07006ac887e938ef8b39d6f3adcf71026cf8ec04",
       "apps": [
         {
           "id": "qsmbly",
-          "version": "0.31.20261113"
+          "version": "0.31.20261119"
         },
         {
           "id": "dicompare",
-          "version": "0.15.20261113"
+          "version": "0.15.20261120"
         },
         {
           "id": "niimath",
-          "version": "1.3.20261113"
+          "version": "1.3.20261119"
         },
         {
           "id": "mri2vid",
-          "version": "0.6.20261113"
+          "version": "0.6.20261119"
         },
         {
           "id": "zarro",
-          "version": "0.4.20261113"
+          "version": "0.4.20261119"
         },
         {
           "id": "elastix",
-          "version": "0.5.20261113"
+          "version": "0.5.20261119"
         },
         {
           "id": "dicomview",
-          "version": "0.4.20261113"
+          "version": "0.4.20261119"
         },
         {
           "id": "degibbs",
-          "version": "0.4.20261113"
+          "version": "0.4.20261119"
         },
         {
           "id": "dcm2niix",
-          "version": "0.2.20261113"
+          "version": "0.2.20261119"
         },
         {
           "id": "dwidenoise",
-          "version": "0.4.20261113"
+          "version": "0.4.20261119"
         },
         {
           "id": "ants-denoise",
-          "version": "0.1.20261113"
+          "version": "0.1.20261119"
         },
         {
           "id": "calcium-imaging",
-          "version": "0.1.20261113"
+          "version": "0.1.20261119"
         },
         {
           "id": "neuromorph",
-          "version": "0.1.20261113"
+          "version": "0.1.20261119"
         },
         {
           "id": "stitching",
-          "version": "0.2.20261113"
+          "version": "0.2.20261119"
         },
         {
           "id": "structure-tensor",
-          "version": "0.1.20261113"
+          "version": "0.1.20261119"
         }
       ],
       "downloads": [
         {
           "kind": "desktop",
           "platform": "macos-arm64",
-          "version": "0.49.20261119",
-          "bytes": 485370129,
-          "url": "https://github.com/neurodesk/webapps/releases/download/preclinical-webapps-v0.49.20261119/preclinical-webapps-0.49.20261119-mac-arm64.zip",
-          "sha256": "4881b5d74630afe757c7f3d7367f3fa42f071b7e3e25f7fc8c40e3d9ff5cb7b4",
-          "command": "unzip preclinical-webapps-0.49.20261119-mac-arm64.zip"
+          "version": "0.49.20261120",
+          "bytes": 485372638,
+          "url": "https://github.com/neurodesk/webapps/releases/download/preclinical-webapps-v0.49.20261120/preclinical-webapps-0.49.20261120-mac-arm64.zip",
+          "sha256": "729db0de16e705dddeeb16a3a5b958e3a0f62157dd7dfb916b91f166ae2fd9bb",
+          "command": "unzip preclinical-webapps-0.49.20261120-mac-arm64.zip"
         },
         {
           "kind": "desktop",
           "platform": "linux-x64",
-          "version": "0.49.20261119",
-          "bytes": 491241154,
-          "url": "https://github.com/neurodesk/webapps/releases/download/preclinical-webapps-v0.49.20261119/preclinical-webapps-0.49.20261119-linux-x64.tar.gz",
-          "sha256": "52a9c013e1f6ababc187db0faab27b7427f75b146633fe21d309303275467279",
-          "command": "tar -xzf preclinical-webapps-0.49.20261119-linux-x64.tar.gz"
+          "version": "0.49.20261120",
+          "bytes": 491239174,
+          "url": "https://github.com/neurodesk/webapps/releases/download/preclinical-webapps-v0.49.20261120/preclinical-webapps-0.49.20261120-linux-x64.tar.gz",
+          "sha256": "00bab4d41802821e5faed02209f179e29f8eb2e1dbd6b5af31bdcec4cf28bac3",
+          "command": "tar -xzf preclinical-webapps-0.49.20261120-linux-x64.tar.gz"
         },
         {
           "kind": "desktop",
           "platform": "windows-x64",
-          "version": "0.49.20261119",
-          "bytes": 515089320,
-          "url": "https://github.com/neurodesk/webapps/releases/download/preclinical-webapps-v0.49.20261119/preclinical-webapps-0.49.20261119-win-x64.zip",
-          "sha256": "47f779b06adfcfa0d458657623206b2341b97ee0141a0b97f9d9a18c7d015b70",
-          "command": "Expand-Archive preclinical-webapps-0.49.20261119-win-x64.zip -DestinationPath PreclinicalWebapps"
+          "version": "0.49.20261120",
+          "bytes": 515092077,
+          "url": "https://github.com/neurodesk/webapps/releases/download/preclinical-webapps-v0.49.20261120/preclinical-webapps-0.49.20261120-win-x64.zip",
+          "sha256": "6633405d313881f16d0d37d2402ddf897ca4869efa4a4c7de5b15acab66e92ad",
+          "command": "Expand-Archive preclinical-webapps-0.49.20261120-win-x64.zip -DestinationPath PreclinicalWebapps"
         }
       ],
       "models": {
