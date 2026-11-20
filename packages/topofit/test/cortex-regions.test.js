@@ -313,37 +313,20 @@ const closeAffine = (actual, expected, message) => {
   }
 };
 
-test('a NIfTI-2 scan takes its affine by the NIfTI-1 rule and its outputs keep that grid', () => {
-  // A 90 degree turn about z, z flipped by qfac -1 and x moved 20 mm, in the qform only.
-  const qform = { qformCode: 1, quaternion: [0, 0, Math.SQRT1_2], offset: [20, 0, 0], pixdim: [2, 2.5, 3], qfac: -1 };
-  const expected = [[0, -2.5, 0, 20], [2, 0, 0, 0], [0, 0, -3, 0], [0, 0, 0, 1]];
-  const identity = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]];
-  const zeros = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
+test('QC and mask headers of a NIfTI-2 scan carry the affine the reader took', () => {
   const sform = [[2, 0, 0, -5], [0, 2.5, 0.5, -7], [0, 0, 3, -9]];
-  const cases = [
-    ['qform with inactive identity srows', nifti2Source([5, 6, 7], identity, { ...qform, sformCode: 0 }), expected],
-    ['qform with zeroed srows', nifti2Source([5, 6, 7], zeros, { ...qform, sformCode: 0 }), expected],
-    ['sform only', nifti2Source([5, 6, 7], sform), [...sform, [0, 0, 0, 1]]],
-    ['sform code at least the qform code', nifti2Source([5, 6, 7], sform, { ...qform, sformCode: 1 }), [...sform, [0, 0, 0, 1]]],
-    ['no transform', nifti2Source([5, 6, 7], zeros, { sformCode: 0, pixdim: [2, 2.5, 3] }), [[2, 0, 0, 0], [0, 2.5, 0, 0], [0, 0, 3, 0], [0, 0, 0, 1]]],
-  ];
-  for (const [name, volume, affine] of cases) {
-    closeAffine(volume.affine, affine, `${name}: reader`);
+  const millimetres = nifti2Source([5, 6, 7], sform);
+  const micrometreBuffer = nifti2Buffer([5, 6, 7], sform.map((row) => row.map((value) => value * 1000)));
+  new DataView(micrometreBuffer).setInt32(500, 3, true);
+  for (const [name, volume] of [['millimetres', millimetres], ['micrometres', readVolume(micrometreBuffer)]]) {
+    closeAffine(volume.affine, [...sform, [0, 0, 0, 1]], `${name}: reader`);
     for (const [output, bytes] of [['QC', writeInt16Nifti(volume, new Int16Array(210), 'qc')], ['mask', regionMask(volume, [], 'mask')]]) {
+      assert.equal(new DataView(bytes).getInt32(0, true), 348, `${name}: ${output} is NIfTI-1`);
       const written = readVolume(bytes);
       assert.deepEqual(written.dims, [5, 6, 7], `${name}: ${output} dims`);
       closeAffine(written.affine, volume.affine, `${name}: ${output} header`);
     }
   }
-});
-
-test('a rounded 180 degree NIfTI-2 qform is a rotation and a broken geometry is refused', () => {
-  assert.ok(2 * Math.SQRT1_2 ** 2 > 1, 'the quaternion squares to just over 1');
-  const zeros = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
-  const turned = nifti2Source([5, 6, 7], zeros, { sformCode: 0, qformCode: 1, quaternion: [Math.SQRT1_2, Math.SQRT1_2, 0], offset: [1, 2, 3], pixdim: [2, 2.5, 3] });
-  closeAffine(turned.affine, [[0, 2.5, 0, 1], [2, 0, 0, 2], [0, 0, -3, 3], [0, 0, 0, 1]], '180 degree qform');
-  assert.throws(() => nifti2Source([5, 6, 7], [[NaN, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]]), /not a finite affine/);
-  assert.throws(() => nifti2Source([5, 6, 7], zeros), /singular/);
 });
 
 test('the region mask and QC images keep a NIfTI-2 source grid in a NIfTI-1 header', async () => {

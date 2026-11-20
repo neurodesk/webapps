@@ -19,7 +19,6 @@ import { registerAppAutomation, registerViewer, createNiivueAdapter } from '@neu
 import { automationArtifacts } from './automation-results.js';
 import manifest from '@neurodesk/topofit/manifest';
 import { REGIONS, REGION_ATLASES } from '@neurodesk/topofit/regions';
-import { displaySource } from '@neurodesk/topofit/display-source';
 import { parcellationMesh, regionMaskColormap } from './region-view.js';
 
 const $ = (id) => document.getElementById(id);
@@ -44,7 +43,6 @@ let viewer;
 let viewerReady;
 let embeddedViewer;
 let source;
-let shownSource;
 let worker;
 let cancelRun;
 let busy = false;
@@ -472,9 +470,10 @@ async function showSource({ reset = false } = {}) {
     await resetMeshes(nv);
   }
   await hideParcellations(nv);
-  if (isParcellation(displayedResult)) displayedResult = null;
+  if (volumeStages.has(displayedResult)) showPatchMeasurements(null);
+  if (isParcellation(displayedResult) || volumeStages.has(displayedResult)) displayedResult = null;
   nv.setClipPlane([2, 0, 0]);
-  await nv.loadVolumes([{ url: shownSource, name: source.name }]);
+  await nv.loadVolumes([{ url: source, name: source.name }]);
   nv.drawScene();
   $('emptyState').hidden = true;
   $('imageLabel').textContent = 'ORIGINAL IMAGE';
@@ -491,7 +490,7 @@ async function setMeshVisible(stage, visible, input) {
     const nv = await ensureViewer();
     if (visible) {
       if (volumeStages.has(displayedResult)) {
-        await nv.loadVolumes([{ url: shownSource, name: source.name }]);
+        await nv.loadVolumes([{ url: source, name: source.name }]);
       }
       await hideParcellations(nv);
       displayedResult = null;
@@ -538,7 +537,7 @@ async function showResult(stage, { duringRun = false } = {}) {
     if (volumeStages.has(stage)) {
       nv.setClipPlane([2, 0, 0]);
       const overlay = stage === 'patch-qc' ? { colormap: 'hot', calMin: 1, calMax: 4095, isTransparentBelowCalMin: true } : {};
-      await nv.loadVolumes([{ url: shownSource, name: source.name }, { url: file, name: file.name, opacity: stage === 'region-mask' ? 0.6 : 0.75, ...overlay }]);
+      await nv.loadVolumes([{ url: source, name: source.name }, { url: file, name: file.name, opacity: stage === 'region-mask' ? 0.6 : 0.75, ...overlay }]);
       if (stage === 'region-mask') await nv.setColormapLabel(1, regionMaskColormap(searchRegion().name));
       nv.sliceType = SLICE_TYPE.MULTIPLANAR;
       $('imageLabel').textContent = stage === 'region-mask' ? `${searchRegion().name} SEARCH REGION · LEFT BLUE · RIGHT ORANGE`
@@ -559,7 +558,7 @@ async function showResult(stage, { duringRun = false } = {}) {
       const view = await parcellationView(hemisphere);
       nv.meshThicknessOn2D = 1;
       nv.setClipPlane([anatomyIn3D ? 2 : -1, 0, 0]);
-      await nv.loadVolumes([{ url: shownSource, name: source.name }]);
+      await nv.loadVolumes([{ url: source, name: source.name }]);
       let index = nv.meshes.findIndex((mesh) => mesh.name === file.name);
       if (index >= 0 && parcellationMeshFiles.get(file.name) !== file) {
         await nv.removeMesh(index);
@@ -591,7 +590,7 @@ async function showResult(stage, { duringRun = false } = {}) {
       nv.meshThicknessOn2D = 1;
       // Hide the MRI in 3D until the user explicitly shows it in FreeBrowse.
       nv.setClipPlane([anatomyIn3D ? 2 : -1, 0, 0]);
-      await nv.loadVolumes([{ url: shownSource, name: source.name }]);
+      await nv.loadVolumes([{ url: source, name: source.name }]);
       let index = nv.meshes.findIndex((mesh) => mesh.name === file.name);
       if (index < 0) {
         await nv.addMesh({
@@ -633,8 +632,6 @@ async function load(file) {
   try {
     if (!/\.nii(\.gz)?$/i.test(file.name)) throw new Error('Choose a .nii or .nii.gz image.');
     showPatchMeasurements(null);
-    // The viewer must draw the scan on the grid the pipeline reads (displaySource).
-    shownSource = await displaySource(file);
     source = file;
     reconstruction = null;
     normalArrowWorker?.terminate();

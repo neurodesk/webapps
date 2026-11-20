@@ -218,21 +218,12 @@ manifest (`topofit_manifest.json`) lists every output, so a named-region manifes
 gains the `topofit_region_mask.nii` entry in `outputSha256` and differs from before
 by exactly that entry. `test/cortex-regions.test.js` holds this to SHA-256 values
 recorded from the previous release: on a NIfTI-1 source, whole-cortex and ROI
-searches, manifest included, are byte-identical. A NIfTI-2 source deliberately
-changes: its affine is now chosen by the NIfTI-1 rule (qform when its code is set
-and above the sform code, else sform, else the voxel sizes) instead of always from
-the srows, and the mask and both QC images are NIfTI-1 files whose sform, in
-millimetres and single precision, is exactly that affine. Earlier releases wrote
-NIfTI-2 header bytes into a NIfTI-1 layout and took the srows even when their code
-was 0. A qform quaternion whose b, c and d square to just over 1 (a rounded 180°
-rotation) is normalised as `nifti_quatern_to_dmat44` does, and an affine that is not
-finite or not invertible is refused. NiiVue, like nifti-reader-js, draws a NIfTI-2
-file on its srows whatever the codes say, so `displaySource(file)`
-(`@neurodesk/topofit/display-source`) gives a viewer the scan on TopoFit's grid: a
-NIfTI-2 scan whose srows do not already hold that affine comes back as an
-uncompressed copy with it as the sform in millimetres and the voxel data untouched;
-every other scan comes back as the same `File`. For NIfTI-1, NiiVue and TopoFit read
-the same header affine.
+searches, manifest included, are byte-identical. For a NIfTI-2 source the mask and both
+QC images are now valid NIfTI-1 files whose sform, in millimetres and single precision,
+is the affine the scan was read with; earlier releases copied NIfTI-2 header bytes into
+a NIfTI-1 layout. Known limitation: a NIfTI-2 scan is read through its srows whatever
+its codes say, as nifti-reader-js and NiiVue read it, so one that carries its
+orientation only in the qform is processed and shown on the srow grid.
 With `'cortex'` or an ROI, the outputs are those of a search without the option. `pack_cortex_regions.py` rebuilds the asset, and
 `validation/region-check.mjs` checks the mapping on a real reconstruction
 (`validation/surface-analysis.md`).

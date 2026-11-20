@@ -97,9 +97,7 @@ left 1 in blue, right 2 in orange, named in the location readout. The parcellati
 mesh lies on the mid-surface: viewing it hides that hemisphere's white, mid and pial
 surfaces (their checkboxes clear), and it is hidden whenever another result, a surface
 checkbox or the source image takes over; a parcellation the viewer cannot draw is
-reported in the viewer instead of being labelled as shown. The scan is loaded into the
-viewer through `displaySource`, so a NIfTI-2 scan whose qform and srows disagree is drawn
-on the same grid as the surfaces, mask and QC images. NiiVue 1.0.0-rc.26
+reported in the viewer instead of being labelled as shown. NiiVue 1.0.0-rc.26
 has no FreeSurfer annotation layer reader (its layers read curv, SMP, STC, mesh
 scalars and volumes), so the app draws the parcellation as an mz3 mesh with
 per-vertex colours built from the annotation.

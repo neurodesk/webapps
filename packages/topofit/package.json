@@ -18,7 +18,6 @@
     "./manifest": "./model.manifest.json",
     "./cortex-atlas-manifest": "./cortex-atlas.manifest.json",
     "./regions": "./src/cortex-regions.js",
-    "./display-source": "./src/display-source.js",
     "./cortex-regions-manifest": "./cortex-regions.manifest.json"
   },
   "files": [

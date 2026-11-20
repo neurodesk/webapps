@@ -93,18 +93,17 @@ function writeNiftiHeader(volume, length, datatype, bitpix, description) {
   return output;
 }
 
-// The grid readVolume chose for a NIfTI-2 source, as a NIfTI-1 sform in millimetres (or the
-// voxel sizes alone when the source has no transform), so both always describe one grid.
+// readVolume's affine of a NIfTI-2 source (its srows, in millimetres) as an active NIfTI-1
+// sform, with voxel sizes from its columns, so the output decodes to the same grid.
 function writeNifti2Geometry(view, volume, little) {
   const { header, affine, dims } = volume;
   if (dims.some((size) => size > 32767)) throw new Error('The image is too large for a NIfTI-1 output.');
   [3, ...dims, 1, 1, 1, 1].forEach((size, index) => view.setInt16(40 + index * 2, size, little));
-  const code = Math.max(header.qform_code, header.sform_code, 0);
-  const spacing = [0, 1, 2].map((column) => code ? Math.hypot(affine[0][column], affine[1][column], affine[2][column]) : affine[column][column]);
+  const spacing = [0, 1, 2].map((column) => Math.hypot(affine[0][column], affine[1][column], affine[2][column]));
   [1, ...spacing, ...header.pixDims.slice(4)].forEach((size, index) => view.setFloat32(76 + index * 4, size, little));
   view.setUint8(123, 2 | (header.xyzt_units & 56));
   view.setInt16(252, 0, little);
-  view.setInt16(254, code, little);
+  view.setInt16(254, Math.max(header.sform_code, 1), little);
   affine.slice(0, 3).forEach((row, axis) => row.forEach((value, column) => view.setFloat32(280 + (axis * 4 + column) * 4, value, little)));
 }
 

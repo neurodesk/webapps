@@ -4,7 +4,6 @@ import { writeSurfaceFiles } from '../../../packages/topofit/src/results.js';
 import { analyzeSurfaces } from '../../../packages/topofit/src/surface-analysis.js';
 import { readVolume } from '../../../packages/topofit/src/volume.js';
 import { REGIONS } from '../../../packages/topofit/src/cortex-regions.js';
-import { nifti2Buffer } from '../../../packages/topofit/test/region-fixture.js';
 
 async function patchPixels(page, clip) {
   const screenshot = await page.screenshot({ clip });
@@ -576,6 +575,13 @@ test('a named search region lists atlas groups, reaches the worker and shows its
   await expect(page.locator('#viewerError')).toBeHidden();
   await expect(page.locator('#location')).toContainText('Left V1');
   await page.screenshot({ path: testInfo.outputPath('region-mask.png') });
+  const activeTabs = async () => (await dispatch(page, 'viewers.state', { viewerId: 'image' })).tabs.filter(({ active }) => active).map(({ id }) => id);
+  expect(await activeTabs()).toEqual(['region-mask']);
+  // The state the tab command returns is read as soon as the source is shown.
+  const switched = await dispatch(page, 'viewers.tab', { viewerId: 'image', tabId: 'source' });
+  expect(switched.tabs.filter(({ active }) => active).map(({ id }) => id)).toEqual(['source']);
+  expect(await activeTabs()).toEqual(['source']);
+  await expect(page.locator('#imageLabel')).toHaveText('ORIGINAL IMAGE');
   const maskDownload = page.waitForEvent('download');
   await mask.getByRole('button', { name: 'Download', exact: true }).click();
   const maskFile = await maskDownload;
@@ -654,26 +660,6 @@ test('a parcellation mesh the viewer cannot decode is reported, not shown as dra
   await expect(page.locator('#viewerError')).toContainText('the viewer could not draw the parcellation');
   await expect(page.locator('#imageLabel')).not.toContainText('in full colour');
   expect((await viewerMeshes(page)).some(({ name }) => name.endsWith('.annot'))).toBe(false);
-});
-
-test('a qform-only NIfTI-2 scan is drawn on the grid the pipeline reads', async ({ page }) => {
-  // Inactive identity srows; the active qform moves x by 20 mm and flips z.
-  const identity = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]];
-  const buffer = Buffer.from(nifti2Buffer([5, 6, 7], identity, { sformCode: 0, qformCode: 1, offset: [20, 0, 0], pixdim: [1, 1, 1], qfac: -1 }));
-  const pipeline = readVolume(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)).affine;
-  await page.goto('/');
-  await page.locator('#imageInput').setInputFiles({ name: 'qform.nii', mimeType: 'application/octet-stream', buffer });
-  await expect(page.locator('#runButton')).toBeEnabled();
-  const voxel = [2, 3, 4];
-  const mm = pipeline.slice(0, 3).map((row) => row[0] * voxel[0] + row[1] * voxel[1] + row[2] * voxel[2] + row[3]);
-  expect(mm).toEqual([22, 3, -4]);
-  await dispatch(page, 'viewers.crosshair', { viewerId: 'image', position: { frame: 'mm', value: mm } });
-  // NiiVue reports the voxel in its RAS-ordered copy, where the flipped z counts from the
-  // other end; the stored value shows which voxel of the scan lies under the crosshair.
-  await expect.poll(async () => (await dispatch(page, 'viewers.state', { viewerId: 'image' })).location?.values?.[0]?.vox).toEqual([voxel[0], voxel[1], 6 - voxel[2]]);
-  const { location } = await dispatch(page, 'viewers.state', { viewerId: 'image' });
-  expect(location.mm).toEqual(mm);
-  expect(location.values[0].value).toBe((voxel[0] + 5 * (voxel[1] + 6 * voxel[2])) % 17);
 });
 
 test('settings open on demand and pass edited values to the worker', async ({ page }, testInfo) => {
