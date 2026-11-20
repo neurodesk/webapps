@@ -196,8 +196,20 @@ the atlas; the processing manifest records the asset's SHA-256 as
 `runtime.cortexRegionsSha256`. Each searched hemisphere also gets the mapped
 parcellation of that atlas as a FreeSurfer annotation for the output surfaces,
 such as `lh.wang2015.annot`, with the manifest's colour table; unlabelled
-vertices have annotation 0. With `'cortex'` or an ROI, the outputs are those of
-a search without the option. `pack_cortex_regions.py` rebuilds the asset, and
+vertices have annotation 0. `readAnnotation` in `@neurodesk/topofit/results`
+reads such a file back into label values and the colour table.
+
+A named region also writes `topofit_region_mask.nii` (`id: 'region-mask'`), the
+region in the cortical ribbon on the source grid: an unsigned 8-bit NIfTI with
+the source header's geometry, 0 outside, `REGION_MASK_VALUES` (left 1, right 2)
+inside, stated in its description. It covers the searched hemispheres' faces
+whose three vertices carry a region label in the mapped parcellation, before the
+cortex and ribbon checks, and fills each white-to-pial prism by sampling it no
+coarser than half a voxel and marking the voxel nearest each sample; where the
+hemispheres meet the right one is written last. A hemisphere without region faces
+leaves the mask empty there. Every other output of the search keeps the bytes it
+had before the mask was added; the processing manifest lists the mask's SHA-256.
+With `'cortex'` or an ROI, the outputs are those of a search without the option. `pack_cortex_regions.py` rebuilds the asset, and
 `validation/region-check.mjs` checks the mapping on a real reconstruction
 (`validation/surface-analysis.md`).
 

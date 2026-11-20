@@ -4,8 +4,8 @@ import test from 'node:test';
 import { LOBES, REGIONS, REGION_ATLASES, readRegionAtlas, selectRegion } from '../src/cortex-regions.js';
 import { findPatches } from '../src/patches.js';
 import { runSurfaceAnalysis } from '../src/pipeline.js';
-import { writeAnnotation } from '../src/results.js';
-import { analyzeSurfaces } from '../src/surface-analysis.js';
+import { readAnnotation as readParcellation, writeAnnotation } from '../src/results.js';
+import { REGION_MASK_VALUES, analyzeSurfaces } from '../src/surface-analysis.js';
 import { writeInt16Nifti } from '../src/qc.js';
 
 const manifest = JSON.parse(await readFile(new URL('../cortex-regions.manifest.json', import.meta.url)));
@@ -195,6 +195,7 @@ test('a region outside the searched cortex finds no patch and still writes its p
   const empty = await analyzeSurfaces({ ...data, region: 'wang2015:V1' });
   assert.equal(empty.analysis.flat_patch_status, 'NO_PATCH_MEETS_CRITERIA');
   assert.equal(empty.files.filter(({ name }) => name.endsWith('.annot')).length, 1);
+  assert.ok(new Uint8Array(empty.files.find(({ id }) => id === 'region-mask').bytes, 352).every((voxel) => voxel === 0));
   await assert.rejects(analyzeSurfaces({ ...data, region: 'wang2015:V1', roi: data.source }), /not both/);
   await assert.rejects(analyzeSurfaces({ ...data, region: 'wang2015:XX' }), /Unknown cortical region/);
 });
@@ -209,6 +210,7 @@ test('the whole-cortex region gives exactly the result of no region and never lo
   assert.equal(JSON.stringify(Object.keys(implicit.analysis.flat_patch_definition)), JSON.stringify(['schema_version', 'radius', 'count', 'hemisphere', 'maxRms', 'minAreaFraction', 'cortex_mask', 'medial_wall_margin_mm', 'min_ribbon_separation_mm', 'min_normal_coherence', 'region']));
   assert.equal(implicit.analysis.flat_patch_definition.region, 'cortex');
   assert.ok(!implicit.files.some(({ name }) => name.endsWith('.annot')));
+  assert.ok(!implicit.files.some(({ id }) => id === 'region-mask'));
 });
 
 test('post-reconstruction analysis records the region atlas only while a region is searched', async () => {
@@ -221,10 +223,12 @@ test('post-reconstruction analysis records the region atlas only while a region 
   assert.equal(named.provenance.runtime.cortexRegionsSha256, 'regions');
   assert.equal(named.provenance.surfaceAnalysis.flat_patch_definition.region, 'wang2015:V1');
   assert.ok(named.provenance.outputSha256['lh.wang2015.annot']);
+  assert.ok(named.provenance.outputSha256['topofit_region_mask.nii']);
   const whole = await runSurfaceAnalysis({ ...options, provenance: named.provenance });
   assert.equal(whole.provenance.runtime.cortexRegionsSha256, undefined);
   assert.equal(whole.provenance.runtime.cortexAtlasSha256, 'atlas');
   assert.equal(whole.provenance.outputSha256['lh.wang2015.annot'], undefined);
+  assert.equal(whole.provenance.outputSha256['topofit_region_mask.nii'], undefined);
   assert.equal(whole.provenance.surfaceAnalysis.flat_patch_definition.region, 'cortex');
 });
 
@@ -237,6 +241,49 @@ test('annotations round-trip vertex colours and the embedded colour table', () =
   assert.deepEqual(header, { tag: 1, version: -2, maxStructure: table.length, file: 'NOFILE' });
   assert.deepEqual(entries, table.map(({ value: index, name, rgb }) => ({ index, name, rgba: [...rgb, 0] })));
   assert.throws(() => writeAnnotation(Uint8Array.of(table.length), table), /has no colour/);
+});
+
+test('the region mask fills the ribbon of each searched hemisphere on the source grid', async () => {
+  const data = fixture({ wang2015: { lh: [1, 0], rh: [0, 2] } });
+  const result = await analyzeSurfaces({ ...data, patches: { ...data.patches, hemisphere: 'both' }, region: 'wang2015:V1' });
+  const file = result.files.find(({ id }) => id === 'region-mask');
+  assert.deepEqual([file.name, file.mediaType], ['topofit_region_mask.nii', 'application/nifti']);
+  assert.ok(result.files.indexOf(file) < result.files.findIndex(({ id }) => id === 'surface-analysis'));
+  const header = new DataView(file.bytes);
+  assert.deepEqual([header.getInt16(70, true), header.getInt16(72, true), header.getFloat32(108, true)], [2, 8, 352]);
+  assert.match(new TextDecoder().decode(new Uint8Array(file.bytes, 148, 80)), /^TopoFit region wang2015:V1 ribbon: left 1, right 2\0/);
+  const mask = new Uint8Array(file.bytes, 352);
+  assert.equal(mask.length, data.source.data.length);
+  const at = (x, y, z) => mask[x + 32 * (y + 32 * z)];
+  assert.deepEqual(REGION_MASK_VALUES, { lh: 1, rh: 2 });
+  // Left V1 is x < 15 and right V1 x >= 15, both between the white (z 0) and pial (z 2) sheets.
+  for (let z = 0; z <= 2; z += 1) {
+    for (let y = 0; y <= 30; y += 1) {
+      for (let x = 0; x <= 30; x += 1) assert.equal(at(x, y, z), x < 15 ? 1 : 2, `${x},${y},${z}`);
+    }
+  }
+  assert.equal(at(31, 5, 1), 0);
+  assert.equal(at(5, 31, 1), 0);
+  assert.equal(at(5, 5, 3), 0);
+  const again = await analyzeSurfaces({ ...data, patches: { ...data.patches, hemisphere: 'both' }, region: 'wang2015:V1' });
+  assert.deepEqual(new Uint8Array(again.files.find(({ id }) => id === 'region-mask').bytes), new Uint8Array(file.bytes));
+});
+
+test('a named region keeps every other output of the search and adds only the mask', async () => {
+  const data = fixture();
+  const result = await analyzeSurfaces({ ...data, region: 'wang2015:V1' });
+  const patches = Object.keys(result.analysis.flat_patches).map((id) => `${id}.mid.white`);
+  assert.ok(patches.length > 0);
+  assert.deepEqual(result.files.map(({ name }) => name), [...patches, 'lh.wang2015.annot', 'topofit_patch_coordinates_ras.csv', 'topofit_patch_geometry.json', 'topofit_patch_qc.nii', 'topofit_region_mask.nii', 'topofit_surface_analysis.json']);
+  assert.equal(JSON.stringify(Object.keys(result.analysis.flat_patch_definition)), JSON.stringify(['schema_version', 'radius', 'count', 'hemisphere', 'maxRms', 'minAreaFraction', 'cortex_mask', 'medial_wall_margin_mm', 'min_ribbon_separation_mm', 'min_normal_coherence', 'region', 'region_atlas']));
+});
+
+test('a parcellation reads back as label values with its colour table', () => {
+  const table = REGION_ATLASES.wang2015.labels;
+  const labels = Uint8Array.of(0, value('wang2015', 'V1v'), value('wang2015', 'V1d'), value('wang2015', 'FEF'), 0);
+  const read = readParcellation(writeAnnotation(labels, table));
+  assert.deepEqual([...read.labels], [...labels]);
+  assert.deepEqual(read.table, table.map(({ value: index, name, rgb }) => ({ value: index, name, rgb })));
 });
 
 test('a named region left with two non-degenerate faces finds no patch instead of failing', () => {

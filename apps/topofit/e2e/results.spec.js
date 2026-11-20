@@ -42,7 +42,9 @@ function scan() {
   return { name: 'scan.nii', mimeType: 'application/nifti', buffer };
 }
 
-async function deliverSurfaces(page, analysisResult = { files: [], analysis: null }) {
+// `surfaces` replaces the fixture tetrahedra in the worker's result (not the surface files),
+// for views that need the analysed geometry.
+async function deliverSurfaces(page, analysisResult = { files: [], analysis: null }, surfaces = null) {
   const vertices = {};
   const faces = {};
   for (const side of ['lh', 'rh']) {
@@ -52,7 +54,7 @@ async function deliverSurfaces(page, analysisResult = { files: [], analysis: nul
     faces[side] = Int32Array.from([0, 2, 1, 0, 1, 3, 0, 3, 2, 1, 2, 3]);
   }
   const surfaceFiles = writeSurfaceFiles(vertices, faces);
-  await page.addInitScript(({ surfaceFiles, qc, analysisFiles, analysis }) => {
+  await page.addInitScript(({ surfaceFiles, qc, analysisFiles, analysis, surfaces }) => {
     const NativeWorker = window.Worker;
     window.Worker = class extends NativeWorker {
       constructor(url, options) {
@@ -74,6 +76,10 @@ async function deliverSurfaces(page, analysisResult = { files: [], analysis: nul
           vertices[`${side}.pial`] = Float32Array.from(vertices[`${side}.white`], (v) => v + 1);
           vertices[`${side}.registration`] = Float32Array.from(vertices[`${side}.white`]);
           faces[side] = Int32Array.from([0, 2, 1, 0, 1, 3, 0, 3, 2, 1, 2, 3]);
+          if (surfaces) {
+            for (const name of ['white', 'pial', 'registration']) vertices[`${side}.${name}`] = Float32Array.from(surfaces.vertices[`${side}.${name}`]);
+            faces[side] = Int32Array.from(surfaces.faces[side]);
+          }
         }
         this.onmessage({ data: { type: 'result', files, surfaces: { vertices, faces }, provenance: { surfaceVertices: 4, surfaceAnalysis: analysis, runtime: {}, outputSha256: { 'topofit_qc.nii': 'original-qc' } }, elapsedSeconds: 1 } });
       }
@@ -83,6 +89,10 @@ async function deliverSurfaces(page, analysisResult = { files: [], analysis: nul
     qc: Array.from(scan().buffer),
     analysis: analysisResult.analysis,
     analysisFiles: analysisResult.files.map((file) => ({ ...file, bytes: Array.from(new Uint8Array(file.bytes)) })),
+    surfaces: surfaces && {
+      vertices: Object.fromEntries(Object.entries(surfaces.vertices).map(([name, values]) => [name, Array.from(values)])),
+      faces: Object.fromEntries(Object.entries(surfaces.faces).map(([name, values]) => [name, Array.from(values)])),
+    },
   });
   await page.goto('/');
   await page.locator('#imageInput').setInputFiles(scan());
@@ -440,7 +450,7 @@ test('computed patches, local normals and QC can be viewed and downloaded', asyn
   await expect(page.locator('#patchCenter')).toHaveValue('');
 });
 
-test('a named search region lists atlas groups, reaches the worker and offers its parcellation', async ({ page }, testInfo) => {
+test('a named search region lists atlas groups, reaches the worker and shows its parcellation and mask', async ({ page }, testInfo) => {
   test.setTimeout(90_000);
   const white = [];
   const faces = [];
@@ -463,17 +473,18 @@ test('a named search region lists atlas groups, reaches the worker and offers it
   new Uint8Array(atlas).set([1, 1], 16);
   const regionAtlas = Uint8Array.of(1, 0, 0, 0, 1, 1, 0, 0);
   const input = scan().buffer;
+  const triangles = { lh: Int32Array.from(faces), rh: Int32Array.from(faces) };
   const result = await analyzeSurfaces({
     source: readVolume(input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength)),
     vertices,
-    faces: { lh: Int32Array.from(faces), rh: Int32Array.from(faces) },
+    faces: triangles,
     patches: { hemisphere: 'lh', count: 1 },
     region: 'wang2015:V1',
     loadAtlas: async () => atlas,
     loadRegions: async () => regionAtlas.buffer.slice(0),
   });
   expect(result.analysis.flat_patch_definition.region).toBe('wang2015:V1');
-  await deliverSurfaces(page, result);
+  await deliverSurfaces(page, result, { vertices, faces: triangles });
   await page.locator('#surfaceAnalysisSettings > summary').click();
   await page.locator('#findPatches').check();
   await page.locator('#patchQuality > summary').click();
@@ -489,7 +500,25 @@ test('a named search region lists atlas groups, reaches the worker and offers it
   expect(await page.evaluate(() => window.lastTopofitJob.region)).toBe('wang2015:V1');
   expect(await page.evaluate(() => window.lastTopofitJob.patches)).not.toBeNull();
   const parcellation = page.locator('.nd-volume-toggle').filter({ hasText: 'Left Wang 2015 visual topography parcellation' });
-  await expect(parcellation.getByRole('button', { name: 'View', exact: true })).toBeDisabled();
+  await parcellation.getByRole('button', { name: 'View', exact: true }).click();
+  await expect(page.locator('#imageLabel')).toContainText('Left Wang 2015 visual topography parcellation · V1 in full colour · patches white');
+  await expect(page.locator('#viewerError')).toBeHidden();
+  await page.getByRole('radio', { name: 'Render view', exact: true }).click();
+  await page.screenshot({ path: testInfo.outputPath('region-parcellation.png') });
+  await page.getByRole('radio', { name: 'Multi+Render', exact: true }).click();
+  const mask = page.locator('.nd-volume-toggle').filter({ hasText: 'V1 mask in the cortical ribbon' });
+  await mask.getByRole('button', { name: 'View', exact: true }).click();
+  await expect(page.locator('#imageLabel')).toContainText('V1 SEARCH REGION · LEFT BLUE · RIGHT ORANGE');
+  await expect(page.locator('#viewerError')).toBeHidden();
+  await expect(page.locator('#location')).toContainText('Left V1');
+  await page.screenshot({ path: testInfo.outputPath('region-mask.png') });
+  const maskDownload = page.waitForEvent('download');
+  await mask.getByRole('button', { name: 'Download', exact: true }).click();
+  const maskFile = await maskDownload;
+  expect(maskFile.suggestedFilename()).toBe('topofit_region_mask.nii');
+  expect(new Uint8Array(await readFile(await maskFile.path()))).toEqual(new Uint8Array(result.files.find(({ id }) => id === 'region-mask').bytes));
+  await parcellation.getByRole('button', { name: 'View', exact: true }).click();
+  await expect(page.locator('#imageLabel')).toContainText('V1 in full colour');
   const downloading = page.waitForEvent('download');
   await parcellation.getByRole('button', { name: 'Download', exact: true }).click();
   const download = await downloading;

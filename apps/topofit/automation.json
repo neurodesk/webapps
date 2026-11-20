@@ -222,6 +222,13 @@
           "mediaType": "application/vnd.freesurfer.annotation",
           "minimum": 0,
           "maximum": 2
+        },
+        "region-mask": {
+          "type": "neuro:label-map",
+          "mediaType": "application/nifti",
+          "space": "input",
+          "minimum": 0,
+          "maximum": 1
         }
       },
       "engines": [

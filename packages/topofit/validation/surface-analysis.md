@@ -117,3 +117,23 @@ the zeros are areas narrower than a 10 mm-radius patch that also passes the flat
 and 25 % area gates, so V3B and the small visual areas need a smaller radius.
 A region's patch is limited by the region's edge, so its accepted area is often
 near the 78.5 mm² minimum.
+
+# Region views, 20 November 2026
+
+The production app ran the hosted example (`sub-01_T1w.nii.gz`) in headless
+Chromium with Search region V1 at the default patch settings. `topofit_region_mask.nii`
+is unsigned 8-bit on the source grid (160 × 192 × 192):
+
+| Label | Voxels | Centroid, scanner RAS mm |
+| --- | ---: | --- |
+| Left V1 (1) | 3,779 | (−10.9, −83.7, −31.9) |
+| Right V1 (2) | 3,499 | (2.6, −80.3, −32.3) |
+
+Both centroids lie within 1.4 mm of the V1 mid-surface centroids of the region
+check above, at the occipital pole on each side of the midline. Viewing the
+parcellation centred the crosshair on (−12, −84, −33) and (3, −81, −33). The
+whole-cortex re-analysis after it listed the same outputs as before the mask was
+added, without a mask or annotation. In the package tests the mask fills exactly
+the ribbon of a flat sheet. Run against the previous commit on a synthetic sheet,
+`cortex` and ROI searches, the QC images and every other file of a named-region
+search were byte-identical.

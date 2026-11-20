@@ -58,14 +58,29 @@ function surfaceMask(volume, vertexSets, thickness) {
 }
 
 export function writeInt16Nifti(volume, data, description) {
-  const output = new ArrayBuffer(352 + data.length * 2);
+  const output = writeNiftiHeader(volume, data.length, 4, 16, description);
+  const view = new DataView(output);
+  const little = volume.header.littleEndian;
+  for (let i = 0; i < data.length; i += 1) view.setInt16(352 + i * 2, data[i], little);
+  return output;
+}
+
+export function writeUint8Nifti(volume, data, description) {
+  const output = writeNiftiHeader(volume, data.length, 2, 8, description);
+  new Uint8Array(output, 352).set(data);
+  return output;
+}
+
+// The source header with its geometry, a new data type, unit scaling and the description.
+function writeNiftiHeader(volume, length, datatype, bitpix, description) {
+  const output = new ArrayBuffer(352 + length * bitpix / 8);
   const bytes = new Uint8Array(output);
   bytes.set(new Uint8Array(volume.source, 0, Math.min(348, volume.source.byteLength)));
   const view = new DataView(output);
   const little = volume.header.littleEndian;
   view.setInt32(0, 348, little);
-  view.setInt16(70, 4, little);
-  view.setInt16(72, 16, little);
+  view.setInt16(70, datatype, little);
+  view.setInt16(72, bitpix, little);
   view.setFloat32(108, 352, little);
   view.setFloat32(112, 1, little);
   view.setFloat32(116, 0, little);
@@ -73,7 +88,6 @@ export function writeInt16Nifti(volume, data, description) {
   bytes.set(new TextEncoder().encode(description).slice(0, 79), 148);
   bytes.set([110, 43, 49, 0], 344);
   bytes.fill(0, 348, 352);
-  for (let i = 0; i < data.length; i += 1) view.setInt16(352 + i * 2, data[i], little);
   return output;
 }
 
