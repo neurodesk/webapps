@@ -2,13 +2,15 @@
 // SAMSRF_EXAMPLE_DIR serves the example from a local copy instead of Hugging Face.
 //
 // The analyses run @neurodesk/samsrf in the app's workers. The checks here are the app's:
-// SamSrf's file names, one value per surface vertex, fitted R², and a downloadable zip.
-// Numeric parity belongs to @neurodesk/samsrf's own tests.
+// SamSrf's file names, one value per surface vertex, fitted R², and a downloadable zip whose
+// GIfTIs and lossless file equal the package's in-process job. Numeric parity with MATLAB belongs to
+// @neurodesk/samsrf's own tests.
 import { test, expect } from "@playwright/test";
 import { readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { unzipSync } from "fflate";
-import { analysisSpec, createJob, exportGiis, hrf, readAnalysisInputs, readGifti, readOldSchoolHrf, runJob } from "@neurodesk/samsrf/node";
+import { createHash } from "node:crypto";
+import { analysisSpec, createJob, exportGiis, hrf, readAnalysisInputs, readGifti, readLossless, readOldSchoolHrf, runJob, writeLossless } from "@neurodesk/samsrf/node";
 import { giftiRun, matFile } from "../../../packages/samsrf/test/fixtures.js";
 import { serveSite } from "../../../test-utils/serve-site.mjs";
 
@@ -59,6 +61,23 @@ function giftiMap(bytes) {
   const { arrays } = readGifti(new Uint8Array(bytes));
   expect(arrays).toHaveLength(1);
   return arrays[0].data;
+}
+
+const bitsOf = (values) => Array.from(new BigUint64Array(values.buffer, values.byteOffset, values.length));
+
+/** The zip's lossless file must be the in-process merge written by the package, and its provenance must name it. */
+function expectLossless(entries, prefix, merged, precision) {
+  const name = `${prefix}_lossless.bin`;
+  expect(entries[name], name).toBeDefined();
+  const expected = writeLossless(merged, { precision });
+  expect(Buffer.from(entries[name]).equals(Buffer.from(expected)), `${name} equals the package's merge`).toBe(true);
+  const read = readLossless(entries[name]);
+  expect(read.precision).toBe(precision);
+  expect(bitsOf(read.maps.data)).toEqual(bitsOf(merged.maps.data));
+  expect(read.imaginary === null ? null : bitsOf(read.imaginary)).toEqual(merged.imaginary === null ? null : bitsOf(merged.imaginary));
+  const provenance = JSON.parse(new TextDecoder().decode(entries[`${prefix}_provenance.json`]));
+  expect(provenance.lossless).toEqual({ file: name, sha256: createHash("sha256").update(entries[name]).digest("hex") });
+  return read;
 }
 
 const RUNS = {
@@ -479,6 +498,53 @@ test("automation runs a reverse-correlation analysis on the example's files", as
   expect(report.provenance.method).toBe("samsrf-rc");
   expect(report.provenance.model.Aperture_File).toBe("aps_Bars");
   expect(report.provenance.model.Scaling_Factor).toBe(9.5);
+  expect(report.artifacts.lossless.filename).toBe("lh_pRF_Rcp_lossless.bin");
+  expect(report.provenance.lossless).toEqual({ file: "lh_pRF_Rcp_lossless.bin", sha256: report.artifacts.lossless.sha256 });
+});
+
+test("automation takes a subject HRF fit for reverse correlation and refuses a misnamed one", async ({ page }, testInfo) => {
+  test.setTimeout(1800000);
+  const roi = await smallRoiPath(testInfo);
+  const subjectHrf = testInfo.outputPath("hrf_subject.mat");
+  writeFileSync(subjectHrf, matFile({ fP: { dims: [1, 4], data: [5.5, 15.5, 5, 2] } }));
+  const misnamed = testInfo.outputPath("fit.mat");
+  writeFileSync(misnamed, readFileSync(subjectHrf));
+  const paths = { runs: [await examplePath(testInfo, "lh_uBars1.gii")], apertures: [await examplePath(testInfo, "aps_Bars.mat")], roi: [roi] };
+  await page.goto("/");
+  const adopt = async (role, files) => {
+    await page.locator("#neurodesk-input-transfer").setInputFiles(files);
+    await page.evaluate((target) => globalThis.neurodeskAutomation.dispatch("adopt", { role: target }), role);
+  };
+  const finished = () => expect.poll(() => page.evaluate(async () => (await globalThis.neurodeskAutomation.dispatch("snapshot")).state), { timeout: 1500000 });
+  for (const [role, files] of Object.entries(paths)) await adopt(role, files);
+  await adopt("subjectHrf", [misnamed]);
+  await page.evaluate(() => globalThis.neurodeskAutomation.dispatch("start", { operation: "rc", parameters: { preset: "example-revcor" } }));
+  await finished().toBe("failed");
+  const refused = await page.evaluate(async () => (await globalThis.neurodeskAutomation.dispatch("snapshot")).error.message);
+  expect(refused).toBe("fit.mat: SamSrf reads a subject HRF fit from a file named hrf_*.mat.");
+
+  await page.goto("/");
+  for (const [role, files] of Object.entries(paths)) await adopt(role, files);
+  await adopt("subjectHrf", [subjectHrf]);
+  await page.evaluate(() => globalThis.neurodeskAutomation.dispatch("start", { operation: "rc", parameters: { preset: "example-revcor" } }));
+  await finished().toBe("succeeded");
+  const report = await page.evaluate(async () => (await globalThis.neurodeskAutomation.dispatch("snapshot")).report);
+  expect(report.provenance.method).toBe("samsrf-rc");
+  expect(report.provenance.model.Hrf).toBe("hrf_subject");
+  await expect(page.locator("#hrf")).toHaveValue("subject");
+  const zipped = page.waitForEvent("download");
+  await page.locator("#downloadAll").click();
+  const entries = unzipSync(readFileSync(await (await zipped).path()));
+  const inputs = readAnalysisInputs({ runs: paths.runs, roi, apertures: paths.apertures[0], subjectHrf, hemisphere: "lh" });
+  const job = createJob(analysisSpec(inputs, "rc", report.provenance.model));
+  let expected;
+  try {
+    expected = exportGiis(runJob(job).maps, `lh_${job.modelName}${job.outSuffix}`, null, report.provenance.model.Export_Convention);
+  } finally {
+    job.free();
+  }
+  for (const { name, bytes } of expected) expect(Buffer.from(entries[name]).equals(Buffer.from(bytes)), `${name} equals the package's map`).toBe(true);
+  expect(giftiMap(entries["lh_pRF_Rcp_r^2.gii"]).filter(value => value > 0).length).toBeGreaterThan(0);
 });
 
 /** Run each (analysis, precision) in the app on part of the example and require every downloaded map to equal the package's in-process job. */
@@ -509,7 +575,7 @@ async function downloadsEqualInProcessJobs(page, testInfo, runs, { subjectHrf } 
   for (const [analysis, precision] of runs) {
     const inputs = readAnalysisInputs({
       runs: paths.runs, roi, seed: paths.seed[0], apertures: paths.apertures[0], template: paths.template[0],
-      white: paths.surfaces[0], area: paths.surfaces[1], hemisphere: "lh", precision,
+      white: paths.surfaces[0], area: paths.surfaces[1], subjectHrf: analysis === "cf" ? null : subjectHrf ?? null, hemisphere: "lh", precision,
     });
     await page.locator("#analysis").selectOption(analysis);
     for (const role of roles[analysis]) await page.locator(`#${role}Input`).setInputFiles(paths[role]);
@@ -530,16 +596,20 @@ async function downloadsEqualInProcessJobs(page, testInfo, runs, { subjectHrf } 
     const zipped = page.waitForEvent("download");
     await page.locator("#downloadAll").click();
     const entries = unzipSync(readFileSync(await (await zipped).path()));
+    // With a subject HRF fit, the spec carries the kernel the samsrf command line's --hrf builds.
     const spec = analysisSpec(inputs, analysis, model);
-    if (subjectHrf) spec.hrf = hrf.oldSchool(model.TR, readOldSchoolHrf(readFileSync(subjectHrf)));
+    if (subjectHrf) expect(spec.hrf).toBeInstanceOf(Float64Array);
     const job = createJob(spec);
     const prefix = `lh_${job.modelName}${job.outSuffix}`;
     let expected;
+    let merged;
     try {
-      expected = exportGiis(runJob(job).maps, prefix, null, model.Export_Convention);
+      merged = runJob(job);
+      expected = exportGiis(merged.maps, prefix, null, model.Export_Convention);
     } finally {
       job.free();
     }
+    expectLossless(entries, prefix, merged, precision);
     expect(expected.length).toBeGreaterThan(0);
     for (const { name, bytes } of expected) {
       expect(entries[name], `${analysis}: ${name}`).toBeDefined();
@@ -675,4 +745,61 @@ test("explicit arithmetic references run through workers and are retained in dow
   await page.locator("#modelInput").setInputFiles(payload("css.json", JSON.stringify(css)));
   await expect(page.locator("#statusText")).toContainText("Intel CSS requires Css_Convention='samsrf'");
   await expect(page.locator("#downloadAll")).toBeDisabled();
+});
+
+test("a complex SamSrf-convention CSS fit downloads its double values and imaginary parts losslessly", async ({ page }, testInfo) => {
+  // A bar sweep with a blank frame slightly below zero gives negative predictions, so the compressive
+  // power is complex, as @neurodesk/samsrf's api.test.js fit is.
+  const [height, width, volumes] = [2, 4, 16];
+  const movie = new Array(height * width * volumes).fill(0);
+  for (let t = 0; t < volumes; t++) {
+    const bar = t % (width + 1);
+    for (let y = 0; y < height; y++) {
+      if (bar < width) movie[y + height * (bar + width * t)] = 1;
+      else for (let x = 0; x < width; x++) movie[y + height * (x + width * t)] = -0.1;
+    }
+  }
+  const courses = [
+    Array.from({ length: volumes }, (_, t) => Math.sin(t * 1.3) + (t % 5 === 1 ? 1 : 0)),
+    Array.from({ length: volumes }, (_, t) => Math.cos(t * 0.7) + (t % 5 === 3 ? 0.8 : 0)),
+  ];
+  const runPath = testInfo.outputPath("lh_css.gii");
+  const aperturesPath = testInfo.outputPath("aps_css.mat");
+  writeFileSync(runPath, giftiRun(courses));
+  writeFileSync(aperturesPath, matFile({ ApFrm: { dims: [height, width, volumes], data: movie } }));
+  const css = {
+    Name: "css", TR: 1, Scaling_Factor: 1, Hrf: 1, Aperture_File: "aps_css",
+    Prf_Function: "@(P,ApWidth)prf_gaussian_rf(P(1),P(2),P(3),ApWidth)",
+    Param_Names: ["x0", "y0", "Sigma"], Scaled_Param: [1, 1, 1], Only_Positive: [0, 0, 1],
+    Param1: [-0.5, 0, 0.5], Param2: [0], Param3: [0.25, 0.5], Fine_Fit_Threshold: 0,
+    Compressive_Nonlinearity: true, Css_Convention: "samsrf",
+  };
+  await page.goto("/");
+  await page.locator("#analysis").selectOption("prf");
+  await page.locator("#modelInput").setInputFiles({ name: "css.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(css)) });
+  await page.locator("#runsInput").setInputFiles([runPath, aperturesPath]);
+  const model = JSON.parse(await page.locator("#modelJson").inputValue());
+  expect(model.Css_Convention).toBe("samsrf");
+  await expect(page.locator("#runButton")).toBeEnabled();
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toContainText("pRF maps ready");
+  await expect(page.locator("#resultList")).toContainText("Lossless maps (float64)");
+  const single = page.waitForEvent("download");
+  await page.locator("#resultList .nd-volume-toggle", { hasText: "lossless" }).getByRole("button", { name: "Download", exact: true }).click();
+  const listed = readFileSync(await (await single).path());
+  const zipped = page.waitForEvent("download");
+  await page.locator("#downloadAll").click();
+  const entries = unzipSync(readFileSync(await (await zipped).path()));
+
+  const job = createJob(analysisSpec(readAnalysisInputs({ runs: [runPath], apertures: aperturesPath, hemisphere: "lh" }), "prf", model));
+  let merged;
+  try {
+    merged = runJob(job);
+  } finally {
+    job.free();
+  }
+  expect(merged.imaginary, "the in-process fit is complex").not.toBeNull();
+  const read = expectLossless(entries, "lh_css_Css", merged, "double");
+  expect(read.imaginary.some((value) => value !== 0)).toBe(true);
+  expect(Buffer.from(listed).equals(Buffer.from(entries["lh_css_Css_lossless.bin"])), "the listed download is the zipped file").toBe(true);
 });

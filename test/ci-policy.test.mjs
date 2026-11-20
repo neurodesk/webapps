@@ -137,10 +137,10 @@ const SITE_COMMANDS = {
   'site-audit': ['node scripts/fetch-example-cache.mjs "$EXAMPLE_ASSET_CACHE" --prune', 'node test/external-requests.smoke.mjs', 'pnpm audit:interfaces'],
   'site-e2e': ['pnpm test:smoke', 'pnpm test:e2e:types', 'pnpm test:e2e:catalog'],
   'site-mobile': ['pnpm test:interface-workflows', 'pnpm test:image-uploads', 'pnpm test:mobile'],
-  'site-catalog': ['pnpm --filter @neurodesk/webapp-components test:elements:browser', 'pnpm --filter @neurodesk/webapp-components test:showcase:browser', 'pnpm --filter @neurodesk/webapp-components test:handoff:browser', 'node test/automation-catalog.smoke.mjs', 'pnpm test:app-handoff'],
+  'site-catalog': ['pnpm --filter @neurodesk/webapp-components test:elements:browser', 'pnpm --filter @neurodesk/webapp-components test:showcase:browser', 'pnpm --filter @neurodesk/webapp-components test:handoff:browser', 'node test/automation-catalog.smoke.mjs', 'node test/webmcp.smoke.mjs', 'node test/webmcp-examination.smoke.mjs', 'node test/webmcp-interaction.smoke.mjs', 'pnpm test:app-handoff'],
 };
 // The checks that cover one page per app: SMOKE_APPS narrows them on pull requests and pushes.
-const SCOPED = ['pnpm test:runtime-startup', 'pnpm audit:interfaces', 'pnpm test:smoke', 'pnpm test:e2e:catalog', 'pnpm test:interface-workflows', 'pnpm test:mobile'];
+const SCOPED = ['pnpm test:runtime-startup', 'pnpm audit:interfaces', 'pnpm test:smoke', 'pnpm test:e2e:catalog', 'pnpm test:interface-workflows', 'pnpm test:mobile', 'node test/webmcp.smoke.mjs', 'node test/webmcp-interaction.smoke.mjs'];
 
 test('the site is built once and every site check runs in one job that tests that build', () => {
   const site = ci.jobs['composite-site'];

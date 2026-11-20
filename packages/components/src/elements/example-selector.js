@@ -363,7 +363,7 @@ export function defineExampleSelector(view = globalThis.window) {
         if (selection.rotation) this.#rotationIndex.set(selection.id, index + 1);
         this.dataset.exampleId = example.id;
         this.#describe(example);
-        this.#status('ready', message, false, { description: example.description, expectedResult: example.expectedResult }, inlineMessage);
+        this.#status('ready', message, false, { exampleId: example.id, description: example.description, expectedResult: example.expectedResult }, inlineMessage);
       } catch (error) {
         if (this.#active === controller && !controller.signal.aborted) {
           controller.abort();

@@ -845,6 +845,14 @@
         "sha256": "8f838c0b3689997b0e9f82585ce04abac36f13395705ee55ebc9587266b75e75",
         "bytes": 527994
       }
-    ]
+    ],
+    "automation": {
+      "parameters": {
+        "subject": "01",
+        "session": "01",
+        "privacy": "omit",
+        "assignments": "[{\"type\":\"T1w\"}]"
+      }
+    }
   }
 ]

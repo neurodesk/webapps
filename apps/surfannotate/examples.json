@@ -12,6 +12,11 @@
         "sha256": "068982cfa4533bb5ca228c7743b0fa93da1b055df6391444f8505d426b39be96",
         "bytes": 8847582
       }
-    ]
+    ],
+    "automation": {
+      "roles": {
+        "surface": "surfaces"
+      }
+    }
   }
 ]

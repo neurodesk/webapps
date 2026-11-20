@@ -188,7 +188,11 @@ fn general_position(points: &[[f64; 2]]) -> bool {
         (0..n).filter(|&k| k != i && k != (i + 1) % n).all(|k| {
             let p = points[k];
             let inside = (low[0]..=high[0]).contains(&p[0]) && (low[1]..=high[1]).contains(&p[1]);
-            !inside || robust::orient2d(coord(&a), coord(&b), coord(&p)) != 0.0
+            if !inside {
+                return true;
+            }
+            let turn = robust::orient2d(coord(&a), coord(&b), coord(&p));
+            turn.is_finite() && turn != 0.0
         })
     })
 }
@@ -721,6 +725,16 @@ mod tests {
                 assert!((0..3).any(|k| listed[k] == matlab[k] && stored[k] != matlab[k]), "{points:?}: the stored order loses no value");
             }
         }
+    }
+
+    #[test]
+    fn anchored_hull_falls_back_when_orientation_overflows() {
+        let s = 2_f64.powi(516);
+        let points = [[0.0, 0.0], [s, s], [0.0, s], [s / 2.0, s / 2.0], [s, 0.0]];
+        let (centre, area) = polygon_hull_estimate(&points, HullOrder::default()).unwrap();
+        let (listed_centre, listed_area) = polygon_hull_estimate(&points, HullOrder::Listed).unwrap();
+        assert_eq!(centre.map(f64::to_bits), listed_centre.map(f64::to_bits));
+        assert_eq!(area.to_bits(), listed_area.to_bits());
     }
 
     #[test]

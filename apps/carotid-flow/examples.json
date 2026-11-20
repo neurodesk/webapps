@@ -19,6 +19,11 @@
         "sha256": "db0a041daecf042dcef5a67ebfe7c877a6a4bbe841f505a78c1ec1ea826aa142",
         "bytes": 875770
       }
-    ]
+    ],
+    "automation": {
+      "roles": {
+        "image": "amplitude"
+      }
+    }
   }
 ]

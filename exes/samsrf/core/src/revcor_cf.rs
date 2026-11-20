@@ -47,8 +47,8 @@ pub struct Prepared {
     pub weights: Option<Vec<WeightRow>>,
     pub values: Vec<String>,
     pub hooke_jeeves_steps: Option<Vec<f64>>,
-    /// The hull evaluation of `Fit_pRF = 0`: `Listed` unless a gate asks for the
-    /// diagnostic stored order.
+    /// The hull evaluation of `Fit_pRF = 0`. Defaults to `Anchored`.
+    /// Reference tests also use the diagnostic `Listed` and `Stored` modes.
     pub hull_order: HullOrder,
     // Convex-hull geometry over the unique template coordinates.
     unique_xy: Vec<[f64; 2]>,

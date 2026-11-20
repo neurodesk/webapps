@@ -4,7 +4,8 @@
 # source MATLAB twice, the custom-HRF check, the compiled image twice, strict
 # compiled-versus-source and repeat comparisons, interruption and failure,
 # then the web app's engine against source and compiled MATLAB (a report).
-# Nothing is published; publish the reported image ID separately once it passes.
+# Last, it saves the image as an OCI archive and binds Docker's image ID to the
+# archive's digests (oci_identity.mjs). Nothing is published.
 #
 # Usage: build_and_validate.sh NEW_WORK_DIRECTORY LICENSE_FILE_OR_PORT@HOST MATLAB_ROOT
 #   MATLAB_ROOT is an mpm install of R2023bU11 with MATLAB_Compiler,
@@ -123,5 +124,18 @@ web_status=0
 in_builder "$work/venv/bin/python" "$matlab/compare_web_cli.py" "$cli/plan.json" "$cli/bundle-sha256.json" "$cli/web-1" "$cli/source-1" "$cli/web-1-vs-source.json" --expect source --allow-unattested-source-inputs || web_status=1
 in_builder "$work/venv/bin/python" "$matlab/compare_web_cli.py" "$cli/plan.json" "$cli/bundle-sha256.json" "$cli/web-1" "$cli/compiled-1" "$cli/web-1-vs-compiled.json" --expect compiled-runtime || web_status=1
 [ "$web_status" -eq 0 ] || { echo "Web comparison found inventory errors or failed runs; see $cli/web-1-vs-*.json" >&2; exit 1; }
+# 7. The image as an OCI archive (docker save, Docker 25 or later). Docker's image ID
+# is the digest index.json names in a containerd image store but the config digest in
+# a classic one, so neither is assumed: oci_identity.mjs checks every blob and layer of
+# the archive and accepts the ID the gates ran only as one of those two digests.
+docker save --output "$work/samsrf-reference.oci.tar" samsrf-reference:41ed1e96-r2023b
+docker image inspect samsrf-reference:41ed1e96-r2023b > "$cli/container-build/image-inspect.json"
+saved="$(docker run --rm --network none --user "$(id -u):$(id -g)" \
+  --volume "$repo:$repo:ro" --volume "$work:$work" "$node_image" \
+  node "$matlab/oci_identity.mjs" "$work/samsrf-reference.oci.tar" \
+  "$cli/container-build/image-inspect.json" "$cli/container-build/oci-identity.json")"
+[ "$saved" = "$image" ] \
+  || { echo "The saved archive's image ($saved) is not the image the gates ran ($image)" >&2; exit 1; }
 echo "All gates passed on this host for local image $image."
-echo "Evidence: $cli. Publish this image ID by digest; it has not been pushed."
+echo "Evidence: $cli. Image archive: $work/samsrf-reference.oci.tar ($cli/container-build/oci-identity.json)."
+echo "Nothing was pushed. A registry reports its own manifest digest; record it on publication."

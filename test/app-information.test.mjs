@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
-import { appInformationPayload, loadAppInformation } from '../scripts/lib/app-information.mjs';
+import { appInformationPayload, loadAppInformation, validateAppInformation } from '../scripts/lib/app-information.mjs';
 import { injectCompositeTheme } from '../scripts/lib/composite-theme.mjs';
 import { mountAppShell } from '../test-utils/mount-app-shell.mjs';
 import { loadTemplateCatalogue } from '../scripts/lib/templates.mjs';
@@ -200,6 +200,36 @@ test('the shell Privacy dialog adds the app\'s own network statement from the re
   const zarro = await mountShell('zarro');
   zarro.document.querySelector('.nd-app-bar [data-neurodesk-shell-control="privacy"]').click();
   assert.doesNotMatch(zarro.document.querySelector('.nd-app-dialog[data-dialog="privacy"]').textContent, /Cloudflare/);
+});
+
+test('every Privacy dialog, the app\'s own included, ends with what a browser AI agent can read', async () => {
+  const fallback = await mountShell('zarro');
+  fallback.document.querySelector('.nd-app-bar [data-neurodesk-shell-control="privacy"]').click();
+  const shared = fallback.document.querySelector('.nd-app-dialog[data-dialog="privacy"] [data-neurodesk-app-info="privacy"]');
+  assert.equal(shared?.textContent.includes(information.shared.agents), true);
+  const window = await mountShell('qsmbly', `
+    <button id="openPrivacy" data-neurodesk-control="privacy">Privacy</button>
+    <div class="modal-overlay" id="privacyModal"><div class="modal"><div class="modal-body"><p>App text</p></div></div></div>`);
+  const overlay = window.document.getElementById('privacyModal');
+  window.document.getElementById('openPrivacy').addEventListener('click', () => overlay.classList.add('active'));
+  for (let open = 0; open < 2; open += 1) {
+    window.document.querySelector('.nd-app-bar [data-neurodesk-shell-control="privacy"]').click();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  const blocks = overlay.querySelectorAll('.modal-body [data-neurodesk-app-info="privacy"]');
+  assert.equal(blocks.length, 1, 'appended once inside the app\'s own dialog');
+  assert.match(blocks[0].textContent, /Nothing reaches the agent until it calls a tool/);
+  assert.match(blocks[0].textContent, /file names and checksums, measurements, the viewer's state/);
+  assert.match(blocks[0].textContent, /cannot take a picture of the viewer/);
+  assert.match(blocks[0].textContent, /web address only after you allow that address/);
+  assert.match(blocks[0].textContent, /in the cloud sends what it reads to its provider/);
+  assert.equal(window.document.querySelector('.nd-app-dialog[data-dialog="privacy"]'), null, 'the app\'s own dialog opened, not the fallback');
+});
+
+test('the shared agent statement must keep each fact the Privacy dialogs promise', () => {
+  const registry = { apps: [] };
+  const withAgents = (agents) => ({ ...information, shared: { ...information.shared, agents }, apps: {} });
+  assert.throws(() => validateAppInformation(withAgents('Agents can read things.'), registry), /nothing is shared until a tool is called/);
 });
 
 test('the shell About fallback uses registry paragraphs when the app has no About dialog', async () => {

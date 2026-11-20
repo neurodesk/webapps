@@ -26,7 +26,8 @@
       "parameters": {
         "prompts": {
           "type": "string",
-          "description": "JSON array, one entry per object: {\"points\": [[x, y, 1 or 0], ...], \"box\": [x0, y0, x1, y1] or null}, in pixels from the top-left; 1 is a positive and 0 a negative point"
+          "description": "JSON array, one entry per object: {\"points\": [[x, y, 1 or 0], ...], \"box\": [x0, y0, x1, y1] or null}, in pixels from the top-left; 1 is a positive and 0 a negative point",
+          "required": true
         },
         "channel": {
           "type": "integer",

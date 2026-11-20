@@ -48,7 +48,18 @@
         "bytes": 250
       }
     ],
-    "method": "pyhysco"
+    "method": "pyhysco",
+    "automation": {
+      "files": {
+        "sub-01_dir-AP_dwi.nii.gz": "image1",
+        "sub-01_dir-AP_dwi.json": "sidecar1",
+        "sub-01_dir-AP_dwi.bval": "bval1",
+        "sub-01_dir-AP_dwi.bvec": null,
+        "sub-01_dir-PA_epi.nii.gz": "image2",
+        "sub-01_dir-PA_epi.json": "sidecar2"
+      },
+      "reason": "The gradient directions are left out: pyhysco reads only b-values, to average the b0 volumes."
+    }
   },
   {
     "id": "ds005134-slab-t1w",
@@ -92,6 +103,9 @@
         "sha256": "fab571879a3f83803405b53a2161f60f58cb32a4a04ee5b54b7b090a61af4a6e",
         "bytes": 17420714
       }
-    ]
+    ],
+    "automation": {
+      "unavailable": "It is the page's T1w-based SyN correction, which no automation operation runs; the pyhysco operation needs an opposite phase-encoding pair."
+    }
   }
 ]

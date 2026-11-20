@@ -61,6 +61,19 @@
         "sha256": "9c54e48c3de18c69b8fd8c08deef4151384eb309fc46dfb83a37cbdd856e4e26",
         "bytes": 2081
       }
-    ]
+    ],
+    "automation": {
+      "files": {
+        "sub-001_ses-001_acq-S3P1_dir-AP_dwi.nii.gz": "dwi",
+        "sub-001_ses-001_acq-S3P1_dir-AP_dwi.bval": "bval",
+        "sub-001_ses-001_acq-S3P1_dir-AP_dwi.bvec": "bvec",
+        "sub-001_ses-001_acq-S3P1_dir-AP_dwi.json": "sidecar",
+        "sub-001_ses-001_acq-S3P1_dir-PA_dwi.nii.gz": null,
+        "sub-001_ses-001_acq-S3P1_dir-PA_dwi.bval": null,
+        "sub-001_ses-001_acq-S3P1_dir-PA_dwi.bvec": null,
+        "sub-001_ses-001_acq-S3P1_dir-PA_dwi.json": null
+      },
+      "reason": "The reverse phase-encoding run is left out: the operation takes a reverse b0 image without b-values, so this run corrects motion and eddy currents without a susceptibility field."
+    }
   }
 ]

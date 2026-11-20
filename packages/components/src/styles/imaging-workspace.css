@@ -22,7 +22,7 @@
      Console    .nd-console-container / -header / -title / -actions / -clear / -output,
                 .nd-console-resizer, .nd-console-tabs / -tab, .nd-console-panels
      Status     .nd-imaging-status > .nd-status-label / .nd-status-text / progress
-     Dialogs    dialog.nd-dialog > .nd-dialog-header + .nd-dialog-body, .nd-command
+     Dialogs    dialog.nd-dialog > .nd-dialog-header + .nd-dialog-body, .nd-dialog-actions, .nd-command
 
    Rules for app stylesheets (enforced by test/design-system.test.mjs):
      - colour only through --nd-color-* tokens; never hex/rgb literals
@@ -684,6 +684,7 @@ dialog.nd-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
 .nd-dialog-body > :first-child { margin-top: 0; }
 .nd-dialog-body > :last-child { margin-bottom: 0; }
 .nd-dialog-body > .nd-field { margin-bottom: var(--nd-space-sm); }
+.nd-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--nd-space-sm); margin-top: var(--nd-space-md); }
 .nd-dialog-body p { margin: 0 0 var(--nd-space-sm); }
 .nd-dialog-body h3 { margin: var(--nd-space-lg) 0 var(--nd-space-xs); padding-bottom: var(--nd-space-xs); border-bottom: 1px solid var(--nd-color-border); color: var(--nd-color-primary); font-size: 0.9rem; font-weight: 600; }
 .nd-dialog-body h3:first-child { margin-top: 0; }

@@ -21,7 +21,8 @@ export function operationParameterSchema(field) {
 export function operationParametersSchema(fields) {
   const shape = Object.fromEntries(Object.entries(fields).map(([key, field]) => {
     const value = operationParameterSchema(field);
-    return [key, field.default === undefined ? value.optional() : value.prefault(structuredClone(field.default))];
+    if (field.default !== undefined) return [key, value.prefault(structuredClone(field.default))];
+    return [key, field.required ? value : value.optional()];
   }));
   return z.strictObject(shape).prefault({});
 }

@@ -26,7 +26,12 @@
         "sha256": "27303b7a328840c20b5f736ab1aebd6d9d5fee55e62eac840a271864e689c73d",
         "bytes": 631349
       }
-    ]
+    ],
+    "automation": {
+      "roles": {
+        "moving": "primary"
+      }
+    }
   },
   {
     "id": "trace-only",
@@ -48,7 +53,12 @@
         "sha256": "cdd5cc70dcc49f425e90e9b102545708ce70ecb76179fcdfc739ab258eea1b92",
         "bytes": 2381
       }
-    ]
+    ],
+    "automation": {
+      "roles": {
+        "moving": "primary"
+      }
+    }
   },
   {
     "id": "ct-only",
@@ -70,6 +80,11 @@
         "sha256": "a5b1503f73baf467d104296d18a9e89c694f52ae35c2849962abd8331a9b9eed",
         "bytes": 7925
       }
-    ]
+    ],
+    "automation": {
+      "roles": {
+        "moving": "primary"
+      }
+    }
   }
 ]

@@ -247,6 +247,8 @@ test("array parameters export as typed arrays and reject invalid entries in plac
   await page.locator("#stepEditor details summary").click();
   const echoes = page.locator("#param-param_echoTimesMs");
   const error = page.locator("#param-param_echoTimesMs-error");
+  await page.locator("#param-param_fieldStrength").fill("3");
+  await page.locator("#param-param_fieldStrength").press("Tab");
   await echoes.fill("10, 20");
   await echoes.press("Tab");
   await expect(error).toBeHidden();

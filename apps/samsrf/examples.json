@@ -103,6 +103,15 @@
         "sha256": "d00d0bbb96d03e7b6e0811c9ae7f9c828cef9cb4ecc95171ef91a4b4e572b2cf",
         "bytes": 537055
       }
-    ]
+    ],
+    "automation": {
+      "roles": {
+        "run": "runs",
+        "white": "surfaces",
+        "inflated": "surfaces",
+        "curv": "surfaces",
+        "area": "surfaces"
+      }
+    }
   }
 ]

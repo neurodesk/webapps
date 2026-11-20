@@ -109,6 +109,9 @@
         "dictionaryUrl": "https://github.com/OpenNeuroDatasets/ds004889/blob/a62344db73f18f384a95b452f4a1a423087e059b/participants.json",
         "readmeUrl": "https://github.com/OpenNeuroDatasets/ds004889/blob/a62344db73f18f384a95b452f4a1a423087e059b/README.md"
       }
+    },
+    "automation": {
+      "unavailable": "Its DWI and ADC pair feeds the page's acute stroke lesion step, which no automation operation runs; the operations take a structural T1 or a reviewed lesion."
     }
   },
   {
@@ -141,6 +144,9 @@
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/blob/e6e810074a620d84b5a2538d4658fa7fee3fd41f/examples/calmar/acute/isles2022/sub-strokecase0001_ses-0001_dwi.json",
         "datasetUrl": "https://zenodo.org/records/7960856"
       }
+    },
+    "automation": {
+      "unavailable": "Its DWI and ADC pair feeds the page's acute stroke lesion step, which no automation operation runs; the operations take a structural T1 or a reviewed lesion."
     }
   }
 ]

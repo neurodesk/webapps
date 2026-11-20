@@ -87,6 +87,21 @@ region, and the mapped parcellation of each searched hemisphere is offered as a
 FreeSurfer annotation (`lh.wang2015.annot`, `rh.aparc.annot`) that Freeview
 opens on the output surfaces.
 
+A region search gives two views of the region in Output. **View** on a
+parcellation colours that hemisphere's mid-surface by the atlas: the search region
+in its atlas colours, the other areas faded towards grey, the hemisphere's patches
+white, with the crosshair on the region and the 3D camera facing it. **View** on
+the region mask (`topofit_region_mask.nii`) overlays the region, filled between
+the white and pial surfaces on the source grid, on the original image's slices:
+left 1 in blue, right 2 in orange, named in the location readout. The parcellation
+mesh lies on the mid-surface: viewing it hides that hemisphere's white, mid and pial
+surfaces (their checkboxes clear), and it is hidden whenever another result, a surface
+checkbox or the source image takes over; a parcellation the viewer cannot draw is
+reported in the viewer instead of being labelled as shown. NiiVue 1.0.0-rc.26
+has no FreeSurfer annotation layer reader (its layers read curv, SMP, STC, mesh
+scalars and volumes), so the app draws the parcellation as an mz3 mesh with
+per-vertex colours built from the annotation.
+
 Results include individual patch surfaces, patch-and-normal QC and paired ribbon
 geometry. Analysis measurements are recorded in the technical log. Patches are
 labeled "Left flat patch 1", "Right flat patch 1", and so on.
@@ -118,4 +133,4 @@ keeps the previous outputs. Loading another scan clears the saved reconstruction
 
 ## Agent automation
 
-The `reconstruct` operation accepts an explicit `image` and optional `roi` as NIfTI or DICOM. Parameters expose the existing conforming, overlay thickness, normals and flat-patch controls. An ROI requires `findPatches`. `patchRegion` names a search region (`cortex`, the default, or an id such as `wang2015:V1` or `aparc:lobe-occipital`); a named region requires `findPatches` and excludes an ROI, and adds the `parcellation` annotation files. The operation awaits the same worker as the interface and returns all actual files: eight surface files including registration spheres, source-grid QC, provenance and requested analysis tables, patch surfaces and metadata. Variable patch counts remain variable. The report retains model and asset checksums from the scientific pipeline. The image viewer exposes actual source/output stages and measured patches. Cancellation terminates the worker. Full model inference requires the published model assets and an adequate browser backend; routing/unit checks alone do not verify scientific inference.
+The `reconstruct` operation accepts an explicit `image` and optional `roi` as NIfTI or DICOM. Parameters expose the existing conforming, overlay thickness, normals and flat-patch controls. An ROI requires `findPatches`. `patchRegion` names a search region (`cortex`, the default, or an id such as `wang2015:V1` or `aparc:lobe-occipital`); a named region requires `findPatches` and excludes an ROI, and adds the `parcellation` annotation files and the `region-mask` NIfTI (label map in the input grid: left 1, right 2). The operation awaits the same worker as the interface and returns all actual files: eight surface files including registration spheres, source-grid QC, provenance and requested analysis tables, patch surfaces and metadata. Variable patch counts remain variable. The report retains model and asset checksums from the scientific pipeline. The image viewer exposes actual source/output stages and measured patches. Cancellation terminates the worker. Full model inference requires the published model assets and an adequate browser backend; routing/unit checks alone do not verify scientific inference.

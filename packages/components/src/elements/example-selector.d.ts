@@ -14,7 +14,13 @@ export interface AppExample {
   files: ExampleFile[];
   /** Cycle through these catalogue IDs after successful loads; retries keep the same case. */
   rotation?: string[];
+  /** How a browser agent's tools load this example: see webmcp/examples.js. The selector ignores it. */
+  automation?: ExampleAutomation;
 }
+
+export type ExampleAutomation =
+  | { roles?: Record<string, string | null>; files?: Record<string, string | null>; reason?: string; parameters?: Record<string, unknown>; unavailable?: undefined }
+  | { unavailable: string };
 
 export interface ExampleLoadContext {
   signal: AbortSignal;

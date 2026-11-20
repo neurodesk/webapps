@@ -60,7 +60,19 @@ async function makeArtifacts(result, operation, signal) {
   return { files, records };
 }
 
-export function registerAppAutomation({ app, operations, convertDicom, contractUrl = 'automation.json', contract: providedContract, document: doc = globalThis.document, target = globalThis, download = downloadFile }) {
+// The address an operation receives for a url input, or null when the request leaves it out.
+function sourceAddress(role, source) {
+  if (!object(source) || typeof source.url !== 'string') return null;
+  const url = new URL(source.url);
+  if (!['https:', 'http:'].includes(url.protocol)) throw new Error(`Unsupported source URL: ${role}`);
+  return url.href;
+}
+
+/**
+ * `sourceRoots` maps a url input role to the app's own function from the address it receives to the
+ * address it reads under (a store's root), which the WebMCP tools ask the person to allow before a run.
+ */
+export function registerAppAutomation({ app, operations, convertDicom, sourceRoots = {}, contractUrl = 'automation.json', contract: providedContract, document: doc = globalThis.document, target = globalThis, download = downloadFile }) {
   const adopted = new Map();
   const viewers = createViewerRegistry();
   let contract;
@@ -99,17 +111,15 @@ export function registerAppAutomation({ app, operations, convertDicom, contractU
       for (const [role, field] of Object.entries(operation.inputs)) {
         signal.throwIfAborted();
         if (field.source !== 'files') {
-          const source = request.inputs?.[role];
-          if (!object(source) || typeof source.url !== 'string') {
+          const href = sourceAddress(role, request.inputs?.[role]);
+          if (href === null) {
             if (field.minimum > 0) throw new Error(`Missing input: ${role}`);
             inputs[role] = [];
             inputRecords[role] = [];
             continue;
           }
-          const url = new URL(source.url);
-          if (!['https:', 'http:'].includes(url.protocol)) throw new Error(`Unsupported source URL: ${role}`);
-          inputs[role] = { url: url.href };
-          inputRecords[role] = { url: url.href };
+          inputs[role] = { url: href };
+          inputRecords[role] = { url: href };
           continue;
         }
         const files = sourceFiles.get(role) ?? [];
@@ -162,12 +172,42 @@ export function registerAppAutomation({ app, operations, convertDicom, contractU
     }
   }
 
+  function adopt(role, files) {
+    if (!terminal.has(snapshot.state)) throw new Error('An operation is already running');
+    if (!Object.values(contract.operations).some(operation => Object.hasOwn(operation.inputs, role) && operation.inputs[role].source === 'files')) throw new Error(`Unknown file input role: ${role}`);
+    adopted.set(role, files);
+    return { role, count: files.length };
+  }
+
+  // A command that names a run acts only while that run is the current one, checked here so that no
+  // other command can start a run between the check and the act.
+  function bound(request) {
+    if (request.runId !== undefined && request.runId !== snapshot.runId) {
+      throw Object.assign(new Error(`Run ${request.runId} is not the current run; its outputs are gone`), { code: 'RUN_NOT_CURRENT', current: snapshot.runId });
+    }
+  }
+
+  function requestedOperation(request, fields) {
+    const name = request.operation ?? contract.defaultOperation;
+    if (!Object.hasOwn(contract.operations, name)) throw new Error(`Unknown operation: ${name}`);
+    const operation = contract.operations[name];
+    for (const field of fields) {
+      if (request[field] !== undefined && !object(request[field])) throw new Error(`${field} must be an object`);
+      for (const role of Object.keys(request[field] ?? {})) if (!Object.hasOwn(operation.inputs, role)) throw new Error(`Unknown input role: ${role}`);
+    }
+    return operation;
+  }
+
   async function dispatch(command, request = {}) {
     await ready;
     if (!object(request)) throw new Error('Automation command arguments must be an object');
     if (command === 'describe') return copy(contract);
-    if (command === 'snapshot') return copy(snapshot);
+    if (command === 'snapshot') {
+      bound(request);
+      return copy(snapshot);
+    }
     if (command === 'cancel') {
+      bound(request);
       if (!active || terminal.has(snapshot.state)) return { cancelled: false };
       artifacts.clear();
       snapshot = { ...snapshot, state: 'cancelled' };
@@ -175,21 +215,24 @@ export function registerAppAutomation({ app, operations, convertDicom, contractU
       return { cancelled: true };
     }
     if (command === 'adopt') {
-      if (!terminal.has(snapshot.state)) throw new Error('An operation is already running');
-      if (!Object.values(contract.operations).some(operation => Object.hasOwn(operation.inputs, request.role) && operation.inputs[request.role].source === 'files')) throw new Error(`Unknown file input role: ${request.role}`);
-      adopted.set(request.role, Array.from(transfer.files));
+      const adoption = adopt(request.role, Array.from(transfer.files));
       transfer.value = '';
-      return { role: request.role, count: adopted.get(request.role).length };
+      return adoption;
+    }
+    if (command === 'sources') {
+      const operation = requestedOperation(request, ['inputs']);
+      return Object.fromEntries(Object.entries(request.inputs ?? {}).map(([role, source]) => {
+        if (operation.inputs[role].source === 'files') throw new Error(`Input ${role} takes files, not an address`);
+        const address = sourceAddress(role, source);
+        if (address === null) throw new Error(`Input ${role} needs a url`);
+        const root = sourceRoots[role]?.(address) ?? address;
+        return [role, { address, root: new URL(root).href }];
+      }));
     }
     if (command === 'start') {
       if (!terminal.has(snapshot.state)) throw new Error('An operation is already running');
+      const operation = requestedOperation(request, ['inputs', 'selections']);
       const name = request.operation ?? contract.defaultOperation;
-      if (!Object.hasOwn(contract.operations, name)) throw new Error(`Unknown operation: ${name}`);
-      const operation = contract.operations[name];
-      for (const field of ['inputs', 'selections']) {
-        if (request[field] !== undefined && !object(request[field])) throw new Error(`${field} must be an object`);
-        for (const role of Object.keys(request[field] ?? {})) if (!Object.hasOwn(operation.inputs, role)) throw new Error(`Unknown input role: ${role}`);
-      }
       const parameters = operationParametersSchema(operation.parameters).parse(request.parameters);
       const run = { id: crypto.randomUUID(), operation: name, controller: new AbortController(), parameters };
       active = run;
@@ -201,7 +244,12 @@ export function registerAppAutomation({ app, operations, convertDicom, contractU
       return { runId: run.id, state: 'running' };
     }
     if (command === 'download') {
+      bound(request);
       if (snapshot.state !== 'succeeded' || !artifacts.has(request.artifactId)) throw new Error('The requested completed artifact is unavailable');
+      // The checksum the caller recorded for the output, which this run's file must still have.
+      if (request.sha256 !== undefined && snapshot.report.artifacts[request.artifactId]?.sha256 !== request.sha256) {
+        throw Object.assign(new Error(`Run ${request.runId ?? snapshot.runId} no longer holds the ${request.artifactId} output it ended with`), { code: 'RUN_NOT_CURRENT', current: snapshot.runId });
+      }
       await download(artifacts.get(request.artifactId));
       return { artifactId: request.artifactId };
     }
@@ -217,13 +265,23 @@ export function registerAppAutomation({ app, operations, convertDicom, contractU
     artifacts.clear();
     transfer.value = '';
     snapshot = { schemaVersion: 2, app, appVersion: contract?.appVersion, runId: null, state: 'idle' };
+    target.dispatchEvent?.(new target.Event('neurodesk-automation-reset'));
   }
   const handle = {
     ready, dispatch, reset,
     registerViewer: (id, adapter) => viewers.register(id, adapter),
     agentConnection: options => createAgentConnection(() => viewers.niivue(), options),
   };
-  target.neurodeskAutomation = Object.freeze({ dispatch });
+  target.neurodeskAutomation = Object.freeze({
+    dispatch,
+    running: () => !terminal.has(snapshot.state),
+    async adopt(role, files) {
+      await ready;
+      return adopt(role, files);
+    },
+  });
+  // The shell's WebMCP module loads apart from the app and may arrive before or after this registration.
+  target.dispatchEvent?.(new target.Event('neurodesk-automation'));
   pageRegistration = handle;
   return handle;
 }
