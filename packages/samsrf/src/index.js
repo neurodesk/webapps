@@ -140,10 +140,12 @@ export const hrf = {
  */
 export function subjectHrfKernel(model, fP) {
   if (!isSubjectHrf(model.Hrf)) throw new Error(`model: Hrf ${JSON.stringify(model.Hrf ?? null)} does not name a subject HRF fit (hrf_*)`);
-  if (!(Number.isFinite(model.TR) && model.TR > 0)) throw new Error(`model: TR must be a positive number to build the subject HRF, not ${JSON.stringify(model.TR ?? null)}`);
-  const parameters = Float64Array.from(fP);
-  if (!parameters.every(Number.isFinite)) throw new Error('subject HRF fit: fP holds a value that is not finite');
-  const kernel = hrf.oldSchool(model.TR, parameters);
+  // The engine reads a one-element array as its value, as MATLAB's jsondecode gives it.
+  const tr = Array.isArray(model.TR) && model.TR.length === 1 ? model.TR[0] : model.TR;
+  if (!(typeof tr === 'number' && Number.isFinite(tr) && tr > 0)) throw new Error(`model: TR must be a positive number to build the subject HRF, not ${JSON.stringify(model.TR ?? null)}`);
+  const values = Array.from(fP);
+  if (!values.every((value) => typeof value === 'number' && Number.isFinite(value))) throw new Error('subject HRF fit: fP holds a value that is not finite');
+  const kernel = hrf.oldSchool(tr, Float64Array.from(values));
   if (!kernel.length || !kernel.every(Number.isFinite)) throw new Error('subject HRF fit: fP gives an empty or non-finite kernel');
   return kernel;
 }

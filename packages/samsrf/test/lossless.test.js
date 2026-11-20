@@ -60,6 +60,9 @@ test('a subject HRF kernel is refused when the fit or the TR cannot give one', (
   assert.deepEqual(samsrf.subjectHrfKernel(model, [5.5, 15.5, 5, 2].values()), kernel);
   assert.throws(() => samsrf.subjectHrfKernel(model, [5.5, 15.5, NaN, 2]), /fP holds a value that is not finite/);
   assert.throws(() => samsrf.subjectHrfKernel({ ...model, TR: 0 }, [5.5, 15.5, 5, 2]), /TR must be a positive number/);
+  assert.deepEqual(samsrf.subjectHrfKernel({ ...model, TR: [model.TR] }, [5.5, 15.5, 5, 2]), kernel);
+  assert.throws(() => samsrf.subjectHrfKernel(model, [5.5, 15.5, 5, null]), /fP holds a value that is not finite/);
+  assert.throws(() => samsrf.subjectHrfKernel(model, '5652'), /fP holds a value that is not finite/);
 });
 
 test('the layout is the documented one: magic, version, padded JSON header, then the sections', () => {

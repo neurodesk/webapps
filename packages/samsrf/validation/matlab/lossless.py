@@ -39,6 +39,8 @@ MAGIC = b'SAMSRFLX'
 FORMAT = 'samsrf-lossless-maps'
 VERSION = 1
 PREAMBLE = 16
+# Analysed vertices are uint32 indices, so no surface has more.
+MAX_VERTICES = 2 ** 32 - 1
 
 
 def lossless_name(stem):
@@ -82,7 +84,7 @@ def read_lossless(data):
     if (not isinstance(header, dict) or header.get('format') != FORMAT or type(header.get('version')) is not int or header['version'] != VERSION
             or 'analysed' not in header
             or header.get('precision') not in cli_plan.PRECISIONS or not isinstance(header.get('arithmeticReference'), str)
-            or not count(header.get('vertices')) or header['vertices'] < 1 or not names(header.get('values'))
+            or not count(header.get('vertices')) or not 1 <= header['vertices'] <= MAX_VERTICES or not names(header.get('values'))
             or not isinstance(header.get('imaginary'), bool) or not names(header.get('raw'))
             or not (header.get('analysed') is None or count(header['analysed']))):
         raise Inventory('the lossless header does not describe a SamSrf map set')

@@ -209,7 +209,15 @@ export async function analyse(options, { log = () => {}, progress = () => {} } =
   if (options.kind !== 'cf') checkSubjectHrf(options.model, model.json, options.subjectHrf ?? null);
   checkOutput(options.output);
   log(`Reading and preprocessing ${options.runs.length} run${options.runs.length === 1 ? '' : 's'}`);
+  const inputFiles = [
+    ...options.runs.map((path) => ['run', path]),
+    ['roi', options.roi], ['apertures', options.apertures], ['seed', options.seed],
+    ['template', options.template], ['white', options.white], ['area', options.area],
+    ['subjectHrf', options.subjectHrf ?? null],
+  ].filter(([, path]) => path !== null);
   const inputs = readAnalysisInputs({ ...options, precision: model.json.Data_Precision === 'single' ? 'single' : 'double', arithmeticReference: model.json.Arithmetic_Reference });
+  // Hashed beside the read, not after the fit, so a file replaced during a long run cannot be the one named.
+  const inputHashes = inputFiles.map(([role, path]) => ({ role, path, sha256: sha256(readFileSync(path)) }));
   const spec = analysisSpec(inputs, options.kind, model.text);
   log(options.kind === 'prf' ? 'Generating the search space' : `Preparing the ${options.kind} analysis`);
   let job;
@@ -234,12 +242,6 @@ export async function analyse(options, { log = () => {}, progress = () => {} } =
     const lossless = { name: losslessName(prefix), bytes: writeLossless(merged, { precision: model.json.Data_Precision === 'single' ? 'single' : 'double' }) };
     mkdirSync(options.output, { recursive: true });
     for (const { name, bytes } of [...files, lossless]) writeFileSync(join(options.output, name), bytes);
-    const inputFiles = [
-      ...options.runs.map((path) => ['run', path]),
-      ['roi', options.roi], ['apertures', options.apertures], ['seed', options.seed],
-      ['template', options.template], ['white', options.white], ['area', options.area],
-      ['subjectHrf', options.subjectHrf ?? null],
-    ].filter(([, path]) => path !== null);
     const provenance = {
       tool: 'samsrf',
       version: VERSION,
@@ -250,7 +252,7 @@ export async function analyse(options, { log = () => {}, progress = () => {} } =
       exportConvention: convention,
       arithmeticReference: merged.arithmeticReference,
       options: { hemisphere: options.hemisphere, normalise: options.normalise, combine: options.combine, shards: options.shards },
-      inputs: inputFiles.map(([role, path]) => ({ role, path, sha256: sha256(readFileSync(path)) })),
+      inputs: inputHashes,
       analysedVertices: total,
       maps: merged.maps.values,
       outputs: files.map(({ name }) => name),

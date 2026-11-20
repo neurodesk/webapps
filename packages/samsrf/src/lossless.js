@@ -4,6 +4,8 @@
 
 const MAGIC = 'SAMSRFLX';
 const PREAMBLE = 16;
+// Analysed vertices are uint32 indices, so no surface has more.
+const MAX_VERTICES = 2 ** 32 - 1;
 export const LOSSLESS_FORMAT = 'samsrf-lossless-maps';
 export const LOSSLESS_VERSION = 1;
 const PRECISIONS = ['double', 'single'];
@@ -99,7 +101,7 @@ export function readLossless(bytes) {
   const names = (list) => Array.isArray(list) && list.every((value) => typeof value === 'string');
   if (format !== LOSSLESS_FORMAT || named !== version) fail('the header names another format or version');
   if (!PRECISIONS.includes(precision) || typeof arithmeticReference !== 'string') fail('the header has no precision or arithmetic reference');
-  if (!Number.isInteger(vertices) || vertices < 1 || !names(values) || typeof imaginary !== 'boolean' || !names(raw)) fail('the header does not describe the maps');
+  if (!Number.isInteger(vertices) || vertices < 1 || vertices > MAX_VERTICES || !names(values) || typeof imaginary !== 'boolean' || !names(raw)) fail('the header does not describe the maps');
   if (analysed !== null && (!Number.isInteger(analysed) || analysed < 0)) fail('the header analysed count is invalid');
   const lengths = [values.length * vertices * 8, imaginary ? values.length * vertices * 8 : 0, raw.length * vertices * 8, (analysed ?? 0) * 4];
   if (PREAMBLE + headerLength + lengths.reduce((sum, length) => sum + length, 0) !== bytes.length) fail('the file length does not match its header');

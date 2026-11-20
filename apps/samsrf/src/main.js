@@ -520,7 +520,9 @@ async function runSelected(signal) {
     controller.signal.throwIfAborted();
     const files = output.files.map(({ name, bytes }) => new File([bytes], name, { type: "application/octet-stream" }));
     const losslessFile = new File([output.lossless.bytes], output.lossless.name, { type: "application/octet-stream" });
-    const lossless = { file: losslessFile.name, sha256: await sha256(output.lossless.bytes, controller.signal) };
+    // Web Crypto needs a secure context; on a plain HTTP host the result still shows, without a checksum.
+    const digest = globalThis.crypto?.subtle ? await sha256(output.lossless.bytes, controller.signal) : null;
+    const lossless = { file: losslessFile.name, sha256: digest };
     const maps = new Map(output.maps.map(({ name, values }) => [name, values]));
     result = {
       analysis: kind,

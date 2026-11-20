@@ -76,10 +76,15 @@ How these were checked: `run_web_matrix.mjs`, `compare_web_cli.py` and
 `matlab-amd` and `matlab-intel` rows, the same runner with each run's model
 given `Arithmetic_Reference` as `check_arithmetic_references.mjs` gives it,
 compared by `compare_web_cli.py` with each host's source execution (the Intel
-host on its own bundle). `compare_web_cli.py` lists the refused Intel single
-runs as `failed`, because it accepts only the two single Gaussian refusals of
-the plan. The `matlab-amd` and `matlab-intel` counts agree with the reviewed
-accounting in
+host on its own bundle). That last replay is not a committed procedure:
+`compare_web_cli.py` accepts only the plan's own model bytes and rejects a
+plan whose models name a reference, so it cannot be repeated with the
+committed files as described here. The
+reproducible evidence for these two rows is `check_arithmetic_references.mjs`
+and the reviewed accounting below. `compare_web_cli.py` lists the refused
+Intel single runs as `failed`, because it accepts only the two single Gaussian
+refusals of the plan. The `matlab-amd` and `matlab-intel` counts agree with the
+reviewed accounting in
 [`matlab/intel-avx512/harness/cc528cf6-main4cdc/avx512-complex-qr/matrix.json`](matlab/intel-avx512/harness/cc528cf6-main4cdc/avx512-complex-qr/matrix.json).
 These are results on a finite set of recorded inputs, not general MATLAB
 equivalence.
