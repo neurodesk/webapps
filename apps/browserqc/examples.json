@@ -19,6 +19,11 @@
         "sha256": "5201efd81abd53a7adc5b698517894ed8b9ca1cb5ed57b30a075ba1010bb4da8",
         "bytes": 474
       }
-    ]
+    ],
+    "automation": {
+      "roles": {
+        "metadata": "sidecar"
+      }
+    }
   }
 ]

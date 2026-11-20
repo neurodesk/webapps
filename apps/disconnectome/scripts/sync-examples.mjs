@@ -45,6 +45,8 @@ const examples = Object.entries(lesions).map(([subject, { modality, geometry }])
       { role: 'image', name: `${subject}_${modality}_lesion.nii.gz`, ...asset(`examples/${subject}_${modality}_lesion.nii.gz`) },
       { role: 'anatomical', name: `${subject}_${modality}.nii.gz`, ...asset(`examples/${subject}_${modality}.nii.gz`) },
     ],
+    // The page's selector reads the image role; the automation contract names that input lesion.
+    automation: { roles: { image: 'lesion' } },
   };
 });
 

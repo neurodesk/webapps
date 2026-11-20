@@ -182,7 +182,7 @@ test('the shared stylesheet defines the whole vocabulary the template and docs r
     '.nd-file', '.nd-file-button', '.nd-file-info', '.nd-image-pair', '.nd-image-slot', '.nd-image-slot-header', '.nd-image-slot-title', '.nd-btn', '.nd-btn-primary', '.nd-btn-secondary', '.nd-btn-sm', '.nd-btn-icon',
     '.nd-message', '.nd-info-icon', '.nd-info-tooltip', '.nd-viewer-toolbar', '.nd-view-tabs', '.nd-view-tab', '.nd-viewer-actions',
     '.nd-viewer-canvas-wrapper', '.nd-viewer-empty', '.nd-viewer-info', '.nd-console-container', '.nd-console-title', '.nd-console-output',
-    '.nd-status-label', '.nd-status-text', 'dialog.nd-dialog', '.nd-dialog-header', '.nd-dialog-body', '.nd-command', '.nd-volume-toggle', '.nd-result-visibility',
+    '.nd-status-label', '.nd-status-text', 'dialog.nd-dialog', '.nd-dialog-header', '.nd-dialog-body', '.nd-dialog-actions', '.nd-command', '.nd-volume-toggle', '.nd-result-visibility',
     '.nd-mask-editor', '.nd-tool-group', '.nd-tool-btn', '.nd-brush-control', '.nd-edit-btn',
     '.nd-viewer-report', '.nd-report-stack', '.nd-report-heading', '.nd-data-table caption', '.nd-chart-grid', '.nd-chart-figure', '.nd-chart', '.nd-chart-legend',
   ]) {

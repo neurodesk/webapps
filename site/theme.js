@@ -14,6 +14,23 @@
   };
 })();
 
+// The WebMCP tools (webmcp/tool-inputs.js) must see each action of the person before any listener of
+// the page or the shell can stop it. A capture listener on window that is added first runs first, so
+// this one hands every such event to the tools, which add their handler to the set when they start.
+// The types are tool-inputs.js's INTERACTIONS, which the components tests hold equal.
+(() => {
+  if (!(document.modelContext ?? navigator.modelContext)) return;
+  const handlers = new Set();
+  const types = ['pointerdown', 'pointerup', 'wheel', 'keydown', 'input', 'change', 'paste', 'dragenter', 'dragover', 'drop'];
+  for (const type of types) {
+    window.addEventListener(type, (event) => {
+      for (const handler of handlers) handler(event);
+    }, true);
+  }
+  handlers.types = types;
+  window[Symbol.for('neurodesk.personInput')] = handlers;
+})();
+
 (() => {
   const storageKey = 'neurodesk-theme';
   const root = document.documentElement;

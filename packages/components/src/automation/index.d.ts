@@ -62,6 +62,8 @@ export function registerAppAutomation(options: {
   app: string;
   operations: Record<string, (context: OperationContext) => Promise<OperationResult>>;
   convertDicom?: DicomConverter;
+  /** Per url input role, the app's own function from the address it receives to the address it reads under. */
+  sourceRoots?: Record<string, (url: string) => string>;
   contractUrl?: string;
   contract?: object;
   document?: Document;

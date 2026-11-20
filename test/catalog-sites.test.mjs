@@ -1,11 +1,15 @@
 // Checks the catalogue sites `pnpm build` writes to dist-sites/ against the
 // all-app assembly in dist/. Run after a build (CI composite-site, Pages deploy).
 import assert from 'node:assert/strict';
-import { readFile, readdir, stat } from 'node:fs/promises';
+import { readFile, readdir, rm, stat } from 'node:fs/promises';
 import { dirname, extname, join, relative, resolve, sep } from 'node:path';
 import test from 'node:test';
 import { appUrl, catalogApps, loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
-import { HUB_SITE, SITES_DIR, runtimeClosure } from '../scripts/lib/catalog-sites.mjs';
+import { HUB_SITE, SITES_DIR, projectCatalogSite, runtimeClosure } from '../scripts/lib/catalog-sites.mjs';
+import { loadAppInformation } from '../scripts/lib/app-information.mjs';
+import { loadStandalone } from '../scripts/lib/standalone.mjs';
+import { loadNotFoundTemplate } from '../scripts/lib/not-found-page.mjs';
+import { firstPageScript } from '../scripts/lib/composite-theme.mjs';
 
 const registry = await loadAppsRegistry();
 const dist = join(repoRoot, 'dist');
@@ -133,6 +137,24 @@ test('webapps.neurodesk.org redirects the moved apps to mskapps.sciget.org', asy
   assert.equal(routes.dicom2vid, '/mri2vid');
 });
 
+test('every app page of the assembly and of each site runs the theme controller, which installs the WebMCP recorder, before any other script', async () => {
+  const pages = [];
+  for (const root of [dist, ...registry.site.catalogs.map((catalog) => join(sites, catalog.id))]) {
+    for (const { path } of registry.apps) {
+      const directory = join(root, path);
+      if (!await exists(directory)) continue;
+      for (const file of await walk(directory)) {
+        if (extname(file) !== '.html') continue;
+        const html = await readFile(file, 'utf8');
+        if (/data-neurodesk-app-shell(?:\s|=|>)/.test(html)) pages.push([relative(repoRoot, file), html]);
+      }
+    }
+  }
+  assert.ok(pages.length >= registry.apps.length, `found ${pages.length} app pages`);
+  const late = pages.filter(([, html]) => !/\bdata-neurodesk-theme-controller\b/.test(firstPageScript(html) ?? '')).map(([file, html]) => `${file}: ${firstPageScript(html)}`);
+  assert.deepEqual(late, []);
+});
+
 test('the all-app assembly still holds every app the suites are projected from', async () => {
   for (const app of registry.apps) assert.ok(await exists(join(dist, app.path, 'index.html')), app.id);
   const html = await readFile(join(dist, 'dicomview', 'index.html'), 'utf8');
@@ -146,4 +168,29 @@ test('the hub holds only the hub page and what it loads', async () => {
   const html = await readFile(join(hub, 'index.html'), 'utf8');
   for (const reference of references(html, join(hub, 'index.html'))) assert.ok(await exists(join(hub, reference)), reference);
   for (const catalog of registry.site.catalogs) assert.match(html, new RegExp(`href="https://${catalog.host.replaceAll('.', '\\.')}/"`));
+});
+
+test('each host\'s WebMCP origin trial token reaches only its own app pages', async () => {
+  for (const catalog of registry.site.catalogs) {
+    for (const app of catalogApps(registry, catalog)) {
+      const page = await readFile(join(sites, catalog.id, app.path, 'index.html'), 'utf8');
+      const tokens = [...page.matchAll(/<meta http-equiv="origin-trial" content="([^"]*)"/g)].map(([, token]) => token);
+      assert.deepEqual(tokens, catalog.webmcp_origin_trial ? [catalog.webmcp_origin_trial] : [], `${catalog.host}/${app.path}`);
+    }
+  }
+  for (const app of registry.apps) assert.doesNotMatch(await readFile(join(dist, app.path, 'index.html'), 'utf8'), /origin-trial/, `dist/${app.path}`);
+  const catalog = registry.site.catalogs.find(({ id }) => id === 'preclinical');
+  const destination = join(process.env.TMPDIR ?? repoRoot, `origin-trial-site-${process.pid}`);
+  try {
+    const information = await loadAppInformation(registry);
+    const standalone = await loadStandalone(registry);
+    const notFoundTemplate = await loadNotFoundTemplate(repoRoot);
+    const fake = { ...catalog, webmcp_origin_trial: 'RmFrZVRva2VuRm9yVGVzdGluZ09ubHk=' };
+    await projectCatalogSite({ repoRoot, siteDist: dist, destination, registry, catalog: fake, information, standalone, notFoundTemplate });
+    for (const app of catalogApps(registry, fake)) {
+      assert.match(await readFile(join(destination, app.path, 'index.html'), 'utf8'), /<meta http-equiv="origin-trial" content="RmFrZVRva2VuRm9yVGVzdGluZ09ubHk=" data-neurodesk-origin-trial>/, app.path);
+    }
+  } finally {
+    await rm(destination, { recursive: true, force: true });
+  }
 });

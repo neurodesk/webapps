@@ -53,12 +53,14 @@
             "type": "number",
             "description": "Echo time in milliseconds",
             "minimum": 0.001
-          }
+          },
+          "required": true
         },
         "fieldStrength": {
           "type": "number",
           "description": "Acquired magnetic field strength in tesla",
-          "minimum": 0.001
+          "minimum": 0.001,
+          "required": true
         },
         "unwrap": {
           "type": "string",

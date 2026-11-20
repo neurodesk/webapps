@@ -86,6 +86,9 @@
         "sha256": "da8a0638d8b8e9c0b58c5b1d0ea872222e3ea26bf44432b2b314396d18819d17",
         "bytes": 153554
       }
-    ]
+    ],
+    "automation": {
+      "unavailable": "Its files are the chunks of an OME-Zarr store that the page assembles itself; the tools fill file inputs and open-url needs the address of a whole store."
+    }
   }
 ]

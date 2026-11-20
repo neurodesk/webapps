@@ -3,6 +3,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isScalar, parse, parseDocument, visit } from 'yaml';
 
+// A Chrome origin trial token is base64, as composite-theme.mjs checks it again in each page it writes.
+const ORIGIN_TRIAL_TOKEN = /^[A-Za-z0-9+/]*={0,2}$/;
 export const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 export const registryPath = join(repoRoot, 'registry', 'apps.yml');
 
@@ -129,6 +131,10 @@ function validateCatalogs(registry, errors) {
     if (!HOSTINGS.has(catalog?.hosting)) errors.push(`hosting for catalog ${catalog?.id} must be one of: ${[...HOSTINGS].join(', ')}`);
     validateSiteEntry(catalog, `catalog ${catalog?.id}`, errors);
     validateDesktop(catalog, desktop, errors);
+    const trial = catalog?.webmcp_origin_trial ?? '';
+    if (typeof trial !== 'string' || !ORIGIN_TRIAL_TOKEN.test(trial)) {
+      errors.push(`catalog ${catalog?.id}.webmcp_origin_trial must be a Chrome origin trial token for ${catalog?.host}, or empty`);
+    }
     ids.add(catalog?.id);
     hosts.add(catalog?.host);
   }

@@ -12,7 +12,18 @@
         "sha256": "7e9a73a6e5c36f9d8f9761c8e2399767cc5c56461f2e622e9ece6f6c182b03c2",
         "bytes": 9565228
       }
-    ]
+    ],
+    "automation": {
+      "parameters": {
+        "voxelSizeUm": [
+          50,
+          40,
+          40
+        ],
+        "orientation": "psl",
+        "detect": false
+      }
+    }
   },
   {
     "id": "cellfinder-crop",

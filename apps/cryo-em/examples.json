@@ -12,6 +12,9 @@
         "sha256": "123d411889e6259ec176942ada14c49b0bd43fddd371b944a76e5aed888367da",
         "bytes": 2657
       }
-    ]
+    ],
+    "automation": {
+      "unavailable": "Its movies stay on the compute server: the file is the tutorial's checksum list, which the page checks before it fills the RELION settings."
+    }
   }
 ]

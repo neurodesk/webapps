@@ -380,6 +380,7 @@ test('every catalogue names its own desktop suite, and neuro keeps the installed
     [raw => { raw.site.catalogs[1].desktop.executable = 'neurodesk-webapps'; }, /duplicate desktop executable: neurodesk-webapps/],
     [raw => { raw.site.catalogs[1].desktop.release = 'webapps'; }, /duplicate desktop release: webapps/],
     [raw => { raw.site.catalogs[1].desktop.release = 'musclemap'; }, /desktop release musclemap is an app id/],
+    [raw => { raw.site.catalogs[1].webmcp_origin_trial = '"><script>'; }, /catalog msk\.webmcp_origin_trial must be a Chrome origin trial token for mskapps\.sciget\.org, or empty/],
   ];
   for (const [mutate, message] of cases) {
     const raw = parse(await readFile(join(repoRoot, 'registry', 'apps.yml'), 'utf8'));

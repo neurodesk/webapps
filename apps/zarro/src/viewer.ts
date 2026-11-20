@@ -20,6 +20,7 @@ import {
 import examples from '../examples.json'
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace'
 import { createExampleAssetFetch } from './example_asset_fetch.js'
+import { confinedRequest, refuseRedirect } from './confined_store.js'
 import * as zarr from 'zarrita'
 import './styles.css'
 import {
@@ -1883,6 +1884,7 @@ async function selectStainLayer(id: string, reload: boolean): Promise<void> {
 }
 
 async function removeStainLayer(id: string): Promise<void> {
+  agentLayerRoots.delete(id)
   const index = stainLayers.findIndex((layer) => layer.id === id)
   if (index < 0) return
   const removedWasActive = activeStainLayerId === id
@@ -1927,6 +1929,7 @@ function commitCustomLayer(): StainLayer {
     throw new Error('Add at least one OME-Zarr store URL before loading')
   }
   const existing = activeStainLayer()
+  if (existing) agentLayerRoots.delete(existing.id)
   if (existing?.source === 'custom') {
     stainLayers = updateStainLayer(stainLayers, existing.id, {
       name: els.customStainName.value || customStoreName(urls[0]!),
@@ -2527,13 +2530,21 @@ function recordRequest(label: string): void {
   if (stats.lastRequests.length > 5) stats.lastRequests.pop()
 }
 
-function createTrackedZarrFetch(): (request: Request) => Promise<Response> {
+// The layer an agent opened, by id, with the store root the person allowed in the WebMCP consent:
+// every read of that layer's store stays under the root, without following a redirect
+// (confined_store.js). The mark belongs to that one load: committing the layer by hand, removing it
+// or a failed agent load drops it, so the person's own loads are never confined.
+const agentLayerRoots = new Map<string, string>()
+
+function createTrackedZarrFetch(confineTo?: string): (request: Request) => Promise<Response> {
   const exampleAssets = examples.flatMap((example) => example.files)
   return async (request: Request): Promise<Response> => {
     const fetchAsset = createExampleAssetFetch(exampleAssets, {
       onRetry: ({ status }) => recordRequest(`${status} retry ${shortZarrPath(new URL(request.url).pathname)}`),
     })
-    const { response, wireBytes } = await fetchAsset(request)
+    const sent = confineTo === undefined ? request : confinedRequest(confineTo, request)
+    const { response, wireBytes } = await fetchAsset(sent)
+    if (confineTo !== undefined) refuseRedirect(response, request.url)
     const method = request.method || 'GET'
     const url = new URL(response.url || request.url)
     const pathname = url.pathname
@@ -2659,11 +2670,12 @@ async function openOmezarrSource(
   initializeWindow: boolean,
   decodedCache: DecodedChunkCache,
   readSession: ZarrReadSession,
+  confineTo?: string,
 ): Promise<OmezarrSource> {
   const isInitialCustomLoad = initializeWindow
   const storeUrl = profile.storeUrl()
   const baseStore = new zarr.FetchStore(storeUrl, {
-    fetch: createTrackedZarrFetch(),
+    fetch: createTrackedZarrFetch(confineTo === storeUrl ? storeUrl : undefined),
   })
   const cachedStore = zarr.withByteCaching(
     withInflightReadDeduplication(baseStore),
@@ -2785,12 +2797,15 @@ async function loadOmezarrSource(
   }
   const decodedCache = new DecodedChunkCache(DECODED_CHUNK_CACHE_BYTES)
   const initializeWindow = shouldInitializeCustomSource
+  const active = activeStainLayer()
+  const confineTo = active ? agentLayerRoots.get(active.id) : undefined
   const first = await openOmezarrSource(
     profiles[0] as OmezarrProfile,
     requestedBaseLevel,
     initializeWindow,
     decodedCache,
     readSession,
+    confineTo,
   )
   requestedBaseLevel = first.baseLevel
   if (fixedZarrLevel !== null) fixedZarrLevel = first.baseLevel
@@ -2805,6 +2820,7 @@ async function loadOmezarrSource(
         false,
         decodedCache,
         readSession,
+        confineTo,
       ),
     ),
   )
@@ -5738,6 +5754,7 @@ async function openAutomationStore({ inputs, signal, progress }: OperationContex
   setCustomStoreUrls([store.url])
   syncSourceControls()
   const layer = commitCustomLayer()
+  agentLayerRoots.set(layer.id, normalizeZarrStoreUrl(store.url))
   progress({ message: 'Loading OME-Zarr metadata and image chunks' })
   try {
     const runtime = await loadSelectedStainLayerRuntime(layer.id, signal)
@@ -5753,6 +5770,7 @@ async function openAutomationStore({ inputs, signal, progress }: OperationContex
       view: captureView(),
     } }
   } catch (error) {
+    agentLayerRoots.delete(layer.id)
     await removeStainLayer(layer.id)
     throw error
   }
@@ -5760,6 +5778,7 @@ async function openAutomationStore({ inputs, signal, progress }: OperationContex
 const automation = registerAppAutomation({
   app: 'zarro',
   operations: { 'open-url': openAutomationStore, 'open-directory': openAutomationStore },
+  sourceRoots: { store: normalizeZarrStoreUrl },
 })
 const initialized = main()
 void initialized.catch((err: unknown) => { status(errorText(err), { error: true }) })

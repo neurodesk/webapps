@@ -1,3 +1,5 @@
+// A Chrome origin trial token is base64, as the registry validates each catalogue's token.
+const ORIGIN_TRIAL_TOKEN = /^[A-Za-z0-9+/]*={0,2}$/;
 const appIdPattern = /^[a-z][a-z0-9-]*$/;
 const titlePattern = /<title\b[^>]*>[\s\S]*?<\/title>/i;
 const iconLinkPattern = /\s*<link\b[^>]*\brel=["']?[^"'>]*\bicon\b[^>]*>/gi;
@@ -57,6 +59,7 @@ export function injectCompositeTheme(html, {
   information,
   standaloneHref,
   componentsHref,
+  originTrial = '',
 }) {
   if (typeof html !== 'string') throw new TypeError('html must be a string');
   if (!appIdPattern.test(appId)) throw new Error(`Invalid app id: ${appId}`);
@@ -70,6 +73,7 @@ export function injectCompositeTheme(html, {
     }
   }
   if (catalogId !== undefined && !appIdPattern.test(catalogId)) throw new Error(`Invalid catalog id: ${catalogId}`);
+  if (!ORIGIN_TRIAL_TOKEN.test(originTrial)) throw new Error('originTrial must be an origin trial token or empty');
   for (const [label, value] of Object.entries({ url, canonical })) {
     if (value !== undefined && !/^https?:\/\/\S+$/.test(value)) {
       throw new Error(`${label} must be an absolute http(s) URL, got ${value}`);
@@ -140,6 +144,13 @@ export function injectCompositeTheme(html, {
     ));
   }
 
+  // A Chrome origin trial token is valid for one origin, so only the catalogue that hosts the page
+  // sets it. Every run removes the previous one, and the all-app assembly carries none.
+  themed = themed.replace(/\s*<meta http-equiv="origin-trial"[^>]*data-neurodesk-origin-trial[^>]*>/gi, '');
+  if (originTrial) {
+    themed = themed.replace(/<head\b[^>]*>/i, (tag) => `${tag}\n  <meta http-equiv="origin-trial" content="${escapeAttribute(originTrial)}" data-neurodesk-origin-trial>`);
+  }
+
   // A brand other than Neurodesk restyles the page through the shared app theme. Every
   // run sets or clears it, so the catalogue that hosts the page decides it.
   themed = themed.replace(/<html\b[^>]*>/i, (tag) => {
@@ -148,13 +159,6 @@ export function injectCompositeTheme(html, {
       ? bare
       : bare.replace(/>$/, ` data-neurodesk-brand="${escapeAttribute(brandTheme)}">`);
   });
-
-  if (!/data-neurodesk-theme-controller(?:\s|=|>)/i.test(themed)) {
-    themed = themed.replace(
-      /<\/head>/i,
-      `  <script src="${escapeAttribute(themeHref)}" data-neurodesk-theme-controller></script>\n</head>`,
-    );
-  }
 
   if (!/data-neurodesk-app-theme(?:\s|=|>)/i.test(themed)) {
     themed = themed.replace(
@@ -207,5 +211,33 @@ export function injectCompositeTheme(html, {
       : themed.replace(/<\/head>/i, `  ${block}\n</head>`);
   }
 
-  return themed;
+  return placeThemeControllerFirst(themed, themeHref);
+}
+
+const themeControllerPattern = /[ \t]*<script\b[^>]*\bdata-neurodesk-theme-controller(?=[\s=>])[^>]*>\s*<\/script>\n?/i;
+
+/**
+ * The theme controller (site/theme.js) installs the WebMCP tools' event recorder, which must listen
+ * before any other script can, so it is the first script of the page: it goes, or moves, right
+ * before the first <script> element, after the metadata (an origin trial token among it) it needs.
+ */
+export function placeThemeControllerFirst(html, themeHref = '../theme.js') {
+  const existing = html.match(themeControllerPattern);
+  const tag = existing ? existing[0].trim() : `<script src="${escapeAttribute(themeHref)}" data-neurodesk-theme-controller></script>`;
+  const rest = existing ? html.replace(themeControllerPattern, '') : html;
+  const first = rest.search(/<script\b/i);
+  if (first < 0) return rest.replace(/<\/head>/i, `  ${tag}\n</head>`);
+  const lineStart = rest.lastIndexOf('\n', first - 1) + 1;
+  const indent = /^[ \t]*$/.test(rest.slice(lineStart, first)) ? rest.slice(lineStart, first) : '';
+  return `${rest.slice(0, first)}${tag}\n${indent}${rest.slice(first)}`;
+}
+
+/** The first executable script of a page, as a parser meets it: its opening tag, or null. */
+export function firstPageScript(html) {
+  const scripts = html.replace(/<!--[\s\S]*?-->/g, '').matchAll(/<script\b[^>]*>/gi);
+  for (const [tag] of scripts) {
+    const type = tag.match(/\btype=["']?([^"'\s>]+)/i)?.[1]?.toLowerCase();
+    if (!type || type === 'module' || type === 'text/javascript' || type === 'application/javascript') return tag;
+  }
+  return null;
 }

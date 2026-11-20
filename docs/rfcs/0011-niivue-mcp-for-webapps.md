@@ -215,8 +215,373 @@ readouts derived from patient data, so it needs a privacy decision before any
 implementation. AWS Lambda and Google Cloud Functions do not hold long-lived
 WebSockets without extra services and are not proposed.
 
-Browser-registered tools, such as the WebMCP draft, would need no server. The
-page handlers above can be registered there once browsers support it.
+### Browser-registered tools (WebMCP)
+
+[WebMCP](https://webmachinelearning.github.io/webmcp/) (Draft Community Group
+Report, 13 November 2026) lets a page register tools with an agent built into
+the browser through `document.modelContext.registerTool`. It needs no server,
+and no tool leaves the page until the agent calls it. Every app now registers
+tools there, built from its automation contract, with no change to any app.
+
+The app shell (`site/app-shell.js`) checks for `document.modelContext`, and
+for `navigator.modelContext` from earlier drafts. If neither exists, it loads
+nothing more. Otherwise it imports `webmcp/page.js` from the shell's copy of
+the components. That module waits for the `neurodeskAutomation` global that
+`registerAppAutomation` sets, reads the contract, builds the tool table with
+`webMcpTools()` (`webmcp/tools.js`) and registers it with
+`registerWebMcpTools()`. A tool the browser refuses is logged once and leaves
+the rest registered. The automation barrel imports none of this, so the
+command lines that import it reach neither `webmcp/` nor `ui/`.
+
+The tools reuse the desktop's names and argument names where they mean the
+same thing.
+
+| Tool | What it does |
+| --- | --- |
+| `app_describe` | Returns the contract's operations, the examples that the page's example selectors offer with the run tool and parameters each needs, `unavailableExamples` with the reason each cannot be loaded, the viewers, the current run, the files each input role holds (`inputs`), the files the page's inputs, drops and handoffs received (`pageFiles`), whether the page may hold inputs the tools cannot list (`pageMayHoldOtherInputs`) and the example the person loaded in the page (`pageExample`), and whether the person has touched the examination (`touched`). A run the tools did not start in this examination is reported as `stale`, and this examination's run as `touched` while the person has not let the agent continue, both without the report. |
+| `inputs_request_files { role, message? }` | Asks the person to choose files for a role in a shared dialog and holds them. Returns names and sizes, or `{ declined: true }`. A DICOM role also offers a folder. |
+| `inputs_use_page_files { role, input }` | Holds the files of one `pageFiles` entry for a role, so an agent runs on what the person already opened. The person always sees the files in a shared dialog and confirms them first; refusing returns `{ declined: true }`. |
+| `inputs_load_example { exampleId }` | Downloads an example through `fetchModel`, which checks its checksums, and holds its files by role in place of everything held before. |
+| `run_<operation>` | One per operation. Takes `parameters`, with a JSON Schema written from the contract (a `required: true` parameter is required), `selections` for DICOM roles, `inputs` for URL roles and `waitSeconds` (default 30, at most 600). Refuses with `RUN_ACTIVE` while another run is going. Asks the person before it lets the app fetch a URL input, naming the address the app reads under (computed by the app's own `sourceRoots` function through the automation's `sources` command) and its origin. Hands the held files to the app, starts the run and returns the run when it ends or when `waitSeconds` passes. The files stay held, so a rerun with other parameters asks for nothing. On a touched examination it first asks to resume. Aborting the call cancels the run; the person using the page does not. |
+| `runs_get { runId?, waitSeconds? }` | Returns the named run, or the current one, and can wait for it to end. A run another run replaced returns `RUN_REPLACED`, never the other run; a run from an earlier examination returns `RUN_STALE`. A run that has ended is returned as the tools recorded it when it ended. On a touched examination it first asks to resume. |
+| `runs_cancel { runId? }` | Cancels the named or current run. The automation checks the run ID as it cancels, so a cancel never reaches a run that replaced the named one. On a touched examination it first asks to resume. |
+| `outputs_download { runId, artifactId }` | Saves an output of the named run, or `report`, to the person's downloads, if that run is still the current one, belongs to this examination and still holds the output with the checksum recorded when it ended (else `RUN_STALE`). On a touched examination it first asks to resume. |
+| `user_ask { question, options?, allowText? }` | Asks the person a question in a shared dialog. Returns `{ answer }` or `{ dismissed: true }`. An agent uses it to resolve `SERIES_SELECTION_REQUIRED` from the candidates in the failed run. |
+| `viewers_list`, `viewers_state`, `viewers_crosshair`, `viewers_tab`, `viewers_regions`, `viewers_volumes`, `viewers_display`, `viewers_niivue` | Send the matching `viewers.*` command. They are registered before any viewer exists, so the command's own error answers a call that comes too early. `viewers_niivue` offers only the nv-mcp methods described below. |
+
+Tool results are JSON text. A tool reports a failure as `{ error: { message,
+code?, ... } }` rather than rejecting, because the browser gives the agent a
+rejection without its message. The codes, listed once in `webmcp/tools.js`:
+
+| Code | Meaning |
+| --- | --- |
+| `INVALID_INPUT` | The input does not match the tool's published schema; nothing ran. |
+| `EXAMINATION_CHANGED` | The person used the page while the call was going: its result is withheld and nothing more was done. The next call that needs the held files or the run asks to resume. |
+| `RUN_STALE` | The run belongs to an examination that had ended before the call began, or the page no longer holds the output the run ended with. |
+| `RUN_REPLACED` | Another run, or a reset of the page, replaced the run; its outputs are gone. |
+| `UNKNOWN_RUN` | The tools did not start this run. |
+| `RUN_ACTIVE` | A run is still going. |
+| `ADDRESS_REFUSED`, `REDIRECT_REFUSED`, `FETCH_FAILED` | An approved fetch that could not be made. |
+
+A person refusing a dialog is not an error: the result is `{ declined: true }`. The browser does not check arguments against
+`inputSchema`, so every tool checks its input against the schema it publishes
+first (`webmcp/schema.js`) and returns `INVALID_INPUT` without running. Pure
+reads carry `readOnlyHint`. Every result carries `untrustedContentHint` except
+those of `inputs_load_example`, `outputs_download` and `viewers_list`, which
+hold only what the app's author or the agent wrote. `outputs_download`,
+`viewers_niivue` and run tools with URL inputs carry `consequentialHint`.
+`viewers_screenshot` is left out because results are text only and a browser
+agent sees the page.
+
+`viewers_niivue` offers only the nv-mcp methods that
+`webmcp/niivue-methods.js` classifies as reading the scene, changing the
+display, or loading one file. Methods that export pixels or files
+(`screenshot`, `save`), edit or remove data (`set_slide` and `set_signal`
+among them), load a payload that can name further addresses
+(`load_document`), read a file's format from its address (`load_signal`),
+add page controls or take settings that can name an address are not offered.
+Each offered method takes only the parameters `NIIVUE_PARAMETERS` lists, and
+any other is refused: `set_volume` leaves out `affine`, `reset_affine`,
+`transform`, `load_all_frames` and `v1`, which turns a vector volume into a
+one-frame colour image for good, `load_mesh` leaves out `replace`, which removes
+the meshes already loaded, and no method takes `tab`. Every taken parameter
+was audited as reading the scene, changing only the display, or naming the
+file the person approves, and the components test records that effect for each
+one. `load_volume` replaces the volumes the viewer shows, so its consent says
+so. A test holds the
+table to nv-mcp's method list, so a method nv-mcp adds stays out until
+someone classifies it; holds each method's allowed and refused parameters to
+nv-mcp's own schemas (`CORE_SCHEMAS`), so a parameter nv-mcp adds stays out
+until someone classifies it; and holds an audit of every offered method
+against the pinned nv-mcp version, so a version bump fails until the audit is
+redone. Before a call that names an
+address (any `url`, or a label table address) and before a run with URL
+inputs, the shared prompt asks the person, naming the app, each resolved
+address and the server that sees the request. Declining returns
+`{ declined: true, addresses }` and nothing is fetched. The tool does not
+predict what NiiVue would fetch: it fetches each approved address itself,
+without cookies, refuses a redirect (`REDIRECT_REFUSED`), and passes NiiVue a
+`blob:` URL of the bytes with the file name, so NiiVue never receives an
+address the agent wrote. A run with URL inputs is different: ZARRo reads a
+store's metadata and chunks itself, so its prompt names the store root that
+ZARRo's own normaliser computes from the address (an agent that names
+`.../store.ome.zarr/.zattrs` is asked about `.../store.ome.zarr`) and says
+that the app reads the addresses under it. The consent alone does not keep
+the reads there, so ZARRo enforces it where it fetches (`src/confined_store.js`):
+for a store an agent opened, a read outside the approved root is refused
+before it is sent, and a redirect is refused instead of followed. Stores the
+person opens are not confined. The desktop agent server and the nv-mcp
+WebSocket keep nv-mcp's full vocabulary.
+
+An examination (`webmcp/tool-inputs.js`) holds the files the agent holds and
+the runs it started. Five reviews found that the tools cannot tell from page
+events what the person did: a drop the shell took on a canvas, an Undo, an
+app's own Remove button, a run the person started and a redisplay all looked
+alike or reached no listener. The guarantee therefore rests on one event fact
+only, whether the person did anything trusted in the page since the agent last
+had their Allow, and on what the tools recorded, not on what the page answers.
+
+- **Seeing the person first.** `site/theme.js` is the first script of every
+  app page: the build puts it before any other script element, after the
+  page's metadata and origin trial token, and `test/catalog-sites.test.mjs`
+  fails on a built app page whose first script is another. When the browser exposes a model
+  context, it adds capture listeners on window for every press, key, input,
+  change, paste, wheel, `dragenter`, `dragover` and drop, and hands each event
+  to the tools. A capture listener on window that is added first runs before
+  every other listener, so no listener of the page or the shell can stop an
+  event before the tools see it. Composed events from inside shadow roots pass
+  window too. Same-origin frames, found at any depth and inside open shadow
+  roots, get the same listeners on their windows from the first animation
+  frame after each new document appears, and a frame navigating away from a
+  document it showed touches the examination itself. A frame whose document
+  the page cannot reach (another origin's) is followed on every animation
+  frame while it is attached, so a document of the page's origin that
+  replaces it is watched from its first frame too, and that change also
+  touches the examination.
+- **Touch.** A trusted action in the workspace touches the examination. The
+  held files and the latest run stay, but the agent gets nothing from them
+  without the shared resume dialog: `app_describe` reports `touched` without
+  the report, and the next run, `runs_get`, `runs_cancel` or
+  `outputs_download` asks first. Calls waiting on one touch share one dialog
+  and its one answer. The dialog names exactly what Allow hands back: the
+  latest run, by operation and start time, with what it was given (the files
+  of the roles its operation reads, and for each url input the root the
+  person allowed), and apart from them the files the agent keeps for its next
+  run. It reads them when it shows, not when it was queued, and Allow applies
+  only while they are still what it named: when the agent's own file request
+  or example changed the held files meanwhile, the dialog shows the change and
+  asks again. Loading the same example again changes nothing it names. It says the
+  agent gets the results that run ended with, even if the page shows others
+  now. Allow discloses that run and those files and clears the touch until the
+  next one; the examination's earlier runs stay withheld (`RUN_STALE`).
+  Decline ends the examination.
+- **Truth at disclosure.** When a run the tools started ends, the tools record
+  its input files and the snapshot it ended with: its report and the identity
+  of each output (file name, size and SHA-256, as the report gives them).
+  After Allow, `runs_get` returns that record, never what the page answers
+  later. `outputs_download` takes a fresh snapshot of the run and saves only
+  while it still holds the recorded output, and the automation checks the
+  recorded checksum again as it saves; otherwise the call returns `RUN_STALE`
+  and says the page holds other results. Every app registers through
+  `registerAppAutomation`, which keeps each run's own output files and their
+  checksums, so every app can establish this identity and none has to refuse
+  a download after a touch. A run the person starts through the app's own
+  controls never reaches the automation, so it cannot make the agent's run
+  stale; the dialog's wording covers it instead.
+- **End.** A convenience that spares the person a dialog with no point: a pick
+  in any file input, files dropped on the page, the page's example selector
+  starting a load, a handoff and the app's `automation.reset()`, and on a
+  touched examination a list change the app reports with `nd-files` or files
+  the page itself puts on a classified input (the shell's Undo). The tools
+  change no app's list reporting: the shell's Undo restores what `nd-files`
+  and `change` told it, so a report added for the tools changes what Undo
+  puts back. A removal an app does not report is a press, which touches the
+  examination. A new
+  examination holds no files and the runs started before it are stale
+  (`app_describe.run` says so; `runs_get`, `runs_cancel` and
+  `outputs_download` return `RUN_STALE`). An end the tools miss is a touch,
+  which only asks.
+- **Not counted.** The agent's dialogs, the shared bar and its dialogs, page
+  scrolling (a wheel elsewhere, a scroll key with nothing focused), pointer
+  movement, modifier keys, Tab and focus changes; a cross-origin frame's events
+  never reach the page. A run's own loads are untrusted and change nothing, so
+  reruns keep their files.
+
+A shadow root attached to an element that is neither inserted later nor a
+custom element defined later is not searched for frames; its own events still
+pass window.
+
+A check when a call starts is not enough: a call awaits the page, a prompt or
+a fetch, and the person can act meanwhile. Every counted event therefore
+starts a new turn, and every tool call reaches the page's automation, the
+prompts and the fetchers only through `examinedCall`, which checks the turn
+before each request and after each answer, and the tool checks once more
+before it returns. A call the person interrupts returns `EXAMINATION_CHANGED`
+and does nothing more: no report, download, viewer load or held file from it.
+The turn's signal also closes its prompts, drops those still queued unshown,
+and stops its fetches and waits; the agent's own signal is kept apart, so the
+person looking at the viewer never cancels the agent's run. A components test
+enumerates every tool, on an untouched and on a touched examination, and
+interrupts it after each answer it awaits.
+
+The read-only viewer tools read what the viewer shows whatever the
+examination's state, because the person sees the same image.
+
+`pageFiles` lists what each classified input received from its change,
+`input` (for an input in an open shadow root) and `nd-files` events, and files
+dropped on the page or handed over by `takeHandoff` that reach no input
+(`received:drop`, `received:handoff`). It says what the page was given, not
+what it shows: NiiMath shows the agent's scan through its own loader without
+an event, and DWI2TRX refuses a NIfTI dropped without its gradient files, so
+no event tells the tools what the page holds. `inputs_use_page_files`
+therefore always shows the person the files and asks first, and a run or
+viewer load the tools start clears the record. A pick made while a run is
+going is not recorded, since the busy app may ignore it.
+`pageMayHoldOtherInputs` turns true once the person has done something whose
+effect the tracker cannot see, such as using a control or an unclassified
+input. An app whose list changes without a change event may leave a stale
+entry; using it still shows the person the files first.
+
+An example's file roles serve the page's example selector and sometimes differ
+from the contract's. The example's `automation` field in `examples.json` maps
+them, leaves files out with a `reason`, translates page parameters into
+contract parameters (`parameters`), or says why the example is `unavailable`
+(`webmcp/examples.js`). `node scripts/webmcp-examples.mjs` reports every app's
+examples and fails when an example's operation requires a parameter the
+example does not give.
+
+WebMCP has no way to ask the person anything. `createAgentPrompts()` provides
+the questions, file requests and fetch approvals as `dialog.nd-dialog`
+dialogs. One shows at a time and the others wait; a prompt that fails to
+render rejects only its own call. Each says that an AI agent the person
+started is asking. Closing a dialog declines it, and an aborted call closes it.
+A consent dialog (fetch approval, page files, resume) names state: it takes a
+function for its request, reads it when it shows and again when the person
+presses Allow, shows the current state in place and asks again when the two
+differ, and resolves to the request the person allowed, which the tools apply
+only while it is still current. The refresh replaces only the text that names
+the request, so the buttons and the focus on Allow stay; Escape, the close
+control and the backdrop decline, before and after a refresh, and none of them
+counts as the person using the page. Requests compare by what they name:
+roles, names, sizes, the checksum a file was verified against or the File
+itself, and the run. On the third change the dialog closes as declined, and
+the tools ask again after Allow at most three times, so an agent cannot keep a
+person answering. A components test enumerates every prompt and fails on
+one that is neither such a consent dialog nor free of state.
+
+- **On by default.** The tools register wherever the browser exposes the API,
+  with no `?agent` switch. The person starts the browser's agent, and the page
+  sends nothing until it calls a tool. To gate the tools later, change the
+  check in `site/app-shell.js`.
+- **Browser support.** No browser enables WebMCP by default. Chrome for
+  Testing 156 implements it behind `--enable-features=WebMCPTesting` (or
+  `WebMCP`, or `--enable-experimental-web-platform-features`), with
+  `getTools()` and `executeTool()`. Chrome also offers an origin trial. Each
+  catalogue in `registry/apps.yml` has a `webmcp_origin_trial` token, empty
+  for every host; the catalogue projection writes a token into that host's
+  app pages only.
+- **Privacy.** `shared.agents` in `registry/app-information.yml` closes every
+  Privacy dialog, the app's own included: nothing reaches the agent until it
+  calls a tool; it can read run reports with file names and checksums,
+  measurements, viewer state (including the value under the crosshair, volume
+  names and image statistics) and the answers typed into its dialogs; it can
+  read what the viewer shows whenever it asks, as the person sees it; it runs
+  the app only on files the person chose, already opened, or the app's
+  examples, using opened files only once the person confirms them; once the
+  person uses the page a request it already started does nothing more, and it
+  uses its files and earlier results again only after the person allows it,
+  while opening other files, picking an example or declining releases them;
+  it can move and restyle the viewer but not capture it or save images from
+  it; it fetches an address only after the person allows it, and for a store
+  the dialog names the address the app reads under, and the app reads only
+  under it, following no redirect; it can save run outputs to downloads; an
+  agent in the cloud sends what it reads to its provider.
+- **Tested.** Node tests build the table from every app's `automation.json`
+  and check that each run schema accepts and refuses the same parameters as
+  the contract, both through a JSON Schema reader and through the tools' own
+  input check, including inherited names, near multiples and unsafe
+  integers; they also cover the examination lifetime, run binding in the
+  automation, the bounded run memory, the nv-mcp method and parameter tables
+  and their audit, redirect refusal, fetch approval, the store root of a URL
+  input, the interaction predicate, and every tool interrupted after each
+  answer it awaits (held promises, not timers).
+  `pnpm --filter @neurodesk/agent-server validate:webmcp` runs a whole Brain
+  Extraction analysis through Chrome's own WebMCP: example, run, viewer, both
+  dialogs, the real file chooser, a rerun with another threshold, a file the
+  person opened in the sidebar, and a download.
+  `node test/webmcp-examination.smoke.mjs` drives in Chromium what a person
+  can do to the agent's files: picking an example in NiiMath, opening a file
+  during a run and after one, dropping a file, QSMbly's mask remove button
+  (a touch whose resume dialog names the mask), dcm2niix's settings, a drop on DWI2TRX's viewer, a handoff from
+  DICOM View to White matter lesions, ZARRo's store approval and its reads
+  against a local server that redirects to another (none reaches the second),
+  Brain Extraction's viewer permissions, redirect refusal and fetch approval,
+  touches from a wheel, a drag and clicks in same-origin frames (one that
+  navigates, one added inside an open shadow root, and a click in a frame's
+  new document before it loads), and the resume flow: NiiMath's example run,
+  a wheel and a click in the viewer, then `runs_get` and `outputs_download`
+  after Allow, with the saved mask's SHA-256 equal to the recorded one, a
+  declined result after Decline, and nothing to resume after the person opens
+  their own file. It also drops a scan on NiiMath's viewer canvas, which the
+  shell takes at window (the example run is then stale with no dialog), uses
+  the status bar's Undo, runs the person's own command after an agent run
+  (Allow returns the agent run's recorded report and bytes), names a run's
+  own file apart from a file the agent took since, shares one dialog between
+  a report and a download asked for together, removes a NeSVoR stack (a touch
+  whose resume dialog names the agent's stack), and
+  loads in ZARRo by hand, in the same tab, a store an agent attempt failed
+  on.
+  `node test/webmcp-interaction.smoke.mjs` holds a file in every app and
+  performs each trusted action the workspace offers once the app is ready
+  (every classified file and folder input, every remove or clear button, and
+  every visible select, changed to another option by keyboard, checkbox, text
+  field and canvas, at most 40 per app). Its expectation does not come from
+  `interactionEffect`: after each action, with no Allow given, the agent must
+  not get the held file back, so the examination is ended or touched and a
+  touch makes the next run ask to resume, naming the held files, whatever the
+  action changed in the page.
+  The tools change no app's list reporting or Undo: the page drop, the shared
+  file controllers and every app's list handlers are the same source as before
+  WebMCP.
+  `node test/webmcp.smoke.mjs` checks every app of the built site at 1440 and
+  390 px in Chrome's own WebMCP (it fails without it unless
+  `WEBMCP_STAND_IN=1`): the full tool set, `app_describe` with every loadable
+  example, both dialogs, the Privacy statement, each light-DOM file input
+  (folder inputs included) listing what it holds, and that a browser without
+  WebMCP loads none of its modules. Inputs in shadow roots are reported as not
+  covered. On 19 November 2026, after the third review's fixes, all 63 apps
+  passed in 360 s. CI runs it in the site-catalog job on the apps the plan
+  selects (`SMOKE_APPS`), and on every app when the plan covers the whole
+  catalogue; the interaction smoke runs beside it the same way, and the
+  examination smoke over its fixed apps on every site build. On 19 November
+  2026, after the fourth review's fixes and on a fresh build of the final head,
+  the examination smoke passed its 19 checks in 43 to 56 s in each of seven
+  runs, two of them beside the interaction smoke. The interaction smoke ran in
+  four parallel shards in 758 s: 62 apps passed and ZARRo, which holds no
+  files, is named in `test/webmcp-interaction-skips.json`. Of 541 actions, 400
+  touched the examination and each made the next run ask to resume, 137 ended
+  it, and the 4 not performed are VesselBoost's inference controls, which the
+  app keeps disabled until preprocessing has run; the skip list gives that
+  reason, and any other unperformed action, or an app with none performed,
+  fails. No app had more than 40 actions. `node test/webmcp.smoke.mjs` passed
+  all 63 apps in 432 s on that build.
+  On 19 November 2026, after the fifth review's fixes and on a fresh build of
+  the final head, the examination smoke passed its 27 checks in 77 to 110 s in
+  each of three runs beside the other two smokes, and `node
+  test/webmcp.smoke.mjs` passed all 63 apps in 453 s. The interaction smoke,
+  now holding each action to what the page shows, ran in four parallel shards
+  in up to 1,277 s: 61 apps passed and ZARRo is named in the skip list. Of 528
+  actions, 313 touched the examination and each made the next run ask to
+  resume, 213 ended it and 2 were not performed. VesselBoost failed in that
+  run when the agent's file dialog did not take its file within 30 s; it
+  passed both of two runs on its own.
+- **Full runs.** `WEBMCP_RUNS=1` also loads each app's loadable examples
+  (`WEBMCP_EXAMPLES=first`: only the first), runs each with the tool and
+  parameters `app_describe` gives and saves an output, through the tools
+  only. A run that does not complete fails its app unless
+  `test/webmcp-run-skips.json` names the app with the outcome it expects
+  (`timed out`, `run failed` with an error pattern, or `no loadable example`)
+  and the reason; any other outcome fails. The 18 November figures below
+  ran the first example only.
+  On 18 November 2026, on 16 cores with SwiftShader WebGPU, 53 apps
+  completed. 45 completed within 420 s in four parallel shards: ants,
+  ants-denoise, brain-extraction, brain2print, calcium-imaging, carotid-flow,
+  dcm2niix, deconvolution, deface, degibbs, dicompare, dicomview,
+  disconnectome, dwicorrect, dwidenoise, easy-mp2rage, edgereg, elastix,
+  greedy, histo2mri, lcmodel, lightsheet-atlas, me-ica, microsam,
+  microscope-qc, mri2vid, n4, nesvor (its viewer operation), neuromorph,
+  niimath, omezarr-convert, pipeline-builder, qsmbly, reproin, samsrf, sdc,
+  spinalcordtoolbox, spot-detection, stardist, stitching, structure-tensor,
+  surfannotate, synthsr and topofit, and noddi on a second pass. Eight more
+  completed within 1500 s in two shards: bison (1137 s), browserqc (232 s),
+  calmar (406 s), fastprep (693 s), fireants (939 s), gliomoda (873 s), hmc
+  (333 s) and vesselboost (605 s). Three still ran past 1500 s: brainqcnet,
+  musclemap and white-matter-lesions. Four failed for the GPU, not the tools:
+  brainchop (WebGL texture limit), dwi2trx (needs 32-lane subgroups), syncro
+  and synthseg (GPU memory). cryo-em, seedseg and zarro have no example the
+  tools can load. These ten are the expected skips.
+- **Untested.** No browser agent has called these tools: every call came from
+  a test through `executeTool`.
 
 ## Phases
 
