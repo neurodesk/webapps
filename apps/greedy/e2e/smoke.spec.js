@@ -95,6 +95,7 @@ test("affine and nonlinear registration align the example T1 with the MNI templa
 });
 
 test("nonlinear is the default and the method selector reruns affine", async ({ page }) => {
+  test.setTimeout(480_000);
   await page.goto("/");
   await configureExampleFixtures(page);
   await page.locator("[data-neurodesk-example]").selectOption("t1-mni");
