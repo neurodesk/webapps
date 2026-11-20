@@ -36,10 +36,19 @@ test('mapped parcellations export as their own role', () => {
   assert.deepEqual({ id: artifact.id, role: artifact.role, name: artifact.file.name }, { id: 'lh-wang2015-annot', role: 'parcellation', name: 'lh.wang2015.annot' });
 });
 
+test('the region mask exports as its own role beside the QC images', () => {
+  const artifacts = automationArtifacts([
+    { id: 'patch-qc', name: 'topofit_patch_qc.nii', mediaType: 'application/nifti', bytes: Uint8Array.of(1) },
+    { id: 'region-mask', name: 'topofit_region_mask.nii', mediaType: 'application/nifti', bytes: Uint8Array.of(1) },
+  ]);
+  assert.deepEqual(artifacts.map(({ id, role }) => [id, role]), [['patch-qc', 'qc'], ['region-mask', 'region-mask']]);
+});
+
 test('the automation patchRegion enum lists the whole cortex and every named region', async () => {
   const contract = JSON.parse(await readFile(new URL('../automation.json', import.meta.url)));
   const { patchRegion } = contract.operations.reconstruct.parameters;
   assert.deepEqual(patchRegion.enum, ['cortex', ...REGIONS.map(({ id }) => id)]);
   assert.equal(patchRegion.default, 'cortex');
   assert.equal(contract.operations.reconstruct.artifacts.parcellation.mediaType, 'application/vnd.freesurfer.annotation');
+  assert.deepEqual(contract.operations.reconstruct.artifacts['region-mask'], { type: 'neuro:label-map', mediaType: 'application/nifti', space: 'input', minimum: 0, maximum: 1 });
 });

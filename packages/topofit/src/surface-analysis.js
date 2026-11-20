@@ -1,13 +1,14 @@
 import { erodeCortex, findPatches, surfaceNormals, validatePatchOptions } from './patches.js';
 import { nearestAtlasVertices, readCortexAtlas } from './cortex-atlas.js';
 import { REGION_ATLASES, readRegionAtlas, selectRegion } from './cortex-regions.js';
-import { patchQc } from './analysis-qc.js';
+import { patchQc, regionMask } from './analysis-qc.js';
 import { roundEven } from './qc.js';
 import { inverseAffine, readVolume } from './volume.js';
 import { writeAnnotation, writeFreeSurfer } from './results.js';
 
 const encoder = new TextEncoder();
 const rows = (values, indices) => indices.map((i) => Array.from(values.subarray(i * 3, i * 3 + 3)));
+export const REGION_MASK_VALUES = Object.freeze({ lh: 1, rh: 2 });
 const jsonFile = (id, name, value) => ({ id, name, mediaType: 'application/json', bytes: encoder.encode(`${JSON.stringify(value)}\n`).buffer });
 
 export function readPatchRoi(buffer, source) {
@@ -30,6 +31,7 @@ export async function analyzeSurfaces({ source, vertices, faces, estimateNormals
   const regionAtlas = region ? readRegionAtlas(regionBytes, atlas.points.length / 3)[region.atlas] : null;
   const regionLabels = region ? new Set(region.labels) : null;
   let eligibleFaceCount = 0;
+  const regionRibbons = [];
   for (const hemisphere of ['lh', 'rh']) {
     const white = vertices[`${hemisphere}.white`];
     const pial = vertices[`${hemisphere}.pial`];
@@ -101,6 +103,11 @@ export async function analyzeSurfaces({ source, vertices, faces, estimateNormals
         mediaType: 'application/vnd.freesurfer.annotation',
         bytes: writeAnnotation(parcellation, REGION_ATLASES[region.atlas].labels),
       });
+      const regionFaces = [];
+      for (let f = 0; f < faces[hemisphere].length; f += 3) {
+        if (faces[hemisphere].subarray(f, f + 3).every((i) => regionLabels.has(parcellation[i]))) regionFaces.push(...faces[hemisphere].subarray(f, f + 3));
+      }
+      regionRibbons.push({ white, pial, faces: Int32Array.from(regionFaces), value: REGION_MASK_VALUES[hemisphere] });
     }
   }
   if (settings && !region && !eligibleFaceCount) throw new Error(roi ? 'ROI contains no eligible cortical patch.' : 'No eligible cortical faces in the requested hemisphere.');
@@ -132,6 +139,14 @@ export async function analyzeSurfaces({ source, vertices, faces, estimateNormals
     files.push(jsonFile('patch-geometry', 'topofit_patch_geometry.json', { depth_fraction: 0.5, patches: geometries }));
     if (Object.keys(flatPatches).length) {
       files.push({ id: 'patch-qc', name: 'topofit_patch_qc.nii', mediaType: 'application/nifti', bytes: patchQc(source, geometries, flatPatches) });
+    }
+    if (region) {
+      files.push({
+        id: 'region-mask',
+        name: 'topofit_region_mask.nii',
+        mediaType: 'application/nifti',
+        bytes: regionMask(source, regionRibbons, `TopoFit region ${region.id} ribbon: left 1, right 2`),
+      });
     }
   }
   files.push(jsonFile('surface-analysis', 'topofit_surface_analysis.json', analysis));
