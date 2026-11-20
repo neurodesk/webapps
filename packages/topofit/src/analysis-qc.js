@@ -74,22 +74,14 @@ function normalGlyph(volume, mask, patch, output) {
   else for (let offset = -2; offset <= 2; offset += 1) for (const sign of [-1, 1]) mark(center[0] + offset, center[1] + sign * offset);
 }
 
-// Marks with `value` the voxels of the ribbon between the white and pial triangles of
-// `faces`. Each prism is sampled on barycentric and depth grids no coarser than half a
-// voxel, so every ribbon point lies within 0.38 voxel of a sample, and a sample marks the
-// voxel whose centre is nearest. A voxel holding a ribbon point at least 0.38 voxel from
-// all of its faces is therefore marked; one the ribbon only clips near a face or corner
-// may stay 0. The mask approximates the ribbon; it is not a conservative voxelisation.
-export function ribbonVoxelMask(volume, white, pial, faces, mask, value) {
-  const inverse = inverseAffine(volume.affine);
-  const toVoxels = (points) => {
-    const output = new Float64Array(points.length);
-    for (let i = 0; i < points.length; i += 3) output.set(transform(inverse, [points[i], points[i + 1], points[i + 2]]), i);
-    return output;
-  };
-  const inner = toVoxels(white);
-  const outer = toVoxels(pial);
-  const [nx, ny, nz] = volume.dims;
+// Visits sample points of the prisms between the white and pial triangles of `faces`, in
+// the coordinates of `white` and `pial`. Each prism is cut into layers and each layer
+// triangle into a barycentric grid, both no coarser than half a unit, so a layer's grid
+// triangles have edges of at most 0.5 and every prism point lies within 0.25 of a layer
+// along its depth line. A prism point is therefore within 1/(2√3) + 1/4 ≈ 0.539 of a sample
+// by the triangle inequality, and within √(1/12 + 1/16) ≈ 0.382 when the depth runs
+// perpendicular to the layers.
+export function ribbonSamples(white, pial, faces, visit) {
   const corner = new Float64Array(18);
   const triangle = new Float64Array(9);
   const span = (points, a, b) => Math.hypot(points[a] - points[b], points[a + 1] - points[b + 1], points[a + 2] - points[b + 2]);
@@ -97,8 +89,8 @@ export function ribbonVoxelMask(volume, white, pial, faces, mask, value) {
     for (let k = 0; k < 3; k += 1) {
       const v = faces[f + k] * 3;
       for (let axis = 0; axis < 3; axis += 1) {
-        corner[k * 3 + axis] = inner[v + axis];
-        corner[9 + k * 3 + axis] = outer[v + axis];
+        corner[k * 3 + axis] = white[v + axis];
+        corner[9 + k * 3 + axis] = pial[v + axis];
       }
     }
     let edge = 0;
@@ -118,14 +110,30 @@ export function ribbonVoxelMask(volume, white, pial, faces, mask, value) {
           const a = i / across;
           const b = j / across;
           const c = (across - i - j) / across;
-          const x = roundEven(a * triangle[0] + b * triangle[3] + c * triangle[6]);
-          const y = roundEven(a * triangle[1] + b * triangle[4] + c * triangle[7]);
-          const z = roundEven(a * triangle[2] + b * triangle[5] + c * triangle[8]);
-          if (x >= 0 && y >= 0 && z >= 0 && x < nx && y < ny && z < nz) mask[x + nx * (y + ny * z)] = value;
+          visit(a * triangle[0] + b * triangle[3] + c * triangle[6], a * triangle[1] + b * triangle[4] + c * triangle[7], a * triangle[2] + b * triangle[5] + c * triangle[8]);
         }
       }
     }
   }
+}
+
+// Marks with `value` the voxel whose centre is nearest each ribbon sample (ribbonSamples on
+// the voxel grid). The mask approximates the ribbon: a voxel the ribbon crosses only near a
+// face or corner may stay 0, so it is not a conservative voxelisation.
+export function ribbonVoxelMask(volume, white, pial, faces, mask, value) {
+  const inverse = inverseAffine(volume.affine);
+  const toVoxels = (points) => {
+    const output = new Float64Array(points.length);
+    for (let i = 0; i < points.length; i += 3) output.set(transform(inverse, [points[i], points[i + 1], points[i + 2]]), i);
+    return output;
+  };
+  const [nx, ny, nz] = volume.dims;
+  ribbonSamples(toVoxels(white), toVoxels(pial), faces, (sx, sy, sz) => {
+    const x = roundEven(sx);
+    const y = roundEven(sy);
+    const z = roundEven(sz);
+    if (x >= 0 && y >= 0 && z >= 0 && x < nx && y < ny && z < nz) mask[x + nx * (y + ny * z)] = value;
+  });
   return mask;
 }
 

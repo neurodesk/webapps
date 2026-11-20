@@ -43,7 +43,7 @@ export function readVolume(buffer) {
   }
   const unit = header.xyzt_units & 7;
   const scale = unit === 1 ? 1000 : unit === 3 ? 0.001 : 1;
-  const affine = header.affine.map((row, rowIndex) =>
+  const affine = (header instanceof nifti.NIFTI2 ? nifti2Affine(header) : header.affine).map((row, rowIndex) =>
     row.map((value) => (rowIndex < 3 ? value * scale : value)),
   );
   inverseAffine(affine);
@@ -57,6 +57,39 @@ export function readVolume(buffer) {
     datatypeCode: scaled ? 64 : header.datatypeCode,
     storageDatatypeCode: header.datatypeCode,
   };
+}
+
+// nifti-reader-js takes a NIfTI-2 affine from the srows whatever the codes say. This picks
+// it by the rule its NIfTI-1 reader applies: the qform when its code is set and above the
+// sform code (qfac from pixdim[0]), else the sform when its code is set, else the pixdims.
+function nifti2Affine(header) {
+  const affine = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
+  if (header.qform_code < 1 && header.sform_code < 1) {
+    for (let axis = 0; axis < 3; axis += 1) affine[axis][axis] = header.pixDims[axis + 1];
+  }
+  if (header.qform_code > 0 && header.sform_code < header.qform_code) {
+    const b = header.quatern_b;
+    const c = header.quatern_c;
+    const d = header.quatern_d;
+    const a = Math.sqrt(1 - (b * b + c * c + d * d));
+    const qfac = header.pixDims[0] === 0 ? 1 : header.pixDims[0];
+    const rotation = [
+      [a * a + b * b - c * c - d * d, 2 * b * c - 2 * a * d, 2 * b * d + 2 * a * c],
+      [2 * b * c + 2 * a * d, a * a + c * c - b * b - d * d, 2 * c * d - 2 * a * b],
+      [2 * b * d - 2 * a * c, 2 * c * d + 2 * a * b, a * a + d * d - c * c - b * b],
+    ];
+    for (let row = 0; row < 3; row += 1) {
+      for (let column = 0; column < 3; column += 1) {
+        affine[row][column] = rotation[row][column] * header.pixDims[column + 1] * (column === 2 ? qfac : 1);
+      }
+    }
+    affine[0][3] = header.qoffset_x;
+    affine[1][3] = header.qoffset_y;
+    affine[2][3] = header.qoffset_z;
+  } else if (header.sform_code > 0) {
+    for (let row = 0; row < 3; row += 1) affine[row] = header.affine[row].slice();
+  }
+  return affine;
 }
 
 export function estimateConformMemoryBytes(dims, retainedBytes = 0) {

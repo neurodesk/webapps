@@ -571,8 +571,11 @@ async function showResult(stage, { duringRun = false } = {}) {
         parcellationMeshFiles.set(file.name, file);
       }
       await nv.setMesh(index, { opacity: 1 });
-      const mid = nv.meshes.findIndex((mesh) => mesh.name === outputs.get(`${hemisphere}-mid`)?.name);
-      if (mid >= 0 && nv.meshes[mid].opacity > 0) await nv.setMesh(mid, { opacity: 0 });
+      // The hemisphere's own surfaces would cover the parcellation; their checkboxes follow.
+      for (const surface of ['white', 'mid', 'pial']) {
+        const covering = nv.meshes.findIndex((mesh) => mesh.name === outputs.get(`${hemisphere}-${surface}`)?.name);
+        if (covering >= 0 && nv.meshes[covering].opacity > 0) await nv.setMesh(covering, { opacity: 0 });
+      }
       meshSceneReady = true;
       displayedResult = stage;
       if (view.centroid) nv.setCrosshairPos(view.centroid);

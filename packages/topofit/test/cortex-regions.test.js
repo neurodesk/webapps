@@ -10,6 +10,7 @@ import { REGION_MASK_VALUES, analyzeSurfaces } from '../src/surface-analysis.js'
 import { writeInt16Nifti } from '../src/qc.js';
 import { fixture } from './region-fixture.js';
 import { readVolume } from '../src/volume.js';
+import { regionMask } from '../src/analysis-qc.js';
 
 const manifest = JSON.parse(await readFile(new URL('../cortex-regions.manifest.json', import.meta.url)));
 const labelNames = (atlas, values) => values.map((value) => REGION_ATLASES[atlas].labels[value].name);
@@ -304,8 +305,9 @@ test('a named region adds only the mask, and the manifest only its hash', async 
 `)), manifestHash);
 });
 
-// A NIfTI-2 scan of the fixture's grid with a translated, scaled sform.
-function nifti2Source(dims, srow) {
+// A NIfTI-2 float32 scan. `srow` is written whatever the codes; the qform comes from the
+// quaternion (b, c, d), `offset`, `pixdim` and `qfac` (pixdim[0]).
+function nifti2Source(dims, srow, { sformCode = 1, qformCode = 0, quaternion = [0, 0, 0], offset = [0, 0, 0], pixdim = srow.map((row, axis) => row[axis]), qfac = 1 } = {}) {
   const count = dims[0] * dims[1] * dims[2];
   const buffer = new ArrayBuffer(544 + count * 4);
   const view = new DataView(buffer);
@@ -315,14 +317,47 @@ function nifti2Source(dims, srow) {
   view.setInt16(14, 32, true);
   view.setBigInt64(16, 3n, true);
   for (let i = 1; i < 8; i += 1) view.setBigInt64(16 + i * 8, BigInt(dims[i - 1] ?? 1), true);
-  srow.forEach((row, axis) => view.setFloat64(112 + axis * 8, row[axis], true));
+  view.setFloat64(104, qfac, true);
+  pixdim.forEach((size, axis) => view.setFloat64(112 + axis * 8, size, true));
   view.setBigInt64(168, 544n, true);
   view.setFloat64(176, 1, true);
-  view.setInt32(348, 1, true);
+  view.setInt32(344, qformCode, true);
+  view.setInt32(348, sformCode, true);
+  [...quaternion, ...offset].forEach((value, index) => view.setFloat64(352 + index * 8, value, true));
   srow.forEach((row, axis) => row.forEach((value, column) => view.setFloat64(400 + (axis * 4 + column) * 8, value, true)));
   view.setInt32(500, 2, true);
   return readVolume(buffer);
 }
+
+const closeAffine = (actual, expected, message) => {
+  for (let row = 0; row < 4; row += 1) {
+    for (let column = 0; column < 4; column += 1) assert.ok(Math.abs(actual[row][column] - expected[row][column]) < 1e-5, `${message} [${row}][${column}]: ${actual[row][column]} vs ${expected[row][column]}`);
+  }
+};
+
+test('a NIfTI-2 scan takes its affine by the NIfTI-1 rule and its outputs keep that grid', () => {
+  // A 90 degree turn about z, z flipped by qfac -1 and x moved 20 mm, in the qform only.
+  const qform = { qformCode: 1, quaternion: [0, 0, Math.SQRT1_2], offset: [20, 0, 0], pixdim: [2, 2.5, 3], qfac: -1 };
+  const expected = [[0, -2.5, 0, 20], [2, 0, 0, 0], [0, 0, -3, 0], [0, 0, 0, 1]];
+  const identity = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]];
+  const zeros = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
+  const sform = [[2, 0, 0, -5], [0, 2.5, 0.5, -7], [0, 0, 3, -9]];
+  const cases = [
+    ['qform with inactive identity srows', nifti2Source([5, 6, 7], identity, { ...qform, sformCode: 0 }), expected],
+    ['qform with zeroed srows', nifti2Source([5, 6, 7], zeros, { ...qform, sformCode: 0 }), expected],
+    ['sform only', nifti2Source([5, 6, 7], sform), [...sform, [0, 0, 0, 1]]],
+    ['sform code at least the qform code', nifti2Source([5, 6, 7], sform, { ...qform, sformCode: 1 }), [...sform, [0, 0, 0, 1]]],
+    ['no transform', nifti2Source([5, 6, 7], zeros, { sformCode: 0, pixdim: [2, 2.5, 3] }), [[2, 0, 0, 0], [0, 2.5, 0, 0], [0, 0, 3, 0], [0, 0, 0, 1]]],
+  ];
+  for (const [name, volume, affine] of cases) {
+    closeAffine(volume.affine, affine, `${name}: reader`);
+    for (const [output, bytes] of [['QC', writeInt16Nifti(volume, new Int16Array(210), 'qc')], ['mask', regionMask(volume, [], 'mask')]]) {
+      const written = readVolume(bytes);
+      assert.deepEqual(written.dims, [5, 6, 7], `${name}: ${output} dims`);
+      closeAffine(written.affine, volume.affine, `${name}: ${output} header`);
+    }
+  }
+});
 
 test('the region mask and QC images keep a NIfTI-2 source grid in a NIfTI-1 header', async () => {
   const data = fixture({ wang2015: { lh: [1, 0], rh: [0, 2] } });

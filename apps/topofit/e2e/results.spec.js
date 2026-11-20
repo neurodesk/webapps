@@ -538,8 +538,17 @@ test('a named search region lists atlas groups, reaches the worker and shows its
   expect(await page.evaluate(() => window.lastTopofitJob.region)).toBe('wang2015:V1');
   expect(await page.evaluate(() => window.lastTopofitJob.patches)).not.toBeNull();
   const parcellation = page.locator('.nd-volume-toggle').filter({ hasText: 'Left Wang 2015 visual topography parcellation' });
+  // Visible surfaces of the hemisphere would cover the parcellation, so viewing it hides them.
+  const leftPial = page.getByRole('checkbox', { name: 'Show Left pial surface', exact: true });
+  await page.getByRole('radio', { name: 'Render view', exact: true }).click();
+  await leftPial.check();
+  await expect(leftPial).toBeEnabled();
   await parcellation.getByRole('button', { name: 'View', exact: true }).click();
   await expect(page.locator('#imageLabel')).toContainText('Left Wang 2015 visual topography parcellation · V1 in full colour · patches white');
+  await expect(leftPial).not.toBeChecked();
+  expect(await meshOpacity(page, 'lh.pial')).toBe(0);
+  await expect.poll(() => atlasRedPixels(page)).toBeGreaterThan(2000);
+  await page.getByRole('radio', { name: 'Multi+Render', exact: true }).click();
   await expect(page.locator('#viewerError')).toBeHidden();
   expect((await viewerMeshes(page)).filter(({ name }) => name.endsWith('.annot')).map(({ name, url, opacity }) => [name, url, opacity])).toEqual([['lh.wang2015.annot', 'lh.wang2015.annot.mz3', 1]]);
   await page.getByRole('radio', { name: 'Render view', exact: true }).click();
