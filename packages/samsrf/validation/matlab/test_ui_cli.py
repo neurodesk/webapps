@@ -4,6 +4,7 @@ import itertools
 import json
 from pathlib import Path
 import shutil
+import struct
 import subprocess
 import sys
 import unittest
@@ -15,6 +16,7 @@ import cli_plan
 import compare_cli
 import compare_ui_cli as ui_cli
 from compare_web_cli import Inventory
+from lossless import lossless_name, write_lossless
 from test_cli import scratch, write_gifti
 from test_web_cli import IMAGE, PLAN, ROI, VERTICES, Fixture, sha
 
@@ -26,9 +28,14 @@ class UiFixture(Fixture):
     """A compiled MATLAB execution, the engine harness's run (self.web) and the production
     UI's records, saved models and downloads of the same runs."""
 
-    def __init__(self, root, ids, ui_status=None):
+    def __init__(self, root, ids, ui_status=None, lossless=False):
         self.ui_status = dict(ui_status or {})
         self.reports = itertools.count()
+        # With `lossless`, each download holds the lossless file of self.maps and self.imaginary (or
+        # of self.lossless_real / self.lossless_imaginary where a test sets them) and its provenance.
+        self.lossless = lossless
+        self.lossless_real = {}
+        self.lossless_imaginary = {}
         super().__init__(root, ids, kind='compiled', runner='browser')
         self.ui = self.root / 'ui'
         self.write_ui()
@@ -66,6 +73,10 @@ class UiFixture(Fixture):
                         if (self.web / run_id / name).exists():
                             shutil.copyfile(staged / name, self.web / run_id / name)
                         handle.write(staged / name, name)
+                    if self.lossless:
+                        handle.writestr(lossless_name(stem), self.lossless_bytes(run))
+                        handle.writestr(f'{stem}_provenance.json', json.dumps(self.provenance(run, stem)))
+                        record.update({'arithmeticProvenance': True, 'losslessExport': True})
                 record.update({'zip': archive.name, 'zipSha256': sha(archive.read_bytes()),
                                'statusText': {'prf': 'pRF maps ready', 'rc': 'Reverse-correlation maps ready',
                                               'cf': 'Connective field maps ready'}[run['algorithm']] + ' (1.0 s)'})
@@ -75,6 +86,18 @@ class UiFixture(Fixture):
                 record['stage'] = expected['stage']
                 record[ui_cli.MESSAGE_FIELD[expected['stage']]] = expected['message']
             (self.ui / f'{run_id}.ui.json').write_text(json.dumps(record))
+
+    def lossless_bytes(self, run):
+        run_id = run['id']
+        labels = compare_cli.expected_results(run)[1]
+        return write_lossless(self.lossless_real.get(run_id, self.maps[run_id]), labels, run['precision'],
+                              run['model'].get('Arithmetic_Reference', 'current'),
+                              imaginary=self.lossless_imaginary.get(run_id, self.imaginary.get(run_id)), analysed=ROI)
+
+    def provenance(self, run, stem):
+        return {'arithmeticReference': run['model'].get('Arithmetic_Reference', 'current'),
+                'model': ui_cli.expected_app_model(run),
+                'lossless': {'file': lossless_name(stem), 'sha256': sha(self.lossless_bytes(run))}}
 
     def ui_report(self, expect='compiled-runtime'):
         return ui_cli.compare(self.plan, self.plan_sha, self.manifest, self.manifest_sha, self.ui, self.matlab,
@@ -95,10 +118,11 @@ class UiFixture(Fixture):
 class Base(unittest.TestCase):
     ids = ['rc_hull_lh_single']
     ui_status = {}
+    lossless = False
 
     def setUp(self):
         self._scratch = scratch()
-        self.x = UiFixture(self._scratch.name, self.ids, self.ui_status)
+        self.x = UiFixture(self._scratch.name, self.ids, self.ui_status, self.lossless)
         self.id = self.ids[0]
         self.names = compare_cli.expected_results(PLAN[self.id])[2]
 
@@ -248,6 +272,163 @@ class ComplexEngineRuns(Base):
                     run = self.run_report()
                     self.assertEqual(run['class'], 'inventory-error', run)
                     self.assertIn(name, run['error'])
+
+
+class LosslessDownloads(Base):
+    """Downloads with the lossless file: double values and imaginary parts become observable."""
+    ids = ['rc_hull_lh_double']
+    lossless = True
+
+    def test_a_lossless_download_equal_to_matlab_and_the_engine_is_exact(self):
+        report = self.x.ui_report()
+        run = report['runs'][0]
+        self.assertEqual(run['class'], 'exact', run)
+        self.assertTrue(run['engineFiles']['lossless']['equal'])
+        self.assertTrue(all(entry['lossless']['srfData']['exact'] for entry in run['maps']))
+        self.assertEqual(report['summary']['losslessDownloadRuns'], 1)
+        self.assertEqual(report['summary']['losslessComparedMaps'], len(self.names))
+        self.assertEqual(report['failures'], [])
+
+    def test_a_double_value_float32_hides_differs_in_the_lossless_comparison(self):
+        # DoublePrecision's case: the float32 downloads agree, the double values do not.
+        self.x.maps[self.id][1][ROI[0]] = numpy.nextafter(self.x.maps[self.id][1][ROI[0]], numpy.inf)
+        self.x.write()
+        self.x.lossless_real[self.id] = self.x.maps[self.id].copy()
+        self.x.lossless_real[self.id][1][ROI[0]] = numpy.nextafter(self.x.maps[self.id][1][ROI[0]], -numpy.inf)
+        engine = self.x.web / self.id / 'maps.f64'
+        engine.write_bytes(self.x.lossless_real[self.id].astype('<f8').tobytes())
+        self.x.edit_record(self.id, mapsSha256=sha(engine.read_bytes()))
+        self.x.write_ui()
+        report = self.x.ui_report()
+        entry = report['runs'][0]['maps'][1]
+        self.assertTrue(entry['gifti']['exact'] and entry['srfDataCast']['exact'])
+        self.assertEqual(entry['lossless']['srfData']['differing'], 1)
+        self.assertEqual(entry['lossless']['srfData']['maxUlp'], 1)
+        self.assertEqual(entry['class'], 'differs')
+        self.assertEqual(report['failures'], [])
+
+    def test_a_lossless_file_that_is_not_the_engine_result_fails_the_gate(self):
+        for change in ('real', 'imaginary'):
+            with self.subTest(change=change):
+                self.x.lossless_real.clear()
+                self.x.lossless_imaginary.clear()
+                if change == 'real':
+                    self.x.lossless_real[self.id] = self.x.maps[self.id].copy()
+                    self.x.lossless_real[self.id][0][ROI[2]] = -self.x.lossless_real[self.id][0][ROI[2]]
+                else:
+                    self.x.lossless_imaginary[self.id] = numpy.zeros_like(self.x.maps[self.id])
+                self.x.write_ui()
+                report = self.x.ui_report()
+                engine = report['runs'][0]['engineFiles']
+                self.assertFalse(engine['lossless']['equal'], engine)
+                self.assertFalse(ui_cli.engine_equal(engine))
+                self.assertIn('engine harness export', ' '.join(report['failures']))
+
+    def test_the_lossless_file_and_its_provenance_are_required_and_bound(self):
+        stem = compare_cli.expected_results(PLAN[self.id])[0][:-4]
+        name = lossless_name(stem)
+        good = self.x.lossless_bytes(PLAN[self.id])
+        cases = (
+            (lambda entries: entries.pop(name), 'lossless file is missing'),
+            (lambda entries: entries.pop(f'{stem}_provenance.json'), 'has no provenance'),
+            (lambda entries: entries.update({name: good[:-1]}), 'provenance differs'),
+            (lambda entries: entries.update({f'{stem}_provenance.json': json.dumps(
+                {**self.x.provenance(PLAN[self.id], stem), 'lossless': None}).encode()}), 'provenance differs'),
+        )
+        for change, message in cases:
+            with self.subTest(message=message):
+                self.x.write_ui()
+                InventoryErrors.rewrite_zip(self, change)
+                # The arithmetic provenance requirement would name the missing provenance first.
+                self.x.edit_ui(self.id, arithmeticProvenance=False)
+                run = self.run_report()
+                self.assertEqual(run['class'], 'inventory-error', run)
+                self.assertIn(message, run['error'])
+
+    def test_a_lossless_header_that_is_not_this_run_is_an_inventory_error(self):
+        stem = compare_cli.expected_results(PLAN[self.id])[0][:-4]
+        labels = compare_cli.expected_results(PLAN[self.id])[1]
+        real = self.x.maps[self.id]
+        cases = (
+            (write_lossless(real, labels, 'single', 'current', analysed=ROI), 'holds single results'),
+            (write_lossless(real, labels, 'double', 'matlab-amd', analysed=ROI), 'arithmetic reference matlab-amd'),
+            (write_lossless(real, [*labels[:-1], 'Other'], 'double', 'current', analysed=ROI), 'lossless map labels'),
+            (write_lossless(real, labels, 'double', 'current', analysed=ROI[:-1]), 'analysed vertices'),
+            (write_lossless(real, labels, 'double', 'current'), 'analysed vertices'),
+            (b'SAMSRFLX' + struct.pack('<II', 1, 0), 'header is not JSON'),
+            (b'SAMSRFLX' + struct.pack('<II', 2, 0), 'unsupported lossless version 2'),
+        )
+        for data, message in cases:
+            with self.subTest(message=message):
+                self.x.write_ui()
+                provenance = {**self.x.provenance(PLAN[self.id], stem), 'lossless': {'file': lossless_name(stem), 'sha256': sha(data)}}
+                InventoryErrors.rewrite_zip(self, lambda entries: entries.update(
+                    {lossless_name(stem): data, f'{stem}_provenance.json': json.dumps(provenance).encode()}))
+                run = self.run_report()
+                self.assertEqual(run['class'], 'inventory-error', run)
+                self.assertIn(message, run['error'])
+
+
+class LosslessSingle(Base):
+    ids = ['rc_hull_lh_single']
+    lossless = True
+
+    def test_single_results_are_compared_in_matlab_single_and_must_cast_exactly(self):
+        self.assertEqual(self.run_report()['class'], 'exact')
+        self.x.lossless_real[self.id] = self.x.maps[self.id].copy()
+        self.x.lossless_real[self.id][2][ROI[1]] += 2.0 ** -40
+        engine = self.x.web / self.id / 'maps.f64'
+        engine.write_bytes(self.x.lossless_real[self.id].astype('<f8').tobytes())
+        self.x.edit_record(self.id, mapsSha256=sha(engine.read_bytes()))
+        self.x.write_ui()
+        report = self.x.ui_report()
+        entry = report['runs'][0]['maps'][2]
+        self.assertFalse(entry['lossless']['castExact'])
+        self.assertEqual(entry['class'], 'differs')
+        self.assertEqual(report['failures'], [])
+
+
+class LosslessComplex(Base):
+    """compare_ui_cli.py's complex case with the lossless file: the imaginary parts are compared."""
+    ids = ['prf_css_lh_double']
+    lossless = True
+
+    def setUp(self):
+        super().setUp()
+        imaginary = numpy.zeros_like(self.x.maps[self.id])
+        imaginary[0, ROI] = [-2e-3, 0.0, 5e-4]
+        imaginary[-3, ROI] = [1e-3, -7e-4, 0.0]
+        self.x.imaginary[self.id] = imaginary
+        self.x.write()
+        self.x.write_ui()
+
+    def test_matching_imaginary_parts_make_complex_maps_exact(self):
+        report = self.x.ui_report()
+        run = report['runs'][0]
+        self.assertEqual(report['failures'], [])
+        self.assertEqual({entry['label'] for entry in run['maps'] if entry['imaginaryNonzero']}, {'nR^2', 'Baseline'})
+        self.assertTrue(all(entry['class'] == 'exact' for entry in run['maps']), run['maps'])
+        self.assertEqual(run['class'], 'exact')
+
+    def test_imaginary_parts_that_differ_from_matlab_differ(self):
+        # MATLAB's imaginary parts are 5e-4 at (0, ROI[2]) and +0 at (-3, ROI[2]).
+        for row, value, name in ((0, numpy.nextafter(5e-4, 1.0), 'one ulp'), (-3, -0.0, 'signed zero'), (0, numpy.nan, 'nan')):
+            with self.subTest(change=name):
+                parts = self.x.imaginary[self.id].copy()
+                parts[row, ROI[2]] = value
+                self.x.lossless_imaginary[self.id] = parts
+                self.x.write()
+                path = self.x.web / self.id / 'maps.imag.f64'
+                path.write_bytes(parts.astype('<f8').tobytes())
+                self.x.edit_record(self.id, imaginarySha256=sha(path.read_bytes()))
+                self.x.write_ui()
+                report = self.x.ui_report()
+                run = report['runs'][0]
+                self.assertEqual(report['failures'], [])
+                differing = [entry for entry in run['maps'] if not entry['lossless']['imaginary']['exact']]
+                self.assertEqual([entry['class'] for entry in differing], ['differs'], run['maps'])
+                if name == 'signed zero':
+                    self.assertEqual(differing[0]['lossless']['imaginary']['signedZeroOnly'], 1)
 
 
 class Statuses(Base):

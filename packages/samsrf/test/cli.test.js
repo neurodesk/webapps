@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { hemisphereOf, main, parseCommandLine } from '../src/cli.js';
-import { analysisSpec, createJob, exportGiis, readAnalysisInputs, readGifti, runJob } from '../src/node.js';
+import { createHash } from 'node:crypto';
+import { analysisSpec, createJob, exportGiis, hrf, readAnalysisInputs, readGifti, readLossless, readOldSchoolHrf, runJob, writeLossless } from '../src/node.js';
 import { MODELS } from '../validation/example-inputs.mjs';
 import { giftiRun, matFile } from './fixtures.js';
 
@@ -49,6 +50,7 @@ test('parseCommandLine reads an analysis, with the run files that follow --runs'
     template: 'benson.gii',
     white: join('surf', 'rh.white'),
     area: join('surf', 'rh.area'),
+    subjectHrf: null,
     hemisphere: 'rh',
     normalise: 'none',
     combine: 'concatenate',
@@ -59,6 +61,8 @@ test('parseCommandLine reads an analysis, with the run files that follow --runs'
   assert.equal(rc.normalise, 'zscore');
   assert.equal(rc.combine, 'average');
   assert.equal(rc.shards, 1);
+  assert.equal(rc.subjectHrf, null);
+  assert.equal(parseCommandLine(['rc', 'm.json', 'out', '--runs', 'run1.gii', '--apertures', 'aps.mat', '--hrf', 'data/hrf_sub01.mat']).subjectHrf, 'data/hrf_sub01.mat');
   assert.equal(parseCommandLine(['rc', 'm.json', 'out', '--runs', 'run1.gii', '--apertures', 'aps.mat']).hemisphere, 'srf');
   assert.equal(parseCommandLine(['rc', 'm.json', 'out', '--runs', 'lh_run.gii', '--apertures', 'aps.mat', '--hemisphere', 'srf']).hemisphere, 'srf');
 });
@@ -89,6 +93,9 @@ test('parseCommandLine refuses incomplete or contradictory arguments', () => {
     [[...base, '--cache-dir', 'x'], /--cache-dir only applies to download-models/],
     [['self-check', 'extra'], /self-check does not accept arguments/],
     [[...base, '--norm'], /Unknown option '--norm'/],
+    [[...base, '--hrf', 'fit.mat'], /^Error: fit\.mat: SamSrf reads a subject HRF fit from a file named hrf_\*\.mat\.$/],
+    [[...base, '--hrf', 'hrf_fit.txt'], /hrf_fit\.txt: SamSrf reads a subject HRF fit from a file named hrf_\*\.mat/],
+    [['cf', 'm.json', 'out', '--runs', 'lh_a.gii', '--seed', 's.label', '--template', 't.gii', '--hrf', 'hrf_fit.mat'], /--hrf applies to prf and rc/],
   ];
   for (const [argv, message] of cases) assert.throws(() => parseCommandLine(argv), message, argv.join(' '));
 });
@@ -183,13 +190,25 @@ test('a single-precision rc run writes the in-process single job and refuses sin
   assert.equal(result.code, 0, result.stderr);
   const job = createJob(analysisSpec(readAnalysisInputs({ runs: [runPath], apertures, normalise: 'none', precision: 'single' }), 'rc', model));
   let expected;
+  let lossless;
   try {
-    expected = exportGiis(runJob(job).maps, `lh_${job.modelName}${job.outSuffix}`);
+    const merged = runJob(job);
+    expected = exportGiis(merged.maps, `lh_${job.modelName}${job.outSuffix}`);
+    lossless = writeLossless(merged, { precision: 'single' });
   } finally {
     job.free();
   }
   for (const { name, bytes } of expected) assert.ok(Buffer.from(bytes).equals(readFileSync(join(output, name))), name);
-  assert.equal(JSON.parse(readFileSync(join(output, 'lh_Single_Rcp_provenance.json'), 'utf8')).model.Data_Precision, 'single');
+  const provenance = JSON.parse(readFileSync(join(output, 'lh_Single_Rcp_provenance.json'), 'utf8'));
+  assert.equal(provenance.model.Data_Precision, 'single');
+  // The lossless file is the in-process merge, byte for byte; its values are float32 values held as float64.
+  const written = readFileSync(join(output, 'lh_Single_Rcp_lossless.bin'));
+  assert.ok(Buffer.from(lossless).equals(written));
+  assert.deepEqual(provenance.lossless, { file: 'lh_Single_Rcp_lossless.bin', sha256: createHash('sha256').update(written).digest('hex') });
+  const read = readLossless(new Uint8Array(written));
+  assert.equal(read.precision, 'single');
+  assert.ok(read.maps.data.every((value) => Object.is(Math.fround(value), value)));
+  assert.deepEqual(read.raw.values, ['R^2', 'x0', 'y0', 'Fwhm', 'Beta']);
   const fit = { ...model, Prf_Function: '@(P,ApWidth)prf_gaussian_rf(P(1),P(2),P(3),ApWidth)', Param_Names: ['x0', 'y0', 'Sigma'], Scaled_Param: [1, 1, 1], SeedPar_Function: '@(V)[V(2:3);V(4)]' };
   writeFileSync(modelPath, JSON.stringify(fit));
   const refused = await run(['rc', modelPath, join(work, 'refused'), '--runs', runPath, '--apertures', apertures, '--no-normalise']);
@@ -216,7 +235,8 @@ test('a short rc run writes the GIfTIs an in-process job writes', { skip: !dir &
   const job = createJob(analysisSpec(readAnalysisInputs({ runs, ...inputs }), 'rc', MODELS.rc));
   let expected;
   try {
-    expected = exportGiis(runJob(job).maps, `lh_${job.modelName}${job.outSuffix}`);
+    const merged = runJob(job);
+    expected = [...exportGiis(merged.maps, `lh_${job.modelName}${job.outSuffix}`), { name: 'lh_pRF_Rcp_lossless.bin', bytes: writeLossless(merged, { precision: 'double' }) }];
   } finally {
     job.free();
   }
@@ -245,11 +265,138 @@ test('CLI reference models preprocess, shard and record the selected arithmetic'
     const inputs = readAnalysisInputs({ runs: [runPath], apertures, arithmeticReference: reference });
     const job = createJob(analysisSpec(inputs, 'rc', model));
     try {
-      const expected = exportGiis(runJob(job).maps, 'lh_Reference_Rcp');
+      const merged = runJob(job);
+      const expected = [...exportGiis(merged.maps, 'lh_Reference_Rcp'), { name: 'lh_Reference_Rcp_lossless.bin', bytes: writeLossless(merged, { precision: 'double' }) }];
       for (const { name, bytes } of expected) assert.deepEqual(readFileSync(join(output, name)), Buffer.from(bytes));
     } finally { job.free(); }
     const provenance = JSON.parse(readFileSync(join(output, 'lh_Reference_Rcp_provenance.json')));
     assert.equal(provenance.arithmeticReference, reference);
+    assert.equal(readLossless(new Uint8Array(readFileSync(join(output, 'lh_Reference_Rcp_lossless.bin')))).arithmeticReference, reference);
     assert.equal(provenance.model.Arithmetic_Reference, reference);
   }
+});
+
+// An old-school subject HRF fit and a small dataset for the two analyses that take one.
+function subjectHrfCase(work) {
+  const paths = { run: join(work, 'lh_run.gii'), apertures: join(work, 'aps.mat'), fit: join(work, 'hrf_subject.mat'), model: join(work, 'model.json') };
+  const volumes = 60;
+  const fP = [5.5, 15.5, 5, 2];
+  // Pixel p (column-major in a 2 x 2 frame) is on in volumes n with (n + 3p) % 8 < 2; vertex v follows pixel v through the subject kernel.
+  const pixel = (p) => Float64Array.from({ length: volumes }, (_, n) => Number((n + 3 * p) % 8 < 2));
+  const kernel = hrf.oldSchool(1, fP);
+  const courses = [0, 1, 2].map((v) => Array.from(hrf.convolve(pixel(v), kernel), (value, n) => value + 0.05 * Math.sin(7 * n + v)));
+  const frames = Array.from({ length: volumes }, (_, n) => [0, 1, 2, 3].map((p) => pixel(p)[n])).flat();
+  writeFileSync(paths.run, giftiRun(courses));
+  writeFileSync(paths.apertures, matFile({ ApFrm: { dims: [2, 2, volumes], data: frames } }));
+  writeFileSync(paths.fit, matFile({ fP: { dims: [1, 4], data: fP } }));
+  const models = {
+    rc: { Name: 'Subject', Scaling_Factor: 1, TR: 1, Hrf: 'hrf_subject', Aperture_File: 'aps' },
+    prf: {
+      ...MODELS.prf, Name: 'Subject', Hrf: 'hrf_subject', TR: 1, Aperture_File: 'aps', Polar_Search_Space: false,
+      Param1: [-0.5, 0.5], Param2: [-0.5, 0.5], Param3: [0.5, 1], Coarse_Fit_Only: true,
+    },
+  };
+  return { paths, models };
+}
+
+// The job the web app's engine builds (apps/samsrf/src/engine.js): the kernel hrf.oldSchool(TR, fP) as spec.hrf.
+function appStyleFiles(kind, model, paths) {
+  const spec = analysisSpec(readAnalysisInputs({ runs: [paths.run], apertures: paths.apertures }), kind, model);
+  assert.equal(spec.hrf, undefined, 'no fit was read');
+  spec.hrf = hrf.oldSchool(model.TR, readOldSchoolHrf(readFileSync(paths.fit)));
+  const job = createJob(spec);
+  try {
+    const merged = runJob(job);
+    const prefix = `lh_${job.modelName}${job.outSuffix}`;
+    return [...exportGiis(merged.maps, prefix), { name: `${prefix}_lossless.bin`, bytes: writeLossless(merged, { precision: 'double' }) }];
+  } finally {
+    job.free();
+  }
+}
+
+test('--hrf runs prf and rc on the subject HRF fit the model names, byte for byte as the app builds the job', async t => {
+  const work = scratch(t);
+  const { paths, models } = subjectHrfCase(work);
+  for (const kind of ['rc', 'prf']) {
+    writeFileSync(paths.model, JSON.stringify(models[kind]));
+    for (const shards of ['1', '2']) {
+      const output = join(work, `${kind}-${shards}`);
+      const result = await run([kind, paths.model, output, '--runs', paths.run, '--apertures', paths.apertures, '--hrf', paths.fit, '--shards', shards]);
+      assert.equal(result.code, 0, result.stderr);
+      const expected = appStyleFiles(kind, models[kind], paths);
+      const prefix = `lh_${kind === 'rc' ? 'Subject_Rcp' : 'Subject_CrsFit'}`;
+      assert.deepEqual(readdirSync(output).sort(), [...expected.map(({ name }) => name), `${prefix}_provenance.json`].sort());
+      for (const { name, bytes } of expected) assert.ok(Buffer.from(bytes).equals(readFileSync(join(output, name))), `${kind} ${shards}: ${name}`);
+      const provenance = JSON.parse(readFileSync(join(output, `${prefix}_provenance.json`), 'utf8'));
+      assert.equal(provenance.model.Hrf, 'hrf_subject');
+      if (kind === 'prf') assert.ok(readGifti(readFileSync(join(output, `${prefix}_r^2.gii`))).arrays[0].data.every((value) => value > 0.8), 'the subject kernel fits');
+      assert.deepEqual(provenance.inputs.at(-1).role, 'subjectHrf');
+      assert.equal(provenance.inputs.at(-1).path, paths.fit);
+    }
+  }
+  // The fit is used: the same pRF model on the SPM canonical HRF gives other maps.
+  writeFileSync(paths.model, JSON.stringify({ ...models.prf, Hrf: 0 }));
+  const canonical = join(work, 'canonical');
+  assert.equal((await run(['prf', paths.model, canonical, '--runs', paths.run, '--apertures', paths.apertures])).code, 0);
+  const maps = (folder) => Object.fromEntries(readdirSync(folder).filter((name) => name.endsWith('.gii')).map((name) => [name, Array.from(readGifti(readFileSync(join(folder, name))).arrays[0].data)]));
+  assert.notDeepEqual(maps(canonical), maps(join(work, 'prf-1')));
+});
+
+test('a subject HRF fit that is missing, malformed or not the one the model names stops the run before any output', async t => {
+  const work = scratch(t);
+  const { paths, models } = subjectHrfCase(work);
+  const noFp = join(work, 'hrf_nofp.mat');
+  writeFileSync(noFp, matFile({ ApFrm: { dims: [1, 4], data: [1, 2, 3, 4] } }));
+  const shortFp = join(work, 'hrf_short.mat');
+  writeFileSync(shortFp, matFile({ fP: { dims: [1, 3], data: [5.5, 15.5, 5] } }));
+  const text = join(work, 'hrf_text.mat');
+  writeFileSync(text, 'not a MAT file');
+  const missing = join(work, 'hrf_missing.mat');
+  const escape = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const cases = [
+    [{ Hrf: 'hrf_missing' }, missing, new RegExp(`(?:^|\\n)${escape(missing)}: no such subject HRF fit file\\.\\n$`)],
+    [{ Hrf: 'hrf_text' }, text, new RegExp(`(?:^|\\n)${escape(text)}: `)],
+    [{ Hrf: 'hrf_nofp' }, noFp, new RegExp(`(?:^|\\n)${escape(noFp)}: .*HRF file has no numeric fP variable`)],
+    [{ Hrf: 'hrf_short' }, shortFp, new RegExp(`(?:^|\\n)${escape(shortFp)}: .*fP has 3 values; an old-school HRF has 4`)],
+    [{}, null, new RegExp(`(?:^|\\n)${escape(paths.model)}: Hrf hrf_subject names a subject HRF fit: give it with --hrf hrf_subject\\.mat\\.\\n$`)],
+    [{ Hrf: 0 }, paths.fit, new RegExp(`(?:^|\\n)${escape(paths.model)}: --hrf gives a subject HRF fit, but the model's Hrf is 0: set Hrf to "hrf_subject" to use it\\.\\n$`)],
+    [{ Hrf: 'hrf_other' }, paths.fit, new RegExp(`(?:^|\\n)${escape(paths.model)}: Hrf hrf_other names hrf_other\\.mat, but --hrf gives hrf_subject\\.mat\\.\\n$`)],
+  ];
+  for (const kind of ['rc', 'prf']) {
+    for (const [change, fit, message] of cases) {
+      writeFileSync(paths.model, JSON.stringify({ ...models[kind], ...change }));
+      const output = join(work, 'out');
+      const result = await run([kind, paths.model, output, '--runs', paths.run, '--apertures', paths.apertures, ...(fit ? ['--hrf', fit] : [])]);
+      assert.equal(result.code, 1, `${kind} ${JSON.stringify(change)}`);
+      assert.match(result.stderr, message);
+      assert.equal(result.stdout, '');
+      assert.equal(existsSync(output), false, 'a refused run creates no output directory');
+    }
+  }
+});
+
+test('a short rc run on the example with --hrf writes the GIfTIs the app-built job writes', { skip: !dir && 'set SAMSRF_WEBAPP_EXAMPLE_DIR' }, async (t) => {
+  const work = scratch(t);
+  const model = { ...MODELS.rc, Hrf: 'hrf_subject' };
+  const paths = { model: join(work, 'rc.json'), fit: join(work, 'hrf_subject.mat'), run: join(dir, 'lh_uBars1.gii'), apertures: join(dir, 'aps_Bars.mat') };
+  writeFileSync(paths.model, JSON.stringify(model));
+  writeFileSync(paths.fit, matFile({ fP: { dims: [1, 4], data: [5.5, 15.5, 5, 2] } }));
+  const [header, , ...rows] = readFileSync(join(dir, 'lh.V123.label'), 'utf8').split('\n');
+  const roi = join(work, 'lh.small.label');
+  writeFileSync(roi, `${[header, '64', ...rows.slice(0, 64)].join('\n')}\n`);
+  const output = join(work, 'out');
+  const result = await run(['rc', paths.model, output, '--runs', paths.run, '--roi', roi, '--apertures', paths.apertures, '--hrf', paths.fit, '--shards', '2']);
+  assert.equal(result.code, 0, result.stderr);
+  const spec = analysisSpec(readAnalysisInputs({ runs: [paths.run], roi, apertures: paths.apertures }), 'rc', model);
+  spec.hrf = hrf.oldSchool(model.TR, readOldSchoolHrf(readFileSync(paths.fit)));
+  const job = createJob(spec);
+  let expected;
+  try {
+    expected = exportGiis(runJob(job).maps, `lh_${job.modelName}${job.outSuffix}`);
+  } finally {
+    job.free();
+  }
+  for (const { name, bytes } of expected) assert.ok(Buffer.from(bytes).equals(readFileSync(join(output, name))), name);
+  const r2 = readGifti(readFileSync(join(output, 'lh_pRF_Rcp_r^2.gii'))).arrays[0].data;
+  assert.ok(r2.filter((value) => value > 0).length > 10, 'reverse correlation finds profiles through the subject kernel');
 });

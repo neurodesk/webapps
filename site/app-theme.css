@@ -1015,7 +1015,9 @@
     overflow: visible;
   }
 
-  [data-neurodesk-app]:not(:has(.mobile-tab-bar)) :is(.viewer-canvas-wrapper, .nd-viewer-canvas-wrapper) {
+  /* Legacy shells only: the shared workspace's grid row sizes its viewer, and a canvas minimum
+     there pushes the info bar and console past the viewer into the status bar. */
+  [data-neurodesk-app]:not(:has(.mobile-tab-bar)) :is(.viewer-canvas-wrapper, .nd-viewer-canvas-wrapper):not(.nd-imaging-viewer > *) {
     min-height: 360px;
     min-height: max(300px, 50svh);
   }

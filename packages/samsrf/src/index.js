@@ -1,8 +1,10 @@
 // SamSrf's readers, models, HRFs, pRF functions and preprocessing on one WebAssembly
 // module, for browsers and Node. README.md documents every export.
 import wasmInit, * as core from '../wasm/samsrf_wasm.js';
+import { isSubjectHrf } from './inputs.js';
 
 export { Apertures, Run } from '../wasm/samsrf_wasm.js';
+export { LOSSLESS_FORMAT, LOSSLESS_VERSION, losslessName, readLossless, writeLossless } from './lossless.js';
 
 export function init(input) {
   return wasmInit(input === undefined ? undefined : { module_or_path: input });
@@ -131,6 +133,22 @@ export const hrf = {
     return core.hrfResolve(spec.type, values, spec.file, tr);
   },
 };
+
+/**
+ * The kernel of the subject HRF fit a model's Hrf names (hrf_*): `hrf.oldSchool(model.TR, fP)` with fP
+ * from `readOldSchoolHrf`. createJob takes it as `spec.hrf`; the engine leaves file-backed HRFs to its caller.
+ */
+export function subjectHrfKernel(model, fP) {
+  if (!isSubjectHrf(model.Hrf)) throw new Error(`model: Hrf ${JSON.stringify(model.Hrf ?? null)} does not name a subject HRF fit (hrf_*)`);
+  // The engine reads a one-element array as its value, as MATLAB's jsondecode gives it.
+  const tr = Array.isArray(model.TR) && model.TR.length === 1 ? model.TR[0] : model.TR;
+  if (!(typeof tr === 'number' && Number.isFinite(tr) && tr > 0)) throw new Error(`model: TR must be a positive number to build the subject HRF, not ${JSON.stringify(model.TR ?? null)}`);
+  const values = Array.from(fP);
+  if (!values.every((value) => typeof value === 'number' && Number.isFinite(value))) throw new Error('subject HRF fit: fP holds a value that is not finite');
+  const kernel = hrf.oldSchool(tr, Float64Array.from(values));
+  if (!kernel.length || !kernel.every(Number.isFinite)) throw new Error('subject HRF fit: fP gives an empty or non-finite kernel');
+  return kernel;
+}
 
 const PREPROCESS_DEFAULTS = { normalise: 'zscore', combine: 'average', noiseCeiling: true, globalSignal: false, precision: 'double', arithmeticReference: 'current' };
 

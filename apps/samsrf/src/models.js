@@ -2,6 +2,7 @@
 // (Models/Json/*.json); presets reproduce the three example JSON files and the
 // standard models at commit 41ed1e96 (horizontal tuning follows the GUI .mod).
 import { arithmeticReference, exportConvention } from "@neurodesk/samsrf";
+import { isSubjectHrf, subjectHrfName } from "@neurodesk/samsrf/inputs";
 
 /** @typedef {'prf' | 'rc' | 'cf'} Analysis */
 
@@ -18,19 +19,6 @@ export const HRF_OPTIONS = Object.freeze([
   { value: "1", label: "None", model: 1 },
   { value: "Inf", label: "Fitted with the pRF", model: "Inf" },
 ]);
-
-/**
- * SamSrf reads an Hrf that starts with hrf_ as the name of a subject's old-school HRF fit
- * (hrf_*.mat holding fP) and any other name as a vertex-wise HRF map, which the engine refuses.
- */
-export function isSubjectHrf(hrf) {
-  return typeof hrf === "string" && /^hrf_/i.test(hrf);
-}
-
-/** The Hrf a model gives to name a subject HRF fit file. */
-export function subjectHrfName(file) {
-  return file.name.replace(/\.mat$/i, "");
-}
 
 export function hrfValue(hrf) {
   if (isSubjectHrf(hrf)) return "subject";
@@ -262,7 +250,7 @@ export function withInputNames(model, analysis, { apertures, seed, template, sub
     next.Template = stem(template);
   } else {
     next.Aperture_File = stem(apertures);
-    if (subjectHrf && isSubjectHrf(next.Hrf)) next.Hrf = subjectHrfName(subjectHrf);
+    if (subjectHrf && isSubjectHrf(next.Hrf)) next.Hrf = subjectHrfName(subjectHrf.name);
   }
   return next;
 }

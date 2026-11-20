@@ -48,7 +48,10 @@ requires double precision and at least two volumes. Intel CSS requires
 Unsupported choices are refused, not silently routed to AMD. Hull geometry differences and two near-tie norm
 cases remain unresolved. The recorded complex QR evidence covers finite
 two-column designs; other numerical edge cases are not established by MATLAB
-recordings. See [the validation record](validation/matlab/README.md).
+recordings. See [the validation record](validation/matlab/README.md). The
+results of each reference on both recorded hosts, and every open limit with
+the product's behaviour, are in
+[validation/acceptance.md](validation/acceptance.md#open-numerical-limits).
 
 When using the API, pass the same `arithmeticReference` to `RunAccumulator` or
 `readAnalysisInputs` as the model's `Arithmetic_Reference`. Keep the returned
@@ -104,6 +107,7 @@ All readers take the file's bytes as a `Uint8Array`.
 | `readAnatomy({ white, pial, inflated, sphere, curv, area, thickness? }) → { white, pial, inflated, sphere, curvature, area, thickness, normals }` | A FreeSurfer `surf` folder for one hemisphere. `white` is a mesh, the others `Float64Array`s; `thickness` is `null` when not given; `normals` is pial minus white. Every file must have the white surface's vertex count. |
 | `readMat(bytes) → { [name]: { class, dims, data } }` | The numeric variables of a MAT v5 file. `class` is the MATLAB class name; `data` is a column-major `Float64Array`. Character, cell and struct variables are skipped; v7.3 files are refused. |
 | `readOldSchoolHrf(bytes) → Float64Array` | The four `fP` values of an old-school `hrf_*.mat` fit. |
+| `subjectHrfKernel(model, fP) → Float64Array` | The kernel of the subject HRF fit a model's `Hrf` names (`hrf_*`, any case): `hrf.oldSchool(model.TR, fP)`, for `createJob`'s `spec.hrf`. Throws when `Hrf` names no subject fit. The web app and the command line both build the kernel with it. |
 
 ### Apertures
 
@@ -170,11 +174,53 @@ a u32 count, that many u32 pixel indices and that many f64 values.
 | `writeGiftiMap(values) → Uint8Array` | One float32 per-vertex map as SPM's `gifti/save` writes it. |
 | `polarAndEccentricity({ values, vertices, data }, convention = 'samsrf-10.4') → { polar, eccentricity } \| null` | Polar angle in degrees and eccentricity from rows 2 and 3 (`x0`, `y0`), eccentricity 0 where row 1 (`R^2`) is 0; `null` without an `x0` row. |
 
+| `writeLossless(merged, { precision }) → Uint8Array` | The lossless file of a `job.merge` result: every `Srf.Data` value in float64, the imaginary parts, `Srf.Raw_Data` and the analysed vertices, bit for bit ([Lossless export](#lossless-export)). `precision` is the model's `Data_Precision`, `'double'` or `'single'`. |
+| `readLossless(bytes) → { maps, raw, analysed, imaginary, arithmeticReference, precision }` | Reads a lossless file back into the shape `job.merge` returns; throws on any other layout. |
+| `losslessName(prefix) → string` | `{prefix}_lossless.bin`, the name the app and the command line give the file. |
+
 `convention: 'samsrfx-10.003'` reproduces the older Neurodesk container's
 float32 derived maps and eccentricity offset of −0.5. The app and CLI read
 `Export_Convention` from model JSON; the app also exposes it under Advanced
 settings. This affects map display/export, not fitting precision. The geometric
 default has no offset. See the [actual container comparison](validation/container/README.md).
+
+### Lossless export
+
+The GIfTI maps are float32 and hold the real parts only, as SamSrf's export
+does. The lossless file keeps what they drop: each double, NaN payloads and
+signs and signed zeros included, and the imaginary parts of a complex
+`Srf.Data` (SamSrf-convention CSS). The app's downloads and the command line
+write it with `writeLossless`, so both give the same bytes for the same
+result. Each provenance JSON names it as `lossless: { file, sha256 }`.
+
+The file is little-endian:
+
+| Offset | Content |
+| --- | --- |
+| 0 | `SAMSRFLX` (8 ASCII bytes) |
+| 8 | Format version, uint32 (1) |
+| 12 | Header length `H`, uint32; `16 + H` is a multiple of 8 |
+| 16 | UTF-8 JSON header, padded with spaces to `H` bytes |
+| 16 + H | The sections below, in this order, with nothing after them |
+
+The header is `{"format":"samsrf-lossless-maps","version":1,"precision",
+"arithmeticReference","vertices","values","imaginary","raw","analysed"}`:
+`precision` is `double` or `single` (single results are float32 values held
+as float64), `values` the `Srf.Values` row names, `imaginary` whether the
+imaginary section follows, `raw` the `Srf.Raw_Data` row names (`[]` without
+it) and `analysed` the number of analysed vertices (`null` for every vertex).
+The sections:
+
+1. `Srf.Data`: float64, `values.length x vertices`, row by row over every
+   vertex (`data[row * vertices + vertex]`, as `maps.data`).
+2. Imaginary parts, the same shape, only when `imaginary` is true.
+3. `Srf.Raw_Data`: float64, `raw.length x vertices`.
+4. The analysed vertices, 0-based uint32, `analysed` of them.
+
+Typed arrays are copied as bytes, never through a JavaScript number, so a
+NaN keeps its bits. `validation/matlab/lossless.py` reads the format
+independently and compares a lossless file with the engine harness and a
+MATLAB execution.
 
 ### Analyses
 
@@ -248,12 +294,18 @@ re-exports the whole API, plus:
 | `readLabelFile(path)` | `readFreeSurferLabel` on a file. |
 | `readAnatomyFolder(dir, hemisphere)` | `readAnatomy` on `dir/<hemisphere>.white`, `.pial`, `.inflated`, `.sphere`, `.curv`, `.area` and, when present, `.thickness`. `hemisphere` is `'lh'` or `'rh'`. |
 | `preprocessRuns(paths, { keep, ...options }) → result` | Reads the runs one at a time into a `RunAccumulator`, freeing each, and returns `finish()`. |
-| `readAnalysisInputs({ runs, roi?, seed?, apertures?, template?, white?, area?, hemisphere?, normalise = 'zscore', combine = 'average', precision = 'double' }) → inputs` | Reads an analysis's files as the web app does: the runs preprocessed keeping the ROI and seed vertices (every vertex without `roi`), with the noise ceiling and global signal (`precision` is the model's `Data_Precision`); the serialised apertures; the Benson template (`x0` flipped for `'rh'`); the white surface and areas. Paths left out are `null`. |
-| `analysisSpec(inputs, kind, model, { roi }?) → spec` | The `createJob` spec for `kind` on `readAnalysisInputs` output. `model` is the JSON text or object; `roi` overrides the label's vertices. |
+| `readSubjectHrfFile(path) → Float64Array` | `readOldSchoolHrf` on a file named `hrf_*.mat`; refuses any other name and a missing file. |
+| `readAnalysisInputs({ runs, roi?, seed?, apertures?, template?, white?, area?, subjectHrf?, hemisphere?, normalise = 'zscore', combine = 'average', precision = 'double' }) → inputs` | Reads an analysis's files as the web app does: the runs preprocessed keeping the ROI and seed vertices (every vertex without `roi`), with the noise ceiling and global signal (`precision` is the model's `Data_Precision`); the serialised apertures; the Benson template (`x0` flipped for `'rh'`); the white surface and areas; the subject HRF fit's `fP` (`readSubjectHrfFile`, read before the runs). Paths left out are `null`. |
+| `analysisSpec(inputs, kind, model, { roi }?) → spec` | The `createJob` spec for `kind` on `readAnalysisInputs` output. `model` is the JSON text or object; `roi` overrides the label's vertices. With a subject HRF fit, `spec.hrf` is `subjectHrfKernel(model, fP)`. |
 | `runJob(job, shards = 1, onProgress?) → merged` | `job.run` over `[0, vertexCount)` in `shards` pieces in this thread, then `job.merge`. |
 | `shardRanges(total, shards) → [[start, end], ...]` | The ranges `runJob` and the command line split the vertices into. |
 
-Errors from `readRunFile`, `readAperturesFile` and `readLabelFile` start with the file's path.
+Errors from `readRunFile`, `readAperturesFile`, `readLabelFile` and `readSubjectHrfFile` start with the file's path.
+
+`@neurodesk/samsrf/inputs` holds the file-name rules the app and the command line share, without the
+module: `hemisphereOf`, `resolveHemisphere`, `compareRunNames`, and `isSubjectHrf(hrf)` (an `Hrf` that
+starts with `hrf_` in any case, as the engine's model parser reads it), `isSubjectHrfFile(path)`
+(`hrf_*.mat`) and `subjectHrfName(path)` (the `Hrf` that names a fit file).
 
 ## Command line
 
@@ -267,6 +319,8 @@ samsrf prf pRF_Gaussian.json results --runs lh_uBars*.gii --roi lh.V123.label \
   --apertures aps_Bars.mat --shards 8
 samsrf cf CF_Rcp.json results --runs lh_uBars*.gii --roi lh.V123.label \
   --seed lh.V1_seed.label --template lh_benson.gii --surf surf
+samsrf prf pRF_subject_hrf.json results --runs lh_uBars*.gii --roi lh.V123.label \
+  --apertures aps_Bars.mat --hrf hrf_fit.mat
 ```
 
 The first argument is the analysis (`prf`, `rc` or `cf`), then a SamSrf model
@@ -280,6 +334,7 @@ after `--runs` up to the next option is a run. The other options:
 | `--seed FILE`, `--template FILE` | Seed label and Benson template GIfTI; required by `cf`. |
 | `--surf DIR` | Reads `<hemisphere>.white` (for `Smoothing`) and `<hemisphere>.area` (for `cf`) from a FreeSurfer `surf` folder. `--white FILE` and `--area FILE` name them one by one. |
 | `--hemisphere NAME` | `lh`, `rh`, `bi` or `srf`. Inferred from matching FreeSurfer or BIDS names across runs, labels, template and anatomy. CF requires `lh` or `rh`; conflicting names are rejected. |
+| `--hrf FILE` | The subject HRF fit (`hrf_*.mat` holding `fP`) that the model's `Hrf` names, for `prf` and `rc`: `Hrf: "hrf_fit"` reads `hrf_fit.mat`. The kernel is `hrf.oldSchool(TR, fP)`, as the web app builds it, so the maps equal the app's. The command line refuses a file not named `hrf_*.mat`, a model whose `Hrf` names a fit without `--hrf`, `--hrf` with a model whose `Hrf` names none or another file, and `--hrf` with `cf`; a missing file, a file that is not a MAT file, and an `fP` that is missing or not four values stop the run before it reads the runs. It does not look for the file next to the model, and vertex-wise HRF maps (an `Hrf` naming any other file) stay refused. |
 | `--no-normalise` | Keeps each run as it is (`samsrf_gii2srf` with normalisation off); default detrend and z-score. |
 | `--concatenate` | Concatenates the runs; default average, with the noise ceiling for two or more runs. |
 | `--shards N` | Splits the vertices over N worker threads, each with its own module. The maps do not depend on N. |
@@ -287,10 +342,11 @@ after `--runs` up to the next option is a run. The other options:
 It reads the inputs with `readAnalysisInputs` (the runs keep the ROI and seed
 vertices, so the noise ceiling is 0 outside them), runs the job with a progress
 line on standard error, and writes `exportGiis(maps,
-'<hemisphere>_<Name><suffix>')` (`lh_pRF_Rcp_r^2.gii`, ...) and
+'<hemisphere>_<Name><suffix>')` (`lh_pRF_Rcp_r^2.gii`, ...), the
+[lossless file](#lossless-export) `<prefix>_lossless.bin` and
 `<prefix>_provenance.json`: the package and core versions, the model, the
-options, each input with its SHA-256, the analysed vertex count, the map names
-and the wall time. Errors print one line on standard error, starting with the
+options, each input with its SHA-256 (the fit with role `subjectHrf`), the analysed vertex count, the map names,
+the lossless file with its SHA-256 and the wall time. Errors print one line on standard error, starting with the
 file they concern, and exit with status 1.
 
 `samsrf self-check` fits a coarse pRF to a course generated from a known
@@ -302,13 +358,14 @@ The portable archives come from `exes/node-cli` (`release.json`,
 `.github/workflows/samsrf-native.yml`). Each must pass
 `validation/cli-check.mjs`: `rc` on the example's whole V1-V3 label in three
 shards, and the Nelder-Mead `prf` fit and `cf` on its first 200 vertices, each
-GIfTI byte-identical to the same job run in-process through `src/node.js`, with
+GIfTI and the lossless file byte-identical to the same job run in-process
+through `src/node.js`, the provenance naming the lossless file's SHA-256, with
 fixed file names, 134260 values per map and pinned counts of vertices with
 R^2 > 0.1. It downloads the pinned example from `apps/samsrf/examples.json`
 into a cache under the temporary directory, or reads it from
 `SAMSRF_WEBAPP_EXAMPLE_DIR` when the bytes match. `test/cli.test.js` covers the
-argument errors, `self-check` and, with `SAMSRF_WEBAPP_EXAMPLE_DIR`, a short
-sharded `rc` run.
+argument errors, `self-check`, `--hrf` runs and refusals and, with `SAMSRF_WEBAPP_EXAMPLE_DIR`, short
+sharded `rc` runs with and without a subject HRF fit.
 
 ## Comparing with MATLAB
 
@@ -329,9 +386,13 @@ current pinned example when comparing CF maps.
 Presets follow SamSrf's model scripts except horizontal tuning, which follows
 the GUI `.mod` grid (unscaled Mu). Circular tuning fixes the scale at 1.
 Imported or manually edited JSON grids are preserved when the radius changes.
-Custom HRF kernels can be supplied in JSON; HRF file loading is not exposed by
-the app. Model wrapper scripts can additionally wrap angles or derive aspect
+Custom HRF kernels can be supplied in JSON. The app loads a subject's HRF fit
+(`hrf_*.mat`, SamSrf's `fP`) through its HRF field (#877). Model wrapper scripts can additionally wrap angles or derive aspect
 ratio; this app implements the `SamSrfAnalysis` path without those wrappers.
+
+Pick the `Arithmetic_Reference` for the MKL branch the MATLAB run reports:
+`matlab-amd` for `CNR branch auto` on AMD, `matlab-intel` for `AVX512_E1` on
+Intel (double only). The default `current` keeps the earlier production output.
 
 Run MATLAB in a fresh results directory. Its `src_<Name>.mat` search-space
 cache and `reg_<aperture>.mat` convolved-regressor cache validate dimensions,
@@ -380,6 +441,9 @@ reference is produced.
 MATLAB Runtime references, a controlled precision comparison and CI gates.
 [validation/matlab/README.md](validation/matlab/README.md) adds the pinned
 MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
+[validation/acceptance.md](validation/acceptance.md) maps the criteria of
+#729-#733 to that evidence, with the current state of each arithmetic reference
+and the [open numerical limits](validation/acceptance.md#open-numerical-limits).
 
 ## Divergences from SamSrf
 
@@ -493,8 +557,10 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   for imaginary zeros MATLAB stores as real. This is agreement on recorded
   designs on MATLAB's AMD hosts, not a proof for every input. MKL's AVX-512
   branch on Intel rounds
-  differently, and MATLAB ignores MKL branch requests, so results on Intel
-  hosts are not reproduced. `mldivide_many` solves several right-hand sides
+  differently, and MATLAB ignores MKL branch requests, so `current` and
+  `matlab-amd` do not reproduce results on Intel hosts. `matlab-intel` follows
+  that branch for the recorded finite double designs
+  ([Arithmetic reference](#arithmetic-reference)). `mldivide_many` solves several right-hand sides
   at once as MATLAB's `A \ B` does, which the single RC profile and global
   regression use; complex ones multiply by MKL's `?trsm` reciprocal. Nonfinite
   converted inputs give NaN coefficients.
@@ -549,7 +615,8 @@ MATLAB R2023b source matrix, per-vertex gates and the limits of each assertion.
   elements and every recorded `corr` objective from 25 to 250 elements equal
   the port's. MKL's Intel AVX-512 branch sums 51 or more elements in another
   tree, and Intel `corr` differs at shorter lengths too
-  ([arithmetic order](validation/matlab/README.md#arithmetic-order-729-730)).
+  ([arithmetic order](validation/matlab/README.md#arithmetic-order-729-730));
+  `matlab-intel` uses the research candidates for those trees.
   All 108 recorded CSS optimizer traces (54 double, 54 single) follow MATLAB's
   parameter sequences bit for bit. With the port's own HRF, which equals MATLAB's
   kernel, the recorded 96-vertex double pipelines (original apertures and a

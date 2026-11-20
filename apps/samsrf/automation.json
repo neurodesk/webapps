@@ -56,6 +56,16 @@
           "minimum": 1,
           "maximum": 1
         },
+        "subjectHrf": {
+          "source": "files",
+          "type": "neuro:metadata",
+          "formats": [
+            "mat"
+          ],
+          "description": "Optional subject HRF fit (hrf_*.mat holding fP); the model's Hrf then names it",
+          "minimum": 0,
+          "maximum": 1
+        },
         "model": {
           "source": "files",
           "type": "neuro:model",
@@ -117,6 +127,12 @@
           "type": "neuro:surface",
           "mediaType": "application/octet-stream",
           "minimum": 1
+        },
+        "lossless": {
+          "type": "neuro:surface",
+          "mediaType": "application/octet-stream",
+          "minimum": 1,
+          "maximum": 1
         }
       },
       "engines": [
@@ -174,6 +190,16 @@
           "minimum": 1,
           "maximum": 1
         },
+        "subjectHrf": {
+          "source": "files",
+          "type": "neuro:metadata",
+          "formats": [
+            "mat"
+          ],
+          "description": "Optional subject HRF fit (hrf_*.mat holding fP); the model's Hrf then names it",
+          "minimum": 0,
+          "maximum": 1
+        },
         "model": {
           "source": "files",
           "type": "neuro:model",
@@ -228,6 +254,12 @@
           "type": "neuro:surface",
           "mediaType": "application/octet-stream",
           "minimum": 1
+        },
+        "lossless": {
+          "type": "neuro:surface",
+          "mediaType": "application/octet-stream",
+          "minimum": 1,
+          "maximum": 1
         }
       },
       "engines": [
@@ -326,6 +358,12 @@
           "type": "neuro:surface",
           "mediaType": "application/octet-stream",
           "minimum": 1
+        },
+        "lossless": {
+          "type": "neuro:surface",
+          "mediaType": "application/octet-stream",
+          "minimum": 1,
+          "maximum": 1
         }
       },
       "engines": [
