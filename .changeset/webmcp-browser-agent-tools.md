@@ -1,0 +1,71 @@
+---
+"@neurodesk/webapp-components": minor
+"@neurodesk/desktop": patch
+"ants-denoise": patch
+"ants": patch
+"bison": patch
+"brain2print": patch
+"brainchop": patch
+"brain-extraction": patch
+"brainqcnet": patch
+"browserqc": patch
+"calcium-imaging": patch
+"calmar": patch
+"carotid-flow": patch
+"cryo-em": patch
+"dcm2niix": patch
+"deconvolution": patch
+"deface": patch
+"degibbs": patch
+"dicompare": patch
+"dicomview": patch
+"disconnectome": patch
+"dwi2trx": patch
+"dwicorrect": patch
+"dwidenoise": patch
+"easy-mp2rage": patch
+"edgereg": patch
+"elastix": patch
+"fastprep": patch
+"fireants": patch
+"gliomoda": patch
+"greedy": patch
+"histo2mri": patch
+"hmc": patch
+"lcmodel": patch
+"lightsheet-atlas": patch
+"me-ica": patch
+"microsam": patch
+"microscope-qc": patch
+"mri2vid": patch
+"musclemap": patch
+"n4": patch
+"nesvor": patch
+"neuromorph": patch
+"niimath": patch
+"noddi": patch
+"omezarr-convert": patch
+"pipeline-builder": patch
+"qsmbly": patch
+"reproin": patch
+"samsrf": patch
+"sdc": patch
+"seedseg": patch
+"spinalcordtoolbox": patch
+"spot-detection": patch
+"stardist": patch
+"stitching": patch
+"structure-tensor": patch
+"surfannotate": patch
+"syncro": patch
+"synthseg": patch
+"synthsr": patch
+"topofit": patch
+"vesselboost": patch
+"white-matter-lesions": patch
+"zarro": patch
+---
+
+In a browser that offers WebMCP, every app registers tools with the browser's built-in AI agent. The agent can read what the app does, load any of its examples, use the files you already opened or ask you to choose others, run any operation and wait for its report, run it again with other settings without asking for the files again, move and restyle the viewer, and save an output of the run it names. When it needs a decision, it asks you in a dialog that says an AI agent is asking, and closing the dialog declines. It uses files you opened in the app only after you confirm them in a dialog that lists them. It loads data from a web address only after you allow that address, the viewer gets that one file and not a redirect, and for a ZARRo store the dialog names the store's address, under which ZARRo then reads without following a redirect. It changes only how the viewer shows images, never their data or position, it never removes what the viewer shows unless the dialog says so, and it cannot capture the viewer or save images from it. When you use the page yourself, a request the agent already started does nothing more, and before it uses its files or the results of its latest run again it asks you in one dialog that names them and what that run was given, its files and the address it read; declining releases them. A dialog names what it asks about as it is when it opens, and if that changes before you allow it, it shows the change in place and asks again; loading the same example again is no change, and on the third change the dialog closes as declined. Escape, the close button and a click beside the dialog all decline, also after it showed a change. After you allow it, the agent gets that run's report and outputs exactly as the run ended, even if the page shows other results by then. Opening other files, picking an example or a handoff releases them at once, so it never runs on or reports an earlier examination by mistake. It can read what the viewer shows at any time, as you see it. Each app's Privacy dialog says what such an agent can read and do. Browsers without WebMCP load none of this. No browser enables WebMCP by default yet: Chrome offers it behind a testing flag, and each catalogue can hold an origin trial token for its host.
+
+Automation contracts can mark a parameter `required: true`. Easy MP2RAGE's acquisition values, QSMbly's echo times and field strength and micro-sam's prompts are now required, and the desktop contract schema and NeuroFlow tools accept and publish the mark.

@@ -78,9 +78,19 @@ async function checkLayout(page, label) {
         .filter(element => Math.abs(element.getBoundingClientRect().width - element.getBoundingClientRect().height) > 1).map(describe),
       smallInputs: [...document.querySelectorAll('input:not([type]), input[type="text"], input[type="number"], input[type="url"], select, textarea')]
         .filter(visible).filter(element => Number.parseFloat(getComputedStyle(element).fontSize) < 16).map(describe),
+      // The viewer's in-flow rows (toolbar, canvas, info line, console) must fit inside it and end above an
+      // in-flow status bar; the viewer clips what does not, and the info line once ran under the status bar.
+      viewerOverflow: [...document.querySelectorAll('.nd-imaging-workspace > .nd-imaging-viewer')].filter(visible).flatMap(viewer => {
+        const status = viewer.parentElement.querySelector(':scope > .nd-imaging-status');
+        const inFlow = element => ['static', 'relative'].includes(getComputedStyle(element).position);
+        const statusTop = status && visible(status) && inFlow(status) ? status.getBoundingClientRect().top : Infinity;
+        const limit = Math.min(viewer.getBoundingClientRect().bottom, statusTop);
+        return [...viewer.children].filter(visible).filter(inFlow).map(child => [describe(child), Math.round(child.getBoundingClientRect().bottom - limit)])
+          .filter(([, below]) => below > 1).map(([name, below]) => `${name} +${below}px`);
+      }),
     };
   });
-  const failed = result.pageOverflow || result.dialogOverflow.length || result.overflow.length || result.smallNavigation.length || result.distortedInfoIcons.length || result.smallInputs.length;
+  const failed = result.pageOverflow || result.dialogOverflow.length || result.overflow.length || result.smallNavigation.length || result.distortedInfoIcons.length || result.smallInputs.length || result.viewerOverflow.length;
   if (failed) failures.push(`${label}: ${JSON.stringify(result)}`);
   if (screenshotDir) await page.screenshot({ path: join(screenshotDir, `${label.replaceAll('/', '-')}.png`), timeout: 30000 });
   console.log(`${failed ? 'FAIL' : 'PASS'} ${label}${failed ? ' ' + JSON.stringify(result) : ''}`);

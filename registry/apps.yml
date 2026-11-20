@@ -23,6 +23,8 @@ site:
   catalogs:
     - id: neuro
       host: webapps.neurodesk.org
+      # Chrome's WebMCP origin trial token for this host; empty until one is registered.
+      webmcp_origin_trial: ''
       hosting: pages
       title: Neurodesk Webapps
       heading: Run Neuroimaging Tools in Your Browser
@@ -41,6 +43,8 @@ site:
         executable: neurodesk-webapps
     - id: msk
       host: mskapps.sciget.org
+      # Chrome's WebMCP origin trial token for this host; empty until one is registered.
+      webmcp_origin_trial: ''
       hosting: worker
       title: Musculoskeletal Webapps
       heading: Run Musculoskeletal and Body Imaging Tools in Your Browser
@@ -59,6 +63,8 @@ site:
         executable: msk-webapps
     - id: microscopy
       host: microscopyapps.sciget.org
+      # Chrome's WebMCP origin trial token for this host; empty until one is registered.
+      webmcp_origin_trial: ''
       hosting: worker
       title: Microscopy Webapps
       heading: Run Microscopy Tools in Your Browser
@@ -77,6 +83,8 @@ site:
         executable: microscopy-webapps
     - id: preclinical
       host: preclinicalapps.sciget.org
+      # Chrome's WebMCP origin trial token for this host; empty until one is registered.
+      webmcp_origin_trial: ''
       hosting: worker
       title: Preclinical Webapps
       heading: Run Preclinical Imaging Tools in Your Browser

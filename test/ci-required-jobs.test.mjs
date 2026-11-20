@@ -26,8 +26,9 @@ const REQUIRED = {
   'app-plan': { needs: [], if: "github.event.action != 'converted_to_draft'" },
   'workspace-contracts': { needs: [], if: "github.event.action != 'converted_to_draft' && inputs.scope != 'gpu' && inputs.scope != 'site'" },
   'app-tests': { needs: ['app-plan'], if: "needs.app-plan.outputs.has_apps == 'true'" },
-  'browser-e2e': { needs: ['app-plan'], if: "needs.app-plan.outputs.has_browser_apps == 'true'" },
-  'browser-e2e-gpu': { needs: ['app-plan'], if: "needs.app-plan.outputs.has_gpu_apps == 'true' && (github.event_name != 'pull_request' || needs.app-plan.outputs.all_apps != 'true')" },
+  // A draft pull request starts neither browser job; it runs app-tests only.
+  'browser-e2e': { needs: ['app-plan'], if: "needs.app-plan.outputs.has_browser_apps == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)" },
+  'browser-e2e-gpu': { needs: ['app-plan'], if: "needs.app-plan.outputs.has_gpu_apps == 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && needs.app-plan.outputs.all_apps != 'true'))" },
   'composite-site': { needs: ['app-plan'], if: "(github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name == 'push' || github.event_name == 'schedule' || needs.app-plan.outputs.has_site == 'true')" },
   'site-runtime': { needs: ['composite-site'], if: "needs.composite-site.result == 'success'" },
   'site-audit': { needs: ['composite-site'], if: "needs.composite-site.result == 'success'" },
@@ -388,4 +389,101 @@ test('the guard evaluates conditions as GitHub does', () => {
   assert.equal(run('${{ !cancelled() && success() }}'), true);
   assert.equal(compile('${{ !cancelled() }}').status, true);
   assert.equal(compile("needs.a.outputs.b == 'true'").status, false);
+});
+
+// The jobs a run starts, given the outputs its jobs write: a job starts when its
+// own condition holds and, unless that condition calls a status function, every
+// job it needs started. Every started job is taken to succeed.
+function startedJobs(ci, run, values) {
+  const ran = new Map();
+  const simulate = (id) => {
+    if (!ran.has(id)) {
+      const succeeded = needsOf(ci.jobs[id]).map(simulate).every(Boolean);
+      const own = ci.jobs[id].if === undefined ? null : compile(String(ci.jobs[id].if));
+      const context = {
+        call: (name) => ({ always: true, cancelled: false, failure: false, success: succeeded })[name] ?? fail(`${id} calls ${name}()`),
+        read: (path) => read(path, { run, ran, values, id }),
+      };
+      ran.set(id, own ? own(context) && (own.status || succeeded) : succeeded);
+    }
+    return ran.get(id);
+  };
+  return Object.keys(ci.jobs).filter(simulate);
+}
+
+// The outputs a one-app plan of a hardware-GPU app writes, with overrides.
+const planOutputs = (overrides = {}) => ({
+  'app-plan.has_apps': 'true',
+  'app-plan.has_browser_apps': 'true',
+  'app-plan.has_gpu_apps': 'true',
+  'app-plan.all_apps': 'false',
+  'app-plan.has_site': 'true',
+  'app-plan.withheld': 'false',
+  'app-plan.full_plan': 'false',
+  'app-plan.easter_egg': 'run',
+  'composite-site.agent_site_ready': '',
+  ...Object.fromEntries(Object.entries(overrides).map(([key, value]) => [key.includes('.') ? key : `app-plan.${key}`, value])),
+});
+const pullRequest = (action, draft) => ({ event_name: 'pull_request', ref: 'refs/pull/1/merge', event: { action, pull_request: { draft } }, inputs: {} });
+const onMain = (event_name) => ({ event_name, ref: 'refs/heads/main', event: {}, inputs: {} });
+const dispatch = (scope, agentic_mode = 'none', ref = 'refs/heads/feature') => ({ event_name: 'workflow_dispatch', ref, event: {}, inputs: { scope, agentic_mode } });
+const noApps = { has_apps: 'false', has_browser_apps: 'false', has_gpu_apps: 'false', has_site: 'false' };
+// Each event, with the outputs the planner writes for it (scripts/app-plan.mjs).
+const JOB_GRAPH_SCENARIOS = {
+  'draft pull request, one GPU app': [pullRequest('synchronize', true), planOutputs()],
+  'draft pull request opened, docs only': [pullRequest('opened', true), planOutputs(noApps)],
+  'ready pull request, one GPU app': [pullRequest('synchronize', false), planOutputs()],
+  'ready pull request, whole catalogue': [pullRequest('ready_for_review', false), planOutputs({ all_apps: 'true', full_plan: 'true' })],
+  'ready pull request over its budget': [pullRequest('synchronize', false), planOutputs({ withheld: 'true', has_site: 'false' })],
+  'ready pull request, docs only': [pullRequest('synchronize', false), planOutputs(noApps)],
+  'pull request reopened, one GPU app': [pullRequest('reopened', false), planOutputs()],
+  'pull request converted to draft': [pullRequest('converted_to_draft', true), planOutputs()],
+  'push, one GPU app': [onMain('push'), planOutputs()],
+  'push, docs only': [onMain('push'), planOutputs(noApps)],
+  nightly: [onMain('schedule'), planOutputs({ all_apps: 'true', 'composite-site.agent_site_ready': 'true' })],
+  'dispatch, scope affected': [dispatch('affected'), planOutputs()],
+  'dispatch on main, scope affected': [dispatch('affected', 'none', 'refs/heads/main'), planOutputs()],
+  'dispatch, scope all': [dispatch('all'), planOutputs({ all_apps: 'true' })],
+  'dispatch, scope gpu': [dispatch('gpu'), planOutputs({ ...noApps, has_gpu_apps: 'true', all_apps: 'true' })],
+  'dispatch, scope site, interactions': [dispatch('site', 'interactions'), planOutputs({ ...noApps, has_site: 'true', 'composite-site.agent_site_ready': 'true' })],
+  'dispatch, scope site, pipeline': [dispatch('site', 'pipeline'), planOutputs({ ...noApps, has_site: 'true' })],
+};
+const SITE_RUN = ['composite-site', 'site-runtime', 'site-audit', 'site-e2e', 'site-mobile', 'site-catalog'];
+const PLAN_RUN = ['app-plan', 'workspace-contracts'];
+const APP_RUN = ['app-tests', 'browser-e2e', 'browser-e2e-gpu'];
+// What each scenario starts, read off ci.yml by startedJobs. A change to a job
+// condition that moves a job in or out of a row changes this table.
+const EXPECTED_JOB_GRAPH = {
+  // A draft runs unit and build tests; its browser tests run on a dispatch.
+  'draft pull request, one GPU app': [...PLAN_RUN, 'app-tests', 'homepage-easter-egg'],
+  'draft pull request opened, docs only': [...PLAN_RUN, 'homepage-easter-egg'],
+  'ready pull request, one GPU app': [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, 'homepage-easter-egg'],
+  'ready pull request, whole catalogue': [...PLAN_RUN, 'full-plan', 'app-tests', ...SITE_RUN, 'browser-e2e', 'homepage-easter-egg'],
+  'ready pull request over its budget': ['app-plan', 'full-plan-withheld', 'workspace-contracts', ...APP_RUN, 'homepage-easter-egg'],
+  'ready pull request, docs only': [...PLAN_RUN, 'homepage-easter-egg'],
+  'pull request reopened, one GPU app': [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, 'homepage-easter-egg'],
+  'pull request converted to draft': [],
+  'push, one GPU app': [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, 'example-cache-retention', 'homepage-easter-egg'],
+  'push, docs only': [...PLAN_RUN, ...SITE_RUN, 'example-cache-retention', 'homepage-easter-egg'],
+  nightly: [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, 'example-cache-retention', 'agent-interactions', 'homepage-easter-egg'],
+  'dispatch, scope affected': [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, 'homepage-easter-egg'],
+  'dispatch on main, scope affected': [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, 'example-cache-retention', 'homepage-easter-egg'],
+  'dispatch, scope all': [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, 'homepage-easter-egg'],
+  'dispatch, scope gpu': ['app-plan', 'browser-e2e-gpu'],
+  'dispatch, scope site, interactions': ['app-plan', ...SITE_RUN, 'agent-interactions', 'homepage-easter-egg'],
+  'dispatch, scope site, pipeline': ['app-plan', ...SITE_RUN, 'processing-workflows', 'homepage-easter-egg'],
+};
+
+test('every event starts the jobs the job-graph table says, read off ci.yml', async () => {
+  const ci = await loadCi();
+  const order = Object.keys(ci.jobs);
+  const sorted = (ids) => [...ids].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+  const graph = Object.fromEntries(Object.entries(JOB_GRAPH_SCENARIOS).map(([name, [run, values]]) => [name, startedJobs(ci, run, values)]));
+  if (process.env.PRINT_JOB_GRAPH) {
+    const short = (id) => id.replace(/^site-/, 's-');
+    console.log(`| Run | ${order.map(short).join(' | ')} |\n| --- |${order.map(() => ' :-: |').join('')}`);
+    for (const [name, started] of Object.entries(graph)) console.log(`| ${name} | ${order.map((id) => (started.includes(id) ? 'x' : '')).join(' | ')} |`);
+  }
+  for (const [name, expected] of Object.entries(EXPECTED_JOB_GRAPH)) assert.deepEqual(graph[name], sorted(expected), name);
+  assert.deepEqual(Object.keys(graph), Object.keys(EXPECTED_JOB_GRAPH));
 });

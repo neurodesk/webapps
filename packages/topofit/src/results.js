@@ -112,3 +112,45 @@ export function writeAnnotation(labels, table) {
   }
   return buffer;
 }
+
+// Reads what writeAnnotation writes: each vertex's label value, found from its colour in
+// the embedded table (0 for annotation 0), and that table.
+export function readAnnotation(buffer) {
+  const view = new DataView(buffer);
+  const decoder = new TextDecoder();
+  let offset = 0;
+  const read = () => {
+    const value = view.getInt32(offset, false);
+    offset += 4;
+    return value;
+  };
+  const readString = () => {
+    const length = read();
+    const text = decoder.decode(new Uint8Array(buffer, offset, Math.max(0, length - 1)));
+    offset += length;
+    return text;
+  };
+  const colours = new Int32Array(read());
+  for (let i = 0; i < colours.length; i += 1) {
+    if (read() !== i) throw new Error('Unsupported annotation vertex order.');
+    colours[i] = read();
+  }
+  if (read() !== 1 || read() !== -2) throw new Error('The annotation has no version 2 colour table.');
+  read();
+  readString();
+  const table = [];
+  for (let count = read(); count > 0; count -= 1) {
+    const value = read();
+    const name = readString();
+    const rgb = [read(), read(), read()];
+    read();
+    table[value] = { value, name, rgb };
+  }
+  const byColour = new Map(table.filter(Boolean).map(({ value, rgb }) => [rgb[0] + rgb[1] * 256 + rgb[2] * 65536, value]));
+  const labels = Int32Array.from(colours, (colour) => {
+    if (colour === 0) return 0;
+    if (!byColour.has(colour)) throw new Error('An annotation colour is not in its table.');
+    return byColour.get(colour);
+  });
+  return { labels, table };
+}

@@ -1,7 +1,6 @@
 // The input slots of a SamSrf session and how a dropped file finds its slot.
 // Pure: no DOM, so the rules are unit-tested under Node.
-import { compareRunNames, resolveHemisphere } from "@neurodesk/samsrf/inputs";
-import { isSubjectHrf } from "./models.js";
+import { compareRunNames, isSubjectHrf, isSubjectHrfFile, resolveHemisphere } from "@neurodesk/samsrf/inputs";
 
 /** @typedef {'white' | 'pial' | 'inflated' | 'sphere' | 'mesh' | 'curv' | 'area'} SurfaceRole */
 /** @typedef {'runs' | 'apertures' | 'roi' | 'surfaces' | 'template' | 'seed' | 'subjectHrf' | 'model'} Slot */
@@ -35,7 +34,7 @@ const MESH_GII = /\.surf\.gii$|(?:white|pial|inflated|sphere|midthickness)[^/]*\
 export function classifyFile(name) {
   const base = name.split("/").pop();
   if (/\.label$/i.test(base)) return { slot: /seed/i.test(base) ? "seed" : "roi" };
-  if (/\.mat$/i.test(base) && isSubjectHrf(base)) return { slot: "subjectHrf" };
+  if (isSubjectHrfFile(base)) return { slot: "subjectHrf" };
   if (/\.(mat|gif)$|\.nii(\.gz)?$/i.test(base)) return { slot: "apertures" };
   if (/\.json$/i.test(base)) return { slot: "model" };
   if (/\.(curv|sulc)$/i.test(base)) return { slot: "surfaces", role: "curv" };

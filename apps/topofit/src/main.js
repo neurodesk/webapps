@@ -19,6 +19,7 @@ import { registerAppAutomation, registerViewer, createNiivueAdapter } from '@neu
 import { automationArtifacts } from './automation-results.js';
 import manifest from '@neurodesk/topofit/manifest';
 import { REGIONS, REGION_ATLASES } from '@neurodesk/topofit/regions';
+import { parcellationMesh, regionMaskColormap } from './region-view.js';
 
 const $ = (id) => document.getElementById(id);
 const assetBase = import.meta.env.VITE_TOPOFIT_ASSET_BASE || manifest.base_url;
@@ -63,6 +64,8 @@ let normalArrowKey = '';
 const visibleMeshes = new Set();
 const loadedSurfaces = new Map();
 const surfaceStages = new Set(['lh-white', 'rh-white', 'lh-mid', 'rh-mid', 'lh-pial', 'rh-pial']);
+const volumeStages = new Set(['qc', 'patch-qc', 'region-mask']);
+const isParcellation = (stage) => /^(lh|rh)-\w+-annot$/.test(stage);
 const stageLabels = {
   qc: 'Source-grid QC overlay',
   'lh-white': 'Left white surface',
@@ -254,15 +257,14 @@ $('stlButton').onclick = () => {
   };
 };
 
-// A parcellation is download-only: its View button stays disabled whatever the busy state.
-const resultControls = () => [...$('resultList').querySelectorAll('button, input')]
-  .filter((control) => !(control.matches('.nd-view-btn') && control.closest('[data-stage$="-annot"]')));
+const resultControls = () => [...$('resultList').querySelectorAll('button, input')];
 
 function resultLabel(stage) {
   const patch = /^(LH|RH)(\d+)$/.exec(stage);
   if (patch) return `${patch[1] === 'LH' ? 'Left' : 'Right'} flat patch ${Number(patch[2])}`;
   const parcellation = /^(lh|rh)-(\w+)-annot$/.exec(stage);
   if (parcellation) return `${parcellation[1] === 'lh' ? 'Left' : 'Right'} ${REGION_ATLASES[parcellation[2]].name} parcellation`;
+  if (stage === 'region-mask') return `${searchRegion()?.name ?? 'Search region'} mask in the cortical ribbon`;
   return stageLabels[stage] || stage;
 }
 
@@ -360,7 +362,7 @@ async function ensureViewer() {
       }
       registerViewer('image', createNiivueAdapter(viewer, {
         tabs: {
-          list: () => [{ id: 'source', label: 'Source image', active: !displayedResult && !meshSceneReady }, ...[...outputs.keys()].filter((id) => id === 'qc' || id === 'patch-qc' || surfaceStages.has(id)).map((id) => ({ id, label: resultLabel(id), active: surfaceStages.has(id) ? visibleMeshes.has(id) : displayedResult === id }))],
+          list: () => [{ id: 'source', label: 'Source image', active: !displayedResult && !meshSceneReady }, ...[...outputs.keys()].filter((id) => volumeStages.has(id) || isParcellation(id) || surfaceStages.has(id)).map((id) => ({ id, label: resultLabel(id), active: surfaceStages.has(id) ? visibleMeshes.has(id) : displayedResult === id }))],
           select: (id) => id === 'source' ? showSource() : showResult(id),
         },
         regions: { list: () => Object.values(surfaceAnalysis?.flat_patches ?? {}).map((patch) => ({ id: patch.patch_id, name: patch.patch_id, ...patch })) },
@@ -393,7 +395,7 @@ function syncMeshControls() {
       : viewer.volumes.some((volume) => volume.name === source?.name) ? 'ORIGINAL IMAGE' : 'VIEWER SCENE';
   }
   if (displayedResult) {
-    const files = displayedResult === 'qc' || displayedResult === 'patch-qc' ? viewer.volumes : viewer.meshes;
+    const files = volumeStages.has(displayedResult) ? viewer.volumes : viewer.meshes;
     const displayed = files.find((file) => file.name === outputs.get(displayedResult)?.name);
     if (!displayed || displayed.opacity === 0 || displayed.visible === false) {
       showPatchMeasurements(null);
@@ -424,6 +426,9 @@ async function loadResultSurfaces() {
     const surfaceFiles = new Map([...outputs.values()]
       .filter((file) => file.type === 'application/vnd.freesurfer.surface')
       .map((file) => [file.name, file]));
+    for (const name of nv.meshes.map((mesh) => mesh.name).filter((name) => name.endsWith('.annot'))) {
+      await nv.removeMesh(nv.meshes.findIndex((mesh) => mesh.name === name));
+    }
     for (let index = nv.meshes.length - 1; index >= 0; index -= 1) {
       const name = nv.meshes[index].name;
       if (loadedSurfaces.has(name) && loadedSurfaces.get(name) !== surfaceFiles.get(name)) {
@@ -451,12 +456,22 @@ async function loadResultSurfaces() {
   }
 }
 
+// The parcellation meshes lie on the mid-surface, so any other scene hides them.
+async function hideParcellations(nv, except = null) {
+  for (const [index, mesh] of nv.meshes.entries()) {
+    if (mesh.name.endsWith('.annot') && mesh.name !== except && mesh.opacity > 0) await nv.setMesh(index, { opacity: 0 });
+  }
+}
+
 async function showSource({ reset = false } = {}) {
   const nv = await ensureViewer();
   if (reset) {
     anatomyIn3D = false;
     await resetMeshes(nv);
   }
+  await hideParcellations(nv);
+  if (volumeStages.has(displayedResult)) showPatchMeasurements(null);
+  if (isParcellation(displayedResult) || volumeStages.has(displayedResult)) displayedResult = null;
   nv.setClipPlane([2, 0, 0]);
   await nv.loadVolumes([{ url: source, name: source.name }]);
   nv.drawScene();
@@ -474,9 +489,10 @@ async function setMeshVisible(stage, visible, input) {
   try {
     const nv = await ensureViewer();
     if (visible) {
-      if (displayedResult === 'qc' || displayedResult === 'patch-qc') {
+      if (volumeStages.has(displayedResult)) {
         await nv.loadVolumes([{ url: source, name: source.name }]);
       }
+      await hideParcellations(nv);
       displayedResult = null;
       showPatchMeasurements(null);
       nv.meshThicknessOn2D = 1;
@@ -517,18 +533,58 @@ async function showResult(stage, { duringRun = false } = {}) {
   try {
     const nv = await ensureViewer();
     showPatchMeasurements(null);
-    if (stage === 'qc' || stage === 'patch-qc') {
+    await hideParcellations(nv, isParcellation(stage) ? file.name : null);
+    if (volumeStages.has(stage)) {
       nv.setClipPlane([2, 0, 0]);
       const overlay = stage === 'patch-qc' ? { colormap: 'hot', calMin: 1, calMax: 4095, isTransparentBelowCalMin: true } : {};
-      await nv.loadVolumes([{ url: source, name: source.name }, { url: file, name: file.name, opacity: 0.75, ...overlay }]);
+      await nv.loadVolumes([{ url: source, name: source.name }, { url: file, name: file.name, opacity: stage === 'region-mask' ? 0.6 : 0.75, ...overlay }]);
+      if (stage === 'region-mask') await nv.setColormapLabel(1, regionMaskColormap(searchRegion().name));
       nv.sliceType = SLICE_TYPE.MULTIPLANAR;
-      $('imageLabel').textContent = stage === 'patch-qc' ? 'PATCHES · WHITE 2400 · PIAL 2700 · MID 3000 · NORMAL 4095' : 'ORIGINAL IMAGE · TOPOFIT QC';
+      $('imageLabel').textContent = stage === 'region-mask' ? `${searchRegion().name} SEARCH REGION · LEFT BLUE · RIGHT ORANGE`
+        : stage === 'patch-qc' ? 'PATCHES · WHITE 2400 · PIAL 2700 · MID 3000 · NORMAL 4095' : 'ORIGINAL IMAGE · TOPOFIT QC';
       displayedResult = stage;
       const firstPatch = stage === 'patch-qc' && Object.values(surfaceAnalysis?.flat_patches || {})[0];
       if (firstPatch) {
         nv.setCrosshairPos(firstPatch.center_ras_mm);
         showPatchMeasurements(firstPatch);
       }
+      if (stage === 'region-mask') {
+        const views = await Promise.all(['lh', 'rh'].map(parcellationView));
+        const centroid = views.map((view) => view?.centroid).find(Boolean);
+        if (centroid) nv.setCrosshairPos(centroid);
+      }
+    } else if (isParcellation(stage)) {
+      const hemisphere = stage.slice(0, 2);
+      const view = await parcellationView(hemisphere);
+      nv.meshThicknessOn2D = 1;
+      nv.setClipPlane([anatomyIn3D ? 2 : -1, 0, 0]);
+      await nv.loadVolumes([{ url: source, name: source.name }]);
+      let index = nv.meshes.findIndex((mesh) => mesh.name === file.name);
+      if (index >= 0 && parcellationMeshFiles.get(file.name) !== file) {
+        await nv.removeMesh(index);
+        index = -1;
+      }
+      if (index < 0) {
+        await nv.addMesh({ url: new File([view.bytes], `${file.name}.mz3`), name: file.name, sliceShaderType: 'crosscut' });
+        index = nv.meshes.findIndex((mesh) => mesh.name === file.name);
+        // NiiVue logs a mesh it cannot decode and resolves without adding it.
+        if (index < 0 || !nv.meshes[index].positions?.length) throw new Error('the viewer could not draw the parcellation');
+        parcellationMeshFiles.set(file.name, file);
+      }
+      await nv.setMesh(index, { opacity: 1 });
+      // The hemisphere's own surfaces would cover the parcellation; their checkboxes follow.
+      for (const surface of ['white', 'mid', 'pial']) {
+        const covering = nv.meshes.findIndex((mesh) => mesh.name === outputs.get(`${hemisphere}-${surface}`)?.name);
+        if (covering >= 0 && nv.meshes[covering].opacity > 0) await nv.setMesh(covering, { opacity: 0 });
+      }
+      meshSceneReady = true;
+      displayedResult = stage;
+      if (view.centroid) nv.setCrosshairPos(view.centroid);
+      if (view.camera) {
+        nv.azimuth = view.camera.azimuth;
+        nv.elevation = view.camera.elevation;
+      }
+      $('imageLabel').textContent = `${resultLabel(stage)} · ${searchRegion().name} in full colour · patches white`;
     } else {
       const patch = surfaceAnalysis?.flat_patches?.[stage];
       nv.meshThicknessOn2D = 1;
@@ -648,6 +704,37 @@ $('patchRegion').onchange = () => { $('patchRoiField').hidden = $('patchRegion')
     groups.get(region.group).append(createElement('option', { value: region.id, text: region.name }));
   }
   $('patchRegion').append(...groups.values());
+}
+// The named region of the displayed results, or undefined for a whole-cortex or ROI search.
+const searchRegion = () => REGIONS.find(({ id }) => id === surfaceAnalysis?.flat_patch_definition?.region);
+const parcellationViews = new Map();
+const parcellationMeshFiles = new Map();
+
+// A hemisphere's parcellation mesh, built once per set of results.
+async function parcellationView(hemisphere) {
+  const stage = [...outputs.keys()].find((id) => isParcellation(id) && id.startsWith(`${hemisphere}-`));
+  const region = searchRegion();
+  if (!stage || !region || !reconstruction) return null;
+  const file = outputs.get(stage);
+  if (parcellationViews.get(stage)?.file !== file) {
+    const geometry = outputs.get('patch-geometry');
+    const patches = geometry ? JSON.parse(await geometry.text()).patches : {};
+    const patchVertices = new Set(Object.entries(patches)
+      .filter(([id]) => id.startsWith(hemisphere.toUpperCase()))
+      .flatMap(([, patch]) => patch.vertex_indices));
+    parcellationViews.set(stage, {
+      file,
+      ...parcellationMesh({
+        annotation: await file.arrayBuffer(),
+        white: reconstruction.surfaces.vertices[`${hemisphere}.white`],
+        pial: reconstruction.surfaces.vertices[`${hemisphere}.pial`],
+        faces: reconstruction.surfaces.faces[hemisphere],
+        region: new Set(region.labels),
+        patchVertices,
+      }),
+    });
+  }
+  return parcellationViews.get(stage);
 }
 const namedRegion = () => $('findPatches').checked && !['cortex', 'roi'].includes($('patchRegion').value) ? $('patchRegion').value : 'cortex';
 
@@ -834,11 +921,9 @@ async function run(analysisOnly = false, { signal, progress = () => {}, roiFile 
               files: new Map([...outputs].filter(([id]) => surfaceStages.has(id) || id === 'qc')),
             };
           }
-          results.render(Object.fromEntries([...outputs].map(([id, file]) => [
+          results.render(Object.fromEntries([...outputs.keys()].map((id) => [
             id,
-            surfaceStages.has(id) ? { visible: false, viewable: true }
-              : file.name.endsWith('.annot') ? { description: resultLabel(id), viewable: false }
-                : { description: resultLabel(id) },
+            surfaceStages.has(id) ? { visible: false, viewable: true } : { description: resultLabel(id) },
           ])));
           $('stlButton').hidden = !reconstruction;
           $('outputSection').open = true;

@@ -31,6 +31,13 @@ Pages. `sciget.org` DNS is on Cloudflare.
 - `brand.icon` is the browser-tab icon of the landing page and every app page;
   `brand.logo` is the header image. SciGet's icon is sciget.org's network graph,
   because its wordmark is unreadable at favicon size.
+- `webmcp_origin_trial`: the catalogue's Chrome origin trial token for WebMCP, so
+  a browser's built-in agent can use the apps' tools there before the API ships.
+  A token is valid for one origin, so each host has its own. The catalogue
+  projection writes it as `<meta http-equiv="origin-trial">` into that host's
+  app pages only; `dist/` and the other hosts carry none. Empty (the default)
+  writes nothing. Register the host at Chrome's origin trials console, paste the
+  token here and rebuild; `test/catalog-sites.test.mjs` checks each page.
 - `site.hub`: the hub page's host, text and brand.
 - `catalog:` on every app: its home catalogue. Its old links redirect there, and
   other hosts' 404 pages send its path there.

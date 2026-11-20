@@ -1,5 +1,6 @@
 import { cp, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { placeThemeControllerFirst } from './composite-theme.mjs';
 
 // Only the composite site that serves dicompare needs this bridge; its 404 page
 // (scripts/lib/not-found-page.mjs) loads it. Standalone builds keep their
@@ -15,7 +16,8 @@ export async function stageDicompareRoutes({ repoRoot, siteDist }) {
     if (!base || !/href=["']\/dicompare\/["']/.test(base)) {
       throw new Error('Dicompare Pages routing requires a /dicompare/ document base');
     }
-    await writeFile(index, html.replace(base, '').replace('<head>', `<head>\n  ${base}\n  ${restore}`));
+    // The theme controller stays the first script: it installs the WebMCP recorder.
+    await writeFile(index, placeThemeControllerFirst(html.replace(base, '').replace('<head>', `<head>\n  ${base}\n  ${restore}`)));
   }
   await cp(join(repoRoot, 'site', 'dicompare-routes.js'), join(siteDist, 'dicompare', 'dicompare-routes.js'));
 }

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { runSurfaceAnalysis } from '../src/pipeline.js';
 import { analyzeSurfaces, readPatchRoi } from '../src/surface-analysis.js';
-import { triangleVoxelMask } from '../src/analysis-qc.js';
+import { ribbonSamples, ribbonVoxelMask, triangleVoxelMask } from '../src/analysis-qc.js';
 import { writeInt16Nifti } from '../src/qc.js';
 
 function fixture() {
@@ -148,4 +148,49 @@ test('patch coordinates and plane normals remain scanner RAS on translated obliq
     assert.equal(patch.center_ras_mm[axis], (data.vertices['lh.white'][index] + data.vertices['lh.pial'][index]) / 2);
   }
   assert.ok(Math.abs(Math.hypot(...patch.normal_ras) - 1) < 1e-12);
+});
+
+function nearestSample(white, pial, point) {
+  let nearest = Infinity;
+  ribbonSamples(white, pial, Int32Array.of(0, 1, 2), (x, y, z) => {
+    nearest = Math.min(nearest, Math.hypot(x - point[0], y - point[1], z - point[2]));
+  });
+  return nearest;
+}
+
+test('every ribbon point lies within the stated distance of a ribbon sample', () => {
+  const sheared = 1 / (2 * Math.sqrt(3)) + 1 / 4;
+  const perpendicular = Math.sqrt(1 / 12 + 1 / 16);
+  let seed = 7;
+  const random = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+  const point = (white, pial) => {
+    let [a, b] = [random(), random()];
+    if (a + b > 1) [a, b] = [1 - a, 1 - b];
+    const t = random();
+    return [0, 1, 2].map((axis) => {
+      const at = (surface) => a * surface[axis] + b * surface[3 + axis] + (1 - a - b) * surface[6 + axis];
+      return (1 - t) * at(white) + t * at(pial);
+    });
+  };
+  for (let trial = 0; trial < 200; trial += 1) {
+    const white = Float64Array.from({ length: 9 }, () => random() * 3);
+    const depth = [random() * 3 - 1.5, random() * 3 - 1.5, 0.3 + random() * 2.5];
+    const pial = Float64Array.from(white, (value, i) => value + depth[i % 3] * (0.6 + 0.8 * random()));
+    for (let sample = 0; sample < 20; sample += 1) assert.ok(nearestSample(white, pial, point(white, pial)) <= sheared);
+    const flat = Float64Array.from(white, (value, i) => i % 3 === 2 ? 0 : value);
+    const raised = Float64Array.from(flat, (value, i) => i % 3 === 2 ? depth[2] : value);
+    for (let sample = 0; sample < 20; sample += 1) assert.ok(nearestSample(flat, raised, point(flat, raised)) <= perpendicular);
+  }
+  // The worst perpendicular case: an equilateral prism just under half a unit, sampled only
+  // at its corners, is farthest from them at its centre.
+  const side = 0.499;
+  const white = Float64Array.of(0, 0, 0, side, 0, 0, side / 2, side * Math.sqrt(3) / 2, 0);
+  const pial = Float64Array.from(white, (value, i) => i % 3 === 2 ? side : value);
+  const centre = nearestSample(white, pial, [side / 2, side / (2 * Math.sqrt(3)), side / 2]);
+  assert.ok(centre > 0.38 && centre <= perpendicular, String(centre));
+  const volume = { dims: [12, 12, 12], affine: [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]], data: new Float32Array(1728) };
+  // A ribbon that only clips a voxel's corner can leave it unmarked.
+  const clipWhite = Float64Array.of(0.46, 0.57, 0.8, 0.57, 0.46, 0.8, 0.43, 0.43, 0.8);
+  const clipPial = Float64Array.from(clipWhite, (value, i) => i % 3 === 2 ? 1.2 : value);
+  assert.equal(ribbonVoxelMask(volume, clipWhite, clipPial, Int32Array.of(0, 1, 2), new Uint8Array(1728), 1)[1 + 12 * (1 + 12)], 0);
 });

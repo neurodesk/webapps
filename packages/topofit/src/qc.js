@@ -58,14 +58,31 @@ function surfaceMask(volume, vertexSets, thickness) {
 }
 
 export function writeInt16Nifti(volume, data, description) {
-  const output = new ArrayBuffer(352 + data.length * 2);
-  const bytes = new Uint8Array(output);
-  bytes.set(new Uint8Array(volume.source, 0, Math.min(348, volume.source.byteLength)));
+  const output = writeNiftiHeader(volume, data.length, 4, 16, description);
   const view = new DataView(output);
   const little = volume.header.littleEndian;
+  for (let i = 0; i < data.length; i += 1) view.setInt16(352 + i * 2, data[i], little);
+  return output;
+}
+
+export function writeUint8Nifti(volume, data, description) {
+  const output = writeNiftiHeader(volume, data.length, 2, 8, description);
+  new Uint8Array(output, 352).set(data);
+  return output;
+}
+
+// A NIfTI-1 header: a NIfTI-1 source's header bytes, or the grid read from a NIfTI-2
+// source (single precision), with a new data type, unit scaling and the description.
+function writeNiftiHeader(volume, length, datatype, bitpix, description) {
+  const output = new ArrayBuffer(352 + length * bitpix / 8);
+  const bytes = new Uint8Array(output);
+  const view = new DataView(output);
+  const little = volume.header.littleEndian;
+  if (new DataView(volume.source).getInt32(0, little) === 540) writeNifti2Geometry(view, volume, little);
+  else bytes.set(new Uint8Array(volume.source, 0, Math.min(348, volume.source.byteLength)));
   view.setInt32(0, 348, little);
-  view.setInt16(70, 4, little);
-  view.setInt16(72, 16, little);
+  view.setInt16(70, datatype, little);
+  view.setInt16(72, bitpix, little);
   view.setFloat32(108, 352, little);
   view.setFloat32(112, 1, little);
   view.setFloat32(116, 0, little);
@@ -73,8 +90,21 @@ export function writeInt16Nifti(volume, data, description) {
   bytes.set(new TextEncoder().encode(description).slice(0, 79), 148);
   bytes.set([110, 43, 49, 0], 344);
   bytes.fill(0, 348, 352);
-  for (let i = 0; i < data.length; i += 1) view.setInt16(352 + i * 2, data[i], little);
   return output;
+}
+
+// readVolume's affine of a NIfTI-2 source (its srows, in millimetres) as an active NIfTI-1
+// sform, with voxel sizes from its columns, so the output decodes to the same grid.
+function writeNifti2Geometry(view, volume, little) {
+  const { header, affine, dims } = volume;
+  if (dims.some((size) => size > 32767)) throw new Error('The image is too large for a NIfTI-1 output.');
+  [3, ...dims, 1, 1, 1, 1].forEach((size, index) => view.setInt16(40 + index * 2, size, little));
+  const spacing = [0, 1, 2].map((column) => Math.hypot(affine[0][column], affine[1][column], affine[2][column]));
+  [1, ...spacing, ...header.pixDims.slice(4)].forEach((size, index) => view.setFloat32(76 + index * 4, size, little));
+  view.setUint8(123, 2 | (header.xyzt_units & 56));
+  view.setInt16(252, 0, little);
+  view.setInt16(254, Math.max(header.sform_code, 1), little);
+  affine.slice(0, 3).forEach((row, axis) => row.forEach((value, column) => view.setFloat32(280 + (axis * 4 + column) * 4, value, little)));
 }
 
 export function roundEven(value) {

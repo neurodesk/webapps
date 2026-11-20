@@ -1,10 +1,9 @@
 {
   "name": "dicompare",
-  "version": "0.15.20261113",
+  "version": "0.15.20261120",
   "description": "DICOM compliance validation tool for medical imaging",
   "author": {
-    "name": "Ashley Stewart",
-    "email": "ashley.stewart@uq.edu.au"
+    "name": "Ashley Stewart"
   },
   "private": true,
   "main": "./out/main/index.js",
@@ -120,6 +119,9 @@
         "deb"
       ],
       "category": "Science"
+    },
+    "deb": {
+      "maintainer": "Neurodesk <mail.neurodesk@gmail.com>"
     },
     "nsis": {
       "oneClick": false,

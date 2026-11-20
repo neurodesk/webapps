@@ -336,7 +336,12 @@ test('cancelling input conversion discards late outputs and permits retry', asyn
 
 test('automation reports missing and malformed explicit assignments clearly', async ({ page }) => {
   await page.goto('./');
-  for (const assignments of [undefined, 'not-json', 'null', '[null]', '[{}]', '[{"type":"unknown"}]', '[]']) {
+  await page.locator('#neurodesk-input-transfer').setInputFiles(dicomSeries());
+  await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('adopt', { role: 'dicom' }));
+  await expect(page.evaluate(() => globalThis.neurodeskAutomation.dispatch('start', {
+    parameters: { subject: '01', session: '01', privacy: 'omit' },
+  }))).rejects.toThrow('ZodError');
+  for (const assignments of ['not-json', 'null', '[null]', '[{}]', '[{"type":"unknown"}]', '[]']) {
     await page.locator('#neurodesk-input-transfer').setInputFiles(dicomSeries());
     await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('adopt', { role: 'dicom' }));
     await page.evaluate(assignments => globalThis.neurodeskAutomation.dispatch('start', {

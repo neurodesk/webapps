@@ -55,6 +55,14 @@ import { resolveShellAdapter } from './shell-adapters/index.js';
       if (text) text.textContent = `Could not open the image sent from another app: ${error.message}`;
     });
 
+  // A browser's built-in agent reaches the app through WebMCP. Browsers without it load none of that code.
+  const modelContext = document.modelContext ?? navigator.modelContext;
+  if (modelContext) {
+    import(/* @vite-ignore */ new URL('webmcp/page.js', metadata.componentsHref).href)
+      .then(({ exposeWebMcp }) => exposeWebMcp(modelContext, document))
+      .catch((error) => console.warn('Neurodesk WebMCP tools were not registered:', error));
+  }
+
   const icons = {
     about: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg>',
     cite: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3.5h12a2 2 0 0 1 2 2V21H7a2 2 0 0 1-2-2V3.5Z"/><path d="M7 17h12M9 7h6"/></svg>',
@@ -221,6 +229,13 @@ import { resolveShellAdapter } from './shell-adapters/index.js';
       + `</section>`;
   }
 
+  // What a browser AI agent can read through the app's WebMCP tools: shared, so it closes every
+  // Privacy dialog, the app's own included.
+  function agentPrivacyHtml() {
+    if (!information?.shared?.agents) return '';
+    return `<section class="nd-app-info" data-neurodesk-app-info="privacy"><h3>AI agents in your browser</h3><p>${escapeHtml(information.shared.agents)}</p></section>`;
+  }
+
   function citationHtml(item) {
     const code = item.code ? `<small>Code: ${linkHtml(item.code, item.code.replace(/^https?:\/\//, ''))}</small>` : '';
     const link = item.doi
@@ -265,7 +280,7 @@ import { resolveShellAdapter } from './shell-adapters/index.js';
         || `<p>Please cite the scientific software, methods, and models used in your analysis. App-specific citation details are available in the documentation and source repository.</p>`;
     }
     const appPrivacy = information?.privacy ? `<p>${escapeHtml(information.privacy)}</p>` : '';
-    return `<p>Imaging files are processed in your browser unless the app clearly states otherwise. The ${escapeHtml(metadata.brandName)} hosting layer records page views only and sends no custom events. It makes no analytics request when Do Not Track or Global Privacy Control is enabled, and never sends your loaded imaging data to Google Analytics.</p>${appPrivacy}`;
+    return `<p>Imaging files are processed in your browser unless the app clearly states otherwise. The ${escapeHtml(metadata.brandName)} hosting layer records page views only and sends no custom events. It makes no analytics request when Do Not Track or Global Privacy Control is enabled, and never sends your loaded imaging data to Google Analytics.</p>${appPrivacy}${agentPrivacyHtml()}`;
   }
 
   function openFallbackDialog(kind) {
@@ -300,19 +315,21 @@ import { resolveShellAdapter } from './shell-adapters/index.js';
 
   const openDialogSelector = 'dialog[open], .modal-overlay.active .modal, .nd-modal-overlay.active .nd-modal, [role="dialog"]:not([hidden])';
 
-  // After an app opens its own About dialog, append the shared block so the
-  // packages, builder and ecosystem statements appear in every app.
+  const sharedBlocks = { about: aboutInformationHtml, privacy: agentPrivacyHtml };
+
+  // After an app opens its own About or Privacy dialog, append the shared block so the
+  // packages, builder, ecosystem and agent statements appear in every app.
   function decorateAppDialog(kind, attempt = 0) {
-    if (kind !== 'about' || !information) return;
+    if (!sharedBlocks[kind] || !information) return;
     const dialogs = [...document.querySelectorAll(openDialogSelector)]
-      .filter((node) => !node.classList.contains('nd-app-dialog') && node.checkVisibility?.() !== false);
+      .filter((node) => !node.matches('.nd-app-dialog[data-dialog]') && node.checkVisibility?.() !== false);
     const dialog = dialogs.at(-1);
     if (!dialog) { if (attempt < 10) requestAnimationFrame(() => decorateAppDialog(kind, attempt + 1)); return; }
-    if (dialog.querySelector('[data-neurodesk-app-info="about"]')) return;
-    const body = dialog.querySelector('.modal-body, .nd-dialog-body, .nd-modal-body, .dialog-body, [data-dialog-body]') || dialog;
+    if (dialog.querySelector(`[data-neurodesk-app-info="${kind}"]`)) return;
+    const body = dialog.querySelector('.modal-body, .nd-dialog-body, .nd-modal-body, .dialog-body, [data-dialog-body], .nd-app-dialog__panel') || dialog;
     const section = document.createElement('div');
-    section.innerHTML = aboutInformationHtml();
-    body.append(section.firstElementChild);
+    section.innerHTML = sharedBlocks[kind]();
+    if (section.firstElementChild) body.append(section.firstElementChild);
   }
 
   async function openAppInformation(kind) {

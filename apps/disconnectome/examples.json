@@ -19,7 +19,12 @@
         "sha256": "aa8be671c4e662ec4d4a913e1f2d4080a488a1a3c7734a02b980e23effcbdd21",
         "bytes": 2483322
       }
-    ]
+    ],
+    "automation": {
+      "roles": {
+        "image": "lesion"
+      }
+    }
   },
   {
     "id": "wm2018",
@@ -41,7 +46,12 @@
         "sha256": "44364444f7522936ee21beef6fc9140e46b2664b09fbf6e9ec73368166fc024e",
         "bytes": 2800195
       }
-    ]
+    ],
+    "automation": {
+      "roles": {
+        "image": "lesion"
+      }
+    }
   },
   {
     "id": "wm2201",
@@ -63,7 +73,12 @@
         "sha256": "d834d31fc6aad8d31fbbcacf8591c89699537a36f6fc4a5d69a2b7c3ffdd872d",
         "bytes": 2516604
       }
-    ]
+    ],
+    "automation": {
+      "roles": {
+        "image": "lesion"
+      }
+    }
   },
   {
     "id": "wm2208",
@@ -85,6 +100,11 @@
         "sha256": "3926f810853c2fa199ac4d50488a1c83c84789005ea96be2d95536dbd358c97b",
         "bytes": 2472763
       }
-    ]
+    ],
+    "automation": {
+      "roles": {
+        "image": "lesion"
+      }
+    }
   }
 ]

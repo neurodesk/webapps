@@ -33,7 +33,13 @@
         "sha256": "ee4aea62833b98301faedafd2633662e54c9dfd33ac40fb1bf1d03caf5c3b757",
         "bytes": 2856
       }
-    ]
+    ],
+    "automation": {
+      "roles": {
+        "sidecar": null
+      },
+      "reason": "The acquisition JSON is left out: the fit takes its b-values and gradient directions from the .bval and .bvec files."
+    }
   },
   {
     "id": "single-shell",

@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { Worker } from 'node:worker_threads';
-import { resolveHemisphere } from './inputs.js';
+import { isSubjectHrf, isSubjectHrfFile, resolveHemisphere, subjectHrfName } from './inputs.js';
 export { hemisphereOf } from './inputs.js';
 import {
   Apertures,
@@ -13,12 +13,14 @@ import {
   createJob,
   exportGiis,
   exportConvention,
+  losslessName,
   predictTimecourse,
   prfProfile,
   readAnalysisInputs,
   runJob,
   shardRanges,
   version as coreVersion,
+  writeLossless,
 } from './node.js';
 
 const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
@@ -36,7 +38,8 @@ Runs SamSrf's SamSrfAnalysis on GIfTI time series, as the SamSrf web app does:
   rc   reverse-correlation pRF (samsrf_revcor_prf)
   cf   reverse-correlation connective fields (samsrf_revcor_cf)
 MODEL.json is a SamSrf model file (Models/Json). Writes SamSrf's GIfTI map set,
-<hemisphere>_<Name><suffix>_<map>.gii, and <prefix>_provenance.json into
+<hemisphere>_<Name><suffix>_<map>.gii, every map value in float64 (with any
+imaginary parts) in <prefix>_lossless.bin, and <prefix>_provenance.json into
 OUTPUT_DIR, which must be new or empty.
 
 Inputs:
@@ -53,6 +56,8 @@ Inputs:
   --area FILE            Vertex areas (lh.area), for cf
   --hemisphere NAME      Hemisphere (lh, rh, bi or srf); inferred from matching
                          FreeSurfer/BIDS input names when omitted
+  --hrf FILE             Subject HRF fit (hrf_*.mat holding fP) that the model's
+                         Hrf names, e.g. Hrf "hrf_fit" reads hrf_fit.mat; prf and rc
 
 Preprocessing (samsrf_gii2srf):
   --no-normalise         Keep the raw time series (SamSrf -norm off); default
@@ -80,6 +85,7 @@ const OPTIONS = {
   white: { type: 'string' },
   area: { type: 'string' },
   hemisphere: { type: 'string' },
+  hrf: { type: 'string' },
   'no-normalise': { type: 'boolean' },
   concatenate: { type: 'boolean' },
   shards: { type: 'string' },
@@ -120,6 +126,8 @@ export function parseCommandLine(argv) {
   if (runs.length === 0) throw new Error('Give the functional runs with --runs.');
   if (command !== 'cf' && values.apertures === undefined) throw new Error(`${command} needs --apertures.`);
   if (command === 'cf' && (values.seed === undefined || values.template === undefined)) throw new Error('cf needs --seed and --template.');
+  if (command === 'cf' && values.hrf !== undefined) throw new Error('--hrf applies to prf and rc: connective fields have no HRF.');
+  if (values.hrf !== undefined && !isSubjectHrfFile(values.hrf)) throw new Error(`${values.hrf}: SamSrf reads a subject HRF fit from a file named hrf_*.mat.`);
   if (values.surf !== undefined && (values.white !== undefined || values.area !== undefined)) throw new Error('Give either --surf or --white and --area, not both.');
   if (values.hemisphere && !/^[A-Za-z0-9_-]+$/.test(values.hemisphere)) throw new Error(`--hemisphere must be a plain name such as lh or rh, not ${JSON.stringify(values.hemisphere)}.`);
   const hemisphere = resolveHemisphere([...runs, values.roi, values.seed, values.template, values.white, values.area], { hemisphere: values.hemisphere, required: command === 'cf' });
@@ -138,6 +146,7 @@ export function parseCommandLine(argv) {
     template: values.template ?? null,
     white: values.surf === undefined ? values.white ?? null : join(values.surf, `${hemisphere}.white`),
     area: values.surf === undefined ? values.area ?? null : join(values.surf, `${hemisphere}.area`),
+    subjectHrf: values.hrf ?? null,
     hemisphere,
     normalise: values['no-normalise'] ? 'none' : 'zscore',
     combine: values.concatenate ? 'concatenate' : 'average',
@@ -154,6 +163,14 @@ function readModel(path) {
   } catch (error) {
     throw new Error(`${path}: not a JSON model file (${error.message})`, { cause: error });
   }
+}
+
+// SamSrf loads the fit an hrf_* Hrf names; the command line takes it from --hrf and holds the two to each other.
+function checkSubjectHrf(path, model, subjectHrf) {
+  const named = isSubjectHrf(model.Hrf);
+  if (named && subjectHrf === null) throw new Error(`${path}: Hrf ${model.Hrf} names a subject HRF fit: give it with --hrf ${model.Hrf}.mat.`);
+  if (!named && subjectHrf !== null) throw new Error(`${path}: --hrf gives a subject HRF fit, but the model's Hrf is ${JSON.stringify(model.Hrf ?? null)}: set Hrf to "${subjectHrfName(subjectHrf)}" to use it.`);
+  if (named && model.Hrf !== subjectHrfName(subjectHrf)) throw new Error(`${path}: Hrf ${model.Hrf} names ${model.Hrf}.mat, but --hrf gives ${subjectHrfName(subjectHrf)}.mat.`);
 }
 
 // Checked before the analysis and created after it, so a failed run leaves nothing behind.
@@ -189,9 +206,18 @@ export async function analyse(options, { log = () => {}, progress = () => {} } =
   const started = performance.now();
   const model = readModel(options.model);
   const convention = exportConvention(model.json.Export_Convention);
+  if (options.kind !== 'cf') checkSubjectHrf(options.model, model.json, options.subjectHrf ?? null);
   checkOutput(options.output);
   log(`Reading and preprocessing ${options.runs.length} run${options.runs.length === 1 ? '' : 's'}`);
+  const inputFiles = [
+    ...options.runs.map((path) => ['run', path]),
+    ['roi', options.roi], ['apertures', options.apertures], ['seed', options.seed],
+    ['template', options.template], ['white', options.white], ['area', options.area],
+    ['subjectHrf', options.subjectHrf ?? null],
+  ].filter(([, path]) => path !== null);
   const inputs = readAnalysisInputs({ ...options, precision: model.json.Data_Precision === 'single' ? 'single' : 'double', arithmeticReference: model.json.Arithmetic_Reference });
+  // Hashed beside the read, not after the fit, so a file replaced during a long run cannot be the one named.
+  const inputHashes = inputFiles.map(([role, path]) => ({ role, path, sha256: sha256(readFileSync(path)) }));
   const spec = analysisSpec(inputs, options.kind, model.text);
   log(options.kind === 'prf' ? 'Generating the search space' : `Preparing the ${options.kind} analysis`);
   let job;
@@ -213,13 +239,9 @@ export async function analyse(options, { log = () => {}, progress = () => {} } =
     }
     const prefix = `${options.hemisphere}_${job.modelName}${job.outSuffix}`;
     const files = exportGiis(merged.maps, prefix, null, convention);
+    const lossless = { name: losslessName(prefix), bytes: writeLossless(merged, { precision: model.json.Data_Precision === 'single' ? 'single' : 'double' }) };
     mkdirSync(options.output, { recursive: true });
-    for (const { name, bytes } of files) writeFileSync(join(options.output, name), bytes);
-    const inputFiles = [
-      ...options.runs.map((path) => ['run', path]),
-      ['roi', options.roi], ['apertures', options.apertures], ['seed', options.seed],
-      ['template', options.template], ['white', options.white], ['area', options.area],
-    ].filter(([, path]) => path !== null);
+    for (const { name, bytes } of [...files, lossless]) writeFileSync(join(options.output, name), bytes);
     const provenance = {
       tool: 'samsrf',
       version: VERSION,
@@ -230,15 +252,16 @@ export async function analyse(options, { log = () => {}, progress = () => {} } =
       exportConvention: convention,
       arithmeticReference: merged.arithmeticReference,
       options: { hemisphere: options.hemisphere, normalise: options.normalise, combine: options.combine, shards: options.shards },
-      inputs: inputFiles.map(([role, path]) => ({ role, path, sha256: sha256(readFileSync(path)) })),
+      inputs: inputHashes,
       analysedVertices: total,
       maps: merged.maps.values,
       outputs: files.map(({ name }) => name),
+      lossless: { file: lossless.name, sha256: sha256(lossless.bytes) },
       wallTimeSeconds: Number(((performance.now() - started) / 1000).toFixed(1)),
     };
     const provenanceName = `${prefix}_provenance.json`;
     writeFileSync(join(options.output, provenanceName), `${JSON.stringify(provenance, null, 2)}\n`);
-    return { prefix, files: [...files.map(({ name }) => name), provenanceName], analysedVertices: total, provenance };
+    return { prefix, files: [...files.map(({ name }) => name), lossless.name, provenanceName], analysedVertices: total, provenance };
   } finally {
     job.free();
   }

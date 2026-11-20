@@ -67,7 +67,8 @@
             "type": "number",
             "description": "Acquisition value in declared units",
             "minimum": 1e-06
-          }
+          },
+          "required": true
         },
         "sa2rage": {
           "type": "array",

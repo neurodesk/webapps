@@ -196,8 +196,38 @@ the atlas; the processing manifest records the asset's SHA-256 as
 `runtime.cortexRegionsSha256`. Each searched hemisphere also gets the mapped
 parcellation of that atlas as a FreeSurfer annotation for the output surfaces,
 such as `lh.wang2015.annot`, with the manifest's colour table; unlabelled
-vertices have annotation 0. With `'cortex'` or an ROI, the outputs are those of
-a search without the option. `pack_cortex_regions.py` rebuilds the asset, and
+vertices have annotation 0. `readAnnotation` in `@neurodesk/topofit/results`
+reads such a file back into label values and the colour table.
+
+A named region also writes `topofit_region_mask.nii` (`id: 'region-mask'`), the
+region in the cortical ribbon on the source grid: an unsigned 8-bit NIfTI with
+the source header's geometry, 0 outside, `REGION_MASK_VALUES` (left 1, right 2)
+inside, stated in its description. It covers the searched hemispheres' faces
+whose three vertices carry a region label in the mapped parcellation, before the
+cortex and ribbon checks, and fills each white-to-pial prism by sampling it no
+coarser than half a voxel and marking the voxel nearest each sample. Every ribbon
+point lies within 1/(2√3) + 1/4 ≈ 0.539 voxel of a sample, or √(1/12 + 1/16) ≈
+0.382 voxel when the ribbon runs perpendicular to the surfaces (`ribbonSamples`,
+tested on random and worst-case prisms). That is no guarantee for a single voxel: one
+the ribbon crosses only near a face or corner may be missed, so the mask approximates
+the ribbon and is not a conservative voxelisation.
+Where the hemispheres meet the right one is written last. A hemisphere without region faces
+leaves the mask empty there. Every other output of the search keeps the bytes it
+had before the mask was added for a NIfTI-1 source, with one deliberate exception: the processing
+manifest (`topofit_manifest.json`) lists every output, so a named-region manifest
+gains the `topofit_region_mask.nii` entry in `outputSha256` and differs from before
+by exactly that entry. `test/cortex-regions.test.js` holds this to SHA-256 values
+recorded from the previous release: on a NIfTI-1 source, whole-cortex and ROI
+searches, manifest included, are byte-identical. For a NIfTI-2 source the mask and both
+QC images are now valid NIfTI-1 files whose sform, in millimetres and single precision,
+is the affine the scan was read with; earlier releases copied NIfTI-2 header bytes into
+a NIfTI-1 layout. Known limitation: a NIfTI-2 scan is read through its srows whatever
+its codes say, as nifti-reader-js and NiiVue read it, so one that carries its
+orientation only in the qform is processed and shown on the srow grid.
+The viewer does not scale a scan's spatial units, so for a scan stored in micrometres or
+metres the surfaces, and for NIfTI-2 also the mask and QC images, are in millimetres
+while the anatomy is drawn in the stored unit; the files themselves are correct.
+With `'cortex'` or an ROI, the outputs are those of a search without the option. `pack_cortex_regions.py` rebuilds the asset, and
 `validation/region-check.mjs` checks the mapping on a real reconstruction
 (`validation/surface-analysis.md`).
 

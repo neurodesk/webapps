@@ -14,7 +14,7 @@ function evaluate(expression, event, overrides = {}) {
   // GitHub permits hyphens in property names; JavaScript requires brackets.
   const source = expression.replace(/^\$\{\{\s*|\s*\}\}$/g, '').replaceAll('needs.app-plan.', "needs['app-plan'].").replaceAll('needs.composite-site.', "needs['composite-site'].");
   return runInNewContext(source, {
-    github: { event_name: event, workflow: 'ci', ref: 'refs/heads/main' },
+    github: { event_name: event, workflow: 'ci', ref: 'refs/heads/main', event: { pull_request: { draft: false } } },
     cancelled: () => false,
     inputs: { agentic_mode: 'interactions' },
     needs: { 'app-plan': { outputs: { has_gpu_apps: 'true', all_apps: 'false' } }, 'composite-site': { result: 'success' } },
@@ -89,6 +89,13 @@ test('scientific CPU and hardware GPU tests keep independent builds and test-dat
   assert.equal(gpu.env.NEURODESK_HARDWARE_GPU, '1');
   assert.equal(gpu['runs-on'], 'macos-15');
   assert.equal(ci.jobs['browser-e2e'].steps.find((step) => step.name === 'Download ${{ matrix.app }} test data').env.CPU_ONLY, "${{ matrix.hardware_gpu && '--cpu' || '' }}");
+  // A draft pull request starts neither browser job; a ready one, and every other event, does.
+  const draft = { github: { event_name: 'pull_request', ref: 'refs/pull/1/merge', event: { pull_request: { draft: true } } }, needs: { 'app-plan': { outputs: { has_browser_apps: 'true', has_gpu_apps: 'true', all_apps: 'false' } } } };
+  for (const name of ['browser-e2e', 'browser-e2e-gpu']) {
+    assert.equal(evaluate(ci.jobs[name].if, 'pull_request', draft), false, `${name} on a draft`);
+    assert.equal(evaluate(ci.jobs[name].if, 'pull_request', { ...draft, github: { ...draft.github, event: { pull_request: { draft: false } } } }), true, `${name} when ready`);
+  }
+  assert.equal(evaluate(ci.jobs['app-tests'].if, 'pull_request', { ...draft, needs: { 'app-plan': { outputs: { has_apps: 'true' } } } }), true, 'a draft still runs unit and build tests');
   for (const event of events) {
     assert.equal(evaluate(gpu.if, event), true, `${event} retains selected GPU apps`);
     assert.equal(evaluate(gpu.if, event, { needs: { 'app-plan': { outputs: { has_gpu_apps: 'true', all_apps: 'true' } } } }), event !== 'pull_request', `${event} catalog coverage`);
@@ -130,10 +137,10 @@ const SITE_COMMANDS = {
   'site-audit': ['node scripts/fetch-example-cache.mjs "$EXAMPLE_ASSET_CACHE" --prune', 'node test/external-requests.smoke.mjs', 'pnpm audit:interfaces'],
   'site-e2e': ['pnpm test:smoke', 'pnpm test:e2e:types', 'pnpm test:e2e:catalog'],
   'site-mobile': ['pnpm test:interface-workflows', 'pnpm test:image-uploads', 'pnpm test:mobile'],
-  'site-catalog': ['pnpm --filter @neurodesk/webapp-components test:elements:browser', 'pnpm --filter @neurodesk/webapp-components test:showcase:browser', 'pnpm --filter @neurodesk/webapp-components test:handoff:browser', 'node test/automation-catalog.smoke.mjs', 'pnpm test:app-handoff'],
+  'site-catalog': ['pnpm --filter @neurodesk/webapp-components test:elements:browser', 'pnpm --filter @neurodesk/webapp-components test:showcase:browser', 'pnpm --filter @neurodesk/webapp-components test:handoff:browser', 'node test/automation-catalog.smoke.mjs', 'node test/webmcp.smoke.mjs', 'node test/webmcp-examination.smoke.mjs', 'node test/webmcp-interaction.smoke.mjs', 'pnpm test:app-handoff'],
 };
 // The checks that cover one page per app: SMOKE_APPS narrows them on pull requests and pushes.
-const SCOPED = ['pnpm test:runtime-startup', 'pnpm audit:interfaces', 'pnpm test:smoke', 'pnpm test:e2e:catalog', 'pnpm test:interface-workflows', 'pnpm test:mobile'];
+const SCOPED = ['pnpm test:runtime-startup', 'pnpm audit:interfaces', 'pnpm test:smoke', 'pnpm test:e2e:catalog', 'pnpm test:interface-workflows', 'pnpm test:mobile', 'node test/webmcp.smoke.mjs', 'node test/webmcp-interaction.smoke.mjs'];
 
 test('the site is built once and every site check runs in one job that tests that build', () => {
   const site = ci.jobs['composite-site'];

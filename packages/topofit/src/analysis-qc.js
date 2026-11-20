@@ -1,5 +1,5 @@
 import { inverseAffine } from './volume.js';
-import { roundEven, writeInt16Nifti } from './qc.js';
+import { roundEven, writeInt16Nifti, writeUint8Nifti } from './qc.js';
 
 const sub = (a, b) => a.map((v, i) => v - b[i]);
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
@@ -74,6 +74,69 @@ function normalGlyph(volume, mask, patch, output) {
   else for (let offset = -2; offset <= 2; offset += 1) for (const sign of [-1, 1]) mark(center[0] + offset, center[1] + sign * offset);
 }
 
+// Visits sample points of the prisms between the white and pial triangles of `faces`, in
+// the coordinates of `white` and `pial`. Each prism is cut into layers and each layer
+// triangle into a barycentric grid, both no coarser than half a unit, so a layer's grid
+// triangles have edges of at most 0.5 and every prism point lies within 0.25 of a layer
+// along its depth line. A prism point is therefore within 1/(2√3) + 1/4 ≈ 0.539 of a sample
+// by the triangle inequality, and within √(1/12 + 1/16) ≈ 0.382 when the depth runs
+// perpendicular to the layers.
+export function ribbonSamples(white, pial, faces, visit) {
+  const corner = new Float64Array(18);
+  const triangle = new Float64Array(9);
+  const span = (points, a, b) => Math.hypot(points[a] - points[b], points[a + 1] - points[b + 1], points[a + 2] - points[b + 2]);
+  for (let f = 0; f < faces.length; f += 3) {
+    for (let k = 0; k < 3; k += 1) {
+      const v = faces[f + k] * 3;
+      for (let axis = 0; axis < 3; axis += 1) {
+        corner[k * 3 + axis] = white[v + axis];
+        corner[9 + k * 3 + axis] = pial[v + axis];
+      }
+    }
+    let edge = 0;
+    let depth = 0;
+    for (let k = 0; k < 3; k += 1) {
+      const next = (k + 1) % 3;
+      edge = Math.max(edge, span(corner, k * 3, next * 3), span(corner, 9 + k * 3, 9 + next * 3));
+      depth = Math.max(depth, span(corner, k * 3, 9 + k * 3));
+    }
+    const across = Math.max(1, Math.ceil(edge * 2));
+    const layers = Math.max(1, Math.ceil(depth * 2));
+    for (let layer = 0; layer <= layers; layer += 1) {
+      const t = layer / layers;
+      for (let c = 0; c < 9; c += 1) triangle[c] = (1 - t) * corner[c] + t * corner[9 + c];
+      for (let i = 0; i <= across; i += 1) {
+        for (let j = 0; j <= across - i; j += 1) {
+          const a = i / across;
+          const b = j / across;
+          const c = (across - i - j) / across;
+          visit(a * triangle[0] + b * triangle[3] + c * triangle[6], a * triangle[1] + b * triangle[4] + c * triangle[7], a * triangle[2] + b * triangle[5] + c * triangle[8]);
+        }
+      }
+    }
+  }
+}
+
+// Marks with `value` the voxel whose centre is nearest each ribbon sample (ribbonSamples on
+// the voxel grid). The mask approximates the ribbon: a voxel the ribbon crosses only near a
+// face or corner may stay 0, so it is not a conservative voxelisation.
+export function ribbonVoxelMask(volume, white, pial, faces, mask, value) {
+  const inverse = inverseAffine(volume.affine);
+  const toVoxels = (points) => {
+    const output = new Float64Array(points.length);
+    for (let i = 0; i < points.length; i += 3) output.set(transform(inverse, [points[i], points[i + 1], points[i + 2]]), i);
+    return output;
+  };
+  const [nx, ny, nz] = volume.dims;
+  ribbonSamples(toVoxels(white), toVoxels(pial), faces, (sx, sy, sz) => {
+    const x = roundEven(sx);
+    const y = roundEven(sy);
+    const z = roundEven(sz);
+    if (x >= 0 && y >= 0 && z >= 0 && x < nx && y < ny && z < nz) mask[x + nx * (y + ny * z)] = value;
+  });
+  return mask;
+}
+
 export function patchQc(volume, geometries, patches) {
   const output = new Int16Array(volume.data.length);
   const midMasks = [];
@@ -88,4 +151,12 @@ export function patchQc(volume, geometries, patches) {
   for (const [, mask] of midMasks) for (let i = 0; i < mask.length; i += 1) if (mask[i]) output[i] = 3000;
   for (const [id, mask] of midMasks) normalGlyph(volume, mask, patches[id], output);
   return writeInt16Nifti(volume, output, 'TopoFit patches and normals: white 2400, pial 2700, mid 3000, normal 4095');
+}
+
+// The search region in the cortical ribbon on the source grid: 0 outside, then each
+// hemisphere's `value` (left 1, right 2), the later hemisphere where two meet.
+export function regionMask(volume, hemispheres, description) {
+  const mask = new Uint8Array(volume.data.length);
+  for (const { white, pial, faces, value } of hemispheres) ribbonVoxelMask(volume, white, pial, faces, mask, value);
+  return writeUint8Nifti(volume, mask, description);
 }

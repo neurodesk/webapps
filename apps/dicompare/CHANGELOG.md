@@ -1,5 +1,18 @@
 # dicompare
 
+## 0.15.20261120
+
+### Patch Changes
+
+- 94da230: Remove the personal email address from the app metadata and use the Neurodesk team contact for the Debian package.
+
+## 0.15.20261119
+
+### Patch Changes
+
+- Updated dependencies [3db69e4]
+  - @neurodesk/webapp-components@0.28.1
+
 ## 0.15.20261113
 
 ### Patch Changes
