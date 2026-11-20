@@ -200,7 +200,7 @@ try {
     await page.locator('#maskList .file-remove').waitFor({ state: 'detached' });
     const described = await call('app_describe');
     assert.equal(described.touched, true, 'the press on Remove touched the examination');
-    const { listed, declined } = await answered('run_reconstruct', { waitSeconds: 0 }, 'Decline');
+    const { listed, declined } = await answered('run_reconstruct', { parameters: { echoTimesMs: [4], fieldStrength: 3 }, waitSeconds: 0 }, 'Decline');
     assert.equal(declined, true);
     assert.ok(listed.some(item => item.endsWith(': old-mask.nii.gz')), `the resume dialog names the mask: ${JSON.stringify(listed)}`);
     assert.deepEqual((await call('app_describe')).inputs, {}, 'Decline released the mask');
