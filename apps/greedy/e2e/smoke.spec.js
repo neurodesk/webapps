@@ -94,7 +94,7 @@ test("affine and nonlinear registration align the example T1 with the MNI templa
   await expectBothMethodsAlign(page, pair, 240_000, pair.files);
 });
 
-test("the method selector runs affine plus nonlinear registration", async ({ page }) => {
+test("nonlinear is the default and the method selector reruns affine", async ({ page }) => {
   await page.goto("/");
   await configureExampleFixtures(page);
   await page.locator("[data-neurodesk-example]").selectOption("t1-mni");
@@ -104,10 +104,11 @@ test("the method selector runs affine plus nonlinear registration", async ({ pag
   await expect(page.locator("#method option")).toHaveCount(2);
   await expect(page.locator("#method")).toContainText("Affine · NMI");
   await expect(page.locator("#method")).toContainText("Affine + nonlinear · NMI");
-  await expect(page.locator("#statusText")).toContainText("Registration complete", { timeout: 60_000 });
+  await expect(page.locator("#method")).toHaveValue("deformable");
+  await expect(page.locator("#statusText")).toContainText("Registration complete", { timeout: 240_000 });
   const lockedWhileClearing = await page.evaluate(() => {
     const method = document.getElementById("method");
-    method.value = "deformable";
+    method.value = "affine";
     method.dispatchEvent(new Event("change"));
     return document.getElementById("runButton").disabled;
   });
