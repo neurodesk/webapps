@@ -444,7 +444,7 @@ the request, so the buttons and the focus on Allow stay; Escape, the close
 control and the backdrop decline, before and after a refresh, and none of them
 counts as the person using the page. Requests compare by what they name:
 roles, names, sizes, the checksum a file was verified against or the File
-itself, and the run. After three changes the dialog closes as declined, and
+itself, and the run. On the third change the dialog closes as declined, and
 the tools ask again after Allow at most three times, so an agent cannot keep a
 person answering. A components test enumerates every prompt and fails on
 one that is neither such a consent dialog nor free of state.
@@ -520,12 +520,9 @@ one that is neither such a consent dialog nor free of state.
   not get the held file back, so the examination is ended or touched and a
   touch makes the next run ask to resume, naming the held files, whatever the
   action changed in the page.
-  `node test/page-drop-undo.smoke.mjs` records, for every app with a
-  classified file input, what pick, drop and Undo, and pick, the app's own
-  remove control, drop and Undo leave: the file names shown and in the inputs,
-  each registered viewer's volumes, the files and volumes the app's state
-  object holds, and every other control's value. `--diff` compares two builds;
-  with it the branch was held to leave every app's Undo as on main.
+  The tools change no app's list reporting or Undo: the page drop, the shared
+  file controllers and every app's list handlers are the same source as before
+  WebMCP.
   `node test/webmcp.smoke.mjs` checks every app of the built site at 1440 and
   390 px in Chrome's own WebMCP (it fails without it unless
   `WEBMCP_STAND_IN=1`): the full tool set, `app_describe` with every loadable

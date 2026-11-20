@@ -78,7 +78,7 @@ already started does nothing more, and before it uses its files or the results
 of its latest run again, a dialog names them, with the files and the address
 that run was given, and asks you; declining releases them. A dialog names what
 it asks about as it is when it opens; if that changes before you allow it, the
-dialog shows the change in place and asks again, and after three changes it closes as declined. It then gets that run's report and outputs
+dialog shows the change in place and asks again, and on the third change it closes as declined. It then gets that run's report and outputs
 as the run ended, even if the page shows other results by then. Opening other
 files, picking an example or a handoff releases them at once. It can read what the viewer shows at any time, as you see it. It can
 move and restyle the viewer but cannot capture it or save images from it.

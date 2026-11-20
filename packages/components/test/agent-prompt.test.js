@@ -269,7 +269,7 @@ test('a consent request that keeps changing while it shows closes as declined', 
   let state = 0;
   const asked = createAgentPrompts(document).confirmResume(() => ({ app: 'NiiMath', files: [{ role: 'image', name: `scan-${state}.nii` }], run: null }));
   await tick();
-  for (let change = 1; change <= CONSENT_CHANGES; change += 1) {
+  for (let change = 1; change < CONSENT_CHANGES; change += 1) {
     state = change;
     press(document, 'Allow');
     assert.ok(dialog(document).textContent.includes(`scan-${change}.nii`), 'the refreshed dialog names the new request');
@@ -277,6 +277,6 @@ test('a consent request that keeps changing while it shows closes as declined', 
   }
   state += 1;
   press(document, 'Allow');
-  assert.equal(await asked, null, 'one change more declines');
+  assert.equal(await asked, null, 'the third change declines');
   assert.equal(dialog(document).open, false);
 });

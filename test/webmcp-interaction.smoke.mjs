@@ -392,7 +392,7 @@ try {
         }
         const checked = entry.actions.filter(outcome => CHECKED.has(outcome.result));
         const wrong = entry.actions.filter(outcome => /^(NOT COUNTED|NOT ENDED|RESUME)/.test(outcome.result));
-        assert.deepEqual(wrong, [], `${app.id}: every trusted action touches or ends the examination, one that changes the files shown ends it, and a touch asks to resume`);
+        assert.deepEqual(wrong, [], `${app.id}: every trusted action touches or ends the examination, and a touch asks to resume`);
         const unexplained = entry.actions.filter(outcome => !CHECKED.has(outcome.result) && !expected[`${outcome.kind} ${outcome.name}`]);
         assert.deepEqual(unexplained, [], `${app.id}: every action is performed, or webmcp-interaction-skips.json says why not`);
         if (!checked.length) assert.ok(expected['*'], `${app.id}: no action was performed (${entry.actions.length} found), and webmcp-interaction-skips.json gives no reason under "*"`);

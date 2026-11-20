@@ -88,7 +88,7 @@ export function createAgentPrompts(doc = globalThis.document) {
         }
         if (JSON.stringify(now) === JSON.stringify(shown)) return finish(shown);
         // A request that keeps changing is never allowed: the dialog closes as declined.
-        if (++changes > CONSENT_CHANGES) return finish(null);
+        if (++changes >= CONSENT_CHANGES) return finish(null);
         shown = now;
         named.replaceChildren(...body(shown));
         named.before(notice);
