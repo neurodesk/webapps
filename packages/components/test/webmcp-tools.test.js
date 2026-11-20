@@ -40,8 +40,8 @@ function asPerson(target, event) {
 const hold = (inputs, role, files) => inputs.hold(inputs.turn(), role, files);
 // A consent prompt allowed as it shows: it resolves to the request it named.
 const allowing = request => (typeof request === 'function' ? request() : request);
-// What a consent dialog names, without the revision it carries to tell it is still current.
-const named = ({ revision, ...request }) => request;
+// What a consent dialog shows: its files without the identity that tells files of one name and size apart.
+const named = request => ({ ...request, ...(request.files && { files: request.files.map(({ identity, ...file }) => file) }) });
 const WORKSPACE = '<body><header class="nd-app-bar"><button id="privacy">Privacy</button></header><main><input type="file" id="t1" data-neurodesk-input="image" aria-label="T1 image"><button id="remove">Remove</button><canvas id="viewer"></canvas></main></body>';
 
 function page(t, operation, options = {}) {
@@ -1443,4 +1443,50 @@ test('the resume dialog names the run by what its operation read: its own file r
   click(dom.window, '#viewer');
   await call('runs_get', { runId: denoised.runId });
   assert.deepEqual(resumes[1].run.inputs, [{ role: 'inv1', name: 'inv1.nii', bytes: 1 }, { role: 'store', url: 'https://data.test/brain.ome.zarr' }], 'its file role and the store root the person allowed');
+});
+
+test('the same example loaded again while the resume dialog shows is the same request, and other bytes of one name and size are not', async t => {
+  const holder = {};
+  const shown = [];
+  const { call, inputs, window } = page(t, async () => labels(), {
+    fetchAsset: async () => new TextEncoder().encode('head').buffer,
+    confirmResume: async request => {
+      const state = request();
+      shown.push(state.files.map(file => file.name));
+      // The agent loads the example again, then once holds other bytes under the same name and size.
+      if (shown.length === 1) await holder.call('inputs_load_example', { exampleId: 'head' });
+      if (shown.length === 2) hold(holder.inputs, 'image', [new File(['tail'], 'head.nii')]);
+      return state;
+    },
+  });
+  Object.assign(holder, { call, inputs });
+  await call('inputs_load_example', { exampleId: 'head' });
+  const run = await call('run_run');
+  click(window, '#viewer');
+  assert.equal((await call('runs_get', { runId: run.runId })).report.runId, run.runId);
+  assert.deepEqual(shown, [['head.nii']], 'identical example bytes ask nothing more');
+  click(window, '#viewer');
+  assert.equal((await call('runs_get', { runId: run.runId })).report.runId, run.runId);
+  assert.deepEqual(shown, [['head.nii'], ['head.nii'], ['head.nii']], 'other bytes under the same name are asked again');
+});
+
+test('a resume whose files keep changing between Allow and its use is declined after three asks', async t => {
+  const holder = {};
+  let asked = 0;
+  const { call, inputs, window } = page(t, async () => labels(), {
+    confirmResume: async request => {
+      const state = request();
+      asked += 1;
+      hold(holder.inputs, 'image', [new File([`${asked}`], `scan-${asked}.nii`)]);
+      return state;
+    },
+  });
+  holder.inputs = inputs;
+  hold(inputs, 'image', [new File(['a'], 'original.nii')]);
+  const run = await call('run_run');
+  click(window, '#viewer');
+  const result = await call('runs_get', { runId: run.runId });
+  assert.equal(asked, 3, 'asked three times');
+  assert.equal(result.declined, true, 'the answer Decline gives');
+  assert.deepEqual(inputs.held(), {}, 'the held files are released as on Decline');
 });

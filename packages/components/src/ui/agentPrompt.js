@@ -4,6 +4,8 @@ import { createInfoDialog } from './renderInfoDialog.js';
 
 const TITLE = 'Your AI agent is asking';
 const NOTICE = 'An AI agent you started in this browser sent this request. Closing it declines.';
+/** How often a consent request may change while it is shown before the dialog closes as declined. */
+export const CONSENT_CHANGES = 3;
 
 /**
  * The dialogs through which a browser AI agent asks the person at the page for an answer or for files.
@@ -55,8 +57,7 @@ export function createAgentPrompts(doc = globalThis.document) {
         if (!root.open) finish(null);
       };
       const onAbort = () => finish(null);
-      const render = nodes => dialog.open(TITLE, [createElement('p', { className: 'nd-hint', text: NOTICE, ownerDocument: doc }), ...nodes]);
-      render(content(finish, render));
+      dialog.open(TITLE, [createElement('p', { className: 'nd-hint', text: NOTICE, ownerDocument: doc }), ...content(finish)]);
       root.addEventListener('close', onClose);
       signal?.addEventListener('abort', onAbort, { once: true });
     });
@@ -72,25 +73,27 @@ export function createAgentPrompts(doc = globalThis.document) {
    */
   function consent(request, body, signal) {
     const current = typeof request === 'function' ? request : () => request;
-    return show((finish, render) => {
-      const ask = (shown, changed) => {
-        const allow = () => {
-          let now;
-          try {
-            now = current();
-          } catch {
-            return finish(null);
-          }
-          if (JSON.stringify(now) === JSON.stringify(shown)) finish(shown);
-          else render(ask(now, true));
-        };
-        return [
-          ...(changed ? [createElement('p', { className: 'nd-message warning', role: 'status', text: 'This changed since it was shown. Check it again.', ownerDocument: doc })] : []),
-          ...body(shown),
-          actions(finish, button('Allow', 'nd-btn-primary', allow)),
-        ];
+    return show(finish => {
+      let shown = current();
+      let changes = 0;
+      const notice = createElement('p', { className: 'nd-message warning', role: 'status', text: 'This changed since it was shown. Check it again.', ownerDocument: doc });
+      const named = createElement('div', { ownerDocument: doc }, body(shown));
+      // The request is replaced in place, so the buttons and the focus on them stay where they are.
+      const allow = () => {
+        let now;
+        try {
+          now = current();
+        } catch {
+          return finish(null);
+        }
+        if (JSON.stringify(now) === JSON.stringify(shown)) return finish(shown);
+        // A request that keeps changing is never allowed: the dialog closes as declined.
+        if (++changes > CONSENT_CHANGES) return finish(null);
+        shown = now;
+        named.replaceChildren(...body(shown));
+        named.before(notice);
       };
-      return ask(current(), false);
+      return [named, actions(finish, button('Allow', 'nd-btn-primary', allow))];
     }, signal);
   }
 

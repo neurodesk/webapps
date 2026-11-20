@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { JSDOM } from 'jsdom';
-import { createAgentPrompts } from '../src/ui/agentPrompt.js';
+import { CONSENT_CHANGES, createAgentPrompts } from '../src/ui/agentPrompt.js';
 
 function page(url = 'about:blank') {
   const { window } = new JSDOM('<!doctype html><body></body>', { url });
@@ -263,3 +263,20 @@ for (const [name, { states: [first, second], names }] of Object.entries(CONSENT)
     assert.deepEqual(await asked, first, `${name} resolves to the state the person allowed`);
   });
 }
+
+test('a consent request that keeps changing while it shows closes as declined', async () => {
+  const document = page();
+  let state = 0;
+  const asked = createAgentPrompts(document).confirmResume(() => ({ app: 'NiiMath', files: [{ role: 'image', name: `scan-${state}.nii` }], run: null }));
+  await tick();
+  for (let change = 1; change <= CONSENT_CHANGES; change += 1) {
+    state = change;
+    press(document, 'Allow');
+    assert.ok(dialog(document).textContent.includes(`scan-${change}.nii`), 'the refreshed dialog names the new request');
+    assert.equal(dialog(document).querySelectorAll('.nd-message.warning').length, 1);
+  }
+  state += 1;
+  press(document, 'Allow');
+  assert.equal(await asked, null, 'one change more declines');
+  assert.equal(dialog(document).open, false);
+});

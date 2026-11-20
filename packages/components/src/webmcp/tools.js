@@ -32,6 +32,9 @@ const CHANGED = 'The person used the page while this call was going, so its resu
 const TOUCHED = 'The person has used the page since your last step. The next call that uses the held files or this run asks them whether you may continue.';
 const OTHER_RESULTS = 'The page now holds other results than the ones this run ended with, so nothing was saved. Run it again if they still want it.';
 const sameJson = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+// A consent request that changed between Allow and its use is asked again, this many times at most;
+// after that it counts as declined, so an agent cannot keep a person answering.
+const CONSENT_ASKS = 3;
 const describeFiles = files => files.map(file => ({ name: file.name, bytes: file.size }));
 
 /** The JSON Schema of one contract parameter, accepting what operationParameterSchema accepts. */
@@ -238,10 +241,10 @@ export function webMcpTools({ contract, inputs, ...pageIo }) {
     if (pending?.from !== from) {
       const request = () => ({ app: contract.title, ...inputs.resumable() });
       const decide = async () => {
-        for (;;) {
+        for (let asked = 0; ; asked += 1) {
           const { files, run } = inputs.resumable();
           if (!files.length && !run) break;
-          const allowed = await call.confirmResume(request, { signal: from.controller.signal });
+          const allowed = asked < CONSENT_ASKS ? await call.confirmResume(request, { signal: from.controller.signal }) : null;
           if (!allowed) {
             inputs.release(from);
             return { allowed: false, turn: inputs.turn() };
@@ -345,18 +348,20 @@ export function webMcpTools({ contract, inputs, ...pageIo }) {
     }, ['role', 'input']), {},
     async ({ role, input }, call) => {
       // The dialog names the entry as it is when it shows; the files held are the ones it named.
+      const named = files => files.map(file => ({ name: file.name, bytes: file.size, identity: inputs.identity(file) }));
       const request = () => {
         const entry = inputs.pageEntry(input);
-        return { app: contract.title, label: entry.label, files: describeFiles(entry.files), revision: entry.revision };
+        return { app: contract.title, label: entry.label, files: named(entry.files) };
       };
-      for (;;) {
+      for (let asked = 0; asked < CONSENT_ASKS; asked += 1) {
         const allowed = await call.confirmFiles(request, { signal: call.waits });
         if (!allowed) return { declined: true };
         const entry = inputs.pageEntry(input);
-        if (entry.revision !== allowed.revision) continue;
+        if (!sameJson(named(entry.files), allowed.files)) continue;
         inputs.hold(call.from, role, entry.files);
         return { role, files: describeFiles(entry.files) };
       }
+      return { declined: true };
     });
 
   tool('inputs_load_example', 'Load an example',
@@ -369,7 +374,9 @@ export function webMcpTools({ contract, inputs, ...pageIo }) {
       const files = new Map();
       for (const asset of entry.files) {
         const bytes = await call.fetchAsset({ url: asset.url, integrity: { bytes: asset.bytes, sha256: asset.sha256 } }, { signal: call.waits, retries: 4 });
-        files.set(asset.role, [...(files.get(asset.role) ?? []), new File([bytes], asset.name)]);
+        const file = new File([bytes], asset.name);
+        if (asset.sha256) inputs.verified(file, `sha256:${asset.sha256.toLowerCase()}`);
+        files.set(asset.role, [...(files.get(asset.role) ?? []), file]);
       }
       call.signal?.throwIfAborted();
       inputs.replace(call.from, files);

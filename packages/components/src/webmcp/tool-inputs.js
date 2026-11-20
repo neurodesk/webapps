@@ -120,9 +120,16 @@ export function createToolInputs({ doc, automation, isPerson = event => event.is
   const received = new Map();
   let pageExample = null;
   let loads = 0;
-  // Count the changes of what a consent dialog names: the held files and runs, and the page's entries.
-  let revision = 0;
-  let pageRevision = 0;
+  // What a consent dialog names a file by beyond its name and size: the checksum it was verified
+  // against, else the File itself, so identical bytes loaded again are the same request.
+  const digests = new WeakMap();
+  const identities = new WeakMap();
+  let identityCount = 0;
+  const identity = file => {
+    if (digests.has(file)) return digests.get(file);
+    if (!identities.has(file)) identities.set(file, `file-${++identityCount}`);
+    return identities.get(file);
+  };
 
   const classified = () => [
     ...[...doc.querySelectorAll(CLASSIFIED)].filter(isClassified),
@@ -145,7 +152,6 @@ export function createToolInputs({ doc, automation, isPerson = event => event.is
 
   function end() {
     examination = { id: examination.id + 1, held: new Map(), touched: false };
-    revision += 1;
     nextTurn();
   }
 
@@ -154,12 +160,10 @@ export function createToolInputs({ doc, automation, isPerson = event => event.is
     pageFiles.set(input, files);
     received.clear();
     loads += 1;
-    pageRevision += 1;
   }
 
   function receive(name, entry) {
     received.set(name, entry);
-    pageRevision += 1;
   }
 
   // Files the page held before this module loaded count as received now.
@@ -344,16 +348,16 @@ export function createToolInputs({ doc, automation, isPerson = event => event.is
     },
     held: () => Object.fromEntries([...examination.held].map(([role, files]) => [role, describe(files)])),
     /**
-     * What letting the agent continue would hand back: the held files by role, and the examination's
-     * latest run with what it ran on. `revision` changes whenever either does, even to files of the
-     * same names, so a dialog that named it can tell it is still what it named.
+     * What letting the agent continue would hand back: the held files by role, each with its
+     * `identity`, and the examination's latest run with what it ran on. Two answers are equal exactly
+     * when they hand back the same, so a dialog that named one can tell it is still what it named.
      */
     resumable() {
-      const files = [...examination.held].flatMap(([role, held]) => held.map(file => ({ role, name: file.name, bytes: file.size })));
+      const files = [...examination.held].flatMap(([role, held]) => held.map(file => ({ role, name: file.name, bytes: file.size, identity: identity(file) })));
       const latest = [...runs].reverse().find(([, run]) => run.examination === examination.id);
-      if (!latest) return { files, run: null, revision };
+      if (!latest) return { files, run: null };
       const [runId, { operation, startedAt, inputs }] = latest;
-      return { files, run: { runId, operation, startedAt, inputs: structuredClone(inputs) }, revision };
+      return { files, run: { runId, operation, startedAt, inputs: structuredClone(inputs) } };
     },
     /** The person let the agent continue with what `resumable` named: the held files and the latest run serve its calls again; the examination's earlier runs stay withheld. */
     resume(from) {
@@ -372,30 +376,33 @@ export function createToolInputs({ doc, automation, isPerson = event => event.is
     pageMayHoldOtherInputs: () => unseen,
     /** The example the person picked with the page's own example selector, until anything changes the page. */
     pageExample: () => pageExample,
-    /** The files a page entry lists, its label, and the revision of the page's entries they were read at. */
+    /** The files a page entry lists and its label. */
     pageEntry(inputKey) {
       const entry = entries().find(candidate => candidate.input === inputKey);
       if (!entry) throw new Error(`No files are loaded in the page input ${inputKey}`);
-      return { label: entry.label, files: entry.files, revision: pageRevision };
+      return { label: entry.label, files: entry.files };
+    },
+    /** The file's identity, as `resumable` gives it: the checksum it was `verified` against, else the File itself. */
+    identity,
+    /** Records that the file's bytes are the ones `sha256` names. */
+    verified(file, sha256) {
+      digests.set(file, sha256);
     },
     /** Forgets the page's entries and example: a run or viewer load the tools start may change what the page shows. */
     toolLoaded() {
       pageFiles = new WeakMap();
       received.clear();
       pageExample = null;
-      pageRevision += 1;
     },
     /** Holds `files` for one role, beside the roles already held, if the turn is still `from`. */
     hold(from, role, files) {
       bound(from);
       examination.held.set(role, files);
-      revision += 1;
     },
     /** Holds `files` (role to files) as the whole held set, if the turn is still `from`. */
     replace(from, files) {
       bound(from);
       examination.held = new Map(files);
-      revision += 1;
     },
     /** Hands the held files for every file role to the app's automation for the next run, which takes them; a role the tools do not hold gets none. */
     async stage(from, roles = [...examination.held.keys()]) {
@@ -414,7 +421,6 @@ export function createToolInputs({ doc, automation, isPerson = event => event.is
       const files = roles.flatMap(role => (from.examination.held.get(role) ?? []).map(file => ({ role, name: file.name, bytes: file.size })));
       runs.set(runId, { examination: from.examination.id, operation, startedAt: Date.now(), inputs: [...files, ...addresses.map(({ role, url }) => ({ role, url }))], settled: null });
       if (runs.size > RUNS_KEPT) runs.delete(runs.keys().next().value);
-      revision += 1;
     },
     /** Records the snapshot a run the tools started ended with, the first time the tools see it ended. */
     settle(snapshot) {
