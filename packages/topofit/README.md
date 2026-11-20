@@ -224,6 +224,9 @@ is the affine the scan was read with; earlier releases copied NIfTI-2 header byt
 a NIfTI-1 layout. Known limitation: a NIfTI-2 scan is read through its srows whatever
 its codes say, as nifti-reader-js and NiiVue read it, so one that carries its
 orientation only in the qform is processed and shown on the srow grid.
+The viewer does not scale a scan's spatial units, so for a scan stored in micrometres or
+metres the surfaces, and for NIfTI-2 also the mask and QC images, are in millimetres
+while the anatomy is drawn in the stored unit; the files themselves are correct.
 With `'cortex'` or an ROI, the outputs are those of a search without the option. `pack_cortex_regions.py` rebuilds the asset, and
 `validation/region-check.mjs` checks the mapping on a real reconstruction
 (`validation/surface-analysis.md`).
