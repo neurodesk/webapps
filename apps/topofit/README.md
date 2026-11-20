@@ -93,7 +93,10 @@ in its atlas colours, the other areas faded towards grey, the hemisphere's patch
 white, with the crosshair on the region and the 3D camera facing it. **View** on
 the region mask (`topofit_region_mask.nii`) overlays the region, filled between
 the white and pial surfaces on the source grid, on the original image's slices:
-left 1 in blue, right 2 in orange, named in the location readout. NiiVue 1.0.0-rc.26
+left 1 in blue, right 2 in orange, named in the location readout. The parcellation
+mesh lies on the mid-surface, so it is hidden whenever another result, a surface
+checkbox or the source image takes over; a parcellation the viewer cannot draw is
+reported in the viewer instead of being labelled as shown. NiiVue 1.0.0-rc.26
 has no FreeSurfer annotation layer reader (its layers read curv, SMP, STC, mesh
 scalars and volumes), so the app draws the parcellation as an mz3 mesh with
 per-vertex colours built from the annotation.

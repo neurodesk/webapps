@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { LOBES, REGIONS, REGION_ATLASES, readRegionAtlas, selectRegion } from '../src/cortex-regions.js';
@@ -7,76 +8,12 @@ import { runSurfaceAnalysis } from '../src/pipeline.js';
 import { readAnnotation as readParcellation, writeAnnotation } from '../src/results.js';
 import { REGION_MASK_VALUES, analyzeSurfaces } from '../src/surface-analysis.js';
 import { writeInt16Nifti } from '../src/qc.js';
+import { fixture } from './region-fixture.js';
+import { readVolume } from '../src/volume.js';
 
 const manifest = JSON.parse(await readFile(new URL('../cortex-regions.manifest.json', import.meta.url)));
 const labelNames = (atlas, values) => values.map((value) => REGION_ATLASES[atlas].labels[value].name);
 const value = (atlas, name) => REGION_ATLASES[atlas].labels.find((label) => label.name === name).value;
-
-function source(dims) {
-  const header = new ArrayBuffer(348);
-  const view = new DataView(header);
-  view.setInt32(0, 348, true);
-  view.setInt16(40, 3, true);
-  for (let i = 1; i < 4; i += 1) {
-    view.setInt16(40 + i * 2, dims[i - 1], true);
-    view.setFloat32(76 + i * 4, 1, true);
-  }
-  view.setInt16(254, 1, true);
-  for (const offset of [280, 300, 320]) view.setFloat32(offset, 1, true);
-  const affine = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
-  return { dims, affine, data: new Float32Array(dims[0] * dims[1] * dims[2]), source: header, header: { littleEndian: true } };
-}
-
-function plane(size) {
-  const white = [];
-  const faces = [];
-  for (let y = 0; y < size; y += 1) {
-    for (let x = 0; x < size; x += 1) {
-      white.push(x, y, 0);
-      const a = x + y * size;
-      if (x + 1 < size && y + 1 < size) faces.push(a, a + 1, a + size, a + 1, a + size + 1, a + size);
-    }
-  }
-  const pial = Float64Array.from(white, (v, i) => i % 3 === 2 ? v + 2 : v);
-  return { white: Float64Array.from(white), pial, faces: Int32Array.from(faces) };
-}
-
-// A flat 31 x 31 mm sheet in both hemispheres. Vertices with x < 15 register to the
-// first atlas vertex, the rest to the second; both atlas vertices are cortex.
-function fixture(labels = {}) {
-  const { white, pial, faces } = plane(31);
-  const registration = Float64Array.from(white, (_, i) => {
-    const x = white[i - i % 3];
-    return (i % 3) === (x < 15 ? 0 : 1) ? 100 : 0;
-  });
-  const vertices = {};
-  const triangles = {};
-  for (const hemisphere of ['lh', 'rh']) {
-    vertices[`${hemisphere}.white`] = white;
-    vertices[`${hemisphere}.pial`] = pial;
-    vertices[`${hemisphere}.registration`] = registration;
-    triangles[hemisphere] = faces;
-  }
-  const atlas = new ArrayBuffer(4 + 2 * 14);
-  const view = new DataView(atlas);
-  view.setUint32(0, 2, true);
-  view.setFloat32(4, 1, true);
-  view.setFloat32(20, 1, true);
-  new Uint8Array(atlas).set([1, 1, 1, 1], 28);
-  const regions = new Uint8Array(4 + 2 * 4);
-  new DataView(regions.buffer).setUint32(0, 2, true);
-  const layout = { wang2015: { lh: [1, 0], rh: [0, 0] }, aparc: { lh: [0, 0], rh: [0, 0] }, ...labels };
-  regions.set([...layout.wang2015.lh, ...layout.wang2015.rh, ...layout.aparc.lh, ...layout.aparc.rh], 4);
-  return {
-    source: source([32, 32, 4]),
-    vertices,
-    faces: triangles,
-    estimateNormals: false,
-    patches: { radius: 5, count: 3, hemisphere: 'lh' },
-    loadAtlas: async () => atlas.slice(0),
-    loadRegions: async () => regions.buffer.slice(0),
-  };
-}
 
 function readAnnotation(buffer) {
   const view = new DataView(buffer);
@@ -269,13 +206,142 @@ test('the region mask fills the ribbon of each searched hemisphere on the source
   assert.deepEqual(new Uint8Array(again.files.find(({ id }) => id === 'region-mask').bytes), new Uint8Array(file.bytes));
 });
 
-test('a named region keeps every other output of the search and adds only the mask', async () => {
-  const data = fixture();
-  const result = await analyzeSurfaces({ ...data, region: 'wang2015:V1' });
-  const patches = Object.keys(result.analysis.flat_patches).map((id) => `${id}.mid.white`);
-  assert.ok(patches.length > 0);
-  assert.deepEqual(result.files.map(({ name }) => name), [...patches, 'lh.wang2015.annot', 'topofit_patch_coordinates_ras.csv', 'topofit_patch_geometry.json', 'topofit_patch_qc.nii', 'topofit_region_mask.nii', 'topofit_surface_analysis.json']);
-  assert.equal(JSON.stringify(Object.keys(result.analysis.flat_patch_definition)), JSON.stringify(['schema_version', 'radius', 'count', 'hemisphere', 'maxRms', 'minAreaFraction', 'cortex_mask', 'medial_wall_margin_mm', 'min_ribbon_separation_mm', 'min_normal_coherence', 'region', 'region_atlas']));
+// SHA-256 of every output of the fixture below, recorded from @neurodesk/topofit at 23c3cae9f,
+// the commit before the region mask.
+const BASE_SHA256 = {
+  'cortex': {
+    'lh.mid.normals.csv': 'e4a8ffea9de40729354c569e011c98bb4b6e13f5ae48e422a4f2ecf531c1def7',
+    'LH01.mid.white': 'fbdbb7d3270ffe3e34b0cc52cda76acfe73cec13d7e6d72211c29a2106cd50b7',
+    'LH02.mid.white': '68f5366b6b5f5a7afcadd719b58d69efb20e9107ddd0eb229cceedd088d12029',
+    'LH03.mid.white': '359d372bff16a133a31a2a42cdcf74b290500b1d13c4a0f2049c5c251f9df057',
+    'rh.mid.normals.csv': 'e4a8ffea9de40729354c569e011c98bb4b6e13f5ae48e422a4f2ecf531c1def7',
+    'RH01.mid.white': 'fbdbb7d3270ffe3e34b0cc52cda76acfe73cec13d7e6d72211c29a2106cd50b7',
+    'RH02.mid.white': '68f5366b6b5f5a7afcadd719b58d69efb20e9107ddd0eb229cceedd088d12029',
+    'RH03.mid.white': '359d372bff16a133a31a2a42cdcf74b290500b1d13c4a0f2049c5c251f9df057',
+    'topofit_patch_coordinates_ras.csv': '5623686f0b28287838041602d209d1861c22bf2cfc26ce91656e374855d7a220',
+    'topofit_patch_geometry.json': '0f3c8713806b4b6546231b2e6d26d2883ba948a94b94ac4fa1600801562cefbc',
+    'topofit_patch_qc.nii': '0edd46cdba4b26fc563512cbe96f0104e74d3e6e5d79eda2c3d124f72ad60fb2',
+    'topofit_surface_analysis.json': '675cfd0c79cc9736a94aa044f3038e5a4342acd00027519f032dfe959eb778a1',
+    'topofit_manifest.json': '333573daea2381d9e9a0b1ceaba0897bb3b9480f8e30bda4177671cda1dac336',
+  },
+  'roi': {
+    'lh.mid.normals.csv': 'e4a8ffea9de40729354c569e011c98bb4b6e13f5ae48e422a4f2ecf531c1def7',
+    'LH01.mid.white': 'fbdbb7d3270ffe3e34b0cc52cda76acfe73cec13d7e6d72211c29a2106cd50b7',
+    'LH02.mid.white': '8459dc90bb0109fed69d6c9f3cbff8c1ae63ee07a91ed726a519d69c9480c59d',
+    'LH03.mid.white': '0728bde50d07efbb031a12d542fe99de8aa0575484447ae641bf78fb3362ff1f',
+    'rh.mid.normals.csv': 'e4a8ffea9de40729354c569e011c98bb4b6e13f5ae48e422a4f2ecf531c1def7',
+    'RH01.mid.white': 'fbdbb7d3270ffe3e34b0cc52cda76acfe73cec13d7e6d72211c29a2106cd50b7',
+    'RH02.mid.white': '8459dc90bb0109fed69d6c9f3cbff8c1ae63ee07a91ed726a519d69c9480c59d',
+    'RH03.mid.white': '0728bde50d07efbb031a12d542fe99de8aa0575484447ae641bf78fb3362ff1f',
+    'topofit_patch_coordinates_ras.csv': 'e0ec3f0c9079c99717d92be15e5009b7170e6a3547a968580e26dc291c53b77f',
+    'topofit_patch_geometry.json': '8eea2576998e71a2b5f25289c8cb2ac52d320d4fe7f0e477c6a3e5586aa3656b',
+    'topofit_patch_qc.nii': 'bf2f8daf356f083de34130f551b6c5b86acf6961124d44ef7bc74976f769bbda',
+    'topofit_surface_analysis.json': 'ef0c2eea7549f0f7ec9dd439449205aa52b603f527064db73763ff1e8fb43f99',
+    'topofit_manifest.json': 'fa2a82f6fcf3e2608ed8bb0577c967691a2eb7ba5861de4085c17dc7f82576fd',
+  },
+  'wang2015:V1': {
+    'lh.mid.normals.csv': 'e4a8ffea9de40729354c569e011c98bb4b6e13f5ae48e422a4f2ecf531c1def7',
+    'LH01.mid.white': 'fbdbb7d3270ffe3e34b0cc52cda76acfe73cec13d7e6d72211c29a2106cd50b7',
+    'LH02.mid.white': '0a76d884bb18eee96bc76255b3fd42e4549ce96be2f75cb02c982759113e3f09',
+    'LH03.mid.white': '6be4872ed1b8ccfa4290dcad11238c5c80a42490a5321832b80296c0a2c6eb97',
+    'lh.wang2015.annot': 'c2f34a93f406b100b6206ee4512fbae88d869d2e8587b474f7af7f8481827a51',
+    'rh.mid.normals.csv': 'e4a8ffea9de40729354c569e011c98bb4b6e13f5ae48e422a4f2ecf531c1def7',
+    'RH01.mid.white': '1910494e74b27da562a7c8a5b123ae797fb7c0b902c58067fd60833ac60e1439',
+    'RH02.mid.white': '05c3ba39a4eff7d33686aa16b2ee2e2539b32dbc68d4e9b84079c5653c1edf17',
+    'RH03.mid.white': '7ec1b0175f9ae3c9ad7bec09dee69546dc44826b3120f1013b9f0a334fa2f119',
+    'rh.wang2015.annot': '674a5e5e2d1215740ccedc40e25f3eabb5a81628adf30708ccf16f98609ef0bf',
+    'topofit_patch_coordinates_ras.csv': '961826c337be19e19b4ca561d8d8b012f81c38013b6ac7090575912e322a3c3c',
+    'topofit_patch_geometry.json': 'b5a738a821ea615cd414399e337d3348ba43dc835ee130c127d9e69ac6d54e53',
+    'topofit_patch_qc.nii': '4c78e17a1e84a8a01e1bd80495ad046ed1216e4c2d2bdb87895140dc428cd6a7',
+    'topofit_surface_analysis.json': '09abdf9bf5eb673ce562c90329188076ab2c44c081a282cbadf69f498420c1f1',
+    'topofit_manifest.json': 'fb359e57ff32539d110381cb98fcf8439f238744d5dea576485c57416c48a94a',
+  },
+};
+
+async function compatibilityRun(extra) {
+  const data = fixture({ wang2015: { lh: [1, 0], rh: [0, 2] } });
+  const length = data.source.data.length;
+  const buffer = writeInt16Nifti(data.source, Int16Array.from({ length }, (_, i) => i % 97), 'scan');
+  const roiBuffer = writeInt16Nifti(data.source, Int16Array.from({ length }, (_, i) => (i % 32) < 20 ? 1 : 0), 'roi');
+  const result = await runSurfaceAnalysis({
+    buffer,
+    surfaces: { vertices: data.vertices, faces: data.faces },
+    provenance: { runtime: {}, outputSha256: {} },
+    estimateNormals: true,
+    patches: { radius: 5, count: 3, hemisphere: 'both' },
+    loadAtlas: data.loadAtlas,
+    loadRegions: data.loadRegions,
+    cortexAtlasSha256: 'atlas',
+    cortexRegionsSha256: 'regions',
+    ...(extra.roi ? { roiBuffer } : {}),
+    ...(extra.region ? { region: extra.region } : {}),
+  });
+  return result.files;
+}
+const sha256 = (bytes) => createHash('sha256').update(new Uint8Array(bytes)).digest('hex');
+
+test('whole-cortex and ROI searches write exactly the files and bytes of the previous release', async () => {
+  for (const [name, extra] of [['cortex', {}], ['roi', { roi: true }]]) {
+    const files = await compatibilityRun(extra);
+    assert.deepEqual(Object.fromEntries(files.map((file) => [file.name, sha256(file.bytes)])), BASE_SHA256[name], name);
+  }
+});
+
+test('a named region adds only the mask, and the manifest only its hash', async () => {
+  const files = await compatibilityRun({ region: 'wang2015:V1' });
+  const hashes = Object.fromEntries(files.map((file) => [file.name, sha256(file.bytes)]));
+  const mask = files.find(({ id }) => id === 'region-mask');
+  assert.equal(mask.name, 'topofit_region_mask.nii');
+  const { 'topofit_manifest.json': manifestHash, ...previous } = BASE_SHA256['wang2015:V1'];
+  for (const [name, hash] of Object.entries(previous)) assert.equal(hashes[name], hash, name);
+  assert.deepEqual(Object.keys(hashes).sort(), [...Object.keys(BASE_SHA256['wang2015:V1']), mask.name].sort());
+  const manifestFile = files.find(({ name }) => name === 'topofit_manifest.json');
+  const written = new TextDecoder().decode(manifestFile.bytes);
+  const provenance = JSON.parse(written);
+  assert.equal(provenance.outputSha256[mask.name], hashes[mask.name]);
+  delete provenance.outputSha256[mask.name];
+  assert.equal(sha256(new TextEncoder().encode(`${JSON.stringify(provenance, null, 2)}
+`)), manifestHash);
+});
+
+// A NIfTI-2 scan of the fixture's grid with a translated, scaled sform.
+function nifti2Source(dims, srow) {
+  const count = dims[0] * dims[1] * dims[2];
+  const buffer = new ArrayBuffer(544 + count * 4);
+  const view = new DataView(buffer);
+  view.setInt32(0, 540, true);
+  new Uint8Array(buffer).set([110, 43, 50, 0, 13, 10, 26, 10], 4);
+  view.setInt16(12, 16, true);
+  view.setInt16(14, 32, true);
+  view.setBigInt64(16, 3n, true);
+  for (let i = 1; i < 8; i += 1) view.setBigInt64(16 + i * 8, BigInt(dims[i - 1] ?? 1), true);
+  srow.forEach((row, axis) => view.setFloat64(112 + axis * 8, row[axis], true));
+  view.setBigInt64(168, 544n, true);
+  view.setFloat64(176, 1, true);
+  view.setInt32(348, 1, true);
+  srow.forEach((row, axis) => row.forEach((value, column) => view.setFloat64(400 + (axis * 4 + column) * 8, value, true)));
+  view.setInt32(500, 2, true);
+  return readVolume(buffer);
+}
+
+test('the region mask and QC images keep a NIfTI-2 source grid in a NIfTI-1 header', async () => {
+  const data = fixture({ wang2015: { lh: [1, 0], rh: [0, 2] } });
+  const options = { ...data, patches: { ...data.patches, hemisphere: 'both' }, region: 'wang2015:V1' };
+  const identity = await analyzeSurfaces(options);
+  const scan = nifti2Source([32, 32, 4], [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]]);
+  const result = await analyzeSurfaces({ ...options, source: scan });
+  for (const id of ['region-mask', 'patch-qc']) {
+    const written = result.files.find((file) => file.id === id);
+    assert.equal(new DataView(written.bytes).getInt32(0, true), 348, id);
+    const volume = readVolume(written.bytes);
+    assert.deepEqual(volume.dims, [32, 32, 4], id);
+    assert.deepEqual(volume.affine, data.source.affine, id);
+    assert.deepEqual(volume.data, readVolume(identity.files.find((file) => file.id === id).bytes).data, id);
+  }
+  const oblique = nifti2Source([5, 6, 7], [[2, 0, 0, -5], [0, 2.5, 0.5, -7], [0, 0, 3, -9]]);
+  const header = readVolume(writeInt16Nifti(oblique, new Int16Array(210), 'oblique'));
+  assert.deepEqual(header.dims, [5, 6, 7]);
+  assert.deepEqual(header.affine, oblique.affine);
 });
 
 test('a parcellation reads back as label values with its colour table', () => {

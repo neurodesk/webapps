@@ -42,9 +42,12 @@ function scan() {
   return { name: 'scan.nii', mimeType: 'application/nifti', buffer };
 }
 
+// `analysisResult` may be a list, one result per reconstruction run (the last repeats).
 // `surfaces` replaces the fixture tetrahedra in the worker's result (not the surface files),
-// for views that need the analysed geometry.
-async function deliverSurfaces(page, analysisResult = { files: [], analysis: null }, surfaces = null) {
+// for views that need the analysed geometry. With `analysisWorker`, Run surface analysis
+// also returns the next result instead of running the real analysis worker.
+async function deliverSurfaces(page, analysisResult = { files: [], analysis: null }, surfaces = null, { analysisWorker = false } = {}) {
+  const analyses = [analysisResult].flat();
   const vertices = {};
   const faces = {};
   for (const side of ['lh', 'rh']) {
@@ -54,17 +57,24 @@ async function deliverSurfaces(page, analysisResult = { files: [], analysis: nul
     faces[side] = Int32Array.from([0, 2, 1, 0, 1, 3, 0, 3, 2, 1, 2, 3]);
   }
   const surfaceFiles = writeSurfaceFiles(vertices, faces);
-  await page.addInitScript(({ surfaceFiles, qc, analysisFiles, analysis, surfaces }) => {
+  await page.addInitScript(({ surfaceFiles, qc, analyses, surfaces, analysisWorker }) => {
     const NativeWorker = window.Worker;
     window.Worker = class extends NativeWorker {
       constructor(url, options) {
         super(url, options);
         this.fixture = String(url).includes('inference-worker');
+        this.analysisFixture = analysisWorker && String(url).includes('analysis-worker');
       }
       postMessage(job, ...rest) {
-        if (!this.fixture) return super.postMessage(job, ...rest);
+        if (!this.fixture && !this.analysisFixture) return super.postMessage(job, ...rest);
         window.lastTopofitJob = job;
         window.reconstructionRuns = (window.reconstructionRuns || 0) + 1;
+        const { analysis, files: analysisFiles } = analyses[Math.min(window.reconstructionRuns, analyses.length) - 1];
+        if (this.analysisFixture) {
+          const files = analysisFiles.map((file) => ({ ...file, bytes: Uint8Array.from(file.bytes).buffer }));
+          setTimeout(() => this.onmessage({ data: { type: 'result', files, provenance: { surfaceAnalysis: analysis, runtime: {}, outputSha256: {} }, elapsedSeconds: 1 } }));
+          return;
+        }
         for (let i = 0; i < 100; i += 1) this.onmessage({ data: { type: 'progress', value: i / 100, message: 'Loading topofit-t1w-1mm-white-order-6.onnx…' } });
         const files = surfaceFiles.map((file) => ({ ...file, bytes: Uint8Array.from(file.bytes).buffer }));
         files.push({ id: 'qc', name: 'qc.nii', mediaType: 'application/nifti', bytes: Uint8Array.from(qc).buffer });
@@ -87,8 +97,8 @@ async function deliverSurfaces(page, analysisResult = { files: [], analysis: nul
   }, {
     surfaceFiles: surfaceFiles.map((file) => ({ ...file, bytes: Array.from(new Uint8Array(file.bytes)) })),
     qc: Array.from(scan().buffer),
-    analysis: analysisResult.analysis,
-    analysisFiles: analysisResult.files.map((file) => ({ ...file, bytes: Array.from(new Uint8Array(file.bytes)) })),
+    analysisWorker,
+    analyses: analyses.map(({ analysis, files }) => ({ analysis, files: files.map((file) => ({ ...file, bytes: Array.from(new Uint8Array(file.bytes)) })) })),
     surfaces: surfaces && {
       vertices: Object.fromEntries(Object.entries(surfaces.vertices).map(([name, values]) => [name, Array.from(values)])),
       faces: Object.fromEntries(Object.entries(surfaces.faces).map(([name, values]) => [name, Array.from(values)])),
@@ -99,7 +109,7 @@ async function deliverSurfaces(page, analysisResult = { files: [], analysis: nul
   await expect(page.locator('#runButton')).toBeEnabled();
   await page.locator('#runButton').click();
   await expect(page.locator('#outputSection')).toHaveAttribute('open', '');
-  await expect(page.locator('#imageLabel')).toContainText(analysisResult.analysis ? 'PATCHES' : 'TOPOFIT QC', { timeout: 30_000 });
+  await expect(page.locator('#imageLabel')).toContainText(analyses[0].analysis ? 'PATCHES' : 'TOPOFIT QC', { timeout: 30_000 });
   return surfaceFiles;
 }
 
@@ -450,8 +460,9 @@ test('computed patches, local normals and QC can be viewed and downloaded', asyn
   await expect(page.locator('#patchCenter')).toHaveValue('');
 });
 
-test('a named search region lists atlas groups, reaches the worker and shows its parcellation and mask', async ({ page }, testInfo) => {
-  test.setTimeout(90_000);
+// A 14 x 14 mm sheet in both hemispheres whose left vertices all map to Wang V1v, searched
+// for `region` in the left hemisphere.
+async function regionAnalysis(region) {
   const white = [];
   const faces = [];
   for (let y = 0; y < 14; y += 1) {
@@ -479,12 +490,39 @@ test('a named search region lists atlas groups, reaches the worker and shows its
     vertices,
     faces: triangles,
     patches: { hemisphere: 'lh', count: 1 },
-    region: 'wang2015:V1',
+    region,
     loadAtlas: async () => atlas,
     loadRegions: async () => regionAtlas.buffer.slice(0),
   });
+  return { result, surfaces: { vertices, faces: triangles } };
+}
+
+const dispatch = (page, command, request = {}) => page.evaluate(({ command, request }) => globalThis.neurodeskAutomation.dispatch(command, request), { command, request });
+const viewerMeshes = async (page) => (await dispatch(page, 'viewers.niivue', { viewerId: 'image', method: 'list_meshes' })).result.meshes;
+const meshOpacity = async (page, name) => (await viewerMeshes(page)).find((mesh) => mesh.name === name)?.opacity;
+
+// Pixels of the render view whose red outweighs green as V1v's full atlas colour does
+// (230, 25, 75), and not as its faded colour outside a region (182, 100, 120) or as the
+// pure red crosshair (a few blended edge pixels aside), in the middle of the canvas, away from the magenta orientation cube.
+async function atlasRedPixels(page) {
+  const canvas = await page.locator('#gl1').boundingBox();
+  const screenshot = await page.screenshot({ clip: { x: canvas.x + canvas.width * 0.2, y: canvas.y + canvas.height * 0.1, width: canvas.width * 0.6, height: canvas.height * 0.6 } });
+  return page.evaluate(async (base64) => {
+    const image = await createImageBitmap(await (await fetch(`data:image/png;base64,${base64}`)).blob());
+    const context = new OffscreenCanvas(image.width, image.height).getContext('2d');
+    context.drawImage(image, 0, 0);
+    const { data } = context.getImageData(0, 0, image.width, image.height);
+    let count = 0;
+    for (let i = 0; i < data.length; i += 4) if (data[i] > 90 && data[i] > 3 * data[i + 1] && data[i + 2] > 0.2 * data[i]) count += 1;
+    return count;
+  }, screenshot.toString('base64'));
+}
+
+test('a named search region lists atlas groups, reaches the worker and shows its parcellation and mask', async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
+  const { result, surfaces } = await regionAnalysis('wang2015:V1');
   expect(result.analysis.flat_patch_definition.region).toBe('wang2015:V1');
-  await deliverSurfaces(page, result, { vertices, faces: triangles });
+  await deliverSurfaces(page, result, surfaces);
   await page.locator('#surfaceAnalysisSettings > summary').click();
   await page.locator('#findPatches').check();
   await page.locator('#patchQuality > summary').click();
@@ -503,8 +541,24 @@ test('a named search region lists atlas groups, reaches the worker and shows its
   await parcellation.getByRole('button', { name: 'View', exact: true }).click();
   await expect(page.locator('#imageLabel')).toContainText('Left Wang 2015 visual topography parcellation · V1 in full colour · patches white');
   await expect(page.locator('#viewerError')).toBeHidden();
+  expect((await viewerMeshes(page)).filter(({ name }) => name.endsWith('.annot')).map(({ name, url, opacity }) => [name, url, opacity])).toEqual([['lh.wang2015.annot', 'lh.wang2015.annot.mz3', 1]]);
   await page.getByRole('radio', { name: 'Render view', exact: true }).click();
+  await expect.poll(() => atlasRedPixels(page)).toBeGreaterThan(2000);
   await page.screenshot({ path: testInfo.outputPath('region-parcellation.png') });
+  // A surface or the source image takes over from the parcellation.
+  const leftMid = page.getByRole('checkbox', { name: 'Show Left mid-surface', exact: true });
+  await leftMid.check();
+  await expect(leftMid).toBeEnabled();
+  await expect.poll(() => meshOpacity(page, 'lh.wang2015.annot')).toBe(0);
+  await expect.poll(() => atlasRedPixels(page)).toBeLessThan(50);
+  await leftMid.uncheck();
+  await expect(leftMid).toBeEnabled();
+  await parcellation.getByRole('button', { name: 'View', exact: true }).click();
+  await expect.poll(() => atlasRedPixels(page)).toBeGreaterThan(2000);
+  await expect.poll(() => meshOpacity(page, 'lh.wang2015.annot')).toBe(1);
+  await dispatch(page, 'viewers.tab', { viewerId: 'image', tabId: 'source' });
+  await expect.poll(() => meshOpacity(page, 'lh.wang2015.annot')).toBe(0);
+  await expect.poll(() => atlasRedPixels(page)).toBeLessThan(50);
   await page.getByRole('radio', { name: 'Multi+Render', exact: true }).click();
   const mask = page.locator('.nd-volume-toggle').filter({ hasText: 'V1 mask in the cortical ribbon' });
   await mask.getByRole('button', { name: 'View', exact: true }).click();
@@ -525,6 +579,7 @@ test('a named search region lists atlas groups, reaches the worker and shows its
   expect(download.suggestedFilename()).toBe('lh.wang2015.annot');
   expect(new Uint8Array(await readFile(await download.path()))).toEqual(new Uint8Array(result.files.find(({ name }) => name === 'lh.wang2015.annot').bytes));
   await expect(page.locator('#technicalLog')).toContainText('"region":"wang2015:V1","region_atlas":"Wang 2015 visual topography"');
+
 
   // The surface-analysis worker downloads the region atlas only for a named region.
   const regionRequests = [];
@@ -547,6 +602,48 @@ test('a named search region lists atlas groups, reaches the worker and shows its
   await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('#patchRegion').scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath('region-phone.png'), fullPage: true });
+});
+
+test('re-analysis with another region of the same atlas replaces the parcellation mesh', async ({ page }, testInfo) => {
+  const v1 = await regionAnalysis('wang2015:V1');
+  const v2 = await regionAnalysis('wang2015:V2');
+  await deliverSurfaces(page, [v1.result, v2.result], v1.surfaces, { analysisWorker: true });
+  const parcellation = page.locator('.nd-volume-toggle').filter({ hasText: 'Left Wang 2015 visual topography parcellation' });
+  await parcellation.getByRole('button', { name: 'View', exact: true }).click();
+  await expect(page.locator('#imageLabel')).toContainText('V1 in full colour');
+  await page.getByRole('radio', { name: 'Render view', exact: true }).click();
+  await expect.poll(() => atlasRedPixels(page)).toBeGreaterThan(2000);
+  await page.locator('#surfaceAnalysisSettings > summary').click();
+  await page.locator('#findPatches').check();
+  await page.locator('#patchQuality > summary').click();
+  await page.locator('#patchRegion').selectOption('wang2015:V2');
+  await page.locator('#analyzeButton').click();
+  await expect(page.locator('#statusText')).toContainText('no patch fits the search region');
+  expect(await page.evaluate(() => window.lastTopofitJob.region)).toBe('wang2015:V2');
+  await parcellation.getByRole('button', { name: 'View', exact: true }).click();
+  await expect(page.locator('#imageLabel')).toContainText('V2 in full colour');
+  await expect(page.locator('#viewerError')).toBeHidden();
+  expect((await viewerMeshes(page)).filter(({ name }) => name.endsWith('.annot')).map(({ name, opacity }) => [name, opacity])).toEqual([['lh.wang2015.annot', 1]]);
+  // Left V1v lies outside V2, so it is drawn faded and no full-colour V1 remains.
+  await expect.poll(() => atlasRedPixels(page)).toBeLessThan(50);
+  await page.screenshot({ path: testInfo.outputPath('region-parcellation-v2.png') });
+});
+
+test('a parcellation mesh the viewer cannot decode is reported, not shown as drawn', async ({ page }) => {
+  const { result, surfaces } = await regionAnalysis('wang2015:V1');
+  await page.addInitScript(() => {
+    const NativeFile = window.File;
+    window.File = class extends NativeFile {
+      constructor(parts, name, options) {
+        super(name.endsWith('.annot.mz3') ? [new Uint8Array(8)] : parts, name, options);
+      }
+    };
+  });
+  await deliverSurfaces(page, result, surfaces);
+  await page.locator('.nd-volume-toggle').filter({ hasText: 'Left Wang 2015 visual topography parcellation' }).getByRole('button', { name: 'View', exact: true }).click();
+  await expect(page.locator('#viewerError')).toContainText('the viewer could not draw the parcellation');
+  await expect(page.locator('#imageLabel')).not.toContainText('in full colour');
+  expect((await viewerMeshes(page)).some(({ name }) => name.endsWith('.annot'))).toBe(false);
 });
 
 test('settings open on demand and pass edited values to the worker', async ({ page }, testInfo) => {

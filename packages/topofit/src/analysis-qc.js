@@ -74,9 +74,12 @@ function normalGlyph(volume, mask, patch, output) {
   else for (let offset = -2; offset <= 2; offset += 1) for (const sign of [-1, 1]) mark(center[0] + offset, center[1] + sign * offset);
 }
 
-// Marks with `value` every voxel reached by the ribbon between the white and pial
-// triangles of `faces`. Each prism is sampled on barycentric and depth grids no coarser
-// than half a voxel; a sample marks the voxel whose centre is nearest.
+// Marks with `value` the voxels of the ribbon between the white and pial triangles of
+// `faces`. Each prism is sampled on barycentric and depth grids no coarser than half a
+// voxel, so every ribbon point lies within 0.38 voxel of a sample, and a sample marks the
+// voxel whose centre is nearest. A voxel holding a ribbon point at least 0.38 voxel from
+// all of its faces is therefore marked; one the ribbon only clips near a face or corner
+// may stay 0. The mask approximates the ribbon; it is not a conservative voxelisation.
 export function ribbonVoxelMask(volume, white, pial, faces, mask, value) {
   const inverse = inverseAffine(volume.affine);
   const toVoxels = (points) => {

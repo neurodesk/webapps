@@ -205,10 +205,20 @@ the source header's geometry, 0 outside, `REGION_MASK_VALUES` (left 1, right 2)
 inside, stated in its description. It covers the searched hemispheres' faces
 whose three vertices carry a region label in the mapped parcellation, before the
 cortex and ribbon checks, and fills each white-to-pial prism by sampling it no
-coarser than half a voxel and marking the voxel nearest each sample; where the
-hemispheres meet the right one is written last. A hemisphere without region faces
+coarser than half a voxel and marking the voxel nearest each sample. Every ribbon
+point is within 0.38 voxel of a sample, so a voxel the ribbon crosses at least that
+far inside its faces is marked, while one it only clips near a face or corner may be
+missed: the mask approximates the ribbon and is not a conservative voxelisation.
+Where the hemispheres meet the right one is written last. A hemisphere without region faces
 leaves the mask empty there. Every other output of the search keeps the bytes it
-had before the mask was added; the processing manifest lists the mask's SHA-256.
+had before the mask was added, with one deliberate exception: the processing
+manifest (`topofit_manifest.json`) lists every output, so a named-region manifest
+gains the `topofit_region_mask.nii` entry in `outputSha256` and differs from before
+by exactly that entry. `test/cortex-regions.test.js` holds this to SHA-256 values
+recorded from the previous release: whole-cortex and ROI searches, manifest
+included, are byte-identical. For a NIfTI-2 source, the mask and the QC images
+are written as NIfTI-1 with the source's dimensions, voxel sizes, qform and sform
+in single precision.
 With `'cortex'` or an ROI, the outputs are those of a search without the option. `pack_cortex_regions.py` rebuilds the asset, and
 `validation/region-check.mjs` checks the mapping on a real reconstruction
 (`validation/surface-analysis.md`).

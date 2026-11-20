@@ -40,21 +40,24 @@ export function regionCentroid(points, labels, region) {
   return count ? sum.map((value) => value / count) : null;
 }
 
-export function surfaceCentroid(points) {
-  const count = points.length / 3;
-  return [0, 1, 2].map((axis) => {
-    let sum = 0;
-    for (let vertex = 0; vertex < count; vertex += 1) sum += points[vertex * 3 + axis];
-    return sum / count;
-  });
+// Mean white-to-pial direction of the region's vertices, which points out of the cortex.
+export function regionOutward(white, pial, labels, region) {
+  const sum = [0, 0, 0];
+  for (let vertex = 0; vertex < labels.length; vertex += 1) {
+    if (!region.has(labels[vertex])) continue;
+    for (let axis = 0; axis < 3; axis += 1) sum[axis] += pial[vertex * 3 + axis] - white[vertex * 3 + axis];
+  }
+  return sum;
 }
 
-// NiiVue's camera angles that look at `to` from beyond it as seen from `from`: azimuth 0
+// NiiVue's camera angles for a camera placed along `direction` from the scene: azimuth 0
 // views from behind, 90 from the left and 270 from the right; elevation is positive above.
-export function viewToward(from, to) {
-  const [dx, dy, dz] = to.map((value, axis) => value - from[axis]);
-  const azimuth = (Math.atan2(-dx, -dy) * 180 / Math.PI + 360) % 360;
-  const elevation = Math.atan2(dz, Math.hypot(dx, dy)) * 180 / Math.PI;
+// Null when the direction is too short to choose one.
+export function cameraAlong([dx, dy, dz]) {
+  const horizontal = Math.hypot(dx, dy);
+  if (Math.hypot(horizontal, dz) < 1e-6) return null;
+  const azimuth = horizontal < 1e-6 ? 0 : (Math.atan2(-dx, -dy) * 180 / Math.PI + 360) % 360;
+  const elevation = Math.atan2(dz, horizontal) * 180 / Math.PI;
   return { azimuth, elevation };
 }
 
@@ -70,8 +73,8 @@ export function regionMaskColormap(regionName) {
   };
 }
 
-// The hemisphere's mid-surface coloured by its parcellation, as an mz3 mesh, and where the
-// region lies on it.
+// The hemisphere's mid-surface coloured by its parcellation, as an mz3 mesh, where the
+// region lies on it and a camera that faces the region's outer side.
 export function parcellationMesh({ annotation, white, pial, faces, region, patchVertices }) {
   const { labels, table } = readAnnotation(annotation);
   if (labels.length * 3 !== white.length) throw new Error('The parcellation does not match the reconstructed surface.');
@@ -79,6 +82,6 @@ export function parcellationMesh({ annotation, white, pial, faces, region, patch
   return {
     bytes: writeMz3(points, faces, parcellationColours(labels, table, region, patchVertices)),
     centroid: regionCentroid(points, labels, region),
-    surfaceCentroid: surfaceCentroid(points),
+    camera: cameraAlong(regionOutward(white, pial, labels, region)),
   };
 }

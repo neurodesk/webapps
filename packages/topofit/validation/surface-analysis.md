@@ -134,6 +134,9 @@ check above, at the occipital pole on each side of the midline. Viewing the
 parcellation centred the crosshair on (−12, −84, −33) and (3, −81, −33). The
 whole-cortex re-analysis after it listed the same outputs as before the mask was
 added, without a mask or annotation. In the package tests the mask fills exactly
-the ribbon of a flat sheet. Run against the previous commit on a synthetic sheet,
-`cortex` and ROI searches, the QC images and every other file of a named-region
-search were byte-identical.
+the ribbon of a flat sheet. On a synthetic sheet, `cortex` and ROI searches
+(manifest included) and every other file of a named-region search are
+byte-identical to SHA-256 values recorded from the previous release
+(`test/cortex-regions.test.js`). The named-region processing manifest is the one
+deliberate exception: it lists every output, so it gains the mask's
+`outputSha256` entry and differs from before by exactly that entry.

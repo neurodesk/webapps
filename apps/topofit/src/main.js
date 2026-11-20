@@ -19,7 +19,7 @@ import { registerAppAutomation, registerViewer, createNiivueAdapter } from '@neu
 import { automationArtifacts } from './automation-results.js';
 import manifest from '@neurodesk/topofit/manifest';
 import { REGIONS, REGION_ATLASES } from '@neurodesk/topofit/regions';
-import { parcellationMesh, regionMaskColormap, viewToward } from './region-view.js';
+import { parcellationMesh, regionMaskColormap } from './region-view.js';
 
 const $ = (id) => document.getElementById(id);
 const assetBase = import.meta.env.VITE_TOPOFIT_ASSET_BASE || manifest.base_url;
@@ -456,12 +456,21 @@ async function loadResultSurfaces() {
   }
 }
 
+// The parcellation meshes lie on the mid-surface, so any other scene hides them.
+async function hideParcellations(nv, except = null) {
+  for (const [index, mesh] of nv.meshes.entries()) {
+    if (mesh.name.endsWith('.annot') && mesh.name !== except && mesh.opacity > 0) await nv.setMesh(index, { opacity: 0 });
+  }
+}
+
 async function showSource({ reset = false } = {}) {
   const nv = await ensureViewer();
   if (reset) {
     anatomyIn3D = false;
     await resetMeshes(nv);
   }
+  await hideParcellations(nv);
+  if (isParcellation(displayedResult)) displayedResult = null;
   nv.setClipPlane([2, 0, 0]);
   await nv.loadVolumes([{ url: source, name: source.name }]);
   nv.drawScene();
@@ -482,6 +491,7 @@ async function setMeshVisible(stage, visible, input) {
       if (volumeStages.has(displayedResult)) {
         await nv.loadVolumes([{ url: source, name: source.name }]);
       }
+      await hideParcellations(nv);
       displayedResult = null;
       showPatchMeasurements(null);
       nv.meshThicknessOn2D = 1;
@@ -522,9 +532,7 @@ async function showResult(stage, { duringRun = false } = {}) {
   try {
     const nv = await ensureViewer();
     showPatchMeasurements(null);
-    for (const [index, mesh] of nv.meshes.entries()) {
-      if (mesh.name.endsWith('.annot') && mesh.name !== file.name && mesh.opacity > 0) await nv.setMesh(index, { opacity: 0 });
-    }
+    await hideParcellations(nv, isParcellation(stage) ? file.name : null);
     if (volumeStages.has(stage)) {
       nv.setClipPlane([2, 0, 0]);
       const overlay = stage === 'patch-qc' ? { colormap: 'hot', calMin: 1, calMax: 4095, isTransparentBelowCalMin: true } : {};
@@ -551,20 +559,26 @@ async function showResult(stage, { duringRun = false } = {}) {
       nv.setClipPlane([anatomyIn3D ? 2 : -1, 0, 0]);
       await nv.loadVolumes([{ url: source, name: source.name }]);
       let index = nv.meshes.findIndex((mesh) => mesh.name === file.name);
+      if (index >= 0 && parcellationMeshFiles.get(file.name) !== file) {
+        await nv.removeMesh(index);
+        index = -1;
+      }
       if (index < 0) {
         await nv.addMesh({ url: new File([view.bytes], `${file.name}.mz3`), name: file.name, sliceShaderType: 'crosscut' });
         index = nv.meshes.findIndex((mesh) => mesh.name === file.name);
+        // NiiVue logs a mesh it cannot decode and resolves without adding it.
+        if (index < 0 || !nv.meshes[index].positions?.length) throw new Error('the viewer could not draw the parcellation');
+        parcellationMeshFiles.set(file.name, file);
       }
       await nv.setMesh(index, { opacity: 1 });
       const mid = nv.meshes.findIndex((mesh) => mesh.name === outputs.get(`${hemisphere}-mid`)?.name);
       if (mid >= 0 && nv.meshes[mid].opacity > 0) await nv.setMesh(mid, { opacity: 0 });
       meshSceneReady = true;
       displayedResult = stage;
-      if (view.centroid) {
-        nv.setCrosshairPos(view.centroid);
-        const { azimuth, elevation } = viewToward(view.surfaceCentroid, view.centroid);
-        nv.azimuth = azimuth;
-        nv.elevation = elevation;
+      if (view.centroid) nv.setCrosshairPos(view.centroid);
+      if (view.camera) {
+        nv.azimuth = view.camera.azimuth;
+        nv.elevation = view.camera.elevation;
       }
       $('imageLabel').textContent = `${resultLabel(stage)} · ${searchRegion().name} in full colour · patches white`;
     } else {
@@ -690,6 +704,7 @@ $('patchRegion').onchange = () => { $('patchRoiField').hidden = $('patchRegion')
 // The named region of the displayed results, or undefined for a whole-cortex or ROI search.
 const searchRegion = () => REGIONS.find(({ id }) => id === surfaceAnalysis?.flat_patch_definition?.region);
 const parcellationViews = new Map();
+const parcellationMeshFiles = new Map();
 
 // A hemisphere's parcellation mesh, built once per set of results.
 async function parcellationView(hemisphere) {

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { writeAnnotation } from '../../../packages/topofit/src/results.js';
 import { REGIONS, REGION_ATLASES } from '../../../packages/topofit/src/cortex-regions.js';
-import { HEMISPHERE_COLOURS, parcellationColours, parcellationMesh, regionMaskColormap, viewToward } from '../src/region-view.js';
+import { HEMISPHERE_COLOURS, parcellationColours, cameraAlong, parcellationMesh, regionMaskColormap } from '../src/region-view.js';
 
 const table = REGION_ATLASES.wang2015.labels;
 const v1 = REGIONS.find(({ id }) => id === 'wang2015:V1');
@@ -27,16 +27,18 @@ test('a parcellation mesh is the coloured mid-surface and locates its region', (
   assert.deepEqual([view.getUint16(0, true), view.getUint16(2, true), view.getUint32(4, true), view.getUint32(8, true)], [23117, 7, 2, 4]);
   assert.deepEqual(Array.from(new Float32Array(mesh.bytes, 16 + 24, 3)), [0, 0, 1]);
   assert.deepEqual(mesh.centroid, [1, 0, 1]);
-  assert.deepEqual(mesh.surfaceCentroid, [1, 1, 1]);
+  assert.deepEqual(mesh.camera, { azimuth: 0, elevation: 90 });
   assert.throws(() => parcellationMesh({ annotation: writeAnnotation(labels, table), white: white.subarray(3), pial: pial.subarray(3), faces: Int32Array.of(0, 1, 2), region: new Set(v1.labels) }), /does not match/);
 });
 
-test('the camera looks at the region from beyond it', () => {
+test('the camera is placed along the outward direction of the region', () => {
   const round = ({ azimuth, elevation }) => [Math.round(azimuth), Math.round(elevation)];
-  assert.deepEqual(round(viewToward([0, 0, 0], [0, -10, 0])), [0, 0]);
-  assert.deepEqual(round(viewToward([0, 0, 0], [-10, 0, 0])), [90, 0]);
-  assert.deepEqual(round(viewToward([0, 0, 0], [10, 0, 0])), [270, 0]);
-  assert.deepEqual(round(viewToward([0, 0, 0], [0, -10, -10])), [0, -45]);
+  assert.deepEqual(round(cameraAlong([0, -10, 0])), [0, 0]);
+  assert.deepEqual(round(cameraAlong([-10, 0, 0])), [90, 0]);
+  assert.deepEqual(round(cameraAlong([10, 0, 0])), [270, 0]);
+  assert.deepEqual(round(cameraAlong([0, -10, -10])), [0, -45]);
+  assert.deepEqual(round(cameraAlong([0, 0, 3])), [0, 90]);
+  assert.equal(cameraAlong([0, 0, 0]), null);
 });
 
 test('the region mask colours left 1 and right 2 like the hemispheres', () => {
