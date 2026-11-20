@@ -1,5 +1,11 @@
 # dicompare
 
+## 0.15.20261120
+
+### Patch Changes
+
+- 94da230: Remove the personal email address from the app metadata and use the Neurodesk team contact for the Debian package.
+
 ## 0.15.20261119
 
 ### Patch Changes
