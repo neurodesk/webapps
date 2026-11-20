@@ -132,9 +132,6 @@ function syncDependentFields() {
 $("modality").addEventListener("change", syncDependentFields);
 $("method").addEventListener("change", syncDependentFields);
 
-// The shell's Undo puts back the empty PSF list the app reported.
-$("psfInput").addEventListener("nd-clear", () => clearMeasuredPsf());
-
 function syncInputFiles(id, files) {
   $(id).dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files } }));
 }

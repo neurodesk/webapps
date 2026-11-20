@@ -115,16 +115,10 @@ async function job(message, signal, run) {
   }
 }
 
-// The examination's files, whichever way they arrived, are the picker's list for the shared page drop and a browser agent's tools.
-function reportSourceFiles() {
-  $('imageInput').dispatchEvent(new CustomEvent('nd-files', { bubbles: true, detail: { files: sourceFiles } }));
-}
-
 async function loadFiles(inputs, signal) {
   if (active) throw new Error('Wait for the current operation or cancel it.');
   const current = ++generation;
   sourceFiles = Array.from(inputs);
-  reportSourceFiles();
   series = [];
   invalidate();
   review.render([]);
@@ -261,7 +255,6 @@ function clear() {
   generation++;
   active?.abort();
   sourceFiles = [];
-  reportSourceFiles();
   series = [];
   $('imageInput').value = '';
   $('subject').value = '';
@@ -281,8 +274,6 @@ function clear() {
   $('clearButton').disabled = true;
 }
 $('clearButton').onclick = clear;
-// The shell's Undo puts back the empty list Clear reported.
-$('imageInput').addEventListener('nd-clear', clear);
 
 // Batch callers make the same explicit assignments as the review table. No
 // automatic contrast decision is silently accepted by the automation contract.

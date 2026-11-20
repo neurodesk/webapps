@@ -168,21 +168,9 @@ function guessRole(name) {
   return "(ignore)";
 }
 
-// A Remove or a reset changes the loaded list without a change event; the shell and the WebMCP tools
-// learn the list from nd-files on the file input, and that the folder inputs now hold nothing.
-function reportFiles() {
-  // The images and their JSON sidecars, which the app keeps apart.
-  const loaded = [...state.files, ...state.jsons].map((record) => record.file).filter(Boolean);
-  for (const input of document.querySelectorAll('#controls input[type="file"][data-neurodesk-input]')) {
-    const files = input.closest("#fileControl") ? loaded : [];
-    input.dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files } }));
-  }
-}
-
 async function readImageRecord(file, buffer) {
   const nii = await readNifti(buffer);
   return {
-    file,
     name: file.name,
     size: file.size,
     dims: nii.dims,
@@ -203,7 +191,7 @@ async function addFiles(fileList) {
     if (lower.endsWith(".json")) {
       try {
         const js = JSON.parse(new TextDecoder().decode(buf));
-        state.jsons.push({ name: file.name, json: js, file });
+        state.jsons.push({ name: file.name, json: js });
         if ($("#paramSource").value === "json") applySidecar(file.name, js);
         log(`sidecar: ${file.name}`);
       } catch (e) {
@@ -307,7 +295,6 @@ function renderTable() {
       state.files.splice(i, 1);
       renderTable();
       refreshRunState();
-      reportFiles();
     };
     del.appendChild(b);
     tr.appendChild(del);
@@ -327,7 +314,6 @@ function renderTable() {
     b.onclick = () => {
       state.jsons.splice(i, 1);
       renderTable();
-      reportFiles();
     };
     del.appendChild(b);
     tr.appendChild(del);
@@ -682,20 +668,9 @@ function resetAll() {
   if ($("#deid")) $("#deid").checked = true;
   if ($("#verbose")) $("#verbose").checked = false;
   refreshRunState();
-  reportFiles();
   log("↺ reset, all inputs, parameters and results cleared.");
 }
 $("#resetAll").onclick = resetAll;
-
-// The shell's Undo puts back the empty list reportFiles reported: the images and sidecars go, as removing each would.
-document.addEventListener("nd-clear", (event) => {
-  if (!event.target.closest?.("#fileControl")) return;
-  state.files = [];
-  state.jsons = [];
-  renderTable();
-  refreshRunState();
-  reportFiles();
-});
 
 // mismatched grids or a non-2-volume SA2RAGE fail with a clear message instead of
 // a silent all-NaN result or a raw WASM panic.
@@ -2365,7 +2340,6 @@ async function loadBidsEntry(ses, opts = {}) {
         state.jsons.push({
           name: baseName(sc.path),
           json: JSON.parse(await sc.file.text()),
-          file: sc.file,
         });
       } catch (e) {
         /* ignore */

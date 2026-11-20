@@ -126,20 +126,6 @@ test('Undo restores an appending input as its app last reported it', async t => 
   assert.deepEqual([...input.files].map(f => f.name), ['b.nii']);
 });
 
-test('Undo putting back a list the app emptied fires nd-clear after the empty change, and only then', async t => {
-  const { window, input, pick, drop, undo } = dropSession('<input type="file" data-neurodesk-input="image" data-appends>', t);
-  const events = [];
-  for (const type of ['nd-replace', 'change', 'nd-clear']) input.addEventListener(type, () => events.push(`${type}:${input.files.length}`));
-  pick('a.nii');
-  input.dispatchEvent(new window.CustomEvent('nd-files', { bubbles: true, detail: { files: [] } }));
-  events.length = 0;
-  await drop('b.nii');
-  assert.deepEqual(events, ['nd-replace:1', 'change:1'], 'a drop with files fires no nd-clear');
-  events.length = 0;
-  undo().click();
-  assert.deepEqual(events, ['nd-replace:1', 'change:0', 'nd-clear:0']);
-});
-
 test('a loaded scan fills the next slot even when the app clears the picker', async t => {
   const { input, inputs, pick, drop } = dropSession('<input type="file" data-neurodesk-input="image"><input type="file" data-neurodesk-input="image">', t);
   const loaded = new Map();

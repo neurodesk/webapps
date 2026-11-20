@@ -4,9 +4,8 @@
 // person performs one trusted action, and with no Allow given the agent must not get the held file
 // back: the examination is either ended or touched, and after a touch the agent's next run asks the
 // person first, naming the held files (the test declines). The expectation does not come from the
-// tools' own predicate: an action that changes the files the page shows (a pick, a removal, a clear,
-// a select that loads other data), read from the page itself, must end the examination, so that no
-// earlier run of the agent can be disclosed even after Allow.
+// tools' own predicate: whatever the action changes in the page, the outcome must be one of those two.
+// An end only spares the person the dialog; an app that does not report a removal leaves a touch.
 //
 // The actions: a pick in each classified file and folder input, a click on each remove or clear button,
 // a change of value in each visible select (to another option, by keyboard), and a click on each
@@ -333,7 +332,6 @@ async function attempt(context, page, app, target, run, action, outcome) {
     return 'ended';
   }
   if (observed === 'kept') return 'NOT COUNTED';
-  if (replaced && observed !== 'ended') return `NOT ENDED: the page shows other files, yet the examination is ${observed}`;
   if (outcome.resume) return `RESUME: ${outcome.resume}`;
   return observed;
 }

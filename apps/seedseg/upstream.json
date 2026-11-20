@@ -16,9 +16,7 @@
     "Keep the monorepo idle status: #statusText starts as \"Drag and drop files\" (design system); the window-wide drop comes from the shared components.",
     "SeedSeg loads dicompare's controller, worker and schema from the locally staged web/vendor/dicompare copies. The rewrite points any remaining upstream reference to dicompare.neurodesk.org, which stopped serving in October 2026, at https://webapps.neurodesk.org/dicompare instead.",
     "Keep NiiVue on the app's own origin: web/index.html loads wasm/niivue.umd.js, which prebuild fetches and checksums through runtime-assets/manifest.json (niivue-umd). Upstream loads it from unpkg with a classic script; when that request fails the page has no `niivue` global and startup throws. Do not restore the CDN script tag; move the manifest pin when upstream changes the NiiVue version.",
-    "Keep examples.json empty and do not import the upstream example button or downloader. The interface standard excludes SeedSeg because its synthetic public example was withdrawn as unsuitable; a replacement needs scientific validation and the shared example contract before adoption.",
-    "Keep `_reportFiles`: a triage card's Remove and a bucket's Clear report the remaining files with `nd-files` on #unifiedFiles, so the shell and the WebMCP tools see the removal.",
-    "seedseg-app.js listens for nd-clear on #unifiedFiles and clears the buckets, then reports them with nd-files, so the shared page drop's Undo can put back a list the app had emptied; keep it when upstream changes the bucket handling."
+    "Keep examples.json empty and do not import the upstream example button or downloader. The interface standard excludes SeedSeg because its synthetic public example was withdrawn as unsuitable; a replacement needs scientific validation and the shared example contract before adoption."
   ],
   "citationSnapshot": {
     "file": "web/index.html",

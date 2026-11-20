@@ -148,21 +148,17 @@ export class SctInputSessions {
 
     if (!this.sessions.length) {
       this.clearFiles();
-    } else if (wasActive) {
+      return true;
+    }
+
+    if (wasActive) {
       const nextIndex = Math.min(removedIndex, this.sessions.length - 1);
       this.activateSession(this.sessions[nextIndex].id);
     } else {
       this._updateUI();
       this.onSessionsChanged(this.getSessions());
     }
-    this._reportFiles();
     return true;
-  }
-
-  // The shell and the WebMCP tools learn the remaining list from nd-files on the input.
-  _reportFiles() {
-    const fileInput = document.getElementById('fileInput');
-    fileInput?.dispatchEvent(new CustomEvent('nd-files', { bubbles: true, detail: { files: this.sessions.map(session => session.file) } }));
   }
 
   _updateUI() {

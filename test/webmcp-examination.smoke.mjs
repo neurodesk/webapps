@@ -183,8 +183,8 @@ try {
     }
   });
 
-  await check('QSMbly: a mask removed with its own button is neither held nor listed', async context => {
-    const { page, call, usePageFiles } = await open(context, 'qsmbly');
+  await check('QSMbly: a mask removed with its own button waits for the person before the agent gets it again', async context => {
+    const { page, call, usePageFiles, answered } = await open(context, 'qsmbly');
     await personPicks(context, page, '#maskFiles', 'old-mask.nii.gz');
     await page.locator('#maskList .file-remove').waitFor({ state: 'attached', timeout: 60000 });
     // The masking section starts collapsed; open it as the person would before reaching the button.
@@ -199,11 +199,14 @@ try {
     await page.locator('#maskList .file-remove').click();
     await page.locator('#maskList .file-remove').waitFor({ state: 'detached' });
     const described = await call('app_describe');
-    assert.deepEqual(described.inputs, {}, JSON.stringify(described.inputs));
-    assert.ok(!described.pageFiles.some(entry => entry.files.some(file => file.name === 'old-mask.nii.gz')), JSON.stringify(described.pageFiles));
+    assert.equal(described.touched, true, 'the press on Remove touched the examination');
+    const { listed, declined } = await answered('run_reconstruct', { waitSeconds: 0 }, 'Decline');
+    assert.equal(declined, true);
+    assert.ok(listed.some(item => item.endsWith(': old-mask.nii.gz')), `the resume dialog names the mask: ${JSON.stringify(listed)}`);
+    assert.deepEqual((await call('app_describe')).inputs, {}, 'Decline released the mask');
   });
 
-  await check('dcm2niix: editing a setting keeps the files listed, to confirm; Clear empties the list', async context => {
+  await check('dcm2niix: editing a setting keeps the files listed, to confirm', async context => {
     const { page, call, usePageFiles } = await open(context, 'dcm2niix');
     await page.locator('#imageInput').setInputFiles(dicomSeries());
     await page.waitForFunction(() => document.querySelector('#fileInfo')?.textContent.includes('4 DICOM files'), undefined, { timeout: 60000 });
@@ -212,8 +215,6 @@ try {
     assert.deepEqual(described.pageFiles.map(entry => [entry.input, entry.files.length]), [['imageInput', 4]], JSON.stringify(described.pageFiles));
     const confirmed = await usePageFiles('dicom', 'imageInput');
     assert.equal(confirmed.files?.length, 4, JSON.stringify(confirmed));
-    await page.locator('#clearButton').click();
-    assert.deepEqual((await call('app_describe')).pageFiles, [], 'the cleared examination lists no files');
   });
 
   await check('DWI2TRX: a drop the app refused stays listed as received, and the person decides before the agent gets it', async context => {
@@ -658,7 +659,7 @@ try {
     assert.equal(await dialog.evaluate(element => element.open), false);
   });
 
-  await check('NeSVoR: a stack the person removes leaves pageFiles, and the agent\'s own stack waits for the dialog', async context => {
+  await check('NeSVoR: after the person removes a stack, the agent\'s own stack waits for the dialog', async context => {
     const { page, call, answered } = await open(context, 'nesvor');
     await personPicks(context, page, '#imageInput', 'person-stack.nii.gz');
     const remove = page.getByRole('button', { name: 'Remove person-stack.nii.gz', exact: true });
@@ -671,9 +672,11 @@ try {
     assert.ok((await page.evaluate(() => globalThis.agentHold)).files);
     await remove.click();
     await remove.waitFor({ state: 'detached' });
-    const described = await call('app_describe');
-    assert.deepEqual(described.pageFiles, [], `the removed stack is not listed: ${JSON.stringify(described.pageFiles)}`);
-    assert.deepEqual(described.inputs, {}, 'the removal the app reports after the press ends the examination');
+    assert.equal((await call('app_describe')).touched, true, 'the press on Remove touched the examination');
+    const { listed, declined } = await answered('run_open_stacks', { waitSeconds: 0 }, 'Decline');
+    assert.equal(declined, true);
+    assert.ok(listed.some(item => item.endsWith(': agent-stack.nii.gz')), `the resume dialog names the agent's stack: ${JSON.stringify(listed)}`);
+    assert.deepEqual((await call('app_describe')).inputs, {}, 'Decline released the stack');
   });
 
   await check('a same-origin frame is watched from its new document on, before it loads', async context => {
@@ -935,84 +938,6 @@ try {
       release();
       await elsewhere.close();
     }
-  });
-
-  await check('NeSVoR: Undo after a page drop onto an emptied stack list empties the list and the viewer again', async context => {
-    const { page, call } = await open(context, 'nesvor');
-    await personPicks(context, page, '#imageInput', 'removed-before-drop.nii.gz');
-    await page.getByRole('button', { name: 'Remove removed-before-drop.nii.gz', exact: true }).click();
-    await personDrops(context, page, 'nesvor-drop.nii.gz', await centreOf(page, '#viewer'));
-    const remove = page.getByRole('button', { name: 'Remove nesvor-drop.nii.gz', exact: true });
-    await remove.waitFor({ timeout: 30000 });
-    await page.getByRole('button', { name: 'Undo', exact: true }).click();
-    await remove.waitFor({ state: 'detached', timeout: 10000 });
-    assert.deepEqual((await call('app_describe')).pageFiles, []);
-    assert.equal(await page.locator('#emptyState').isVisible(), true, 'the viewer shows its empty state');
-    assert.deepEqual((await call('viewers_volumes', { viewerId: 'main' })).volumes ?? [], [], 'the viewer holds no stack');
-  });
-
-  // An app that reports an emptied list with nd-files empties it again when Undo puts that list back.
-  for (const app of ['nesvor', 'easy-mp2rage', 'seedseg', 'samsrf', 'syncro', 'qsmbly', 'vesselboost', 'musclemap']) {
-    await check(`${app}: Undo after a drop onto the list the person emptied empties it again`, async context => {
-      const { page, call } = await open(context, app);
-      const narration = 'footer#status, nd-console, .nd-console-container, .console-container, #neurodeskAgentPrompt, .nd-app-bar, .nd-app-utility-bar, dialog.nd-app-dialog, script, style';
-      const shown = name => page.evaluate(([name, narration]) => {
-        const scan = root => [...root.querySelectorAll('*')].some(node => (!node.closest(narration) && [...node.childNodes].some(child => child.nodeType === 3 && child.textContent.includes(name))) || (node.shadowRoot && scan(node.shadowRoot)));
-        return scan(document);
-      }, [name, narration]);
-      const primary = await page.evaluate(() => {
-        const auxiliary = new Set(['gradients', 'model', 'protocol', 'metadata', 'mask']);
-        const inputs = [...document.querySelectorAll('input[type="file"][data-neurodesk-input]')].filter(input => input.id !== 'neurodesk-input-transfer' && !input.disabled && !input.hasAttribute('webkitdirectory') && !input.closest('[inert], dialog:not([open])'));
-        const input = inputs.find(candidate => !auxiliary.has(candidate.dataset.neurodeskInput)) ?? inputs[0];
-        input.dataset.emptiedList = '';
-        return input.id;
-      });
-      await page.locator('[data-emptied-list]').setInputFiles(scan('emptied-pick.nii.gz', 8));
-      await until(page, () => [...document.querySelectorAll('body *')].some(node => [...node.childNodes].some(child => child.nodeType === 3 && child.textContent.includes('emptied-pick'))), 30000);
-      const removers = await page.evaluate(narration => {
-        const names = [];
-        for (const button of document.querySelectorAll('button')) {
-          if (button.closest(narration) || button.disabled || !button.checkVisibility?.()) continue;
-          const name = (button.getAttribute('aria-label') || button.title || button.textContent).trim();
-          if (/remove|clear|delete|^\s*[×✕]\s*$/i.test(name)) {
-            button.dataset.emptiedRemover = String(names.length);
-            names.push(name);
-          }
-        }
-        return names;
-      }, narration);
-      let emptied = false;
-      for (const index of removers.keys()) {
-        await page.locator(`[data-emptied-remover="${index}"]`).click({ timeout: 3000 }).catch(() => {});
-        await page.waitForTimeout(800);
-        if (!(await shown('emptied-pick'))) {
-          emptied = true;
-          break;
-        }
-      }
-      assert.ok(emptied, `one of the app's own removers empties the list: ${removers.join(', ')}`);
-      await personDrops(context, page, 'emptied-drop.nii.gz', await centreOf(page, '#statusText'));
-      await until(page, () => Boolean(document.querySelector('button.nd-status-undo')), 30000);
-      for (const deadline = Date.now() + 30000; !(await shown('emptied-drop')); await page.waitForTimeout(250)) assert.ok(Date.now() < deadline, 'the dropped file is shown');
-      await page.locator('button.nd-status-undo').click();
-      for (const deadline = Date.now() + 10000; await shown('emptied-drop'); await page.waitForTimeout(250)) assert.ok(Date.now() < deadline, `Undo leaves the dropped file shown in ${primary}'s list`);
-      const listed = (await call('app_describe')).pageFiles.flatMap(entry => entry.files.map(file => file.name));
-      assert.ok(!listed.includes('emptied-drop.nii.gz'), JSON.stringify(listed));
-    });
-  }
-
-  await check('Easy MP2RAGE: removing one JSON sidecar keeps the other listed', async context => {
-    const { page, call } = await open(context, 'easy-mp2rage');
-    const payload = name => ({ name, mimeType: 'application/json', buffer: Buffer.from('{}') });
-    await page.locator('#fileControl input[type="file"]').setInputFiles([scan('subject_UNI.nii.gz'), payload('drop.json'), payload('keep.json')]);
-    const row = name => page.getByRole('row').filter({ hasText: name });
-    await row('keep.json').waitFor();
-    const names = async () => (await call('app_describe')).pageFiles.flatMap(entry => entry.files.map(file => file.name)).sort();
-    assert.deepEqual(await names(), ['drop.json', 'keep.json', 'subject_UNI.nii.gz']);
-    await row('drop.json').getByRole('button').click();
-    await row('drop.json').waitFor({ state: 'detached' });
-    assert.equal(await row('keep.json').isVisible(), true);
-    assert.deepEqual(await names(), ['keep.json', 'subject_UNI.nii.gz']);
   });
 
   await check('a browser without a model context loads no WebMCP code and gets no recorder', async () => {

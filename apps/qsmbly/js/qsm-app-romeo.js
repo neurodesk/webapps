@@ -483,12 +483,6 @@ class QSMApp {
       await this.loadCustomMaskFile();
       this.updateEchoInfo();
     });
-    // The shell's Undo puts back the empty mask list this input reported.
-    document.getElementById('maskFiles')?.addEventListener('nd-clear', async () => {
-      this.fileIOController.clearMaskFile();
-      this.updateMaskSectionState();
-      await this.clearMask();
-    });
 
     // Remove buttons in the mask file list, which FileIOController.updateFileList rebuilds
     document.getElementById('maskList')?.addEventListener('click', (e) => {
@@ -858,15 +852,6 @@ class QSMApp {
     });
   }
 
-  // The shared page drop and a browser agent's tools read each input's list from nd-files, which
-  // follow removals and the drop zone's loads that never pass through the inputs.
-  _reportPageFiles() {
-    const io = this.fileIOController;
-    const report = (id, items) => document.getElementById(id)?.dispatchEvent(new CustomEvent('nd-files', { bubbles: true, detail: { files: items.map(item => item.file) } }));
-    report('unifiedFiles', Object.values(io.buckets).flat());
-    report('maskFiles', io.maskFile);
-  }
-
   /**
    * Set up the unified drop zone for all file types (NIfTI, DICOM, JSON).
    */
@@ -881,8 +866,6 @@ class QSMApp {
       if (files.length > 0) this._handleUnifiedFiles(files);
       fileInput.value = '';
     });
-    // The shell's Undo puts back the empty list this input reported: the images go, the mask stays.
-    fileInput.addEventListener('nd-clear', () => this.fileIOController.clearImageFiles());
 
     // Drag and drop
     dropZone.addEventListener('dragover', (e) => {
@@ -1009,7 +992,6 @@ class QSMApp {
    * Replaces scattered switchInputMode/updateEchoInfo calls.
    */
   _onBucketsChanged(changeType) {
-    this._reportPageFiles();
     if (this.maskAlignmentActive && (this.maskAlignmentSession?.reference !== this.getMaskReferenceFile()
         || this.maskAlignmentSession?.file !== this.fileIOController.getMaskFile())) this.resetMaskAlignmentRepair();
     // Render file triage UI

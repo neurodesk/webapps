@@ -303,11 +303,6 @@ export class SpinalCordToolboxApp {
         }
         this.fileIOController.handleFiles(e.target.files);
       });
-      // The shell's Undo puts back the empty list the sessions reported: every image goes, as removing each would.
-      fileInput.addEventListener('nd-clear', () => {
-        this.fileIOController.clearFiles();
-        this.fileIOController._reportFiles();
-      });
     }
 
     this.setupDropZone();

@@ -284,11 +284,6 @@ class SeedSegApp {
       if (files.length > 0) this._handleUnifiedFiles(files);
       fileInput.value = '';
     });
-    // The shell's Undo puts back the empty list this input reported.
-    fileInput.addEventListener('nd-clear', () => {
-      this.clearFile();
-      this._reportFiles();
-    });
 
     dropZone.addEventListener('dragover', (e) => {
       e.preventDefault();
@@ -392,19 +387,11 @@ class SeedSegApp {
     if (!arr || index < 0 || index >= arr.length) return;
     arr.splice(index, 1);
     this._onBucketsChanged();
-    this._reportFiles();
   }
 
   _clearBucket(bucket) {
     this._buckets[bucket] = [];
     this._onBucketsChanged();
-    this._reportFiles();
-  }
-
-  // A removal changes the list without a change event; the shell and the WebMCP tools learn it from nd-files.
-  _reportFiles() {
-    const files = [...this._buckets.t1w, ...this._buckets.other];
-    document.getElementById('unifiedFiles')?.dispatchEvent(new CustomEvent('nd-files', { bubbles: true, detail: { files } }));
   }
 
   _onBucketsChanged() {
