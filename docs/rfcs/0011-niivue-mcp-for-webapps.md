@@ -350,7 +350,7 @@ had their Allow, and on what the tools recorded, not on what the page answers.
   run. It reads them when it shows, not when it was queued, and Allow applies
   only while they are still what it named: when the agent's own file request
   or example changed the held files meanwhile, the dialog shows the change and
-  asks again. It says the
+  asks again. Loading the same example again changes nothing it names. It says the
   agent gets the results that run ended with, even if the page shows others
   now. Allow discloses that run and those files and clears the touch until the
   next one; the examination's earlier runs stay withheld (`RUN_STALE`).
@@ -372,12 +372,11 @@ had their Allow, and on what the tools recorded, not on what the page answers.
   in any file input, files dropped on the page, the page's example selector
   starting a load, a handoff and the app's `automation.reset()`, and on a
   touched examination a list change the app reports with `nd-files` or files
-  the page itself puts on a classified input (the shell's Undo). When Undo
-  puts back a list the app had emptied, it fires `nd-clear` after the empty
-  change, and every app that reports an emptied list empties its list on it
-  (NeSVoR, Easy MP2RAGE, SeedSeg, SamSrf, QSMbly, dcm2niix, Spinal Cord
-  Toolbox, ANTs denoise's mask, Deconvolution's PSF, the shared image pair
-  and `SimpleFileIOController`). A new
+  the page itself puts on a classified input (the shell's Undo). The tools
+  change no app's list reporting: the shell's Undo restores what `nd-files`
+  and `change` told it, so a report added for the tools changes what Undo
+  puts back. A removal an app does not report is a press, which touches the
+  examination. A new
   examination holds no files and the runs started before it are stale
   (`app_describe.run` says so; `runs_get`, `runs_cancel` and
   `outputs_download` return `RUN_STALE`). An end the tools miss is a touch,
@@ -420,8 +419,8 @@ viewer load the tools start clears the record. A pick made while a run is
 going is not recorded, since the busy app may ignore it.
 `pageMayHoldOtherInputs` turns true once the person has done something whose
 effect the tracker cannot see, such as using a control or an unclassified
-input. An app whose list changes without a change event reports it with
-`nd-files`, as QSMbly's remove buttons and dcm2niix's drop zone and Clear do.
+input. An app whose list changes without a change event may leave a stale
+entry; using it still shows the person the files first.
 
 An example's file roles serve the page's example selector and sometimes differ
 from the contract's. The example's `automation` field in `examples.json` maps
@@ -438,9 +437,16 @@ render rejects only its own call. Each says that an AI agent the person
 started is asking. Closing a dialog declines it, and an aborted call closes it.
 A consent dialog (fetch approval, page files, resume) names state: it takes a
 function for its request, reads it when it shows and again when the person
-presses Allow, shows the current state and asks again when the two differ, and
-resolves to the request the person allowed, which the tools apply only while
-it is still current. A components test enumerates every prompt and fails on
+presses Allow, shows the current state in place and asks again when the two
+differ, and resolves to the request the person allowed, which the tools apply
+only while it is still current. The refresh replaces only the text that names
+the request, so the buttons and the focus on Allow stay; Escape, the close
+control and the backdrop decline, before and after a refresh, and none of them
+counts as the person using the page. Requests compare by what they name:
+roles, names, sizes, the checksum a file was verified against or the File
+itself, and the run. After three changes the dialog closes as declined, and
+the tools ask again after Allow at most three times, so an agent cannot keep a
+person answering. A components test enumerates every prompt and fails on
 one that is neither such a consent dialog nor free of state.
 
 - **On by default.** The tools register wherever the browser exposes the API,
@@ -485,8 +491,8 @@ one that is neither such a consent dialog nor free of state.
   person opened in the sidebar, and a download.
   `node test/webmcp-examination.smoke.mjs` drives in Chromium what a person
   can do to the agent's files: picking an example in NiiMath, opening a file
-  during a run and after one, dropping a file, QSMbly's mask remove button,
-  dcm2niix's settings and Clear, a drop on DWI2TRX's viewer, a handoff from
+  during a run and after one, dropping a file, QSMbly's mask remove button
+  (a touch whose resume dialog names the mask), dcm2niix's settings, a drop on DWI2TRX's viewer, a handoff from
   DICOM View to White matter lesions, ZARRo's store approval and its reads
   against a local server that redirects to another (none reaches the second),
   Brain Extraction's viewer permissions, redirect refusal and fetch approval,
@@ -501,7 +507,8 @@ one that is neither such a consent dialog nor free of state.
   the status bar's Undo, runs the person's own command after an agent run
   (Allow returns the agent run's recorded report and bytes), names a run's
   own file apart from a file the agent took since, shares one dialog between
-  a report and a download asked for together, removes a NeSVoR stack, and
+  a report and a download asked for together, removes a NeSVoR stack (a touch
+  whose resume dialog names the agent's stack), and
   loads in ZARRo by hand, in the same tab, a store an agent attempt failed
   on.
   `node test/webmcp-interaction.smoke.mjs` holds a file in every app and
@@ -511,8 +518,14 @@ one that is neither such a consent dialog nor free of state.
   field and canvas, at most 40 per app). Its expectation does not come from
   `interactionEffect`: after each action, with no Allow given, the agent must
   not get the held file back, so the examination is ended or touched and a
-  touch makes the next run ask to resume; an action that changes the file
-  names the workspace shows or its classified inputs hold must end it.
+  touch makes the next run ask to resume, naming the held files, whatever the
+  action changed in the page.
+  `node test/page-drop-undo.smoke.mjs` records, for every app with a
+  classified file input, what pick, drop and Undo, and pick, the app's own
+  remove control, drop and Undo leave: the file names shown and in the inputs,
+  each registered viewer's volumes, the files and volumes the app's state
+  object holds, and every other control's value. `--diff` compares two builds;
+  with it the branch was held to leave every app's Undo as on main.
   `node test/webmcp.smoke.mjs` checks every app of the built site at 1440 and
   390 px in Chrome's own WebMCP (it fails without it unless
   `WEBMCP_STAND_IN=1`): the full tool set, `app_describe` with every loadable
