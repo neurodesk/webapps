@@ -166,6 +166,18 @@ export function gpuBufferLimit(limits) {
   return Math.min(limits.maxStorageBufferBindingSize, limits.maxBufferSize);
 }
 
+async function drainGpuErrorScopes(device) {
+  const scopes = [];
+  for (let i = 0; i < 2; i++) {
+    try {
+      scopes.push({ error: await device.popErrorScope() });
+    } catch (error) {
+      scopes.push({ rejection: error });
+    }
+  }
+  return scopes;
+}
+
 /**
  * Outputs borrow the mapped readback. Copy data to retain it beyond dispose(), the
  * next run(), or release(); each of these detaches previously returned views.
@@ -191,16 +203,20 @@ export async function createGpuSession(bytes, dims, {
     maxBufferSize:adapter.limits.maxBufferSize,maxStorageBufferBindingSize:adapter.limits.maxStorageBufferBindingSize,
   }});
   let failure, released=false, running=false, mappedOutput=null;
-  device.lost.then(info=>{if(!released)failure=new Error(`${label} GPU device lost: ${info.message}`);});
-  device.addEventListener('uncapturederror',event=>{failure=new Error(`${label} GPU error: ${event.error.message}`);});
+  const gpuErrorText=(err,isOom=err?.constructor?.name==='GPUOutOfMemoryError')=>isOom
+    ?`GPU out of memory${err?.message?`: ${err.message}`:''}`:(err?.message||'GPU error');
+  device.lost.then(info=>{if(!released && info?.reason!=='destroyed')failure=new Error(`${label} GPU device lost${info?.message?`: ${info.message}`:''}`);});
+  device.addEventListener('uncapturederror',event=>{failure=new Error(`${label} ${gpuErrorText(event.error)}`);});
   const createBuffer=(size,usage,label)=>device.createBuffer({size:Math.max(16,size),usage,label});
   const upload=(values,label)=>{
     const buffer=createBuffer(values.byteLength,GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST,label);
     device.queue.writeBuffer(buffer,0,values);return buffer;
   };
   const values=(name)=>{const t=graph.tensors[name];return new Float32Array(raw.slice(t.offset,t.offset+t.bytes).buffer);};
+  let setupScopesOpen = false;
   try {
     device.pushErrorScope('out-of-memory');device.pushErrorScope('validation');
+    setupScopesOpen = true;
     const buffers=plan.slots.map((s,i)=>createBuffer(s.bytes,GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST|GPUBufferUsage.COPY_SRC,`${label} activation ${i}`));
     const dummy=upload(new Float32Array(4),'unused'), constants=new Map();
     const constant=(name,padded=0)=>{
@@ -236,8 +252,6 @@ export async function createGpuSession(bytes, dims, {
       const bind=device.createBindGroup({layout,entries:[buffers[node.inputSlots[0]],other,params,buffers[node.slot]].map((buffer,binding)=>({binding,resource:{buffer}}))});
       steps.push({name:node.name,op:node.op,pipeline,bind,dispatch:shader.dispatch});
     }
-    const validation=await device.popErrorScope(),oom=await device.popErrorScope();
-    if(validation||oom)throw new Error((validation||oom).message);
     const outputBytes=product(dims)*outputChannels*4;
     const read=createBuffer(outputBytes,GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ,`${label} output readback`);
     const unmapRead=()=>{if(mappedOutput){mappedOutput=null;read.unmap();}};
@@ -245,6 +259,13 @@ export async function createGpuSession(bytes, dims, {
     const querySize=steps.length*16;
     const resolve=timestamps?createBuffer(querySize,GPUBufferUsage.QUERY_RESOLVE|GPUBufferUsage.COPY_SRC,'timings'):null;
     const queryRead=timestamps?createBuffer(querySize,GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ,'timings readback'):null;
+    setupScopesOpen = false;
+    const [validation, oom] = await drainGpuErrorScopes(device);
+    if (oom.error) throw new Error(`${label} ${gpuErrorText(oom.error, true)}`);
+    if (validation.error) throw new Error(`${label} ${gpuErrorText(validation.error)}`);
+    if (failure) throw failure;
+    const rejected = [validation, oom].find(scope => Object.hasOwn(scope, 'rejection'));
+    if (rejected) throw rejected.rejection;
     const session={inputNames:[graph.input],outputNames:[graph.output],implementation:`${label.toLowerCase()}-blocked-fp32-v1`,profile:[],
       async run(feeds) {
         if(released || running || failure)throw failure||new Error(`${label} GPU session is released or busy.`);
@@ -258,9 +279,11 @@ export async function createGpuSession(bytes, dims, {
         let result;
         let operationError;
         let failed = false;
+        let inputRead = false;
         try {
           const data=await tensor.getData();
           if(data.length!==product(dims))throw new Error('GPU input size mismatch.');
+          inputRead = true;
           device.queue.writeBuffer(buffers[plan.inputSlot],0,data);
           // A full-volume U-Net can occupy a Metal command buffer for tens of seconds.
           // Complete each layer separately, preserving all shaders, bindings and graph order.
@@ -302,20 +325,16 @@ export async function createGpuSession(bytes, dims, {
           unmapRead();
         }
         // Drain both scopes even if a driver throws synchronously while popping one.
-        const scopes = [];
-        for (let i = 0; i < 2; i++) {
-          try {
-            scopes.push({ error: await device.popErrorScope() });
-          } catch (error) {
-            scopes.push({ rejection: error });
-          }
-        }
+        const scopes = await drainGpuErrorScopes(device);
         running = false;
+        if (failed && inputRead && scopes[1]?.error) {
+          throw new Error(`${label} GPU inference failed: ${gpuErrorText(scopes[1].error, true)}`);
+        }
         if (failed) throw failure || operationError;
-        const scopedError = scopes.find(scope => scope.error)?.error;
-        if (scopedError) {
+        const scopedIndex = scopes[1]?.error ? 1 : scopes.findIndex(scope => scope.error);
+        if (scopedIndex >= 0) {
           unmapRead();
-          throw new Error(`${label} GPU inference failed: ${scopedError.message}`);
+          throw new Error(`${label} GPU inference failed: ${gpuErrorText(scopes[scopedIndex].error, scopedIndex === 1)}`);
         }
         const rejected = scopes.find(scope => Object.hasOwn(scope, 'rejection'));
         if (rejected) {
@@ -327,5 +346,11 @@ export async function createGpuSession(bytes, dims, {
       async release(){if(!released){released=true;unmapRead();device.destroy();}},
     };
     return session;
-  }catch(error){released=true;device.destroy();throw error;}
+  } catch (error) {
+    const oom = setupScopesOpen ? (await drainGpuErrorScopes(device))[1].error : null;
+    released = true;
+    device.destroy();
+    if (oom) throw new Error(`${label} ${gpuErrorText(oom, true)}`);
+    throw error;
+  }
 }

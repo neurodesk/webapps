@@ -51,6 +51,7 @@ test('the prefilled issue carries the app, build and browser facts a maintainer 
   assert.match(body, /\| Version \| v0\.4\.20260715 \|/);
   assert.match(body, /\| Page \| https:\/\/webapps\.neurodesk\.org\/synthsr\/ \|/);
   assert.match(body, new RegExp(`\\| Browser \\| ${window.navigator.userAgent.replace(/[.()/\\]/g, '\\$&')} \\|`));
+  assert.match(body, /\| Device memory \| not reported \|/);
   assert.match(body, /\| WebGPU \| unavailable \|/);
   assert.match(body, /\| Cross-origin isolated \| no \|/);
 });

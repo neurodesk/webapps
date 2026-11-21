@@ -49,6 +49,37 @@ test('worker session owns one worker and fans out messages without exposing tran
   assert.equal(worker.terminateCalled, true);
 });
 
+test('worker session distinguishes pre-start script errors from mid-run crashes and forwards router unhandled rejections', () => {
+  const errors = [];
+  let worker;
+  const session = new WorkerSession({
+    createWorker: () => (worker = { postMessage() {}, terminate() {} }),
+    onError: (message) => errors.push(message),
+  });
+  session.start();
+  worker.onerror({});
+  assert.equal(errors.at(-1), 'Worker error');
+
+  worker.onmessage({ data: { type: 'initialized' } });
+  worker.onerror({});
+  assert.match(errors.at(-1), /stopped unexpectedly \(often low device memory\)/);
+
+  worker.onmessageerror({});
+  assert.match(errors.at(-1), /deserialized \(often low device memory\)/);
+
+  const posted = [];
+  const listeners = new Map();
+  installWorkerRouter({
+    scope: {
+      postMessage: (message) => posted.push(message),
+      addEventListener: (type, fn) => listeners.set(type, fn),
+    },
+    handlers: {},
+  });
+  listeners.get('unhandledrejection')({ reason: new RangeError('Out of memory') });
+  assert.deepEqual(posted, [{ type: 'error', message: 'Out of memory', fatal: true }]);
+});
+
 test('worker emitter recursively transfers stage buffers', () => {
   let posted;
   const emit = createWorkerEmitter({ postMessage: (message, transfer) => { posted = { message, transfer }; } });

@@ -633,8 +633,10 @@ async function segmentImage(parameters, { signal, progress = () => {}, voxelSize
         reject(error instanceof Error ? error : new Error(String(error)));
       };
       try {
+        let workerStarted = false;
         worker = new Worker(new URL('./inference-worker.js', import.meta.url), { type: 'module' });
         worker.onmessage = async ({ data }) => {
+          workerStarted = true;
           if (!run.current) return;
           if (data.type === 'progress') {
             run.progress(data);
@@ -698,7 +700,10 @@ async function segmentImage(parameters, { signal, progress = () => {}, voxelSize
             } catch (error) { fail(error); }
           }
         };
-        worker.onerror = event => fail(new Error(event.message || 'The inference worker could not run. Reload the app and try again.'));
+        worker.onerror = event => fail(new Error(event.message || (workerStarted
+          ? 'Processing worker stopped unexpectedly (often low device memory).'
+          : 'The inference worker could not run. Reload the app and try again.')));
+        worker.onmessageerror = () => fail(new Error('Worker message could not be deserialized (often low device memory).'));
         const asset = manifest.assets.find(entry => entry.filename === 'synthseg-2.0.onnx');
         worker.postMessage({ file: source, options, model: { ...asset, url: `${assetBase}${asset.filename}?sha256=${asset.sha256}` } });
       } catch (error) { fail(error); }

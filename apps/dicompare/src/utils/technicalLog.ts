@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { formatMemoryError, isMemoryErrorMessage } from '@neurodesk/webapp-components/ui';
 
 /**
  * Technical log and activity store.
@@ -24,6 +25,8 @@ export interface ActivityState {
   progress: number | null;
   /** Epoch ms when the current run of activity started. */
   startedAt: number | null;
+  /** Latest log entry id recorded synchronously when the activity started. */
+  logFloorId: number;
 }
 
 const MAX_ENTRIES = 500;
@@ -33,12 +36,26 @@ type Listener = () => void;
 let entries: LogEntry[] = [];
 let nextId = 1;
 const logListeners = new Set<Listener>();
+let recoveryNotice: string | null = null;
+const recoveryListeners = new Set<Listener>();
 
 function emitLog() {
   logListeners.forEach((listener) => listener());
 }
 
+function emitRecovery() {
+  recoveryListeners.forEach((listener) => listener());
+}
+
 export function log(message: string, level: LogLevel = 'info'): void {
+  const formatted = level === 'error' && isMemoryErrorMessage(message) ? formatMemoryError(message) : null;
+  if (formatted) {
+    const rawEntry: LogEntry = { id: nextId++, time: new Date(), level: 'info', message: formatted.log };
+    const statusEntry: LogEntry = { id: nextId++, time: new Date(), level: 'error', message: formatted.status };
+    entries = [...entries, rawEntry, statusEntry].slice(-MAX_ENTRIES);
+    emitLog();
+    return;
+  }
   const entry: LogEntry = { id: nextId++, time: new Date(), level, message };
   entries = entries.length >= MAX_ENTRIES ? [...entries.slice(1), entry] : [...entries, entry];
   emitLog();
@@ -53,10 +70,34 @@ export function logError(context: string, error: unknown): void {
 export function clearLog(): void {
   entries = [];
   emitLog();
+  clearRecoveryNotice();
+}
+
+export function getRecoveryNotice(): string | null {
+  return recoveryNotice;
+}
+
+export function clearRecoveryNotice(): void {
+  if (recoveryNotice === null) return;
+  recoveryNotice = null;
+  emitRecovery();
+}
+
+function subscribeRecovery(listener: Listener) {
+  recoveryListeners.add(listener);
+  return () => { recoveryListeners.delete(listener); };
+}
+
+export function useRecoveryNotice(): string | null {
+  return useSyncExternalStore(subscribeRecovery, getRecoveryNotice, getRecoveryNotice);
 }
 
 export function getLogEntries(): LogEntry[] {
   return entries;
+}
+
+export function getLatestLogId(): number {
+  return entries.length ? entries[entries.length - 1].id : 0;
 }
 
 function subscribeLog(listener: Listener) {
@@ -73,20 +114,22 @@ export function useTechnicalLog(): LogEntry[] {
 // processing context but should show in the status footer.
 // ---------------------------------------------------------------------------
 
-interface Activity { id: number; label: string; progress: number | null }
+interface Activity { id: number; label: string; progress: number | null; logFloorId: number }
 
 let activities: Activity[] = [];
 let nextActivityId = 1;
-let activityState: ActivityState = { label: null, progress: null, startedAt: null };
+let activityState: ActivityState = { label: null, progress: null, startedAt: null, logFloorId: 0 };
 const activityListeners = new Set<Listener>();
 
 function recompute() {
   const current = activities[activities.length - 1] ?? null;
+  const root = activities[0] ?? null;
   const wasBusy = activityState.label !== null;
   activityState = {
     label: current?.label ?? null,
     progress: current?.progress ?? null,
     startedAt: current ? (wasBusy ? activityState.startedAt : Date.now()) : null,
+    logFloorId: root ? root.logFloorId : activityState.logFloorId,
   };
   activityListeners.forEach((listener) => listener());
 }
@@ -96,9 +139,10 @@ function recompute() {
  * `finally` block. Nested operations show the most recent label.
  */
 export function beginActivity(label: string, options: { silent?: boolean } = {}): (result?: { message?: string; level?: LogLevel }) => void {
-  const activity: Activity = { id: nextActivityId++, label, progress: null };
-  activities = [...activities, activity];
+  clearRecoveryNotice();
   if (!options.silent) log(label);
+  const activity: Activity = { id: nextActivityId++, label, progress: null, logFloorId: getLatestLogId() };
+  activities = [...activities, activity];
   recompute();
   let finished = false;
   return (result) => {
@@ -168,13 +212,33 @@ export function installConsoleCapture(target: Window & typeof globalThis = windo
   };
   target.addEventListener('error', (event) => log(`Unexpected error: ${event.message}`, 'error'));
   target.addEventListener('unhandledrejection', (event) => logError('Unexpected error', event.reason));
+  (target as unknown as Record<symbol, boolean>)[Symbol.for('neurodesk.statusManaged')] = true;
+  target.addEventListener('neurodesk-memory-notice', (event) => {
+    const detail = (event as CustomEvent<{ status?: string; log?: string }>).detail;
+    if (detail?.log) log(detail.log, 'info');
+    if (detail?.status) {
+      log(detail.status, 'error');
+      recoveryNotice = detail.status;
+      emitRecovery();
+    }
+  });
+  target.addEventListener('neurodesk-memory-restored', () => {
+    const webglStatus = formatMemoryError('WebGL context lost', { kind: 'webgl' })?.status;
+    if (webglStatus && entries.some((entry) => entry.level === 'error' && entry.message === webglStatus)) {
+      entries = entries.filter((entry) => !(entry.level === 'error' && entry.message === webglStatus));
+      emitLog();
+    }
+    if (recoveryNotice === webglStatus) clearRecoveryNotice();
+  });
 }
 
 /** Test helper: reset every store. */
 export function resetTechnicalLog(): void {
   entries = [];
   activities = [];
-  activityState = { label: null, progress: null, startedAt: null };
+  activityState = { label: null, progress: null, startedAt: null, logFloorId: 0 };
+  recoveryNotice = null;
   emitLog();
+  emitRecovery();
   activityListeners.forEach((listener) => listener());
 }

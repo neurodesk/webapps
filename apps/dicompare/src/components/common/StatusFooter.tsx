@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { usePyodide } from '../../contexts/PyodideContext';
 import { useProcessing } from '../../contexts/ProcessingContext';
-import { LogEntry, useActivity, useTechnicalLog } from '../../utils/technicalLog';
+import { formatMemoryError, isMemoryErrorMessage } from '@neurodesk/webapp-components/ui';
+import { clearRecoveryNotice, LogEntry, useActivity, useRecoveryNotice, useTechnicalLog } from '../../utils/technicalLog';
 
 function newestError(entries: LogEntry[]): LogEntry | null {
   for (let index = entries.length - 1; index >= 0; index -= 1) {
@@ -44,33 +45,56 @@ type ActivityStatusFooterProps = {
 export function ActivityStatusFooter({ pyodide, isProcessing = false, processingProgress, position = 'sticky' }: ActivityStatusFooterProps) {
   const activity = useActivity();
   const entries = useTechnicalLog();
+  const recoveryNotice = useRecoveryNotice();
   const [now, setNow] = useState(() => Date.now());
   const startedAt = useRef<number | null>(null);
-  const errorFloor = useRef(0);
+  const lastIdleLogId = useRef(0);
+  const processingFloor = useRef(0);
+  const wasProcessing = useRef(false);
   const text = useRef<HTMLSpanElement>(null);
-  const entriesRef = useRef(entries);
-  entriesRef.current = entries;
 
-  const running = Boolean(pyodide?.isLoading) || isProcessing || activity.label !== null;
-  // The newest error stays visible until the next operation starts.
+  if (isProcessing && !wasProcessing.current) {
+    processingFloor.current = lastIdleLogId.current;
+  }
+  wasProcessing.current = isProcessing;
+
+  const workflowRunning = isProcessing || activity.label !== null;
+  const running = Boolean(pyodide?.isLoading) || workflowRunning;
+  const effectiveFloor = Math.max(processingFloor.current, activity.logFloorId);
+  // The newest error stays visible until the next user workflow starts;
+  // automatic Pyodide startup must not swallow pre-ready recovery notices, and
+  // errors logged synchronously right after beginActivity/isProcessing stay visible.
   const candidate = newestError(entries);
-  const lastError = candidate && candidate.id > errorFloor.current ? candidate : null;
+  const lastError = candidate && candidate.id > effectiveFloor ? candidate : null;
+
+  useEffect(() => {
+    if (!workflowRunning) {
+      lastIdleLogId.current = entries.length ? entries[entries.length - 1].id : lastIdleLogId.current;
+      return;
+    }
+    clearRecoveryNotice();
+  }, [workflowRunning, entries]);
 
   useEffect(() => {
     if (!running) {
       startedAt.current = null;
       return undefined;
     }
-    const list = entriesRef.current;
-    errorFloor.current = list.length ? list[list.length - 1].id : errorFloor.current;
     startedAt.current = Date.now();
     setNow(Date.now());
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [running]);
 
+  const activeProgress = isProcessing
+    ? (processingProgress ? processingProgress.percentage / 100 : null)
+    : activity.progress;
+
   let state: FooterState;
-  if (isProcessing) {
+  if (workflowRunning && lastError) {
+    // Keep live errors (such as uncaught OOMs) visible while progress and elapsed continue.
+    state = { message: lastError.message, progress: activeProgress, running: true, error: true };
+  } else if (isProcessing) {
     state = {
       message: processingProgress?.currentOperation || 'Processing files…',
       progress: processingProgress ? processingProgress.percentage / 100 : null,
@@ -88,8 +112,16 @@ export function ActivityStatusFooter({ pyodide, isProcessing = false, processing
     };
   } else if (lastError) {
     state = { message: lastError.message, progress: 0, running: false, error: true };
+  } else if (recoveryNotice) {
+    state = { message: recoveryNotice, progress: 0, running: false, error: true };
   } else if (pyodide?.error) {
-    state = { message: `Analysis engine unavailable: ${pyodide.error}`, progress: 0, running: false, error: true };
+    const memoryError = isMemoryErrorMessage(pyodide.error) ? formatMemoryError(pyodide.error) : null;
+    state = {
+      message: memoryError ? memoryError.status : `Analysis engine unavailable: ${pyodide.error}`,
+      progress: 0,
+      running: false,
+      error: true,
+    };
   } else {
     state = {
       message: pyodide ? (pyodide.isReady ? 'Ready · load DICOMs, a protocol or a schema' : 'Starting…') : 'Ready',

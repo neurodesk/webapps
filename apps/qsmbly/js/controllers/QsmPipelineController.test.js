@@ -170,6 +170,35 @@ describe('QsmPipelineController initialization', () => {
     spy.mockRestore();
   });
 
+  test('reports a mid-run empty worker.onerror or onmessageerror, settles cancellable waiters and discards the dead worker', async () => {
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const errors = [];
+    const ex = makeExecutor({ onPipelineError: (message) => errors.push(message) });
+    const initialized = ex.initialize();
+    workers[0].reply({ type: 'initialized' });
+    await initialized;
+
+    const settledReasons = [];
+    ex.beginCancellableJob((reason) => settledReasons.push(reason));
+    workers[0].onerror({});
+
+    expect(workers[0].terminated).toBe(true);
+    expect(ex.workerSession).toBeNull();
+    expect(ex.workerReady).toBe(false);
+    expect(ex.isRunning()).toBe(false);
+    expect(errors[0]).toMatch(/stopped unexpectedly \(often low device memory\)/);
+    expect(settledReasons[0]).toMatch(/stopped unexpectedly \(often low device memory\)/);
+
+    const reinit = ex.initialize();
+    workers[1].reply({ type: 'initialized' });
+    await reinit;
+    ex.beginCancellableJob((reason) => settledReasons.push(reason));
+    workers[1].onmessageerror({});
+    expect(errors[1]).toMatch(/could not be deserialized \(often low device memory\)/);
+    expect(settledReasons[1]).toMatch(/could not be deserialized \(often low device memory\)/);
+    spy.mockRestore();
+  });
+
   test('rejects after the timeout if the worker never replies', async () => {
     jest.useFakeTimers();
     const progress = [];
@@ -228,7 +257,7 @@ describe('QsmPipelineController initialization', () => {
     expect(ex.workerInitializing).toBe(false);
   });
 
-  test('worker errors after init still go to the pipeline error path', async () => {
+  test('worker errors after init settle cancellable waiters and go to the pipeline error path', async () => {
     const ex = makeExecutor();
     const onPipelineError = jest.fn();
     ex.onPipelineError = onPipelineError;
@@ -236,9 +265,13 @@ describe('QsmPipelineController initialization', () => {
     workers[0].reply({ type: 'initialized' });
     await p;
 
-    workers[0].reply({ type: 'error', message: 'unwrap failed' });
+    const settled = [];
+    ex.beginCancellableJob((reason) => settled.push(reason));
+    workers[0].reply({ type: 'error', message: 'WebAssembly.Memory(): could not allocate memory' });
 
-    expect(onPipelineError).toHaveBeenCalledWith('unwrap failed');
+    expect(onPipelineError).toHaveBeenCalledWith('WebAssembly.Memory(): could not allocate memory');
+    expect(settled).toEqual(['WebAssembly.Memory(): could not allocate memory']);
+    expect(ex.isRunning()).toBe(false);
   });
 
   test('run() reports an init failure and returns false', async () => {

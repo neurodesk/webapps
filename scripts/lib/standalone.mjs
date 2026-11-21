@@ -55,7 +55,7 @@ function validateDownloads(downloads, id) {
 export const DIALOG_FORBIDDEN = /cargo build|compile from source|make macos-release|sha-256|sha256|shasum|Prepare this upstream/i;
 
 export const SHELL_COMPONENTS = [
-  'core/dom.js', 'ui/renderInfoDialog.js', 'ui/renderStandalone.js', 'ui/pageDrop.js', 'file-io/detectFiles.js', 'handoff/index.js', 'handoff/receive.js', 'styles/imaging-workspace.css', 'styles/base.css',
+  'core/dom.js', 'ui/ConsoleOutput.js', 'ui/renderInfoDialog.js', 'ui/renderStandalone.js', 'ui/pageDrop.js', 'ui/memoryCrash.js', 'file-io/detectFiles.js', 'handoff/index.js', 'handoff/receive.js', 'styles/imaging-workspace.css', 'styles/base.css',
   // WebMCP tools, loaded only in a browser that exposes a model context.
   'webmcp/page.js', 'webmcp/tools.js', 'webmcp/examples.js', 'webmcp/tool-inputs.js', 'webmcp/schema.js', 'webmcp/niivue-methods.js', 'ui/agentPrompt.js', 'ui/bindFileDrop.js', 'elements/define.js', 'elements/file-field.js',
   'automation/files.js', 'file-io/NiftiUtils.js', 'file-io/hash.js', 'worker/fetchModel.js', 'net/fetchWithRetry.js', 'net/stallGuard.js',

@@ -108,6 +108,7 @@ export class ProgressManager {
   setProgress(value: number, text?: string | null): void;
   setIndeterminate(text?: string): void;
   setText(text: string): void;
+  setError(text: string): void;
   setCancellable(cancellable: boolean): void;
   startTimer(): void;
   stopTimer(clear?: boolean): void;
@@ -116,5 +117,6 @@ export class ProgressManager {
   reset(text?: string): void;
 }
 
+export * from './ui/memoryCrash.js';
 export * from './elements/index.js';
 export * from './ui/templates.js';

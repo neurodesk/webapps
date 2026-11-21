@@ -556,6 +556,7 @@ const NiivueViewer: React.FC<NiivueViewerProps> = ({
         )}
         <canvas
           ref={canvasRef}
+          data-neurodesk-viewer-canvas=""
           style={{
             width: '100%',
             height: '100%',

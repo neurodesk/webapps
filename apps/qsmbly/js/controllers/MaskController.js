@@ -989,10 +989,15 @@ export class MaskController {
         }
       });
 
-      // Cancelling terminates the worker, so no reply ever comes — settle from here instead.
-      release = this.beginCancellableJob?.(() => {
-        this.updateOutput(`${name} cancelled.`);
-        this.setProgress(0, 'Cancelled');
+      // Cancelling or a fatal worker crash terminates the worker, so no reply ever comes — settle from here instead.
+      release = this.beginCancellableJob?.((errorMessage) => {
+        if (errorMessage) {
+          this.updateOutput(`${name} failed: ${errorMessage}`);
+          this.setProgress(0, `${name} failed`);
+        } else {
+          this.updateOutput(`${name} cancelled.`);
+          this.setProgress(0, 'Cancelled');
+        }
         settle(false);
       }) || (() => {});
 

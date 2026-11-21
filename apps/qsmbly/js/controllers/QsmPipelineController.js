@@ -102,13 +102,22 @@ export class QsmPipelineController {
     if (this.workerSession) return;
     this.workerSession = new WorkerSession({
       createWorker: () => new Worker('js/qsm-worker-pure.js', { type: 'module' }),
-      onError: (_, event) => {
+      onError: (workerMessage, event) => {
         console.error('Worker error:', event);
         // A worker script that fails to load reports an ErrorEvent with no message.
-        const message = event?.message || 'the worker script failed to load';
         if (this.workerInitializing) {
+          const message = event?.message || (workerMessage && workerMessage !== 'Worker error' ? workerMessage : 'the worker script failed to load');
           this._failInit(new Error(`Worker error: ${message}`));
           return;
+        }
+        const message = event?.message || (workerMessage && workerMessage !== 'Worker error'
+          ? workerMessage
+          : 'the processing worker stopped unexpectedly (often low device memory)');
+        this._settleWorkerWaiters(message);
+        if (this.workerSession) {
+          this.workerSession.terminate();
+          this.workerSession = null;
+          this.workerReady = false;
         }
         this.updateOutput(`Worker error: ${message}`);
         this._handleError(message);
@@ -131,6 +140,7 @@ export class QsmPipelineController {
           if (this.workerInitializing) {
             this._failInit(new Error(data.message));
           } else {
+            this._settleWorkerWaiters(data.message);
             if (data.fatal) {
               this.workerSession.terminate();
               this.workerSession = null;
@@ -315,6 +325,13 @@ export class QsmPipelineController {
     }
   }
 
+  _settleWorkerWaiters(errorMessage) {
+    for (const fn of [...this.cancelHandlers]) {
+      try { fn(errorMessage); } catch (e) { console.warn('cancel handler failed:', e); }
+    }
+    this.cancelHandlers.clear();
+  }
+
   cancel() {
     if (!this.pipelineRunning) return;
 
@@ -322,10 +339,7 @@ export class QsmPipelineController {
 
     // Settle anything awaiting a worker message first: after `terminate()` no reply can arrive,
     // so these promises would otherwise hang and leave the UI stuck mid-run.
-    for (const fn of [...this.cancelHandlers]) {
-      try { fn(); } catch (e) { console.warn('cancel handler failed:', e); }
-    }
-    this.cancelHandlers.clear();
+    this._settleWorkerWaiters();
 
     // Terminate the worker to stop all processing
     if (this.workerSession) {

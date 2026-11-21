@@ -307,6 +307,7 @@ if (typeof window === 'undefined') {
         try {
             const reloadedBySelf = window.sessionStorage.getItem("coiReloadedBySelf");
             window.sessionStorage.removeItem("coiReloadedBySelf");
+            if (reloadedBySelf) window[Symbol.for("neurodesk.coiReloaded")] = reloadedBySelf;
             const coepDegrading = reloadedBySelf === "coepdegrade";
             const coi = {
                 // A first-install update can reload before clients.claim() gives
