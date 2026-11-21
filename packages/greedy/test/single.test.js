@@ -43,6 +43,10 @@ test('the single-threaded build runs without a thread pool', async () => {
   for (const [x, y, z] of [[10, 16, 16], [16, 12, 20], [5, 20, 9]]) {
     assert.ok(Math.abs(at(resliced, x, y, z) - at(moving, x + 2, y, z)) < 1e-4, `voxel ${x}, ${y}, ${z}`);
   }
+  // A sheared sform (gantry tilt) without a qform is refused, as ITK does, not read as a bare diagonal grid.
+  const sheared = phantom();
+  new DataView(sheared.buffer).setFloat32(280 + 32 + 4, 0.3, true);
+  assert.throws(() => api.reslice_affine_options(sheared, sheared, '1 0 0 0\n0 1 0 0\n0 0 1 0\n0 0 0 1\n', false, 0), /not orthonormal/);
 });
 
 test('the rigid export recovers a translation with an orthonormal matrix', async () => {

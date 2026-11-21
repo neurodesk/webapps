@@ -19,8 +19,10 @@ test('the production CLI bundles workspace helpers without adding browser runtim
     assert.ok(inputs.some((path) => path.includes(`/${owner}/src/`)), `${owner} helpers must be bundled`);
   }
   const external = [...new Set(Object.values(graph.outputs).flatMap(({ imports }) =>
-    imports.filter(({ external }) => external).map(({ path }) => path)).filter((path) => !isBuiltin(path)))].sort();
-  assert.deepEqual(external, ['nifti-reader-js', 'onnxruntime-node']);
+    imports.filter(({ external }) => external).map(({ path }) => path)).filter((path) => !isBuiltin(path))
+    .map((path) => path.split('/').slice(0, path.startsWith('@') ? 2 : 1).join('/')))].sort();
+  // MindGrab's CPU modules and the Node driver's worker are loaded from disk, so they stay installed packages.
+  assert.deepEqual(external, ['@brainchop/mindgrab', '@neurodesk/node-drivers', 'nifti-reader-js', 'onnxruntime-node']);
   const manifest = JSON.parse(await readFile(root + 'package.json', 'utf8'));
   assert.deepEqual(Object.keys(manifest.dependencies).sort(), external);
   const browserInputs = inputs.filter((path) => /runtime-support|onnxruntime-web|components\/src\/(ui|viewer|elements)/.test(path));
