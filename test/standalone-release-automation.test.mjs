@@ -366,12 +366,13 @@ test('the nightly suite release announces every succeeded suite in one catalog d
 });
 
 test('a release.json from before exes/node-cli lists its targets without install commands', async () => {
-  const legacy = nativeReleases(new Map([['syncro', { packageDir: 'packages/syncro', spec: { targets: { 'linux-x64': { archive: 'tar.gz' } } }, legacy: true }]]));
-  const names = ['syncro-0.3.20260915-linux-x64.tar.gz'];
-  const catalog = { apps: { syncro: { downloads: [] } } };
-  applyCatalogUpdate(catalog, await update(catalog, verifiedRelease(names, 'syncro-v0.3.20260915'), legacy, 'syncro@0.3.20260915'));
-  assert.equal(catalog.apps.syncro.downloads[0].platform, 'linux-x64');
-  assert.equal(catalog.apps.syncro.downloads[0].command, undefined);
+  // SYNcro's release.json before 0.4 had this shape; topofit stands in, since SYNcro is now a Rust release.
+  const legacy = nativeReleases(new Map([['topofit', { packageDir: 'packages/topofit', spec: { targets: { 'linux-x64': { archive: 'tar.gz' } } }, legacy: true }]]));
+  const names = ['topofit-0.3.20260915-linux-x64.tar.gz'];
+  const catalog = { apps: { topofit: { downloads: [] } } };
+  applyCatalogUpdate(catalog, await update(catalog, verifiedRelease(names, 'topofit-v0.3.20260915'), legacy, 'topofit@0.3.20260915'));
+  assert.equal(catalog.apps.topofit.downloads[0].platform, 'linux-x64');
+  assert.equal(catalog.apps.topofit.downloads[0].command, undefined);
 });
 
 test('release tags name the app and version; specs are read from the tag itself', async () => {
