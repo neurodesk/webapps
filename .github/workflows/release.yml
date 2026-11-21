@@ -56,7 +56,7 @@ jobs:
     needs: app-plan
     if: needs.app-plan.outputs.has_release_apps == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 160
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.app-plan.outputs.release_apps) }}

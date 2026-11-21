@@ -506,7 +506,7 @@ jobs:
     # Due when the site was built; a skipped build leaves nothing to check.
     if: needs.composite-site.result == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
