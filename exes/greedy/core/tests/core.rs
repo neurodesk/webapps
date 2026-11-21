@@ -144,6 +144,9 @@ fn nifti_form_precedence_follows_itk() {
     let decoded = decode_image(&raw).unwrap();
     assert_eq!(decoded.grid.lps_from_voxel.0[0][3], -10.0);
     assert_eq!(decoded.grid.lps_from_voxel.0[0][1], 0.0);
+    // Without a qform ITK refuses the sheared sform rather than guess.
+    raw[252..254].copy_from_slice(&0_i16.to_le_bytes());
+    assert!(decode_image(&raw).is_err());
 }
 
 #[test]

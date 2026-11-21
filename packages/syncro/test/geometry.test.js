@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { gzipSync } from 'node:zlib';
-import { compatibleMaskGeometry, prepareAdditional, readAdditional, runSyncro, sameGeometry, thresholdBinary } from '../src/pipeline.js';
-import { writeVolume } from '../../synthsr/src/index.js';
+import { asBuffer, compatibleMaskGeometry, orthogonalGrid, prepareAdditional, readAdditional, resampleOnto, runSyncro, sameGeometry, thresholdBinary } from '../src/pipeline.js';
+import { readVolume, writeVolume } from '../../synthsr/src/index.js';
 
 const affine = [
   [1, 0, 0, 0],
@@ -180,6 +180,57 @@ test('CT reslicing uses the lower of zero and the source minimum', async () => {
     },
   });
   assert.equal(fill, -1024);
+});
+
+test('a gantry-tilted scan and its lesion are desheared onto one orthogonal grid, filled with the darkest voxel', async () => {
+  assert.equal(orthogonalGrid(volume), null);
+  // 8.5 degree tilt: voxel y also moves world z. Trilinear sampling reproduces a linear field exactly.
+  const tilted = [[-1, 0, 0, 5], [0, 1, 0, 0], [0, 0.15, 1, 0], [0, 0, 0, 1]];
+  const dims = [6, 8, 5];
+  const field = (x, y, z) => 2 * x + 3 * y + 5 * z - 50;
+  const data = new Float32Array(240);
+  for (let z = 0, i = 0; z < 5; z += 1) for (let y = 0; y < 8; y += 1) for (let x = 0; x < 6; x += 1, i += 1) data[i] = field(5 - x, y, 0.15 * y + z);
+  const darkest = Math.min(...data);
+  const grid = orthogonalGrid({ dims, affine: tilted });
+  const step = Math.hypot(1, 0.15);
+  assert.deepEqual(grid.dims, [6, 8, 7]);
+  assert.deepEqual(grid.affine, [[-1, 0, 0, 5], [0, step, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]);
+  const desheared = resampleOnto({ data, dims, affine: tilted }, grid, darkest);
+  let filled = 0;
+  for (let z = 0, i = 0; z < 7; z += 1) for (let y = 0; y < 8; y += 1) for (let x = 0; x < 6; x += 1, i += 1) {
+    const sourceZ = z - 0.15 * y * step;
+    if (y * step <= 7 && sourceZ >= -1e-4 && sourceZ <= 4 + 1e-4) assert.ok(Math.abs(desheared.data[i] - field(5 - x, y * step, z)) < 1e-3);
+    else filled += desheared.data[i] === darkest;
+  }
+  assert.ok(filled > 0);
+
+  const seen = [];
+  const input = writeVolume({ data, dims, affine: tilted });
+  const mask = writeVolume({ data: Uint8Array.from(data, (_, i) => Number(i === 100)), dims, affine: tilted });
+  const result = await runSyncro({
+    input,
+    inputName: 'ct.nii',
+    lesion: { name: 'lesion.nii', buffer: mask },
+    template: writeVolume(volume),
+    synthesize: async ({ buffer }) => {
+      seen.push(readVolume(buffer));
+      return { buffer: writeVolume(volume), provenance: {} };
+    },
+    extractBrain: async ({ volume: inputVolume }) => ({ brain: inputVolume, provenance: {} }),
+    registration: {
+      provenance: {},
+      register: ({ moving }) => ({ warped: new Uint8Array(moving), matrix: 'm', warp: Uint8Array.of(1) }),
+      apply: ({ moving }) => {
+        seen.push(readVolume(asBuffer(moving)));
+        return new Uint8Array(moving);
+      },
+      release() {},
+    },
+    imageMath: { smoothLesion: ({ buffer }) => new Uint8Array(buffer), thresholdLesion: ({ buffer }) => new Uint8Array(buffer), mask: ({ image }) => new Uint8Array(image) },
+  });
+  assert.deepEqual(result.provenance.desheared, { primary: true, pathological: false });
+  for (const image of seen.slice(0, 3)) assert.ok(sameGeometry(image, grid));
+  assert.equal(seen[2].data.reduce((sum, value) => sum + value, 0), 1);
 });
 
 const supportTemplate = {

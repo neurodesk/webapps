@@ -1,4 +1,4 @@
-import { gaussian, readVolume, writeVolume } from '../../synthsr/src/index.js';
+import { gaussian, inverse3, readVolume, writeVolume } from '../../synthsr/src/index.js';
 import * as nifti from 'nifti-reader-js';
 import packageJson from '../package.json' with { type: 'json' };
 
@@ -64,6 +64,78 @@ export function compatibleMaskGeometry(reference, mask) {
     if (Math.abs(reference.affine[row][3] - mask.affine[row][3]) > tolerance) return false;
   }
   return true;
+}
+
+// Gantry-tilted CT stores a sheared sform. ITK (ANTs) refuses it, Greedy would misread it and SynthSR
+// would see a sheared head, so it is resampled onto the orthogonal grid that covers the same world box:
+// each voxel axis keeps its spacing and snaps to its nearest world axis. Null when already orthonormal.
+export function orthogonalGrid({ dims, affine }) {
+  const spacing = [0, 1, 2].map((a) => Math.hypot(affine[0][a], affine[1][a], affine[2][a]));
+  const unit = (r, a) => affine[r][a] / spacing[a];
+  const dot = (a, b) => unit(0, a) * unit(0, b) + unit(1, a) * unit(1, b) + unit(2, a) * unit(2, b);
+  if (Math.abs(dot(0, 1)) <= 1e-4 && Math.abs(dot(0, 2)) <= 1e-4 && Math.abs(dot(1, 2)) <= 1e-4) return null;
+  const permutations = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]];
+  const score = (p) => p.reduce((sum, r, a) => sum + Math.abs(unit(r, a)), 0);
+  const axes = permutations.reduce((best, p) => score(p) > score(best) ? p : best);
+  const steps = axes.map((r, a) => Math.sign(affine[r][a]) * spacing[a]);
+  const low = [Infinity, Infinity, Infinity];
+  const high = [-Infinity, -Infinity, -Infinity];
+  for (let corner = 0; corner < 8; corner += 1) {
+    const voxel = [0, 1, 2].map((a) => (corner >> a & 1) * (dims[a] - 1));
+    axes.forEach((r, a) => {
+      const world = affine[r][0] * voxel[0] + affine[r][1] * voxel[1] + affine[r][2] * voxel[2] + affine[r][3];
+      low[a] = Math.min(low[a], world / steps[a]);
+      high[a] = Math.max(high[a], world / steps[a]);
+    });
+  }
+  const grid = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 1]];
+  axes.forEach((r, a) => {
+    grid[r][a] = steps[a];
+    grid[r][3] = low[a] * steps[a];
+  });
+  return { dims: low.map((value, a) => Math.ceil(high[a] - value - 1e-6) + 1), affine: grid };
+}
+
+// Trilinear resampling of `volume` onto `grid` (same world space); voxels outside the source get `fill`.
+export function resampleOnto(volume, grid, fill) {
+  const { data, dims } = volume;
+  const inverse = inverse3(volume.affine);
+  const offset = [0, 1, 2].map((r) => grid.affine[r][3] - volume.affine[r][3]);
+  const map = inverse.map((row) => [0, 1, 2, 3].map((c) => row[0] * (c < 3 ? grid.affine[0][c] : offset[0])
+    + row[1] * (c < 3 ? grid.affine[1][c] : offset[1]) + row[2] * (c < 3 ? grid.affine[2][c] : offset[2])));
+  const [nx, ny, nz] = grid.dims;
+  const out = new Float32Array(nx * ny * nz);
+  const limit = dims.map((d) => d - 1 + 1e-4);
+  const at = (xi, yi, zi) => data[xi + dims[0] * (yi + dims[1] * zi)];
+  let index = 0;
+  for (let k = 0; k < nz; k += 1) for (let j = 0; j < ny; j += 1) for (let i = 0; i < nx; i += 1, index += 1) {
+    const x = map[0][0] * i + map[0][1] * j + map[0][2] * k + map[0][3];
+    const y = map[1][0] * i + map[1][1] * j + map[1][2] * k + map[1][3];
+    const z = map[2][0] * i + map[2][1] * j + map[2][2] * k + map[2][3];
+    if (x < -1e-4 || y < -1e-4 || z < -1e-4 || x > limit[0] || y > limit[1] || z > limit[2]) {
+      out[index] = fill;
+      continue;
+    }
+    const x0 = Math.min(Math.max(Math.floor(x), 0), dims[0] - 1);
+    const y0 = Math.min(Math.max(Math.floor(y), 0), dims[1] - 1);
+    const z0 = Math.min(Math.max(Math.floor(z), 0), dims[2] - 1);
+    const x1 = Math.min(x0 + 1, dims[0] - 1);
+    const y1 = Math.min(y0 + 1, dims[1] - 1);
+    const z1 = Math.min(z0 + 1, dims[2] - 1);
+    const tx = x - x0;
+    const ty = y - y0;
+    const tz = z - z0;
+    const front = (at(x0, y0, z0) * (1 - tx) + at(x1, y0, z0) * tx) * (1 - ty) + (at(x0, y1, z0) * (1 - tx) + at(x1, y1, z0) * tx) * ty;
+    const back = (at(x0, y0, z1) * (1 - tx) + at(x1, y0, z1) * tx) * (1 - ty) + (at(x0, y1, z1) * (1 - tx) + at(x1, y1, z1) * tx) * ty;
+    out[index] = front * (1 - tz) + back * tz;
+  }
+  return { data: out, dims: grid.dims, affine: grid.affine };
+}
+
+function darkest(data) {
+  let value = Infinity;
+  for (const item of data) if (item < value) value = item;
+  return value;
 }
 
 export function prepareAdditional(volume, type) {
@@ -175,18 +247,29 @@ export async function runSyncro({
   const timings = {};
   const outputs = {};
   const provenance = { version: packageJson.version, ct, keepSynth, brainExtractor, normalization, stages: {} };
-  const inputBuffer = asBuffer(input);
-  const volume = readVolume(inputBuffer);
+  let inputBuffer = asBuffer(input);
+  let volume = readVolume(inputBuffer);
   const fixed = readVolume(asBuffer(template));
   const outputSpace = { dims: fixed.dims, affine: fixed.affine };
   if (hasTwoValues(volume)) throw new Error('The primary scan must be a scalar image, not a binary mask.');
-  const pathologicalVolume = pathological ? readAdditional(pathological.buffer, 'image') : null;
+  let pathologicalVolume = pathological ? readAdditional(pathological.buffer, 'image') : null;
   if (pathologicalVolume && hasTwoValues(pathologicalVolume)) throw new Error('The pathological modality scan must be a scalar image, not a binary mask.');
-  const lesionVolume = lesion ? readAdditional(lesion.buffer, 'binary') : null;
+  let lesionVolume = lesion ? readAdditional(lesion.buffer, 'binary') : null;
   const lesionReference = pathologicalVolume || volume;
   if (lesionVolume && !compatibleMaskGeometry(lesionReference, lesionVolume)) {
     throw new Error(`The lesion map must match the ${pathologicalVolume ? 'pathological modality' : 'primary'} scan grid.`);
   }
+  const primaryGrid = orthogonalGrid(volume);
+  const pathologicalGrid = pathologicalVolume && orthogonalGrid(pathologicalVolume);
+  const lesionGrid = pathologicalVolume ? pathologicalGrid : primaryGrid;
+  // Fill with the darkest voxel, not zero: sheared scans are mostly CT, where air is about -1000 HU.
+  if (primaryGrid) {
+    volume = resampleOnto(volume, primaryGrid, darkest(volume.data));
+    inputBuffer = writeVolume(volume, 'Desheared primary scan');
+  }
+  if (pathologicalGrid) pathologicalVolume = resampleOnto(pathologicalVolume, pathologicalGrid, darkest(pathologicalVolume.data));
+  if (lesionVolume && lesionGrid) lesionVolume = thresholdBinary(resampleOnto(lesionVolume, lesionGrid, 0));
+  provenance.desheared = { primary: Boolean(primaryGrid), pathological: Boolean(pathologicalGrid) };
   const compressed = splitNiftiName(inputName).extension.endsWith('.gz');
   async function stage(name, task) {
     onProgress(name, 0);
