@@ -27,11 +27,8 @@
     "lint": "node --check validation/package-check.mjs && node --check scripts/build-wasm.mjs"
   },
   "devDependencies": {
-    "@neurodesk/brain-extraction": "workspace:*",
-    "@neurodesk/greedy": "workspace:*",
     "@neurodesk/registration": "workspace:*",
     "@neurodesk/synthsr": "workspace:*",
-    "@neurodesk/synthstrip": "workspace:*",
     "@playwright/test": "1.64.0"
   }
 }

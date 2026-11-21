@@ -827,9 +827,9 @@ apps:
 
   syncro:
     packages:
-      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: SynthSR and SynthStrip inference on the CPU }
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: SynthSR inference on the CPU }
       - { name: WebGPU FP32 kernels, url: https://github.com/neurodesk/webapps/tree/main/packages/synthsr, role: SynthSR inference on the GPU }
-      - { name: MindGrab (brainchop), url: https://github.com/neuroneural/brainchop, role: default brain extraction }
+      - { name: MindGrab (brainchop), url: https://github.com/neuroneural/brainchop, role: brain extraction }
       - { name: greedy-rs (Rust/WebAssembly), url: https://github.com/neurodesk/webapps/tree/main/exes/greedy, role: default Greedy-compatible affine and deformable registration }
       - { name: ANTs SyN (WebAssembly), url: https://github.com/ANTsX/ANTs, role: optional deformable registration to MNI space }
       - { name: niimath (WebAssembly), url: https://github.com/rordenlab/niimath, role: lesion preparation, thresholding and brain masking }
@@ -850,11 +850,6 @@ apps:
         reference: "Masoud M, Hu F, Plis S. Brainchop: in-browser MRI volumetric segmentation and rendering. Journal of Open Source Software. 2023;8(83):5098."
         doi: 10.21105/joss.05098
         code: https://github.com/neuroneural/brainchop
-      - group: Brain extraction
-        title: SynthStrip
-        reference: "Hoopes A, Mora JS, Dalca AV, Fischl B, Hoffmann M. SynthStrip: skull-stripping for any brain image. NeuroImage. 2022;260:119474."
-        doi: 10.1016/j.neuroimage.2022.119474
-        code: https://surfer.nmr.mgh.harvard.edu/docs/synthstrip/
       - group: Registration
         title: Greedy
         reference: "Greedy was created by Paul Yushkevich at the Penn Image Computing and Science Lab and is maintained by contributors to the Greedy C++ project [Computer software]."

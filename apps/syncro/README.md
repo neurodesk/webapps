@@ -1,11 +1,11 @@
 # SYNcro webapp
 
 SYNcro normalizes clinical brain scans to the MNI152 1 mm template entirely in
-the browser. Its default stages match the native
-[`rordenlab/SYNcro`](https://github.com/rordenlab/SYNcro) command:
+the browser. It runs the same Rust core (`exes/syncro`, as WebAssembly) as the
+standalone `syncro` command, which decides every step and its command line:
 
 1. SynthSR creates a synthetic T1-weighted image from the primary scan.
-2. MindGrab extracts its brain. SynthStrip is an optional alternative.
+2. MindGrab extracts its brain.
 3. Greedy estimates affine and deformable normalization. ANTs SyN is optional.
 4. niimath prepares and thresholds lesion masks and masks the normalized primary
    scan with the normalized synthetic brain.
