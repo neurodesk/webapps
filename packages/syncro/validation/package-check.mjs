@@ -40,8 +40,8 @@ const LIMITS={
 };
 
 const executableIndex=process.argv.indexOf('--executable');
-const executable=executableIndex>=0?resolve(process.argv[executableIndex+1]):process.execPath;
-const prefix=executableIndex>=0?[]:[resolve(process.argv[2]||'packages/syncro/bin/syncro.js')];
+if(executableIndex<0)throw new Error('usage: package-check.mjs --executable PATH/syncro [--input SCAN]');
+const executable=resolve(process.argv[executableIndex+1]);
 // A local scan in place of the pinned download. Only the check's own tests pass it, to judge a
 // stand-in command without the network; a release check always reads the pinned scan.
 const inputIndex=process.argv.indexOf('--input');
@@ -50,7 +50,7 @@ const sha256=bytes=>createHash('sha256').update(bytes).digest('hex');
 const failures=[];
 
 function run(args,timeout=30000) {
-  const result=spawnSync(executable,[...prefix,...args],{encoding:'utf8',timeout,maxBuffer:64*1024*1024});
+  const result=spawnSync(executable,args,{encoding:'utf8',timeout,maxBuffer:64*1024*1024});
   if(result.error)throw result.error;
   return result;
 }
@@ -147,10 +147,10 @@ function lesionFixture(input) {
 
 // The scan moved 20 mm along x in world space (sform and qform offsets), standing in for a second
 // modality: SYNcro must register it back to the primary scan before the lesion drawn on it is warped.
-function shiftedCopy(input) {
+function shiftedCopy(input,shift=PATHOLOGICAL_SHIFT_MM) {
   const bytes=Buffer.from(input.bytes);
   const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
-  for(const offset of [268,292])view.setFloat32(offset,view.getFloat32(offset,input.le)+PATHOLOGICAL_SHIFT_MM,input.le);
+  for(const offset of [268,292])view.setFloat32(offset,view.getFloat32(offset,input.le)+shift,input.le);
   return bytes;
 }
 
@@ -231,36 +231,38 @@ async function rejectsInvalidUse(work) {
   await writeFile(input,Buffer.from('Validation is rejected before inference.'));
   await mkdir(output);
   await writeFile(join(output,'keep.txt'),'preserve');
-  let r=run([input,output,'--offline']);
+  let r=run([input,output]);
   assert.notEqual(r.status,0);
   assert.match(r.stderr,/already exists/);
   assert.equal(await readFile(join(output,'keep.txt'),'utf8'),'preserve');
   r=run([input,join(work,'new'),'--threads','0']);
   assert.notEqual(r.status,0);
   assert.match(r.stderr,/positive integer/);
-  const emptyCache=join(work,'empty-cache');
-  r=run(['download-models','--offline','--cache-dir',emptyCache]);
+  r=run(['download-models']);
   assert.notEqual(r.status,0);
-  assert.match(r.stderr,/missing from the offline installation/);
-  r=run([input,output,'--resume','--offline']);
+  assert.match(r.stderr,/was removed/);
+  r=run([input,output,'--resume']);
   assert.notEqual(r.status,0);
+  assert.match(r.stderr,/not an interrupted SYNcro run/);
   assert.equal(await readFile(join(output,'keep.txt'),'utf8'),'preserve');
-  const interrupted=join(work,'interrupted');
-  const pathological=join(work,'pathological.nii');
-  await writeFile(pathological,'Original pathological scan');
-  const options=['--offline','--cache-dir',emptyCache,'--pathological',pathological];
-  r=run([input,interrupted,...options]);
-  assert.notEqual(r.status,0);
-  assert.match(r.stderr,/missing from the offline installation/);
-  await writeFile(pathological,'Changed pathological scan');
-  r=run([input,interrupted,...options,'--resume']);
-  assert.notEqual(r.status,0);
-  assert.match(r.stderr,/Checkpoint input, options or software differ/);
-  console.log('PASS installed package: self-check, help, output preservation, thread validation, offline cache failure, invalid resume, changed pathological scan');
+  console.log('PASS installed package: self-check, help, output preservation, thread validation, removed command, resume of a foreign directory');
 }
 
-// Exercise the default MindGrab and Greedy path with a pathological scan and its lesion.
-// The second run uses SynthStrip and ANTs as in the reference container.
+// A finished run resumes without rerunning a step; a changed input is refused and the outputs kept.
+async function resumes(inputPath,output,options,pathologicalPath,original) {
+  const name=basename(inputPath);
+  const before=sha256(await readFile(join(output,`wbt1${name}`)));
+  let r=run([inputPath,output,...options,'--resume'],10*60*1000);
+  const reran=r.stdout.split('\n').filter(line=>/^ +[0-9.]+s /.test(line));
+  check(r.status===0&&reran.length===0,`resume of a finished run reruns no step${reran.length?`: ${reran.join('; ')}`:''}`);
+  await writeFile(pathologicalPath,shiftedCopy(readNifti(original),PATHOLOGICAL_SHIFT_MM+1));
+  r=run([inputPath,output,...options,'--resume']);
+  const kept=sha256(await readFile(join(output,`wbt1${name}`)))===before;
+  check(r.status!==0&&/Checkpoint input, options or software differ/.test(r.stderr)&&kept,'resume with a changed pathological scan is refused and keeps the outputs');
+}
+
+// Exercise the default Greedy path with a pathological scan and its lesion, then ANTs SyN (ANTs must be on
+// PATH or in ANTSPATH: SYNcro does not bundle it).
 async function normalisesPinnedScan(work,engine) {
   const templateBytes=await readFile(TEMPLATE.url);
   check(sha256(templateBytes)===TEMPLATE.sha256,`MNI152 template SHA-256 ${TEMPLATE.sha256}`);
@@ -276,14 +278,13 @@ async function normalisesPinnedScan(work,engine) {
   await writeFile(lesionPath,lesion.bytes);
   const output=join(work,`normalised-${engine}`);
   const started=performance.now();
-  const extractor=engine==='greedy'?'mindgrab':'synthstrip';
-  const options=pathological?['--pathological',pathologicalPath]:['--normalization',engine,'--brain-extractor',extractor];
-  const result=run([inputPath,output,'--offline','--lesion',lesionPath,...options],40*60*1000);
+  const options=['--lesion',lesionPath,...(pathological?['--pathological',pathologicalPath]:['--normalization',engine])];
+  const result=run([inputPath,output,...options],40*60*1000);
   const seconds=(performance.now()-started)/1000;
   if(result.status!==0)throw new Error(`normalisation exited with ${result.status}:\n${result.stderr}`);
   const provenance=JSON.parse(await readFile(join(output,'provenance.json'),'utf8'));
   check(provenance.normalization===engine,`${engine}: provenance records the ${provenance.normalization} normalisation`);
-  check(provenance.brainExtractor===extractor && Object.hasOwn(provenance.stages,extractor),`${engine}: brain extraction ran ${extractor}`);
+  check(provenance.brainExtractor==='mindgrab'&&Boolean(provenance.tools?.['brainchop-mindgrab']),`${engine}: brain extraction ran MindGrab (${provenance.tools?.['brainchop-mindgrab']?.version})`);
   console.log(`INFO ${engine}: offline normalisation of ${name} took ${seconds.toFixed(0)} s; native lesion centre ${lesion.centre.map(value=>value.toFixed(1)).join(', ')} mm`);
   const template=readNifti(templateBytes);
   report(score({
@@ -296,6 +297,7 @@ async function normalisesPinnedScan(work,engine) {
     const warped=readNifti(await readFile(join(output,'wpathological.nii')));
     const value=correlation(warped.data,template.data,i=>template.data[i]>0);
     check(sameGrid(warped,template)&&value>=LIMITS.primaryCorrelation,`${engine}: warped pathological modality correlation with the MNI152 template inside its brain ${value.toFixed(4)} >= ${LIMITS.primaryCorrelation}`);
+    await resumes(inputPath,output,options,pathologicalPath,await readFile(inputPath));
   }
 }
 

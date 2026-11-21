@@ -13,21 +13,30 @@ const template=fileURLToPath(new URL('../data/MNI152_T1_1mm_brain.nii.gz',import
 // judge its verdicts without the network; the stand-in ignores the scan it is given.
 // A stand-in for the installed command. Its normalisation copies the MNI152 template into every
 // output (and the --pathological scan's), draws a 6 mm lesion at MNI (-30, -10, 20) and records
-// the requested registration and extraction methods, then applies FAKE_SYNCRO_DEFECT.
+// the requested registration method and MindGrab, then applies FAKE_SYNCRO_DEFECT. --resume reruns
+// nothing while the pathological scan is unchanged and refuses a changed one.
 const fake=`#!/usr/bin/env node
 import {mkdir,readFile,writeFile,stat} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
 import {basename,join} from 'node:path';
 import {gunzipSync,gzipSync} from 'node:zlib';
 const args=process.argv.slice(2);
 const fail=message=>{console.error(message);process.exit(1);};
 if(args[0]==='--help'){console.log('usage');process.exit(0);}
 if(args[0]==='self-check'){console.log(JSON.stringify({executable:process.execPath}));process.exit(0);}
-if(args[0]==='download-models')fail('Model is missing from the offline installation.');
-if(args.includes('--resume'))fail('Checkpoint input, options or software differ.');
+if(args[0]==='download-models')fail('download-models was removed: the models are built into the tools.');
 if(args[args.indexOf('--threads')+1]==='0')fail('Threads must be a positive integer.');
-if(args.includes('--cache-dir'))fail('Model is missing from the offline installation.');
 const [input,output]=args;
-if(await stat(output).catch(()=>null))fail('Output directory already exists.');
+const pathological=args.includes('--pathological')?args[args.indexOf('--pathological')+1]:null;
+const fingerprint=pathological?createHash('sha256').update(await readFile(pathological)).digest('hex'):'none';
+if(await stat(output).catch(()=>null)) {
+  if(!args.includes('--resume'))fail('Output directory already exists.');
+  const record=await readFile(join(output,'work','syncro.json'),'utf8').catch(()=>null);
+  if(record===null)fail(output+' is not an interrupted SYNcro run.');
+  if(record!==fingerprint)fail('Checkpoint input, options or software differ.');
+  console.log('  skip  everything');
+  process.exit(0);
+}
 const defect=process.env.FAKE_SYNCRO_DEFECT;
 const bytes=gunzipSync(await readFile(${JSON.stringify(template)}));
 const header=Buffer.from(bytes.subarray(0,352));
@@ -46,16 +55,16 @@ for(let i=0;i<lesion.length;i+=1){
   if(Math.hypot(mm[0]-centreX,mm[1]+10,mm[2]-20)<=6)lesion[i]=1;
 }
 const nifti=data=>gzipSync(Buffer.concat([header,Buffer.from(data.buffer)]));
-await mkdir(output);
+await mkdir(join(output,'work'),{recursive:true});
+await writeFile(join(output,'work','syncro.json'),fingerprint);
 const name=basename(input);
 const primary=defect==='garbage'?brain.map((value,i)=>(i*7919)%1000):shifted;
 await writeFile(join(output,'wbt1'+name),nifti(shifted));
 await writeFile(join(output,'w'+name),nifti(primary));
 await writeFile(join(output,'wlesion.nii'),nifti(lesion));
 const normalization=defect==='engine'?'greedy':args.includes('--normalization')?args[args.indexOf('--normalization')+1]:'greedy';
-const brainExtractor=args.includes('--brain-extractor')?args[args.indexOf('--brain-extractor')+1]:'mindgrab';
-if(args.includes('--pathological'))await writeFile(join(output,'w'+basename(args[args.indexOf('--pathological')+1])),nifti(primary));
-await writeFile(join(output,'provenance.json'),JSON.stringify({normalization,brainExtractor,stages:{[brainExtractor]:{}}}));
+if(pathological)await writeFile(join(output,'w'+basename(pathological)),nifti(primary));
+await writeFile(join(output,'provenance.json'),JSON.stringify({normalization,brainExtractor:'mindgrab',tools:{'brainchop-mindgrab':{version:'stand-in'}}}));
 console.log(output);
 `;
 
