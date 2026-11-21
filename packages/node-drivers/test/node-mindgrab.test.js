@@ -9,6 +9,20 @@ const reference = JSON.parse(await readFile(REFERENCE_URL, 'utf8')).mindgrab;
 const mindgrab = await loadMindgrabCpu(import.meta.resolve('@brainchop/mindgrab/package.json'));
 const input = new Uint8Array(1024);
 
+// A uint8 NIfTI-1 of n^3 zeros.
+function volume(n) {
+  const bytes = new Uint8Array(352 + n ** 3);
+  const view = new DataView(bytes.buffer);
+  view.setInt32(0, 348, true);
+  [3, n, n, n, 1, 1, 1, 1].forEach((value, i) => view.setInt16(40 + 2 * i, value, true));
+  view.setInt16(70, 2, true);
+  view.setInt16(72, 8, true);
+  [1, 1, 1, 1].forEach((value, i) => view.setFloat32(76 + 4 * i, value, true));
+  view.setFloat32(108, 352, true);
+  bytes.set([0x6e, 0x2b, 0x31, 0x00], 344);
+  return bytes;
+}
+
 test('runs the mindgrab version the browser reference ran', () => {
   assert.equal(mindgrab.version, reference.version);
 });
@@ -39,9 +53,10 @@ test('a run past its time limit is stopped and reported', async () => {
 test('an aborted signal stops the run with its reason and frees the queue', async () => {
   const reason = new DOMException('stop', 'AbortError');
   await assert.rejects(mindgrab.segment(input, { model: 'mindgrab', signal: AbortSignal.abort(reason) }), error => error === reason);
+  // A valid 8^3 image keeps the module in inference for seconds, so aborting on its first log
+  // line lands while it runs (the zero-filled input fails to read, which can win a timer).
   const controller = new AbortController();
-  const running = mindgrab.segment(input, { model: 'mindgrab', signal: controller.signal });
-  setTimeout(() => controller.abort(), 50);
+  const running = mindgrab.segment(volume(8), { model: 'mindgrab', signal: controller.signal, onLog: () => controller.abort() });
   await assert.rejects(running, { name: 'AbortError' });
   await assert.rejects(mindgrab.segment(input, { model: 'mindgrab', timeoutMs: 1 }), /did not finish within 1 ms/);
 });
