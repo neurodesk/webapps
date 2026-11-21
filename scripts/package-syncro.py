@@ -55,9 +55,12 @@ def extract(archive, into):
         with zipfile.ZipFile(archive) as bundle:
             bundle.extractall(into)
             # extractall drops Unix modes; ANTs' zips record its executables as 0755.
+            root = Path(into).resolve()
             for member in bundle.infolist():
-                if mode := member.external_attr >> 16 & 0o777:
-                    os.chmod(Path(into) / member.filename, mode)
+                path = (root / member.filename).resolve()
+                mode = member.external_attr >> 16 & 0o777
+                if mode and not member.is_dir() and path.is_relative_to(root):
+                    os.chmod(path, mode)
     elif name.endswith('.tar.gz'):
         with tarfile.open(archive) as bundle:
             bundle.extractall(into, filter='data')
