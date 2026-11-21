@@ -1,0 +1,11 @@
+[package]
+name = "syncro"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+syncro-core = { path = "../core" }
+neurodesk-pipeline-host = { path = "../../pipeline-host", features = ["native"] }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }

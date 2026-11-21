@@ -7,7 +7,7 @@
     "dev": "pnpm --filter @neurodesk/greedy build:wasm && node scripts/copy-runtime-assets.mjs && vite",
     "build": "pnpm --filter @neurodesk/greedy build:wasm && node scripts/copy-runtime-assets.mjs && vite build && node ../../scripts/theme-app-dist.mjs --app syncro",
     "preview": "vite preview",
-    "test": "pnpm --filter @neurodesk/greedy build:wasm && node --test test/*.test.js",
+    "test": "pnpm --filter @neurodesk/greedy build:wasm && pnpm --filter @neurodesk/syncro test:core && node --test test/*.test.js",
     "test:e2e": "playwright test",
     "lint": "node --check src/main.js && node --check src/worker.js"
   },

@@ -3,6 +3,7 @@
 
 #[path = "../../../synthsr/src/nifti.rs"]
 #[allow(dead_code)]
+#[rustfmt::skip]
 mod synthsr_nifti;
 
 pub use synthsr_nifti::{Affine, Volume, read};

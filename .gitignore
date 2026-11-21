@@ -39,6 +39,7 @@ packages/greedy/wasm/
 packages/shoreline/wasm/
 packages/shoreline/.wasm-build.lock/
 packages/fastprep/wasm/
+packages/syncro/wasm/
 packages/greedy/.wasm-build.lock/
 
 # Vendored shared components (generated from packages/components by each app's vendor script)
