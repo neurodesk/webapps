@@ -48,13 +48,18 @@ export async function dispatchedWorkflows(root) {
 // workflows, run it. A workflow native.yml does not sweep is never called on
 // the schedule. Every call uses this one template; test/native-decision.test.mjs
 // evaluates it for each gate outcome and for corrupted skip lists.
+// Draft pull requests and converted_to_draft transitions skip the gate job
+// entirely (zero runners allocated) while still cancelling any in-flight PR run
+// through the workflow concurrency group.
+export const NOT_DRAFT_CONDITION = "(github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft'))";
+
 export function callCondition(name, { sweep }) {
   const skipped = `needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"${name}"')`;
-  return `\${{ !cancelled() && ${sweep ? '' : "github.event_name != 'schedule' && "}needs.gate.outputs.withheld != 'true' && !(${skipped}) }}`;
+  return `\${{ !cancelled() && ${NOT_DRAFT_CONDITION} && ${sweep ? '' : "github.event_name != 'schedule' && "}needs.gate.outputs.withheld != 'true' && !(${skipped}) }}`;
 }
 
 // The job that fails a run whose full plan the gate withheld.
-export const WITHHELD_CONDITION = "${{ !cancelled() && needs.gate.outputs.withheld == 'true' }}";
+export const WITHHELD_CONDITION = `\${{ !cancelled() && ${NOT_DRAFT_CONDITION} && needs.gate.outputs.withheld == 'true' }}`;
 
 export function renderNativeWorkflow(workflows) {
   const paths = [...GATE_FILES, ...new Set(workflows.flatMap(([, flow]) => sharedPaths(flow)).sort())];
@@ -101,6 +106,7 @@ export function renderNativeWorkflow(workflows) {
     '  # Decides which workflows to skip (scripts/lib/native-decision.mjs). Whatever',
     '  # goes wrong in it runs them: each call skips only when the gate names it.',
     '  gate:',
+    `    if: ${NOT_DRAFT_CONDITION}`,
     '    uses: ./.github/workflows/pr-gate.yml',
     '    permissions:',
     '      contents: read',

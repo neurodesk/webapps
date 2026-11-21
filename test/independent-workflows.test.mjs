@@ -187,7 +187,7 @@ test('desktop builds run on the daily schedule or by hand, and publish only on s
     assert.ok(!flow.jobs[name].steps.some(step => /pnpm build/.test(step.run || '')), `${name} reuses the one build`);
   }
   for (const [name, job] of Object.entries(flow.jobs)) {
-    if (job.uses) continue;
+    if (job.uses || name === 'turbo-cache-retention' || name === 'announce') continue;
     const checkout = job.steps.find(step => step.uses?.startsWith('actions/checkout@'));
     assert.equal(checkout.with?.ref, undefined, 'use the scheduled run commit for every job');
     const stamp = job.steps.find(step => step.run === 'node scripts/desktop/daily-version.mjs');
@@ -195,6 +195,8 @@ test('desktop builds run on the daily schedule or by hand, and publish only on s
       ? '${{ steps.date.outputs.release_date }}'
       : '${{ needs.bundle.outputs.release_date }}');
   }
+  assert.deepEqual(flow.jobs.announce.needs, ['bundle', 'publish']);
+  assert.equal(flow.jobs.bundle.outputs.desktop_version, '${{ steps.desktop-version.outputs.version }}');
 });
 
 test('web releases and deployments do not wait for the desktop suite', async () => {
@@ -275,7 +277,7 @@ test('native and independent test workflows pin actions and discard checkout cre
       if (job.uses) assert.match(job.uses, /^\.\/\.github\/workflows\/[\w-]+\.yml$/, `${name}: ${job.uses}`);
       for (const step of job.steps || []) {
         if (!step.uses) continue;
-        if (['./.github/actions/setup-wasm-opt', './.github/actions/windows-signing'].includes(step.uses)) continue;
+        if (['./.github/actions/setup-wasm-opt', './.github/actions/setup-wasm-pack', './.github/actions/setup-playwright', './.github/actions/windows-signing'].includes(step.uses)) continue;
         assert.match(step.uses, /^[\w-]+\/[\w-]+@[0-9a-f]{40}$/, `${name}: ${step.uses}`);
         if (step.uses.startsWith('actions/checkout@')) assert.equal(step.with['persist-credentials'], false);
       }

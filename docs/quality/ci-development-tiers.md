@@ -1,12 +1,16 @@
 # CI development tiers
 
-Keep iterative PRs in draft. Drafts run repository contracts, package tests,
-lint, the homepage easter egg unless every changed path lies in a tree it
-cannot read, and app unit and build tests (`app-tests`) for directly edited
-`apps/<id>/` files and `models/<id>.manifest.json`. If the diff cannot be
-determined, the app planner keeps its conservative full selection. Changes
-confined to shared packages receive package tests during development; their
-downstream applications run when the PR is ready.
+Keep iterative PRs in draft. Drafts run repository contracts (`workspace-contracts`),
+fast quality checks (`correctness` and `dependencies`, deferring `unused-code` and
+`mutation` until ready), shared package tests (`package-tests`, which runs in parallel
+with `workspace-contracts` and skips app/doc-only drafts), the homepage easter egg
+unless every changed path lies in a tree it cannot read, and app unit and build tests
+(`app-tests`) for directly edited `apps/<id>/` files and `models/<id>.manifest.json`.
+If the diff cannot be determined, the app planner keeps its conservative full
+selection. Changes confined to shared packages receive package tests during
+development; their downstream applications run when the PR is ready. Changes confined
+to `site/app-theme.css` or `site/fonts/` test the complete composite site (`siteCode = true`)
+without running per-app unit/WASM matrices.
 
 A draft starts no browser job (`browser-e2e`, `browser-e2e-gpu`). To run the
 browser tests of a draft, dispatch `ci` on its branch:
@@ -79,15 +83,18 @@ calls `.github/workflows/pr-gate.yml`, and its entry jobs wait for
 - When it cannot decide (no diff, an unreadable lockfile, a script error) it
   runs.
 
-The gate answers `false` for a draft and `true` for a dispatch without a
+The gate job skips draft pull requests (and `converted_to_draft`) at the workflow level
+with zero runners (`NOT_DRAFT_CONDITION`), and answers `true` for a dispatch without a
 checkout. A ready pull request over its full-plan budget
 ([enforcement](#enforcement-in-ci)) fails the gate, even for the workflow's
 own paths, as a draft would skip it, where the change gives `ci` a full plan
 wider than its draft plan: there its `ci` run withholds the plan too and fails
 `full-plan-withheld` (`budgetedDecision`). The gate fails rather than skips so
-that the suite never reads as green; a check that fails runs the workflow. The job always finishes: a skipped gate would skip every
-job after the entry jobs. `test/workflow-gate.test.mjs` holds the rules, and
-fails when a workflow adds a shared filter without the gate.
+that the suite never reads as green; a check that fails runs the workflow. On ready
+pull requests and non-PR events the gate always finishes: a skipped gate skips
+every job after the entry jobs (and `native.yml` calls also require `NOT_DRAFT_CONDITION`,
+keeping fail-open intact for ready pull requests and schedules). `test/workflow-gate.test.mjs`
+holds the rules, and fails when a workflow adds a shared filter without the gate.
 
 Replay a pull request locally with
 `node scripts/workflow-gate.mjs --workflow <name> --base <sha> --head <sha>`,

@@ -54,6 +54,7 @@ test('the workflow builds a fixed real upstream runtime and executes both templa
   }
   assert.ok(job.steps.some(step => (step.run ?? '').includes('node scripts/desktop/neuroflow-smoke.mjs --${{ matrix.template }}')));
   for (const step of job.steps.filter(step => step.uses)) {
+    if (step.uses === './.github/actions/setup-wasm-pack') continue;
     assert.match(step.uses, /^[\w-]+\/[\w-]+@[0-9a-f]{40}$/);
     if (step.uses.startsWith('actions/checkout@')) assert.equal(step.with['persist-credentials'], false);
   }
@@ -84,11 +85,15 @@ test('the DWI job installs the toolchain that the real shoreline build requires'
   const toolchain = build.match(/const toolchain\s*=\s*["']([^"']+)["']/)[1];
   const steps = flow.jobs['exported-template'].steps;
   const install = steps.findIndex(step => step.run?.includes(`rustup toolchain install ${toolchain}`));
+  const wasmPack = steps.findIndex(step => step.uses === './.github/actions/setup-wasm-pack');
   const compile = steps.findIndex(step => step.name === "Build the exported workflow's applications");
   assert.ok(install >= 0 && install < compile, 'Install the pinned toolchain before building DWI Correct');
+  assert.ok(wasmPack >= 0 && wasmPack < compile, 'Set up the pinned cached wasm-pack before building DWI Correct');
+  assert.equal(steps[wasmPack].if, "matrix.template == 'dwi'");
   assert.match(steps[install].run, /--component rust-src/);
   assert.match(steps[install].run, /--target wasm32-unknown-unknown/);
-  assert.match(steps[install].run, /cargo install wasm-pack --version 0\.13\.1 --locked/);
+  const wasmPackAction = await readFile(new URL('.github/actions/setup-wasm-pack/action.yml', root), 'utf8');
+  assert.match(wasmPackAction, /cargo install wasm-pack --version 0\.13\.1 --locked/);
 });
 
 

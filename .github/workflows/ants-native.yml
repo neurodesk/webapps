@@ -39,6 +39,7 @@ jobs:
   # its shared_paths (scripts/lib/workflow-gate.mjs). Called from native.yml, which decided first,
   # it answers true.
   gate:
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft'))
     uses: ./.github/workflows/pr-gate.yml
     permissions:
       contents: read

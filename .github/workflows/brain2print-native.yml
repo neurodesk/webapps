@@ -7,10 +7,6 @@ on:
       - '.github/workflows/brain2print-native.yml'
       - 'packages/brain2print/**'
       - 'apps/brain2print/**'
-      - 'packages/node-drivers/package.json'
-      - 'packages/node-drivers/src/mindgrab-worker.js'
-      - 'packages/node-drivers/src/mindgrab.js'
-      - 'packages/node-drivers/src/niimath.js'
       - 'exes/synthseg/test/fixtures/small.nii.gz'
       - 'apps/calmar/tests/fixtures/synthstrip-mini/T1.nii.gz'
       - 'packages/components/src/automation/parameters.js'
@@ -22,10 +18,6 @@ on:
       - 'exes/node-cli/**'
       - 'packages/brain2print/**'
       - 'apps/brain2print/**'
-      - 'packages/node-drivers/package.json'
-      - 'packages/node-drivers/src/mindgrab-worker.js'
-      - 'packages/node-drivers/src/mindgrab.js'
-      - 'packages/node-drivers/src/niimath.js'
       - 'exes/synthseg/test/fixtures/small.nii.gz'
       - 'apps/calmar/tests/fixtures/synthstrip-mini/T1.nii.gz'
       - 'packages/components/src/automation/parameters.js'
@@ -51,6 +43,7 @@ jobs:
   # its shared_paths (scripts/lib/workflow-gate.mjs). Called from native.yml, which decided first,
   # it answers true.
   gate:
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft'))
     uses: ./.github/workflows/pr-gate.yml
     permissions:
       contents: read
@@ -62,6 +55,10 @@ jobs:
         packages/components/package.json
         packages/runtime-support/src/mindgrab/**
         packages/components/src/file-io/**
+        packages/node-drivers/package.json
+        packages/node-drivers/src/mindgrab-worker.js
+        packages/node-drivers/src/mindgrab.js
+        packages/node-drivers/src/niimath.js
 
   browser-reference:
     needs: gate

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import YAML from 'yaml';
@@ -244,12 +244,23 @@ test('each quality job runs on exactly the events its former workflow ran on', a
   };
   const triggers = Object.keys(quality.on).sort();
   assert.deepEqual(triggers, ['pull_request', 'push', 'schedule', 'workflow_dispatch']);
+  assert.deepEqual(quality.on.pull_request.types, ['opened', 'synchronize', 'reopened', 'ready_for_review', 'converted_to_draft']);
   assert.deepEqual(quality.on.push, { branches: ['main'] });
   assert.deepEqual(quality.on.schedule, [{ cron: '41 4 * * 1' }]);
   assert.deepEqual(Object.keys(quality.jobs).sort(), Object.keys(expected).sort());
   for (const [name, job] of Object.entries(quality.jobs)) {
     const runs = triggers.filter(event => evaluate(job.if ?? 'true', event));
     assert.deepEqual(runs, expected[name], name);
+  }
+  const draft = { github: { event_name: 'pull_request', workflow: 'quality', ref: 'refs/pull/1/merge', event: { action: 'synchronize', pull_request: { draft: true } } } };
+  const converted = { github: { event_name: 'pull_request', workflow: 'quality', ref: 'refs/pull/1/merge', event: { action: 'converted_to_draft', pull_request: { draft: true } } } };
+  for (const name of ['correctness', 'dependencies']) {
+    assert.equal(evaluate(quality.jobs[name].if, 'pull_request', draft), true, `${name} still checks drafts`);
+    assert.equal(evaluate(quality.jobs[name].if, 'pull_request', converted), false, `${name} skips converted_to_draft`);
+  }
+  for (const name of ['unused-code', 'mutation']) {
+    assert.equal(evaluate(quality.jobs[name].if, 'pull_request', draft), false, `${name} defers drafts until ready`);
+    assert.equal(evaluate(quality.jobs[name].if, 'pull_request', converted), false, `${name} skips converted_to_draft`);
   }
   // Each job keeps its former workflow's concurrency: a newer run on the same ref cancels the
   // running correctness, unused-code and dependency checks, whatever the event.
@@ -279,8 +290,9 @@ test('each quality job runs on exactly the events its former workflow ran on', a
 
 test('contract and correctness owners replace duplicate invocations without losing native parity', async () => {
   const workspace = commands(ci.jobs['workspace-contracts']);
+  const packages = commands(ci.jobs['package-tests']);
   assert.equal(workspace.filter((command) => command === 'pnpm test:contracts').length, 1);
-  assert.ok(workspace.indexOf(workspace.find((command) => command.includes('make -C exes/nii2tvx test'))) < workspace.indexOf('pnpm test:packages'));
+  assert.ok(packages.indexOf(packages.find((command) => command.includes('make -C exes/nii2tvx test'))) < packages.indexOf('pnpm test:packages'));
   assert.ok(workspace.includes('node scripts/lint-workspaces.mjs'));
   assert.ok(!workspace.includes('pnpm lint'));
   assert.ok(commands((await workflow('quality')).jobs.correctness).includes('pnpm lint:correctness'));
@@ -312,7 +324,26 @@ test('contract and correctness owners replace duplicate invocations without losi
     }
   }
   assert.equal(composite.filter((command) => /install.*chromium/.test(command)).length, 0, 'the build job needs no browser');
+  assert.equal(ci.jobs['composite-site'].steps.filter((step) => step.uses === './.github/actions/setup-playwright').length, 0, 'the build job needs no browser action');
   for (const id of SITE_CHECKS) {
-    assert.equal(commands(ci.jobs[id]).filter((command) => /install.*chromium/.test(command)).length, 1, `one browser install in ${id}`);
+    assert.equal(ci.jobs[id].steps.filter((step) => step.uses === './.github/actions/setup-playwright').length, 1, `one browser install in ${id}`);
   }
+});
+
+test('every non-reusable workflow job declares an explicit timeout-minutes', async () => {
+  const dir = new URL('../.github/workflows/', import.meta.url);
+  const missing = [];
+  for (const file of (await readdir(dir)).filter((name) => name.endsWith('.yml')).sort()) {
+    const flow = YAML.parse(await readFile(new URL(file, dir), 'utf8'));
+    for (const [id, job] of Object.entries(flow.jobs ?? {})) {
+      if (job.uses) continue;
+      const timeout = job['timeout-minutes'];
+      const validNumber = Number.isInteger(timeout) && timeout > 0;
+      const validExpr = typeof timeout === 'string' && /^\$\{\{[\s\S]+\}\}$/.test(timeout.trim());
+      if (!validNumber && !validExpr) {
+        missing.push(`${file}: ${id}`);
+      }
+    }
+  }
+  assert.deepEqual(missing, [], `jobs missing explicit timeout-minutes: ${missing.join(', ')}`);
 });

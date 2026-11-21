@@ -68,6 +68,7 @@ jobs:
   # Release bookkeeping (changelogs, version bumps) runs this workflow neither
   # for a pull request nor for a push to main (scripts/lib/workflow-gate.mjs).
   gate:
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft'))
     uses: ./.github/workflows/pr-gate.yml
     permissions:
       contents: read
@@ -107,12 +108,19 @@ jobs:
         run: |
           python3 exes/dwi/sdc/validation/fetch_reference.py "$HOME/sdc-reference" registration-gate >> "$GITHUB_ENV"
           python3 exes/dwi/sdc/validation/fetch_reference.py --folder grid "$HOME/sdc-grid" replay-1.2mm >> "$GITHUB_ENV"
+      - name: Cache Python wheels for the reference environment
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.cache/pip
+          key: sdc-registration-gate-pip-${{ runner.os }}-${{ hashFiles('exes/dwi/sdc/validation/reference.manifest.json') }}
+          restore-keys: |
+            sdc-registration-gate-pip-${{ runner.os }}-
       - name: Install the reference's Python environment (sdcflows 2.17.1) and GNU time
         run: |
           python -m venv "$RUNNER_TEMP/sdc-venv"
-          "$RUNNER_TEMP/sdc-venv/bin/python" -m pip install --no-deps -r "$SDC_REFERENCE/env/uv-pip-freeze.txt"
+          "$RUNNER_TEMP/sdc-venv/bin/python" -m pip install --retries 5 --timeout 60 --no-deps -r "$SDC_REFERENCE/env/uv-pip-freeze.txt"
           echo "SDC_PYTHON=$RUNNER_TEMP/sdc-venv/bin/python" >> "$GITHUB_ENV"
-          [ -x /usr/bin/time ] || { sudo apt-get update && sudo apt-get install -y --no-install-recommends time; }
+          [ -x /usr/bin/time ] || { sudo apt-get -o Acquire::Retries=5 update && sudo apt-get -o Acquire::Retries=5 install -y --no-install-recommends time; }
       - name: Replay SyN through the WebAssembly kernel
         env:
           OMP_NUM_THREADS: '1'

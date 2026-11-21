@@ -153,7 +153,7 @@ test('the notarizing workflows and the workflows with a job that continues on er
   for (const file of ['syncro-native', 'standalone', 'synthseg-portable', 'node-cli', 'bison-native', 'native']) assert.ok(facts.notarizing.includes(`.github/workflows/${file}.yml`), file);
   for (const file of ['ci', 'node-cli-portable', 'quality', 'workflow-reports']) assert.ok(!facts.notarizing.includes(`.github/workflows/${file}.yml`), file);
   assert.ok(facts.notarizing.length >= 39, 'every workflow the replaced alert listed');
-  assert.deepEqual(facts.continuesOnError, ['.github/workflows/ci.yml', '.github/workflows/deploy-pages.yml']);
+  assert.deepEqual(facts.continuesOnError, ['.github/workflows/ci.yml', '.github/workflows/deploy-pages.yml', '.github/workflows/standalone.yml']);
 });
 
 test('a .yaml workflow file counts like a .yml one', async () => {

@@ -21,6 +21,7 @@ env:
 jobs:
   plan:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       apps: ${{ steps.plan.outputs.apps }}
     steps:
@@ -38,6 +39,7 @@ jobs:
     needs: plan
     if: needs.plan.outputs.apps != '[]'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:

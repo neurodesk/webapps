@@ -17,8 +17,11 @@ for (const file of (await readdir(`${repoRoot}/.github/workflows`)).sort()) {
   const dependencies = commandLineClosure(repoRoot, directory)
     .filter((entry) => entry.startsWith('packages/node-drivers/'));
   if (!dependencies.length) continue;
-  const lines = dependencies.map((entry) => `      - '${entry}'`).join('\n');
-  const updated = source.replace(/(?:^ {6}- 'packages\/node-drivers\/[^']+'\n)+/gm, `${lines}\n`);
+  const pushLines = dependencies.map((entry) => `      - '${entry}'`).join('\n');
+  const sharedLines = dependencies.map((entry) => `        ${entry}`).join('\n');
+  const updated = source
+    .replace(/(?:^ {6}- 'packages\/node-drivers\/[^']+'\n)+/gm, `${pushLines}\n`)
+    .replace(/(?:^ {8}packages\/node-drivers\/[^\n]+\n)+/gm, `${sharedLines}\n`);
   if (source === updated) continue;
   if (process.argv.includes('--check')) throw new Error(`${file}: run node scripts/sync-native-driver-paths.mjs`);
   await writeFile(path, updated);

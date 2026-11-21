@@ -31,6 +31,7 @@ const CI_JOBS = Object.freeze({
   'full-plan': 'plan',
   'full-plan-withheld': 'plan',
   'workspace-contracts': 'fixed',
+  'package-tests': 'fixed',
   'homepage-easter-egg': 'fixed',
   'app-tests': 'app',
   'browser-e2e': 'app',
@@ -43,6 +44,7 @@ const CI_JOBS = Object.freeze({
   'site-catalog': 'site',
   'processing-workflows': 'site',
   'example-cache-retention': 'site',
+  'turbo-cache-retention': 'site',
   'agent-interactions': 'site',
 });
 

@@ -6,9 +6,6 @@ on:
     paths:
       - '.github/workflows/brain-extraction-native.yml'
       - 'packages/brain-extraction/**'
-      - 'packages/node-drivers/package.json'
-      - 'packages/node-drivers/src/mindgrab-worker.js'
-      - 'packages/node-drivers/src/mindgrab.js'
       - 'apps/brain-extraction/**'
       - 'apps/qsmbly/rust-wasm/**'
       - 'packages/synthsr/**'
@@ -20,13 +17,11 @@ on:
       - '.github/workflows/node-cli-portable.yml'
       - 'exes/node-cli/**'
       - 'packages/brain-extraction/**'
-      - 'packages/node-drivers/package.json'
-      - 'packages/node-drivers/src/mindgrab-worker.js'
-      - 'packages/node-drivers/src/mindgrab.js'
       - 'apps/brain-extraction/**'
       - 'apps/qsmbly/rust-wasm/**'
       - 'packages/synthsr/**'
       - 'packages/synthstrip/**'
+  workflow_call:
   workflow_dispatch:
     inputs:
       sign_release:
@@ -45,6 +40,7 @@ jobs:
   # Release bookkeeping (changelogs, version bumps) runs this workflow neither
   # for a pull request nor for a push to main (scripts/lib/workflow-gate.mjs).
   gate:
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft'))
     uses: ./.github/workflows/pr-gate.yml
     permissions:
       contents: read
@@ -52,12 +48,17 @@ jobs:
       pull-requests: read
     with:
       workflow: brain-extraction-native
+      shared_paths: |
+        packages/node-drivers/package.json
+        packages/node-drivers/src/mindgrab-worker.js
+        packages/node-drivers/src/mindgrab.js
 
   wasm-source:
     needs: gate
     if: needs.gate.outputs.run == 'true'
     name: committed BET WASM equals a rebuild from source
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

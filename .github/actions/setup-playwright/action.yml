@@ -1,0 +1,40 @@
+name: Set up Playwright browsers
+description: Install Playwright browsers (and Linux system dependencies) with apt and download retries.
+inputs:
+  browsers:
+    description: Space-separated Playwright browser names to install
+    required: false
+    default: chromium
+  with-deps:
+    description: Install Linux OS dependencies with --with-deps
+    required: false
+    default: 'true'
+runs:
+  using: composite
+  steps:
+    - name: Install Playwright browsers with retries
+      shell: bash
+      env:
+        BROWSERS: ${{ inputs.browsers }}
+        WITH_DEPS: ${{ inputs.with-deps }}
+      run: |
+        if [ "${RUNNER_OS:-}" = "Linux" ]; then
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
+          echo 'Acquire::Retries "5";' | sudo tee /etc/apt/apt.conf.d/99-ci-retries > /dev/null
+        fi
+        args=(install)
+        if [ "$WITH_DEPS" = "true" ] && [ "${RUNNER_OS:-}" = "Linux" ]; then
+          args+=(--with-deps)
+        fi
+        read -r -a browser_list <<< "$BROWSERS"
+        args+=("${browser_list[@]}")
+        for attempt in 1 2 3; do
+          if node node_modules/@playwright/test/cli.js "${args[@]}"; then
+            exit 0
+          fi
+          if [ "$attempt" -eq 3 ]; then
+            exit 1
+          fi
+          echo "::warning title=Playwright install retry::attempt ${attempt}/3 failed; retrying in $((attempt * 10))s"
+          sleep $((attempt * 10))
+        done

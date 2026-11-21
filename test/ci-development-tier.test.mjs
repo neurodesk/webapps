@@ -8,6 +8,7 @@ import YAML from 'yaml';
 import { createAppPlan } from '../scripts/lib/app-plan.mjs';
 import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
 import { isSharedFilter, pathGlob } from '../scripts/lib/workflow-gate.mjs';
+import { NOT_DRAFT_CONDITION } from '../scripts/lib/native-workflow.mjs';
 
 const workflow = async (name) => YAML.parse(await readFile(new URL(`../.github/workflows/${name}`, import.meta.url), 'utf8'));
 // What pr-gate.yml answers without a checkout: false for a draft, true for
@@ -50,14 +51,16 @@ test('ready and updated PRs run deferred native jobs; pushes and dispatches keep
     const usesGate = Object.hasOwn(flow.jobs, 'gate');
     if (usesGate) {
       gated++;
-      // The gate always finishes, so jobs after the entry jobs keep their default conditions.
+      // Drafts skip the gate at the workflow level (0 runners); ready PRs and non-PR events run it.
       const { shared_paths: shared, calls, sweeps, ...inputs } = flow.jobs.gate.with;
-      assert.deepEqual({ ...flow.jobs.gate, with: inputs }, { uses: './.github/workflows/pr-gate.yml', permissions: { contents: 'read', actions: 'read', 'pull-requests': 'read' }, with: { workflow: file.slice(0, -'.yml'.length) } }, file);
+      assert.deepEqual({ ...flow.jobs.gate, with: inputs }, { if: NOT_DRAFT_CONDITION, uses: './.github/workflows/pr-gate.yml', permissions: { contents: 'read', actions: 'read', 'pull-requests': 'read' }, with: { workflow: file.slice(0, -'.yml'.length) } }, file);
       for (const list of [shared, calls, sweeps]) assert.ok(list === undefined || typeof list === 'string', `${file}: the gate's lists are strings`);
     }
     if (file !== 'ci.yml' && flow.on?.pull_request?.types?.includes('ready_for_review')) {
       for (const [id, job] of Object.entries(flow.jobs)) {
         if (id === 'gate' || (job.needs && job.needs !== 'gate')) continue;
+        // Fast quality checks (correctness, dependencies) still run on drafts; heavier ones defer.
+        if (file === 'quality.yml' && (id === 'correctness' || id === 'dependencies')) continue;
         assert.equal(evaluate(job.if ?? 'true', {
           event_name: 'pull_request', event: { pull_request: { draft: true } },
         }), false, `${file}: entry job ${id} must defer drafts or be restricted to non-PR events`);
@@ -68,6 +71,7 @@ test('ready and updated PRs run deferred native jobs; pushes and dispatches keep
       const waits = String(job.if).includes('needs.gate.outputs.run');
       if (!deferred && !waits) continue;
       if (file === 'ci.yml') continue;
+      if (file === 'native.yml' && id === 'full-plan-withheld') continue;
       guarded++;
       if (waits) {
         assert.equal(job.needs, 'gate', `${file}: ${id} reads the gate it waits for`);
@@ -75,11 +79,22 @@ test('ready and updated PRs run deferred native jobs; pushes and dispatches keep
         const ready = { event_name: 'pull_request', event: { pull_request: { draft: false } } };
         assert.equal(evaluate(job.if, ready, {}, gate(ready, false)), false, `${file}: ${id} skips a pull request that does not reach it`);
       }
+      if (file === 'quality.yml') {
+        for (const action of ['opened', 'synchronize', 'reopened', 'ready_for_review', 'converted_to_draft']) assert.ok(flow.on.pull_request.types.includes(action), `${file} ${action}`);
+        for (const draft of [true, false]) {
+          assert.equal(evaluate(job.if, { event_name: 'pull_request', event: { pull_request: { draft } } }), !draft, `${file}: ${id}`);
+        }
+        continue;
+      }
       for (const action of ['opened', 'synchronize', 'reopened', 'ready_for_review', 'converted_to_draft']) assert.ok(flow.on.pull_request.types.includes(action), `${file} ${action}`);
       for (const draft of [true, false]) {
-        assert.equal(evaluate(job.if, { event_name: 'pull_request', event: { pull_request: { draft } } }), !draft, file);
+        assert.equal(evaluate(job.if, { event_name: 'pull_request', event: { pull_request: { draft } } }), !draft, `${file}: ${id}`);
       }
-      for (const event_name of ['push', 'schedule', 'workflow_dispatch']) assert.equal(evaluate(job.if, { event_name, event: {} }), true, file);
+      const sweeps = file === 'native.yml' ? flow.jobs.gate.with.sweeps.split(' ') : null;
+      for (const event_name of ['push', 'schedule', 'workflow_dispatch']) {
+        const expected = file === 'native.yml' && id !== 'gate' && event_name === 'schedule' ? sweeps.includes(id) : true;
+        assert.equal(evaluate(job.if, { event_name, event: {} }), expected, `${file}: ${id} (${event_name})`);
+      }
     }
   }
   assert.ok(guarded > 30);
@@ -244,11 +259,20 @@ test('the interface audit reads the example cache the job restored, filled and s
 test('superseded per-commit caches are deleted by a job that holds nothing else', async () => {
   const ci = await workflow('ci.yml');
   const pages = await workflow('deploy-pages.yml');
+  const standalone = await workflow('standalone.yml');
   const cacheKey = (job, prefix) => job.steps.map(step => step.with?.key).find(key => key?.startsWith(prefix));
-  for (const [file, flow, id, saver, prefix] of [
+  const retentionJobs = [
     ['ci.yml', ci, 'example-cache-retention', 'site-audit', 'example-assets-'],
+    ['ci.yml', ci, 'turbo-cache-retention', 'composite-site', 'turbo-ci-'],
     ['deploy-pages.yml', pages, 'turbo-cache-retention', 'build', 'turbo-pages-'],
-  ]) {
+    ['standalone.yml', standalone, 'turbo-cache-retention', 'bundle', 'standalone-turbo-'],
+  ];
+  const allowedWriters = new Map();
+  for (const [file, , id] of retentionJobs) {
+    if (!allowedWriters.has(file)) allowedWriters.set(file, new Set());
+    allowedWriters.get(file).add(id);
+  }
+  for (const [file, flow, id, saver, prefix] of retentionJobs) {
     const job = flow.jobs[id];
     assert.ok(job, `${file} deletes superseded ${prefix} caches`);
     assert.ok(cacheKey(flow.jobs[saver], prefix), `${file}: ${saver} saves the ${prefix} caches`);
@@ -265,13 +289,18 @@ test('superseded per-commit caches are deleted by a job that holds nothing else'
       assert.ok(![needs].flat().includes(id), `${file}: ${other} does not wait for the cleanup`);
     }
     for (const [other, { permissions }] of Object.entries(flow.jobs)) {
-      if (other !== id) assert.notEqual(permissions?.actions, 'write', `${file}: only ${id} may delete caches`);
+      if (!allowedWriters.get(file).has(other)) assert.notEqual(permissions?.actions, 'write', `${file}: only cache retention jobs may delete caches (${other})`);
     }
     assert.notEqual(flow.permissions.actions, 'write', `${file}: the write permission is the job's alone`);
   }
-  const retention = ci.jobs['example-cache-retention'];
-  assert.equal(retention.steps[0].env.CACHE_REF, 'refs/heads/main');
-  assert.equal(retention.if, "github.ref == 'refs/heads/main'", 'only main saves, so only main has a copy to supersede');
+  for (const [job, ref] of [
+    [ci.jobs['example-cache-retention'], 'refs/heads/main'],
+    [ci.jobs['turbo-cache-retention'], 'refs/heads/main'],
+    [standalone.jobs['turbo-cache-retention'], 'refs/heads/main'],
+  ]) {
+    assert.equal(job.steps[0].env.CACHE_REF, ref);
+    assert.equal(job.if, "github.ref == 'refs/heads/main'", 'only main saves, so only main has a copy to supersede');
+  }
   assert.equal(pages.jobs['turbo-cache-retention'].if, undefined, 'every deploy build saves a cache');
   assert.equal(pages.jobs['turbo-cache-retention'].steps[0].env.CACHE_REF, '${{ github.ref }}');
 });

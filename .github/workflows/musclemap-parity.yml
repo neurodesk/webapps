@@ -41,6 +41,7 @@ jobs:
   # its shared_paths (scripts/lib/workflow-gate.mjs). Called from native.yml, which decided first,
   # it answers true.
   gate:
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft'))
     uses: ./.github/workflows/pr-gate.yml
     permissions:
       contents: read
@@ -78,7 +79,7 @@ jobs:
       - name: Install comparison dependencies
         run: |
           python -m venv apps/musclemap/.tmp_model_env
-          apps/musclemap/.tmp_model_env/bin/pip install numpy==1.26.4 nibabel==5.2.1
+          apps/musclemap/.tmp_model_env/bin/pip install --retries 5 --timeout 60 numpy==1.26.4 nibabel==5.2.1
       - name: Check preprocessing and comparison gates
         run: |
           pnpm --filter musclemap test

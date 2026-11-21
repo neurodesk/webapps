@@ -143,6 +143,7 @@ jobs:
   # for a pull request nor for a push to main (scripts/lib/workflow-gate.mjs).
   # The dispatch-only jobs below do not wait for it.
   gate:
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft'))
     uses: ./.github/workflows/pr-gate.yml
     permissions:
       contents: read
@@ -156,6 +157,7 @@ jobs:
     if: needs.gate.outputs.run == 'true' && (github.event_name != 'workflow_dispatch' || (!inputs.record_matlab && !inputs.revcor_only && !inputs.qr_only && !inputs.qr_kernels && !inputs.controls_only && !inputs.wasm_only && (inputs.runtime_cli || 'none') == 'none' && !inputs.runtime_image))
     name: core tests and package tests
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -379,14 +381,15 @@ jobs:
     if: needs.gate.outputs.run == 'true' && (github.event_name != 'workflow_dispatch' || (!inputs.record_matlab && !inputs.revcor_only && !inputs.qr_only && !inputs.qr_kernels && !inputs.controls_only && (inputs.runtime_cli || 'none') == 'none' && !inputs.runtime_image))
     name: committed WASM equals a rebuild from source
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
       - name: Install the pinned Rust toolchain
         run: rustup toolchain install 1.98.1 --profile minimal --target wasm32-unknown-unknown
-      - name: Install wasm-pack 0.13.1
-        run: cargo install wasm-pack --version 0.13.1 --locked
+      - name: Set up wasm-pack
+        uses: ./.github/actions/setup-wasm-pack
       - name: Set up wasm-opt
         uses: ./.github/actions/setup-wasm-opt
       - name: Rebuild and compare
@@ -444,6 +447,7 @@ jobs:
     needs: gate
     if: needs.gate.outputs.run == 'true' && (github.event_name != 'workflow_dispatch' || (!inputs.wasm_only && !inputs.controls_only && (inputs.runtime_cli || 'none') == 'none' && !inputs.runtime_image && inputs.probes != 'cleanup-order-1'))
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -455,7 +459,7 @@ jobs:
           path: reference-source
           persist-credentials: false
       - name: Install Octave for recorder plumbing checks
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends octave octave-dev python3-numpy
+        run: sudo apt-get -o Acquire::Retries=5 update && sudo apt-get -o Acquire::Retries=5 install -y --no-install-recommends octave octave-dev python3-numpy
       - name: Run the recorder on a pinned real input
         run: |
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-reference" packages/samsrf/validation/matlab/reference.json

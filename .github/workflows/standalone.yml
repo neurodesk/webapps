@@ -43,6 +43,7 @@ jobs:
     timeout-minutes: 90
     outputs:
       release_date: ${{ steps.date.outputs.release_date }}
+      desktop_version: ${{ steps.desktop-version.outputs.version }}
       suites: ${{ steps.suites.outputs.suites }}
       primary_catalog: ${{ steps.suites.outputs.primary }}
     steps:
@@ -50,15 +51,15 @@ jobs:
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: 24
+          node-version: 22
           cache: pnpm
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
         with:
           targets: wasm32-unknown-unknown
-      - name: Install WASM build tools
-        run: |
-          rustup toolchain install nightly-2025-11-15 --component rust-src --target wasm32-unknown-unknown
-          cargo install wasm-pack --version 0.13.1 --locked
+      - name: Install pinned nightly toolchain
+        run: rustup toolchain install nightly-2025-11-15 --component rust-src --target wasm32-unknown-unknown
+      - name: Set up wasm-pack
+        uses: ./.github/actions/setup-wasm-pack
       - name: Set up wasm-opt
         uses: ./.github/actions/setup-wasm-opt
       - run: pnpm install --frozen-lockfile
@@ -69,14 +70,25 @@ jobs:
         run: node scripts/desktop/daily-version.mjs
         env:
           DESKTOP_RELEASE_DATE: ${{ steps.date.outputs.release_date }}
+      - name: Record the daily desktop version
+        id: desktop-version
+        run: echo "version=$(node -p "require('./packages/desktop/package.json').version")" >> "$GITHUB_OUTPUT"
       - name: Test package contracts
         run: node --test test/standalone.test.mjs test/new-app.test.mjs test/offline-asset-pins.test.mjs test/desktop-assembly.test.mjs packages/desktop/test/*.test.js
-      - uses: actions/cache@v6
+      - name: Restore Turborepo build cache
+        id: turbo-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .turbo
           key: standalone-turbo-${{ runner.os }}-${{ github.sha }}
           restore-keys: standalone-turbo-${{ runner.os }}-
       - run: pnpm build
+      - name: Save Turborepo build cache
+        if: github.ref == 'refs/heads/main' && steps.turbo-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: .turbo
+          key: ${{ steps.turbo-cache.outputs.cache-primary-key }}
       # Not cached: all assets together exceed GitHub's 10 GB cache limit; each assemble job fetches its catalogue's own.
       - name: Verify all offline inputs against the committed lock
         run: node scripts/desktop/assets.mjs
@@ -109,7 +121,7 @@ jobs:
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: 24
+          node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Set the daily desktop version
@@ -175,7 +187,7 @@ jobs:
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: 24
+          node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Set the daily desktop version
@@ -248,9 +260,9 @@ jobs:
       - name: Install pinned Apptainer
         if: runner.os == 'Linux' && matrix.suite.catalog == needs.bundle.outputs.primary_catalog
         run: |
-          curl -fL https://github.com/apptainer/apptainer/releases/download/v1.5.3/apptainer_1.5.3_amd64.deb -o "$RUNNER_TEMP/apptainer.deb"
+          curl --retry 5 --retry-all-errors --retry-delay 5 -fL https://github.com/apptainer/apptainer/releases/download/v1.5.3/apptainer_1.5.3_amd64.deb -o "$RUNNER_TEMP/apptainer.deb"
           echo "82b0bdddf459087d202383360b8318d526ad6826c748a2f669913cc6aef9ee40  $RUNNER_TEMP/apptainer.deb" | sha256sum -c -
-          sudo apt-get install -y "$RUNNER_TEMP/apptainer.deb"
+          sudo apt-get -o Acquire::Retries=5 install -y "$RUNNER_TEMP/apptainer.deb"
       - name: Build and test offline Docker and Apptainer distributions
         if: runner.os == 'Linux' && matrix.suite.catalog == needs.bundle.outputs.primary_catalog
         run: node scripts/desktop/container.mjs
@@ -283,7 +295,7 @@ jobs:
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: 24
+          node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Set the daily desktop version
@@ -332,6 +344,24 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  turbo-cache-retention:
+    needs: bundle
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    permissions:
+      actions: write
+    steps:
+      - name: Delete every standalone-turbo- cache but the newest
+        run: |
+          gh cache list --ref "$CACHE_REF" --key standalone-turbo- --sort created_at --order desc --limit 100 --json id --jq '.[1:][].id' |
+            xargs --no-run-if-empty --max-args 1 gh cache delete
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          CACHE_REF: refs/heads/main
+
   publish:
     needs: [bundle, assemble, desktop, models-offline]
     if: "!inputs.source_approval_only && (github.event_name == 'schedule' || inputs.publish)"
@@ -340,13 +370,14 @@ jobs:
       matrix:
         suite: ${{ fromJSON(needs.bundle.outputs.suites) }}
     runs-on: ubuntu-22.04
+    timeout-minutes: 30
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: 24
+          node-version: 22
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
       - run: pnpm install --frozen-lockfile
       - name: Set the daily desktop version
@@ -361,12 +392,22 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CATALOG: ${{ matrix.suite.catalog }}
-      # A release made with GITHUB_TOKEN starts no workflow, so announce it; standalone-catalog commits the
-      # suite entry to registry/standalone.json and redeploys the site.
-      - name: Publish to the Standalone catalog
+
+  # Announce all published desktop suites in one catalog dispatch instead of one per
+  # matrix leg, avoiding four back-to-back standalone-catalog and deploy-pages runs every night.
+  announce:
+    needs: [bundle, publish]
+    if: "!cancelled() && needs.bundle.result == 'success' && needs.publish.result == 'success' && !inputs.source_approval_only && (github.event_name == 'schedule' || inputs.publish)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Publish all desktop suites to the Standalone catalog
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SUITE_RELEASE: ${{ matrix.suite.release }}
+          SUITES: ${{ needs.bundle.outputs.suites }}
+          VERSION: ${{ needs.bundle.outputs.desktop_version }}
         run: |
-          RELEASE="${SUITE_RELEASE}@$(node -p "require('./packages/desktop/package.json').version")"
+          RELEASE="$(node -p "JSON.parse(process.env.SUITES).map(s => s.release + '@' + process.env.VERSION).join(' ')")"
           gh api "repos/$GITHUB_REPOSITORY/dispatches" -f event_type=standalone-catalog -f "client_payload[releases]=$RELEASE"

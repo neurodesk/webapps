@@ -37,12 +37,16 @@ const ROOT_MANIFESTS = ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']
 const SHARED_TREE = /^(?:packages|exes|scripts|test|test-utils|registry|models)\/\*\*$/;
 // Packages every app is built from. A glob into one is shared; a single file
 // in one is a generated command-line import and stays the workflow's own.
+// Consumer workflows' generated node-drivers files are also shared so a change
+// to a driver routes through native.yml instead of firing 15+ separate runs
+// (node-drivers.yml itself owns `packages/node-drivers/**`).
 export const SHARED_PACKAGES = ['packages/components', 'packages/runtime-support'];
+const SHARED_NODE_DRIVER = /^packages\/node-drivers\/(?:package\.json|src\/[^/*]+\.js)$/;
 const LOCKFILE = 'pnpm-lock.yaml';
 const WORKSPACE_MANIFEST = /^(?:packages|exes)\/[^/]+\/package\.json$/;
 
 export function isSharedFilter(filter) {
-  if (ROOT_MANIFESTS.includes(filter) || SHARED_TREE.test(filter)) return true;
+  if (ROOT_MANIFESTS.includes(filter) || SHARED_TREE.test(filter) || SHARED_NODE_DRIVER.test(filter)) return true;
   return SHARED_PACKAGES.some((directory) => filter === `${directory}/package.json`
     || (filter.startsWith(`${directory}/`) && filter.includes('*')));
 }

@@ -14,10 +14,6 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
-      - 'packages/node-drivers/package.json'
-      - 'packages/node-drivers/src/dcm2niix.js'
-      - 'packages/node-drivers/src/mindgrab-worker.js'
-      - 'packages/node-drivers/src/mindgrab.js'
       - '.github/workflows/lcmodel-native.yml'
       - 'exes/lcmodel/**'
       - 'exes/fida/**'
@@ -25,17 +21,9 @@ on:
       - 'models/lcmodel.manifest.json'
       - 'apps/lcmodel/**'
       - 'packages/components/src/file-io/NiftiUtils.js'
-      - 'packages/node-drivers/package.json'
-      - 'packages/node-drivers/src/dcm2niix.js'
-      - 'packages/node-drivers/src/mindgrab-worker.js'
-      - 'packages/node-drivers/src/mindgrab.js'
   push:
     branches: [main]
     paths:
-      - 'packages/node-drivers/package.json'
-      - 'packages/node-drivers/src/dcm2niix.js'
-      - 'packages/node-drivers/src/mindgrab-worker.js'
-      - 'packages/node-drivers/src/mindgrab.js'
       - '.github/workflows/lcmodel-native.yml'
       - '.github/workflows/node-cli-portable.yml'
       - 'exes/node-cli/**'
@@ -45,10 +33,6 @@ on:
       - 'models/lcmodel.manifest.json'
       - 'apps/lcmodel/**'
       - 'packages/components/src/file-io/NiftiUtils.js'
-      - 'packages/node-drivers/package.json'
-      - 'packages/node-drivers/src/dcm2niix.js'
-      - 'packages/node-drivers/src/mindgrab-worker.js'
-      - 'packages/node-drivers/src/mindgrab.js'
   # A pull request that changes only paths in the gate's shared_paths starts native.yml instead,
   # which calls this workflow when the change reaches it; its nightly run is this workflow's sweep.
   workflow_call:
@@ -71,6 +55,7 @@ jobs:
   # its shared_paths (scripts/lib/workflow-gate.mjs). Called from native.yml, which decided first,
   # it answers true.
   gate:
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft'))
     uses: ./.github/workflows/pr-gate.yml
     permissions:
       contents: read
@@ -80,11 +65,16 @@ jobs:
       workflow: lcmodel-native
       shared_paths: |
         packages/components/package.json
+        packages/node-drivers/package.json
+        packages/node-drivers/src/dcm2niix.js
+        packages/node-drivers/src/mindgrab-worker.js
+        packages/node-drivers/src/mindgrab.js
 
   test:
     needs: gate
     if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -111,6 +101,7 @@ jobs:
     needs: gate
     if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     env:
       DATA: ${{ github.workspace }}/../fida-reference
     steps:

@@ -9,7 +9,7 @@ import YAML from 'yaml';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { commandLineClosure, moduleClosure, onlyAddsExports, onlyBumpsVersion } from '../scripts/lib/module-closure.mjs';
 import { testedBase } from '../scripts/lib/tested-base.mjs';
-import { callCondition, callerPermissions, dispatchedWorkflows, renderNativeWorkflow } from '../scripts/lib/native-workflow.mjs';
+import { NOT_DRAFT_CONDITION, callCondition, callerPermissions, dispatchedWorkflows, renderNativeWorkflow } from '../scripts/lib/native-workflow.mjs';
 import { DISPATCHER, budgetedDecision, calledWorkflows, certainOwnStart, decideWorkflow, dispatchDecision, dispatched, dispatchedRuns, isSharedFilter, mainWorkflow, ownedPackages, pathGlob, pullRequestFilters, pushWorkflow, sharedPaths, swept, sweepWorkflow, workflowApps, workflowScripts } from '../scripts/lib/workflow-gate.mjs';
 import { loadConservativeWorkspaceGraph } from '../scripts/lib/workspace-graph.mjs';
 
@@ -47,10 +47,10 @@ const lock = (version) => JSON.stringify({
 });
 
 test('shared filters are the root manifests, whole root trees and globs into the shared packages', () => {
-  for (const filter of ['pnpm-lock.yaml', 'package.json', 'pnpm-workspace.yaml', 'packages/**', 'exes/**', 'scripts/**', 'test/**', 'test-utils/**', 'registry/**', 'models/**', 'packages/components/**', 'packages/components/src/file-io/**', 'packages/components/package.json', 'packages/runtime-support/src/mindgrab/**', 'packages/runtime-support/package.json']) {
+  for (const filter of ['pnpm-lock.yaml', 'package.json', 'pnpm-workspace.yaml', 'packages/**', 'exes/**', 'scripts/**', 'test/**', 'test-utils/**', 'registry/**', 'models/**', 'packages/components/**', 'packages/components/src/file-io/**', 'packages/components/package.json', 'packages/runtime-support/src/mindgrab/**', 'packages/runtime-support/package.json', 'packages/node-drivers/package.json', 'packages/node-drivers/src/niimath.js']) {
     assert.equal(isSharedFilter(filter), true, filter);
   }
-  for (const filter of ['packages/elastix/**', 'apps/elastix/**', 'exes/dwi/**', 'packages/components/src/file-io/NiftiUtils.js', 'packages/node-drivers/package.json', 'packages/node-drivers/src/niimath.js', 'test-utils/native-nifti/**', 'test/neuroflow*', 'models/bison.manifest.json', '.github/workflows/elastix-native.yml', 'registry/offline-assets.sources.json']) {
+  for (const filter of ['packages/elastix/**', 'packages/node-drivers/**', 'apps/elastix/**', 'exes/dwi/**', 'packages/components/src/file-io/NiftiUtils.js', 'test-utils/native-nifti/**', 'test/neuroflow*', 'models/bison.manifest.json', '.github/workflows/elastix-native.yml', 'registry/offline-assets.sources.json']) {
     assert.equal(isSharedFilter(filter), false, filter);
   }
 });
@@ -302,7 +302,7 @@ test('native.yml calls every workflow with shared paths, granting what its jobs 
   assert.equal(native.on.schedule.length, 1);
   // The gate may name in its skip list only the workflows native.yml lists here.
   const lists = { calls: nativeCalls.map(([name]) => name).join(' '), sweeps: nativeCalls.filter(([, flow]) => swept(flow)).map(([name]) => name).join(' ') };
-  assert.deepEqual(native.jobs.gate, { uses: './.github/workflows/pr-gate.yml', permissions: { contents: 'read', actions: 'read', 'pull-requests': 'read' }, with: { workflow: DISPATCHER, ...lists } });
+  assert.deepEqual(native.jobs.gate, { if: NOT_DRAFT_CONDITION, uses: './.github/workflows/pr-gate.yml', permissions: { contents: 'read', actions: 'read', 'pull-requests': 'read' }, with: { workflow: DISPATCHER, ...lists } });
   // A pull request that changes any workflow's shared path starts native.yml.
   const starts = native.on.pull_request.paths.map(pathGlob);
   for (const [name, flow] of nativeCalls) {

@@ -5,7 +5,12 @@ const skipped = [
   process.env.NEURODESK_E2E_SKIP_SLOW === '1' && '@slow',
   process.env.NEURODESK_E2E_SKIP_HEAVY === '1' && '@heavy',
 ].filter(Boolean);
+const retriesEnv = process.env.NEURODESK_E2E_RETRIES;
+const ciRetries = retriesEnv !== undefined && retriesEnv !== ''
+  ? Number(retriesEnv)
+  : (process.env.CI ? 1 : 0);
 export const e2eTier = {
   ...(skipped.length ? { grepInvert: new RegExp(skipped.join('|')) } : {}),
   ...(total > 1 ? { shard: { current, total } } : {}),
+  ...(ciRetries > 0 ? { retries: ciRetries } : {}),
 };

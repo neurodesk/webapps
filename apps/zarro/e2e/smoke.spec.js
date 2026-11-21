@@ -1439,8 +1439,8 @@ async function expectNvSlideWindowOnGpu(page) {
       const expected = `${await canvas.getAttribute("data-window-min")}:` +
         `${await canvas.getAttribute("data-window-max")}`;
       return (await nvSlidePaneState(page)).map((pane) => pane.window === expected);
-    }).toEqual(before.map(() => true));
-    await expect.poll(async () => check(await axialPaneCenterLuma(page))).toBe(true);
+    }, { timeout: 15_000 }).toEqual(before.map(() => true));
+    await expect.poll(async () => check(await axialPaneCenterLuma(page)), { timeout: 15_000 }).toBe(true);
   }
 
   const after = await nvSlidePaneState(page);

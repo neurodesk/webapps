@@ -338,15 +338,19 @@ test('a suite entry must match its release and every file it lists', async () =>
   await assert.rejects(checkUpdateAssets(changes, async (tag) => intact.releases[tag]), /mac-arm64\.zip: release webapps-v0\.28\.20261014 does not serve the bytes/);
 });
 
-test('the nightly suite release announces itself to the catalog', async () => {
-  const publish = (await workflow('standalone.yml')).jobs.publish;
+test('the nightly suite release announces all suites in one catalog dispatch', async () => {
+  const standalone = await workflow('standalone.yml');
+  const publish = standalone.jobs.publish;
   assert.equal(publish.permissions.contents, 'write');
-  const steps = publish.steps.map((step) => step.run || '');
-  const release = steps.findIndex((run) => run.includes('node scripts/desktop/publish.mjs'));
-  const announce = steps.findIndex((run) => run.includes(CATALOG_DISPATCH));
-  assert.ok(release >= 0 && announce > release, 'the suite is announced after it is published');
-  assert.match(steps[announce], /RELEASE="\$\{SUITE_RELEASE\}@\$\(node -p "require\('\.\/packages\/desktop\/package\.json'\)\.version"\)"/);
-  assert.equal(publish.steps[announce].env.SUITE_RELEASE, '${{ matrix.suite.release }}');
+  assert.ok(publish.steps.some((step) => (step.run || '').includes('node scripts/desktop/publish.mjs')));
+  assert.ok(!publish.steps.some((step) => (step.run || '').includes(CATALOG_DISPATCH)), 'publish matrix legs do not dispatch one catalog run each');
+  const announce = standalone.jobs.announce;
+  assert.ok(announce, 'standalone.yml has a fan-in announce job');
+  assert.deepEqual(announce.needs, ['bundle', 'publish']);
+  assert.equal(announce.permissions.contents, 'write');
+  const dispatchStep = announce.steps.find((step) => (step.run || '').includes(CATALOG_DISPATCH));
+  assert.ok(dispatchStep, 'announce dispatches standalone-catalog once for all suites');
+  assert.equal(dispatchStep.env.SUITES, '${{ needs.bundle.outputs.suites }}');
 });
 
 test('a release.json from before exes/node-cli lists its targets without install commands', async () => {
@@ -476,7 +480,9 @@ test('the catalog workflow computes without write access and publishes without r
   const verify = commit.indexOf('node scripts/verify-catalog-update.mjs "$UPDATE"');
   assert.ok(verify >= 0 && verify < commit.findIndex((line) => line.startsWith('git commit')), 'every commit attempt first re-reads the releases');
   assert.ok(commit.indexOf('node scripts/apply-catalog-update.mjs "$UPDATE"') < verify);
-  assert.equal(publish.steps.at(-1).run, 'gh workflow run deploy-pages.yml --ref main');
+  assert.equal(publish.steps.at(-1).if, "steps.commit.outputs.pushed == 'true'");
+  assert.match(publish.steps.at(-1).run, /gh workflow run deploy-pages\.yml --ref main$/m);
+  assert.match(publish.steps.at(-1).run, /git ls-remote "\$remote" refs\/heads\/main/);
 });
 
 test('the scripts release jobs run without installing dependencies import only Node built-ins', async () => {

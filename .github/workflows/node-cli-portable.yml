@@ -127,7 +127,7 @@ jobs:
           python-version: '3.11'
       - name: Provision browser reference comparison
         if: inputs.validation_app != ''
-        run: python -m pip install numpy==1.26.4 nibabel==5.2.1
+        run: python -m pip install --retries 5 --timeout 60 numpy==1.26.4 nibabel==5.2.1
       - name: Configure browser reference cache
         if: inputs.validation_app != ''
         run: echo "PLAYWRIGHT_BROWSERS_PATH=$RUNNER_TEMP/browser-reference-chromium" >> "$GITHUB_ENV"
@@ -232,7 +232,7 @@ jobs:
           python-version: '3.11'
       - name: Provision browser reference comparison
         if: inputs.sign_release && inputs.validation_app != ''
-        run: python -m pip install numpy==1.26.4 nibabel==5.2.1
+        run: python -m pip install --retries 5 --timeout 60 numpy==1.26.4 nibabel==5.2.1
       - name: Configure browser reference cache
         if: inputs.sign_release && inputs.validation_app != ''
         run: echo "PLAYWRIGHT_BROWSERS_PATH=$RUNNER_TEMP/browser-reference-chromium" >> "$GITHUB_ENV"
