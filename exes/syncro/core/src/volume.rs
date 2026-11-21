@@ -97,8 +97,9 @@ pub fn read(bytes: &[u8]) -> Result<Volume<f32>, String> {
     synthsr_nifti::read(&nifti1(gunzip(bytes)?)?)
 }
 
-/// A NIfTI-2 image as NIfTI-1 in the same byte order, voxels untouched (affines rounded to float32, as every
-/// tool-facing file is); anything else unchanged.
+/// A NIfTI-2 image as NIfTI-1 in the same byte order (affines rounded to float32, as every tool-facing file
+/// is); anything else unchanged. NIfTI-1 stores scaling as float32, so a scaled image is decoded with its f64
+/// slope and intercept into float64 voxels: an empty lesion stored as 100 * 0.01 - 1 must stay exactly 0.
 fn nifti1(raw: Vec<u8>) -> Result<Vec<u8>, String> {
     if raw.len() < 540 || &raw[4..8] != b"n+2\0" {
         return Ok(raw);
@@ -116,33 +117,47 @@ fn nifti1(raw: Vec<u8>) -> Result<Vec<u8>, String> {
         w[..n].copy_from_slice(&b);
         i64::from_le_bytes(w)
     };
-    let real = |o: usize| f64::from_bits(int(o, 8) as u64) as f32;
+    let real64 = |o: usize| f64::from_bits(int(o, 8) as u64);
+    let real = |o: usize| real64(o) as f32;
     let mut h = vec![0u8; 352];
-    let mut put = |o: usize, b: &[u8]| h[o..o + b.len()].copy_from_slice(&order(b.to_vec()));
-    put(0, &348i32.to_le_bytes());
-    put(70, &(int(12, 2) as i16).to_le_bytes());
-    put(72, &(int(14, 2) as i16).to_le_bytes());
+    let put =
+        |h: &mut Vec<u8>, o: usize, b: &[u8]| h[o..o + b.len()].copy_from_slice(&order(b.to_vec()));
+    put(&mut h, 0, &348i32.to_le_bytes());
+    put(&mut h, 70, &(int(12, 2) as i16).to_le_bytes());
+    put(&mut h, 72, &(int(14, 2) as i16).to_le_bytes());
     for a in 0..8 {
         let d = i16::try_from(int(16 + 8 * a, 8)).map_err(|_| "Unsupported image dimensions.")?;
-        put(40 + 2 * a, &d.to_le_bytes());
-        put(76 + 4 * a, &real(104 + 8 * a).to_le_bytes());
+        put(&mut h, 40 + 2 * a, &d.to_le_bytes());
+        put(&mut h, 76 + 4 * a, &real(104 + 8 * a).to_le_bytes());
     }
-    put(108, &352f32.to_le_bytes());
-    put(112, &real(176).to_le_bytes());
-    put(116, &real(184).to_le_bytes());
-    put(252, &(int(344, 4) as i16).to_le_bytes());
-    put(254, &(int(348, 4) as i16).to_le_bytes());
+    put(&mut h, 108, &352f32.to_le_bytes());
+    put(&mut h, 112, &real(176).to_le_bytes());
+    put(&mut h, 116, &real(184).to_le_bytes());
+    put(&mut h, 252, &(int(344, 4) as i16).to_le_bytes());
+    put(&mut h, 254, &(int(348, 4) as i16).to_le_bytes());
     // quatern_b..qoffset_z, then the three sform rows: f64 runs in NIfTI-2, f32 in NIfTI-1.
     for k in 0..18 {
-        put(256 + 4 * k, &real(352 + 8 * k).to_le_bytes());
+        put(&mut h, 256 + 4 * k, &real(352 + 8 * k).to_le_bytes());
     }
     h[123] = raw[500 + if le { 0 } else { 3 }];
     h[344..348].copy_from_slice(b"n+1\0");
     let offset = usize::try_from(int(168, 8)).map_err(|_| "The NIfTI voxel data is truncated.")?;
-    h.extend_from_slice(
-        raw.get(offset..)
-            .ok_or("The NIfTI voxel data is truncated.")?,
-    );
+    let voxels = raw
+        .get(offset..)
+        .ok_or("The NIfTI voxel data is truncated.")?;
+    let (slope, inter) = (real64(176), real64(184));
+    if slope == 0.0 || (slope == 1.0 && inter == 0.0) {
+        h.extend_from_slice(voxels);
+        return Ok(h);
+    }
+    let (width, decode) = Nifti1Header::decode(h[..348].try_into().unwrap()).scalar_decoder()?;
+    put(&mut h, 70, &64i16.to_le_bytes());
+    put(&mut h, 72, &64i16.to_le_bytes());
+    put(&mut h, 112, &1f32.to_le_bytes());
+    put(&mut h, 116, &0f32.to_le_bytes());
+    for c in voxels.chunks_exact(width) {
+        h.extend_from_slice(&order((decode(c) * slope + inter).to_le_bytes().to_vec()));
+    }
     Ok(h)
 }
 
@@ -240,9 +255,18 @@ mod tests {
         for v in 1..=8 {
             b.extend_from_slice(&(v as f32).to_le_bytes());
         }
+        let mut empty = b.clone();
         let v = super::read(&b).unwrap();
         assert_eq!(v.dims, [2, 2, 2]);
         assert_eq!(v.data, (1..=8).map(|v| v as f32).collect::<Vec<_>>());
         assert_eq!(v.affine, sform);
+        // An empty lesion stored scaled: 100 * 0.01 - 1 is 0 in f64, but not with float32 scaling.
+        empty[12..14].copy_from_slice(&2i16.to_le_bytes());
+        empty[14..16].copy_from_slice(&8i16.to_le_bytes());
+        empty[176..184].copy_from_slice(&0.01f64.to_le_bytes());
+        empty[184..192].copy_from_slice(&(-1f64).to_le_bytes());
+        empty.truncate(544);
+        empty.extend_from_slice(&[100; 8]);
+        assert_eq!(super::read_binary(&empty).unwrap().data, [0; 8]);
     }
 }
