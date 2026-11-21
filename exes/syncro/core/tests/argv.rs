@@ -229,6 +229,7 @@ fn commands(case: &Case, normalization: Normalization) -> String {
         threads: 4,
         device: Device::Auto,
         keep_synth: false,
+        heal: false,
         software: serde_json::Value::Null,
     };
     if let Some(p) = &case.pathological {
@@ -299,6 +300,7 @@ fn bad_inputs_are_refused_before_any_tool() {
                 threads: 1,
                 device: Device::Auto,
                 keep_synth: false,
+                heal: false,
                 software: serde_json::Value::Null,
             };
             if let Some(l) = lesion {

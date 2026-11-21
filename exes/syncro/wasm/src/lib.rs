@@ -40,6 +40,7 @@ pub async fn run_syncro(
         threads: get("threads").as_f64().unwrap_or(1.0) as usize,
         device: Device::Auto,
         keep_synth: get("keepSynth").as_bool().unwrap_or(false),
+        heal: false,
         software: js_sys::JSON::stringify(&get("software"))
             .ok()
             .and_then(|t| t.as_string())

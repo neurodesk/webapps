@@ -57,6 +57,7 @@ struct Args {
     threads: usize,
     device: Device,
     keep_synth: bool,
+    heal: bool,
     resume: bool,
 }
 
@@ -80,6 +81,7 @@ fn parse(argv: &[String]) -> Result<Args, String> {
         threads: default_threads(),
         device: Device::Auto,
         keep_synth: false,
+        heal: false,
         resume: false,
     };
     let mut it = argv.iter();
@@ -102,6 +104,8 @@ fn parse(argv: &[String]) -> Result<Args, String> {
             "--pathological" => a.pathological = Some(value()?),
             "--ct" => a.ct = true,
             "--keep-synth" => a.keep_synth = true,
+            #[cfg(feature = "heal")]
+            "--heal" => a.heal = true,
             "--resume" => a.resume = true,
             "--normalization" => {
                 a.normalization = match value()?.as_str() {
@@ -338,6 +342,7 @@ fn start(a: Args) -> Result<(), String> {
         threads: a.threads,
         device: a.device,
         keep_synth: a.keep_synth,
+        heal: a.heal,
         software: tools.clone(),
     };
     // Tools run in the output directory, so commands.sh names work/... and the outputs as the browser does.

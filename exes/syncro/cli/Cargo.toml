@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[features]
+heal = ["syncro-core/heal"]
+
 [dependencies]
 syncro-core = { path = "../core" }
 neurodesk-pipeline-host = { path = "../../pipeline-host", features = ["native"] }

@@ -2,6 +2,9 @@
 //! synthesize a T1 (SynthSR), extract its brain (MindGrab), register it to MNI152 (Greedy or ANTs SyN), then
 //! carry the scan, a pathological modality and a lesion map through the same transforms.
 
+#[cfg(feature = "heal")]
+mod heal;
+
 use crate::geometry::{
     self, Grid, compatible_mask_geometry, has_shear, orthogonal_grid, same_geometry,
 };
@@ -39,6 +42,9 @@ pub struct Options {
     pub threads: usize,
     pub device: Device,
     pub keep_synth: bool,
+    /// Enantiomorphic healing before SynthSR (experimental; needs the `heal` feature, a lesion and no
+    /// pathological scan).
+    pub heal: bool,
     /// The tools' identities (native: path, version, SHA-256); a resume with different software reruns nothing
     /// and fails.
     pub software: Value,
@@ -198,6 +204,18 @@ impl<H: Host> Runner<'_, H> {
 pub async fn run<H: Host>(h: &H, o: &Options, stage: &dyn Fn(&str)) -> Result<Value, String> {
     let t0 = h.now();
     let input_name = file_name(&o.input).to_string();
+    if o.heal {
+        if !cfg!(feature = "heal") {
+            return Err(
+                "This SYNcro was built without enantiomorphic healing (the heal feature).".into(),
+            );
+        }
+        if o.lesion.is_none() || o.pathological.is_some() {
+            return Err(
+                "Healing needs a lesion map on the primary scan and no pathological scan.".into(),
+            );
+        }
+    }
     let compressed_name = |name: &str| name.to_ascii_lowercase().ends_with(".gz");
     let out = |name: &str| join(&o.out, name);
     let work = |name: &str| join(&o.work, name);
@@ -318,7 +336,7 @@ pub async fn run<H: Host>(h: &H, o: &Options, stage: &dyn Fn(&str)) -> Result<Va
         "version": env!("CARGO_PKG_VERSION"),
         "inputs": fingerprint,
         "template": template_hash,
-        "options": {"ct": o.ct, "normalization": format!("{:?}", o.normalization), "keepSynth": o.keep_synth},
+        "options": {"ct": o.ct, "normalization": format!("{:?}", o.normalization), "keepSynth": o.keep_synth, "heal": o.heal},
         "software": o.software,
     })
     .to_string();
@@ -416,12 +434,16 @@ pub async fn run<H: Host>(h: &H, o: &Options, stage: &dyn Fn(&str)) -> Result<Va
         "synthsr",
         has_pathological.then_some("pathological-registration"),
     );
+    #[cfg(feature = "heal")]
+    let synthsr_input = if o.heal {
+        heal::heal(&mut r, &primary_path, &lesion_path, fill, o.ct).await?
+    } else {
+        primary_path.clone()
+    };
+    #[cfg(not(feature = "heal"))]
+    let synthsr_input = primary_path.clone();
     let synthetic = work("t1.nii");
-    let mut argv = vec![
-        "synthsr".to_string(),
-        primary_path.clone(),
-        synthetic.clone(),
-    ];
+    let mut argv = vec!["synthsr".to_string(), synthsr_input, synthetic.clone()];
     if o.ct {
         argv.push("--ct".into());
     }
@@ -753,6 +775,7 @@ pub async fn run<H: Host>(h: &H, o: &Options, stage: &dyn Fn(&str)) -> Result<Va
         "version": env!("CARGO_PKG_VERSION"),
         "ct": o.ct,
         "keepSynth": o.keep_synth,
+        "healed": o.heal,
         "brainExtractor": "mindgrab",
         "normalization": match o.normalization { Normalization::Greedy => "greedy", Normalization::Ants => "ants" },
         "threads": o.threads,

@@ -5,6 +5,10 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[features]
+# Experimental enantiomorphic healing (`--heal`), native only.
+heal = []
+
 [dependencies]
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 neurodesk-nifti = { path = "../../nifti" }
