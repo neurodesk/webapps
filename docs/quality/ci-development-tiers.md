@@ -3,14 +3,15 @@
 Keep iterative PRs in draft. Drafts run repository contracts (`workspace-contracts`),
 fast quality checks (`correctness` and `dependencies`, deferring `unused-code` and
 `mutation` until ready), shared package tests (`package-tests`, which runs in parallel
-with `workspace-contracts` and skips app/doc-only drafts), the homepage easter egg
-unless every changed path lies in a tree it cannot read, and app unit and build tests
-(`app-tests`) for directly edited `apps/<id>/` files and `models/<id>.manifest.json`.
+with `workspace-contracts` and skips doc/changeset/easter-egg-only drafts), the homepage
+easter egg unless every changed path lies in a tree it cannot read, and app unit and build
+tests (`app-tests`) for directly edited `apps/<id>/` files and `models/<id>.manifest.json`.
 If the diff cannot be determined, the app planner keeps its conservative full
 selection. Changes confined to shared packages receive package tests during
 development; their downstream applications run when the PR is ready. Changes confined
-to `site/app-theme.css` or `site/fonts/` test the complete composite site (`siteCode = true`)
-without running per-app unit/WASM matrices.
+to `site/app-theme.css` test its direct app consumers (`SITE_THEME_CONSUMERS`) plus the
+complete composite site (`siteCode = true`), and `site/fonts/` tests the complete
+composite site, without running all 63 per-app unit/WASM matrices.
 
 A draft starts no browser job (`browser-e2e`, `browser-e2e-gpu`). To run the
 browser tests of a draft, dispatch `ci` on its branch:

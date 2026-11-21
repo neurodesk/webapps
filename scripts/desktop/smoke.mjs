@@ -48,13 +48,24 @@ async function runSingleApp(app) {
       }, appTimeoutMs);
     });
     const run = (async () => {
-      prepared = process.env.NEURODESK_WORKFLOWS ? await prepareWorkflow(app.id) : null;
-      desktop = await electron.launch({
+      const nextPrepared = process.env.NEURODESK_WORKFLOWS ? await prepareWorkflow(app.id) : null;
+      if (timedOut) {
+        await nextPrepared?.close?.().catch(() => {});
+        return null;
+      }
+      prepared = nextPrepared;
+      const launched = await electron.launch({
         executablePath,
         args: [...(process.env.NEURODESK_CONTAINER === '1' ? ['--no-sandbox'] : []), ...(process.env.NEURODESK_EXECUTABLE ? [] : [join(root, 'packages/desktop')])],
         env: { ...environment, ...(prepared?.env ?? {}), NEURODESK_BUNDLE: resources, NEURODESK_APP: app.id, NEURODESK_USER_DATA: userData, NEURODESK_DOWNLOADS: join(report, app.id, 'downloads') },
         timeout: 60000,
       });
+      if (timedOut) {
+        try { launched.process()?.kill('SIGKILL'); } catch { /* ignore */ }
+        await Promise.race([launched.close().catch(() => {}), new Promise(resolve => setTimeout(resolve, 5000))]);
+        return null;
+      }
+      desktop = launched;
       if (environment.NEURODESK_SMOKE_DIAGNOSTICS === '1') {
         const child = desktop.process();
         for (const channel of ['stdout', 'stderr']) {

@@ -1452,6 +1452,7 @@ async function expectNvSlideWindowOnGpu(page) {
 }
 
 test("generic uint16 share contrast is replaced from streamed signal", async ({ page }) => {
+  test.setTimeout(120_000);
   const group = JSON.stringify({ zarr_format: 2 });
   const values = Buffer.alloc(32 * 32 * 32 * 2);
   for (let index = 64; index < 32 * 32 * 32; index++) {

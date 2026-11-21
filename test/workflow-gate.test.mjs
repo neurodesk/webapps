@@ -12,6 +12,7 @@ import { testedBase } from '../scripts/lib/tested-base.mjs';
 import { NOT_DRAFT_CONDITION, callCondition, callerPermissions, dispatchedWorkflows, renderNativeWorkflow } from '../scripts/lib/native-workflow.mjs';
 import { DISPATCHER, budgetedDecision, calledWorkflows, certainOwnStart, decideWorkflow, dispatchDecision, dispatched, dispatchedRuns, isSharedFilter, mainWorkflow, ownedPackages, pathGlob, pullRequestFilters, pushWorkflow, sharedPaths, swept, sweepWorkflow, workflowApps, workflowScripts } from '../scripts/lib/workflow-gate.mjs';
 import { loadConservativeWorkspaceGraph } from '../scripts/lib/workspace-graph.mjs';
+import { syncDriverPathsInSource } from '../scripts/sync-native-driver-paths.mjs';
 
 // The pull request gate skips a native suite only when no changed file can
 // reach it. A wrong skip hides a regression until main; a wrong run only costs
@@ -666,4 +667,21 @@ test('a ready pull request over its full-plan budget skips a gated workflow only
   const skipped = { run: false, reason: 'does not reach it' };
   assert.deepEqual(await gate(skipped, shared, spent), skipped);
   assert.equal(asked, 0);
+});
+
+test('driver consumers route packages/node-drivers through native.yml shared_paths and missing blocks fail sync', async () => {
+  for (const [name, driver] of [
+    ['brain-extraction-native', 'packages/node-drivers/src/mindgrab.js'],
+    ['mri2vid-native', 'packages/node-drivers/src/dcm2niix.js'],
+    ['niimath-native', 'packages/node-drivers/src/niimath.js'],
+    ['dwi-native', 'packages/node-drivers/src/mindgrab.js'],
+    ['bison-native', 'packages/node-drivers/src/niimath.js'],
+  ]) {
+    const flow = await real(name);
+    assert.ok(!(flow.on?.push?.paths ?? []).includes(driver), `${name}: push.paths leaves shared ${driver} to native.yml nightly sweep`);
+    assert.ok(!(flow.on?.pull_request?.paths ?? []).includes(driver), `${name}: pull_request.paths routes ${driver} via native.yml`);
+    assert.ok(sharedPaths(flow).includes(driver), `${name}: gate shared_paths includes ${driver}`);
+  }
+  const missingShared = `on:\n  push:\n    paths:\n      - 'packages/x/**'\njobs:\n  gate:\n    with:\n      shared_paths: |\n        packages/components/**\n`;
+  assert.throws(() => syncDriverPathsInSource('x.yml', missingShared, ['packages/node-drivers/package.json']), /missing packages\/node-drivers\/ entries in jobs\.gate\.with\.shared_paths/);
 });

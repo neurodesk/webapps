@@ -55,7 +55,7 @@ jobs:
         run: |
           case "$EVENT" in
             release) node scripts/catalog-update.mjs --out update.json --tag "$TAG" ;;
-            repository_dispatch) node scripts/catalog-update.mjs --out update.json $DISPATCHED ;;
+            repository_dispatch) node scripts/catalog-update.mjs --out update.json --partial-ok $DISPATCHED ;;
             schedule) node scripts/catalog-update.mjs --out update.json --missing ;;
             *) node scripts/catalog-update.mjs --out update.json $REQUESTED ;;
           esac
@@ -113,26 +113,16 @@ jobs:
             git commit --quiet -m "chore(standalone): publish ${releases} downloads" registry/standalone.json
             if git push --quiet "$remote" HEAD:main; then
               echo "pushed=true" >> "$GITHUB_OUTPUT"
-              echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             sleep $((attempt * 5))
           done
           echo "could not push the catalog after 5 attempts" >&2
           exit 1
-      # Coalesce bursts of release updates: wait briefly and dispatch deploy-pages only
-      # when main is still at the commit this run pushed; a newer commit handles its own deploy.
+      # Only redeploy when this run actually committed a catalog change; deploy-pages.yml's
+      # concurrency queue coalesces concurrent runs without dropping the latest main.
       - name: Redeploy the site
         if: steps.commit.outputs.pushed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          PUSHED_SHA: ${{ steps.commit.outputs.sha }}
-        run: |
-          sleep 15
-          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          remote_sha=$(git ls-remote "$remote" refs/heads/main | cut -f1)
-          if [ -n "$remote_sha" ] && [ "$remote_sha" != "$PUSHED_SHA" ]; then
-            echo "main moved on to ${remote_sha}; skipping superseded deploy dispatch for ${PUSHED_SHA}"
-            exit 0
-          fi
-          gh workflow run deploy-pages.yml --ref main
+        run: gh workflow run deploy-pages.yml --ref main

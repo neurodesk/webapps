@@ -7,7 +7,7 @@ import { dirname, join, relative as relativePath, resolve as resolvePath } from 
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { parse, stringify } from 'yaml';
-import { AUTOMATION_CATALOG_READERS, changedPathsFromGit, CI_JOB_SCOPES, CLASSIFIED_ENTRY_FIELDS, createAppPlan, EASTER_EGG_INPUTS, EASTER_EGG_JOB, EASTER_EGG_OUTPUT, EASTER_EGG_PACKAGES, easterEggCannotRead, HANDOFF_CATALOG_READERS, WORKSPACE_MANIFESTS, INDEPENDENT_ROOT_DEV_DEPENDENCIES, packageTestsCanSkipOnDraft, RUNTIME_MANIFEST_READERS, UnreadableDiffError, SITE_DATA_KEYS, SITE_KEY_READERS, SITE_ONLY_FILES, SITE_THEME_FILES } from '../scripts/lib/app-plan.mjs';
+import { AUTOMATION_CATALOG_READERS, changedPathsFromGit, CI_JOB_SCOPES, CLASSIFIED_ENTRY_FIELDS, createAppPlan, EASTER_EGG_INPUTS, EASTER_EGG_JOB, EASTER_EGG_OUTPUT, EASTER_EGG_PACKAGES, easterEggCannotRead, HANDOFF_CATALOG_READERS, WORKSPACE_MANIFESTS, INDEPENDENT_ROOT_DEV_DEPENDENCIES, packageTestsCanSkipOnDraft, RUNTIME_MANIFEST_READERS, UnreadableDiffError, SITE_DATA_KEYS, SITE_KEY_READERS, SITE_ONLY_FILES, SITE_THEME_CONSUMERS, SITE_THEME_FILES } from '../scripts/lib/app-plan.mjs';
 import { siteCheckApps, smokeApps } from '../scripts/lib/smoke-apps.mjs';
 import { loadAppInformation } from '../scripts/lib/app-information.mjs';
 import { hostedThemeOptions } from '../scripts/lib/catalog-sites.mjs';
@@ -48,19 +48,24 @@ test('homepage easter-egg changes select no catalog apps', async () => {
   assert.equal(plan.allApps, false);
 });
 
-test('shared homepage files still select the complete app catalog, while theme CSS and fonts test the full site', async () => {
+test('shared homepage files still select the complete app catalog, while theme CSS and fonts test the full site and direct consumers', async () => {
   const registry = await loadAppsRegistry();
   for (const path of ['site/app-shell.js', 'scripts/lib/landing-page.mjs']) {
     const plan = createAppPlan(registry, [path]);
     assert.equal(plan.selected.length, registry.apps.length, path);
   }
-  for (const path of [...SITE_THEME_FILES, 'site/fonts/inter.woff2']) {
+  for (const path of SITE_THEME_FILES) {
     const plan = createAppPlan(registry, [path]);
-    assert.deepEqual(plan.selected, [], path);
+    assert.deepEqual(plan.selected.map(({ id }) => id).sort(), [...SITE_THEME_CONSUMERS].sort(), path);
     assert.equal(plan.site, true, path);
     assert.equal(plan.siteCode, true, path);
     assert.equal(plan.allApps, false, path);
   }
+  const fontsPlan = createAppPlan(registry, ['site/fonts/inter.woff2']);
+  assert.deepEqual(fontsPlan.selected, []);
+  assert.equal(fontsPlan.site, true);
+  assert.equal(fontsPlan.siteCode, true);
+  assert.equal(fontsPlan.allApps, false);
 });
 
 test('shared module changes select the complete app catalog', async () => {
@@ -1308,15 +1313,15 @@ test('the jobs a ci.yml change can narrow to test what CI_JOB_SCOPES says', asyn
   assert.ok(ci.jobs['package-tests'].steps.some((step) => step.run === 'pnpm test:packages'));
 });
 
-test('a draft pull request skips package-tests only when every changed path lies in an app or doc tree', async () => {
+test('a draft pull request skips package-tests only when every changed path lies in a doc, changeset or easter-egg tree', async () => {
   const registry = await loadAppsRegistry();
   const workspace = await graph;
   const pkgs = (paths, options) => createAppPlan(registry, paths, workspace, new Map(), options).packageTests;
-  for (const path of ['apps/niimath/main.js', 'docs/quality/ci-development-tiers.md', '.changeset/brave-owls.md', 'README.md', 'site/easter-eggs/vessel-surfer/src/main.js']) {
+  for (const path of ['docs/quality/ci-development-tiers.md', '.changeset/brave-owls.md', 'README.md', 'site/easter-eggs/vessel-surfer/src/main.js']) {
     assert.equal(packageTestsCanSkipOnDraft(path), true, path);
     assert.deepEqual(pkgs([path], { draft: true }), [], path);
   }
-  for (const path of ['packages/components/src/ui/index.js', 'exes/nii2tvx/src/main.c', 'apps/niimath/package.json', 'package.json', 'pnpm-lock.yaml', 'scripts/app-plan.mjs', '.github/workflows/ci.yml']) {
+  for (const path of ['apps/niimath/main.js', 'apps/browserqc/src/models.json', 'apps/surfannotate/automation.json', 'packages/components/src/ui/index.js', 'exes/nii2tvx/src/main.c', 'apps/niimath/package.json', 'package.json', 'pnpm-lock.yaml', 'scripts/app-plan.mjs', '.github/workflows/ci.yml']) {
     assert.equal(packageTestsCanSkipOnDraft(path), false, path);
     assert.ok(pkgs([path], { draft: true }).length > 0, path);
   }
@@ -2256,16 +2261,25 @@ test('composite-only site files select the site build and no app', async () => {
       assert.equal(plan.reasons.fallback, null, path);
     }
   }
-  // The shell and theme scripts go into every app's JS runtime; theme CSS and fonts test the full site.
+  // The shell and theme scripts go into every app's JS runtime; theme CSS tests its direct consumers + full site, fonts test the full site.
   for (const path of ['site/app-shell.js', 'site/theme.js']) {
     assert.equal(createAppPlan(registry, [path], await graph).allApps, true, path);
   }
-  for (const path of ['site/app-theme.css', 'site/fonts/inter.woff2']) {
-    const plan = createAppPlan(registry, [path], await graph);
-    assert.deepEqual(plan.selected, [], path);
-    assert.equal(plan.site, true, path);
-    assert.equal(plan.siteCode, true, path);
-    assert.equal(plan.allApps, false, path);
+  const themePlan = createAppPlan(registry, ['site/app-theme.css'], await graph);
+  assert.deepEqual(themePlan.selected.map(({ id }) => id).sort(), [...SITE_THEME_CONSUMERS].sort());
+  assert.equal(themePlan.site, true);
+  assert.equal(themePlan.siteCode, true);
+  assert.equal(themePlan.allApps, false);
+  const fontsPlan = createAppPlan(registry, ['site/fonts/inter.woff2'], await graph);
+  assert.deepEqual(fontsPlan.selected, []);
+  assert.equal(fontsPlan.site, true);
+  assert.equal(fontsPlan.siteCode, true);
+  assert.equal(fontsPlan.allApps, false);
+  // Every app source or test that directly loads site/app-theme.css or site/fonts must be in SITE_THEME_CONSUMERS.
+  for (const file of filesNaming('app-theme\\.css|site/fonts')) {
+    if (!file.startsWith('apps/') || file.endsWith('.md') || file.endsWith('.css')) continue;
+    const appId = file.split('/')[1];
+    assert.ok(SITE_THEME_CONSUMERS.includes(appId), `${file} directly loads site theme/fonts; add ${appId} to SITE_THEME_CONSUMERS`);
   }
 });
 

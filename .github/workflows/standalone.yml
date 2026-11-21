@@ -392,22 +392,40 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CATALOG: ${{ matrix.suite.catalog }}
+      - name: Record published desktop suite
+        env:
+          SUITE_RELEASE: ${{ matrix.suite.release }}
+          VERSION: ${{ needs.bundle.outputs.desktop_version }}
+        run: printf '%s@%s\n' "$SUITE_RELEASE" "$VERSION" > published-suite.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: published-suite-${{ matrix.suite.catalog }}
+          path: published-suite.txt
+          if-no-files-found: error
+          retention-days: 1
 
-  # Announce all published desktop suites in one catalog dispatch instead of one per
+  # Announce every published desktop suite in one catalog dispatch instead of one per
   # matrix leg, avoiding four back-to-back standalone-catalog and deploy-pages runs every night.
+  # Runs even when one matrix leg fails so every suite that did publish is still listed.
   announce:
     needs: [bundle, publish]
-    if: "!cancelled() && needs.bundle.result == 'success' && needs.publish.result == 'success' && !inputs.source_approval_only && (github.event_name == 'schedule' || inputs.publish)"
+    if: "!cancelled() && needs.bundle.result == 'success' && (needs.publish.result == 'success' || needs.publish.result == 'failure') && !inputs.source_approval_only && (github.event_name == 'schedule' || inputs.publish)"
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: write
     steps:
-      - name: Publish all desktop suites to the Standalone catalog
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: published-suite-*
+          path: published-suites
+      - name: Publish succeeded desktop suites to the Standalone catalog
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SUITES: ${{ needs.bundle.outputs.suites }}
-          VERSION: ${{ needs.bundle.outputs.desktop_version }}
         run: |
-          RELEASE="$(node -p "JSON.parse(process.env.SUITES).map(s => s.release + '@' + process.env.VERSION).join(' ')")"
+          RELEASE="$(find published-suites -type f -name 'published-suite.txt' -exec cat {} + 2>/dev/null | sort -u | paste -sd ' ' -)"
+          if [ -z "$RELEASE" ]; then
+            echo "No desktop suites published; skipping catalog dispatch."
+            exit 0
+          fi
           gh api "repos/$GITHUB_REPOSITORY/dispatches" -f event_type=standalone-catalog -f "client_payload[releases]=$RELEASE"

@@ -118,8 +118,12 @@ function sample() {
   samples.push(entry);
   return entry.bytes;
 }
-async function webdriver(path, body, method = 'POST') {
-  const response = await fetch(`http://127.0.0.1:4445${path}`, { method, ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}) });
+async function webdriver(path, body, method = 'POST', timeoutMs = 120_000) {
+  const response = await fetch(`http://127.0.0.1:4445${path}`, {
+    method,
+    signal: AbortSignal.timeout(timeoutMs),
+    ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}),
+  });
   const result = await response.json();
   if (!response.ok || result.value?.error) throw new Error(JSON.stringify(result));
   return result.value;
@@ -273,9 +277,17 @@ for (let runAttempt = 1; runAttempt <= maxAttempts; runAttempt++) {
     }
   } finally {
     clearInterval(sampleTimer);
-    if (session) await webdriver(`/session/${session.sessionId}`, null, 'DELETE').catch(() => {});
-    safari?.kill();
-    if (safari && safari.exitCode === null) await new Promise((done) => safari.once('exit', done));
+    if (session) await webdriver(`/session/${session.sessionId}`, null, 'DELETE', 10_000).catch(() => {});
+    if (safari && safari.exitCode === null && safari.signalCode === null) {
+      safari.kill();
+      await Promise.race([
+        new Promise((done) => safari.once('exit', done)),
+        new Promise((done) => setTimeout(() => {
+          try { safari.kill('SIGKILL'); } catch { /* ignore */ }
+          done();
+        }, 5000)),
+      ]);
+    }
     await browser?.close();
     await browserServer?.close();
   }

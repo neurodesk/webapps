@@ -143,7 +143,7 @@ jobs:
     needs: app-plan
     # Runs in parallel with workspace-contracts on every ready PR, push, nightly
     # and dispatch. A draft skips it only when app-plan succeeded and proved every
-    # changed path lies in an app or doc tree outside the shared packages.
+    # changed path lies in a doc, changeset or easter-egg tree outside shared packages.
     if: ${{ !cancelled() && github.event.action != 'converted_to_draft' && inputs.scope != 'gpu' && inputs.scope != 'site' && (github.event_name != 'pull_request' || !github.event.pull_request.draft || needs.app-plan.result != 'success' || needs.app-plan.outputs.package_tests != 'skip') }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -671,7 +671,7 @@ jobs:
     # browser tests (docs/quality/ci-development-tiers.md).
     if: needs.app-plan.outputs.has_browser_apps == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 160
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.app-plan.outputs.browser_apps) }}
@@ -726,7 +726,7 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: ~/.cache/neurodesk-e2e-test-data
-          key: e2e-test-data-${{ runner.os }}-${{ matrix.app }}-${{ hashFiles(format('apps/{0}/examples.json', matrix.app), format('models/{0}.manifest.json', matrix.app), format('packages/{0}/model.manifest.json', matrix.app), 'scripts/lib/e2e-test-data.mjs') }}
+          key: e2e-test-data-${{ runner.os }}-${{ matrix.app }}-${{ hashFiles('registry/offline-assets.lock.json', format('apps/{0}/examples.json', matrix.app), format('models/{0}.manifest.json', matrix.app), format('packages/{0}/model.manifest.json', matrix.app), 'scripts/lib/e2e-test-data.mjs') }}
           restore-keys: e2e-test-data-${{ runner.os }}-${{ matrix.app }}-
       - name: Download ${{ matrix.app }} test data
         shell: bash
@@ -825,7 +825,7 @@ jobs:
             ~/.cache/neurodesk-e2e-test-data
             exes/synthseg/models
             exes/synthsr/models
-          key: e2e-test-data-${{ runner.os }}-${{ matrix.app }}-${{ hashFiles(format('apps/{0}/examples.json', matrix.app), format('models/{0}.manifest.json', matrix.app), format('packages/{0}/model.manifest.json', matrix.app), 'scripts/lib/e2e-test-data.mjs') }}
+          key: e2e-test-data-${{ runner.os }}-${{ matrix.app }}-${{ hashFiles('registry/offline-assets.lock.json', format('apps/{0}/examples.json', matrix.app), format('models/{0}.manifest.json', matrix.app), format('packages/{0}/model.manifest.json', matrix.app), 'scripts/lib/e2e-test-data.mjs') }}
           restore-keys: e2e-test-data-${{ runner.os }}-${{ matrix.app }}-
       - name: Download ${{ matrix.app }} models and fixtures
         # Explicit bash adds pipefail, so a failed download fails the step.

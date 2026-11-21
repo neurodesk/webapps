@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
-import { readFile, readdir } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { parse } from 'yaml';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { provisioners, unpublished } from '../scripts/lib/e2e-test-data.mjs';
+import { fetchPinnedExample } from '../scripts/desktop/scientific-evidence.mjs';
 
 // The full argument text of every `test.skip(...)` call, across line breaks.
 // Parentheses inside string literals do not end the call.
@@ -108,4 +110,28 @@ test('a CPU subset provisions only variables its full provisioner declares', asy
 // SYNcro's pinned example runs through WASM SynthSR on Linux, not only on the macOS GPU job (issue #211).
 test('Linux provisions SYNcro\'s pinned example for its CPU normalization', () => {
   assert.deepEqual(provisioners.syncro.cpu?.env, ['SYNCRO_AUTOMATION_IMAGE']);
+});
+
+test('fetchPinnedExample re-downloads and heals stale cached bytes instead of failing permanently', async () => {
+  const examples = JSON.parse(await readFile(join(repoRoot, 'apps/dwi2trx/examples.json'), 'utf8'));
+  const file = examples[0].files.find((entry) => entry.role === 'bval');
+  const lock = JSON.parse(await readFile(join(repoRoot, 'registry/offline-assets.lock.json'), 'utf8'));
+  const locked = lock.assets[file.url];
+  const cache = await mkdtemp(join(tmpdir(), 'neurodesk-e2e-stale-cache-'));
+  try {
+    const cachedPath = join(cache, 'dwi2trx', file.name);
+    await mkdir(join(cache, 'dwi2trx'), { recursive: true });
+    // Seed corrupted/stale bytes under the same filename (simulating a restore-keys hit after repinning).
+    await writeFile(cachedPath, Buffer.from('stale-cached-bytes'));
+    let fetches = 0;
+    const badFetch = async () => {
+      fetches++;
+      return new Response(Buffer.from('wrong-downloaded-bytes'), { status: 200 });
+    };
+    await assert.rejects(fetchPinnedExample('dwi2trx', examples[0].id, ['bval'], cache, badFetch), /downloaded checksum mismatch/);
+    assert.equal(fetches, 1, 'stale cached file triggered a fresh download instead of immediately throwing on cache mismatch');
+    assert.ok(locked.bytes > 0 && locked.sha256);
+  } finally {
+    await rm(cache, { recursive: true, force: true });
+  }
 });

@@ -57,8 +57,10 @@ export const SITE_ONLY_FILES = new Set(['site/landing.css', 'site/landing.js', '
 // Theme stylesheets and fonts copied into every app's themed dist/ by
 // theme-app-dist.mjs and build-site.mjs: they affect rendered UI, never unit
 // tests or WASM compilation, so composite-site + all 5 site-* checks over the
-// full catalog (siteCode = true) test them without running 63 app-tests/e2e legs.
+// full catalog (siteCode = true) test them, together with apps whose own build
+// or e2e tests directly load site/app-theme.css (SITE_THEME_CONSUMERS).
 export const SITE_THEME_FILES = new Set(['site/app-theme.css']);
+export const SITE_THEME_CONSUMERS = Object.freeze(['surfannotate', 'zarro']);
 const CI_WORKFLOW = '.github/workflows/ci.yml';
 // What each ci.yml job tests, for a change confined to it: the composite site
 // (`site`: composite-site and the jobs that only consume its build), the
@@ -542,7 +544,14 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
       siteData(`${path}: only the composite build copies it`);
       continue;
     }
-    if (SITE_THEME_FILES.has(path) || path.startsWith('site/fonts/')) {
+    if (SITE_THEME_FILES.has(path)) {
+      siteBuild(`${path}: the composite site checks the themed build across every app`);
+      for (const id of SITE_THEME_CONSUMERS) {
+        if (appIds.has(id)) select(id, `${path}: ${id} loads ${path} directly`);
+      }
+      continue;
+    }
+    if (path.startsWith('site/fonts/')) {
       siteBuild(`${path}: the composite site checks the themed build across every app`);
       continue;
     }
@@ -758,10 +767,12 @@ export function selectEasterEgg(changedPaths) {
   return read.length > shown.length ? [...shown, `and ${read.length - shown.length} more`] : shown;
 }
 
-// Trees whose edits on a draft pull request do not affect shared package suites
-// (`pnpm test:packages` + `exes/nii2tvx`). Ready pull requests, pushes and
-// nightlies always run `package-tests`.
-const PACKAGE_TEST_DRAFT_SKIP_TREE = /^(?:apps|docs|\.changeset|site\/easter-eggs)\/|^(?:[^/]+\.md)$/;
+// Trees whose edits on a draft pull request cannot affect shared package suites
+// (`pnpm test:packages` + `exes/nii2tvx`). App edits stay covered because
+// packages/*/test/* checks cross-contract parity against app files (models.json,
+// automation.json, fixtures). Ready pull requests, pushes and nightlies always
+// run `package-tests`.
+const PACKAGE_TEST_DRAFT_SKIP_TREE = /^(?:docs|\.changeset|site\/easter-eggs)\/|^(?:[^/]+\.md)$/;
 export function packageTestsCanSkipOnDraft(path) {
   if (WORKSPACE_MANIFESTS.includes(path.slice(path.lastIndexOf('/') + 1))) return false;
   return PACKAGE_TEST_DRAFT_SKIP_TREE.test(path);

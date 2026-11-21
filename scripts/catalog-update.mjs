@@ -11,7 +11,7 @@ import { nativeReleases, portableSpecs, portableSpecsAt } from './lib/native-rel
 import { loadAppsRegistry } from './lib/apps-registry.mjs';
 import { catalogUpdate, parseReleases, releaseFromTag, releaseSources, suiteReleases, unlistedReleases } from './lib/standalone-import.mjs';
 
-const { values, positionals } = parseArgs({ allowPositionals: true, options: { out: { type: 'string' }, tag: { type: 'string' }, missing: { type: 'boolean' } } });
+const { values, positionals } = parseArgs({ allowPositionals: true, options: { out: { type: 'string' }, tag: { type: 'string' }, missing: { type: 'boolean' }, 'partial-ok': { type: 'boolean' } } });
 if (!values.out) throw new Error('--out is required');
 const catalog = JSON.parse(await readFile(new URL('../registry/standalone.json', import.meta.url), 'utf8'));
 const suites = suiteReleases(await loadAppsRegistry());
@@ -60,12 +60,26 @@ async function allReleases() {
 let update;
 if (values.missing) {
   update = [];
-  for (const release of unlistedReleases(catalog, await allReleases(), nativeReleases(await portableSpecs()))) {
+  for (const release of unlistedReleases(catalog, await allReleases(), nativeReleases(await portableSpecs()), suites)) {
     try {
       update.push(...await catalogUpdate(catalog, [release], { fetchRelease, fetchText, nativeAt, suites }));
     } catch (error) {
       console.log(`::warning::${release.id}@${release.version} not published: ${error.message}`);
     }
+  }
+} else if (values['partial-ok'] && releases.length > 1) {
+  update = [];
+  const failures = [];
+  for (const release of releases) {
+    try {
+      update.push(...await catalogUpdate(catalog, [release], { fetchRelease, fetchText, nativeAt, suites }));
+    } catch (error) {
+      failures.push(`${release.id}@${release.version}: ${error.message}`);
+      console.log(`::warning::${release.id}@${release.version} not published: ${error.message}`);
+    }
+  }
+  if (!update.length && failures.length) {
+    throw new Error(`No dispatched release could be verified: ${failures.join('; ')}`);
   }
 } else {
   update = await catalogUpdate(catalog, releases, { fetchRelease, fetchText, nativeAt, suites });

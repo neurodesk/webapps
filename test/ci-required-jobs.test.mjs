@@ -432,8 +432,7 @@ const dispatch = (scope, agentic_mode = 'none', ref = 'refs/heads/feature') => (
 const noApps = { has_apps: 'false', has_browser_apps: 'false', has_gpu_apps: 'false', has_site: 'false' };
 // Each event, with the outputs the planner writes for it (scripts/app-plan.mjs).
 const JOB_GRAPH_SCENARIOS = {
-  'draft pull request, one GPU app': [pullRequest('synchronize', true), planOutputs({ package_tests: 'skip' })],
-  'draft pull request, shared package': [pullRequest('synchronize', true), planOutputs({ package_tests: 'run' })],
+  'draft pull request, one GPU app': [pullRequest('synchronize', true), planOutputs()],
   'draft pull request opened, docs only': [pullRequest('opened', true), planOutputs({ ...noApps, package_tests: 'skip' })],
   'ready pull request, one GPU app': [pullRequest('synchronize', false), planOutputs()],
   'ready pull request, whole catalogue': [pullRequest('ready_for_review', false), planOutputs({ all_apps: 'true', full_plan: 'true' })],
@@ -459,9 +458,8 @@ const APP_RUN = ['app-tests', 'browser-e2e', 'browser-e2e-gpu'];
 // What each scenario starts, read off ci.yml by startedJobs. A change to a job
 // condition that moves a job in or out of a row changes this table.
 const EXPECTED_JOB_GRAPH = {
-  // A draft runs unit and build tests; its browser tests run on a dispatch, and package-tests skips app/doc-only drafts.
-  'draft pull request, one GPU app': [...DRAFT_PLAN_RUN, 'app-tests', 'homepage-easter-egg'],
-  'draft pull request, shared package': [...PLAN_RUN, 'app-tests', 'homepage-easter-egg'],
+  // A draft runs unit and build tests; its browser tests run on a dispatch, and package-tests skips doc/changeset/easter-egg-only drafts.
+  'draft pull request, one GPU app': [...PLAN_RUN, 'app-tests', 'homepage-easter-egg'],
   'draft pull request opened, docs only': [...DRAFT_PLAN_RUN, 'homepage-easter-egg'],
   'ready pull request, one GPU app': [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, 'homepage-easter-egg'],
   'ready pull request, whole catalogue': [...PLAN_RUN, 'full-plan', 'app-tests', ...SITE_RUN, 'browser-e2e', 'homepage-easter-egg'],

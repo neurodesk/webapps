@@ -338,19 +338,21 @@ test('a suite entry must match its release and every file it lists', async () =>
   await assert.rejects(checkUpdateAssets(changes, async (tag) => intact.releases[tag]), /mac-arm64\.zip: release webapps-v0\.28\.20261014 does not serve the bytes/);
 });
 
-test('the nightly suite release announces all suites in one catalog dispatch', async () => {
+test('the nightly suite release announces every succeeded suite in one catalog dispatch', async () => {
   const standalone = await workflow('standalone.yml');
   const publish = standalone.jobs.publish;
   assert.equal(publish.permissions.contents, 'write');
   assert.ok(publish.steps.some((step) => (step.run || '').includes('node scripts/desktop/publish.mjs')));
   assert.ok(!publish.steps.some((step) => (step.run || '').includes(CATALOG_DISPATCH)), 'publish matrix legs do not dispatch one catalog run each');
+  assert.ok(publish.steps.some((step) => step.uses?.startsWith('actions/upload-artifact@') && step.with?.name === 'published-suite-${{ matrix.suite.catalog }}'), 'publish records each succeeded suite as an artifact');
   const announce = standalone.jobs.announce;
   assert.ok(announce, 'standalone.yml has a fan-in announce job');
   assert.deepEqual(announce.needs, ['bundle', 'publish']);
+  assert.match(announce.if, /needs\.publish\.result == 'success' \|\| needs\.publish\.result == 'failure'/, 'announce runs even if one suite leg failed so succeeded suites are still listed');
   assert.equal(announce.permissions.contents, 'write');
+  assert.ok(announce.steps.some((step) => step.uses?.startsWith('actions/download-artifact@') && step.with?.pattern === 'published-suite-*'), 'announce downloads only succeeded suite receipts');
   const dispatchStep = announce.steps.find((step) => (step.run || '').includes(CATALOG_DISPATCH));
-  assert.ok(dispatchStep, 'announce dispatches standalone-catalog once for all suites');
-  assert.equal(dispatchStep.env.SUITES, '${{ needs.bundle.outputs.suites }}');
+  assert.ok(dispatchStep, 'announce dispatches standalone-catalog once for all succeeded suites');
 });
 
 test('a release.json from before exes/node-cli lists its targets without install commands', async () => {
@@ -457,6 +459,10 @@ test('the scheduled run picks the newest release of each app with archives the c
   const skipped = [release('0.2.20261009', archives, { draft: true }), release('0.2.20261010', archives, { prerelease: true }), release('0.2.20261011', [])];
   assert.deepEqual(unlistedReleases(catalog(urls), [...skipped, listed], portable), [], 'drafts, prereleases and releases without archives wait');
   assert.deepEqual(unlistedReleases({ apps: {} }, [newer], portable), [], 'only apps the catalog lists');
+  // The scheduled catch-up also discovers newer desktop suite releases with standalone-catalog.json.
+  const suiteRel = suiteReleases('0.29.20261015').releases['webapps-v0.29.20261015'];
+  assert.deepEqual(unlistedReleases({ apps: {}, suites: { neuro: { version: '0.28.20261014' } } }, [suiteRel], portable, suites), [{ id: 'webapps', version: '0.29.20261015' }]);
+  assert.deepEqual(unlistedReleases({ apps: {}, suites: { neuro: { version: '0.29.20261015' } } }, [suiteRel], portable, suites), []);
 });
 
 test('the catalog workflow computes without write access and publishes without running dependencies', async () => {
@@ -464,6 +470,7 @@ test('the catalog workflow computes without write access and publishes without r
   assert.deepEqual(flow.on.repository_dispatch, { types: ['standalone-catalog'] });
   assert.deepEqual(flow.on.release, { types: ['released'] });
   assert.ok(flow.on.schedule?.length, 'a schedule catches up updates that failed');
+  assert.match(flow.jobs.compute.steps.find((step) => step.id === 'update').run, /repository_dispatch\) node scripts\/catalog-update\.mjs --out update\.json --partial-ok \$DISPATCHED/);
   assert.match(flow.jobs.compute.steps.find((step) => step.id === 'update').run, /schedule\) node scripts\/catalog-update\.mjs --out update\.json --missing/);
   assert.equal(flow.concurrency, undefined, 'a concurrency group would drop queued catalog updates');
   assert.deepEqual(flow.permissions, { contents: 'read' });
@@ -481,8 +488,7 @@ test('the catalog workflow computes without write access and publishes without r
   assert.ok(verify >= 0 && verify < commit.findIndex((line) => line.startsWith('git commit')), 'every commit attempt first re-reads the releases');
   assert.ok(commit.indexOf('node scripts/apply-catalog-update.mjs "$UPDATE"') < verify);
   assert.equal(publish.steps.at(-1).if, "steps.commit.outputs.pushed == 'true'");
-  assert.match(publish.steps.at(-1).run, /gh workflow run deploy-pages\.yml --ref main$/m);
-  assert.match(publish.steps.at(-1).run, /git ls-remote "\$remote" refs\/heads\/main/);
+  assert.equal(publish.steps.at(-1).run, 'gh workflow run deploy-pages.yml --ref main');
 });
 
 test('the scripts release jobs run without installing dependencies import only Node built-ins', async () => {

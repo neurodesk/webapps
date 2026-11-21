@@ -88,10 +88,18 @@ export async function fetchPinnedExample(app, exampleId, roles, cache, fetchImpl
     if (file.sha256) assert.equal(file.sha256, locked.sha256);
     const path = resolve(cache, app, file.name);
     await mkdir(dirname(path), { recursive: true });
-    let bytes;
-    try { bytes = await readFile(path); }
-    catch (error) {
+    let bytes = null;
+    try {
+      const cached = await readFile(path);
+      if (cached.length === locked.bytes && checksum(cached) === locked.sha256) {
+        bytes = cached;
+      } else {
+        console.log(`Re-downloading stale cached ${app}/${file.name}`);
+      }
+    } catch (error) {
       if (error.code !== 'ENOENT') throw error;
+    }
+    if (!bytes) {
       console.log(`Downloading ${app}/${file.name}`);
       bytes = Buffer.from(await fetchBytesWithRetry(file.url, { signal: AbortSignal.timeout(600_000) }, { fetch: fetchImpl, retryTransient: true, retries: 3 }));
       assert.equal(checksum(bytes), locked.sha256, `${path}: downloaded checksum mismatch`);
@@ -100,8 +108,6 @@ export async function fetchPinnedExample(app, exampleId, roles, cache, fetchImpl
       await writeFile(temporary, bytes);
       await rename(temporary, path);
     }
-    assert.equal(checksum(bytes), locked.sha256, `${path}: cached checksum mismatch; remove this file and retry`);
-    assert.equal(bytes.length, locked.bytes, `${path}: cached size mismatch`);
     assets.push({ app, example: exampleId, role, path, url: file.url, bytes: bytes.length, sha256: locked.sha256 });
   }
   return assets;
