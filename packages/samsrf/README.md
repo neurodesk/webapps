@@ -663,11 +663,12 @@ and the [open numerical limits](validation/acceptance.md#open-numerical-limits).
   gives MATLAB's `delaunay` edges on every recorded grid, ring and shuffled
   tie. `polyshape(...).convhull` follows MATLAB's fixed-point grid, even-odd
   resolution and 1e-8 cleaning, and gives MATLAB's hull vertices on 25,964
-  of the 26,057 original recorded polygons. Hull area and centroid keep the
-  port's earlier evaluation. An order and arithmetic fitted to MATLAB's
-  recordings would give MATLAB's bits on far more recorded values, but it also
-  loses some the earlier evaluation matched, so it is kept as gated diagnostic
-  evidence rather than shipped. Reverse-correlation pRF fits use MATLAB's
+  of the 26,057 original recorded polygons. An order and arithmetic fitted to
+  MATLAB's recordings give MATLAB's bits on far more recorded values, but they
+  also lose some the port's earlier evaluation matched. So connective-field
+  hulls take that order only where the cluster's first point starts the hull,
+  where it loses nothing recorded, and the earlier evaluation elsewhere; the
+  full order stays gated diagnostic evidence. Reverse-correlation pRF fits use MATLAB's
   symmetric `linspace` grid, which every recorded grid follows and which loses
   nothing. The convex-hull analysis keeps the earlier grid, because MATLAB's
   `convexHull` area is not identified

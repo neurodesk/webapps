@@ -1,5 +1,5 @@
 {
-  "description": "Literal output hashes from the independently reviewed main, AMD and Intel builds; Intel double runs only. No tolerance comparison.",
+  "description": "Literal output hashes from the independently reviewed main, AMD and Intel builds; Intel double runs only. No tolerance comparison. The double CF hull runs' maps.f64 under every reference follow the anchored hull default (#732), which changes 16 y0 values of each, all to MATLAB's.",
   "baselines": {
     "current": "abbd6625e895a1ec7eee6bcd3eb03ae93b7b79a45ebdf16a42a90208a6908daa",
     "matlab-amd": "cc528cf6ec172367ee845296f197a686e671629386a595eaba5432ccfe0436b6",
@@ -43,7 +43,7 @@
           "lh_cf_hull_lh_double_vx.gii": "14c1000f8fd9635bd97a8133865d1e5b169cc462324294269410e85420c5824d",
           "lh_cf_hull_lh_double_x0.gii": "a3348ff5799caf9757b675ba312453e6509f88eb75ae8e95598829a516e6aede",
           "lh_cf_hull_lh_double_y0.gii": "591ef4397785a02a5af924991b9c109193ac61c436485037b8133a4e5dde5969",
-          "maps.f64": "933463ed18bb28485bfd09911fb43556457a4e882374df44d9fdb3345e722049"
+          "maps.f64": "e3540f84ce92ffb5fa917e54d3f45c821b791ae8ad6959991eb8cfaadae2a25d"
         }
       },
       "cf_hull_lh_single": {
@@ -79,7 +79,7 @@
           "lh_cf_hull_smooth_global_lh_double_vx.gii": "d9e4449e6d0d695c21ba912ad421d3e4847e797a7b958555d8753359ff9923b2",
           "lh_cf_hull_smooth_global_lh_double_x0.gii": "504e3b158070ab1603b55be633b567fa962c75b1a63661fe26a00f8298178161",
           "lh_cf_hull_smooth_global_lh_double_y0.gii": "908ae56e3cff053a9147631512efd987c7d6ce0d2845f25382c83d67f2d9b523",
-          "maps.f64": "61f8620cca8847d39f86b39ef510ada0f9b713f1585c265650d4a61f2daba914"
+          "maps.f64": "4dbff655557f6bf2b2b5c4fe773fea5d9b096a3c1962ce7045919d553cfbb2c0"
         }
       },
       "cf_hull_smooth_global_lh_single": {
@@ -399,7 +399,7 @@
           "lh_cf_hull_lh_double_vx.gii": "14c1000f8fd9635bd97a8133865d1e5b169cc462324294269410e85420c5824d",
           "lh_cf_hull_lh_double_x0.gii": "a3348ff5799caf9757b675ba312453e6509f88eb75ae8e95598829a516e6aede",
           "lh_cf_hull_lh_double_y0.gii": "591ef4397785a02a5af924991b9c109193ac61c436485037b8133a4e5dde5969",
-          "maps.f64": "933463ed18bb28485bfd09911fb43556457a4e882374df44d9fdb3345e722049"
+          "maps.f64": "e3540f84ce92ffb5fa917e54d3f45c821b791ae8ad6959991eb8cfaadae2a25d"
         }
       },
       "cf_hull_lh_single": {
@@ -435,7 +435,7 @@
           "lh_cf_hull_smooth_global_lh_double_vx.gii": "d9e4449e6d0d695c21ba912ad421d3e4847e797a7b958555d8753359ff9923b2",
           "lh_cf_hull_smooth_global_lh_double_x0.gii": "504e3b158070ab1603b55be633b567fa962c75b1a63661fe26a00f8298178161",
           "lh_cf_hull_smooth_global_lh_double_y0.gii": "908ae56e3cff053a9147631512efd987c7d6ce0d2845f25382c83d67f2d9b523",
-          "maps.f64": "4b2b0b93c9a81353633deffa04b7d373aa25d03c8cf28754b125baa195f227d2"
+          "maps.f64": "31f88056f8a8ae1f4242eb66115bb077ccabfabcfb748ec32ce164b08179f2e5"
         }
       },
       "cf_hull_smooth_global_lh_single": {
@@ -751,7 +751,7 @@
           "lh_cf_hull_lh_double_vx.gii": "14c1000f8fd9635bd97a8133865d1e5b169cc462324294269410e85420c5824d",
           "lh_cf_hull_lh_double_x0.gii": "a3348ff5799caf9757b675ba312453e6509f88eb75ae8e95598829a516e6aede",
           "lh_cf_hull_lh_double_y0.gii": "591ef4397785a02a5af924991b9c109193ac61c436485037b8133a4e5dde5969",
-          "maps.f64": "72f748fa2d99a7c01f243e4c73cabb212ecec38074a97c5fb2e5c0b6f9b2aace"
+          "maps.f64": "b411a6b0fb9c892f9dbe8961668386f8baafe9954a06f6ff1a30f3b2a33f20ef"
         }
       },
       "cf_hull_smooth_global_lh_double": {
@@ -769,7 +769,7 @@
           "lh_cf_hull_smooth_global_lh_double_vx.gii": "d9e4449e6d0d695c21ba912ad421d3e4847e797a7b958555d8753359ff9923b2",
           "lh_cf_hull_smooth_global_lh_double_x0.gii": "504e3b158070ab1603b55be633b567fa962c75b1a63661fe26a00f8298178161",
           "lh_cf_hull_smooth_global_lh_double_y0.gii": "908ae56e3cff053a9147631512efd987c7d6ce0d2845f25382c83d67f2d9b523",
-          "maps.f64": "410c402fedc4aa97885423f6249c38da5c773daab8f8f1893397d2ee2021728d"
+          "maps.f64": "4a2fc3326ba6b02bfd52332b8a52344ef6338fdf5b24b4e94057e58b97981e13"
         }
       },
       "cf_summary_lh_double": {

@@ -39,15 +39,19 @@ fn nan_last(a: f64, b: f64) -> std::cmp::Ordering {
 }
 
 /// Which evaluation a hull estimate takes. `Listed` is the port's evaluation
-/// before it followed MATLAB's stored order, and the analyses' default. `Stored`
-/// follows the order and arithmetic fitted to MATLAB's recordings (`Hull`): it
-/// matches far more recorded values but loses some that `Listed` matched,
-/// because the port's rings of a self-intersecting polygon are not MATLAB's
+/// before it followed MATLAB's stored order. `Stored` follows the order and
+/// arithmetic fitted to MATLAB's recordings (`Hull`): it matches far more
+/// recorded values but loses some that `Listed` matched, because the port's
+/// rings of a self-intersecting polygon are not MATLAB's
 /// (`packages/samsrf/validation/matlab/README.md`, "Hull area, centroid and vertex
-/// order"). It stays diagnostic until it loses none.
+/// order"), so it stays diagnostic. `Anchored`, the analyses' default, takes
+/// `Stored` for a connective-field polygon whose stored hull starts at its first
+/// point, where those rings cannot move the start ([`anchored_start`]), and
+/// `Listed` everywhere else, reverse-correlation hulls included.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum HullOrder {
     #[default]
+    Anchored,
     Listed,
     Stored,
 }
@@ -135,7 +139,62 @@ pub fn polygon_hull_estimate(points: &[[f64; 2]], order: HullOrder) -> Option<([
     match order {
         HullOrder::Listed => ListedHull::of_polygon(points).map(|hull| (hull.centroid(), hull.area())),
         HullOrder::Stored => Hull::of_polygon(points).map(|hull| (hull.centroid(), hull.area())),
+        HullOrder::Anchored => {
+            let (listed, start) = crate::polyshape::convex_hull_and_start(points)?;
+            let stored = Hull { vertices: crate::polyshape::stored_order(&listed, start) };
+            if anchored_start(points, &stored.vertices) {
+                (stored.area() > 0.0).then(|| (stored.centroid(), stored.area()))
+            } else {
+                let listed = ListedHull { vertices: listed };
+                (listed.area() > 0.0).then(|| (listed.centroid(), listed.area()))
+            }
+        }
     }
+}
+
+/// Whether the port's stored hull of `polyshape(points)`, `stored`, starts where
+/// MATLAB's does without depending on how the port splits the polygon into
+/// rings: it starts at the first input point, every hull vertex is an input
+/// point, and the points are distinct with none on an edge it does not end.
+///
+/// MATLAB's `convhull` starts at the first stored vertex on the hull, and MATLAB
+/// stores first the boundary holding the first input point, from that point. So
+/// a first point that is a hull vertex starts the hull, whatever rings the rest
+/// of the polygon forms. The recordings break the second rule where points
+/// repeat or touch another edge, and in near-collinear clouds. A vertex where
+/// nearly parallel edges cross has coordinates the port does not reproduce
+/// (`polyshape.rs`). Repeats, touches and crossing vertices stay listed here;
+/// `packages/samsrf/validation/matlab/README.md` ("Anchored connective-field
+/// hulls") accounts for the near-collinear clouds.
+fn anchored_start(points: &[[f64; 2]], stored: &[[f64; 2]]) -> bool {
+    stored.first() == points.first() && stored.iter().all(|v| points.contains(v)) && general_position(points)
+}
+
+/// Finite, distinct points of which none lies on a polygon edge it does not
+/// end, decided with exact predicates.
+fn general_position(points: &[[f64; 2]]) -> bool {
+    let n = points.len();
+    if points.iter().any(|p| !p[0].is_finite() || !p[1].is_finite()) {
+        return false;
+    }
+    let mut sorted = points.to_vec();
+    sorted.sort_by(row_order);
+    if sorted.windows(2).any(|pair| pair[0] == pair[1]) {
+        return false;
+    }
+    (0..n).all(|i| {
+        let (a, b) = (points[i], points[(i + 1) % n]);
+        let (low, high) = ([a[0].min(b[0]), a[1].min(b[1])], [a[0].max(b[0]), a[1].max(b[1])]);
+        (0..n).filter(|&k| k != i && k != (i + 1) % n).all(|k| {
+            let p = points[k];
+            let inside = (low[0]..=high[0]).contains(&p[0]) && (low[1]..=high[1]).contains(&p[1]);
+            if !inside {
+                return true;
+            }
+            let turn = robust::orient2d(coord(&a), coord(&b), coord(&p));
+            turn.is_finite() && turn != 0.0
+        })
+    })
 }
 
 /// A diagnostic boundary model fitted to recorded MATLAB R2023b `polyshape`
@@ -628,6 +687,54 @@ mod tests {
         assert_eq!(hull.vertices, vec![[0.9804315476094008, 2.960863106026634], [0.29706208837477277, 1.594123948026354], [0.1567924020000721, 1.3135849239128334]]);
         let [x, y] = hull.centroid();
         assert_eq!([x, y, hull.area()].map(f64::to_bits), [0.4780953459852008, 1.9561906593028449, 1.3592302744447338e-07].map(f64::to_bits));
+    }
+
+    /// Recorded clouds (`record_geometry.m`, `polygon_point_clouds`) with MATLAB's
+    /// `[x, y, area]` of `polyshape(P).convhull`: the default takes the stored order
+    /// only where the first point starts it and the polygon is in general position
+    /// with a hull of input points, and the listed evaluation everywhere else.
+    #[test]
+    fn anchored_order_is_stored_only_where_the_first_point_starts_the_hull() {
+        // A recorded polygon, MATLAB's estimate and the evaluation the default takes.
+        type Case = (&'static [[f64; 2]], [f64; 3], HullOrder);
+        let estimate = |points: &[[f64; 2]], order| polygon_hull_estimate(points, order).map(|([x, y], area)| [x, y, area].map(f64::to_bits));
+        let cases: [Case; 4] = [
+            // Cloud 1902: the first point starts the stored hull, which is MATLAB's.
+            (&[[0.7342249133712252, 2.468449382063369], [0.9763177452882609, 2.952635363812125], [0.27625762598984194, 1.5525149575511683], [0.27056936308139684, 1.5411388087735334]],
+                [0.5706492671702865, 2.141298349908086, 2.2343648718725628e-07], HullOrder::Stored),
+            // Cloud 2049: another vertex starts the hull; only the listed area is MATLAB's.
+            (&[[101.35951138914504, 100.73409894907866], [101.26172740865694, 100.96205840455791], [100.43439392095279, 100.5652237823131], [100.74574346487618, 101.31900714721903], [101.44103383963589, 100.49224651679756], [103.23775414795227, 103.34604900318995], [103.74346832796162, 101.06114169991841]],
+                [102.29942048405681, 101.59651184325986, 4.899868308630106], HullOrder::Listed),
+            // Cloud 768: the first point starts the stored hull, but vertices touch
+            // other edges and MATLAB stores another boundary first.
+            (&[[0.6000000000000001, 0.4], [0.6000000000000001, 0.5], [0.3, 0.5], [0.5, 0.5], [0.3, 0.4], [0.5, 0.4], [0.4, 0.3], [0.5, 0.3], [0.6000000000000001, 0.3], [0.3, 0.3], [0.4, 0.4], [0.4, 0.5]],
+                [0.44444444444444453, 0.40740740740740744, 0.045000000000000026], HullOrder::Listed),
+            // Cloud 1032: a hull vertex lies where nearly parallel edges cross, at
+            // coordinates the port does not reproduce.
+            (&[[0.9990959065223678, 2.9981920992223516], [0.4976910182436611, 1.9953821614967506], [0.6160843429985576, 2.2321688674905578], [0.8934709773722375, 2.7869420048881874]],
+                [0.8439442913882659, 2.6878887517224186, 3.635767241438881e-08], HullOrder::Listed),
+        ];
+        for (points, matlab, taken) in cases {
+            let matlab = matlab.map(f64::to_bits);
+            let [default, listed, stored] = [HullOrder::default(), HullOrder::Listed, HullOrder::Stored].map(|order| estimate(points, order).unwrap());
+            assert_eq!(default, if taken == HullOrder::Stored { stored } else { listed }, "{points:?}");
+            if taken == HullOrder::Stored {
+                assert_eq!(default, matlab, "{points:?}");
+                assert_ne!(listed, matlab, "{points:?}: the listed evaluation is MATLAB's too");
+            } else {
+                assert!((0..3).any(|k| listed[k] == matlab[k] && stored[k] != matlab[k]), "{points:?}: the stored order loses no value");
+            }
+        }
+    }
+
+    #[test]
+    fn anchored_hull_falls_back_when_orientation_overflows() {
+        let s = 2_f64.powi(516);
+        let points = [[0.0, 0.0], [s, s], [0.0, s], [s / 2.0, s / 2.0], [s, 0.0]];
+        let (centre, area) = polygon_hull_estimate(&points, HullOrder::default()).unwrap();
+        let (listed_centre, listed_area) = polygon_hull_estimate(&points, HullOrder::Listed).unwrap();
+        assert_eq!(centre.map(f64::to_bits), listed_centre.map(f64::to_bits));
+        assert_eq!(area.to_bits(), listed_area.to_bits());
     }
 
     #[test]

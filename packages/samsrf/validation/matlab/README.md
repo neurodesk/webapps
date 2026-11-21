@@ -2888,10 +2888,12 @@ leaves empty are near-collinear clouds already listed as exceptions
 What this changes in SamSrf. The stored order and its arithmetic match far more
 recorded values than the port's previous evaluation, but they also lose some
 values that evaluation matched (accounting below). A loss is not accepted on the
-port's own authority. So the analyses take `geometry::HullOrder::Listed`, the
+port's own authority. So the analyses keep `geometry::HullOrder::Listed`, the
 previous evaluation bit for bit, wherever the new one loses anything. The stored
 order is kept as diagnostic evidence, `HullOrder::Stored`, gated exactly, until
-it loses nothing.
+it loses nothing. The default, `HullOrder::Anchored`, takes the stored order for
+the connective-field hulls where the port's rings cannot move its start
+([anchored hulls](#anchored-connective-field-hulls)) and `Listed` everywhere else.
 
 - **Reverse correlation with a pRF model.** Production takes MATLAB's grid,
   `symmetric_linspace`. Round hull-area-1 supports it on all 208 recorded grids
@@ -2907,8 +2909,10 @@ it loses nothing.
   AMD vertices, and `Fwhm` at 27. It loses one value the previous grid matched:
   `rc_custom_hrf_lh_double` vertex 4's `Fwhm`, 2.883208896089259 against
   2.8832088960892586, on both hosts. That loss keeps it out of production.
-- **Connective fields, `Fit_pRF = 0`.** Production keeps the previous hull,
-  `ListedHull`. The diagnostic's hull starts at the first stored vertex on it. The
+- **Connective fields, `Fit_pRF = 0`.** Production takes the stored order where
+  the polygon's first point starts it and the previous hull, `ListedHull`,
+  elsewhere ([anchored hulls](#anchored-connective-field-hulls)). The diagnostic's
+  hull starts at the first stored vertex on it. The
   port does not reproduce how MATLAB splits these self-intersecting clusters into
   rings, so the hull can start elsewhere. With MATLAB's own stored shapes, the
   rules above give all 316 template clusters' centroids. With the port's rings, 30
@@ -2925,12 +2929,14 @@ every hull value: 586,668 polygon and 1,440 template-CF value bits on both hosts
 compared.
 
 The production regression checks freeze the base `3f90ac124` output bits for
-the seven original polygon families and both CLI RC hull runs on each host.
-They also require the three formerly exact template-CF values per precision
-and host to stay exact. This CF guard prevents the known losses; it does not
-freeze every CF output row. Switching the default to `Stored` fails all three
-checks. These are guards against losing previous agreement, not claims of MATLAB parity for
-the remaining differences; the stored-order diagnostic is tested separately.
+both CLI RC hull runs on each host, and the production output bits for the
+seven original polygon families (the anchored evaluation's since it became the
+default; `3f90ac124`'s before). They also require the three formerly exact
+template-CF values per precision and host to stay exact. This CF guard prevents
+the known losses; it does not freeze every CF output row. Switching the default
+to `Stored` fails all three checks. These are guards against losing previous
+agreement, not claims of MATLAB parity for the remaining differences; the
+stored-order diagnostic is tested separately.
 
 | Recorded cases (values per host) | Base exact | Stored order exact | Gained | Lost |
 | --- | ---: | ---: | ---: | ---: |
@@ -2970,6 +2976,78 @@ and 157 of 168 maps, and 57 maps on Intel. `web-cli-outcome.json` held that AMD
 outcome until the [double global regression](#double-global-regression) was merged
 with it. The stored order was not measured on the merged tree.
 
+#### Anchored connective-field hulls
+
+Given MATLAB's own stored hull lists, the stored arithmetic gives every recorded
+value (`polyshape_arithmetic.rs`). Where the port's hull list is MATLAB's, so does
+the port: all 136,722 such hulls of the four recordings, counted over both hosts. So the
+losses come from the port's rings moving the hull's start. MATLAB stores first the
+boundary holding the polygon's first point, from that point. When that point is a
+vertex of the hull, `convhull` starts there, whatever rings the rest of the polygon
+forms. `HullOrder::Anchored`, the default, takes the stored order when all three
+hold, and `Listed` otherwise:
+
+- the port's stored hull starts at the polygon's first point;
+- every hull vertex is an input point, because a vertex where nearly parallel edges
+  cross has coordinates the port does not reproduce (original cloud 1032);
+- the points are distinct and none lies on an edge it does not end, decided
+  exactly, because where points repeat or touch an edge MATLAB can store another
+  boundary first (original cloud 768).
+
+Reverse-correlation hulls stay `Listed` (above). The first condition alone loses
+88 values per host: 84 in 78 polygons whose points repeat (mostly the causal gap
+sweeps), and the area of clouds 768 and 1032, each in both recordings that hold
+it. The other two conditions were added after those losses were seen. Each
+states a mechanism, and their evidence comes from recordings already exposed, not
+held-out ones. On MATLAB's own outputs the start rule also fails
+for 143 distinct, non-touching polygons whose first point is a hull corner
+(22.04), 139 of them in reproducer rounds 4 and 5. All 143 are near-collinear
+(no point farther than 6.2e-7 of their length from the line through their two
+farthest points), and in them MATLAB stores another boundary first. Among the
+42,843 polygons per host the default anchors, the port's hull list differs from
+MATLAB's in 1,391. In 1,252 the vertices differ, which both evaluations share; in
+139 the start differs. In none of them is the listed evaluation exact, so nothing
+is lost.
+
+Per host against main `23c3cae9f` (module `bf0b8cb1`). Both hosts agree unless
+noted, and every value the base gives exactly stays exact.
+
+| Recorded cases (values per host) | Base exact | Anchored exact | Gained | Lost |
+| --- | ---: | ---: | ---: | ---: |
+| Original polygons, `polyshape(P).convhull` x, y, area (78,171) | 52,257 | 75,787 | 23,530 | 0 |
+| Probe polygons (99,462) | 38,762 | 85,557 | 46,795 | 0 |
+| Causal polygons (32,247) | 7,045 | 7,189 | 144 | 0 |
+| Reproducer polygons (83,454) | 644 | 7,656 | 7,012 | 0 |
+| Real-template CF hull values, double, then single (single `R^2` aside) | 615, 535 | 641, 561 | 26, 26 | 0, 0 |
+| Revcor replays, CF values, matrix (8,568), then edges (2,520) | 8,412, 2,476 | 8,519, 2,510 | 107, 34 | 0, 0 |
+| Revcor pipelines, all values, matrix (45,624; 22.04, then 24.04) | 45,350, 43,675 | 45,457, 43,782 | 107, 107 | 0, 0 |
+| Revcor pipelines, all values, edges (15,360) | 15,278 | 15,312 | 34 | 0 |
+| SamSrfAnalysis matrix, real `Srf.Data` (3,528), AMD, then Intel | 3,389, 2,230 | 3,405, 2,246 | 16, 16 | 0, 0 |
+
+Every revcor gain is a CF `x0` or `y0`. On the matrix, imaginary parts and GIfTI
+exports are unchanged on both hosts. The gains are `y0` of `cf_hull_lh_double` at
+9 vertices and of `cf_hull_smooth_global_lh_double` at 7, which leaves 7 and 5 of
+their values different (`web-cli-outcome.json`). Both maps still differ, so exact
+maps stay 157 of 168 on AMD and 57 on Intel. The explicit arithmetic references
+give the same 16 gains and no losses: `matlab-amd` against the AMD host (3,418 to
+3,434) and `matlab-intel` against the Intel host (1,822 to 1,838 of 1,932). Their
+frozen outputs (`arithmetic-reference-outputs.json`) change only those two runs'
+`maps.f64`. `polyshape_arithmetic.rs`, `matlab_geometry.rs` and
+`revcor_reference.rs` require the default to keep every value the listed
+evaluation gives exactly, and they freeze the counts above.
+
+**Where `convhull` starts.** On MATLAB's own stored vertices and hulls, every
+recorded polygon hull (174,596 on both hosts) starts at the same place. Take the
+first stored vertex on the exact hull boundary, collinear points included, and go
+counter-clockwise to the first vertex `convhull` keeps. The rule above, the
+first stored hull vertex, gives 169,932. This was found on those exposed
+recordings after inspecting three exceptions, so it is not held-out evidence, and
+round cleanup-order-1 did not decide it ([result](cleanup-order-1/result.md)).
+Production does not depend on it: where the first point starts the hull, both
+rules start there. With the port's rings, the rule gains 2,776 hull lists and
+loses 272, all where the port's rings are not MATLAB's, so the diagnostic keeps
+the rule above.
+
 **How MATLAB splits rings.** On the CF template shapes, MATLAB's recorded rings
 are mostly the port's cleaned rings re-paired at shared vertices. The re-pairing
 takes the most counter-clockwise turn and then splits each ring at every vertex it
@@ -2983,9 +3061,18 @@ points or keeps a hole touching its solid. There MATLAB's rings visit a vertex
 twice, so no splitting rule reproduces them. No rule found loses nothing, so
 nothing changed and no recording was spent on it.
 
-Still open for these hulls: `convexHull`'s area (round hull-area-1 refuted every
-candidate; see its results), MATLAB's ring decomposition of self-intersecting
-polygons, and so the stored order's adoption in production.
+Still open for these hulls: `convexHull`'s area, MATLAB's ring decomposition of
+self-intersecting polygons, and so the stored order's adoption where the first
+point does not start the hull. Round hull-area-1 refuted every area candidate (see
+its results). Later direct tests on its recording, with no new recording, refuted
+more. MATLAB's area is not `polyshape`'s area of the same hull (171 of 424 sets).
+No origin for the cross products reproduces it: bounding-box centre, its variants,
+means, the first point, the hull's first vertex, the minimum corner and zero; the
+best is the box centre summed clockwise from `K(1)`, at 255 of 424. Neither do the
+strictly convex vertices alone, per-vertex forms (no summation order reproduces
+the 7-vertex set `blob_f016_reversed`), or fans from `K(1)` with any base vertex or
+fused multiply-add. MATLAB's `polyarea` on the same `K` is the left-to-right
+trapezoid sum up to 42 terms (414 of 424; all ten differences have 45 or more).
 
 To replay dispatch 1's historical discovery report, run
 `python3 hull_area_report.py discovery RECORDING DECISION_JSON --dispatch-1`

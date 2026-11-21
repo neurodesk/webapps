@@ -222,7 +222,7 @@
     "R^2": "exact",
     "x0": "exact",
     "y0": {
-     "srfData": 16,
+     "srfData": 7,
      "imaginary": 0,
      "gifti": 0
     },
@@ -301,7 +301,7 @@
     },
     "x0": "exact",
     "y0": {
-     "srfData": 12,
+     "srfData": 5,
      "imaginary": 0,
      "gifti": 0
     },

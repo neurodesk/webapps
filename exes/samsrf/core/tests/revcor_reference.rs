@@ -34,10 +34,13 @@ struct Expected {
     pipelines: usize,
     templates: usize,
     raw_cf: usize,
+    /// Double convex-hull CF geometry values of the replay that the listed
+    /// evaluation and production give MATLAB's bits.
+    cf_hull_exact: [usize; 2],
 }
 
-const MATRIX: Expected = Expected { cases: 102, refused: 15, single_cf: 24, single_rc: 9, global: 6, replay: 69, pipelines: 69, templates: 6, raw_cf: 36 };
-const EDGES: Expected = Expected { cases: 24, refused: 0, single_cf: 8, single_rc: 2, global: 2, replay: 20, pipelines: 20, templates: 2, raw_cf: 0 };
+const MATRIX: Expected = Expected { cases: 102, refused: 15, single_cf: 24, single_rc: 9, global: 6, replay: 69, pipelines: 69, templates: 6, raw_cf: 36, cf_hull_exact: [852, 959] };
+const EDGES: Expected = Expected { cases: 24, refused: 0, single_cf: 8, single_rc: 2, global: 2, replay: 20, pipelines: 20, templates: 2, raw_cf: 0, cf_hull_exact: [292, 326] };
 
 struct Host {
     name: &'static str,
@@ -241,7 +244,8 @@ fn bits(a: f64, b: f64) -> bool {
 
 /// Whether a replayed row is a hull geometry row: MATLAB's polyshape centroid
 /// and areas. Double replays reproduce them bit for bit with the diagnostic
-/// `HullOrder::Stored`; production's listed hull stays within 1e-12.
+/// `HullOrder::Stored`; production stays within 1e-12 and keeps every value the
+/// listed evaluation gives exactly.
 fn hull_row(case: &Value, name: &str) -> bool {
     let rc_hull = kind(case) == AnalysisKind::RevCorPrf && case["mapReplayModel"]["Prf_Function"] == 0;
     let cf_hull = kind(case) == AnalysisKind::RevCorCf && case["mapReplayModel"]["Fit_pRF"] == 0;
@@ -696,11 +700,14 @@ fn recorded_profiles_replay_to_each_hosts_maps() {
     let mut failures = Failures::default();
     let mut tally = Tally::default();
     for host in &hosts {
+        let mut cf_hull_exact = [0; 2];
         for case in pipelines(host, "cf").filter(|c| parse(c).is_ok() && !single_gaussian_cf(c) && !runaway_double_gaussian(c)) {
             tally.add(host);
             let prepared = cf_prepared(host, case, &template_maps(host, case));
             let mut stored = prepared.clone();
             stored.hull_order = HullOrder::Stored;
+            let mut base = prepared.clone();
+            base.hull_order = HullOrder::Listed;
             let profiles = array(&host.root, &case["profiles"]);
             let nsvx = shape(&case["profiles"])[0];
             let saved = array(&host.root, &case["savedMaps"]);
@@ -709,15 +716,19 @@ fn recorded_profiles_replay_to_each_hosts_maps() {
                 let profile = &profiles[v as usize * nsvx..(v as usize + 1) * nsvx];
                 let actual = prepared.estimate_profile(profile).unwrap();
                 let diagnostic = stored.estimate_profile(profile).unwrap();
+                let listed = base.estimate_profile(profile).unwrap();
                 for (r, name) in prepared.values.iter().enumerate() {
                     let cast = |value: f64| if single(case) { f64::from(value as f32) } else { value };
                     let (a, d) = (cast(actual[r]), cast(diagnostic[r]));
                     let e = saved[i * rows + r];
-                    // Production keeps the listed hull; the stored order must give MATLAB's bits.
+                    // Production keeps every value the listed evaluation gives exactly;
+                    // the stored order must give MATLAB's bits.
                     let ok = if single(case) {
                         same(a, e) && same(d, e)
                     } else if hull_row(case, name) {
-                        within(a, e, 1e-12 * e.abs().max(1.0)) && bits(d, e)
+                        cf_hull_exact[0] += usize::from(bits(listed[r], e));
+                        cf_hull_exact[1] += usize::from(bits(a, e));
+                        within(a, e, 1e-12 * e.abs().max(1.0)) && bits(d, e) && (!bits(listed[r], e) || bits(a, e))
                     } else {
                         within(a, e, 1e-12 * e.abs().max(1.0))
                     };
@@ -725,6 +736,7 @@ fn recorded_profiles_replay_to_each_hosts_maps() {
                 }
             }
         }
+        failures.check(cf_hull_exact == host.expected.cf_hull_exact, || format!("{}: exact double CF hull values, listed and production, {cf_hull_exact:?}", host.root.display()));
         for case in pipelines(host, "revcor").filter(|c| parse(c).is_ok()) {
             tally.add(host);
             let prepared = rc_prepared(host, case);
