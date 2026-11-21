@@ -236,7 +236,7 @@ async function rejectsInvalidUse(work) {
   assert.notEqual(r.status,0);
   assert.match(r.stderr,/already exists/);
   assert.equal(await readFile(join(output,'keep.txt'),'utf8'),'preserve');
-  r=run([input,join(work,'new'),'--threads','0']);
+  r=run([input,join(work,'new'),'--threads','-1']);
   assert.notEqual(r.status,0);
   assert.match(r.stderr,/positive integer/);
   // A refused input leaves no output directory, so the same command can run once the input is fixed.

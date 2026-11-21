@@ -25,7 +25,7 @@ const fail=message=>{console.error(message);process.exit(1);};
 if(args[0]==='--help'){console.log('usage');process.exit(0);}
 if(args[0]==='self-check'){console.log(JSON.stringify({executable:process.execPath}));process.exit(0);}
 if(args[0]==='download-models')fail('download-models was removed: the models are built into the tools.');
-if(args[args.indexOf('--threads')+1]==='0')fail('Threads must be a positive integer.');
+if(args[args.indexOf('--threads')+1]==='-1')fail('Threads must be 0 (automatic) or a positive integer.');
 const [input,output]=args;
 const pathological=args.includes('--pathological')?args[args.indexOf('--pathological')+1]:null;
 const fingerprint=pathological?createHash('sha256').update(await readFile(pathological)).digest('hex'):'none';

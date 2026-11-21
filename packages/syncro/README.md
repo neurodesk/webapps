@@ -30,7 +30,7 @@ syncro INPUT OUTPUT_DIR [--lesion FILE] [--pathological FILE] [--ct] [--normaliz
        [--threads N] [--device auto|cpu|metal|cuda] [--keep-synth] [--resume]
 ```
 
-- `--threads` (default `SLURM_CPUS_PER_TASK`, else every core) caps every tool: SynthSR, MindGrab, Greedy, niimath
+- `--threads` caps every tool (0 or omitted: `SLURM_CPUS_PER_TASK` when set, else every core of the machine): SynthSR, MindGrab, Greedy, niimath
   and ANTs.
 - `--device` chooses where SynthSR and MindGrab run; `auto` takes each tool's fastest (Metal on Apple silicon,
   CUDA for MindGrab on NVIDIA). SynthSR has no CUDA build and runs on the CPU there (about 10 s, 8 GB).

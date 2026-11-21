@@ -20,7 +20,7 @@ modality and a lesion map follow the same transforms.
   --pathological FILE   second modality (e.g. FLAIR), registered to the primary scan first
   --ct                  the primary scan is CT in Hounsfield units
   --normalization       greedy (default, the web app's method) or ants (ANTs SyN; needs ANTs on PATH or ANTSPATH)
-  --threads             threads for every tool (default: SLURM_CPUS_PER_TASK, else all cores)
+  --threads             threads for every tool; 0 or omitted: SLURM_CPUS_PER_TASK, else every core
   --device              where SynthSR and MindGrab run (default auto: each tool's fastest available)
   --keep-synth          also write the synthetic T1 (t1INPUT)
   --resume              reuse the steps an interrupted run with the same inputs finished
@@ -115,11 +115,14 @@ fn parse(argv: &[String]) -> Result<Args, String> {
                 }
             }
             "--threads" => {
-                a.threads = value()?
-                    .parse()
-                    .ok()
-                    .filter(|&n| n > 0)
-                    .ok_or("Threads must be a positive integer.")?
+                // 0 asks for the automatic count, as omitting the option does.
+                a.threads = match value()?.parse::<usize>() {
+                    Ok(0) => default_threads(),
+                    Ok(n) => n,
+                    Err(_) => {
+                        return Err("Threads must be 0 (automatic) or a positive integer.".into());
+                    }
+                }
             }
             "--device" => {
                 a.device = match value()?.as_str() {
@@ -379,5 +382,18 @@ fn main() -> ExitCode {
             eprintln!("syncro: {e}");
             ExitCode::FAILURE
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn zero_threads_means_the_automatic_count() {
+        let argv = |t: &str| ["in.nii", "out", "--threads", t].map(String::from);
+        assert_eq!(parse(&argv("0")).unwrap().threads, default_threads());
+        assert_eq!(parse(&argv("3")).unwrap().threads, 3);
+        assert!(parse(&argv("-1")).is_err());
     }
 }
