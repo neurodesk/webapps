@@ -278,15 +278,20 @@ for (let runAttempt = 1; runAttempt <= maxAttempts; runAttempt++) {
   } finally {
     clearInterval(sampleTimer);
     if (session) await webdriver(`/session/${session.sessionId}`, null, 'DELETE', 10_000).catch(() => {});
-    if (safari && safari.exitCode === null && safari.signalCode === null) {
-      safari.kill();
+    const child = safari;
+    if (child && child.exitCode === null && child.signalCode === null) {
+      child.kill();
+      let killTimer;
       await Promise.race([
-        new Promise((done) => safari.once('exit', done)),
-        new Promise((done) => setTimeout(() => {
-          try { safari.kill('SIGKILL'); } catch { /* ignore */ }
-          done();
-        }, 5000)),
+        new Promise((done) => child.once('exit', done)),
+        new Promise((done) => {
+          killTimer = setTimeout(() => {
+            try { child.kill('SIGKILL'); } catch { /* ignore */ }
+            done();
+          }, 5000);
+        }),
       ]);
+      clearTimeout(killTimer);
     }
     await browser?.close();
     await browserServer?.close();

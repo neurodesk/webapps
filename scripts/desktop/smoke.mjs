@@ -78,6 +78,7 @@ async function runSingleApp(app) {
         child.on('exit', (code, signal) => console.error(JSON.stringify({ time: new Date().toISOString(), event: 'electron-exit', code, signal })));
       }
       const page = await desktop.firstWindow();
+      if (timedOut) return null;
       let reporting = false;
       let previousStatus = '';
       progress = setInterval(async () => {

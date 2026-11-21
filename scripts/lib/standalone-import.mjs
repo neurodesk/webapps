@@ -235,6 +235,27 @@ export async function checkUpdateAssets(update, fetchRelease) {
   }
 }
 
+// Re-verifies each entry in a multi-entry update independently so one suite whose
+// release changed or disappeared between compute and commit does not block the
+// other verified entries. Throws if every entry fails.
+export async function filterVerifiedUpdate(update, fetchRelease, { onDrop = () => {} } = {}) {
+  const verified = [];
+  const dropped = [];
+  for (const entry of update) {
+    try {
+      await checkUpdateAssets([entry], fetchRelease);
+      verified.push(entry);
+    } catch (error) {
+      dropped.push({ entry, error });
+      onDrop(entry, error);
+    }
+  }
+  if (!verified.length && dropped.length) {
+    throw new Error(`No release in the batch still serves its verified bytes: ${dropped.map(({ entry, error }) => `${entry.id}@${entry.version}: ${error.message}`).join('; ')}`);
+  }
+  return { verified, dropped };
+}
+
 function versionKey(version) {
   return version.split('.').map(Number);
 }

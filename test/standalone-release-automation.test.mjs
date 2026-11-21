@@ -11,7 +11,7 @@ import { openStandalone } from '../packages/components/src/ui/renderStandalone.j
 import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
 import { EMBEDDED_VERSION_SITES } from '../scripts/lib/app-versions.mjs';
 import { nativeReleases, portableSpecs, portableSpecsAt } from '../scripts/lib/native-releases.mjs';
-import { applyCatalogUpdate, catalogReleases, catalogUpdate, checkReceipt, checkUpdateAssets, parseReleases, releaseFromTag, suiteReleases as registrySuiteReleases, unlistedReleases } from '../scripts/lib/standalone-import.mjs';
+import { applyCatalogUpdate, catalogReleases, catalogUpdate, checkReceipt, checkUpdateAssets, filterVerifiedUpdate, parseReleases, releaseFromTag, suiteReleases as registrySuiteReleases, unlistedReleases } from '../scripts/lib/standalone-import.mjs';
 
 const CATALOG_DISPATCH = 'gh api "repos/$GITHUB_REPOSITORY/dispatches" -f event_type=standalone-catalog -f "client_payload[releases]=$RELEASE"';
 
@@ -336,6 +336,16 @@ test('a suite entry must match its release and every file it lists', async () =>
   const changes = await update(intact.releases, intact.fetchText);
   intact.releases['webapps-v0.28.20261014'].assets[0].digest = `sha256:${'e'.repeat(64)}`;
   await assert.rejects(checkUpdateAssets(changes, async (tag) => intact.releases[tag]), /mac-arm64\.zip: release webapps-v0\.28\.20261014 does not serve the bytes/);
+  // Partial commit-time verification drops a changed suite while keeping healthy suites in the batch.
+  const healthy = suiteReleases('0.29.20261015');
+  const healthyChanges = await catalogUpdate({ apps: {} }, parseReleases(['webapps@0.29.20261015']), { fetchRelease: async (tag) => healthy.releases[tag], fetchText: healthy.fetchText, nativeAt: () => new Map(), suites });
+  const merged = { ...intact.releases, ...healthy.releases };
+  const droppedNames = [];
+  const { verified, dropped } = await filterVerifiedUpdate([...changes, ...healthyChanges], async (tag) => merged[tag], { onDrop: (entry) => droppedNames.push(`${entry.id}@${entry.version}`) });
+  assert.deepEqual(droppedNames, ['webapps@0.28.20261014']);
+  assert.equal(dropped.length, 1);
+  assert.deepEqual(verified, healthyChanges);
+  await assert.rejects(filterVerifiedUpdate(changes, async (tag) => intact.releases[tag]), /No release in the batch still serves its verified bytes/);
 });
 
 test('the nightly suite release announces every succeeded suite in one catalog dispatch', async () => {

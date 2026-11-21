@@ -6,20 +6,28 @@ import YAML from 'yaml';
 import { commandLineClosure } from './lib/module-closure.mjs';
 import { repoRoot } from './lib/apps-registry.mjs';
 
-const SHARED_BLOCK = /(?:^ {8}packages\/node-drivers\/[^\n]+\n)+/gm;
+const SHARED_PATHS_BLOCK = /(^ {6}shared_paths: \|\n)((?: {8}[^\n]*\n)+)/m;
+const DRIVER_LINES = /(?:^ {8}packages\/node-drivers\/[^\n]+\n)+/gm;
 
 // Syncs the generated packages/node-drivers/ filters of a portable CLI consumer
-// workflow in jobs.gate.with.shared_paths (routed by native.yml on ready PRs and
-// swept nightly, matching the repo's shared-path contract). Missing blocks fail
-// loudly instead of silently passing --check.
+// workflow strictly inside jobs.gate.with.shared_paths (routed by native.yml on
+// ready PRs and swept nightly, matching the repo's shared-path contract). Missing
+// blocks fail loudly instead of silently passing --check or matching unrelated YAML.
 export function syncDriverPathsInSource(file, source, dependencies) {
   const sharedLines = dependencies.map((entry) => `        ${entry}`).join('\n');
   const flow = YAML.parse(source);
-  if (!flow.jobs?.gate?.with || !SHARED_BLOCK.test(source)) {
+  const match = SHARED_PATHS_BLOCK.exec(source);
+  if (!flow.jobs?.gate?.with?.shared_paths || !match) {
+    throw new Error(`${file}: missing jobs.gate.with.shared_paths block`);
+  }
+  const block = match[2];
+  DRIVER_LINES.lastIndex = 0;
+  if (!DRIVER_LINES.test(block)) {
     throw new Error(`${file}: missing packages/node-drivers/ entries in jobs.gate.with.shared_paths`);
   }
-  SHARED_BLOCK.lastIndex = 0;
-  return source.replace(SHARED_BLOCK, `${sharedLines}\n`);
+  DRIVER_LINES.lastIndex = 0;
+  const replacedBlock = block.replace(DRIVER_LINES, `${sharedLines}\n`);
+  return source.slice(0, match.index) + match[1] + replacedBlock + source.slice(match.index + match[0].length);
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {

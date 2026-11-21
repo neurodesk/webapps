@@ -96,20 +96,28 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           UPDATE: ${{ runner.temp }}/catalog/update.json
+          BASE_CATALOG: ${{ runner.temp }}/base-standalone.json
+          PARTIAL_OK: ${{ (github.event_name == 'repository_dispatch' || github.event_name == 'schedule') && '1' || '0' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          releases=$(node -p "require(process.env.UPDATE).map((entry) => entry.id + ' ' + entry.version).join(', ')")
           for attempt in 1 2 3 4 5; do
             git fetch --quiet "$remote" main
             git reset --quiet --hard FETCH_HEAD
+            cp registry/standalone.json "$BASE_CATALOG"
             node scripts/apply-catalog-update.mjs "$UPDATE"
             if git diff --quiet registry/standalone.json; then
+              releases=$(node -p "require(process.env.UPDATE).map((entry) => entry.id + ' ' + entry.version).join(', ')")
               echo "main already lists ${releases}"
               exit 0
             fi
             node scripts/verify-catalog-update.mjs "$UPDATE"
+            if git diff --quiet registry/standalone.json; then
+              echo "main already lists every remaining verified release"
+              exit 0
+            fi
+            releases=$(node -p "require(process.env.UPDATE).map((entry) => entry.id + ' ' + entry.version).join(', ')")
             git commit --quiet -m "chore(standalone): publish ${releases} downloads" registry/standalone.json
             if git push --quiet "$remote" HEAD:main; then
               echo "pushed=true" >> "$GITHUB_OUTPUT"
