@@ -37,6 +37,8 @@ if(await stat(output).catch(()=>null)) {
   console.log('  skip  everything');
   process.exit(0);
 }
+const head=await readFile(input);
+if(!(head[0]===0x1f&&head[1]===0x8b)&&head.subarray(344,347).toString()!=='n+1')fail('Choose a NIfTI image (.nii or .nii.gz).');
 const defect=process.env.FAKE_SYNCRO_DEFECT;
 const bytes=gunzipSync(await readFile(${JSON.stringify(template)}));
 const header=Buffer.from(bytes.subarray(0,352));

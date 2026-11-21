@@ -5,6 +5,7 @@
 // This file reads NIfTI itself so that no code under test judges its own output.
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
+import {existsSync} from 'node:fs';
 import {mkdtemp,mkdir,writeFile,readFile,rename,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {basename,join,resolve} from 'node:path';
@@ -238,6 +239,10 @@ async function rejectsInvalidUse(work) {
   r=run([input,join(work,'new'),'--threads','0']);
   assert.notEqual(r.status,0);
   assert.match(r.stderr,/positive integer/);
+  // A refused input leaves no output directory, so the same command can run once the input is fixed.
+  r=run([input,join(work,'refused')]);
+  assert.notEqual(r.status,0);
+  assert.equal(existsSync(join(work,'refused')),false);
   r=run(['download-models']);
   assert.notEqual(r.status,0);
   assert.match(r.stderr,/was removed/);
@@ -245,7 +250,7 @@ async function rejectsInvalidUse(work) {
   assert.notEqual(r.status,0);
   assert.match(r.stderr,/not an interrupted SYNcro run/);
   assert.equal(await readFile(join(output,'keep.txt'),'utf8'),'preserve');
-  console.log('PASS installed package: self-check, help, output preservation, thread validation, removed command, resume of a foreign directory');
+  console.log('PASS installed package: self-check, help, output preservation, thread validation, refused input leaves no directory, removed command, resume of a foreign directory');
 }
 
 // A finished run resumes without rerunning a step; a changed input is refused and the outputs kept.

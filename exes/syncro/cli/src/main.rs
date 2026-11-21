@@ -314,6 +314,7 @@ fn start(a: Args) -> Result<(), String> {
         }
     }
     // Tools run in the output directory, so commands.sh names work/... and the outputs as the browser does.
+    let created = !Path::new(&out).exists();
     std::fs::create_dir_all(&out).map_err(|e| format!("{out}: {e}"))?;
     std::env::set_current_dir(&out).map_err(|e| format!("{out}: {e}"))?;
     let host = Native {
@@ -336,7 +337,13 @@ fn start(a: Args) -> Result<(), String> {
         keep_synth: a.keep_synth,
         software: tools.clone(),
     };
-    let mut provenance = block_on(pipeline::run(&host, &o, &|stage| eprintln!("[{stage}]")))?;
+    let result = block_on(pipeline::run(&host, &o, &|stage| eprintln!("[{stage}]")));
+    // Inputs refused before any record was written leave nothing behind, so the same command can run again.
+    if result.is_err() && created && !Path::new("work/syncro.json").is_file() {
+        let _ = std::env::set_current_dir(std::env::temp_dir());
+        let _ = std::fs::remove_dir_all(&out);
+    }
+    let mut provenance = result?;
     provenance["device"] = json!(format!("{:?}", a.device).to_lowercase());
     provenance["tools"] = tools;
     provenance["input"] = json!(o.input);
