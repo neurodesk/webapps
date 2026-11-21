@@ -24,9 +24,13 @@ const TEMPLATE={
 // The lesion sits this far from the head's intensity centroid, in native world millimetres (RAS).
 const LESION_OFFSET_MM=[-30,0,10];
 const LESION_RADIUS_MM=6;
+// Far enough that skipping the pathological-to-primary affine moves the lesion outside lesionXMm.
+const PATHOLOGICAL_SHIFT_MM=20;
 // With ANTs, Linux, Windows and macOS archives measured Dice 0.9665, correlations 0.815-0.816 and
 // 0.701-0.702 (2026-10-06); with Greedy, Linux measured Dice 0.9670, correlations 0.783 and 0.672
-// (2026-10-27). Without registration the scan correlates 0.13; the template shifted 2 mm, 0.74.
+// (2026-10-27), both with SynthStrip. With MindGrab, macOS measured Greedy Dice 0.9771, correlations
+// 0.851 and 0.757, and ANTs 0.9669, 0.807 and 0.694 (2026-11-21). Without registration the scan
+// correlates 0.13; the template shifted 2 mm, 0.74.
 const LIMITS={
   brainDice:0.95,
   brainCorrelation:0.77,
@@ -141,6 +145,15 @@ function lesionFixture(input) {
   return {centre,bytes:Buffer.concat([header,Buffer.from(mask)])};
 }
 
+// The scan moved 20 mm along x in world space (sform and qform offsets), standing in for a second
+// modality: SYNcro must register it back to the primary scan before the lesion drawn on it is warped.
+function shiftedCopy(input) {
+  const bytes=Buffer.from(input.bytes);
+  const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+  for(const offset of [268,292])view.setFloat32(offset,view.getFloat32(offset,input.le)+PATHOLOGICAL_SHIFT_MM,input.le);
+  return bytes;
+}
+
 function sameGrid(volume,template) {
   const dims=volume.dims.every((value,axis)=>value===template.dims[axis]);
   const affine=volume.sform.every((row,r)=>row.every((value,c)=>Math.abs(value-template.sform[r][c])<1e-3));
@@ -225,39 +238,65 @@ async function rejectsInvalidUse(work) {
   r=run([input,join(work,'new'),'--threads','0']);
   assert.notEqual(r.status,0);
   assert.match(r.stderr,/positive integer/);
-  r=run(['download-models','--offline','--cache-dir',join(work,'empty-cache')]);
+  const emptyCache=join(work,'empty-cache');
+  r=run(['download-models','--offline','--cache-dir',emptyCache]);
   assert.notEqual(r.status,0);
   assert.match(r.stderr,/missing from the offline installation/);
   r=run([input,output,'--resume','--offline']);
   assert.notEqual(r.status,0);
   assert.equal(await readFile(join(output,'keep.txt'),'utf8'),'preserve');
-  console.log('PASS installed package: self-check, help, output preservation, thread validation, offline cache failure, invalid resume');
+  const interrupted=join(work,'interrupted');
+  const pathological=join(work,'pathological.nii');
+  await writeFile(pathological,'Original pathological scan');
+  const options=['--offline','--cache-dir',emptyCache,'--pathological',pathological];
+  r=run([input,interrupted,...options]);
+  assert.notEqual(r.status,0);
+  assert.match(r.stderr,/missing from the offline installation/);
+  await writeFile(pathological,'Changed pathological scan');
+  r=run([input,interrupted,...options,'--resume']);
+  assert.notEqual(r.status,0);
+  assert.match(r.stderr,/Checkpoint input, options or software differ/);
+  console.log('PASS installed package: self-check, help, output preservation, thread validation, offline cache failure, invalid resume, changed pathological scan');
 }
 
-// Greedy is the default; --normalization ants keeps the container-parity path.
+// Exercise the default MindGrab and Greedy path with a pathological scan and its lesion.
+// The second run uses SynthStrip and ANTs as in the reference container.
 async function normalisesPinnedScan(work,engine) {
   const templateBytes=await readFile(TEMPLATE.url);
   check(sha256(templateBytes)===TEMPLATE.sha256,`MNI152 template SHA-256 ${TEMPLATE.sha256}`);
   const inputPath=localInput??await pinnedInput();
   if(localInput)console.log(`INFO input: ${localInput} replaces the pinned ${INPUT.name}`);
   const name=basename(inputPath);
-  const lesion=lesionFixture(readNifti(await readFile(inputPath)));
+  const primaryScan=readNifti(await readFile(inputPath));
+  const pathological=engine==='greedy'?shiftedCopy(primaryScan):null;
+  const pathologicalPath=join(work,'pathological.nii');
+  if(pathological)await writeFile(pathologicalPath,pathological);
+  const lesion=lesionFixture(pathological?readNifti(pathological):primaryScan);
   const lesionPath=join(work,'lesion.nii');
   await writeFile(lesionPath,lesion.bytes);
   const output=join(work,`normalised-${engine}`);
   const started=performance.now();
-  const result=run([inputPath,output,'--offline','--lesion',lesionPath,...(engine==='greedy'?[]:['--normalization',engine])],40*60*1000);
+  const extractor=engine==='greedy'?'mindgrab':'synthstrip';
+  const options=pathological?['--pathological',pathologicalPath]:['--normalization',engine,'--brain-extractor',extractor];
+  const result=run([inputPath,output,'--offline','--lesion',lesionPath,...options],40*60*1000);
   const seconds=(performance.now()-started)/1000;
   if(result.status!==0)throw new Error(`normalisation exited with ${result.status}:\n${result.stderr}`);
   const provenance=JSON.parse(await readFile(join(output,'provenance.json'),'utf8'));
   check(provenance.normalization===engine,`${engine}: provenance records the ${provenance.normalization} normalisation`);
+  check(provenance.brainExtractor===extractor && Object.hasOwn(provenance.stages,extractor),`${engine}: brain extraction ran ${extractor}`);
   console.log(`INFO ${engine}: offline normalisation of ${name} took ${seconds.toFixed(0)} s; native lesion centre ${lesion.centre.map(value=>value.toFixed(1)).join(', ')} mm`);
+  const template=readNifti(templateBytes);
   report(score({
-    template:readNifti(templateBytes),
+    template,
     brain:readNifti(await readFile(join(output,`wbt1${name}`))),
     primary:readNifti(await readFile(join(output,`w${name}`))),
     lesion:readNifti(await readFile(join(output,'wlesion.nii'))),
   }),engine);
+  if(pathological) {
+    const warped=readNifti(await readFile(join(output,'wpathological.nii')));
+    const value=correlation(warped.data,template.data,i=>template.data[i]>0);
+    check(sameGrid(warped,template)&&value>=LIMITS.primaryCorrelation,`${engine}: warped pathological modality correlation with the MNI152 template inside its brain ${value.toFixed(4)} >= ${LIMITS.primaryCorrelation}`);
+  }
 }
 
 const work=await mkdtemp(join(tmpdir(),'syncro-package-check-'));

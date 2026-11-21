@@ -51,7 +51,7 @@ export function writeVolume({ data, dims, affine }, description = 'SynthSR synth
   return buffer;
 }
 
-function inverse3(m) {
+export function inverse3(m) {
   const [[a,b,c], [d,e,f], [g,h,i]] = m;
   const det = a*(e*i-f*h)-b*(d*i-f*g)+c*(d*h-e*g);
   if (Math.abs(det) < 1e-12) throw new Error('The image affine is singular.');

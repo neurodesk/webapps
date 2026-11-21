@@ -5,7 +5,10 @@
 
 import { parentPort, workerData } from 'node:worker_threads';
 
-const { moduleUrl, model, args, input, outputs } = workerData;
+const { moduleUrl, model, args, input, outputs, threads } = workerData;
+// Emscripten sizes its pthread pool from navigator.hardwareConcurrency and brainchopC its
+// thread count from os.cpus(); -cpu N sets the second, this cap the first.
+if (threads) Object.defineProperty(navigator, 'hardwareConcurrency', { value: threads });
 const log = line => parentPort.postMessage({ type: 'log', line });
 const { default: createModule } = await import(moduleUrl);
 let settle;
@@ -22,7 +25,7 @@ const module = await createModule({
 module.FS.writeFile('/in.nii', input);
 const started = performance.now();
 try {
-  module.callMain([...args, '-backend', 'cpu', '-o', '/out.nii', '/in.nii']);
+  module.callMain([...args, ...(threads ? ['-cpu', String(threads)] : ['-backend', 'cpu']), '-o', '/out.nii', '/in.nii']);
 } catch (error) {
   if (typeof error?.status === 'number') {
     settle(error.status);

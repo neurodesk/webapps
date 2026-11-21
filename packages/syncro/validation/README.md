@@ -2,7 +2,7 @@
 
 The implementation was checked against the published Neurodesk container on **OpenNeuro ds000001/sub-01/anat/sub-01_T1w.nii.gz**, the real anatomical image used by Neurodesk's own SYNcro full test. The input has 160 × 192 × 192 voxels with approximately 1 × 1.333 × 1.333 mm spacing.
 
-These parity results describe the SynthStrip + ANTs path, which remains selectable in the browser and in the standalone Node fallback (`--normalization ants`). The browser defaults to MindGrab + Greedy and the Node fallback to SynthStrip + Greedy, so the older end-to-end parity claim must not be transferred to a default run. A paired extraction resource benchmark is recorded in [`results/brain-extraction-benchmark.json`](results/brain-extraction-benchmark.json), including a repeat with each extractor isolated in a fresh Chromium process and 100 ms Linux process-tree RSS sampling. Greedy's core and browser package have their own tests; a new real clinical end-to-end comparison remains required.
+These parity results cover SynthStrip and ANTs. Select both in the browser or pass `--brain-extractor synthstrip --normalization ants` to the standalone command. The browser and standalone command default to MindGrab and Greedy. The extraction benchmark compares both extractors in separate Chromium processes and samples Linux process-tree RSS every 100 ms. [Brain extraction benchmark](results/brain-extraction-benchmark.json)
 
 - [Neurodesk recipe and source](https://github.com/neurodesk/neurocontainers/tree/f993bfd6ea658f6d56ba5f6a131e4a8c79b7e0e7/recipes/syncro)
 - [Input download](https://s3.amazonaws.com/openneuro.org/ds000001/sub-01/anat/sub-01_T1w.nii.gz)
@@ -12,7 +12,7 @@ These parity results describe the SynthStrip + ANTs path, which remains selectab
 
 ## Greedy against the container (2026-10-27)
 
-The Node fallback's default, SynthStrip + Greedy, against the same container's SynthStrip + ANTs on this scan ([report](results/greedy-standalone.json)). Greedy is a different method, so this measures agreement, not parity.
+The Node command's previous default, SynthStrip + Greedy (now `--brain-extractor synthstrip`), against the same container's SynthStrip + ANTs on this scan ([report](results/greedy-standalone.json)). Greedy is a different method, so this measures agreement, not parity.
 
 | Output | Dice of non-zero voxels | Correlation |
 | --- | --- | --- |

@@ -227,6 +227,12 @@ fn parse_header(b: &[u8]) -> Result<Header> {
     let sform = Mat4(sform);
     let ras = if sform_code > 0 && itk_prefers_sform(sform, qform, sform_code, qform_code) {
         sform
+    } else if sform_code > 0 && qform_code == 0 {
+        // ITK throws here too; the diagonal fallback would drop the origin and the
+        // left-right flip of a sheared (e.g. gantry-tilted CT) sform.
+        return Err(Error(
+            "NIfTI sform is not orthonormal (sheared) and there is no qform; resample it to an orthogonal grid".into(),
+        ));
     } else {
         qform
     };

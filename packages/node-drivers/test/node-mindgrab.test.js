@@ -9,6 +9,20 @@ const reference = JSON.parse(await readFile(REFERENCE_URL, 'utf8')).mindgrab;
 const mindgrab = await loadMindgrabCpu(import.meta.resolve('@brainchop/mindgrab/package.json'));
 const input = new Uint8Array(1024);
 
+// A uint8 NIfTI-1 of n^3 zeros.
+function volume(n) {
+  const bytes = new Uint8Array(352 + n ** 3);
+  const view = new DataView(bytes.buffer);
+  view.setInt32(0, 348, true);
+  [3, n, n, n, 1, 1, 1, 1].forEach((value, i) => view.setInt16(40 + 2 * i, value, true));
+  view.setInt16(70, 2, true);
+  view.setInt16(72, 8, true);
+  [1, 1, 1, 1].forEach((value, i) => view.setFloat32(76 + 4 * i, value, true));
+  view.setFloat32(108, 352, true);
+  bytes.set([0x6e, 0x2b, 0x31, 0x00], 344);
+  return bytes;
+}
+
 test('runs the mindgrab version the browser reference ran', () => {
   assert.equal(mindgrab.version, reference.version);
 });
@@ -39,10 +53,18 @@ test('a run past its time limit is stopped and reported', async () => {
 test('an aborted signal stops the run with its reason and frees the queue', async () => {
   const reason = new DOMException('stop', 'AbortError');
   await assert.rejects(mindgrab.segment(input, { model: 'mindgrab', signal: AbortSignal.abort(reason) }), error => error === reason);
+  // The CPU backend log confirms that a valid input reached the running module.
   const controller = new AbortController();
-  const running = mindgrab.segment(input, { model: 'mindgrab', signal: controller.signal });
-  setTimeout(() => controller.abort(), 50);
-  await assert.rejects(running, { name: 'AbortError' });
+  const running = mindgrab.segment(volume(8), {
+    model: 'mindgrab',
+    threads: 2,
+    timeoutMs: 15000,
+    signal: controller.signal,
+    onLog: (line) => {
+      if (line.includes('using cpu backend')) controller.abort(reason);
+    },
+  });
+  await assert.rejects(running, error => error === reason);
   await assert.rejects(mindgrab.segment(input, { model: 'mindgrab', timeoutMs: 1 }), /did not finish within 1 ms/);
 });
 
@@ -53,7 +75,9 @@ for (const item of MINDGRAB_CASES) {
     const bytes = await pinnedFile(MINDGRAB_INPUT);
     process.exitCode = undefined;
     // A gzipped input returns gzipped outputs, as in the wrapper; the pins are of the NIfTI inside.
-    const result = await mindgrab[item.call](bytes, item.options);
+    // A capped thread pool (a Slurm allocation) must give the same bytes.
+    const options = item.id === 'mindgrab-mask' ? { ...item.options, threads: 2 } : item.options;
+    const result = await mindgrab[item.call](bytes, options);
     assert.equal(result.backend, 'cpu');
     assert.equal(process.exitCode, undefined, 'the module exit leaves the host exit code alone');
     assert.equal(globalThis.Worker, undefined, 'the glue installs no global Worker in the host');
