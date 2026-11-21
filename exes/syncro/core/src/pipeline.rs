@@ -309,14 +309,15 @@ pub async fn run<H: Host>(h: &H, o: &Options, stage: &dyn Fn(&str)) -> Result<Va
     if !o.out.is_empty() {
         h.mkdirs(&o.out)?;
     }
-    let mut fingerprint = vec![json!([input_name, sha256(&input_bytes)])];
+    let (input_hash, template_hash) = (sha256(&input_bytes), sha256(&template_bytes));
+    let mut fingerprint = vec![json!([input_name, input_hash])];
     for p in [&o.pathological, &o.lesion].into_iter().flatten() {
         fingerprint.push(json!([file_name(p), sha256(&read_all(h, p).await?)]));
     }
     let run_record = json!({
         "version": env!("CARGO_PKG_VERSION"),
         "inputs": fingerprint,
-        "template": sha256(&template_bytes),
+        "template": template_hash,
         "options": {"ct": o.ct, "normalization": format!("{:?}", o.normalization), "keepSynth": o.keep_synth},
         "software": o.software,
     })
@@ -352,6 +353,24 @@ pub async fn run<H: Host>(h: &H, o: &Options, stage: &dyn Fn(&str)) -> Result<Va
         put(h, &lesion_path, &volume::write(l, "Lesion map")).await?;
     }
 
+    // The tools read the work files; the decoded volumes are not needed again, and a browser's WebAssembly memory
+    // never shrinks, so they go before the first tool runs.
+    let fill = if o.ct {
+        darkest(&primary.data).min(0.0)
+    } else {
+        0.0
+    };
+    let output_space = json!({"dims": template.dims, "affine": template.affine});
+    let has_pathological = pathological.is_some();
+    drop((
+        primary,
+        pathological,
+        lesion,
+        template,
+        input_bytes,
+        template_bytes,
+    ));
+
     let mut r = Runner {
         h,
         o,
@@ -368,7 +387,7 @@ pub async fn run<H: Host>(h: &H, o: &Options, stage: &dyn Fn(&str)) -> Result<Va
     };
 
     let pathological_matrix = work("pathological.mat");
-    if pathological.is_some() {
+    if has_pathological {
         begin(&mut r, "pathological-registration", None);
         let argv = r.greedy(&[
             "-a",
@@ -395,9 +414,7 @@ pub async fn run<H: Host>(h: &H, o: &Options, stage: &dyn Fn(&str)) -> Result<Va
     begin(
         &mut r,
         "synthsr",
-        pathological
-            .is_some()
-            .then_some("pathological-registration"),
+        has_pathological.then_some("pathological-registration"),
     );
     let synthetic = work("t1.nii");
     let mut argv = vec![
@@ -579,14 +596,12 @@ pub async fn run<H: Host>(h: &H, o: &Options, stage: &dyn Fn(&str)) -> Result<Va
         }
     };
 
-    validate_registered_brain(&read(&read_all(h, &warped_brain).await?)?, &template)?;
+    validate_registered_brain(
+        &read(&read_all(h, &warped_brain).await?)?,
+        &read(&read_all(h, &template_path).await?)?,
+    )?;
 
     begin(&mut r, "resampling", Some("registration"));
-    let fill = if o.ct {
-        darkest(&primary.data).min(0.0)
-    } else {
-        0.0
-    };
     let chain_refs: Vec<&str> = chain.iter().map(String::as_str).collect();
     let apply = async |r: &mut Runner<'_, H>,
                        moving: &str,
@@ -693,7 +708,7 @@ pub async fn run<H: Host>(h: &H, o: &Options, stage: &dyn Fn(&str)) -> Result<Va
             &warped,
             true,
             0.0,
-            pathological.is_some(),
+            has_pathological,
             "lesion",
         )
         .await?;
@@ -748,12 +763,12 @@ pub async fn run<H: Host>(h: &H, o: &Options, stage: &dyn Fn(&str)) -> Result<Va
             "lesion": o.lesion.as_deref().map(file_name),
             "lesionSpace": if o.pathological.is_some() { "pathological" } else { "primary" },
         },
-        "inputHash": sha256(&input_bytes),
-        "templateHash": sha256(&template_bytes),
+        "inputHash": input_hash,
+        "templateHash": template_hash,
         "commands": r.commands,
         "timings": r.timings,
         "totalSeconds": h.now() - t0,
-        "outputSpace": {"dims": template.dims, "affine": template.affine},
+        "outputSpace": output_space,
         "outputs": outputs,
         "resamplingDatatype": "float32",
         "synthetic": true,

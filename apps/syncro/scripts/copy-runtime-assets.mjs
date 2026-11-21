@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Stage the runtime assets that are fetched by URL at run time (so Vite never
 // emits them) into public/, as dwi2trx does: MindGrab's glue + WASM for its three
-// backends, Greedy's threaded bundle, and the registration WASM. All three
-// folders are gitignored.
+// backends, Greedy's threaded bundle, niimath's Emscripten module and the
+// registration WASM. All four folders are gitignored.
 import { copyFileSync, cpSync, mkdirSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
@@ -25,6 +25,8 @@ stage(mindgrab, mindgrabTarget, ['LICENSE'])
 stage(join(here, '..', '..', '..', 'packages', 'registration', 'wasm'), join(here, '..', 'public', 'registration'), [
   'syncro-registration.mjs', 'syncro-registration.wasm',
 ])
+const niimath = dirname(createRequire(import.meta.url).resolve('@niivue/niimath/niimath.js'))
+stage(niimath, join(here, '..', 'public', 'niimath'), ['niimath.js', 'niimath.wasm'])
 const greedyTarget = join(here, '..', 'public', 'greedy-wasm')
 rmSync(greedyTarget, { recursive: true, force: true })
 cpSync(join(here, '..', '..', '..', 'packages', 'greedy', 'wasm'), greedyTarget, { recursive: true })

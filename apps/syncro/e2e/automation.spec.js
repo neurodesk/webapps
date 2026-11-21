@@ -4,10 +4,12 @@ import { readFile } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
 import { readNifti } from '../../../packages/components/src/file-io/NiftiUtils.js';
 import { readVolume } from '../../../packages/synthsr/src/index.js';
-import { sameGeometry } from '../../../packages/syncro/src/pipeline.js';
 
+// The MNI template grid, compared as the SYNcro core does (dims equal, affine within 0.01 mm).
+const sameGeometry = (a, b) => a.dims.every((d, i) => d === b.dims[i])
+  && a.affine.every((row, r) => row.every((value, c) => Math.abs(value - b.affine[r][c]) <= 0.01));
 const inferenceTimeout = Number(process.env.SYNCRO_AUTOMATION_TIMEOUT_MS || 1_800_000);
-// Measured on the pinned sub-101 T1 with WASM SynthSR, SynthStrip and Greedy (issue #211):
+// Measured on the pinned sub-101 T1 with WASM SynthSR, SynthStrip and Greedy (issue #211; MindGrab replaced SynthStrip):
 // brain Dice 0.974, correlations 0.944 (normalized) and 0.950 (synthetic), from 0.554 unregistered.
 const PINNED_FLOOR = { overlap: 0.95, correlation: 0.9, gain: 0.2 };
 const image = gunzipSync(await readFile(new URL('../../../exes/synthseg/test/fixtures/small.nii.gz', import.meta.url)));
@@ -25,7 +27,6 @@ test.beforeEach(async ({ page }) => {
   }));
   for (const [filename, path] of [
     ['synthsr-v2.onnx', process.env.SYNTHSR_MODEL],
-    ['synthstrip-browser.onnx', process.env.SYNTHSTRIP_MODEL],
   ]) {
     if (path) await page.context().route(`**/${filename}`, (route) => route.fulfill({ path }));
   }
@@ -55,7 +56,7 @@ test('cropped brain fails normalization without exporting nearly empty images', 
   await page.goto('./');
   await page.locator('#neurodesk-input-transfer').setInputFiles({ name: 'cropped-head.nii', mimeType: 'application/nifti', buffer: image });
   await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('adopt', { role: 'primary' }));
-  await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('start', { operation: 'normalize', parameters: { synthsrBackend: 'wasm', brainExtractor: 'synthstrip', keepSynth: true } }));
+  await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('start', { operation: 'normalize', parameters: { synthsrBackend: 'wasm', mindgrabBackend: 'cpu', keepSynth: true } }));
   await expect.poll(async () => (await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('snapshot'))).state, { timeout: inferenceTimeout - 60_000 }).not.toBe('running');
   const snapshot = await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('snapshot'));
   expect(snapshot.state).toBe('failed');
@@ -70,7 +71,7 @@ test('the pinned T1 example normalizes onto the MNI152 template with WASM SynthS
   await page.goto('./');
   await page.locator('#neurodesk-input-transfer').setInputFiles(process.env.SYNCRO_AUTOMATION_IMAGE);
   await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('adopt', { role: 'primary' }));
-  await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('start', { operation: 'normalize', parameters: { synthsrBackend: 'wasm', brainExtractor: 'synthstrip', keepSynth: true } }));
+  await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('start', { operation: 'normalize', parameters: { synthsrBackend: 'wasm', mindgrabBackend: 'cpu', keepSynth: true } }));
   await expect.poll(async () => (await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('snapshot'))).state, { timeout: inferenceTimeout - 60_000 }).not.toBe('running');
   const snapshot = await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('snapshot'));
   expect(snapshot.state, snapshot.error?.message).toBe('succeeded');
@@ -133,7 +134,7 @@ test('the pinned T1 example normalizes onto the MNI152 template with WASM SynthS
   expect(registeredBrain).toBeGreaterThan(unregistered + PINNED_FLOOR.gain);
 });
 
-// The real pipeline on the CPU: SynthSR and SynthStrip on ONNX Runtime WebAssembly, Greedy on
+// The real pipeline on the CPU: SynthSR on ONNX Runtime WebAssembly, MindGrab's CPU module, Greedy on
 // WebAssembly threads. No GPU is involved, so this runs on a CI machine as it runs on a laptop.
 // The default input is the pinned 2 mm T1 head from the SynthStrip fixtures, moved out of MNI space
 // by rewriting its header: a head lying 10 and 8 degrees off axis and 12, 9 and 7 mm off centre, as
@@ -218,7 +219,7 @@ test('a displaced 2 mm T1 normalizes onto the MNI152 template on the CPU', async
   await page.goto('./');
   await page.locator('#neurodesk-input-transfer').setInputFiles({ ...input, mimeType: 'application/octet-stream' });
   await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('adopt', { role: 'primary' }));
-  await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('start', { operation: 'normalize', parameters: { synthsrBackend: 'wasm', brainExtractor: 'synthstrip', keepSynth: true } }));
+  await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('start', { operation: 'normalize', parameters: { synthsrBackend: 'wasm', mindgrabBackend: 'cpu', keepSynth: true } }));
   await expect.poll(async () => (await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('snapshot'))).state, { timeout: 1_700_000, intervals: [2000] }).not.toBe('running');
   const snapshot = await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('snapshot'));
   expect(snapshot.state, snapshot.error?.message).toBe('succeeded');

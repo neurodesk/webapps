@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { loadSdc } from '@neurodesk/sdc';
 import { createNiftiFromVolume, decodeNiftiBuffer, readNiftiFrames, sameNiftiGrid } from '@neurodesk/webapp-components/file-io/nifti';
 import { sdcDriver } from '../src/drivers.js';
-import { Files } from '../src/files.js';
+import { Files } from '@neurodesk/pipeline-drivers/files';
 
 const runtime = await loadSdc(await readFile(new URL('../../sdc/src/sdc.wasm', import.meta.url)));
 const dims = [8, 40, 4];

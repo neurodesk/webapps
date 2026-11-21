@@ -1777,6 +1777,9 @@ importers:
       '@neurodesk/greedy':
         specifier: workspace:*
         version: link:../../packages/greedy
+      '@neurodesk/pipeline-drivers':
+        specifier: workspace:*
+        version: link:../../packages/pipeline-drivers
       '@neurodesk/registration':
         specifier: workspace:*
         version: link:../../packages/registration
@@ -1789,12 +1792,12 @@ importers:
       '@neurodesk/synthsr':
         specifier: workspace:*
         version: link:../../packages/synthsr
-      '@neurodesk/synthstrip':
-        specifier: workspace:*
-        version: link:../../packages/synthstrip
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
+      '@niivue/niimath':
+        specifier: 1.4.20261016
+        version: 1.4.20261016
       '@niivue/niivue':
         specifier: 1.0.0-rc.26
         version: 1.0.0-rc.26
@@ -2486,6 +2489,9 @@ importers:
 
   packages/fastprep:
     dependencies:
+      '@neurodesk/pipeline-drivers':
+        specifier: workspace:*
+        version: link:../pipeline-drivers
       '@neurodesk/sdc':
         specifier: workspace:*
         version: link:../sdc
@@ -2731,6 +2737,12 @@ importers:
       ajv:
         specifier: 8.20.0
         version: 8.20.0
+
+  packages/pipeline-drivers:
+    devDependencies:
+      '@niivue/niimath':
+        specifier: 1.4.20261016
+        version: 1.4.20261016
 
   packages/qsmbly:
     devDependencies:

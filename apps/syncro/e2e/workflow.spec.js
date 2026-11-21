@@ -54,7 +54,7 @@ test('cancellation restores input controls and an unreadable file keeps the prev
  await page.addInitScript(()=>{
   const OriginalWorker=window.Worker;
   window.Worker=class extends OriginalWorker {
-   postMessage(job,...rest){if(job.synthsrBackend){window.sentBackend=job.synthsrBackend;window.sentBrainExtractor=job.brainExtractor;window.sentNormalization=job.normalization;}return super.postMessage(job,...rest);}
+   postMessage(job,...rest){if(job.synthsrBackend){window.sentBackend=job.synthsrBackend;window.sentMindgrabBackend=job.mindgrabBackend;window.sentNormalization=job.normalization;}return super.postMessage(job,...rest);}
   };
  });
  await page.goto('./');
@@ -62,23 +62,23 @@ test('cancellation restores input controls and an unreadable file keeps the prev
  await expect(page.locator('#runButton')).toBeEnabled({timeout:30000});
  await page.getByText('Processing settings',{exact:true}).click();
  await expect(page.locator('#synthsrBackend')).toHaveValue('webgpu');
- await expect(page.locator('#brainExtractor')).toHaveValue('mindgrab');
+ await expect(page.locator('#mindgrabBackend')).toHaveValue('auto');
  await expect(page.locator('#normalization')).toHaveValue('greedy');
  await page.context().route('**/MNI152_T1_1mm_brain.nii.gz',()=>{});
  await page.locator('#runButton').click();
  await expect(page.locator('#synthsrBackend')).toBeDisabled();
- await expect(page.locator('#brainExtractor')).toBeDisabled();
+ await expect(page.locator('#mindgrabBackend')).toBeDisabled();
  expect(await page.evaluate(()=>window.sentBackend)).toBe('webgpu');
- expect(await page.evaluate(()=>window.sentBrainExtractor)).toBe('mindgrab');
+ expect(await page.evaluate(()=>window.sentMindgrabBackend)).toBe('auto');
  expect(await page.evaluate(()=>window.sentNormalization)).toBe('greedy');
  await page.locator('#cancel').click();
  await expect(page.locator('#statusText')).toContainText('cancelled');
  await expect(page.locator('#movingInput')).toBeEnabled();
  await expect(page.locator('#synthsrBackend')).toBeEnabled();
- await expect(page.locator('#brainExtractor')).toBeEnabled();
+ await expect(page.locator('#mindgrabBackend')).toBeEnabled();
  await expect(page.locator('#normalization')).toBeEnabled();
  await expect(page.locator('#synthsrBackend')).toHaveValue('webgpu');
- await expect(page.locator('#brainExtractor')).toHaveValue('mindgrab');
+ await expect(page.locator('#mindgrabBackend')).toHaveValue('auto');
  await expect(page.locator('#normalization')).toHaveValue('greedy');
  await expect(page.locator('#download')).toBeDisabled();
  // A file that cannot be read leaves the previous scan in place.

@@ -67,14 +67,14 @@
           "default": "webgpu",
           "description": "SynthSR inference backend"
         },
-        "brainExtractor": {
+        "mindgrabBackend": {
           "type": "string",
           "enum": [
-            "mindgrab",
-            "synthstrip"
+            "auto",
+            "cpu"
           ],
-          "default": "mindgrab",
-          "description": "Brain extraction engine"
+          "default": "auto",
+          "description": "MindGrab brain extraction backend"
         },
         "normalization": {
           "type": "string",

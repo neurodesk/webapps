@@ -43,8 +43,8 @@
         <select id="synthsrBackend"><option value="webgpu">GPU · WebGPU</option><option value="wasm">CPU · WebAssembly</option></select>
       </div>
       <div class="nd-field">
-        <label for="brainExtractor">Brain extraction</label>
-        <select id="brainExtractor"><option value="mindgrab">MindGrab · automatic</option><option value="synthstrip">SynthStrip · CPU WebAssembly</option></select>
+        <label for="mindgrabBackend">MindGrab device <span class="nd-info-icon" tabindex="0" aria-label="About MindGrab devices">i<span class="nd-info-tooltip">Automatic tries hardware WebGPU, WebGL2, then threaded CPU WebAssembly. CPU skips the graphics probes.</span></span></label>
+        <select id="mindgrabBackend"><option value="auto">Automatic</option><option value="cpu">CPU · WebAssembly</option></select>
       </div>
       <div class="nd-field">
         <label for="normalization">Normalization <span class="nd-info-icon" tabindex="0" aria-label="About processing backends">i<span class="nd-info-tooltip">MindGrab tries WebGPU, WebGL2, then threaded CPU. Greedy and ANTs use threaded CPU WebAssembly.</span></span></label>
@@ -85,7 +85,7 @@
 </footer>
 
 <template id="aboutContent">
-  <p>SynthSR → brain extraction (MindGrab by default, or SynthStrip) → Greedy normalization (or ANTs SyN) to the MNI152 1 mm brain template → niimath masking. A pathological modality is first aligned to the primary scan.</p>
+  <p>SynthSR → MindGrab brain extraction → Greedy normalization (or ANTs SyN) to the MNI152 1 mm brain template → niimath masking. A pathological modality is first aligned to the primary scan. The standalone syncro command runs the same steps on native tools.</p>
   <p>Synthetic contrast may alter lesions. Review the original image, extracted synthetic brain and alignment before using results. This experimental implementation is for research.</p>
   <p>Code: Apache-2.0 with upstream attribution. MindGrab is MIT licensed. The MNI template has separate <a href="data/FSL-LICENSE.txt">FSL terms for non-commercial use</a>.</p>
 </template>

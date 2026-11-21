@@ -3,8 +3,12 @@ import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import { unzipSync } from 'fflate';
 import { readVolume } from '@neurodesk/synthsr';
-import { asBuffer, sameGeometry } from '../../../packages/syncro/src/pipeline.js';
 import { assertHardwareAdapter, hardwareGpu, readAdapterInfo } from '../../../test-utils/hardware-gpu.mjs';
+
+const asBuffer = (bytes) => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+// The MNI template grid, compared as the SYNcro core does (dims equal, affine within 0.01 mm).
+const sameGeometry = (a, b) => a.dims.every((d, i) => d === b.dims[i])
+  && a.affine.every((row, r) => row.every((value, c) => Math.abs(value - b.affine[r][c]) <= 0.01));
 
 test.beforeEach(async ({ page }, testInfo) => {
   if (!hardwareGpu) return;
@@ -75,7 +79,7 @@ test('cropped head fixture cannot publish nearly empty normalized outputs', asyn
   await page.locator('#movingInput').setInputFiles(fileURLToPath(new URL('../../../exes/synthseg/test/fixtures/small.nii.gz', import.meta.url)));
   await expect(page.locator('#runButton')).toBeEnabled();
   await expect(page.locator('#synthsrBackend')).toHaveValue('webgpu');
-  await expect(page.locator('#brainExtractor')).toHaveValue('mindgrab');
+  await expect(page.locator('#mindgrabBackend')).toHaveValue('auto');
   await expect(page.locator('#normalization')).toHaveValue('greedy');
   await page.locator('#settingsSection > summary').click();
   await page.locator('#synthsrBackend').selectOption('wasm');

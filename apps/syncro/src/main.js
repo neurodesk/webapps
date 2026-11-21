@@ -146,7 +146,7 @@ function setBusy(value) {
   exampleControl.setDisabled(value);
   pair.disabled = value;
   for (const field of Object.values(fileFields)) field.disabled = value;
-  for (const id of ['ct', 'keepSynth', 'synthsrBackend', 'brainExtractor', 'normalization']) $(id).disabled = value;
+  for (const id of ['ct', 'keepSynth', 'synthsrBackend', 'mindgrabBackend', 'normalization']) $(id).disabled = value;
   $('clearLesion').disabled = value;
   $('clearPathological').disabled = value;
   $('runButton').disabled = value || !inputs.primary;
@@ -488,7 +488,7 @@ $('viewSelect').onchange = () => {
 
 async function normalize({
   scanInputs = inputs,
-  settings = { ct: $('ct').checked, keepSynth: $('keepSynth').checked, synthsrBackend: $('synthsrBackend').value, brainExtractor: $('brainExtractor').value, normalization: $('normalization').value },
+  settings = { ct: $('ct').checked, keepSynth: $('keepSynth').checked, synthsrBackend: $('synthsrBackend').value, mindgrabBackend: $('mindgrabBackend').value, normalization: $('normalization').value },
   signal,
   progress = () => {},
 } = {}) {
@@ -513,7 +513,6 @@ async function normalize({
     'pathological-registration': [0, 0.1],
     synthsr: [0.1, 0.4],
     mindgrab: [0.5, 0.2],
-    synthstrip: [0.5, 0.2],
     registration: [0.7, 0.25],
     resampling: [0.95, 0.05],
     complete: [1, 0],
@@ -522,7 +521,6 @@ async function normalize({
     'pathological-registration': 'Aligning pathological modality to primary scan…',
     synthsr: 'Synthesizing T1…',
     mindgrab: 'Extracting brain with MindGrab…',
-    synthstrip: 'Extracting brain with SynthStrip…',
     registration: `Registering to MNI with ${settings.normalization === 'greedy' ? 'Greedy' : 'ANTs'}…`,
     resampling: 'Warping input images…',
   };
@@ -566,6 +564,7 @@ async function normalize({
         mindgrabAssetPath: new URL('mindgrab/', base).href,
         templateURL: template.url,
         greedyURL: new URL('greedy-wasm/greedy_rs_wasm.js', base).href,
+        niimathURL: new URL('niimath/niimath.js', base).href,
         registrationURL: new URL('registration/syncro-registration.mjs', base).href,
       });
     });
@@ -709,7 +708,7 @@ registerAppAutomation({
         $('ct').checked = parameters.ct;
         $('keepSynth').checked = parameters.keepSynth;
         $('synthsrBackend').value = parameters.synthsrBackend;
-        $('brainExtractor').value = parameters.brainExtractor;
+        $('mindgrabBackend').value = parameters.mindgrabBackend;
         $('normalization').value = parameters.normalization;
       } finally {
         setBusy(false);

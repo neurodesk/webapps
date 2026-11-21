@@ -1,4 +1,4 @@
-// In-memory files for one fastprep session: path -> Blob (user inputs, read lazily) or Uint8Array.
+// In-memory files for one pipeline session (fastprep, SYNcro): path -> Blob (user inputs, read lazily) or Uint8Array.
 // `mtime` is a write counter, enough for the core's resume records within a session.
 
 export class Files {

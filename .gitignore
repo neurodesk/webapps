@@ -21,6 +21,7 @@ apps/*/public/shoreline-wasm/
 apps/me-ica/public/meica-wasm/
 apps/*/public/cfireants/
 apps/syncro/public/mindgrab/
+apps/syncro/public/niimath/
 apps/dicomview/src/vendor/
 apps/*/public/registration/
 apps/*/public/n4/

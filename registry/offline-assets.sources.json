@@ -2467,19 +2467,6 @@
         "kind": "model"
       },
       {
-        "url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/a8cdbf8c2874e1a2f617ecc6695244a0810eac11/vesselboost/synthstrip.onnx",
-        "sha256": "7b8eeecf3793a6c4510b9f5270ecc03d9c3262d26e08d568203a651ab4b84074",
-        "bytes": 10294211,
-        "kind": "model"
-      },
-      {
-        "url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/e0a056b3d6b2b075bab5b780281af17fc9d6421d/syncro/synthstrip-browser.onnx",
-        "sha256": "dc9e11999b58d7949d77ddf1b2ed2910df66f8725c078a6b46ae08b8ebcc2800",
-        "bytes": 10296357,
-        "kind": "model",
-        "license": "Apache-2.0"
-      },
-      {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/444fd496704f2ac5fd06ed28d614f1b6acfc6fcb/syncro/tutorials/sub-101_T1w.nii.gz",
         "sha256": "753ed0812286604068a67489caecf8df2e8f3349de8e5af3d18f5c6744be6869",
         "bytes": 4619526,

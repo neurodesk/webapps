@@ -12,7 +12,8 @@
   },
   "exports": {
     ".": "./dist/index.js",
-    "./node": "./dist/node.js"
+    "./node": "./dist/node.js",
+    "./core": "./wasm/syncro_wasm.js"
   },
   "files": [
     "dist",
@@ -23,7 +24,8 @@
     "NOTICE",
     "release.json",
     "validation/README.md",
-    "validation/results"
+    "validation/results",
+    "wasm"
   ],
   "scripts": {
     "build": "node scripts/build.mjs",
