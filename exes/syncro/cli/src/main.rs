@@ -23,6 +23,7 @@ modality and a lesion map follow the same transforms.
   --threads             threads for every tool; 0 or omitted: SLURM_CPUS_PER_TASK, else every core
   --device              where SynthSR and MindGrab run (default auto: each tool's fastest available)
   --keep-synth          also write the synthetic T1 (t1INPUT)
+  --heal                experimental: heal the lesion from the mirrored scan before SynthSR (heal builds only)
   --resume              reuse the steps an interrupted run with the same inputs finished
 
 Tools are found in <home>/bin, then PATH (ANTs also in ANTSPATH); the template in <home>/templates
