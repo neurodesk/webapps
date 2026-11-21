@@ -128,6 +128,7 @@ self.onmessage = async ({ data: job }) => {
     };
     const outputs = {};
     for (const name of provenance.outputs) outputs[name] = (await files.bytes(name)).slice();
+    outputs['commands.sh'] = (await files.bytes('work/commands.sh')).slice();
     outputs['provenance.json'] = new TextEncoder().encode(`${JSON.stringify(provenance, null, 2)}\n`);
     progress('complete', 1, 'Normalization complete');
     self.postMessage({ type: 'result', outputs, provenance }, Object.values(outputs).map((bytes) => bytes.buffer));

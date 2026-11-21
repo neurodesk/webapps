@@ -582,6 +582,7 @@ async function normalize({
       [prefixed('wbt1', scanInputs.primary.name), 'synthetic-brain'],
       [prefixed('t1', scanInputs.primary.name), 'native-synthetic'],
       ['provenance.json', 'details'],
+      ['commands.sh', 'commands'],
       ...(scanInputs.lesion ? [[prefixed('w', scanInputs.lesion.name), 'lesion']] : []),
       ...(scanInputs.pathological ? [[prefixed('w', scanInputs.pathological.name), 'pathological']] : []),
     ]);

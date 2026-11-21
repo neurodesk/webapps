@@ -134,6 +134,12 @@
           "mediaType": "application/json",
           "minimum": 1,
           "maximum": 1
+        },
+        "commands": {
+          "type": "neuro:provenance",
+          "mediaType": "text/plain",
+          "minimum": 1,
+          "maximum": 1
         }
       },
       "engines": [

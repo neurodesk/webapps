@@ -50,8 +50,8 @@ const localInput=inputIndex>=0?resolve(process.argv[inputIndex+1]):null;
 const sha256=bytes=>createHash('sha256').update(bytes).digest('hex');
 const failures=[];
 
-function run(args,timeout=30000) {
-  const result=spawnSync(executable,args,{encoding:'utf8',timeout,maxBuffer:64*1024*1024});
+function run(args,timeout=30000,cwd=undefined) {
+  const result=spawnSync(executable,args,{encoding:'utf8',timeout,cwd,maxBuffer:64*1024*1024});
   if(result.error)throw result.error;
   return result;
 }
@@ -240,8 +240,10 @@ async function rejectsInvalidUse(work) {
   assert.notEqual(r.status,0);
   assert.match(r.stderr,/positive integer/);
   // A refused input leaves no output directory, so the same command can run once the input is fixed.
-  r=run([input,join(work,'refused')]);
+  // Relative paths name the caller's files, not the output directory's (it reads the input to refuse it).
+  r=run(['input.nii','refused'],30000,work);
   assert.notEqual(r.status,0);
+  assert.match(r.stderr,/Choose a NIfTI image/);
   assert.equal(existsSync(join(work,'refused')),false);
   r=run(['download-models']);
   assert.notEqual(r.status,0);
@@ -250,7 +252,7 @@ async function rejectsInvalidUse(work) {
   assert.notEqual(r.status,0);
   assert.match(r.stderr,/not an interrupted SYNcro run/);
   assert.equal(await readFile(join(output,'keep.txt'),'utf8'),'preserve');
-  console.log('PASS installed package: self-check, help, output preservation, thread validation, refused input leaves no directory, removed command, resume of a foreign directory');
+  console.log('PASS installed package: self-check, help, output preservation, thread validation, refused input leaves no directory, relative paths, removed command, resume of a foreign directory');
 }
 
 // A finished run resumes without rerunning a step; a changed input is refused and the outputs kept.

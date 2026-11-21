@@ -146,8 +146,9 @@ fn parse(argv: &[String]) -> Result<Args, String> {
     Ok(a)
 }
 
+// Absolute, because the run changes into the output directory.
 fn home() -> PathBuf {
-    std::env::var_os("SYNCRO_HOME")
+    let home = std::env::var_os("SYNCRO_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
             let exe = std::env::current_exe().unwrap_or_default();
@@ -158,7 +159,8 @@ fn home() -> PathBuf {
             } else {
                 dir.to_path_buf()
             }
-        })
+        });
+    std::path::absolute(&home).unwrap_or(home)
 }
 
 fn tools(normalization: Normalization) -> Vec<&'static str> {
@@ -174,7 +176,8 @@ fn search_path() {
     if let Some(ants) = std::env::var_os("ANTSPATH") {
         let path = std::env::var_os("PATH").unwrap_or_default();
         let joined = std::env::join_paths(
-            std::iter::once(PathBuf::from(ants)).chain(std::env::split_paths(&path)),
+            std::iter::once(std::path::absolute(&ants).unwrap_or_else(|_| PathBuf::from(&ants)))
+                .chain(std::env::split_paths(&path)),
         );
         if let Ok(joined) = joined {
             // SAFETY: called once at startup, before any thread starts.
@@ -316,10 +319,7 @@ fn start(a: Args) -> Result<(), String> {
             ));
         }
     }
-    // Tools run in the output directory, so commands.sh names work/... and the outputs as the browser does.
-    let created = !Path::new(&out).exists();
-    std::fs::create_dir_all(&out).map_err(|e| format!("{out}: {e}"))?;
-    std::env::set_current_dir(&out).map_err(|e| format!("{out}: {e}"))?;
+    // Inputs resolve against the caller's directory, before the run changes into the output.
     let host = Native {
         bin,
         env: vec![],
@@ -340,6 +340,10 @@ fn start(a: Args) -> Result<(), String> {
         keep_synth: a.keep_synth,
         software: tools.clone(),
     };
+    // Tools run in the output directory, so commands.sh names work/... and the outputs as the browser does.
+    let created = !Path::new(&out).exists();
+    std::fs::create_dir_all(&out).map_err(|e| format!("{out}: {e}"))?;
+    std::env::set_current_dir(&out).map_err(|e| format!("{out}: {e}"))?;
     let result = block_on(pipeline::run(&host, &o, &|stage| eprintln!("[{stage}]")));
     // Inputs refused before any record was written leave nothing behind, so the same command can run again.
     if result.is_err() && created && !Path::new("work/syncro.json").is_file() {

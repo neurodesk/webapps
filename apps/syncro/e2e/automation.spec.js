@@ -75,7 +75,7 @@ test('the pinned T1 example normalizes onto the MNI152 template with WASM SynthS
   await expect.poll(async () => (await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('snapshot'))).state, { timeout: inferenceTimeout - 60_000 }).not.toBe('running');
   const snapshot = await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('snapshot'));
   expect(snapshot.state, snapshot.error?.message).toBe('succeeded');
-  expect(Object.values(snapshot.report.artifacts).map(({ role }) => role).sort()).toEqual(['details','native-synthetic','normalized-brain','normalized-primary','synthetic-brain']);
+  expect(Object.values(snapshot.report.artifacts).map(({ role }) => role).sort()).toEqual(['commands','details','native-synthetic','normalized-brain','normalized-primary','synthetic-brain']);
   const volumes = new Map();
   for (const [artifactId, artifact] of Object.entries(snapshot.report.artifacts)) {
     const downloading = page.waitForEvent('download');
@@ -223,7 +223,7 @@ test('a displaced 2 mm T1 normalizes onto the MNI152 template on the CPU', async
   await expect.poll(async () => (await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('snapshot'))).state, { timeout: 1_700_000, intervals: [2000] }).not.toBe('running');
   const snapshot = await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('snapshot'));
   expect(snapshot.state, snapshot.error?.message).toBe('succeeded');
-  expect(Object.values(snapshot.report.artifacts).map(({ role }) => role).sort()).toEqual(['details','native-synthetic','normalized-brain','normalized-primary','synthetic-brain']);
+  expect(Object.values(snapshot.report.artifacts).map(({ role }) => role).sort()).toEqual(['commands','details','native-synthetic','normalized-brain','normalized-primary','synthetic-brain']);
   const volumes = {};
   let details;
   for (const [artifactId, artifact] of Object.entries(snapshot.report.artifacts)) {
@@ -232,6 +232,7 @@ test('a displaced 2 mm T1 normalizes onto the MNI152 template on the CPU', async
     const bytes = await readFile(await (await downloading).path());
     expect(createHash('sha256').update(bytes).digest('hex')).toBe(artifact.sha256);
     if (artifact.role === 'details') details = JSON.parse(bytes.toString('utf8'));
+    else if (artifact.role === 'commands') expect(bytes.toString('utf8')).toMatch(/^greedy-rs /m);
     else volumes[artifact.role] = await readNifti(bytes);
   }
   expect(details.inputHash).toBe(createHash('sha256').update(input.buffer).digest('hex'));

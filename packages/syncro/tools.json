@@ -14,14 +14,16 @@
           "url": "https://github.com/neurodesk/webapps/releases/download/synthsr-v0.6.20261119/synthsr-0.6.20261119-linux-x64.tar.gz",
           "sha256": "0d4288ce5287000ca09fa5f5b07ccf5ffc09e4c9339ea38d9d46cc833d646aa7",
           "files": {
-            "synthsr-0.6.20261119-linux-x64/synthsr": "bin/synthsr"
+            "synthsr": "bin/synthsr",
+            "libwebgpu_dawn.so": "bin/libwebgpu_dawn.so"
           }
         },
         "windows-x64": {
           "url": "https://github.com/neurodesk/webapps/releases/download/synthsr-v0.6.20261119/synthsr-0.6.20261119-windows-x64.zip",
           "sha256": "3e636950977b7d44cff73503ea2a976dd976648c0f9d7584b40c0eb1ace90f5e",
           "files": {
-            "synthsr-0.6.20261119-windows-x64/synthsr.exe": "bin/synthsr.exe"
+            "synthsr.exe": "bin/synthsr.exe",
+            "webgpu_dawn.dll": "bin/webgpu_dawn.dll"
           }
         },
         "macos-arm64": {

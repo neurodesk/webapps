@@ -62,6 +62,7 @@ test('pinned T1 example completes with the WASM SynthSR backend', async ({ page 
   expect(templateSupport).toBeGreaterThan(0);
   expect(overlap / templateSupport).toBeGreaterThanOrEqual(0.1);
   const provenance = JSON.parse(new TextDecoder().decode(files['provenance.json']));
+  expect(new TextDecoder().decode(files['commands.sh'])).toMatch(/^synthsr /m);
   expect(provenance.stages.synthsr).toMatchObject({ backend: 'wasm', flip: true, tiled: false });
   if (hardwareGpu) expect(provenance.stages.mindgrab.backend).toBe('webgpu');
 });
