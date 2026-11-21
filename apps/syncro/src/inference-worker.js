@@ -4,7 +4,7 @@ import wasmModuleURL from 'onnxruntime-web/ort-wasm-simd-threaded.asyncify.mjs?u
 import {readVolume,runSynthsr} from '@neurodesk/synthsr';
 import {createBrowserSession,browserRuntime} from '@neurodesk/synthsr/browser';
 import { fetchModel } from '@neurodesk/webapp-components/worker';
-import {assets} from '../../../packages/syncro/src/assets.js';
+import {assets} from './assets.js';
 import {runMindgrab} from '@neurodesk/brain-extraction/mindgrab';
 import * as mindgrab from '@brainchop/core';
 import mindgrabPackage from '@brainchop/core/package.json' with { type: 'json' };

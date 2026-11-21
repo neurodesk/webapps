@@ -6162,6 +6162,7 @@
     ],
     "syncro": [
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/88c3dd6b9aac13429f760d9b0b48249040d3ee5f/synthsr/models/synthsr-v2.onnx",
+      "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/e0a056b3d6b2b075bab5b780281af17fc9d6421d/syncro/synthstrip-browser.onnx",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/444fd496704f2ac5fd06ed28d614f1b6acfc6fcb/syncro/tutorials/sub-101_T1w.nii.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/444fd496704f2ac5fd06ed28d614f1b6acfc6fcb/syncro/tutorials/sub-101_space-TRACE_desc-lesion_mask.nii.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/444fd496704f2ac5fd06ed28d614f1b6acfc6fcb/syncro/tutorials/sub-101_rec-TRACE_dwi.nii.gz",

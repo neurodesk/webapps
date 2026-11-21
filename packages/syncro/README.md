@@ -1,12 +1,19 @@
 # SYNcro
 
-Normalize a primary NIfTI scan to the MNI152 1 mm brain template. The shared browser pipeline follows native SYNcro: SynthSR, configurable MindGrab/SynthStrip brain extraction, configurable Greedy/ANTs normalization, pathological-modality alignment, lesion propagation and niimath masking. The packaged Node command matches the browser's defaults, MindGrab and Greedy; `--brain-extractor synthstrip` and `--normalization ants` select the alternatives.
+Normalize a primary NIfTI scan of any contrast to the MNI152 1 mm brain template: SynthSR synthesizes a T1-weighted
+image, MindGrab extracts its brain, Greedy (or ANTs SyN) registers it to the template, and the scan, a pathological
+modality and a lesion map follow the same transforms; niimath masks the result.
 
-## Portable macOS, Windows and Linux builds
+One Rust core (`exes/syncro`) decides every step and its exact command line. The standalone `syncro` command runs
+those commands as native processes; the web app runs the same core as WebAssembly and maps each command to its
+browser runtime. Both write the commands in `commands.sh`.
 
-Download the macOS installer, the Windows x64 archive or the Linux x64 archive from the **Standalone** action in the webapp's bar. Each contains `syncro` or `syncro.exe`, a private Node runtime, native ONNX Runtime, the Greedy and ANTs WebAssembly modules, MindGrab's CPU WebAssembly, the MNI template, and the checksum-pinned SynthSR and SynthStrip models. You do not need to install Node.js, Python, FreeSurfer, or a display server.
+## Standalone command
 
-On Linux, download, verify, extract, and check the current release:
+The archive holds `syncro` (or `syncro.exe`), the native tools in `bin/` (`synthsr`, `brainchop-mindgrab`,
+`greedy-rs`, `niimath`; their models are built in), the MNI template in `templates/` and every tool's licence in
+`licenses/`. It needs no Node.js, Python, FreeSurfer, network or model download. Keep the extracted directory
+intact: `syncro` finds its tools next to itself (or set `SYNCRO_HOME`), then on `PATH`.
 
 ```bash
 version=MAJOR.MINOR.YYYYMMDD
@@ -15,76 +22,60 @@ curl -fLO "https://github.com/neurodesk/webapps/releases/download/syncro-v${vers
 sha256sum -c "syncro-${version}-linux-x64.tar.gz.sha256"
 tar -xzf "syncro-${version}-linux-x64.tar.gz"
 "./syncro-${version}-linux-x64/syncro" self-check
-"./syncro-${version}-linux-x64/syncro" input.nii.gz results --threads 4
+"./syncro-${version}-linux-x64/syncro" input.nii.gz results
 ```
 
-On Windows, run these commands in PowerShell:
-
-```powershell
-$Version = 'MAJOR.MINOR.YYYYMMDD'
-$Archive = "syncro-$Version-windows-x64.zip"
-$Base = "https://github.com/neurodesk/webapps/releases/download/syncro-v$Version"
-Invoke-WebRequest "$Base/$Archive" -OutFile $Archive
-Invoke-WebRequest "$Base/$Archive.sha256" -OutFile "$Archive.sha256"
-$Expected = (Get-Content "$Archive.sha256").Split()[0]
-if ((Get-FileHash $Archive -Algorithm SHA256).Hash.ToLower() -ne $Expected) { throw 'Checksum mismatch' }
-Expand-Archive -Path $Archive -DestinationPath .
-& ".\syncro-$Version-windows-x64\syncro.exe" self-check
-& ".\syncro-$Version-windows-x64\syncro.exe" input.nii.gz results --threads 4
+```
+syncro INPUT OUTPUT_DIR [--lesion FILE] [--pathological FILE] [--ct] [--normalization greedy|ants]
+       [--threads N] [--device auto|cpu|metal|cuda] [--keep-synth] [--resume]
 ```
 
-On macOS with Apple silicon, the release is an installer package signed with a Developer ID and notarized by Apple. It installs SYNcro in `/usr/local/lib/neurodesk/syncro` and the `syncro` command in `/usr/local/bin`:
+- `--threads` (default `SLURM_CPUS_PER_TASK`, else every core) caps every tool: SynthSR, MindGrab, Greedy, niimath
+  and ANTs.
+- `--device` chooses where SynthSR and MindGrab run; `auto` takes each tool's fastest (Metal on Apple silicon,
+  CUDA for MindGrab on NVIDIA). SynthSR has no CUDA build and runs on the CPU there (about 10 s, 8 GB).
+- `--normalization ants` runs ANTs SyN with the schedule the web app's ANTs kernel runs. ANTs is not bundled:
+  install it and put it on `PATH` or set `ANTSPATH`; `syncro` stops with that message otherwise.
+- `--ct` marks a CT in Hounsfield units. Modality is explicit; there is no automatic CT detection.
+- `--resume` reuses the steps an interrupted run finished. It refuses a directory that is not a SYNcro run and
+  any change to an input's name or content, the options or the tools.
 
-```bash
-version=MAJOR.MINOR.YYYYMMDD
-curl -fLO "https://github.com/neurodesk/webapps/releases/download/syncro-v${version}/syncro-${version}-macos-arm64.pkg"
-curl -fLO "https://github.com/neurodesk/webapps/releases/download/syncro-v${version}/syncro-${version}-macos-arm64.pkg.sha256"
-shasum -a 256 -c "syncro-${version}-macos-arm64.pkg.sha256"
-sudo installer -pkg "syncro-${version}-macos-arm64.pkg" -target /
-syncro self-check
-syncro input.nii.gz results --threads 4
-```
+A gantry-tilted scan (a sheared affine, as CT often has) is resampled onto an orthogonal grid that covers it,
+filled with its darkest voxel, before anything else; its lesion map follows on the same grid.
 
-You can also open the package in Finder. To uninstall, delete `/usr/local/lib/neurodesk/syncro` and `/usr/local/bin/syncro`, then run `sudo pkgutil --forget org.neurodesk.syncro`.
-
-Keep the extracted Windows or Linux directory intact. Releases built with this packaging include both models and run offline by default. No model download or cache preparation is needed on the destination machine. Older releases that lack a `models` directory are not complete offline distributions.
-
-Use `--ct` for a CT image in Hounsfield units. Modality is explicit; there is no intensity-based CT autodetection. CT has not yet been validated against the reference container in this port.
-
-## Offline HPC jobs
-
-Use the complete Linux archive above, or the Neurodesk Webapps Apptainer release described in [the desktop guide](../../packages/desktop/STANDALONE.md). The portable SYNcro executable runs without a display server.
-
-Example SLURM script (adapt partitions, paths and resource requests to your system):
+On a 1 mm T1 with a TRACE scan and lesion, an M4 Pro took 17 s with Greedy and 22 s with ANTs, against 91 s and
+108 s for the earlier Node command. The tools run one at a time; the largest is SynthSR on the CPU (about 8 GB
+per its README; MindGrab peaks at 2.6 GB), so a Slurm job without a GPU should request 12 GB:
 
 ```bash
 #!/bin/bash
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=32G
-#SBATCH --time=01:00:00
+#SBATCH --mem=12G
 set -euo pipefail
-/shared/software/syncro-VERSION-linux-x64/syncro /data/input.nii.gz /scratch/my-job/syncro \
-  --threads "$SLURM_CPUS_PER_TASK" --offline
+/shared/software/syncro-VERSION-linux-x64/syncro /data/input.nii.gz /scratch/my-job/syncro --threads "$SLURM_CPUS_PER_TASK"
 ```
-
-The CLI uses native ONNX Runtime CPU for SynthSR and SynthStrip. MindGrab runs on CPU WebAssembly. Registration runs on single-threaded WebAssembly with Greedy by default. Use `--normalization ants` to select the ANTs kernel, which reached 3.16 GB of its 4 GiB linear-memory limit during validation. `--threads` controls inference threads. It defaults to `SLURM_CPUS_PER_TASK` when set and up to four threads otherwise. Start with 32 GB per job to accommodate model sessions, image buffers, and outputs. Use a separate process and output directory for each subject.
-
-Use a new output directory for each run. After interruption, `--resume` verifies the input files, software, models, and checkpoint hashes. It reuses completed SynthSR and brain-extraction stages and reruns registration. Use a new output directory if any input file, including an accompanying image, changes.
 
 ## Images and outputs
 
-The Node command accepts one scalar primary NIfTI, an optional pathological-modality scan (`--pathological`) and an optional binary lesion map on the grid of the pathological scan when given, otherwise the primary. The shared browser pipeline permits a one-voxel mask border, matching native SYNcro's geometry tolerance.
-
-Output names match native SYNcro: `w<input>` is each normalized input, `wb<primary>` is the normalized brain-extracted primary, and `wbt1<primary>` is the normalized brain-extracted synthetic T1. The browser's `--keep-synth` equivalent additionally retains `t1<primary>` in native space. `provenance.json` records selected engines and timing. Original intensities are resampled into MNI space as float32; lesion output is uint8.
-
-Like native SYNcro, the shared pipeline refuses inputs whose basenames would
-create duplicate output names. Non-CT scalar reslices use a zero background;
-`--ct` uses the lower of zero and the primary image minimum.
+One scalar primary NIfTI, an optional pathological-modality scan (`--pathological`, registered to the primary
+first) and an optional binary lesion map on the pathological scan's grid when given, otherwise the primary's (a
+one-voxel border is allowed). Outputs: `w<input>` for each normalized input, `wb<primary>` the normalized
+brain-extracted primary, `wbt1<primary>` the normalized synthetic brain, and with `--keep-synth` `t1<primary>` in
+native space. `provenance.json` records the commands, each tool's path, version and SHA-256, and timings. Scans
+are resampled as float32 with a zero background (`--ct`: the lower of zero and the scan's minimum); lesions are
+uint8. Inputs whose names would give duplicate outputs are refused.
 
 ## Development and validation
 
-`pnpm --filter @neurodesk/syncro build` produces the self-contained package bundle. The shared `runSyncro` API injects inference, registration and progress adapters; Node's `normalize` API accepts filesystem paths.
+- `exes/syncro`: the core (`core`), the command line (`cli`) and the WebAssembly build (`wasm`); `cargo test`
+  there checks the de-shearing against the JavaScript it replaced and the commands of every input case.
+- `pnpm --filter @neurodesk/syncro test:core` builds the WebAssembly core and checks it emits the same commands.
+- `scripts/package-syncro.py package TARGET` assembles an archive from the tool releases pinned in `tools.json`
+  and runs `validation/package-check.mjs` on the extracted copy.
 
-See [validation/README.md](validation/README.md) for the real OpenNeuro scan, pinned Neurodesk container, exact stage comparisons, end-to-end differences and reproduction commands. Current evidence covers one real T1 scan and synthetic annotation fixtures, not clinical validation or broad modality/pathology coverage. Review the acquired image, brain mask and MNI alignment before using results.
+[validation/README.md](validation/README.md) holds the container comparisons, which predate the Rust core. Current
+evidence covers a few real scans, not clinical validation. Review the acquired image, brain mask and MNI alignment
+before using results.
 
-Code is Apache-2.0 with upstream attribution. The MNI template has separate FSL non-commercial terms in `data/FSL-LICENSE.txt`.
+Code is Apache-2.0 with upstream attribution. The MNI template has separate FSL non-commercial terms in
+`data/FSL-LICENSE.txt`.

@@ -950,9 +950,10 @@ test('a native or CLI workflow runs when a file its command line imports changes
 });
 
 test('the command-line closure follows workspace exports and relative imports', () => {
-  const syncro = commandLineClosure(repoRoot, 'packages/syncro');
-  for (const path of ['packages/registration/src/node.js', 'packages/synthstrip/src/index.js', 'packages/synthsr/src/pipeline.js']) assert.ok(syncro.includes(path), path);
-  assert.ok(syncro.every((path) => !path.startsWith('packages/syncro/')));
+  // brain2print reaches node-drivers through its exports and components through relative imports.
+  const brain2print = commandLineClosure(repoRoot, 'packages/brain2print');
+  for (const path of ['packages/node-drivers/src/mindgrab.js', 'packages/components/src/file-io/mesh.js']) assert.ok(brain2print.includes(path), path);
+  assert.ok(brain2print.every((path) => !path.startsWith('packages/brain2print/')));
   const lcmodel = commandLineClosure(repoRoot, 'packages/lcmodel');
   assert.ok(lcmodel.includes('packages/node-drivers/src/dcm2niix.js'));
   // A worker loaded through new URL(..., import.meta.url).

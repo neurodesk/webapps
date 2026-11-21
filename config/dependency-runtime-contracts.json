@@ -205,31 +205,6 @@
     "reason": "packages/seedseg build stages the pinned QSM runtime directory with scripts/fetch-app-runtime.mjs."
   },
   {
-    "from": "packages/syncro/bin/syncro.js",
-    "to": "../dist/node.js",
-    "reason": "packages/syncro/scripts/build.mjs bundles dist/node.js and stages registration runtime files relative to the built Node adapter."
-  },
-  {
-    "from": "packages/syncro/src/node.js",
-    "to": "./registration/syncro-registration.mjs",
-    "reason": "packages/syncro/scripts/build.mjs bundles dist/node.js and stages registration runtime files relative to the built Node adapter."
-  },
-  {
-    "from": "packages/syncro/src/node.js",
-    "to": "./registration/syncro-registration.wasm",
-    "reason": "packages/syncro/scripts/build.mjs bundles dist/node.js and stages registration runtime files relative to the built Node adapter."
-  },
-  {
-    "from": "packages/syncro/src/node.js",
-    "to": "./greedy/greedy_rs_wasm.js",
-    "reason": "packages/syncro/scripts/build.mjs bundles dist/node.js and stages @neurodesk/greedy's single-threaded build relative to the built Node adapter."
-  },
-  {
-    "from": "packages/syncro/src/node.js",
-    "to": "./greedy/greedy_rs_wasm_bg.wasm",
-    "reason": "packages/syncro/scripts/build.mjs bundles dist/node.js and stages @neurodesk/greedy's single-threaded build relative to the built Node adapter."
-  },
-  {
     "from": "apps/dicomview/src/protocol-session.js",
     "to": "./vendor/dicompare/DicompareController.js",
     "reason": "apps/dicomview/scripts/stage-dicompare.mjs stages dicompare's embedding kit and schema library in apps/dicomview/src/vendor/dicompare before the dev and build scripts run."
@@ -243,5 +218,10 @@
     "from": "apps/dicomview/src/protocol-session.js",
     "to": "./vendor/dicompare/schemas/index.json",
     "reason": "apps/dicomview/scripts/stage-dicompare.mjs stages dicompare's embedding kit and schema library in apps/dicomview/src/vendor/dicompare before the dev and build scripts run."
+  },
+  {
+    "from": "apps/syncro/src/worker.js",
+    "to": "@neurodesk/syncro/core",
+    "reason": "pnpm --filter @neurodesk/syncro build:wasm (run by the syncro app's dev, build and test scripts) generates this wasm-bindgen module from exes/syncro/wasm into the gitignored packages/syncro/wasm."
   }
 ]
