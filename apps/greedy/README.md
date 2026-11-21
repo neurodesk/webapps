@@ -62,9 +62,9 @@ MCP uses the same processing function as the Run button and returns the exact
 output files with input and artifact checksums. See
 [desktop automation](../../packages/desktop/AUTOMATION.md) for connection details.
 
-`register` requires `moving` and `fixed` image roles. `method` is `affine` by
-default or `deformable`. The operation returns the registered NIfTI and the
-actual affine matrix. Deformable runs also return the displacement field.
+`register` requires `moving` and `fixed` image roles. `method` defaults to
+`deformable` and also accepts `affine`. The operation returns the registered
+NIfTI and the affine matrix. Deformable runs also return the displacement field.
 The three image viewers expose their crosshairs and layout tabs.
 Both image roles accept NIfTI or DICOM. Ambiguous DICOM conversion requires an
 explicit series selection; the operation never guesses roles from filenames.

@@ -42,7 +42,7 @@
             "affine",
             "deformable"
           ],
-          "default": "affine",
+          "default": "deformable",
           "description": "Affine or affine followed by nonlinear registration"
         }
       },
