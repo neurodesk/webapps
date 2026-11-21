@@ -92,7 +92,7 @@ test('the WebAssembly core emits the native goldens', async () => {
       const host = memoryHost();
       host.put('/in/sub-01_T1w.nii.gz', gzipSync(bytes(writeVolume(testCase.primary, 'primary'))));
       host.put('/in/mni.nii.gz', gzipSync(bytes(writeVolume(template(), 'template'))));
-      const options = { input: '/in/sub-01_T1w.nii.gz', template: '/in/mni.nii.gz', out: '/out', work: '/work', ct: Boolean(testCase.ct), normalization, threads: 4 };
+      const options = { input: '/in/sub-01_T1w.nii.gz', template: '/in/mni.nii.gz', out: '', work: 'work', ct: Boolean(testCase.ct), normalization, threads: 4 };
       if (testCase.pathological) {
         host.put('/in/sub-01_FLAIR.nii', writeVolume(testCase.pathological, 'pathological'));
         options.pathological = '/in/sub-01_FLAIR.nii';
@@ -107,7 +107,7 @@ test('the WebAssembly core emits the native goldens', async () => {
       assert.equal(provenance.desheared.primary, Boolean(testCase.ct));
       assert.equal(stages.at(-1), 'complete');
       const golden = await readFile(new URL(`${testCase.name}-${normalization}.sh`, goldens), 'utf8');
-      assert.equal(new TextDecoder().decode(host.files.get('/work/commands.sh')), golden, `${testCase.name}-${normalization}`);
+      assert.equal(new TextDecoder().decode(host.files.get('work/commands.sh')), golden, `${testCase.name}-${normalization}`);
     }
   }
 });

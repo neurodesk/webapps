@@ -303,9 +303,19 @@ fn start(a: Args) -> Result<(), String> {
     }
     let tools = find_tools(&bin, a.normalization)?;
     let out = absolute(&a.output);
-    if Path::new(&out).exists() && !a.resume {
-        return Err("Output directory already exists. Choose a new directory or --resume an interrupted SYNcro run.".into());
+    if Path::new(&out).exists() {
+        if !a.resume {
+            return Err("Output directory already exists. Choose a new directory or --resume an interrupted SYNcro run.".into());
+        }
+        if !Path::new(&out).join("work/syncro.json").is_file() {
+            return Err(format!(
+                "{out} is not an interrupted SYNcro run; --resume needs the output directory of one."
+            ));
+        }
     }
+    // Tools run in the output directory, so commands.sh names work/... and the outputs as the browser does.
+    std::fs::create_dir_all(&out).map_err(|e| format!("{out}: {e}"))?;
+    std::env::set_current_dir(&out).map_err(|e| format!("{out}: {e}"))?;
     let host = Native {
         bin,
         env: vec![],
@@ -317,24 +327,22 @@ fn start(a: Args) -> Result<(), String> {
         lesion: a.lesion.as_deref().map(absolute),
         pathological: a.pathological.as_deref().map(absolute),
         template: absolute(&template.to_string_lossy()),
-        work: format!("{out}/work"),
-        out: out.clone(),
+        work: "work".into(),
+        out: String::new(),
         ct: a.ct,
         normalization: a.normalization,
         threads: a.threads,
         device: a.device,
         keep_synth: a.keep_synth,
+        software: tools.clone(),
     };
     let mut provenance = block_on(pipeline::run(&host, &o, &|stage| eprintln!("[{stage}]")))?;
     provenance["device"] = json!(format!("{:?}", a.device).to_lowercase());
     provenance["tools"] = tools;
     provenance["input"] = json!(o.input);
     let text = serde_json::to_string_pretty(&provenance).unwrap() + "\n";
-    block_on(host.write(&format!("{out}/provenance.json"), text.as_bytes()))?;
-    host.copy(
-        &format!("{out}/work/commands.sh"),
-        &format!("{out}/commands.sh"),
-    )?;
+    block_on(host.write("provenance.json", text.as_bytes()))?;
+    host.copy("work/commands.sh", "commands.sh")?;
     println!("{out}");
     Ok(())
 }

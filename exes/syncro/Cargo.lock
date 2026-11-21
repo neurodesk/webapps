@@ -328,6 +328,7 @@ version = "0.1.20261121"
 dependencies = [
  "js-sys",
  "neurodesk-pipeline-host",
+ "serde_json",
  "syncro-core",
  "wasm-bindgen",
  "wasm-bindgen-futures",

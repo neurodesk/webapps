@@ -39,6 +39,9 @@ pub struct Options {
     pub threads: usize,
     pub device: Device,
     pub keep_synth: bool,
+    /// The tools' identities (native: path, version, SHA-256); a resume with different software reruns nothing
+    /// and fails.
+    pub software: Value,
 }
 
 /// FWHM 3 mm, as the web app's niimath call.
@@ -108,6 +111,18 @@ impl<H: Host> Runner<'_, H> {
         outputs: &[String],
         gpu: bool,
     ) -> Result<(), String> {
+        self.step_reading(argv, env, outputs, gpu, &[]).await
+    }
+
+    /// `step`, for a tool that also reads files its argv does not name as plain arguments.
+    async fn step_reading(
+        &mut self,
+        argv: Vec<String>,
+        env: Vec<(&str, String)>,
+        outputs: &[String],
+        gpu: bool,
+        extra_inputs: &[String],
+    ) -> Result<(), String> {
         let env: Vec<(String, String)> = env.into_iter().map(|(k, v)| (k.to_string(), v)).collect();
         self.commands.push(json!({"argv": argv, "env": env}));
         let mut settings = Map::new();
@@ -115,7 +130,7 @@ impl<H: Host> Runner<'_, H> {
         let recorded = Recorded {
             step: Step { argv, env, gpu },
             outputs,
-            extra_inputs: &[],
+            extra_inputs,
             settings,
             done_marker: None,
         };
@@ -291,7 +306,9 @@ pub async fn run<H: Host>(h: &H, o: &Options, stage: &dyn Fn(&str)) -> Result<Va
 
     // Resume: every input's name and content and the options must match the interrupted run.
     h.mkdirs(&o.work)?;
-    h.mkdirs(&o.out)?;
+    if !o.out.is_empty() {
+        h.mkdirs(&o.out)?;
+    }
     let mut fingerprint = vec![json!([input_name, sha256(&input_bytes)])];
     for p in [&o.pathological, &o.lesion].into_iter().flatten() {
         fingerprint.push(json!([file_name(p), sha256(&read_all(h, p).await?)]));
@@ -301,6 +318,7 @@ pub async fn run<H: Host>(h: &H, o: &Options, stage: &dyn Fn(&str)) -> Result<Va
         "inputs": fingerprint,
         "template": sha256(&template_bytes),
         "options": {"ct": o.ct, "normalization": format!("{:?}", o.normalization), "keepSynth": o.keep_synth},
+        "software": o.software,
     })
     .to_string();
     let record_path = work("syncro.json");
@@ -390,7 +408,8 @@ pub async fn run<H: Host>(h: &H, o: &Options, stage: &dyn Fn(&str)) -> Result<Va
     if o.ct {
         argv.push("--ct".into());
     }
-    argv.extend(["--threads".into(), r.threads()]);
+    // --force: a rerun replaces the previous run's JSON sidecar, which the record does not declare.
+    argv.extend(["--threads".into(), r.threads(), "--force".into()]);
     match o.device {
         Device::Cpu => argv.extend(["--device".into(), "cpu".into()]),
         Device::Metal => argv.extend(["--device".into(), "metal".into()]),
@@ -540,11 +559,13 @@ pub async fn run<H: Host>(h: &H, o: &Options, stage: &dyn Fn(&str)) -> Result<Va
                 format!("{prefix}0GenericAffine.mat"),
             );
             let env = vec![("ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS", r.threads())];
-            r.step(
+            // Its images appear only inside bracketed options, so the resume record names them explicitly.
+            r.step_reading(
                 argv,
                 env,
                 &[warped.clone(), warp.clone(), affine.clone()],
                 false,
+                &[template_path.clone(), brain_f32.clone()],
             )
             .await?;
             let bytes = read_all(h, &warped).await?;

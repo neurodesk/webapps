@@ -222,13 +222,14 @@ fn commands(case: &Case, normalization: Normalization) -> String {
         lesion: None,
         pathological: None,
         template: "/in/mni.nii.gz".into(),
-        out: "/out".into(),
-        work: "/work".into(),
+        out: String::new(),
+        work: "work".into(),
         ct: case.ct,
         normalization,
         threads: 4,
         device: Device::Auto,
         keep_synth: false,
+        software: serde_json::Value::Null,
     };
     if let Some(p) = &case.pathological {
         h.put("/in/sub-01_FLAIR.nii", write(p, "pathological"));
@@ -252,7 +253,7 @@ fn commands(case: &Case, normalization: Normalization) -> String {
     }
     let provenance = block_on(run(&h, &o, &|_| {})).unwrap();
     assert_eq!(provenance["desheared"]["primary"], case.ct);
-    String::from_utf8(h.files.borrow()["/work/commands.sh"].clone()).unwrap()
+    String::from_utf8(h.files.borrow()["work/commands.sh"].clone()).unwrap()
 }
 
 #[test]
@@ -291,13 +292,14 @@ fn bad_inputs_are_refused_before_any_tool() {
                 lesion: None,
                 pathological: None,
                 template: "/in/mni.nii".into(),
-                out: "/out".into(),
-                work: "/work".into(),
+                out: String::new(),
+                work: "work".into(),
                 ct: false,
                 normalization: Normalization::Greedy,
                 threads: 1,
                 device: Device::Auto,
                 keep_synth: false,
+                software: serde_json::Value::Null,
             };
             if let Some(l) = lesion {
                 h.put("/in/lesion.nii", l);
@@ -309,7 +311,7 @@ fn bad_inputs_are_refused_before_any_tool() {
                 o.pathological = Some(path);
             }
             let error = block_on(run(&h, &o, &|_| {})).unwrap_err();
-            assert!(!h.exists("/work/commands.sh"), "{error}: a tool ran");
+            assert!(!h.exists("work/commands.sh"), "{error}: a tool ran");
             error
         };
     let source = write(&scan(IDENTITY, 10.0), "scan");
