@@ -466,6 +466,8 @@ test('the scheduled run picks the newest release of each app with archives the c
   const urls = listed.assets.map((item) => item.browser_download_url);
   assert.deepEqual(unlistedReleases(catalog(urls), [newer, listed], portable), [{ id: 'tool', version: '0.2.20261008' }]);
   assert.deepEqual(unlistedReleases(catalog(newer.assets.map((item) => item.browser_download_url)), [newer, listed], portable), []);
+  // Partially linked shared-tag release (e.g. one source landed, another dropped): still discovered.
+  assert.deepEqual(unlistedReleases(catalog([newer.assets[0].browser_download_url]), [newer, listed], portable), [{ id: 'tool', version: '0.2.20261008' }]);
   const skipped = [release('0.2.20261009', archives, { draft: true }), release('0.2.20261010', archives, { prerelease: true }), release('0.2.20261011', [])];
   assert.deepEqual(unlistedReleases(catalog(urls), [...skipped, listed], portable), [], 'drafts, prereleases and releases without archives wait');
   assert.deepEqual(unlistedReleases({ apps: {} }, [newer], portable), [], 'only apps the catalog lists');

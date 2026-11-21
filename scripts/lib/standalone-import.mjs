@@ -73,7 +73,12 @@ export function unlistedReleases(catalog, releases, natives, suites = new Map())
     if (!seen || compareVersions(parsed.version, seen.release.version) > 0) newest.set(parsed.id, { release: parsed, assets: release.assets });
   }
   const unlistedApps = [...newest.values()]
-    .filter(({ assets }) => !assets.some((asset) => linked.has(asset.browser_download_url)))
+    .filter(({ release, assets }) => {
+      const sources = releaseSources(natives.get(release.id) ?? [], { assets });
+      return sources.some((source) =>
+        assets.some((asset) => source.targets.includes(releasePlatform(source.spec, asset.name)) && !linked.has(asset.browser_download_url)),
+      );
+    })
     .map(({ release }) => release);
   const unlistedSuites = [...newestSuites.values()]
     .filter((release) => {

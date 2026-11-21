@@ -6,6 +6,7 @@ import YAML from 'yaml';
 import { commandLineClosure } from './lib/module-closure.mjs';
 import { repoRoot } from './lib/apps-registry.mjs';
 
+const GATE_JOB_BLOCK = /^ {2}gate:\n(?:(?: {4}[^\n]*|\s*)\n)*/m;
 const SHARED_PATHS_BLOCK = /(^ {6}shared_paths: \|\n)((?: {8}[^\n]*\n)+)/m;
 const DRIVER_LINES = /(?:^ {8}packages\/node-drivers\/[^\n]+\n)+/gm;
 
@@ -16,8 +17,13 @@ const DRIVER_LINES = /(?:^ {8}packages\/node-drivers\/[^\n]+\n)+/gm;
 export function syncDriverPathsInSource(file, source, dependencies) {
   const sharedLines = dependencies.map((entry) => `        ${entry}`).join('\n');
   const flow = YAML.parse(source);
-  const match = SHARED_PATHS_BLOCK.exec(source);
-  if (!flow.jobs?.gate?.with?.shared_paths || !match) {
+  const gateMatch = GATE_JOB_BLOCK.exec(source);
+  if (!flow.jobs?.gate?.with?.shared_paths || !gateMatch) {
+    throw new Error(`${file}: missing jobs.gate.with.shared_paths block`);
+  }
+  const gateText = gateMatch[0];
+  const match = SHARED_PATHS_BLOCK.exec(gateText);
+  if (!match) {
     throw new Error(`${file}: missing jobs.gate.with.shared_paths block`);
   }
   const block = match[2];
@@ -27,7 +33,8 @@ export function syncDriverPathsInSource(file, source, dependencies) {
   }
   DRIVER_LINES.lastIndex = 0;
   const replacedBlock = block.replace(DRIVER_LINES, `${sharedLines}\n`);
-  return source.slice(0, match.index) + match[1] + replacedBlock + source.slice(match.index + match[0].length);
+  const replacedGate = gateText.slice(0, match.index) + match[1] + replacedBlock + gateText.slice(match.index + match[0].length);
+  return source.slice(0, gateMatch.index) + replacedGate + source.slice(gateMatch.index + gateMatch[0].length);
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {

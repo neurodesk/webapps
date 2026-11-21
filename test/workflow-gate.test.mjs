@@ -682,6 +682,6 @@ test('driver consumers route packages/node-drivers through native.yml shared_pat
     assert.ok(!(flow.on?.pull_request?.paths ?? []).includes(driver), `${name}: pull_request.paths routes ${driver} via native.yml`);
     assert.ok(sharedPaths(flow).includes(driver), `${name}: gate shared_paths includes ${driver}`);
   }
-  const missingShared = `on:\n  push:\n    paths:\n      - 'packages/x/**'\njobs:\n  gate:\n    with:\n      shared_paths: |\n        packages/components/**\n  other:\n    env:\n      NOTE: |\n        packages/node-drivers/package.json\n`;
-  assert.throws(() => syncDriverPathsInSource('x.yml', missingShared, ['packages/node-drivers/package.json']), /missing packages\/node-drivers\/ entries in jobs\.gate\.with\.shared_paths/);
+  const otherJobFirst = `on:\n  push:\n    paths:\n      - 'packages/x/**'\njobs:\n  helper:\n    uses: ./.github/workflows/other.yml\n    with:\n      shared_paths: |\n        packages/node-drivers/package.json\n  gate:\n    with:\n      shared_paths: |\n        packages/components/**\n`;
+  assert.throws(() => syncDriverPathsInSource('x.yml', otherJobFirst, ['packages/node-drivers/package.json']), /missing packages\/node-drivers\/ entries in jobs\.gate\.with\.shared_paths/);
 });
