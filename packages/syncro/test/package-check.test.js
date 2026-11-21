@@ -12,8 +12,8 @@ const template=fileURLToPath(new URL('../data/MNI152_T1_1mm_brain.nii.gz',import
 // The check normalises the committed template in place of its pinned download, so these tests
 // judge its verdicts without the network; the stand-in ignores the scan it is given.
 // A stand-in for the installed command. Its normalisation copies the MNI152 template into every
-// output, draws a 6 mm lesion at MNI (-30, -10, 20) and records --normalization (default greedy) in
-// provenance.json, then applies FAKE_SYNCRO_DEFECT.
+// output (and the --pathological scan's), draws a 6 mm lesion at MNI (-30, -10, 20) and records
+// --normalization (default greedy) and MindGrab in provenance.json, then applies FAKE_SYNCRO_DEFECT.
 const fake=`#!/usr/bin/env node
 import {mkdir,readFile,writeFile,stat} from 'node:fs/promises';
 import {basename,join} from 'node:path';
@@ -52,7 +52,8 @@ await writeFile(join(output,'wbt1'+name),nifti(shifted));
 await writeFile(join(output,'w'+name),nifti(primary));
 await writeFile(join(output,'wlesion.nii'),nifti(lesion));
 const normalization=defect==='engine'?'greedy':args.includes('--normalization')?args[args.indexOf('--normalization')+1]:'greedy';
-await writeFile(join(output,'provenance.json'),JSON.stringify({normalization}));
+if(args.includes('--pathological'))await writeFile(join(output,'w'+basename(args[args.indexOf('--pathological')+1])),nifti(primary));
+await writeFile(join(output,'provenance.json'),JSON.stringify({normalization,stages:{mindgrab:{version:'stand-in'}}}));
 console.log(output);
 `;
 

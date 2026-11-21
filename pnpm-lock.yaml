@@ -2415,6 +2415,12 @@ importers:
 
   packages/syncro:
     dependencies:
+      '@brainchop/mindgrab':
+        specifier: 0.1.20260813
+        version: 0.1.20260813
+      '@neurodesk/node-drivers':
+        specifier: workspace:*
+        version: link:../node-drivers
       nifti-reader-js:
         specifier: 0.8.0
         version: 0.8.0
@@ -2422,6 +2428,9 @@ importers:
         specifier: 1.29.0
         version: 1.29.0
     devDependencies:
+      '@neurodesk/brain-extraction':
+        specifier: workspace:*
+        version: link:../brain-extraction
       '@neurodesk/greedy':
         specifier: workspace:*
         version: link:../greedy

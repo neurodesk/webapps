@@ -1,10 +1,10 @@
 # SYNcro
 
-Normalize a primary NIfTI scan to the MNI152 1 mm brain template. The shared browser pipeline follows native SYNcro: SynthSR, configurable MindGrab/SynthStrip brain extraction, configurable Greedy/ANTs normalization, pathological-modality alignment, lesion propagation and niimath masking. The packaged Node fallback uses SynthStrip and, like the browser, Greedy by default; `--normalization ants` selects ANTs SyN.
+Normalize a primary NIfTI scan to the MNI152 1 mm brain template. The shared browser pipeline follows native SYNcro: SynthSR, configurable MindGrab/SynthStrip brain extraction, configurable Greedy/ANTs normalization, pathological-modality alignment, lesion propagation and niimath masking. The packaged Node command matches the browser's defaults, MindGrab and Greedy; `--brain-extractor synthstrip` and `--normalization ants` select the alternatives.
 
 ## Portable macOS, Windows and Linux builds
 
-Download the macOS installer, the Windows x64 archive or the Linux x64 archive from the **Standalone** action in the webapp's bar. Each contains `syncro` or `syncro.exe`, a private Node runtime, native ONNX Runtime, the Greedy and ANTs WebAssembly modules, the MNI template, and the checksum-pinned SynthSR and SynthStrip models. You do not need to install Node.js, Python, FreeSurfer, or a display server.
+Download the macOS installer, the Windows x64 archive or the Linux x64 archive from the **Standalone** action in the webapp's bar. Each contains `syncro` or `syncro.exe`, a private Node runtime, native ONNX Runtime, the Greedy and ANTs WebAssembly modules, MindGrab's CPU WebAssembly, the MNI template, and the checksum-pinned SynthSR and SynthStrip models. You do not need to install Node.js, Python, FreeSurfer, or a display server.
 
 On Linux, download, verify, extract, and check the current release:
 
@@ -69,11 +69,11 @@ set -euo pipefail
 
 The CLI uses native ONNX Runtime CPU for synthesis and extraction. Registration runs single-threaded WebAssembly: by default Greedy's single-threaded build, whose registrations match the webapp's threaded Greedy build byte for byte on the same inputs, or with `--normalization ants` the webapp's ANTs kernel, whose validated registration grew to 3.16 GB of its 4 GiB linear-memory ceiling. `--threads` controls neural-network inference, not registration. Process memory also includes model sessions, image buffers and outputs. Start with 32 GB per job; this is a conservative request, not a measured peak-RSS guarantee. Use a separate process/output directory for each subject.
 
-An output directory must be new. After interruption, `--resume` verifies input, software, models and stored checkpoint hashes, reuses completed SynthSR/SynthStrip stages, and reruns registration. It is not a resume within the optimizer. Changed input/options/software require a new output directory. Accompanying-image choices can change on resume because they do not affect synthesis or extraction.
+An output directory must be new. After interruption, `--resume` verifies input, software, models and stored checkpoint hashes, reuses completed SynthSR and brain-extraction stages, and reruns registration. It is not a resume within the optimizer. Changed input/options/software require a new output directory. Accompanying-image choices can change on resume because they do not affect synthesis or extraction.
 
 ## Images and outputs
 
-The Node fallback accepts one scalar primary NIfTI and one optional binary lesion map already in the same grid. Use the native command or browser for a separate pathological-modality scan. The shared browser pipeline permits a one-voxel mask border, matching native SYNcro's geometry tolerance.
+The Node command accepts one scalar primary NIfTI, an optional pathological-modality scan (`--pathological`) and an optional binary lesion map on the grid of the pathological scan when given, otherwise the primary. The shared browser pipeline permits a one-voxel mask border, matching native SYNcro's geometry tolerance.
 
 Output names match native SYNcro: `w<input>` is each normalized input, `wb<primary>` is the normalized brain-extracted primary, and `wbt1<primary>` is the normalized brain-extracted synthetic T1. The browser's `--keep-synth` equivalent additionally retains `t1<primary>` in native space. `provenance.json` records selected engines and timing. Original intensities are resampled into MNI space as float32; lesion output is uint8.
 
