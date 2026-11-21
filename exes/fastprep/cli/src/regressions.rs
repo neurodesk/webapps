@@ -1,5 +1,9 @@
 use super::*;
+use fastprep_core::host::Step;
 use fastprep_core::{bids, block_on};
+use std::fs::File;
+use std::process::Command;
+use std::time::{Duration, SystemTime};
 
 struct Fixture(PathBuf);
 
@@ -199,10 +203,114 @@ fn pepolar_solver_resolves_from_fastprep_home_bin_and_receives_argv() {
         ]
         .map(String::from)
         .to_vec(),
-        fsl_out: None,
+        env: vec![],
         gpu: false,
     };
     let result = block_on(host.run(&step)).unwrap();
     assert_eq!(result.code, 0);
     assert_eq!(result.stdout.lines().collect::<Vec<_>>(), step.argv[1..]);
+}
+
+// Pins the shared runner's observable contract (commands.sh line, resume record bytes, skip, failure cleanup) so
+// moving it into exes/pipeline-host cannot change a fastprep work directory.
+#[test]
+fn step_records_and_command_log_are_stable() {
+    use std::os::unix::fs::PermissionsExt;
+    let f = Fixture::new("step-record");
+    let bin = f.0.join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    let tool = bin.join("niimath");
+    // Writes its last argument; fails when told to.
+    fs::write(
+        &tool,
+        "#!/bin/sh\nfor a; do last=$a; done\n[ \"$1\" = fail ] && { echo boom >&2; exit 3; }\nprintf '%s' \"$FSLOUTPUTTYPE\" > \"$last\"\necho done\n",
+    )
+    .unwrap();
+    fs::set_permissions(&tool, fs::Permissions::from_mode(0o755)).unwrap();
+    fs::write(f.path("in.nii"), b"input").unwrap();
+    let mut host = f.host();
+    host.bin = bin;
+    block_on(async {
+        let ctx = Ctx::new(
+            host,
+            f.path("out"),
+            f.path("work"),
+            Templates::new("unused"),
+            1,
+            1,
+            0,
+        )
+        .await;
+        ctx.h.mkdirs(&ctx.work).unwrap();
+        let out = f.path("o ut.nii");
+        let argv = fastprep_core::argv!["niimath", f.path("in.nii"), "-s", 1.5f64, out];
+        assert!(
+            ctx.run(
+                argv.clone(),
+                std::slice::from_ref(&out),
+                Some("NIFTI"),
+                None
+            )
+            .await
+            .unwrap()
+        );
+        assert_eq!(fs::read_to_string(&out).unwrap(), "NIFTI");
+        assert_eq!(
+            fs::read_to_string(f.path("work/commands.sh")).unwrap(),
+            format!(
+                "FSLOUTPUTTYPE=NIFTI niimath {} -s 1.5 '{}'\n",
+                f.path("in.nii"),
+                out
+            )
+        );
+        let stat = |p: &str| {
+            let m = fs::metadata(p).unwrap();
+            let t = m
+                .modified()
+                .unwrap()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            format!("[{},{},\"{t}\"]", serde_json_string(p), m.len())
+        };
+        let records: Vec<_> = fs::read_dir(f.path("work/steps"))
+            .unwrap()
+            .flatten()
+            .collect();
+        assert_eq!(records.len(), 1);
+        assert_eq!(
+            fs::read_to_string(records[0].path()).unwrap(),
+            format!(
+                "{{\"argv\":[\"niimath\",{},\"-s\",\"1.5\",{}],\"fsl_out\":\"NIFTI\",\"outputs\":[{}],\"inputs\":[{}]}}",
+                serde_json_string(&f.path("in.nii")),
+                serde_json_string(&out),
+                stat(&out),
+                stat(&f.path("in.nii"))
+            )
+        );
+        assert!(
+            !ctx.run(argv, std::slice::from_ref(&out), Some("NIFTI"), None)
+                .await
+                .unwrap()
+        );
+        let bad = f.path("bad.nii");
+        let error = ctx
+            .run(
+                fastprep_core::argv!["niimath", "fail", bad],
+                std::slice::from_ref(&bad),
+                None,
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(
+            error,
+            format!("FAILED (3, missing ['bad.nii']): niimath fail {bad}\nboom\n")
+        );
+        assert!(!Path::new(&bad).exists());
+    });
+}
+
+fn serde_json_string(s: &str) -> String {
+    format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
 }
