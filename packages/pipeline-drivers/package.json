@@ -17,6 +17,7 @@
     "test": "node --test test/*.test.js"
   },
   "devDependencies": {
+    "@neurodesk/registration": "workspace:*",
     "@niivue/niimath": "1.4.20261016"
   }
 }

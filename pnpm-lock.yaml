@@ -2740,6 +2740,9 @@ importers:
 
   packages/pipeline-drivers:
     devDependencies:
+      '@neurodesk/registration':
+        specifier: workspace:*
+        version: link:../registration
       '@niivue/niimath':
         specifier: 1.4.20261016
         version: 1.4.20261016
