@@ -55,7 +55,8 @@ const { brain, mask, provenance } = await runMindgrab({
 package's version.
 
 All four models run: `mindgrab`, `mindmap`, `mindsnap` and `16chan18cls`. Each
-call runs in its own worker thread with one Emscripten thread per logical core,
+call runs in its own worker thread with one Emscripten thread per logical core
+(`threads: N` caps it, e.g. to a Slurm allocation),
 and ending that thread frees the module's memory at once. On the 1 mm T1-weighted
 example a call peaks at 2.6 GB (MindGrab) to 3.9 GB (MindMap tissues) and takes
 30-70 s on eight cores. Calls in one process queue and run one at a time. GPU

@@ -53,7 +53,9 @@ for (const item of MINDGRAB_CASES) {
     const bytes = await pinnedFile(MINDGRAB_INPUT);
     process.exitCode = undefined;
     // A gzipped input returns gzipped outputs, as in the wrapper; the pins are of the NIfTI inside.
-    const result = await mindgrab[item.call](bytes, item.options);
+    // A capped thread pool (a Slurm allocation) must give the same bytes.
+    const options = item.id === 'mindgrab-mask' ? { ...item.options, threads: 2 } : item.options;
+    const result = await mindgrab[item.call](bytes, options);
     assert.equal(result.backend, 'cpu');
     assert.equal(process.exitCode, undefined, 'the module exit leaves the host exit code alone');
     assert.equal(globalThis.Worker, undefined, 'the glue installs no global Worker in the host');

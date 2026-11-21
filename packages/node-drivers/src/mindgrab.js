@@ -65,13 +65,14 @@ export async function loadMindgrabCpu(packageJsonUrl) {
     return { args, maskPath };
   }
 
-  function run({ model, args, input, primaryOutput, extraOutputs, timeoutMs, onLog, signal }) {
+  function run({ model, args, input, primaryOutput, extraOutputs, threads, timeoutMs, onLog, signal }) {
     const log = [];
     const worker = new Worker(new URL('./mindgrab-worker.js', import.meta.url), {
       workerData: {
         moduleUrl: new URL(`dist/brainchop-${model}.js`, packageJsonUrl).href,
         model,
         args,
+        threads,
         input,
         outputs: [primaryOutput, ...extraOutputs],
       },
@@ -119,6 +120,9 @@ export async function loadMindgrabCpu(packageJsonUrl) {
     if (options.device || options.glContext || (options.backend && !['auto', 'cpu'].includes(options.backend))) {
       throw new BrainchopError('unsupported-option', 'the Node driver runs only the cpu backend');
     }
+    if (options.threads !== undefined && !(Number.isSafeInteger(options.threads) && options.threads > 0)) {
+      throw new BrainchopError('unsupported-option', `threads must be a positive integer, got ${options.threads}`);
+    }
     const { args, maskPath } = buildArgs(options);
     if (tissueMode) {
       if ((options.model !== 'mindmap' && options.model !== '16chan18cls') || options.mask || options.borderMm || options.legacyCleanup) {
@@ -134,6 +138,7 @@ export async function loadMindgrabCpu(packageJsonUrl) {
       input: compressed ? gunzipSync(raw) : raw,
       primaryOutput: tissueMode ? '/out_gm.nii' : '/out.nii',
       extraOutputs: tissueMode ? TISSUE_OUTPUTS : maskPath ? [maskPath] : [],
+      threads: options.threads,
       timeoutMs: options.timeoutMs ?? CPU_TIMEOUT_MS,
       onLog: options.onLog,
       signal: options.signal,
