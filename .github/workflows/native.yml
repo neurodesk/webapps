@@ -90,6 +90,7 @@ jobs:
         sdc-native
         seedseg-native
         spinalcordtoolbox-native
+        syncro-native
         synthseg-native
         synthseg-portable
         vesselboost-native
@@ -124,6 +125,7 @@ jobs:
         sdc-native
         seedseg-native
         spinalcordtoolbox-native
+        syncro-native
         synthseg-portable
         vesselboost-native
         white-matter-lesions-native
@@ -447,6 +449,17 @@ jobs:
     needs: gate
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"spinalcordtoolbox-native"')) }}
     uses: ./.github/workflows/spinalcordtoolbox-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  syncro-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"syncro-native"')) }}
+    uses: ./.github/workflows/syncro-native.yml
     permissions:
       actions: read
       contents: write

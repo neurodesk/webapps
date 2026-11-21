@@ -16,9 +16,6 @@ on:
       - 'packages/synthsr/**'
       - 'packages/synthstrip/**'
       - 'packages/brain-extraction/src/mindgrab.js'
-      - 'packages/node-drivers/package.json'
-      - 'packages/node-drivers/src/mindgrab-worker.js'
-      - 'packages/node-drivers/src/mindgrab.js'
   push:
     branches: [main]
     paths:
@@ -36,9 +33,7 @@ on:
       - 'packages/synthsr/**'
       - 'packages/synthstrip/**'
       - 'packages/brain-extraction/src/mindgrab.js'
-      - 'packages/node-drivers/package.json'
-      - 'packages/node-drivers/src/mindgrab-worker.js'
-      - 'packages/node-drivers/src/mindgrab.js'
+  workflow_call:
   workflow_dispatch:
     inputs:
       sign_release:
@@ -65,6 +60,10 @@ jobs:
       pull-requests: read
     with:
       workflow: syncro-native
+      shared_paths: |
+        packages/node-drivers/package.json
+        packages/node-drivers/src/mindgrab-worker.js
+        packages/node-drivers/src/mindgrab.js
 
   portable:
     needs: gate
