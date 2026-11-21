@@ -1,0 +1,13 @@
+[workspace]
+members = ["core"]
+resolver = "2"
+
+[workspace.package]
+edition = "2024"
+license = "Apache-2.0"
+version = "0.1.20261121"
+rust-version = "1.85"
+
+[profile.release]
+lto = true
+codegen-units = 1

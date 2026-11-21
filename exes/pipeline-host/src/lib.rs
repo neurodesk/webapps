@@ -88,3 +88,15 @@ pub fn quote(s: &str) -> String {
         format!("'{}'", s.replace('\'', "'\"'\"'"))
     }
 }
+
+/// Drive a future whose host never suspends (the native host blocks inside each call).
+pub fn block_on<F: std::future::Future>(f: F) -> F::Output {
+    let mut f = std::pin::pin!(f);
+    match f
+        .as_mut()
+        .poll(&mut std::task::Context::from_waker(std::task::Waker::noop()))
+    {
+        std::task::Poll::Ready(v) => v,
+        std::task::Poll::Pending => panic!("host future suspended; use an async executor"),
+    }
+}
