@@ -155,8 +155,16 @@ fn nifti1(raw: Vec<u8>) -> Result<Vec<u8>, String> {
     put(&mut h, 72, &64i16.to_le_bytes());
     put(&mut h, 112, &1f32.to_le_bytes());
     put(&mut h, 116, &0f32.to_le_bytes());
-    for c in voxels.chunks_exact(width) {
-        h.extend_from_slice(&order((decode(c) * slope + inter).to_le_bytes().to_vec()));
+    h.reserve(voxels.len() / width * 8);
+    let value = |c| decode(c) * slope + inter;
+    if le {
+        voxels
+            .chunks_exact(width)
+            .for_each(|c| h.extend_from_slice(&value(c).to_le_bytes()));
+    } else {
+        voxels
+            .chunks_exact(width)
+            .for_each(|c| h.extend_from_slice(&value(c).to_be_bytes()));
     }
     Ok(h)
 }
