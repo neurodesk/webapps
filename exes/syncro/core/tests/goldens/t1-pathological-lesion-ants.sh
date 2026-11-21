@@ -5,8 +5,8 @@ ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=4 antsRegistration --dimensionality 3 --flo
 ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=4 antsApplyTransforms -d 3 --float 1 -i /work/primary.nii -r /work/template.nii -o /out/wsub-01_T1w.nii.gz -n Linear -f 0 -t /work/ants-1Warp.nii.gz -t /work/ants-0GenericAffine.mat
 greedy-rs -threads 4 -d 3 -rf /work/primary.nii -rm /work/pathological.nii /work/pathological-primary-grid.nii -r /work/pathological.mat
 ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=4 antsApplyTransforms -d 3 --float 1 -i /work/pathological-primary-grid.nii -r /work/template.nii -o /out/wsub-01_FLAIR.nii -n Linear -f 0 -t /work/ants-1Warp.nii.gz -t /work/ants-0GenericAffine.mat
-OMP_NUM_THREADS=4 niimath /work/lesion.nii -s 1.2739827004487725 /work/lesion-smoothed.nii -odt float
+FSLOUTPUTTYPE=NIFTI OMP_NUM_THREADS=4 niimath /work/lesion.nii -s 1.2739827004487725 /work/lesion-smoothed.nii -odt float
 greedy-rs -threads 4 -d 3 -rf /work/primary.nii -rm /work/lesion-smoothed.nii /work/lesion-primary-grid.nii -ri NN -r /work/pathological.mat
 ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=4 antsApplyTransforms -d 3 --float 1 -i /work/lesion-primary-grid.nii -r /work/template.nii -o /work/lesion-warped.nii -n NearestNeighbor -f 0 -t /work/ants-1Warp.nii.gz -t /work/ants-0GenericAffine.mat
-OMP_NUM_THREADS=4 niimath /work/lesion-warped.nii -thr 0.5 -bin /out/wlesion.nii -odt char
-OMP_NUM_THREADS=4 niimath /out/wsub-01_T1w.nii.gz -mas /out/wbt1sub-01_T1w.nii.gz /out/wbsub-01_T1w.nii.gz -odt input
+FSLOUTPUTTYPE=NIFTI OMP_NUM_THREADS=4 niimath /work/lesion-warped.nii -thr 0.5 -bin /out/wlesion.nii -odt char
+FSLOUTPUTTYPE=NIFTI_GZ OMP_NUM_THREADS=4 niimath /out/wsub-01_T1w.nii.gz -mas /out/wbt1sub-01_T1w.nii.gz /out/wbsub-01_T1w.nii.gz -odt input

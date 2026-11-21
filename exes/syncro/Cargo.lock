@@ -307,6 +307,7 @@ version = "0.1.20261121"
 dependencies = [
  "neurodesk-pipeline-host",
  "serde_json",
+ "sha2",
  "syncro-core",
 ]
 

@@ -6,7 +6,7 @@ greedy-rs -threads 4 -d 3 -m NMI -i /work/template.nii /work/brain-f32.nii -it /
 greedy-rs -threads 4 -d 3 -rf /work/template.nii -rm /work/brain-f32.nii /out/wbt1sub-01_T1w.nii.gz -r /work/warp.nii /work/affine.mat
 greedy-rs -threads 4 -d 3 -rf /work/template.nii -rm /work/primary.nii /out/wsub-01_T1w.nii.gz -r /work/warp.nii /work/affine.mat
 greedy-rs -threads 4 -d 3 -rf /work/template.nii -rm /work/pathological.nii /out/wsub-01_FLAIR.nii -r /work/warp.nii /work/affine.mat /work/pathological.mat
-OMP_NUM_THREADS=4 niimath /work/lesion.nii -s 1.2739827004487725 /work/lesion-smoothed.nii -odt float
+FSLOUTPUTTYPE=NIFTI OMP_NUM_THREADS=4 niimath /work/lesion.nii -s 1.2739827004487725 /work/lesion-smoothed.nii -odt float
 greedy-rs -threads 4 -d 3 -rf /work/template.nii -rm /work/lesion-smoothed.nii /work/lesion-warped.nii -ri NN -r /work/warp.nii /work/affine.mat /work/pathological.mat
-OMP_NUM_THREADS=4 niimath /work/lesion-warped.nii -thr 0.5 -bin /out/wlesion.nii -odt char
-OMP_NUM_THREADS=4 niimath /out/wsub-01_T1w.nii.gz -mas /out/wbt1sub-01_T1w.nii.gz /out/wbsub-01_T1w.nii.gz -odt input
+FSLOUTPUTTYPE=NIFTI OMP_NUM_THREADS=4 niimath /work/lesion-warped.nii -thr 0.5 -bin /out/wlesion.nii -odt char
+FSLOUTPUTTYPE=NIFTI_GZ OMP_NUM_THREADS=4 niimath /out/wsub-01_T1w.nii.gz -mas /out/wbt1sub-01_T1w.nii.gz /out/wbsub-01_T1w.nii.gz -odt input

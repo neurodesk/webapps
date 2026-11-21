@@ -140,8 +140,17 @@ impl<H: Host> Runner<'_, H> {
         argv
     }
 
-    fn niimath_env(&self) -> Vec<(&'static str, String)> {
-        vec![("OMP_NUM_THREADS", self.threads())]
+    /// niimath picks its output format from FSLOUTPUTTYPE, not the file name.
+    fn niimath_env(&self, output: &str) -> Vec<(&'static str, String)> {
+        let format = if output.to_ascii_lowercase().ends_with(".gz") {
+            "NIFTI_GZ"
+        } else {
+            "NIFTI"
+        };
+        vec![
+            ("FSLOUTPUTTYPE", format.into()),
+            ("OMP_NUM_THREADS", self.threads()),
+        ]
     }
 
     /// `greedy -rf FIXED -rm MOVING OUT -r CHAIN`, linear unless `nearest`, outside voxels `fill`.
@@ -653,7 +662,7 @@ pub async fn run<H: Host>(h: &H, o: &Options, stage: &dyn Fn(&str)) -> Result<Va
             "-odt".into(),
             "float".into(),
         ];
-        let env = r.niimath_env();
+        let env = r.niimath_env(&smoothed);
         r.step(argv, env, std::slice::from_ref(&smoothed), false)
             .await?;
         let warped = work("lesion-warped.nii");
@@ -678,7 +687,7 @@ pub async fn run<H: Host>(h: &H, o: &Options, stage: &dyn Fn(&str)) -> Result<Va
             "-odt".into(),
             "char".into(),
         ];
-        let env = r.niimath_env();
+        let env = r.niimath_env(&output);
         r.step(argv, env, std::slice::from_ref(&output), false)
             .await?;
     }
@@ -692,7 +701,7 @@ pub async fn run<H: Host>(h: &H, o: &Options, stage: &dyn Fn(&str)) -> Result<Va
         "-odt".into(),
         "input".into(),
     ];
-    let env = r.niimath_env();
+    let env = r.niimath_env(&masked);
     r.step(argv, env, std::slice::from_ref(&masked), false)
         .await?;
     begin(&mut r, "complete", Some("resampling"));
