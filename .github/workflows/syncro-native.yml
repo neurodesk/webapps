@@ -17,8 +17,8 @@ on:
       - 'packages/synthstrip/**'
       - 'packages/brain-extraction/src/mindgrab.js'
       - 'packages/node-drivers/package.json'
-      - 'packages/node-drivers/src/mindgrab.js'
       - 'packages/node-drivers/src/mindgrab-worker.js'
+      - 'packages/node-drivers/src/mindgrab.js'
   push:
     branches: [main]
     paths:
@@ -37,8 +37,8 @@ on:
       - 'packages/synthstrip/**'
       - 'packages/brain-extraction/src/mindgrab.js'
       - 'packages/node-drivers/package.json'
-      - 'packages/node-drivers/src/mindgrab.js'
       - 'packages/node-drivers/src/mindgrab-worker.js'
+      - 'packages/node-drivers/src/mindgrab.js'
   workflow_dispatch:
     inputs:
       sign_release:

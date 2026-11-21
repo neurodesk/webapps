@@ -67,9 +67,9 @@ set -euo pipefail
   --threads "$SLURM_CPUS_PER_TASK" --offline
 ```
 
-The CLI uses native ONNX Runtime CPU for synthesis and extraction. Registration runs single-threaded WebAssembly: by default Greedy's single-threaded build, whose registrations match the webapp's threaded Greedy build byte for byte on the same inputs, or with `--normalization ants` the webapp's ANTs kernel, whose validated registration grew to 3.16 GB of its 4 GiB linear-memory ceiling. `--threads` (default `SLURM_CPUS_PER_TASK`, else at most 4) caps neural-network inference and MindGrab, not registration. Process memory also includes model sessions, image buffers and outputs. Start with 32 GB per job; this is a conservative request, not a measured peak-RSS guarantee. Use a separate process/output directory for each subject.
+The CLI uses native ONNX Runtime CPU for SynthSR and SynthStrip. MindGrab runs on CPU WebAssembly. Registration runs on single-threaded WebAssembly with Greedy by default. Use `--normalization ants` to select the ANTs kernel, which reached 3.16 GB of its 4 GiB linear-memory limit during validation. `--threads` controls inference threads. It defaults to `SLURM_CPUS_PER_TASK` when set and up to four threads otherwise. Start with 32 GB per job to accommodate model sessions, image buffers, and outputs. Use a separate process and output directory for each subject.
 
-An output directory must be new. After interruption, `--resume` verifies input, software, models and stored checkpoint hashes, reuses completed SynthSR and brain-extraction stages, and reruns registration. It is not a resume within the optimizer. Changed input/options/software require a new output directory. Accompanying-image choices can change on resume because they do not affect synthesis or extraction.
+Use a new output directory for each run. After interruption, `--resume` verifies the input files, software, models, and checkpoint hashes. It reuses completed SynthSR and brain-extraction stages and reruns registration. Use a new output directory if any input file, including an accompanying image, changes.
 
 ## Images and outputs
 

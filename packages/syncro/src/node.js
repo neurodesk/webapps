@@ -85,7 +85,17 @@ export async function normalize({input,output,additional=[],ct=false,normalizati
   if(hash(template)!==templateSha256)throw new Error('Template checksum mismatch.');
   const registrationURL=new URL('./registration/syncro-registration.mjs',import.meta.url);
   const wasm=normalization==='ants'?await readRegistrationWasm(new URL('./registration/syncro-registration.wasm',import.meta.url)):await readFile(greedyFiles.binary);
-  const fingerprint=hash(JSON.stringify({input:hash(inputBytes),ct,normalization,brainExtractor,code:hash(await readFile(new URL(import.meta.url))),wasm:hash(wasm),template:hash(template),models:Object.values(assets).map(a=>a.sha256)}));
+  const fingerprint=hash(JSON.stringify({
+    input:[basename(input),hash(inputBytes)],
+    lesion:lesion&&[lesion.name,hash(Buffer.from(lesion.buffer))],
+    pathological:pathological&&[pathological.name,hash(Buffer.from(pathological.buffer))],
+    ct,normalization,brainExtractor,
+    code:hash(await readFile(new URL(import.meta.url))),
+    wasm:hash(wasm),
+    affineWasm:normalization==='ants'&&pathological?hash(await readFile(greedyFiles.binary)):null,
+    template:hash(template),
+    models:Object.values(assets).map(a=>a.sha256),
+  }));
   let exists=false;try{await stat(out);exists=true;}catch(e){if(e.code!=='ENOENT')throw e;}
   if(exists) {
     if(!resume)throw new Error('Output directory already exists. Choose a new directory or --resume an interrupted SYNcro run.');

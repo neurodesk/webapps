@@ -53,11 +53,18 @@ test('a run past its time limit is stopped and reported', async () => {
 test('an aborted signal stops the run with its reason and frees the queue', async () => {
   const reason = new DOMException('stop', 'AbortError');
   await assert.rejects(mindgrab.segment(input, { model: 'mindgrab', signal: AbortSignal.abort(reason) }), error => error === reason);
-  // A valid 8^3 image keeps the module in inference for seconds, so aborting on its first log
-  // line lands while it runs (the zero-filled input fails to read, which can win a timer).
+  // The CPU backend log confirms that a valid input reached the running module.
   const controller = new AbortController();
-  const running = mindgrab.segment(volume(8), { model: 'mindgrab', signal: controller.signal, onLog: () => controller.abort() });
-  await assert.rejects(running, { name: 'AbortError' });
+  const running = mindgrab.segment(volume(8), {
+    model: 'mindgrab',
+    threads: 2,
+    timeoutMs: 15000,
+    signal: controller.signal,
+    onLog: (line) => {
+      if (line.includes('using cpu backend')) controller.abort(reason);
+    },
+  });
+  await assert.rejects(running, error => error === reason);
   await assert.rejects(mindgrab.segment(input, { model: 'mindgrab', timeoutMs: 1 }), /did not finish within 1 ms/);
 });
 

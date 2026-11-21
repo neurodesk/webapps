@@ -5,4 +5,4 @@
 "@neurodesk/greedy": patch
 ---
 
-SYNcro resamples a sheared scan (a gantry-tilted CT) onto an orthogonal grid that covers its whole world box before synthesis, filling with its darkest voxel (about -1000 HU in CT); a lesion map or pathological scan on that grid is desheared with it, and provenance records `desheared`. Before, Greedy read the sheared sform as a bare diagonal grid and normalized such a CT mirrored left to right. Greedy now refuses a sheared sform without a qform, as ITK does, instead of dropping its origin and orientation.
+SYNcro resamples sheared images such as gantry-tilted CT onto an orthogonal grid that covers the source voxels. Areas outside the scan take its darkest intensity. Lesion masks use nearest-neighbor sampling on the corresponding scan grid. Provenance records which inputs were resampled. Greedy now reports an error for a sheared sform without a qform, matching ITK.
