@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { gzipSync } from 'node:zlib';
 import test from 'node:test';
 import * as nifti from 'nifti-reader-js';
-import { estimateConformMemoryBytes, needsConform, readVolume, resolveWorldAffine } from '../src/volume.js';
+import { estimateConformMemoryBytes, needsConform, readVolume, readVolumeHeader, resolveWorldAffine } from '../src/volume.js';
 import { writeInt16Nifti } from '../src/qc.js';
 import { regionMask } from '../src/analysis-qc.js';
 
@@ -259,15 +259,23 @@ test('resolveWorldAffine scales metres, millimetres, micrometres and unknown uni
   }
 });
 
-test('resolveWorldAffine rejects non-finite and singular affines', () => {
+test('resolveWorldAffine rejects non-finite, singular and non-positive voxel spacings', () => {
   const singularNifti2 = makeNifti2({ qformCode: 0, sformCode: 1, srow: ZERO_SROW });
   assert.throws(() => readVolume(singularNifti2), /singular/);
 
-  const singularMethod0 = makeNifti2({ pixDims: [1, 0, 1, 1], qformCode: 0, sformCode: 0, srow: ZERO_SROW });
-  assert.throws(() => readVolume(singularMethod0), /singular/);
-
-  const singularQform = makeNifti2({ pixDims: [1, 1, 0, 1], qformCode: 1, sformCode: 0, srow: ZERO_SROW });
-  assert.throws(() => readVolume(singularQform), /singular/);
+  for (const [format, make] of [['NIfTI-1', makeNifti1], ['NIfTI-2', makeNifti2]]) {
+    for (const [label, qformCode] of [['qform', 1], ['diagonal fallback', 0]]) {
+      for (const badSpacing of [0, -1, NaN, Infinity]) {
+        const buffer = make({
+          pixDims: [1, badSpacing, 1, 1],
+          qformCode,
+          sformCode: 0,
+          srow: ZERO_SROW,
+        });
+        assert.throws(() => readVolume(buffer), /voxel spacing must be finite and positive/, `${format} ${label} pixdim=${badSpacing}`);
+      }
+    }
+  }
 
   const nanSrow = makeNifti2({
     qformCode: 0,
@@ -291,6 +299,22 @@ test('resolveWorldAffine rejects non-finite and singular affines', () => {
     pixDims: [1, 1, 1, 1],
     affine: [[1, 0, 0, Infinity], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]],
   }), /non-finite/);
+});
+
+test('readVolumeHeader parses a 544-byte header prefix even when NIfTI extensions are flagged', () => {
+  const n1 = makeNifti1({ pixDims: [1, 2, 3, 4], qformCode: 1, sformCode: 0, quatern: [0, 0, Math.SQRT1_2], qoffset: [1, 2, 3], srow: ZERO_SROW });
+  new DataView(n1).setFloat32(108, 4096, true);
+  new Uint8Array(n1)[348] = 1;
+  const h1 = readVolumeHeader(n1.slice(0, 544));
+  assert.equal(h1.qform_code, 1);
+  assert.deepEqual(h1.pixDims.slice(1, 4), [2, 3, 4]);
+
+  const n2 = makeNifti2({ pixDims: [1, 2, 3, 4], qformCode: 1, sformCode: 0, quatern: [0, 0, Math.SQRT1_2], qoffset: [1, 2, 3], srow: ZERO_SROW });
+  new DataView(n2).setBigInt64(168, 4096n, true);
+  new Uint8Array(n2)[540] = 1;
+  const h2 = readVolumeHeader(n2.slice(0, 544));
+  assert.equal(h2.qform_code, 1);
+  assert.deepEqual(h2.pixDims.slice(1, 4), [2, 3, 4]);
 });
 
 test('readVolume accepts a gzipped NIfTI file with a bad gzip CRC trailer', () => {

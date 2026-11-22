@@ -20,7 +20,7 @@ import { automationArtifacts } from './automation-results.js';
 import manifest from '@neurodesk/topofit/manifest';
 import { REGIONS, REGION_ATLASES } from '@neurodesk/topofit/regions';
 import { parcellationMesh, regionMaskColormap } from './region-view.js';
-import { alignViewerVolumes } from './viewer-geometry.js';
+import { alignViewerVolumes, readFileWorldAffine } from './viewer-geometry.js';
 
 const $ = (id) => document.getElementById(id);
 const assetBase = import.meta.env.VITE_TOPOFIT_ASSET_BASE || manifest.base_url;
@@ -44,6 +44,7 @@ let viewer;
 let viewerReady;
 let embeddedViewer;
 let source;
+let sourceAffine = null;
 let worker;
 let cancelRun;
 let busy = false;
@@ -471,34 +472,22 @@ async function restorePreviousSource(nv, isRestorable) {
   if (source) {
     await nv.loadVolumes([{ url: source, name: source.name }]);
     if (!isRestorable()) return;
-    await alignViewerVolumes(nv, isRestorable);
+    await alignViewerVolumes(nv, isRestorable, sourceAffine ? [sourceAffine] : []);
   } else {
     await nv.removeAllVolumes();
   }
-  if (isRestorable()) nv.drawScene();
+  if (isRestorable()) {
+    nv.drawScene();
+    nv.createOnLocationChange?.();
+  }
 }
 
-function loadSceneVolumes(nv, entries, { isCurrent = () => true, restoreOnAbort = false } = {}) {
+function loadSceneVolumes(nv, entries, { isCurrent = () => true, expectedAffines = sourceAffine ? [sourceAffine] : [] } = {}) {
   return serializeViewerLoad(async () => {
     if (!isCurrent()) return false;
-    try {
-      await nv.loadVolumes(entries);
-      if (!isCurrent()) {
-        if (restoreOnAbort) await restorePreviousSource(nv, () => loadToken === cancelledToken);
-        return false;
-      }
-      if (!await alignViewerVolumes(nv, isCurrent)) {
-        if (restoreOnAbort) await restorePreviousSource(nv, () => loadToken === cancelledToken);
-        return false;
-      }
-      return true;
-    } catch (error) {
-      if (restoreOnAbort) {
-        const errorToken = loadToken;
-        await restorePreviousSource(nv, () => loadToken === errorToken).catch(() => {});
-      }
-      throw error;
-    }
+    await nv.loadVolumes(entries);
+    if (!isCurrent()) return false;
+    return alignViewerVolumes(nv, isCurrent, expectedAffines);
   });
 }
 
@@ -509,24 +498,50 @@ async function hideParcellations(nv, except = null) {
   }
 }
 
-async function showSource({ file = source, reset = false, isCurrent = () => true, restoreOnAbort = false } = {}) {
+async function showSource({
+  file = source,
+  affine = sourceAffine,
+  reset = false,
+  isCurrent = () => true,
+  restoreOnAbort = false,
+  onCommit = null,
+} = {}) {
   const nv = await ensureViewer();
   if (!isCurrent()) return false;
-  if (!await loadSceneVolumes(nv, [{ url: file, name: file.name }], { isCurrent, restoreOnAbort })) return false;
-  if (reset) {
-    anatomyIn3D = false;
-    await resetMeshes(nv);
+  return serializeViewerLoad(async () => {
     if (!isCurrent()) return false;
-  }
-  await hideParcellations(nv);
-  if (!isCurrent()) return false;
-  if (volumeStages.has(displayedResult)) showPatchMeasurements(null);
-  if (isParcellation(displayedResult) || volumeStages.has(displayedResult)) displayedResult = null;
-  nv.setClipPlane([2, 0, 0]);
-  nv.drawScene();
-  $('emptyState').hidden = true;
-  $('imageLabel').textContent = 'ORIGINAL IMAGE';
-  return true;
+    const rollbackOnCancel = async () => {
+      if (restoreOnAbort) await restorePreviousSource(nv, () => loadToken === cancelledToken);
+      return false;
+    };
+    try {
+      await nv.loadVolumes([{ url: file, name: file.name }]);
+      if (!isCurrent()) return rollbackOnCancel();
+      if (!await alignViewerVolumes(nv, isCurrent, affine ? [affine] : [])) return rollbackOnCancel();
+      if (reset) {
+        anatomyIn3D = false;
+        await resetMeshes(nv);
+        if (!isCurrent()) return rollbackOnCancel();
+      }
+      await hideParcellations(nv);
+      if (!isCurrent()) return rollbackOnCancel();
+      if (volumeStages.has(displayedResult)) showPatchMeasurements(null);
+      if (isParcellation(displayedResult) || volumeStages.has(displayedResult)) displayedResult = null;
+      nv.setClipPlane([2, 0, 0]);
+      nv.drawScene();
+      nv.createOnLocationChange?.();
+      $('emptyState').hidden = true;
+      $('imageLabel').textContent = 'ORIGINAL IMAGE';
+      onCommit?.();
+      return true;
+    } catch (error) {
+      if (restoreOnAbort) {
+        const errorToken = loadToken;
+        await restorePreviousSource(nv, () => loadToken === errorToken).catch(() => {});
+      }
+      throw error;
+    }
+  });
 }
 
 async function setMeshVisible(stage, visible, input) {
@@ -691,26 +706,36 @@ async function load(file, { signal } = {}) {
   setBusy(true);
   try {
     if (!/\.nii(\.gz)?$/i.test(file.name)) throw new Error('Choose a .nii or .nii.gz image.');
-    if (!await showSource({ file, reset: true, isCurrent, restoreOnAbort: true })) return false;
+    const affine = await readFileWorldAffine(file);
     if (!isCurrent()) return false;
-    showPatchMeasurements(null);
-    source = file;
-    reconstruction = null;
-    normalArrowWorker?.terminate();
-    normalArrowWorker = null;
-    $('showNormalArrows').checked = false;
-    $('normalArrowStatus').textContent = 'Select a mid-surface to plot its normals.';
-    outputs = new Map();
-    results.render();
-    $('stlButton').hidden = true;
-    $('outputSection').open = false;
-    $('fileInfo').hidden = false;
-    $('fileInfo').textContent = file.name;
-    $('dropZone').classList.add('has-files');
-    $('progress').value = 0;
-    $('imageLabel').textContent = 'ORIGINAL IMAGE';
-    status('Image loaded · ready to reconstruct');
-    return true;
+    const committed = await showSource({
+      file,
+      affine,
+      reset: true,
+      isCurrent,
+      restoreOnAbort: true,
+      onCommit: () => {
+        showPatchMeasurements(null);
+        source = file;
+        sourceAffine = affine;
+        reconstruction = null;
+        normalArrowWorker?.terminate();
+        normalArrowWorker = null;
+        $('showNormalArrows').checked = false;
+        $('normalArrowStatus').textContent = 'Select a mid-surface to plot its normals.';
+        outputs = new Map();
+        results.render();
+        $('stlButton').hidden = true;
+        $('outputSection').open = false;
+        $('fileInfo').hidden = false;
+        $('fileInfo').textContent = file.name;
+        $('dropZone').classList.add('has-files');
+        $('progress').value = 0;
+        $('imageLabel').textContent = 'ORIGINAL IMAGE';
+        status('Image loaded · ready to reconstruct');
+      },
+    });
+    return committed;
   } catch (error) {
     if (isCurrent()) status(error.message, true);
     return false;
@@ -753,11 +778,12 @@ $('seriesSelect').onchange = () => void load(importedImages[Number($('seriesSele
 bindFileDrop($('dropZone'), (files) => void importFiles(files));
 const exampleControl = createExampleSelector({
   examples,
-  onLoad: async (_example, { fetchFiles, assertCurrent }) => {
+  onLoad: async (_example, { fetchFiles, assertCurrent, signal }) => {
     const files = await fetchFiles();
     assertCurrent();
-    if (!await load(files[0])) throw new Error('The example image could not be loaded.');
+    const loaded = await load(files[0], { signal });
     assertCurrent();
+    if (!loaded) throw new Error('The example image could not be loaded.');
   },
   onStatus: status,
 });

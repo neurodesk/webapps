@@ -4,10 +4,19 @@ const product = (shape) => shape.reduce((total, value) => total * value, 1);
 const SPATIAL_UNIT_SCALE = { 1: 1000, 2: 1, 3: 0.001 };
 export const MAX_CONFORM_MEMORY_BYTES = 768 * 1024 * 1024;
 
+function spatialPixDims(header) {
+  const spacing = header.pixDims?.slice(1, 4);
+  if (!spacing || spacing.length !== 3 || spacing.some((value) => !Number.isFinite(value) || value <= 0)) {
+    throw new Error('The NIfTI voxel spacing must be finite and positive.');
+  }
+  return spacing;
+}
+
 // Builds the unscaled qform affine following the NIfTI reference
 // (`nifti_quatern_to_dmat44`): normalizes (b, c, d) with a = 0 when
 // 1 - (b^2 + c^2 + d^2) < 1e-7 so 180° rotations never produce NaN.
 function qformAffine(header) {
+  const [dx, dy, dzBase] = spatialPixDims(header);
   let b = header.quatern_b;
   let c = header.quatern_c;
   let d = header.quatern_d;
@@ -25,14 +34,23 @@ function qformAffine(header) {
     a = Math.sqrt(a2);
   }
   const qfac = header.pixDims[0] < 0 ? -1 : 1;
-  const dx = header.pixDims[1];
-  const dy = header.pixDims[2];
-  const dz = header.pixDims[3] * qfac;
+  const dz = dzBase * qfac;
   return [
     [(a * a + b * b - c * c - d * d) * dx, (2 * b * c - 2 * a * d) * dy, (2 * b * d + 2 * a * c) * dz, header.qoffset_x],
     [(2 * b * c + 2 * a * d) * dx, (a * a + c * c - b * b - d * d) * dy, (2 * c * d - 2 * a * b) * dz, header.qoffset_y],
     [(2 * b * d - 2 * a * c) * dx, (2 * c * d + 2 * a * b) * dy, (a * a + d * d - c * c - b * b) * dz, header.qoffset_z],
   ];
+}
+
+// Reads a NIfTI-1 or NIfTI-2 header from either a full file buffer or a
+// 540-byte uncompressed prefix. Slicing to the fixed header size avoids walking
+// into NIfTI extensions when only the prefix was streamed.
+export function readVolumeHeader(buffer) {
+  const source = nifti.isCompressed(buffer) ? nifti.decompress(buffer) : buffer;
+  if (!nifti.isNIFTI(source)) throw new Error('Choose a NIfTI image (.nii or .nii.gz).');
+  const headerLength = nifti.isNIFTI2(source) ? 540 : 348;
+  if (source.byteLength < headerLength) throw new Error('The NIfTI header is truncated.');
+  return nifti.readHeader(source.slice(0, headerLength));
 }
 
 // Resolves a NIfTI-1 or NIfTI-2 header to a finite, invertible 4x4 voxel-to-RAS
@@ -47,10 +65,11 @@ export function resolveWorldAffine(header) {
   } else if (sformCode > 0) {
     raw = header.affine.slice(0, 3).map((row) => row.slice(0, 4));
   } else {
+    const [dx, dy, dz] = spatialPixDims(header);
     raw = [
-      [header.pixDims[1], 0, 0, 0],
-      [0, header.pixDims[2], 0, 0],
-      [0, 0, header.pixDims[3], 0],
+      [dx, 0, 0, 0],
+      [0, dy, 0, 0],
+      [0, 0, dz, 0],
     ];
   }
   const scale = SPATIAL_UNIT_SCALE[header.xyzt_units & 7] ?? 1;

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { alignViewerVolumes } from '../src/viewer-geometry.js';
+import { gzipSync } from 'node:zlib';
+import { alignViewerVolumes, readFileWorldAffine } from '../src/viewer-geometry.js';
 
 function fakeNiivue(volumes) {
   const calls = [];
@@ -17,6 +18,27 @@ function fakeNiivue(volumes) {
       locationUpdates += 1;
     },
   };
+}
+
+function makeNifti2Bytes({ pixDims = [1, 2, 3, 4], qformCode = 1, sformCode = 0, quatern = [0, 0, Math.SQRT1_2], qoffset = [10, -20, 30], xyztUnits = 2, extension = false } = {}) {
+  const buffer = new ArrayBuffer(544 + 32);
+  const view = new DataView(buffer);
+  view.setInt32(0, 540, true);
+  new Uint8Array(buffer).set([110, 43, 50, 0, 13, 10, 26, 10], 4);
+  view.setInt16(12, 16, true);
+  view.setInt16(14, 32, true);
+  view.setBigInt64(16, 3n, true);
+  for (let i = 1; i <= 3; i += 1) view.setBigInt64(16 + i * 8, 2n, true);
+  for (let i = 0; i < 4; i += 1) view.setFloat64(104 + i * 8, pixDims[i], true);
+  view.setBigInt64(168, extension ? 4096n : 544n, true);
+  view.setFloat64(176, 1, true);
+  view.setInt32(344, qformCode, true);
+  view.setInt32(348, sformCode, true);
+  for (let i = 0; i < 3; i += 1) view.setFloat64(352 + i * 8, quatern[i], true);
+  for (let i = 0; i < 3; i += 1) view.setFloat64(376 + i * 8, qoffset[i], true);
+  view.setInt32(500, xyztUnits, true);
+  if (extension) new Uint8Array(buffer)[540] = 1;
+  return new Uint8Array(buffer);
 }
 
 test('leaves already-aligned millimetre volumes untouched', async () => {
@@ -36,7 +58,6 @@ test('leaves already-aligned millimetre volumes untouched', async () => {
 
 test('aligns NIfTI-2 qform-only, micrometre and metre volumes with matching pixDims, units and dirty flag', async () => {
   const nv = fakeNiivue([
-    // NIfTI-2 qform-only with zeroed srows and micrometre units + temporal sec bit (8)
     {
       hdr: {
         qform_code: 1,
@@ -52,7 +73,6 @@ test('aligns NIfTI-2 qform-only, micrometre and metre volumes with matching pixD
         affine: [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 1]],
       },
     },
-    // NIfTI-1 metre overlay
     {
       hdr: {
         qform_code: 0,
@@ -139,4 +159,25 @@ test('stops immediately when superseded by a newer load', async () => {
   assert.equal(await alignViewerVolumes(nv, () => current), false);
   assert.equal(nv.calls.length, 1);
   assert.equal(nv.locationUpdates, 0);
+});
+
+test('readFileWorldAffine validates untouched headers across uncompressed, gzipped, bad-CRC gzip and invalid spacing', async () => {
+  const valid = makeNifti2Bytes({ extension: true });
+  const affineRaw = await readFileWorldAffine(new Blob([valid]));
+  assert.ok(Math.abs(affineRaw[0][1] - (-3)) < 1e-6);
+  assert.ok(Math.abs(affineRaw[1][0] - 2) < 1e-6);
+
+  const gz = Buffer.from(gzipSync(Buffer.from(valid)));
+  const affineGz = await readFileWorldAffine(new Blob([gz]));
+  assert.deepEqual(affineGz, affineRaw);
+
+  const badCrc = Buffer.from(gz);
+  badCrc[badCrc.length - 8] ^= 0xff;
+  const affineBadCrc = await readFileWorldAffine(new Blob([badCrc]));
+  assert.deepEqual(affineBadCrc, affineRaw);
+
+  for (const bad of [0, -2, NaN]) {
+    const invalid = makeNifti2Bytes({ pixDims: [1, bad, 3, 4], qformCode: 1, sformCode: 0 });
+    await assert.rejects(readFileWorldAffine(new Blob([invalid])), /voxel spacing must be finite and positive/);
+  }
 });
