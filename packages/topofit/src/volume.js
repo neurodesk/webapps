@@ -1,7 +1,71 @@
 import * as nifti from 'nifti-reader-js';
 
 const product = (shape) => shape.reduce((total, value) => total * value, 1);
+const SPATIAL_UNIT_SCALE = { 1: 1000, 2: 1, 3: 0.001 };
 export const MAX_CONFORM_MEMORY_BYTES = 768 * 1024 * 1024;
+
+// Builds the unscaled qform affine following the NIfTI reference
+// (`nifti_quatern_to_dmat44`): normalizes (b, c, d) with a = 0 when
+// 1 - (b^2 + c^2 + d^2) < 1e-7 so 180° rotations never produce NaN.
+function qformAffine(header) {
+  let b = header.quatern_b;
+  let c = header.quatern_c;
+  let d = header.quatern_d;
+  const norm2 = b * b + c * c + d * d;
+  if (!Number.isFinite(norm2)) throw new Error('The NIfTI affine contains non-finite values.');
+  const a2 = 1 - norm2;
+  let a;
+  if (a2 < 1e-7) {
+    const norm = Math.sqrt(norm2);
+    b /= norm;
+    c /= norm;
+    d /= norm;
+    a = 0;
+  } else {
+    a = Math.sqrt(a2);
+  }
+  const qfac = header.pixDims[0] < 0 ? -1 : 1;
+  const dx = header.pixDims[1];
+  const dy = header.pixDims[2];
+  const dz = header.pixDims[3] * qfac;
+  return [
+    [(a * a + b * b - c * c - d * d) * dx, (2 * b * c - 2 * a * d) * dy, (2 * b * d + 2 * a * c) * dz, header.qoffset_x],
+    [(2 * b * c + 2 * a * d) * dx, (a * a + c * c - b * b - d * d) * dy, (2 * c * d - 2 * a * b) * dz, header.qoffset_y],
+    [(2 * b * d - 2 * a * c) * dx, (2 * c * d + 2 * a * b) * dy, (a * a + d * d - c * c - b * b) * dz, header.qoffset_z],
+  ];
+}
+
+// Resolves a NIfTI-1 or NIfTI-2 header to a finite, invertible 4x4 voxel-to-RAS
+// affine in millimetres. Uses the qform when qform_code > 0 and sform_code < qform_code,
+// the sform when sform_code > 0, or a pixDims diagonal when neither code is set.
+export function resolveWorldAffine(header) {
+  const qformCode = header.qform_code ?? 0;
+  const sformCode = header.sform_code ?? 0;
+  let raw;
+  if (qformCode > 0 && sformCode < qformCode) {
+    raw = qformAffine(header);
+  } else if (sformCode > 0) {
+    raw = header.affine.slice(0, 3).map((row) => row.slice(0, 4));
+  } else {
+    raw = [
+      [header.pixDims[1], 0, 0, 0],
+      [0, header.pixDims[2], 0, 0],
+      [0, 0, header.pixDims[3], 0],
+    ];
+  }
+  const scale = SPATIAL_UNIT_SCALE[header.xyzt_units & 7] ?? 1;
+  const affine = [
+    raw[0].map((value) => value * scale),
+    raw[1].map((value) => value * scale),
+    raw[2].map((value) => value * scale),
+    [0, 0, 0, 1],
+  ];
+  if (affine.some((row) => row.length !== 4 || row.some((value) => !Number.isFinite(value)))) {
+    throw new Error('The NIfTI affine contains non-finite values.');
+  }
+  inverseAffine(affine);
+  return affine;
+}
 
 export function readVolume(buffer) {
   const source = nifti.isCompressed(buffer) ? nifti.decompress(buffer) : buffer;
@@ -41,12 +105,7 @@ export function readVolume(buffer) {
     data[i] = view[type[0]](i * type[1], header.littleEndian) * slope + intercept;
     if (!Number.isFinite(data[i])) throw new Error('The image contains non-finite intensities.');
   }
-  const unit = header.xyzt_units & 7;
-  const scale = unit === 1 ? 1000 : unit === 3 ? 0.001 : 1;
-  const affine = header.affine.map((row, rowIndex) =>
-    row.map((value) => (rowIndex < 3 ? value * scale : value)),
-  );
-  inverseAffine(affine);
+  const affine = resolveWorldAffine(header);
   const scaled = Boolean(header.scl_slope) && (slope !== 1 || intercept !== 0);
   return {
     data,
@@ -197,7 +256,7 @@ export function inverseAffine(matrix) {
     for (let row = column + 1; row < 4; row += 1) {
       if (Math.abs(augmented[row][column]) > Math.abs(augmented[pivot][column])) pivot = row;
     }
-    if (Math.abs(augmented[pivot][column]) < 1e-12) throw new Error('The NIfTI affine is singular.');
+    if (!Number.isFinite(augmented[pivot][column]) || Math.abs(augmented[pivot][column]) < 1e-12) throw new Error('The NIfTI affine is singular.');
     [augmented[column], augmented[pivot]] = [augmented[pivot], augmented[column]];
     const divisor = augmented[column][column];
     for (let entry = 0; entry < 8; entry += 1) augmented[column][entry] /= divisor;

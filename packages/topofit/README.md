@@ -218,15 +218,14 @@ manifest (`topofit_manifest.json`) lists every output, so a named-region manifes
 gains the `topofit_region_mask.nii` entry in `outputSha256` and differs from before
 by exactly that entry. `test/cortex-regions.test.js` holds this to SHA-256 values
 recorded from the previous release: on a NIfTI-1 source, whole-cortex and ROI
-searches, manifest included, are byte-identical. For a NIfTI-2 source the mask and both
-QC images are now valid NIfTI-1 files whose sform, in millimetres and single precision,
-is the affine the scan was read with; earlier releases copied NIfTI-2 header bytes into
-a NIfTI-1 layout. Known limitation: a NIfTI-2 scan is read through its srows whatever
-its codes say, as nifti-reader-js and NiiVue read it, so one that carries its
-orientation only in the qform is processed and shown on the srow grid.
-The viewer does not scale a scan's spatial units, so for a scan stored in micrometres or
-metres the surfaces, and for NIfTI-2 also the mask and QC images, are in millimetres
-while the anatomy is drawn in the stored unit; the files themselves are correct.
+searches, manifest included, are byte-identical. `resolveWorldAffine` resolves both
+NIfTI-1 and NIfTI-2 headers to a millimetre voxel-to-RAS affine (honouring `sform_code`
+and `qform_code` precedence, `qfac`, exact 180° quaternion normalization, and `xyzt_units`
+scaling), and the viewer aligns loaded volumes onto that same millimetre grid without
+copying voxels. For a NIfTI-2 source the mask and both QC images are valid NIfTI-1 files
+whose sform, in millimetres and single precision, is that resolved affine; earlier
+releases copied NIfTI-2 header bytes into a NIfTI-1 layout. Known limitation: NiiVue
+1.0.0-rc.26 displays wrong intensities for big-endian float32 NIfTI-2 volumes.
 With `'cortex'` or an ROI, the outputs are those of a search without the option. `pack_cortex_regions.py` rebuilds the asset, and
 `validation/region-check.mjs` checks the mapping on a real reconstruction
 (`validation/surface-analysis.md`).

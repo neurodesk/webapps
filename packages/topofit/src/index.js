@@ -2,5 +2,5 @@ export { estimateBrainAffine } from './affine.js';
 export { reconstructHemisphere, runTopofit, runSurfaceAnalysis } from './pipeline.js';
 export { createQcVolume } from './qc.js';
 export { writeFreeSurfer } from './results.js';
-export { axisAlignedVoxelSpacing, cropAndNormalize, needsConform, readVolume } from './volume.js';
+export { axisAlignedVoxelSpacing, cropAndNormalize, needsConform, readVolume, resolveWorldAffine } from './volume.js';
 export { shareAssets } from './shared-assets.js';
