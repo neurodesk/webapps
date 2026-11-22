@@ -7,7 +7,7 @@ import { dirname, join, relative as relativePath, resolve as resolvePath } from 
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { parse, stringify } from 'yaml';
-import { AUTOMATION_CATALOG_READERS, changedPathsFromGit, CI_JOB_SCOPES, CLASSIFIED_ENTRY_FIELDS, createAppPlan, EASTER_EGG_INPUTS, EASTER_EGG_JOB, EASTER_EGG_OUTPUT, EASTER_EGG_PACKAGES, easterEggCannotRead, HANDOFF_CATALOG_READERS, WORKSPACE_MANIFESTS, INDEPENDENT_ROOT_DEV_DEPENDENCIES, RUNTIME_MANIFEST_READERS, UnreadableDiffError, SITE_DATA_KEYS, SITE_KEY_READERS, SITE_ONLY_FILES } from '../scripts/lib/app-plan.mjs';
+import { AUTOMATION_CATALOG_READERS, changedPathsFromGit, CI_JOB_SCOPES, CLASSIFIED_ENTRY_FIELDS, createAppPlan, EASTER_EGG_INPUTS, EASTER_EGG_JOB, EASTER_EGG_OUTPUT, EASTER_EGG_PACKAGES, easterEggCannotRead, HANDOFF_CATALOG_READERS, WORKSPACE_MANIFESTS, INDEPENDENT_ROOT_DEV_DEPENDENCIES, packageTestsCanSkipOnDraft, RUNTIME_MANIFEST_READERS, UnreadableDiffError, SITE_DATA_KEYS, SITE_KEY_READERS, SITE_ONLY_FILES, SITE_THEME_CONSUMERS, SITE_THEME_FILES } from '../scripts/lib/app-plan.mjs';
 import { siteCheckApps, smokeApps } from '../scripts/lib/smoke-apps.mjs';
 import { loadAppInformation } from '../scripts/lib/app-information.mjs';
 import { hostedThemeOptions } from '../scripts/lib/catalog-sites.mjs';
@@ -48,12 +48,24 @@ test('homepage easter-egg changes select no catalog apps', async () => {
   assert.equal(plan.allApps, false);
 });
 
-test('shared homepage files still select the complete app catalog', async () => {
+test('shared homepage files still select the complete app catalog, while theme CSS and fonts test the full site and direct consumers', async () => {
   const registry = await loadAppsRegistry();
-  for (const path of ['site/app-shell.js', 'site/app-theme.css', 'site/fonts/inter.woff2', 'scripts/lib/landing-page.mjs']) {
+  for (const path of ['site/app-shell.js', 'scripts/lib/landing-page.mjs']) {
     const plan = createAppPlan(registry, [path]);
     assert.equal(plan.selected.length, registry.apps.length, path);
   }
+  for (const path of SITE_THEME_FILES) {
+    const plan = createAppPlan(registry, [path]);
+    assert.deepEqual(plan.selected.map(({ id }) => id).sort(), [...SITE_THEME_CONSUMERS].sort(), path);
+    assert.equal(plan.site, true, path);
+    assert.equal(plan.siteCode, true, path);
+    assert.equal(plan.allApps, false, path);
+  }
+  const fontsPlan = createAppPlan(registry, ['site/fonts/inter.woff2']);
+  assert.deepEqual(fontsPlan.selected, []);
+  assert.equal(fontsPlan.site, true);
+  assert.equal(fontsPlan.siteCode, true);
+  assert.equal(fontsPlan.allApps, false);
 });
 
 test('shared module changes select the complete app catalog', async () => {
@@ -258,7 +270,7 @@ test('root package.json script edits count only where ci.yml runs them', async (
   // check:integration (app-plan) and test:contracts (workspace-contracts) included.
   const workspace = await graph;
   assert.ok(workspace.jobScripts.get('app-plan').has('check:integration'));
-  assert.ok(workspace.jobScripts.get('workspace-contracts').has('test:contracts') && workspace.jobScripts.get('workspace-contracts').has('test:packages'));
+  assert.ok(workspace.jobScripts.get('workspace-contracts').has('test:contracts') && workspace.jobScripts.get('package-tests').has('test:packages'));
   for (const name of ['check:integration', 'test:contracts', 'test:packages']) {
     const edited = plan({ scripts: { ...scripts, [name]: 'echo' } });
     assert.equal(edited.allApps, true, name);
@@ -1289,13 +1301,31 @@ test('the jobs a ci.yml change can narrow to test what CI_JOB_SCOPES says', asyn
       assert.ok(needs.length && needs.every((need) => CI_JOB_SCOPES[need] === 'site'), `${job} needs more than the composite site: ${needs.join(', ')}`);
     }
   }
-  // The plan decides the easter egg on a pull request only; workspace-contracts runs as on main, every package on every run.
+  // The plan decides the easter egg on a pull request only, and package-tests on drafts only;
+  // workspace-contracts runs on every run, and package-tests runs on every ready PR, push, nightly and dispatch.
   assert.equal(ci.jobs['homepage-easter-egg'].needs, 'app-plan');
   assert.match(ci.jobs['homepage-easter-egg'].if, new RegExp(String.raw`\(github\.event_name != 'pull_request' \|\| needs\.app-plan\.result != 'success' \|\| needs\.app-plan\.outputs\.easter_egg != '${EASTER_EGG_OUTPUT.skip}'\) \}\}$`));
   assert.equal(ci.jobs['app-plan'].outputs.easter_egg, '${{ steps.plan.outputs.easter_egg }}');
+  assert.equal(ci.jobs['app-plan'].outputs.package_tests, '${{ steps.plan.outputs.package_tests }}');
   assert.equal(ci.jobs['workspace-contracts'].needs, undefined);
   for (const step of ci.jobs['workspace-contracts'].steps.filter((step) => step.run)) assert.equal(step.if, step.run === 'pnpm lint:correctness' ? "${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}" : undefined, step.run);
-  assert.ok(ci.jobs['workspace-contracts'].steps.some((step) => step.run === 'pnpm test:packages'));
+  assert.equal(ci.jobs['package-tests'].needs, 'app-plan');
+  assert.ok(ci.jobs['package-tests'].steps.some((step) => step.run === 'pnpm test:packages'));
+});
+
+test('a draft pull request skips package-tests only when every changed path lies in a doc, changeset or easter-egg tree', async () => {
+  const registry = await loadAppsRegistry();
+  const workspace = await graph;
+  const pkgs = (paths, options) => createAppPlan(registry, paths, workspace, new Map(), options).packageTests;
+  for (const path of ['docs/quality/ci-development-tiers.md', '.changeset/brave-owls.md', 'README.md', 'site/easter-eggs/vessel-surfer/src/main.js']) {
+    assert.equal(packageTestsCanSkipOnDraft(path), true, path);
+    assert.deepEqual(pkgs([path], { draft: true }), [], path);
+  }
+  for (const path of ['apps/niimath/main.js', 'apps/browserqc/src/models.json', 'apps/surfannotate/automation.json', 'packages/components/src/ui/index.js', 'exes/nii2tvx/src/main.c', 'apps/niimath/package.json', 'package.json', 'pnpm-lock.yaml', 'scripts/app-plan.mjs', '.github/workflows/ci.yml']) {
+    assert.equal(packageTestsCanSkipOnDraft(path), false, path);
+    assert.ok(pkgs([path], { draft: true }).length > 0, path);
+  }
+  assert.ok(pkgs([], { draft: true }).length > 0, 'empty diff fails open');
 });
 
 test('a pull request skips the homepage easter egg only when every changed path lies in a tree it cannot read', async () => {
@@ -1930,7 +1960,7 @@ test('every ci job is the plan, a per-app job named by its app, or one a push or
   for (const id of Object.keys(ci.jobs)) assert.ok(known.has(id), `${id} is a job carriedApps cannot place`);
   // A site job checks the apps its own plan selected, so a push after its failure diffs from the last green run.
   for (const id of SITE_JOBS) assert.deepEqual(carriedApps([{ name: id, conclusion: 'failure' }]).unattributed, [id]);
-  assert.deepEqual(siteJobNames(ci).filter((id) => !SITE_JOBS.includes(id)).sort(), ['agent-interactions', 'example-cache-retention', 'processing-workflows']);
+  assert.deepEqual(siteJobNames(ci).filter((id) => !SITE_JOBS.includes(id)).sort(), ['agent-interactions', 'example-cache-retention', 'processing-workflows', 'turbo-cache-retention']);
   const outputs = { 'app-tests': 'apps', 'browser-e2e': 'browser_apps', 'browser-e2e-gpu': 'gpu_apps' };
   for (const id of APP_JOBS) {
     const job = ci.jobs[id];
@@ -2231,9 +2261,25 @@ test('composite-only site files select the site build and no app', async () => {
       assert.equal(plan.reasons.fallback, null, path);
     }
   }
-  // The shell, theme and fonts go into every app.
-  for (const path of ['site/app-shell.js', 'site/app-theme.css', 'site/theme.js', 'site/fonts/inter.woff2']) {
+  // The shell and theme scripts go into every app's JS runtime; theme CSS tests its direct consumers + full site, fonts test the full site.
+  for (const path of ['site/app-shell.js', 'site/theme.js']) {
     assert.equal(createAppPlan(registry, [path], await graph).allApps, true, path);
+  }
+  const themePlan = createAppPlan(registry, ['site/app-theme.css'], await graph);
+  assert.deepEqual(themePlan.selected.map(({ id }) => id).sort(), [...SITE_THEME_CONSUMERS].sort());
+  assert.equal(themePlan.site, true);
+  assert.equal(themePlan.siteCode, true);
+  assert.equal(themePlan.allApps, false);
+  const fontsPlan = createAppPlan(registry, ['site/fonts/inter.woff2'], await graph);
+  assert.deepEqual(fontsPlan.selected, []);
+  assert.equal(fontsPlan.site, true);
+  assert.equal(fontsPlan.siteCode, true);
+  assert.equal(fontsPlan.allApps, false);
+  // Every app source or test that directly loads site/app-theme.css or site/fonts must be in SITE_THEME_CONSUMERS.
+  for (const file of filesNaming('app-theme\\.css|site/fonts')) {
+    if (!file.startsWith('apps/') || file.endsWith('.md') || file.endsWith('.css')) continue;
+    const appId = file.split('/')[1];
+    assert.ok(SITE_THEME_CONSUMERS.includes(appId), `${file} directly loads site theme/fonts; add ${appId} to SITE_THEME_CONSUMERS`);
   }
 });
 

@@ -211,11 +211,11 @@ test('the sweep skips nothing whose history it could not read', () => {
 
 // GitHub's expression functions as native.yml's conditions use them: string
 // comparisons and contains() ignore case, and a missing output is ''.
-function evaluate(condition, { result, skips, withheld, event = 'pull_request', cancelled = false }) {
+function evaluate(condition, { result, skips, withheld, event = 'pull_request', draft = false, action = 'synchronize', cancelled = false }) {
   const text = (value) => (value === undefined || value === null ? '' : String(value)).toLowerCase();
   return Boolean(runInNewContext(condition.replace(/^\$\{\{\s*|\s*\}\}$/g, ''), {
     needs: { gate: { result, outputs: { skips, withheld } } },
-    github: { event_name: event },
+    github: { event_name: event, event: event === 'pull_request' ? { action, pull_request: { draft } } : {} },
     cancelled: () => cancelled,
     startsWith: (search, item) => text(search).startsWith(text(item)),
     endsWith: (search, item) => text(search).endsWith(text(item)),
@@ -255,9 +255,12 @@ test('native.yml runs a call unless a successful gate names it in its skip list'
     assert.equal(evaluate(bison, { result, skips, withheld }), runs, label);
     assert.equal(evaluate(WITHHELD_CONDITION, { result, skips, withheld }), withheld === 'true', `full-plan-withheld: ${label}`);
   }
-  // A cancelled run calls nothing; the sweep calls only what it sweeps, and a failed gate runs those.
+  // A cancelled run or draft pull request calls nothing; the sweep calls only what it sweeps, and a failed gate runs those.
   assert.equal(evaluate(bison, { result: 'failure', cancelled: true }), false);
+  assert.equal(evaluate(bison, { result: 'skipped', draft: true }), false);
+  assert.equal(evaluate(bison, { result: 'skipped', draft: true, action: 'converted_to_draft' }), false);
   assert.equal(evaluate(WITHHELD_CONDITION, { result: 'success', withheld: 'true', cancelled: true }), false);
+  assert.equal(evaluate(WITHHELD_CONDITION, { result: 'skipped', withheld: 'true', draft: true }), false);
   assert.equal(evaluate(bison, { result: 'failure', event: 'schedule' }), true);
   const unswept = callCondition('synthseg-native', { sweep: false });
   assert.equal(evaluate(unswept, { result: 'failure', event: 'schedule' }), false);

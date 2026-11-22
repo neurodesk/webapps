@@ -3,10 +3,12 @@ description: Cache the pinned wasm-pack executable independently of app build ca
 runs:
   using: composite
   steps:
-    - uses: actions/cache@v6
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
       id: cache
       with:
-        path: ~/.cargo/bin/wasm-pack
+        path: |
+          ~/.cargo/bin/wasm-pack
+          ~/.cargo/bin/wasm-pack.exe
         key: wasm-pack-${{ runner.os }}-${{ runner.arch }}-0.13.1
     - name: Install wasm-pack
       if: steps.cache.outputs.cache-hit != 'true'

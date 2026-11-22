@@ -49,22 +49,43 @@ export function catalogReleases(catalog, natives) {
   });
 }
 
-// The newest published release of each app that carries archives the catalog does not link yet. A
-// catalog run lost to an outage or a cancelled dispatch leaves its release unlisted; the scheduled run
-// catches it up. Older releases need nothing: the catalog only ever moves to the newest.
-export function unlistedReleases(catalog, releases, natives) {
+// The newest published release of each app (and desktop suite when `suites` is
+// given) that carries archives the catalog does not link yet. A catalog run lost
+// to an outage or a cancelled dispatch leaves its release unlisted; the scheduled
+// run catches it up. Older releases need nothing: the catalog only ever moves to
+// the newest.
+export function unlistedReleases(catalog, releases, natives, suites = new Map()) {
   const linked = new Set(Object.values(catalog.apps).flatMap((app) => app.downloads.map((download) => download.url)));
   const newest = new Map();
+  const newestSuites = new Map();
   for (const release of releases) {
     const parsed = releaseFromTag(release.tag_name);
-    if (!parsed || release.draft || release.prerelease || !catalog.apps[parsed.id]) continue;
+    if (!parsed || release.draft || release.prerelease) continue;
+    if (suites.has(parsed.id)) {
+      if (!release.assets.some((asset) => asset.name === 'standalone-catalog.json')) continue;
+      const seen = newestSuites.get(parsed.id);
+      if (!seen || compareVersions(parsed.version, seen.version) > 0) newestSuites.set(parsed.id, parsed);
+      continue;
+    }
+    if (!catalog.apps[parsed.id]) continue;
     if (!releaseSources(natives.get(parsed.id) ?? [], release).length) continue;
     const seen = newest.get(parsed.id);
     if (!seen || compareVersions(parsed.version, seen.release.version) > 0) newest.set(parsed.id, { release: parsed, assets: release.assets });
   }
-  return [...newest.values()]
-    .filter(({ assets }) => !assets.some((asset) => linked.has(asset.browser_download_url)))
+  const unlistedApps = [...newest.values()]
+    .filter(({ release, assets }) => {
+      const sources = releaseSources(natives.get(release.id) ?? [], { assets });
+      return sources.some((source) =>
+        assets.some((asset) => source.targets.includes(releasePlatform(source.spec, asset.name)) && !linked.has(asset.browser_download_url)),
+      );
+    })
     .map(({ release }) => release);
+  const unlistedSuites = [...newestSuites.values()]
+    .filter((release) => {
+      const current = catalog.suites?.[suites.get(release.id)]?.version;
+      return !current || compareVersions(release.version, current) > 0;
+    });
+  return [...unlistedApps, ...unlistedSuites];
 }
 
 // The sources whose archives a release carries. Sources can attach to one shared tag or to their own.
@@ -217,6 +238,27 @@ export async function checkUpdateAssets(update, fetchRelease) {
       if (!same) throw new Error(`${name}: release ${tag} no longer serves the bytes this update verified`);
     }
   }
+}
+
+// Re-verifies each entry in a multi-entry update independently so one suite whose
+// release changed or disappeared between compute and commit does not block the
+// other verified entries. Throws if every entry fails.
+export async function filterVerifiedUpdate(update, fetchRelease, { onDrop = () => {} } = {}) {
+  const verified = [];
+  const dropped = [];
+  for (const entry of update) {
+    try {
+      await checkUpdateAssets([entry], fetchRelease);
+      verified.push(entry);
+    } catch (error) {
+      dropped.push({ entry, error });
+      onDrop(entry, error);
+    }
+  }
+  if (!verified.length && dropped.length) {
+    throw new Error(`No release in the batch still serves its verified bytes: ${dropped.map(({ entry, error }) => `${entry.id}@${entry.version}: ${error.message}`).join('; ')}`);
+  }
+  return { verified, dropped };
 }
 
 function versionKey(version) {

@@ -118,6 +118,8 @@ const scoped = {
 // A push, the nightly and a dispatch run the easter egg every time; a pull request skips it only when no changed path can reach it.
 const everyRun = Boolean(process.env.GITHUB_EVENT_NAME) && process.env.GITHUB_EVENT_NAME !== 'pull_request';
 const easterEgg = scope === 'site' || (scope !== 'gpu' && (everyRun || plan.easterEgg.length > 0));
+// Ready PRs, pushes, nightlies and dispatches run all shared package suites; drafts skip them when only app/docs files changed.
+const packageTests = !draft || plan.packageTests.length > 0;
 const emptyMatrix = { include: [{ app: '__none__', path: '', runtime: '', rust_wasm: false, python_reference: false, shared_runtime: false, browser_test: false, hardware_gpu: false, app_scoped_runtime: false, release_test: 'test', heavy_tests: false }] };
 const fallback = (fallbackReason || (plan.reasons.fallback ?? '')).replace(/\s+/g, ' ');
 // A wide change gives every app the same long list; keep the outputs small.
@@ -151,6 +153,7 @@ const outputs = {
   fallback_reason: fallback,
   selection_reasons: JSON.stringify(reasons),
   easter_egg: easterEgg ? EASTER_EGG_OUTPUT.run : EASTER_EGG_OUTPUT.skip,
+  package_tests: packageTests ? EASTER_EGG_OUTPUT.run : EASTER_EGG_OUTPUT.skip,
 };
 
 // The same reasons for a person: the job summary on GitHub, stderr locally.

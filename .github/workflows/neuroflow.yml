@@ -66,6 +66,7 @@ jobs:
   # Release bookkeeping (changelogs, version bumps) runs this workflow neither
   # for a pull request nor for a push to main (scripts/lib/workflow-gate.mjs).
   gate:
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft'))
     uses: ./.github/workflows/pr-gate.yml
     permissions:
       contents: read
@@ -140,9 +141,10 @@ jobs:
           key: neuroflow-assets-${{ hashFiles('registry/offline-assets.lock.json') }}
       - name: Install the pinned DWI WebAssembly build toolchain
         if: matrix.template == 'dwi'
-        run: |
-          rustup toolchain install nightly-2025-11-15 --profile minimal --component rust-src --target wasm32-unknown-unknown
-          cargo install wasm-pack --version 0.13.1 --locked
+        run: rustup toolchain install nightly-2025-11-15 --profile minimal --component rust-src --target wasm32-unknown-unknown
+      - name: Set up wasm-pack
+        if: matrix.template == 'dwi'
+        uses: ./.github/actions/setup-wasm-pack
       - name: Build the exported workflow's applications
         run: pnpm ${{ matrix.apps }} build
       - name: Run the exported ${{ matrix.template }} workflow through the desktop suite

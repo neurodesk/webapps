@@ -11,7 +11,7 @@ import { openStandalone } from '../packages/components/src/ui/renderStandalone.j
 import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
 import { EMBEDDED_VERSION_SITES } from '../scripts/lib/app-versions.mjs';
 import { nativeReleases, portableSpecs, portableSpecsAt } from '../scripts/lib/native-releases.mjs';
-import { applyCatalogUpdate, catalogReleases, catalogUpdate, checkReceipt, checkUpdateAssets, parseReleases, releaseFromTag, suiteReleases as registrySuiteReleases, unlistedReleases } from '../scripts/lib/standalone-import.mjs';
+import { applyCatalogUpdate, catalogReleases, catalogUpdate, checkReceipt, checkUpdateAssets, filterVerifiedUpdate, parseReleases, releaseFromTag, suiteReleases as registrySuiteReleases, unlistedReleases } from '../scripts/lib/standalone-import.mjs';
 
 const CATALOG_DISPATCH = 'gh api "repos/$GITHUB_REPOSITORY/dispatches" -f event_type=standalone-catalog -f "client_payload[releases]=$RELEASE"';
 
@@ -336,17 +336,33 @@ test('a suite entry must match its release and every file it lists', async () =>
   const changes = await update(intact.releases, intact.fetchText);
   intact.releases['webapps-v0.28.20261014'].assets[0].digest = `sha256:${'e'.repeat(64)}`;
   await assert.rejects(checkUpdateAssets(changes, async (tag) => intact.releases[tag]), /mac-arm64\.zip: release webapps-v0\.28\.20261014 does not serve the bytes/);
+  // Partial commit-time verification drops a changed suite while keeping healthy suites in the batch.
+  const healthy = suiteReleases('0.29.20261015');
+  const healthyChanges = await catalogUpdate({ apps: {} }, parseReleases(['webapps@0.29.20261015']), { fetchRelease: async (tag) => healthy.releases[tag], fetchText: healthy.fetchText, nativeAt: () => new Map(), suites });
+  const merged = { ...intact.releases, ...healthy.releases };
+  const droppedNames = [];
+  const { verified, dropped } = await filterVerifiedUpdate([...changes, ...healthyChanges], async (tag) => merged[tag], { onDrop: (entry) => droppedNames.push(`${entry.id}@${entry.version}`) });
+  assert.deepEqual(droppedNames, ['webapps@0.28.20261014']);
+  assert.equal(dropped.length, 1);
+  assert.deepEqual(verified, healthyChanges);
+  await assert.rejects(filterVerifiedUpdate(changes, async (tag) => intact.releases[tag]), /No release in the batch still serves its verified bytes/);
 });
 
-test('the nightly suite release announces itself to the catalog', async () => {
-  const publish = (await workflow('standalone.yml')).jobs.publish;
+test('the nightly suite release announces every succeeded suite in one catalog dispatch', async () => {
+  const standalone = await workflow('standalone.yml');
+  const publish = standalone.jobs.publish;
   assert.equal(publish.permissions.contents, 'write');
-  const steps = publish.steps.map((step) => step.run || '');
-  const release = steps.findIndex((run) => run.includes('node scripts/desktop/publish.mjs'));
-  const announce = steps.findIndex((run) => run.includes(CATALOG_DISPATCH));
-  assert.ok(release >= 0 && announce > release, 'the suite is announced after it is published');
-  assert.match(steps[announce], /RELEASE="\$\{SUITE_RELEASE\}@\$\(node -p "require\('\.\/packages\/desktop\/package\.json'\)\.version"\)"/);
-  assert.equal(publish.steps[announce].env.SUITE_RELEASE, '${{ matrix.suite.release }}');
+  assert.ok(publish.steps.some((step) => (step.run || '').includes('node scripts/desktop/publish.mjs')));
+  assert.ok(!publish.steps.some((step) => (step.run || '').includes(CATALOG_DISPATCH)), 'publish matrix legs do not dispatch one catalog run each');
+  assert.ok(publish.steps.some((step) => step.uses?.startsWith('actions/upload-artifact@') && step.with?.name === 'published-suite-${{ matrix.suite.catalog }}'), 'publish records each succeeded suite as an artifact');
+  const announce = standalone.jobs.announce;
+  assert.ok(announce, 'standalone.yml has a fan-in announce job');
+  assert.deepEqual(announce.needs, ['bundle', 'publish']);
+  assert.match(announce.if, /needs\.publish\.result == 'success' \|\| needs\.publish\.result == 'failure'/, 'announce runs even if one suite leg failed so succeeded suites are still listed');
+  assert.equal(announce.permissions.contents, 'write');
+  assert.ok(announce.steps.some((step) => step.uses?.startsWith('actions/download-artifact@') && step.with?.pattern === 'published-suite-*'), 'announce downloads only succeeded suite receipts');
+  const dispatchStep = announce.steps.find((step) => (step.run || '').includes(CATALOG_DISPATCH));
+  assert.ok(dispatchStep, 'announce dispatches standalone-catalog once for all succeeded suites');
 });
 
 test('a release.json from before exes/node-cli lists its targets without install commands', async () => {
@@ -450,9 +466,15 @@ test('the scheduled run picks the newest release of each app with archives the c
   const urls = listed.assets.map((item) => item.browser_download_url);
   assert.deepEqual(unlistedReleases(catalog(urls), [newer, listed], portable), [{ id: 'tool', version: '0.2.20261008' }]);
   assert.deepEqual(unlistedReleases(catalog(newer.assets.map((item) => item.browser_download_url)), [newer, listed], portable), []);
+  // Partially linked shared-tag release (e.g. one source landed, another dropped): still discovered.
+  assert.deepEqual(unlistedReleases(catalog([newer.assets[0].browser_download_url]), [newer, listed], portable), [{ id: 'tool', version: '0.2.20261008' }]);
   const skipped = [release('0.2.20261009', archives, { draft: true }), release('0.2.20261010', archives, { prerelease: true }), release('0.2.20261011', [])];
   assert.deepEqual(unlistedReleases(catalog(urls), [...skipped, listed], portable), [], 'drafts, prereleases and releases without archives wait');
   assert.deepEqual(unlistedReleases({ apps: {} }, [newer], portable), [], 'only apps the catalog lists');
+  // The scheduled catch-up also discovers newer desktop suite releases with standalone-catalog.json.
+  const suiteRel = suiteReleases('0.29.20261015').releases['webapps-v0.29.20261015'];
+  assert.deepEqual(unlistedReleases({ apps: {}, suites: { neuro: { version: '0.28.20261014' } } }, [suiteRel], portable, suites), [{ id: 'webapps', version: '0.29.20261015' }]);
+  assert.deepEqual(unlistedReleases({ apps: {}, suites: { neuro: { version: '0.29.20261015' } } }, [suiteRel], portable, suites), []);
 });
 
 test('the catalog workflow computes without write access and publishes without running dependencies', async () => {
@@ -460,6 +482,7 @@ test('the catalog workflow computes without write access and publishes without r
   assert.deepEqual(flow.on.repository_dispatch, { types: ['standalone-catalog'] });
   assert.deepEqual(flow.on.release, { types: ['released'] });
   assert.ok(flow.on.schedule?.length, 'a schedule catches up updates that failed');
+  assert.match(flow.jobs.compute.steps.find((step) => step.id === 'update').run, /repository_dispatch\) node scripts\/catalog-update\.mjs --out update\.json --partial-ok \$DISPATCHED/);
   assert.match(flow.jobs.compute.steps.find((step) => step.id === 'update').run, /schedule\) node scripts\/catalog-update\.mjs --out update\.json --missing/);
   assert.equal(flow.concurrency, undefined, 'a concurrency group would drop queued catalog updates');
   assert.deepEqual(flow.permissions, { contents: 'read' });
@@ -476,6 +499,7 @@ test('the catalog workflow computes without write access and publishes without r
   const verify = commit.indexOf('node scripts/verify-catalog-update.mjs "$UPDATE"');
   assert.ok(verify >= 0 && verify < commit.findIndex((line) => line.startsWith('git commit')), 'every commit attempt first re-reads the releases');
   assert.ok(commit.indexOf('node scripts/apply-catalog-update.mjs "$UPDATE"') < verify);
+  assert.equal(publish.steps.at(-1).if, "steps.commit.outputs.pushed == 'true'");
   assert.equal(publish.steps.at(-1).run, 'gh workflow run deploy-pages.yml --ref main');
 });
 

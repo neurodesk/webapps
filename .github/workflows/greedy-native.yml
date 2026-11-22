@@ -60,6 +60,7 @@ jobs:
   # Release bookkeeping (changelogs, version bumps) runs this workflow neither
   # for a pull request nor for a push to main (scripts/lib/workflow-gate.mjs).
   gate:
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft'))
     uses: ./.github/workflows/pr-gate.yml
     permissions:
       contents: read
@@ -81,10 +82,10 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
-      - name: Install the pinned nightly toolchain and wasm-pack 0.13.1
-        run: |
-          rustup toolchain install nightly-2025-11-15 --profile minimal --target wasm32-unknown-unknown
-          cargo install wasm-pack --version 0.13.1 --locked
+      - name: Install the pinned nightly toolchain
+        run: rustup toolchain install nightly-2025-11-15 --profile minimal --target wasm32-unknown-unknown
+      - name: Set up wasm-pack
+        uses: ./.github/actions/setup-wasm-pack
       - name: Set up wasm-opt
         uses: ./.github/actions/setup-wasm-opt
       - name: Rebuild and compare

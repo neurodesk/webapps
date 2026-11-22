@@ -51,16 +51,22 @@ export const RUNTIME_MANIFEST_READERS = ['scripts/fetch-app-runtime.mjs'];
 export const AUTOMATION_CATALOG_READERS = ['scripts/lib/neuroflow-bundle.mjs'];
 const AUTOMATION_CONTRACT = /^apps\/[^/]+\/automation\.json$/;
 // site/ files only the composite build copies: the landing page, its
-// analytics settings, the Pages 404 page and the dicompare route shim. The
-// app shell, theme, fonts and logo go into every app and stay shared.
+// analytics settings, the Pages 404 page and the dicompare route shim.
 // test/app-plan.test.mjs fails when anything else names them.
 export const SITE_ONLY_FILES = new Set(['site/landing.css', 'site/landing.js', 'site/analytics.json', 'site/404.html', 'site/dicompare-routes.js']);
+// Theme stylesheets and fonts copied into every app's themed dist/ by
+// theme-app-dist.mjs and build-site.mjs: they affect rendered UI, never unit
+// tests or WASM compilation, so composite-site + all 5 site-* checks over the
+// full catalog (siteCode = true) test them, together with apps whose own build
+// or e2e tests directly load site/app-theme.css (SITE_THEME_CONSUMERS).
+export const SITE_THEME_FILES = new Set(['site/app-theme.css']);
+export const SITE_THEME_CONSUMERS = Object.freeze(['surfannotate', 'zarro']);
 const CI_WORKFLOW = '.github/workflows/ci.yml';
 // What each ci.yml job tests, for a change confined to it: the composite site
 // (`site`: composite-site and the jobs that only consume its build), the
 // homepage easter egg (`easter-egg`), nothing more than the run itself
-// (`every-run`: workspace-contracts runs on every run, so its own run tests
-// the change), or nothing (`none`: the plan's marker jobs). The plan, the
+// (`every-run`: workspace-contracts and package-tests run on every ready/push run, so
+// their own run tests the change), or nothing (`none`: the plan's marker jobs). The plan, the
 // per-app jobs, a job not listed here and every key outside `jobs` reach
 // every app. test/app-plan.test.mjs holds the list to ci.yml.
 export const CI_JOB_SCOPES = Object.freeze({
@@ -73,7 +79,9 @@ export const CI_JOB_SCOPES = Object.freeze({
   'processing-workflows': 'site',
   'agent-interactions': 'site',
   'example-cache-retention': 'site',
+  'turbo-cache-retention': 'site',
   'workspace-contracts': 'every-run',
+  'package-tests': 'every-run',
   'homepage-easter-egg': 'easter-egg',
   'full-plan': 'none',
   'full-plan-withheld': 'none',
@@ -536,6 +544,17 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
       siteData(`${path}: only the composite build copies it`);
       continue;
     }
+    if (SITE_THEME_FILES.has(path)) {
+      siteBuild(`${path}: the composite site checks the themed build across every app`);
+      for (const id of SITE_THEME_CONSUMERS) {
+        if (appIds.has(id)) select(id, `${path}: ${id} loads ${path} directly`);
+      }
+      continue;
+    }
+    if (path.startsWith('site/fonts/')) {
+      siteBuild(`${path}: the composite site checks the themed build across every app`);
+      continue;
+    }
     if (path === RUNTIME_MANIFEST && graph) {
       siteBuild(`${path}: the composite build assembles the shared runtime store from it`);
       for (const reader of RUNTIME_MANIFEST_READERS) selectReaching(reader, `${path}: ${reader} stages the files it pins`);
@@ -748,6 +767,24 @@ export function selectEasterEgg(changedPaths) {
   return read.length > shown.length ? [...shown, `and ${read.length - shown.length} more`] : shown;
 }
 
+// Trees whose edits on a draft pull request cannot affect shared package suites
+// (`pnpm test:packages` + `exes/nii2tvx`). App edits stay covered because
+// packages/*/test/* checks cross-contract parity against app files (models.json,
+// automation.json, fixtures). Ready pull requests, pushes and nightlies always
+// run `package-tests`.
+const PACKAGE_TEST_DRAFT_SKIP_TREE = /^(?:docs|\.changeset|site\/easter-eggs)\/|^(?:[^/]+\.md)$/;
+export function packageTestsCanSkipOnDraft(path) {
+  if (WORKSPACE_MANIFESTS.includes(path.slice(path.lastIndexOf('/') + 1))) return false;
+  return PACKAGE_TEST_DRAFT_SKIP_TREE.test(path);
+}
+
+export function selectPackageTests(changedPaths) {
+  if (!changedPaths.length) return ['no changed paths: no base revision, an unreadable diff, or a full run'];
+  const read = changedPaths.filter((path) => !packageTestsCanSkipOnDraft(path));
+  const shown = read.slice(0, 5).map((path) => `${path}: can affect shared package suites`);
+  return read.length > shown.length ? [...shown, `and ${read.length - shown.length} more`] : shown;
+}
+
 export function createAppPlan(registry, changedPaths = [], graph = null, manifests = new Map(), { draft = false, release = false, carried = new Map() } = {}) {
   const affected = selectAffectedApps(registry, changedPaths, graph, manifests, { release, carried });
   // Drafts give fast feedback on app edits. Ready PRs always use the complete
@@ -763,6 +800,7 @@ export function createAppPlan(registry, changedPaths = [], graph = null, manifes
   const gpuTested = selected.filter((app) => app.ci.hardware_gpu);
   // What a pull request's homepage-easter-egg job does; a draft plans it as a ready pull request does.
   const easterEgg = selectEasterEgg(changedPaths);
+  const packageTests = selectPackageTests(changedPaths);
   return Object.freeze({
     changedPaths: Object.freeze([...changedPaths]),
     selected: Object.freeze(selected),
@@ -777,6 +815,8 @@ export function createAppPlan(registry, changedPaths = [], graph = null, manifes
     bookkeeping: Object.freeze([...(affected.bookkeeping ?? [])]),
     // Why a pull request's homepage-easter-egg job runs; empty when it is skipped.
     easterEgg: Object.freeze([...easterEgg]),
+    // Why a draft pull request's package-tests job runs; empty when deferred until ready.
+    packageTests: Object.freeze([...packageTests]),
   });
 }
 

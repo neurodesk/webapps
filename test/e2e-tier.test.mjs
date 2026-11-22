@@ -39,10 +39,12 @@ test('ci skips @slow repeats on pull requests and pushes and logs every test dur
   assert.doesNotMatch(release, /NEURODESK_E2E_SKIP_SLOW/, 'releases run every test');
 });
 
-test('the CI environment selects the slow-test filter and the Playwright shard', async () => {
+test('the CI environment selects the slow-test filter, retries and the Playwright shard', async () => {
   const { execFileSync } = await import('node:child_process');
-  const tier = (env) => JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', "const { e2eTier } = await import('./test-utils/e2e-tier.mjs'); console.log(JSON.stringify({ ...e2eTier, grepInvert: e2eTier.grepInvert?.source }))"], { cwd: repoRoot, env: { ...process.env, NEURODESK_E2E_SKIP_SLOW: '', NEURODESK_E2E_SKIP_HEAVY: '', NEURODESK_E2E_SHARD: '', ...env }, encoding: 'utf8' }));
+  const tier = (env) => JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', "const { e2eTier } = await import('./test-utils/e2e-tier.mjs'); console.log(JSON.stringify({ ...e2eTier, grepInvert: e2eTier.grepInvert?.source }))"], { cwd: repoRoot, env: { ...process.env, CI: '', NEURODESK_E2E_RETRIES: '', NEURODESK_E2E_SKIP_SLOW: '', NEURODESK_E2E_SKIP_HEAVY: '', NEURODESK_E2E_SHARD: '', ...env }, encoding: 'utf8' }));
   assert.deepEqual(tier({}), {});
+  assert.deepEqual(tier({ CI: 'true' }), { retries: 1 });
+  assert.deepEqual(tier({ CI: 'true', NEURODESK_E2E_RETRIES: '0' }), {});
   assert.deepEqual(tier({ NEURODESK_E2E_SKIP_SLOW: '1', NEURODESK_E2E_SHARD: '2/3' }), { grepInvert: '@slow', shard: { current: 2, total: 3 } });
   assert.deepEqual(tier({ NEURODESK_E2E_SKIP_HEAVY: '1' }), { grepInvert: '@heavy' });
   assert.deepEqual(tier({ NEURODESK_E2E_SKIP_SLOW: '1', NEURODESK_E2E_SKIP_HEAVY: '1' }), { grepInvert: '@slow|@heavy' });

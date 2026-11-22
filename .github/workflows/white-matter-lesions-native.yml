@@ -45,6 +45,7 @@ jobs:
   # its shared_paths (scripts/lib/workflow-gate.mjs). Called from native.yml, which decided first,
   # it answers true.
   gate:
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft'))
     uses: ./.github/workflows/pr-gate.yml
     permissions:
       contents: read
@@ -107,11 +108,19 @@ jobs:
           ONNXRUNTIME_NODE_INSTALL: skip
       - run: pnpm --filter white-matter-lesions build
       - if: matrix.browser == 'chrome'
-        run: pnpm exec playwright install --with-deps chromium
+        uses: ./.github/actions/setup-playwright
+        with:
+          browsers: chromium
       - if: matrix.browser == 'safari'
         run: sudo safaridriver --enable
+      - name: Cache FLAMeS models and example input
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.cache/neurodesk-flames-validation
+          key: flames-validation-${{ hashFiles('packages/white-matter-lesions/src/node.js', 'apps/white-matter-lesions/examples.json') }}
+          restore-keys: flames-validation-
       - name: Measure completed ensemble and check unchanged browser reference
-        run: node apps/white-matter-lesions/validation/browser-memory.mjs --browser '${{ matrix.browser }}' --output '${{ runner.temp }}/flames-memory/receipt.json'
+        run: node apps/white-matter-lesions/validation/browser-memory.mjs --browser '${{ matrix.browser }}' --model-dir "$HOME/.cache/neurodesk-flames-validation/models" --output '${{ runner.temp }}/flames-memory/receipt.json'
         env:
           TMPDIR: ${{ runner.temp }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

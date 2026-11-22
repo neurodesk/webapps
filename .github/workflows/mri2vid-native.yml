@@ -7,8 +7,6 @@ on:
       - '.github/workflows/mri2vid-native.yml'
       - 'packages/mri2vid/**'
       - 'apps/mri2vid/**'
-      - 'packages/node-drivers/package.json'
-      - 'packages/node-drivers/src/dcm2niix.js'
       - 'test-utils/dicom-fixture.mjs'
   push:
     branches: [main]
@@ -18,9 +16,8 @@ on:
       - 'exes/node-cli/**'
       - 'packages/mri2vid/**'
       - 'apps/mri2vid/**'
-      - 'packages/node-drivers/package.json'
-      - 'packages/node-drivers/src/dcm2niix.js'
       - 'test-utils/dicom-fixture.mjs'
+  workflow_call:
   workflow_dispatch:
     inputs:
       sign_release:
@@ -39,6 +36,7 @@ jobs:
   # Release bookkeeping (changelogs, version bumps) runs this workflow neither
   # for a pull request nor for a push to main (scripts/lib/workflow-gate.mjs).
   gate:
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft'))
     uses: ./.github/workflows/pr-gate.yml
     permissions:
       contents: read
@@ -46,6 +44,9 @@ jobs:
       pull-requests: read
     with:
       workflow: mri2vid-native
+      shared_paths: |
+        packages/node-drivers/package.json
+        packages/node-drivers/src/dcm2niix.js
 
   portable:
     needs: gate

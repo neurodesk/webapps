@@ -14,78 +14,113 @@ const server = process.env.BASE_URL ? null : await serveSite(siteDir);
 const base = `${(process.env.BASE_URL || server.origin).replace(/\/$/, '')}/`;
 // The shell module draws the bar, on the document the isolation service worker reloads, and
 // imports the Standalone dialog on the first click: on a cold load of the deployed host either
-// can outlast the 5 s default.
+// can outlast the 5 s default. Deployed hosts also see an occasional COI reload or CDN stall,
+// so verifyApp retries once on live BASE_URL runs and logs a warning when a retry was needed.
 const STARTUP_TIMEOUT = 60000;
+const MAX_ATTEMPTS = process.env.BASE_URL ? 2 : 1;
+
+async function waitForStableIsolation(page) {
+  if (!process.env.BASE_URL) return;
+  // Wait for coi-serviceworker's reload to settle before clicking the Standalone button;
+  // clicking mid-reload drops the click and hangs until the 60 s dialog timeout.
+  const deadline = Date.now() + 20_000;
+  while (Date.now() < deadline) {
+    try {
+      const settled = await page.evaluate(() => Boolean(window.crossOriginIsolated || !navigator.serviceWorker));
+      if (settled) return;
+    } catch {
+      // Expected while the COI service worker reloads the document.
+    }
+    await page.waitForTimeout(250);
+  }
+}
+
+async function verifyApp(browser, app) {
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage();
+    await page.context().route(/googletagmanager\.com|google-analytics\.com/, route => route.fulfill({ body: '' }));
+    if (app.id === 'browserqc') await page.context().route(/\/browserqc\/t1_crop\.nii\.gz$/, route => route.abort());
+    const response = await page.goto(new URL(`${app.path}/`, base).href, { waitUntil: 'domcontentloaded' });
+    assert.ok(response?.ok(), `${app.id} page must load`);
+    await waitForStableIsolation(page);
+    const bar = page.locator('.nd-app-bar:visible').first();
+    await expect(bar, `${app.id}: the app bar (.nd-app-bar) must appear within ${STARTUP_TIMEOUT / 1000} s`).toBeVisible({ timeout: STARTUP_TIMEOUT });
+    const enter = page.locator('#enterAppButton:visible, #landingLaunch:visible').first();
+    if (await enter.count()) await enter.click();
+    const workspace = page.getByRole('link', { name: 'Open Workspace', exact: true });
+    if (await workspace.isVisible()) await workspace.click();
+    const welcome = page.locator('#welcomeLater');
+    if (await welcome.isVisible()) await welcome.click();
+    await expect(bar.getByRole('link', { name: /lightNIIng/i })).toHaveCount(0);
+    let releaseStyles;
+    let stylesheetRequest;
+    if (app.id === 'calmar') {
+      const stylesReady = new Promise(resolve => { releaseStyles = resolve; });
+      await page.context().route('**/shell-adapters/components/styles/imaging-workspace.css', async route => {
+        await stylesReady;
+        await route.continue();
+      });
+      stylesheetRequest = page.context().waitForEvent('request', request => request.url().endsWith('/shell-adapters/components/styles/imaging-workspace.css'));
+    }
+    await bar.getByRole('button', { name: 'Standalone', exact: true }).click();
+    const dialog = page.locator('#neurodeskStandaloneDialog');
+    if (stylesheetRequest) {
+      try {
+        await stylesheetRequest;
+        await expect(dialog).toBeHidden();
+      } finally {
+        releaseStyles();
+      }
+    }
+    await expect(dialog, `${app.id}: the Standalone dialog (#neurodeskStandaloneDialog) must open within ${STARTUP_TIMEOUT / 1000} s`).toBeVisible({ timeout: STARTUP_TIMEOUT });
+    await expect(dialog).not.toContainText(DIALOG_FORBIDDEN);
+    const sections = await dialog.locator('section > h3').allTextContents();
+    const downloads = catalog.apps[app.id].downloads;
+    assert.equal(sections.includes('Command line'), downloads.length > 0, `${app.id}: lists a command line exactly when it has released one`);
+    const computeServer = catalog.apps[app.id].computeServer;
+    if (computeServer) {
+      assert.equal(sections[0], computeServer.runner === 'slurm' ? 'Compute server · Slurm cluster' : 'Compute server · Linux with NVIDIA GPU');
+      await expect(dialog.locator('#standalone-compute')).toBeVisible();
+    } else if (catalog.apps[app.id].containers.length) {
+      assert.equal(sections[0], 'Neurodesk containers');
+    }
+    const openrecon = catalog.apps[app.id].openrecon;
+    const scanner = dialog.locator('section[aria-labelledby="standalone-openrecon"]');
+    await expect(scanner).toHaveCount(openrecon ? 1 : 0);
+    if (openrecon) {
+      if (downloads.length) assert.ok(sections.indexOf('OpenRecon · MRI scanner console') < sections.indexOf('Command line'));
+      await expect(scanner).toContainText(`Run the ${openrecon.label} container on the MRI scanner console`);
+      await expect(scanner.getByRole('link', { name: 'Siemens teamplay C2P exchange' })).toHaveAttribute('href', 'https://webclient.us.api.teamplay.siemens-healthineers.com/c2p');
+      await expect(scanner.getByRole('link', { name: 'neurodesk/openrecon', exact: true })).toHaveAttribute('href', 'https://github.com/neurodesk/openrecon/');
+      await expect(scanner.getByRole('link', { name: `${openrecon.label} recipe` })).toHaveAttribute('href', `https://github.com/neurodesk/openrecon/tree/main/recipes/${openrecon.recipe}`);
+    }
+    const links = await dialog.locator('a').evaluateAll(elements => elements.map(element => element.href));
+    if (computeServer?.download) {
+      assert.ok(links.includes(computeServer.download.url), `${app.id}: missing compute-server download`);
+    }
+    for (const download of downloads) assert.ok(links.includes(download.url), `${app.id}: missing visible ${download.platform} download ${download.url}`);
+    assert.ok(links.every(href => !suiteReleases.some(release => href.includes(`/releases/download/${release}-v`))), `${app.id}: links a desktop suite instead of its own release`);
+  } finally {
+    await context.close();
+  }
+}
+
 const browser = await chromium.launch({ headless: true });
 try {
   for (const app of apps) {
-    const context = await browser.newContext();
-    try {
-      const page = await context.newPage();
-      await page.context().route(/googletagmanager\.com|google-analytics\.com/, route => route.fulfill({ body: '' }));
-      if (app.id === 'browserqc') await page.context().route(/\/browserqc\/t1_crop\.nii\.gz$/, route => route.abort());
-      const response = await page.goto(new URL(`${app.path}/`, base).href, { waitUntil: 'domcontentloaded' });
-      assert.ok(response?.ok(), `${app.id} page must load`);
-      const bar = page.locator('.nd-app-bar:visible').first();
-      await expect(bar, `${app.id}: the app bar (.nd-app-bar) must appear within ${STARTUP_TIMEOUT / 1000} s`).toBeVisible({ timeout: STARTUP_TIMEOUT });
-      const enter = page.locator('#enterAppButton:visible, #landingLaunch:visible').first();
-      if (await enter.count()) await enter.click();
-      const workspace = page.getByRole('link', { name: 'Open Workspace', exact: true });
-      if (await workspace.isVisible()) await workspace.click();
-      const welcome = page.locator('#welcomeLater');
-      if (await welcome.isVisible()) await welcome.click();
-      await expect(bar.getByRole('link', { name: /lightNIIng/i })).toHaveCount(0);
-      let releaseStyles;
-      let stylesheetRequest;
-      if (app.id === 'calmar') {
-        const stylesReady = new Promise(resolve => { releaseStyles = resolve; });
-        await page.context().route('**/shell-adapters/components/styles/imaging-workspace.css', async route => {
-          await stylesReady;
-          await route.continue();
-        });
-        stylesheetRequest = page.context().waitForEvent('request', request => request.url().endsWith('/shell-adapters/components/styles/imaging-workspace.css'));
-      }
-      await bar.getByRole('button', { name: 'Standalone', exact: true }).click();
-      const dialog = page.locator('#neurodeskStandaloneDialog');
-      if (stylesheetRequest) {
-        try {
-          await stylesheetRequest;
-          await expect(dialog).toBeHidden();
-        } finally {
-          releaseStyles();
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        await verifyApp(browser, app);
+        if (attempt > 1) {
+          console.log(`::warning title=Standalone download smoke retry::${app.id} passed on attempt ${attempt}`);
         }
+        console.log(`PASS ${app.id}: its own released downloads are visible`);
+        break;
+      } catch (error) {
+        if (attempt === MAX_ATTEMPTS) throw error;
+        console.warn(`RETRY ${app.id} (attempt ${attempt}/${MAX_ATTEMPTS} failed): ${error.message}`);
       }
-      await expect(dialog, `${app.id}: the Standalone dialog (#neurodeskStandaloneDialog) must open within ${STARTUP_TIMEOUT / 1000} s`).toBeVisible({ timeout: STARTUP_TIMEOUT });
-      await expect(dialog).not.toContainText(DIALOG_FORBIDDEN);
-      const sections = await dialog.locator('section > h3').allTextContents();
-      const downloads = catalog.apps[app.id].downloads;
-      assert.equal(sections.includes('Command line'), downloads.length > 0, `${app.id}: lists a command line exactly when it has released one`);
-      const computeServer = catalog.apps[app.id].computeServer;
-      if (computeServer) {
-        assert.equal(sections[0], computeServer.runner === 'slurm' ? 'Compute server · Slurm cluster' : 'Compute server · Linux with NVIDIA GPU');
-        await expect(dialog.locator('#standalone-compute')).toBeVisible();
-      } else if (catalog.apps[app.id].containers.length) {
-        assert.equal(sections[0], 'Neurodesk containers');
-      }
-      const openrecon = catalog.apps[app.id].openrecon;
-      const scanner = dialog.locator('section[aria-labelledby="standalone-openrecon"]');
-      await expect(scanner).toHaveCount(openrecon ? 1 : 0);
-      if (openrecon) {
-        if (downloads.length) assert.ok(sections.indexOf('OpenRecon · MRI scanner console') < sections.indexOf('Command line'));
-        await expect(scanner).toContainText(`Run the ${openrecon.label} container on the MRI scanner console`);
-        await expect(scanner.getByRole('link', { name: 'Siemens teamplay C2P exchange' })).toHaveAttribute('href', 'https://webclient.us.api.teamplay.siemens-healthineers.com/c2p');
-        await expect(scanner.getByRole('link', { name: 'neurodesk/openrecon', exact: true })).toHaveAttribute('href', 'https://github.com/neurodesk/openrecon/');
-        await expect(scanner.getByRole('link', { name: `${openrecon.label} recipe` })).toHaveAttribute('href', `https://github.com/neurodesk/openrecon/tree/main/recipes/${openrecon.recipe}`);
-      }
-      const links = await dialog.locator('a').evaluateAll(elements => elements.map(element => element.href));
-      if (computeServer?.download) {
-        assert.ok(links.includes(computeServer.download.url), `${app.id}: missing compute-server download`);
-      }
-      for (const download of downloads) assert.ok(links.includes(download.url), `${app.id}: missing visible ${download.platform} download ${download.url}`);
-      assert.ok(links.every(href => !suiteReleases.some(release => href.includes(`/releases/download/${release}-v`))), `${app.id}: links a desktop suite instead of its own release`);
-      console.log(`PASS ${app.id}: its own released downloads are visible`);
-    } finally {
-      await context.close();
     }
   }
 } finally {

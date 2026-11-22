@@ -8,6 +8,7 @@ name: quality
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   push:
     branches: [main]
   schedule:
@@ -22,8 +23,9 @@ jobs:
     concurrency:
       group: code-quality-${{ github.ref }}
       cancel-in-progress: true
-    if: github.event_name != 'schedule'
+    if: github.event_name != 'schedule' && github.event.action != 'converted_to_draft'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       ONNXRUNTIME_NODE_INSTALL: skip
     steps:
@@ -42,7 +44,7 @@ jobs:
     concurrency:
       group: unused-code-${{ github.ref }}
       cancel-in-progress: true
-    if: github.event_name != 'schedule'
+    if: github.event_name != 'schedule' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -66,7 +68,7 @@ jobs:
     concurrency:
       group: dependency-quality-${{ github.ref }}
       cancel-in-progress: true
-    if: github.event_name != 'schedule'
+    if: github.event_name != 'schedule' && github.event.action != 'converted_to_draft'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -87,7 +89,7 @@ jobs:
     concurrency:
       group: mutation-quality-${{ github.event_name }}-${{ github.ref }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
-    if: github.event_name != 'push'
+    if: github.event_name != 'push' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

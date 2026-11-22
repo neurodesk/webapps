@@ -53,7 +53,7 @@ export function testedBase({ runs, head, branch, git, workflow = 'ci', atHead = 
 // canaries (scripts/lib/smoke-apps.mjs) and name no app, so a failure there is
 // tied to none either. test/app-plan.test.mjs holds ci.yml to these job lists.
 export const APP_JOBS = ['app-tests', 'browser-e2e', 'browser-e2e-gpu'];
-export const RERUN_JOBS = ['workspace-contracts', 'homepage-easter-egg', 'example-cache-retention', 'full-plan', 'full-plan-withheld'];
+export const RERUN_JOBS = ['workspace-contracts', 'package-tests', 'homepage-easter-egg', 'example-cache-retention', 'turbo-cache-retention', 'full-plan', 'full-plan-withheld'];
 export const SITE_JOBS = ['composite-site', 'site-runtime', 'site-audit', 'site-e2e', 'site-mobile', 'site-catalog'];
 export const NIGHTLY_JOBS = ['agent-interactions', 'processing-workflows'];
 const APP_JOB = new RegExp(`^(?:${APP_JOBS.join('|')}) \\(([^,)]+)[,)]`);

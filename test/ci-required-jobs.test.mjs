@@ -25,6 +25,7 @@ import { parse } from 'yaml';
 const REQUIRED = {
   'app-plan': { needs: [], if: "github.event.action != 'converted_to_draft'" },
   'workspace-contracts': { needs: [], if: "github.event.action != 'converted_to_draft' && inputs.scope != 'gpu' && inputs.scope != 'site'" },
+  'package-tests': { needs: ['app-plan'], if: "${{ !cancelled() && github.event.action != 'converted_to_draft' && inputs.scope != 'gpu' && inputs.scope != 'site' && (github.event_name != 'pull_request' || !github.event.pull_request.draft || needs.app-plan.result != 'success' || needs.app-plan.outputs.package_tests != 'skip') }}" },
   'app-tests': { needs: ['app-plan'], if: "needs.app-plan.outputs.has_apps == 'true'" },
   // A draft pull request starts neither browser job; it runs app-tests only.
   'browser-e2e': { needs: ['app-plan'], if: "needs.app-plan.outputs.has_browser_apps == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)" },
@@ -421,6 +422,7 @@ const planOutputs = (overrides = {}) => ({
   'app-plan.withheld': 'false',
   'app-plan.full_plan': 'false',
   'app-plan.easter_egg': 'run',
+  'app-plan.package_tests': 'run',
   'composite-site.agent_site_ready': '',
   ...Object.fromEntries(Object.entries(overrides).map(([key, value]) => [key.includes('.') ? key : `app-plan.${key}`, value])),
 });
@@ -431,7 +433,7 @@ const noApps = { has_apps: 'false', has_browser_apps: 'false', has_gpu_apps: 'fa
 // Each event, with the outputs the planner writes for it (scripts/app-plan.mjs).
 const JOB_GRAPH_SCENARIOS = {
   'draft pull request, one GPU app': [pullRequest('synchronize', true), planOutputs()],
-  'draft pull request opened, docs only': [pullRequest('opened', true), planOutputs(noApps)],
+  'draft pull request opened, docs only': [pullRequest('opened', true), planOutputs({ ...noApps, package_tests: 'skip' })],
   'ready pull request, one GPU app': [pullRequest('synchronize', false), planOutputs()],
   'ready pull request, whole catalogue': [pullRequest('ready_for_review', false), planOutputs({ all_apps: 'true', full_plan: 'true' })],
   'ready pull request over its budget': [pullRequest('synchronize', false), planOutputs({ withheld: 'true', has_site: 'false' })],
@@ -449,25 +451,27 @@ const JOB_GRAPH_SCENARIOS = {
   'dispatch, scope site, pipeline': [dispatch('site', 'pipeline'), planOutputs({ ...noApps, has_site: 'true' })],
 };
 const SITE_RUN = ['composite-site', 'site-runtime', 'site-audit', 'site-e2e', 'site-mobile', 'site-catalog'];
-const PLAN_RUN = ['app-plan', 'workspace-contracts'];
+const MAIN_RETENTION = ['turbo-cache-retention', 'example-cache-retention'];
+const PLAN_RUN = ['app-plan', 'workspace-contracts', 'package-tests'];
+const DRAFT_PLAN_RUN = ['app-plan', 'workspace-contracts'];
 const APP_RUN = ['app-tests', 'browser-e2e', 'browser-e2e-gpu'];
 // What each scenario starts, read off ci.yml by startedJobs. A change to a job
 // condition that moves a job in or out of a row changes this table.
 const EXPECTED_JOB_GRAPH = {
-  // A draft runs unit and build tests; its browser tests run on a dispatch.
+  // A draft runs unit and build tests; its browser tests run on a dispatch, and package-tests skips doc/changeset/easter-egg-only drafts.
   'draft pull request, one GPU app': [...PLAN_RUN, 'app-tests', 'homepage-easter-egg'],
-  'draft pull request opened, docs only': [...PLAN_RUN, 'homepage-easter-egg'],
+  'draft pull request opened, docs only': [...DRAFT_PLAN_RUN, 'homepage-easter-egg'],
   'ready pull request, one GPU app': [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, 'homepage-easter-egg'],
   'ready pull request, whole catalogue': [...PLAN_RUN, 'full-plan', 'app-tests', ...SITE_RUN, 'browser-e2e', 'homepage-easter-egg'],
-  'ready pull request over its budget': ['app-plan', 'full-plan-withheld', 'workspace-contracts', ...APP_RUN, 'homepage-easter-egg'],
+  'ready pull request over its budget': ['app-plan', 'full-plan-withheld', 'workspace-contracts', 'package-tests', ...APP_RUN, 'homepage-easter-egg'],
   'ready pull request, docs only': [...PLAN_RUN, 'homepage-easter-egg'],
   'pull request reopened, one GPU app': [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, 'homepage-easter-egg'],
   'pull request converted to draft': [],
-  'push, one GPU app': [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, 'example-cache-retention', 'homepage-easter-egg'],
-  'push, docs only': [...PLAN_RUN, ...SITE_RUN, 'example-cache-retention', 'homepage-easter-egg'],
-  nightly: [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, 'example-cache-retention', 'agent-interactions', 'homepage-easter-egg'],
+  'push, one GPU app': [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, ...MAIN_RETENTION, 'homepage-easter-egg'],
+  'push, docs only': [...PLAN_RUN, ...SITE_RUN, ...MAIN_RETENTION, 'homepage-easter-egg'],
+  nightly: [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, ...MAIN_RETENTION, 'agent-interactions', 'homepage-easter-egg'],
   'dispatch, scope affected': [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, 'homepage-easter-egg'],
-  'dispatch on main, scope affected': [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, 'example-cache-retention', 'homepage-easter-egg'],
+  'dispatch on main, scope affected': [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, ...MAIN_RETENTION, 'homepage-easter-egg'],
   'dispatch, scope all': [...PLAN_RUN, ...APP_RUN, ...SITE_RUN, 'homepage-easter-egg'],
   'dispatch, scope gpu': ['app-plan', 'browser-e2e-gpu'],
   'dispatch, scope site, interactions': ['app-plan', ...SITE_RUN, 'agent-interactions', 'homepage-easter-egg'],

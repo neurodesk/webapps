@@ -26,6 +26,7 @@ env:
 jobs:
   app-plan:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       release_apps: ${{ steps.plan.outputs.release_apps }}
       has_release_apps: ${{ steps.plan.outputs.has_release_apps }}
@@ -55,6 +56,7 @@ jobs:
     needs: app-plan
     if: needs.app-plan.outputs.has_release_apps == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 160
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.app-plan.outputs.release_apps) }}
@@ -74,9 +76,9 @@ jobs:
       - name: Install pinned nightly toolchain
         if: matrix.rust_wasm
         run: rustup toolchain install nightly-2025-11-15 --component rust-src --target wasm32-unknown-unknown
-      - name: Install wasm-pack 0.13.1
+      - name: Set up wasm-pack
         if: matrix.rust_wasm
-        run: cargo install wasm-pack --version 0.13.1 --locked
+        uses: ./.github/actions/setup-wasm-pack
       - name: Set up wasm-opt
         if: matrix.rust_wasm
         uses: ./.github/actions/setup-wasm-opt
@@ -87,7 +89,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Install Python reference dependencies
         if: matrix.python_reference
-        run: pip install -r apps/${{ matrix.app }}/requirements.txt nibabel
+        run: pip install --retries 5 --timeout 60 -r apps/${{ matrix.app }}/requirements.txt nibabel
       - name: Test app-scoped runtime worker scope
         if: matrix.app_scoped_runtime
         run: node --test test/runtime-worker-scope.test.mjs test/runtime-assets-rewrite.test.mjs
@@ -100,15 +102,15 @@ jobs:
         run: pnpm --filter ${{ matrix.app }} build
       - name: Install browser
         if: matrix.browser_test
-        run: |
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
-          node node_modules/@playwright/test/cli.js install --with-deps chromium
+        uses: ./.github/actions/setup-playwright
       # The same pinned data ci.yml's browser-e2e job provisions; hardware-GPU apps get their CPU subset.
       - uses: actions/cache@v6
         if: matrix.browser_test
         with:
           path: ~/.cache/neurodesk-e2e-test-data
-          key: e2e-test-data-${{ runner.os }}-${{ matrix.app }}-${{ hashFiles('registry/offline-assets.lock.json', 'apps/*/examples.json', 'models/*.json', 'packages/*/model.manifest.json', 'packages/nesvor/src/masking/manifest.json') }}
+          key: e2e-test-data-${{ runner.os }}-${{ matrix.app }}-${{ hashFiles('scripts/lib/e2e-test-data.mjs', 'registry/offline-assets.lock.json', format('apps/{0}/examples.json', matrix.app), 'models/*.json', 'packages/*/model.manifest.json', 'packages/nesvor/src/masking/manifest.json') }}
+          restore-keys: |
+            e2e-test-data-${{ runner.os }}-${{ matrix.app }}-
       - name: Download test data
         if: matrix.browser_test
         shell: bash
@@ -144,6 +146,7 @@ jobs:
     needs: [app-plan, verify]
     if: needs.app-plan.outputs.has_release_apps == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
       actions: write

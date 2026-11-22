@@ -53,7 +53,7 @@ jobs:
         env:
           SOURCE_SHA: ${{ steps.source.outputs.sha }}
         run: |
-          python -m pip install pandas==3.0.6 PyYAML==6.0.3
+          python -m pip install --retries 5 --timeout 60 pandas==3.0.6 PyYAML==6.0.3
           git clone https://github.com/micmas/stroke-aphasia-kb.git "$RUNNER_TEMP/stroke-aphasia-kb"
           git -C "$RUNNER_TEMP/stroke-aphasia-kb" checkout --detach "$SOURCE_SHA"
           python apps/calmar/scripts/sync_kb.py --kb "$RUNNER_TEMP/stroke-aphasia-kb" --both

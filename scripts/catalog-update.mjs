@@ -9,12 +9,14 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { nativeReleases, portableSpecs, portableSpecsAt } from './lib/native-releases.mjs';
 import { loadAppsRegistry } from './lib/apps-registry.mjs';
-import { catalogUpdate, parseReleases, releaseFromTag, releaseSources, suiteReleases, unlistedReleases } from './lib/standalone-import.mjs';
+import { validateStandalone } from './lib/standalone.mjs';
+import { applyCatalogUpdate, catalogUpdate, parseReleases, releaseFromTag, releaseSources, suiteReleases, unlistedReleases } from './lib/standalone-import.mjs';
 
-const { values, positionals } = parseArgs({ allowPositionals: true, options: { out: { type: 'string' }, tag: { type: 'string' }, missing: { type: 'boolean' } } });
+const { values, positionals } = parseArgs({ allowPositionals: true, options: { out: { type: 'string' }, tag: { type: 'string' }, missing: { type: 'boolean' }, 'partial-ok': { type: 'boolean' } } });
 if (!values.out) throw new Error('--out is required');
 const catalog = JSON.parse(await readFile(new URL('../registry/standalone.json', import.meta.url), 'utf8'));
-const suites = suiteReleases(await loadAppsRegistry());
+const registry = await loadAppsRegistry();
+const suites = suiteReleases(registry);
 const headers = { accept: 'application/vnd.github+json' };
 if (process.env.GH_TOKEN) headers.authorization = `Bearer ${process.env.GH_TOKEN}`;
 
@@ -57,15 +59,39 @@ async function allReleases() {
   return releases;
 }
 
+async function computeValidatedRelease(release) {
+  const entries = await catalogUpdate(catalog, [release], { fetchRelease, fetchText, nativeAt, suites });
+  // Validate each candidate release against the catalog schema before admitting it
+  // to a multi-release batch so invalid metadata on one suite never blocks others.
+  const candidate = structuredClone(catalog);
+  applyCatalogUpdate(candidate, entries);
+  validateStandalone(candidate, registry);
+  return entries;
+}
+
 let update;
 if (values.missing) {
   update = [];
-  for (const release of unlistedReleases(catalog, await allReleases(), nativeReleases(await portableSpecs()))) {
+  for (const release of unlistedReleases(catalog, await allReleases(), nativeReleases(await portableSpecs()), suites)) {
     try {
-      update.push(...await catalogUpdate(catalog, [release], { fetchRelease, fetchText, nativeAt, suites }));
+      update.push(...await computeValidatedRelease(release));
     } catch (error) {
       console.log(`::warning::${release.id}@${release.version} not published: ${error.message}`);
     }
+  }
+} else if (values['partial-ok'] && releases.length > 1) {
+  update = [];
+  const failures = [];
+  for (const release of releases) {
+    try {
+      update.push(...await computeValidatedRelease(release));
+    } catch (error) {
+      failures.push(`${release.id}@${release.version}: ${error.message}`);
+      console.log(`::warning::${release.id}@${release.version} not published: ${error.message}`);
+    }
+  }
+  if (!update.length && failures.length) {
+    throw new Error(`No dispatched release could be verified: ${failures.join('; ')}`);
   }
 } else {
   update = await catalogUpdate(catalog, releases, { fetchRelease, fetchText, nativeAt, suites });

@@ -6,8 +6,6 @@ on:
     paths:
       - '.github/workflows/edgereg-native.yml'
       - 'packages/edgereg/**'
-      - 'packages/node-drivers/package.json'
-      - 'packages/node-drivers/src/niimath.js'
       - 'apps/edgereg/**'
   push:
     branches: [main]
@@ -16,8 +14,6 @@ on:
       - '.github/workflows/node-cli-portable.yml'
       - 'exes/node-cli/**'
       - 'packages/edgereg/**'
-      - 'packages/node-drivers/package.json'
-      - 'packages/node-drivers/src/niimath.js'
       - 'apps/edgereg/**'
   # A pull request that changes only paths in the gate's shared_paths starts native.yml instead,
   # which calls this workflow when the change reaches it; its nightly run is this workflow's sweep.
@@ -41,6 +37,7 @@ jobs:
   # its shared_paths (scripts/lib/workflow-gate.mjs). Called from native.yml, which decided first,
   # it answers true.
   gate:
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft'))
     uses: ./.github/workflows/pr-gate.yml
     permissions:
       contents: read
@@ -50,6 +47,8 @@ jobs:
       workflow: edgereg-native
       shared_paths: |
         packages/components/**
+        packages/node-drivers/package.json
+        packages/node-drivers/src/niimath.js
 
   # Registers the pinned example through the built web app and compares its download with
   # packages/edgereg/validation/t1-mni-reference.json, the reference the archives are held to.

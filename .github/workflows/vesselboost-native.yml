@@ -43,6 +43,7 @@ jobs:
   # its shared_paths (scripts/lib/workflow-gate.mjs). Called from native.yml, which decided first,
   # it answers true.
   gate:
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft'))
     uses: ./.github/workflows/pr-gate.yml
     permissions:
       contents: read
@@ -86,6 +87,7 @@ jobs:
     if: needs.gate.outputs.run == 'true'
     name: Reproduce required Rust preprocessing
     runs-on: ubuntu-22.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -93,11 +95,10 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
-      - name: Install exact Rust toolchain and WASM builders
+      - name: Install exact Rust toolchain and wasm-bindgen
         run: |
           rustup toolchain install 1.98.0 --profile minimal --target wasm32-unknown-unknown
           rustup default 1.98.0
-          cargo install wasm-pack --version 0.13.1 --locked
           task_bindgen_dir="$(mktemp -d "$RUNNER_TEMP/vesselboost-bindgen.XXXXXX")"
           curl --fail --location --retry 3 \
             https://github.com/wasm-bindgen/wasm-bindgen/releases/download/0.2.114/wasm-bindgen-0.2.114-x86_64-unknown-linux-musl.tar.gz \
@@ -107,6 +108,8 @@ jobs:
           echo "$task_bindgen_dir/wasm-bindgen-0.2.114-x86_64-unknown-linux-musl" >> "$GITHUB_PATH"
         env:
           CARGO_BUILD_JOBS: 2
+      - name: Set up wasm-pack
+        uses: ./.github/actions/setup-wasm-pack
       - name: Build locked source and compare every committed artifact byte
         run: |
           bash packages/vesselboost/scripts/build-preprocessing.sh

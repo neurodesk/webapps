@@ -26,7 +26,7 @@ const example = JSON.parse(await readFile(join(app, 'examples.json')))[0].files[
 const lock = JSON.parse(await readFile(new URL('../../../registry/offline-assets.lock.json', import.meta.url)));
 const pin = lock.assets[example.url];
 const { directory } = await downloadModels({ cacheDir: values['model-dir'], onProgress: console.log });
-const examplePath = join(tmpdir(), 'neurodesk-flames-validation', pin.sha256, example.name);
+const examplePath = join(dirname(values['model-dir']), pin.sha256, example.name);
 let input = await readFile(examplePath).catch(() => null);
 if (!input) {
   const response = await fetch(example.url);
@@ -118,142 +118,187 @@ function sample() {
   samples.push(entry);
   return entry.bytes;
 }
-async function webdriver(path, body, method = 'POST') {
-  const response = await fetch(`http://127.0.0.1:4445${path}`, { method, ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}) });
+async function webdriver(path, body, method = 'POST', timeoutMs = 120_000) {
+  const response = await fetch(`http://127.0.0.1:4445${path}`, {
+    method,
+    signal: AbortSignal.timeout(timeoutMs),
+    ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}),
+  });
   const result = await response.json();
   if (!response.ok || result.value?.error) throw new Error(JSON.stringify(result));
   return result.value;
 }
-try {
-  if (values.browser === 'chrome') {
-    browserServer = await chromium.launchServer({ executablePath: process.env.CHROME_EXECUTABLE || undefined, headless: true, args: ['--enable-webgl', '--use-gl=angle', '--use-angle=swiftshader'] });
-    browser = await chromium.connect(browserServer.wsEndpoint());
-    receipt.version = browser.version();
-    const page = await browser.newPage();
-    page.on('pageerror', (error) => receipt.errors.push(error.message));
-    await page.goto(`${origin}/white-matter-lesions/`);
-    execute = (script, args = []) => page.evaluate(({ script, args }) => new Function(script)(...args), { script, args });
-  } else {
-    safari = spawn('/usr/bin/safaridriver', ['--port', '4445'], { stdio: 'inherit' });
-    for (let attempt = 0; ; attempt++) {
-      try { await webdriver('/status', null, 'GET'); break; }
-      catch (error) { if (attempt === 30) throw error; await new Promise((done) => setTimeout(done, 1000)); }
-    }
-    session = await webdriver('/session', { capabilities: { alwaysMatch: { browserName: 'safari' } } });
-    receipt.version = session.capabilities.browserVersion;
-    await webdriver(`/session/${session.sessionId}/url`, { url: `${origin}/white-matter-lesions/` });
-    execute = (script, args = []) => webdriver(`/session/${session.sessionId}/execute/sync`, { script, args });
-  }
-  for (let attempt = 0; ; attempt++) {
-    if (await execute('return !!window.neurodeskAutomation && self.crossOriginIsolated;')) break;
-    if (attempt === 60) throw new Error('Production app did not become ready and isolated');
-    await new Promise((done) => setTimeout(done, 1000));
-  }
-  // Serve the shipped worker with an instrumentation prefix that caps hardwareConcurrency,
-  // maps immutable asset URLs to verified local files; observe progress/result metadata.
-  await execute(`
-    const origin = arguments[0];
-    window.__memoryRun = { files: [], patches: [] };
-    const OriginalFile = File;
-    window.File = class extends OriginalFile {
-      constructor(...args) { super(...args); window.__memoryRun.files.push(this); }
-    };
-    const OriginalWorker = Worker;
-    window.Worker = class extends OriginalWorker {
-      constructor(url, options) {
-        if (!String(url).includes('/assets/worker-')) return new OriginalWorker(url, options);
-        const filename = new URL(url).pathname.split('/').pop();
-        super(origin + '/white-matter-lesions/assets/memory-worker.js?worker=' + encodeURIComponent(filename), options);
-        this.addEventListener('error', (event) => { window.__memoryRun.error = event.message || 'Processing worker failed'; });
-        this.addEventListener('message', ({ data }) => {
-          if (data.type === 'progress') window.__memoryRun.patches.push(data.message);
-          if (data.type === 'error') window.__memoryRun.error = data.message;
-          if (data.type === 'result') window.__memoryRun.provenance = data.provenance;
-        });
-      }
-    };
-    fetch(origin + '/input').then((response) => response.blob()).then((blob) => {
-      const transfer = new DataTransfer();
-      transfer.items.add(new File([blob], arguments[2], { type: 'application/gzip' }));
-      document.querySelector('#neurodesk-input-transfer').files = transfer.files;
-      return window.neurodeskAutomation.dispatch('adopt', { role: 'image' });
-    }).then(() => { window.__memoryRun.ready = true; }).catch((error) => { window.__memoryRun.error = error.message; });
-  `, [origin, MODEL_ASSETS, example.name]);
-  for (let attempt = 0; ; attempt++) {
-    const state = await execute('return { ready: window.__memoryRun.ready, error: window.__memoryRun.error };');
-    if (state.error) throw new Error(state.error);
-    if (state.ready) break;
-    if (attempt === 120) throw new Error('Input adoption timed out');
-    await new Promise((done) => setTimeout(done, 1000));
-  }
-  receipt.baselineRssBytes = sample();
-  sampleTimer = setInterval(() => { try { sample(); } catch (error) { receipt.errors.push(error.message); } }, 1000);
-  const started = Date.now();
-  await execute(`window.neurodeskAutomation.dispatch('start', { operation: 'segment', parameters: { folds: 5, backend: 'wasm', skullStripped: false } }).catch((error) => { window.__memoryRun.error = error.message; }); return true;`);
-  for (;;) {
-    const state = await execute('return { text: document.querySelector("#statusText").textContent, error: window.__memoryRun.error, provenance: window.__memoryRun.provenance };');
-    if (state.error) throw new Error(state.error);
-    if (state.provenance) { receipt.provenance = state.provenance; break; }
-    if (Date.now() - started > 100 * 60 * 1000) throw new Error('Fivefold completion timed out');
-    console.log(state.text);
-    await new Promise((done) => setTimeout(done, 10000));
-  }
-  clearInterval(sampleTimer);
+function isTransientSafariDriverError(error) {
+  const text = String(error?.message || error || '');
+  return /invalid session id|session not created|ECONNREFUSED|fetch failed|socket hang up|Unable to connect/i.test(text);
+}
+
+const maxAttempts = values.browser === 'safari' ? 2 : 1;
+for (let runAttempt = 1; runAttempt <= maxAttempts; runAttempt++) {
+  samples.length = 0;
+  receipt.errors = [];
+  receipt.retries = runAttempt - 1;
+  browserServer = null;
+  browser = null;
+  safari = null;
+  session = null;
+  execute = null;
   sampleTimer = null;
-  sample();
-  receipt.elapsedSeconds = (Date.now() - started) / 1000;
-  receipt.peakRssBytes = Math.max(...samples.map(({ bytes }) => bytes));
-  receipt.samples = samples;
-  receipt.progress = await execute('return window.__memoryRun.patches;');
-  receipt.technicalLog = await execute('return document.querySelector("#technicalLog").textContent;');
-  assert.ok(receipt.technicalLog.includes('FLAMeS, 5 folds, on WebAssembly, 4 threads'));
-  receipt.pageMemoryApiAvailable = await execute('return typeof performance.measureUserAgentSpecificMemory === "function";');
-  receipt.pageMemoryNote = 'RSS observes resident native/WASM allocation during inference. UA-specific memory counts different objects and may trigger GC. Its separate post-completion observation is outside RSS sampling and is not a peak measurement.';
-  if (receipt.pageMemoryApiAvailable) {
-    await execute(`performance.measureUserAgentSpecificMemory().then((memory) => { window.__memoryRun.pageMemory = { bytes: memory.bytes }; }).catch((error) => { window.__memoryRun.pageMemory = { error: error.message }; }); return true;`);
-    for (let attempt = 0; attempt < 30; attempt++) {
-      receipt.pageMemoryObservation = await execute('return window.__memoryRun.pageMemory;');
-      if (receipt.pageMemoryObservation) break;
+  let shouldRetry = false;
+  try {
+    if (values.browser === 'chrome') {
+      browserServer = await chromium.launchServer({ executablePath: process.env.CHROME_EXECUTABLE || undefined, headless: true, args: ['--enable-webgl', '--use-gl=angle', '--use-angle=swiftshader'] });
+      browser = await chromium.connect(browserServer.wsEndpoint());
+      receipt.version = browser.version();
+      const page = await browser.newPage();
+      page.on('pageerror', (error) => receipt.errors.push(error.message));
+      await page.goto(`${origin}/white-matter-lesions/`);
+      execute = (script, args = []) => page.evaluate(({ script, args }) => new Function(script)(...args), { script, args });
+    } else {
+      safari = spawn('/usr/bin/safaridriver', ['--port', '4445'], { stdio: 'inherit' });
+      for (let attempt = 0; ; attempt++) {
+        try { await webdriver('/status', null, 'GET'); break; }
+        catch (error) { if (attempt === 30) throw error; await new Promise((done) => setTimeout(done, 1000)); }
+      }
+      session = await webdriver('/session', { capabilities: { alwaysMatch: { browserName: 'safari' } } });
+      receipt.version = session.capabilities.browserVersion;
+      await webdriver(`/session/${session.sessionId}/url`, { url: `${origin}/white-matter-lesions/` });
+      execute = (script, args = []) => webdriver(`/session/${session.sessionId}/execute/sync`, { script, args });
+    }
+    for (let attempt = 0; ; attempt++) {
+      if (await execute('return !!window.neurodeskAutomation && self.crossOriginIsolated;')) break;
+      if (attempt === 60) throw new Error('Production app did not become ready and isolated');
       await new Promise((done) => setTimeout(done, 1000));
     }
-    receipt.pageMemoryObservation ||= { error: 'No response within 30 seconds after completion' };
+    // Serve the shipped worker with an instrumentation prefix that caps hardwareConcurrency,
+    // maps immutable asset URLs to verified local files; observe progress/result metadata.
+    await execute(`
+      const origin = arguments[0];
+      window.__memoryRun = { files: [], patches: [] };
+      const OriginalFile = File;
+      window.File = class extends OriginalFile {
+        constructor(...args) { super(...args); window.__memoryRun.files.push(this); }
+      };
+      const OriginalWorker = Worker;
+      window.Worker = class extends OriginalWorker {
+        constructor(url, options) {
+          if (!String(url).includes('/assets/worker-')) return new OriginalWorker(url, options);
+          const filename = new URL(url).pathname.split('/').pop();
+          super(origin + '/white-matter-lesions/assets/memory-worker.js?worker=' + encodeURIComponent(filename), options);
+          this.addEventListener('error', (event) => { window.__memoryRun.error = event.message || 'Processing worker failed'; });
+          this.addEventListener('message', ({ data }) => {
+            if (data.type === 'progress') window.__memoryRun.patches.push(data.message);
+            if (data.type === 'error') window.__memoryRun.error = data.message;
+            if (data.type === 'result') window.__memoryRun.provenance = data.provenance;
+          });
+        }
+      };
+      fetch(origin + '/input').then((response) => response.blob()).then((blob) => {
+        const transfer = new DataTransfer();
+        transfer.items.add(new File([blob], arguments[2], { type: 'application/gzip' }));
+        document.querySelector('#neurodesk-input-transfer').files = transfer.files;
+        return window.neurodeskAutomation.dispatch('adopt', { role: 'image' });
+      }).then(() => { window.__memoryRun.ready = true; }).catch((error) => { window.__memoryRun.error = error.message; });
+    `, [origin, MODEL_ASSETS, example.name]);
+    for (let attempt = 0; ; attempt++) {
+      const state = await execute('return { ready: window.__memoryRun.ready, error: window.__memoryRun.error };');
+      if (state.error) throw new Error(state.error);
+      if (state.ready) break;
+      if (attempt === 120) throw new Error('Input adoption timed out');
+      await new Promise((done) => setTimeout(done, 1000));
+    }
+    receipt.baselineRssBytes = sample();
+    sampleTimer = setInterval(() => { try { sample(); } catch (error) { receipt.errors.push(error.message); } }, 1000);
+    const started = Date.now();
+    await execute(`window.neurodeskAutomation.dispatch('start', { operation: 'segment', parameters: { folds: 5, backend: 'wasm', skullStripped: false } }).catch((error) => { window.__memoryRun.error = error.message; }); return true;`);
+    for (;;) {
+      const state = await execute('return { text: document.querySelector("#statusText").textContent, error: window.__memoryRun.error, provenance: window.__memoryRun.provenance };');
+      if (state.error) throw new Error(state.error);
+      if (state.provenance) { receipt.provenance = state.provenance; break; }
+      if (Date.now() - started > 100 * 60 * 1000) throw new Error('Fivefold completion timed out');
+      console.log(state.text);
+      await new Promise((done) => setTimeout(done, 10000));
+    }
+    clearInterval(sampleTimer);
+    sampleTimer = null;
+    sample();
+    receipt.elapsedSeconds = (Date.now() - started) / 1000;
+    receipt.peakRssBytes = Math.max(...samples.map(({ bytes }) => bytes));
+    receipt.samples = samples;
+    receipt.progress = await execute('return window.__memoryRun.patches;');
+    receipt.technicalLog = await execute('return document.querySelector("#technicalLog").textContent;');
+    assert.ok(receipt.technicalLog.includes('FLAMeS, 5 folds, on WebAssembly, 4 threads'));
+    receipt.pageMemoryApiAvailable = await execute('return typeof performance.measureUserAgentSpecificMemory === "function";');
+    receipt.pageMemoryNote = 'RSS observes resident native/WASM allocation during inference. UA-specific memory counts different objects and may trigger GC. Its separate post-completion observation is outside RSS sampling and is not a peak measurement.';
+    if (receipt.pageMemoryApiAvailable) {
+      await execute(`performance.measureUserAgentSpecificMemory().then((memory) => { window.__memoryRun.pageMemory = { bytes: memory.bytes }; }).catch((error) => { window.__memoryRun.pageMemory = { error: error.message }; }); return true;`);
+      for (let attempt = 0; attempt < 30; attempt++) {
+        receipt.pageMemoryObservation = await execute('return window.__memoryRun.pageMemory;');
+        if (receipt.pageMemoryObservation) break;
+        await new Promise((done) => setTimeout(done, 1000));
+      }
+      receipt.pageMemoryObservation ||= { error: 'No response within 30 seconds after completion' };
+    }
+    assert.equal(receipt.provenance.backend, 'wasm');
+    assert.equal(receipt.provenance.models.length, 5);
+    assert.ok(receipt.progress.includes(`Segmenting lesions · patch ${5 * receipt.provenance.windows} of ${5 * receipt.provenance.windows}`));
+    // Sample before reading output bytes: FileReader/base64 validation allocations are excluded.
+    const names = await execute('return window.__memoryRun.files.map((file) => file.name);');
+    const files = {};
+    for (const name of ['MSLesSeg_P57_T1_FLAIR_lesions.nii', 'MSLesSeg_P57_T1_FLAIR_lesion_probability.nii']) {
+      assert.ok(names.includes(name), `App output ${name}`);
+      await execute(`window.__memoryRun.output = null; const file = window.__memoryRun.files.findLast((file) => file.name === arguments[0]); const reader = new FileReader(); reader.onload = () => { window.__memoryRun.output = reader.result.split(',')[1]; }; reader.readAsDataURL(file); return true;`, [name]);
+      let base64;
+      while (!(base64 = await execute('return window.__memoryRun.output;'))) await new Promise((done) => setTimeout(done, 100));
+      const bytes = Buffer.from(base64, 'base64');
+      files[name] = readVolume(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+      await mkdir(dirname(values.output), { recursive: true });
+      await writeFile(join(dirname(values.output), name), bytes);
+    }
+    // Safari sync scripts do not await promises: publish snapshot through an explicit completion slot.
+    await execute('window.neurodeskAutomation.dispatch("snapshot").then((snapshot) => { window.__memoryRun.report = snapshot.report; }); return true;');
+    let measurements;
+    while (!(measurements = await execute('return window.__memoryRun.report?.measurements;'))) await new Promise((done) => setTimeout(done, 100));
+    receipt.results = measure({ mask: files['MSLesSeg_P57_T1_FLAIR_lesions.nii'], probability: files['MSLesSeg_P57_T1_FLAIR_lesion_probability.nii'], lesions: measurements.count, totalMl: measurements.totalMl });
+    receipt.parity = compareWithBrowser(receipt.results, 5);
+    for (const [passed, line] of receipt.parity) assert.ok(passed, line);
+    assert.deepEqual(receipt.errors, []);
+    if (runAttempt > 1) {
+      console.log(`::warning title=Safari WebDriver retry::Five-fold memory benchmark passed on attempt ${runAttempt}`);
+    }
+    process.exitCode = 0;
+  } catch (error) {
+    if (runAttempt < maxAttempts && values.browser === 'safari' && isTransientSafariDriverError(error)) {
+      console.warn(`Safari WebDriver session dropped on attempt ${runAttempt}/${maxAttempts}; retrying cleanly: ${error.message}`);
+      shouldRetry = true;
+    } else {
+      receipt.errors.push(error.stack || String(error));
+      process.exitCode = 1;
+    }
+  } finally {
+    clearInterval(sampleTimer);
+    if (session) await webdriver(`/session/${session.sessionId}`, null, 'DELETE', 10_000).catch(() => {});
+    const child = safari;
+    if (child && child.exitCode === null && child.signalCode === null) {
+      child.kill();
+      let killTimer;
+      await Promise.race([
+        new Promise((done) => child.once('exit', done)),
+        new Promise((done) => {
+          killTimer = setTimeout(() => {
+            try { child.kill('SIGKILL'); } catch { /* ignore */ }
+            done();
+          }, 5000);
+        }),
+      ]);
+      clearTimeout(killTimer);
+    }
+    await browser?.close();
+    await browserServer?.close();
   }
-  assert.equal(receipt.provenance.backend, 'wasm');
-  assert.equal(receipt.provenance.models.length, 5);
-  assert.ok(receipt.progress.includes(`Segmenting lesions · patch ${5 * receipt.provenance.windows} of ${5 * receipt.provenance.windows}`));
-  // Sample before reading output bytes: FileReader/base64 validation allocations are excluded.
-  const names = await execute('return window.__memoryRun.files.map((file) => file.name);');
-  const files = {};
-  for (const name of ['MSLesSeg_P57_T1_FLAIR_lesions.nii', 'MSLesSeg_P57_T1_FLAIR_lesion_probability.nii']) {
-    assert.ok(names.includes(name), `App output ${name}`);
-    await execute(`window.__memoryRun.output = null; const file = window.__memoryRun.files.findLast((file) => file.name === arguments[0]); const reader = new FileReader(); reader.onload = () => { window.__memoryRun.output = reader.result.split(',')[1]; }; reader.readAsDataURL(file); return true;`, [name]);
-    let base64;
-    while (!(base64 = await execute('return window.__memoryRun.output;'))) await new Promise((done) => setTimeout(done, 100));
-    const bytes = Buffer.from(base64, 'base64');
-    files[name] = readVolume(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
-    await mkdir(dirname(values.output), { recursive: true });
-    await writeFile(join(dirname(values.output), name), bytes);
-  }
-  // Safari sync scripts do not await promises: publish snapshot through an explicit completion slot.
-  await execute('window.neurodeskAutomation.dispatch("snapshot").then((snapshot) => { window.__memoryRun.report = snapshot.report; }); return true;');
-  let measurements;
-  while (!(measurements = await execute('return window.__memoryRun.report?.measurements;'))) await new Promise((done) => setTimeout(done, 100));
-  receipt.results = measure({ mask: files['MSLesSeg_P57_T1_FLAIR_lesions.nii'], probability: files['MSLesSeg_P57_T1_FLAIR_lesion_probability.nii'], lesions: measurements.count, totalMl: measurements.totalMl });
-  receipt.parity = compareWithBrowser(receipt.results, 5);
-  for (const [passed, line] of receipt.parity) assert.ok(passed, line);
-  assert.deepEqual(receipt.errors, []);
-} catch (error) {
-  receipt.errors.push(error.stack || String(error));
-  process.exitCode = 1;
-} finally {
-  clearInterval(sampleTimer);
-  await mkdir(dirname(values.output), { recursive: true });
-  await writeFile(values.output, JSON.stringify(receipt, null, 2) + '\n');
-  if (session) await webdriver(`/session/${session.sessionId}`, null, 'DELETE').catch(console.error);
-  safari?.kill();
-  if (safari && safari.exitCode === null) await new Promise((done) => safari.once('exit', done));
-  await browser?.close();
-  await browserServer?.close();
-  await new Promise((done) => server.close(done));
+  if (!shouldRetry) break;
 }
+await mkdir(dirname(values.output), { recursive: true });
+await writeFile(values.output, JSON.stringify(receipt, null, 2) + '\n');
+await new Promise((done) => server.close(done));
 console.log(`Memory receipt ${values.output}; errors ${receipt.errors.length}`);
