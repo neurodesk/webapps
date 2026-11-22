@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { gzipSync } from 'node:zlib';
+import { deflateRawSync, gzipSync } from 'node:zlib';
 import { alignViewerVolumes, readFileWorldAffine } from '../src/viewer-geometry.js';
 
 function fakeNiivue(volumes) {
@@ -216,4 +216,57 @@ test('readFileWorldAffine bounds compressed reads for highly compressible and ba
     assert.ok(maxSliceBytes <= 544, `expected bounded slices, saw ${maxSliceBytes}`);
     assert.ok(slicedBytes < 4096, `expected bounded total reads, saw ${slicedBytes} of ${blob.size}`);
   }
+});
+
+test('readFileWorldAffine handles max legal FEXTRA gzip header and leading empty DEFLATE blocks with bounded slices', async () => {
+  const header = makeNifti2Bytes({ extension: true });
+  // 1. Legal 65,535-byte FEXTRA header (payload begins at offset 65,547).
+  const rawDeflate = deflateRawSync(Buffer.from(header));
+  const fextraGzip = Buffer.alloc(10 + 2 + 65535 + rawDeflate.length + 8);
+  fextraGzip.set([0x1f, 0x8b, 0x08, 0x04, 0, 0, 0, 0, 0, 0xff], 0);
+  fextraGzip.writeUInt16LE(65535, 10);
+  rawDeflate.copy(fextraGzip, 10 + 2 + 65535);
+  let fextraRead = 0;
+  let fextraMaxSlice = 0;
+  const fextraBlob = new Blob([fextraGzip]);
+  const fextraTracked = {
+    size: fextraBlob.size,
+    slice(start = 0, end = fextraBlob.size) {
+      const len = Math.max(0, Math.min(end, fextraBlob.size) - Math.max(0, start));
+      fextraRead += len;
+      fextraMaxSlice = Math.max(fextraMaxSlice, len);
+      return fextraBlob.slice(start, end);
+    },
+  };
+  const fextraAffine = await readFileWorldAffine(fextraTracked);
+  assert.ok(Math.abs(fextraAffine[0][1] - (-3)) < 1e-6);
+  assert.ok(fextraMaxSlice <= 544);
+  assert.ok(fextraRead < 2048, `expected FEXTRA to be skipped without reading, saw ${fextraRead}`);
+
+  // 2. Leading empty stored DEFLATE blocks (each 5 bytes: 0x00 0x00 0x00 0xff 0xff)
+  // before the header, verifying fixed-size chunks with no quadratic re-reading.
+  const emptyBlocks = Buffer.alloc(1000 * 5);
+  for (let i = 0; i < 1000; i += 1) emptyBlocks.set([0x00, 0x00, 0x00, 0xff, 0xff], i * 5);
+  const paddedGzip = Buffer.concat([
+    Buffer.from([0x1f, 0x8b, 0x08, 0x00, 0, 0, 0, 0, 0, 0xff]),
+    emptyBlocks,
+    rawDeflate,
+    Buffer.alloc(8),
+  ]);
+  let paddedRead = 0;
+  let paddedMaxSlice = 0;
+  const paddedBlob = new Blob([paddedGzip]);
+  const paddedTracked = {
+    size: paddedBlob.size,
+    slice(start = 0, end = paddedBlob.size) {
+      const len = Math.max(0, Math.min(end, paddedBlob.size) - Math.max(0, start));
+      paddedRead += len;
+      paddedMaxSlice = Math.max(paddedMaxSlice, len);
+      return paddedBlob.slice(start, end);
+    },
+  };
+  const paddedAffine = await readFileWorldAffine(paddedTracked);
+  assert.ok(Math.abs(paddedAffine[0][1] - (-3)) < 1e-6);
+  assert.ok(paddedMaxSlice <= 544, `expected fixed bounded slice <= 544, saw ${paddedMaxSlice}`);
+  assert.ok(paddedRead <= paddedGzip.length + 544, `expected linear read without re-reading, saw ${paddedRead} vs ${paddedGzip.length}`);
 });
