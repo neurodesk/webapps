@@ -484,9 +484,10 @@ async function restorePreviousSource(nv, snapshot = null) {
       await nv.setColormapLabel(1, regionMaskColormap(searchRegion().name));
     }
     if (snapshot) {
+      const keepLabel = Boolean(overlayFile || !snapshot.meshesCleared);
       anatomyIn3D = snapshot.anatomyIn3D;
-      displayedResult = overlayFile ? previousResult : null;
-      $('imageLabel').textContent = overlayFile ? snapshot.imageLabel : 'ORIGINAL IMAGE';
+      displayedResult = overlayFile ? previousResult : (snapshot.meshesCleared ? null : snapshot.displayedResult);
+      $('imageLabel').textContent = keepLabel ? snapshot.imageLabel : 'ORIGINAL IMAGE';
       if (overlayFile && previousResult === 'patch-qc') {
         const firstPatch = Object.values(surfaceAnalysis?.flat_patches || {})[0];
         if (firstPatch) showPatchMeasurements(firstPatch);
@@ -531,6 +532,7 @@ async function showSource({
       displayedResult,
       imageLabel: $('imageLabel').textContent,
       anatomyIn3D,
+      meshesCleared: false,
     };
     const rollbackOnCancel = async () => {
       if (restoreOnAbort) await restorePreviousSource(nv, snapshot);
@@ -541,6 +543,7 @@ async function showSource({
       if (!isCurrent()) return rollbackOnCancel();
       if (!await alignViewerVolumes(nv, isCurrent, affine ? [affine] : [])) return rollbackOnCancel();
       if (reset) {
+        snapshot.meshesCleared = true;
         anatomyIn3D = false;
         await resetMeshes(nv);
         if (!isCurrent()) return rollbackOnCancel();

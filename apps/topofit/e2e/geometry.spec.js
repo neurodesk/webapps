@@ -1006,7 +1006,7 @@ test('switching from a scan with a displaced mesh to a micrometre scan updates t
   }
 });
 
-test('cancelling a replacement during mesh cleanup restores the active QC overlay', async ({ page }) => {
+test('cancelling a replacement preserves visible surface labels and active QC overlays', async ({ page }) => {
   test.setTimeout(60_000);
   const scanA = {
     name: 'scan-qc-a.nii',
@@ -1038,8 +1038,18 @@ test('cancelling a replacement during mesh cleanup restores the active QC overla
       values: landmarkValues([8, 8, 8]),
     }),
   };
+  const verts = Float32Array.from([0, 0, 0, 4, 0, 0, 0, 4, 0, 0, 0, 4]);
+  const faces = Int32Array.from([0, 2, 1, 0, 1, 3, 0, 3, 2, 1, 2, 3]);
+  const surfaceFiles = writeSurfaceFiles({
+    'lh.white': verts,
+    'lh.pial': verts,
+    'lh.registration': verts,
+    'rh.white': verts,
+    'rh.pial': verts,
+    'rh.registration': verts,
+  }, { lh: faces, rh: faces });
 
-  await page.addInitScript(({ qc }) => {
+  await page.addInitScript(({ files, qc }) => {
     const NativeWorker = window.Worker;
     window.Worker = class extends NativeWorker {
       constructor(url, options) {
@@ -1048,10 +1058,12 @@ test('cancelling a replacement during mesh cleanup restores the active QC overla
       }
       postMessage(job, ...rest) {
         if (!this.fixture) return super.postMessage(job, ...rest);
+        const reconstructedFiles = files.map((file) => ({ ...file, bytes: Uint8Array.from(file.bytes).buffer }));
+        reconstructedFiles.push({ id: 'qc', name: 'qc.nii', mediaType: 'application/nifti', bytes: Uint8Array.from(qc).buffer });
         this.onmessage({
           data: {
             type: 'result',
-            files: [{ id: 'qc', name: 'qc.nii', mediaType: 'application/nifti', bytes: Uint8Array.from(qc).buffer }],
+            files: reconstructedFiles,
             surfaces: null,
             provenance: { surfaceVertices: 4, surfaceAnalysis: null, runtime: {}, outputSha256: {} },
             elapsedSeconds: 1,
@@ -1059,6 +1071,9 @@ test('cancelling a replacement during mesh cleanup restores the active QC overla
         });
       }
     };
+    window.holdNextVolumeLoad = false;
+    window.releaseVolumeLoad = null;
+    window.volumeLoadStarted = new Promise((resolve) => { window.markVolumeLoadStarted = resolve; });
     window.holdNextMeshCleanup = false;
     window.releaseMeshCleanup = null;
     window.meshCleanupStarted = new Promise((resolve) => { window.markMeshCleanupStarted = resolve; });
@@ -1066,6 +1081,15 @@ test('cancelling a replacement during mesh cleanup restores the active QC overla
     EventTarget.prototype.addEventListener = function (type, ...rest) {
       if (type === 'volumeRemoved' && typeof this.removeAllMeshes === 'function' && !this.__meshHooked) {
         this.__meshHooked = true;
+        const origLoadVolumes = this.loadVolumes.bind(this);
+        this.loadVolumes = async (...args) => {
+          if (window.holdNextVolumeLoad) {
+            window.holdNextVolumeLoad = false;
+            window.markVolumeLoadStarted();
+            await new Promise((resolve) => { window.releaseVolumeLoad = resolve; });
+          }
+          return origLoadVolumes(...args);
+        };
         const origRemoveAll = this.removeAllMeshes.bind(this);
         this.removeAllMeshes = async () => {
           if (window.holdNextMeshCleanup) {
@@ -1078,20 +1102,36 @@ test('cancelling a replacement during mesh cleanup restores the active QC overla
       }
       return nativeAddEventListener.call(this, type, ...rest);
     };
-  }, { qc: Array.from(scanA.buffer) });
+  }, {
+    files: surfaceFiles.map((file) => ({ ...file, bytes: Array.from(new Uint8Array(file.bytes)) })),
+    qc: Array.from(scanA.buffer),
+  });
 
   await page.goto('/');
   await page.locator('#imageInput').setInputFiles(scanA);
   await expect(page.locator('#runButton')).toBeEnabled({ timeout: 30_000 });
   await page.locator('#runButton').click();
   await expect(page.locator('#outputSection')).toHaveAttribute('open', '', { timeout: 30_000 });
-  await expect(page.locator('#imageLabel')).toContainText('TOPOFIT QC');
-  const before = (await dispatch(page, 'viewers.niivue', { viewerId: 'image', method: 'where_am_i' })).result;
-  expect(before.volumes).toHaveLength(2);
 
-  await page.evaluate(() => {
-    window.holdNextMeshCleanup = true;
-  });
+  // 1. Cancel during volume decode before mesh cleanup while a surface is visible: label stays LEFT WHITE SURFACE.
+  await page.locator('.nd-volume-toggle').filter({ hasText: 'Left white surface' }).getByRole('button', { name: 'View', exact: true }).click();
+  await expect(page.locator('#imageLabel')).toContainText('LEFT WHITE SURFACE');
+  await page.evaluate(() => { window.holdNextVolumeLoad = true; });
+  await page.locator('#imageInput').setInputFiles(scanB);
+  await page.evaluate(() => window.volumeLoadStarted);
+  await page.locator('#cancelButton').click();
+  await expect(page.locator('#statusText')).toContainText('cancelled');
+  await page.evaluate(() => window.releaseVolumeLoad?.());
+  await expect.poll(async () => (await dispatch(page, 'viewers.niivue', {
+    viewerId: 'image',
+    method: 'where_am_i',
+  })).result.volumes.map((v) => v.name), { timeout: 15_000 }).toEqual(['scan-qc-a.nii']);
+  await expect(page.locator('#imageLabel')).toContainText('LEFT WHITE SURFACE');
+
+  // 2. Cancel during mesh cleanup while the QC overlay is active: both anatomy and QC overlay are restored.
+  await page.locator('.nd-volume-toggle').filter({ hasText: 'Source-grid QC overlay' }).getByRole('button', { name: 'View', exact: true }).click();
+  await expect(page.locator('#imageLabel')).toContainText('TOPOFIT QC');
+  await page.evaluate(() => { window.holdNextMeshCleanup = true; });
   await page.locator('#imageInput').setInputFiles(scanB);
   await page.evaluate(() => window.meshCleanupStarted);
   await page.locator('#cancelButton').click();
