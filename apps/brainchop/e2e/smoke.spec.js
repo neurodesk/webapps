@@ -61,12 +61,14 @@ test('cancelling inference allows another run', async ({ page }) => {
       await page.locator('#runButton').click();
       await expect(page.locator('#cancelButton')).toBeVisible();
       const worker = await workerPromise;
-      const workerClosed = worker.waitForEvent('close', { timeout: 30000 });
       await expect
         .poll(() => held.length, { timeout: 60000, message: `Expected run ${run} to request model.json` })
         .toBe(run);
-      await page.locator('#cancelButton').click();
-      await workerClosed;
+      expect(page.workers()).toContain(worker);
+      await Promise.all([
+        worker.waitForEvent('close', { timeout: 30000 }),
+        page.locator('#cancelButton').click(),
+      ]);
       await expect(page.locator('#runButton')).toBeEnabled({ timeout: 30000 });
       await expect(page.locator('#statusText')).toHaveText('Cancelled');
       await expect(page.locator('#resultList .nd-download-btn')).toHaveCount(0);
