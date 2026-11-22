@@ -807,6 +807,46 @@ test('cancelling a load during mesh cleanup rolls back the viewer to match the a
 
   await page.locator('#runButton').click();
   await expect.poll(() => page.evaluate(() => window.postedFileName)).toBe('scan-a.nii');
+
+  // Reproducing Sol 6.2 r2 P1: cancel B during mesh cleanup, then select an invalid C
+  // before B's cleanup finishes. C fails before reaching the viewer, and the viewer must
+  // still roll back to scan-a.nii instead of leaving cancelled scan-b.nii displayed.
+  const invalidScanC = {
+    name: 'invalid-scan-c.nii',
+    mimeType: 'application/nifti',
+    buffer: buildNifti2({
+      dims: [8, 8, 8],
+      pixDims: [1, 0, 2, 2],
+      qformCode: 1,
+      sformCode: 0,
+      quatern: [0, 0, 0],
+      qoffset: [0, 0, 0],
+      srow: ZERO_SROW,
+      xyztUnits: 2,
+      values: landmarkValues([8, 8, 8]),
+    }),
+  };
+  await page.evaluate(() => {
+    window.postedFileName = null;
+    window.holdNextMeshCleanup = true;
+    window.meshCleanupStarted = new Promise((resolve) => { window.markMeshCleanupStarted = resolve; });
+  });
+  await page.locator('#imageInput').setInputFiles(scanB);
+  await page.evaluate(() => window.meshCleanupStarted);
+  await page.locator('#cancelButton').click();
+  await expect(page.locator('#statusText')).toContainText('cancelled');
+  await page.locator('#imageInput').setInputFiles(invalidScanC);
+  await expect(page.locator('#statusText')).toContainText(/voxel spacing|singular/i);
+  await page.evaluate(() => window.releaseMeshCleanup?.());
+
+  await expect.poll(async () => (await dispatch(page, 'viewers.niivue', {
+    viewerId: 'image',
+    method: 'describe_volume',
+    params: { volume: 0, affine: true, stats: false },
+  })).result.volume.name, { timeout: 15_000 }).toBe('scan-a.nii');
+  await expect(page.locator('#fileInfo')).toHaveText('scan-a.nii');
+  await page.locator('#runButton').click();
+  await expect.poll(() => page.evaluate(() => window.postedFileName)).toBe('scan-a.nii');
 });
 
 test('cancelling an example during viewer decode leaves the app cancelled without enabling reconstruction', async ({ page }) => {

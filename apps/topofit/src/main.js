@@ -62,7 +62,6 @@ let meshSceneReady = false;
 let anatomyIn3D = false;
 let viewerBusy = false;
 let loadToken = 0;
-let cancelledToken = 0;
 let viewerLoadChain = Promise.resolve();
 let normalArrowWorker;
 let normalArrowKey = '';
@@ -467,19 +466,15 @@ function serializeViewerLoad(task) {
   return queued;
 }
 
-async function restorePreviousSource(nv, isRestorable) {
-  if (!isRestorable()) return;
+async function restorePreviousSource(nv) {
   if (source) {
     await nv.loadVolumes([{ url: source, name: source.name }]);
-    if (!isRestorable()) return;
-    await alignViewerVolumes(nv, isRestorable, sourceAffine ? [sourceAffine] : []);
+    await alignViewerVolumes(nv, () => true, sourceAffine ? [sourceAffine] : []);
   } else {
     await nv.removeAllVolumes();
   }
-  if (isRestorable()) {
-    nv.drawScene();
-    nv.createOnLocationChange?.();
-  }
+  nv.drawScene();
+  nv.createOnLocationChange?.();
 }
 
 function loadSceneVolumes(nv, entries, { isCurrent = () => true, expectedAffines = sourceAffine ? [sourceAffine] : [] } = {}) {
@@ -511,7 +506,7 @@ async function showSource({
   return serializeViewerLoad(async () => {
     if (!isCurrent()) return false;
     const rollbackOnCancel = async () => {
-      if (restoreOnAbort) await restorePreviousSource(nv, () => loadToken === cancelledToken);
+      if (restoreOnAbort) await restorePreviousSource(nv);
       return false;
     };
     try {
@@ -536,8 +531,7 @@ async function showSource({
       return true;
     } catch (error) {
       if (restoreOnAbort) {
-        const errorToken = loadToken;
-        await restorePreviousSource(nv, () => loadToken === errorToken).catch(() => {});
+        await restorePreviousSource(nv).catch(() => {});
       }
       throw error;
     }
@@ -697,7 +691,7 @@ async function load(file, { signal } = {}) {
   const isCurrent = () => token === loadToken && !signal?.aborted;
   const onAbort = () => {
     if (token === loadToken) {
-      cancelledToken = ++loadToken;
+      loadToken += 1;
       setBusy(false);
     }
   };
@@ -1085,7 +1079,7 @@ $('analyzeButton').onclick = () => void run(true).catch((error) => { if (error.n
 
 $('cancelButton').onclick = () => {
   exampleControl.cancel();
-  cancelledToken = ++loadToken;
+  loadToken += 1;
   cancelRun?.();
   preparation = null;
   worker?.terminate();

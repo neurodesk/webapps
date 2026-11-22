@@ -181,3 +181,39 @@ test('readFileWorldAffine validates untouched headers across uncompressed, gzipp
     await assert.rejects(readFileWorldAffine(new Blob([invalid])), /voxel spacing must be finite and positive/);
   }
 });
+
+test('readFileWorldAffine bounds compressed reads for highly compressible and bad-CRC gzip scans', async () => {
+  const header = makeNifti2Bytes({ extension: true });
+  const large = new Uint8Array(32 * 1024 * 1024);
+  large.set(header, 0);
+  const gz = Buffer.from(gzipSync(large));
+  assert.ok(gz.length > 8192, `expected multi-KiB compressed fixture, got ${gz.length}`);
+  const badCrc = Buffer.from(gz);
+  badCrc[badCrc.length - 8] ^= 0xff;
+
+  for (const payload of [gz, badCrc]) {
+    let slicedBytes = 0;
+    let maxSliceBytes = 0;
+    const blob = new Blob([payload]);
+    const tracked = {
+      size: blob.size,
+      slice(start = 0, end = blob.size) {
+        const len = Math.max(0, Math.min(end, blob.size) - Math.max(0, start));
+        slicedBytes += len;
+        maxSliceBytes = Math.max(maxSliceBytes, len);
+        return blob.slice(start, end);
+      },
+      arrayBuffer() {
+        throw new Error('header probe must not read the entire file');
+      },
+      stream() {
+        throw new Error('header probe must not stream unbounded chunks');
+      },
+    };
+    const affine = await readFileWorldAffine(tracked);
+    assert.ok(Math.abs(affine[0][1] - (-3)) < 1e-6);
+    assert.ok(Math.abs(affine[1][0] - 2) < 1e-6);
+    assert.ok(maxSliceBytes <= 544, `expected bounded slices, saw ${maxSliceBytes}`);
+    assert.ok(slicedBytes < 4096, `expected bounded total reads, saw ${slicedBytes} of ${blob.size}`);
+  }
+});
