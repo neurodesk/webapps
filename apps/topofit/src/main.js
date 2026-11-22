@@ -700,8 +700,8 @@ async function load(file, { signal } = {}) {
   setBusy(true);
   try {
     if (!/\.nii(\.gz)?$/i.test(file.name)) throw new Error('Choose a .nii or .nii.gz image.');
-    const affine = await readFileWorldAffine(file);
-    if (!isCurrent()) return false;
+    const affine = await readFileWorldAffine(file, { isCurrent });
+    if (!isCurrent() || !affine) return false;
     const committed = await showSource({
       file,
       affine,

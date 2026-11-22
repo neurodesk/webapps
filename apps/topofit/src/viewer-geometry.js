@@ -1,7 +1,7 @@
+import { Inflate } from 'fflate';
 import { readVolumeHeader, resolveWorldAffine } from '@neurodesk/topofit';
 
 const HEADER_PREFIX_BYTES = 544;
-const MIN_NIFTI_HEADER_BYTES = 348;
 const GZIP_CHUNK_BYTES = 256;
 const GZIP_SCAN_BYTES = 512;
 
@@ -21,11 +21,19 @@ function pixDimsDiffer(pixDims, spacing) {
   return false;
 }
 
-async function scanPastZeroByte(file, startOffset) {
+async function readSlice(file, start, end, isCurrent) {
+  if (!isCurrent()) return null;
+  const buffer = await file.slice(start, end).arrayBuffer();
+  if (!isCurrent()) return null;
+  return new Uint8Array(buffer);
+}
+
+async function scanPastZeroByte(file, startOffset, isCurrent) {
   let offset = startOffset;
   while (offset < file.size) {
     const end = Math.min(offset + GZIP_SCAN_BYTES, file.size);
-    const view = new Uint8Array(await file.slice(offset, end).arrayBuffer());
+    const view = await readSlice(file, offset, end, isCurrent);
+    if (!view) return null;
     const zeroIndex = view.indexOf(0);
     if (zeroIndex >= 0) return offset + zeroIndex + 1;
     offset = end;
@@ -33,9 +41,10 @@ async function scanPastZeroByte(file, startOffset) {
   throw new Error('The NIfTI gzip header is truncated.');
 }
 
-async function findGzipPayloadOffset(file) {
+async function findGzipPayloadOffset(file, isCurrent) {
   if (file.size < 10) throw new Error('The NIfTI image is truncated.');
-  const fixed = new Uint8Array(await file.slice(0, 10).arrayBuffer());
+  const fixed = await readSlice(file, 0, 10, isCurrent);
+  if (!fixed) return null;
   if (fixed[0] !== 0x1f || fixed[1] !== 0x8b || fixed[2] !== 0x08 || (fixed[3] & 0xe0) !== 0) {
     throw new Error('The NIfTI gzip header is invalid.');
   }
@@ -43,13 +52,20 @@ async function findGzipPayloadOffset(file) {
   let offset = 10;
   if (flags & 0x04) {
     if (offset + 2 > file.size) throw new Error('The NIfTI gzip header is truncated.');
-    const lenBytes = new Uint8Array(await file.slice(offset, offset + 2).arrayBuffer());
+    const lenBytes = await readSlice(file, offset, offset + 2, isCurrent);
+    if (!lenBytes) return null;
     const extraLength = lenBytes[0] | (lenBytes[1] << 8);
     offset += 2 + extraLength;
     if (offset > file.size) throw new Error('The NIfTI gzip header is truncated.');
   }
-  if (flags & 0x08) offset = await scanPastZeroByte(file, offset);
-  if (flags & 0x10) offset = await scanPastZeroByte(file, offset);
+  if (flags & 0x08) {
+    offset = await scanPastZeroByte(file, offset, isCurrent);
+    if (offset === null) return null;
+  }
+  if (flags & 0x10) {
+    offset = await scanPastZeroByte(file, offset, isCurrent);
+    if (offset === null) return null;
+  }
   if (flags & 0x02) {
     offset += 2;
     if (offset > file.size) throw new Error('The NIfTI gzip header is truncated.');
@@ -58,132 +74,55 @@ async function findGzipPayloadOffset(file) {
 }
 
 // Inflates only the NIfTI header prefix from a gzipped File/Blob by feeding
-// fixed-size 256-byte slices sequentially into raw DEFLATE, draining any output
-// produced by each slice before reading the next. This bounds every slice to
-// 256 compressed bytes (~256 KiB max expansion), never re-reads earlier bytes,
-// and skips the gzip CRC32 trailer so bad-CRC scans match readVolume().
-async function inflateGzipHeaderPrefix(file) {
-  const start = await findGzipPayloadOffset(file);
+// fixed 256-byte slices synchronously into raw DEFLATE. Stopping immediately
+// once 544 uncompressed bytes are available bounds both compressed reads and
+// inflation memory in Node and Chromium, skips the gzip CRC32 trailer so
+// bad-CRC scans match readVolume(), and halts on cancellation before the next
+// slice is read.
+async function inflateGzipHeaderPrefix(file, isCurrent) {
+  const start = await findGzipPayloadOffset(file, isCurrent);
+  if (start === null) return null;
   if (start >= file.size) throw new Error('The NIfTI image is truncated.');
-  const decompressor = new DecompressionStream('deflate-raw');
-  const writer = decompressor.writable.getWriter();
-  const reader = decompressor.readable.getReader();
   const output = new Uint8Array(HEADER_PREFIX_BYTES);
   let offset = 0;
+  let done = false;
+  const inflater = new Inflate((chunk, final) => {
+    if (offset < HEADER_PREFIX_BYTES) {
+      const take = Math.min(chunk.byteLength, HEADER_PREFIX_BYTES - offset);
+      output.set(chunk.subarray(0, take), offset);
+      offset += take;
+    }
+    if (final) done = true;
+  });
   let position = start;
-  let pendingRead = reader.read();
-
-  const channel = typeof MessageChannel === 'function' ? new MessageChannel() : null;
-  let nextTurnId = 0;
-
-  const consumeChunk = (value) => {
-    const take = Math.min(value.byteLength, HEADER_PREFIX_BYTES - offset);
-    output.set(value.subarray(0, take), offset);
-    offset += take;
-  };
-
-  const waitNextTurn = (afterWrite) => {
-    let cancelled = false;
-    let timer;
-    const promise = afterWrite.then(() => {
-      if (cancelled) return new Promise(() => {});
-      if (channel) {
-        const id = (nextTurnId += 1);
-        return new Promise((resolve) => {
-          channel.port1.onmessage = (event) => {
-            if (event.data === id) resolve({ kind: 'next' });
-          };
-          channel.port2.postMessage(id);
-        });
-      }
-      return new Promise((resolve) => {
-        timer = setTimeout(() => resolve({ kind: 'next' }), 0);
-      });
-    });
-    return {
-      promise,
-      cancel: () => {
-        cancelled = true;
-        clearTimeout(timer);
-        if (channel) channel.port1.onmessage = null;
-      },
-    };
-  };
-
-  try {
-    let streamDone = false;
-    while (offset < HEADER_PREFIX_BYTES && position < file.size && !streamDone) {
-      const end = Math.min(position + GZIP_CHUNK_BYTES, file.size);
-      const chunk = new Uint8Array(await file.slice(position, end).arrayBuffer());
-      position = end;
-      const writeSettled = writer.write(chunk).catch(() => {});
-      while (offset < HEADER_PREFIX_BYTES && !streamDone) {
-        const nextTurn = waitNextTurn(writeSettled);
-        const turn = await Promise.race([
-          pendingRead.then(
-            (result) => ({ kind: 'read', result }),
-            (error) => ({ kind: 'error', error }),
-          ),
-          nextTurn.promise,
-        ]);
-        nextTurn.cancel();
-        if (turn.kind === 'next') break;
-        if (turn.kind === 'error') {
-          if (offset >= MIN_NIFTI_HEADER_BYTES) {
-            streamDone = true;
-            break;
-          }
-          throw turn.error;
-        }
-        if (turn.result.done) {
-          streamDone = true;
-          break;
-        }
-        consumeChunk(turn.result.value);
-        if (offset < HEADER_PREFIX_BYTES) pendingRead = reader.read();
-      }
-    }
-    if (offset < HEADER_PREFIX_BYTES && !streamDone) {
-      writer.close().catch(() => {});
-      while (offset < HEADER_PREFIX_BYTES) {
-        let result;
-        try {
-          result = await pendingRead;
-        } catch (error) {
-          if (offset >= MIN_NIFTI_HEADER_BYTES) break;
-          throw error;
-        }
-        if (result.done) break;
-        consumeChunk(result.value);
-        if (offset < HEADER_PREFIX_BYTES) pendingRead = reader.read();
-      }
-    }
-  } finally {
-    channel?.port1.close();
-    channel?.port2.close();
-    pendingRead.catch(() => {});
-    await reader.cancel().catch(() => {});
-    await writer.abort().catch(() => {});
+  while (offset < HEADER_PREFIX_BYTES && !done && position < file.size) {
+    const end = Math.min(position + GZIP_CHUNK_BYTES, file.size);
+    const slice = await readSlice(file, position, end, isCurrent);
+    if (!slice) return null;
+    position = end;
+    inflater.push(slice, position >= file.size);
   }
   return output.buffer.slice(0, offset);
 }
 
 // Reads only the header prefix of a NIfTI File/Blob without copying or inflating
-// the full voxel payload.
-async function readHeaderBytes(file) {
-  const head = await file.slice(0, HEADER_PREFIX_BYTES).arrayBuffer();
-  const bytes = new Uint8Array(head);
-  if (bytes.length < 2 || bytes[0] !== 0x1f || bytes[1] !== 0x8b) return head;
-  if (typeof DecompressionStream === 'function') {
-    return inflateGzipHeaderPrefix(file);
+// the full voxel payload. Returns null when cancelled before completion.
+async function readHeaderBytes(file, isCurrent) {
+  const head = await readSlice(file, 0, HEADER_PREFIX_BYTES, isCurrent);
+  if (!head) return null;
+  if (head.byteLength < 2 || head[0] !== 0x1f || head[1] !== 0x8b) {
+    return head.buffer.slice(head.byteOffset, head.byteOffset + head.byteLength);
   }
-  return file.arrayBuffer();
+  return inflateGzipHeaderPrefix(file, isCurrent);
 }
 
 // Validates the original untouched NIfTI header (before NiiVue normalizes zero
-// or non-finite pixDims to 1) and returns the millimetre world affine.
-export async function readFileWorldAffine(file) {
-  const header = readVolumeHeader(await readHeaderBytes(file));
+// or non-finite pixDims to 1) and returns the millimetre world affine, or null
+// if the load is cancelled while reading.
+export async function readFileWorldAffine(file, { isCurrent = () => true } = {}) {
+  const bytes = await readHeaderBytes(file, isCurrent);
+  if (!bytes || !isCurrent()) return null;
+  const header = readVolumeHeader(bytes);
   return resolveWorldAffine(header);
 }
 

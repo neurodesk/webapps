@@ -403,3 +403,11 @@ test('a real brain scan converted to NIfTI-2 (qform-only, micrometres, metres) m
     closeMatrix(actual.affine, reference.affine, 1e-4, `${label}: oblique brain affine`);
   }
 });
+
+test('readVolumeHeader and readVolume reject empty and one-byte buffers with a NIfTI validation error', () => {
+  for (const length of [0, 1]) {
+    const buffer = new ArrayBuffer(length);
+    assert.throws(() => readVolumeHeader(buffer), /Choose a NIfTI image/);
+    assert.throws(() => readVolume(buffer), /Choose a NIfTI image/);
+  }
+});

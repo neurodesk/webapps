@@ -42,12 +42,18 @@ function qformAffine(header) {
   ];
 }
 
+function decodeNiftiBuffer(buffer) {
+  if (!buffer || buffer.byteLength < 2) throw new Error('Choose a NIfTI image (.nii or .nii.gz).');
+  const source = nifti.isCompressed(buffer) ? nifti.decompress(buffer) : buffer;
+  if (!nifti.isNIFTI(source)) throw new Error('Choose a NIfTI image (.nii or .nii.gz).');
+  return source;
+}
+
 // Reads a NIfTI-1 or NIfTI-2 header from either a full file buffer or a
 // 540-byte uncompressed prefix. Slicing to the fixed header size avoids walking
 // into NIfTI extensions when only the prefix was streamed.
 export function readVolumeHeader(buffer) {
-  const source = nifti.isCompressed(buffer) ? nifti.decompress(buffer) : buffer;
-  if (!nifti.isNIFTI(source)) throw new Error('Choose a NIfTI image (.nii or .nii.gz).');
+  const source = decodeNiftiBuffer(buffer);
   const headerLength = nifti.isNIFTI2(source) ? 540 : 348;
   if (source.byteLength < headerLength) throw new Error('The NIfTI header is truncated.');
   return nifti.readHeader(source.slice(0, headerLength));
@@ -87,8 +93,7 @@ export function resolveWorldAffine(header) {
 }
 
 export function readVolume(buffer) {
-  const source = nifti.isCompressed(buffer) ? nifti.decompress(buffer) : buffer;
-  if (!nifti.isNIFTI(source)) throw new Error('Choose a NIfTI image (.nii or .nii.gz).');
+  const source = decodeNiftiBuffer(buffer);
   const header = nifti.readHeader(source);
   if (header.dims[0] !== 3 || header.dims.slice(4, header.dims[0] + 1).some((size) => size > 1)) {
     throw new Error('TopoFit needs one three-dimensional image.');

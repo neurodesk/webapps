@@ -180,6 +180,10 @@ test('readFileWorldAffine validates untouched headers across uncompressed, gzipp
     const invalid = makeNifti2Bytes({ pixDims: [1, bad, 3, 4], qformCode: 1, sformCode: 0 });
     await assert.rejects(readFileWorldAffine(new Blob([invalid])), /voxel spacing must be finite and positive/);
   }
+
+  for (const shortBytes of [new Uint8Array(0), new Uint8Array([0x1f])]) {
+    await assert.rejects(readFileWorldAffine(new Blob([shortBytes])), /Choose a NIfTI image/);
+  }
 });
 
 test('readFileWorldAffine bounds compressed reads for highly compressible and bad-CRC gzip scans', async () => {
@@ -243,19 +247,23 @@ test('readFileWorldAffine handles max legal FEXTRA gzip header and leading empty
   assert.ok(fextraMaxSlice <= 544);
   assert.ok(fextraRead < 2048, `expected FEXTRA to be skipped without reading, saw ${fextraRead}`);
 
-  // 2. Leading empty stored DEFLATE blocks (each 5 bytes: 0x00 0x00 0x00 0xff 0xff)
-  // before the header, verifying fixed-size chunks with no quadratic re-reading.
-  const emptyBlocks = Buffer.alloc(1000 * 5);
-  for (let i = 0; i < 1000; i += 1) emptyBlocks.set([0x00, 0x00, 0x00, 0xff, 0xff], i * 5);
-  const paddedGzip = Buffer.concat([
+  // 2. Leading empty stored DEFLATE blocks before a highly compressible 32 MiB
+  // payload: must stop at the header boundary without reading to EOF.
+  const large = new Uint8Array(32 * 1024 * 1024);
+  large.set(header, 0);
+  const largeRawDeflate = deflateRawSync(large);
+  const fiftyEmpty = Buffer.alloc(50 * 5);
+  for (let i = 0; i < 50; i += 1) fiftyEmpty.set([0x00, 0x00, 0x00, 0xff, 0xff], i * 5);
+  const paddedLargeGzip = Buffer.concat([
     Buffer.from([0x1f, 0x8b, 0x08, 0x00, 0, 0, 0, 0, 0, 0xff]),
-    emptyBlocks,
-    rawDeflate,
+    fiftyEmpty,
+    largeRawDeflate,
     Buffer.alloc(8),
   ]);
+  assert.ok(paddedLargeGzip.length > 16384);
   let paddedRead = 0;
   let paddedMaxSlice = 0;
-  const paddedBlob = new Blob([paddedGzip]);
+  const paddedBlob = new Blob([paddedLargeGzip]);
   const paddedTracked = {
     size: paddedBlob.size,
     slice(start = 0, end = paddedBlob.size) {
@@ -268,5 +276,61 @@ test('readFileWorldAffine handles max legal FEXTRA gzip header and leading empty
   const paddedAffine = await readFileWorldAffine(paddedTracked);
   assert.ok(Math.abs(paddedAffine[0][1] - (-3)) < 1e-6);
   assert.ok(paddedMaxSlice <= 544, `expected fixed bounded slice <= 544, saw ${paddedMaxSlice}`);
-  assert.ok(paddedRead <= paddedGzip.length + 544, `expected linear read without re-reading, saw ${paddedRead} vs ${paddedGzip.length}`);
+  assert.ok(
+    paddedRead < 2048,
+    `expected probe to stop at header boundary well before EOF, saw ${paddedRead} of ${paddedLargeGzip.length}`,
+  );
+});
+
+test('readFileWorldAffine stops immediately when cancelled during gzip header scanning or inflation', async () => {
+  const header = makeNifti2Bytes({ extension: true });
+  const rawDeflate = deflateRawSync(Buffer.from(header));
+
+  // Cancel during DEFLATE inflation (4th slice of a long sequence of empty blocks).
+  const manyEmpty = Buffer.alloc(1000 * 5);
+  for (let i = 0; i < 1000; i += 1) manyEmpty.set([0x00, 0x00, 0x00, 0xff, 0xff], i * 5);
+  const inflateGzip = Buffer.concat([
+    Buffer.from([0x1f, 0x8b, 0x08, 0x00, 0, 0, 0, 0, 0, 0xff]),
+    manyEmpty,
+    rawDeflate,
+    Buffer.alloc(8),
+  ]);
+  let inflateSlices = 0;
+  let inflateActive = true;
+  const inflateBlob = new Blob([inflateGzip]);
+  const inflateTracked = {
+    size: inflateBlob.size,
+    slice(start = 0, end = inflateBlob.size) {
+      inflateSlices += 1;
+      if (inflateSlices === 4) inflateActive = false;
+      return inflateBlob.slice(start, end);
+    },
+  };
+  const inflateResult = await readFileWorldAffine(inflateTracked, { isCurrent: () => inflateActive });
+  assert.equal(inflateResult, null);
+  assert.equal(inflateSlices, 4, `expected inflation to stop at slice 4, saw ${inflateSlices}`);
+
+  // Cancel during long FNAME scanning.
+  const longName = Buffer.alloc(4096, 0x61);
+  longName[longName.length - 1] = 0;
+  const fnameGzip = Buffer.concat([
+    Buffer.from([0x1f, 0x8b, 0x08, 0x08, 0, 0, 0, 0, 0, 0xff]),
+    longName,
+    rawDeflate,
+    Buffer.alloc(8),
+  ]);
+  let fnameSlices = 0;
+  let fnameActive = true;
+  const fnameBlob = new Blob([fnameGzip]);
+  const fnameTracked = {
+    size: fnameBlob.size,
+    slice(start = 0, end = fnameBlob.size) {
+      fnameSlices += 1;
+      if (fnameSlices === 3) fnameActive = false;
+      return fnameBlob.slice(start, end);
+    },
+  };
+  const fnameResult = await readFileWorldAffine(fnameTracked, { isCurrent: () => fnameActive });
+  assert.equal(fnameResult, null);
+  assert.equal(fnameSlices, 3, `expected FNAME scan to stop at slice 3, saw ${fnameSlices}`);
 });

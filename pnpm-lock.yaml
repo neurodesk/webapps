@@ -1679,6 +1679,9 @@ importers:
       '@niivue/niivue':
         specifier: 1.0.0-rc.26
         version: 1.0.0-rc.26
+      fflate:
+        specifier: 0.8.2
+        version: 0.8.2
       onnxruntime-web:
         specifier: 1.29.0
         version: 1.29.0
