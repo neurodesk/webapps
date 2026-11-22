@@ -1005,3 +1005,103 @@ test('switching from a scan with a displaced mesh to a micrometre scan updates t
     expect(Math.abs(shownCoords[axis])).toBeLessThan(20);
   }
 });
+
+test('cancelling a replacement during mesh cleanup restores the active QC overlay', async ({ page }) => {
+  test.setTimeout(60_000);
+  const scanA = {
+    name: 'scan-qc-a.nii',
+    mimeType: 'application/nifti',
+    buffer: buildNifti1({
+      dims: [8, 8, 8],
+      pixDims: [1, 2, 2, 2],
+      qformCode: 0,
+      sformCode: 1,
+      quatern: [0, 0, 0],
+      qoffset: [0, 0, 0],
+      srow: [[2, 0, 0, -10], [0, 2, 0, -10], [0, 0, 2, -10]],
+      xyztUnits: 2,
+      values: landmarkValues([8, 8, 8]),
+    }),
+  };
+  const scanB = {
+    name: 'scan-qc-b.nii',
+    mimeType: 'application/nifti',
+    buffer: buildNifti1({
+      dims: [8, 8, 8],
+      pixDims: [1, 1, 1, 1],
+      qformCode: 0,
+      sformCode: 1,
+      quatern: [0, 0, 0],
+      qoffset: [0, 0, 0],
+      srow: [[1, 0, 0, 5], [0, 1, 0, 5], [0, 0, 1, 5]],
+      xyztUnits: 2,
+      values: landmarkValues([8, 8, 8]),
+    }),
+  };
+
+  await page.addInitScript(({ qc }) => {
+    const NativeWorker = window.Worker;
+    window.Worker = class extends NativeWorker {
+      constructor(url, options) {
+        super(url, options);
+        this.fixture = String(url).includes('inference-worker');
+      }
+      postMessage(job, ...rest) {
+        if (!this.fixture) return super.postMessage(job, ...rest);
+        this.onmessage({
+          data: {
+            type: 'result',
+            files: [{ id: 'qc', name: 'qc.nii', mediaType: 'application/nifti', bytes: Uint8Array.from(qc).buffer }],
+            surfaces: null,
+            provenance: { surfaceVertices: 4, surfaceAnalysis: null, runtime: {}, outputSha256: {} },
+            elapsedSeconds: 1,
+          },
+        });
+      }
+    };
+    window.holdNextMeshCleanup = false;
+    window.releaseMeshCleanup = null;
+    window.meshCleanupStarted = new Promise((resolve) => { window.markMeshCleanupStarted = resolve; });
+    const nativeAddEventListener = EventTarget.prototype.addEventListener;
+    EventTarget.prototype.addEventListener = function (type, ...rest) {
+      if (type === 'volumeRemoved' && typeof this.removeAllMeshes === 'function' && !this.__meshHooked) {
+        this.__meshHooked = true;
+        const origRemoveAll = this.removeAllMeshes.bind(this);
+        this.removeAllMeshes = async () => {
+          if (window.holdNextMeshCleanup) {
+            window.holdNextMeshCleanup = false;
+            window.markMeshCleanupStarted();
+            await new Promise((resolve) => { window.releaseMeshCleanup = resolve; });
+          }
+          return origRemoveAll();
+        };
+      }
+      return nativeAddEventListener.call(this, type, ...rest);
+    };
+  }, { qc: Array.from(scanA.buffer) });
+
+  await page.goto('/');
+  await page.locator('#imageInput').setInputFiles(scanA);
+  await expect(page.locator('#runButton')).toBeEnabled({ timeout: 30_000 });
+  await page.locator('#runButton').click();
+  await expect(page.locator('#outputSection')).toHaveAttribute('open', '', { timeout: 30_000 });
+  await expect(page.locator('#imageLabel')).toContainText('TOPOFIT QC');
+  const before = (await dispatch(page, 'viewers.niivue', { viewerId: 'image', method: 'where_am_i' })).result;
+  expect(before.volumes).toHaveLength(2);
+
+  await page.evaluate(() => {
+    window.holdNextMeshCleanup = true;
+  });
+  await page.locator('#imageInput').setInputFiles(scanB);
+  await page.evaluate(() => window.meshCleanupStarted);
+  await page.locator('#cancelButton').click();
+  await expect(page.locator('#statusText')).toContainText('cancelled');
+  await page.evaluate(() => window.releaseMeshCleanup?.());
+
+  await expect.poll(async () => (await dispatch(page, 'viewers.niivue', {
+    viewerId: 'image',
+    method: 'where_am_i',
+  })).result.volumes.map((v) => v.name), { timeout: 15_000 }).toEqual(['scan-qc-a.nii', 'qc.nii']);
+  await expect(page.locator('#imageLabel')).toContainText('TOPOFIT QC');
+  await expect(page.locator('#fileInfo')).toHaveText('scan-qc-a.nii');
+});

@@ -334,3 +334,75 @@ test('readFileWorldAffine stops immediately when cancelled during gzip header sc
   assert.equal(fnameResult, null);
   assert.equal(fnameSlices, 3, `expected FNAME scan to stop at slice 3, saw ${fnameSlices}`);
 });
+
+test('readFileWorldAffine stops at the NIfTI-1 header or DEFLATE member end on concatenated gzip files', async () => {
+  // Build a complete minimal NIfTI-1 scan (< 544 bytes uncompressed) concatenated
+  // with a 512 KiB second gzip member, plus a truncated first member and non-NIfTI member.
+  const nifti1 = new Uint8Array(352 + 8 * 2);
+  const view = new DataView(nifti1.buffer);
+  view.setInt32(0, 348, true);
+  view.setInt16(40, 3, true);
+  view.setInt16(42, 2, true);
+  view.setInt16(44, 2, true);
+  view.setInt16(46, 2, true);
+  view.setInt16(70, 4, true);
+  view.setInt16(72, 16, true);
+  view.setFloat32(76, 1, true);
+  view.setFloat32(80, 2, true);
+  view.setFloat32(84, 3, true);
+  view.setFloat32(88, 4, true);
+  view.setFloat32(108, 352, true);
+  view.setUint8(123, 2);
+  view.setInt16(252, 0, true);
+  view.setInt16(254, 1, true);
+  view.setFloat32(280, 2, true);
+  view.setFloat32(300, 3, true);
+  view.setFloat32(320, 4, true);
+  nifti1.set([0x6e, 0x2b, 0x31, 0x00], 344);
+
+  const trailerPayload = Buffer.from(gzipSync(Buffer.alloc(512 * 1024, 0x5a)));
+  const bigSecondMember = Buffer.concat(Array.from({ length: 400 }, () => trailerPayload));
+  assert.ok(bigSecondMember.length > 200 * 1024);
+
+  const track = (buf) => {
+    let slices = 0;
+    let bytes = 0;
+    const blob = new Blob([buf]);
+    return {
+      stats: () => ({ slices, bytes }),
+      file: {
+        size: blob.size,
+        slice(start = 0, end = blob.size) {
+          slices += 1;
+          bytes += Math.max(0, Math.min(end, blob.size) - Math.max(0, start));
+          return blob.slice(start, end);
+        },
+      },
+    };
+  };
+
+  // 1. Complete NIfTI-1 first member (< 544 bytes) + huge second member.
+  const concatValid = track(Buffer.concat([Buffer.from(gzipSync(nifti1)), bigSecondMember]));
+  const affine = await readFileWorldAffine(concatValid.file);
+  assert.deepEqual(affine, [
+    [2, 0, 0, 0],
+    [0, 3, 0, 0],
+    [0, 0, 4, 0],
+    [0, 0, 0, 1],
+  ]);
+  assert.ok(concatValid.stats().slices <= 3, `expected <= 3 slices, saw ${concatValid.stats().slices}`);
+  assert.ok(concatValid.stats().bytes < 1024, `expected < 1024 bytes read, saw ${concatValid.stats().bytes}`);
+
+  // 2. Truncated 100-byte NIfTI-1 prefix (starts with 348) + huge second member.
+  const concatTruncated = track(Buffer.concat([Buffer.from(gzipSync(nifti1.subarray(0, 100))), bigSecondMember]));
+  await assert.rejects(readFileWorldAffine(concatTruncated.file), /Choose a NIfTI image/);
+  assert.ok(concatTruncated.stats().slices <= 3, `expected <= 3 slices, saw ${concatTruncated.stats().slices}`);
+  assert.ok(concatTruncated.stats().bytes < 1024, `expected < 1024 bytes read, saw ${concatTruncated.stats().bytes}`);
+
+  // 3. Non-NIfTI first member + huge second member stops immediately at 4 bytes.
+  const nonNifti = Buffer.alloc(1024, 0x41);
+  const concatNonNifti = track(Buffer.concat([Buffer.from(gzipSync(nonNifti)), bigSecondMember]));
+  await assert.rejects(readFileWorldAffine(concatNonNifti.file), /Choose a NIfTI image/);
+  assert.ok(concatNonNifti.stats().slices <= 3, `expected <= 3 slices, saw ${concatNonNifti.stats().slices}`);
+  assert.ok(concatNonNifti.stats().bytes < 1024, `expected < 1024 bytes read, saw ${concatNonNifti.stats().bytes}`);
+});

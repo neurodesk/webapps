@@ -466,10 +466,32 @@ function serializeViewerLoad(task) {
   return queued;
 }
 
-async function restorePreviousSource(nv) {
+function volumeOverlayEntry(stage, file) {
+  const overlay = stage === 'patch-qc' ? { colormap: 'hot', calMin: 1, calMax: 4095, isTransparentBelowCalMin: true } : {};
+  return { url: file, name: file.name, opacity: stage === 'region-mask' ? 0.6 : 0.75, ...overlay };
+}
+
+async function restorePreviousSource(nv, snapshot = null) {
+  const previousResult = snapshot?.displayedResult ?? null;
+  const overlayFile = previousResult && volumeStages.has(previousResult) ? outputs.get(previousResult) : null;
   if (source) {
-    await nv.loadVolumes([{ url: source, name: source.name }]);
+    const entries = overlayFile
+      ? [{ url: source, name: source.name }, volumeOverlayEntry(previousResult, overlayFile)]
+      : [{ url: source, name: source.name }];
+    await nv.loadVolumes(entries);
     await alignViewerVolumes(nv, () => true, sourceAffine ? [sourceAffine] : []);
+    if (overlayFile && previousResult === 'region-mask') {
+      await nv.setColormapLabel(1, regionMaskColormap(searchRegion().name));
+    }
+    if (snapshot) {
+      anatomyIn3D = snapshot.anatomyIn3D;
+      displayedResult = overlayFile ? previousResult : null;
+      $('imageLabel').textContent = overlayFile ? snapshot.imageLabel : 'ORIGINAL IMAGE';
+      if (overlayFile && previousResult === 'patch-qc') {
+        const firstPatch = Object.values(surfaceAnalysis?.flat_patches || {})[0];
+        if (firstPatch) showPatchMeasurements(firstPatch);
+      }
+    }
   } else {
     await nv.removeAllVolumes();
   }
@@ -505,8 +527,13 @@ async function showSource({
   if (!isCurrent()) return false;
   return serializeViewerLoad(async () => {
     if (!isCurrent()) return false;
+    const snapshot = {
+      displayedResult,
+      imageLabel: $('imageLabel').textContent,
+      anatomyIn3D,
+    };
     const rollbackOnCancel = async () => {
-      if (restoreOnAbort) await restorePreviousSource(nv);
+      if (restoreOnAbort) await restorePreviousSource(nv, snapshot);
       return false;
     };
     try {
@@ -531,7 +558,7 @@ async function showSource({
       return true;
     } catch (error) {
       if (restoreOnAbort) {
-        await restorePreviousSource(nv).catch(() => {});
+        await restorePreviousSource(nv, snapshot).catch(() => {});
       }
       throw error;
     }
@@ -595,8 +622,7 @@ async function showResult(stage, { duringRun = false } = {}) {
     await hideParcellations(nv, isParcellation(stage) ? file.name : null);
     if (volumeStages.has(stage)) {
       nv.setClipPlane([2, 0, 0]);
-      const overlay = stage === 'patch-qc' ? { colormap: 'hot', calMin: 1, calMax: 4095, isTransparentBelowCalMin: true } : {};
-      await loadSceneVolumes(nv, [{ url: source, name: source.name }, { url: file, name: file.name, opacity: stage === 'region-mask' ? 0.6 : 0.75, ...overlay }]);
+      await loadSceneVolumes(nv, [{ url: source, name: source.name }, volumeOverlayEntry(stage, file)]);
       if (stage === 'region-mask') await nv.setColormapLabel(1, regionMaskColormap(searchRegion().name));
       nv.sliceType = SLICE_TYPE.MULTIPLANAR;
       $('imageLabel').textContent = stage === 'region-mask' ? `${searchRegion().name} SEARCH REGION · LEFT BLUE · RIGHT ORANGE`

@@ -73,34 +73,50 @@ async function findGzipPayloadOffset(file, isCurrent) {
   return offset;
 }
 
+function targetHeaderBytes(bytes, offset) {
+  if (offset < 4) return HEADER_PREFIX_BYTES;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, offset);
+  const le = view.getInt32(0, true);
+  const be = view.getInt32(0, false);
+  if (le === 348 || be === 348) return 348;
+  if (le === 540 || be === 540) return 540;
+  return 0;
+}
+
 // Inflates only the NIfTI header prefix from a gzipped File/Blob by feeding
-// fixed 256-byte slices synchronously into raw DEFLATE. Stopping immediately
-// once 544 uncompressed bytes are available bounds both compressed reads and
-// inflation memory in Node and Chromium, skips the gzip CRC32 trailer so
-// bad-CRC scans match readVolume(), and halts on cancellation before the next
-// slice is read.
+// fixed 256-byte slices synchronously into raw DEFLATE. Stopping as soon as the
+// format-specific NIfTI header (348 bytes for NIfTI-1, 540 for NIfTI-2) is
+// decoded, when the leading bytes cannot be NIfTI, or when the first DEFLATE
+// stream finishes bounds reads and inflation in Node and Chromium, skips the
+// gzip CRC32 trailer so bad-CRC scans match readVolume(), and halts on
+// cancellation before the next slice is read.
 async function inflateGzipHeaderPrefix(file, isCurrent) {
   const start = await findGzipPayloadOffset(file, isCurrent);
   if (start === null) return null;
   if (start >= file.size) throw new Error('The NIfTI image is truncated.');
   const output = new Uint8Array(HEADER_PREFIX_BYTES);
   let offset = 0;
+  let target = HEADER_PREFIX_BYTES;
   let done = false;
   const inflater = new Inflate((chunk, final) => {
     if (offset < HEADER_PREFIX_BYTES) {
       const take = Math.min(chunk.byteLength, HEADER_PREFIX_BYTES - offset);
       output.set(chunk.subarray(0, take), offset);
       offset += take;
+      if (target === HEADER_PREFIX_BYTES && offset >= 4) {
+        target = targetHeaderBytes(output, offset);
+      }
     }
     if (final) done = true;
   });
   let position = start;
-  while (offset < HEADER_PREFIX_BYTES && !done && position < file.size) {
+  while (offset < target && !done && position < file.size) {
     const end = Math.min(position + GZIP_CHUNK_BYTES, file.size);
     const slice = await readSlice(file, position, end, isCurrent);
     if (!slice) return null;
     position = end;
     inflater.push(slice, position >= file.size);
+    if (inflater.s?.f && !inflater.s.l) break;
   }
   return output.buffer.slice(0, offset);
 }
