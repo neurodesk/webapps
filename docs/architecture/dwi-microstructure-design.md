@@ -17,7 +17,7 @@ A pipeline specification for all apps in this repository is a later, separate de
 | NIfTI + bval + bvec input | `apps/dwi2trx/src/dwi2trx/input.ts` (`resolveInput`, `resolveTriple`) |
 | DICOM to NIfTI with bval, bvec and BIDS sidecar | `packages/runtime-support/src/dcm2niix-client/index.ts` (`readImageFiles` pairs each image with its sidecar) |
 | bval/bvec parse, b0 index | `packages/dwi2trx/src/gradients.js` |
-| Single-shell tensor fit | vendored niimath `--dtifit` (`packages/dwi2trx/src/tensor.js`) |
+| Single-shell tensor fit | `@niivue/niimath` `--dtifit` (`packages/dwi2trx/src/tensor.js`) |
 | Brain mask | MindGrab (`@brainchop/mindgrab`) |
 | Affine registration | EdgeReg (`packages/edgereg`, niimath `-allineate`), greedy (`exes/greedy`) |
 | Deformable registration | ANTs `antsRegistration` WebAssembly with full argv (`packages/registration/src/main.cxx`) |

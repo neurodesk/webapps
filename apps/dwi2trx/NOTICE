@@ -2,7 +2,7 @@ dwi2trx third-party components
 
 @niivue/niivue — BSD-2-Clause — https://github.com/niivue/niivue
 @niivue/dcm2niix — BSD-2-Clause — https://github.com/niivue/niivue-dcm2niix
-@niivue/niimath — BSD-2-Clause — https://github.com/rordenlab/niimath
+@niivue/niimath 1.4.20261114 — BSD-2-Clause (includes Apache-2.0 N4 module; full license and notices in niimath/LICENSE) — https://github.com/rordenlab/niimath
 @brainchop/mindgrab — MIT — https://github.com/neuroneural/brainchopC
 @dipy/gpu-streamlines — BSD-3-Clause — https://github.com/dipy/GPUStreamlines
 fflate — MIT — https://github.com/101arrowz/fflate
