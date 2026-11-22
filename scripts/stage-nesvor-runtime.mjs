@@ -6,7 +6,7 @@ import { gzipSync } from 'node:zlib';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { fetchBytesWithRetry } from '../packages/components/src/net/fetchWithRetry.js';
+import { downloadBytes } from './lib/download-bytes.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
@@ -33,12 +33,9 @@ export async function stageN4Runtime({
   sourceDir,
   rootDir = root,
   fetchImpl = globalThis.fetch,
-  retries = 4,
-  baseDelay = 1000,
-  maxDelay = 30_000,
-  stallTimeout,
-  timeoutMs = 300_000,
-  onRetry,
+  attempts = 5,
+  timeoutMs = 120_000,
+  wait,
   log = console.warn,
 }) {
   await mkdir(outputDir, { recursive: true });
@@ -57,22 +54,16 @@ export async function stageN4Runtime({
       bytes = await readFile(cached).catch(() => null);
       if (!bytes || !verifyAsset(bytes, record)) {
         const url = new URL(record.file, manifest.base_url);
-        const init = timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {};
-        const retryOptions = {
-          fetch: fetchImpl,
-          retryTransient: true,
-          retries,
-          baseDelay,
-          maxDelay,
-          onRetry: onRetry ?? (({ status, attempt, delay }) => {
-            const detail = status ? `HTTP ${status}` : 'network error';
-            log(`N4 asset download retry ${attempt}/${retries} for ${record.file} (${detail}), waiting ${Math.round(delay)} ms`);
-          }),
+        const downloadOptions = {
+          attempts,
+          timeoutMs,
+          fetcher: fetchImpl,
+          log,
         };
-        if (stallTimeout !== undefined) {
-          retryOptions.stallTimeout = stallTimeout;
+        if (wait !== undefined) {
+          downloadOptions.wait = wait;
         }
-        bytes = Buffer.from(await fetchBytesWithRetry(url, init, retryOptions));
+        bytes = await downloadBytes(url, downloadOptions);
         if (!verifyAsset(bytes, record)) {
           throw new Error(`N4 asset verification failed: ${record.file}`);
         }

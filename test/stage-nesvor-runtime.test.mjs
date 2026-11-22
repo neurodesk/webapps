@@ -64,15 +64,14 @@ test('stageN4Runtime retries transient ECONNRESET and HTTP 503 failures and cach
     outputDir,
     cacheDir,
     fetchImpl,
-    baseDelay: 0,
-    maxDelay: 0,
+    wait: async () => {},
     log: (message) => logs.push(message),
   });
 
   assert.equal(attempts.get(loader.file), 2);
   assert.equal(attempts.get(wasm.file), 2);
   assert.equal(logs.length, 2);
-  assert.match(logs[0], /nesvor-n4\.mjs.*network error/);
+  assert.match(logs[0], /nesvor-n4\.mjs.*ECONNRESET/);
   assert.match(logs[1], /nesvor-n4\.wasm.*HTTP 503/);
 
   assert.deepEqual(await readFile(join(outputDir, loader.file)), loader.data);
@@ -104,7 +103,7 @@ test('stageN4Runtime rejects checksum and size mismatches without polluting the 
       outputDir,
       cacheDir,
       fetchImpl: async () => new Response(wrongHash, { status: 200 }),
-      baseDelay: 0,
+      wait: async () => {},
       log: () => {},
     }),
     /N4 asset verification failed: nesvor-n4\.mjs/,
@@ -119,7 +118,7 @@ test('stageN4Runtime rejects checksum and size mismatches without polluting the 
       outputDir,
       cacheDir,
       fetchImpl: async () => new Response(Buffer.from('short'), { status: 200 }),
-      baseDelay: 0,
+      wait: async () => {},
       log: () => {},
     }),
     /N4 asset verification failed: nesvor-n4\.mjs/,
@@ -146,7 +145,7 @@ test('stageN4Runtime reuses valid cached bytes without network fetches and repla
       fetches++;
       throw new Error('should not fetch when cache is valid');
     },
-    baseDelay: 0,
+    wait: async () => {},
     log: () => {},
   });
   assert.equal(fetches, 0);
@@ -162,7 +161,7 @@ test('stageN4Runtime reuses valid cached bytes without network fetches and repla
       fetches++;
       return new Response(loader.data, { status: 200 });
     },
-    baseDelay: 0,
+    wait: async () => {},
     log: () => {},
   });
   assert.equal(fetches, 1);
@@ -227,7 +226,7 @@ test('stageN4Runtime fails immediately on non-retryable HTTP status without poll
         calls++;
         return new Response('Not Found', { status: 404 });
       },
-      baseDelay: 0,
+      wait: async () => {},
       log: () => {},
     }),
     /404/,
@@ -236,4 +235,57 @@ test('stageN4Runtime fails immediately on non-retryable HTTP status without poll
   assert.equal(calls, 1);
   assert.deepEqual(await readdir(cacheDir), []);
   assert.deepEqual(await readdir(outputDir), []);
+});
+
+test('stageN4Runtime retries stalled body transfers and mid-body socket resets with diagnostic logs', async (t) => {
+  const { outputDir, cacheDir } = await makeTempDirs(t);
+  const wasm = makeRecord('nesvor-n4.wasm', '\0asm\x01\x00\x00\x00stalled-then-ok');
+  const manifest = makeManifest([wasm]);
+
+  let calls = 0;
+  const logs = [];
+  const fetchImpl = async (_url, { signal } = {}) => {
+    calls++;
+    if (calls === 1) {
+      // Stalls after sending headers and one partial chunk until per-attempt idle timeout aborts it.
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(wasm.data.subarray(0, 4));
+          signal?.addEventListener('abort', () => controller.error(signal.reason), { once: true });
+        },
+      });
+      return new Response(stream, { status: 200 });
+    }
+    if (calls === 2) {
+      // Drops mid-body with UND_ERR_SOCKET after HTTP 200 headers.
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(wasm.data.subarray(0, 4));
+          controller.error(new TypeError('terminated', {
+            cause: Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' }),
+          }));
+        },
+      });
+      return new Response(stream, { status: 200 });
+    }
+    return new Response(wasm.data, { status: 200 });
+  };
+
+  await stageN4Runtime({
+    manifest,
+    outputDir,
+    cacheDir,
+    fetchImpl,
+    timeoutMs: 25,
+    wait: async () => {},
+    log: (message) => logs.push(message),
+  });
+
+  assert.equal(calls, 3);
+  assert.equal(logs.length, 2);
+  assert.match(logs[0], /Download stalled/);
+  assert.match(logs[1], /UND_ERR_SOCKET/);
+  assert.doesNotMatch(logs[1], /HTTP 200/);
+  assert.deepEqual(await readFile(join(outputDir, wasm.file)), wasm.data);
+  assert.deepEqual(await readFile(join(cacheDir, `${wasm.sha256}-${wasm.file}`)), wasm.data);
 });
