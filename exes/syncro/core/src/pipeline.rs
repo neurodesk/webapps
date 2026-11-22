@@ -210,10 +210,8 @@ pub async fn run<H: Host>(h: &H, o: &Options, stage: &dyn Fn(&str)) -> Result<Va
                 "This SYNcro was built without enantiomorphic healing (the heal feature).".into(),
             );
         }
-        if o.lesion.is_none() || o.pathological.is_some() {
-            return Err(
-                "Healing needs a lesion map on the primary scan and no pathological scan.".into(),
-            );
+        if o.lesion.is_none() {
+            return Err("Healing needs a lesion map.".into());
         }
     }
     let compressed_name = |name: &str| name.to_ascii_lowercase().ends_with(".gz");
@@ -436,7 +434,23 @@ pub async fn run<H: Host>(h: &H, o: &Options, stage: &dyn Fn(&str)) -> Result<Va
     );
     #[cfg(feature = "heal")]
     let synthsr_input = if o.heal {
-        heal::heal(&mut r, &primary_path, &lesion_path, fill, o.ct).await?
+        // A lesion drawn on the pathological scan follows its affine onto the primary grid first (as SYNcro.py).
+        let lesion_on_primary = if has_pathological {
+            let onto = work("lesion-primary-grid.nii");
+            r.greedy_reslice(
+                &primary_path,
+                &lesion_path,
+                &onto,
+                &[&pathological_matrix],
+                false,
+                0.0,
+            )
+            .await?;
+            onto
+        } else {
+            lesion_path.clone()
+        };
+        heal::heal(&mut r, &primary_path, &lesion_on_primary, fill, o.ct).await?
     } else {
         primary_path.clone()
     };
