@@ -248,10 +248,25 @@ test('stageN4Runtime retries stalled body transfers and mid-body socket resets w
     calls++;
     if (calls === 1) {
       // Stalls after sending headers and one partial chunk until per-attempt idle timeout aborts it.
+      // Keep a referenced timer alive (cleared on abort/cancel/teardown) so Node 22 does not exit
+      // while only downloadBytes's unref'ed idle timer is pending.
+      let keepAlive;
+      const clearKeepAlive = () => {
+        clearTimeout(keepAlive);
+        keepAlive = undefined;
+      };
+      t.after(clearKeepAlive);
       const stream = new ReadableStream({
         start(controller) {
+          keepAlive = setTimeout(clearKeepAlive, 5000);
           controller.enqueue(wasm.data.subarray(0, 4));
-          signal?.addEventListener('abort', () => controller.error(signal.reason), { once: true });
+          signal?.addEventListener('abort', () => {
+            clearKeepAlive();
+            controller.error(signal.reason);
+          }, { once: true });
+        },
+        cancel() {
+          clearKeepAlive();
         },
       });
       return new Response(stream, { status: 200 });
