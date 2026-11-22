@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, posix } from 'node:path';
+import { dirname, join, posix, relative, resolve } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import sourceParser from '@neurodesk/code-quality';
 import { moduleById, modules, smoke, strykerConfig } from '../scripts/lib/mutation-modules.mjs';
@@ -152,23 +153,35 @@ test('a crashing tool and missing executable fail', (t) => {
   assert.throws(() => runMutations({ cwd, executable: join(cwd, 'missing') }), /ENOENT/);
 });
 
-function resolveLocalImport(from, specifier) {
-  const base = posix.normalize(posix.join(posix.dirname(from), specifier));
+function staticRelativeSpecifier(node) {
+  let value;
+  if (node?.type === 'Literal' && typeof node.value === 'string') {
+    value = node.value;
+  } else if (node?.type === 'TemplateLiteral' && node.expressions.length === 0 && node.quasis.length === 1) {
+    value = node.quasis[0].value.cooked;
+  }
+  return typeof value === 'string' && value.startsWith('.') ? value : null;
+}
+
+function resolveLocalImport(from, specifier, esm) {
+  const base = esm
+    ? relative(process.cwd(), fileURLToPath(new URL(specifier, pathToFileURL(resolve(process.cwd(), from))))).replaceAll('\\', '/')
+    : posix.normalize(posix.join(posix.dirname(from), specifier));
   const candidates = [base, `${base}.js`, `${base}.mjs`, `${base}.cjs`, `${base}.json`, `${base}/index.js`, `${base}/index.mjs`];
   return candidates.find(isFile) ?? base;
 }
 
 function localRelativeImports(file) {
   const ast = sourceParser.parse(readFileSync(file, 'utf8'), { filePath: file, sourceType: 'module' });
-  const specifiers = new Set();
+  const resolved = new Set();
   const visit = (node) => {
     if (!node || typeof node !== 'object') return;
-    if ((node.type === 'ImportDeclaration' || node.type === 'ExportNamedDeclaration' || node.type === 'ExportAllDeclaration' || node.type === 'ImportExpression')
-      && node.source?.type === 'Literal' && typeof node.source.value === 'string' && node.source.value.startsWith('.')) {
-      specifiers.add(node.source.value);
-    } else if (node.type === 'CallExpression' && node.callee?.type === 'Identifier' && node.callee.name === 'require'
-      && node.arguments?.[0]?.type === 'Literal' && typeof node.arguments[0].value === 'string' && node.arguments[0].value.startsWith('.')) {
-      specifiers.add(node.arguments[0].value);
+    if (node.type === 'ImportDeclaration' || node.type === 'ExportNamedDeclaration' || node.type === 'ExportAllDeclaration' || node.type === 'ImportExpression') {
+      const specifier = staticRelativeSpecifier(node.source);
+      if (specifier) resolved.add(resolveLocalImport(file, specifier, true));
+    } else if (node.type === 'CallExpression' && node.callee?.type === 'Identifier' && node.callee.name === 'require') {
+      const specifier = staticRelativeSpecifier(node.arguments?.[0]);
+      if (specifier) resolved.add(resolveLocalImport(file, specifier, false));
     }
     for (const value of Object.values(node)) {
       if (Array.isArray(value)) {
@@ -179,7 +192,7 @@ function localRelativeImports(file) {
     }
   };
   visit(ast);
-  return [...specifiers].map((specifier) => resolveLocalImport(file, specifier));
+  return [...resolved];
 }
 
 function missingSandboxImports(module) {
@@ -211,7 +224,7 @@ async function runInSandbox(module) {
     for (const rel of ['package.json', module.file, ...module.files]) {
       const targetPath = join(sandbox, rel);
       mkdirSync(dirname(targetPath), { recursive: true });
-      cpSync(join(repoRoot, rel), targetPath);
+      copyFileSync(join(repoRoot, rel), targetPath);
     }
     // Mirror Stryker's node_modules symlinking for the root and touched workspace packages.
     const dirs = new Set(['.']);
