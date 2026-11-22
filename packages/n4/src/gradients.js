@@ -1,4 +1,4 @@
-// Keep the b0 selection independent of dwi2trx's vendored niimath in portable n4 archives.
+// Keep the b0 selection independent of dwi2trx's @niivue/niimath dependency in portable n4 archives.
 // test/gradients.test.js checks the rule against dwi2trx and the gradients crate's cases.
 export { parseBval } from "@neurodesk/webapp-components/file-io/gradients";
 

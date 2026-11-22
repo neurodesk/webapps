@@ -713,8 +713,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/components
       '@niivue/niimath':
-        specifier: file:./vendor/niimath
-        version: file:apps/dwi2trx/vendor/niimath
+        specifier: 1.4.20261114
+        version: 1.4.20261114
       '@niivue/niivue':
         specifier: 1.0.0-rc.11
         version: 1.0.0-rc.11
@@ -2033,8 +2033,8 @@ importers:
         specifier: workspace:*
         version: link:../components
       '@niivue/niimath':
-        specifier: file:../../apps/dwi2trx/vendor/niimath
-        version: file:apps/dwi2trx/vendor/niimath
+        specifier: 1.4.20261114
+        version: 1.4.20261114
 
   packages/dwidenoise:
     dependencies:
@@ -4480,8 +4480,8 @@ packages:
   '@niivue/niimath@1.4.20261016':
     resolution: {integrity: sha512-dX50FIE3SXX54LBiQyeljPY0zY+AXOR6Pf9pmhPXqFawuRSZLZUKOsP3qHz58VXzPM5QnjLI2GrbVCshnOyydw==}
 
-  '@niivue/niimath@file:apps/dwi2trx/vendor/niimath':
-    resolution: {directory: apps/dwi2trx/vendor/niimath, type: directory}
+  '@niivue/niimath@1.4.20261114':
+    resolution: {integrity: sha512-Wy3mqz+G7Tn6/Ar/ce5Anj5loi98baBRn5rsRki23YKnzZpwp3uvjD18nv2cNQxhv4Qwltr7e95Aw6ntCp+g6w==}
 
   '@niivue/niivue@0.62.0':
     resolution: {integrity: sha512-CFaRJvoacx/N/7gwkIOIR4mFV2fZ1Kl8X31izhD2w/PpkLEQSL1hZC55ABR8FJI+zUDrK0w+nQnQwIloZdVVMg==}
@@ -12154,7 +12154,7 @@ snapshots:
 
   '@niivue/niimath@1.4.20261016': {}
 
-  '@niivue/niimath@file:apps/dwi2trx/vendor/niimath': {}
+  '@niivue/niimath@1.4.20261114': {}
 
   '@niivue/niivue@0.62.0':
     dependencies:

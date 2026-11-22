@@ -201,19 +201,19 @@
       ]
     },
     {
-      "id": "niimath-wasm-dtifit",
-      "version": "1.2.0-dtifit.1",
-      "target": "niimath/1.2.0-dtifit.1",
+      "id": "niimath-wasm-20261114",
+      "version": "1.4.20261114",
+      "target": "niimath/1.4.20261114",
       "deduplicate": true,
       "consumers": ["dwi2trx", "noddi"],
       "match_by": "sha256",
-      "reason": "Share the dtifit-enabled niimath binary vendored in apps/dwi2trx/vendor/niimath used by DWI2TRX and NODDI; each app keeps the single-threaded niimath module in its own worker bundle, which names the binary in a static new URL.",
+      "reason": "Share the @niivue/niimath 1.4.20261114 binary used by DWI2TRX and NODDI; each app keeps the single-threaded niimath module in its own worker bundle, which names the binary in a static new URL.",
       "files": [
         {
           "name": "niimath.wasm",
           "source_app": "dwi2trx",
-          "source": "assets/niimath-CMuo2tfS.wasm",
-          "sha256": "02e8ca72af8f5ed72bceb3e99353831fd7feea7170ae86b8c7efe8e2d73bf856"
+          "source": "assets/niimath-BntI6d7r.wasm",
+          "sha256": "7a5f166f7ec939aebd8c7d4a6782c569215aa44bae7adbe4d42dbb1a81192c52"
         }
       ]
     },

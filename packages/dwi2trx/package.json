@@ -33,7 +33,7 @@
     "@brainchop/mindgrab": "0.1.20260925",
     "@neurodesk/node-drivers": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
-    "@niivue/niimath": "file:../../apps/dwi2trx/vendor/niimath"
+    "@niivue/niimath": "1.4.20261114"
   },
   "repository": {
     "type": "git",

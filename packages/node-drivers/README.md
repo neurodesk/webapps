@@ -26,7 +26,8 @@ const { outputs } = await runNiimath(createNiimath, ['in.nii', '-s', '2', 'out.n
 
 niimath gzips NIfTI output by default, so ask for `.nii.gz` names. A non-zero
 exit or a missing output throws `NiimathError` with the module's log. Any
-Emscripten `niimath.js` build works, including DWI2TRX's vendored dtifit build.
+Emscripten `niimath.js` build works, including DWI2TRX's pinned `@niivue/niimath`
+(`1.4.20261114`) dtifit build.
 
 ### MindGrab on the CPU
 

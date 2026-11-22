@@ -2,9 +2,10 @@ DWI2TRX command line
 Copyright (c) 2026 Neurodesk
 BSD-2-Clause
 
-The tensor fit runs niimath --dtifit (Chris Rorden, BSD-2-Clause) from the
-dtifit-enabled WebAssembly build vendored in apps/dwi2trx/vendor/niimath
-(@niivue/niimath 1.2.0-dtifit.0), the build the DWI2TRX web app runs.
+The tensor fit runs niimath --dtifit (Chris Rorden, BSD-2-Clause; the published
+WebAssembly build also includes an Apache-2.0 N4 module) from
+@niivue/niimath 1.4.20261114, the build the DWI2TRX web app runs; see
+app/node_modules/@niivue/niimath/LICENSE in a portable archive.
 https://github.com/rordenlab/niimath
 
 The brain mask runs MindGrab (@brainchop/mindgrab 0.1.20260925, MIT,

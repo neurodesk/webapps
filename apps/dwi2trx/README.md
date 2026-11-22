@@ -2,7 +2,7 @@
 
 Browser-only diffusion-MRI pipeline: load a DWI (NIfTI + bval/bvec, or a DICOM
 folder), optionally brain-extract the b0 with MindGrab (WebGPU), fit the
-diffusion tensor with a vendored dtifit-enabled niimath WASM build, track
+diffusion tensor with the pinned `@niivue/niimath` WASM build (`--dtifit`), track
 streamlines on the GPU with `@dipy/gpu-streamlines`, and save a TRX
 tractogram. Everything runs client-side; no imaging data leaves the browser.
 It also includes a standalone gradient-scheme viewer/generator (bvec/bval
@@ -32,16 +32,18 @@ Neurodesk cross-origin-isolation headers used by the app's Web Workers.
 Fitting and tracking a full-resolution DWI is memory-intensive in a
 WASM/WebGPU sandbox; see the size limit below.
 
-## Vendored niimath
+## niimath dtifit
 
-`vendor/niimath` ships a pinned niimath WASM with the `--dtifit` CLI mode
-enabled (`@niivue/niimath/niimath.js`, driven directly for multi-file FS
-staging + `callMain` — see `runNiimath` in `@neurodesk/dwi2trx/runner`). DWI2TRX,
-its command line and NODDI share this file dependency. It includes upstream's
-repair for non-unit or inaccurate eigenvectors when two tensor eigenvalues
-are equal or nearly equal. See [the build provenance](vendor/niimath/README.md)
-for the exact source, SDK, flags and rebuild command. Upstream now also ships
-dtifit on npm; changing this file pin requires validating those same consumers.
+`apps/dwi2trx` and `packages/dwi2trx` pin the published `@niivue/niimath@1.4.20261114`
+package with the `--dtifit` CLI mode enabled (`@niivue/niimath/niimath.js`, driven
+directly for multi-file FS staging + `callMain` — see `runNiimath` in
+`@neurodesk/dwi2trx/runner`). DWI2TRX, its command line and NODDI share this
+dependency, which includes upstream's fixes for orthonormal eigenvectors on
+repeated/nearly-equal eigenvalues (`rordenlab/niimath#83`), small positive
+eigenvalues (`rordenlab/niimath#84`), and the `./package.json` export
+(`rordenlab/niimath#82`). Changing this pin requires validating all three
+consumers and rerecording `packages/dwi2trx/validation/dwi-gradients-reference.json`
+if outputs change.
 
 ## public/brainchop
 
@@ -55,7 +57,7 @@ emit them itself — they must exist as plain static assets under `public/`.
 
 Input files (NIfTI/DICOM + bval/bvec) are read and processed entirely in the
 browser: DICOM conversion (`@niivue/dcm2niix`), optional brain extraction
-(`@brainchop/mindgrab`, WebGPU), tensor fitting (the vendored niimath WASM),
+(`@brainchop/mindgrab`, WebGPU), tensor fitting (`@niivue/niimath` WASM),
 and GPU streamline tracking (`@dipy/gpu-streamlines`) all run locally. Only
 the bundled example DWI and the app's own static assets are fetched over the
 network; no loaded image, mask, tensor map, or tractogram is uploaded.
@@ -122,7 +124,7 @@ See also [NiiVue](https://github.com/niivue/niivue) (visualization) and
 ## Command line
 
 `dwi2trx` from `packages/dwi2trx` runs the tensor fit with Node, on the same
-vendored niimath build, with MindGrab on the CPU:
+pinned `@niivue/niimath` build, with MindGrab on the CPU:
 
 ```bash
 dwi2trx dwi.nii.gz dwi.bval dwi.bvec results [--mask FILE | --no-mask]

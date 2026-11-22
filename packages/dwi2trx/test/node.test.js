@@ -184,16 +184,20 @@ test('download-models installs nothing', async (t) => {
   assert.ok(!(await readdir(paths.directory)).includes('models'));
 });
 
-test('self-check fits the phantom tensor with the vendored dtifit build', () => {
+test('self-check fits the phantom tensor with the pinned dtifit build', () => {
   const run = dwi2trx(['self-check']);
   assert.equal(run.status, 0, run.stderr);
   const report = JSON.parse(run.stdout);
-  assert.equal(report.niimath, '1.2.0-dtifit.1');
+  assert.equal(report.niimath, NIIMATH_VERSION);
+  assert.equal(report.niimath, '1.4.20261114');
   assert.equal(report.mindgrab, '0.1.20260925');
   assert.equal(report.phantomFa, 0.603);
 });
 
-test('the niimath version module names the pinned build', async () => {
-  const pinned = JSON.parse(await readFile(new URL('../../../apps/dwi2trx/vendor/niimath/package.json', import.meta.url), 'utf8'));
-  assert.equal(NIIMATH_VERSION, pinned.version);
+test('the niimath version module matches the exact registry pin in both package and app', async () => {
+  const cli = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+  const app = JSON.parse(await readFile(new URL('../../../apps/dwi2trx/package.json', import.meta.url), 'utf8'));
+  assert.equal(cli.dependencies['@niivue/niimath'], app.dependencies['@niivue/niimath']);
+  assert.match(cli.dependencies['@niivue/niimath'], /^\d+\.\d+\.\d+$/, 'an exact version, so the two cannot drift apart');
+  assert.equal(NIIMATH_VERSION, cli.dependencies['@niivue/niimath']);
 });

@@ -1,7 +1,6 @@
 /**
  * End-to-end check of the shared dtifit pipeline through the package's niimath runner
- * against the bundled sample. Runs the real WASM (unmasked dtifit), so it needs the
- * vendored niimath.
+ * against the bundled sample. Runs the real WASM (unmasked dtifit).
  * Run: node --experimental-strip-types src/dwi2trx/dtifit.test.ts  (Node 22+).
  */
 

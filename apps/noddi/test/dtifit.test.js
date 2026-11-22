@@ -34,9 +34,9 @@ async function dwi2trxFit(dwi, mask) {
 }
 
 test("FA and MD equal DWI2TRX's on a single-shell DWI, where the fit uses every volume", async () => {
-  // Three distinct eigenvalues along x, y and z; the repeated-eigenvalue cases below also
-  // exercise the repair for https://github.com/rordenlab/niimath/issues/83.
-  const dwi = syntheticDwi({ shells: [1000], eigenvalues: [1.7e-3, 0.6e-3, 0.3e-3] });
+  // Prolate tensor with two equal minor eigenvalues (rordenlab/niimath#83); the oblique test
+  // below covers three distinct eigenvalues.
+  const dwi = syntheticDwi({ shells: [1000], eigenvalues: [1.7e-3, 0.3e-3, 0.3e-3] });
   const input = appInput(dwi);
   assert.equal(input.volumes.length, input.bvals.length);
   const mask = Uint8Array.from(readNiftiFrames(gunzipSync(syntheticMask({ value: 1 }).buffer)).data);
@@ -46,7 +46,7 @@ test("FA and MD equal DWI2TRX's on a single-shell DWI, where the fit uses every 
   assert.deepEqual(maps.MD, reference.MD);
   const centre = 4 + 8 * (4 + 8 * 4);
   assert.ok(Math.abs(maps.AD[centre] - 1.7e-3) < 1e-5, `AD ${maps.AD[centre]}`);
-  assert.ok(Math.abs(maps.RD[centre] - 0.45e-3) < 1e-5, `RD ${maps.RD[centre]}`);
+  assert.ok(Math.abs(maps.RD[centre] - 0.3e-3) < 1e-5, `RD ${maps.RD[centre]}`);
   assert.ok(Math.abs(maps.S0[centre] - 1000) < 1, `S0 ${maps.S0[centre]}`);
   // The tensor lies on the x axis, so an x mirror cannot change V1 here. niimath can give
   // (-1, 0, 0) from its eigenvector sign convention; the app's sign rule makes it (1, 0, 0).
@@ -166,6 +166,25 @@ for (const [name, eigenvalues] of [
     for (let i = 0; i < eigenvalues.length; i += 1) {
       const { data } = readNiftiFrames(gunzipSync(maps[`L${i + 1}`]));
       assert.ok(Math.abs(data[centre] - eigenvalues[i]) < 1e-8, `${name} L${i + 1}`);
+    }
+  });
+}
+
+// Positive eigenvalues below 1e-4 must not be zeroed (rordenlab/niimath#84, fixed in 1.4.20261114).
+for (const [name, options] of [
+  ["small positive L3", { direction: [1, -2, 3], eigenvalues: [1.7e-3, 0.3e-3, 5e-5] }],
+  ["prolate with small equal minor eigenvalues", { direction: [0.3, -0.7, 0.6], eigenvalues: [1.7e-3, 5e-5, 5e-5] }],
+  ["all small positive eigenvalues", { direction: [1, 1, 0.3], eigenvalues: [8e-5, 5e-5, 2e-5] }],
+]) {
+  test(`the actual niimath fit preserves ${name} below 1e-4`, async () => {
+    const fits = await centreFits(options);
+    assertSameTensor(fits, name);
+    const [image, bval, bvec] = syntheticDwi({ shells: [1000], ...options }).files;
+    const maps = await fitTensor(runNiimath, { dwi: image.buffer, bval: bval.buffer, bvec: bvec.buffer, xflip: "0" });
+    const centre = 4 + 8 * (4 + 8 * 4);
+    for (let i = 0; i < options.eigenvalues.length; i += 1) {
+      const { data } = readNiftiFrames(gunzipSync(maps[`L${i + 1}`]));
+      assert.ok(Math.abs(data[centre] - options.eigenvalues[i]) < 1e-7, `${name} L${i + 1}: got ${data[centre]}, expected ${options.eigenvalues[i]}`);
     }
   });
 }

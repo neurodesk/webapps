@@ -1,6 +1,6 @@
 // DWI2TRX's tensor fit, shared by the web app's tensor worker and the dwi2trx command line.
 //
-// Both drive the dtifit-enabled niimath build vendored in apps/dwi2trx/vendor/niimath through a
+// Both drive the pinned dtifit-enabled @niivue/niimath build through a
 // `run(args, { inputs, outputs })` function that stages `inputs` (name -> bytes), runs one niimath
 // argv and returns `{ outputs }` (name -> bytes): runNiimath from
 // @neurodesk/node-drivers/niimath in Node, a cached module in the browser worker.

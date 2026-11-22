@@ -20,8 +20,8 @@ without a build step:
 `src/tensor.js` takes a `run(args, { inputs, outputs })` function instead of a
 niimath module. The DWI2TRX and NODDI tensor workers pass `runNiimath` from
 `@neurodesk/dwi2trx/runner`, which drives one cached module. The command line
-passes `runNiimath` from `@neurodesk/node-drivers/niimath`. Both load the same vendored
-dtifit-enabled build, `apps/dwi2trx/vendor/niimath`.
+passes `runNiimath` from `@neurodesk/node-drivers/niimath`. Both load the same pinned
+`@niivue/niimath` build (`1.4.20261114`).
 
 ## Command line
 
@@ -124,7 +124,7 @@ That file holds two things:
   Windows and macOS by `node-drivers.yml`).
 - `browser`: the eleven maps the web app downloaded when given that mask through
   its `mask` automation input. `apps/dwi2trx/e2e/reference.spec.js` recorded
-  them through the built app, its tensor worker and the vendored niimath, in
+  them through the built app, its tensor worker and `@niivue/niimath`, in
   Chromium. Giving the app the mask isolates the fit from MindGrab's WebGPU
   backend, whose output is not byte-identical to the CPU backend's.
 
@@ -142,7 +142,7 @@ node packages/dwi2trx/validation/cli-check.mjs --executable path/to/dwi2trx
 DWI2TRX_BROWSER_REFERENCE=write pnpm --filter dwi2trx exec playwright test e2e/reference.spec.js
 ```
 
-Rerecord the reference when the vendored niimath or the MindGrab pin changes.
+Rerecord the reference when the `@niivue/niimath` or MindGrab pin changes.
 The `web-app-reference` job in `dwi2trx-native.yml` reruns the browser
 recording with `DWI2TRX_BROWSER_REFERENCE=check`.
 

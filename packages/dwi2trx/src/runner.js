@@ -1,5 +1,5 @@
-// The browser's niimath runner for tensor.js: one cached module of the dtifit-enabled niimath
-// build this package pins (apps/dwi2trx/vendor/niimath). The DWI2TRX and NODDI tensor workers
+// The browser's niimath runner for tensor.js: one cached module of the dtifit-enabled
+// @niivue/niimath build this package pins. The DWI2TRX and NODDI tensor workers
 // use it. It also runs under Node, but the command line uses runNiimath from
 // @neurodesk/node-drivers/niimath, which makes a new module for each call.
 //

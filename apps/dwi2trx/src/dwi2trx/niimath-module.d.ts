@@ -1,7 +1,7 @@
 /**
  * Minimal typing for the raw Emscripten niimath module (the dtifit CLI mode
  * needs multi-file FS staging + callMain, which the @niivue/niimath chain-API
- * worker can't express). Built locally; see vendor/niimath.
+ * worker can't express).
  */
 declare module '@niivue/niimath/niimath.js' {
   export interface NiimathModule {
