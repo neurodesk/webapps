@@ -7,8 +7,8 @@ import { fit } from '@neurodesk/dwi2trx/node';
 import { EXAMPLE_SHA256, compare, pinnedExample, readReference, summarize, writeReference } from '../../../packages/dwi2trx/validation/reference.mjs';
 import { gpuBrowser } from '../../../test-utils/hardware-gpu.mjs';
 
-// Fits the pinned example's tensor through the app itself (automation, tensor worker, vendored
-// niimath, served assets) and compares every map with
+// Fits the pinned example's tensor through the app itself (automation, tensor worker, pinned
+// @niivue/niimath, served assets) and compares every map with
 // packages/dwi2trx/validation/dwi-gradients-reference.json, which the command line's release
 // check also uses. The app's MindGrab runs on WebGPU, so the brain mask comes from the command
 // line's CPU MindGrab and is handed to the app through its mask role: this isolates the fit.

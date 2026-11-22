@@ -11,7 +11,7 @@ import { checkInstallation, fit, threadCount } from '../src/node.js';
 import { multiShellPhantom } from '../src/phantom.js';
 
 // The niimath build @neurodesk/dwi2trx pins, read from its package.json, not from the version module.
-const NIIMATH = JSON.parse(await readFile(new URL('../../../apps/dwi2trx/vendor/niimath/package.json', import.meta.url), 'utf8')).version;
+const NIIMATH = JSON.parse(await readFile(new URL('../../dwi2trx/package.json', import.meta.url), 'utf8')).dependencies['@niivue/niimath'];
 
 const BIN = fileURLToPath(new URL('../bin/noddi.js', import.meta.url));
 

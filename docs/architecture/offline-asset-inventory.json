@@ -2020,7 +2020,7 @@
         "@neurodesk/runtime-support": "workspace:*",
         "@neurodesk/webapp-components": "workspace:*",
         "@niivue/dcm2niix": "^1.2.0",
-        "@niivue/niimath": "file:./vendor/niimath",
+        "@niivue/niimath": "1.4.20261114",
         "@niivue/niivue": "1.0.0-rc.11",
         "fflate": "^0.8.3"
       },
