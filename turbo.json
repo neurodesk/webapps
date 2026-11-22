@@ -63,6 +63,11 @@
       "dependsOn": [
         "^build"
       ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/scripts/stage-nesvor-runtime.mjs",
+        "$TURBO_ROOT$/scripts/lib/download-bytes.mjs"
+      ],
       "env": [
         "NESVOR_MODEL_DIR",
         "NESVOR_N4_DIR"
