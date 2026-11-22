@@ -93,7 +93,7 @@ function writeNiftiHeader(volume, length, datatype, bitpix, description) {
   return output;
 }
 
-// readVolume's affine of a NIfTI-2 source (its srows, in millimetres) as an active NIfTI-1
+// readVolume's resolved affine of a NIfTI-2 source (in millimetres) as an active NIfTI-1
 // sform, with voxel sizes from its columns, so the output decodes to the same grid.
 function writeNifti2Geometry(view, volume, little) {
   const { header, affine, dims } = volume;
@@ -103,7 +103,10 @@ function writeNifti2Geometry(view, volume, little) {
   [1, ...spacing, ...header.pixDims.slice(4)].forEach((size, index) => view.setFloat32(76 + index * 4, size, little));
   view.setUint8(123, 2 | (header.xyzt_units & 56));
   view.setInt16(252, 0, little);
-  view.setInt16(254, Math.max(header.sform_code, 1), little);
+  const code = header.qform_code > 0 && header.sform_code < header.qform_code
+    ? header.qform_code
+    : Math.max(header.sform_code, 1);
+  view.setInt16(254, code > 0 && code <= 32767 ? code : 1, little);
   affine.slice(0, 3).forEach((row, axis) => row.forEach((value, column) => view.setFloat32(280 + (axis * 4 + column) * 4, value, little)));
 }
 

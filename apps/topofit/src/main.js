@@ -20,6 +20,7 @@ import { automationArtifacts } from './automation-results.js';
 import manifest from '@neurodesk/topofit/manifest';
 import { REGIONS, REGION_ATLASES } from '@neurodesk/topofit/regions';
 import { parcellationMesh, regionMaskColormap } from './region-view.js';
+import { alignViewerVolumes, readFileWorldAffine } from './viewer-geometry.js';
 
 const $ = (id) => document.getElementById(id);
 const assetBase = import.meta.env.VITE_TOPOFIT_ASSET_BASE || manifest.base_url;
@@ -43,6 +44,7 @@ let viewer;
 let viewerReady;
 let embeddedViewer;
 let source;
+let sourceAffine = null;
 let worker;
 let cancelRun;
 let busy = false;
@@ -59,6 +61,8 @@ let preparation;
 let meshSceneReady = false;
 let anatomyIn3D = false;
 let viewerBusy = false;
+let loadToken = 0;
+let viewerLoadChain = Promise.resolve();
 let normalArrowWorker;
 let normalArrowKey = '';
 const visibleMeshes = new Set();
@@ -456,6 +460,55 @@ async function loadResultSurfaces() {
   }
 }
 
+function serializeViewerLoad(task) {
+  const queued = viewerLoadChain.catch(() => {}).then(task);
+  viewerLoadChain = queued.catch(() => {});
+  return queued;
+}
+
+function volumeOverlayEntry(stage, file) {
+  const overlay = stage === 'patch-qc' ? { colormap: 'hot', calMin: 1, calMax: 4095, isTransparentBelowCalMin: true } : {};
+  return { url: file, name: file.name, opacity: stage === 'region-mask' ? 0.6 : 0.75, ...overlay };
+}
+
+async function restorePreviousSource(nv, snapshot = null) {
+  const previousResult = snapshot?.displayedResult ?? null;
+  const overlayFile = previousResult && volumeStages.has(previousResult) ? outputs.get(previousResult) : null;
+  if (source) {
+    const entries = overlayFile
+      ? [{ url: source, name: source.name }, volumeOverlayEntry(previousResult, overlayFile)]
+      : [{ url: source, name: source.name }];
+    await nv.loadVolumes(entries);
+    await alignViewerVolumes(nv, () => true, sourceAffine ? [sourceAffine] : []);
+    if (overlayFile && previousResult === 'region-mask') {
+      await nv.setColormapLabel(1, regionMaskColormap(searchRegion().name));
+    }
+    if (snapshot) {
+      const keepLabel = Boolean(overlayFile || !snapshot.meshesCleared);
+      anatomyIn3D = snapshot.anatomyIn3D;
+      displayedResult = overlayFile ? previousResult : (snapshot.meshesCleared ? null : snapshot.displayedResult);
+      $('imageLabel').textContent = keepLabel ? snapshot.imageLabel : 'ORIGINAL IMAGE';
+      if (overlayFile && previousResult === 'patch-qc') {
+        const firstPatch = Object.values(surfaceAnalysis?.flat_patches || {})[0];
+        if (firstPatch) showPatchMeasurements(firstPatch);
+      }
+    }
+  } else {
+    await nv.removeAllVolumes();
+  }
+  nv.drawScene();
+  nv.createOnLocationChange?.();
+}
+
+function loadSceneVolumes(nv, entries, { isCurrent = () => true, expectedAffines = sourceAffine ? [sourceAffine] : [] } = {}) {
+  return serializeViewerLoad(async () => {
+    if (!isCurrent()) return false;
+    await nv.loadVolumes(entries);
+    if (!isCurrent()) return false;
+    return alignViewerVolumes(nv, isCurrent, expectedAffines);
+  });
+}
+
 // The parcellation meshes lie on the mid-surface, so any other scene hides them.
 async function hideParcellations(nv, except = null) {
   for (const [index, mesh] of nv.meshes.entries()) {
@@ -463,20 +516,56 @@ async function hideParcellations(nv, except = null) {
   }
 }
 
-async function showSource({ reset = false } = {}) {
+async function showSource({
+  file = source,
+  affine = sourceAffine,
+  reset = false,
+  isCurrent = () => true,
+  restoreOnAbort = false,
+  onCommit = null,
+} = {}) {
   const nv = await ensureViewer();
-  if (reset) {
-    anatomyIn3D = false;
-    await resetMeshes(nv);
-  }
-  await hideParcellations(nv);
-  if (volumeStages.has(displayedResult)) showPatchMeasurements(null);
-  if (isParcellation(displayedResult) || volumeStages.has(displayedResult)) displayedResult = null;
-  nv.setClipPlane([2, 0, 0]);
-  await nv.loadVolumes([{ url: source, name: source.name }]);
-  nv.drawScene();
-  $('emptyState').hidden = true;
-  $('imageLabel').textContent = 'ORIGINAL IMAGE';
+  if (!isCurrent()) return false;
+  return serializeViewerLoad(async () => {
+    if (!isCurrent()) return false;
+    const snapshot = {
+      displayedResult,
+      imageLabel: $('imageLabel').textContent,
+      anatomyIn3D,
+      meshesCleared: false,
+    };
+    const rollbackOnCancel = async () => {
+      if (restoreOnAbort) await restorePreviousSource(nv, snapshot);
+      return false;
+    };
+    try {
+      await nv.loadVolumes([{ url: file, name: file.name }]);
+      if (!isCurrent()) return rollbackOnCancel();
+      if (!await alignViewerVolumes(nv, isCurrent, affine ? [affine] : [])) return rollbackOnCancel();
+      if (reset) {
+        snapshot.meshesCleared = true;
+        anatomyIn3D = false;
+        await resetMeshes(nv);
+        if (!isCurrent()) return rollbackOnCancel();
+      }
+      await hideParcellations(nv);
+      if (!isCurrent()) return rollbackOnCancel();
+      if (volumeStages.has(displayedResult)) showPatchMeasurements(null);
+      if (isParcellation(displayedResult) || volumeStages.has(displayedResult)) displayedResult = null;
+      nv.setClipPlane([2, 0, 0]);
+      nv.drawScene();
+      nv.createOnLocationChange?.();
+      $('emptyState').hidden = true;
+      $('imageLabel').textContent = 'ORIGINAL IMAGE';
+      onCommit?.();
+      return true;
+    } catch (error) {
+      if (restoreOnAbort) {
+        await restorePreviousSource(nv, snapshot).catch(() => {});
+      }
+      throw error;
+    }
+  });
 }
 
 async function setMeshVisible(stage, visible, input) {
@@ -490,7 +579,7 @@ async function setMeshVisible(stage, visible, input) {
     const nv = await ensureViewer();
     if (visible) {
       if (volumeStages.has(displayedResult)) {
-        await nv.loadVolumes([{ url: source, name: source.name }]);
+        await loadSceneVolumes(nv, [{ url: source, name: source.name }]);
       }
       await hideParcellations(nv);
       displayedResult = null;
@@ -536,8 +625,7 @@ async function showResult(stage, { duringRun = false } = {}) {
     await hideParcellations(nv, isParcellation(stage) ? file.name : null);
     if (volumeStages.has(stage)) {
       nv.setClipPlane([2, 0, 0]);
-      const overlay = stage === 'patch-qc' ? { colormap: 'hot', calMin: 1, calMax: 4095, isTransparentBelowCalMin: true } : {};
-      await nv.loadVolumes([{ url: source, name: source.name }, { url: file, name: file.name, opacity: stage === 'region-mask' ? 0.6 : 0.75, ...overlay }]);
+      await loadSceneVolumes(nv, [{ url: source, name: source.name }, volumeOverlayEntry(stage, file)]);
       if (stage === 'region-mask') await nv.setColormapLabel(1, regionMaskColormap(searchRegion().name));
       nv.sliceType = SLICE_TYPE.MULTIPLANAR;
       $('imageLabel').textContent = stage === 'region-mask' ? `${searchRegion().name} SEARCH REGION · LEFT BLUE · RIGHT ORANGE`
@@ -558,7 +646,7 @@ async function showResult(stage, { duringRun = false } = {}) {
       const view = await parcellationView(hemisphere);
       nv.meshThicknessOn2D = 1;
       nv.setClipPlane([anatomyIn3D ? 2 : -1, 0, 0]);
-      await nv.loadVolumes([{ url: source, name: source.name }]);
+      await loadSceneVolumes(nv, [{ url: source, name: source.name }]);
       let index = nv.meshes.findIndex((mesh) => mesh.name === file.name);
       if (index >= 0 && parcellationMeshFiles.get(file.name) !== file) {
         await nv.removeMesh(index);
@@ -590,7 +678,7 @@ async function showResult(stage, { duringRun = false } = {}) {
       nv.meshThicknessOn2D = 1;
       // Hide the MRI in 3D until the user explicitly shows it in FreeBrowse.
       nv.setClipPlane([anatomyIn3D ? 2 : -1, 0, 0]);
-      await nv.loadVolumes([{ url: source, name: source.name }]);
+      await loadSceneVolumes(nv, [{ url: source, name: source.name }]);
       let index = nv.meshes.findIndex((mesh) => mesh.name === file.name);
       if (index < 0) {
         await nv.addMesh({
@@ -626,43 +714,71 @@ async function showResult(stage, { duringRun = false } = {}) {
   }
 }
 
-async function load(file) {
-  if (!file || busy || viewerBusy) return;
+async function load(file, { signal } = {}) {
+  if (!file || busy || viewerBusy) return false;
+  const token = ++loadToken;
+  const isCurrent = () => token === loadToken && !signal?.aborted;
+  const onAbort = () => {
+    if (token === loadToken) {
+      loadToken += 1;
+      setBusy(false);
+    }
+  };
+  signal?.addEventListener('abort', onAbort, { once: true });
+  operation = 'Image load';
   setBusy(true);
   try {
     if (!/\.nii(\.gz)?$/i.test(file.name)) throw new Error('Choose a .nii or .nii.gz image.');
-    showPatchMeasurements(null);
-    source = file;
-    reconstruction = null;
-    normalArrowWorker?.terminate();
-    normalArrowWorker = null;
-    $('showNormalArrows').checked = false;
-    $('normalArrowStatus').textContent = 'Select a mid-surface to plot its normals.';
-    outputs = new Map();
-    results.render();
-    $('stlButton').hidden = true;
-    $('outputSection').open = false;
-    $('fileInfo').hidden = false;
-    $('fileInfo').textContent = file.name;
-    $('dropZone').classList.add('has-files');
-    $('progress').value = 0;
-    await showSource({ reset: true });
-    status('Image loaded · ready to reconstruct');
-    return true;
+    const affine = await readFileWorldAffine(file, { isCurrent });
+    if (!isCurrent() || !affine) return false;
+    const committed = await showSource({
+      file,
+      affine,
+      reset: true,
+      isCurrent,
+      restoreOnAbort: true,
+      onCommit: () => {
+        showPatchMeasurements(null);
+        source = file;
+        sourceAffine = affine;
+        reconstruction = null;
+        normalArrowWorker?.terminate();
+        normalArrowWorker = null;
+        $('showNormalArrows').checked = false;
+        $('normalArrowStatus').textContent = 'Select a mid-surface to plot its normals.';
+        outputs = new Map();
+        results.render();
+        $('stlButton').hidden = true;
+        $('outputSection').open = false;
+        $('fileInfo').hidden = false;
+        $('fileInfo').textContent = file.name;
+        $('dropZone').classList.add('has-files');
+        $('progress').value = 0;
+        $('imageLabel').textContent = 'ORIGINAL IMAGE';
+        status('Image loaded · ready to reconstruct');
+      },
+    });
+    return committed;
   } catch (error) {
-    status(error.message, true);
+    if (isCurrent()) status(error.message, true);
+    return false;
   } finally {
-    setBusy(false);
+    signal?.removeEventListener('abort', onAbort);
+    if (token === loadToken) setBusy(false);
   }
 }
 
 async function importFiles(filesPromise) {
   exampleControl.cancel();
-  if (busy) return;
+  if (busy || viewerBusy) return;
+  const token = ++loadToken;
+  const isCurrent = () => token === loadToken;
+  operation = 'Image load';
   setBusy(true);
   status('Reading images · converting DICOM if needed…');
   try {
     const images = await readImageFiles(await filesPromise);
+    if (!isCurrent()) return;
     if (!images.length) throw new Error('Choose a NIfTI image or complete DICOM series.');
     importedImages = images;
     $('seriesSelect').replaceChildren(...images.map((file, index) => new Option(file.name, String(index))));
@@ -670,6 +786,7 @@ async function importFiles(filesPromise) {
     setBusy(false);
     await load(images[0]);
   } catch (error) {
+    if (!isCurrent()) return;
     status(error.message, true);
     setBusy(false);
   }
@@ -684,11 +801,12 @@ $('seriesSelect').onchange = () => void load(importedImages[Number($('seriesSele
 bindFileDrop($('dropZone'), (files) => void importFiles(files));
 const exampleControl = createExampleSelector({
   examples,
-  onLoad: async (_example, { fetchFiles, assertCurrent }) => {
+  onLoad: async (_example, { fetchFiles, assertCurrent, signal }) => {
     const files = await fetchFiles();
     assertCurrent();
-    if (!await load(files[0])) throw new Error('The example image could not be loaded.');
+    const loaded = await load(files[0], { signal });
     assertCurrent();
+    if (!loaded) throw new Error('The example image could not be loaded.');
   },
   onStatus: status,
 });
@@ -854,7 +972,7 @@ async function run(analysisOnly = false, { signal, progress = () => {}, roiFile 
     $('elapsed').textContent = `${Math.round((performance.now() - started) / 1000)} s`;
   }, 1000);
   try {
-    if (!analysisOnly) await showSource({ reset: true });
+    if (!analysisOnly) await showSource({ reset: true, isCurrent: () => busy && preparation === currentPreparation });
   } catch (error) {
     $('viewerError').hidden = false;
     $('viewerError').textContent = `Visualization unavailable: ${error.message}. Reconstruction can continue.`;
@@ -990,6 +1108,7 @@ $('analyzeButton').onclick = () => void run(true).catch((error) => { if (error.n
 
 $('cancelButton').onclick = () => {
   exampleControl.cancel();
+  loadToken += 1;
   cancelRun?.();
   preparation = null;
   worker?.terminate();
@@ -1017,8 +1136,9 @@ registerAppAutomation({
       signal.throwIfAborted();
       if (busy || viewerBusy) throw new Error('Wait for the current operation to finish.');
       exampleControl.cancel();
-      if (!await load(inputs.image[0])) throw new Error('The image could not be loaded.');
+      const loaded = await load(inputs.image[0], { signal });
       signal.throwIfAborted();
+      if (!loaded) throw new Error('The image could not be loaded.');
       for (const id of ['conform', 'estimateNormals', 'findPatches']) $(id).checked = parameters[id];
       if (parameters.parallelHemispheres !== undefined) $('parallelHemispheres').checked = parameters.parallelHemispheres;
       for (const id of ['model', 'thickness', 'patchCount', 'patchRadius', 'patchHemisphere', 'patchMaxRms', 'patchMinArea']) $(id).value = String(parameters[id]);
