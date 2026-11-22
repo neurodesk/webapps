@@ -45,35 +45,32 @@ test('example download failure permits retry', async ({ page }) => {
 test('cancelling inference allows another run', async ({ page }) => {
   test.setTimeout(180000);
   const held = [];
-  let modelRequested;
-  const nextModelRequest = () => new Promise(resolve => {
-    modelRequested = resolve;
-  });
-  let pendingModel = nextModelRequest();
   // Route on the browser context so worker fetches forwarded by coi-serviceworker.js are held.
   const holdModel = route => {
     held.push(route);
-    modelRequested?.();
   };
   await page.context().route('**/models/**/model.json', holdModel);
   try {
     await page.goto('/');
     await loadExample(page);
-    await page.locator('#runButton').click();
-    await expect(page.locator('#cancelButton')).toBeVisible();
-    await pendingModel;
-    await page.locator('#cancelButton').click();
-    await expect(page.locator('#runButton')).toBeEnabled({ timeout: 30000 });
-    await expect(page.locator('#statusText')).toHaveText('Cancelled');
-    await expect(page.locator('#resultList .nd-download-btn')).toHaveCount(0);
-
-    pendingModel = nextModelRequest();
-    await page.locator('#runButton').click();
-    await expect(page.locator('#cancelButton')).toBeVisible();
-    await pendingModel;
-    await page.locator('#cancelButton').click();
-    await expect(page.locator('#runButton')).toBeEnabled({ timeout: 30000 });
-    await expect(page.locator('#resultList .nd-download-btn')).toHaveCount(0);
+    for (const run of [1, 2]) {
+      const workerPromise = page.waitForEvent('worker', {
+        predicate: worker => worker.url().includes('brainchop-webworker'),
+        timeout: 60000,
+      });
+      await page.locator('#runButton').click();
+      await expect(page.locator('#cancelButton')).toBeVisible();
+      const worker = await workerPromise;
+      const workerClosed = worker.waitForEvent('close', { timeout: 30000 });
+      await expect
+        .poll(() => held.length, { timeout: 60000, message: `Expected run ${run} to request model.json` })
+        .toBe(run);
+      await page.locator('#cancelButton').click();
+      await workerClosed;
+      await expect(page.locator('#runButton')).toBeEnabled({ timeout: 30000 });
+      await expect(page.locator('#statusText')).toHaveText('Cancelled');
+      await expect(page.locator('#resultList .nd-download-btn')).toHaveCount(0);
+    }
   } finally {
     for (const route of held) await route.abort().catch(() => {});
     await page.context().unroute('**/models/**/model.json', holdModel).catch(() => {});
