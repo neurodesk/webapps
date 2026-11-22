@@ -1,10 +1,17 @@
 import assert from 'node:assert/strict';
-import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { execFile } from 'node:child_process';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, posix } from 'node:path';
 import test from 'node:test';
+import { promisify } from 'node:util';
+import sourceParser from '@neurodesk/code-quality';
 import { moduleById, modules, smoke, strykerConfig } from '../scripts/lib/mutation-modules.mjs';
 import { runMutations, summarizeMutations } from '../scripts/report-mutations.mjs';
+
+const execFileAsync = promisify(execFile);
+const JS_MODULE = /\.[cm]?js$/;
+const isFile = (path) => existsSync(path) && statSync(path).isFile();
 
 const target = moduleById(smoke.module).file;
 const files = modules.map((module) => module.file);
@@ -143,4 +150,119 @@ test('a crashing tool and missing executable fail', (t) => {
   assert.throws(() => runMutations({ cwd, prefix: ['-e', 'process.exit(2)', '--'] }), /Stryker failed for disconnectome with exit 2/);
   assert.throws(() => runMutations({ cwd, prefix: ['-e', 'process.exit(0)', '--'] }), /ENOENT/);
   assert.throws(() => runMutations({ cwd, executable: join(cwd, 'missing') }), /ENOENT/);
+});
+
+function resolveLocalImport(from, specifier) {
+  const base = posix.normalize(posix.join(posix.dirname(from), specifier));
+  const candidates = [base, `${base}.js`, `${base}.mjs`, `${base}.cjs`, `${base}.json`, `${base}/index.js`, `${base}/index.mjs`];
+  return candidates.find(isFile) ?? base;
+}
+
+function localRelativeImports(file) {
+  const ast = sourceParser.parse(readFileSync(file, 'utf8'), { filePath: file, sourceType: 'module' });
+  const specifiers = new Set();
+  const visit = (node) => {
+    if (!node || typeof node !== 'object') return;
+    if ((node.type === 'ImportDeclaration' || node.type === 'ExportNamedDeclaration' || node.type === 'ExportAllDeclaration' || node.type === 'ImportExpression')
+      && node.source?.type === 'Literal' && typeof node.source.value === 'string' && node.source.value.startsWith('.')) {
+      specifiers.add(node.source.value);
+    } else if (node.type === 'CallExpression' && node.callee?.type === 'Identifier' && node.callee.name === 'require'
+      && node.arguments?.[0]?.type === 'Literal' && typeof node.arguments[0].value === 'string' && node.arguments[0].value.startsWith('.')) {
+      specifiers.add(node.arguments[0].value);
+    }
+    for (const value of Object.values(node)) {
+      if (Array.isArray(value)) {
+        for (const item of value) visit(item);
+      } else if (value && typeof value === 'object' && value.type) {
+        visit(value);
+      }
+    }
+  };
+  visit(ast);
+  return [...specifiers].map((specifier) => resolveLocalImport(file, specifier));
+}
+
+function missingSandboxImports(module) {
+  const included = new Set(['package.json', module.file, ...module.files]);
+  const seen = new Set();
+  const pending = [module.file, ...module.files].filter((file) => JS_MODULE.test(file));
+  const missing = [];
+  while (pending.length) {
+    const file = pending.pop();
+    if (seen.has(file)) continue;
+    seen.add(file);
+    for (const target of localRelativeImports(file)) {
+      if (!included.has(target)) missing.push(`${file} -> ${target}`);
+      if (JS_MODULE.test(target) && isFile(target) && !seen.has(target)) pending.push(target);
+    }
+  }
+  return missing;
+}
+
+async function runInSandbox(module) {
+  assert.match(module.command, /^node --test /, module.id);
+  const scratch = mkdtempSync(join(tmpdir(), `mutation-sandbox-${module.id}-`));
+  const sandbox = join(scratch, 'sandbox');
+  const temp = join(scratch, 'tmp');
+  mkdirSync(sandbox, { recursive: true });
+  mkdirSync(temp, { recursive: true });
+  const repoRoot = process.cwd();
+  try {
+    for (const rel of ['package.json', module.file, ...module.files]) {
+      const targetPath = join(sandbox, rel);
+      mkdirSync(dirname(targetPath), { recursive: true });
+      cpSync(join(repoRoot, rel), targetPath);
+    }
+    // Mirror Stryker's node_modules symlinking for the root and touched workspace packages.
+    const dirs = new Set(['.']);
+    for (const rel of [module.file, ...module.files]) {
+      for (let dir = posix.dirname(rel); dir !== '.' && dir !== '/'; dir = posix.dirname(dir)) dirs.add(dir);
+    }
+    for (const dir of dirs) {
+      const source = join(repoRoot, dir, 'node_modules');
+      const link = join(sandbox, dir, 'node_modules');
+      if (existsSync(source) && !existsSync(link)) {
+        mkdirSync(dirname(link), { recursive: true });
+        symlinkSync(source, link, 'junction');
+      }
+    }
+    const env = { ...process.env, TMPDIR: temp, TMP: temp, TEMP: temp };
+    delete env.NODE_TEST_CONTEXT;
+    const args = module.command.trim().split(/\s+/).slice(1);
+    try {
+      return await execFileAsync(process.execPath, args, { cwd: sandbox, env, maxBuffer: 16 * 1024 * 1024 });
+    } catch (error) {
+      throw new Error(`${module.id} failed in isolated sandbox:\n${error.stderr || ''}${error.stdout || ''}`, { cause: error });
+    }
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
+test('every module sandbox list covers all transitive local relative imports', () => {
+  for (const module of modules) {
+    assert.deepEqual(
+      missingSandboxImports(module),
+      [],
+      `${module.id}: add missing transitive local imports to scripts/lib/mutation-modules.mjs`,
+    );
+  }
+  const dateVersions = moduleById('date-versions');
+  const withoutEmbedded = {
+    ...dateVersions,
+    files: dateVersions.files.filter((path) => path !== 'scripts/lib/embedded-version-sites.mjs'),
+  };
+  assert.deepEqual(missingSandboxImports(withoutEmbedded), [
+    'scripts/lib/app-versions.mjs -> scripts/lib/embedded-version-sites.mjs',
+  ]);
+});
+
+test('every module baseline command passes inside a Stryker-isolated sandbox', async () => {
+  await Promise.all(modules.map((module) => runInSandbox(module)));
+  const dateVersions = moduleById('date-versions');
+  const withoutEmbedded = {
+    ...dateVersions,
+    files: dateVersions.files.filter((path) => path !== 'scripts/lib/embedded-version-sites.mjs'),
+  };
+  await assert.rejects(runInSandbox(withoutEmbedded), /ERR_MODULE_NOT_FOUND[\s\S]*embedded-version-sites\.mjs/);
 });
