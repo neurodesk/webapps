@@ -29,7 +29,12 @@ export const modules = [
     id: 'date-versions',
     file: 'scripts/lib/app-versions.mjs',
     mutate: 'scripts/lib/app-versions.mjs:58-87',
-    files: ['scripts/lib/apps-registry.mjs', 'test/date-versions.test.mjs'],
+    files: [
+      'scripts/lib/apps-registry.mjs',
+      'scripts/lib/embedded-version-sites.mjs',
+      'scripts/lib/string-literals.mjs',
+      'test/date-versions.test.mjs',
+    ],
     command: 'node --test test/date-versions.test.mjs',
   },
   {
@@ -57,7 +62,13 @@ export const modules = [
     id: 'workspace-graph',
     file: 'scripts/lib/workspace-graph.mjs',
     mutate: 'scripts/lib/workspace-graph.mjs',
-    files: ['test/workspace-graph.test.mjs'],
+    files: [
+      'scripts/lib/apps-registry.mjs',
+      'scripts/lib/module-closure.mjs',
+      'scripts/lib/shared-module-users.mjs',
+      'scripts/lib/standalone.mjs',
+      'test/workspace-graph.test.mjs',
+    ],
     command: 'node --test test/workspace-graph.test.mjs',
   },
   {
