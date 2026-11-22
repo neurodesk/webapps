@@ -6,14 +6,17 @@ const browser = process.env.BRAINCHOP_MESA === '1'
   ? { channel: 'chromium', headless: false, launchOptions: { args: ['--use-gl=angle', '--use-angle=gl', '--ignore-gpu-blocklist'] } }
   : gpuBrowser;
 
+const port = Number(process.env.BRAINCHOP_E2E_PORT || 4198);
+const baseURL = `http://localhost:${port}`;
+
 // Serve the BUILT output so the shared preview headers and worker/wasm asset
 // paths are exercised — not just the dev server.
 export default defineConfig({
   testDir: "./e2e",
   webServer: {
-    command: withBrowserBuild("pnpm preview --port 4173 --strictPort"),
-    url: "http://localhost:4173",
+    command: withBrowserBuild(`pnpm preview --port ${port} --strictPort`),
+    url: baseURL,
     reuseExistingServer: !process.env.CI,
   },
-  use: { baseURL: "http://localhost:4173", ...browser },
+  use: { baseURL, ...browser },
 });

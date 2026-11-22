@@ -6,6 +6,7 @@ import { dicomSeries } from '../../../test-utils/dicom-fixture.mjs';
 
 async function loadExample(page) {
   await page.locator('select[data-neurodesk-example]').selectOption(examples[0].id);
+  await expect(page.locator('[data-neurodesk-examples]')).toHaveAttribute('data-example-state', 'ready', { timeout: 120000 });
   await expect(page.locator('#runButton')).toBeEnabled({ timeout: 120000 });
 }
 
@@ -18,25 +19,65 @@ test('workspace exposes six segmentation models and shared information controls'
 });
 
 test('example download failure permits retry', async ({ page }) => {
-  await page.route(examples[0].files[0].url, route => route.abort());
-  await page.goto('/');
-  await page.locator('select[data-neurodesk-example]').selectOption(examples[0].id);
-  await expect(page.locator('#runButton')).toBeDisabled();
-  await expect(page.locator('select[data-neurodesk-example]')).toBeEnabled();
-  await page.unroute(examples[0].files[0].url);
-  await loadExample(page);
+  test.setTimeout(180000);
+  const exampleUrl = examples[0].files[0].url;
+  let attempts = 0;
+  // Route on the browser context so requests forwarded by coi-serviceworker.js are intercepted.
+  const abortDownload = route => {
+    attempts += 1;
+    return route.abort();
+  };
+  await page.context().route(exampleUrl, abortDownload);
+  try {
+    await page.goto('/');
+    await page.locator('select[data-neurodesk-example]').selectOption(examples[0].id);
+    await expect(page.locator('[data-neurodesk-examples]')).toHaveAttribute('data-example-state', 'error');
+    await expect(page.locator('#runButton')).toBeDisabled();
+    await expect(page.locator('select[data-neurodesk-example]')).toBeEnabled();
+    expect(attempts).toBe(1);
+    await page.context().unroute(exampleUrl, abortDownload);
+    await loadExample(page);
+  } finally {
+    await page.context().unroute(exampleUrl, abortDownload).catch(() => {});
+  }
 });
 
 test('cancelling inference allows another run', async ({ page }) => {
   test.setTimeout(180000);
-  await page.route('**/models/**/model.json', () => {});
-  await page.goto('/');
-  await loadExample(page);
-  await page.locator('#runButton').click();
-  await expect(page.locator('#cancelButton')).toBeVisible();
-  await page.locator('#cancelButton').click();
-  await expect(page.locator('#runButton')).toBeEnabled({ timeout: 30000 });
-  await expect(page.locator('#resultList .nd-download-btn')).toHaveCount(0);
+  const held = [];
+  let modelRequested;
+  const nextModelRequest = () => new Promise(resolve => {
+    modelRequested = resolve;
+  });
+  let pendingModel = nextModelRequest();
+  // Route on the browser context so worker fetches forwarded by coi-serviceworker.js are held.
+  const holdModel = route => {
+    held.push(route);
+    modelRequested?.();
+  };
+  await page.context().route('**/models/**/model.json', holdModel);
+  try {
+    await page.goto('/');
+    await loadExample(page);
+    await page.locator('#runButton').click();
+    await expect(page.locator('#cancelButton')).toBeVisible();
+    await pendingModel;
+    await page.locator('#cancelButton').click();
+    await expect(page.locator('#runButton')).toBeEnabled({ timeout: 30000 });
+    await expect(page.locator('#statusText')).toHaveText('Cancelled');
+    await expect(page.locator('#resultList .nd-download-btn')).toHaveCount(0);
+
+    pendingModel = nextModelRequest();
+    await page.locator('#runButton').click();
+    await expect(page.locator('#cancelButton')).toBeVisible();
+    await pendingModel;
+    await page.locator('#cancelButton').click();
+    await expect(page.locator('#runButton')).toBeEnabled({ timeout: 30000 });
+    await expect(page.locator('#resultList .nd-download-btn')).toHaveCount(0);
+  } finally {
+    for (const route of held) await route.abort().catch(() => {});
+    await page.context().unroute('**/models/**/model.json', holdModel).catch(() => {});
+  }
 });
 
 for (const [model, classes] of [['tissue-light', 3], ['tissue', 3], ['subcortical', 18], ['subcortical-small', 18], ['aparc50', 50], ['aparc104', 104]]) {
