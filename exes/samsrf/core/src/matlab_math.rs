@@ -368,12 +368,14 @@ fn real_integer_power(mut base: f64, mut n: f64) -> f64 {
 
 /// MATLAB's `value.^exponent` for a real base and a real exponent. Nonnegative
 /// bases and whole exponents use fdlibm `pow`. A negative base with a fractional
-/// exponent splits off the whole part: `(-r)^e = pow_bin(-r, floor(e)) * unit(f)`
-/// with `unit(0.5) = i*sqrt(r)` and `unit(f) = exp(f*log(r)) * (cos(f*pi) + i*sin(f*pi))`.
-/// A negative exponent is the complex reciprocal `1 / ((-r)^(-e))`. Zero signs
-/// follow MATLAB R2023b's rules: positive half-integers carry `(-1)^floor(e) * 0.0`
-/// (except `+0.0` on overflow), negative half-integers always have `+0.0` real part,
-/// and results whose imaginary part is zero strip to real (`+0.0` imaginary part).
+/// exponent splits off the whole part in real arithmetic (`rk = real_integer_power(-r, trunc(e))`)
+/// and multiplies `(rk, +0.0)` by `unit(f)` in complex arithmetic (`unit(0.5) = i*sqrt(r)`,
+/// `unit(f) = exp(f*log(r)) * (cos(f*pi) + i*sin(f*pi))`), with `+0.0` real part
+/// on half-integer overflow. A negative exponent is the complex reciprocal
+/// `1 / ((-r)^(-e))` (with `+0.0` real part when `w.re == 0.0`, and real `1 / w.re`
+/// when `w.im == 0.0`). Signed zeros of complex results (including `-0.0` imaginary
+/// parts on odd-whole-part underflows with `frac > 0.5`) follow MATLAB R2023b
+/// across all 27,552 recorded parts in `numerics-reference.json`.
 pub fn power(value: f64, exponent: f64) -> Complex64 {
     if value >= 0.0 || value.is_nan() || exponent.fract() == 0.0 || !exponent.is_finite() {
         return Complex64::new(pow(value, exponent), 0.0);
@@ -835,7 +837,7 @@ fn poisson_raw(k: f64, z: f64) -> f64 {
     if k == 0.0 {
         return exp(-z);
     }
-    if z < k * f64::MIN_POSITIVE {
+    if z < 1.0 && z < k * f64::MIN_POSITIVE {
         return exp(k * log(z) - z - gammaln(k + 1.0));
     }
     let normalisation = -0.5 * (log(2.0 * std::f64::consts::PI) + log(k));
@@ -843,9 +845,12 @@ fn poisson_raw(k: f64, z: f64) -> f64 {
 }
 
 /// MATLAB's `gampdf(x, a, b)` for every positive finite shape `a > 0`:
-/// Loader's saddle-point density `poisson_raw(a - 1, x / b) / b` for `a >= 1`,
-/// and the shifted recurrence `(poisson_raw(a_rt, x / b) * exp(log(a_rt) - log(x / b))) / b`
-/// with `a_rt = (a - 1) + 1` for `0 < a < 1` (falling back to `None` only when `a`
+/// computes `z = x / b` first (returning `Inf` when `z == 0` and `a < 1`, matching
+/// MATLAB's `gampdf` even when `x > 0` underflows `x / b`, as recorded on
+/// `gampdf(f64::from_bits(1), 0.999, 3.0)`), then Loader's saddle-point density
+/// `poisson_raw(a - 1, z) / b` for `a >= 1`, and the shifted recurrence
+/// `(poisson_raw(a_rt, z) * exp(log(a_rt) - log(z))) / b` with
+/// `a_rt = (a - 1) + 1` for `0 < a < 1` (falling back to `None` only when `a`
 /// is so small that `(a - 1) + 1` underflows to 0).
 pub fn gampdf(x: f64, a: f64, b: f64) -> Option<f64> {
     if !(a > 0.0 && a.is_finite()) || !(b > 0.0 && b.is_finite()) || x.is_nan() {
@@ -905,10 +910,15 @@ mod tests {
         assert!(deviance(1e-300, 1e308).is_finite());
         assert_eq!(gampdf(f64::INFINITY, 2.0, 1.0), Some(0.0));
         assert_eq!(gampdf(1e308, 2.0, 1e-308), Some(0.0));
+        // Huge shape with z >= 1 must not trigger the subnormal log-space branch.
+        assert_eq!(gampdf(3.0, f64::MAX, 1.0), Some(0.0));
+        assert_eq!(gampdf(0.5, f64::MAX, 1.0), Some(0.0));
         // Small shapes 0 < a < 1: shifted Loader recurrence and subnormal z < k * realmin branch.
         assert_eq!(gampdf(f64::MIN_POSITIVE, 0.55, 3.0).unwrap().to_bits(), 0x5c94_3139_c9ae_3f47);
         assert_eq!(gampdf(f64::MIN_POSITIVE, 0.5, 3.0).unwrap().to_bits(), 0x5fc4_d8d7_a58f_a483);
         assert_eq!(gampdf(0.0, 0.5, 1.0), Some(f64::INFINITY));
+        // MATLAB divides z = x / b first, so z == 0 with a < 1 yields +Inf (pinned in held_out_gamma).
+        assert_eq!(gampdf(f64::from_bits(1), 0.999, 3.0), Some(f64::INFINITY));
         assert_eq!(gampdf(1.0, 1e-17, 1.0), None);
     }
 

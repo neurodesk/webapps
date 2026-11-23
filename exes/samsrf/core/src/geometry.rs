@@ -367,11 +367,22 @@ pub fn delaunay_convex_hull_area(points: &[[f64; 2]]) -> Option<f64> {
     let sum = area_twice(&boundary, cx, cy);
     if sum.is_finite() {
         let area = 0.5 * sum.abs();
-        return (area > 0.0).then_some(area);
+        if area > 0.0 {
+            return Some(area);
+        }
     }
-    let exponent = binade(boundary.iter().fold(0.0_f64, |m, p| m.max((p[0] - cx).abs()).max((p[1] - cy).abs())));
-    let scaled: Vec<[f64; 2]> = boundary.iter().map(|p| [times_power_of_two(p[0] - cx, -exponent), times_power_of_two(p[1] - cy, -exponent)]).collect();
-    let area = times_power_of_two(0.5 * area_twice(&scaled, 0.0, 0.0).abs(), 2 * exponent);
+    let max_x = boundary.iter().fold(0.0_f64, |m, p| m.max((p[0] - cx).abs()));
+    let max_y = boundary.iter().fold(0.0_f64, |m, p| m.max((p[1] - cy).abs()));
+    if max_x == 0.0 || max_y == 0.0 {
+        return None;
+    }
+    let ex = binade(max_x);
+    let ey = binade(max_y);
+    let scaled: Vec<[f64; 2]> = boundary
+        .iter()
+        .map(|p| [times_power_of_two(p[0] - cx, -ex), times_power_of_two(p[1] - cy, -ey)])
+        .collect();
+    let area = times_power_of_two(0.5 * area_twice(&scaled, 0.0, 0.0).abs(), ex + ey);
     (area > 0.0).then_some(area)
 }
 
@@ -804,6 +815,14 @@ mod tests {
         assert_eq!(delaunay_convex_hull_area(&huge), Some(f64::INFINITY));
         let scaled = [[0.0, 0.0], [2e154, 0.0], [2e154, 1e154]];
         assert_eq!(delaunay_convex_hull_area(&scaled), Some(1e308));
+        // Extreme aspect ratios and subnormal squares scale each axis independently
+        // so representable areas neither overflow nor underflow to None.
+        let wide_thin = [[-1e308, 0.0], [1e308, 0.0], [0.0, 1e-308]];
+        let wide_thin_area = delaunay_convex_hull_area(&wide_thin).unwrap();
+        assert!((wide_thin_area - 1.0).abs() < 1e-12, "wide_thin_area = {wide_thin_area}");
+        let half = 2f64.powi(-538);
+        let tiny_square = [[-half, -half], [half, -half], [half, half], [-half, half]];
+        assert_eq!(delaunay_convex_hull_area(&tiny_square), Some(f64::from_bits(1)));
         assert_eq!(delaunay_convex_hull_area(&[[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]), None);
     }
 

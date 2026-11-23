@@ -2900,15 +2900,18 @@ the connective-field hulls where the port's rings cannot move its start
   (`hull-area-predictions.md`). On the SamSrfAnalysis matrix it gains the double
   RC Gaussian fits' `R^2`, `x0` and `y0` in 24 AMD and 23 Intel values at nine vertices, because
   the fits start at the peak pixel, and it loses none.
-- **Reverse correlation, `Prf_Function = 0`.** Production keeps the previous grid
-  and hull (`revcor_prf::pixel_grid`). The diagnostic takes MATLAB's grid and the
-  centroid of `polyshape(Dt.Points(K, :))`. Round hull-area-1 supports the port's
-  `K` on all 424 recorded sets. `Fwhm` stays the previous hull's area, because
-  `convexHull`'s area is not identified. From MATLAB's courses (`cli_rc_hulls.rs`)
-  the diagnostic gives the grid, the peak, and `x0` and `y0` bit for bit at all 42
-  AMD vertices, and `Fwhm` at 27. It loses one value the previous grid matched:
-  `rc_custom_hrf_lh_double` vertex 4's `Fwhm`, 2.883208896089259 against
-  2.8832088960892586, on both hosts. That loss keeps it out of production.
+- **Reverse correlation, `Prf_Function = 0`.** Production (`HullOrder::Anchored`)
+  now adopts MATLAB's symmetric pixel grid (`symmetric_linspace`), stored
+  Delaunay boundary centroid (`Hull::of_delaunay_boundary`), and `convexHull`
+  area (`delaunay_convex_hull_area`, using the bounding-box midpoint and
+  reverse clockwise non-FMA traversal of `K`). Round hull-area-1 matches
+  MATLAB's `K`, `AV` and `cornersArea` on all 424 recorded point sets on both
+  hosts (`cli_rc_hulls.rs`). From MATLAB's courses (`cli_rc_hulls.rs`),
+  production gives the grid, the peak, `x0`, `y0` and `Fwhm` bit for bit at all
+  42 AMD vertices (eliminating all 15 previously differing `Fwhm` values and
+  the vertex 4 loss that kept the stored grid out of production), making both
+  `rc_hull_lh_double` and `rc_custom_hrf_lh_double` bit-exact on AMD (`current`
+  and `matlab-amd`) and on Intel (`matlab-intel`).
 - **Connective fields, `Fit_pRF = 0`.** Production takes the stored order where
   the polygon's first point starts it and the previous hull, `ListedHull`,
   elsewhere ([anchored hulls](#anchored-connective-field-hulls)). The diagnostic's

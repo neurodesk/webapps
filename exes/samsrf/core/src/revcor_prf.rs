@@ -413,6 +413,18 @@ mod tests {
         assert_eq!(row[3], 2.0);
         let hull = prepared.convex_hull(&row, &profile);
         assert_eq!(hull, vec![0.0; 5], "one pixel spans no area, so SamSrf zeroes the column");
+
+        // Tiny scaling factor (2^-538): a 2x2 square has area 2^-1074 = f64::MIN_SUBNORMAL,
+        // which Anchored and Stored must preserve without zeroing R^2, Fwhm or Beta.
+        let mut tiny_model = model();
+        tiny_model.scaling_factor = 2f64.powi(-538);
+        let tiny_y = [1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0];
+        for order in [HullOrder::Anchored, HullOrder::Stored, HullOrder::Listed] {
+            let tiny = Prepared::new(&tiny_model, &apertures(), &ResolvedHrf::None, 8).unwrap().with_hull_order(order);
+            let (tiny_row, tiny_profile) = tiny.reverse_correlate(&tiny_y);
+            let tiny_hull = tiny.convex_hull(&tiny_row, &tiny_profile);
+            assert!(tiny_hull[0] > 0.0 && tiny_hull[3] > 0.0 && tiny_hull[4] > 0.0, "{order:?}: tiny hull zeroed {tiny_hull:?}");
+        }
     }
 
     #[test]

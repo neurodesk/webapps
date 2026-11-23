@@ -17,6 +17,7 @@ use samsrf_core::model::{parse_model_json, AnalysisKind, Model};
 use samsrf_core::geometry::{delaunay_convex_hull_area, HullOrder};
 use samsrf_core::{mat, revcor_prf};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
 const RUNS: [&str; 2] = ["rc_hull_lh_double", "rc_custom_hrf_lh_double"];
@@ -74,6 +75,7 @@ fn reverse_correlation_hulls_equal_matlab() {
     let hull_manifest = json(&hulls.join("manifest.json"));
     assert_eq!(hull_manifest.as_object().unwrap().keys().collect::<Vec<_>>(), ["amd", "intel"], "extracted hosts");
     for (host, bundle) in [("amd", recording.join("bundle")), ("intel", recording.join("ubuntu-24.04").join("bundle"))] {
+        let mut production_bits = Sha256::new();
         let extracted = hull_manifest[host].as_array().unwrap();
         assert_eq!(extracted.iter().map(|run| run["id"].as_str().unwrap()).collect::<Vec<_>>(), RUNS, "{host}: extracted runs");
         for entry in extracted {
@@ -93,7 +95,7 @@ fn reverse_correlation_hulls_equal_matlab() {
             assert_eq!((grid(&stored.xc, &xc), grid(&stored.yc, &yc)), (0, 0), "{host} {run}: stored pixels off MATLAB's grid");
             let ys = float64(&courses.join(host).join(course["file"].as_str().unwrap()), roi.len() * volumes);
             let values: Vec<&str> = entry["values"].as_array().unwrap().iter().map(|v| v.as_str().unwrap()).collect();
-            for name in ["x0", "y0", "Fwhm"] {
+            for name in ["R^2", "x0", "y0", "Fwhm", "Beta"] {
                 assert_eq!(values.iter().filter(|v| **v == name).count(), 1, "{run}: map {name}");
             }
             let data = float64(&hulls.join(host).join(format!("{run}.data.f64")), roi.len() * values.len());
@@ -101,6 +103,9 @@ fn reverse_correlation_hulls_equal_matlab() {
             for (position, y) in ys.chunks(volumes).enumerate() {
                 let (production_row, production_profile) = production.reverse_correlate(y);
                 let production_hull = production.convex_hull(&production_row, &production_profile);
+                for value in &production_hull {
+                    production_bits.update(value.to_le_bytes());
+                }
                 let (stored_row, stored_profile) = stored.reverse_correlate(y);
                 let stored_hull = stored.convex_hull(&stored_row, &stored_profile);
                 assert_eq!(
@@ -113,11 +118,18 @@ fn reverse_correlation_hulls_equal_matlab() {
                 }
                 assert_eq!(production_row.map(f64::to_bits), [0, 1, 2, 3, 4].map(|r| raw[position * 5 + r].to_bits()), "{run} vertex {position}: peak row");
                 let matlab = |name: &str| data[position * values.len() + values.iter().position(|v| *v == name).unwrap()];
-                for (r, name) in ["x0", "y0", "Fwhm"].iter().enumerate() {
-                    assert_eq!(production_hull[r + 1].to_bits(), matlab(name).to_bits(), "{run} vertex {position} {name}: {} vs {}", production_hull[r + 1], matlab(name));
+                for (r, name) in ["R^2", "x0", "y0", "Fwhm", "Beta"].iter().enumerate() {
+                    assert_eq!(production_hull[r].to_bits(), matlab(name).to_bits(), "{run} vertex {position} {name}: {} vs {}", production_hull[r], matlab(name));
                 }
             }
         }
+        // All five output rows (R^2, x0, y0, Fwhm, Beta) at every ROI vertex of both runs.
+        let expected = if host == "amd" {
+            "0aaacf7bb31b90a0925285f4b32f8e389a1c9381144f3690f9492101db268ab3"
+        } else {
+            "5cf07edff626f3b452a79a71a926c4feced4f26ab8700f7236ac265c0a6b67ce"
+        };
+        assert_eq!(format!("{:x}", production_bits.finalize()), expected, "{host}: production RC hull bits changed");
     }
 }
 

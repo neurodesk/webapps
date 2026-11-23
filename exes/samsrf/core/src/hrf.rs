@@ -92,7 +92,9 @@ pub fn old_school(tr: f64, fp: [f64; 4]) -> Vec<f64> {
 }
 
 /// `gampdf(x, a, b)` as MATLAB defines it, including `x = 0` for every shape: MATLAB's
-/// saddle-point form for a >= 1 (`matlab_math::gampdf`), the closed form below otherwise.
+/// saddle-point form (`matlab_math::gampdf`) for positive finite shapes where
+/// `(a - 1) + 1 > 0`, and the log-space closed form only as a fallback when `a` is
+/// tiny enough to underflow `(a - 1) + 1` to zero or nonfinite.
 pub fn gampdf(x: f64, a: f64, b: f64) -> f64 {
     if x.is_nan() || a.is_nan() || b.is_nan() || a <= 0.0 || b <= 0.0 {
         return f64::NAN;

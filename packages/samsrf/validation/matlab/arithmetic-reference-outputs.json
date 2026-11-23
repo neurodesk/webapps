@@ -1,5 +1,5 @@
 {
- "description": "Literal output hashes from the independently reviewed main, AMD and Intel builds; Intel double runs only. No tolerance comparison. The double CF hull runs' maps.f64 under every reference follow the anchored hull default (#732), which changes 16 y0 values of each, all to MATLAB's.",
+ "description": "Literal output hashes from the independently reviewed main, AMD and Intel builds; Intel double runs only. No tolerance comparison. The double CF hull runs' maps.f64 under every reference follow the anchored hull default (#732), which changes 16 y0 values of each, all to MATLAB's. The six double reverse-correlation hull entries (rc_hull_lh_double and rc_custom_hrf_lh_double under current, matlab-amd, and matlab-intel) follow production's adoption of MATLAB's symmetric pixel grid, stored Delaunay boundary centroid and convexHull area (#732), making both runs bit-exact against MATLAB on AMD (current/matlab-amd) and Intel (matlab-intel).",
  "baselines": {
   "current": "abbd6625e895a1ec7eee6bcd3eb03ae93b7b79a45ebdf16a42a90208a6908daa",
   "matlab-amd": "cc528cf6ec172367ee845296f197a686e671629386a595eaba5432ccfe0436b6",
