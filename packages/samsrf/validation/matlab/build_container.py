@@ -17,9 +17,11 @@ from prepare import SOURCE, repairs, source_record
 
 FROM_LINE = re.compile(r'^\s*FROM\s+(?:--platform=\S+\s+)?(\S+)(?:\s+AS\s+(\S+))?\s*$', re.IGNORECASE)
 FROM_KEYWORD = re.compile(r'^\s*FROM(?:\s|$)', re.IGNORECASE)
-COPY_FROM_LINE = re.compile(r'^\s*(?:COPY|ADD)\s+.*--from=', re.IGNORECASE)
+COPY_ADD_KEYWORD = re.compile(r'^\s*(COPY|ADD)(?:\s|$)', re.IGNORECASE)
 RUNTIME_IMAGE = 'samsrf-reference-runtime:r2023b'
 APP_IMAGE = 'samsrf-reference:41ed1e96-r2023b'
+RUNTIME_DOCKERFILE_CANDIDATES = (Path('runtime/Dockerfile.runtime'), Path('runtime/Dockerfile'))
+RUNTIME_BASE_DOCKERFILE = Path('runtime/matlabruntimebase/Dockerfile.deps')
 
 
 def git(directory, *args):
@@ -209,45 +211,106 @@ def dockerfile_instructions(text):
             yield instruction
 
 
-def parse_dockerfile_bases(dockerfile):
-    """Parse generated Dockerfile FROM stages and resolve the final stage's external base image.
+STAGE_ALIAS = re.compile(r'^[A-Za-z][A-Za-z0-9._-]*$')
 
-    Returns (external_bases, final_base). Fails closed on missing Dockerfiles, missing or
-    unparseable FROM instructions, FROM scratch, variable-expanded FROM refs, or
-    COPY/ADD --from= instructions whose cross-stage provenance layer prefixes cannot verify.
+
+def parse_copy_from_flag(instruction, path):
+    """Return the `--from=<src>` value for a COPY instruction, or None if absent.
+
+    Fails closed on ADD --from=, malformed/duplicate/quoted flags, `--`, or variable refs.
+    """
+    match = COPY_ADD_KEYWORD.match(instruction)
+    if not match:
+        return None
+    keyword = match.group(1).upper()
+    from_ref = None
+    for token in instruction.split()[1:]:
+        if not token.startswith('--'):
+            break
+        if token == '--' or '"' in token or "'" in token:
+            raise ValueError(f'Unsupported {keyword} flag in generated Dockerfile {path}: {instruction}')
+        lower = token.lower()
+        if lower == '--from' or lower.startswith('--from='):
+            if keyword != 'COPY':
+                raise ValueError(f'Unsupported ADD --from= in generated Dockerfile {path}: {instruction}')
+            if lower == '--from' or from_ref is not None:
+                raise ValueError(f'Unsupported COPY --from= in generated Dockerfile {path}: {instruction}')
+            value = token.split('=', 1)[1]
+            if not value or '$' in value:
+                raise ValueError(f'Unsupported COPY --from= in generated Dockerfile {path}: {instruction}')
+            from_ref = value
+    return from_ref
+
+
+def parse_dockerfile_bases(dockerfile):
+    """Parse generated Dockerfile FROM stages and resolve external base images.
+
+    Returns (external_bases, final_base, copy_from_stages). Allows `COPY --from=<stage>`
+    only when `<stage>` refers to a strictly earlier `FROM` stage in the same Dockerfile
+    (by alias or 0-based index), whose external base image is recorded in `external_bases`.
+    Fails closed on missing Dockerfiles, missing/unparseable FROM instructions, duplicate
+    stage aliases, FROM scratch, variable-expanded FROM refs, ADD --from=, or COPY --from=
+    referencing external images, self, or undeclared stages.
     """
     path = Path(dockerfile)
     if not path.is_file():
         raise ValueError(f'Missing generated Dockerfile: {path}')
     external_bases = []
-    stage_to_base = {}
+    stage_bases = []
+    earlier_aliases = {}
+    all_aliases = set()
+    current_alias = None
     final_base = None
+    copy_from_stages = []
     # Decode raw bytes so Python universal newlines do not split on bare carriage returns.
     for instruction in dockerfile_instructions(path.read_bytes().decode('utf-8')):
-        if COPY_FROM_LINE.match(instruction):
-            raise ValueError(f'Unsupported COPY/ADD --from= in generated Dockerfile {path}: {instruction}')
+        copy_from = parse_copy_from_flag(instruction, path)
+        if copy_from is not None:
+            if not stage_bases:
+                raise ValueError(f'Unsupported COPY --from= before FROM in generated Dockerfile {path}: {instruction}')
+            key = copy_from.lower()
+            if key in earlier_aliases:
+                stage_base = earlier_aliases[key]
+            elif copy_from.isascii() and copy_from.isdigit() and int(copy_from) < len(stage_bases) - 1:
+                stage_base = stage_bases[int(copy_from)]
+            else:
+                raise ValueError(f'Unsupported COPY/ADD --from= in generated Dockerfile {path}: {instruction}')
+            entry = {'from': copy_from, 'stageBase': stage_base}
+            if entry not in copy_from_stages:
+                copy_from_stages.append(entry)
+            continue
         if not FROM_KEYWORD.match(instruction):
             continue
         match = FROM_LINE.match(instruction)
         if not match:
             raise ValueError(f'Unsupported FROM instruction in generated Dockerfile {path}: {instruction}')
+        if current_alias is not None:
+            earlier_aliases[current_alias] = final_base
+            current_alias = None
         ref, alias = match.group(1), match.group(2)
         if '$' in ref:
             raise ValueError(f'Unsupported variable FROM reference in generated Dockerfile {path}: {instruction}')
         if ref.lower() == 'scratch':
             raise ValueError(f'Unsupported FROM scratch in generated Dockerfile: {path}')
-        if ref.lower() in stage_to_base:
-            resolved_base = stage_to_base[ref.lower()]
+        if ref.lower() in earlier_aliases:
+            resolved_base = earlier_aliases[ref.lower()]
         else:
             resolved_base = ref
             if ref not in external_bases:
                 external_bases.append(ref)
+        stage_bases.append(resolved_base)
         final_base = resolved_base
         if alias:
-            stage_to_base[alias.lower()] = resolved_base
+            if not STAGE_ALIAS.match(alias):
+                raise ValueError(f'Invalid stage alias in generated Dockerfile {path}: {alias}')
+            alias_key = alias.lower()
+            if alias_key in all_aliases:
+                raise ValueError(f'Duplicate stage alias in generated Dockerfile {path}: {alias}')
+            all_aliases.add(alias_key)
+            current_alias = alias_key
     if final_base is None:
         raise ValueError(f'Generated Dockerfile declares no FROM base image: {path}')
-    return external_bases, final_base
+    return external_bases, final_base, copy_from_stages
 
 
 def inspect_docker_image(ref):
@@ -288,12 +351,26 @@ def require_layer_prefix(parent_ref, parent, child_ref, child):
             f'{child_ref} ({child["id"]}); tag may be stale or mismatched')
 
 
+def resolve_runtime_dockerfile(output):
+    """Locate the generated runtime Dockerfile (`runtime/Dockerfile.runtime` in MATLAB
+    R2023b U11, or `runtime/Dockerfile`), failing closed if both or neither exist."""
+    present = [rel for rel in RUNTIME_DOCKERFILE_CANDIDATES if (output / rel).is_file()]
+    if len(present) > 1:
+        names = ', '.join(str(rel) for rel in present)
+        raise ValueError(f'Ambiguous generated runtime Dockerfiles in {output}: {names}')
+    if not present:
+        raise ValueError(f'Missing generated Dockerfile: {output / RUNTIME_DOCKERFILE_CANDIDATES[0]}')
+    return present[0]
+
+
 def record_base_images(output, runtime_image=RUNTIME_IMAGE, app_image=APP_IMAGE, inspector=None):
     """Record and fail-closed verify generated Dockerfile FROM bases and layer lineage."""
     output = Path(output)
     inspect = inspector or inspect_docker_image
     dockerfiles = {}
+    dockerfile_paths = {}
     final_bases = {}
+    copy_from_stages = {}
     dockerfile_sha256 = {}
     resolved = {}
 
@@ -302,18 +379,31 @@ def record_base_images(output, runtime_image=RUNTIME_IMAGE, app_image=APP_IMAGE,
             resolved[ref] = validate_image_metadata(ref, inspect(ref))
         return resolved[ref]
 
-    for label, relative in (('runtime', Path('runtime/Dockerfile')), ('container', Path('container/Dockerfile'))):
+    def parse_entry(label, relative):
         path = output / relative
-        refs, final_base = parse_dockerfile_bases(path)
+        refs, final_base, copy_from = parse_dockerfile_bases(path)
         dockerfiles[label] = refs
+        dockerfile_paths[label] = relative.as_posix()
         final_bases[label] = final_base
+        if copy_from:
+            copy_from_stages[label] = copy_from
         dockerfile_sha256[label] = hashlib.sha256(path.read_bytes()).hexdigest()
         for ref in refs:
             lookup(ref)
 
+    runtime_rel = resolve_runtime_dockerfile(output)
+    parse_entry('runtime', runtime_rel)
+    parse_entry('container', Path('container/Dockerfile'))
+
+    runtime_base_ref = final_bases['runtime']
+    deps_path = output / RUNTIME_BASE_DOCKERFILE
+    if deps_path.is_file() or runtime_base_ref.startswith('matlabruntimebase/'):
+        parse_entry('runtimeBase', RUNTIME_BASE_DOCKERFILE)
+        deps_base_ref = final_bases['runtimeBase']
+        require_layer_prefix(deps_base_ref, resolved[deps_base_ref], runtime_base_ref, resolved[runtime_base_ref])
+
     runtime_info = lookup(runtime_image)
     app_info = lookup(app_image)
-    runtime_base_ref = final_bases['runtime']
     container_base_ref = final_bases['container']
     require_layer_prefix(runtime_base_ref, resolved[runtime_base_ref], runtime_image, runtime_info)
     if resolved[container_base_ref]['id'] != runtime_info['id']:
@@ -324,7 +414,9 @@ def record_base_images(output, runtime_image=RUNTIME_IMAGE, app_image=APP_IMAGE,
 
     record = {
         'dockerfiles': dockerfiles,
+        'dockerfilePaths': dockerfile_paths,
         'finalBases': final_bases,
+        'copyFromStages': copy_from_stages,
         'dockerfileSha256': dockerfile_sha256,
         'resolved': resolved,
         'lineageVerified': True,
