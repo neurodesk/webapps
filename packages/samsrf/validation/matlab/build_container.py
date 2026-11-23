@@ -175,7 +175,7 @@ def dockerfile_instructions(text):
         match = PARSER_DIRECTIVE.match(lines[index])
         if not match:
             break
-        key, value = match.group(1).lower(), match.group(2).strip()
+        key, value = match.group(1).lower(), match.group(2).strip(' \t')
         if key not in KNOWN_DIRECTIVES:
             break
         if key in seen_directives:

@@ -278,8 +278,8 @@ class RepairSets(unittest.TestCase):
             ok_check_ws = build_container.record_base_images(root, inspector=lambda ref: multistage_ok[ref])
             self.assertEqual(ok_check_ws['finalBases']['runtime'], 'base1:r2023b')
 
-            # Zero-character # check= / # syntax= stops directive scanning (BuildKit rule).
-            for empty_dir in ('# check=\n', '# syntax=\n'):
+            # Zero-character # check= / # syntax= / # escape= stops directive scanning (BuildKit rule).
+            for empty_dir in ('# check=\n', '# syntax=\n', '# escape=\n'):
                 (root / 'runtime' / 'Dockerfile').write_text(
                     f'{empty_dir}# escape=`\nFROM base2:r2023b AS s1\nRUN echo ok`\nFROM base1:r2023b\n')
                 ok_empty = build_container.record_base_images(root, inspector=lambda ref: multistage_ok[ref])
@@ -298,10 +298,11 @@ class RepairSets(unittest.TestCase):
                 ok_ws = build_container.record_base_images(root, inspector=lambda ref: multistage_b2[ref])
                 self.assertEqual(ok_ws['finalBases']['runtime'], 'base2:r2023b')
 
-            # Whitespace-only # escape= fails closed as an invalid escape token.
-            (root / 'runtime' / 'Dockerfile').write_text('# escape=   \nFROM base1:r2023b\n')
-            with self.assertRaisesRegex(ValueError, 'Unsupported Dockerfile escape directive'):
-                build_container.record_base_images(root, inspector=lambda ref: multistage_ok[ref])
+            # Whitespace-only or non-ASCII-whitespace # escape= fails closed as an invalid escape token.
+            for bad_escape in ('# escape=   \n', '# escape=`\u00a0\n'):
+                (root / 'runtime' / 'Dockerfile').write_text(f'{bad_escape}FROM base1:r2023b\n')
+                with self.assertRaisesRegex(ValueError, 'Unsupported Dockerfile escape directive'):
+                    build_container.record_base_images(root, inspector=lambda ref: multistage_ok[ref])
 
             # Invalid # escape= value (including multi-token) and duplicate directives fail closed.
             (root / 'runtime' / 'Dockerfile').write_text('# escape=invalid token\nFROM base1:r2023b\n')
