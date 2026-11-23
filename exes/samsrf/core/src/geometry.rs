@@ -377,16 +377,26 @@ fn delaunay_boundary_area(boundary: &[[f64; 2]]) -> Option<f64> {
     let cy = midpoint(low[1], high[1]);
     let m = boundary.len();
     let mut sum = 0.0_f64;
+    let mut subnormal = false;
     for j in (0..m).rev() {
         let a = boundary[j];
         let b = boundary[(j + 1) % m];
         let dx = b[0] - a[0];
         let dy = b[1] - a[1];
-        sum += (a[0] - cx) * dy - (a[1] - cy) * dx;
+        let p1 = (a[0] - cx) * dy;
+        let p2 = (a[1] - cy) * dx;
+        if (p1 != 0.0 && p1.abs() < f64::MIN_POSITIVE)
+            || (p2 != 0.0 && p2.abs() < f64::MIN_POSITIVE)
+            || (p1 == 0.0 && a[0] != cx && dy != 0.0)
+            || (p2 == 0.0 && a[1] != cy && dx != 0.0)
+        {
+            subnormal = true;
+        }
+        sum += p1 - p2;
     }
-    if sum.is_finite() {
+    if !subnormal && sum.is_finite() {
         let area = 0.5 * sum.abs();
-        if area > 0.0 {
+        if area >= f64::MIN_POSITIVE {
             return Some(area);
         }
     }
@@ -1023,6 +1033,15 @@ mod tests {
         // Exact tie to even at 0.5 * MIN_SUBNORMAL rounds to 0 -> None.
         let half_sub = 2f64.powi(-538);
         assert_eq!(delaunay_convex_hull_area(&[[0.0, 0.0], [half_sub, 0.0], [0.0, half_sub]]), None);
+        // Subnormal midpoint products must still fall back to ExactSum even when the
+        // floating-point sum is positive (59/128 ULP -> None; 87/128 ULP -> 1 ULP).
+        let k = 2f64.powi(-540);
+        let sub_zero = [[0.0, 0.0], [6.0 * k, 11.0 * k], [7.0 * k, 3.0 * k]];
+        assert_eq!(delaunay_convex_hull_area(&sub_zero), None);
+        assert_eq!(delaunay_convex_hull_centroid_and_area(&sub_zero), None);
+        let sub_one = [[0.0, 0.0], [k, 8.0 * k], [11.0 * k, k]];
+        assert_eq!(delaunay_convex_hull_area(&sub_one), Some(f64::from_bits(1)));
+        assert_eq!(delaunay_convex_hull_centroid_and_area(&sub_one).map(|(_, a)| a), Some(f64::from_bits(1)));
         // Mixed-scale and full-exponent-range cases where floating-point orient2d or midpoint shifts fail.
         let mixed_scale = [[0.0, 0.0], [1.0, 2.0], [1e200, 1e200]];
         assert_eq!(delaunay_boundary(&mixed_scale).as_ref().map(Vec::len), Some(3));
