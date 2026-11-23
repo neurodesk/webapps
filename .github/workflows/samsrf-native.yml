@@ -559,7 +559,7 @@ jobs:
       matrix:
         host: [ubuntu-22.04, ubuntu-24.04]
         # Runner labels do not choose the CPU; more kernel runs reach more of them.
-        replica: ${{ fromJSON((inputs.qr_kernels || inputs.probes == 'intel-norm-single-css') && '[1, 2, 3]' || '[1]') }}
+        replica: ${{ fromJSON((inputs.qr_kernels || (inputs.record_matlab && inputs.probes == 'intel-norm-single-css')) && '[1, 2, 3]' || '[1]') }}
     runs-on: ${{ matrix.host }}
     timeout-minutes: 90
     env:
@@ -625,7 +625,7 @@ jobs:
       - name: Fetch the pinned least-squares designs for the kernel probe
         if: inputs.qr_kernels
         run: |
-          if [ '${{ inputs.record_matlab }}' = true ] || [ '${{ inputs.revcor_only }}' = true ] || [ '${{ inputs.qr_only }}' = true ]; then
+          if [ '${{ inputs.record_matlab }}' = true ] || [ '${{ inputs.revcor_only }}' = true ] || [ '${{ inputs.qr_only }}' = true ] || [ '${{ inputs.probes != 'none' && inputs.probes != '' }}' = true ]; then
             echo 'qr_kernels records the least-squares kernels alone.' >&2
             exit 1
           fi
@@ -984,23 +984,23 @@ jobs:
           print(f'{len(arrays)} arrays and every case equal in a new process')
           PY
       - name: Prepare a same-host repeat of the intel-norm-single-css probes
-        if: inputs.probes == 'intel-norm-single-css'
+        if: inputs.record_matlab && inputs.probes == 'intel-norm-single-css'
         run: |
           mkdir "$RUNNER_TEMP/samsrf-matlab-repeat"
           cp "$RUNNER_TEMP/samsrf-matlab/source.json" "$RUNNER_TEMP/samsrf-matlab-repeat/source.json"
           python3 packages/samsrf/validation/matlab/capture_environment.py "$RUNNER_TEMP/samsrf-matlab-repeat"
       - name: Record the intel-norm-single-css probes
-        if: inputs.probes == 'intel-norm-single-css'
+        if: inputs.record_matlab && inputs.probes == 'intel-norm-single-css'
         uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
         with:
           command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); t = getenv('RUNNER_TEMP'); record_intel_norm_single_css(fullfile(pwd,'reference-source'),fullfile(t,'samsrf-matrix-input'),fullfile(t,'samsrf-matlab'),fullfile(pwd,'reference-spm'),false)
       - name: Repeat the intel-norm-single-css probes in a new MATLAB process
-        if: inputs.probes == 'intel-norm-single-css'
+        if: inputs.record_matlab && inputs.probes == 'intel-norm-single-css'
         uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
         with:
           command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); t = getenv('RUNNER_TEMP'); record_intel_norm_single_css(fullfile(pwd,'reference-source'),fullfile(t,'samsrf-matrix-input'),fullfile(t,'samsrf-matlab-repeat'),fullfile(pwd,'reference-spm'),false)
       - name: Require an exact same-host repeat of the intel-norm-single-css probes
-        if: inputs.probes == 'intel-norm-single-css'
+        if: inputs.record_matlab && inputs.probes == 'intel-norm-single-css'
         run: |
           python3 - "$RUNNER_TEMP/samsrf-matlab" "$RUNNER_TEMP/samsrf-matlab-repeat" <<'PY'
           import json, pathlib, sys

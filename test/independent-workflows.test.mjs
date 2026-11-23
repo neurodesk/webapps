@@ -530,14 +530,29 @@ test('manual SamSrf MATLAB recording uses pinned source and cannot publish relea
 test('manual SamSrf least-squares kernel probe runs MATLAB alone on more runners', async () => {
   const flow = await workflow('samsrf-native');
   assert.equal(flow.on.workflow_dispatch.inputs.qr_kernels.default, false);
+  assert.ok(flow.on.workflow_dispatch.inputs.probes.options.includes('intel-norm-single-css'));
   const recording = flow.jobs['matlab-reference'];
-  assert.equal(recording.strategy.matrix.replica, "${{ fromJSON(inputs.qr_kernels && '[1, 2, 3]' || '[1]') }}");
+  const expectedReplicaExpr = "${{ fromJSON((inputs.qr_kernels || (inputs.record_matlab && inputs.probes == 'intel-norm-single-css')) && '[1, 2, 3]' || '[1]') }}";
+  assert.equal(recording.strategy.matrix.replica, expectedReplicaExpr);
+  const replicaInner = recording.strategy.matrix.replica.slice(3, -2).trim();
+  const evalReplica = (inputs) => JSON.parse(runInNewContext(replicaInner, { inputs, fromJSON: value => value }));
+  assert.deepEqual(evalReplica({ qr_kernels: true, record_matlab: false, probes: 'none' }), [1, 2, 3]);
+  assert.deepEqual(evalReplica({ qr_kernels: false, record_matlab: true, probes: 'intel-norm-single-css' }), [1, 2, 3]);
+  assert.deepEqual(evalReplica({ qr_kernels: false, record_matlab: false, probes: 'intel-norm-single-css' }), [1]);
+  assert.deepEqual(evalReplica({ qr_kernels: false, record_matlab: true, probes: 'none' }), [1]);
+  const qrFetch = recording.steps.find(step => step.name === 'Fetch the pinned least-squares designs for the kernel probe');
+  assert.match(qrFetch.run, /inputs\.probes != 'none'/);
+  const intelSteps = recording.steps.filter(step => /intel-norm-single-css/.test(step.name ?? ''));
+  assert.equal(intelSteps.length, 4);
+  for (const step of intelSteps) {
+    assert.equal(step.if, "inputs.record_matlab && inputs.probes == 'intel-norm-single-css'");
+  }
   const upload = recording.steps.find(step => step.uses?.startsWith('actions/upload-artifact@'));
   assert.match(upload.with.name, /matrix\.replica/);
   assert.ok(recording.steps.some(step => step.if === 'inputs.qr_kernels' && /record_qr_kernels\(/.test(step.with?.command ?? '')));
   for (const event of ['pull_request', 'push', 'workflow_dispatch']) {
     for (const only of [false, true]) {
-      const context = { github: { event_name: event, event: { pull_request: { draft: false } } }, inputs: { qr_kernels: only, qr_only: false, record_matlab: false, revcor_only: false, diagnostics_only: false } , needs: { gate: { outputs: { run: 'true' } } } };
+      const context = { github: { event_name: event, event: { pull_request: { draft: false } } }, inputs: { qr_kernels: only, qr_only: false, record_matlab: false, revcor_only: false, diagnostics_only: false, probes: 'none' } , needs: { gate: { outputs: { run: 'true' } } } };
       assert.equal(runInNewContext(recording.if, context), event === 'workflow_dispatch' && only);
       for (const name of ['test', 'wasm-source']) {
         assert.equal(runInNewContext(flow.jobs[name].if, context), event !== 'workflow_dispatch' || !only, name);
