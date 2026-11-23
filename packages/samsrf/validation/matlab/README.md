@@ -1630,9 +1630,10 @@ Each run directory must hold exactly the files its record names:
   forward model, and the file fields named as the app names them (`aps_bars`,
   `seed`, `lh_benson`);
 - the zip, whose bytes hash to `zipSha256` and which holds the contract map
-  GIfTIs, the polar angle and eccentricity GIfTIs, and (since #897) the
-  provenance JSON and `<stem>_lossless.bin` lossless export (historical zips
-  before #897 held only the GIfTIs).
+  GIfTIs, the polar angle and eccentricity GIfTIs, the provenance JSON (added
+  in #895), and `<stem>_lossless.bin` (added with its checksum in the
+  provenance JSON in #897; zips before #895 held only the GIfTIs, and zips
+  between #895 and #897 held GIfTIs plus provenance JSON).
 
 For each contract map's float32 GIfTI, the comparator checks bits twice:
 
@@ -1647,12 +1648,12 @@ which SamSrf's own GIfTI export also drops: without a lossless export, a map
 whose MATLAB values are complex stays `differs` even when every real part
 agrees, and `compare_web_cli.py` holds the engine's imaginary parts
 (`maps.imag.f64`, which the engine harness's run directory may hold when its
-record names the hash). Since #897, zips include `<stem>_lossless.bin` and
-provenance JSON, which expose raw float64 values and imaginary parts to
-`compare_ui_cli.py` directly (see **Lossless downloads (#897)** below).
-`nanSignOnly` counts differing values that are NaN on both sides. The zip's own
-hash changes from run to run, because its entries carry the time of the
-download; its GIfTIs do not.
+record names the hash). Since #897, zips also include `<stem>_lossless.bin`
+(named with its SHA-256 in the provenance JSON), which exposes raw float64
+values and imaginary parts to `compare_ui_cli.py` directly (see **Lossless
+downloads (#897)** below). `nanSignOnly` counts differing values that are NaN
+on both sides. The zip's own hash changes from run to run, because its entries
+carry the time of the download; its GIfTIs do not.
 
 The comparator classes each run from its record, and does not take the
 runner's status on trust:
@@ -1766,7 +1767,7 @@ the tooling of the same commit, module `abbd6625…`, against the compiled
 execution with `run_browser_matrix.mjs`'s run of that commit as the engine
 root), the comparator exits 0: all 22 computed runs complete, 2 are `refused`,
 and none is `ui-error`, `unsupported`, `failed` or `inventory-error`. All 212
-downloaded files equal the engine harness's, with the Node runner's run as the
+downloaded GIfTIs equal the engine harness's, with the Node runner's run as the
 engine root too, and the source execution gives the same counts. In their
 float32 downloads 20 runs are exact and 2 differ (160 of 168 maps). The four
 `*_custom_hrf_*` runs take `hrf_custom.mat` through the Subject HRF field. The
