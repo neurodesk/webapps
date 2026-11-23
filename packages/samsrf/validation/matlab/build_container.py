@@ -168,7 +168,8 @@ def dockerfile_instructions(text):
     """Yield complete logical Dockerfile instructions, honoring BuildKit parser directives
     (syntax, escape, check) and line continuations."""
     escape = '\\'
-    lines = text.lstrip('\ufeff').splitlines()
+    # Match Go bufio.ScanLines / BuildKit line splitting: split only on LF, stripping optional CR.
+    lines = [line[:-1] if line.endswith('\r') else line for line in text.lstrip('\ufeff').split('\n')]
     index = 0
     seen_directives = set()
     while index < len(lines):
@@ -187,9 +188,8 @@ def dockerfile_instructions(text):
             escape = value
         index += 1
     current = []
-    continuing = False
     for raw in lines[index:]:
-        stripped = raw.strip()
+        stripped = raw.strip(' \t')
         if not stripped or stripped.startswith('#'):
             # BuildKit skips blank lines and full-line comments both between
             # instructions and inside a pending continuation.
@@ -197,16 +197,14 @@ def dockerfile_instructions(text):
         trimmed_right = raw.rstrip(' \t')
         if trailing_escape_count(trimmed_right, escape) % 2 == 1:
             current.append(trimmed_right[:-1])
-            continuing = True
         else:
             current.append(raw)
-            instruction = ''.join(current).strip()
+            instruction = ''.join(current).strip(' \t')
             if instruction:
                 yield instruction
             current = []
-            continuing = False
     if current:
-        instruction = ''.join(current).strip()
+        instruction = ''.join(current).strip(' \t')
         if instruction:
             yield instruction
 

@@ -298,8 +298,8 @@ class RepairSets(unittest.TestCase):
                 ok_ws = build_container.record_base_images(root, inspector=lambda ref: multistage_b2[ref])
                 self.assertEqual(ok_ws['finalBases']['runtime'], 'base2:r2023b')
 
-            # Whitespace-only or non-ASCII-whitespace # escape= fails closed as an invalid escape token.
-            for bad_escape in ('# escape=   \n', '# escape=`\u00a0\n'):
+            # Whitespace-only, non-ASCII-whitespace, or Unicode line-separator # escape= fails closed.
+            for bad_escape in ('# escape=   \n', '# escape=`\u00a0\n', '# escape=`\u0085\n', '# escape=`\u2028\n', '# escape=`\u2029\n'):
                 (root / 'runtime' / 'Dockerfile').write_text(f'{bad_escape}FROM base1:r2023b\n')
                 with self.assertRaisesRegex(ValueError, 'Unsupported Dockerfile escape directive'):
                     build_container.record_base_images(root, inspector=lambda ref: multistage_ok[ref])
