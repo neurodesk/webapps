@@ -341,6 +341,40 @@ fn times_power_of_two(mut x: f64, mut k: i32) -> f64 {
     x * power(k)
 }
 
+/// Area of `[K, AV] = convexHull(delaunayTriangulation(points))` as MATLAB R2023b
+/// evaluates it: bounding-box midpoint `(min + max) / 2` and non-FMA edge cross
+/// products summed sequentially in reverse (clockwise) traversal of the closed
+/// counter-clockwise boundary `K`. `None` where the points span no area.
+pub fn delaunay_convex_hull_area(points: &[[f64; 2]]) -> Option<f64> {
+    let boundary = delaunay_boundary(points)?;
+    let (low, high) = boundary.iter().fold(([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]), |(low, high), p| {
+        ([low[0].min(p[0]), low[1].min(p[1])], [high[0].max(p[0]), high[1].max(p[1])])
+    });
+    let cx = midpoint(low[0], high[0]);
+    let cy = midpoint(low[1], high[1]);
+    let area_twice = |pts: &[[f64; 2]], ox: f64, oy: f64| {
+        let m = pts.len();
+        let mut sum = 0.0_f64;
+        for j in (0..m).rev() {
+            let a = pts[j];
+            let b = pts[(j + 1) % m];
+            let dx = b[0] - a[0];
+            let dy = b[1] - a[1];
+            sum += (a[0] - ox) * dy - (a[1] - oy) * dx;
+        }
+        sum
+    };
+    let sum = area_twice(&boundary, cx, cy);
+    if sum.is_finite() {
+        let area = 0.5 * sum.abs();
+        return (area > 0.0).then_some(area);
+    }
+    let exponent = binade(boundary.iter().fold(0.0_f64, |m, p| m.max((p[0] - cx).abs()).max((p[1] - cy).abs())));
+    let scaled: Vec<[f64; 2]> = boundary.iter().map(|p| [times_power_of_two(p[0] - cx, -exponent), times_power_of_two(p[1] - cy, -exponent)]).collect();
+    let area = times_power_of_two(0.5 * area_twice(&scaled, 0.0, 0.0).abs(), 2 * exponent);
+    (area > 0.0).then_some(area)
+}
+
 /// The boundary of the convex hull of `points` that `convexHull` of their
 /// Delaunay triangulation lists: decided with exact predicates, exactly
 /// collinear points included, counter-clockwise from the first input point on
@@ -762,6 +796,15 @@ mod tests {
             let listed: Vec<usize> = boundary.iter().map(|b| points.iter().position(|p| p == b).unwrap() + 1).collect();
             assert_eq!(listed, k);
         }
+        // `delaunay_convex_hull_area` uses the bounding-box midpoint and reverse (CW)
+        // non-FMA traversal of `K`, matching MATLAB's `convexHull(delaunayTriangulation)`
+        // `AV` (424/424 on round hull-area-1, both hosts) and scaling safely on overflow.
+        assert_eq!(delaunay_convex_hull_area(cases[0].0), Some(0.03683297622691565));
+        let huge = [[0.0, 0.0], [2e200, 0.0], [2e200, 1e200]];
+        assert_eq!(delaunay_convex_hull_area(&huge), Some(f64::INFINITY));
+        let scaled = [[0.0, 0.0], [2e154, 0.0], [2e154, 1e154]];
+        assert_eq!(delaunay_convex_hull_area(&scaled), Some(1e308));
+        assert_eq!(delaunay_convex_hull_area(&[[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]), None);
     }
 
     #[test]

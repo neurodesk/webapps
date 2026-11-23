@@ -5,43 +5,21 @@
 //! `SAMSRF_CLI_RC_HULLS_DIR` the output of `extract_cli_rc_hulls.py`; set all three
 //! or none.
 //!
-//! Production output bits are frozen against base 3f90ac124 on both hosts.
-//! This also gates the diagnostic `HullOrder::Stored` evaluation, which the convex-hull
-//! analysis does not take in production (`revcor_prf::pixel_grid`). With it, on
-//! both hosts the pixel grid equals the `xc` and `yc` MATLAB saved, at every
-//! pixel. On the AMD host, where the profiles are MATLAB's, the peak, the hull
-//! centroid and, but for the listed vertices, `Fwhm` are MATLAB's bits.
+//! Production (`HullOrder::Anchored`) and `HullOrder::Stored` now both use
+//! MATLAB's symmetric pixel grid (`symmetric_linspace`), stored Delaunay
+//! boundary centroid (`Hull::of_delaunay_boundary`) and `convexHull` area
+//! (`delaunay_convex_hull_area`). On both hosts the pixel grid equals the `xc`
+//! and `yc` MATLAB saved at every pixel, and on the AMD host, where the
+//! profiles are MATLAB's, the peak, hull centroid and `Fwhm` match MATLAB's
+//! bits at every ROI vertex of both runs.
 use samsrf_core::hrf::{self, ResolvedHrf};
 use samsrf_core::model::{parse_model_json, AnalysisKind, Model};
-use samsrf_core::geometry::HullOrder;
+use samsrf_core::geometry::{delaunay_convex_hull_area, HullOrder};
 use samsrf_core::{mat, revcor_prf};
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
 const RUNS: [&str; 2] = ["rc_hull_lh_double", "rc_custom_hrf_lh_double"];
-
-/// AMD vertices (positions in `Srf.Roi`) whose `Fwhm` differs: MATLAB takes it
-/// from `convexHull` of the Delaunay triangulation, whose area arithmetic is not
-/// identified (`ListedHull::of`, `hull-area-predictions.md`). Each must still
-/// differ, by at most 2 ULP.
-const FWHM_DIFFERS: [(&str, usize); 15] = [
-    ("rc_hull_lh_double", 6),
-    ("rc_hull_lh_double", 12),
-    ("rc_hull_lh_double", 14),
-    ("rc_hull_lh_double", 17),
-    ("rc_hull_lh_double", 20),
-    ("rc_custom_hrf_lh_double", 2),
-    ("rc_custom_hrf_lh_double", 3),
-    ("rc_custom_hrf_lh_double", 4),
-    ("rc_custom_hrf_lh_double", 8),
-    ("rc_custom_hrf_lh_double", 10),
-    ("rc_custom_hrf_lh_double", 11),
-    ("rc_custom_hrf_lh_double", 12),
-    ("rc_custom_hrf_lh_double", 15),
-    ("rc_custom_hrf_lh_double", 18),
-    ("rc_custom_hrf_lh_double", 19),
-];
 
 fn configured(values: [Option<PathBuf>; 3]) -> Option<[PathBuf; 3]> {
     match values {
@@ -75,11 +53,6 @@ fn vertex_numbers(roi: &Value, what: &str) -> Vec<u64> {
     roi
 }
 
-fn ulps(a: f64, b: f64) -> u64 {
-    let key = |x: f64| { let i = x.to_bits() as i64; if i < 0 { i64::MIN - i } else { i } };
-    key(a).abs_diff(key(b))
-}
-
 /// The run's analysis set up from the host's bundle, as the engine sets it up.
 fn prepared(bundle: &Path, run: &str, volumes: usize) -> revcor_prf::Prepared {
     let mut model: Value = json(&bundle.join("models").join(format!("{run}.json")));
@@ -99,10 +72,8 @@ fn reverse_correlation_hulls_equal_matlab() {
     let Some([recording, courses, hulls]) = roots() else { return; };
     let course_manifest = json(&courses.join("manifest.json"));
     let hull_manifest = json(&hulls.join("manifest.json"));
-    let mut differing = std::collections::BTreeSet::new();
     assert_eq!(hull_manifest.as_object().unwrap().keys().collect::<Vec<_>>(), ["amd", "intel"], "extracted hosts");
     for (host, bundle) in [("amd", recording.join("bundle")), ("intel", recording.join("ubuntu-24.04").join("bundle"))] {
-        let mut production_bits = Sha256::new();
         let extracted = hull_manifest[host].as_array().unwrap();
         assert_eq!(extracted.iter().map(|run| run["id"].as_str().unwrap()).collect::<Vec<_>>(), RUNS, "{host}: extracted runs");
         for entry in extracted {
@@ -112,13 +83,14 @@ fn reverse_correlation_hulls_equal_matlab() {
             let roi = vertex_numbers(&entry["roi"], &format!("{host} {run} maps"));
             assert_eq!(roi, vertex_numbers(&course["roi"], &format!("{host} {run} courses")), "{host} {run}: ROI of courses and maps");
             let production = prepared(&bundle, run, volumes);
-            let prepared = production.clone().with_hull_order(HullOrder::Stored);
+            let stored = production.clone().with_hull_order(HullOrder::Stored);
             let pixels = entry["rows"].as_u64().unwrap() as usize * entry["columns"].as_u64().unwrap() as usize;
-            assert_eq!(pixels, prepared.pixels, "{host} {run}: aperture size");
+            assert_eq!(pixels, production.pixels, "{host} {run}: aperture size");
             let xc = float64(&hulls.join(host).join(format!("{run}.xc.f64")), pixels);
             let yc = float64(&hulls.join(host).join(format!("{run}.yc.f64")), pixels);
             let grid = |port: &[f64], matlab: &[f64]| port.iter().zip(matlab).filter(|(a, b)| a.to_bits() != b.to_bits()).count();
-            assert_eq!((grid(&prepared.xc, &xc), grid(&prepared.yc, &yc)), (0, 0), "{host} {run}: pixels off MATLAB's grid");
+            assert_eq!((grid(&production.xc, &xc), grid(&production.yc, &yc)), (0, 0), "{host} {run}: production pixels off MATLAB's grid");
+            assert_eq!((grid(&stored.xc, &xc), grid(&stored.yc, &yc)), (0, 0), "{host} {run}: stored pixels off MATLAB's grid");
             let ys = float64(&courses.join(host).join(course["file"].as_str().unwrap()), roi.len() * volumes);
             let values: Vec<&str> = entry["values"].as_array().unwrap().iter().map(|v| v.as_str().unwrap()).collect();
             for name in ["x0", "y0", "Fwhm"] {
@@ -128,33 +100,25 @@ fn reverse_correlation_hulls_equal_matlab() {
             let raw = float64(&hulls.join(host).join(format!("{run}.raw.f64")), roi.len() * 5);
             for (position, y) in ys.chunks(volumes).enumerate() {
                 let (production_row, production_profile) = production.reverse_correlate(y);
-                for value in production.convex_hull(&production_row, &production_profile) {
-                    production_bits.update(value.to_le_bytes());
-                }
+                let production_hull = production.convex_hull(&production_row, &production_profile);
+                let (stored_row, stored_profile) = stored.reverse_correlate(y);
+                let stored_hull = stored.convex_hull(&stored_row, &stored_profile);
+                assert_eq!(
+                    production_hull.iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
+                    stored_hull.iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
+                    "{host} {run} vertex {position}: production and stored RC hull differ"
+                );
                 if host != "amd" {
                     continue;
                 }
-                let (row, profile) = prepared.reverse_correlate(y);
-                assert_eq!(row.map(f64::to_bits), [0, 1, 2, 3, 4].map(|r| raw[position * 5 + r].to_bits()), "{run} vertex {position}: peak row");
-                let hull = prepared.convex_hull(&row, &profile);
+                assert_eq!(production_row.map(f64::to_bits), [0, 1, 2, 3, 4].map(|r| raw[position * 5 + r].to_bits()), "{run} vertex {position}: peak row");
                 let matlab = |name: &str| data[position * values.len() + values.iter().position(|v| *v == name).unwrap()];
-                for (r, name) in ["x0", "y0"].iter().enumerate() {
-                    assert_eq!(hull[r + 1].to_bits(), matlab(name).to_bits(), "{run} vertex {position} {name}: {} vs {}", hull[r + 1], matlab(name));
-                }
-                let (fwhm, expected) = (hull[3], matlab("Fwhm"));
-                if FWHM_DIFFERS.contains(&(run, position)) {
-                    assert!(fwhm.to_bits() != expected.to_bits() && ulps(fwhm, expected) <= 2, "{run} vertex {position} Fwhm: {fwhm} vs {expected}; update FWHM_DIFFERS");
-                    differing.insert((run, position));
-                } else {
-                    assert_eq!(fwhm.to_bits(), expected.to_bits(), "{run} vertex {position} Fwhm: {fwhm} vs {expected}");
+                for (r, name) in ["x0", "y0", "Fwhm"].iter().enumerate() {
+                    assert_eq!(production_hull[r + 1].to_bits(), matlab(name).to_bits(), "{run} vertex {position} {name}: {} vs {}", production_hull[r + 1], matlab(name));
                 }
             }
         }
-        // Base 3f90ac124, all five output rows at every ROI vertex of both runs.
-        let expected = if host == "amd" { "3e1e6c3d5022541150ad7c0000e5b21708336d1cc12211257662bf8b16ee3e1f" } else { "bbca770519d3403f398d817f53c0830d2f4b0d20a19e456135815e668e9b0a42" };
-        assert_eq!(format!("{:x}", production_bits.finalize()), expected, "{host}: production RC hull bits changed");
     }
-    assert_eq!(differing.len(), FWHM_DIFFERS.len(), "unvisited FWHM_DIFFERS entries");
 }
 
 #[test]
@@ -165,5 +129,36 @@ fn partial_fixture_configuration_is_refused() {
         let mut values = [Some(PathBuf::from("r")), Some(PathBuf::from("c")), Some(PathBuf::from("h"))];
         values[missing] = None;
         assert!(std::panic::catch_unwind(|| configured(values)).is_err(), "variable {missing} missing");
+    }
+}
+
+/// Every `convexHull(delaunayTriangulation(P))` area `AV` and corner-hull area
+/// `cornersArea` in round hull-area-1 (424 point sets on both AMD and Intel hosts).
+#[test]
+fn delaunay_convex_hull_area_matches_round_hull_area_1() {
+    let Some(root) = std::env::var_os("SAMSRF_HULL_AREA_DIR").map(PathBuf::from) else { return };
+    for host in ["ubuntu-22.04", "ubuntu-24.04"] {
+        let dir = root.join(host);
+        let recording = json(&dir.join("geometry.json"));
+        let mut checked = 0usize;
+        for case in recording["cases"].as_array().unwrap().iter().filter(|c| c["kind"] == "hull-area") {
+            let id = case["id"].as_str().unwrap();
+            let shape = case["dtPoints"]["shape"].as_array().unwrap();
+            let rows = shape[0].as_u64().unwrap() as usize;
+            assert_eq!(shape[1].as_u64().unwrap(), 2, "{host} {id}: point width");
+            let raw_pts = float64(&dir.join(case["dtPoints"]["file"].as_str().unwrap()), rows * 2);
+            let pts: Vec<[f64; 2]> = (0..rows).map(|i| [raw_pts[i], raw_pts[rows + i]]).collect();
+            let expected_av = float64(&dir.join(case["area"]["file"].as_str().unwrap()), 1)[0];
+            let actual_av = delaunay_convex_hull_area(&pts).unwrap_or_else(|| panic!("{host} {id}: empty hull"));
+            assert_eq!(actual_av.to_bits(), expected_av.to_bits(), "{host} {id}: AV {actual_av} vs {expected_av}");
+            let k_len = case["hull"]["shape"][0].as_u64().unwrap() as usize;
+            let k_vals = float64(&dir.join(case["hull"]["file"].as_str().unwrap()), k_len);
+            let corner_pts: Vec<[f64; 2]> = k_vals[..k_len - 1].iter().map(|&idx| pts[idx as usize - 1]).collect();
+            let expected_cav = float64(&dir.join(case["cornersArea"]["file"].as_str().unwrap()), 1)[0];
+            let actual_cav = delaunay_convex_hull_area(&corner_pts).unwrap_or_else(|| panic!("{host} {id}: empty corner hull"));
+            assert_eq!(actual_cav.to_bits(), expected_cav.to_bits(), "{host} {id}: cornersArea {actual_cav} vs {expected_cav}");
+            checked += 1;
+        }
+        assert_eq!(checked, 424, "{host}: hull-area-1 inventory");
     }
 }

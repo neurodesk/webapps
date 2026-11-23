@@ -770,9 +770,11 @@ fn recorded_profiles_replay_to_each_hosts_maps() {
                 for (name, a, e, d) in rows_out {
                     let a = if single(case) { f64::from(a as f32) } else { a };
                     // R^2 = corr(Y, X(:,m))^2, whose dot product order is host-specific.
-                    // Production keeps the listed grid and hull; the stored order must give MATLAB's bits.
+                    // Production uses MATLAB's symmetric grid, stored boundary centroid,
+                    // and convexHull area for reverse-correlation hulls, matching MATLAB's
+                    // bits directly alongside the diagnostic `HullOrder::Stored` evaluation.
                     let ok = if !single(case) && hull_row(case, &name) {
-                        within(a, e, 1e-12 * e.abs().max(1.0)) && bits(d, e)
+                        bits(a, e) && bits(d, e)
                     } else if !single(case) {
                         within(a, e, 1e-12 * e.abs().max(1.0))
                     } else if name.ends_with("R^2") && intel(host) {

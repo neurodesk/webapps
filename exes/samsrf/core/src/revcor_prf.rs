@@ -12,7 +12,7 @@
 use crate::apertures::Apertures;
 use crate::error::{Error, Result};
 use crate::expr::Value;
-use crate::geometry::{Hull, HullOrder, ListedHull};
+use crate::geometry::{delaunay_convex_hull_area, Hull, HullOrder, ListedHull};
 use crate::hrf::{self, ResolvedHrf};
 use crate::model::{FineFit, RevCorPrfModel};
 use crate::optim::{self, FminsearchOptions};
@@ -179,11 +179,17 @@ impl Prepared {
         let Some(listed) = ListedHull::of(&points) else {
             return vec![0.0; 5];
         };
-        let [cx, cy] = match self.hull_order {
-            HullOrder::Anchored | HullOrder::Listed => listed.centroid(),
-            HullOrder::Stored => Hull::of_delaunay_boundary(&points).map_or([f64::NAN; 2], |hull| hull.centroid()),
+        let ([cx, cy], area) = match self.hull_order {
+            HullOrder::Listed => (listed.centroid(), listed.area()),
+            HullOrder::Anchored | HullOrder::Stored => {
+                let centroid = Hull::of_delaunay_boundary(&points).map_or([f64::NAN; 2], |hull| hull.centroid());
+                let Some(cha) = delaunay_convex_hull_area(&points) else {
+                    return vec![0.0; 5];
+                };
+                (centroid, cha)
+            }
         };
-        vec![raw[0], cx, cy, listed.area().sqrt() / (2.0 * (2.0 * 2f64.ln()).sqrt()), raw[4]]
+        vec![raw[0], cx, cy, area.sqrt() / (2.0 * (2.0 * 2f64.ln()).sqrt()), raw[4]]
     }
 
     /// `samsrf_revcorprf_loop` for one vertex: NaN rows below `R2_Threshold`, otherwise
@@ -319,7 +325,7 @@ fn nan_min(values: &[f64]) -> f64 {
 /// centroid and vertex order").
 fn pixel_grid(model: &RevCorPrfModel, rows: usize, cols: usize, order: HullOrder) -> (Vec<f64>, Vec<f64>) {
     let a = model.scaling_factor;
-    let line = |n: usize| if model.prf_function.is_none() && order != HullOrder::Stored { listed_linspace(-a, a, n) } else { symmetric_linspace(a, n) };
+    let line = |n: usize| if model.prf_function.is_none() && order == HullOrder::Listed { listed_linspace(-a, a, n) } else { symmetric_linspace(a, n) };
     let (xs, ys) = (line(cols), line(rows));
     (0..rows * cols).map(|p| (xs[p / rows], ys[rows - 1 - p % rows])).unzip()
 }
