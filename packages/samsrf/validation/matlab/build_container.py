@@ -16,7 +16,8 @@ import sys
 from prepare import SOURCE, repairs, source_record
 
 FROM_LINE = re.compile(r'^\s*FROM\s+(?:--platform=\S+\s+)?(\S+)(?:\s+AS\s+(\S+))?\s*$', re.IGNORECASE)
-COPY_FROM_LINE = re.compile(r'^\s*COPY\s+.*--from=', re.IGNORECASE)
+FROM_KEYWORD = re.compile(r'^\s*FROM(?:\s|$)', re.IGNORECASE)
+COPY_FROM_LINE = re.compile(r'^\s*(?:COPY|ADD)\s+.*--from=', re.IGNORECASE)
 RUNTIME_IMAGE = 'samsrf-reference-runtime:r2023b'
 APP_IMAGE = 'samsrf-reference:41ed1e96-r2023b'
 
@@ -69,15 +70,17 @@ def sparse_cone_directories(source):
 
 
 def in_sparse_cone(rel, cone_dirs):
+    """Return whether rel is permitted under Git's cone-mode sparse-checkout rules:
+    root files, any file inside a selected directory, or an immediate file inside a
+    strict ancestor of a selected directory."""
     parts = Path(rel).parts
     if len(parts) <= 1:
         return True
-    prefix = parts[0]
     for depth in range(1, len(parts)):
-        candidate = '/'.join(parts[:depth])
-        if candidate in cone_dirs:
+        if '/'.join(parts[:depth]) in cone_dirs:
             return True
-    return prefix in cone_dirs
+    parent_prefix = '/'.join(parts[:-1]) + '/'
+    return any(cone.startswith(parent_prefix) for cone in cone_dirs)
 
 
 def tracked_present_files(source):
@@ -147,12 +150,58 @@ def stage_clean_tree(source, destination):
     return staged_hashes
 
 
+PARSER_DIRECTIVE = re.compile(r'^\s*#\s*([a-zA-Z]+)\s*=\s*(\S+)\s*$')
+
+
+def dockerfile_instructions(text):
+    """Yield complete logical Dockerfile instructions, honoring top-of-file # escape=
+    directives and line continuations per the Dockerfile syntax specification."""
+    escape = '\\'
+    lines = text.splitlines()
+    index = 0
+    seen_escape = False
+    while index < len(lines):
+        match = PARSER_DIRECTIVE.match(lines[index])
+        if not match:
+            break
+        key, value = match.group(1).lower(), match.group(2)
+        if key == 'escape' and not seen_escape and value in ('\\', '`'):
+            escape = value
+            seen_escape = True
+        index += 1
+    current = []
+    continuing = False
+    for raw in lines[index:]:
+        stripped = raw.strip()
+        if not continuing:
+            if not stripped or stripped.startswith('#'):
+                continue
+        elif stripped.startswith('#'):
+            # Dockerfile ignores full-line comments inside a continued instruction.
+            continue
+        trimmed_right = raw.rstrip(' \t')
+        if trimmed_right.endswith(escape):
+            current.append(trimmed_right[:-1])
+            continuing = True
+        else:
+            current.append(raw)
+            instruction = ''.join(current).strip()
+            if instruction:
+                yield instruction
+            current = []
+            continuing = False
+    if current:
+        instruction = ''.join(current).strip()
+        if instruction:
+            yield instruction
+
+
 def parse_dockerfile_bases(dockerfile):
     """Parse generated Dockerfile FROM stages and resolve the final stage's external base image.
 
-    Returns (external_bases, final_base). Fails closed on missing Dockerfiles, missing FROM,
-    FROM scratch, or COPY --from= instructions whose cross-stage provenance layer prefixes
-    cannot verify.
+    Returns (external_bases, final_base). Fails closed on missing Dockerfiles, missing or
+    unparseable FROM instructions, FROM scratch, variable-expanded FROM refs, or
+    COPY/ADD --from= instructions whose cross-stage provenance layer prefixes cannot verify.
     """
     path = Path(dockerfile)
     if not path.is_file():
@@ -160,13 +209,17 @@ def parse_dockerfile_bases(dockerfile):
     external_bases = []
     stage_to_base = {}
     final_base = None
-    for line in path.read_text().splitlines():
-        if COPY_FROM_LINE.match(line):
-            raise ValueError(f'Unsupported COPY --from= in generated Dockerfile {path}: {line.strip()}')
-        match = FROM_LINE.match(line)
-        if not match:
+    for instruction in dockerfile_instructions(path.read_text()):
+        if COPY_FROM_LINE.match(instruction):
+            raise ValueError(f'Unsupported COPY/ADD --from= in generated Dockerfile {path}: {instruction}')
+        if not FROM_KEYWORD.match(instruction):
             continue
+        match = FROM_LINE.match(instruction)
+        if not match:
+            raise ValueError(f'Unsupported FROM instruction in generated Dockerfile {path}: {instruction}')
         ref, alias = match.group(1), match.group(2)
+        if '$' in ref:
+            raise ValueError(f'Unsupported variable FROM reference in generated Dockerfile {path}: {instruction}')
         if ref.lower() == 'scratch':
             raise ValueError(f'Unsupported FROM scratch in generated Dockerfile: {path}')
         if ref.lower() in stage_to_base:

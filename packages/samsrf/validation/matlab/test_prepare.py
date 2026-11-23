@@ -133,6 +133,33 @@ class RepairSets(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'Sparse-excluded path unexpectedly materialized'):
                 build_container.stage_clean_tree(sparse, base / 'staged-spm-leaked')
 
+    def test_clean_stage_allows_nested_sparse_cone_ancestor_files(self):
+        with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as tmp:
+            base = Path(tmp)
+            upstream = base / 'nested-upstream'
+            (upstream / 'parent' / 'selected').mkdir(parents=True)
+            (upstream / 'parent' / 'other').mkdir(parents=True)
+            (upstream / 'root.m').write_text('% root\n')
+            (upstream / 'parent' / 'shared.m').write_text('% ancestor sibling\n')
+            (upstream / 'parent' / 'selected' / 'keep.m').write_text('% selected\n')
+            (upstream / 'parent' / 'other' / 'skip.m').write_text('% excluded\n')
+            git = ['git', '-C', str(upstream), '-c', 'user.name=t', '-c', 'user.email=t@t']
+            subprocess.run(['git', 'init', '-q', str(upstream)], check=True)
+            subprocess.run(git + ['add', '.'], check=True)
+            subprocess.run(git + ['commit', '-q', '-m', 'init'], check=True)
+            sparse = base / 'nested-sparse'
+            subprocess.run(['git', 'clone', '-q', '--sparse', str(upstream), str(sparse)], check=True)
+            subprocess.run(['git', '-C', str(sparse), 'sparse-checkout', 'init', '--cone'], check=True)
+            subprocess.run(['git', '-C', str(sparse), 'sparse-checkout', 'set', 'parent/selected'], check=True)
+            staged = base / 'staged-nested'
+            hashes = build_container.stage_clean_tree(sparse, staged)
+            self.assertEqual(sorted(hashes), ['parent/selected/keep.m', 'parent/shared.m', 'root.m'])
+            # Restoring a sibling directory outside parent/selected is still rejected.
+            (sparse / 'parent' / 'other').mkdir()
+            (sparse / 'parent' / 'other' / 'skip.m').write_text('% excluded\n')
+            with self.assertRaisesRegex(ValueError, 'Sparse-excluded path unexpectedly materialized'):
+                build_container.stage_clean_tree(sparse, base / 'staged-nested-bad')
+
     def test_clean_stage_rejects_symlinks_in_source(self):
         root, source, _ = self.checkout()
         target = next(p for p in source.rglob('*') if p.is_file() and '.git' not in p.parts)
@@ -206,11 +233,25 @@ class RepairSets(unittest.TestCase):
             ok = build_container.record_base_images(root, inspector=lambda ref: multistage_ok[ref])
             self.assertEqual(ok['finalBases']['runtime'], 'base1:r2023b')
 
-            # COPY --from= cannot be verified by layer prefix alone and fails closed.
+            # COPY --from= (including across line continuations) cannot be verified by layer prefix alone.
             (root / 'runtime' / 'Dockerfile').write_text(
-                'FROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY --from=s1 /x /x\n')
-            with self.assertRaisesRegex(ValueError, 'Unsupported COPY --from='):
+                'FROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY \\\n  --from=s1 /x /x\n')
+            with self.assertRaisesRegex(ValueError, 'Unsupported COPY/ADD --from='):
                 build_container.record_base_images(root, inspector=lambda ref: multistage[ref])
+
+            # Continued final FROM instruction must be parsed rather than falling back to an earlier stage.
+            (root / 'runtime' / 'Dockerfile').write_text(
+                'FROM base2:r2023b AS s1\nFROM \\\n  base1:r2023b\n')
+            with self.assertRaisesRegex(ValueError, 'Base image base1:r2023b .* not a prefix'):
+                build_container.record_base_images(root, inspector=lambda ref: multistage[ref])
+            ok_continued = build_container.record_base_images(root, inspector=lambda ref: multistage_ok[ref])
+            self.assertEqual(ok_continued['finalBases']['runtime'], 'base1:r2023b')
+
+            # Custom # escape=` directive is honored for continued instructions too.
+            (root / 'runtime' / 'Dockerfile').write_text(
+                '# escape=`\nFROM base2:r2023b AS s1\nFROM `\n  base1:r2023b\n')
+            ok_backtick = build_container.record_base_images(root, inspector=lambda ref: multistage_ok[ref])
+            self.assertEqual(ok_backtick['finalBases']['runtime'], 'base1:r2023b')
 
 
 if __name__ == '__main__':
