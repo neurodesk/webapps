@@ -11,6 +11,7 @@ Usage:
   cli_plan.py stage PLAN_JSON BUNDLE RESULTS_ROOT
   cli_plan.py hash BUNDLE MANIFEST_JSON
   cli_plan.py verify BUNDLE MANIFEST_JSON
+  cli_plan.py attest-inputs BUNDLE MANIFEST_JSON RESULTS_ROOT
 """
 import hashlib
 import json
@@ -194,6 +195,20 @@ def tree_hashes(root):
     return hashes
 
 
+def attest_inputs(bundle, manifest_path, results_root):
+    """Verify the input bundle against its pre-run manifest and write receipts/inputs.json."""
+    expected = json.loads(Path(manifest_path).read_text())
+    actual = tree_hashes(bundle)
+    if actual != expected:
+        raise ValueError('The bundle differs from its recorded SHA-256 hashes')
+    receipts = Path(results_root) / 'receipts'
+    if not receipts.is_dir():
+        raise ValueError(f'Missing receipts directory {receipts}')
+    with (receipts / 'inputs.json').open('x') as output:
+        json.dump({'sha256': actual, 'unchanged': True}, output, indent=2)
+        output.write('\n')
+
+
 def main(arguments):
     if arguments[:1] == ['plan'] and len(arguments) == 2:
         Path(arguments[1]).write_text(json.dumps(plan(), indent=2) + '\n')
@@ -208,6 +223,11 @@ def main(arguments):
     elif arguments[:1] == ['verify'] and len(arguments) == 3:
         if tree_hashes(arguments[1]) != json.loads(Path(arguments[2]).read_text()):
             raise SystemExit('The bundle differs from its recorded SHA-256 hashes')
+    elif arguments[:1] == ['attest-inputs'] and len(arguments) == 4:
+        try:
+            attest_inputs(arguments[1], arguments[2], arguments[3])
+        except ValueError as error:
+            raise SystemExit(str(error)) from error
     else:
         raise SystemExit(__doc__)
 

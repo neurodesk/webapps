@@ -65,6 +65,8 @@ from compare_cli import expected_results, read_gifti, read_mat
 
 SOURCE_MODE = 'source-samsrfanalysis-cli'
 RECEIPT_EXECUTION = {'source': 'source', 'compiled-runtime': 'compiled-runtime'}
+ARITHMETIC_REFERENCES = ('current', 'matlab-amd', 'matlab-intel')
+INTEL_SINGLE_REFUSAL = "model: matlab-intel arithmetic requires Data_Precision 'double'; Intel single-precision kernels are not implemented"
 IMAGE_ID = re.compile(r'^sha256:[0-9a-f]{64}$')
 SHA256 = re.compile(r'^[0-9a-f]{64}$')
 MATLAB_EXTRA = re.compile(r'^(SamSrf_defaults\.json|hrf_custom\.mat|src_.+\.mat|reg_.+\.mat)$')
@@ -112,17 +114,19 @@ def validate_plan(plan, manifest):
             raise Inventory(f'{run["id"]}: the plan model is not the bundle manifest model file')
 
 
-def expected_web_outcome(run, runner):
+def expected_web_outcome(run, runner, reference='current'):
     """What the engine must do with a plan run on this runner, with the exact text of an
     expected refusal; run_web_matrix.mjs's expectedEngineOutcome says the same."""
     model = run['model']
     single = run['precision'] == 'single'
-    # exes/samsrf/core/src/model.rs: Error::NotImplemented.
+    # exes/samsrf/core/src/model.rs: Error::NotImplemented comes before ArithmeticReference::validate.
     if single and run['algorithm'] == 'rc' and model.get('Prf_Function', 0) != 0:
         return {'status': 'refused',
                 'message': 'Data_Precision=single with a Prf_Function fit is not supported by this port'}
     if single and run['algorithm'] == 'cf' and model.get('Fit_pRF') == 1:
         return {'status': 'refused', 'message': 'Data_Precision=single with Fit_pRF=1 is not supported by this port'}
+    if single and reference == 'matlab-intel':
+        return {'status': 'refused', 'message': INTEL_SINGLE_REFUSAL}
     return {'status': 'succeeded'}
 
 
@@ -185,7 +189,7 @@ def matlab_execution(root, plan, manifest, allow_unattested):
     return identity, records
 
 
-def web_execution(root, plan, plan_sha, manifest_sha):
+def web_execution(root, plan, plan_sha, manifest_sha, reference='current'):
     environment = read_json(root / 'environment.json')
     if environment.get('runner') not in ('node', 'browser'):
         raise Inventory('the web environment names no runner')
@@ -195,6 +199,11 @@ def web_execution(root, plan, plan_sha, manifest_sha):
         raise Inventory('the web execution ran on another bundle manifest')
     if not is_sha256(environment.get('wasmSha256')):
         raise Inventory('the web environment names no WebAssembly hash')
+    recorded_reference = environment.get('arithmeticReference', 'current')
+    if recorded_reference not in ARITHMETIC_REFERENCES:
+        raise Inventory(f'the web environment names unknown arithmeticReference {recorded_reference!r}')
+    if recorded_reference != reference:
+        raise Inventory(f'expected arithmetic reference {reference}, the web environment ran {recorded_reference}')
     allowed = {'environment.json', 'runs.json'}
     records = {}
     for run in plan['runs']:
@@ -410,8 +419,8 @@ def compare_maps(run, web, web_dir, matlab_dir):
     return results, imaginary is not None, web_only, matlab_only
 
 
-def compare_run(run, web, matlab, runner, web_root, matlab_root):
-    expected = expected_web_outcome(run, runner)
+def compare_run(run, web, matlab, runner, web_root, matlab_root, reference='current'):
+    expected = expected_web_outcome(run, runner, reference)
     report = {'id': run['id'], 'precision': run['precision'], 'algorithm': run['algorithm'],
               'status': {'web': web['status'], 'matlab': matlab['status'], 'expectedWeb': expected['status']},
               'maps': []}
@@ -440,15 +449,17 @@ def compare_run(run, web, matlab, runner, web_root, matlab_root):
     return report
 
 
-def compare(plan, plan_sha, manifest, manifest_sha, web_root, matlab_root, expect, allow_unattested=False):
+def compare(plan, plan_sha, manifest, manifest_sha, web_root, matlab_root, expect, allow_unattested=False, reference='current'):
+    if reference not in ARITHMETIC_REFERENCES:
+        raise Inventory(f'unknown arithmetic reference {reference!r}')
     web_root = Path(web_root)
     matlab_root = Path(matlab_root)
     validate_plan(plan, manifest)
     identity, receipts = matlab_execution(matlab_root, plan, manifest, allow_unattested)
     if identity['kind'] != expect:
         raise Inventory(f'expected a {expect} execution, the receipts record {identity["kind"]}')
-    environment, records = web_execution(web_root, plan, plan_sha, manifest_sha)
-    runs = [compare_run(run, records[run['id']], receipts[run['id']], environment['runner'], web_root, matlab_root)
+    environment, records = web_execution(web_root, plan, plan_sha, manifest_sha, reference)
+    runs = [compare_run(run, records[run['id']], receipts[run['id']], environment['runner'], web_root, matlab_root, reference)
             for run in plan['runs']]
     maps = [entry for run in runs for entry in run['maps']]
     count = lambda items, value: sum(item['class'] == value for item in items)
@@ -482,6 +493,7 @@ def main(arguments=None):
     parser.add_argument('report')
     parser.add_argument('--expect', required=True, choices=sorted(RECEIPT_EXECUTION))
     parser.add_argument('--allow-unattested-source-inputs', action='store_true')
+    parser.add_argument('--reference', default='current', choices=ARITHMETIC_REFERENCES)
     options = parser.parse_args(arguments)
     plan_bytes = Path(options.plan).read_bytes()
     manifest_bytes = Path(options.manifest).read_bytes()
@@ -490,7 +502,8 @@ def main(arguments=None):
         raise SystemExit("The plan is not cli_plan.py's matrix")
     try:
         report = compare(plan, sha256_bytes(plan_bytes), json.loads(manifest_bytes), sha256_bytes(manifest_bytes),
-                         options.web_root, options.matlab_root, options.expect, options.allow_unattested_source_inputs)
+                         options.web_root, options.matlab_root, options.expect, options.allow_unattested_source_inputs,
+                         options.reference)
     except Inventory as error:
         raise SystemExit(f'Refused: {error}') from error
     with Path(options.report).open('x') as output:

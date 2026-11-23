@@ -82,6 +82,44 @@ class RepairSets(unittest.TestCase):
         self.assertEqual(built, json.loads((root / 'out' / 'source.json').read_text()))
         self.assertIn('Keep the subject-HRF file route a column, as samsrf_doublegamma returns it', built['patches'])
 
+    def test_clean_stage_excludes_git_and_preserves_every_source_file(self):
+        root, source, pinned = self.checkout()
+        staged = root / 'staged-samsrf'
+        hashes = build_container.stage_clean_tree(source, staged)
+        self.assertGreater(len(hashes), 0)
+        self.assertFalse((staged / '.git').exists())
+        self.assertEqual([p for p in staged.rglob('*') if p.name == '.git'], [])
+        for rel, digest in hashes.items():
+            self.assertEqual((staged / rel).read_bytes(), (source / rel).read_bytes())
+
+    def test_clean_stage_rejects_symlinks_in_source(self):
+        root, source, _ = self.checkout()
+        target = next(p for p in source.rglob('*') if p.is_file() and '.git' not in p.parts)
+        (source / 'linked.m').symlink_to(target)
+        with self.assertRaises(ValueError):
+            build_container.stage_clean_tree(source, root / 'staged-symlink')
+
+    def test_record_base_images_parses_generated_dockerfiles(self):
+        with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as tmp:
+            root = Path(tmp)
+            (root / 'runtime').mkdir()
+            (root / 'container').mkdir()
+            (root / 'runtime' / 'Dockerfile').write_text('FROM mathworks/matlab-runtime:r2023b AS base\nRUN echo ok\n')
+            (root / 'container' / 'Dockerfile').write_text('FROM --platform=linux/amd64 samsrf-reference-runtime:r2023b\n')
+            seen = []
+
+            def fake_inspect(ref):
+                seen.append(ref)
+                return {'id': f'sha256:{ref}', 'repoDigests': []}
+
+            record = build_container.record_base_images(root, inspector=fake_inspect)
+            self.assertEqual(record['dockerfiles'], {
+                'runtime': ['mathworks/matlab-runtime:r2023b'],
+                'container': ['samsrf-reference-runtime:r2023b'],
+            })
+            self.assertEqual(seen, ['mathworks/matlab-runtime:r2023b', 'samsrf-reference-runtime:r2023b'])
+            self.assertEqual(json.loads((root / 'base-images.json').read_text()), record)
+
 
 if __name__ == '__main__':
     unittest.main()

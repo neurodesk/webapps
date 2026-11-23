@@ -10,6 +10,7 @@
 //! predictions for section A and the FPRev counts for section C are written there
 //! before any recording exists. With `SAMSRF_CGG_DIR` (the recording, one folder per
 //! host), every regenerated input must equal MATLAB's and each model is compared.
+use samsrf_core::arithmetic::ArithmeticReference;
 use samsrf_core::gifti;
 use samsrf_core::matlab_math as m;
 use samsrf_core::precision::Precision;
@@ -200,6 +201,8 @@ struct Pipeline {
     /// Per model: courses (volumes x positions, column-major) and noise ceilings.
     models: Vec<(Vec<f64>, Vec<f64>)>,
     global: Vec<f64>,
+    global_amd: Vec<f64>,
+    global_intel: Option<Vec<f64>>,
 }
 
 fn pipeline_cases(runs: &[RawRun]) -> Vec<Pipeline> {
@@ -221,7 +224,7 @@ fn pipeline_cases(runs: &[RawRun]) -> Vec<Pipeline> {
                 global_signal: true,
                 precision,
             };
-            let mut accumulator = RunAccumulator::new(count, VertexSelection::from_indices(positions.iter().map(|&p| p as u32).collect()), options);
+            let mut accumulator = RunAccumulator::new(count, VertexSelection::from_indices(positions.iter().map(|&p| p as u32).collect()), options.clone());
             for run in &edited_runs {
                 accumulator.push_run(run).unwrap();
             }
@@ -250,6 +253,21 @@ fn pipeline_cases(runs: &[RawRun]) -> Vec<Pipeline> {
                 models.push((courses, ceilings));
             }
             let global = port.global_signal.unwrap().into_iter().map(round).collect();
+            let run_global = |reference| {
+                let mut acc = RunAccumulator::with_reference(
+                    count,
+                    VertexSelection::from_indices(positions.iter().map(|&p| p as u32).collect()),
+                    options.clone(),
+                    reference,
+                )
+                .unwrap();
+                for run in &edited_runs {
+                    acc.push_run(run).unwrap();
+                }
+                acc.finish().unwrap().global_signal.unwrap().into_iter().map(round).collect::<Vec<_>>()
+            };
+            let global_amd = run_global(ArithmeticReference::MatlabAmd);
+            let global_intel = if single { None } else { Some(run_global(ArithmeticReference::MatlabIntel)) };
             cases.push(Pipeline {
                 id: format!("pipeline_V{count}_{}", if single { "single" } else { "double" }),
                 vertices: count,
@@ -259,6 +277,8 @@ fn pipeline_cases(runs: &[RawRun]) -> Vec<Pipeline> {
                 inputs: inputs.clone(),
                 models,
                 global,
+                global_amd,
+                global_intel,
             });
         }
     }
@@ -446,6 +466,7 @@ fn constants_and_gemv_against_the_recording() {
     let pipeline = pipeline_cases(&runs);
     let mut report = BTreeMap::new();
     let mut amd_hosts = 0;
+    let mut intel_hosts = 0;
     for host in HOSTS {
         let dir = root.join(host);
         let environment: Value = serde_json::from_slice(&std::fs::read(dir.join("constants-direct.json")).unwrap()).unwrap();
@@ -493,6 +514,16 @@ fn constants_and_gemv_against_the_recording() {
             let entry = tallies.entry("pipeline global signal M1 port".into()).or_default();
             entry[0] += same(&port.global, &global);
             entry[1] += 250;
+            let entry_amd = tallies.entry("pipeline global signal matlab-amd".into()).or_default();
+            entry_amd[0] += same(&port.global_amd, &global);
+            entry_amd[1] += 250;
+            if let Some(ref intel_global) = port.global_intel {
+                let entry_intel = tallies.entry("pipeline global signal matlab-intel double".into()).or_default();
+                entry_intel[0] += same(intel_global, &global);
+                entry_intel[1] += 250;
+                let intel_rel = intel_global.iter().zip(&global).map(|(a, b)| ((a - b) / b).abs()).fold(0.0, f64::max);
+                global_error.insert(format!("{}_matlab_intel", port.id), intel_rel);
+            }
             let relative = port.global.iter().zip(&global).map(|(a, b)| ((a - b) / b).abs()).fold(0.0, f64::max);
             global_error.insert(port.id.clone(), relative);
         }
@@ -530,6 +561,9 @@ fn constants_and_gemv_against_the_recording() {
         if cpu.contains("AMD") && blas.contains("CNR branch auto") {
             amd_hosts += 1;
             require_amd_outcome(host, &tallies);
+        } else if cpu.contains("Intel") && blas.contains("AVX512_E1") {
+            intel_hosts += 1;
+            require_intel_outcome(host, &tallies, &global_error);
         }
         report.insert(host, json!({ "cpu": cpu, "blas": blas, "tallies": tallies, "globalSignalMaxRelativeError": global_error }));
     }
@@ -538,8 +572,9 @@ fn constants_and_gemv_against_the_recording() {
         std::fs::write(out, serde_json::to_string_pretty(&report).unwrap()).unwrap();
     }
     // Run 43882331042: an AMD EPYC 9V74 (CNR auto) and an Intel Xeon 6975P-C
-    // (AVX512_E1, reported only: its MKL solves double `\` and `y' * A` in other orders).
+    // (AVX512_E1, where double global signal is gated under matlab-intel).
     assert_eq!(amd_hosts, 1, "the pinned recording has one AMD host with MKL's auto branch");
+    assert_eq!(intel_hosts, 1, "the pinned recording has one Intel host with MKL's AVX512_E1 branch");
 }
 
 /// The outcome on an AMD host, decided by the pre-registered rules.
@@ -572,6 +607,8 @@ fn require_amd_outcome(host: &str, tallies: &BTreeMap<String, [usize; 2]>) {
     assert_eq!(count("pipeline noise ceiling M1 port"), [564, 564]);
     // The across-vertex nanmean is not MATLAB's order (README: global signal).
     assert_eq!(count("pipeline global signal M1 port"), [15, 2_000], "{host}: global signal");
+    assert_eq!(count("pipeline global signal matlab-amd"), [15, 2_000], "{host}: matlab-amd global signal");
+    assert_eq!(count("pipeline global signal matlab-intel double"), [0, 1_000], "{host}: matlab-intel global signal on AMD");
     // C: production's y' * A is MATLAB's on every fingerprint and random product;
     // no frozen alternative reproduces the remaining columns.
     for part in ["fprev full", "fprev leftover", "random discovery full", "random discovery leftover", "random held-out full", "random held-out leftover"] {
@@ -579,6 +616,19 @@ fn require_amd_outcome(host: &str, tallies: &BTreeMap<String, [usize; 2]>) {
     }
     for (name, _) in GEMV_MODELS.iter().skip(1) {
         misses(&format!("gemv fprev leftover {name}"));
+    }
+}
+
+/// The global-signal outcome on the Intel AVX512_E1 host under explicit references.
+fn require_intel_outcome(host: &str, tallies: &BTreeMap<String, [usize; 2]>, global_error: &BTreeMap<String, f64>) {
+    let count = |key: &str| tallies.get(key).copied().unwrap_or_else(|| panic!("{host}: no tally {key}"));
+    assert_eq!(count("pipeline global signal M1 port"), [0, 2_000], "{host}: current global signal on Intel");
+    assert_eq!(count("pipeline global signal matlab-amd"), [0, 2_000], "{host}: matlab-amd global signal on Intel");
+    assert_eq!(count("pipeline global signal matlab-intel double"), [8, 1_000], "{host}: matlab-intel double global signal");
+    for count_v in COUNTS {
+        let key = format!("pipeline_V{count_v}_double_matlab_intel");
+        let err = global_error.get(&key).copied().unwrap_or_else(|| panic!("{host}: missing {key}"));
+        assert!(err < 3e-13, "{host}: {key} max relative error {err:e}");
     }
 }
 

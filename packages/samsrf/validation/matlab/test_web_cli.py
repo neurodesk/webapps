@@ -134,9 +134,9 @@ class Fixture:
                     record['imaginarySha256'] = sha(parts)
             (self.web / f'{run_id}.web.json').write_text(json.dumps(record))
 
-    def report(self, expect=None, allow=True):
+    def report(self, expect=None, allow=True, reference='current'):
         return web_cli.compare(self.plan, self.plan_sha, self.manifest, self.manifest_sha, self.web, self.matlab,
-                               expect or self.kind, allow_unattested=allow)
+                               expect or self.kind, allow_unattested=allow, reference=reference)
 
     def edit_record(self, run_id, **changes):
         path = self.web / f'{run_id}.web.json'
@@ -625,6 +625,40 @@ class Provenance(Base):
     def test_source_inputs_must_be_explicitly_unattested(self):
         with self.assertRaisesRegex(Inventory, 'unattested'):
             self.x.report(allow=False)
+
+    def test_source_execution_with_attested_inputs_passes_without_allow_flag(self):
+        (self.x.matlab / 'receipts' / 'inputs.json').write_text(json.dumps({
+            'sha256': self.x.manifest, 'unchanged': True}))
+        report = self.x.report(allow=False)
+        self.assertEqual(report['matlab']['inputs'], 'attested by receipts/inputs.json')
+        self.assertEqual(report['summary']['exactRuns'], 1)
+
+    def test_arithmetic_reference_must_match_web_environment_and_intel_refuses_single(self):
+        env_path = self.x.web / 'environment.json'
+        env = json.loads(env_path.read_text())
+        env['arithmeticReference'] = 'matlab-amd'
+        env_path.write_text(json.dumps(env))
+        with self.assertRaisesRegex(Inventory, 'expected arithmetic reference current'):
+            self.x.report(reference='current')
+        report = self.x.report(reference='matlab-amd')
+        self.assertEqual(report['summary']['exactRuns'], 1)
+        # Intel reference expects single runs to refuse with the exact Intel message.
+        with scratch() as root:
+            intel = Fixture(root, ['prf_gaussian_lh_average_single', 'rc_gaussian_lh_single', 'rc_hull_lh_double'])
+            intel_env = json.loads((intel.web / 'environment.json').read_text())
+            intel_env['arithmeticReference'] = 'matlab-intel'
+            (intel.web / 'environment.json').write_text(json.dumps(intel_env))
+            # Convert prf_gaussian_lh_average_single from succeeded to the exact Intel refusal.
+            shutil.rmtree(intel.web / 'prf_gaussian_lh_average_single')
+            intel.edit_record('prf_gaussian_lh_average_single', status='refused', message=web_cli.INTEL_SINGLE_REFUSAL)
+            intel_report = intel.report(reference='matlab-intel')
+            by_id = {r['id']: r['class'] for r in intel_report['runs']}
+            self.assertEqual(by_id, {
+                'prf_gaussian_lh_average_single': 'refused',
+                'rc_gaussian_lh_single': 'refused',
+                'rc_hull_lh_double': 'exact',
+            })
+            self.assertEqual(intel_report['summary']['failedRuns'], 0)
 
     def test_source_receipts_are_not_a_compiled_execution(self):
         with self.assertRaisesRegex(Inventory, 'expected a compiled-runtime execution'):

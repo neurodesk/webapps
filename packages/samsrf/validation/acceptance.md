@@ -3,8 +3,10 @@
 This file maps each acceptance criterion of issues #729 to #733 to the available
 test or evidence, its measured scope and what remains. It was
 audited on 2026-11-13 against `main` at `ef089b0a`, brought up to date on
-2026-11-16 against `main` at `6df4fb3e` (after #855 and #857), and reconciled
-on 2026-11-19 against `main` at `3cf5c9cf` (after #895, `62a5f0c3`) for #897.
+2026-11-16 against `main` at `6df4fb3e` (after #855 and #857), reconciled
+on 2026-11-19 against `main` at `3cf5c9cf` (after #895, `62a5f0c3`) for #897,
+and updated on 2026-11-23 after #900, #902, #904 and the #897 harness/attestation
+and global-signal measurements.
 The issues' original descriptions predate most of this work. This audit does
 not change their acceptance requirements or approve closing an issue.
 
@@ -65,27 +67,26 @@ run 42928350417; the source receipts do not attest the inputs), checked again on
 
 A map is exact when every raw `Srf.Data` value, imaginary part and GIfTI value
 equals MATLAB's, bit for bit. Under `current` on the AMD host every float32
-GIfTI of the 22 computed runs equals MATLAB's. The 11 differing maps differ only
-in 139 raw double values: 110 hull coordinates and 29 values of R², Beta and
-Suppression in `cf_hull_smooth_global_lh_double`. `matlab-amd` makes those 29
-exact.
+GIfTI of the 22 computed runs equals MATLAB's. After #902 (`HullOrder::Anchored`),
+the 11 differing maps differ only in 123 raw double values: 94 hull coordinates
+(16 fewer CF hull `y0` differences than the pre-#902 count of 110) and 29 values
+of R², Beta and Suppression in `cf_hull_smooth_global_lh_double`. `matlab-amd`
+makes those 29 exact, leaving the 94 hull coordinates.
 
 How these were checked: `run_web_matrix.mjs`, `compare_web_cli.py` and
 `web_cli_outcome.py check` for the default (as CI runs them);
 `check_arithmetic_references.mjs` for all three references; and, for the
-`matlab-amd` and `matlab-intel` rows, the same runner with each run's model
-given `Arithmetic_Reference` as `check_arithmetic_references.mjs` gives it,
-compared by `compare_web_cli.py` with each host's source execution (the Intel
-host on its own bundle). That last replay is not a committed procedure:
-`compare_web_cli.py` accepts only the plan's own model bytes and rejects a
-plan whose models name a reference, so it cannot be repeated with the
-committed files as described here. The
-reproducible evidence for these two rows is `check_arithmetic_references.mjs`
-and the reviewed accounting below. `compare_web_cli.py` lists the refused
-Intel single runs as `failed`, because it accepts only the two single Gaussian
-refusals of the plan. The `matlab-amd` and `matlab-intel` counts agree with the
+`matlab-amd` and `matlab-intel` rows, `run_web_matrix.mjs --reference <ref>`
+(and `run_browser_matrix.mjs --reference <ref>`) passed with the same `--reference`
+to `compare_web_cli.py` against each host's source execution (the Intel host on
+its own bundle), without mutating the bundle's plan models. `compare_web_cli.py`
+checks that `environment.json` records the matching `arithmeticReference` and
+classifies all 12 Intel single runs as `refused` (checking the single Gaussian
+refusal first and the Intel single-precision refusal on the remaining 10).
+The `matlab-amd` and `matlab-intel` counts agree with the
 reviewed accounting in
-[`matlab/intel-avx512/harness/cc528cf6-main4cdc/avx512-complex-qr/matrix.json`](matlab/intel-avx512/harness/cc528cf6-main4cdc/avx512-complex-qr/matrix.json).
+[`matlab/intel-avx512/harness/cc528cf6-main4cdc/avx512-complex-qr/matrix.json`](matlab/intel-avx512/harness/cc528cf6-main4cdc/avx512-complex-qr/matrix.json)
+(aside from the 16 CF hull `y0` values resolved by #902).
 These are results on a finite set of recorded inputs, not general MATLAB
 equivalence.
 
@@ -117,8 +118,8 @@ hull-area-1 (2 of 2) budgets are spent.
 
 | Limit | `current` (default) | `matlab-amd` | `matlab-intel` |
 | --- | --- | --- | --- |
-| Four double hull runs | Differ on AMD: 110 hull values (at most 36 ULP) and 29 global-regression values (at most 147 ULP) | Differ on AMD: the 110 hull values | Differ on Intel: the same 110 hull values |
-| Whole-cortex global-signal sum | 15 of 2,000 values exact (AMD) | Not measured | Not measured |
+| Four double hull runs | Differ on AMD: 94 hull values (at most 36 ULP) and 29 global-regression values (at most 147 ULP) | Differ on AMD: the 94 hull values | Differ on Intel: the same 94 hull values |
+| Whole-cortex global-signal sum | 15 of 2,000 values exact (AMD) | 15 of 2,000 values exact (AMD) | 8 of 1,000 double values exact (Intel, max rel err 2.77e-13); single refused |
 | Single RC 2D and single CF Gaussian fits | Refused | Refused | Refused |
 | Other single analyses | Run | Run | Refused |
 | CSS with `Css_Convention: "nonnegative"` | Runs | Runs | Refused |
@@ -132,21 +133,22 @@ hull-area-1 (2 of 2) budgets are spent.
 `rc_custom_hrf_lh_double`, `cf_hull_lh_double` and
 `cf_hull_smooth_global_lh_double`.
 
-- Evidence: the matrix above. The same 110 raw values differ under `current`
-  and `matlab-amd` on the AMD host and under `matlab-intel` on the Intel host:
-  x0 18, y0 12 and Fwhm 12 values (`rc_hull`); x0 16, y0 9 and Fwhm 15
-  (`rc_custom_hrf`); y0 16 (`cf_hull`); y0 12 (`cf_hull_smooth_global`). The
-  largest is 36 ULP (4.6e-15 relative). Under `current` the AMD comparison also
-  differs in `cf_hull_smooth_global_lh_double`'s R² (8 values, up to 147 ULP,
-  2.2e-14 relative), Beta (8, up to 61 ULP) and Suppression (13, up to 28 ULP).
+- Evidence: the matrix above. After #902 (`HullOrder::Anchored`), the same 94
+  raw values differ under `current` and `matlab-amd` on the AMD host and under
+  `matlab-intel` on the Intel host: x0 18, y0 12 and Fwhm 12 values (`rc_hull`);
+  x0 16, y0 9 and Fwhm 15 (`rc_custom_hrf`); y0 7 (`cf_hull`, down from 16);
+  y0 5 (`cf_hull_smooth_global`, down from 12). The largest is 36 ULP (4.6e-15
+  relative). Under `current` the AMD comparison also differs in
+  `cf_hull_smooth_global_lh_double`'s R² (8 values, up to 147 ULP, 2.2e-14
+  relative), Beta (8, up to 61 ULP) and Suppression (13, up to 28 ULP).
   That is the default's double global regression, not geometry; `matlab-amd`
   removes it. The 147 ULP named in #897 is this R² value.
 - Product: these runs complete and differ by those amounts. Their float32
-  GIfTIs equal MATLAB's. Production keeps `HullOrder::Listed` and the earlier
-  RC hull pixel grid.
-- Accounting: the 110 values under `matlab-intel` and the 110 under the AMD
+  GIfTIs equal MATLAB's. Production uses `HullOrder::Anchored` for CF hulls
+  and keeps the earlier RC hull pixel grid.
+- Accounting: the 94 values under `matlab-intel` and the 94 under the AMD
   references are the same positions measured against two recordings. Count
-  them per reference and host, never as 220 cases, and never as additions to
+  them per reference and host, never as 188 cases, and never as additions to
   the default map counts.
 - To move it: identify MATLAB's hull start and cleanup order, `convexHull`'s
   area arithmetic and its ring decomposition of self-intersecting and
@@ -159,19 +161,22 @@ hull-area-1 (2 of 2) budgets are spent.
 
 **The whole-cortex global signal.**
 
-- Evidence: `constants_gemv.rs` (run 43882331042, AMD EPYC 9V74) pins the
-  port's `nanmean` over every vertex at 15 of 2,000 MATLAB values: the port
-  does not add the 134k vertices in MATLAB's order. The package README gives
-  the size on the pinned run: up to 2.7e-13 relative in double, 1e-4 in single.
-  It is measured with `current` arithmetic on the AMD host only; that run's
-  Intel host is reported, not gated.
+- Evidence: `constants_gemv.rs` (run 43882331042) pins the port's `nanmean`
+  over every vertex across explicit arithmetic references: on the AMD EPYC 9V74
+  host, both `current` and `matlab-amd` match 15 of 2,000 MATLAB values (max
+  relative error `2.71e-13` double, `9.87e-5` single; `matlab-intel` double
+  matches 0 of 1,000 against AMD with max relative error `0.314` because Intel
+  detrends differently). On the Intel Xeon 6975P-C (`AVX512_E1`) host, `current`
+  and `matlab-amd` match 0 of 2,000 (max relative error `0.239`), whereas
+  `matlab-intel` double matches 8 of 1,000 with max relative error `2.77e-13`
+  (single is refused). Thus `matlab-intel`'s double detrend matches Intel's
+  courses and the remaining difference on both hosts is the 134k-vertex
+  summation order.
 - Product: runs. Connective fields with global-signal correction regress on
   this signal under every reference. The sum itself does not depend on the
   reference; the courses it sums do (`matlab-intel` detrends with the Intel
   kernels).
-- To move it: measure it under `matlab-amd` and `matlab-intel` on the existing
-  recording (no new recording); then identify MATLAB's across-vertex order,
-  which may need one.
+- To move it: identify MATLAB's across-vertex `nanmean` summation order.
 
 ### 2. Single-precision and Intel paths (#731; historical #729)
 
@@ -338,10 +343,10 @@ and [Open numerical limits](#open-numerical-limits).
 | Criterion | Evidence | Status | Remaining |
 | --- | --- | --- | --- |
 | Recipe executed on a licensed builder | The first attempts stopped at the licence check (2026-11-16: from this repository's cloud build host the licence server's private address was unreachable, and MATLAB stopped at License Manager Error -15,570; matlab/README "Compiler access"). On the licensed host, `licensed-host/build_and_validate.sh` then built a compiled image (build 2, local ID `sha256:be7ae7aa…`, created 2026-11-16, not published) and ran the matrix in it; an independent audit verified its receipts on 2026-11-17. History: build 2 is in no reachable Docker store. A rebuild (build 3, created 2026-11-18) exists locally and is not published: OCI manifest digest `sha256:99f912af…`, config digest `sha256:746944cc…` ([Runtime container status](matlab/README.md#building-a-matching-runtime-container)). #897 and an independent audit of 2026-11-18 report it; that evidence is local and was not rechecked for this file | Met on retained local evidence | Publication: [steps that need the maintainer](matlab/README.md#publication-steps-that-need-the-maintainer) |
-| Compiled-vs-source maps pass per-map gates | `compare_cli.py` on the retained executions, on one host: compiled and source MATLAB agree bitwise in all 24 runs (1,036 numerical and structural array checks, the 184 contract maps among them). The compiled receipts attest the inputs (`receipts/inputs.json` equals the bundle manifest); the source receipts do not record the bundle, so the source side's inputs are unattested. For build 3 the 2026-11-18 audit reports six retained comparisons (source repeat, compiled against source, compiled repeat, and across builds 2 and 3) equal in all 24 runs | Met on retained local evidence | Source inputs stay unattested until they are attested prospectively ([steps that need the maintainer](matlab/README.md#publication-steps-that-need-the-maintainer)) |
+| Compiled-vs-source maps pass per-map gates | `compare_cli.py` on the retained executions, on one host: compiled and source MATLAB agree bitwise in all 24 runs (1,036 numerical and structural array checks, the 184 contract maps among them). The compiled receipts attest the inputs (`receipts/inputs.json` equals the bundle manifest); the retained build 3 source receipts did not record the bundle, so its source side's inputs were unattested. `cli_plan.py attest-inputs` now writes `receipts/inputs.json` for `source-1` and `source-2` in both `licensed-host/build_and_validate.sh` and `samsrf-native.yml`, and `compare_web_cli.py --expect source` checks it prospectively without `--allow-unattested-source-inputs`. For build 3 the 2026-11-18 audit reports six retained comparisons (source repeat, compiled against source, compiled repeat, and across builds 2 and 3) equal in all 24 runs | Met on retained local evidence | Fresh licensed build and source runs under the prospective `receipts/inputs.json` attestation ([steps that need the maintainer](matlab/README.md#publication-steps-that-need-the-maintainer)) |
 | Runtime-only execution without a licence | `runtime_image` dispatch: no MATLAB on the host, no network in the container, read-only inputs. The 2026-11-18 audit restored build 3 from its OCI archive into an empty, isolated Docker store and ran three fresh cases (`prf_custom_hrf_lh_double`, `rc_custom_hrf_lh_double`, `cf_hull_lh_single`) without network or licence, with read-only root and inputs; it reports their 127 arrays equal to the retained compiled and source outputs, and the missing-model case failing as expected. Its first verifier assumed the image ID is the OCI manifest digest; `matlab/oci_identity.mjs` now accepts the config digest a classic store reports too (tested offline in `test/oci-identity.test.js`) | Partial | No fresh restored 24-run matrix and no fresh interrupt run; `runtime_image` on a published digest |
 | Repeated runs reproduce outputs | Source recordings repeat exactly on each host (1,036 array checks per host). The web engine repeats byte for byte (Node 24, Node 22 in a pinned image, Chromium). The retained compiled executions repeat bitwise (24 runs, 1,036 arrays), as do the retained source executions on the same host; the 2026-11-18 audit reports the same for build 3 | Met on retained local evidence | A published image repeats its own on another host |
-| Immutable digest and receipts; stock and repaired baselines separate | The stock Neurodesk 2024 image (SamSrf 10.003), the repaired source recording and the web runs are kept apart; each web report names the MATLAB execution it used. The licensed-host receipts name the compiled image by its local ID; it has no registry digest. Since #897 the driver also saves the image as an OCI archive and binds the ID it ran to the archive's digests (`oci_identity.mjs`, `container-build/oci-identity.json`) | Partial | Redistribution authorization, embedded Git and build metadata, the tag-based bases of MATLAB's generated Dockerfiles, and publication with an immutable registry digest ([steps that need the maintainer](matlab/README.md#publication-steps-that-need-the-maintainer)) |
+| Immutable digest and receipts; stock and repaired baselines separate | The stock Neurodesk 2024 image (SamSrf 10.003), the repaired source recording and the web runs are kept apart; each web report names the MATLAB execution it used. The licensed-host receipts name the compiled image by its local ID; it has no registry digest. Since #897 the driver saves the image as an OCI archive and binds the ID it ran to the archive's digests (`oci_identity.mjs`, `container-build/oci-identity.json`), and `build_container.py` now stages `.git`-free trees under a canonical `/build` mount (`SAMSRF_CANONICAL_BUILD_DIR`) and records generated Dockerfile base references and resolved digests in `base-images.json` | Partial | Redistribution authorization, rebuilding under the clean `.git`-free `/build` staging, and publication with an immutable registry digest ([steps that need the maintainer](matlab/README.md#publication-steps-that-need-the-maintainer)) |
 | Web comparison lists exact, tolerance, failing and unsupported cases | `run_web_matrix.mjs` (engine in Node), `run_browser_matrix.mjs` (the app's `engine.js` in Chromium, an engine-module harness from source, not the production bundle or interface; raw maps merged from the exported shard, replay equal to export) and `compare_web_cli.py`. The comparator derives the MATLAB execution from its receipts and refuses mismatched plan, bundle, argv, execution kind or image identity. It classes every contract map of all 24 runs exact or differing, bitwise, after checking the ROI, vertex counts and byte lengths. A refusal counts only with the core's exact text, in both runners and again in the comparator; a crash is `failed`, and a MATLAB failure does not hide it. Refused, unsupported and failed runs are listed with both sides' statuses; web-only polar and eccentricity maps are listed as not compared. 44 tests with negative controls. Wired into the `build` and `runtime_image` jobs (Node and Chromium) and the licensed-host driver (Node; its Chromium run is a documented step on the returned evidence, and has been run on it). Against source MATLAB, with inputs unattested by the source receipts, CI holds the Node runner to the frozen outcome on the AMD host: 18 of 24 runs and 157 of 168 maps exact since #874; on Intel no run and 57 maps (#866's first report: 77 of 168 maps on AMD in Node and 63 of 140 in the browser, whose 4 subject-HRF runs were then unsupported; 45 and 37 on Intel). Against the retained compiled executions, with the module on main since #874 (`abbd6625…`; forward models with `Css_Convention: "samsrf"`, imaginary parts compared): Node and Chromium, which takes the subject-HRF file since 2026-11-18, each 18 of 22 computed runs exact (157 of 168 maps), equal byte for byte; 2 refused; against #875's module, 24 real values became exact and none was lost | Partial | The differences listed under "SamSrfAnalysis CLI matrix" below, and completed interface parity (next row) |
 | The production interface runs the matrix, held to MATLAB and to the engine harness | `run_ui_matrix.mjs` drives a built `apps/samsrf` bundle through its interface. `compare_ui_cli.py` compares only the whole matrix; it binds the served module to the engine harness's, each saved model to the plan model and each download to its hash. A run whose result was offered before an error is `ui-error`, a refusal without its expected text is `failed`, and a download that is not the engine harness's export fails a gate of its own (matlab/README "Production interface against the CLI matrix"). 44 tests; each of 17 mutations reverting a check fails them. On 2026-11-18, with #874 merged (module `abbd6625…`), against the same locally built, unpublished compiled image, all 22 computed runs complete (20 exact and 2 differing in float32 downloads; 160 of 168 maps), 2 are refused and none is `ui-error`, `unsupported` or failed; all 212 downloaded files equal the engine harness's. The two that differ are the CSS runs, loaded with `Css_Convention: "samsrf"`: their four complex maps cannot be observed through real downloads. Four double runs are exact in float32 while their double values differ (matlab/README). On 2026-11-17 none of 18 completed (the viewer could not read the matrix's tagless surface) and the 4 subject-HRF runs had no route | Partial | The 2026-11-18 measurement used float32 downloads only. Double values and imaginary parts are downloadable since #897 ([current state](#current-state-after-895)); the matrix is not yet measured again with them. The numerical differences listed below |
 
@@ -370,7 +375,7 @@ so far):
 | Finding | Scope | Issue |
 | --- | --- | --- |
 | Double convex-hull reverse correlation: x0, y0 and Fwhm differ in `Srf.Data` at 9 to 18 vertices per map, by at most 36 ULP (production keeps the previous pixel grid and hull); the float32 GIfTIs are exact | `rc_hull_lh_double`, `rc_custom_hrf_lh_double` | #732 |
-| Double CF hull: y0 differs in `Srf.Data` at 16 and 12 vertices (centroids); the float32 GIfTIs are exact | `cf_hull_lh_double`, `cf_hull_smooth_global_lh_double` | #732 |
+| Double CF hull: y0 differs in `Srf.Data` at 7 and 5 vertices (centroids, down from 16 and 12 after #902); the float32 GIfTIs are exact | `cf_hull_lh_double`, `cf_hull_smooth_global_lh_double` | #732 |
 | Double global regression by normal equations (the default only): R² (up to 147 ULP), Beta and Suppression of the smoothed, globally corrected CF run at 8 to 13 vertices; `matlab-amd` makes them exact | `cf_hull_smooth_global_lh_double` | #897 |
 | Public refusals: single RC Gaussian, single CF Gaussian | 2 runs | #729 |
 

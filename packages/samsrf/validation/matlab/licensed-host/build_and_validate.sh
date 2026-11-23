@@ -77,8 +77,11 @@ run_matlab() {
   "$here/matlab_batch.sh" "$command)"
 }
 
-# 1. MATLAB Compiler build (build_container.py verifies the CLI repair set and pins).
+# 1. MATLAB Compiler build (build_container.py verifies the CLI repair set and pins,
+# stages .git-free trees, and mounts container-build at /build to avoid host paths).
 SAMSRF_MATLAB_BATCH="$here/matlab_batch.sh" \
+  SAMSRF_BUILD_DIR="$cli/container-build" \
+  SAMSRF_CANONICAL_BUILD_DIR=/build \
   python3 "$matlab/build_container.py" reference-source reference-spm "$cli/container-build"
 
 # 2. The shared read-only bundle, prepared once in source MATLAB.
@@ -93,11 +96,14 @@ done
 python3 "$matlab/capture_environment.py" "$cli/source-1"
 python3 "$matlab/capture_environment.py" "$cli/source-2"
 
-# 3. Source MATLAB on this host: two processes and the custom-HRF check.
-run_matlab run_source_cli "$work/reference-source" "$work/reference-spm" "$cli/plan.json" "$cli/source-1"
-run_matlab verify_cli_hrf "$work/reference-source" "$work/reference-spm" "$cli/plan.json" "$cli/source-1" "$cli/source-1-direct"
-run_matlab run_source_cli "$work/reference-source" "$work/reference-spm" "$cli/plan.json" "$cli/source-2"
+# 3. Source MATLAB on this host: two processes (each attesting its input bundle) and the custom-HRF check.
 python3 "$matlab/cli_plan.py" verify "$cli/bundle" "$cli/bundle-sha256.json"
+run_matlab run_source_cli "$work/reference-source" "$work/reference-spm" "$cli/plan.json" "$cli/source-1"
+python3 "$matlab/cli_plan.py" attest-inputs "$cli/bundle" "$cli/bundle-sha256.json" "$cli/source-1"
+run_matlab verify_cli_hrf "$work/reference-source" "$work/reference-spm" "$cli/plan.json" "$cli/source-1" "$cli/source-1-direct"
+python3 "$matlab/cli_plan.py" verify "$cli/bundle" "$cli/bundle-sha256.json"
+run_matlab run_source_cli "$work/reference-source" "$work/reference-spm" "$cli/plan.json" "$cli/source-2"
+python3 "$matlab/cli_plan.py" attest-inputs "$cli/bundle" "$cli/bundle-sha256.json" "$cli/source-2"
 compare "$cli/plan.json" "$cli/source-1" "$cli/source-2" "$cli/source-repeat.json"
 
 # 4. The compiled image on the same host, without MATLAB, network or writable inputs.
@@ -121,7 +127,7 @@ docker run --rm --network none --user "$(id -u):$(id -g)" \
   --volume "$repo:$repo:ro" --volume "$cli:$cli" "$node_image" \
   node "$matlab/run_web_matrix.mjs" "$cli/plan.json" "$cli/bundle" "$cli/bundle-sha256.json" "$cli/web-1"
 web_status=0
-in_builder "$work/venv/bin/python" "$matlab/compare_web_cli.py" "$cli/plan.json" "$cli/bundle-sha256.json" "$cli/web-1" "$cli/source-1" "$cli/web-1-vs-source.json" --expect source --allow-unattested-source-inputs || web_status=1
+in_builder "$work/venv/bin/python" "$matlab/compare_web_cli.py" "$cli/plan.json" "$cli/bundle-sha256.json" "$cli/web-1" "$cli/source-1" "$cli/web-1-vs-source.json" --expect source || web_status=1
 in_builder "$work/venv/bin/python" "$matlab/compare_web_cli.py" "$cli/plan.json" "$cli/bundle-sha256.json" "$cli/web-1" "$cli/compiled-1" "$cli/web-1-vs-compiled.json" --expect compiled-runtime || web_status=1
 [ "$web_status" -eq 0 ] || { echo "Web comparison found inventory errors or failed runs; see $cli/web-1-vs-*.json" >&2; exit 1; }
 # 7. The image as an OCI archive (docker save, Docker 25 or later). Docker's image ID

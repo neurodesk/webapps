@@ -32,16 +32,30 @@ elif name == 'docker':
         with open(os.environ['TEST_COMMANDS'], 'a') as handle:
             handle.write(json.dumps(['oci_identity'] + args[args.index('node') + 2:]) + '\n')
         print(os.environ.get('TEST_SAVED_ID', 'sha256:stub'))
+    elif args[0] == 'run' and any(arg.endswith('compare_web_cli.py') for arg in args):
+        index = next(i for i, arg in enumerate(args) if arg.endswith('compare_web_cli.py'))
+        with open(os.environ['TEST_COMMANDS'], 'a') as handle:
+            handle.write(json.dumps(['compare_web_cli'] + args[index + 1:]) + '\n')
 elif name == 'python3':
     if args[0] == '-c':
         print('case 10' if 'seconds' in args[1] else 'pinned-commit')
     elif pathlib.Path(args[0]).name == 'build_container.py':
         # The real build writes its records into this new directory.
         pathlib.Path(args[3]).mkdir(parents=True)
+        with open(os.environ['TEST_COMMANDS'], 'a') as handle:
+            handle.write(json.dumps([
+                'build_container',
+                os.environ.get('SAMSRF_BUILD_DIR'),
+                os.environ.get('SAMSRF_CANONICAL_BUILD_DIR'),
+                *args[1:],
+            ]) + '\n')
     elif pathlib.Path(args[0]).name == 'cli_plan.py' and args[1] == 'hash':
         bundle = pathlib.Path(args[2])
         bundle.mkdir(parents=True)
         (bundle / 'SamSrf_defaults.json').write_text('{}')
+    elif pathlib.Path(args[0]).name == 'cli_plan.py' and args[1] == 'attest-inputs':
+        with open(os.environ['TEST_COMMANDS'], 'a') as handle:
+            handle.write(json.dumps(['attest-inputs'] + args[2:]) + '\n')
 elif name == 'matlab_batch.sh':
     with open(os.environ['TEST_COMMANDS'], 'a') as handle:
         handle.write(json.dumps(args) + '\n')
@@ -116,11 +130,24 @@ class LicensedHostCommands(unittest.TestCase):
                 ('run_source_cli', common + [cli / 'plan.json', cli / 'source-2']),
             ]
             cli = work / 'samsrf-cli'
+            build_cmds = [command for command in commands if command[0] == 'build_container']
+            self.assertEqual(build_cmds, [['build_container', str(cli / 'container-build'), '/build',
+                                           'reference-source', 'reference-spm', str(cli / 'container-build')]])
+            attested = [command for command in commands if command[0] == 'attest-inputs']
+            self.assertEqual(attested, [
+                ['attest-inputs', str(cli / 'bundle'), str(cli / 'bundle-sha256.json'), str(cli / 'source-1')],
+                ['attest-inputs', str(cli / 'bundle'), str(cli / 'bundle-sha256.json'), str(cli / 'source-2')],
+            ])
+            web_compares = [command for command in commands if command[0] == 'compare_web_cli']
+            self.assertEqual(len(web_compares), 2)
+            for compare_cmd in web_compares:
+                self.assertNotIn('--allow-unattested-source-inputs', compare_cmd)
             identity = [command for command in commands if command[0] == 'oci_identity']
             self.assertEqual(identity, [['oci_identity', str(work / 'samsrf-reference.oci.tar'),
                                          str(cli / 'container-build/image-inspect.json'),
                                          str(cli / 'container-build/oci-identity.json')]])
-            commands = [command for command in commands if command[0] != 'oci_identity']
+            recorded_tags = {'oci_identity', 'build_container', 'attest-inputs', 'compare_web_cli'}
+            commands = [command for command in commands if command[0] not in recorded_tags]
             self.assertEqual(len(commands), len(expected))
             literal = r"'(?:[^']|'')*'"
             for arguments, (function, paths) in zip(commands, expected):
@@ -158,7 +185,9 @@ class LicensedHostCommands(unittest.TestCase):
         with scratch() as directory:
             result, commands, _, _ = self.run_driver(Path(directory), exit_code=37)
             self.assertEqual(result.returncode, 37, result.stderr)
-            self.assertEqual(len(commands), 1)
+            matlab_cmds = [command for command in commands
+                           if command[0] not in {'oci_identity', 'build_container', 'attest-inputs', 'compare_web_cli'}]
+            self.assertEqual(len(matlab_cmds), 1)
 
 
 if __name__ == '__main__':

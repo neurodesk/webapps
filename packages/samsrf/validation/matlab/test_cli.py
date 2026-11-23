@@ -106,6 +106,28 @@ class Plan(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 cli_plan.stage(plan, bundle, Path(root) / 'results')
 
+    def test_attest_inputs_writes_verified_receipt_and_rejects_drift(self):
+        with scratch() as root:
+            root = Path(root)
+            bundle = root / 'bundle'
+            bundle.mkdir()
+            (bundle / 'SamSrf_defaults.json').write_text('{}')
+            manifest = root / 'bundle-sha256.json'
+            manifest.write_text(json.dumps(cli_plan.tree_hashes(bundle)))
+            results = root / 'source-1'
+            (results / 'receipts').mkdir(parents=True)
+            cli_plan.attest_inputs(bundle, manifest, results)
+            receipt = json.loads((results / 'receipts' / 'inputs.json').read_text())
+            self.assertTrue(receipt['unchanged'])
+            self.assertEqual(receipt['sha256'], cli_plan.tree_hashes(bundle))
+            with self.assertRaises(FileExistsError):
+                cli_plan.attest_inputs(bundle, manifest, results)
+            (bundle / 'extra.txt').write_text('drift')
+            results2 = root / 'source-2'
+            (results2 / 'receipts').mkdir(parents=True)
+            with self.assertRaisesRegex(ValueError, 'differs'):
+                cli_plan.attest_inputs(bundle, manifest, results2)
+
 
 class Runtime(unittest.TestCase):
     def test_tags_are_not_accepted_as_image_identity(self):

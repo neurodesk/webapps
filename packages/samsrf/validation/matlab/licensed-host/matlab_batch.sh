@@ -40,5 +40,8 @@ fi
 if [ -n "${SAMSRF_INPUT:-}" ]; then
   arguments+=(--volume "$SAMSRF_INPUT:/input:ro")
 fi
+if [ -n "${SAMSRF_BUILD_DIR:-}" ]; then
+  arguments+=(--volume "$SAMSRF_BUILD_DIR:/build")
+fi
 mkdir -p "$SAMSRF_WORK/home"
 exec docker run "${arguments[@]}" "$SAMSRF_BUILDER" /opt/matlab/bin/matlab -batch "$1"
