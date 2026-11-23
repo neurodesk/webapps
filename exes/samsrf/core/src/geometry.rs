@@ -395,8 +395,36 @@ fn delaunay_boundary(points: &[[f64; 2]]) -> Option<Vec<[f64; 2]>> {
     let mut sorted = finite.clone();
     sorted.sort_by(row_order);
     sorted.dedup();
-    let turn = |a: &[f64; 2], b: &[f64; 2], c: &[f64; 2]| robust::orient2d(coord(a), coord(b), coord(c));
-    if sorted.len() < 3 || (2..sorted.len()).all(|k| turn(&sorted[0], &sorted[1], &sorted[k]) == 0.0) {
+    if sorted.len() < 3 {
+        return None;
+    }
+    let (low, high) = sorted.iter().fold(([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]), |(low, high), p| {
+        ([low[0].min(p[0]), low[1].min(p[1])], [high[0].max(p[0]), high[1].max(p[1])])
+    });
+    if low[0] == high[0] || low[1] == high[1] {
+        return None;
+    }
+    let max_abs_x = low[0].abs().max(high[0].abs());
+    let max_abs_y = low[1].abs().max(high[1].abs());
+    // `robust::orient2d` is exact without scaling when coordinates stay well inside
+    // half the double exponent range; at extreme scales, scale each triple's axes
+    // independently by exact powers of two so orientation never underflows or overflows
+    // and never loses precision to a centroid shift.
+    let extreme = max_abs_x >= 1e150 || max_abs_y >= 1e150 || max_abs_x <= 1e-100 || max_abs_y <= 1e-100;
+    let turn = |a: &[f64; 2], b: &[f64; 2], c: &[f64; 2]| {
+        if !extreme {
+            return robust::orient2d(coord(a), coord(b), coord(c));
+        }
+        let mx = a[0].abs().max(b[0].abs()).max(c[0].abs());
+        let my = a[1].abs().max(b[1].abs()).max(c[1].abs());
+        if mx == 0.0 || my == 0.0 {
+            return 0.0;
+        }
+        let (ex, ey) = (binade(mx), binade(my));
+        let scale = |p: &[f64; 2]| coord(&[times_power_of_two(p[0], -ex), times_power_of_two(p[1], -ey)]);
+        robust::orient2d(scale(a), scale(b), scale(c))
+    };
+    if (2..sorted.len()).all(|k| turn(&sorted[0], &sorted[1], &sorted[k]) == 0.0) {
         return None;
     }
     let chain = |ordered: &mut dyn Iterator<Item = &[f64; 2]>| {
@@ -820,9 +848,16 @@ mod tests {
         let wide_thin = [[-1e308, 0.0], [1e308, 0.0], [0.0, 1e-308]];
         let wide_thin_area = delaunay_convex_hull_area(&wide_thin).unwrap();
         assert!((wide_thin_area - 1.0).abs() < 1e-12, "wide_thin_area = {wide_thin_area}");
+        let wide_thin_rect = [[-1e308, 0.0], [1e308, 0.0], [1e308, 1e-308], [-1e308, 1e-308]];
+        let wide_thin_rect_area = delaunay_convex_hull_area(&wide_thin_rect).unwrap();
+        assert!((wide_thin_rect_area - 2.0).abs() < 1e-12, "wide_thin_rect_area = {wide_thin_rect_area}");
         let half = 2f64.powi(-538);
         let tiny_square = [[-half, -half], [half, -half], [half, half], [-half, half]];
         assert_eq!(delaunay_convex_hull_area(&tiny_square), Some(f64::from_bits(1)));
+        let tiny_trapezoid = [[-half, half], [-half, -half], [half, half], [half, 0.0]];
+        assert_eq!(delaunay_convex_hull_area(&tiny_trapezoid), Some(f64::from_bits(1)));
+        let mixed_scale = [[0.0, 0.0], [1.0, 2.0], [1e200, 1e200]];
+        assert_eq!(delaunay_boundary(&mixed_scale).as_ref().map(Vec::len), Some(3));
         assert_eq!(delaunay_convex_hull_area(&[[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]), None);
     }
 

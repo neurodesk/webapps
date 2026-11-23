@@ -176,16 +176,18 @@ impl Prepared {
         let max = crate::fit_prf::nan_max(&rmap);
         let threshold = model.data_precision.round(max * model.convex_hull_threshold);
         let points: Vec<[f64; 2]> = (0..self.pixels).filter(|&p| rmap[p] > threshold).map(|p| [self.xc[p], self.yc[p]]).collect();
-        let Some(listed) = ListedHull::of(&points) else {
-            return vec![0.0; 5];
-        };
         let ([cx, cy], area) = match self.hull_order {
-            HullOrder::Listed => (listed.centroid(), listed.area()),
+            HullOrder::Listed => {
+                let Some(listed) = ListedHull::of(&points) else {
+                    return vec![0.0; 5];
+                };
+                (listed.centroid(), listed.area())
+            }
             HullOrder::Anchored | HullOrder::Stored => {
-                let centroid = Hull::of_delaunay_boundary(&points).map_or([f64::NAN; 2], |hull| hull.centroid());
                 let Some(cha) = delaunay_convex_hull_area(&points) else {
                     return vec![0.0; 5];
                 };
+                let centroid = Hull::of_delaunay_boundary(&points).map_or([f64::NAN; 2], |hull| hull.centroid());
                 (centroid, cha)
             }
         };
@@ -414,8 +416,9 @@ mod tests {
         let hull = prepared.convex_hull(&row, &profile);
         assert_eq!(hull, vec![0.0; 5], "one pixel spans no area, so SamSrf zeroes the column");
 
-        // Tiny scaling factor (2^-538): a 2x2 square has area 2^-1074 = f64::MIN_SUBNORMAL,
-        // which Anchored and Stored must preserve without zeroing R^2, Fwhm or Beta.
+        // Tiny scaling factor (2^-538): both a 2x2 square and a 3x3 trapezoid have
+        // area rounding to 2^-1074 = f64::from_bits(1), which Anchored and Stored
+        // must preserve without zeroing R^2, Fwhm or Beta.
         let mut tiny_model = model();
         tiny_model.scaling_factor = 2f64.powi(-538);
         let tiny_y = [1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0];
@@ -424,6 +427,19 @@ mod tests {
             let (tiny_row, tiny_profile) = tiny.reverse_correlate(&tiny_y);
             let tiny_hull = tiny.convex_hull(&tiny_row, &tiny_profile);
             assert!(tiny_hull[0] > 0.0 && tiny_hull[3] > 0.0 && tiny_hull[4] > 0.0, "{order:?}: tiny hull zeroed {tiny_hull:?}");
+        }
+        // 3x3 grid selecting [-h, h], [-h, -h], [h, h], [h, 0] (pixels 0, 2, 6, 7).
+        let frames3: Vec<Frame> = (0..9)
+            .map(|p| Frame { indices: vec![p], values: vec![1.0] })
+            .chain(std::iter::repeat_n(Frame { indices: vec![], values: vec![] }, 3))
+            .collect();
+        let aps3 = Apertures { width: 3, height: 3, frames: frames3, xy: vec![[0.0, 0.0]; 9], conditions: None };
+        let y3 = [1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0];
+        for order in [HullOrder::Anchored, HullOrder::Stored, HullOrder::Listed] {
+            let tiny3 = Prepared::new(&tiny_model, &aps3, &ResolvedHrf::None, 12).unwrap().with_hull_order(order);
+            let (row3, profile3) = tiny3.reverse_correlate(&y3);
+            let hull3 = tiny3.convex_hull(&row3, &profile3);
+            assert!(hull3[0] > 0.0 && hull3[3] > 0.0 && hull3[4] > 0.0, "{order:?}: 3x3 tiny trapezoid zeroed {hull3:?}");
         }
     }
 

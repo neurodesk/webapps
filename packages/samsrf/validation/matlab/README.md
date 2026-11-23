@@ -3064,18 +3064,18 @@ points or keeps a hole touching its solid. There MATLAB's rings visit a vertex
 twice, so no splitting rule reproduces them. No rule found loses nothing, so
 nothing changed and no recording was spent on it.
 
-Still open for these hulls: `convexHull`'s area, MATLAB's ring decomposition of
-self-intersecting polygons, and so the stored order's adoption where the first
-point does not start the hull. Round hull-area-1 refuted every area candidate (see
-its results). Later direct tests on its recording, with no new recording, refuted
-more. MATLAB's area is not `polyshape`'s area of the same hull (171 of 424 sets).
-No origin for the cross products reproduces it: bounding-box centre, its variants,
-means, the first point, the hull's first vertex, the minimum corner and zero; the
-best is the box centre summed clockwise from `K(1)`, at 255 of 424. Neither do the
-strictly convex vertices alone, per-vertex forms (no summation order reproduces
-the 7-vertex set `blob_f016_reversed`), or fans from `K(1)` with any base vertex or
-fused multiply-add. MATLAB's `polyarea` on the same `K` is the left-to-right
-trapezoid sum up to 42 terms (414 of 424; all ten differences have 45 or more).
+Still open for CF hulls: MATLAB's ring decomposition of self-intersecting
+polygons, and so the stored order's adoption where the first point does not
+start the hull. (`convexHull`'s area `AV` is now identified as
+`geometry::delaunay_convex_hull_area` — bounding-box midpoint and reverse
+clockwise non-FMA edge cross-product summation over `K` — matching all 424
+recorded sets and 424 corner hulls on both hosts in `cli_rc_hulls.rs`.
+Historical note: round hull-area-1 had refuted its earlier candidate list,
+and later direct tests had checked clockwise box-centre cross products in
+forward order (255 of 424) before reverse traversal of the closed boundary
+reproduced all 424 of 424. MATLAB's `polyarea` on the same `K` is the
+left-to-right trapezoid sum up to 42 terms, 414 of 424; all ten differences
+have 45 or more.)
 
 To replay dispatch 1's historical discovery report, run
 `python3 hull_area_report.py discovery RECORDING DECISION_JSON --dispatch-1`
