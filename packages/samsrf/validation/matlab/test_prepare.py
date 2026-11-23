@@ -262,6 +262,11 @@ class RepairSets(unittest.TestCase):
                 'FROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY --from=s1 --from=0 /x /x\n',
                 'FROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY -- --from=external:1 /x /x\n',
                 'FROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY --from=\u00b2 /x /x\n',
+                'FROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY --fr\\om=external:1 ["/x", "/x"]\n',
+                'FROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY --exclude=foo\\ bar --from=external:1 /x /x\n',
+                'FROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY \\--from=external:1 /x /x\n',
+                '# escape=`\nFROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY --fr`om=external:1 /x /x\n',
+                'FROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY --from=s1\u00a0/x /x\n',
             ):
                 (root / 'runtime' / 'Dockerfile').write_text(bad_copy)
                 with self.assertRaisesRegex(ValueError, 'Unsupported'):
@@ -426,6 +431,31 @@ class RepairSets(unittest.TestCase):
             (root / 'runtime' / 'matlabruntimebase' / 'Dockerfile.deps').unlink()
             with self.assertRaisesRegex(ValueError, 'Missing generated Dockerfile'):
                 build_container.record_base_images(root, inspector=lambda ref: images[ref])
+
+            # Earlier stage using matlabruntimebase/ with a different final stage still requires
+            # Dockerfile.deps and validates ubuntu:22.04 against matlabruntimebase/, not the final base.
+            (root / 'runtime' / 'Dockerfile.runtime').write_text(
+                f'FROM {runtime_base} AS installer\n'
+                f'FROM alpine:3.19\n'
+                f'COPY --from=installer /tmp/matlabruntime/runtime /opt/matlabruntime\n'
+            )
+            alpine_images = {
+                **images,
+                'alpine:3.19': {'id': 'sha256:alp', 'repoDigests': [], 'layers': ['sha256:a1']},
+                'samsrf-reference-runtime:r2023b': {'id': 'sha256:rt', 'repoDigests': [], 'layers': ['sha256:a1', 'sha256:rt1']},
+                'samsrf-reference:41ed1e96-r2023b': {'id': 'sha256:app', 'repoDigests': [], 'layers': ['sha256:a1', 'sha256:rt1', 'sha256:app1']},
+            }
+            with self.assertRaisesRegex(ValueError, 'Missing generated Dockerfile'):
+                build_container.record_base_images(root, inspector=lambda ref: alpine_images[ref])
+            (root / 'runtime' / 'matlabruntimebase' / 'Dockerfile.deps').write_text('FROM ubuntu:22.04\n')
+            ok_earlier_mrb = build_container.record_base_images(root, inspector=lambda ref: alpine_images[ref])
+            self.assertEqual(ok_earlier_mrb['finalBases']['runtime'], 'alpine:3.19')
+            self.assertEqual(ok_earlier_mrb['finalBases']['runtimeBase'], 'ubuntu:22.04')
+
+            # Unexpected Dockerfile.deps when no runtime stage references matlabruntimebase/ fails closed.
+            (root / 'runtime' / 'Dockerfile.runtime').write_text('FROM alpine:3.19\n')
+            with self.assertRaisesRegex(ValueError, 'Unexpected runtime/matlabruntimebase/Dockerfile.deps'):
+                build_container.record_base_images(root, inspector=lambda ref: alpine_images[ref])
 
 
 if __name__ == '__main__':

@@ -166,8 +166,8 @@ def trailing_escape_count(text, escape):
     return count
 
 
-def dockerfile_instructions(text):
-    """Yield complete logical Dockerfile instructions, honoring BuildKit parser directives
+def parse_dockerfile_instructions(text):
+    """Return `(escape, instructions)` for a Dockerfile, honoring BuildKit parser directives
     (syntax, escape, check) and line continuations."""
     escape = '\\'
     # Match Go bufio.ScanLines / BuildKit line splitting: split only on LF, stripping optional CR.
@@ -189,6 +189,7 @@ def dockerfile_instructions(text):
                 raise ValueError(f'Unsupported Dockerfile escape directive: {value!r}')
             escape = value
         index += 1
+    instructions = []
     current = []
     for raw in lines[index:]:
         stripped = raw.strip()
@@ -203,31 +204,44 @@ def dockerfile_instructions(text):
             current.append(raw)
             instruction = ''.join(current).strip()
             if instruction:
-                yield instruction
+                instructions.append(instruction)
             current = []
     if current:
         instruction = ''.join(current).strip()
         if instruction:
-            yield instruction
+            instructions.append(instruction)
+    return escape, instructions
+
+
+def dockerfile_instructions(text):
+    """Yield complete logical Dockerfile instructions, honoring BuildKit parser directives
+    (syntax, escape, check) and line continuations."""
+    _, instructions = parse_dockerfile_instructions(text)
+    yield from instructions
 
 
 STAGE_ALIAS = re.compile(r'^[A-Za-z][A-Za-z0-9._-]*$')
+ASCII_WS = re.compile(r'[ \t]+')
 
 
-def parse_copy_from_flag(instruction, path):
+def parse_copy_from_flag(instruction, path, escape='\\'):
     """Return the `--from=<src>` value for a COPY instruction, or None if absent.
 
-    Fails closed on ADD --from=, malformed/duplicate/quoted flags, `--`, or variable refs.
+    Fails closed on ADD --from=, malformed/duplicate/quoted/escaped flags, `--`,
+    escaped leading tokens, or variable refs.
     """
     match = COPY_ADD_KEYWORD.match(instruction)
     if not match:
         return None
     keyword = match.group(1).upper()
     from_ref = None
-    for token in instruction.split()[1:]:
+    tokens = ASCII_WS.split(instruction.strip(' \t'))[1:]
+    for token in tokens:
         if not token.startswith('--'):
+            if token.startswith(escape):
+                raise ValueError(f'Unsupported escaped {keyword} argument in generated Dockerfile {path}: {instruction}')
             break
-        if token == '--' or '"' in token or "'" in token:
+        if token == '--' or '"' in token or "'" in token or escape in token:
             raise ValueError(f'Unsupported {keyword} flag in generated Dockerfile {path}: {instruction}')
         lower = token.lower()
         if lower == '--from' or lower.startswith('--from='):
@@ -263,8 +277,9 @@ def parse_dockerfile_bases(dockerfile):
     final_base = None
     copy_from_stages = []
     # Decode raw bytes so Python universal newlines do not split on bare carriage returns.
-    for instruction in dockerfile_instructions(path.read_bytes().decode('utf-8')):
-        copy_from = parse_copy_from_flag(instruction, path)
+    escape, instructions = parse_dockerfile_instructions(path.read_bytes().decode('utf-8'))
+    for instruction in instructions:
+        copy_from = parse_copy_from_flag(instruction, path, escape=escape)
         if copy_from is not None:
             if not stage_bases:
                 raise ValueError(f'Unsupported COPY --from= before FROM in generated Dockerfile {path}: {instruction}')
@@ -397,10 +412,17 @@ def record_base_images(output, runtime_image=RUNTIME_IMAGE, app_image=APP_IMAGE,
 
     runtime_base_ref = final_bases['runtime']
     deps_path = output / RUNTIME_BASE_DOCKERFILE
-    if deps_path.is_file() or runtime_base_ref.startswith('matlabruntimebase/'):
+    mrb_refs = [ref for ref in dockerfiles['runtime'] if ref.startswith('matlabruntimebase/')]
+    if len(mrb_refs) > 1:
+        raise ValueError(f'Ambiguous matlabruntimebase references in runtime Dockerfile: {mrb_refs}')
+    if deps_path.is_file() and not mrb_refs:
+        raise ValueError(
+            f'Unexpected {RUNTIME_BASE_DOCKERFILE.as_posix()}: runtime Dockerfile does not reference matlabruntimebase/')
+    if mrb_refs:
         parse_entry('runtimeBase', RUNTIME_BASE_DOCKERFILE)
         deps_base_ref = final_bases['runtimeBase']
-        require_layer_prefix(deps_base_ref, resolved[deps_base_ref], runtime_base_ref, resolved[runtime_base_ref])
+        mrb_ref = mrb_refs[0]
+        require_layer_prefix(deps_base_ref, resolved[deps_base_ref], mrb_ref, resolved[mrb_ref])
 
     runtime_info = lookup(runtime_image)
     app_info = lookup(app_image)
