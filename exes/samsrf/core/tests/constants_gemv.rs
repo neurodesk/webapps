@@ -279,7 +279,7 @@ fn pipeline_cases(runs: &[RawRun]) -> Vec<Pipeline> {
                 let intel_ceiling = res.noise_ceiling.as_ref().unwrap();
                 let intel_courses = positions
                     .iter()
-                    .flat_map(|&p| res.data.course(slot(p)).iter().copied().collect::<Vec<_>>())
+                    .flat_map(|&p| res.data.course(slot(p)).iter().copied())
                     .collect::<Vec<_>>();
                 let intel_ceilings = positions.iter().map(|&p| intel_ceiling[slot(p)]).collect::<Vec<_>>();
                 let intel_global = res.global_signal.unwrap();
