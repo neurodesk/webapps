@@ -150,7 +150,7 @@ def stage_clean_tree(source, destination):
     return staged_hashes
 
 
-PARSER_DIRECTIVE = re.compile(r'^\s*#\s*([a-zA-Z]+)\s*=\s*(\S+)\s*$')
+PARSER_DIRECTIVE = re.compile(r'^\s*#\s*([a-zA-Z]+)\s*=\s*(.*?)\s*$')
 KNOWN_DIRECTIVES = {'syntax', 'escape', 'check'}
 
 
@@ -168,7 +168,7 @@ def dockerfile_instructions(text):
     """Yield complete logical Dockerfile instructions, honoring BuildKit parser directives
     (syntax, escape, check) and line continuations."""
     escape = '\\'
-    lines = text.splitlines()
+    lines = text.lstrip('\ufeff').splitlines()
     index = 0
     seen_directives = set()
     while index < len(lines):
@@ -176,8 +176,10 @@ def dockerfile_instructions(text):
         if not match:
             break
         key, value = match.group(1).lower(), match.group(2)
-        if key not in KNOWN_DIRECTIVES or key in seen_directives:
+        if key not in KNOWN_DIRECTIVES:
             break
+        if key in seen_directives:
+            raise ValueError(f'Duplicate Dockerfile parser directive: {key}')
         seen_directives.add(key)
         if key == 'escape':
             if value not in ('\\', '`'):

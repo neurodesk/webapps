@@ -272,6 +272,20 @@ class RepairSets(unittest.TestCase):
             ok_unknown_dir = build_container.record_base_images(root, inspector=lambda ref: multistage_ok[ref])
             self.assertEqual(ok_unknown_dir['finalBases']['runtime'], 'base1:r2023b')
 
+            # Recognized # check= directive with internal whitespace keeps scanning active for # escape=`.
+            (root / 'runtime' / 'Dockerfile').write_text(
+                '# check=skip=JSONArgsRecommended; error=true\n# escape=`\nFROM base2:r2023b AS s1\nFROM `\n  base1:r2023b\n')
+            ok_check_ws = build_container.record_base_images(root, inspector=lambda ref: multistage_ok[ref])
+            self.assertEqual(ok_check_ws['finalBases']['runtime'], 'base1:r2023b')
+
+            # Invalid # escape= value (including multi-token) and duplicate directives fail closed.
+            (root / 'runtime' / 'Dockerfile').write_text('# escape=invalid token\nFROM base1:r2023b\n')
+            with self.assertRaisesRegex(ValueError, 'Unsupported Dockerfile escape directive'):
+                build_container.record_base_images(root, inspector=lambda ref: multistage_ok[ref])
+            (root / 'runtime' / 'Dockerfile').write_text('# check=error=true\n# CHECK=error=false\nFROM base1:r2023b\n')
+            with self.assertRaisesRegex(ValueError, 'Duplicate Dockerfile parser directive'):
+                build_container.record_base_images(root, inspector=lambda ref: multistage_ok[ref])
+
 
 if __name__ == '__main__':
     unittest.main()
