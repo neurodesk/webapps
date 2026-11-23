@@ -375,9 +375,10 @@ fn delaunay_boundary_area(boundary: &[[f64; 2]]) -> Option<f64> {
     });
     let cx = midpoint(low[0], high[0]);
     let cy = midpoint(low[1], high[1]);
+    const NORMAL_FLOOR: f64 = 1e-290;
     let m = boundary.len();
     let mut sum = 0.0_f64;
-    let mut subnormal = false;
+    let mut near_subnormal = false;
     for j in (0..m).rev() {
         let a = boundary[j];
         let b = boundary[(j + 1) % m];
@@ -385,18 +386,18 @@ fn delaunay_boundary_area(boundary: &[[f64; 2]]) -> Option<f64> {
         let dy = b[1] - a[1];
         let p1 = (a[0] - cx) * dy;
         let p2 = (a[1] - cy) * dx;
-        if (p1 != 0.0 && p1.abs() < f64::MIN_POSITIVE)
-            || (p2 != 0.0 && p2.abs() < f64::MIN_POSITIVE)
+        if (p1 != 0.0 && p1.abs() < NORMAL_FLOOR)
+            || (p2 != 0.0 && p2.abs() < NORMAL_FLOOR)
             || (p1 == 0.0 && a[0] != cx && dy != 0.0)
             || (p2 == 0.0 && a[1] != cy && dx != 0.0)
         {
-            subnormal = true;
+            near_subnormal = true;
         }
         sum += p1 - p2;
     }
-    if !subnormal && sum.is_finite() {
+    if !near_subnormal && sum.is_finite() {
         let area = 0.5 * sum.abs();
-        if area >= f64::MIN_POSITIVE {
+        if area >= NORMAL_FLOOR {
             return Some(area);
         }
     }
@@ -1042,6 +1043,17 @@ mod tests {
         let sub_one = [[0.0, 0.0], [k, 8.0 * k], [11.0 * k, k]];
         assert_eq!(delaunay_convex_hull_area(&sub_one), Some(f64::from_bits(1)));
         assert_eq!(delaunay_convex_hull_centroid_and_area(&sub_one).map(|(_, a)| a), Some(f64::from_bits(1)));
+        // Products or sums near f64::MIN_POSITIVE that round up into normal range must still use ExactSum.
+        let below_one = f64::from_bits(1.0_f64.to_bits() - 1);
+        let min_pos = f64::MIN_POSITIVE;
+        let diamond_near_min = [[below_one, 0.0], [0.0, min_pos], [-below_one, 0.0], [0.0, -min_pos]];
+        let expected_diamond = f64::from_bits(0x001f_ffff_ffff_ffff);
+        assert_eq!(delaunay_convex_hull_area(&diamond_near_min).map(f64::to_bits), Some(expected_diamond.to_bits()));
+        assert_eq!(delaunay_convex_hull_centroid_and_area(&diamond_near_min).map(|(_, a)| a.to_bits()), Some(expected_diamond.to_bits()));
+        let tri_near_min = [[0.0, 0.0], [2.25, f64::from_bits(0x004c_0000_0000_0000)], [0.25, f64::from_bits(0x0023_8e38_e38e_38e3)]];
+        let max_subnormal = f64::from_bits((1u64 << 52) - 1);
+        assert_eq!(delaunay_convex_hull_area(&tri_near_min).map(f64::to_bits), Some(max_subnormal.to_bits()));
+        assert_eq!(delaunay_convex_hull_centroid_and_area(&tri_near_min).map(|(_, a)| a.to_bits()), Some(max_subnormal.to_bits()));
         // Mixed-scale and full-exponent-range cases where floating-point orient2d or midpoint shifts fail.
         let mixed_scale = [[0.0, 0.0], [1.0, 2.0], [1e200, 1e200]];
         assert_eq!(delaunay_boundary(&mixed_scale).as_ref().map(Vec::len), Some(3));
