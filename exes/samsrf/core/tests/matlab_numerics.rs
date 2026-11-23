@@ -68,10 +68,9 @@ fn elementary_functions_are_fdlibm_on_intel_and_amd() {
     }
 }
 
-/// Every MATLAB power is reproduced, including half-integer exponents and the
-/// NaN and infinite parts of overflowing results. The only difference allowed is
-/// the sign of a zero part of an underflowed result; the count of such parts is
-/// part of the evidence.
+/// Every MATLAB power is reproduced bit for bit, including half-integer
+/// exponents, zero signs of underflowed results, and the NaN and infinite parts
+/// of overflowing results.
 #[test]
 fn negative_base_powers_match_every_matlab_result() {
     let Some(root) = root() else { return };
@@ -94,7 +93,7 @@ fn negative_base_powers_match_every_matlab_result() {
             }
         }
     }
-    assert_eq!((compared, nonfinite, zero_signs), (13_776, 1_688, 2_440));
+    assert_eq!((compared, nonfinite, zero_signs), (13_776, 1_688, 0));
 }
 
 /// Every output SamSrf keeps, for every recorded course and kernel length (1-129

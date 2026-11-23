@@ -40,14 +40,16 @@ fn nan_last(a: f64, b: f64) -> std::cmp::Ordering {
 
 /// Which evaluation a hull estimate takes. `Listed` is the port's evaluation
 /// before it followed MATLAB's stored order. `Stored` follows the order and
-/// arithmetic fitted to MATLAB's recordings (`Hull`): it matches far more
-/// recorded values but loses some that `Listed` matched, because the port's
-/// rings of a self-intersecting polygon are not MATLAB's
-/// (`packages/samsrf/validation/matlab/README.md`, "Hull area, centroid and vertex
-/// order"), so it stays diagnostic. `Anchored`, the analyses' default, takes
-/// `Stored` for a connective-field polygon whose stored hull starts at its first
-/// point, where those rings cannot move the start ([`anchored_start`]), and
-/// `Listed` everywhere else, reverse-correlation hulls included.
+/// arithmetic fitted to MATLAB's recordings (`Hull`): for connective-field
+/// polygons it matches far more recorded values but loses some that `Listed`
+/// matched, because the port's rings of a self-intersecting polygon are not
+/// MATLAB's (`packages/samsrf/validation/matlab/README.md`, "Hull area, centroid
+/// and vertex order"), so it stays diagnostic. `Anchored`, the analyses'
+/// default, takes `Stored` for a connective-field polygon whose stored hull
+/// starts at its first point, where those rings cannot move the start
+/// ([`anchored_start`]), `Listed` for other connective-field polygons, and
+/// MATLAB's `delaunayTriangulation` hull ([`delaunay_convex_hull_centroid_and_area`])
+/// for reverse-correlation hulls.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum HullOrder {
     #[default]
@@ -220,7 +222,11 @@ impl Hull {
     /// `polyshape` does. `None` where that shape is empty or the points span no area.
     pub fn of_delaunay_boundary(points: &[[f64; 2]]) -> Option<Hull> {
         let boundary = delaunay_boundary(points)?;
-        let mut stored = crate::polyshape::boundaries(&boundary);
+        Self::of_boundary(&boundary)
+    }
+
+    fn of_boundary(boundary: &[[f64; 2]]) -> Option<Hull> {
+        let mut stored = crate::polyshape::boundaries(boundary);
         if stored.len() != 1 {
             return None;
         }
@@ -341,6 +347,220 @@ fn times_power_of_two(mut x: f64, mut k: i32) -> f64 {
     x * power(k)
 }
 
+/// Area of `[K, AV] = convexHull(delaunayTriangulation(points))` as MATLAB R2023b
+/// evaluates it: bounding-box midpoint `(min + max) / 2` and non-FMA edge cross
+/// products summed sequentially in reverse (clockwise) traversal of the closed
+/// counter-clockwise boundary `K`. Falls back to exact fixed-point summation when
+/// the unscaled formula overflows, underflows, or cancels to zero. `None` where
+/// the points span no representable positive area.
+pub fn delaunay_convex_hull_area(points: &[[f64; 2]]) -> Option<f64> {
+    let boundary = delaunay_boundary(points)?;
+    delaunay_boundary_area(&boundary)
+}
+
+/// Centroid (via `polyshape`) and area (via `convexHull(delaunayTriangulation)`)
+/// computed from a single Delaunay boundary pass. `None` where the points span no
+/// representable positive area; `centroid` is `[NaN, NaN]` when `polyshape`
+/// empties a positive-area boundary.
+pub fn delaunay_convex_hull_centroid_and_area(points: &[[f64; 2]]) -> Option<([f64; 2], f64)> {
+    let boundary = delaunay_boundary(points)?;
+    let area = delaunay_boundary_area(&boundary)?;
+    let centroid = Hull::of_boundary(&boundary).map_or([f64::NAN; 2], |hull| hull.centroid());
+    Some((centroid, area))
+}
+
+fn delaunay_boundary_area(boundary: &[[f64; 2]]) -> Option<f64> {
+    let (low, high) = boundary.iter().fold(([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]), |(low, high), p| {
+        ([low[0].min(p[0]), low[1].min(p[1])], [high[0].max(p[0]), high[1].max(p[1])])
+    });
+    let cx = midpoint(low[0], high[0]);
+    let cy = midpoint(low[1], high[1]);
+    const NORMAL_FLOOR: f64 = 1e-290;
+    let m = boundary.len();
+    let mut sum = 0.0_f64;
+    let mut near_subnormal = false;
+    for j in (0..m).rev() {
+        let a = boundary[j];
+        let b = boundary[(j + 1) % m];
+        let dx = b[0] - a[0];
+        let dy = b[1] - a[1];
+        let p1 = (a[0] - cx) * dy;
+        let p2 = (a[1] - cy) * dx;
+        if (p1 != 0.0 && p1.abs() < NORMAL_FLOOR)
+            || (p2 != 0.0 && p2.abs() < NORMAL_FLOOR)
+            || (p1 == 0.0 && a[0] != cx && dy != 0.0)
+            || (p2 == 0.0 && a[1] != cy && dx != 0.0)
+        {
+            near_subnormal = true;
+        }
+        sum += p1 - p2;
+    }
+    if !near_subnormal && sum.is_finite() {
+        let area = 0.5 * sum.abs();
+        if area >= NORMAL_FLOOR {
+            return Some(area);
+        }
+    }
+    let mut exact = ExactSum::default();
+    for j in 0..m {
+        let a = boundary[j];
+        let b = boundary[(j + 1) % m];
+        exact.add_product(a[0], b[1], 1);
+        exact.add_product(a[1], b[0], -1);
+    }
+    let area = exact.abs_half_to_f64();
+    (area > 0.0).then_some(area)
+}
+
+/// Exact two's-complement fixed-point accumulator covering products of any finite
+/// `f64` values across the full IEEE-754 exponent range (`2^-2148` to `2^2048`
+/// plus headroom for millions of terms). Bit `0` represents `2^-2148`.
+const EXACT_BASE_EXP: i32 = -2148;
+const EXACT_WORDS: usize = 68;
+
+struct ExactSum {
+    words: [u64; EXACT_WORDS],
+}
+
+impl Default for ExactSum {
+    fn default() -> Self {
+        Self { words: [0; EXACT_WORDS] }
+    }
+}
+
+impl ExactSum {
+    fn add_product(&mut self, x: f64, y: f64, sign: i8) {
+        let (mx, ex) = decode_f64(x);
+        let (my, ey) = decode_f64(y);
+        if mx == 0 || my == 0 || sign == 0 {
+            return;
+        }
+        let val = (mx as i128) * (my as i128) * (sign as i128);
+        let shift = (ex + ey - EXACT_BASE_EXP) as usize;
+        let word = shift / 64;
+        let bit = shift % 64;
+        let u = val as u128;
+        let lo = u as u64;
+        let hi = (u >> 64) as u64;
+        let ext = if val < 0 { u64::MAX } else { 0 };
+        let w0 = lo << bit;
+        let (w1, w2) = if bit == 0 {
+            (hi, ext)
+        } else {
+            ((hi << bit) | (lo >> (64 - bit)), (ext << bit) | (hi >> (64 - bit)))
+        };
+        let mut carry = 0u64;
+        for (offset, slot) in self.words[word..].iter_mut().enumerate() {
+            let addend = match offset {
+                0 => w0,
+                1 => w1,
+                2 => w2,
+                _ => ext,
+            };
+            let (s1, c1) = slot.overflowing_add(addend);
+            let (s2, c2) = s1.overflowing_add(carry);
+            *slot = s2;
+            carry = u64::from(c1) + u64::from(c2);
+            if offset >= 3 && carry == (ext & 1) {
+                break;
+            }
+        }
+    }
+
+    fn sign(&self) -> i8 {
+        if self.words[EXACT_WORDS - 1] >> 63 != 0 {
+            return -1;
+        }
+        if self.words.iter().any(|&w| w != 0) {
+            return 1;
+        }
+        0
+    }
+
+    /// Correctly rounded (ties-to-even) IEEE-754 `f64` value of `0.5 * |self|`.
+    fn abs_half_to_f64(&self) -> f64 {
+        let mut mag = self.words;
+        if mag[EXACT_WORDS - 1] >> 63 != 0 {
+            let mut carry = 1u64;
+            for w in &mut mag {
+                let (v, c) = (!*w).overflowing_add(carry);
+                *w = v;
+                carry = u64::from(c);
+            }
+        }
+        let Some(top_word) = (0..EXACT_WORDS).rev().find(|&i| mag[i] != 0) else {
+            return 0.0;
+        };
+        let msb = top_word * 64 + (63 - mag[top_word].leading_zeros() as usize);
+        // `self` has LSB = 2^-2148, so `0.5 * |self|` has LSB = 2^-2149.
+        let exp = msb as i32 - 2149;
+        if exp > 1023 {
+            return f64::INFINITY;
+        }
+        if exp < -1075 {
+            return 0.0;
+        }
+        // Subnormal ULP 2^-1074 sits at bit 2149 - 1074 = 1075.
+        let lsb = (msb as i32 - 52).max(1075) as usize;
+        let w = lsb / 64;
+        let b = lsb % 64;
+        let mut sig = if b == 0 { mag[w] } else { (mag[w] >> b) | (mag[w + 1] << (64 - b)) };
+        sig &= (1u64 << 53) - 1;
+        let half_pos = lsb - 1;
+        let hw = half_pos / 64;
+        let hb = half_pos % 64;
+        let half_bit = ((mag[hw] >> hb) & 1) != 0;
+        let low_mask = (1u64 << hb) - 1;
+        let sticky = (mag[hw] & low_mask) != 0 || mag[..hw].iter().any(|&word| word != 0);
+        if half_bit && (sticky || (sig & 1) != 0) {
+            sig += 1;
+        }
+        if lsb == 1075 && sig < (1u64 << 52) {
+            return f64::from_bits(sig);
+        }
+        let mut e = lsb as i32 + 52 - 2149;
+        if sig == (1u64 << 53) {
+            sig >>= 1;
+            e += 1;
+        }
+        if e > 1023 {
+            return f64::INFINITY;
+        }
+        let biased = (e + 1023) as u64;
+        f64::from_bits((biased << 52) | (sig & ((1u64 << 52) - 1)))
+    }
+}
+
+/// Decompose a finite `f64` into `(mantissa, exponent)` with `x == mantissa * 2^exponent`,
+/// `|mantissa| < 2^53`, and `exponent in [-1074, 971]` (or `(0, 0)` when `x == 0.0`).
+fn decode_f64(x: f64) -> (i64, i32) {
+    let bits = x.to_bits();
+    let sign = if bits >> 63 != 0 { -1i64 } else { 1i64 };
+    let exp_bits = ((bits >> 52) & 0x7ff) as i32;
+    let frac = bits & ((1u64 << 52) - 1);
+    if exp_bits == 0 {
+        if frac == 0 {
+            return (0, 0);
+        }
+        (sign * frac as i64, -1074)
+    } else {
+        (sign * ((1u64 << 52) | frac) as i64, exp_bits - 1075)
+    }
+}
+
+/// Exact sign (`-1`, `0`, `+1`) of `orient2d(a, b, c) = (a.x - c.x)*(b.y - c.y) - (a.y - c.y)*(b.x - c.x)`
+/// across the full finite `f64` exponent range, without overflow or underflow.
+fn exact_orient2d_sign(a: &[f64; 2], b: &[f64; 2], c: &[f64; 2]) -> i8 {
+    let mut sum = ExactSum::default();
+    sum.add_product(a[0], b[1], 1);
+    sum.add_product(a[1], b[0], -1);
+    sum.add_product(b[0], c[1], 1);
+    sum.add_product(b[1], c[0], -1);
+    sum.add_product(c[0], a[1], 1);
+    sum.add_product(c[1], a[0], -1);
+    sum.sign()
+}
+
 /// The boundary of the convex hull of `points` that `convexHull` of their
 /// Delaunay triangulation lists: decided with exact predicates, exactly
 /// collinear points included, counter-clockwise from the first input point on
@@ -350,14 +570,42 @@ fn delaunay_boundary(points: &[[f64; 2]]) -> Option<Vec<[f64; 2]>> {
     let mut sorted = finite.clone();
     sorted.sort_by(row_order);
     sorted.dedup();
-    let turn = |a: &[f64; 2], b: &[f64; 2], c: &[f64; 2]| robust::orient2d(coord(a), coord(b), coord(c));
-    if sorted.len() < 3 || (2..sorted.len()).all(|k| turn(&sorted[0], &sorted[1], &sorted[k]) == 0.0) {
+    if sorted.len() < 3 {
+        return None;
+    }
+    let (low, high) = sorted.iter().fold(([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]), |(low, high), p| {
+        ([low[0].min(p[0]), low[1].min(p[1])], [high[0].max(p[0]), high[1].max(p[1])])
+    });
+    if low[0] == high[0] || low[1] == high[1] {
+        return None;
+    }
+    // `robust::orient2d` is exact whenever every nonzero coordinate stays well inside
+    // half the double exponent range (even ULP-adjacent differences square safely above
+    // subnormals and below Veltkamp's split limit); otherwise evaluate the 6-term
+    // determinant exactly in fixed point across the full `f64` exponent range.
+    const SAFE_MIN: f64 = 1e-120; // > 2^-400
+    const SAFE_MAX: f64 = 1e120; // < 2^400
+    let safe = sorted.iter().all(|p| {
+        p.iter().all(|&v| {
+            let a = v.abs();
+            a == 0.0 || (SAFE_MIN..=SAFE_MAX).contains(&a)
+        })
+    });
+    let turn = |a: &[f64; 2], b: &[f64; 2], c: &[f64; 2]| -> i8 {
+        if safe {
+            let d = robust::orient2d(coord(a), coord(b), coord(c));
+            if d > 0.0 { 1 } else if d < 0.0 { -1 } else { 0 }
+        } else {
+            exact_orient2d_sign(a, b, c)
+        }
+    };
+    if (2..sorted.len()).all(|k| turn(&sorted[0], &sorted[1], &sorted[k]) == 0) {
         return None;
     }
     let chain = |ordered: &mut dyn Iterator<Item = &[f64; 2]>| {
         let mut half: Vec<[f64; 2]> = Vec::new();
         for p in ordered {
-            while half.len() >= 2 && turn(&half[half.len() - 2], &half[half.len() - 1], p) < 0.0 {
+            while half.len() >= 2 && turn(&half[half.len() - 2], &half[half.len() - 1], p) < 0 {
                 half.pop();
             }
             half.push(*p);
@@ -762,6 +1010,75 @@ mod tests {
             let listed: Vec<usize> = boundary.iter().map(|b| points.iter().position(|p| p == b).unwrap() + 1).collect();
             assert_eq!(listed, k);
         }
+        // `delaunay_convex_hull_area` uses the bounding-box midpoint and reverse (CW)
+        // non-FMA traversal of `K`, matching MATLAB's `convexHull(delaunayTriangulation)`
+        // `AV` (424/424 on round hull-area-1, both hosts) and scaling safely on overflow.
+        assert_eq!(delaunay_convex_hull_area(cases[0].0), Some(0.03683297622691565));
+        let huge = [[0.0, 0.0], [2e200, 0.0], [2e200, 1e200]];
+        assert_eq!(delaunay_convex_hull_area(&huge), Some(f64::INFINITY));
+        let scaled = [[0.0, 0.0], [2e154, 0.0], [2e154, 1e154]];
+        assert_eq!(delaunay_convex_hull_area(&scaled), Some(1e308));
+        // Extreme aspect ratios and subnormal squares scale each axis independently
+        // so representable areas neither overflow nor underflow to None.
+        let wide_thin = [[-1e308, 0.0], [1e308, 0.0], [0.0, 1e-308]];
+        let wide_thin_area = delaunay_convex_hull_area(&wide_thin).unwrap();
+        assert!((wide_thin_area - 1.0).abs() < 1e-12, "wide_thin_area = {wide_thin_area}");
+        let wide_thin_rect = [[-1e308, 0.0], [1e308, 0.0], [1e308, 1e-308], [-1e308, 1e-308]];
+        let wide_thin_rect_area = delaunay_convex_hull_area(&wide_thin_rect).unwrap();
+        assert!((wide_thin_rect_area - 2.0).abs() < 1e-12, "wide_thin_rect_area = {wide_thin_rect_area}");
+        let half = 2f64.powi(-538);
+        let tiny_square = [[-half, -half], [half, -half], [half, half], [-half, half]];
+        assert_eq!(delaunay_convex_hull_area(&tiny_square), Some(f64::from_bits(1)));
+        let tiny_trapezoid = [[-half, half], [-half, -half], [half, half], [half, 0.0]];
+        assert_eq!(delaunay_convex_hull_area(&tiny_trapezoid), Some(f64::from_bits(1)));
+        // Exact tie to even at 0.5 * MIN_SUBNORMAL rounds to 0 -> None.
+        let half_sub = 2f64.powi(-538);
+        assert_eq!(delaunay_convex_hull_area(&[[0.0, 0.0], [half_sub, 0.0], [0.0, half_sub]]), None);
+        // Subnormal midpoint products must still fall back to ExactSum even when the
+        // floating-point sum is positive (59/128 ULP -> None; 87/128 ULP -> 1 ULP).
+        let k = 2f64.powi(-540);
+        let sub_zero = [[0.0, 0.0], [6.0 * k, 11.0 * k], [7.0 * k, 3.0 * k]];
+        assert_eq!(delaunay_convex_hull_area(&sub_zero), None);
+        assert_eq!(delaunay_convex_hull_centroid_and_area(&sub_zero), None);
+        let sub_one = [[0.0, 0.0], [k, 8.0 * k], [11.0 * k, k]];
+        assert_eq!(delaunay_convex_hull_area(&sub_one), Some(f64::from_bits(1)));
+        assert_eq!(delaunay_convex_hull_centroid_and_area(&sub_one).map(|(_, a)| a), Some(f64::from_bits(1)));
+        // Products or sums near f64::MIN_POSITIVE that round up into normal range must still use ExactSum.
+        let below_one = f64::from_bits(1.0_f64.to_bits() - 1);
+        let min_pos = f64::MIN_POSITIVE;
+        let diamond_near_min = [[below_one, 0.0], [0.0, min_pos], [-below_one, 0.0], [0.0, -min_pos]];
+        let expected_diamond = f64::from_bits(0x001f_ffff_ffff_ffff);
+        assert_eq!(delaunay_convex_hull_area(&diamond_near_min).map(f64::to_bits), Some(expected_diamond.to_bits()));
+        assert_eq!(delaunay_convex_hull_centroid_and_area(&diamond_near_min).map(|(_, a)| a.to_bits()), Some(expected_diamond.to_bits()));
+        let tri_near_min = [[0.0, 0.0], [2.25, f64::from_bits(0x004c_0000_0000_0000)], [0.25, f64::from_bits(0x0023_8e38_e38e_38e3)]];
+        let max_subnormal = f64::from_bits((1u64 << 52) - 1);
+        assert_eq!(delaunay_convex_hull_area(&tri_near_min).map(f64::to_bits), Some(max_subnormal.to_bits()));
+        assert_eq!(delaunay_convex_hull_centroid_and_area(&tri_near_min).map(|(_, a)| a.to_bits()), Some(max_subnormal.to_bits()));
+        // Mixed-scale and full-exponent-range cases where floating-point orient2d or midpoint shifts fail.
+        let mixed_scale = [[0.0, 0.0], [1.0, 2.0], [1e200, 1e200]];
+        assert_eq!(delaunay_boundary(&mixed_scale).as_ref().map(Vec::len), Some(3));
+        assert_eq!(delaunay_convex_hull_area(&mixed_scale), Some(5e199));
+        let full_span = [[0.0, 0.0], [1e-200, 2e-200], [1e200, 1e200]];
+        assert_eq!(delaunay_boundary(&full_span).as_ref().map(Vec::len), Some(3));
+        let full_span_area = delaunay_convex_hull_area(&full_span).unwrap();
+        assert!((full_span_area - 0.5).abs() <= 1e-15, "full_span_area = {full_span_area}");
+        let near_collinear = [[0.0, 0.0], [2f64.powi(-500), 2f64.powi(-500)], [2f64.powi(550), f64::from_bits(2f64.powi(550).to_bits() + 1)]];
+        assert_eq!(delaunay_boundary(&near_collinear).as_ref().map(Vec::len), Some(3));
+        assert_eq!(delaunay_convex_hull_area(&near_collinear), Some(0.125));
+        let tiny_corner = [[0.0, 0.0], [0.0, 2f64.powi(-540)], [2f64.powi(-540), 0.0], [1.0, 1.0]];
+        let corner_boundary = delaunay_boundary(&tiny_corner).unwrap();
+        assert_eq!(corner_boundary.len(), 4);
+        assert_eq!(corner_boundary, vec![[0.0, 0.0], [2f64.powi(-540), 0.0], [1.0, 1.0], [0.0, 2f64.powi(-540)]]);
+        // ExactSum rounding boundaries: subnormal-to-normal carry and f64::MAX overflow.
+        let mut carry_normal = ExactSum::default();
+        carry_normal.add_product(2.0, f64::from_bits((1u64 << 52) - 1), 1);
+        carry_normal.add_product(2.0, f64::from_bits(1), 1);
+        assert_eq!(carry_normal.abs_half_to_f64(), f64::MIN_POSITIVE);
+        let mut overflow_max = ExactSum::default();
+        overflow_max.add_product(2.0, f64::MAX, 1);
+        overflow_max.add_product(2.0, 2f64.powi(970), 1);
+        assert_eq!(overflow_max.abs_half_to_f64(), f64::INFINITY);
+        assert_eq!(delaunay_convex_hull_area(&[[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]), None);
     }
 
     #[test]

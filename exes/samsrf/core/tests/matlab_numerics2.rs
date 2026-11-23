@@ -49,9 +49,8 @@ fn same(a: f64, b: f64) -> bool {
     a.to_bits() == b.to_bits() || a.is_nan() && b.is_nan()
 }
 
-/// Every recorded value with shape a >= 1, the HRF domain, on both hosts. The
-/// identified form agrees with MATLAB on these probes; it is not MATLAB's source.
-/// Shapes below 1 take another MATLAB form, and the port declines them.
+/// Every recorded `gampdf` density (both `a >= 1` and `0 < a < 1`) on both hosts.
+/// The identified form agrees with MATLAB on all 10,980 recorded values.
 #[test]
 fn gampdf_matches_every_recorded_value_with_shape_at_least_one() {
     let Some((root, amd, intel)) = hosts() else { return };
@@ -70,13 +69,12 @@ fn gampdf_matches_every_recorded_value_with_shape_at_least_one() {
                         matched += 1;
                     }
                     None => {
-                        assert!(a < 1.0);
                         declined += 1;
                     }
                 }
             }
         }
-        assert_eq!((matched, declined), (9_760, 1_220), "{host}");
+        assert_eq!((matched, declined), (10_980, 0), "{host}");
     }
 }
 

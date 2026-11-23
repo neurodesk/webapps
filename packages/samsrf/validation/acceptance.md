@@ -57,21 +57,25 @@ each reference to the literal hashes in
 
 The 24-run SamSrfAnalysis matrix against source MATLAB (`matlab/cli-reference.json`,
 run 42928350417; the source receipts do not attest the inputs), checked again on
-2026-11-19 with the committed module:
+2026-11-23 with the committed module:
 
 | Reference | AMD EPYC 9V74 (CNR `auto`) | Intel Xeon Platinum 8573C (`AVX512_E1`) |
 | --- | --- | --- |
-| `current` (default) | 18 runs exact, 4 differ, 2 refused; 157 of 168 maps | No run exact, 22 differ, 2 refused; 57 of 168 maps |
-| `matlab-amd` | 18 runs exact, 4 differ, 2 refused; 160 of 168 maps | No run exact, 22 differ, 2 refused; 57 of 168 maps |
-| `matlab-intel` | Double runs: none of 12 exact; 26 of their 92 maps. The 12 single runs are refused | Double runs: 8 of 12 exact, 4 differ; 84 of their 92 maps. The 12 single runs are refused |
+| `current` (default) | 20 runs exact, 2 differ, 2 refused; 163 of 168 maps | No run exact, 22 differ, 2 refused; 63 of 168 maps |
+| `matlab-amd` | 20 runs exact, 2 differ, 2 refused; 166 of 168 maps | No run exact, 22 differ, 2 refused; 63 of 168 maps |
+| `matlab-intel` | Double runs: none of 12 exact; 26 of their 92 maps. The 12 single runs are refused | Double runs: 10 of 12 exact, 2 differ; 90 of their 92 maps. The 12 single runs are refused |
 
 A map is exact when every raw `Srf.Data` value, imaginary part and GIfTI value
 equals MATLAB's, bit for bit. Under `current` on the AMD host every float32
-GIfTI of the 22 computed runs equals MATLAB's. After #902 (`HullOrder::Anchored`),
-the 11 differing maps differ only in 123 raw double values: 94 hull coordinates
-(16 fewer CF hull `y0` differences than the pre-#902 count of 110) and 29 values
-of R², Beta and Suppression in `cf_hull_smooth_global_lh_double`. `matlab-amd`
-makes those 29 exact, leaving the 94 hull coordinates.
+GIfTI of the 22 computed runs equals MATLAB's. With production reverse-correlation
+hulls adopting MATLAB's symmetric pixel grid, stored Delaunay boundary centroid
+and `convexHull` area (`delaunay_convex_hull_area`), both `rc_hull_lh_double`
+and `rc_custom_hrf_lh_double` are now exact on AMD (`current` and `matlab-amd`)
+and on Intel (`matlab-intel`), leaving only 5 differing maps under `current` on
+AMD (41 raw double values: 12 CF hull `y0` values across `cf_hull_lh_double` (7)
+and `cf_hull_smooth_global_lh_double` (5), plus 29 values of R², Beta and
+Suppression in `cf_hull_smooth_global_lh_double`). `matlab-amd` makes those 29
+exact, leaving only the 12 CF hull `y0` values (2 differing maps).
 
 How these were checked: `run_web_matrix.mjs`, `compare_web_cli.py` and
 `web_cli_outcome.py check` for the default (as CI runs them);
@@ -118,69 +122,67 @@ hull-area-1 (2 of 2) budgets are spent.
 
 | Limit | `current` (default) | `matlab-amd` | `matlab-intel` |
 | --- | --- | --- | --- |
-| Four double hull runs | Differ on AMD: 94 hull values (at most 36 ULP) and 29 global-regression values (at most 147 ULP) | Differ on AMD: the 94 hull values | Differ on Intel: the same 94 hull values |
-| Whole-cortex global-signal sum | 15 of 2,000 values exact (AMD) | 15 of 2,000 values exact (AMD) | 8 of 1,000 double values exact (Intel, max rel err 2.77e-13); single refused |
+| Two double CF hull runs | Differ on AMD: 12 CF hull `y0` values and 29 global-regression values (at most 147 ULP); both RC hull runs are exact | Differ on AMD: the 12 CF hull `y0` values | Differ on Intel: the same 12 CF hull `y0` values; both RC hull runs are exact |
+| Whole-cortex global-signal sum | 2,000 of 2,000 values exact (AMD, double and single) | 2,000 of 2,000 values exact (AMD, double and single) | 1,000 of 1,000 double values exact (Intel, 0.0 rel err); single refused |
 | Single RC 2D and single CF Gaussian fits | Refused | Refused | Refused |
 | Other single analyses | Run | Run | Refused |
 | CSS with `Css_Convention: "nonnegative"` | Runs | Runs | Refused |
 | Fewer than two volumes | Runs | Runs | Refused |
 | Norms at rounding ties | AMD norm order, which matches the recorded AMD norms | AMD norm order, as `current` | Correctly rounded norm: two recorded one-ULP misses |
-| Small-shape `gampdf`, zero signs, single `sin`, `cos`, `exp` | Kernels independent of the reference | Same as `current` | Same as `current` |
+| Small-shape `gampdf`, zero signs, single `sin`, `cos`, `exp` | Small-shape `gampdf` (29,376/29,376) and negative-base power zero signs (0/27,552 diffs) match MATLAB; single `sin`, `cos`, `exp` remain open | Same as `current` | Same as `current` |
 
 ### 1. Hull geometry and full-pipeline last bits (#732; historical #729)
 
-**The four double hull runs.** `rc_hull_lh_double`,
-`rc_custom_hrf_lh_double`, `cf_hull_lh_double` and
-`cf_hull_smooth_global_lh_double`.
+**The two remaining double CF hull runs.** `cf_hull_lh_double` and
+`cf_hull_smooth_global_lh_double` (`rc_hull_lh_double` and
+`rc_custom_hrf_lh_double` are now bit-exact on AMD under `current`/`matlab-amd`
+and on Intel under `matlab-intel`).
 
-- Evidence: the matrix above. After #902 (`HullOrder::Anchored`), the same 94
-  raw values differ under `current` and `matlab-amd` on the AMD host and under
-  `matlab-intel` on the Intel host: x0 18, y0 12 and Fwhm 12 values (`rc_hull`);
-  x0 16, y0 9 and Fwhm 15 (`rc_custom_hrf`); y0 7 (`cf_hull`, down from 16);
-  y0 5 (`cf_hull_smooth_global`, down from 12). The largest is 36 ULP (4.6e-15
-  relative). Under `current` the AMD comparison also differs in
-  `cf_hull_smooth_global_lh_double`'s R² (8 values, up to 147 ULP, 2.2e-14
-  relative), Beta (8, up to 61 ULP) and Suppression (13, up to 28 ULP).
-  That is the default's double global regression, not geometry; `matlab-amd`
-  removes it. The 147 ULP named in #897 is this R² value.
+- Evidence: the matrix above. With `delaunay_convex_hull_area` (matching all
+  424 point sets and 424 corner hulls in round `hull-area-1` on both AMD and
+  Intel, gated by `cli_rc_hulls.rs`) and MATLAB's symmetric pixel grid and
+  stored Delaunay boundary centroid enabled in production RC hulls, all 82 raw
+  double differences in `rc_hull_lh_double` and `rc_custom_hrf_lh_double` are
+  resolved (0/42 `Fwhm` diffs in `cli_rc_hulls.rs`, production RC hulls bit-exact
+  in `revcor_reference.rs`). Only 12 CF hull `y0` values remain across
+  `cf_hull_lh_double` (7) and `cf_hull_smooth_global_lh_double` (5) under
+  `current`, `matlab-amd`, and `matlab-intel`. Under `current` the AMD
+  comparison also differs in `cf_hull_smooth_global_lh_double`'s R² (8 values,
+  up to 147 ULP, 2.2e-14 relative), Beta (8, up to 61 ULP) and Suppression (13,
+  up to 28 ULP). That is the default's double global regression, not geometry;
+  `matlab-amd` removes it. The 147 ULP named in #897 is this R² value.
 - Product: these runs complete and differ by those amounts. Their float32
   GIfTIs equal MATLAB's. Production uses `HullOrder::Anchored` for CF hulls
-  and keeps the earlier RC hull pixel grid.
-- Accounting: the 94 values under `matlab-intel` and the 94 under the AMD
+  and MATLAB's symmetric pixel grid, stored Delaunay boundary centroid and
+  `convexHull` area for RC hulls.
+- Accounting: the 12 values under `matlab-intel` and the 12 under the AMD
   references are the same positions measured against two recordings. Count
-  them per reference and host, never as 188 cases, and never as additions to
+  them per reference and host, never as 24 cases, and never as additions to
   the default map counts.
-- To move it: identify MATLAB's hull start and cleanup order, `convexHull`'s
-  area arithmetic and its ring decomposition of self-intersecting and
+- To move it: identify MATLAB's ring decomposition of self-intersecting and
   near-coincident clouds
   ([hull area, centroid and vertex order](matlab/README.md#hull-area-centroid-and-vertex-order-732)).
-  The stored-order diagnostic and the experimental Clipper model each lose
-  values the shipped evaluation matches, so neither is an approved replacement.
-  [cleanup-order-1](matlab/cleanup-order-1/result.md) ended undecided (STOP on
-  `MATLAB:polyshape:repairedBySimplify`); no prediction was adopted.
+  The stored-order diagnostic for CF hulls and the experimental Clipper model
+  each lose values the shipped evaluation matches, so neither is an approved
+  replacement. [cleanup-order-1](matlab/cleanup-order-1/result.md) ended
+  undecided (STOP on `MATLAB:polyshape:repairedBySimplify`); no prediction was
+  adopted.
 
 **The whole-cortex global signal.**
 
 - Evidence: `constants_gemv.rs` (run 43882331042) pins the port's `nanmean`
-  over every vertex across explicit arithmetic references: on the AMD EPYC 9V74
-  host, both `current` and `matlab-amd` match 15 of 2,000 MATLAB values (max
-  relative error `2.71e-13` double, `9.87e-5` single; `matlab-intel` double
-  matches 0 of 1,000 against AMD with max relative error `0.314` because Intel
-  detrends differently). On the Intel Xeon 6975P-C (`AVX512_E1`) host, `current`
-  and `matlab-amd` match 0 of 2,000 (max relative error `0.239`), whereas
-  `matlab-intel` double matches all 70,500 recorded double `courses` and 282
-  `noiseCeiling` values (the 282 sampled vertices across the four vertex counts)
-  bit for bit and matches 8 of 1,000 aggregate global-signal values with max
-  relative error `2.77e-13` (single is refused). That aggregate residual matches
-  the AMD summation-order scale (`2.71e-13`); because the recording stores
-  individual courses for the 282 sampled vertices rather than all 134,260
-  vertices, full per-vertex agreement across every unrecorded vertex is not
-  separately established by this replay.
+  over every vertex (1,024-column sequential chunking in `VolumeMean`, with
+  float32 division for single precision) across explicit arithmetic references:
+  on the AMD EPYC 9V74 host, both `current` and `matlab-amd` match 2,000 of
+  2,000 MATLAB values bit for bit (1,000 double and 1,000 single, up from 15 of
+  2,000). On the Intel Xeon 6975P-C (`AVX512_E1`) host, `matlab-intel` double
+  matches all 70,500 recorded double `courses`, all 282 `noiseCeiling` values,
+  and all 1,000 of 1,000 aggregate global-signal values bit for bit (0.0 max
+  relative error, up from 8 of 1,000; single is refused).
 - Product: runs. Connective fields with global-signal correction regress on
-  this signal under every reference. The sum itself does not depend on the
-  reference; the courses it sums do (`matlab-intel` detrends with the Intel
-  kernels).
-- To move it: identify MATLAB's across-vertex `nanmean` summation order.
+  this signal under every reference. The sum itself uses MATLAB's 1,024-column
+  chunked reduction; the courses it sums depend on the reference (`matlab-intel`
+  detrends with the Intel kernels).
 
 ### 2. Single-precision and Intel paths (#731; historical #729)
 
@@ -245,24 +247,21 @@ matlab-intel arithmetic requires at least two volumes".
 - To move it: MKL's `dnrm2` rule near midpoints, which needs a recording that
   probes ties.
 
-**Small-shape `gampdf` and zero signs.**
+**Small-shape `gampdf` and zero signs (resolved on the pinned recordings).**
 
 - Evidence: every recorded density with shape of at least 1 equals MATLAB's
-  (9,760 in `matlab_numerics2.rs`). Below 1 the port keeps the closed form with
-  `lgamma`; the frozen Loader candidate reproduced 23,941 of 29,376 held-out
-  densities and was rejected
-  ([constants-gamma-gemv-predictions.md](matlab/constants-gamma-gemv-predictions.md)).
-  In negative-base powers the sign of a zero part differs in 2,440 of 27,552
-  recorded parts (`matlab_numerics.rs`); the matrix's CSS runs are exact,
-  zero signs included.
-- Product: runs, the same in every reference. No recorded HRF has a shape below
-  1, so no user-facing failure is shown; a custom or fitted HRF with such a
-  shape would use the closed form. Measured against MATLAB's recorded
-  densities it differs by 59 ULP at shape 0.3, scale 1, x = 29.875 and by
-  1,356 ULP at shape 0.95, scale 1, x = 584. These are examples, not a bound.
-  The effect on a fitted HRF's results is not measured.
-- To move it: identify MATLAB's small-shape `gampdf` and its zero-sign rule on
-  held-out recordings.
+  (9,760 in `matlab_numerics2.rs`). Below 1 (`0 < a < 1`), production evaluates
+  the shifted Loader recurrence `(poisson_raw(a_rt, z) * exp(log(a_rt) - log(z))) / b`
+  with `a_rt = (a - 1) + 1` and MATLAB's `z < k * f64::MIN_POSITIVE` direct
+  log-space branch inside `poisson_raw`, matching all 29,376 positive and 108
+  edge held-out densities bit for bit on both AMD and Intel hosts
+  (`held_out_gamma.rs`, run 43882331042; up from 2,054 of 29,376). In
+  negative-base powers (`matlab_numerics.rs`), evaluating the whole-exponent
+  factor in real arithmetic before complex multiplication reproduces every
+  recorded value and zero sign (0 of 27,552 differing zero signs, down from
+  2,440).
+- Product: runs identically across references; extreme tiny shapes where
+  `(a - 1) + 1 <= 0` fall back to the closed form.
 
 **Single elementary functions and template coordinates.** The single `sin`
 and `cos` candidates differ from MATLAB on 36,350 and 32,406 of 2,257,723,138
@@ -336,7 +335,7 @@ and [Open numerical limits](#open-numerical-limits).
 | --- | --- | --- | --- |
 | Remove both original polygon exclusions and pass all 253 cases | `matlab_reference.rs` asserts all 253 polygons with no named skips; polygon_191 and polygon_193 pass | Met | Broader boundary/cloud coverage is separate below |
 | Independently recorded boundary sweeps and broader geometry coverage | Shipped model retains 93 exceptions among the 26,073 original-family polygons and further supplementary mismatches. The experimental, unshipped Clipper model retains 44 original, 178 held-out and 246 causal exceptions, including four regressions | **Open** | Establish a general correction without losing accepted cases. `KeepCollinearPoints` is a separate MATLAB configuration, not an observed internal stage of default `polyshape`. Round 7 (#855) rejected merging at single-vertex contacts around a void (H_M, H_M1) on 592 pre-registered cases on two AMD hosts; the 932 and 1607 holes remain unexplained |
-| Exact connectivity and selected regions; justified per-value tolerances | `matlab_geometry.rs`, `geometry_reference.rs`. Production (`HullOrder::Anchored`) takes MATLAB's stored order for CF hulls whose first point starts the hull, in general position with a hull of input points, and the previous evaluation (`HullOrder::Listed`) elsewhere, because the full stored order, exact on far more values, loses some the previous evaluation matched: over both hosts 2,578 polygon-recording values, 12 template CF values (3 per precision and host) and one RC `Fwhm`. The anchored default loses none of them and gains, per host, 16 matrix `y0` values, 26 template values per precision, 141 revcor CF values and 77,481 polygon values; `polyshape_arithmetic.rs`, `matlab_geometry.rs` and `revcor_reference.rs` hold it to every value the previous evaluation gives exactly (README, "Anchored connective-field hulls"). The full stored order is gated as diagnostic evidence. `polyshape_arithmetic.rs` gives every recorded hull of the four polygon recordings MATLAB's bits from MATLAB's stored vertices (87,298 per host). `matlab_geometry.rs` requires MATLAB's bits for the 15,840 original hulls it lists in MATLAB's order, with 948 in another order bounded and 79 other-vertex and 4 empty hulls among the 93 snapping clouds. RC hulls are bit for bit from MATLAB's profiles (revcor replay) and courses (`cli_rc_hulls.rs`) but for 15 `Fwhm` values. Round hull-area-1 supports MATLAB's grid and `K` (`hull_area_report.py check`) | Partial | As above; the stored order where the first point does not start the hull awaits MATLAB's ring decomposition of self-intersecting clouds; `convexHull`'s area, unidentified after round hull-area-1 and later direct tests |
+| Exact connectivity and selected regions; justified per-value tolerances | `matlab_geometry.rs`, `geometry_reference.rs`. Production (`HullOrder::Anchored`) takes MATLAB's stored order for CF hulls whose first point starts the hull, in general position with a hull of input points, and the previous evaluation (`HullOrder::Listed`) elsewhere for CF hulls; for reverse-correlation hulls, production adopts MATLAB's symmetric pixel grid, stored Delaunay boundary centroid (`Hull::of_delaunay_boundary`) and `convexHull` area (`delaunay_convex_hull_area`). The anchored default loses no previously exact CF value and gains, per host, 16 matrix `y0` values, 26 template values per precision, 141 revcor CF values and 77,481 polygon values; `polyshape_arithmetic.rs`, `matlab_geometry.rs` and `revcor_reference.rs` hold it to every value the previous evaluation gives exactly (README, "Anchored connective-field hulls"). The full stored order for CF hulls is gated as diagnostic evidence. `polyshape_arithmetic.rs` gives every recorded hull of the four polygon recordings MATLAB's bits from MATLAB's stored vertices (87,298 per host). `matlab_geometry.rs` requires MATLAB's bits for the 15,840 original hulls it lists in MATLAB's order, with 948 in another order bounded and 79 other-vertex and 4 empty hulls among the 93 snapping clouds. RC hulls are bit for bit from MATLAB's profiles (`revcor_reference.rs`) and courses (`cli_rc_hulls.rs`, 0 of 42 `Fwhm` differences). Round hull-area-1 matches MATLAB's grid, `K` (`hull_area_report.py check`), and all 424 `AV` and 424 `cornersArea` values on both AMD and Intel (`cli_rc_hulls.rs`) | Partial | As above; the stored order for CF hulls where the first point does not start the hull awaits MATLAB's ring decomposition of self-intersecting clouds |
 | Cocircular and degenerate cases with MATLAB behaviour | Probe and causal recordings | Partial | As above |
 | Full CF hull, summary and Gaussian checks on real templates | `production_template_reader_equals_matlabs_template`; CF hull/summary exact on AMD. Double CF hull values from MATLAB's profiles stay within 1e-12 in production (the previous hull). The stored-order diagnostic gives them bit for bit on both hosts (revcor matrix, 504 per row) and on the real templates but for 15 listed values per host (`TEMPLATE_HULL_START`); 3 of those per host are exact under the previous hull | Partial | Single CF Gaussian is publicly refused (#729); double CF Gaussian runs and is exact on the CLI matrix. MATLAB's ring decomposition of self-intersecting clusters; the stored order's adoption in production |
 | Provenance and hashes; missing cases fail CI | Pinned probe/causal recordings with repeats | Met | — |
@@ -370,21 +369,21 @@ holds the web engine against the pinned source recording (run 42928350417), map
 by map, in both precisions. This is interim evidence against **source** MATLAB
 and does not establish compiled-image parity. The comparison applies no
 tolerance. CI holds the committed module's default (`current`) to the outcome
-frozen in `matlab/web-cli-outcome.json` against the recording's AMD host: since
-#874, 18 of 24 runs and 157 of 168 maps are exact. The other references are in
-[Current state after #895](#current-state-after-895). What still differs under
-the default (matlab/README "Double detrend and z-score" lists the causes found
-so far):
+frozen in `matlab/web-cli-outcome.json` against the recording's AMD host: 20 of
+24 runs and 163 of 168 maps are exact (up from 18 and 157 after #874). The
+other references are in [Current state after #895](#current-state-after-895).
+What still differs under the default (matlab/README "Double detrend and z-score"
+lists the causes found so far):
 
 | Finding | Scope | Issue |
 | --- | --- | --- |
-| Double convex-hull reverse correlation: x0, y0 and Fwhm differ in `Srf.Data` at 9 to 18 vertices per map, by at most 36 ULP (production keeps the previous pixel grid and hull); the float32 GIfTIs are exact | `rc_hull_lh_double`, `rc_custom_hrf_lh_double` | #732 |
 | Double CF hull: y0 differs in `Srf.Data` at 7 and 5 vertices (centroids, down from 16 and 12 after #902); the float32 GIfTIs are exact | `cf_hull_lh_double`, `cf_hull_smooth_global_lh_double` | #732 |
 | Double global regression by normal equations (the default only): R² (up to 147 ULP), Beta and Suppression of the smoothed, globally corrected CF run at 8 to 13 vertices; `matlab-amd` makes them exact | `cf_hull_smooth_global_lh_double` | #897 |
 | Public refusals: single RC Gaussian, single CF Gaussian | 2 runs | #729 |
 
-On the Intel host no run is exact and 57 of 168 maps are by default (matlab/README
-"Double detrend and z-score"); under `matlab-intel` 8 of its 12 double runs are. Of the findings in #866's first report, double
+On the Intel host no run is exact and 63 of 168 maps are by default (matlab/README
+"Double detrend and z-score"); under `matlab-intel` 10 of its 12 double runs
+(90 of 92 double maps) are exact. Of the findings in #866's first report, double
 detrend and z-score now equal MATLAB's on the AMD host in every preprocessed
 course (0.6.20261116), and these are exact in the frozen outcome: SamSrfAnalysis
 CSS with its complex `Srf.Data` (#873), the single forward pRF's Beta and

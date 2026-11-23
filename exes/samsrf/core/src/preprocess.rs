@@ -100,11 +100,17 @@ impl NanSum {
     }
 }
 
+/// MATLAB's `sum(X, 2, 'omitnan')` chunks strided dim-2 reductions into contiguous
+/// 1024-column blocks summed sequentially, then accumulates each block sum into `total`.
+const NANMEAN_CHUNK: usize = 1024;
+
 /// `nanmean(Data, 2)` built one vertex at a time. Its counts are u32 because a hemisphere
 /// has more vertices than `NanSum`'s u16 run counts hold.
 #[derive(Debug)]
 struct VolumeMean {
-    sum: Vec<f64>,
+    total: Vec<f64>,
+    chunk: Vec<f64>,
+    chunk_len: usize,
     count: Vec<u32>,
     precision: Precision,
 }
@@ -112,29 +118,49 @@ struct VolumeMean {
 impl VolumeMean {
     fn new(volumes: usize, precision: Precision) -> Self {
         Self {
-            sum: vec![0.0; volumes],
+            total: vec![0.0; volumes],
+            chunk: vec![0.0; volumes],
+            chunk_len: 0,
             count: vec![0; volumes],
             precision,
         }
     }
 
-    /// Adds one vertex's course. Single data sum in single, vertex by vertex, as
-    /// MATLAB's `nanmean(Srf.Data, 2)` does.
+    fn flush_chunk(&mut self) {
+        if self.chunk_len == 0 {
+            return;
+        }
+        for (total, chunk) in self.total.iter_mut().zip(&mut self.chunk) {
+            *total = self.precision.round(*total + *chunk);
+            *chunk = 0.0;
+        }
+        self.chunk_len = 0;
+    }
+
+    /// Adds one vertex's course in MATLAB's 1024-column sequential chunked order.
     fn add(&mut self, course: &[f64]) {
-        for ((sum, count), &value) in self.sum.iter_mut().zip(&mut self.count).zip(course) {
+        for ((chunk, count), &value) in self.chunk.iter_mut().zip(&mut self.count).zip(course) {
             if !value.is_nan() {
-                *sum = self.precision.round(*sum + self.precision.round(value));
+                *chunk = self.precision.round(*chunk + self.precision.round(value));
                 *count += 1;
             }
         }
+        self.chunk_len += 1;
+        if self.chunk_len == NANMEAN_CHUNK {
+            self.flush_chunk();
+        }
     }
 
-    fn mean(self) -> Vec<f64> {
+    fn mean(mut self) -> Vec<f64> {
+        self.flush_chunk();
         let precision = self.precision;
-        self.sum
+        self.total
             .iter()
             .zip(&self.count)
-            .map(|(sum, count)| precision.round(sum / f64::from(*count)))
+            .map(|(&sum, &count)| match precision {
+                Precision::Double => sum / f64::from(count),
+                Precision::Single => f64::from((sum as f32) / (count as f32)),
+            })
             .collect()
     }
 }
@@ -1784,5 +1810,33 @@ mod tests {
             remove_noise(&mut data, &[7.0; 3], 1),
             Err(Error::Shape(_))
         ));
+    }
+
+    #[test]
+    fn volume_mean_chunks_at_1024_columns_and_uses_single_division() {
+        // Put 2^53 in chunk 0 and 1.0 in chunk 1: a flat left-to-right sum drops
+        // the 1.0 in f64, whereas MATLAB's 1024-column chunked reduction preserves
+        // the chunk 1 subtotal (2.0) when added into the total.
+        let big = 2f64.powi(53);
+        let mut double_mean = VolumeMean::new(1, Precision::Double);
+        double_mean.add(&[big]);
+        for _ in 1..NANMEAN_CHUNK {
+            double_mean.add(&[0.0]);
+        }
+        double_mean.add(&[1.0]);
+        double_mean.add(&[1.0]);
+        let expected = (big + 2.0) / f64::from((NANMEAN_CHUNK + 2) as u32);
+        assert_eq!(double_mean.mean()[0].to_bits(), expected.to_bits());
+
+        // Single precision divides sum_f32 / count_f32 in float32.
+        let mut single_mean = VolumeMean::new(1, Precision::Single);
+        let a = 1.0_f32 / 3.0_f32;
+        single_mean.add(&[f64::from(a)]);
+        single_mean.add(&[f64::NAN]);
+        single_mean.add(&[f64::from(a)]);
+        single_mean.add(&[f64::from(a)]);
+        let sum_f32 = (a + a) + a;
+        let expected_single = f64::from(sum_f32 / 3.0_f32);
+        assert_eq!(single_mean.mean()[0].to_bits(), expected_single.to_bits());
     }
 }

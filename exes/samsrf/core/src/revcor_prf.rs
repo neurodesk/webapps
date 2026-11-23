@@ -12,7 +12,7 @@
 use crate::apertures::Apertures;
 use crate::error::{Error, Result};
 use crate::expr::Value;
-use crate::geometry::{Hull, HullOrder, ListedHull};
+use crate::geometry::{delaunay_convex_hull_centroid_and_area, HullOrder, ListedHull};
 use crate::hrf::{self, ResolvedHrf};
 use crate::model::{FineFit, RevCorPrfModel};
 use crate::optim::{self, FminsearchOptions};
@@ -176,14 +176,21 @@ impl Prepared {
         let max = crate::fit_prf::nan_max(&rmap);
         let threshold = model.data_precision.round(max * model.convex_hull_threshold);
         let points: Vec<[f64; 2]> = (0..self.pixels).filter(|&p| rmap[p] > threshold).map(|p| [self.xc[p], self.yc[p]]).collect();
-        let Some(listed) = ListedHull::of(&points) else {
-            return vec![0.0; 5];
+        let ([cx, cy], area) = match self.hull_order {
+            HullOrder::Listed => {
+                let Some(listed) = ListedHull::of(&points) else {
+                    return vec![0.0; 5];
+                };
+                (listed.centroid(), listed.area())
+            }
+            HullOrder::Anchored | HullOrder::Stored => {
+                let Some((centroid, cha)) = delaunay_convex_hull_centroid_and_area(&points) else {
+                    return vec![0.0; 5];
+                };
+                (centroid, cha)
+            }
         };
-        let [cx, cy] = match self.hull_order {
-            HullOrder::Anchored | HullOrder::Listed => listed.centroid(),
-            HullOrder::Stored => Hull::of_delaunay_boundary(&points).map_or([f64::NAN; 2], |hull| hull.centroid()),
-        };
-        vec![raw[0], cx, cy, listed.area().sqrt() / (2.0 * (2.0 * 2f64.ln()).sqrt()), raw[4]]
+        vec![raw[0], cx, cy, area.sqrt() / (2.0 * (2.0 * 2f64.ln()).sqrt()), raw[4]]
     }
 
     /// `samsrf_revcorprf_loop` for one vertex: NaN rows below `R2_Threshold`, otherwise
@@ -312,14 +319,13 @@ fn nan_min(values: &[f64]) -> f64 {
 /// `(n - 1) * (half / (n - 1))` rounds away from `half`.
 /// `xc(:)` and `yc(:)` of `meshgrid(linspace(-a, a, cols), linspace(-a, a, rows))`
 /// with `yc` flipped, as `samsrf_revcor_prf` builds them. Every grid MATLAB saved
-/// is `symmetric_linspace`. The convex-hull analysis keeps the previous
-/// `listed_linspace` unless `HullOrder::Stored` is asked for: with MATLAB's grid its `Fwhm`
-/// loses a recorded value the previous grid matched, because `convexHull`'s area
-/// is not identified (`packages/samsrf/validation/matlab/README.md`, "Hull area,
-/// centroid and vertex order").
+/// is `symmetric_linspace`, which `Anchored` and `Stored` now use for all RC
+/// analyses (including convex-hull RC, whose area is `delaunay_convex_hull_area`).
+/// Only the historical `HullOrder::Listed` mode keeps `listed_linspace` for the
+/// convex-hull analysis.
 fn pixel_grid(model: &RevCorPrfModel, rows: usize, cols: usize, order: HullOrder) -> (Vec<f64>, Vec<f64>) {
     let a = model.scaling_factor;
-    let line = |n: usize| if model.prf_function.is_none() && order != HullOrder::Stored { listed_linspace(-a, a, n) } else { symmetric_linspace(a, n) };
+    let line = |n: usize| if model.prf_function.is_none() && order == HullOrder::Listed { listed_linspace(-a, a, n) } else { symmetric_linspace(a, n) };
     let (xs, ys) = (line(cols), line(rows));
     (0..rows * cols).map(|p| (xs[p / rows], ys[rows - 1 - p % rows])).unzip()
 }
@@ -407,6 +413,32 @@ mod tests {
         assert_eq!(row[3], 2.0);
         let hull = prepared.convex_hull(&row, &profile);
         assert_eq!(hull, vec![0.0; 5], "one pixel spans no area, so SamSrf zeroes the column");
+
+        // Tiny scaling factor (2^-538): both a 2x2 square and a 3x3 trapezoid have
+        // area rounding to 2^-1074 = f64::from_bits(1), which Anchored and Stored
+        // must preserve without zeroing R^2, Fwhm or Beta.
+        let mut tiny_model = model();
+        tiny_model.scaling_factor = 2f64.powi(-538);
+        let tiny_y = [1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0];
+        for order in [HullOrder::Anchored, HullOrder::Stored, HullOrder::Listed] {
+            let tiny = Prepared::new(&tiny_model, &apertures(), &ResolvedHrf::None, 8).unwrap().with_hull_order(order);
+            let (tiny_row, tiny_profile) = tiny.reverse_correlate(&tiny_y);
+            let tiny_hull = tiny.convex_hull(&tiny_row, &tiny_profile);
+            assert!(tiny_hull[0] > 0.0 && tiny_hull[3] > 0.0 && tiny_hull[4] > 0.0, "{order:?}: tiny hull zeroed {tiny_hull:?}");
+        }
+        // 3x3 grid selecting [-h, h], [-h, -h], [h, h], [h, 0] (pixels 0, 2, 6, 7).
+        let frames3: Vec<Frame> = (0..9)
+            .map(|p| Frame { indices: vec![p], values: vec![1.0] })
+            .chain(std::iter::repeat_n(Frame { indices: vec![], values: vec![] }, 3))
+            .collect();
+        let aps3 = Apertures { width: 3, height: 3, frames: frames3, xy: vec![[0.0, 0.0]; 9], conditions: None };
+        let y3 = [1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0];
+        for order in [HullOrder::Anchored, HullOrder::Stored, HullOrder::Listed] {
+            let tiny3 = Prepared::new(&tiny_model, &aps3, &ResolvedHrf::None, 12).unwrap().with_hull_order(order);
+            let (row3, profile3) = tiny3.reverse_correlate(&y3);
+            let hull3 = tiny3.convex_hull(&row3, &profile3);
+            assert!(hull3[0] > 0.0 && hull3[3] > 0.0 && hull3[4] > 0.0, "{order:?}: 3x3 tiny trapezoid zeroed {hull3:?}");
+        }
     }
 
     #[test]

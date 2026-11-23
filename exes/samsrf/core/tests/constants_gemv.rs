@@ -644,9 +644,10 @@ fn require_amd_outcome(host: &str, tallies: &BTreeMap<String, [usize; 2]>) {
     assert_eq!(count("direct detrend constant M1 port")[1] + count("direct detrend other M1 port")[1], 255_495);
     assert_eq!(count("pipeline courses M1 port"), [141_000, 141_000]);
     assert_eq!(count("pipeline noise ceiling M1 port"), [564, 564]);
-    // The across-vertex nanmean is not MATLAB's order (README: global signal).
-    assert_eq!(count("pipeline global signal M1 port"), [15, 2_000], "{host}: global signal");
-    assert_eq!(count("pipeline global signal matlab-amd"), [15, 2_000], "{host}: matlab-amd global signal");
+    // Across-vertex nanmean matches MATLAB's 1024-column sequential chunked order
+    // (and single-precision division for single data) at every double and single volume.
+    assert_eq!(count("pipeline global signal M1 port"), [2_000, 2_000], "{host}: global signal");
+    assert_eq!(count("pipeline global signal matlab-amd"), [2_000, 2_000], "{host}: matlab-amd global signal");
     assert_eq!(count("pipeline global signal matlab-intel double"), [0, 1_000], "{host}: matlab-intel global signal on AMD");
     // C: production's y' * A is MATLAB's on every fingerprint and random product;
     // no frozen alternative reproduces the remaining columns.
@@ -665,11 +666,11 @@ fn require_intel_outcome(host: &str, tallies: &BTreeMap<String, [usize; 2]>, glo
     assert_eq!(count("pipeline noise ceiling matlab-intel double"), [282, 282], "{host}: matlab-intel double noise ceiling");
     assert_eq!(count("pipeline global signal M1 port"), [0, 2_000], "{host}: current global signal on Intel");
     assert_eq!(count("pipeline global signal matlab-amd"), [0, 2_000], "{host}: matlab-amd global signal on Intel");
-    assert_eq!(count("pipeline global signal matlab-intel double"), [8, 1_000], "{host}: matlab-intel double global signal");
+    assert_eq!(count("pipeline global signal matlab-intel double"), [1_000, 1_000], "{host}: matlab-intel double global signal");
     for count_v in COUNTS {
         let key = format!("pipeline_V{count_v}_double_matlab_intel");
         let err = global_error.get(&key).copied().unwrap_or_else(|| panic!("{host}: missing {key}"));
-        assert!(err < 3e-13, "{host}: {key} max relative error {err:e}");
+        assert_eq!(err, 0.0, "{host}: {key} max relative error {err:e}");
     }
 }
 

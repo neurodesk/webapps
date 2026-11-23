@@ -2900,15 +2900,18 @@ the connective-field hulls where the port's rings cannot move its start
   (`hull-area-predictions.md`). On the SamSrfAnalysis matrix it gains the double
   RC Gaussian fits' `R^2`, `x0` and `y0` in 24 AMD and 23 Intel values at nine vertices, because
   the fits start at the peak pixel, and it loses none.
-- **Reverse correlation, `Prf_Function = 0`.** Production keeps the previous grid
-  and hull (`revcor_prf::pixel_grid`). The diagnostic takes MATLAB's grid and the
-  centroid of `polyshape(Dt.Points(K, :))`. Round hull-area-1 supports the port's
-  `K` on all 424 recorded sets. `Fwhm` stays the previous hull's area, because
-  `convexHull`'s area is not identified. From MATLAB's courses (`cli_rc_hulls.rs`)
-  the diagnostic gives the grid, the peak, and `x0` and `y0` bit for bit at all 42
-  AMD vertices, and `Fwhm` at 27. It loses one value the previous grid matched:
-  `rc_custom_hrf_lh_double` vertex 4's `Fwhm`, 2.883208896089259 against
-  2.8832088960892586, on both hosts. That loss keeps it out of production.
+- **Reverse correlation, `Prf_Function = 0`.** Production (`HullOrder::Anchored`)
+  now adopts MATLAB's symmetric pixel grid (`symmetric_linspace`), stored
+  Delaunay boundary centroid (`Hull::of_delaunay_boundary`), and `convexHull`
+  area (`delaunay_convex_hull_area`, using the bounding-box midpoint and
+  reverse clockwise non-FMA traversal of `K`). Round hull-area-1 matches
+  MATLAB's `K`, `AV` and `cornersArea` on all 424 recorded point sets on both
+  hosts (`cli_rc_hulls.rs`). From MATLAB's courses (`cli_rc_hulls.rs`),
+  production gives the grid, the peak, `x0`, `y0` and `Fwhm` bit for bit at all
+  42 AMD vertices (eliminating all 15 previously differing `Fwhm` values and
+  the vertex 4 loss that kept the stored grid out of production), making both
+  `rc_hull_lh_double` and `rc_custom_hrf_lh_double` bit-exact on AMD (`current`
+  and `matlab-amd`) and on Intel (`matlab-intel`).
 - **Connective fields, `Fit_pRF = 0`.** Production takes the stored order where
   the polygon's first point starts it and the previous hull, `ListedHull`,
   elsewhere ([anchored hulls](#anchored-connective-field-hulls)). The diagnostic's
@@ -3061,18 +3064,18 @@ points or keeps a hole touching its solid. There MATLAB's rings visit a vertex
 twice, so no splitting rule reproduces them. No rule found loses nothing, so
 nothing changed and no recording was spent on it.
 
-Still open for these hulls: `convexHull`'s area, MATLAB's ring decomposition of
-self-intersecting polygons, and so the stored order's adoption where the first
-point does not start the hull. Round hull-area-1 refuted every area candidate (see
-its results). Later direct tests on its recording, with no new recording, refuted
-more. MATLAB's area is not `polyshape`'s area of the same hull (171 of 424 sets).
-No origin for the cross products reproduces it: bounding-box centre, its variants,
-means, the first point, the hull's first vertex, the minimum corner and zero; the
-best is the box centre summed clockwise from `K(1)`, at 255 of 424. Neither do the
-strictly convex vertices alone, per-vertex forms (no summation order reproduces
-the 7-vertex set `blob_f016_reversed`), or fans from `K(1)` with any base vertex or
-fused multiply-add. MATLAB's `polyarea` on the same `K` is the left-to-right
-trapezoid sum up to 42 terms (414 of 424; all ten differences have 45 or more).
+Still open for CF hulls: MATLAB's ring decomposition of self-intersecting
+polygons, and so the stored order's adoption where the first point does not
+start the hull. (`convexHull`'s area `AV` is now identified as
+`geometry::delaunay_convex_hull_area` — bounding-box midpoint and reverse
+clockwise non-FMA edge cross-product summation over `K` — matching all 424
+recorded sets and 424 corner hulls on both hosts in `cli_rc_hulls.rs`.
+Historical note: round hull-area-1 had refuted its earlier candidate list,
+and later direct tests had checked clockwise box-centre cross products in
+forward order (255 of 424) before reverse traversal of the closed boundary
+reproduced all 424 of 424. MATLAB's `polyarea` on the same `K` is the
+left-to-right trapezoid sum up to 42 terms, 414 of 424; all ten differences
+have 45 or more.)
 
 To replay dispatch 1's historical discovery report, run
 `python3 hull_area_report.py discovery RECORDING DECISION_JSON --dispatch-1`

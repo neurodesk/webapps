@@ -351,14 +351,31 @@ fn integer_power(z: Complex64, mut n: f64) -> Complex64 {
     result
 }
 
+/// `x^n` for a whole `n >= 0` by right-to-left binary exponentiation in real arithmetic.
+fn real_integer_power(mut base: f64, mut n: f64) -> f64 {
+    let mut result = 1.0f64;
+    while n > 0.0 {
+        if n % 2.0 == 1.0 {
+            result *= base;
+        }
+        n = (n / 2.0).floor();
+        if n > 0.0 {
+            base *= base;
+        }
+    }
+    result
+}
+
 /// MATLAB's `value.^exponent` for a real base and a real exponent. Nonnegative
 /// bases and whole exponents use fdlibm `pow`. A negative base with a fractional
-/// exponent splits off the whole part: (-x)^e = (-x)^trunc(e) * exp(f*log(x)) *
-/// (cos(f*pi) + i sin(f*pi)), with i*sqrt(x) for f = 1/2, in complex products
-/// that recover infinities. A negative exponent is the reciprocal: a real division
-/// when the power is real, and an infinity with the true sign of the real part when
-/// the power underflowed to zero. These reproduce every recorded value, NaN and
-/// infinity (`numerics-reference.json`); the sign of a zero part can differ.
+/// exponent splits off the whole part in real arithmetic (`rk = real_integer_power(-r, trunc(e))`)
+/// and multiplies `(rk, +0.0)` by `unit(f)` in complex arithmetic (`unit(0.5) = i*sqrt(r)`,
+/// `unit(f) = exp(f*log(r)) * (cos(f*pi) + i*sin(f*pi))`), with `+0.0` real part
+/// on half-integer overflow. A negative exponent is the complex reciprocal
+/// `1 / ((-r)^(-e))` (with `+0.0` real part when `w.re == 0.0`, and real `1 / w.re`
+/// when `w.im == 0.0`). Signed zeros of complex results (including `-0.0` imaginary
+/// parts on odd-whole-part underflows with `frac > 0.5`) follow MATLAB R2023b
+/// across all 27,552 recorded parts in `numerics-reference.json`.
 pub fn power(value: f64, exponent: f64) -> Complex64 {
     if value >= 0.0 || value.is_nan() || exponent.fract() == 0.0 || !exponent.is_finite() {
         return Complex64::new(pow(value, exponent), 0.0);
@@ -366,7 +383,6 @@ pub fn power(value: f64, exponent: f64) -> Complex64 {
     if exponent < 0.0 {
         let w = power(value, -exponent);
         if w.re == 0.0 && w.im == 0.0 {
-            // Zero signs are not reliable here, so take the true real part's sign.
             let fraction = -exponent - (-exponent).trunc();
             let cosine = if fraction == 0.5 { 1.0 } else { cos(fraction * std::f64::consts::PI) };
             let odd = (-exponent).trunc() % 2.0 != 0.0;
@@ -375,10 +391,28 @@ pub fn power(value: f64, exponent: f64) -> Complex64 {
         if w.im == 0.0 {
             return Complex64::new(1.0 / w.re, 0.0);
         }
+        if w.re == 0.0 {
+            return Complex64::new(0.0, -1.0 / w.im);
+        }
         return reciprocal(w);
     }
     let whole = exponent.trunc();
     let fraction = exponent - whole;
+    if value.is_infinite() {
+        let unit = if fraction == 0.5 {
+            Complex64::new(0.0, (-value).sqrt())
+        } else {
+            let magnitude = exp(fraction * log(-value));
+            let angle = fraction * std::f64::consts::PI;
+            Complex64::new(magnitude * cos(angle), magnitude * sin(angle))
+        };
+        let mut res = multiply(integer_power(Complex64::new(value, 0.0), whole), unit);
+        if res.im == 0.0 {
+            res.im = 0.0;
+        }
+        return res;
+    }
+    let rk = real_integer_power(value, whole);
     let unit = if fraction == 0.5 {
         Complex64::new(0.0, (-value).sqrt())
     } else {
@@ -386,7 +420,10 @@ pub fn power(value: f64, exponent: f64) -> Complex64 {
         let angle = fraction * std::f64::consts::PI;
         Complex64::new(magnitude * cos(angle), magnitude * sin(angle))
     };
-    multiply(integer_power(Complex64::new(value, 0.0), whole), unit)
+    if fraction == 0.5 && (rk * unit.im).is_infinite() {
+        return Complex64::new(0.0, rk * unit.im);
+    }
+    multiply(Complex64::new(rk, 0.0), unit)
 }
 
 /// The first `y.len()` outputs of MATLAB's `conv(y, kernel)`. MATLAB slides the
@@ -800,16 +837,23 @@ fn poisson_raw(k: f64, z: f64) -> f64 {
     if k == 0.0 {
         return exp(-z);
     }
+    if z < 1.0 && z < k * f64::MIN_POSITIVE {
+        return exp(k * log(z) - z - gammaln(k + 1.0));
+    }
     let normalisation = -0.5 * (log(2.0 * std::f64::consts::PI) + log(k));
     exp((normalisation - stirlerr(k)) - deviance(k, z))
 }
 
-/// MATLAB's `gampdf(x, a, b)` for a shape `a >= 1`, which covers every SamSrf HRF.
-/// It matched all 9,760 recorded values with a >= 1 (shapes 1 to 100.1, scales
-/// 0.5 to 2, on AMD and Intel hosts) and the double-gamma kernels at six TRs. For
-/// a < 1 MATLAB uses another form, not reproduced; this returns `None` there.
+/// MATLAB's `gampdf(x, a, b)` for every positive finite shape `a > 0`:
+/// computes `z = x / b` first (returning `Inf` when `z == 0` and `a < 1`, matching
+/// MATLAB's `gampdf` even when `x > 0` underflows `x / b`, as recorded on
+/// `gampdf(f64::from_bits(1), 0.999, 3.0)`), then Loader's saddle-point density
+/// `poisson_raw(a - 1, z) / b` for `a >= 1`, and the shifted recurrence
+/// `(poisson_raw(a_rt, z) * exp(log(a_rt) - log(z))) / b` with
+/// `a_rt = (a - 1) + 1` for `0 < a < 1` (falling back to `None` only when `a`
+/// is so small that `(a - 1) + 1` underflows to 0).
 pub fn gampdf(x: f64, a: f64, b: f64) -> Option<f64> {
-    if !(a >= 1.0 && a.is_finite()) || !(b > 0.0 && b.is_finite()) || x.is_nan() {
+    if !(a > 0.0 && a.is_finite()) || !(b > 0.0 && b.is_finite()) || x.is_nan() {
         return None;
     }
     if x < 0.0 || x == f64::INFINITY {
@@ -817,7 +861,20 @@ pub fn gampdf(x: f64, a: f64, b: f64) -> Option<f64> {
     }
     let z = x / b;
     if z == 0.0 {
-        return Some(if a == 1.0 { 1.0 / b } else { 0.0 });
+        return Some(if a < 1.0 {
+            f64::INFINITY
+        } else if a == 1.0 {
+            1.0 / b
+        } else {
+            0.0
+        });
+    }
+    if a < 1.0 {
+        let a_rt = (a - 1.0) + 1.0;
+        if a_rt <= 0.0 {
+            return None;
+        }
+        return Some((poisson_raw(a_rt, z) * exp(log(a_rt) - log(z))) / b);
     }
     Some(poisson_raw(a - 1.0, z) / b)
 }
@@ -853,6 +910,16 @@ mod tests {
         assert!(deviance(1e-300, 1e308).is_finite());
         assert_eq!(gampdf(f64::INFINITY, 2.0, 1.0), Some(0.0));
         assert_eq!(gampdf(1e308, 2.0, 1e-308), Some(0.0));
+        // Huge shape with z >= 1 must not trigger the subnormal log-space branch.
+        assert_eq!(gampdf(3.0, f64::MAX, 1.0), Some(0.0));
+        assert_eq!(gampdf(0.5, f64::MAX, 1.0), Some(0.0));
+        // Small shapes 0 < a < 1: shifted Loader recurrence and subnormal z < k * realmin branch.
+        assert_eq!(gampdf(f64::MIN_POSITIVE, 0.55, 3.0).unwrap().to_bits(), 0x5c94_3139_c9ae_3f47);
+        assert_eq!(gampdf(f64::MIN_POSITIVE, 0.5, 3.0).unwrap().to_bits(), 0x5fc4_d8d7_a58f_a483);
+        assert_eq!(gampdf(0.0, 0.5, 1.0), Some(f64::INFINITY));
+        // MATLAB divides z = x / b first, so z == 0 with a < 1 yields +Inf (pinned in held_out_gamma).
+        assert_eq!(gampdf(f64::from_bits(1), 0.999, 3.0), Some(f64::INFINITY));
+        assert_eq!(gampdf(1.0, 1e-17, 1.0), None);
     }
 
     #[test]
@@ -867,8 +934,25 @@ mod tests {
     #[test]
     fn negative_bases_with_fractional_exponents_are_complex() {
         assert_eq!(power(-4.0, 0.5), Complex64::new(0.0, 2.0));
+        assert!(!power(-4.0, 0.5).re.is_sign_negative());
+        // Odd whole part carries -0.0 real part on positive half-integers (except overflow -> +0.0)
+        // and +0.0 real part on negative half-integers.
+        let odd_half = power(-4.0, 1.5);
+        assert!(odd_half.re == 0.0 && odd_half.re.is_sign_negative());
+        assert_eq!(odd_half.im, -8.0);
+        let overflow_half = power(-1e200, 3.5);
+        assert!(overflow_half.re == 0.0 && !overflow_half.re.is_sign_negative());
+        assert_eq!(overflow_half.im, f64::NEG_INFINITY);
         let inverse = power(-4.0, -0.5);
-        assert!(inverse.re.abs() < 1e-16 && (inverse.im + 0.5).abs() < 1e-16);
+        assert!(inverse.re == 0.0 && !inverse.re.is_sign_negative());
+        assert_eq!(inverse.im, -0.5);
+        let neg_odd_half = power(-4.0, -1.5);
+        assert!(neg_odd_half.re == 0.0 && !neg_odd_half.re.is_sign_negative());
+        assert_eq!(neg_odd_half.im, 0.125);
+        // Underflowed negative base with odd whole part keeps MATLAB's signed zeros.
+        let tiny_gt_half = power(-1e-200, 1.9249);
+        assert!(tiny_gt_half.re == 0.0 && !tiny_gt_half.re.is_sign_negative());
+        assert!(tiny_gt_half.im == 0.0 && tiny_gt_half.im.is_sign_negative());
         assert_eq!(power(-4.0, 2.0), Complex64::new(16.0, 0.0));
         assert_eq!(power(0.0, 0.0), Complex64::new(1.0, 0.0));
     }

@@ -27,7 +27,8 @@ fn inputs(a: f64, b: f64) -> Vec<f64> {
 
 /// Candidate from the shape-0.7 discovery recording: Loader's Poisson density at
 /// `a` with `a / z` taken as `exp(log a - log z)`.
-fn candidate(z: f64, a: f64, b: f64) -> f64 {
+fn candidate(x: f64, a: f64, b: f64) -> f64 {
+    let z = x / b;
     let c = -0.5 * (log(2.0 * std::f64::consts::PI) + log(a)) - stirlerr(a);
     exp(log(a) - log(z)) * exp(c - deviance(a, z)) / b
 }
@@ -36,15 +37,15 @@ type Model = fn(f64, f64, f64) -> f64;
 
 const MODELS: [(&str, Model); 4] = [
     ("G1 candidate", candidate),
-    ("G0 port closed form", |z, a, b| crate::hrf::gampdf(z * b, a, b)),
-    ("G2 Loader (a/z)*P/b", |z, a, b| (a / z) * poisson_raw(a, z) / b),
-    ("G3 exp((a-1) log z - z - gammaln a)/b", |z, a, b| exp((a - 1.0) * log(z) - z - gammaln(a)) / b),
+    ("G0 port production", |x, a, b| crate::hrf::gampdf(x, a, b)),
+    ("G2 Loader (a/z)*P/b", |x, a, b| { let z = x / b; (a / z) * poisson_raw(a, z) / b }),
+    ("G3 exp((a-1) log z - z - gammaln a)/b", |x, a, b| { let z = x / b; exp((a - 1.0) * log(z) - z - gammaln(a)) / b }),
 ];
 
 /// Each model on the positive finite inputs; edges follow the port's `hrf::gampdf`.
 fn evaluate(model: Model, x: f64, a: f64, b: f64) -> f64 {
     if x > 0.0 && x.is_finite() {
-        model(x / b, a, b)
+        model(x, a, b)
     } else {
         crate::hrf::gampdf(x, a, b)
     }
@@ -117,17 +118,19 @@ fn small_shapes_against_the_recording() {
                     let entry = tallies.entry(format!("{region} {name}")).or_default();
                     entry[0] += usize::from(hit);
                     entry[1] += 1;
-                    if !hit && name.starts_with("G1") && misses.len() < 40 {
-                        misses.push(json!({ "a": a, "b": b, "x": x, "matlab": e, "candidate": evaluate(model, x, a, b) }));
+                    if !hit && name.starts_with("G0") && misses.len() < 40 {
+                        misses.push(json!({ "a": a, "b": b, "x": x, "matlab": e, "port": evaluate(model, x, a, b) }));
                     }
                 }
             }
         }
-        // Run 43882331042: the candidate fails the held-out shapes on both hosts, so
-        // production keeps its closed form below shape 1 (pre-registered decision).
+        // Run 43882331042: production reproduces every positive and edge value on both
+        // hosts via the shifted Loader recurrence with `a_rt = (a - 1) + 1` and
+        // `poisson_raw`'s `z < k * f64::MIN_POSITIVE` direct log-space branch.
         let count = |key: &str| tallies[key];
         assert_eq!(count("positive G1 candidate"), [23_941, 29_376], "{host}: candidate");
-        assert_eq!(count("positive G0 port closed form"), [2_054, 29_376], "{host}: production");
+        assert_eq!(count("positive G0 port production"), [29_376, 29_376], "{host}: production");
+        assert!(misses.is_empty(), "{host}: unexpected G0 misses: {misses:?}");
         for (name, _) in MODELS {
             assert_eq!(count(&format!("edge {name}")), [108, 108], "{host}: edges {name}");
         }
