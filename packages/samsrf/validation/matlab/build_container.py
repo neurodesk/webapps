@@ -16,6 +16,7 @@ import sys
 from prepare import SOURCE, repairs, source_record
 
 FROM_LINE = re.compile(r'^\s*FROM\s+(?:--platform=\S+\s+)?(\S+)(?:\s+AS\s+(\S+))?\s*$', re.IGNORECASE)
+COPY_FROM_LINE = re.compile(r'^\s*COPY\s+.*--from=', re.IGNORECASE)
 RUNTIME_IMAGE = 'samsrf-reference-runtime:r2023b'
 APP_IMAGE = 'samsrf-reference:41ed1e96-r2023b'
 
@@ -50,13 +51,44 @@ def verify_source(source, spm):
     return {**source_record(cli=True), 'files': files}
 
 
+def sparse_cone_directories(source):
+    """Return the allowed sparse-checkout cone directories when core.sparseCheckout is enabled,
+    or None for a full checkout. Rejects non-cone sparse checkouts."""
+    probe = subprocess.run(
+        ['git', '-C', str(source), 'config', '--bool', 'core.sparseCheckout'],
+        capture_output=True, text=True, check=False)
+    if probe.returncode != 0 or probe.stdout.strip() != 'true':
+        return None
+    cone = subprocess.run(
+        ['git', '-C', str(source), 'config', '--bool', 'core.sparseCheckoutCone'],
+        capture_output=True, text=True, check=False)
+    if cone.returncode != 0 or cone.stdout.strip() != 'true':
+        raise ValueError(f'Sparse checkout in {source} must use cone mode')
+    listed = subprocess.check_output(['git', '-C', str(source), 'sparse-checkout', 'list'], text=True).splitlines()
+    return {entry.strip().strip('/') for entry in listed if entry.strip()}
+
+
+def in_sparse_cone(rel, cone_dirs):
+    parts = Path(rel).parts
+    if len(parts) <= 1:
+        return True
+    prefix = parts[0]
+    for depth in range(1, len(parts)):
+        candidate = '/'.join(parts[:depth])
+        if candidate in cone_dirs:
+            return True
+    return prefix in cone_dirs
+
+
 def tracked_present_files(source):
     """Return sorted relative POSIX paths of tracked, materialized files in a Git checkout.
 
     Excludes .git metadata, untracked files, and ignored files. Sparse-checkout
-    entries (skip-worktree 'S') are omitted and must not exist on disk.
+    entries (skip-worktree 'S') are omitted and must not exist on disk; when cone
+    sparse-checkout is enabled, materialized paths outside the cone are rejected too.
     """
     source = Path(source)
+    cone_dirs = sparse_cone_directories(source)
     raw = subprocess.check_output(['git', '-C', str(source), 'ls-files', '-v', '-z'])
     present = []
     for entry in raw.split(b'\0'):
@@ -75,6 +107,8 @@ def tracked_present_files(source):
             raise ValueError(f'Unexpected git index state {tag!r} for {rel}')
         if '.git' in Path(rel).parts:
             raise ValueError(f'Unexpected .git entry in tracked tree: {rel}')
+        if cone_dirs is not None and not in_sparse_cone(rel, cone_dirs):
+            raise ValueError(f'Sparse-excluded path unexpectedly materialized in checkout: {rel}')
         present.append(rel)
     return sorted(present)
 
@@ -114,28 +148,39 @@ def stage_clean_tree(source, destination):
 
 
 def parse_dockerfile_bases(dockerfile):
-    """Return every external FROM image reference declared in a generated Dockerfile.
+    """Parse generated Dockerfile FROM stages and resolve the final stage's external base image.
 
-    Requires the Dockerfile to exist and declare at least one external FROM base.
-    Multi-stage aliases defined earlier in the same Dockerfile are ignored as external bases.
+    Returns (external_bases, final_base). Fails closed on missing Dockerfiles, missing FROM,
+    FROM scratch, or COPY --from= instructions whose cross-stage provenance layer prefixes
+    cannot verify.
     """
     path = Path(dockerfile)
     if not path.is_file():
         raise ValueError(f'Missing generated Dockerfile: {path}')
-    stages = []
-    aliases = set()
+    external_bases = []
+    stage_to_base = {}
+    final_base = None
     for line in path.read_text().splitlines():
+        if COPY_FROM_LINE.match(line):
+            raise ValueError(f'Unsupported COPY --from= in generated Dockerfile {path}: {line.strip()}')
         match = FROM_LINE.match(line)
         if not match:
             continue
         ref, alias = match.group(1), match.group(2)
-        if ref.lower() not in aliases:
-            stages.append(ref)
+        if ref.lower() == 'scratch':
+            raise ValueError(f'Unsupported FROM scratch in generated Dockerfile: {path}')
+        if ref.lower() in stage_to_base:
+            resolved_base = stage_to_base[ref.lower()]
+        else:
+            resolved_base = ref
+            if ref not in external_bases:
+                external_bases.append(ref)
+        final_base = resolved_base
         if alias:
-            aliases.add(alias.lower())
-    if not stages:
+            stage_to_base[alias.lower()] = resolved_base
+    if final_base is None:
         raise ValueError(f'Generated Dockerfile declares no FROM base image: {path}')
-    return stages
+    return external_bases, final_base
 
 
 def inspect_docker_image(ref):
@@ -181,6 +226,7 @@ def record_base_images(output, runtime_image=RUNTIME_IMAGE, app_image=APP_IMAGE,
     output = Path(output)
     inspect = inspector or inspect_docker_image
     dockerfiles = {}
+    final_bases = {}
     dockerfile_sha256 = {}
     resolved = {}
 
@@ -191,16 +237,17 @@ def record_base_images(output, runtime_image=RUNTIME_IMAGE, app_image=APP_IMAGE,
 
     for label, relative in (('runtime', Path('runtime/Dockerfile')), ('container', Path('container/Dockerfile'))):
         path = output / relative
-        refs = parse_dockerfile_bases(path)
+        refs, final_base = parse_dockerfile_bases(path)
         dockerfiles[label] = refs
+        final_bases[label] = final_base
         dockerfile_sha256[label] = hashlib.sha256(path.read_bytes()).hexdigest()
         for ref in refs:
             lookup(ref)
 
     runtime_info = lookup(runtime_image)
     app_info = lookup(app_image)
-    runtime_base_ref = dockerfiles['runtime'][-1]
-    container_base_ref = dockerfiles['container'][-1]
+    runtime_base_ref = final_bases['runtime']
+    container_base_ref = final_bases['container']
     require_layer_prefix(runtime_base_ref, resolved[runtime_base_ref], runtime_image, runtime_info)
     if resolved[container_base_ref]['id'] != runtime_info['id']:
         raise ValueError(
@@ -210,6 +257,7 @@ def record_base_images(output, runtime_image=RUNTIME_IMAGE, app_image=APP_IMAGE,
 
     record = {
         'dockerfiles': dockerfiles,
+        'finalBases': final_bases,
         'dockerfileSha256': dockerfile_sha256,
         'resolved': resolved,
         'lineageVerified': True,

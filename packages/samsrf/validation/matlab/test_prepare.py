@@ -125,6 +125,13 @@ class RepairSets(unittest.TestCase):
             self.assertEqual(sorted(hashes), ['.gitignore', '@gifti/gifti.m', 'spm.m'])
             self.assertFalse((staged / 'local_debug.m').exists())
             self.assertFalse((staged / 'toolbox').exists())
+            # Restoring a cone-excluded tracked file with its committed bytes keeps git status
+            # clean and flips its ls-files tag from S to H, so cone enforcement must reject it.
+            (sparse / 'toolbox').mkdir()
+            (sparse / 'toolbox' / 'left_out.m').write_text('% excluded\n')
+            self.assertEqual(subprocess.check_output(['git', '-C', str(sparse), 'status', '--porcelain'], text=True), '')
+            with self.assertRaisesRegex(ValueError, 'Sparse-excluded path unexpectedly materialized'):
+                build_container.stage_clean_tree(sparse, base / 'staged-spm-leaked')
 
     def test_clean_stage_rejects_symlinks_in_source(self):
         root, source, _ = self.checkout()
@@ -179,6 +186,31 @@ class RepairSets(unittest.TestCase):
             (root / 'runtime' / 'Dockerfile').unlink()
             with self.assertRaisesRegex(ValueError, 'Missing generated Dockerfile'):
                 build_container.record_base_images(root, inspector=lambda ref: images[ref])
+
+            # Multi-stage Dockerfile resolving final FROM via an earlier stage alias must
+            # validate lineage against that earlier stage's external base, not a later unused base.
+            (root / 'runtime' / 'Dockerfile').write_text(
+                'FROM base1:r2023b AS s1\nFROM base2:r2023b AS s2\nFROM s1\n')
+            multistage = {
+                **images,
+                'base1:r2023b': {'id': 'sha256:b1', 'repoDigests': [], 'layers': ['sha256:a1']},
+                'base2:r2023b': {'id': 'sha256:b2', 'repoDigests': [], 'layers': ['sha256:l1', 'sha256:l2']},
+            }
+            with self.assertRaisesRegex(ValueError, 'Base image base1:r2023b .* not a prefix'):
+                build_container.record_base_images(root, inspector=lambda ref: multistage[ref])
+            multistage_ok = {
+                **multistage,
+                'samsrf-reference-runtime:r2023b': {'id': 'sha256:rt', 'repoDigests': [], 'layers': ['sha256:a1', 'sha256:rt1']},
+                'samsrf-reference:41ed1e96-r2023b': {'id': 'sha256:app', 'repoDigests': [], 'layers': ['sha256:a1', 'sha256:rt1', 'sha256:app1']},
+            }
+            ok = build_container.record_base_images(root, inspector=lambda ref: multistage_ok[ref])
+            self.assertEqual(ok['finalBases']['runtime'], 'base1:r2023b')
+
+            # COPY --from= cannot be verified by layer prefix alone and fails closed.
+            (root / 'runtime' / 'Dockerfile').write_text(
+                'FROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY --from=s1 /x /x\n')
+            with self.assertRaisesRegex(ValueError, 'Unsupported COPY --from='):
+                build_container.record_base_images(root, inspector=lambda ref: multistage[ref])
 
 
 if __name__ == '__main__':

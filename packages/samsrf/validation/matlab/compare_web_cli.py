@@ -166,17 +166,18 @@ def matlab_execution(root, plan, manifest, allow_unattested):
         recorded = read_json(inputs)
         if recorded.get('sha256') != manifest or recorded.get('unchanged') is not True:
             raise Inventory('the MATLAB execution ran on other inputs than the bundle manifest')
-        recorded_staged = recorded.get('staged')
-        if kind == 'source':
+        has_staged_key = 'staged' in recorded
+        if kind == 'source' or has_staged_key:
+            recorded_staged = recorded.get('staged')
             if not isinstance(recorded_staged, dict):
-                raise Inventory('source receipts/inputs.json must record per-run staged input hashes')
-        elif recorded_staged is not None and not isinstance(recorded_staged, dict):
-            raise Inventory('receipts/inputs.json staged field must be an object')
-        if recorded_staged is not None:
+                raise Inventory('receipts/inputs.json must record per-run staged input hashes as an object')
             expected_run_ids = {run['id'] for run in plan['runs']}
             if set(recorded_staged.keys()) != expected_run_ids:
                 raise Inventory(f'receipts/inputs.json staged runs do not match the plan: {sorted(set(recorded_staged.keys()) ^ expected_run_ids)}')
-        identity['inputs'] = 'attested by receipts/inputs.json'
+            identity['inputs'] = 'attested by receipts/inputs.json (bundle and staged inputs)'
+        else:
+            # Historical compiled-runtime receipts before staged-input attestation omit the 'staged' key.
+            identity['inputs'] = 'historical bundle-only attestation (receipts/inputs.json omits per-run staged hashes)'
     elif kind == 'compiled-runtime':
         raise Inventory('the compiled receipts have no inputs.json')
     elif allow_unattested:
@@ -199,22 +200,22 @@ def matlab_execution(root, plan, manifest, allow_unattested):
             raise Inventory(f'{run_id}: unknown MATLAB status {receipt.get("status")}')
         verify_staged_inputs(root / run_id, run, manifest,
                              None if recorded_staged is None else recorded_staged[run_id],
-                             receipt.get('stagedInputs'), require_receipt=(kind == 'source' and recorded_staged is not None))
+                             receipt.get('stagedInputs'), require_staged=(recorded_staged is not None))
         records[run_id] = receipt
     return identity, records
 
 
-def verify_staged_inputs(run_dir, run, manifest, attested_staged, receipt_staged, require_receipt=False):
+def verify_staged_inputs(run_dir, run, manifest, attested_staged, receipt_staged, require_staged=False):
     """Verify per-run staged defaults and custom HRF against the plan, bundle manifest and receipts."""
     run_id = run['id']
     expects_hrf = run['model'].get('Hrf') == cli_plan.CUSTOM_HRF
     expected_keys = {'SamSrf_defaults.json'} | ({f'{cli_plan.CUSTOM_HRF}.mat'} if expects_hrf else set())
-    if attested_staged is not None:
+    if require_staged:
         if not isinstance(attested_staged, dict) or set(attested_staged.keys()) != expected_keys:
             raise Inventory(f'{run_id}: attested staged inputs do not match the plan')
-        if require_receipt and receipt_staged is None:
+        if not isinstance(receipt_staged, dict):
             raise Inventory(f'{run_id}: run receipt is missing stagedInputs')
-        if receipt_staged is not None and receipt_staged != attested_staged:
+        if receipt_staged != attested_staged:
             raise Inventory(f'{run_id}: run receipt stagedInputs differs from receipts/inputs.json')
         try:
             actual = cli_plan.staged_file_hashes(run_dir, run)
@@ -228,15 +229,17 @@ def verify_staged_inputs(run_dir, run, manifest, attested_staged, receipt_staged
         expected_64bit = run['precision'] == 'double'
         if defaults.get('def_64bit') is not expected_64bit:
             raise Inventory(f'{run_id}: staged SamSrf_defaults.json has def_64bit={defaults.get("def_64bit")!r}, expected {expected_64bit}')
-    elif attested_staged is not None:
+    elif require_staged:
         raise Inventory(f'{run_id}: missing staged SamSrf_defaults.json')
     hrf_name = f'{cli_plan.CUSTOM_HRF}.mat'
     hrf_path = run_dir / hrf_name
     if expects_hrf:
+        if hrf_name not in manifest:
+            raise Inventory(f'{run_id}: bundle manifest is missing {hrf_name}')
         if hrf_path.is_file():
-            if hrf_name in manifest and hashlib.sha256(hrf_path.read_bytes()).hexdigest() != manifest[hrf_name]:
+            if hashlib.sha256(hrf_path.read_bytes()).hexdigest() != manifest[hrf_name]:
                 raise Inventory(f'{run_id}: staged {hrf_name} differs from the bundle manifest')
-        elif attested_staged is not None:
+        elif require_staged:
             raise Inventory(f'{run_id}: missing staged {hrf_name}')
     elif hrf_path.exists() or hrf_path.is_symlink():
         raise Inventory(f'{run_id}: unexpected staged {hrf_name}')

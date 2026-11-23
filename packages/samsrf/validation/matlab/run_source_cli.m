@@ -142,9 +142,7 @@ end
 end
 
 function escaped = json_string(value)
-escaped = strrep(value, '\', '\\');
-escaped = strrep(escaped, '"', '\"');
-escaped = ['"' escaped '"'];
+escaped = char(jsonencode(char(value)));
 end
 
 function write_inputs_json(path, inputPaths, inputHashes, stagedRunIds, stagedRunEntries)
