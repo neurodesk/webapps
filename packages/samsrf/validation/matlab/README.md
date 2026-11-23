@@ -966,10 +966,10 @@ are current. In short:
 
 | Step | State |
 | --- | --- |
-| Builder | `licensed-host/build_and_validate.sh` ran on a licensed host. **Build 5** (2026-11-23, `main` at `2d4581c3f`, after #915–#917, local unpublished) built under clean tracked-only `/build` staging: OCI target/manifest digest `sha256:c132e952abf617eebff01fbbb0d12e8b44a3af9850c15595092d761708f4ee0d`, config digest `sha256:711e465c4e9cf17cc7c1ca7150f9d52531340d89d00dbdec894e5e4b5dfdc2ee`, archive `samsrf-reference.oci.tar` (1,381,349,376 bytes, SHA-256 `28ccdcda70a2d9d794569a375f6ef1c20e5744ee96957c6b8e133d502f8a996c`, 7 layers, 0 attestations, 0 unreferenced blobs), and `base-images.json` (`lineageVerified: true`, SHA-256 `f9f900a3336d39023b1ccd6f2f25c11152159bf2145153d0e365a43a11ef3ebd`) verifying `ubuntu:22.04` (`sha256:f64b2ffc2f10ab8f8505aa56b2664bd846cbb9df87c7e2532e30f7667021c0e6`) → `matlabruntimebase/r2023b/release/update11` (`sha256:ce5f495c24939fb92ff40dd1f462e5a6723272d2e551c45a0282b46dfdf94014`) → `samsrf-reference-runtime:r2023b` (`sha256:1dbdc61c05718a7665687ac86aa4b984cc5a77ea35740479afe1670e0a9e20c2`) → `samsrf-reference:41ed1e96-r2023b` (`sha256:c132e952…`), plus `containers.mathworks.com/matlab-runtime-utils/matlab-runtime-installer:r2023b-update-11` (`sha256:1f07cb493ef6255767af54b8cc85a94b9a164d0c8de53cf37057e5d183a47922`) in `copyFromStages`. History: Build 2 (local ID `sha256:be7ae7aa…`, 2026-11-16, unreachable) and Build 3 (2026-11-18, pre-clean-staging, local unpublished: OCI manifest `sha256:99f912afd57d59bde18976c5664328b1b50ee3a7be63924e92c9aba6a2c82857`, config `sha256:746944cc8c2f9acda96357f47071fe8ed3778f9fe8f16b80aa7b7441bad64518`). The `runtime_cli=build` dispatch still has no batch token. |
-| Compiled versus source | Equal bit for bit in all 24 runs (1,036 arrays) on the build host for Build 5 (`source-repeat.json`, `compiled-vs-source.json`, `compiled-repeat.json` all `exact: true`, SHA-256 `157d17cab2b2053424d429d6f0fb5e7aa4708d3c642b6714e94e403e69f34fd5`), plus SIGINT interrupt (exit 130) and missing-model failure (exit 249). All four Build 5 trees (`source-1`, `source-2`, `compiled-1`, `compiled-2`) prospectively attested inputs in identical `receipts/inputs.json` (`sha256:49c847726fbfc4f1551d6c7d22330f9aa056a258c77a7737717c75a07774bbc1`, `unchanged: true`, 60 bundle entries, 24 staged runs), verified without `--allow-unattested-source-inputs`. History: Build 2 and Build 3 also matched 24/24 locally, with unattested source inputs. That evidence is local; this repository holds the tools, not the archives. |
-| Runtime-only | On Build 5 (2026-11-23), both `samsrf-reference:41ed1e96-r2023b` and `samsrf-reference-runtime:r2023b` were removed from the local Docker store and restored from `samsrf-reference.oci.tar` (`restored-oci-identity.json` byte-identical to `oci-identity.json`, SHA-256 `2bd41c18078c4e7197565132771b3fa13c25168a90ea9ee4e404512c217d97c0`). All 24 runs (`compiled-restored`) then ran with `MLM_LICENSE_FILE` and `SAMSRF_LICENSE` unset, `--network none`, read-only root and inputs; `receipts/inputs.json` verified (`unchanged: true`), and both `restored-vs-compiled.json` and `restored-vs-source.json` passed `exact: true` (24/24 runs, 1,036 arrays). History: the 2026-11-18 audit restored Build 3 and ran three fresh cases. Still open: a fresh restored interrupt run and `runtime_image` on a published digest on another host. |
-| Compiled acceptance (Node & UI) | Build 5 ran explicit-reference Node acceptance on the committed WASM (`d1745bec6532f14dcff3565f15ab148da4f59e629d19bca31e1dbfd8b930a3a2`, `@neurodesk/samsrf` `0.7.20261120`) on the AMD build host (`current`: 20/24 exact, 2 differ, 2 refused, 163/168 maps; `matlab-amd`: 20/24 exact, 2 differ, 2 refused, 166/168 maps; `matlab-intel` cross-host vs AMD `compiled-1`: 0/12 double exact, 12 differ, 12 single refused, 32/92 double maps) and the full 24-run lossless production UI matrix in Chromium (`156.0.8078.4`: 20/24 exact, 2 differ, 2 refused, 163/168 maps across 22 lossless downloads, 212/212 engine files equal; see [Production interface against the CLI matrix](#production-interface-against-the-cli-matrix)). |
+| Builder | `licensed-host/build_and_validate.sh` ran on a licensed host. **Build 5** (2026-11-23, `main` at `2d4581c3f`, after #915–#917, local unpublished) built under clean tracked-only `/build` staging: OCI target/manifest digest `sha256:c132e952abf617eebff01fbbb0d12e8b44a3af9850c15595092d761708f4ee0d`, config digest `sha256:711e465c4e9cf17cc7c1ca7150f9d52531340d89d00dbdec894e5e4b5dfdc2ee`, archive `samsrf-reference.oci.tar` (1,381,349,376 bytes, SHA-256 `28ccdcda70a2d9d794569a375f6ef1c20e5744ee96957c6b8e133d502f8a996c`, 7 layers, 0 attestations, 0 unreferenced blobs), and `base-images.json` (`lineageVerified: true`, SHA-256 `f9f900a3336d39023b1ccd6f2f25c11152159bf2145153d0e365a43a11ef3ebd`) verifying `ubuntu:22.04` (`sha256:f64b2ffc2f10ab8f8505aa56b2664bd846cbb9df87c7e2532e30f7667021c0e6`) → `matlabruntimebase/r2023b/release/update11` (`sha256:ce5f495c24939fb92ff40dd1f462e5a6723272d2e551c45a0282b46dfdf94014`) → `samsrf-reference-runtime:r2023b` (`sha256:1dbdc61c05718a7665687ac86aa4b984cc5a77ea35740479afe1670e0a9e20c2`) → `samsrf-reference:41ed1e96-r2023b` (`sha256:c132e952…`), plus `containers.mathworks.com/matlab-runtime-utils/matlab-runtime-installer:r2023b-update-11` (`sha256:1f07cb493ef6255767af54b8cc85a94b9a164d0c8de53cf37057e5d183a47922`) in `copyFromStages`. History: Build 2 (local ID `sha256:be7ae7aa…`, 2026-11-16; receipts audited on 2026-11-17; in no reachable Docker store) and Build 3 (2026-11-18, pre-clean-staging, local unpublished, audited on 2026-11-18: OCI manifest `sha256:99f912afd57d59bde18976c5664328b1b50ee3a7be63924e92c9aba6a2c82857`, config `sha256:746944cc8c2f9acda96357f47071fe8ed3778f9fe8f16b80aa7b7441bad64518`). The `runtime_cli=build` dispatch still has no batch token. |
+| Compiled versus source | Equal bit for bit in all 24 runs (1,036 arrays) on the build host for Build 5 (`source-repeat.json`, `compiled-vs-source.json`, `compiled-repeat.json` all `exact: true`, SHA-256 `157d17cab2b2053424d429d6f0fb5e7aa4708d3c642b6714e94e403e69f34fd5`), plus SIGINT interrupt (exit 130) and missing-model failure (exit 249). All four Build 5 trees (`source-1`, `source-2`, `compiled-1`, `compiled-2`) prospectively attested inputs in identical `receipts/inputs.json` (`sha256:49c847726fbfc4f1551d6c7d22330f9aa056a258c77a7737717c75a07774bbc1`, `unchanged: true`, 60 bundle entries, 24 staged runs), verified without `--allow-unattested-source-inputs`. History: Build 2 and Build 3 also matched 24/24 locally, with unattested source inputs (the 2026-11-18 Build 3 audit reported six retained comparisons — source repeat, compiled against source, compiled repeat, and across builds 2 and 3 — equal in all 24 runs). That evidence is local; this repository holds the tools, not the archives. |
+| Runtime-only | On Build 5 (2026-11-23), both `samsrf-reference:41ed1e96-r2023b` and `samsrf-reference-runtime:r2023b` were removed from the local Docker store, and `docker load` restored `samsrf-reference:41ed1e96-r2023b` from `samsrf-reference.oci.tar` (`restored-oci-identity.json` byte-identical to `oci-identity.json`, SHA-256 `2bd41c18078c4e7197565132771b3fa13c25168a90ea9ee4e404512c217d97c0`). All 24 runs (`compiled-restored`) then ran with `MLM_LICENSE_FILE` and `SAMSRF_LICENSE` unset, `--network none`, read-only root and inputs; `receipts/inputs.json` verified (`unchanged: true`), and both `restored-vs-compiled.json` and `restored-vs-source.json` passed `exact: true` (24/24 runs, 1,036 arrays). History: the 2026-11-18 audit restored Build 3 and ran three fresh cases. Still open: a fresh restored interrupt run and `runtime_image` on a published digest on another host. |
+| Compiled acceptance (Node & UI) | Build 5 ran explicit-reference Node acceptance on the committed WASM (`d1745bec6532f14dcff3565f15ab148da4f59e629d19bca31e1dbfd8b930a3a2`, `@neurodesk/samsrf` `0.7.20261120`) on the AMD build host (`current`: 20/24 exact, 2 differ, 2 refused, 163/168 maps; `matlab-amd`: 20/24 exact, 2 differ, 2 refused, 166/168 maps; `matlab-intel`, same-host comparison of Intel-mode WASM against AMD MATLAB Runtime output `compiled-1`: 0/12 double exact, 12 differ, 12 single refused, 32/92 double maps) and the full 24-run lossless production UI matrix in Chromium (`156.0.8078.4`: 20/24 exact, 2 differ, 2 refused, 163/168 maps across 22 lossless downloads, 212/212 downloaded GIfTIs equal to the engine harness's with lossless arrays and provenance verified separately; see [Production interface against the CLI matrix](#production-interface-against-the-cli-matrix)). |
 | Publication | Not done. [Publication steps that need the maintainer](#publication-steps-that-need-the-maintainer). After publication, `runtime_image=NAME@sha256:...` validates the image on Runtime-only hosts, which need no license. |
 
 History: until 2026-11-16 this section said the recipe had never been executed
@@ -1310,7 +1310,9 @@ commit `2e09c43dedac7f5f37d86e8dbc02fb3097b4de59`.
   of MATLAB-written MAT files; the arrays are identical. Each recording pins
   its own bundle hashes.
 
-This is source-CLI evidence only. No compiled application has run.
+This pinned recording (`cli-reference.json`) is source-CLI evidence only; no
+compiled application ran in that recording (compiled builds are tracked above
+under [Building a matching Runtime container](#building-a-matching-runtime-container)).
 
 `test_cli.py` tests the plan, staging, the container arguments, the receipts,
 input-tree protection and the comparator, including one-ULP and nonfinite-mask
@@ -1627,26 +1629,30 @@ Each run directory must hold exactly the files its record names:
   the plan model with `Data_Precision` added, `Css_Convention: "samsrf"` for a
   forward model, and the file fields named as the app names them (`aps_bars`,
   `seed`, `lh_benson`);
-- the zip, whose bytes hash to `zipSha256` and which holds exactly the
-  contract maps and the polar angle and eccentricity maps.
+- the zip, whose bytes hash to `zipSha256` and which holds the contract map
+  GIfTIs, the polar angle and eccentricity GIfTIs, and (since #897) the
+  provenance JSON and `<stem>_lossless.bin` lossless export (historical zips
+  before #897 held only the GIfTIs).
 
-The interface downloads float32 GIfTIs only, so each contract map is compared
-bitwise twice:
+For each contract map's float32 GIfTI, the comparator checks bits twice:
 
 - against MATLAB's GIfTI, over every vertex;
 - against MATLAB's `Srf.Data` column over `Srf.Roi`, cast to float32.
 
-A double run's double values cannot be observed through the interface; the
-report says which precision each comparison stands for, and
-`compare_web_cli.py` holds the engine's double rows. Nor can the imaginary
-parts of a complex `Srf.Data`, which SamSrf's own GIfTI export also drops: a map
+In historical zips without a lossless export (`<stem>_lossless.bin`), a double
+run's double values cannot be observed through the interface; the report says
+which precision each comparison stands for, and `compare_web_cli.py` holds the
+engine's double rows. Nor can the imaginary parts of a complex `Srf.Data`,
+which SamSrf's own GIfTI export also drops: without a lossless export, a map
 whose MATLAB values are complex stays `differs` even when every real part
 agrees, and `compare_web_cli.py` holds the engine's imaginary parts
 (`maps.imag.f64`, which the engine harness's run directory may hold when its
-record names the hash). `nanSignOnly` counts
-differing values that are NaN on both sides. The zip's own hash changes from
-run to run, because its entries carry the time of the download; its GIfTIs do
-not.
+record names the hash). Since #897, zips include `<stem>_lossless.bin` and
+provenance JSON, which expose raw float64 values and imaginary parts to
+`compare_ui_cli.py` directly (see **Lossless downloads (#897)** below).
+`nanSignOnly` counts differing values that are NaN on both sides. The zip's own
+hash changes from run to run, because its entries carry the time of the
+download; its GIfTIs do not.
 
 The comparator classes each run from its record, and does not take the
 runner's status on trust:
@@ -1681,15 +1687,17 @@ python3 $m/compare_ui_cli.py $e/plan.json $e/bundle-sha256.json $e/ui-1 $e/compi
   ui-1-vs-compiled.json --expect compiled-runtime --engine-root $e/browser-1
 ```
 
-What the interface cannot show on this matrix:
+What historical float32-only downloads (without #897's lossless export) cannot
+show on this matrix:
 
-- **Double values.** Only float32 GIfTIs are offered.
+- **Double values.** Historical float32-only zips offer float32 GIfTIs only.
 - **Complex CSS maps.** SamSrfAnalysis keeps complex powers and saves a
   complex `Srf.Data`. The app's default stays `nonnegative` (#717); the runner
   selects `Css_Convention: "samsrf"` in the model it loads, and the saved
-  `app-model.json` must carry it. The downloads hold the real parts only, as
-  SamSrf's GIfTI export does, so a CSS map whose MATLAB values are complex
-  stays `differs`, and only `compare_web_cli.py` holds its imaginary parts.
+  `app-model.json` must carry it. Float32-only downloads hold the real parts
+  only, as SamSrf's GIfTI export does, so without `<stem>_lossless.bin` a CSS
+  map whose MATLAB values are complex stays `differs`, and only
+  `compare_web_cli.py` holds its imaginary parts.
 
 **Lossless downloads (#897).** The app now adds `<stem>_lossless.bin` (the
 package README's "Lossless export") to the zip, and its provenance JSON names
@@ -1727,9 +1735,10 @@ Build 5's `web-1` as the engine root). Both `ui-1-vs-compiled.json` (SHA-256
 2 refused (`rc_gaussian_lh_single`, `cf_gaussian_lh_single`), and 0
 `unsupported`, `ui-error`, `failed`, or `inventory-error`; 163 of 168 maps
 exact across all 22 lossless downloads (`losslessDownloadRuns: 22`,
-`losslessComparedMaps: 168`); and all 212 downloaded files equal to the engine
+`losslessComparedMaps: 168`); and all 212 downloaded GIfTIs equal to the engine
 harness's (`engineFilesEqual: 212`, `engineFilesDiffer: 0`,
-`engineMismatchRuns: 0`). Both CSS runs (`prf_css_lh_double`,
+`engineMismatchRuns: 0`, with the 22 lossless downloads verified by array
+contents and provenance separately). Both CSS runs (`prf_css_lh_double`,
 `prf_css_lh_single`) are exact including their imaginary parts, both double RC
 hull runs (`rc_hull_lh_double`, `rc_custom_hrf_lh_double`) are exact in raw
 double precision, and only the same 5 maps as `web-1` differ under
@@ -1768,8 +1777,10 @@ double runs are exact in float32 while their double values differ, which the
 downloads cannot show: x0, y0 and Fwhm of `rc_hull_lh_double` and
 `rc_custom_hrf_lh_double`, y0 of `cf_hull_lh_double`, and R², y0, Beta and
 Suppression of `cf_hull_smooth_global_lh_double`, at 8 to 18 vertices each and
-by at most 147 ULPs (2.2e-14 relative). These are the maps and counts
-`web-cli-outcome.json` records against the pinned AMD host. Both engine runners
+by at most 147 ULPs (2.2e-14 relative). Those were the maps and counts the #874
+snapshot of `web-cli-outcome.json` recorded against the pinned AMD host (the
+current `web-cli-outcome.json` records 20 exact runs and 163 of 168 maps). Both
+engine runners
 compute 22 runs (18 exact, 157 of 168 maps), equal to each other byte for
 byte, and main's unchanged Node runner (#874) writes the same 236 files: an
 outcome frozen from main's runner and comparator holds for this commit's.
@@ -2073,8 +2084,10 @@ value against main's module: on AMD, 29 values gain exactness (R^2 8, Beta 8,
 Suppression 13) and none lose it; on Intel, one value gains (Suppression) and seven lose
 it (R^2 and Beta at zero-based vertices 2, 6 and 11, Suppression at 6), the Intel loss
 described above. The matrix then has 18 of 24 runs and 160 of 168 maps exact on AMD (157
-on main) and 57 maps on Intel (57 on main). Since #895 that is the `matlab-amd` outcome;
-`web-cli-outcome.json` holds the default's (157 of 168).
+on main) and 57 maps on Intel (57 on main). At #895 that was the `matlab-amd`
+outcome while that snapshot of `web-cli-outcome.json` held the default's 157 of
+168 (after #902 and #916, `web-cli-outcome.json` holds 20 exact runs and 163 of
+168 maps, and `matlab-amd` reaches 166 of 168).
 No geometry value changes on either host. Canonical build
 [44286145940](https://github.com/neurodesk/webapps/actions/runs/44286145940) produced the
 combined module `cc528cf6`, whose maps equal its local rebuild's on both hosts; in
