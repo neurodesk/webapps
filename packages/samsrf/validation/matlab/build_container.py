@@ -151,36 +151,49 @@ def stage_clean_tree(source, destination):
 
 
 PARSER_DIRECTIVE = re.compile(r'^\s*#\s*([a-zA-Z]+)\s*=\s*(\S+)\s*$')
+KNOWN_DIRECTIVES = {'syntax', 'escape', 'check'}
+
+
+def trailing_escape_count(text, escape):
+    count = 0
+    for ch in reversed(text):
+        if ch == escape:
+            count += 1
+        else:
+            break
+    return count
 
 
 def dockerfile_instructions(text):
-    """Yield complete logical Dockerfile instructions, honoring top-of-file # escape=
-    directives and line continuations per the Dockerfile syntax specification."""
+    """Yield complete logical Dockerfile instructions, honoring BuildKit parser directives
+    (syntax, escape, check) and line continuations."""
     escape = '\\'
     lines = text.splitlines()
     index = 0
-    seen_escape = False
+    seen_directives = set()
     while index < len(lines):
         match = PARSER_DIRECTIVE.match(lines[index])
         if not match:
             break
         key, value = match.group(1).lower(), match.group(2)
-        if key == 'escape' and not seen_escape and value in ('\\', '`'):
+        if key not in KNOWN_DIRECTIVES or key in seen_directives:
+            break
+        seen_directives.add(key)
+        if key == 'escape':
+            if value not in ('\\', '`'):
+                raise ValueError(f'Unsupported Dockerfile escape directive: {value!r}')
             escape = value
-            seen_escape = True
         index += 1
     current = []
     continuing = False
     for raw in lines[index:]:
         stripped = raw.strip()
-        if not continuing:
-            if not stripped or stripped.startswith('#'):
-                continue
-        elif stripped.startswith('#'):
-            # Dockerfile ignores full-line comments inside a continued instruction.
+        if not stripped or stripped.startswith('#'):
+            # BuildKit skips blank lines and full-line comments both between
+            # instructions and inside a pending continuation.
             continue
         trimmed_right = raw.rstrip(' \t')
-        if trimmed_right.endswith(escape):
+        if trailing_escape_count(trimmed_right, escape) % 2 == 1:
             current.append(trimmed_right[:-1])
             continuing = True
         else:

@@ -253,6 +253,25 @@ class RepairSets(unittest.TestCase):
             ok_backtick = build_container.record_base_images(root, inspector=lambda ref: multistage_ok[ref])
             self.assertEqual(ok_backtick['finalBases']['runtime'], 'base1:r2023b')
 
+            # Doubled trailing escape ends the instruction (does not swallow the next FROM).
+            (root / 'runtime' / 'Dockerfile').write_text(
+                'FROM base2:r2023b AS s1\nRUN echo ok\\\\\nFROM base1:r2023b\n')
+            ok_doubled = build_container.record_base_images(root, inspector=lambda ref: multistage_ok[ref])
+            self.assertEqual(ok_doubled['finalBases']['runtime'], 'base1:r2023b')
+
+            # Blank lines and comments inside a pending continuation are skipped (BuildKit rule).
+            (root / 'runtime' / 'Dockerfile').write_text(
+                'FROM base2:r2023b AS s1\nFROM \\\n\n# comment\n  base1:r2023b\n')
+            ok_blank = build_container.record_base_images(root, inspector=lambda ref: multistage_ok[ref])
+            self.assertEqual(ok_blank['finalBases']['runtime'], 'base1:r2023b')
+
+            # An unrecognized # key=value comment ends parser directive scanning, so a later
+            # # escape=` does not disable backslash continuations.
+            (root / 'runtime' / 'Dockerfile').write_text(
+                '# unknown=1\n# escape=`\nFROM base2:r2023b AS s1\nFROM \\\n  base1:r2023b\n')
+            ok_unknown_dir = build_container.record_base_images(root, inspector=lambda ref: multistage_ok[ref])
+            self.assertEqual(ok_unknown_dir['finalBases']['runtime'], 'base1:r2023b')
+
 
 if __name__ == '__main__':
     unittest.main()
