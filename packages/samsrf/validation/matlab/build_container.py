@@ -189,22 +189,22 @@ def dockerfile_instructions(text):
         index += 1
     current = []
     for raw in lines[index:]:
-        stripped = raw.strip(' \t')
+        stripped = raw.strip()
         if not stripped or stripped.startswith('#'):
-            # BuildKit skips blank lines and full-line comments both between
-            # instructions and inside a pending continuation.
+            # BuildKit skips blank lines and full-line comments (including Unicode
+            # whitespace indentation) both between instructions and inside continuations.
             continue
         trimmed_right = raw.rstrip(' \t')
         if trailing_escape_count(trimmed_right, escape) % 2 == 1:
             current.append(trimmed_right[:-1])
         else:
             current.append(raw)
-            instruction = ''.join(current).strip(' \t')
+            instruction = ''.join(current).strip()
             if instruction:
                 yield instruction
             current = []
     if current:
-        instruction = ''.join(current).strip(' \t')
+        instruction = ''.join(current).strip()
         if instruction:
             yield instruction
 
@@ -222,7 +222,8 @@ def parse_dockerfile_bases(dockerfile):
     external_bases = []
     stage_to_base = {}
     final_base = None
-    for instruction in dockerfile_instructions(path.read_text()):
+    # Decode raw bytes so Python universal newlines do not split on bare carriage returns.
+    for instruction in dockerfile_instructions(path.read_bytes().decode('utf-8')):
         if COPY_FROM_LINE.match(instruction):
             raise ValueError(f'Unsupported COPY/ADD --from= in generated Dockerfile {path}: {instruction}')
         if not FROM_KEYWORD.match(instruction):

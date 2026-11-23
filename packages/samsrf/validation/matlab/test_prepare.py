@@ -259,11 +259,17 @@ class RepairSets(unittest.TestCase):
             ok_doubled = build_container.record_base_images(root, inspector=lambda ref: multistage_ok[ref])
             self.assertEqual(ok_doubled['finalBases']['runtime'], 'base1:r2023b')
 
-            # Blank lines and comments inside a pending continuation are skipped (BuildKit rule).
+            # Blank lines and comments (including Unicode whitespace) inside a pending continuation are skipped.
             (root / 'runtime' / 'Dockerfile').write_text(
-                'FROM base2:r2023b AS s1\nFROM \\\n\n# comment\n  base1:r2023b\n')
+                'FROM base2:r2023b AS s1\nFROM \\\n\n\u00a0\n\u00a0# comment\n  base1:r2023b\n')
             ok_blank = build_container.record_base_images(root, inspector=lambda ref: multistage_ok[ref])
             self.assertEqual(ok_blank['finalBases']['runtime'], 'base1:r2023b')
+
+            # Bare carriage returns inside a comment do not split a new FROM instruction.
+            (root / 'runtime' / 'Dockerfile').write_bytes(
+                b'FROM base1:r2023b\n# comment\rFROM base2:r2023b\n')
+            ok_bare_cr = build_container.record_base_images(root, inspector=lambda ref: multistage_ok[ref])
+            self.assertEqual(ok_bare_cr['finalBases']['runtime'], 'base1:r2023b')
 
             # An unrecognized # key=value comment ends parser directive scanning, so a later
             # # escape=` does not disable backslash continuations.
