@@ -150,7 +150,7 @@ def stage_clean_tree(source, destination):
     return staged_hashes
 
 
-PARSER_DIRECTIVE = re.compile(r'^[ \t]*#[ \t]*([a-zA-Z0-9_-]+)[ \t]*=[ \t]*(\S.*?)[ \t]*$')
+PARSER_DIRECTIVE = re.compile(r'^[ \t]*#[ \t]*([a-zA-Z0-9_-]+)[ \t]*=[ \t]*(.+)$')
 KNOWN_DIRECTIVES = {'syntax', 'escape', 'check'}
 
 
@@ -175,7 +175,7 @@ def dockerfile_instructions(text):
         match = PARSER_DIRECTIVE.match(lines[index])
         if not match:
             break
-        key, value = match.group(1).lower(), match.group(2)
+        key, value = match.group(1).lower(), match.group(2).strip()
         if key not in KNOWN_DIRECTIVES:
             break
         if key in seen_directives:

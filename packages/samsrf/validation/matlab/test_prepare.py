@@ -278,12 +278,30 @@ class RepairSets(unittest.TestCase):
             ok_check_ws = build_container.record_base_images(root, inspector=lambda ref: multistage_ok[ref])
             self.assertEqual(ok_check_ws['finalBases']['runtime'], 'base1:r2023b')
 
-            # Empty # check= or # syntax= is not a directive and stops directive scanning.
-            for empty_dir in ('# check=\n', '# syntax=   \n'):
+            # Zero-character # check= / # syntax= stops directive scanning (BuildKit rule).
+            for empty_dir in ('# check=\n', '# syntax=\n'):
                 (root / 'runtime' / 'Dockerfile').write_text(
                     f'{empty_dir}# escape=`\nFROM base2:r2023b AS s1\nRUN echo ok`\nFROM base1:r2023b\n')
                 ok_empty = build_container.record_base_images(root, inspector=lambda ref: multistage_ok[ref])
                 self.assertEqual(ok_empty['finalBases']['runtime'], 'base1:r2023b')
+
+            # Whitespace-only # syntax= / # check= matches BuildKit's (.+) directive value and
+            # keeps scanning active, so the following # escape=` takes effect.
+            for ws_dir in ('# syntax=   \n', '# check=  \n'):
+                (root / 'runtime' / 'Dockerfile').write_text(
+                    f'{ws_dir}# escape=`\nFROM base2:r2023b AS s1\nRUN echo ok`\nFROM base1:r2023b\n')
+                multistage_b2 = {
+                    **multistage_ok,
+                    'samsrf-reference-runtime:r2023b': {'id': 'sha256:rt', 'repoDigests': [], 'layers': ['sha256:l1', 'sha256:l2', 'sha256:rt1']},
+                    'samsrf-reference:41ed1e96-r2023b': {'id': 'sha256:app', 'repoDigests': [], 'layers': ['sha256:l1', 'sha256:l2', 'sha256:rt1', 'sha256:app1']},
+                }
+                ok_ws = build_container.record_base_images(root, inspector=lambda ref: multistage_b2[ref])
+                self.assertEqual(ok_ws['finalBases']['runtime'], 'base2:r2023b')
+
+            # Whitespace-only # escape= fails closed as an invalid escape token.
+            (root / 'runtime' / 'Dockerfile').write_text('# escape=   \nFROM base1:r2023b\n')
+            with self.assertRaisesRegex(ValueError, 'Unsupported Dockerfile escape directive'):
+                build_container.record_base_images(root, inspector=lambda ref: multistage_ok[ref])
 
             # Invalid # escape= value (including multi-token) and duplicate directives fail closed.
             (root / 'runtime' / 'Dockerfile').write_text('# escape=invalid token\nFROM base1:r2023b\n')
