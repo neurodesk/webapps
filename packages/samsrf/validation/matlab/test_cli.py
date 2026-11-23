@@ -106,6 +106,55 @@ class Plan(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 cli_plan.stage(plan, bundle, Path(root) / 'results')
 
+    def test_verify_inputs_validates_bundle_staged_files_and_run_receipts(self):
+        with scratch() as root:
+            root = Path(root)
+            bundle = root / 'bundle'
+            bundle.mkdir()
+            (bundle / 'SamSrf_defaults.json').write_text('{"def_64bit": true}\n')
+            (bundle / 'hrf_custom.mat').write_bytes(b'hrf-bytes')
+            plan = {'runs': [
+                next(r for r in cli_plan.plan()['runs'] if r['id'] == 'prf_gaussian_lh_average_double'),
+                next(r for r in cli_plan.plan()['runs'] if r['id'] == 'prf_custom_hrf_lh_single'),
+            ]}
+            manifest = root / 'bundle-sha256.json'
+            bundle_hashes = cli_plan.tree_hashes(bundle)
+            manifest.write_text(json.dumps(bundle_hashes))
+            results = root / 'source-1'
+            cli_plan.stage(plan, bundle, results)
+            receipts = results / 'receipts'
+            receipts.mkdir()
+            expected_staged = cli_plan.expected_staged_hashes(plan, bundle)
+            for run in plan['runs']:
+                (receipts / f'{run["id"]}.json').write_text(json.dumps({
+                    'id': run['id'], 'status': 'succeeded',
+                    'stagedInputs': expected_staged[run['id']],
+                }))
+            # Missing receipts/inputs.json fails closed.
+            with self.assertRaisesRegex(ValueError, 'Missing input attestation'):
+                cli_plan.verify_inputs(plan, bundle, manifest, results)
+            (receipts / 'inputs.json').write_text(json.dumps({
+                'sha256': bundle_hashes, 'staged': expected_staged, 'unchanged': True}))
+            verified = cli_plan.verify_inputs(plan, bundle, manifest, results)
+            self.assertEqual(verified['staged'], expected_staged)
+            # Flipping def_64bit on a double case is caught even if receipts/inputs.json is forged.
+            double_defaults = results / 'prf_gaussian_lh_average_double' / 'SamSrf_defaults.json'
+            original_bytes = double_defaults.read_bytes()
+            double_defaults.write_text('{"def_64bit": false}\n')
+            with self.assertRaisesRegex(ValueError, 'on-disk staged inputs differ'):
+                cli_plan.verify_inputs(plan, bundle, manifest, results)
+            double_defaults.write_bytes(original_bytes)
+            # Mutating staged hrf_custom.mat is caught.
+            hrf_path = results / 'prf_custom_hrf_lh_single' / 'hrf_custom.mat'
+            hrf_path.write_bytes(b'tampered')
+            with self.assertRaisesRegex(ValueError, 'on-disk staged inputs differ'):
+                cli_plan.verify_inputs(plan, bundle, manifest, results)
+            hrf_path.write_bytes(b'hrf-bytes')
+            # Bundle drift is caught.
+            (bundle / 'extra.txt').write_text('drift')
+            with self.assertRaisesRegex(ValueError, 'differs'):
+                cli_plan.verify_inputs(plan, bundle, manifest, results)
+
 
 class Runtime(unittest.TestCase):
     def test_tags_are_not_accepted_as_image_identity(self):
@@ -158,6 +207,15 @@ class Runtime(unittest.TestCase):
             return subprocess.CompletedProcess(command, 0)
 
         with self.assertRaises(RuntimeError):
+            self.run_matrix(runner)
+
+    def test_a_run_that_mutates_staged_inputs_fails_the_matrix(self):
+        def runner(command, **_):
+            mount = next(value for value in command if value.endswith(':/results'))
+            Path(mount.split(':')[0], 'SamSrf_defaults.json').write_text('{"def_64bit": false}\n')
+            return subprocess.CompletedProcess(command, 0)
+
+        with self.assertRaisesRegex(RuntimeError, 'modified its staged input files'):
             self.run_matrix(runner)
 
 

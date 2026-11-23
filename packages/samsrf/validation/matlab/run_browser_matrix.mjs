@@ -23,7 +23,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { extname, join, normalize, relative, sep } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { failureStatus, isEntry, treeHashes, webRun } from './run_web_matrix.mjs';
+import { failureStatus, isEntry, parseMatrixArgs, treeHashes, webRun } from './run_web_matrix.mjs';
 
 const repo = fileURLToPath(new URL('../../../../', import.meta.url));
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -35,10 +35,13 @@ const PAGE = `<!doctype html><meta charset="utf-8"><title>SamSrf matrix</title>
 "@neurodesk/samsrf/inputs":"/repo/packages/samsrf/src/inputs.js"}}</script>
 <script type="module">
 import * as engine from '/repo/apps/samsrf/src/engine.js';
-import { createJob, exportGiis, init } from '@neurodesk/samsrf';
+import { createJob, exportGiis, init, parseModel } from '@neurodesk/samsrf';
 const bytes = async (path) => new Uint8Array(await (await fetch(path)).arrayBuffer());
 const named = async (file) => file && { name: file.name, bytes: await bytes(file.url) };
 window.runCase = async (request) => {
+  await init();
+  // Validate model first so single RC/CF Gaussian refusals precede Intel's single refusal.
+  parseModel(request.analysis, JSON.stringify(request.model));
   const surfaces = {};
   for (const [role, file] of Object.entries(request.surfaces)) surfaces[role] = await named(file);
   const inputs = {
@@ -94,8 +97,8 @@ function serve(bundle) {
 }
 
 /** The files and options the page's runCase gives engine.js for one plan run. */
-export function request(run, bundle) {
-  const { algorithm, options, model, translations } = webRun(run, bundle);
+export function request(run, bundle, reference = 'current') {
+  const { algorithm, options, model, translations } = webRun(run, bundle, reference);
   const file = (path) => path && { name: path.split(sep).pop(), url: `/bundle/${relative(bundle, path).split(sep).join('/')}` };
   const hemisphere = options.hemisphere;
   return {
@@ -112,8 +115,11 @@ export function request(run, bundle) {
   };
 }
 
-async function main([planPath, bundle, manifestPath, output, ...rest]) {
-  if (!output || rest.length) throw new Error('Usage: node run_browser_matrix.mjs PLAN_JSON BUNDLE BUNDLE_SHA256_JSON OUTPUT_ROOT');
+async function main(argv) {
+  const { planPath, bundle, manifestPath, output, reference } = parseMatrixArgs(
+    argv,
+    'Usage: node run_browser_matrix.mjs PLAN_JSON BUNDLE BUNDLE_SHA256_JSON OUTPUT_ROOT [--reference current|matlab-amd|matlab-intel]',
+  );
   const { chromium } = await import('playwright');
   if (existsSync(output)) throw new Error(`${output} must not exist`);
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
@@ -132,6 +138,7 @@ async function main([planPath, bundle, manifestPath, output, ...rest]) {
     const environment = {
       runner: 'browser',
       engine: 'web app engine module (apps/samsrf/src/engine.js, served from source) in Chromium; not the production bundle or interface',
+      arithmeticReference: reference,
       playwright: JSON.parse(readFileSync(createRequire(import.meta.url).resolve('playwright/package.json'), 'utf8')).version,
       browser: `chromium ${browser.version()}`,
       userAgent: await page.evaluate(() => navigator.userAgent),
@@ -149,7 +156,7 @@ async function main([planPath, bundle, manifestPath, output, ...rest]) {
       const started = performance.now();
       const record = { id: run.id, precision: run.precision, algorithm: run.algorithm };
       try {
-        const result = await page.evaluate((item) => window.runCase(item), request(run, bundle));
+        const result = await page.evaluate((item) => window.runCase(item), request(run, bundle, reference));
         if (!result.replayEqualsExport) throw new Error('the replayed merge does not reproduce the exported GIfTIs');
         const directory = join(output, run.id);
         mkdirSync(directory);
@@ -169,7 +176,7 @@ async function main([planPath, bundle, manifestPath, output, ...rest]) {
         });
       } catch (error) {
         const message = error.message.replace(/^page\.evaluate: (Error: )?/, '').split('\n')[0];
-        record.status = failureStatus(run, 'browser', message);
+        record.status = failureStatus(run, 'browser', message, reference);
         record.message = message;
       }
       record.seconds = Number(((performance.now() - started) / 1000).toFixed(1));

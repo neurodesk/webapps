@@ -11,6 +11,7 @@ Usage:
   cli_plan.py stage PLAN_JSON BUNDLE RESULTS_ROOT
   cli_plan.py hash BUNDLE MANIFEST_JSON
   cli_plan.py verify BUNDLE MANIFEST_JSON
+  cli_plan.py verify-inputs PLAN_JSON BUNDLE MANIFEST_JSON RESULTS_ROOT
 """
 import hashlib
 import json
@@ -160,22 +161,61 @@ def write_models(plan_data, bundle):
         (directory / f'{run["model"]["Name"]}.json').write_text(text)
 
 
-def stage(plan_data, bundle, root):
-    """Create one fresh directory per run with that run's defaults; never reuse one."""
+def expected_staged_files(plan_data, bundle):
+    """Return the exact per-run staged filenames and bytes derived from plan_data and bundle."""
     bundle = Path(bundle)
     defaults = json.loads((bundle / 'SamSrf_defaults.json').read_text())
-    root = Path(root)
-    root.mkdir(parents=True, exist_ok=False)
+    hrf_bytes = None
+    staged = {}
     for run in plan_data['runs']:
-        directory = root / run['id']
-        directory.mkdir()
         # The defaults loader reads the starting directory in the compiled
         # application; def_64bit selects the precision under test.
         content = {**defaults, 'def_64bit': run['precision'] == 'double'}
-        (directory / 'SamSrf_defaults.json').write_text(json.dumps(content, indent=2) + '\n')
+        files = {'SamSrf_defaults.json': (json.dumps(content, indent=2) + '\n').encode()}
         if run['model'].get('Hrf') == CUSTOM_HRF:
-            name = f'{CUSTOM_HRF}.mat'
-            (directory / name).write_bytes((bundle / name).read_bytes())
+            if hrf_bytes is None:
+                hrf_bytes = (bundle / f'{CUSTOM_HRF}.mat').read_bytes()
+            files[f'{CUSTOM_HRF}.mat'] = hrf_bytes
+        staged[run['id']] = files
+    return staged
+
+
+def expected_staged_hashes(plan_data, bundle):
+    """Return {run_id: {filename: sha256}} for every run's expected staged files."""
+    return {
+        run_id: {name: hashlib.sha256(data).hexdigest() for name, data in sorted(files.items())}
+        for run_id, files in expected_staged_files(plan_data, bundle).items()
+    }
+
+
+def staged_file_hashes(directory, run):
+    """Hash a run directory's staged input files (SamSrf_defaults.json and optional hrf_custom.mat)."""
+    directory = Path(directory)
+    expected = ['SamSrf_defaults.json']
+    if run['model'].get('Hrf') == CUSTOM_HRF:
+        expected.append(f'{CUSTOM_HRF}.mat')
+    elif (directory / f'{CUSTOM_HRF}.mat').exists() or (directory / f'{CUSTOM_HRF}.mat').is_symlink():
+        raise ValueError(f'{run["id"]}: unexpected staged {CUSTOM_HRF}.mat')
+    hashes = {}
+    for name in sorted(expected):
+        path = directory / name
+        if path.is_symlink():
+            raise ValueError(f'{run["id"]}: symbolic link is not allowed in staged inputs: {path}')
+        if not path.is_file():
+            raise ValueError(f'{run["id"]}: missing staged input {name}')
+        hashes[name] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return hashes
+
+
+def stage(plan_data, bundle, root):
+    """Create one fresh directory per run with that run's defaults; never reuse one."""
+    root = Path(root)
+    root.mkdir(parents=True, exist_ok=False)
+    for run_id, files in expected_staged_files(plan_data, bundle).items():
+        directory = root / run_id
+        directory.mkdir()
+        for name, data in files.items():
+            (directory / name).write_bytes(data)
 
 
 def is_staged(directory):
@@ -194,6 +234,37 @@ def tree_hashes(root):
     return hashes
 
 
+def verify_inputs(plan_data, bundle, manifest_path, results_root):
+    """Verify the bundle, receipts/inputs.json, per-run receipts and on-disk staged files."""
+    expected_manifest = json.loads(Path(manifest_path).read_text())
+    actual_bundle = tree_hashes(bundle)
+    if actual_bundle != expected_manifest:
+        raise ValueError('The bundle differs from its recorded SHA-256 hashes')
+    expected_staged = expected_staged_hashes(plan_data, bundle)
+    results_root = Path(results_root)
+    receipts = results_root / 'receipts'
+    inputs_file = receipts / 'inputs.json'
+    if not inputs_file.is_file():
+        raise ValueError(f'Missing input attestation receipt {inputs_file}')
+    recorded = json.loads(inputs_file.read_text())
+    if recorded.get('unchanged') is not True or recorded.get('sha256') != expected_manifest:
+        raise ValueError('receipts/inputs.json does not attest the bundle manifest')
+    if recorded.get('staged') != expected_staged:
+        raise ValueError('receipts/inputs.json staged file hashes do not match the plan and bundle')
+    for run in plan_data['runs']:
+        run_id = run['id']
+        actual_staged = staged_file_hashes(results_root / run_id, run)
+        if actual_staged != expected_staged[run_id]:
+            raise ValueError(f'{run_id}: on-disk staged inputs differ from the plan and bundle')
+        receipt_path = receipts / f'{run_id}.json'
+        if not receipt_path.is_file():
+            raise ValueError(f'{run_id}: missing run receipt {receipt_path}')
+        run_receipt = json.loads(receipt_path.read_text())
+        if run_receipt.get('stagedInputs') != expected_staged[run_id]:
+            raise ValueError(f'{run_id}: run receipt stagedInputs differs from the plan and bundle')
+    return recorded
+
+
 def main(arguments):
     if arguments[:1] == ['plan'] and len(arguments) == 2:
         Path(arguments[1]).write_text(json.dumps(plan(), indent=2) + '\n')
@@ -208,6 +279,11 @@ def main(arguments):
     elif arguments[:1] == ['verify'] and len(arguments) == 3:
         if tree_hashes(arguments[1]) != json.loads(Path(arguments[2]).read_text()):
             raise SystemExit('The bundle differs from its recorded SHA-256 hashes')
+    elif arguments[:1] == ['verify-inputs'] and len(arguments) == 5:
+        try:
+            verify_inputs(json.loads(Path(arguments[1]).read_text()), arguments[2], arguments[3], arguments[4])
+        except ValueError as error:
+            raise SystemExit(str(error)) from error
     else:
         raise SystemExit(__doc__)
 

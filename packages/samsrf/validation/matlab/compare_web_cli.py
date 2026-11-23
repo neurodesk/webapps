@@ -65,6 +65,8 @@ from compare_cli import expected_results, read_gifti, read_mat
 
 SOURCE_MODE = 'source-samsrfanalysis-cli'
 RECEIPT_EXECUTION = {'source': 'source', 'compiled-runtime': 'compiled-runtime'}
+ARITHMETIC_REFERENCES = ('current', 'matlab-amd', 'matlab-intel')
+INTEL_SINGLE_REFUSAL = "model: matlab-intel arithmetic requires Data_Precision 'double'; Intel single-precision kernels are not implemented"
 IMAGE_ID = re.compile(r'^sha256:[0-9a-f]{64}$')
 SHA256 = re.compile(r'^[0-9a-f]{64}$')
 MATLAB_EXTRA = re.compile(r'^(SamSrf_defaults\.json|hrf_custom\.mat|src_.+\.mat|reg_.+\.mat)$')
@@ -112,17 +114,19 @@ def validate_plan(plan, manifest):
             raise Inventory(f'{run["id"]}: the plan model is not the bundle manifest model file')
 
 
-def expected_web_outcome(run, runner):
+def expected_web_outcome(run, runner, reference='current'):
     """What the engine must do with a plan run on this runner, with the exact text of an
     expected refusal; run_web_matrix.mjs's expectedEngineOutcome says the same."""
     model = run['model']
     single = run['precision'] == 'single'
-    # exes/samsrf/core/src/model.rs: Error::NotImplemented.
+    # exes/samsrf/core/src/model.rs: Error::NotImplemented comes before ArithmeticReference::validate.
     if single and run['algorithm'] == 'rc' and model.get('Prf_Function', 0) != 0:
         return {'status': 'refused',
                 'message': 'Data_Precision=single with a Prf_Function fit is not supported by this port'}
     if single and run['algorithm'] == 'cf' and model.get('Fit_pRF') == 1:
         return {'status': 'refused', 'message': 'Data_Precision=single with Fit_pRF=1 is not supported by this port'}
+    if single and reference == 'matlab-intel':
+        return {'status': 'refused', 'message': INTEL_SINGLE_REFUSAL}
     return {'status': 'succeeded'}
 
 
@@ -157,11 +161,23 @@ def matlab_execution(root, plan, manifest, allow_unattested):
     else:
         raise Inventory('the MATLAB receipts name neither a source nor a compiled execution')
     inputs = receipts / 'inputs.json'
+    recorded_staged = None
     if inputs.is_file():
         recorded = read_json(inputs)
         if recorded.get('sha256') != manifest or recorded.get('unchanged') is not True:
             raise Inventory('the MATLAB execution ran on other inputs than the bundle manifest')
-        identity['inputs'] = 'attested by receipts/inputs.json'
+        has_staged_key = 'staged' in recorded
+        if kind == 'source' or has_staged_key:
+            recorded_staged = recorded.get('staged')
+            if not isinstance(recorded_staged, dict):
+                raise Inventory('receipts/inputs.json must record per-run staged input hashes as an object')
+            expected_run_ids = {run['id'] for run in plan['runs']}
+            if set(recorded_staged.keys()) != expected_run_ids:
+                raise Inventory(f'receipts/inputs.json staged runs do not match the plan: {sorted(set(recorded_staged.keys()) ^ expected_run_ids)}')
+            identity['inputs'] = 'attested by receipts/inputs.json (bundle and staged inputs)'
+        else:
+            # Historical compiled-runtime receipts before staged-input attestation omit the 'staged' key.
+            identity['inputs'] = 'historical bundle-only attestation (receipts/inputs.json omits per-run staged hashes)'
     elif kind == 'compiled-runtime':
         raise Inventory('the compiled receipts have no inputs.json')
     elif allow_unattested:
@@ -174,18 +190,62 @@ def matlab_execution(root, plan, manifest, allow_unattested):
         raise Inventory(f'MATLAB receipts do not match the plan runs: {sorted(names ^ expected_names)}')
     records = {}
     for run in plan['runs']:
-        receipt = read_json(receipts / f'{run["id"]}.json')
-        if receipt.get('id') != run['id'] or receipt.get('execution') != RECEIPT_EXECUTION[kind]:
-            raise Inventory(f'{run["id"]}: receipt identity or execution kind differs')
+        run_id = run['id']
+        receipt = read_json(receipts / f'{run_id}.json')
+        if receipt.get('id') != run_id or receipt.get('execution') != RECEIPT_EXECUTION[kind]:
+            raise Inventory(f'{run_id}: receipt identity or execution kind differs')
         if normalised_argv(receipt.get('argv', [])) != run['argv']:
-            raise Inventory(f'{run["id"]}: the MATLAB receipt ran another argv than the plan')
+            raise Inventory(f'{run_id}: the MATLAB receipt ran another argv than the plan')
         if receipt.get('status') not in ('succeeded', 'failed'):
-            raise Inventory(f'{run["id"]}: unknown MATLAB status {receipt.get("status")}')
-        records[run['id']] = receipt
+            raise Inventory(f'{run_id}: unknown MATLAB status {receipt.get("status")}')
+        verify_staged_inputs(root / run_id, run, manifest,
+                             None if recorded_staged is None else recorded_staged[run_id],
+                             receipt.get('stagedInputs'), require_staged=(recorded_staged is not None))
+        records[run_id] = receipt
     return identity, records
 
 
-def web_execution(root, plan, plan_sha, manifest_sha):
+def verify_staged_inputs(run_dir, run, manifest, attested_staged, receipt_staged, require_staged=False):
+    """Verify per-run staged defaults and custom HRF against the plan, bundle manifest and receipts."""
+    run_id = run['id']
+    expects_hrf = run['model'].get('Hrf') == cli_plan.CUSTOM_HRF
+    expected_keys = {'SamSrf_defaults.json'} | ({f'{cli_plan.CUSTOM_HRF}.mat'} if expects_hrf else set())
+    if require_staged:
+        if not isinstance(attested_staged, dict) or set(attested_staged.keys()) != expected_keys:
+            raise Inventory(f'{run_id}: attested staged inputs do not match the plan')
+        if not isinstance(receipt_staged, dict):
+            raise Inventory(f'{run_id}: run receipt is missing stagedInputs')
+        if receipt_staged != attested_staged:
+            raise Inventory(f'{run_id}: run receipt stagedInputs differs from receipts/inputs.json')
+        try:
+            actual = cli_plan.staged_file_hashes(run_dir, run)
+        except ValueError as error:
+            raise Inventory(str(error)) from error
+        if actual != attested_staged:
+            raise Inventory(f'{run_id}: staged input files on disk differ from receipts/inputs.json')
+    defaults_path = run_dir / 'SamSrf_defaults.json'
+    if defaults_path.is_file():
+        defaults = read_json(defaults_path)
+        expected_64bit = run['precision'] == 'double'
+        if defaults.get('def_64bit') is not expected_64bit:
+            raise Inventory(f'{run_id}: staged SamSrf_defaults.json has def_64bit={defaults.get("def_64bit")!r}, expected {expected_64bit}')
+    elif require_staged:
+        raise Inventory(f'{run_id}: missing staged SamSrf_defaults.json')
+    hrf_name = f'{cli_plan.CUSTOM_HRF}.mat'
+    hrf_path = run_dir / hrf_name
+    if expects_hrf:
+        if hrf_name not in manifest:
+            raise Inventory(f'{run_id}: bundle manifest is missing {hrf_name}')
+        if hrf_path.is_file():
+            if hashlib.sha256(hrf_path.read_bytes()).hexdigest() != manifest[hrf_name]:
+                raise Inventory(f'{run_id}: staged {hrf_name} differs from the bundle manifest')
+        elif require_staged:
+            raise Inventory(f'{run_id}: missing staged {hrf_name}')
+    elif hrf_path.exists() or hrf_path.is_symlink():
+        raise Inventory(f'{run_id}: unexpected staged {hrf_name}')
+
+
+def web_execution(root, plan, plan_sha, manifest_sha, reference='current'):
     environment = read_json(root / 'environment.json')
     if environment.get('runner') not in ('node', 'browser'):
         raise Inventory('the web environment names no runner')
@@ -195,6 +255,11 @@ def web_execution(root, plan, plan_sha, manifest_sha):
         raise Inventory('the web execution ran on another bundle manifest')
     if not is_sha256(environment.get('wasmSha256')):
         raise Inventory('the web environment names no WebAssembly hash')
+    recorded_reference = environment.get('arithmeticReference', 'current')
+    if recorded_reference not in ARITHMETIC_REFERENCES:
+        raise Inventory(f'the web environment names unknown arithmeticReference {recorded_reference!r}')
+    if recorded_reference != reference:
+        raise Inventory(f'expected arithmetic reference {reference}, the web environment ran {recorded_reference}')
     allowed = {'environment.json', 'runs.json'}
     records = {}
     for run in plan['runs']:
@@ -410,8 +475,8 @@ def compare_maps(run, web, web_dir, matlab_dir):
     return results, imaginary is not None, web_only, matlab_only
 
 
-def compare_run(run, web, matlab, runner, web_root, matlab_root):
-    expected = expected_web_outcome(run, runner)
+def compare_run(run, web, matlab, runner, web_root, matlab_root, reference='current'):
+    expected = expected_web_outcome(run, runner, reference)
     report = {'id': run['id'], 'precision': run['precision'], 'algorithm': run['algorithm'],
               'status': {'web': web['status'], 'matlab': matlab['status'], 'expectedWeb': expected['status']},
               'maps': []}
@@ -440,15 +505,17 @@ def compare_run(run, web, matlab, runner, web_root, matlab_root):
     return report
 
 
-def compare(plan, plan_sha, manifest, manifest_sha, web_root, matlab_root, expect, allow_unattested=False):
+def compare(plan, plan_sha, manifest, manifest_sha, web_root, matlab_root, expect, allow_unattested=False, reference='current'):
+    if reference not in ARITHMETIC_REFERENCES:
+        raise Inventory(f'unknown arithmetic reference {reference!r}')
     web_root = Path(web_root)
     matlab_root = Path(matlab_root)
     validate_plan(plan, manifest)
     identity, receipts = matlab_execution(matlab_root, plan, manifest, allow_unattested)
     if identity['kind'] != expect:
         raise Inventory(f'expected a {expect} execution, the receipts record {identity["kind"]}')
-    environment, records = web_execution(web_root, plan, plan_sha, manifest_sha)
-    runs = [compare_run(run, records[run['id']], receipts[run['id']], environment['runner'], web_root, matlab_root)
+    environment, records = web_execution(web_root, plan, plan_sha, manifest_sha, reference)
+    runs = [compare_run(run, records[run['id']], receipts[run['id']], environment['runner'], web_root, matlab_root, reference)
             for run in plan['runs']]
     maps = [entry for run in runs for entry in run['maps']]
     count = lambda items, value: sum(item['class'] == value for item in items)
@@ -482,6 +549,7 @@ def main(arguments=None):
     parser.add_argument('report')
     parser.add_argument('--expect', required=True, choices=sorted(RECEIPT_EXECUTION))
     parser.add_argument('--allow-unattested-source-inputs', action='store_true')
+    parser.add_argument('--reference', default='current', choices=ARITHMETIC_REFERENCES)
     options = parser.parse_args(arguments)
     plan_bytes = Path(options.plan).read_bytes()
     manifest_bytes = Path(options.manifest).read_bytes()
@@ -490,7 +558,8 @@ def main(arguments=None):
         raise SystemExit("The plan is not cli_plan.py's matrix")
     try:
         report = compare(plan, sha256_bytes(plan_bytes), json.loads(manifest_bytes), sha256_bytes(manifest_bytes),
-                         options.web_root, options.matlab_root, options.expect, options.allow_unattested_source_inputs)
+                         options.web_root, options.matlab_root, options.expect, options.allow_unattested_source_inputs,
+                         options.reference)
     except Inventory as error:
         raise SystemExit(f'Refused: {error}') from error
     with Path(options.report).open('x') as output:

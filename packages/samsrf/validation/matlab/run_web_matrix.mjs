@@ -26,6 +26,30 @@ import * as samsrf from '../../src/node.js';
 
 const INPUT = '/input';
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
+export const ARITHMETIC_REFERENCES = ['current', 'matlab-amd', 'matlab-intel'];
+export const INTEL_SINGLE_REFUSAL = "model: matlab-intel arithmetic requires Data_Precision 'double'; Intel single-precision kernels are not implemented";
+
+export function parseMatrixArgs(argv, usage) {
+  const positional = [];
+  let reference = 'current';
+  for (let i = 0; i < argv.length; i += 1) {
+    if (argv[i] === '--reference') {
+      reference = argv[i + 1];
+      i += 1;
+    } else if (argv[i].startsWith('--reference=')) {
+      reference = argv[i].slice('--reference='.length);
+    } else if (argv[i].startsWith('--')) {
+      throw new Error(`Unknown option ${argv[i]}\n${usage}`);
+    } else {
+      positional.push(argv[i]);
+    }
+  }
+  if (!ARITHMETIC_REFERENCES.includes(reference)) {
+    throw new Error(`--reference must be one of ${ARITHMETIC_REFERENCES.join(', ')}`);
+  }
+  if (positional.length !== 4) throw new Error(usage);
+  return { planPath: positional[0], bundle: positional[1], manifestPath: positional[2], output: positional[3], reference };
+}
 
 /** SHA-256 of every file under root, by POSIX relative path, sorted. */
 export function treeHashes(root) {
@@ -44,20 +68,23 @@ export function treeHashes(root) {
 
 /** What the engine must do with a plan run on this runner, with the exact text of an expected
  * refusal; compare_web_cli.py's expected_web_outcome says the same. */
-export function expectedEngineOutcome({ algorithm, model, precision }, runner) {
-  // exes/samsrf/core/src/model.rs: Error::NotImplemented.
+export function expectedEngineOutcome({ algorithm, model, precision }, runner, reference = 'current') {
+  // exes/samsrf/core/src/model.rs: Error::NotImplemented comes before ArithmeticReference::validate.
   if (precision === 'single' && algorithm === 'rc' && (model.Prf_Function ?? 0) !== 0) {
     return { status: 'refused', message: 'Data_Precision=single with a Prf_Function fit is not supported by this port' };
   }
   if (precision === 'single' && algorithm === 'cf' && model.Fit_pRF === 1) {
     return { status: 'refused', message: 'Data_Precision=single with Fit_pRF=1 is not supported by this port' };
   }
+  if (precision === 'single' && reference === 'matlab-intel') {
+    return { status: 'refused', message: INTEL_SINGLE_REFUSAL };
+  }
   return { status: 'succeeded' };
 }
 
 /** The status of a run the engine did not finish: refused or unsupported only with exactly the expected text. */
-export function failureStatus(run, runner, message) {
-  const expected = expectedEngineOutcome(run, runner);
+export function failureStatus(run, runner, message, reference = 'current') {
+  const expected = expectedEngineOutcome(run, runner, reference);
   return expected.status !== 'succeeded' && message === expected.message ? expected.status : 'failed';
 }
 
@@ -65,14 +92,15 @@ export function failureStatus(run, runner, message) {
  * precision def_64bit selects for MATLAB) and, for a forward model, Css_Convention "samsrf", because
  * SamSrf always takes complex CSS powers while the engine's default clips negative responses.
  * compare_ui_cli.py's expected_app_model says the same of the model the app saves. */
-export function matlabModel(run) {
+export function matlabModel(run, reference = 'current') {
   const model = { ...run.model, Data_Precision: run.precision };
   if (run.algorithm === 'prf') model.Css_Convention = 'samsrf';
+  if (reference !== 'current') model.Arithmetic_Reference = reference;
   return model;
 }
 
 /** Translates one plan run into the readAnalysisInputs options, the model text and the HRF override. */
-export function webRun(run, bundle) {
+export function webRun(run, bundle, reference = 'current') {
   const local = (path) => path.replace(INPUT, bundle);
   const argv = run.argv;
   const option = (name) => argv.find((value) => value.startsWith(`-${name}=`))?.slice(name.length + 2) ?? null;
@@ -82,10 +110,13 @@ export function webRun(run, bundle) {
   const runFiles = readdirSync(dataset).filter((name) => new RegExp(`^${hemisphere}_ubars\\d+\\.gii$`).test(name)).sort().map((name) => join(dataset, name));
   if (runs !== `${INPUT}/${run.dataset}/${hemisphere}_ubars*.gii` || !runFiles.length) throw new Error(`${run.id}: unexpected run wildcard ${runs}`);
   if (option('norm') !== '1') throw new Error(`${run.id}: only -norm=1 is planned`);
-  const model = matlabModel(run);
+  const model = matlabModel(run, reference);
   const translations = { Data_Precision: run.precision };
   if (model.Css_Convention) {
     translations.Css_Convention = 'samsrf (SamSrf\'s complex CSS powers; the engine default clips negative responses)';
+  }
+  if (reference !== 'current') {
+    translations.Arithmetic_Reference = reference;
   }
   const options = {
     runs: runFiles,
@@ -121,21 +152,24 @@ export function webRun(run, bundle) {
   return { algorithm, options, model, hrf, translations };
 }
 
-export function runOne(run, bundle, directory) {
+export function runOne(run, bundle, directory, reference = 'current') {
   const started = performance.now();
   const record = { id: run.id, precision: run.precision, algorithm: run.algorithm };
   let job;
   try {
-    const translated = webRun(run, bundle);
+    const translated = webRun(run, bundle, reference);
     record.translations = translated.translations;
     record.options = { ...translated.options };
-    const inputs = samsrf.readAnalysisInputs(translated.options);
-    const spec = samsrf.analysisSpec(inputs, translated.algorithm, translated.model);
-    if (translated.hrf) spec.hrf = translated.hrf;
+    let inputs;
     try {
+      // Validate model first so single RC/CF Gaussian refusals precede Intel's single refusal.
+      samsrf.parseModel(translated.algorithm, JSON.stringify(translated.model));
+      inputs = samsrf.readAnalysisInputs(translated.options);
+      const spec = samsrf.analysisSpec(inputs, translated.algorithm, translated.model);
+      if (translated.hrf) spec.hrf = translated.hrf;
       job = samsrf.createJob(spec);
     } catch (error) {
-      record.status = failureStatus(run, 'node', error.message);
+      record.status = failureStatus(run, 'node', error.message, reference);
       record.message = error.message;
       return record;
     }
@@ -186,8 +220,11 @@ export function isEntry(moduleUrl, argv1) {
   }
 }
 
-function main([planPath, bundle, manifestPath, output, ...rest]) {
-  if (!output || rest.length) throw new Error('Usage: node run_web_matrix.mjs PLAN_JSON BUNDLE BUNDLE_SHA256_JSON OUTPUT_ROOT');
+function main(argv) {
+  const { planPath, bundle, manifestPath, output, reference } = parseMatrixArgs(
+    argv,
+    'Usage: node run_web_matrix.mjs PLAN_JSON BUNDLE BUNDLE_SHA256_JSON OUTPUT_ROOT [--reference current|matlab-amd|matlab-intel]',
+  );
   if (existsSync(output)) throw new Error(`${output} must not exist`);
   const expected = JSON.parse(readFileSync(manifestPath, 'utf8'));
   const before = treeHashes(bundle);
@@ -200,6 +237,7 @@ function main([planPath, bundle, manifestPath, output, ...rest]) {
   const environment = {
     runner: 'node',
     engine: 'web app WebAssembly module, Node',
+    arithmeticReference: reference,
     packageVersion: JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version,
     core: samsrf.version(),
     wasmSha256: sha256(readFileSync(wasm)),
@@ -213,7 +251,7 @@ function main([planPath, bundle, manifestPath, output, ...rest]) {
   writeFileSync(join(output, 'environment.json'), `${JSON.stringify(environment, null, 2)}\n`);
   const runs = [];
   for (const run of plan.runs) {
-    const record = runOne(run, bundle, join(output, run.id));
+    const record = runOne(run, bundle, join(output, run.id), reference);
     runs.push(record);
     writeFileSync(join(output, `${run.id}.web.json`), `${JSON.stringify(record, null, 2)}\n`);
     console.log(`${record.status.padEnd(9)} ${run.id} ${record.seconds} s${record.message ? `: ${record.message}` : ''}`);

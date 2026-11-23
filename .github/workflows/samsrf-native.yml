@@ -1195,6 +1195,10 @@ jobs:
         uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
         with:
           command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); run_source_cli(fullfile(pwd,'reference-source'),fullfile(pwd,'reference-spm'),fullfile(getenv('RUNNER_TEMP'),'samsrf-cli','plan.json'),fullfile(getenv('RUNNER_TEMP'),'samsrf-cli','source-1'))
+      - name: Verify source-1 attested inputs
+        run: |
+          cli="$RUNNER_TEMP/samsrf-cli"
+          python3 packages/samsrf/validation/matlab/cli_plan.py verify-inputs "$cli/plan.json" "$cli/bundle" "$cli/bundle-sha256.json" "$cli/source-1"
       - name: Check the custom-HRF runs against a direct call with the column HRF
         uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
         with:
@@ -1206,7 +1210,7 @@ jobs:
       - name: Require every case to succeed and repeat exactly
         run: |
           cli="$RUNNER_TEMP/samsrf-cli"
-          python3 packages/samsrf/validation/matlab/cli_plan.py verify "$cli/bundle" "$cli/bundle-sha256.json"
+          python3 packages/samsrf/validation/matlab/cli_plan.py verify-inputs "$cli/plan.json" "$cli/bundle" "$cli/bundle-sha256.json" "$cli/source-2"
           "$RUNNER_TEMP/samsrf-cli-venv/bin/python" packages/samsrf/validation/matlab/compare_cli.py "$cli/plan.json" "$cli/source-1" "$cli/source-2" "$cli/source-repeat.json"
       - name: Run, repeat, interrupt and fail the compiled image on this host
         if: inputs.runtime_cli == 'build'
@@ -1218,7 +1222,9 @@ jobs:
             python3 "$matlab/cli_plan.py" stage "$cli/plan.json" "$cli/bundle" "$cli/$run"
           done
           python3 "$matlab/run_runtime_cli.py" run "$image" "$cli/plan.json" "$cli/bundle" "$cli/compiled-1"
+          python3 "$matlab/cli_plan.py" verify-inputs "$cli/plan.json" "$cli/bundle" "$cli/bundle-sha256.json" "$cli/compiled-1"
           python3 "$matlab/run_runtime_cli.py" run "$image" "$cli/plan.json" "$cli/bundle" "$cli/compiled-2"
+          python3 "$matlab/cli_plan.py" verify-inputs "$cli/plan.json" "$cli/bundle" "$cli/bundle-sha256.json" "$cli/compiled-2"
           "$RUNNER_TEMP/samsrf-cli-venv/bin/python" "$matlab/compare_cli.py" "$cli/plan.json" "$cli/source-1" "$cli/compiled-1" "$cli/compiled-vs-source.json"
           "$RUNNER_TEMP/samsrf-cli-venv/bin/python" "$matlab/compare_cli.py" "$cli/plan.json" "$cli/compiled-1" "$cli/compiled-2" "$cli/compiled-repeat.json"
           longest="$(python3 -c 'import json,pathlib,sys; r=[json.loads(p.read_text()) for p in pathlib.Path(sys.argv[1]).glob("*.json") if p.name not in ("environment.json","inputs.json")]; m=max(r,key=lambda x:x["seconds"]); print(m["id"], max(10, m["seconds"]/2))' "$cli/compiled-1/receipts")"
@@ -1260,8 +1266,7 @@ jobs:
           node "$matlab/run_browser_matrix.mjs" "$cli/plan.json" "$cli/bundle" "$cli/bundle-sha256.json" "$cli/browser-1"
           status=0
           for web in web-1 browser-1; do
-            # Source receipts do not record the bundle; the report says so.
-            "$python" "$matlab/compare_web_cli.py" "$cli/plan.json" "$cli/bundle-sha256.json" "$cli/$web" "$cli/source-1" "$cli/$web-vs-source.json" --expect source --allow-unattested-source-inputs || status=1
+            "$python" "$matlab/compare_web_cli.py" "$cli/plan.json" "$cli/bundle-sha256.json" "$cli/$web" "$cli/source-1" "$cli/$web-vs-source.json" --expect source || status=1
             if [ "$RUNTIME_CLI" = build ]; then
               "$python" "$matlab/compare_web_cli.py" "$cli/plan.json" "$cli/bundle-sha256.json" "$cli/$web" "$cli/compiled-1" "$cli/$web-vs-compiled.json" --expect compiled-runtime || status=1
             fi

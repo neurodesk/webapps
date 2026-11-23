@@ -65,6 +65,8 @@ class Fixture:
         self.plan = {'runs': [copy.deepcopy(PLAN[i]) for i in ids]}
         self.manifest = {f'models/{i}.json': sha(web_cli.model_bytes(PLAN[i]['model'])) for i in ids}
         self.manifest['x001_lh/lh_ubars1.gii'] = 'b' * 64
+        if any(PLAN[i]['model'].get('Hrf') == cli_plan.CUSTOM_HRF for i in ids):
+            self.manifest[f'{cli_plan.CUSTOM_HRF}.mat'] = sha(b'fixture-hrf-mat')
         self.plan_sha = sha(json.dumps(self.plan).encode())
         self.manifest_sha = sha(json.dumps(self.manifest).encode())
         rng = numpy.random.default_rng(7)
@@ -134,9 +136,9 @@ class Fixture:
                     record['imaginarySha256'] = sha(parts)
             (self.web / f'{run_id}.web.json').write_text(json.dumps(record))
 
-    def report(self, expect=None, allow=True):
+    def report(self, expect=None, allow=True, reference='current'):
         return web_cli.compare(self.plan, self.plan_sha, self.manifest, self.manifest_sha, self.web, self.matlab,
-                               expect or self.kind, allow_unattested=allow)
+                               expect or self.kind, allow_unattested=allow, reference=reference)
 
     def edit_record(self, run_id, **changes):
         path = self.web / f'{run_id}.web.json'
@@ -626,6 +628,108 @@ class Provenance(Base):
         with self.assertRaisesRegex(Inventory, 'unattested'):
             self.x.report(allow=False)
 
+    def test_source_execution_with_attested_inputs_passes_without_allow_flag(self):
+        defaults_path = self.x.matlab / self.id / 'SamSrf_defaults.json'
+        defaults_path.write_text(json.dumps({'def_64bit': True}, indent=2) + '\n')
+        staged_map = {'SamSrf_defaults.json': sha(defaults_path.read_bytes())}
+        # Source inputs.json without per-run staged hashes or with null entries is refused.
+        (self.x.matlab / 'receipts' / 'inputs.json').write_text(json.dumps({
+            'sha256': self.x.manifest, 'unchanged': True}))
+        with self.assertRaisesRegex(Inventory, 'per-run staged input hashes'):
+            self.x.report(allow=False)
+        (self.x.matlab / 'receipts' / 'inputs.json').write_text(json.dumps({
+            'sha256': self.x.manifest, 'staged': {self.id: None}, 'unchanged': True}))
+        with self.assertRaisesRegex(Inventory, 'attested staged inputs do not match'):
+            self.x.report(allow=False)
+        # With staged hashes and per-run stagedInputs, comparison succeeds without allow flag.
+        (self.x.matlab / 'receipts' / 'inputs.json').write_text(json.dumps({
+            'sha256': self.x.manifest, 'staged': {self.id: staged_map}, 'unchanged': True}))
+        receipt_path = self.x.matlab / 'receipts' / f'{self.id}.json'
+        receipt = json.loads(receipt_path.read_text())
+        receipt_path.write_text(json.dumps({**receipt, 'stagedInputs': staged_map}))
+        report = self.x.report(allow=False)
+        self.assertEqual(report['matlab']['inputs'], 'attested by receipts/inputs.json (bundle and staged inputs)')
+        self.assertEqual(report['summary']['exactRuns'], 1)
+        # Mutating staged def_64bit to false on a double run is refused, even if receipts are rewritten to match it.
+        defaults_path.write_text(json.dumps({'def_64bit': False}, indent=2) + '\n')
+        with self.assertRaisesRegex(Inventory, 'staged input files on disk differ'):
+            self.x.report(allow=False)
+        forged_map = {'SamSrf_defaults.json': sha(defaults_path.read_bytes())}
+        (self.x.matlab / 'receipts' / 'inputs.json').write_text(json.dumps({
+            'sha256': self.x.manifest, 'staged': {self.id: forged_map}, 'unchanged': True}))
+        receipt_path.write_text(json.dumps({**receipt, 'stagedInputs': forged_map}))
+        with self.assertRaisesRegex(Inventory, 'def_64bit=False, expected True'):
+            self.x.report(allow=False)
+
+    def test_custom_hrf_staged_file_must_match_bundle_manifest(self):
+        with scratch() as root:
+            fixture = Fixture(root, ['prf_custom_hrf_lh_double'])
+            hrf_bytes = b'expected-hrf-mat'
+            fixture.manifest['hrf_custom.mat'] = sha(hrf_bytes)
+            fixture.manifest_sha = sha(json.dumps(fixture.manifest).encode())
+            fixture.write()
+            run_id = 'prf_custom_hrf_lh_double'
+            defaults_path = fixture.matlab / run_id / 'SamSrf_defaults.json'
+            defaults_path.write_text(json.dumps({'def_64bit': True}, indent=2) + '\n')
+            hrf_path = fixture.matlab / run_id / 'hrf_custom.mat'
+            hrf_path.write_bytes(hrf_bytes)
+            staged_map = {
+                'SamSrf_defaults.json': sha(defaults_path.read_bytes()),
+                'hrf_custom.mat': sha(hrf_bytes),
+            }
+            (fixture.matlab / 'receipts' / 'inputs.json').write_text(json.dumps({
+                'sha256': fixture.manifest, 'staged': {run_id: staged_map}, 'unchanged': True}))
+            receipt_path = fixture.matlab / 'receipts' / f'{run_id}.json'
+            receipt = json.loads(receipt_path.read_text())
+            receipt_path.write_text(json.dumps({**receipt, 'stagedInputs': staged_map}))
+            self.assertEqual(fixture.report(allow=False)['summary']['exactRuns'], 1)
+            # Tampering with staged hrf_custom.mat fails even if receipts are rewritten to match it.
+            hrf_path.write_bytes(b'wrong-hrf')
+            forged = {**staged_map, 'hrf_custom.mat': sha(b'wrong-hrf')}
+            (fixture.matlab / 'receipts' / 'inputs.json').write_text(json.dumps({
+                'sha256': fixture.manifest, 'staged': {run_id: forged}, 'unchanged': True}))
+            receipt_path.write_text(json.dumps({**receipt, 'stagedInputs': forged}))
+            with self.assertRaisesRegex(Inventory, 'staged hrf_custom.mat differs from the bundle manifest'):
+                fixture.report(allow=False)
+            # Omitting hrf_custom.mat from the bundle manifest is refused even when receipts match disk.
+            del fixture.manifest['hrf_custom.mat']
+            fixture.manifest_sha = sha(json.dumps(fixture.manifest).encode())
+            env_path = fixture.web / 'environment.json'
+            env = json.loads(env_path.read_text())
+            env['bundleSha256'] = fixture.manifest_sha
+            env_path.write_text(json.dumps(env))
+            (fixture.matlab / 'receipts' / 'inputs.json').write_text(json.dumps({
+                'sha256': fixture.manifest, 'staged': {run_id: forged}, 'unchanged': True}))
+            with self.assertRaisesRegex(Inventory, 'bundle manifest is missing hrf_custom.mat'):
+                fixture.report(allow=False)
+
+    def test_arithmetic_reference_must_match_web_environment_and_intel_refuses_single(self):
+        env_path = self.x.web / 'environment.json'
+        env = json.loads(env_path.read_text())
+        env['arithmeticReference'] = 'matlab-amd'
+        env_path.write_text(json.dumps(env))
+        with self.assertRaisesRegex(Inventory, 'expected arithmetic reference current'):
+            self.x.report(reference='current')
+        report = self.x.report(reference='matlab-amd')
+        self.assertEqual(report['summary']['exactRuns'], 1)
+        # Intel reference expects single runs to refuse with the exact Intel message.
+        with scratch() as root:
+            intel = Fixture(root, ['prf_gaussian_lh_average_single', 'rc_gaussian_lh_single', 'rc_hull_lh_double'])
+            intel_env = json.loads((intel.web / 'environment.json').read_text())
+            intel_env['arithmeticReference'] = 'matlab-intel'
+            (intel.web / 'environment.json').write_text(json.dumps(intel_env))
+            # Convert prf_gaussian_lh_average_single from succeeded to the exact Intel refusal.
+            shutil.rmtree(intel.web / 'prf_gaussian_lh_average_single')
+            intel.edit_record('prf_gaussian_lh_average_single', status='refused', message=web_cli.INTEL_SINGLE_REFUSAL)
+            intel_report = intel.report(reference='matlab-intel')
+            by_id = {r['id']: r['class'] for r in intel_report['runs']}
+            self.assertEqual(by_id, {
+                'prf_gaussian_lh_average_single': 'refused',
+                'rc_gaussian_lh_single': 'refused',
+                'rc_hull_lh_double': 'exact',
+            })
+            self.assertEqual(intel_report['summary']['failedRuns'], 0)
+
     def test_source_receipts_are_not_a_compiled_execution(self):
         with self.assertRaisesRegex(Inventory, 'expected a compiled-runtime execution'):
             self.x.report(expect='compiled-runtime')
@@ -677,9 +781,27 @@ class Compiled(Base):
         report = self.x.report()
         self.assertEqual(self.run_class(report), 'exact')
         self.assertEqual(report['matlab']['image']['id'], IMAGE)
-        self.assertEqual(report['matlab']['inputs'], 'attested by receipts/inputs.json')
+        self.assertEqual(report['matlab']['inputs'],
+                         'historical bundle-only attestation (receipts/inputs.json omits per-run staged hashes)')
         with self.assertRaisesRegex(Inventory, 'expected a source execution'):
             self.x.report(expect='source')
+        # When compiled receipts include staged hashes, both inputs.json and per-run receipts are enforced.
+        defaults_path = self.x.matlab / self.id / 'SamSrf_defaults.json'
+        defaults_path.write_text(json.dumps({'def_64bit': True}, indent=2) + '\n')
+        staged_map = {'SamSrf_defaults.json': sha(defaults_path.read_bytes())}
+        (self.x.matlab / 'receipts' / 'inputs.json').write_text(json.dumps({
+            'sha256': self.x.manifest, 'staged': None, 'unchanged': True}))
+        with self.assertRaisesRegex(Inventory, 'per-run staged input hashes'):
+            self.x.report()
+        (self.x.matlab / 'receipts' / 'inputs.json').write_text(json.dumps({
+            'sha256': self.x.manifest, 'staged': {self.id: staged_map}, 'unchanged': True}))
+        with self.assertRaisesRegex(Inventory, 'missing stagedInputs'):
+            self.x.report()
+        receipt_path = self.x.matlab / 'receipts' / f'{self.id}.json'
+        receipt = json.loads(receipt_path.read_text())
+        receipt_path.write_text(json.dumps({**receipt, 'stagedInputs': staged_map}))
+        full_report = self.x.report()
+        self.assertEqual(full_report['matlab']['inputs'], 'attested by receipts/inputs.json (bundle and staged inputs)')
 
     def test_malformed_compiled_receipts_are_refused(self):
         environment = self.x.matlab / 'receipts' / 'environment.json'
