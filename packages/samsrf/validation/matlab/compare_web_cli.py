@@ -161,10 +161,21 @@ def matlab_execution(root, plan, manifest, allow_unattested):
     else:
         raise Inventory('the MATLAB receipts name neither a source nor a compiled execution')
     inputs = receipts / 'inputs.json'
+    recorded_staged = None
     if inputs.is_file():
         recorded = read_json(inputs)
         if recorded.get('sha256') != manifest or recorded.get('unchanged') is not True:
             raise Inventory('the MATLAB execution ran on other inputs than the bundle manifest')
+        recorded_staged = recorded.get('staged')
+        if kind == 'source':
+            if not isinstance(recorded_staged, dict):
+                raise Inventory('source receipts/inputs.json must record per-run staged input hashes')
+        elif recorded_staged is not None and not isinstance(recorded_staged, dict):
+            raise Inventory('receipts/inputs.json staged field must be an object')
+        if recorded_staged is not None:
+            expected_run_ids = {run['id'] for run in plan['runs']}
+            if set(recorded_staged.keys()) != expected_run_ids:
+                raise Inventory(f'receipts/inputs.json staged runs do not match the plan: {sorted(set(recorded_staged.keys()) ^ expected_run_ids)}')
         identity['inputs'] = 'attested by receipts/inputs.json'
     elif kind == 'compiled-runtime':
         raise Inventory('the compiled receipts have no inputs.json')
@@ -178,15 +189,57 @@ def matlab_execution(root, plan, manifest, allow_unattested):
         raise Inventory(f'MATLAB receipts do not match the plan runs: {sorted(names ^ expected_names)}')
     records = {}
     for run in plan['runs']:
-        receipt = read_json(receipts / f'{run["id"]}.json')
-        if receipt.get('id') != run['id'] or receipt.get('execution') != RECEIPT_EXECUTION[kind]:
-            raise Inventory(f'{run["id"]}: receipt identity or execution kind differs')
+        run_id = run['id']
+        receipt = read_json(receipts / f'{run_id}.json')
+        if receipt.get('id') != run_id or receipt.get('execution') != RECEIPT_EXECUTION[kind]:
+            raise Inventory(f'{run_id}: receipt identity or execution kind differs')
         if normalised_argv(receipt.get('argv', [])) != run['argv']:
-            raise Inventory(f'{run["id"]}: the MATLAB receipt ran another argv than the plan')
+            raise Inventory(f'{run_id}: the MATLAB receipt ran another argv than the plan')
         if receipt.get('status') not in ('succeeded', 'failed'):
-            raise Inventory(f'{run["id"]}: unknown MATLAB status {receipt.get("status")}')
-        records[run['id']] = receipt
+            raise Inventory(f'{run_id}: unknown MATLAB status {receipt.get("status")}')
+        verify_staged_inputs(root / run_id, run, manifest,
+                             None if recorded_staged is None else recorded_staged[run_id],
+                             receipt.get('stagedInputs'), require_receipt=(kind == 'source' and recorded_staged is not None))
+        records[run_id] = receipt
     return identity, records
+
+
+def verify_staged_inputs(run_dir, run, manifest, attested_staged, receipt_staged, require_receipt=False):
+    """Verify per-run staged defaults and custom HRF against the plan, bundle manifest and receipts."""
+    run_id = run['id']
+    expects_hrf = run['model'].get('Hrf') == cli_plan.CUSTOM_HRF
+    expected_keys = {'SamSrf_defaults.json'} | ({f'{cli_plan.CUSTOM_HRF}.mat'} if expects_hrf else set())
+    if attested_staged is not None:
+        if not isinstance(attested_staged, dict) or set(attested_staged.keys()) != expected_keys:
+            raise Inventory(f'{run_id}: attested staged inputs do not match the plan')
+        if require_receipt and receipt_staged is None:
+            raise Inventory(f'{run_id}: run receipt is missing stagedInputs')
+        if receipt_staged is not None and receipt_staged != attested_staged:
+            raise Inventory(f'{run_id}: run receipt stagedInputs differs from receipts/inputs.json')
+        try:
+            actual = cli_plan.staged_file_hashes(run_dir, run)
+        except ValueError as error:
+            raise Inventory(str(error)) from error
+        if actual != attested_staged:
+            raise Inventory(f'{run_id}: staged input files on disk differ from receipts/inputs.json')
+    defaults_path = run_dir / 'SamSrf_defaults.json'
+    if defaults_path.is_file():
+        defaults = read_json(defaults_path)
+        expected_64bit = run['precision'] == 'double'
+        if defaults.get('def_64bit') is not expected_64bit:
+            raise Inventory(f'{run_id}: staged SamSrf_defaults.json has def_64bit={defaults.get("def_64bit")!r}, expected {expected_64bit}')
+    elif attested_staged is not None:
+        raise Inventory(f'{run_id}: missing staged SamSrf_defaults.json')
+    hrf_name = f'{cli_plan.CUSTOM_HRF}.mat'
+    hrf_path = run_dir / hrf_name
+    if expects_hrf:
+        if hrf_path.is_file():
+            if hrf_name in manifest and hashlib.sha256(hrf_path.read_bytes()).hexdigest() != manifest[hrf_name]:
+                raise Inventory(f'{run_id}: staged {hrf_name} differs from the bundle manifest')
+        elif attested_staged is not None:
+            raise Inventory(f'{run_id}: missing staged {hrf_name}')
+    elif hrf_path.exists() or hrf_path.is_symlink():
+        raise Inventory(f'{run_id}: unexpected staged {hrf_name}')
 
 
 def web_execution(root, plan, plan_sha, manifest_sha, reference='current'):

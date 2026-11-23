@@ -23,7 +23,7 @@ import sys
 import time
 
 from capture_environment import CONTROLS
-from cli_plan import is_staged, results_argv, tree_hashes
+from cli_plan import is_staged, results_argv, staged_file_hashes, tree_hashes
 
 DIGEST = re.compile(r'^(?:[a-z0-9][a-z0-9._/:-]*@)?sha256:[0-9a-f]{64}$')
 RESULTS = '/results'
@@ -89,25 +89,32 @@ def run_matrix(image, plan, bundle, root, runner=subprocess.run):
                                           'requested': CONTROLS, 'host': host(),
                                           'network': 'none', 'inputs': 'read-only'})
     failures = 0
+    staged_hashes = {}
     for run in plan['runs']:
         directory = root / run['id']
         staged(directory)
+        before_staged = staged_file_hashes(directory, run)
         argv = results_argv(run, RESULTS)
         started = time.monotonic()
         with (receipts / f'{run["id"]}.log').open('x') as log:
             completed = runner(docker_command(image, bundle, directory, argv),
                                stdout=log, stderr=subprocess.STDOUT, check=False)
+        after_staged = staged_file_hashes(directory, run)
+        if before_staged != after_staged:
+            raise RuntimeError(f'{run["id"]}: the compiled run modified its staged input files')
+        staged_hashes[run['id']] = before_staged
         status = 'succeeded' if completed.returncode == 0 else 'failed'
         failures += status == 'failed'
         write(receipts / f'{run["id"]}.json', {
             'id': run['id'], 'execution': 'compiled-runtime', 'argv': argv,
             'exitCode': completed.returncode, 'status': status,
+            'stagedInputs': before_staged,
             'seconds': time.monotonic() - started})
         print(f'{run["id"]}: {status} ({completed.returncode})', flush=True)
     after = tree_hashes(bundle)
     if before != after:
         raise RuntimeError('The compiled runs changed the read-only input bundle')
-    write(receipts / 'inputs.json', {'sha256': before, 'unchanged': True})
+    write(receipts / 'inputs.json', {'sha256': before, 'staged': staged_hashes, 'unchanged': True})
     return failures
 
 

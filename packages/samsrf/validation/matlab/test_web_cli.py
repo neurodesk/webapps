@@ -627,11 +627,64 @@ class Provenance(Base):
             self.x.report(allow=False)
 
     def test_source_execution_with_attested_inputs_passes_without_allow_flag(self):
+        defaults_path = self.x.matlab / self.id / 'SamSrf_defaults.json'
+        defaults_path.write_text(json.dumps({'def_64bit': True}, indent=2) + '\n')
+        staged_map = {'SamSrf_defaults.json': sha(defaults_path.read_bytes())}
+        # Source inputs.json without per-run staged hashes is refused.
         (self.x.matlab / 'receipts' / 'inputs.json').write_text(json.dumps({
             'sha256': self.x.manifest, 'unchanged': True}))
+        with self.assertRaisesRegex(Inventory, 'per-run staged input hashes'):
+            self.x.report(allow=False)
+        # With staged hashes and per-run stagedInputs, comparison succeeds without allow flag.
+        (self.x.matlab / 'receipts' / 'inputs.json').write_text(json.dumps({
+            'sha256': self.x.manifest, 'staged': {self.id: staged_map}, 'unchanged': True}))
+        receipt_path = self.x.matlab / 'receipts' / f'{self.id}.json'
+        receipt = json.loads(receipt_path.read_text())
+        receipt_path.write_text(json.dumps({**receipt, 'stagedInputs': staged_map}))
         report = self.x.report(allow=False)
         self.assertEqual(report['matlab']['inputs'], 'attested by receipts/inputs.json')
         self.assertEqual(report['summary']['exactRuns'], 1)
+        # Mutating staged def_64bit to false on a double run is refused, even if receipts are rewritten to match it.
+        defaults_path.write_text(json.dumps({'def_64bit': False}, indent=2) + '\n')
+        with self.assertRaisesRegex(Inventory, 'staged input files on disk differ'):
+            self.x.report(allow=False)
+        forged_map = {'SamSrf_defaults.json': sha(defaults_path.read_bytes())}
+        (self.x.matlab / 'receipts' / 'inputs.json').write_text(json.dumps({
+            'sha256': self.x.manifest, 'staged': {self.id: forged_map}, 'unchanged': True}))
+        receipt_path.write_text(json.dumps({**receipt, 'stagedInputs': forged_map}))
+        with self.assertRaisesRegex(Inventory, 'def_64bit=False, expected True'):
+            self.x.report(allow=False)
+
+    def test_custom_hrf_staged_file_must_match_bundle_manifest(self):
+        with scratch() as root:
+            fixture = Fixture(root, ['prf_custom_hrf_lh_double'])
+            hrf_bytes = b'expected-hrf-mat'
+            fixture.manifest['hrf_custom.mat'] = sha(hrf_bytes)
+            fixture.manifest_sha = sha(json.dumps(fixture.manifest).encode())
+            fixture.write()
+            run_id = 'prf_custom_hrf_lh_double'
+            defaults_path = fixture.matlab / run_id / 'SamSrf_defaults.json'
+            defaults_path.write_text(json.dumps({'def_64bit': True}, indent=2) + '\n')
+            hrf_path = fixture.matlab / run_id / 'hrf_custom.mat'
+            hrf_path.write_bytes(hrf_bytes)
+            staged_map = {
+                'SamSrf_defaults.json': sha(defaults_path.read_bytes()),
+                'hrf_custom.mat': sha(hrf_bytes),
+            }
+            (fixture.matlab / 'receipts' / 'inputs.json').write_text(json.dumps({
+                'sha256': fixture.manifest, 'staged': {run_id: staged_map}, 'unchanged': True}))
+            receipt_path = fixture.matlab / 'receipts' / f'{run_id}.json'
+            receipt = json.loads(receipt_path.read_text())
+            receipt_path.write_text(json.dumps({**receipt, 'stagedInputs': staged_map}))
+            self.assertEqual(fixture.report(allow=False)['summary']['exactRuns'], 1)
+            # Tampering with staged hrf_custom.mat fails even if receipts are rewritten to match it.
+            hrf_path.write_bytes(b'wrong-hrf')
+            forged = {**staged_map, 'hrf_custom.mat': sha(b'wrong-hrf')}
+            (fixture.matlab / 'receipts' / 'inputs.json').write_text(json.dumps({
+                'sha256': fixture.manifest, 'staged': {run_id: forged}, 'unchanged': True}))
+            receipt_path.write_text(json.dumps({**receipt, 'stagedInputs': forged}))
+            with self.assertRaisesRegex(Inventory, 'staged hrf_custom.mat differs from the bundle manifest'):
+                fixture.report(allow=False)
 
     def test_arithmetic_reference_must_match_web_environment_and_intel_refuses_single(self):
         env_path = self.x.web / 'environment.json'

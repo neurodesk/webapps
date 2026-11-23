@@ -96,20 +96,22 @@ done
 python3 "$matlab/capture_environment.py" "$cli/source-1"
 python3 "$matlab/capture_environment.py" "$cli/source-2"
 
-# 3. Source MATLAB on this host: two processes (each attesting its input bundle) and the custom-HRF check.
+# 3. Source MATLAB on this host: two processes (each attesting /input and staged files) and the custom-HRF check.
 python3 "$matlab/cli_plan.py" verify "$cli/bundle" "$cli/bundle-sha256.json"
 run_matlab run_source_cli "$work/reference-source" "$work/reference-spm" "$cli/plan.json" "$cli/source-1"
-python3 "$matlab/cli_plan.py" attest-inputs "$cli/bundle" "$cli/bundle-sha256.json" "$cli/source-1"
+python3 "$matlab/cli_plan.py" verify-inputs "$cli/plan.json" "$cli/bundle" "$cli/bundle-sha256.json" "$cli/source-1"
 run_matlab verify_cli_hrf "$work/reference-source" "$work/reference-spm" "$cli/plan.json" "$cli/source-1" "$cli/source-1-direct"
 python3 "$matlab/cli_plan.py" verify "$cli/bundle" "$cli/bundle-sha256.json"
 run_matlab run_source_cli "$work/reference-source" "$work/reference-spm" "$cli/plan.json" "$cli/source-2"
-python3 "$matlab/cli_plan.py" attest-inputs "$cli/bundle" "$cli/bundle-sha256.json" "$cli/source-2"
+python3 "$matlab/cli_plan.py" verify-inputs "$cli/plan.json" "$cli/bundle" "$cli/bundle-sha256.json" "$cli/source-2"
 compare "$cli/plan.json" "$cli/source-1" "$cli/source-2" "$cli/source-repeat.json"
 
 # 4. The compiled image on the same host, without MATLAB, network or writable inputs.
 image="$(docker image inspect samsrf-reference:41ed1e96-r2023b --format '{{.Id}}')"
 python3 "$matlab/run_runtime_cli.py" run "$image" "$cli/plan.json" "$cli/bundle" "$cli/compiled-1"
+python3 "$matlab/cli_plan.py" verify-inputs "$cli/plan.json" "$cli/bundle" "$cli/bundle-sha256.json" "$cli/compiled-1"
 python3 "$matlab/run_runtime_cli.py" run "$image" "$cli/plan.json" "$cli/bundle" "$cli/compiled-2"
+python3 "$matlab/cli_plan.py" verify-inputs "$cli/plan.json" "$cli/bundle" "$cli/bundle-sha256.json" "$cli/compiled-2"
 compare "$cli/plan.json" "$cli/source-1" "$cli/compiled-1" "$cli/compiled-vs-source.json"
 compare "$cli/plan.json" "$cli/compiled-1" "$cli/compiled-2" "$cli/compiled-repeat.json"
 longest="$(python3 -c 'import json,pathlib,sys; r=[json.loads(p.read_text()) for p in pathlib.Path(sys.argv[1]).glob("*.json") if p.name not in ("environment.json","inputs.json")]; m=max(r,key=lambda x:x["seconds"]); print(m["id"], max(10, m["seconds"]/2))' "$cli/compiled-1/receipts")"

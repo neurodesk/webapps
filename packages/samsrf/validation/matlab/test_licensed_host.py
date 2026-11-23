@@ -53,9 +53,9 @@ elif name == 'python3':
         bundle = pathlib.Path(args[2])
         bundle.mkdir(parents=True)
         (bundle / 'SamSrf_defaults.json').write_text('{}')
-    elif pathlib.Path(args[0]).name == 'cli_plan.py' and args[1] == 'attest-inputs':
+    elif pathlib.Path(args[0]).name == 'cli_plan.py' and args[1] == 'verify-inputs':
         with open(os.environ['TEST_COMMANDS'], 'a') as handle:
-            handle.write(json.dumps(['attest-inputs'] + args[2:]) + '\n')
+            handle.write(json.dumps(['verify-inputs'] + args[2:]) + '\n')
 elif name == 'matlab_batch.sh':
     with open(os.environ['TEST_COMMANDS'], 'a') as handle:
         handle.write(json.dumps(args) + '\n')
@@ -133,10 +133,12 @@ class LicensedHostCommands(unittest.TestCase):
             build_cmds = [command for command in commands if command[0] == 'build_container']
             self.assertEqual(build_cmds, [['build_container', str(cli / 'container-build'), '/build',
                                            'reference-source', 'reference-spm', str(cli / 'container-build')]])
-            attested = [command for command in commands if command[0] == 'attest-inputs']
-            self.assertEqual(attested, [
-                ['attest-inputs', str(cli / 'bundle'), str(cli / 'bundle-sha256.json'), str(cli / 'source-1')],
-                ['attest-inputs', str(cli / 'bundle'), str(cli / 'bundle-sha256.json'), str(cli / 'source-2')],
+            verified = [command for command in commands if command[0] == 'verify-inputs']
+            self.assertEqual(verified, [
+                ['verify-inputs', str(cli / 'plan.json'), str(cli / 'bundle'), str(cli / 'bundle-sha256.json'), str(cli / 'source-1')],
+                ['verify-inputs', str(cli / 'plan.json'), str(cli / 'bundle'), str(cli / 'bundle-sha256.json'), str(cli / 'source-2')],
+                ['verify-inputs', str(cli / 'plan.json'), str(cli / 'bundle'), str(cli / 'bundle-sha256.json'), str(cli / 'compiled-1')],
+                ['verify-inputs', str(cli / 'plan.json'), str(cli / 'bundle'), str(cli / 'bundle-sha256.json'), str(cli / 'compiled-2')],
             ])
             web_compares = [command for command in commands if command[0] == 'compare_web_cli']
             self.assertEqual(len(web_compares), 2)
@@ -146,7 +148,7 @@ class LicensedHostCommands(unittest.TestCase):
             self.assertEqual(identity, [['oci_identity', str(work / 'samsrf-reference.oci.tar'),
                                          str(cli / 'container-build/image-inspect.json'),
                                          str(cli / 'container-build/oci-identity.json')]])
-            recorded_tags = {'oci_identity', 'build_container', 'attest-inputs', 'compare_web_cli'}
+            recorded_tags = {'oci_identity', 'build_container', 'verify-inputs', 'compare_web_cli'}
             commands = [command for command in commands if command[0] not in recorded_tags]
             self.assertEqual(len(commands), len(expected))
             literal = r"'(?:[^']|'')*'"
@@ -186,7 +188,7 @@ class LicensedHostCommands(unittest.TestCase):
             result, commands, _, _ = self.run_driver(Path(directory), exit_code=37)
             self.assertEqual(result.returncode, 37, result.stderr)
             matlab_cmds = [command for command in commands
-                           if command[0] not in {'oci_identity', 'build_container', 'attest-inputs', 'compare_web_cli'}]
+                           if command[0] not in {'oci_identity', 'build_container', 'verify-inputs', 'compare_web_cli'}]
             self.assertEqual(len(matlab_cmds), 1)
 
 

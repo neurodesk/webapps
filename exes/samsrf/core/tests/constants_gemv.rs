@@ -202,7 +202,7 @@ struct Pipeline {
     models: Vec<(Vec<f64>, Vec<f64>)>,
     global: Vec<f64>,
     global_amd: Vec<f64>,
-    global_intel: Option<Vec<f64>>,
+    intel_double: Option<(Vec<f64>, Vec<f64>, Vec<f64>)>,
 }
 
 fn pipeline_cases(runs: &[RawRun]) -> Vec<Pipeline> {
@@ -253,7 +253,7 @@ fn pipeline_cases(runs: &[RawRun]) -> Vec<Pipeline> {
                 models.push((courses, ceilings));
             }
             let global = port.global_signal.unwrap().into_iter().map(round).collect();
-            let run_global = |reference| {
+            let run_ref = |reference| {
                 let mut acc = RunAccumulator::with_reference(
                     count,
                     VertexSelection::from_indices(positions.iter().map(|&p| p as u32).collect()),
@@ -264,10 +264,27 @@ fn pipeline_cases(runs: &[RawRun]) -> Vec<Pipeline> {
                 for run in &edited_runs {
                     acc.push_run(run).unwrap();
                 }
-                acc.finish().unwrap().global_signal.unwrap().into_iter().map(round).collect::<Vec<_>>()
+                acc.finish().unwrap()
             };
-            let global_amd = run_global(ArithmeticReference::MatlabAmd);
-            let global_intel = if single { None } else { Some(run_global(ArithmeticReference::MatlabIntel)) };
+            let global_amd = run_ref(ArithmeticReference::MatlabAmd)
+                .global_signal
+                .unwrap()
+                .into_iter()
+                .map(round)
+                .collect::<Vec<_>>();
+            let intel_double = if single {
+                None
+            } else {
+                let res = run_ref(ArithmeticReference::MatlabIntel);
+                let intel_ceiling = res.noise_ceiling.as_ref().unwrap();
+                let intel_courses = positions
+                    .iter()
+                    .flat_map(|&p| res.data.course(slot(p)).iter().copied().collect::<Vec<_>>())
+                    .collect::<Vec<_>>();
+                let intel_ceilings = positions.iter().map(|&p| intel_ceiling[slot(p)]).collect::<Vec<_>>();
+                let intel_global = res.global_signal.unwrap();
+                Some((intel_courses, intel_ceilings, intel_global))
+            };
             cases.push(Pipeline {
                 id: format!("pipeline_V{count}_{}", if single { "single" } else { "double" }),
                 vertices: count,
@@ -278,7 +295,7 @@ fn pipeline_cases(runs: &[RawRun]) -> Vec<Pipeline> {
                 models,
                 global,
                 global_amd,
-                global_intel,
+                intel_double,
             });
         }
     }
@@ -434,7 +451,23 @@ fn recorded(dir: &Path, descriptor: &Value, shape: &[usize], class: &str) -> Vec
 }
 
 fn same(a: &[f64], b: &[f64]) -> usize {
+    assert_eq!(a.len(), b.len(), "length mismatch ({} vs {})", a.len(), b.len());
     a.iter().zip(b).filter(|(x, y)| x.to_bits() == y.to_bits()).count()
+}
+
+fn max_relative_error(mine: &[f64], theirs: &[f64], label: &str) -> f64 {
+    assert_eq!(mine.len(), theirs.len(), "{label}: length mismatch ({} vs {})", mine.len(), theirs.len());
+    assert!(!mine.is_empty(), "{label}: empty signal");
+    let mut max = 0.0_f64;
+    for (index, (&a, &b)) in mine.iter().zip(theirs).enumerate() {
+        assert!(a.is_finite() && b.is_finite(), "{label}[{index}]: nonfinite value (mine={a}, theirs={b})");
+        let err = ((a - b) / b).abs();
+        assert!(err.is_finite(), "{label}[{index}]: nonfinite relative error (mine={a}, theirs={b})");
+        if err > max {
+            max = err;
+        }
+    }
+    max
 }
 
 fn cases(dir: &Path, file: &str) -> Vec<Value> {
@@ -517,14 +550,20 @@ fn constants_and_gemv_against_the_recording() {
             let entry_amd = tallies.entry("pipeline global signal matlab-amd".into()).or_default();
             entry_amd[0] += same(&port.global_amd, &global);
             entry_amd[1] += 250;
-            if let Some(ref intel_global) = port.global_intel {
+            if let Some((ref intel_courses, ref intel_ceilings, ref intel_global)) = port.intel_double {
+                let c_entry = tallies.entry("pipeline courses matlab-intel double".into()).or_default();
+                c_entry[0] += same(intel_courses, &courses);
+                c_entry[1] += intel_courses.len();
+                let nc_entry = tallies.entry("pipeline noise ceiling matlab-intel double".into()).or_default();
+                nc_entry[0] += same(intel_ceilings, &ceiling);
+                nc_entry[1] += intel_ceilings.len();
                 let entry_intel = tallies.entry("pipeline global signal matlab-intel double".into()).or_default();
                 entry_intel[0] += same(intel_global, &global);
                 entry_intel[1] += 250;
-                let intel_rel = intel_global.iter().zip(&global).map(|(a, b)| ((a - b) / b).abs()).fold(0.0, f64::max);
+                let intel_rel = max_relative_error(intel_global, &global, &format!("{host} {} matlab-intel", port.id));
                 global_error.insert(format!("{}_matlab_intel", port.id), intel_rel);
             }
-            let relative = port.global.iter().zip(&global).map(|(a, b)| ((a - b) / b).abs()).fold(0.0, f64::max);
+            let relative = max_relative_error(&port.global, &global, &format!("{host} {}", port.id));
             global_error.insert(port.id.clone(), relative);
         }
         let recorded_gemv = cases(&dir, "gemv.json");
@@ -619,9 +658,11 @@ fn require_amd_outcome(host: &str, tallies: &BTreeMap<String, [usize; 2]>) {
     }
 }
 
-/// The global-signal outcome on the Intel AVX512_E1 host under explicit references.
+/// The double preprocessing and global-signal outcome on the Intel AVX512_E1 host.
 fn require_intel_outcome(host: &str, tallies: &BTreeMap<String, [usize; 2]>, global_error: &BTreeMap<String, f64>) {
     let count = |key: &str| tallies.get(key).copied().unwrap_or_else(|| panic!("{host}: no tally {key}"));
+    assert_eq!(count("pipeline courses matlab-intel double"), [70_500, 70_500], "{host}: matlab-intel double courses");
+    assert_eq!(count("pipeline noise ceiling matlab-intel double"), [282, 282], "{host}: matlab-intel double noise ceiling");
     assert_eq!(count("pipeline global signal M1 port"), [0, 2_000], "{host}: current global signal on Intel");
     assert_eq!(count("pipeline global signal matlab-amd"), [0, 2_000], "{host}: matlab-amd global signal on Intel");
     assert_eq!(count("pipeline global signal matlab-intel double"), [8, 1_000], "{host}: matlab-intel double global signal");
@@ -629,6 +670,22 @@ fn require_intel_outcome(host: &str, tallies: &BTreeMap<String, [usize; 2]>, glo
         let key = format!("pipeline_V{count_v}_double_matlab_intel");
         let err = global_error.get(&key).copied().unwrap_or_else(|| panic!("{host}: missing {key}"));
         assert!(err < 3e-13, "{host}: {key} max relative error {err:e}");
+    }
+}
+
+#[test]
+fn max_relative_error_rejects_nonfinite_and_mismatched_signals() {
+    assert!((max_relative_error(&[1.0, 2.0], &[1.0, 2.5], "ok") - 0.2).abs() < 1e-15);
+    for (mine, theirs) in [
+        (vec![f64::NAN], vec![1.0]),
+        (vec![1.0], vec![f64::NAN]),
+        (vec![f64::INFINITY], vec![1.0]),
+        (vec![1.0], vec![f64::NEG_INFINITY]),
+        (vec![1.0], vec![0.0]),
+        (vec![1.0], vec![1.0, 2.0]),
+        (vec![], vec![]),
+    ] {
+        assert!(std::panic::catch_unwind(|| max_relative_error(&mine, &theirs, "bad")).is_err());
     }
 }
 
