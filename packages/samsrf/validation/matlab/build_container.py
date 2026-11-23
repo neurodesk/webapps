@@ -175,7 +175,7 @@ def parse_dockerfile_instructions(text):
     index = 0
     seen_directives = set()
     while index < len(lines):
-        match = PARSER_DIRECTIVE.match(lines[index])
+        match = PARSER_DIRECTIVE.match(lines[index].lstrip())
         if not match:
             break
         key, value = match.group(1).lower(), match.group(2).strip(' \t')
@@ -198,7 +198,9 @@ def parse_dockerfile_instructions(text):
             # whitespace indentation) both between instructions and inside continuations.
             continue
         trimmed_right = raw.rstrip(' \t')
-        if trailing_escape_count(trimmed_right, escape) % 2 == 1:
+        # BuildKit continues only on a single trailing escape (an escape preceded by another
+        # escape, e.g. `\\` or `\\\`, ends the instruction).
+        if trailing_escape_count(trimmed_right, escape) == 1:
             current.append(trimmed_right[:-1])
         else:
             current.append(raw)
@@ -227,13 +229,16 @@ ASCII_WS = re.compile(r'[ \t]+')
 def parse_copy_from_flag(instruction, path, escape='\\'):
     """Return the `--from=<src>` value for a COPY instruction, or None if absent.
 
-    Fails closed on ADD --from=, malformed/duplicate/quoted/escaped flags, `--`,
-    escaped leading tokens, or variable refs.
+    Fails closed on ADD --from=, non-ASCII/control whitespace (such as vertical tab or
+    nonbreaking space), malformed/duplicate/quoted/escaped flags, `--`, escaped leading
+    tokens, or variable refs.
     """
     match = COPY_ADD_KEYWORD.match(instruction)
     if not match:
         return None
     keyword = match.group(1).upper()
+    if any(ch.isspace() and ch not in (' ', '\t') for ch in instruction):
+        raise ValueError(f'Unsupported whitespace in {keyword} instruction in generated Dockerfile {path}: {instruction}')
     from_ref = None
     tokens = ASCII_WS.split(instruction.strip(' \t'))[1:]
     for token in tokens:

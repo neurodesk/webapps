@@ -266,7 +266,11 @@ class RepairSets(unittest.TestCase):
                 'FROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY --exclude=foo\\ bar --from=external:1 /x /x\n',
                 'FROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY \\--from=external:1 /x /x\n',
                 '# escape=`\nFROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY --fr`om=external:1 /x /x\n',
+                '\u00a0# escape=`\nFROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY --fr`om=external:1 /x /x\n',
                 'FROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY --from=s1\u00a0/x /x\n',
+                'FROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY\x0b--from=external:1 /x /x\n',
+                'FROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY --exclude=a\u00a0--from=external:1 /x /x\n',
+                'FROM base1:r2023b AS s1\nFROM base2:r2023b\nRUN echo ok\\\\\\\nCOPY --from=external:1 /x /x\n',
             ):
                 (root / 'runtime' / 'Dockerfile').write_text(bad_copy)
                 with self.assertRaisesRegex(ValueError, 'Unsupported'):
