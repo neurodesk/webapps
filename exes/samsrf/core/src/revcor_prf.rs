@@ -12,7 +12,7 @@
 use crate::apertures::Apertures;
 use crate::error::{Error, Result};
 use crate::expr::Value;
-use crate::geometry::{delaunay_convex_hull_area, Hull, HullOrder, ListedHull};
+use crate::geometry::{delaunay_convex_hull_centroid_and_area, HullOrder, ListedHull};
 use crate::hrf::{self, ResolvedHrf};
 use crate::model::{FineFit, RevCorPrfModel};
 use crate::optim::{self, FminsearchOptions};
@@ -184,10 +184,9 @@ impl Prepared {
                 (listed.centroid(), listed.area())
             }
             HullOrder::Anchored | HullOrder::Stored => {
-                let Some(cha) = delaunay_convex_hull_area(&points) else {
+                let Some((centroid, cha)) = delaunay_convex_hull_centroid_and_area(&points) else {
                     return vec![0.0; 5];
                 };
-                let centroid = Hull::of_delaunay_boundary(&points).map_or([f64::NAN; 2], |hull| hull.centroid());
                 (centroid, cha)
             }
         };
@@ -320,11 +319,10 @@ fn nan_min(values: &[f64]) -> f64 {
 /// `(n - 1) * (half / (n - 1))` rounds away from `half`.
 /// `xc(:)` and `yc(:)` of `meshgrid(linspace(-a, a, cols), linspace(-a, a, rows))`
 /// with `yc` flipped, as `samsrf_revcor_prf` builds them. Every grid MATLAB saved
-/// is `symmetric_linspace`. The convex-hull analysis keeps the previous
-/// `listed_linspace` unless `HullOrder::Stored` is asked for: with MATLAB's grid its `Fwhm`
-/// loses a recorded value the previous grid matched, because `convexHull`'s area
-/// is not identified (`packages/samsrf/validation/matlab/README.md`, "Hull area,
-/// centroid and vertex order").
+/// is `symmetric_linspace`, which `Anchored` and `Stored` now use for all RC
+/// analyses (including convex-hull RC, whose area is `delaunay_convex_hull_area`).
+/// Only the historical `HullOrder::Listed` mode keeps `listed_linspace` for the
+/// convex-hull analysis.
 fn pixel_grid(model: &RevCorPrfModel, rows: usize, cols: usize, order: HullOrder) -> (Vec<f64>, Vec<f64>) {
     let a = model.scaling_factor;
     let line = |n: usize| if model.prf_function.is_none() && order == HullOrder::Listed { listed_linspace(-a, a, n) } else { symmetric_linspace(a, n) };
