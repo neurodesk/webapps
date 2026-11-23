@@ -150,7 +150,7 @@ def stage_clean_tree(source, destination):
     return staged_hashes
 
 
-PARSER_DIRECTIVE = re.compile(r'^\s*#\s*([a-zA-Z]+)\s*=\s*(.*?)\s*$')
+PARSER_DIRECTIVE = re.compile(r'^[ \t]*#[ \t]*([a-zA-Z0-9_-]+)[ \t]*=[ \t]*(\S.*?)[ \t]*$')
 KNOWN_DIRECTIVES = {'syntax', 'escape', 'check'}
 
 
