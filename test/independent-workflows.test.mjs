@@ -541,7 +541,16 @@ test('manual SamSrf least-squares kernel probe runs MATLAB alone on more runners
   assert.deepEqual(evalReplica({ qr_kernels: false, record_matlab: false, probes: 'intel-norm-single-css' }), [1]);
   assert.deepEqual(evalReplica({ qr_kernels: false, record_matlab: true, probes: 'none' }), [1]);
   const qrFetch = recording.steps.find(step => step.name === 'Fetch the pinned least-squares designs for the kernel probe');
-  assert.match(qrFetch.run, /inputs\.probes != 'none'/);
+  const runQrGuard = (inputs) => {
+    const rendered = qrFetch.run.replace(/\$\{\{([^}]+)\}\}/g, (_, expr) => String(runInNewContext(expr.trim(), { inputs })));
+    return execFileSync('bash', ['-c', `python3() { printf 'DOWNLOAD_REACHED\\n'; }\n${rendered}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  };
+  assert.match(runQrGuard({ qr_kernels: true, record_matlab: false, revcor_only: false, qr_only: false, probes: 'none' }), /DOWNLOAD_REACHED/);
+  assert.throws(
+    () => runQrGuard({ qr_kernels: true, record_matlab: false, revcor_only: false, qr_only: false, probes: 'intel-norm-single-css' }),
+    (error) => error.status !== 0 && !String(error.stdout ?? '').includes('DOWNLOAD_REACHED'),
+    'qr_kernels guard must exit non-zero before downloading when probes=intel-norm-single-css is also set',
+  );
   const intelSteps = recording.steps.filter(step => /intel-norm-single-css/.test(step.name ?? ''));
   assert.equal(intelSteps.length, 4);
   for (const step of intelSteps) {

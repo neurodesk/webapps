@@ -8,7 +8,7 @@ Authorized by maintainer (`stebo85`) to record pre-registered blind black-box pr
 | File | SHA-256 |
 | --- | --- |
 | `intel-dnrm2-probes.json` | `78e020877fd8af7686732e1597a62ef70db91c1c3506fab4a21f6125a61ca77b` |
-| `record_intel_norm_single_css.m` | `11e89a2a72976eab485997004e5c2b4fa24a6b5c6fecebef38a70e28ca274516` |
+| `record_intel_norm_single_css.m` | `b48f662207becdc0fc060ece679ac5611641244309506180a66bac5c1c249c9d` |
 
 ## 1. Intel AVX512_E1 `dnrm2` / `dznrm2` x87 80-bit identification (#730)
 
@@ -20,7 +20,7 @@ On replay across all 2,400 centered `corr` vectors in `arithmetic-order` and all
 ### Blind test design (`intel-dnrm2-probes.json`)
 - **Real `dnrm2` (`168` vectors):** 14 vectors per length across `n in {5, 7, 13, 17, 18, 19, 20, 33, 36, 37, 64, 75}`, each constructed so its exact Euclidean norm lies within `4e-4` ULP of a `float64` rounding midpoint (seed `73020261123`).
 - **Complex `dznrm2` (`48` vectors):** 8 vectors per length across `n in {5, 13, 17, 36, 50, 75}` (2n real components interleaved), within `4e-4` ULP of a `float64` midpoint.
-- **Extreme-scale `dnrm2` (`8` vectors):** `n = 17` and `n = 36` near-midpoint vectors scaled by `2^600`, `2^-600`, `2^1000`, `2^-1000` (where `x^2` overflows or underflows IEEE `float64` but stays inside x87's 15-bit exponent `[-16382, +16383]`). Because exact power-of-two scaling is exponent-invariant in both 80-bit extended precision and correctly rounded arithmetic, these 8 vectors confirm overflow/underflow-safe extended-exponent accumulation and separate the two extreme-digest families below, rather than distinguishing unscaled x87 from power-of-two-scaled x87.
+- **Extreme-scale `dnrm2` (`8` vectors):** `n = 17` and `n = 36` near-midpoint vectors scaled by `2^600`, `2^-600`, `2^1000`, `2^-1000` (where `x^2` overflows or underflows unscaled IEEE `float64` squaring). These 8 vectors verify whether the norm survives those scales without overflow or underflow and distinguish the two frozen extreme-digest families below; because power-of-two scaling is exponent-invariant in both 80-bit extended precision and compensated binary64 summation, matching a family does not by itself distinguish extended-exponent accumulation from scaled binary64 accumulation.
 
 ### Frozen candidate SHA-256 predictions (little-endian `.f64` arrays)
 
@@ -37,7 +37,7 @@ On replay across all 2,400 centered `corr` vectors in `arithmetic-order` and all
 | `correctly-rounded` (control) | `e931a197d08cea17cd9e2179604be7e4e4fa6b8ffb3ede0818c03e75ea6506a5` | `122c2f641739cbdf780e5ab2094871afa58de6022fd00e7c2d1975ad5c4f7c1e` | `d15f8fadd8c2e05b328eac0aedf61c825ebaa59a5c886e612e7ce4d9b3079d4e` |
 
 ### Decision rule
-- **Confirmed:** A candidate matching **168/168** real norms (exact SHA-256 match) on an Intel `AVX512_E1` host AND matching all 24 BLAS vectors, 95 R(1,1) chains, and 1,200/1,200 `corr` values on existing Intel recordings is confirmed for real `dnrm2` (and likewise 48/48 for `dznrm2`, and 8/8 matching the candidate's frozen extreme-scale digest confirming overflow/underflow-safe extended-precision behavior).
+- **Confirmed:** A candidate matching **168/168** real norms (exact SHA-256 match) on an Intel `AVX512_E1` host AND matching all 24 BLAS vectors, 95 R(1,1) chains, and 1,200/1,200 `corr` values on existing Intel recordings is confirmed for real `dnrm2` (and likewise 48/48 for `dznrm2`, and 8/8 matching the candidate's frozen extreme-scale digest confirming survival without overflow/underflow at `2^±600` and `2^±1000`).
 - **Refuted / further discovery:** If no listed candidate matches 168/168, inspect the exact mismatch pattern (e.g., fold order, unroll boundary, or scaling threshold) and do not adopt an approximate or fitted band.
 
 ## 2. Intel AVX512_E1 single-precision BLAS and blind two-column QR (#731)
@@ -52,8 +52,8 @@ Records on both AMD (`CNR auto`) and Intel (`AVX512_E1`) hosts (`single-blas-qr.
 
 Records (`nonnegative-css.json`) on `x001_lh` original signed apertures (`inputs.json`, double precision):
 - 48 pointwise evaluations (`12` ROI vertices × `4` exponents `[0.3, 0.5, 0.7, 0.85]`) where **every one of the 12 seeds** is asserted to produce both negative and positive `rawYp = prf_predict_timecourse(...)` entries on the original signed apertures, applying `nn_css_compress(rawYp, pExp)` (`rawYp(pos).^pExp` for `rawYp > 0`, `0` otherwise — matching `prf::compress`) through MATLAB's `prf_convolve_hrf`, `corr`, `1 - r^2`, and `[ones pred] \ y`.
-- 12 full Nelder-Mead (`fminsearch`) fine fits under the exact unconstrained nonnegative-clipped CSS objective matching `prf::errfun_with_reference` and `optim::fminsearch` (`OutputFcn` stopping when `~isfinite(optimValues.fval)`, no extra parameter bounds), recording `fitted`, `[fval, rFit, rFit^2]`, `exitflag`, `funcCount`, `iterations`, `negativeCountAtFit`, and `beta`.
-- **Decision rule:** Enabling `Css_Convention: "nonnegative"` under `matlab-intel` requires matching every recorded Intel evaluation (`rawYp`, `predicted`, `r`, `objective`, `beta`) and fitted parameter/score (`fitted`, `fval`, `r`, `r2`, `beta`, `exitflag`, `funcCount`, `iterations`) bit for bit on the Intel `AVX512_E1` host, while keeping AMD control equality intact.
+- 12 full Nelder-Mead (`fminsearch`) fine fits under the exact unconstrained nonnegative-clipped CSS objective matching `prf::errfun_with_reference` and `optim::fminsearch` (`OutputFcn` stopping when `~isfinite(optimValues.fval)`, no extra parameter bounds), recording `fitted`, `[fval, 1 - fval, rFit, rFit^2]` (where `1 - fval` is the port's fitted `R^2` score `fit_prf.rs:287` and `rFit`/`rFit^2` are recomputed-at-`pFit` diagnostics), `exitflag`, `funcCount`, `iterations`, `negativeCountAtFit`, and `beta`.
+- **Decision rule:** Enabling `Css_Convention: "nonnegative"` under `matlab-intel` requires matching every recorded Intel evaluation (`rawYp`, `predicted`, `r`, `objective`, `beta`) and fitted parameter/score (`fitted`, `fval`, `1 - fval`, `rFit`, `rFit^2`, `beta`, `exitflag`, `funcCount`, `iterations`) bit for bit on the Intel `AVX512_E1` host, while keeping AMD control equality intact.
 
 ## Repeatability and host provenance
 Every runner executes `record_intel_norm_single_css` twice in independent MATLAB R2023b Update 11 processes (`maxNumCompThreads(1)`), requiring byte-for-byte identity of all JSON cases (excluding process-specific metadata if any) and all `.f64` arrays. Running 3 replicas per Ubuntu label (`ubuntu-22.04`, `ubuntu-24.04`) ensures both AMD EPYC (`CNR auto`) and Intel Xeon (`AVX512_E1`) hosts are captured by receipt `blas`/`cpu` fields.
