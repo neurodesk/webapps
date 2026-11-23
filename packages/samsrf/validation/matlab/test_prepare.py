@@ -233,11 +233,54 @@ class RepairSets(unittest.TestCase):
             ok = build_container.record_base_images(root, inspector=lambda ref: multistage_ok[ref])
             self.assertEqual(ok['finalBases']['runtime'], 'base1:r2023b')
 
-            # COPY --from= (including across line continuations) cannot be verified by layer prefix alone.
+            # COPY --from= referencing an earlier stage alias (including across continuations)
+            # or numeric stage index is allowed and records its resolved stage base; external,
+            # self, forward, ADD --from=, variable, or malformed flags fail closed.
             (root / 'runtime' / 'Dockerfile').write_text(
                 'FROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY \\\n  --from=s1 /x /x\n')
-            with self.assertRaisesRegex(ValueError, 'Unsupported COPY/ADD --from='):
-                build_container.record_base_images(root, inspector=lambda ref: multistage[ref])
+            multistage_b2 = {
+                **multistage,
+                'samsrf-reference-runtime:r2023b': {'id': 'sha256:rt', 'repoDigests': [], 'layers': ['sha256:l1', 'sha256:l2', 'sha256:rt1']},
+                'samsrf-reference:41ed1e96-r2023b': {'id': 'sha256:app', 'repoDigests': [], 'layers': ['sha256:l1', 'sha256:l2', 'sha256:rt1', 'sha256:app1']},
+            }
+            ok_copy_stage = build_container.record_base_images(root, inspector=lambda ref: multistage_b2[ref])
+            self.assertEqual(ok_copy_stage['finalBases']['runtime'], 'base2:r2023b')
+            self.assertEqual(ok_copy_stage['copyFromStages'], {'runtime': [{'from': 's1', 'stageBase': 'base1:r2023b'}]})
+
+            (root / 'runtime' / 'Dockerfile').write_text(
+                'FROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY --chown=appuser --from=0 /x /x\n')
+            ok_copy_index = build_container.record_base_images(root, inspector=lambda ref: multistage_b2[ref])
+            self.assertEqual(ok_copy_index['copyFromStages'], {'runtime': [{'from': '0', 'stageBase': 'base1:r2023b'}]})
+
+            for bad_copy in (
+                'FROM base2:r2023b\nCOPY --from=external:1 /x /x\n',
+                'FROM base2:r2023b AS s1\nCOPY --from=s1 /x /x\n',
+                'FROM base2:r2023b\nCOPY --from=0 /x /x\n',
+                'FROM base2:r2023b\nCOPY --from=later /x /x\nFROM base1:r2023b AS later\n',
+                'FROM base1:r2023b AS s1\nFROM base2:r2023b\nADD --from=s1 /x /x\n',
+                'FROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY --from=$STAGE /x /x\n',
+                'FROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY --from=s1 --from=0 /x /x\n',
+                'FROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY -- --from=external:1 /x /x\n',
+                'FROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY --from=\u00b2 /x /x\n',
+                'FROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY --fr\\om=external:1 ["/x", "/x"]\n',
+                'FROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY --exclude=foo\\ bar --from=external:1 /x /x\n',
+                'FROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY \\--from=external:1 /x /x\n',
+                '# escape=`\nFROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY --fr`om=external:1 /x /x\n',
+                '\u00a0# escape=`\nFROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY --fr`om=external:1 /x /x\n',
+                'FROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY --from=s1\u00a0/x /x\n',
+                'FROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY\x0b--from=external:1 /x /x\n',
+                'FROM base1:r2023b AS s1\nFROM base2:r2023b\nCOPY --exclude=a\u00a0--from=external:1 /x /x\n',
+                'FROM base1:r2023b AS s1\nFROM base2:r2023b\nRUN echo ok\\\\\\\nCOPY --from=external:1 /x /x\n',
+            ):
+                (root / 'runtime' / 'Dockerfile').write_text(bad_copy)
+                with self.assertRaisesRegex(ValueError, 'Unsupported'):
+                    build_container.record_base_images(root, inspector=lambda ref: multistage_b2[ref])
+
+            # Duplicate stage alias fails closed.
+            (root / 'runtime' / 'Dockerfile').write_text(
+                'FROM base1:r2023b AS s1\nFROM base2:r2023b AS S1\n')
+            with self.assertRaisesRegex(ValueError, 'Duplicate stage alias'):
+                build_container.record_base_images(root, inspector=lambda ref: multistage_b2[ref])
 
             # Continued final FROM instruction must be parsed rather than falling back to an earlier stage.
             (root / 'runtime' / 'Dockerfile').write_text(
@@ -317,6 +360,106 @@ class RepairSets(unittest.TestCase):
             (root / 'runtime' / 'Dockerfile').write_text('# check=error=true\n# CHECK=error=false\nFROM base1:r2023b\n')
             with self.assertRaisesRegex(ValueError, 'Duplicate Dockerfile parser directive'):
                 build_container.record_base_images(root, inspector=lambda ref: multistage_ok[ref])
+
+    def test_record_base_images_matches_matlab_r2023b_u11_layout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'runtime' / 'matlabruntimebase').mkdir(parents=True)
+            (root / 'container').mkdir()
+            installer = 'containers.mathworks.com/matlab-runtime-utils/matlab-runtime-installer:r2023b-update-11'
+            runtime_base = 'matlabruntimebase/r2023b/release/update11'
+            (root / 'runtime' / 'Dockerfile.runtime').write_text(
+                f'FROM {installer} AS installer\n'
+                f'RUN ./install -bat true -inputFile ./installInputs.txt\n'
+                f'FROM {runtime_base}\n'
+                f'COPY --from=installer /tmp/matlabruntime/runtime /opt/matlabruntime\n'
+            )
+            (root / 'runtime' / 'matlabruntimebase' / 'Dockerfile.deps').write_text(
+                'FROM ubuntu:22.04\nRUN apt-get update\n'
+            )
+            (root / 'container' / 'Dockerfile').write_text(
+                'FROM samsrf-reference-runtime:r2023b\nCOPY ./applicationFilesForMATLABCompiler /usr/bin/mlrtapp\n'
+            )
+            images = {
+                'ubuntu:22.04': {
+                    'id': 'sha256:u22', 'repoDigests': ['ubuntu@sha256:u22'],
+                    'layers': ['sha256:l1'],
+                },
+                runtime_base: {
+                    'id': 'sha256:mrb', 'repoDigests': [f'{runtime_base}@sha256:mrb'],
+                    'layers': ['sha256:l1', 'sha256:l2'],
+                },
+                installer: {
+                    'id': 'sha256:inst', 'repoDigests': [f'{installer.split(":")[0]}@sha256:inst'],
+                    'layers': ['sha256:i1', 'sha256:i2'],
+                },
+                'samsrf-reference-runtime:r2023b': {
+                    'id': 'sha256:rt', 'repoDigests': [],
+                    'layers': ['sha256:l1', 'sha256:l2', 'sha256:l3', 'sha256:l4', 'sha256:l5'],
+                },
+                'samsrf-reference:41ed1e96-r2023b': {
+                    'id': 'sha256:app', 'repoDigests': [],
+                    'layers': ['sha256:l1', 'sha256:l2', 'sha256:l3', 'sha256:l4', 'sha256:l5', 'sha256:l6', 'sha256:l7'],
+                },
+            }
+            record = build_container.record_base_images(root, inspector=lambda ref: images[ref])
+            self.assertTrue(record['lineageVerified'])
+            self.assertEqual(record['dockerfilePaths'], {
+                'runtime': 'runtime/Dockerfile.runtime',
+                'container': 'container/Dockerfile',
+                'runtimeBase': 'runtime/matlabruntimebase/Dockerfile.deps',
+            })
+            self.assertEqual(record['finalBases'], {
+                'runtime': runtime_base,
+                'container': 'samsrf-reference-runtime:r2023b',
+                'runtimeBase': 'ubuntu:22.04',
+            })
+            self.assertEqual(record['copyFromStages'], {
+                'runtime': [{'from': 'installer', 'stageBase': installer}],
+            })
+            self.assertIn(installer, record['resolved'])
+            self.assertIn('ubuntu:22.04', record['resolved'])
+
+            # Stale ubuntu:22.04 base breaks the Dockerfile.deps -> matlabruntimebase prefix check.
+            stale_ubuntu = {**images, 'ubuntu:22.04': {'id': 'sha256:old', 'repoDigests': [], 'layers': ['sha256:other']}}
+            with self.assertRaisesRegex(ValueError, 'ubuntu:22.04 .* not a prefix'):
+                build_container.record_base_images(root, inspector=lambda ref: stale_ubuntu[ref])
+
+            # Ambiguous runtime/Dockerfile.runtime and runtime/Dockerfile both present fails closed.
+            (root / 'runtime' / 'Dockerfile').write_text(f'FROM {runtime_base}\n')
+            with self.assertRaisesRegex(ValueError, 'Ambiguous generated runtime Dockerfiles'):
+                build_container.record_base_images(root, inspector=lambda ref: images[ref])
+            (root / 'runtime' / 'Dockerfile').unlink()
+
+            # Missing Dockerfile.deps when runtime uses matlabruntimebase/ fails closed.
+            (root / 'runtime' / 'matlabruntimebase' / 'Dockerfile.deps').unlink()
+            with self.assertRaisesRegex(ValueError, 'Missing generated Dockerfile'):
+                build_container.record_base_images(root, inspector=lambda ref: images[ref])
+
+            # Earlier stage using matlabruntimebase/ with a different final stage still requires
+            # Dockerfile.deps and validates ubuntu:22.04 against matlabruntimebase/, not the final base.
+            (root / 'runtime' / 'Dockerfile.runtime').write_text(
+                f'FROM {runtime_base} AS installer\n'
+                f'FROM alpine:3.19\n'
+                f'COPY --from=installer /tmp/matlabruntime/runtime /opt/matlabruntime\n'
+            )
+            alpine_images = {
+                **images,
+                'alpine:3.19': {'id': 'sha256:alp', 'repoDigests': [], 'layers': ['sha256:a1']},
+                'samsrf-reference-runtime:r2023b': {'id': 'sha256:rt', 'repoDigests': [], 'layers': ['sha256:a1', 'sha256:rt1']},
+                'samsrf-reference:41ed1e96-r2023b': {'id': 'sha256:app', 'repoDigests': [], 'layers': ['sha256:a1', 'sha256:rt1', 'sha256:app1']},
+            }
+            with self.assertRaisesRegex(ValueError, 'Missing generated Dockerfile'):
+                build_container.record_base_images(root, inspector=lambda ref: alpine_images[ref])
+            (root / 'runtime' / 'matlabruntimebase' / 'Dockerfile.deps').write_text('FROM ubuntu:22.04\n')
+            ok_earlier_mrb = build_container.record_base_images(root, inspector=lambda ref: alpine_images[ref])
+            self.assertEqual(ok_earlier_mrb['finalBases']['runtime'], 'alpine:3.19')
+            self.assertEqual(ok_earlier_mrb['finalBases']['runtimeBase'], 'ubuntu:22.04')
+
+            # Unexpected Dockerfile.deps when no runtime stage references matlabruntimebase/ fails closed.
+            (root / 'runtime' / 'Dockerfile.runtime').write_text('FROM alpine:3.19\n')
+            with self.assertRaisesRegex(ValueError, 'Unexpected runtime/matlabruntimebase/Dockerfile.deps'):
+                build_container.record_base_images(root, inspector=lambda ref: alpine_images[ref])
 
 
 if __name__ == '__main__':
