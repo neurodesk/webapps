@@ -23,7 +23,7 @@ function sortedPercentile(sorted, p) {
 
 /**
  * csbdeep.utils.normalize(x, pmin, pmax): float32 (x - lo) / (hi - lo + 1e-20), with the
- * percentiles of the whole image.
+ * percentiles of the whole image (jointly across channels for RGB, as `axis=None` does).
  */
 export function normalize(values, pmin, pmax) {
   const sorted = Float64Array.from(values).sort();
@@ -36,22 +36,27 @@ export function normalize(values, pmin, pmax) {
 }
 
 /** numpy.pad(x, (0, pad), mode="reflect") index for position i of an axis of length n. */
-function reflect(i, n) {
+export function reflectIndex(i, n) {
   if (n === 1) return 0;
   const period = 2 * (n - 1);
   const k = i % period;
   return k < n ? k : period - k;
 }
 
-/** StarDistPadAndCropResizer.before: reflect-pad the end of each axis to a multiple of `divBy`. */
-export function padImage(data, height, width, divBy) {
-  const padHeight = height + ((divBy - (height % divBy)) % divBy);
-  const padWidth = width + ((divBy - (width % divBy)) % divBy);
+/** StarDistPadAndCropResizer.before: reflect-pad the end of each spatial axis to a multiple of `divBy`. */
+export function padImage(data, height, width, divBy, channels = 1) {
+  const [divY, divX] = Array.isArray(divBy) ? divBy : [divBy, divBy];
+  const padHeight = height + ((divY - (height % divY)) % divY);
+  const padWidth = width + ((divX - (width % divX)) % divX);
   if (padHeight === height && padWidth === width) return { data, height, width };
-  const out = new Float32Array(padHeight * padWidth);
+  const out = new Float32Array(padHeight * padWidth * channels);
   for (let y = 0; y < padHeight; y++) {
-    const row = reflect(y, height) * width;
-    for (let x = 0; x < padWidth; x++) out[y * padWidth + x] = data[row + reflect(x, width)];
+    const row = reflectIndex(y, height) * width;
+    for (let x = 0; x < padWidth; x++) {
+      const src = (row + reflectIndex(x, width)) * channels;
+      const dst = (y * padWidth + x) * channels;
+      for (let c = 0; c < channels; c++) out[dst + c] = data[src + c];
+    }
   }
   return { data: out, height: padHeight, width: padWidth };
 }
@@ -115,23 +120,32 @@ export function automaticTiles(height, width, maxTile = 1024) {
   return [Math.max(1, Math.ceil(height / maxTile)), Math.max(1, Math.ceil(width / maxTile))];
 }
 
+export function cropStop(axis, tileSize, grid) {
+  const start = axis.crop[0] / grid;
+  const stop = axis.crop[1] === null ? tileSize / grid : (tileSize + axis.crop[1]) / grid;
+  return [start, stop];
+}
+
 /**
  * StarDist2D._predict_sparse_generator: run the network on the padded image (tiled as csbdeep
  * tiles it), keep the grid pixels whose probability exceeds `probThresh` (not within `b` grid
  * pixels of the padded image border) and inside the unpadded image.
  *
  * `run(tile, height, width)` returns `{ prob, dist }` for one tile: prob has
- * (height / grid) × (width / grid) values and dist nRays per grid pixel (NHWC).
+ * (height / gridY) × (width / gridX) values and dist nRays per grid pixel (NHWC).
  */
 export async function predictCandidates(image, height, width, model, options) {
   const { probThresh, nTiles = [1, 1], run, onTile = () => {} } = options;
-  const { grid, divBy, tileOverlap, nRays } = model;
-  const padded = padImage(image, height, width, divBy);
-  const overlapBlocks = tileOverlap.map((overlap) => Math.ceil(overlap / divBy));
-  const tilesY = axisTiles(padded.height, nTiles[0], divBy, overlapBlocks[0]);
-  const tilesX = axisTiles(padded.width, nTiles[1], divBy, overlapBlocks[1]);
-  const gridHeight = padded.height / grid;
-  const gridWidth = padded.width / grid;
+  const channels = model.channels ?? 1;
+  const [gridY, gridX] = Array.isArray(model.grid) ? model.grid : [model.grid, model.grid];
+  const [divY, divX] = Array.isArray(model.divBy) ? model.divBy : [model.divBy, model.divBy];
+  const { tileOverlap, nRays } = model;
+  const padded = padImage(image, height, width, [divY, divX], channels);
+  const overlapBlocks = [Math.ceil(tileOverlap[0] / divY), Math.ceil(tileOverlap[1] / divX)];
+  const tilesY = axisTiles(padded.height, nTiles[0], divY, overlapBlocks[0]);
+  const tilesX = axisTiles(padded.width, nTiles[1], divX, overlapBlocks[1]);
+  const gridHeight = padded.height / gridY;
+  const gridWidth = padded.width / gridX;
   const threshold = f32(probThresh);
   const prob = [];
   const dist = [];
@@ -142,17 +156,17 @@ export async function predictCandidates(image, height, width, model, options) {
     for (const tx of tilesX) {
       const tileHeight = ty.read[1] - ty.read[0];
       const tileWidth = tx.read[1] - tx.read[0];
-      const input = new Float32Array(tileHeight * tileWidth);
+      const input = new Float32Array(tileHeight * tileWidth * channels);
       for (let y = 0; y < tileHeight; y++) {
-        const from = (ty.read[0] + y) * padded.width + tx.read[0];
-        input.set(padded.data.subarray(from, from + tileWidth), y * tileWidth);
+        const from = ((ty.read[0] + y) * padded.width + tx.read[0]) * channels;
+        input.set(padded.data.subarray(from, from + tileWidth * channels), y * tileWidth * channels);
       }
       const output = await run(input, tileHeight, tileWidth);
-      const outWidth = tileWidth / grid;
-      const sliceY = cropStop(ty, tileHeight, grid);
-      const sliceX = cropStop(tx, tileWidth, grid);
-      const dstY = [ty.write[0] / grid, ty.write[1] / grid];
-      const dstX = [tx.write[0] / grid, tx.write[1] / grid];
+      const outWidth = tileWidth / gridX;
+      const sliceY = cropStop(ty, tileHeight, gridY);
+      const sliceX = cropStop(tx, tileWidth, gridX);
+      const dstY = [ty.write[0] / gridY, ty.write[1] / gridY];
+      const dstX = [tx.write[0] / gridX, tx.write[1] / gridX];
       // _ind_prob_thresh with b only on the sides that touch the padded image border.
       const b = 2;
       const y0 = sliceY[0] + (dstY[0] === 0 ? b : 0);
@@ -164,8 +178,8 @@ export async function predictCandidates(image, height, width, model, options) {
           const at = y * outWidth + x;
           const p = output.prob[at];
           if (!(p > threshold)) continue;
-          const py = (dstY[0] + y - sliceY[0]) * grid;
-          const px = (dstX[0] + x - sliceX[0]) * grid;
+          const py = (dstY[0] + y - sliceY[0]) * gridY;
+          const px = (dstX[0] + x - sliceX[0]) * gridX;
           if (py >= height || px >= width) continue;
           prob.push(p);
           points.push(py, px);
@@ -176,12 +190,6 @@ export async function predictCandidates(image, height, width, model, options) {
     }
   }
   return { prob: Float32Array.from(prob), dist: Float32Array.from(dist), points: Int32Array.from(points), tiles: total };
-}
-
-function cropStop(axis, tileSize, grid) {
-  const start = axis.crop[0] / grid;
-  const stop = axis.crop[1] === null ? tileSize / grid : (tileSize + axis.crop[1]) / grid;
-  return [start, stop];
 }
 
 /** Candidate order of StarDist's NMS: probability descending (np.argsort(prob)[::-1]). */
@@ -375,7 +383,7 @@ export function renderLabels(coord, prob, nRays, height, width) {
 }
 
 /** Per-nucleus measurements as skimage regionprops gives them: centroid (x, y), area, mean. */
-export function measureNuclei(labels, image, width, count) {
+export function measureNuclei(labels, image, width, count, channels = 1) {
   const area = new Float64Array(count + 1);
   const sumX = new Float64Array(count + 1);
   const sumY = new Float64Array(count + 1);
@@ -386,7 +394,14 @@ export function measureNuclei(labels, image, width, count) {
     area[label]++;
     sumX[label] += i % width;
     sumY[label] += Math.floor(i / width);
-    sum[label] += image[i];
+    if (channels === 1) {
+      sum[label] += image[i];
+    } else {
+      let avg = 0;
+      const base = i * channels;
+      for (let c = 0; c < channels; c++) avg += image[base + c];
+      sum[label] += avg / channels;
+    }
   }
   const rows = [];
   for (let label = 1; label <= count; label++) {
@@ -399,6 +414,7 @@ export function measureNuclei(labels, image, width, count) {
 /** The full StarDist 2D instance segmentation: predictCandidates, NMS, labels and measurements. */
 export async function segment(raw, height, width, model, options) {
   const { pmin = 1, pmax = 99.8, probThresh = model.thresholds.prob, nmsThresh = model.thresholds.nms, onStage = () => {} } = options;
+  const channels = model.channels ?? 1;
   const normalized = normalize(raw, pmin, pmax);
   const candidates = await predictCandidates(normalized.data, height, width, model, { ...options, probThresh });
   onStage("nms", candidates.prob.length);
@@ -424,7 +440,7 @@ export async function segment(raw, height, width, model, options) {
   onStage("labels", kept.length);
   const coord = polygonCoordinates(keptDist, keptPoints, nRays);
   const labels = renderLabels(coord, keptProb, nRays, height, width);
-  const nuclei = measureNuclei(labels, raw, width, kept.length).map((row) => ({ ...row, probability: keptProb[row.id - 1] }));
+  const nuclei = measureNuclei(labels, raw, width, kept.length, channels).map((row) => ({ ...row, probability: keptProb[row.id - 1] }));
   return {
     labels,
     nuclei,

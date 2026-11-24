@@ -30,6 +30,7 @@ Paths in this table are relative to the repository root. Existing implementation
 
 | App | Useful batch operation | Existing code and next work |
 | --- | --- | --- |
+| `cellpose` | 2D and 3D cell and nucleus segmentation (Cellpose 3 `cyto3` and `nuclei`) | No command line is packaged: Python Cellpose 3.1.1.1 (`cellpose` on PyPI) is the command-line reference the app reproduces on the examples (`apps/cellpose/validation`). |
 | `tumour-report` | Contrast-enhancing brain tumour segmentation (Raidionics v1.3), native morphometry and MNI RADS report | The pipeline is pure JavaScript in `packages/tumour-report/src`, validated against `dbouget/raidionics-rads:v1.3.2-py39-cpu` (`packages/tumour-report/validation`); a packaged Node CLI can reuse it via `exes/node-cli`. |
 | `denoise` | Self-supervised denoising of 2D/3D microscopy stacks (`Aydin FGR`, `ZS-N2N`, `VST-NLM`) | Browser worker and Node-tested core (`apps/denoise/src/core`) verified offline in `apps/denoise/test/offline.mjs`; Aydin (`pip install aydin`) is the established native CLI for batch work. |
 | `totalsegmentator` | Whole-body CT/MRI, MRI vertebrae and CT abdominal muscle segmentation | The pipeline is pure JavaScript in `packages/totalsegmentator/src`, validated in Node with `onnxruntime-node` (`packages/totalsegmentator/validation/validate.mjs`); upstream `TotalSegmentator` is the established native CLI for batch work. |

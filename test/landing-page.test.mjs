@@ -137,6 +137,7 @@ test('microscopy catalogue groups apps by task without repeating its domain', as
   assert.equal(document.querySelector('[data-category-filter="microscopy"]'), null);
   const expected = {
     stardist: 'segmentation',
+    cellpose: 'segmentation',
     microsam: 'segmentation',
     'spot-detection': 'spot-detection',
     'calcium-imaging': 'calcium-imaging',

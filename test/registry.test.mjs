@@ -215,6 +215,7 @@ test('catalog assigns task categories and shares apps across related categories'
     'omezarr-convert': ['conversion'],
     'calcium-imaging': ['calcium-imaging'],
     stardist: ['segmentation'],
+    cellpose: ['segmentation'],
     microsam: ['segmentation'],
     neuromorph: ['morphometry'],
     'structure-tensor': ['fibre-orientation'],

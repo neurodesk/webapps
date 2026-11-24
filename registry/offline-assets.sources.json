@@ -7375,9 +7375,43 @@
         "kind": "example"
       },
       {
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/e76a7bbd831da2bfdae49058700da81d6cca577c/stardist/models/stardist-2d-versatile-fluo.onnx",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/096c23dbc810fb960b5f7d6319195628d40c0b87/stardist/example/skin-he-nuclei-2d.png",
+        "sha256": "d6fb28b106b2b74cf101be3d1e08a55fe01fb09a9316fd673c830dbbf94250b7",
+        "bytes": 582428,
+        "kind": "example",
+        "license": "CC0-1.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2cc5042a0fad34811857bbdf89b1172bda338af4/stardist/example/stardist-demo-nuclei-3d.tif",
+        "sha256": "f5626d500c7a738cd321698f43df36e2ac149d98456579c5cbcf8af48c7253e8",
+        "bytes": 138925,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2cc5042a0fad34811857bbdf89b1172bda338af4/stardist/models/stardist-2d-versatile-fluo.onnx",
         "sha256": "cc5cb72c2b47ebdf55296fdb03cca87a512f458ee1defb0169cfe2506de5f0d3",
         "bytes": 5715335,
+        "kind": "model",
+        "license": "BSD-3-Clause"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2cc5042a0fad34811857bbdf89b1172bda338af4/stardist/models/stardist-2d-versatile-he.onnx",
+        "sha256": "688350e1cf51245440f5f89e53b025e443f78dd73724f12ebf9179ec600451e1",
+        "bytes": 5717568,
+        "kind": "model",
+        "license": "BSD-3-Clause"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2cc5042a0fad34811857bbdf89b1172bda338af4/stardist/models/stardist-2d-paper-dsb2018.onnx",
+        "sha256": "1442ed96ee21db96bb4f8afd3206124d314ab10969b32ba2ec13655b9dc82e89",
+        "bytes": 5640372,
+        "kind": "model",
+        "license": "BSD-3-Clause"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2cc5042a0fad34811857bbdf89b1172bda338af4/stardist/models/stardist-3d-demo.onnx",
+        "sha256": "c9a9d20fd0d2f33a15a841c7133ceb3adfd6af2253bbd815eeec9ee0ee5e9135",
+        "bytes": 6197533,
         "kind": "model",
         "license": "BSD-3-Clause"
       }
@@ -7798,6 +7832,36 @@
         "bytes": 760,
         "kind": "attribution",
         "license": "CC-BY-4.0"
+      }
+    ],
+    "cellpose": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/bc1de48f8c0857d30f2330e986eef29ec77603b3/cellpose/example/allen-cells-2d.ome.tif",
+        "sha256": "800f360b6aa91a93da29da7a4b28ca8191b2f62529b71c41dad5021eecc9e2af",
+        "bytes": 263274,
+        "kind": "example",
+        "license": "CC0-1.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/bc1de48f8c0857d30f2330e986eef29ec77603b3/cellpose/example/allen-cells-3d.ome.tif",
+        "sha256": "768e71dadf4d8793cd0655c835b0ac6870646cc10383c09374e6773210b0115f",
+        "bytes": 167958,
+        "kind": "example",
+        "license": "CC0-1.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/bc1de48f8c0857d30f2330e986eef29ec77603b3/cellpose/models/cellpose-cyto3.onnx",
+        "sha256": "e307443e09ad20d03dc7d10fdba968ce70ee7294b38e9e42d68b89fde8330fd1",
+        "bytes": 26489378,
+        "kind": "model",
+        "license": "BSD-3-Clause"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/bc1de48f8c0857d30f2330e986eef29ec77603b3/cellpose/models/cellpose-nuclei.onnx",
+        "sha256": "e6ebcede6fca35ae50916257952fe8a7af085ec1a8ffad732cc0ad16a4e8d82a",
+        "bytes": 26489378,
+        "kind": "model",
+        "license": "BSD-3-Clause"
       }
     ],
     "tumour-report": [

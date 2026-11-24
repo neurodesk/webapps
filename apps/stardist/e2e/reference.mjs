@@ -1,4 +1,4 @@
-// Python StarDist's result on the example (validation/reference.json) and the IoU matching
+// Python StarDist's result on the examples (validation/reference.json) and the IoU matching
 // stardist.matching uses, for comparing the browser's labels with it.
 import { readFileSync } from "node:fs";
 import { fromArrayBuffer } from "geotiff";
@@ -12,7 +12,7 @@ function decode(base64, Type) {
   return new Type(bytes.buffer, bytes.byteOffset, bytes.byteLength / Type.BYTES_PER_ELEMENT);
 }
 
-/** The label image Python StarDist 0.9.1 gives on the example (no tiling). */
+/** The label image Python StarDist 0.9.1 gives on the 2D fluo example (no tiling). */
 export function referenceLabels() {
   const example = reference.example["1x1"];
   const [height, width] = reference.shape;
@@ -20,9 +20,23 @@ export function referenceLabels() {
 }
 
 export async function readLabelTiff(bytes) {
-  const image = await (await fromArrayBuffer(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))).getImage();
-  const [values] = await image.readRasters();
-  return { width: image.getWidth(), height: image.getHeight(), labels: Int32Array.from(values) };
+  const tiff = await fromArrayBuffer(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+  const depth = await tiff.getImageCount();
+  const first = await tiff.getImage(0);
+  const width = first.getWidth();
+  const height = first.getHeight();
+  if (depth === 1) {
+    const [values] = await first.readRasters();
+    return { width, height, depth: 1, labels: Int32Array.from(values) };
+  }
+  const plane = width * height;
+  const labels = new Int32Array(depth * plane);
+  for (let z = 0; z < depth; z++) {
+    const page = z === 0 ? first : await tiff.getImage(z);
+    const [values] = await page.readRasters();
+    labels.set(values, z * plane);
+  }
+  return { width, height, depth, labels };
 }
 
 /**

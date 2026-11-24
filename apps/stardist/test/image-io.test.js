@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { encode as encodePng } from "fast-png";
 import { writeLabelTiff } from "@neurodesk/webapp-components/file-io/tiff";
-import { MAX_DECODED_BYTES, nucleiCsv, readImage } from "../src/image-io.js";
+import { MAX_DECODED_BYTES, interleaveRgb, nucleiCsv, nucleiCsv3D, readImage, writeLabelsTiff } from "../src/image-io.js";
 
 const toBuffer = (bytes) => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 
@@ -183,4 +183,134 @@ test("other files and tiny images are refused with the reason", async () => {
 test("the table lists one row per nucleus", () => {
   const csv = nucleiCsv([{ id: 1, x: 10.25, y: 3.5, area: 42, mean: 120.123456789, probability: 0.98765 }]);
   assert.equal(csv, "id,centroid_x,centroid_y,area_px,mean_intensity,probability\n1,10.250,3.500,42,120.1235,0.9877\n");
+  const csv3d = nucleiCsv3D([{ id: 1, x: 10.25, y: 3.5, z: 2.125, volume: 120, mean: 450.5, probability: 0.91234 }]);
+  assert.equal(csv3d, "id,centroid_x,centroid_y,centroid_z,volume_vox,mean_intensity,probability\n1,10.250,3.500,2.125,120,450.5000,0.9123\n");
+});
+
+test("multi-page 3D label stacks roundtrip through writeLabelsTiff and readImage", async () => {
+  const width = 20;
+  const height = 18;
+  const depth = 6;
+  const labels = Int32Array.from({ length: depth * height * width }, (_, i) => i % 11);
+  const bytes = writeLabelsTiff(labels, width, height, depth);
+  const loaded = await readImage("labels3d.tif", toBuffer(bytes));
+  assert.equal(loaded.depth, depth);
+  assert.equal(loaded.is3dHint, true);
+  assert.ok(loaded.stack);
+  assert.equal(loaded.stack.depth, depth);
+  assert.equal(loaded.stack.channels.length, 1);
+  assert.deepEqual(Array.from(loaded.stack.channels[0].data), Array.from(labels));
+});
+
+test("interleaveRgb packs three RGB planes into interleaved HWC floats", () => {
+  const rgb = interleaveRgb([
+    { data: Uint8Array.from([10, 20]) },
+    { data: Uint8Array.from([30, 40]) },
+    { data: Uint8Array.from([50, 60]) },
+  ]);
+  assert.deepEqual(Array.from(rgb), [10, 30, 50, 20, 40, 60]);
+});
+
+test("3D OME-TIFF honors explicit TiffData plane mapping and rejects time series", async () => {
+  const mkPlane = (v) => new Uint16Array(16 * 16).fill(v);
+  // IFD 0=(Z1,C0)=100, IFD 1=(Z0,C0)=200, IFD 2=(Z1,C1)=300, IFD 3=(Z0,C1)=400 (reversed Z!)
+  const omeXml = '<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06"><Image ID="Image:0"><Pixels DimensionOrder="XYZCT" SizeX="16" SizeY="16" SizeZ="2" SizeC="2" SizeT="1" PhysicalSizeX="0.5" PhysicalSizeY="0.5" PhysicalSizeZ="1.5"><Channel Name="DAPI"/><Channel Name="GFP"/><TiffData IFD="0" FirstZ="1" FirstC="0" FirstT="0" PlaneCount="1"/><TiffData IFD="1" FirstZ="0" FirstC="0" FirstT="0" PlaneCount="1"/><TiffData IFD="2" FirstZ="1" FirstC="1" FirstT="0" PlaneCount="1"/><TiffData IFD="3" FirstZ="0" FirstC="1" FirstT="0" PlaneCount="1"/></Pixels></Image></OME>';
+  const buf = tiff([
+    { width: 16, height: 16, bits: 16, samples: [mkPlane(100)], tags: { 270: omeXml } },
+    { width: 16, height: 16, bits: 16, samples: [mkPlane(200)] },
+    { width: 16, height: 16, bits: 16, samples: [mkPlane(300)] },
+    { width: 16, height: 16, bits: 16, samples: [mkPlane(400)] },
+  ]);
+  const img = await readImage("mapped3d.ome.tif", buf);
+  assert.equal(img.is3dHint, true);
+  assert.equal(img.stack.depth, 2);
+  assert.deepEqual(img.stack.channels.map((c) => c.label), ["DAPI", "GFP"]);
+  assert.equal(img.stack.channels[0].data[0], 200);
+  assert.equal(img.stack.channels[0].data[256], 100);
+  assert.equal(img.stack.channels[1].data[0], 400);
+  assert.equal(img.stack.channels[1].data[256], 300);
+  assert.deepEqual(img.spacing, { x: 0.5, y: 0.5, z: 1.5, unit: "micron" });
+
+  // Time series (SizeT=5) must be refused instead of treated as Z slices.
+  const timeXml = '<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06"><Image ID="Image:0"><Pixels DimensionOrder="XYZCT" SizeX="16" SizeY="16" SizeZ="1" SizeC="1" SizeT="5"><TiffData/></Pixels></Image></OME>';
+  const timeBuf = tiff(Array.from({ length: 5 }, (_, i) => ({ width: 16, height: 16, bits: 16, samples: [mkPlane(i + 1)], tags: i ? {} : { 270: timeXml } })));
+  await assert.rejects(readImage("movie.ome.tif", timeBuf), /time series/);
+});
+
+test("ImageJ 3D hyperstack separates channels in CZT order and mixed-type stacks are refused", async () => {
+  const mkPlane = (v) => new Uint16Array(16 * 16).fill(v);
+  const ijDesc = "ImageJ=1.11a\nimages=6\nchannels=2\nslices=3\nhyperstack=true\nspacing=2.5\nunit=micron\n";
+  const ijBuf = tiff([10, 20, 30, 40, 50, 60].map((v, i) => ({
+    width: 16,
+    height: 16,
+    bits: 16,
+    samples: [mkPlane(v)],
+    tags: i ? {} : { 270: ijDesc },
+  })));
+  const img = await readImage("ij.tif", ijBuf);
+  assert.equal(img.is3dHint, true);
+  assert.equal(img.stack.depth, 3);
+  assert.equal(img.stack.channels.length, 2);
+  assert.deepEqual([img.stack.channels[0].data[0], img.stack.channels[0].data[256], img.stack.channels[0].data[512]], [10, 30, 50]);
+  assert.deepEqual([img.stack.channels[1].data[0], img.stack.channels[1].data[256], img.stack.channels[1].data[512]], [20, 40, 60]);
+  assert.equal(img.spacing?.z, 2.5);
+
+  // Mixed uint8 + uint16 stack must be refused instead of silently truncating uint16 to uint8.
+  const mixed = tiff([
+    { width: 16, height: 16, bits: 8, samples: [new Uint8Array(256).fill(10)] },
+    { width: 16, height: 16, bits: 16, samples: [new Uint16Array(256).fill(500)] },
+  ]);
+  await assert.rejects(readImage("mixed.tif", mixed), /different sample type/);
+});
+
+test("oversized PNG header is rejected during IHDR preflight before decompression", async () => {
+  const header = new Uint8Array(33);
+  header.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const view = new DataView(header.buffer);
+  view.setUint32(8, 13, false);
+  header.set([0x49, 0x48, 0x44, 0x52], 12);
+  view.setUint32(16, 9000, false);
+  view.setUint32(20, 9000, false);
+  header[24] = 8;
+  header[25] = 6;
+  await assert.rejects(readImage("huge.png", header.buffer), /9000 × 9000/);
+});
+
+test("writeLabelsTiff preserves physical spacing in 3D output", async () => {
+  const labels = new Int32Array(2 * 16 * 16);
+  labels[10] = 1;
+  const tif = writeLabelsTiff(labels, 16, 16, 2, { x: 0.25, y: 0.25, z: 1.25, unit: "micron" });
+  const back = await readImage("spaced.tif", toBuffer(tif));
+  assert.equal(back.depth, 2);
+  assert.ok(Math.abs(back.spacing.z - 1.25) < 1e-4);
+  assert.ok(Math.abs(back.spacing.x - 0.25) < 1e-4);
+
+  // Partial X-only calibration mirrors to both in-plane axes; micron Z-only without XY drops micron unit.
+  const xOnly = writeLabelsTiff(labels.subarray(0, 256), 16, 16, 1, { x: 0.25, y: null, z: null, unit: "micron" });
+  const backX = await readImage("xonly.tif", toBuffer(xOnly));
+  assert.ok(Math.abs(backX.spacing.x - 0.25) < 1e-4);
+  assert.ok(Math.abs(backX.spacing.y - 0.25) < 1e-4);
+  const zOnly = writeLabelsTiff(labels, 16, 16, 2, { x: null, y: null, z: 1.5, unit: "micron" });
+  const backZ = await readImage("zonly.tif", toBuffer(zOnly));
+  assert.equal(backZ.spacing, null);
+});
+
+test("OME-XML on a reduced-resolution IFD 0 and BinaryOnly OME-TIFFs are rejected", async () => {
+  const mkPlane = (v) => new Uint16Array(16 * 16).fill(v);
+  const timeXml = '<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06"><Image ID="Image:0"><Pixels DimensionOrder="XYZCT" SizeX="16" SizeY="16" SizeZ="1" SizeC="1" SizeT="5"><TiffData/></Pixels></Image></OME>';
+  const reducedFirst = tiff([
+    { width: 16, height: 16, bits: 16, samples: [mkPlane(1)], tags: { 254: [1], 270: timeXml } },
+    ...Array.from({ length: 5 }, (_, i) => ({ width: 16, height: 16, bits: 16, samples: [mkPlane(i + 2)] })),
+  ]);
+  await assert.rejects(readImage("thumb-movie.ome.tif", reducedFirst), /time series/);
+
+  const binaryOnlyXml = '<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06"><BinaryOnly MetadataFile="companion.ome" UUID="urn:uuid:1234"/></OME>';
+  const companionBuf = tiff(Array.from({ length: 5 }, (_, i) => ({
+    width: 16,
+    height: 16,
+    bits: 16,
+    samples: [mkPlane(i + 1)],
+    tags: i ? {} : { 270: binaryOnlyXml },
+  })));
+  await assert.rejects(readImage("companion.ome.tif", companionBuf), /companion file/);
 });

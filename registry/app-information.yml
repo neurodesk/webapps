@@ -2320,17 +2320,22 @@ apps:
 
   stardist:
     packages:
-      - { name: StarDist, url: https://github.com/stardist/stardist, role: "pretrained 2D_versatile_fluo model (BSD-3-Clause); tiling, non-maximum suppression and label drawing ported from stardist 0.9.1 and csbdeep 0.8.1" }
+      - { name: StarDist, url: https://github.com/stardist/stardist, role: "pretrained 2D_versatile_fluo, 2D_versatile_he, 2D_paper_dsb2018 and 3D_demo models (BSD-3-Clause); 2D and 3D tiling, non-maximum suppression and label drawing ported from stardist 0.9.1 and csbdeep 0.8.1" }
       - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: model inference on the CPU (WebAssembly) }
-      - { name: Clipper, url: https://www.angusj.com/clipper2/Docs/Overview.htm, role: "polygon intersection for non-maximum suppression (clipper-lib 6.4.2, the JavaScript port of the Clipper 6.4.2 that StarDist uses)" }
-      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: "TIFF and OME-TIFF reading (@neurodesk/webapp-components/file-io/tiff)" }
+      - { name: Clipper, url: https://www.angusj.com/clipper2/Docs/Overview.htm, role: "polygon intersection for 2D non-maximum suppression (clipper-lib 6.4.2, the JavaScript port of the Clipper 6.4.2 that StarDist uses)" }
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: "2D and 3D TIFF and OME-TIFF reading (@neurodesk/webapp-components/file-io/tiff)" }
       - { name: fast-png, url: https://github.com/image-js/fast-png, role: PNG reading }
-      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: 2D and 3D image viewer }
     citations:
       - group: Nucleus segmentation
-        title: StarDist
+        title: StarDist (2D)
         reference: "Schmidt U, Weigert M, Broaddus C, Myers G. Cell detection with star-convex polygons. Medical Image Computing and Computer Assisted Intervention (MICCAI 2018). Lecture Notes in Computer Science 11071. 2018:265–273."
         doi: 10.1007/978-3-030-00934-2_30
+        code: https://github.com/stardist/stardist
+      - group: Nucleus segmentation
+        title: StarDist 3D
+        reference: "Weigert M, Schmidt U, Haase R, Sugawara K, Myers G. Star-convex polyhedra for 3D object detection and segmentation in microscopy. IEEE Winter Conference on Applications of Computer Vision (WACV 2020). 2020:3666–3673."
+        doi: 10.1109/WACV45572.2020.9093435
         code: https://github.com/stardist/stardist
       - group: Nucleus segmentation
         title: CSBDeep (normalization and tiled prediction)
@@ -2341,6 +2346,11 @@ apps:
         title: 2018 Data Science Bowl (BBBC038)
         reference: "Caicedo JC, Goodman A, Karhohs KW, et al. Nucleus segmentation across imaging experiments: the 2018 Data Science Bowl. Nature Methods. 2019;16(12):1247–1253."
         doi: 10.1038/s41592-019-0612-7
+      - group: Example data
+        title: Human skin H&E histology (scikit-image skin, Public Domain)
+        reference: "van der Walt S, Schönberger JL, Nunez-Iglesias J, et al. scikit-image: image processing in Python. PeerJ. 2014;2:e453. Includes human epidermis and dermis H&E histology by Kilbad (Wikimedia Commons, public domain / CC0-1.0)."
+        doi: 10.7717/peerj.453
+        url: https://en.wikipedia.org/wiki/File:Normal_Epidermis_and_Dermis_with_Intradermal_Nevus_10x.JPG
       - group: Browser inference
         title: ONNX Runtime Web
         reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."
@@ -2838,6 +2848,38 @@ apps:
         title: AHEAD brain 152017 (CC BY 4.0)
         reference: "Alkemade A, Bazin P-L, Balesar R, et al. A unified 3D map of microscopic architecture and MRI of the human brain. Science Advances. 2022;8(17):eabj7892. Data: Ahead Brain 152017, original stains and 3D reconstructions, University of Amsterdam figshare, CC BY 4.0."
         doi: 10.1126/sciadv.abj7892
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  cellpose:
+    packages:
+      - { name: Cellpose, url: https://github.com/MouseLand/cellpose, role: "pretrained cyto3 and nuclei models (BSD-3-Clause; cyto3 and nuclei training sets include CC-BY-NC datasets); 2D/3D tiling, gradient flow tracking, flow-error filtering and hole filling ported from cellpose 3.1.1.1" }
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: model inference on the CPU (WebAssembly) }
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: "2D and 3D TIFF and OME-TIFF reading (@neurodesk/webapp-components/file-io/tiff)" }
+      - { name: fast-png, url: https://github.com/image-js/fast-png, role: PNG reading }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: 2D and 3D image viewer }
+    citations:
+      - group: Cell segmentation
+        title: Cellpose
+        reference: "Stringer C, Wang T, Michaelos M, Pachitariu M. Cellpose: a generalist algorithm for cellular segmentation. Nature Methods. 2021;18(1):100–106."
+        doi: 10.1038/s41592-020-01018-x
+        code: https://github.com/MouseLand/cellpose
+      - group: Cell segmentation
+        title: Cellpose3 (cyto3)
+        reference: "Stringer C, Pachitariu M. Cellpose3: one-click image restoration for improved cellular segmentation. Nature Methods. 2025;22(3):592–599."
+        doi: 10.1038/s41592-025-02595-5
+        code: https://github.com/MouseLand/cellpose
+      - group: Example data
+        title: Allen Institute for Cell Science (cells3d via scikit-image)
+        reference: "van der Walt S, Schönberger JL, Nunez-Iglesias J, et al. scikit-image: image processing in Python (cells3d fluorescence volume from the Allen Institute for Cell Science, CC0 1.0). PeerJ. 2014;2:e453."
+        doi: 10.7717/peerj.453
+        url: https://scikit-image.org/docs/stable/api/skimage.data.html#skimage.data.cells3d
+      - group: Browser inference
+        title: ONNX Runtime Web
+        reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."
+        url: https://onnxruntime.ai
       - group: Visualization
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."

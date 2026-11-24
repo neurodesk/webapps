@@ -1010,6 +1010,37 @@ try {
     await expect(page.locator('#fileInfo')).toContainText('second.tif');
     await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
   });
+  await check('cellpose', async page => {
+    const { syntheticCells } = await import('../apps/cellpose/test/offline.mjs');
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await page.locator('#imageInput').setInputFiles(syntheticCells());
+    await expect(page.locator('#fileInfo')).toHaveText('synthetic-cells.tif · 180 × 180 · TIFF');
+    await expect(page.locator('#channelField')).toBeHidden();
+    // Advanced settings must survive closing that section and its parent.
+    const advanced = page.locator('#advancedSettings > summary');
+    await expect(page.locator('#flowThresh')).toBeHidden();
+    await advanced.tap();
+    await page.locator('#flowThresh').fill('0.5');
+    await page.locator('#minSize').fill('20');
+    await advanced.tap();
+    await expect(page.locator('#minSize')).toBeHidden();
+    const task = page.locator('#taskSection > summary');
+    await task.tap();
+    await expect(page.locator('#runButton')).toBeHidden();
+    await task.tap();
+    await advanced.tap();
+    await expect(page.locator('#flowThresh')).toHaveValue('0.5');
+    await expect(page.locator('#minSize')).toHaveValue('20');
+    await page.locator('#runButton').tap();
+    await expect(page.locator('#statusText')).toHaveText('9 cells segmented', { timeout: 120000 });
+    await expect(page.locator('#outputSection')).toHaveAttribute('open', '');
+    await expect(page.locator('#resultList')).toContainText('Instance labels · 9 cells');
+    // A new image withdraws the result of the old one.
+    await page.locator('#imageInput').setInputFiles({ ...syntheticCells(), name: 'second.tif' });
+    await expect(page.locator('#fileInfo')).toContainText('second.tif');
+    await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
+  });
   await check('neuromorph', async page => {
     await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
     await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);

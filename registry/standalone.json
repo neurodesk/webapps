@@ -2596,6 +2596,13 @@
           "apptainerName": "totalsegmentator_2.18.0_20261012"
         }
       ]
+    },
+    "cellpose": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
     }
   }
 }
