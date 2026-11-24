@@ -1,0 +1,19 @@
+@neurodesk/totalsegmentator
+Copyright Neurodesk Contributors
+
+This package implements browser inference for TotalSegmentator v2 models:
+- TotalSegmentator (Apache-2.0): https://github.com/wasserth/TotalSegmentator
+  Wasserthal J, Breit HC, Meyer MT, Pradella M, Hinck D, Sauter AW, Heye T, Boll DT,
+  Cyriac J, Yang S, Bach M, Segeroth M. TotalSegmentator: Robust Segmentation of 104
+  Anatomic Structures in CT Images. Radiology: Artificial Intelligence. 2023;5(5):e230024.
+- TotalSegmentator MRI (Apache-2.0):
+  D'Antonoli TA, Berger LK, Indrakanti AK, Vishwanathan N, Weiss J, Jung M, Berkarda Z,
+  Rau A, Reisert M, Küstner T, Walter A, Segeroth M, Sperl JI, Wasserthal J.
+  TotalSegmentator MRI: Robust Sequence-Independent Segmentation of Multiple Anatomic
+  Structures in MRI. Radiology. 2025;314(2):e241613.
+- nnU-Net v2 (Apache-2.0): https://github.com/MIC-DKFZ/nnUNet
+  Isensee F, Jaeger PF, Kohl SAA, Petersen J, Maier-Hein KH. nnU-Net: a self-configuring
+  method for deep learning-based biomedical image segmentation. Nature Methods. 2021;18(2):203-211.
+
+Only openly released Apache-2.0 model weights from wasserth/TotalSegmentator GitHub Releases
+(v2.0.0-weights and v2.5.0-weights) are mirrored and exported by this package.

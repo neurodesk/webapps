@@ -209,6 +209,20 @@
       "apptainerUrl": "https://neurocontainers.neurodesk.workers.dev/relion_5.1.1_20261107.simg",
       "apptainerName": "relion_5.1.1_20261107",
       "apptainerSource": "https://raw.githubusercontent.com/neurodesk/neurocommand/main/cvmfs/log.txt"
+    },
+    "totalsegmentator": {
+      "id": "totalsegmentator",
+      "label": "totalsegmentator 2.18.0 (20261012)",
+      "version": "2.18.0",
+      "buildDate": "20261012",
+      "image": "vnmd/totalsegmentator_2.18.0@sha256:0ef94e1c2c0b339bb7a784ce5a16c2ae19d438f884a128aec616c97715c25856",
+      "digest": "sha256:0ef94e1c2c0b339bb7a784ce5a16c2ae19d438f884a128aec616c97715c25856",
+      "url": "https://hub.docker.com/r/vnmd/totalsegmentator_2.18.0",
+      "source": "https://raw.githubusercontent.com/neurodesk/neurocontainers/c8d6f3234c6a82107bfc205d9030d98e9e125bec/recipes/totalsegmentator/build.yaml",
+      "dockerImage": "vnmd/totalsegmentator_2.18.0:20261012",
+      "apptainerUrl": "https://neurocontainers.neurodesk.workers.dev/totalsegmentator_2.18.0_20261012.simg",
+      "apptainerName": "totalsegmentator_2.18.0_20261012",
+      "apptainerSource": "https://raw.githubusercontent.com/neurodesk/neurocommand/main/cvmfs/log.txt"
     }
   },
   "unresolved": []

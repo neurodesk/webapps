@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TotalSegmentator — SciGet</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Input image</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose a NIfTI or DICOM scan" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop NIfTI or DICOM scan</span>
+          </label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+          <div id="seriesField" class="nd-field" hidden>
+            <label for="seriesSelect">DICOM series</label>
+            <select id="seriesSelect"></select>
+          </div>
+          <p class="nd-hint">3D CT or MRI in NIfTI or DICOM.
+            <span class="nd-info-icon" tabindex="0" aria-label="About input scans">i<span class="nd-info-tooltip">Scans are automatically reoriented to canonical RAS for inference and restored to their original orientation and grid on output. DICOM folders and multi-series archives are converted locally with dcm2niix.</span></span>
+          </p>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Segmentation</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="taskSelect">Task
+              <span class="nd-info-icon" tabindex="0" aria-label="About TotalSegmentator tasks">i<span class="nd-info-tooltip">Includes openly licensed Apache-2.0 TotalSegmentator v2 models: whole-body CT (117 structures), whole-body MRI (50 structures), MRI vertebrae (25 structures), and CT abdominal muscles (22 T4–L4 muscles, automatically cropped to the trunk). License-gated commercial tasks (appendicular_bones, tissue_types, thigh_shoulder_muscles) are not mirrored here.</span></span>
+            </label>
+            <select id="taskSelect">
+              <option value="total">CT — Whole body (117 structures)</option>
+              <option value="total_mr">MRI — Whole body (50 structures)</option>
+              <option value="vertebrae_mr">MRI — Vertebrae (25 structures)</option>
+              <option value="abdominal_muscles">CT — Abdominal muscles (22 structures)</option>
+            </select>
+          </div>
+
+          <div class="nd-field" id="resolutionField">
+            <label for="resolutionSelect">Resolution
+              <span class="nd-info-icon" tabindex="0" aria-label="About resolution modes">i<span class="nd-info-tooltip">Fast (3 mm) uses a single 33 MB model and finishes quickly in browser memory. Full resolution (1.5 mm) runs higher-detail models (5 parts on CT, 2 parts on MRI) and supports selecting a single anatomical group to save time and memory.</span></span>
+            </label>
+            <select id="resolutionSelect">
+              <option value="fast">Fast (3 mm)</option>
+              <option value="full">Full resolution (1.5 mm)</option>
+            </select>
+          </div>
+
+          <div class="nd-field" id="subsetField" hidden>
+            <label for="subsetSelect">Structure group</label>
+            <select id="subsetSelect"></select>
+          </div>
+
+          <p id="modelHint" class="nd-hint">1 model · 33 MB download, cached locally.</p>
+
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <div class="nd-field">
+                <label for="backend">Processing</label>
+                <select id="backend">
+                  <option value="auto">Automatic</option>
+                  <option value="wasm">CPU</option>
+                </select>
+                <p class="nd-hint">Automatic uses WebGPU when a hardware GPU is available.</p>
+              </div>
+            </div>
+          </details>
+
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Run segmentation</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Image viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop a CT or MRI scan anywhere, or choose an example.</p>
+        <p id="viewerNotice" class="nd-viewer-notice" hidden></p>
+        <section id="reportView" class="nd-viewer-report" aria-label="Structure measurements" hidden>
+          <div class="nd-report-controls">
+            <div class="nd-field">
+              <label for="reportGroupFilter">Group</label>
+              <select id="reportGroupFilter">
+                <option value="all">All groups</option>
+              </select>
+            </div>
+            <div class="nd-field">
+              <label for="reportSearch">Filter</label>
+              <input id="reportSearch" type="search" placeholder="Search structures…" />
+            </div>
+            <button id="downloadStatsBtn" class="nd-btn nd-btn-secondary nd-btn-sm" type="button">Download TSV</button>
+          </div>
+          <p id="reportSummary" class="nd-report-notes"></p>
+          <div class="nd-table-scroll">
+            <table id="reportTable" class="nd-data-table">
+              <thead>
+                <tr>
+                  <th scope="col">ID</th>
+                  <th scope="col">Structure</th>
+                  <th scope="col">Group</th>
+                  <th scope="col">Volume (mL)</th>
+                  <th scope="col" id="reportMeanHeader">Mean (HU)</th>
+                  <th scope="col" id="reportSdHeader">SD (HU)</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Processing progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel processing" aria-label="Cancel processing" hidden>×</button>
+    </footer>
+
+    <template id="privacyContent">
+      <p>Scans are processed locally in your browser and are never uploaded. TotalSegmentator ONNX models are downloaded on demand from Hugging Face, verified against their pinned SHA-256 checksums, and cached in your browser.</p>
+    </template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
