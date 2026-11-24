@@ -15,6 +15,9 @@ const DILATE_VOXELS: i64 = 2;
 const FEATHER_FWHM_MM: f64 = 3.0;
 /// Hounsfield window of the CT copy Greedy aligns: brain, blood and CSF keep their contrast, bone and air saturate.
 const CT_WINDOW: (f32, f32) = (-100.0, 200.0);
+/// A mirror alignment is near rigid; an axis scaled outside this range is a runaway fit (SOOP sub-683's 6 mm
+/// TRACE scan reached x153 through-plane), so healing is skipped rather than blending a misplaced mirror.
+const SCALE_LIMITS: (f64, f64) = (0.8, 1.25);
 
 /// Writes work/healed.nii, the scan with the aligned mirror mixed in under the feathered lesion, and returns its path.
 pub(super) async fn heal<H: Host>(
@@ -73,6 +76,17 @@ pub(super) async fn heal<H: Host>(
     ]);
     r.step(argv, vec![], std::slice::from_ref(&matrix), false)
         .await?;
+    let scales = axis_scales(&String::from_utf8_lossy(&read_all(h, &matrix).await?))?;
+    if scales
+        .iter()
+        .any(|s| !(SCALE_LIMITS.0..=SCALE_LIMITS.1).contains(s))
+    {
+        h.log(&format!(
+            "heal: mirror alignment rejected (axis scales {:.2} {:.2} {:.2}); continuing without healing",
+            scales[0], scales[1], scales[2]
+        ));
+        return Ok(primary_path.to_string());
+    }
     r.greedy_reslice(
         primary_path,
         &mirror_path,
@@ -95,6 +109,22 @@ pub(super) async fn heal<H: Host>(
     let healed_scan = Volume { data, ..scan };
     put(h, &healed, &volume::write(&healed_scan, "Healed scan")).await?;
     Ok(healed)
+}
+
+/// The lengths of the linear part's columns in a Greedy matrix file (four rows of four numbers).
+// ponytail: column norms, not singular values; shear-only runaways would pass, none seen.
+fn axis_scales(text: &str) -> Result<[f64; 3], String> {
+    let m: Vec<f64> = text
+        .split_whitespace()
+        .filter_map(|t| t.parse().ok())
+        .collect();
+    if m.len() != 16 {
+        return Err(format!(
+            "mirror.mat: expected 16 numbers, found {}",
+            m.len()
+        ));
+    }
+    Ok([0, 1, 2].map(|c| (0..3).map(|r| m[4 * r + c].powi(2)).sum::<f64>().sqrt()))
 }
 
 /// Flips the voxel axis that runs left-right (the one whose column points most along world x); the affine is kept.
@@ -214,6 +244,21 @@ mod tests {
         assert_eq!(
             mirror(&v).data,
             [2., 1., 0., 5., 4., 3., 8., 7., 6., 11., 10., 9.]
+        );
+    }
+
+    /// SOOP sub-683's runaway mirror affine (12 dof, 6 mm slices) against its rigid solution.
+    #[test]
+    fn axis_scales_flag_a_runaway_mirror_fit() {
+        let runaway = "1.148 1.185 -54.23 -79.25\n-0.164 1.368 -22.79 -40.96\n-0.305 -2.830 153.5 233.2\n0 0 0 1\n";
+        let rigid =
+            "0.970 0.030 -0.241 2.12\n-0.027 0.999 0.017 -0.37\n0.242 -0.010 0.970 2.25\n0 0 0 1\n";
+        assert!(axis_scales(runaway).unwrap()[2] > 100.0);
+        assert!(
+            axis_scales(rigid)
+                .unwrap()
+                .iter()
+                .all(|s| (s - 1.0).abs() < 0.01)
         );
     }
 
