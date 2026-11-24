@@ -26,17 +26,19 @@ and `matlab-intel` against literal output hashes in
 `arithmetic-reference-outputs.json`. History (at #895): the frozen default
 outcome was 18 exact AMD runs and 157/168 maps, the Intel double option retained
 110 real-double hull discrepancies, and source MATLAB inputs were unattested.
-After #902 and #915–#919, the frozen AMD default is 20 exact runs and 163/168
+After #902, #915–#919, #921, #922, and #925, the frozen AMD default is 20 exact runs and 163/168
 maps (`matlab-amd`: 166/168), `run_source_cli.m` attests source inputs
-prospectively (verified in Build 5), and `matlab-intel` on Intel Xeon Platinum
+prospectively (verified in Build 5), `matlab-intel` on Intel Xeon Platinum
 8573C reaches 19 exact runs and 158/168 maps (10/12 double + 9/10 runnable
 single-precision runs exact, leaving only the 12 CF hull `y0` values and the 12
-complex vertices of `prf_css_lh_single`), while the two `dnrm2` near-tie misses
+complex vertices of `prf_css_lh_single`), the two `dnrm2` near-tie misses
 and Intel nonnegative CSS are resolved (pinned in
 `intel-norm-single-css-reference.json`, run 45286336873, Hugging Face commit
-`54645a921b7c442085b2db974ad78ed8b89d00d9`). Unrecorded numerical edge cases
-(including mixed complex-single dot on Intel), the 12 CF hull `y0` values, and
-GHCR publication of the compiled Runtime image remain open. Recordings
+`54645a921b7c442085b2db974ad78ed8b89d00d9`), and Build 5 is published privately
+to GHCR (`ghcr.io/neurodesk/samsrf-reference@sha256:c132e952…`) and validated
+cross-host without MATLAB ([run 45361306312](https://github.com/neurodesk/webapps/actions/runs/45361306312)).
+Unrecorded numerical edge cases (including mixed complex-single dot on Intel)
+and the 12 CF hull `y0` values remain documented limits. Recordings
 previously exposed to research stay replay evidence, not blind holdouts.
 
 The separately authorized [cleanup-order-1 experiment](cleanup-order-1/result.md)
@@ -969,17 +971,17 @@ rejects additional tracked changes, and checks the SPM commit before invoking
 MATLAB Compiler. It records the MATLAB environment and resulting local image
 ID. It does not publish the image.
 
-**Status (2026-11-23): built locally on a licensed host, not published (#733).**
+**Status (2026-11-24): Build 5 published privately to GHCR (`ghcr.io/neurodesk/samsrf-reference@sha256:c132e952abf617eebff01fbbb0d12e8b44a3af9850c15595092d761708f4ee0d`) and validated cross-host without MATLAB (#733).**
 The status table and the evidence in [acceptance.md](../acceptance.md#733-version-matched-matlab-runtime-reference-container)
 are current. In short:
 
 | Step | State |
 | --- | --- |
-| Builder | `licensed-host/build_and_validate.sh` ran on a licensed host. **Build 5** (2026-11-23, `main` at `2d4581c3f`, after #915–#917, local unpublished) built under clean tracked-only `/build` staging: OCI target/manifest digest `sha256:c132e952abf617eebff01fbbb0d12e8b44a3af9850c15595092d761708f4ee0d`, config digest `sha256:711e465c4e9cf17cc7c1ca7150f9d52531340d89d00dbdec894e5e4b5dfdc2ee`, archive `samsrf-reference.oci.tar` (1,381,349,376 bytes, SHA-256 `28ccdcda70a2d9d794569a375f6ef1c20e5744ee96957c6b8e133d502f8a996c`, 7 layers, 0 attestations, 0 unreferenced blobs), and `base-images.json` (`lineageVerified: true`, SHA-256 `f9f900a3336d39023b1ccd6f2f25c11152159bf2145153d0e365a43a11ef3ebd`) verifying `ubuntu:22.04` (`sha256:f64b2ffc2f10ab8f8505aa56b2664bd846cbb9df87c7e2532e30f7667021c0e6`) → `matlabruntimebase/r2023b/release/update11` (`sha256:ce5f495c24939fb92ff40dd1f462e5a6723272d2e551c45a0282b46dfdf94014`) → `samsrf-reference-runtime:r2023b` (`sha256:1dbdc61c05718a7665687ac86aa4b984cc5a77ea35740479afe1670e0a9e20c2`) → `samsrf-reference:41ed1e96-r2023b` (`sha256:c132e952…`), plus `containers.mathworks.com/matlab-runtime-utils/matlab-runtime-installer:r2023b-update-11` (`sha256:1f07cb493ef6255767af54b8cc85a94b9a164d0c8de53cf37057e5d183a47922`) in `copyFromStages`. History: Build 2 (local ID `sha256:be7ae7aa…`, 2026-11-16; receipts audited on 2026-11-17; in no reachable Docker store) and Build 3 (2026-11-18, pre-clean-staging, local unpublished, audited on 2026-11-18: OCI manifest `sha256:99f912afd57d59bde18976c5664328b1b50ee3a7be63924e92c9aba6a2c82857`, config `sha256:746944cc8c2f9acda96357f47071fe8ed3778f9fe8f16b80aa7b7441bad64518`). The `runtime_cli=build` dispatch still has no batch token. |
-| Compiled versus source | Equal bit for bit in all 24 runs (1,036 arrays) on the build host for Build 5 (`source-repeat.json`, `compiled-vs-source.json`, `compiled-repeat.json` all `exact: true`, SHA-256 `157d17cab2b2053424d429d6f0fb5e7aa4708d3c642b6714e94e403e69f34fd5`), plus SIGINT interrupt (exit 130) and missing-model failure (exit 249). All four Build 5 trees (`source-1`, `source-2`, `compiled-1`, `compiled-2`) prospectively attested inputs in identical `receipts/inputs.json` (`sha256:49c847726fbfc4f1551d6c7d22330f9aa056a258c77a7737717c75a07774bbc1`, `unchanged: true`, 60 bundle entries, 24 staged runs), verified without `--allow-unattested-source-inputs`. History: Build 2 and Build 3 also matched 24/24 locally, with unattested source inputs (the 2026-11-18 Build 3 audit reported six retained comparisons — source repeat, compiled against source, compiled repeat, and across builds 2 and 3 — equal in all 24 runs). That evidence is local; this repository holds the tools, not the archives. |
-| Runtime-only | On Build 5 (2026-11-23), both `samsrf-reference:41ed1e96-r2023b` and `samsrf-reference-runtime:r2023b` were removed from the local Docker store, and `docker load` restored `samsrf-reference:41ed1e96-r2023b` from `samsrf-reference.oci.tar` (`restored-oci-identity.json` byte-identical to `oci-identity.json`, SHA-256 `2bd41c18078c4e7197565132771b3fa13c25168a90ea9ee4e404512c217d97c0`). All 24 runs (`compiled-restored`) then ran with `MLM_LICENSE_FILE` and `SAMSRF_LICENSE` unset, `--network none`, read-only root and inputs; `receipts/inputs.json` verified (`unchanged: true`), and both `restored-vs-compiled.json` and `restored-vs-source.json` passed `exact: true` (24/24 runs, 1,036 arrays). History: the 2026-11-18 audit restored Build 3 and ran three fresh cases. Still open: a fresh restored interrupt run and `runtime_image` on a published digest on another host. |
-| Compiled acceptance (Node & UI) | Build 5 ran explicit-reference Node acceptance on the committed WASM (`d1745bec6532f14dcff3565f15ab148da4f59e629d19bca31e1dbfd8b930a3a2`, `@neurodesk/samsrf` `0.7.20261120`) on the AMD build host (`current`: 20/24 exact, 2 differ, 2 refused, 163/168 maps; `matlab-amd`: 20/24 exact, 2 differ, 2 refused, 166/168 maps; `matlab-intel`, same-host comparison of Intel-mode WASM against AMD MATLAB Runtime output `compiled-1`: 0/12 double exact, 12 differ, 12 single refused, 32/92 double maps) and the full 24-run lossless production UI matrix in Chromium (`156.0.8078.4`: 20/24 exact, 2 differ, 2 refused, 163/168 maps across 22 lossless downloads, 212/212 downloaded GIfTIs equal to the engine harness's with lossless arrays and provenance verified separately; see [Production interface against the CLI matrix](#production-interface-against-the-cli-matrix)). |
-| Publication | Not done. [Publication steps that need the maintainer](#publication-steps-that-need-the-maintainer). After publication, `runtime_image=NAME@sha256:...` validates the image on Runtime-only hosts, which need no license. |
+| Builder | `licensed-host/build_and_validate.sh` ran on a licensed host. **Build 5** (2026-11-23, `main` at `2d4581c3f`, after #915–#917) built under clean tracked-only `/build` staging: OCI target/manifest digest `sha256:c132e952abf617eebff01fbbb0d12e8b44a3af9850c15595092d761708f4ee0d`, config digest `sha256:711e465c4e9cf17cc7c1ca7150f9d52531340d89d00dbdec894e5e4b5dfdc2ee`, archive `samsrf-reference.oci.tar` (1,381,349,376 bytes, SHA-256 `28ccdcda70a2d9d794569a375f6ef1c20e5744ee96957c6b8e133d502f8a996c`, 7 layers, 0 attestations, 0 unreferenced blobs), and `base-images.json` (`lineageVerified: true`, SHA-256 `f9f900a3336d39023b1ccd6f2f25c11152159bf2145153d0e365a43a11ef3ebd`) verifying `ubuntu:22.04` (`sha256:f64b2ffc2f10ab8f8505aa56b2664bd846cbb9df87c7e2532e30f7667021c0e6`) → `matlabruntimebase/r2023b/release/update11` (`sha256:ce5f495c24939fb92ff40dd1f462e5a6723272d2e551c45a0282b46dfdf94014`) → `samsrf-reference-runtime:r2023b` (`sha256:1dbdc61c05718a7665687ac86aa4b984cc5a77ea35740479afe1670e0a9e20c2`) → `samsrf-reference:41ed1e96-r2023b` (`sha256:c132e952…`), plus `containers.mathworks.com/matlab-runtime-utils/matlab-runtime-installer:r2023b-update-11` (`sha256:1f07cb493ef6255767af54b8cc85a94b9a164d0c8de53cf37057e5d183a47922`) in `copyFromStages`. History: Build 2 (local ID `sha256:be7ae7aa…`, 2026-11-16; receipts audited on 2026-11-17; in no reachable Docker store) and Build 3 (2026-11-18, pre-clean-staging, local unpublished, audited on 2026-11-18: OCI manifest `sha256:99f912afd57d59bde18976c5664328b1b50ee3a7be63924e92c9aba6a2c82857`, config `sha256:746944cc8c2f9acda96357f47071fe8ed3778f9fe8f16b80aa7b7441bad64518`). The `runtime_cli=build` dispatch still has no batch token. |
+| Compiled versus source | Equal bit for bit in all 24 runs (1,036 arrays) on the build host for Build 5 (`source-repeat.json`, `compiled-vs-source.json`, `compiled-repeat.json` all `exact: true`, SHA-256 `157d17cab2b2053424d429d6f0fb5e7aa4708d3c642b6714e94e403e69f34fd5`), plus SIGINT interrupt (exit 130) and missing-model failure (exit 249). All four Build 5 trees (`source-1`, `source-2`, `compiled-1`, `compiled-2`) prospectively attested inputs in identical `receipts/inputs.json` (`sha256:49c847726fbfc4f1551d6c7d22330f9aa056a258c77a7737717c75a07774bbc1`, `unchanged: true`, 60 bundle entries, 24 staged runs), verified without `--allow-unattested-source-inputs`. Cross-host on GitHub Actions `ubuntu-24.04` (AMD EPYC 7763, [run 45361306312](https://github.com/neurodesk/webapps/actions/runs/45361306312)), `runtime-vs-pinned-source.json` also passed 24/24 with 0 failures. |
+| Runtime-only | On Build 5 (2026-11-23), both `samsrf-reference:41ed1e96-r2023b` and `samsrf-reference-runtime:r2023b` were removed from the local Docker store, and `docker load` restored `samsrf-reference:41ed1e96-r2023b` from `samsrf-reference.oci.tar` (`restored-oci-identity.json` byte-identical to `oci-identity.json`, SHA-256 `2bd41c18078c4e7197565132771b3fa13c25168a90ea9ee4e404512c217d97c0`). All 24 runs (`compiled-restored`) ran with `MLM_LICENSE_FILE` and `SAMSRF_LICENSE` unset, `--network none`, read-only root and inputs, verified `receipts/inputs.json` (`unchanged: true`), matched `compiled-1` and `source-1` bitwise (24/24 runs, 1,036 arrays), and passed a restored-image SIGINT check (`exitCode: 130`, `runningWhenSignalled: true`, `stoppedWithinGrace: true`, `afterSeconds: 50.98`, receipt SHA-256 `818a194aba2be27eeca81bd28f2f6a3e800bd65aa9723364dbc2fbba5dc66820`). On 2026-11-24 (`main` `8a6a1d23b`, after #922 and #925), cross-host `runtime_image` validation on GitHub Actions `ubuntu-24.04` (AMD EPYC 7763, no MATLAB installed, [run 45361306312](https://github.com/neurodesk/webapps/actions/runs/45361306312)) pulled `ghcr.io/neurodesk/samsrf-reference@sha256:c132e952…` privately, ran `runtime-1` and `runtime-2`, passed `runtime-repeat.json` (24/24, 0 failures), `interrupt` (`exitCode: 130`, `stoppedWithinGrace: true`, `afterSeconds: 34.19`), and `failure` (`exitCode: 249`). |
+| Compiled acceptance (Node & UI) | Build 5 ran explicit-reference Node acceptance on the AMD build host (`d1745bec…`, `@neurodesk/samsrf` `0.7.20261120`: `current` 20/24 exact, 163/168 maps; `matlab-amd` 20/24 exact, 166/168 maps; `matlab-intel` against AMD `compiled-1`: 0/12 double exact) and the full 24-run lossless production UI matrix in Chromium (`156.0.8078.4`: 20/24 exact, 163/168 maps across 22 lossless downloads, 212/212 GIfTIs equal to the engine harness's). Cross-host on GitHub Actions `ubuntu-24.04` ([run 45361306312](https://github.com/neurodesk/webapps/actions/runs/45361306312), WASM `8bb8ab4f3595f21e2d1416fb1fcb695dfcb7649e8c3a25281c770662fc6f7a7f`), both Node (`web-1-vs-runtime.json`) and Chromium (`browser-1-vs-runtime.json`) passed at 20/24 exact, 2 differ, 2 refused, 0 failed, 0 inventory-error, 163/168 maps exact. |
+| Publication | **Done (private GHCR package, 2026-11-24).** Pushed Build 5 under immutable digest `ghcr.io/neurodesk/samsrf-reference@sha256:c132e952abf617eebff01fbbb0d12e8b44a3af9850c15595092d761708f4ee0d` (tag `41ed1e96-r2023b`, config `sha256:711e465c…`, linked to `neurodesk/webapps` with Read access) and validated via `samsrf-native.yml` `runtime_image` in [run 45361306312](https://github.com/neurodesk/webapps/actions/runs/45361306312). |
 
 History: until 2026-11-16 this section said the recipe had never been executed
 with MATLAB Compiler; the attempts that stopped at the licence check are below.
@@ -1182,13 +1184,17 @@ yet:
   `OMP_*` settings are requests. MKL's effective thread count and dynamic
   setting were never observed inside MATLAB or the Runtime
   ([requested and effective MKL controls](#requested-and-effective-mkl-controls-730)).
-- **Publication itself.** Build 5 completed local explicit-reference compiled
-  acceptance (`current`, `matlab-amd`, `matlab-intel`), a 24-run restored
-  Runtime-only audit, and the 24-run lossless production UI matrix on one AMD
-  host. Still needed from the maintainer: push only an approved image to GHCR,
-  record its immutable registry digest and retained receipts, and run the
-  `runtime_image` dispatch on other hosts (including a fresh restored interrupt
-  check).
+- **Publication itself (completed privately on 2026-11-24).** Build 5
+  completed local explicit-reference compiled acceptance (`current`,
+  `matlab-amd`, `matlab-intel`), a 24-run restored Runtime-only audit, a
+  restored-image SIGINT check (`818a194a…`), and the 24-run lossless production
+  UI matrix on one AMD host. With maintainer authorization, Build 5 was pushed
+  privately to GHCR under immutable digest
+  `ghcr.io/neurodesk/samsrf-reference@sha256:c132e952abf617eebff01fbbb0d12e8b44a3af9850c15595092d761708f4ee0d`
+  (linked to `neurodesk/webapps` with Read access) and passed cross-host
+  `runtime_image` validation on GitHub Actions `ubuntu-24.04` (AMD EPYC 7763,
+  [run 45361306312](https://github.com/neurodesk/webapps/actions/runs/45361306312),
+  `main` `8a6a1d23b`, WASM `8bb8ab4f…`).
 
 Checked without a license on 2026-11-13, and again on 2026-11-16 with
 `test_web_cli.py`: all 62 harness tests in this directory pass (Python 3.12
@@ -1734,8 +1740,9 @@ covers its exit codes; `test_ui_cli.py` covers the lossless downloads.
 
 On 2026-11-23 (`main` at `2d4581c3f`, committed WASM `d1745bec6532f14dcff3565f15ab148da4f59e629d19bca31e1dbfd8b930a3a2`,
 Chromium `156.0.8078.4`), the full 24-run production UI matrix was measured
-with lossless downloads against the locally built, unpublished **Build 5**
-compiled image (`sha256:c132e952abf617eebff01fbbb0d12e8b44a3af9850c15595092d761708f4ee0d`)
+with lossless downloads against the **Build 5** compiled image
+(`sha256:c132e952abf617eebff01fbbb0d12e8b44a3af9850c15595092d761708f4ee0d`,
+since published privately to GHCR under the same digest)
 and source execution on the AMD build host (`current` default reference, with
 Build 5's `web-1` as the engine root). Both `ui-1-vs-compiled.json` (SHA-256
 `8097d41a905acba20111f3ee3b961bf5f0bb7025b245e91196745e6894bb6693`) and
@@ -1755,8 +1762,10 @@ double precision, and only the same 5 maps as `web-1` differ under
 `lossless.srfData` while their float32 GIfTIs are exact: `cf_hull_lh_double`
 `y0` (7/21 vertices, maxAbs `2.22e-16`, 1 ULP) and
 `cf_hull_smooth_global_lh_double` `R^2` (8/21, 147 ULP), `y0` (5/21, 1 ULP),
-`Beta` (8/21, 61 ULP), and `Suppression` (13/21, 28 ULP). This is local
-single-host evidence against an unpublished image.
+`Beta` (8/21, 61 ULP), and `Suppression` (13/21, 28 ULP). This UI run is local
+single-host evidence on one AMD host; cross-host engine validation in Node and
+Chromium ran in [run 45361306312](https://github.com/neurodesk/webapps/actions/runs/45361306312)
+against the published private GHCR digest.
 
 History (earlier float32-only UI runs before lossless downloads):
 
