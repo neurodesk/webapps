@@ -101,8 +101,7 @@ jobs:
           pnpm --filter @neurodesk/syncro test:core
 
   # Archives from the tool releases pinned in packages/syncro/tools.json, each checked by
-  # validation/package-check.mjs after extraction. brainchopC has no public release yet, so packaging
-  # stops at that tool with its blocker message until tools.json pins one.
+  # validation/package-check.mjs after extraction.
   native:
     needs: core
     strategy:

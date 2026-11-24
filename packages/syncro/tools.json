@@ -98,9 +98,34 @@
       }
     },
     "brainchop-mindgrab": {
-      "blocked": "brainchopC (neuroneural/brainchopC) is private and publishes no Linux, Windows or public macOS asset. SYNcro archives need a public brainchopC release (with its licence) to pin here; until then package-syncro.py stops with this message unless --local-tool brainchop-mindgrab=PATH names a binary for a local check.",
-      "licenses": [],
-      "assets": {}
+      "version": "1.0.0",
+      "licenses": [
+        "LICENSE",
+        "THIRD_PARTY_NOTICES.md"
+      ],
+      "assets": {
+        "linux-x64": {
+          "url": "https://github.com/neuroneural/brainchop-core/releases/download/v1.0.0/brainchop-1.0.0-linux-x86_64.tar.gz",
+          "sha256": "ca1d830e7564c4731745299904f97bbbe411e5cb8fec2a3a512f1495b9ce3baf",
+          "files": {
+            "brainchop-1.0.0-linux-x86_64/brainchop-mindgrab": "bin/brainchop-mindgrab"
+          }
+        },
+        "windows-x64": {
+          "url": "https://github.com/neuroneural/brainchop-core/releases/download/v1.0.0/brainchop-1.0.0-windows-x86_64.zip",
+          "sha256": "50ca6976afe75f7f745742fb8621c08f3e3c0cc9aca2b5c6b3acb305e2a288fe",
+          "files": {
+            "brainchop-1.0.0-windows-x86_64/brainchop-mindgrab.exe": "bin/brainchop-mindgrab.exe"
+          }
+        },
+        "macos-arm64": {
+          "url": "https://github.com/neuroneural/brainchop-core/releases/download/v1.0.0/brainchop-1.0.0-macos-arm64.tar.gz",
+          "sha256": "34a493ff14af78ff85a356cff4d124a0eae147c593ba233e38fa96f8cd3ac151",
+          "files": {
+            "brainchop-1.0.0-macos-arm64/brainchop-mindgrab": "bin/brainchop-mindgrab"
+          }
+        }
+      }
     }
   },
   "validation": {

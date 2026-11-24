@@ -26,8 +26,6 @@ on:
       - 'packages/components/src/volume/**'
       - 'packages/components/src/worker/**'
       - 'packages/node-drivers/package.json'
-      - 'packages/node-drivers/src/mindgrab-worker.js'
-      - 'packages/node-drivers/src/mindgrab.js'
       - 'packages/node-drivers/src/output-dir.js'
   schedule:
     - cron: '10 13 * * *'
@@ -60,7 +58,6 @@ jobs:
         stardist-native
         stitching-native
         structure-tensor-native
-        syncro-native
         synthseg-native
         synthseg-portable
         totalsegmentator-native
@@ -76,7 +73,6 @@ jobs:
         stardist-native
         stitching-native
         structure-tensor-native
-        syncro-native
         synthseg-portable
         totalsegmentator-native
         tumour-report-native
@@ -166,17 +162,6 @@ jobs:
     needs: gate
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"structure-tensor-native"')) }}
     uses: ./.github/workflows/structure-tensor-native.yml
-    permissions:
-      actions: read
-      contents: write
-      id-token: write
-      pull-requests: read
-    secrets: inherit
-
-  syncro-native:
-    needs: gate
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"syncro-native"')) }}
-    uses: ./.github/workflows/syncro-native.yml
     permissions:
       actions: read
       contents: write
