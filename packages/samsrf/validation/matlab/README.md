@@ -1145,12 +1145,15 @@ python3 $m/run_runtime_cli.py run "$image" PLAN_JSON BUNDLE RESULTS_ROOT
 
 ### Publication steps that need the maintainer
 
-Nothing here is done by the repository's tooling, and none of it is authorized
-yet:
+Nothing here is done automatically by the repository's tooling. On 2026-11-24
+the maintainer authorized and pushed Build 5 as a **private** GHCR package
+linked to `neurodesk/webapps` (Read access); public redistribution remains
+unpublished and is not claimed here:
 
-- **Redistribution.** Permission to redistribute the compiled application with
-  MATLAB Runtime and its third-party components. The 2026-11-18 audit read no
-  licence terms and made no determination.
+- **Redistribution.** Maintainer-authorized private GHCR hosting for
+  `neurodesk/webapps` CI was completed on 2026-11-24; the image stays private
+  rather than publicly redistributed. The 2026-11-18 audit read no licence terms
+  and made no independent legal determination.
 - **Embedded metadata.** History: the 2026-11-18 audit found that the build 3
   executable embedded 61 `.git` entries (public SamSrf and SPM origins) and
   absolute build paths, and that the evidence held host names and machine
