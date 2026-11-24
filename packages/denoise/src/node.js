@@ -25,8 +25,10 @@ import { readVolume } from "./input.js";
 export const MAX_CLI_INPUT_BYTES = 2 ** 28;
 const CLI_METADATA_BYTES = 2 ** 25;
 
-const LOCK_FILE = ".denoise-run.lock";
+const LOCK_NAME = ".denoise-run.lock";
+const LOCK_TMP_PREFIX = ".denoise-lock-tmp-";
 const STAGE_PREFIX = ".denoise-stage-";
+const OWNER_FILE_RE = /^owner-([0-9a-f]+)\.json$/;
 
 export const OUTPUT_FORMATS = Object.freeze(["auto", "tiff", "nifti", "both"]);
 
@@ -229,43 +231,251 @@ function isLocalProcessDead(pid) {
   }
 }
 
-/**
- * Attempts to atomically reclaim a provably stale `.denoise-run.lock` left by a crashed local
- * process (`ESRCH`). Uses atomic `rename` so at most one concurrent recoverer can claim it.
- */
-async function tryReclaimStaleLock(resolvedDir, lockPath) {
-  let raw;
+async function readJsonIfPresent(filePath) {
   try {
-    raw = await readFile(lockPath, "utf8");
+    return JSON.parse(await readFile(filePath, "utf8"));
   } catch {
     return null;
   }
+}
+
+async function pathExists(filePath) {
+  try {
+    await lstat(filePath);
+    return true;
+  } catch (error) {
+    if (error.code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+function isLockContentionError(error) {
+  return (
+    error.code === "EEXIST" ||
+    error.code === "ENOTEMPTY" ||
+    error.code === "EPERM" ||
+    error.code === "EACCES"
+  );
+}
+
+/**
+ * Safely clears a provably stale owner token inside `.denoise-run.lock/` left by a crashed local
+ * process (`ESRCH`). Because each lock directory holds a unique `owner-<token>.json` file and
+ * live owners enter atomically via `rename(nonEmptyTmpDir, lockDir)`, unlinking only the verified
+ * dead `owner-<deadToken>.json` file and `rmdir`ing only if empty can never remove a concurrent
+ * live owner's lock.
+ */
+async function tryClearStaleLock(lockPath, { onLockInspect } = {}) {
+  let entries;
+  try {
+    entries = await readdir(lockPath);
+  } catch (error) {
+    if (error.code === "ENOENT") return true;
+    return false;
+  }
+
+  if (entries.length === 0) {
+    // An empty lock directory only occurs mid-release or right after unlinking a dead owner;
+    // rmdir() atomically refuses (ENOTEMPTY) if a live owner populates it in the meantime.
+    await rmdir(lockPath).catch(() => {});
+    return true;
+  }
+
+  if (entries.length !== 1) return false;
+  const ownerEntry = entries[0];
+  const match = ownerEntry.match(OWNER_FILE_RE);
+  if (!match) return false;
+
+  const ownerPath = join(lockPath, ownerEntry);
+  let raw;
+  try {
+    raw = await readFile(ownerPath, "utf8");
+  } catch (error) {
+    if (error.code === "ENOENT") return true;
+    return false;
+  }
+
   let parsed;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return null;
+    return false;
   }
-  if (!parsed || parsed.host !== hostname() || !isLocalProcessDead(parsed.pid)) {
-    return null;
+  if (
+    !parsed ||
+    parsed.host !== hostname() ||
+    parsed.token !== match[1] ||
+    !isLocalProcessDead(parsed.pid)
+  ) {
+    return false;
   }
-  const claimed = join(resolvedDir, `.denoise-stale-${process.pid}-${randomBytes(4).toString("hex")}`);
+
+  await onLockInspect?.({ lockPath, ownerEntry, ownerPath, parsed });
+
   try {
-    await rename(lockPath, claimed);
+    // Identity-locked removal: only removes the exact dead token file we verified above.
+    await unlink(ownerPath);
   } catch {
-    // Another process already reclaimed or removed the lock.
-    return null;
+    // Another contender already removed this exact dead owner token (and may now own the lock).
+    return false;
   }
-  await unlink(claimed).catch(() => {});
-  return parsed.pid;
+
+  await rmdir(lockPath).catch(() => {});
+  return true;
 }
 
 /**
- * Exclusively reserves `outputDir` before processing by atomically creating `.denoise-run.lock`
- * with `O_CREAT | O_EXCL` (`wx`), preventing concurrent CLI runs from colliding or interleaving
- * outputs, while safely recovering locks left behind by killed/crashed local processes.
+ * Recovers any interrupted staging directories left by crashed local runs (or blocks if a prior
+ * failed rollback preserved backups in `_backup` that require manual resolution). Must be called
+ * only while holding the exclusive directory lock on `resolvedDir`.
  */
-async function reserveOutputDir(outputDir, { overwrite = false } = {}) {
+async function recoverInterruptedStages(resolvedDir, outputDir) {
+  const entries = await readdir(resolvedDir);
+  for (const entry of entries) {
+    if (entry.startsWith(LOCK_TMP_PREFIX)) {
+      const tmpPath = join(resolvedDir, entry);
+      let info;
+      try {
+        info = await lstat(tmpPath);
+      } catch {
+        continue;
+      }
+      if (!info.isDirectory()) continue;
+      let tmpEntries;
+      try {
+        tmpEntries = await readdir(tmpPath);
+      } catch {
+        continue;
+      }
+      if (tmpEntries.length === 1 && OWNER_FILE_RE.test(tmpEntries[0])) {
+        const parsed = await readJsonIfPresent(join(tmpPath, tmpEntries[0]));
+        if (parsed && parsed.host === hostname() && isLocalProcessDead(parsed.pid)) {
+          await rm(tmpPath, { recursive: true, force: true }).catch(() => {});
+        }
+      }
+      continue;
+    }
+
+    if (!entry.startsWith(STAGE_PREFIX)) continue;
+    const stagePath = join(resolvedDir, entry);
+    let info;
+    try {
+      info = await lstat(stagePath);
+    } catch {
+      continue;
+    }
+    if (!info.isDirectory()) continue;
+
+    const backupDir = join(stagePath, "_backup");
+    const rollbackFailed = await readJsonIfPresent(join(stagePath, "_rollback-failed.json"));
+    if (rollbackFailed) {
+      throw new Error(
+        `Output directory '${outputDir}' contains preserved backup(s) from a failed rollback in '${backupDir}'. Restore or remove them manually before retrying.`,
+      );
+    }
+
+    const meta = (await readJsonIfPresent(join(stagePath, "_meta.json"))) ??
+      (await readJsonIfPresent(join(stagePath, "_manifest.json")));
+
+    let isDeadLocal = false;
+    if (meta) {
+      isDeadLocal = meta.host === hostname() && isLocalProcessDead(meta.pid);
+    } else {
+      const pidMatch = entry.match(/^\.denoise-stage-(\d+)-[0-9a-f]+$/);
+      const parsedPid = pidMatch ? Number(pidMatch[1]) : NaN;
+      const stageContents = await readdir(stagePath);
+      if (isLocalProcessDead(parsedPid) && stageContents.length === 0) {
+        await rm(stagePath, { recursive: true, force: true }).catch(() => {});
+        continue;
+      }
+      if (await pathExists(backupDir)) {
+        const backups = await readdir(backupDir).catch(() => []);
+        if (backups.length > 0) {
+          throw new Error(
+            `Output directory '${outputDir}' contains unrecovered backup(s) in '${backupDir}'. Restore or remove them manually before retrying.`,
+          );
+        }
+      }
+      continue;
+    }
+
+    if (!isDeadLocal) continue;
+
+    // If the interrupted run already finished publishing all outputs before dying during cleanup,
+    // the outputs in `resolvedDir` are complete and `_backup` is obsolete.
+    if (await pathExists(join(stagePath, "_committed"))) {
+      await rm(stagePath, { recursive: true, force: true }).catch(() => {});
+      continue;
+    }
+
+    const manifest = await readJsonIfPresent(join(stagePath, "_manifest.json"));
+    let backupFiles = [];
+    try {
+      backupFiles = await readdir(backupDir);
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+
+    if (!manifest && backupFiles.length === 0) {
+      // Crashed before publish touched any destination file.
+      await rm(stagePath, { recursive: true, force: true }).catch(() => {});
+      continue;
+    }
+
+    const recoveryFailures = [];
+    const stagedFiles = Array.isArray(manifest?.stagedFiles) ? manifest.stagedFiles : [];
+
+    // Remove any partial outputs that the killed run already moved into `resolvedDir`.
+    for (const name of stagedFiles) {
+      if (await pathExists(join(stagePath, name))) continue;
+      const target = join(resolvedDir, name);
+      try {
+        const targetInfo = await lstat(target);
+        if (targetInfo.isDirectory()) {
+          recoveryFailures.push(`${name} (destination is a directory)`);
+        } else {
+          await unlink(target);
+        }
+      } catch (error) {
+        if (error.code !== "ENOENT") {
+          recoveryFailures.push(`${name} (${error.code || error.message})`);
+        }
+      }
+    }
+
+    // Restore every backed-up original file into `resolvedDir` without clobbering unexpected entries.
+    for (const name of backupFiles) {
+      const src = join(backupDir, name);
+      const dst = join(resolvedDir, name);
+      if (await pathExists(dst)) {
+        recoveryFailures.push(`${name} (destination already exists)`);
+        continue;
+      }
+      try {
+        await rename(src, dst);
+      } catch (error) {
+        recoveryFailures.push(`${name} (${error.code || error.message})`);
+      }
+    }
+
+    const remainingBackups = await readdir(backupDir).catch(() => []);
+    if (recoveryFailures.length > 0 || remainingBackups.length > 0) {
+      throw new Error(
+        `Cannot recover interrupted run in '${outputDir}': ${recoveryFailures.join(", ") || "backups remain"}; original backup(s) preserved in '${backupDir}'.`,
+      );
+    }
+
+    await rm(stagePath, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+/**
+ * Exclusively reserves `outputDir` before processing by atomically renaming a pre-populated
+ * lock directory (containing `owner-<token>.json`) onto `.denoise-run.lock`. Because live lock
+ * directories are never empty, concurrent renames fail atomically and stale-lock recovery can
+ * unlink only a verified dead token file without ever disturbing a live owner.
+ */
+async function reserveOutputDir(outputDir, { overwrite = false, onLockInspect } = {}) {
   const resolved = resolve(outputDir);
   let createdDir = false;
   try {
@@ -277,54 +487,59 @@ async function reserveOutputDir(outputDir, { overwrite = false } = {}) {
     createdDir = true;
   }
 
-  const lockPath = join(resolved, LOCK_FILE);
+  const lockPath = join(resolved, LOCK_NAME);
   const token = randomBytes(8).toString("hex");
+  const ownerFile = `owner-${token}.json`;
+  const stageLockDir = join(resolved, `${LOCK_TMP_PREFIX}${process.pid}-${token}`);
   const lockPayload = `${JSON.stringify({ pid: process.pid, host: hostname(), startedAt: Date.now(), token })}\n`;
-  let reclaimedDeadPid = null;
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    let lockHandle;
-    try {
-      lockHandle = await open(lockPath, "wx");
-      await lockHandle.writeFile(lockPayload, "utf8");
-      break;
-    } catch (error) {
-      if (error.code === "EEXIST" && attempt === 0) {
-        const deadPid = await tryReclaimStaleLock(resolved, lockPath);
-        if (deadPid !== null) {
-          reclaimedDeadPid = deadPid;
-          continue;
+  await mkdir(stageLockDir, { recursive: false });
+  let acquired = false;
+  try {
+    await writeFile(join(stageLockDir, ownerFile), lockPayload, "utf8");
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        await rename(stageLockDir, lockPath);
+        acquired = true;
+        break;
+      } catch (error) {
+        if (error.code === "ENOTDIR") {
+          throw new Error(
+            `Output directory '${outputDir}' is locked by another running denoise process (or contains ${LOCK_NAME}).`,
+          );
         }
+        if (isLockContentionError(error)) {
+          if (attempt < 2 && (await tryClearStaleLock(lockPath, { onLockInspect }))) {
+            continue;
+          }
+          throw new Error(
+            `Output directory '${outputDir}' is locked by another running denoise process (or contains ${LOCK_NAME}).`,
+          );
+        }
+        throw error;
       }
-      if (error.code === "EEXIST") {
-        throw new Error(`Output directory '${outputDir}' is locked by another running denoise process (or contains ${LOCK_FILE}).`);
-      }
-      throw error;
-    } finally {
-      await lockHandle?.close();
+    }
+  } finally {
+    if (!acquired) {
+      await rm(stageLockDir, { recursive: true, force: true }).catch(() => {});
     }
   }
 
   const release = async ({ removeIfEmpty = false } = {}) => {
-    await unlink(lockPath).catch(() => {});
+    await unlink(join(lockPath, ownerFile)).catch(() => {});
+    await rmdir(lockPath).catch(() => {});
     if (removeIfEmpty && createdDir) {
       await rmdir(resolved).catch(() => {});
     }
   };
 
   try {
-    if (reclaimedDeadPid !== null) {
-      // Remove any orphaned staging directory left by the crashed process whose lock we reclaimed.
-      const deadStagePrefix = `${STAGE_PREFIX}${reclaimedDeadPid}-`;
-      const existing = await readdir(resolved);
-      for (const entry of existing) {
-        if (entry.startsWith(deadStagePrefix)) {
-          await rm(join(resolved, entry), { recursive: true, force: true }).catch(() => {});
-        }
-      }
-    }
+    await recoverInterruptedStages(resolved, outputDir);
     if (!overwrite) {
-      const entries = (await readdir(resolved)).filter((name) => name !== LOCK_FILE);
+      const entries = (await readdir(resolved)).filter(
+        (name) => name !== LOCK_NAME && !name.startsWith(LOCK_TMP_PREFIX),
+      );
       if (entries.length > 0) {
         throw new Error(`Output directory '${outputDir}' is not empty. Choose a new directory or pass --overwrite.`);
       }
@@ -359,14 +574,21 @@ async function assertPublishableTargets(dir, filenames, { overwrite }) {
 }
 
 /**
- * Publishes all staged files into `dir` with transactional rollback: backs up any existing
- * targets that would be overwritten, renames every staged file into place, and on any failure
- * removes newly published files and restores every backed-up original file.
+ * Publishes all staged files into `dir` with transactional rollback: records a commit manifest,
+ * backs up any existing targets that would be overwritten, renames every staged file into place,
+ * marks commit complete, and on any failure removes newly published files and restores every
+ * backed-up original file. If restoration fails, preserves `_backup` intact and reports its path.
  */
 async function publishStagedFiles(dir, stageDir, stagedFiles, { overwrite, renameFn = rename } = {}) {
   const backupDir = join(stageDir, "_backup");
   const backedUp = [];
   const publishedNames = [];
+
+  await writeFile(
+    join(stageDir, "_manifest.json"),
+    `${JSON.stringify({ pid: process.pid, host: hostname(), stagedFiles, overwrite })}\n`,
+    "utf8",
+  );
 
   try {
     if (overwrite) {
@@ -394,15 +616,82 @@ async function publishStagedFiles(dir, stageDir, stagedFiles, { overwrite, renam
       publishedNames.push(name);
       written.push(finalPath);
     }
+
+    await writeFile(join(stageDir, "_committed"), "ok\n", "utf8");
     return written;
   } catch (error) {
-    // Roll back any newly published files, then restore every backed-up original file.
+    // Move newly published files back into `stageDir` before restoring `_backup` so that even a
+    // hard kill mid-rollback preserves the invariant that `stageDir/<name>` exists whenever
+    // `dir/<name>` holds an original file.
+    const clearFailures = new Map();
     for (const name of publishedNames) {
-      await unlink(join(dir, name)).catch(() => {});
+      const dst = join(dir, name);
+      const staged = join(stageDir, name);
+      try {
+        await rename(dst, staged);
+      } catch (moveErr) {
+        if (moveErr.code === "ENOENT") {
+          await writeFile(staged, "").catch(() => {});
+        } else {
+          clearFailures.set(name, moveErr);
+        }
+      }
     }
+
+    const restoreFailures = [];
     for (const name of backedUp) {
-      await rename(join(backupDir, name), join(dir, name)).catch(() => {});
+      const src = join(backupDir, name);
+      const dst = join(dir, name);
+      if (clearFailures.has(name)) {
+        restoreFailures.push({ name, backupPath: src, error: clearFailures.get(name) });
+        continue;
+      }
+      try {
+        await rename(src, dst);
+      } catch (restoreErr) {
+        restoreFailures.push({ name, backupPath: src, error: restoreErr });
+      }
     }
+
+    const unremovedNew = [...clearFailures.entries()]
+      .filter(([name]) => !backedUp.includes(name))
+      .map(([name, err]) => ({ name, error: err }));
+
+    if (restoreFailures.length > 0 || unremovedNew.length > 0) {
+      if (restoreFailures.length > 0) {
+        await writeFile(
+          join(stageDir, "_rollback-failed.json"),
+          `${JSON.stringify(
+            {
+              pid: process.pid,
+              host: hostname(),
+              failedAt: Date.now(),
+              backupDir,
+              unrestored: restoreFailures.map((f) => ({ name: f.name, reason: f.error.message })),
+            },
+            null,
+            2,
+          )}\n`,
+          "utf8",
+        ).catch(() => {});
+      }
+      const parts = [];
+      if (restoreFailures.length > 0) {
+        const names = restoreFailures.map((f) => `${f.name} (${f.error.code || f.error.message})`).join(", ");
+        parts.push(`rollback failed to restore ${names}; original backup(s) preserved in '${backupDir}'`);
+      }
+      if (unremovedNew.length > 0) {
+        const names = unremovedNew.map((f) => `${f.name} (${f.error.code || f.error.message})`).join(", ");
+        parts.push(`failed to remove partial output(s): ${names}`);
+      }
+      const wrapped = new Error(`${error.message}; ${parts.join("; ")}`, { cause: error });
+      wrapped.code = error.code;
+      if (restoreFailures.length > 0) {
+        wrapped.preservedBackupDir = backupDir;
+      }
+      throw wrapped;
+    }
+
     throw error;
   }
 }
@@ -419,6 +708,7 @@ export async function denoiseFile({
   maxBytes = MAX_CLI_INPUT_BYTES,
   maxFileBytes = maxBytes + CLI_METADATA_BYTES,
   renameFn = rename,
+  onLockInspect,
 }) {
   if (!input) throw new Error("Input file path is required.");
   if (!outputDir) throw new Error("Output directory path is required.");
@@ -429,9 +719,10 @@ export async function denoiseFile({
   const file = await readBoundedInputFile(resolvedInput, inputName, maxFileBytes);
   const volume = await readVolume(file, { maxBytes, maxFileBytes });
 
-  const reservation = await reserveOutputDir(outputDir, { overwrite });
+  const reservation = await reserveOutputDir(outputDir, { overwrite, onLockInspect });
   const stageDir = join(reservation.dir, `${STAGE_PREFIX}${process.pid}-${randomBytes(4).toString("hex")}`);
   let published = false;
+  let preserveStageDir = false;
 
   try {
     const names = outputNames(inputName);
@@ -472,6 +763,11 @@ export async function denoiseFile({
 
     const stagedFiles = [];
     await mkdir(stageDir, { recursive: false });
+    await writeFile(
+      join(stageDir, "_meta.json"),
+      `${JSON.stringify({ pid: process.pid, host: hostname(), createdAt: Date.now() })}\n`,
+      "utf8",
+    );
     if (writeTiff) {
       const data = new Uint8Array(stackTiff(result.denoised, volume.dims, volume.spacingUm, exportOpts));
       await writeFile(join(stageDir, names.tiff), data);
@@ -509,9 +805,16 @@ export async function denoiseFile({
       details: result.details,
       seconds,
     };
+  } catch (error) {
+    if (error?.preservedBackupDir) {
+      preserveStageDir = true;
+    }
+    throw error;
   } finally {
-    await rm(stageDir, { recursive: true, force: true }).catch(() => {});
-    await reservation.release({ removeIfEmpty: !published });
+    if (!preserveStageDir) {
+      await rm(stageDir, { recursive: true, force: true }).catch(() => {});
+    }
+    await reservation.release({ removeIfEmpty: !published && !preserveStageDir });
   }
 }
 

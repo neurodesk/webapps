@@ -308,15 +308,15 @@ test("stale lock from a dead local PID is safely recovered while a live-PID lock
     const child = spawnSync(process.execPath, ["-e", "process.exit(0)"]);
     const deadPid = child.pid;
     const staleOut = join(dir, "stale-out");
-    await mkdir(staleOut);
+    await mkdir(join(staleOut, ".denoise-run.lock"), { recursive: true });
     await writeFile(
-      join(staleOut, ".denoise-run.lock"),
-      `${JSON.stringify({ pid: deadPid, host: hostname(), startedAt: Date.now() - 10_000, token: "dead" })}\n`,
+      join(staleOut, ".denoise-run.lock", "owner-dead0001.json"),
+      `${JSON.stringify({ pid: deadPid, host: hostname(), startedAt: Date.now() - 10_000, token: "dead0001" })}\n`,
       "utf8",
     );
     await mkdir(join(staleOut, `.denoise-stage-${deadPid}-abcd1234`));
 
-    // Recovery succeeds without --overwrite and cleans the dead staging dir.
+    // Recovery succeeds without --overwrite and cleans the empty dead staging dir.
     const recovered = await denoiseFile({
       input: inputPath,
       outputDir: staleOut,
@@ -327,10 +327,10 @@ test("stale lock from a dead local PID is safely recovered while a live-PID lock
 
     // A lock held by a live PID (our own PID) MUST NOT be stolen even with --overwrite.
     const liveOut = join(dir, "live-out");
-    await mkdir(liveOut);
+    await mkdir(join(liveOut, ".denoise-run.lock"), { recursive: true });
     await writeFile(
-      join(liveOut, ".denoise-run.lock"),
-      `${JSON.stringify({ pid: process.pid, host: hostname(), startedAt: Date.now(), token: "live" })}\n`,
+      join(liveOut, ".denoise-run.lock", "owner-11ee0001.json"),
+      `${JSON.stringify({ pid: process.pid, host: hostname(), startedAt: Date.now(), token: "11ee0001" })}\n`,
       "utf8",
     );
     await assert.rejects(
@@ -341,6 +341,240 @@ test("stale lock from a dead local PID is safely recovered while a live-PID lock
       }),
       /locked/i,
     );
+
+    // A corrupt/foreign-host lock MUST NOT be stolen either.
+    const foreignOut = join(dir, "foreign-out");
+    await mkdir(join(foreignOut, ".denoise-run.lock"), { recursive: true });
+    await writeFile(
+      join(foreignOut, ".denoise-run.lock", "owner-f00e0001.json"),
+      `${JSON.stringify({ pid: deadPid, host: "other-host.invalid", startedAt: Date.now(), token: "f00e0001" })}\n`,
+      "utf8",
+    );
+    await assert.rejects(
+      () => denoiseFile({
+        input: inputPath,
+        outputDir: foreignOut,
+        options: { method: "fgr-ridge", "max-scale": "4", overwrite: true },
+      }),
+      /locked/i,
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("failed rollback preserves unrestored backups, reports their path, and blocks silent deletion", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "denoise-rollback-preserve-test-"));
+  try {
+    const inputPath = join(dir, "sample.tif");
+    await writeFile(inputPath, syntheticTiff([1, 24, 24]));
+
+    const outDir = join(dir, "existing");
+    await mkdir(outDir);
+    const oldTiff = Buffer.from("original-tiff-payload");
+    const oldProv = '{"methodId":"original-run"}\n';
+    await writeFile(join(outDir, "sample_denoised.tif"), oldTiff);
+    await writeFile(join(outDir, "sample_provenance.json"), oldProv, "utf8");
+
+    let caught;
+    try {
+      await denoiseFile({
+        input: inputPath,
+        outputDir: outDir,
+        options: { method: "fgr-ridge", "max-scale": "4", overwrite: true },
+        renameFn: async (src, dst) => {
+          if (dst === join(outDir, "sample_provenance.json")) {
+            // Place a blocking directory at the provenance target so both publish and rollback fail.
+            await mkdir(dst);
+            const err = new Error("EACCES: permission denied");
+            err.code = "EACCES";
+            throw err;
+          }
+          return rename(src, dst);
+        },
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    assert.ok(caught, "expected publish + rollback failure");
+    assert.match(caught.message, /EACCES/);
+    assert.match(caught.message, /rollback failed to restore sample_provenance\.json/);
+    assert.match(caught.message, /_backup/);
+    assert.ok(caught.preservedBackupDir, "expected preservedBackupDir metadata");
+
+    // The unblocked original TIFF was restored verbatim.
+    assert.deepEqual(await readFile(join(outDir, "sample_denoised.tif")), oldTiff);
+    // The blocked original provenance was preserved verbatim inside _backup.
+    assert.equal(await readFile(join(caught.preservedBackupDir, "sample_provenance.json"), "utf8"), oldProv);
+
+    // A subsequent run (even with --overwrite) must not delete the preserved backup.
+    await assert.rejects(
+      () => denoiseFile({
+        input: inputPath,
+        outputDir: outDir,
+        options: { method: "fgr-ridge", "max-scale": "4", overwrite: true },
+      }),
+      /preserved backup/i,
+    );
+    assert.equal(await readFile(join(caught.preservedBackupDir, "sample_provenance.json"), "utf8"), oldProv);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("concurrent stale-lock recovery cannot steal a newly acquired live owner's lock", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "denoise-concurrent-reclaim-test-"));
+  try {
+    const inputPath = join(dir, "sample.tif");
+    await writeFile(inputPath, syntheticTiff([1, 24, 24]));
+    const child = spawnSync(process.execPath, ["-e", "process.exit(0)"]);
+    const deadPid = child.pid;
+
+    const outDir = join(dir, "out");
+    await mkdir(join(outDir, ".denoise-run.lock"), { recursive: true });
+    await writeFile(
+      join(outDir, ".denoise-run.lock", "owner-deadbeef.json"),
+      `${JSON.stringify({ pid: deadPid, host: hostname(), startedAt: Date.now() - 10_000, token: "deadbeef" })}\n`,
+      "utf8",
+    );
+
+    let contender1Paused;
+    const contender1AtPause = new Promise((r) => { contender1Paused = r; });
+    let releaseContender1;
+    const contender1Gate = new Promise((r) => { releaseContender1 = r; });
+
+    let contender2Publishing;
+    const contender2AtPublish = new Promise((r) => { contender2Publishing = r; });
+    let releaseContender2;
+    const contender2Gate = new Promise((r) => { releaseContender2 = r; });
+
+    // Contender 1 reads the dead PID lock and pauses before removing it.
+    const run1 = denoiseFile({
+      input: inputPath,
+      outputDir: outDir,
+      options: { method: "fgr-ridge", "max-scale": "4" },
+      onLockInspect: async () => {
+        contender1Paused();
+        await contender1Gate;
+      },
+    });
+
+    await contender1AtPause;
+
+    // While Contender 1 is paused, Contender 2 reclaims the dead lock, acquires a fresh live lock,
+    // and pauses mid-publish.
+    const run2 = denoiseFile({
+      input: inputPath,
+      outputDir: outDir,
+      options: { method: "vst-nlm", "noise-model": "gaussian" },
+      renameFn: async (src, dst) => {
+        if (dst.endsWith("sample_provenance.json")) {
+          contender2Publishing();
+          await contender2Gate;
+        }
+        return rename(src, dst);
+      },
+    });
+
+    await contender2AtPublish;
+
+    // Record Contender 2's live lock file before Contender 1 resumes.
+    const liveLockEntriesBefore = await readdir(join(outDir, ".denoise-run.lock"));
+    assert.equal(liveLockEntriesBefore.length, 1);
+    assert.notEqual(liveLockEntriesBefore[0], "owner-deadbeef.json");
+
+    // Resume Contender 1 — it MUST fail with locked and leave Contender 2's live lock untouched.
+    releaseContender1();
+    await assert.rejects(() => run1, /locked/i);
+
+    const liveLockEntriesAfter = await readdir(join(outDir, ".denoise-run.lock"));
+    assert.deepEqual(liveLockEntriesAfter, liveLockEntriesBefore);
+
+    // Let Contender 2 finish cleanly.
+    releaseContender2();
+    const res2 = await run2;
+    assert.equal(res2.provenance.methodId, "vst-nlm");
+    assert.deepEqual((await readdir(outDir)).sort(), ["sample_denoised.tif", "sample_provenance.json"]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("recovering from a killed overwrite run restores both originals instead of deleting _backup", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "denoise-killed-overwrite-test-"));
+  try {
+    const inputPath = join(dir, "sample.tif");
+    await writeFile(inputPath, syntheticTiff([1, 24, 24]));
+    const child = spawnSync(process.execPath, ["-e", "process.exit(0)"]);
+    const deadPid = child.pid;
+
+    const oldTiff = Buffer.from("original-tiff-before-kill");
+    const oldProv = '{"methodId":"original-before-kill"}\n';
+
+    // Simulate a run killed mid-publish: both originals are in _backup, new TIFF is already in
+    // outDir, new provenance is still in stageDir, and no _committed marker exists.
+    const outDir = join(dir, "out");
+    const stageDir = join(outDir, `.denoise-stage-${deadPid}-1234abcd`);
+    await mkdir(join(outDir, ".denoise-run.lock"), { recursive: true });
+    await writeFile(
+      join(outDir, ".denoise-run.lock", "owner-dead1234.json"),
+      `${JSON.stringify({ pid: deadPid, host: hostname(), startedAt: Date.now() - 10_000, token: "dead1234" })}\n`,
+      "utf8",
+    );
+    await mkdir(join(stageDir, "_backup"), { recursive: true });
+    await writeFile(join(stageDir, "_meta.json"), `${JSON.stringify({ pid: deadPid, host: hostname() })}\n`, "utf8");
+    await writeFile(
+      join(stageDir, "_manifest.json"),
+      `${JSON.stringify({ pid: deadPid, host: hostname(), stagedFiles: ["sample_denoised.tif", "sample_provenance.json"], overwrite: true })}\n`,
+      "utf8",
+    );
+    await writeFile(join(stageDir, "_backup", "sample_denoised.tif"), oldTiff);
+    await writeFile(join(stageDir, "_backup", "sample_provenance.json"), oldProv, "utf8");
+    await writeFile(join(outDir, "sample_denoised.tif"), Buffer.from("partial-new-tiff-from-killed-run"));
+    await writeFile(join(stageDir, "sample_provenance.json"), '{"methodId":"partial-new"}\n', "utf8");
+
+    // Retrying without --overwrite must restore BOTH original files and refuse to overwrite them.
+    await assert.rejects(
+      () => denoiseFile({
+        input: inputPath,
+        outputDir: outDir,
+        options: { method: "fgr-ridge", "max-scale": "4" },
+      }),
+      /not empty/i,
+    );
+
+    assert.deepEqual((await readdir(outDir)).sort(), ["sample_denoised.tif", "sample_provenance.json"]);
+    assert.deepEqual(await readFile(join(outDir, "sample_denoised.tif")), oldTiff);
+    assert.equal(await readFile(join(outDir, "sample_provenance.json"), "utf8"), oldProv);
+
+    // Also test a killed fresh-directory run (no _backup, partial new TIFF in outDir):
+    // retrying without --overwrite cleans the partial TIFF and succeeds cleanly.
+    const freshDir = join(dir, "fresh-killed");
+    const freshStage = join(freshDir, `.denoise-stage-${deadPid}-5678ef90`);
+    await mkdir(join(freshDir, ".denoise-run.lock"), { recursive: true });
+    await writeFile(
+      join(freshDir, ".denoise-run.lock", "owner-dead5678.json"),
+      `${JSON.stringify({ pid: deadPid, host: hostname(), startedAt: Date.now() - 10_000, token: "dead5678" })}\n`,
+      "utf8",
+    );
+    await mkdir(freshStage, { recursive: true });
+    await writeFile(join(freshStage, "_meta.json"), `${JSON.stringify({ pid: deadPid, host: hostname() })}\n`, "utf8");
+    await writeFile(
+      join(freshStage, "_manifest.json"),
+      `${JSON.stringify({ pid: deadPid, host: hostname(), stagedFiles: ["sample_denoised.tif", "sample_provenance.json"], overwrite: false })}\n`,
+      "utf8",
+    );
+    await writeFile(join(freshDir, "sample_denoised.tif"), Buffer.from("partial-fresh-tiff"));
+    await writeFile(join(freshStage, "sample_provenance.json"), '{"methodId":"partial"}\n', "utf8");
+
+    const res = await denoiseFile({
+      input: inputPath,
+      outputDir: freshDir,
+      options: { method: "fgr-ridge", "max-scale": "4" },
+    });
+    assert.equal(res.outputs.length, 2);
+    assert.deepEqual((await readdir(freshDir)).sort(), ["sample_denoised.tif", "sample_provenance.json"]);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
