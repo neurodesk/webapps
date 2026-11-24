@@ -38,7 +38,7 @@
         "channel": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 256,
+          "maximum": 1024,
           "default": 1,
           "description": "Channel or page to segment for single-channel models, counting from 1"
         },
@@ -57,7 +57,7 @@
         "tiles": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 16,
+          "maximum": 8,
           "default": 0,
           "description": "Tiles per spatial axis; 0 chooses tiling automatically from image size"
         }

@@ -5,7 +5,7 @@
   "revision": "2cc5042a0fad34811857bbdf89b1172bda338af4",
   "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2cc5042a0fad34811857bbdf89b1172bda338af4/stardist/models/",
   "license": "BSD-3-Clause",
-  "license_note": "StarDist's pretrained models (github.com/stardist/stardist-models) are BSD-3-Clause, Copyright (c) 2018-2024, Uwe Schmidt, Martin Weigert.",
+  "license_note": "StarDist's pretrained models (github.com/stardist/stardist-models) are BSD-3-Clause, Copyright (c) 2018-2020, Martin Weigert, Uwe Schmidt.",
   "default_model": "2D_versatile_fluo",
   "models": {
     "2D_versatile_fluo": {

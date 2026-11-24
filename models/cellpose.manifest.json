@@ -5,7 +5,7 @@
   "revision": "bc1de48f8c0857d30f2330e986eef29ec77603b3",
   "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/bc1de48f8c0857d30f2330e986eef29ec77603b3/cellpose/models/",
   "license": "BSD-3-Clause",
-  "license_note": "Cellpose code and pretrained model weights (github.com/MouseLand/cellpose) are BSD-3-Clause, Copyright (c) 2020-2024 Howard Hughes Medical Institute. Some Cellpose 3 training datasets (including the cyto3 training set) carry non-commercial (CC-BY-NC) restrictions.",
+  "license_note": "Cellpose 3.1.1.1 code and pretrained model weights (github.com/MouseLand/cellpose, tag v3.1.1.1) are BSD-3-Clause, Copyright © 2020 Howard Hughes Medical Institute. Separate training-data notice: portions of the cyto3 training set carry non-commercial (CC-BY-NC) restrictions.",
   "default_model": "cyto3",
   "models": {
     "cyto3": {

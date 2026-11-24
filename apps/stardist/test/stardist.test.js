@@ -17,10 +17,12 @@ import {
   suppress,
 } from "../src/stardist.js";
 import {
+  automaticTiles3D,
   measureNuclei3D,
   padVolume,
   predictCandidates3D,
   renderLabels3D,
+  segment3D,
   suppress3D,
 } from "../src/stardist3d.js";
 import { MODEL, resolveModel } from "../src/config.js";
@@ -317,4 +319,68 @@ test("3D tiled prediction equals untiled candidates when receptive field fits ov
   };
   assert.ok(whole.prob.length > 50);
   assert.deepEqual(key(tiled), key(whole));
+});
+
+test("3D NMS matches StarDist 0.9.1 kernel and convex-hull intersection decisions", () => {
+  const demo3d = resolveModel("3D_demo");
+  const nRays = demo3d.nRays;
+  // Convex-hull upper bound keeps both small candidates at threshold 0.3.
+  const dSmall = new Float32Array(2 * nRays).fill(2);
+  assert.deepEqual(suppress3D(dSmall, new Int32Array([8, 8, 8, 10, 8, 8]), demo3d.rays, 0.3), [0, 1]);
+  // Kernel lower bound suppresses the second candidate at threshold 0.3.
+  const dMed = new Float32Array(2 * nRays).fill(3);
+  assert.deepEqual(suppress3D(dMed, new Int32Array([8, 8, 8, 8, 10, 10]), demo3d.rays, 0.3), [0]);
+});
+
+test("automaticTiles3D bounds actual overlapped 3D tile output memory and predictCandidates3D caps dense candidates", async () => {
+  const demo3d = resolveModel("3D_demo");
+  const tiles = automaticTiles3D(128, 512, 512, demo3d);
+  assert.ok(tiles[0] * tiles[1] * tiles[2] > 8, `expected finer 3D tiling than 2x2x2, got ${tiles}`);
+  const depth = 12;
+  const height = 16;
+  const width = 16;
+  const volume = new Float32Array(depth * height * width);
+  await assert.rejects(
+    predictCandidates3D(volume, depth, height, width, demo3d, {
+      probThresh: 0.1,
+      nTiles: [1, 1, 1],
+      maxCandidates: 5,
+      run: (_tile, d, h, w) => ({
+        prob: new Float32Array((d / demo3d.grid[0]) * (h / demo3d.grid[1]) * (w / demo3d.grid[2])).fill(0.9),
+        dist: new Float32Array((d / demo3d.grid[0]) * (h / demo3d.grid[1]) * (w / demo3d.grid[2]) * demo3d.nRays).fill(2),
+      }),
+    }),
+    /More than 5 3D candidate polyhedra/,
+  );
+});
+
+test("segment3D compacts empty survivors so count, CSV rows and label IDs stay aligned", async () => {
+  const demo3d = resolveModel("3D_demo");
+  const depth = 12;
+  const height = 16;
+  const width = 16;
+  const volume = new Float32Array(depth * height * width).fill(10);
+  const res = await segment3D(volume, depth, height, width, demo3d, {
+    probThresh: 0.5,
+    nmsThresh: 0.99,
+    nTiles: [1, 1, 1],
+    run: (_tile, d, h, w) => {
+      const gh = h / demo3d.grid[1];
+      const gw = w / demo3d.grid[2];
+      const prob = new Float32Array(d * gh * gw);
+      const dist = new Float32Array(d * gh * gw * demo3d.nRays);
+      const i1 = (6 * gh + 4) * gw + 4;
+      const i2 = (6 * gh + 4) * gw + 5;
+      prob[i1] = 0.95;
+      prob[i2] = 0.8;
+      for (let k = 0; k < demo3d.nRays; k++) {
+        dist[i1 * demo3d.nRays + k] = 4;
+        dist[i2 * demo3d.nRays + k] = 0.2;
+      }
+      return { prob, dist };
+    },
+  });
+  assert.equal(res.count, res.nuclei.length);
+  assert.equal(res.count, 1);
+  assert.equal(res.nuclei[0].id, 1);
 });

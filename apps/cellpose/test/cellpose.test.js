@@ -13,9 +13,12 @@ import {
   normalize99,
   removeBadFlowMasks2D,
   resizePlane2D,
+  segment2D,
+  segment3D,
   taperMask,
   tileStarts,
 } from "../src/cellpose.js";
+import { MODELS } from "../src/config.js";
 
 const reference = JSON.parse(readFileSync(new URL("../validation/reference.json", import.meta.url), "utf8"));
 
@@ -169,4 +172,125 @@ test("fillHolesAndRemoveSmallMasks fills interior holes and removes tiny regions
   assert.equal(rows[0].area, 25);
   assert.equal(rows[0].x, 3);
   assert.equal(rows[0].y, 3);
+});
+
+test("removeBadFlowMasks2D uses synchronous Jacobi diffusion matching Cellpose 3.1.1.1", () => {
+  // 21-pixel C-shaped / asymmetric mask where in-place Gauss-Seidel diverges from Jacobi.
+  const H = 12;
+  const W = 12;
+  const labels = new Int32Array(H * W);
+  const coords = [
+    [2, 2], [2, 3], [2, 4], [2, 5], [2, 6],
+    [3, 2], [3, 6],
+    [4, 2], [4, 6],
+    [5, 2], [5, 3], [5, 4], [5, 5], [5, 6],
+    [6, 4], [7, 4], [8, 4], [8, 5], [8, 6], [8, 7], [8, 8],
+  ];
+  for (const [y, x] of coords) labels[y * W + x] = 1;
+  // Compute exact synchronous Jacobi reference flows in double precision.
+  const r0 = 2;
+  const c0 = 2;
+  const ly = 8 - 2 + 3;
+  const lx = 8 - 2 + 3;
+  const ys = coords.map(([y]) => y - r0 + 1);
+  const xs = coords.map(([, x]) => x - c0 + 1);
+  const meanY = ys.reduce((a, b) => a + b, 0) / ys.length;
+  const meanX = xs.reduce((a, b) => a + b, 0) / xs.length;
+  let medIdx = 0;
+  let best = Infinity;
+  for (let i = 0; i < ys.length; i++) {
+    const d2 = (ys[i] - meanY) ** 2 + (xs[i] - meanX) ** 2;
+    if (d2 < best) { best = d2; medIdx = i; }
+  }
+  const medOff = ys[medIdx] * lx + xs[medIdx];
+  let T = new Float64Array(ly * lx);
+  let Tnext = new Float64Array(ly * lx);
+  const offs = ys.map((y, i) => y * lx + xs[i]);
+  for (let t = 0; t < 2 * (ly + lx); t++) {
+    T[medOff] += 1;
+    for (const off of offs) {
+      Tnext[off] = (T[off] + T[off - lx] + T[off + lx] + T[off - 1] + T[off + 1] + T[off - lx - 1] + T[off - lx + 1] + T[off + lx - 1] + T[off + lx + 1]) / 9;
+    }
+    [T, Tnext] = [Tnext, T];
+  }
+  const dY = new Float32Array(H * W);
+  const dX = new Float32Array(H * W);
+  for (let i = 0; i < coords.length; i++) {
+    const off = offs[i];
+    const gy = T[off + lx] - T[off - lx];
+    const gx = T[off + 1] - T[off - 1];
+    const n = 1e-60 + Math.hypot(gy, gx);
+    const idx = coords[i][0] * W + coords[i][1];
+    dY[idx] = (gy / n) * 5;
+    dX[idx] = (gx / n) * 5;
+  }
+  const kept = removeBadFlowMasks2D(labels, dY, dX, H, W, 0.01);
+  assert.equal(kept[coords[0][0] * W + coords[0][1]], 1, "exact Jacobi flows must have ~0 error");
+});
+
+test("fillHolesAndRemoveSmallMasks preserves enclosed surviving instances with contiguous IDs", () => {
+  const H = 12;
+  const W = 12;
+  const labels = new Int32Array(H * W);
+  // Outer ring: label 2 (from 1..9 x 1..9 minus interior 3..7 x 3..7)
+  for (let y = 1; y <= 9; y++) {
+    for (let x = 1; x <= 9; x++) {
+      if (y >= 3 && y <= 7 && x >= 3 && x <= 7) continue;
+      labels[y * W + x] = 2;
+    }
+  }
+  // Enclosed surviving instance: label 1 (4..6 x 4..6 = 9 pixels)
+  for (let y = 4; y <= 6; y++) {
+    for (let x = 4; x <= 6; x++) labels[y * W + x] = 1;
+  }
+  const cleaned = fillHolesAndRemoveSmallMasks(labels, [H, W], 5);
+  assert.equal(cleaned[5 * W + 5], 1, "enclosed label 1 must survive");
+  assert.equal(cleaned[1 * W + 1], 2, "surrounding label 2 must survive");
+  const rows = measureCells2D(cleaned, new Float32Array(H * W).fill(1), W);
+  assert.deepEqual(rows.map((r) => r.id), [1, 2]);
+});
+
+test("segment2D and segment3D reject non-finite inputs, non-finite outputs, and oversized rescaled budgets", async () => {
+  const bad = new Float32Array(16 * 16).fill(1);
+  bad[7] = Number.NaN;
+  await assert.rejects(
+    segment2D(bad, null, 16, 16, MODELS.cyto3, { runBatch: async () => new Float32Array(0) }),
+    /non-finite values/,
+  );
+
+  const ok = new Float32Array(16 * 16).fill(10);
+  await assert.rejects(
+    segment2D(ok, null, 16, 16, MODELS.cyto3, {
+      diameter: 30,
+      runBatch: async (_inp, b, h, w) => new Float32Array(b * 3 * h * w).fill(Number.NaN),
+    }),
+    /Cellpose model output contains non-finite/,
+  );
+
+  // Oversized 3D rescale budget: 1024x1024x32 at diameter=5 (6x rescale -> >7B voxels) must fail before allocating.
+  const dummyVol = new Float32Array(1);
+  await assert.rejects(
+    segment3D(dummyVol, null, 32, 1024, 1024, MODELS.cyto3, {
+      diameter: 5,
+      anisotropy: 1,
+      runBatch: async () => new Float32Array(0),
+    }),
+    /limit 512 MiB/,
+  );
+});
+
+test("segment3D scales flow iteration count with diameter and handles anisotropy", async () => {
+  const D = 8;
+  const H = 16;
+  const W = 16;
+  const vol = new Float32Array(D * H * W).fill(10);
+  const stages = [];
+  await segment3D(vol, null, D, H, W, MODELS.cyto3, {
+    diameter: 60,
+    anisotropy: 2,
+    runBatch: async (_inp, b, h, w) => new Float32Array(b * 3 * h * w).fill(-5),
+    onStage: (stage, count) => stages.push([stage, count]),
+  });
+  const dyn = stages.find(([s]) => s === "dynamics");
+  assert.deepEqual(dyn, ["dynamics", 400], "diameter=60 on cyto3 (diamMean=30) must run 400 3D flow steps");
 });

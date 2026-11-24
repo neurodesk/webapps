@@ -8,8 +8,8 @@ function bounded(value, fallback, min, max, name) {
 
 /** The validated settings of one run; missing values take the chosen model's defaults. */
 export function segmentationSettings(parameters, model) {
-  const channel = bounded(parameters.channel, 1, 1, 256, "The channel");
-  const tiles = bounded(parameters.tiles, 0, 0, 16, "Tiles per axis");
+  const channel = bounded(parameters.channel, 1, 1, 1024, "The channel");
+  const tiles = bounded(parameters.tiles, 0, 0, 8, "Tiles per axis");
   if (!Number.isInteger(channel)) throw new Error("The channel must be a whole number.");
   if (!Number.isInteger(tiles)) throw new Error("Tiles per axis must be a whole number.");
   return {

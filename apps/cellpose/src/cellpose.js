@@ -772,15 +772,18 @@ export function removeBadFlowMasks2D(labels, dY, dX, height, width, threshold = 
       }
     }
     const medOff = ys[medIdx] * lx + xs[medIdx];
-    const T = new Float64Array(ly * lx);
+    let T = new Float64Array(ly * lx);
+    let Tnext = new Float64Array(ly * lx);
     const nIter = 2 * (ly + lx);
     const offsets = new Int32Array(count);
     for (let k = 0; k < count; k++) offsets[k] = ys[k] * lx + xs[k];
+    // Synchronous Jacobi diffusion matching Cellpose 3.1.1.1 dynamics.py:25-45:
+    // every neighbor is read from the previous iteration before writing the new values.
     for (let t = 0; t < nIter; t++) {
       T[medOff] += 1;
       for (let k = 0; k < count; k++) {
         const off = offsets[k];
-        T[off] =
+        Tnext[off] =
           (T[off] +
             T[off - lx] +
             T[off + lx] +
@@ -792,6 +795,9 @@ export function removeBadFlowMasks2D(labels, dY, dX, height, width, threshold = 
             T[off + lx + 1]) /
           9;
       }
+      const swap = T;
+      T = Tnext;
+      Tnext = swap;
     }
     let errSum = 0;
     for (let k = 0; k < count; k++) {
@@ -897,10 +903,15 @@ export function fillHolesAndRemoveSmallMasks(labels, shape, minSize = 15) {
     }
   }
 
+  const survives = new Uint8Array(maxLabel + 1);
+  for (let label = 1; label <= maxLabel; label++) {
+    if (counts[label] > 0 && !(minSize > 0 && counts[label] < minSize)) survives[label] = 1;
+  }
+
   const out = new Int32Array(labels.length);
   let nextLabel = 0;
   for (let label = 1; label <= maxLabel; label++) {
-    if (counts[label] === 0 || (minSize > 0 && counts[label] < minSize)) continue;
+    if (!survives[label]) continue;
     nextLabel++;
     const bh = yMax[label] - yMin[label] + 1;
     const bw = xMax[label] - xMin[label] + 1;
@@ -925,10 +936,22 @@ export function fillHolesAndRemoveSmallMasks(labels, shape, minSize = 15) {
         const row = zOff + (yMin[label] + y) * width + xMin[label];
         const mRow = y * bw;
         for (let x = 0; x < bw; x++) {
-          if (sliceMask[mRow + x]) out[row + x] = nextLabel;
+          if (!sliceMask[mRow + x]) continue;
+          // Preserve enclosed surviving instances rather than overwriting them during hole filling.
+          const orig = labels[row + x];
+          if (orig === label || !survives[orig]) out[row + x] = nextLabel;
         }
       }
     }
+  }
+  // Compact final IDs to contiguous 1..K with no gaps.
+  const used = new Uint8Array(nextLabel + 1);
+  for (let i = 0; i < out.length; i++) if (out[i]) used[out[i]] = 1;
+  const remap = new Int32Array(nextLabel + 1);
+  let compact = 0;
+  for (let id = 1; id <= nextLabel; id++) if (used[id]) remap[id] = ++compact;
+  if (compact !== nextLabel) {
+    for (let i = 0; i < out.length; i++) if (out[i]) out[i] = remap[out[i]];
   }
   return out;
 }
@@ -998,6 +1021,41 @@ export function measureCells3D(labels, primary, depth, height, width) {
   return rows;
 }
 
+const MAX_WORKING_SET_BYTES = 512 * 1024 * 1024;
+
+function assertFiniteArray(values, label) {
+  for (let i = 0; i < values.length; i++) {
+    if (!Number.isFinite(values[i])) {
+      throw new Error(`${label} contains non-finite values (NaN or Infinity); clean or replace invalid pixels before running Cellpose.`);
+    }
+  }
+}
+
+function checkWorkingSet2D(height, width, resH, resW, hasNuclear, diameter) {
+  const origPx = height * width;
+  const resPx = resH * resW;
+  // Normalized + resized inputs + 3 flow/prob planes (res & orig) + dynamics/labels buffers.
+  const inputPlanes = hasNuclear ? 2 : 1;
+  const bytes = (origPx * (inputPlanes + 6) + resPx * (inputPlanes + 4)) * 4;
+  if (bytes > MAX_WORKING_SET_BYTES) {
+    const mib = Math.round(bytes / (1024 * 1024));
+    throw new Error(`At diameter ${diameter} px, rescaling ${width} × ${height} to ${resW} × ${resH} needs ~${mib} MiB (limit 512 MiB); increase diameter or crop the image.`);
+  }
+}
+
+function checkWorkingSet3D(depth, height, width, resD, resH, resW, hasNuclear, diameter, anisotropy) {
+  const origVox = depth * height * width;
+  const resVox = resD * resH * resW;
+  const paddedHist = (depth + 2) * (height + 2) * (width + 2);
+  // Resized volumes + 4 ortho accumulators (res & orig) + padded histogram + labels.
+  const inputVols = hasNuclear ? 2 : 1;
+  const bytes = (origVox * (inputVols + 6) + resVox * (inputVols + 4) + paddedHist * 2) * 4;
+  if (bytes > MAX_WORKING_SET_BYTES) {
+    const mib = Math.round(bytes / (1024 * 1024));
+    throw new Error(`At diameter ${diameter} px and anisotropy ${anisotropy}, rescaling ${width} × ${height} × ${depth} to ${resW} × ${resH} × ${resD} needs ~${mib} MiB (limit 512 MiB); increase diameter, reduce anisotropy, or crop the stack.`);
+  }
+}
+
 /** Full Cellpose 3 2D segmentation pipeline. */
 export async function segment2D(primaryRaw, nuclearRaw, height, width, model, options) {
   const {
@@ -1009,20 +1067,30 @@ export async function segment2D(primaryRaw, nuclearRaw, height, width, model, op
     onTile = () => {},
     onStage = () => {},
   } = options;
-  const norm0 = normalize99(primaryRaw, 1, 99);
-  const norm1 = nuclearRaw ? normalize99(nuclearRaw, 1, 99) : null;
+  assertFiniteArray(primaryRaw, "The primary channel");
+  if (nuclearRaw) assertFiniteArray(nuclearRaw, "The nuclear channel");
   const rescale = model.diamMean / diameter;
   const resH = rescale !== 1 ? Math.max(16, Math.floor(height * rescale)) : height;
   const resW = rescale !== 1 ? Math.max(16, Math.floor(width * rescale)) : width;
+  checkWorkingSet2D(height, width, resH, resW, Boolean(nuclearRaw), diameter);
+
+  const norm0 = normalize99(primaryRaw, 1, 99);
+  const norm1 = nuclearRaw ? normalize99(nuclearRaw, 1, 99) : null;
   const in0 = rescale !== 1 ? resizePlane2D(norm0.data, height, width, resH, resW) : norm0.data;
   const in1 = norm1 ? (rescale !== 1 ? resizePlane2D(norm1.data, height, width, resH, resW) : norm1.data) : null;
+
+  const checkedRunBatch = async (inputData, batchSize, bh, bw) => {
+    const flows = await runBatch(inputData, batchSize, bh, bw);
+    assertFiniteArray(flows, "The Cellpose model output");
+    return flows;
+  };
 
   const netOut = await runNet2D(in0, in1, resH, resW, {
     bsize: model.bsize,
     tileOverlap: model.tileOverlap,
     div: model.divBy,
     extra: model.extraPad,
-    runBatch,
+    runBatch: checkedRunBatch,
     onTile,
   });
 
@@ -1095,21 +1163,31 @@ export async function segment3D(primaryRaw, nuclearRaw, depth, height, width, mo
     onPlane = () => {},
     onStage = () => {},
   } = options;
-  const norm0 = normalize99(primaryRaw, 1, 99);
-  const norm1 = nuclearRaw ? normalize99(nuclearRaw, 1, 99) : null;
+  assertFiniteArray(primaryRaw, "The primary channel");
+  if (nuclearRaw) assertFiniteArray(nuclearRaw, "The nuclear channel");
   const rescale = model.diamMean / diameter;
   const resD = rescale !== 1 || anisotropy !== 1 ? Math.max(4, Math.floor(depth * anisotropy * rescale)) : depth;
   const resH = rescale !== 1 ? Math.max(16, Math.floor(height * rescale)) : height;
   const resW = rescale !== 1 ? Math.max(16, Math.floor(width * rescale)) : width;
+  checkWorkingSet3D(depth, height, width, resD, resH, resW, Boolean(nuclearRaw), diameter, anisotropy);
+
+  const norm0 = normalize99(primaryRaw, 1, 99);
+  const norm1 = nuclearRaw ? normalize99(nuclearRaw, 1, 99) : null;
   const in0 = resD !== depth || resH !== height || resW !== width ? resizeVolume3D(norm0.data, depth, height, width, resD, resH, resW) : norm0.data;
   const in1 = norm1 ? (resD !== depth || resH !== height || resW !== width ? resizeVolume3D(norm1.data, depth, height, width, resD, resH, resW) : norm1.data) : null;
+
+  const checkedRunBatch = async (inputData, batchSize, bh, bw) => {
+    const flows = await runBatch(inputData, batchSize, bh, bw);
+    assertFiniteArray(flows, "The Cellpose model output");
+    return flows;
+  };
 
   const netOut = await runOrtho3D(in0, in1, resD, resH, resW, {
     bsize: model.bsize,
     tileOverlap: model.tileOverlap,
     div: model.divBy,
     extra: model.extraPad,
-    runBatch,
+    runBatch: checkedRunBatch,
     onPlane,
   });
 
@@ -1119,7 +1197,8 @@ export async function segment3D(primaryRaw, nuclearRaw, depth, height, width, mo
   const dX = needUnresize ? resizeVolume3D(netOut.dX, resD, resH, resW, depth, height, width) : netOut.dX;
   const cellprob = needUnresize ? resizeVolume3D(netOut.cellprob, resD, resH, resW, depth, height, width) : netOut.cellprob;
 
-  const niter = 200;
+  // Match Cellpose 3.1.1.1 models.py:529-537 (resample=True): scale flow steps with diameter.
+  const niter = Math.max(1, Math.trunc((1 / rescale) * 200));
   onStage("dynamics", niter);
   const { inds, pts } = followFlows3D(dZ, dY, dX, cellprob, depth, height, width, cellprobThresh, niter);
   onStage("masks", inds.length);

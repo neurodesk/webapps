@@ -101,6 +101,14 @@ test("2D_versatile_he segments the RGB H&E example identically to Python StarDis
   const rows = table.bytes.toString("utf8").trim().split("\n");
   expect(rows[0]).toBe("id,centroid_x,centroid_y,area_px,mean_intensity,probability");
   expect(rows.length - 1).toBe(reference.he.nuclei.length);
+  rows.slice(1).forEach((row, index) => {
+    const [id, x, y, pixels, mean] = row.split(",").map(Number);
+    const [wantId, wantX, wantY, wantArea, wantMean] = reference.he.nuclei[index];
+    expect([id, pixels]).toEqual([wantId, wantArea]);
+    expect(Math.abs(x - wantX)).toBeLessThan(6e-4);
+    expect(Math.abs(y - wantY)).toBeLessThan(6e-4);
+    expect(Math.abs(mean - wantMean) / wantMean).toBeLessThan(1e-5);
+  });
 });
 
 test("2D_paper_dsb2018 segments the fluorescence example identically to Python StarDist", async ({ page }) => {
@@ -112,6 +120,12 @@ test("2D_paper_dsb2018 segments the fluorescence example identically to Python S
   const labelsFile = await download(page, "Nucleus labels");
   const { labels } = await readLabelTiff(labelsFile.bytes);
   expect(labelHash(labels)).toBe(reference.paper_dsb2018.labels_sha256);
+  const table = await download(page, "Nucleus table");
+  const rows = table.bytes.toString("utf8").trim().split("\n");
+  expect(rows[0]).toBe("id,centroid_x,centroid_y,area_px,mean_intensity,probability");
+  expect(rows.length - 1).toBe(reference.paper_dsb2018.count);
+  const totalArea = rows.slice(1).reduce((sum, row) => sum + Number(row.split(",")[3]), 0);
+  expect(totalArea).toBe(labels.filter(Boolean).length);
 });
 
 test("3D_demo segments the 3D example identically to Python StarDist3D", async ({ page }) => {

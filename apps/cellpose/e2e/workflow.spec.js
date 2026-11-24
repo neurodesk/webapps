@@ -50,6 +50,27 @@ test("cyto3 2D dual-channel segmentation matches Python Cellpose 3.1.1.1", async
   const rows = table.bytes.toString("utf8").trim().split("\n");
   expect(rows[0]).toBe("id,centroid_x,centroid_y,area_px,mean_intensity");
   expect(rows.length - 1).toBe(want.count);
+  // Match each predicted cell to its nearest Python reference cell (label IDs are peak-ordered).
+  const parsed = rows.slice(1).map((row) => row.split(",").map(Number));
+  const used = new Set();
+  for (const [, wantX, wantY, wantArea, wantMean] of want.cells) {
+    let bestIdx = -1;
+    let bestDist = Infinity;
+    for (let i = 0; i < parsed.length; i++) {
+      if (used.has(i)) continue;
+      const d = Math.hypot(parsed[i][1] - wantX, parsed[i][2] - wantY);
+      if (d < bestDist) {
+        bestDist = d;
+        bestIdx = i;
+      }
+    }
+    used.add(bestIdx);
+    const [, x, y, area, mean] = parsed[bestIdx];
+    expect(Math.abs(x - wantX)).toBeLessThan(0.5);
+    expect(Math.abs(y - wantY)).toBeLessThan(0.5);
+    expect(Math.abs(area - wantArea)).toBeLessThanOrEqual(5);
+    expect(Math.abs(mean - wantMean) / wantMean).toBeLessThan(0.01);
+  }
 
   // Viewer toolbar toggles cleanly between filled, outlines and image-only views.
   await page.locator("nd-viewer-toolbar").getByRole("button", { name: "Outlines", exact: true }).click();
@@ -104,9 +125,11 @@ test("cyto3 3D ortho-plane segmentation matches Python Cellpose 3.1.1.1", async 
   const rows = table.bytes.toString("utf8").trim().split("\n");
   expect(rows[0]).toBe("id,centroid_x,centroid_y,centroid_z,volume_vox,mean_intensity");
   expect(rows.length - 1).toBe(want.count);
+  const totalVol = rows.slice(1).reduce((sum, row) => sum + Number(row.split(",")[4]), 0);
+  expect(Math.abs(totalVol - want.nonzero_voxels)).toBeLessThanOrEqual(5);
 });
 
-test("cancelling a run terminates the worker and leaves the app ready to run again", async ({ page }) => {
+test("cancelling a run terminates the worker and permits a full retry", async ({ page }) => {
   test.setTimeout(240000);
   let release;
   const held = new Promise((resolve) => { release = resolve; });
@@ -128,6 +151,10 @@ test("cancelling a run terminates the worker and leaves the app ready to run aga
   await expect(page.locator("#cancelButton")).toBeHidden();
   await expect(page.locator("#runButton")).toBeEnabled();
   await page.unrouteAll({ behavior: "ignoreErrors" });
+  // Retry immediately after cancellation and verify the run completes cleanly.
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toHaveText(`${reference.cases.cyto3_2d.count} cells segmented`, { timeout: 180000 });
+  await expect(page.locator("#resultList .nd-volume-toggle")).toHaveCount(2);
 });
 
 test("automation contract runs cyto3 2D end to end and returns labels and CSV", async ({ page }) => {

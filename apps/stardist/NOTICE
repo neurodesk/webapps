@@ -12,8 +12,12 @@ Weigert, under the BSD 3-Clause licence (LICENSE).
 The models (stardist-2d-versatile-fluo.onnx, stardist-2d-versatile-he.onnx,
 stardist-2d-paper-dsb2018.onnx and stardist-3d-demo.onnx) are StarDist's
 pretrained models (https://github.com/stardist/stardist-models, release v0.1),
-converted to ONNX by validation/convert_model.py. Copyright (c) 2018-2024,
-Uwe Schmidt, Martin Weigert, under the BSD 3-Clause licence (LICENSE).
+converted to ONNX by validation/convert_model.py. Copyright (c) 2018-2020,
+Martin Weigert, Uwe Schmidt, under the BSD 3-Clause licence (LICENSE).
+
+The H&E example (`tcia-he-nuclei-2d.png`) is derived from StarDist 0.9.1's
+`test_image_he_2d()` (`stardist/data/images/histo.jpg`, BSD-3-Clause), originally
+from The Cancer Imaging Archive (TCIA; https://www.cancerimagingarchive.net/data-usage-policies-and-restrictions/).
 
 The bundled clipper-lib 6.4.2 (https://sourceforge.net/projects/jsclipper/), a
 JavaScript port of Angus Johnson's Clipper, is Copyright Angus Johnson 2010-2017

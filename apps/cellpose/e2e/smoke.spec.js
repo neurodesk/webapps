@@ -38,10 +38,14 @@ test("page is cross-origin isolated (COOP/COEP active)", async ({ page }) => {
   expect(await page.evaluate(() => self.crossOriginIsolated === true)).toBe(true);
 });
 
-test("a file that is not an image is refused, and the run stays unavailable", async ({ page }) => {
+test("a file that is not an image or has corrupt TIFF headers is refused, and the run stays unavailable", async ({ page }) => {
   await page.goto("./");
   await page.locator("#imageInput").setInputFiles({ name: "scan.nii", mimeType: "application/octet-stream", buffer: Buffer.alloc(400, 1) });
   await expect(page.locator("#statusText")).toHaveText("scan.nii is not a TIFF, OME-TIFF or PNG image.");
+  await expect(page.locator("#runButton")).toBeDisabled();
+  // Corrupt TIFF magic bytes exercise decoder rejection directly (bypassing example SHA-256 verification).
+  await page.locator("#imageInput").setInputFiles({ name: "corrupt.tif", mimeType: "image/tiff", buffer: Buffer.from([0x49, 0x49, 42, 0, 99, 0, 0, 0]) });
+  await expect(page.locator("#statusText")).toHaveClass(/error/);
   await expect(page.locator("#runButton")).toBeDisabled();
 });
 

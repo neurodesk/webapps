@@ -1,26 +1,26 @@
-Cellpose web application
-Copyright 2026 Neurodesk contributors
+Cellpose Webapp — Third-Party Notices
 
-src/cellpose.js ports the Cellpose 3.1.1.1 inference, tiling and mask
-reconstruction pipeline (https://github.com/MouseLand/cellpose: normalize99,
-get_pad_yx, make_tiles, average_tiles, _taper_mask, run_net, run_3D,
-follow_flows, steps_interp, map_coordinates, get_masks_torch,
-masks_to_flows_cpu, flow_error, remove_bad_flow_masks,
-fill_holes_and_remove_small_masks). Cellpose is Copyright (c) 2020-2025,
-Howard Hughes Medical Institute, authored by Carsen Stringer and Marius
-Pachitariu, under the BSD 3-Clause licence (LICENSE).
+1. Cellpose 3.1.1.1 source code (ported to JavaScript in src/cellpose.js)
+   Source: https://github.com/MouseLand/cellpose (tag v3.1.1.1)
+   Copyright © 2020 Howard Hughes Medical Institute
+   License: BSD 3-Clause License (see LICENSE)
 
-The ONNX models (cellpose-cyto3.onnx and cellpose-nuclei.onnx) are converted
-from Cellpose's pretrained cyto3 and nucleitorch_0 weights
-(https://www.cellpose.org/models/cyto3 and
-https://www.cellpose.org/models/nucleitorch_0) by validation/export_model.py.
-While the Cellpose codebase is BSD-3-Clause, several training datasets used to
-train the pretrained Cellpose weights (including the Cellpose training set and
-TissueNet) are licensed under CC-BY-NC (Attribution-NonCommercial); commercial
-deployments should train models on commercially permissible data.
+2. Pretrained Cellpose 3 model weights (`cyto3` and `nuclei`)
+   Source: https://www.cellpose.org/models/cyto3 and https://www.cellpose.org/models/nucleitorch_0
+   Copyright © 2020 Howard Hughes Medical Institute
+   Weight license: BSD 3-Clause License (see LICENSE)
+   Training-data notice: Portions of the Cellpose 3 `cyto3` training datasets carry
+   non-commercial (CC-BY-NC) restrictions. Review the upstream Cellpose terms before
+   commercial use.
 
-Stringer C, Wang T, Michaelos M, Pachitariu M (2021). Cellpose: a generalist
-algorithm for cellular segmentation. Nature Methods 18(1):100-106.
+3. Example microscopy data (`allen-cells-2d.ome.tif`, `allen-cells-3d.ome.tif`)
+   Derived from `skimage.data.cells3d()` (Allen Institute for Cell Science).
+   License: CC0 1.0 Universal (Public Domain Dedication).
 
-Stringer C, Pachitariu M (2025). Cellpose3: one-click image restoration for
-improved segmentation. Nature Methods 22:592-599.
+4. References
+   - Stringer C, Wang T, Michaelos M, Pachitariu M. Cellpose: a generalist algorithm
+     for cellular segmentation. Nature Methods 18, 100–106 (2021).
+     https://doi.org/10.1038/s41592-020-01018-x
+   - Stringer C, Pachitariu M. Cellpose3: one-click image restoration for improved
+     cellular segmentation. Nature Methods 22, 592–599 (2025).
+     https://doi.org/10.1038/s41592-025-02595-5

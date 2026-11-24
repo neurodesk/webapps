@@ -7124,7 +7124,8 @@
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2cc5042a0fad34811857bbdf89b1172bda338af4/stardist/example/tcia-he-nuclei-2d.png",
         "sha256": "ba5eb1e3745580332efd147d1719ea60bb6addad0e2ea2982ebb3902620953dd",
         "bytes": 284273,
-        "kind": "example"
+        "kind": "example",
+        "license": "BSD-3-Clause"
       },
       {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2cc5042a0fad34811857bbdf89b1172bda338af4/stardist/example/stardist-demo-nuclei-3d.tif",

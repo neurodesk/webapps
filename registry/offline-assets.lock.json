@@ -5428,6 +5428,7 @@
       "bytes": 284273,
       "contentType": "image/png",
       "kind": "example",
+      "license": "BSD-3-Clause",
       "dependencies": []
     },
     "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2cc5042a0fad34811857bbdf89b1172bda338af4/stardist/models/stardist-2d-versatile-he.onnx": {

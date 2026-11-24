@@ -6,6 +6,9 @@ import { axisTiles, cropStop, descendingOrder, normalize, reflectIndex } from ".
 const f32 = Math.fround;
 const N_THETA = 16;
 const N_PHI = 32;
+const MAX_3D_AUTO_TILE_OUTPUT_BYTES = 64 * 1024 * 1024;
+const MAX_3D_TILE_OUTPUT_BYTES = 256 * 1024 * 1024;
+const MAX_3D_CANDIDATES = 200_000;
 
 /** IEEE-754 round-half-to-even, matching C99 `lrint(r)` in `stardist3d_impl.cpp`. */
 function lrint(r) {
@@ -38,13 +41,71 @@ export function padVolume(data, depth, height, width, divBy) {
   return { data: out, depth: padDepth, height: padHeight, width: padWidth };
 }
 
-/** Automatic 3D tiling: keeps each tile within a modest WebAssembly memory budget. */
-export function automaticTiles3D(depth, height, width, maxZ = 64, maxXY = 256) {
-  return [
-    Math.max(1, Math.ceil(depth / maxZ)),
-    Math.max(1, Math.ceil(height / maxXY)),
-    Math.max(1, Math.ceil(width / maxXY)),
+function maxTileDimensions(paddedDepth, paddedHeight, paddedWidth, nTiles, model) {
+  const [divZ, divY, divX] = model.divBy;
+  const overlapBlocks = [
+    Math.ceil(model.tileOverlap[0] / divZ),
+    Math.ceil(model.tileOverlap[1] / divY),
+    Math.ceil(model.tileOverlap[2] / divX),
   ];
+  const tilesZ = axisTiles(paddedDepth, nTiles[0], divZ, overlapBlocks[0]);
+  const tilesY = axisTiles(paddedHeight, nTiles[1], divY, overlapBlocks[1]);
+  const tilesX = axisTiles(paddedWidth, nTiles[2], divX, overlapBlocks[2]);
+  const maxD = Math.max(...tilesZ.map((t) => t.read[1] - t.read[0]));
+  const maxH = Math.max(...tilesY.map((t) => t.read[1] - t.read[0]));
+  const maxW = Math.max(...tilesX.map((t) => t.read[1] - t.read[0]));
+  const [gridZ, gridY, gridX] = model.grid;
+  const outputBytes = (maxD / gridZ) * (maxH / gridY) * (maxW / gridX) * (model.nRays + 1) * 4;
+  return { tilesZ, tilesY, tilesX, maxD, maxH, maxW, outputBytes };
+}
+
+/**
+ * Automatic 3D tiling: chooses tile counts from the ACTUAL overlapped tile shape so every tile's
+ * 96-ray float32 output fits inside the WebAssembly working-set budget.
+ */
+export function automaticTiles3D(depth, height, width, model = null) {
+  if (!model) {
+    return [
+      Math.max(1, Math.ceil(depth / 64)),
+      Math.max(1, Math.ceil(height / 192)),
+      Math.max(1, Math.ceil(width / 192)),
+    ];
+  }
+  const [divZ, divY, divX] = model.divBy;
+  const padD = depth + ((divZ - (depth % divZ)) % divZ);
+  const padH = height + ((divY - (height % divY)) % divY);
+  const padW = width + ((divX - (width % divX)) % divX);
+  const tiles = [1, 1, 1];
+  for (let iter = 0; iter < 64; iter++) {
+    const info = maxTileDimensions(padD, padH, padW, tiles, model);
+    if (info.outputBytes <= MAX_3D_AUTO_TILE_OUTPUT_BYTES) break;
+    // Grow the axis with the largest padded tile span above its minimum overlap footprint.
+    const candidates = [
+      { axis: 0, span: info.maxD, canGrow: tiles[0] < Math.floor(padD / divZ) },
+      { axis: 1, span: info.maxH, canGrow: tiles[1] < Math.floor(padH / divY) },
+      { axis: 2, span: info.maxW, canGrow: tiles[2] < Math.floor(padW / divX) },
+    ].filter((c) => c.canGrow);
+    if (!candidates.length) break;
+    candidates.sort((a, b) => b.span - a.span);
+    const chosen = candidates[0].axis;
+    const prevSpan = [info.maxD, info.maxH, info.maxW][chosen];
+    tiles[chosen]++;
+    const after = maxTileDimensions(padD, padH, padW, tiles, model);
+    const nextSpan = [after.maxD, after.maxH, after.maxW][chosen];
+    if (nextSpan >= prevSpan) {
+      tiles[chosen]--;
+      // Splitting further along this axis cannot shrink the overlap floor; try the next axis.
+      const alt = candidates.slice(1).find((c) => {
+        const probe = [...tiles];
+        probe[c.axis]++;
+        const probeInfo = maxTileDimensions(padD, padH, padW, probe, model);
+        return [probeInfo.maxD, probeInfo.maxH, probeInfo.maxW][c.axis] < [info.maxD, info.maxH, info.maxW][c.axis];
+      });
+      if (!alt) break;
+      tiles[alt.axis]++;
+    }
+  }
+  return tiles;
 }
 
 /**
@@ -53,26 +114,42 @@ export function automaticTiles3D(depth, height, width, maxZ = 64, maxXY = 256) {
  * the padded volume border, and inside `(depth, height, width)`.
  */
 export async function predictCandidates3D(volume, depth, height, width, model, options) {
-  const { probThresh, nTiles = [1, 1, 1], run, onTile = () => {} } = options;
+  const { probThresh, nTiles = [1, 1, 1], run, onTile = () => {}, maxCandidates = MAX_3D_CANDIDATES } = options;
   const [gridZ, gridY, gridX] = model.grid;
   const [divZ, divY, divX] = model.divBy;
-  const { tileOverlap, nRays } = model;
+  const { nRays } = model;
+  const padD = depth + ((divZ - (depth % divZ)) % divZ);
+  const padH = height + ((divY - (height % divY)) % divY);
+  const padW = width + ((divX - (width % divX)) % divX);
+  const plan = maxTileDimensions(padD, padH, padW, nTiles, model);
+  if (plan.outputBytes > MAX_3D_TILE_OUTPUT_BYTES) {
+    const mib = (plan.outputBytes / (1024 * 1024)).toFixed(0);
+    throw new Error(`3D tile (${plan.maxW} × ${plan.maxH} × ${plan.maxD}) needs ${mib} MiB for model output alone; increase tiles per axis or crop the stack.`);
+  }
   const padded = padVolume(volume, depth, height, width, model.divBy);
-  const overlapBlocks = [
-    Math.ceil(tileOverlap[0] / divZ),
-    Math.ceil(tileOverlap[1] / divY),
-    Math.ceil(tileOverlap[2] / divX),
-  ];
-  const tilesZ = axisTiles(padded.depth, nTiles[0], divZ, overlapBlocks[0]);
-  const tilesY = axisTiles(padded.height, nTiles[1], divY, overlapBlocks[1]);
-  const tilesX = axisTiles(padded.width, nTiles[2], divX, overlapBlocks[2]);
+  const { tilesZ, tilesY, tilesX } = plan;
   const gridDepth = padded.depth / gridZ;
   const gridHeight = padded.height / gridY;
   const gridWidth = padded.width / gridX;
   const threshold = f32(probThresh);
-  const prob = [];
-  const dist = [];
-  const points = [];
+  let capacity = 1024;
+  let count = 0;
+  let probBuf = new Float32Array(capacity);
+  let pointsBuf = new Int32Array(capacity * 3);
+  let distBuf = new Float32Array(capacity * nRays);
+  const grow = () => {
+    const nextCap = Math.min(maxCandidates, capacity * 2);
+    const nextProb = new Float32Array(nextCap);
+    nextProb.set(probBuf);
+    probBuf = nextProb;
+    const nextPoints = new Int32Array(nextCap * 3);
+    nextPoints.set(pointsBuf);
+    pointsBuf = nextPoints;
+    const nextDist = new Float32Array(nextCap * nRays);
+    nextDist.set(distBuf);
+    distBuf = nextDist;
+    capacity = nextCap;
+  };
   const total = tilesZ.length * tilesY.length * tilesX.length;
   let done = 0;
   for (const tz of tilesZ) {
@@ -118,9 +195,18 @@ export async function predictCandidates3D(volume, depth, height, width, model, o
               if (!(p > threshold)) continue;
               const px = (dstX[0] + x - sliceX[0]) * gridX;
               if (px >= width) continue;
-              prob.push(p);
-              points.push(pz, py, px);
-              for (let k = 0; k < nRays; k++) dist.push(Math.max(f32(1e-3), output.dist[at * nRays + k]));
+              if (count >= maxCandidates) {
+                throw new Error(`More than ${maxCandidates.toLocaleString()} 3D candidate polyhedra exceed probability ${probThresh}; raise the probability threshold or crop the stack.`);
+              }
+              if (count === capacity) grow();
+              probBuf[count] = p;
+              pointsBuf[3 * count] = pz;
+              pointsBuf[3 * count + 1] = py;
+              pointsBuf[3 * count + 2] = px;
+              const dOff = count * nRays;
+              const srcOff = at * nRays;
+              for (let k = 0; k < nRays; k++) distBuf[dOff + k] = Math.max(f32(1e-3), output.dist[srcOff + k]);
+              count++;
             }
           }
         }
@@ -128,7 +214,12 @@ export async function predictCandidates3D(volume, depth, height, width, model, o
       }
     }
   }
-  return { prob: Float32Array.from(prob), dist: Float32Array.from(dist), points: Int32Array.from(points), tiles: total };
+  return {
+    prob: probBuf.slice(0, count),
+    dist: distBuf.slice(0, count * nRays),
+    points: pointsBuf.slice(0, count * 3),
+    tiles: total,
+  };
 }
 
 /**
@@ -420,9 +511,358 @@ function intersectBbox(bbox, i, j) {
 }
 
 /**
+ * Build outward face halfspace `[nz, ny, nx, offset]` (`n·p + offset <= 0` inside) for triangle
+ * `(A, B, C)`, matching `build_halfspace` in `stardist3d_impl.cpp`.
+ */
+function buildFaceHalfspace(pv, iA, iB, iC) {
+  const Az = pv[3 * iA];
+  const Ay = pv[3 * iA + 1];
+  const Ax = pv[3 * iA + 2];
+  const Pz = pv[3 * iB] - Az;
+  const Py = pv[3 * iB + 1] - Ay;
+  const Px = pv[3 * iB + 2] - Ax;
+  const Qz = pv[3 * iC] - Az;
+  const Qy = pv[3 * iC + 1] - Ay;
+  const Qx = pv[3 * iC + 2] - Ax;
+  const Nz = -(Py * Qx - Px * Qy);
+  const Ny = -(Px * Qz - Pz * Qx);
+  const Nx = -(Pz * Qy - Py * Qz);
+  const len = Math.hypot(Nz, Ny, Nx);
+  if (!(len > 1e-12)) return null;
+  const inv = 1 / len;
+  const nz = Nz * inv;
+  const ny = Ny * inv;
+  const nx = Nx * inv;
+  return [nz, ny, nx, -(Az * nz + Ay * ny + Ax * nx)];
+}
+
+/**
+ * Exact continuous volume of the intersection of 3D halfspaces `n·p + offset <= 0` containing
+ * `interior`, computed by sequential Sutherland-Hodgman polygon clipping of an enclosing box.
+ * Returns `errValue` when `interior` is not strictly feasible (matching Qhull `setFeasiblePoint`).
+ */
+function halfspaceIntersectionVolume(halfspaces, interior, box, errValue) {
+  const [iz, iy, ix] = interior;
+  for (let h = 0; h < halfspaces.length; h++) {
+    const hs = halfspaces[h];
+    if (hs[0] * iz + hs[1] * iy + hs[2] * ix + hs[3] >= -1e-11) return errValue;
+  }
+  const [z0, z1, y0, y1, x0, x1] = box;
+  if (!(z1 > z0 && y1 > y0 && x1 > x0)) return 0;
+  let faces = [
+    [[z0, y0, x0], [z0, y0, x1], [z0, y1, x1], [z0, y1, x0]],
+    [[z1, y0, x0], [z1, y1, x0], [z1, y1, x1], [z1, y0, x1]],
+    [[z0, y0, x0], [z1, y0, x0], [z1, y0, x1], [z0, y0, x1]],
+    [[z0, y1, x0], [z0, y1, x1], [z1, y1, x1], [z1, y1, x0]],
+    [[z0, y0, x0], [z0, y1, x0], [z1, y1, x0], [z1, y0, x0]],
+    [[z0, y0, x1], [z1, y0, x1], [z1, y1, x1], [z0, y1, x1]],
+  ];
+  const eps = 1e-10;
+  for (let h = 0; h < halfspaces.length; h++) {
+    const [nz, ny, nx, off] = halfspaces[h];
+    const nextFaces = [];
+    const capPts = [];
+    let clippedAny = false;
+    for (let f = 0; f < faces.length; f++) {
+      const poly = faces[f];
+      const n = poly.length;
+      const dists = new Float64Array(n);
+      let allIn = true;
+      let allOut = true;
+      for (let k = 0; k < n; k++) {
+        const p = poly[k];
+        const d = nz * p[0] + ny * p[1] + nx * p[2] + off;
+        dists[k] = d;
+        if (d > eps) allIn = false;
+        if (d < -eps) allOut = false;
+      }
+      if (allOut) {
+        clippedAny = true;
+        continue;
+      }
+      if (allIn) {
+        nextFaces.push(poly);
+        for (let k = 0; k < n; k++) if (Math.abs(dists[k]) <= eps) capPts.push(poly[k]);
+        continue;
+      }
+      clippedAny = true;
+      const out = [];
+      for (let k = 0; k < n; k++) {
+        const a = poly[k];
+        const b = poly[(k + 1) % n];
+        const da = dists[k];
+        const db = dists[(k + 1) % n];
+        const aIn = da <= eps;
+        if (aIn) out.push(a);
+        if ((da < -eps && db > eps) || (da > eps && db < -eps)) {
+          const t = da / (da - db);
+          const hit = [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1]), a[2] + t * (b[2] - a[2])];
+          out.push(hit);
+          capPts.push(hit);
+        } else if (aIn && Math.abs(da) <= eps) {
+          capPts.push(a);
+        }
+      }
+      if (out.length >= 3) nextFaces.push(out);
+    }
+    if (clippedAny && capPts.length >= 3) {
+      const uniq = [];
+      for (let k = 0; k < capPts.length; k++) {
+        const p = capPts[k];
+        let dup = false;
+        for (let u = 0; u < uniq.length; u++) {
+          const q = uniq[u];
+          if (Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]) < 1e-7) {
+            dup = true;
+            break;
+          }
+        }
+        if (!dup) uniq.push(p);
+      }
+      if (uniq.length >= 3) {
+        let cz = 0;
+        let cy = 0;
+        let cx = 0;
+        for (const p of uniq) {
+          cz += p[0];
+          cy += p[1];
+          cx += p[2];
+        }
+        cz /= uniq.length;
+        cy /= uniq.length;
+        cx /= uniq.length;
+        const ref = Math.abs(nz) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+        let uz = ref[1] * nx - ref[2] * ny;
+        let uy = ref[2] * nz - ref[0] * nx;
+        let ux = ref[0] * ny - ref[1] * nz;
+        const uLen = Math.hypot(uz, uy, ux);
+        uz /= uLen;
+        uy /= uLen;
+        ux /= uLen;
+        const vz = ny * ux - nx * uy;
+        const vy = nx * uz - nz * ux;
+        const vx = nz * uy - ny * uz;
+        const angled = uniq.map((p) => {
+          const dz = p[0] - cz;
+          const dy = p[1] - cy;
+          const dx = p[2] - cx;
+          return { p, a: Math.atan2(dz * vz + dy * vy + dx * vx, dz * uz + dy * uy + dx * ux) };
+        });
+        angled.sort((a, b) => a.a - b.a);
+        nextFaces.push(angled.map((item) => item.p));
+      }
+    }
+    faces = nextFaces;
+    if (faces.length < 4) return 0;
+  }
+  let vol6 = 0;
+  for (let f = 0; f < faces.length; f++) {
+    const poly = faces[f];
+    const v0 = poly[0];
+    const az = v0[0] - iz;
+    const ay = v0[1] - iy;
+    const ax = v0[2] - ix;
+    for (let k = 1; k + 1 < poly.length; k++) {
+      const v1 = poly[k];
+      const v2 = poly[k + 1];
+      const bz = v1[0] - iz;
+      const by = v1[1] - iy;
+      const bx = v1[2] - ix;
+      const cz = v2[0] - iz;
+      const cy = v2[1] - iy;
+      const cx = v2[2] - ix;
+      const det = az * (by * cx - bx * cy) - ay * (bz * cx - bx * cz) + ax * (bz * cy - by * cz);
+      vol6 += Math.abs(det);
+    }
+  }
+  return vol6 / 6;
+}
+
+/** Outward halfspaces of the 3D convex hull of `polyverts` (incremental 3D QuickHull). */
+function convexHullHalfspaces(pv, nRays) {
+  const pts = [];
+  for (let i = 0; i < nRays; i++) pts.push([pv[3 * i], pv[3 * i + 1], pv[3 * i + 2]]);
+  let i0 = 0;
+  let i1 = 0;
+  for (let i = 1; i < nRays; i++) {
+    if (pts[i][0] < pts[i0][0]) i0 = i;
+    if (pts[i][0] > pts[i1][0]) i1 = i;
+  }
+  if (i0 === i1) return null;
+  const p0 = pts[i0];
+  const p1 = pts[i1];
+  const d01z = p1[0] - p0[0];
+  const d01y = p1[1] - p0[1];
+  const d01x = p1[2] - p0[2];
+  let i2 = -1;
+  let bestLine = 0;
+  for (let i = 0; i < nRays; i++) {
+    if (i === i0 || i === i1) continue;
+    const qz = pts[i][0] - p0[0];
+    const qy = pts[i][1] - p0[1];
+    const qx = pts[i][2] - p0[2];
+    const cz = d01y * qx - d01x * qy;
+    const cy = d01x * qz - d01z * qx;
+    const cx = d01z * qy - d01y * qz;
+    const area2 = cz * cz + cy * cy + cx * cx;
+    if (area2 > bestLine) {
+      bestLine = area2;
+      i2 = i;
+    }
+  }
+  if (i2 < 0 || bestLine < 1e-18) return null;
+  const p2 = pts[i2];
+  const e1z = p1[0] - p0[0];
+  const e1y = p1[1] - p0[1];
+  const e1x = p1[2] - p0[2];
+  const e2z = p2[0] - p0[0];
+  const e2y = p2[1] - p0[1];
+  const e2x = p2[2] - p0[2];
+  const fnz = e1y * e2x - e1x * e2y;
+  const fny = e1x * e2z - e1z * e2x;
+  const fnx = e1z * e2y - e1y * e2z;
+  let i3 = -1;
+  let bestPlane = 0;
+  for (let i = 0; i < nRays; i++) {
+    if (i === i0 || i === i1 || i === i2) continue;
+    const dist = Math.abs((pts[i][0] - p0[0]) * fnz + (pts[i][1] - p0[1]) * fny + (pts[i][2] - p0[2]) * fnx);
+    if (dist > bestPlane) {
+      bestPlane = dist;
+      i3 = i;
+    }
+  }
+  if (i3 < 0 || bestPlane < 1e-15) return null;
+  const p3 = pts[i3];
+  const inner = [
+    (p0[0] + p1[0] + p2[0] + p3[0]) * 0.25,
+    (p0[1] + p1[1] + p2[1] + p3[1]) * 0.25,
+    (p0[2] + p1[2] + p2[2] + p3[2]) * 0.25,
+  ];
+  const makeFace = (a, b, c) => {
+    const A = pts[a];
+    const B = pts[b];
+    const C = pts[c];
+    const pz = B[0] - A[0];
+    const py = B[1] - A[1];
+    const px = B[2] - A[2];
+    const qz = C[0] - A[0];
+    const qy = C[1] - A[1];
+    const qx = C[2] - A[2];
+    let nz = py * qx - px * qy;
+    let ny = px * qz - pz * qx;
+    let nx = pz * qy - py * qz;
+    const len = Math.hypot(nz, ny, nx);
+    if (!(len > 1e-14)) return null;
+    nz /= len;
+    ny /= len;
+    nx /= len;
+    let off = -(A[0] * nz + A[1] * ny + A[2] * nx);
+    let verts = [a, b, c];
+    if (nz * inner[0] + ny * inner[1] + nx * inner[2] + off > 0) {
+      nz = -nz;
+      ny = -ny;
+      nx = -nx;
+      off = -off;
+      verts = [a, c, b];
+    }
+    return { v: verts, n: [nz, ny, nx, off] };
+  };
+  let hull = [
+    makeFace(i0, i1, i2),
+    makeFace(i0, i1, i3),
+    makeFace(i0, i2, i3),
+    makeFace(i1, i2, i3),
+  ].filter(Boolean);
+  for (let i = 0; i < nRays; i++) {
+    if (i === i0 || i === i1 || i === i2 || i === i3) continue;
+    const p = pts[i];
+    const visible = [];
+    const kept = [];
+    for (let f = 0; f < hull.length; f++) {
+      const face = hull[f];
+      const [nz, ny, nx, off] = face.n;
+      if (nz * p[0] + ny * p[1] + nx * p[2] + off > 1e-9) visible.push(face);
+      else kept.push(face);
+    }
+    if (!visible.length) continue;
+    const edgeCount = new Map();
+    for (const face of visible) {
+      const [a, b, c] = face.v;
+      for (const [u, v] of [[a, b], [b, c], [c, a]]) {
+        const rev = `${v},${u}`;
+        if (edgeCount.has(rev)) edgeCount.delete(rev);
+        else edgeCount.set(`${u},${v}`, [u, v]);
+      }
+    }
+    for (const [u, v] of edgeCount.values()) {
+      const nf = makeFace(u, v, i);
+      if (nf) kept.push(nf);
+    }
+    hull = kept;
+  }
+  return hull.map((face) => face.n);
+}
+
+function pairEnclosingBox(pv1, pv2, nRays) {
+  let z0 = Infinity;
+  let z1 = -Infinity;
+  let y0 = Infinity;
+  let y1 = -Infinity;
+  let x0 = Infinity;
+  let x1 = -Infinity;
+  for (let i = 0; i < nRays; i++) {
+    const z = pv1[3 * i];
+    const y = pv1[3 * i + 1];
+    const x = pv1[3 * i + 2];
+    if (z < z0) z0 = z;
+    if (z > z1) z1 = z;
+    if (y < y0) y0 = y;
+    if (y > y1) y1 = y;
+    if (x < x0) x0 = x;
+    if (x > x1) x1 = x;
+  }
+  let bz0 = Infinity;
+  let bz1 = -Infinity;
+  let by0 = Infinity;
+  let by1 = -Infinity;
+  let bx0 = Infinity;
+  let bx1 = -Infinity;
+  for (let i = 0; i < nRays; i++) {
+    const z = pv2[3 * i];
+    const y = pv2[3 * i + 1];
+    const x = pv2[3 * i + 2];
+    if (z < bz0) bz0 = z;
+    if (z > bz1) bz1 = z;
+    if (y < by0) by0 = y;
+    if (y > by1) by1 = y;
+    if (x < bx0) bx0 = x;
+    if (x > bx1) bx1 = x;
+  }
+  return [
+    Math.max(z0, bz0) - 0.5,
+    Math.min(z1, bz1) + 0.5,
+    Math.max(y0, by0) - 0.5,
+    Math.min(y1, by1) + 0.5,
+    Math.max(x0, bx0) - 0.5,
+    Math.min(x1, bx1) + 0.5,
+  ];
+}
+
+function kernelHalfspacesOf(pv, geom) {
+  const { faces, nFaces } = geom;
+  const out = [];
+  for (let f = 0; f < nFaces; f++) {
+    const hs = buildFaceHalfspace(pv, faces[3 * f], faces[3 * f + 1], faces[3 * f + 2]);
+    if (hs) out.push(hs);
+  }
+  return out;
+}
+
+/**
  * `_COMMON_non_maximum_suppression_sparse` (stardist3d_impl.cpp) with `use_bbox`, spatial hash
- * grid and exact voxel rendering: `dist` (n × nRays) and `points` (n × 3, z/y/x) must already be
- * in descending probability order. Returns the surviving indices in that order.
+ * grid, continuous kernel & convex-hull halfspace intersections, and exact voxel rendering:
+ * `dist` (n × nRays) and `points` (n × 3, z/y/x) must already be in descending probability order.
+ * Returns the surviving indices in that order.
  */
 export function suppress3D(dist, points, rays, threshold) {
   const geom = getRays(rays);
@@ -470,12 +910,27 @@ export function suppress3D(dist, points, rays, threshold) {
     cells.get(key).push(i);
   }
 
+  const pvCache = new Array(n);
+  const kernelCache = new Array(n);
+  const hullCache = new Array(n);
+  const getPolyverts = (idx) => {
+    if (!pvCache[idx]) pvCache[idx] = polyvertsOf(dist.subarray(idx * nRays, (idx + 1) * nRays), pts.subarray(3 * idx, 3 * idx + 3), geom);
+    return pvCache[idx];
+  };
+  const getKernel = (idx) => {
+    if (!kernelCache[idx]) kernelCache[idx] = kernelHalfspacesOf(getPolyverts(idx), geom);
+    return kernelCache[idx];
+  };
+  const getHull = (idx) => {
+    if (hullCache[idx] === undefined) hullCache[idx] = convexHullHalfspaces(getPolyverts(idx), nRays);
+    return hullCache[idx];
+  };
+
   const suppressed = new Uint8Array(n);
   const limit = f32(threshold);
   for (let i = 0; i < n - 1; i++) {
     if (suppressed[i]) continue;
     const pi = pts.subarray(3 * i, 3 * i + 3);
-    const di = dist.subarray(i * nRays, (i + 1) * nRays);
     const bi0 = bbox[6 * i];
     const bi1 = bbox[6 * i + 1];
     const bi2 = bbox[6 * i + 2];
@@ -512,8 +967,25 @@ export function suppress3D(dist, points, rays, threshold) {
               suppressed[j] = 1;
               continue;
             }
+            // Second check: continuous kernel intersection (lower bound, matching qhull_overlap_kernel).
+            const pvi = getPolyverts(i);
+            const pvj = getPolyverts(j);
+            const mid = [0.5 * (pi[0] + pj[0]), 0.5 * (pi[1] + pj[1]), 0.5 * (pi[2] + pj[2])];
+            const pairBox = pairEnclosingBox(pvi, pvj, nRays);
+            const Akernel = halfspaceIntersectionVolume([...getKernel(i), ...getKernel(j)], mid, pairBox, 0);
+            if (Akernel / (Amin + 1e-10) > limit) {
+              suppressed[j] = 1;
+              continue;
+            }
+            // Third check: continuous convex-hull intersection (upper bound, matching qhull_overlap_convex_hulls).
+            const hi = getHull(i);
+            const hj = getHull(j);
+            if (hi && hj) {
+              const Aconvex = halfspaceIntersectionVolume([...hi, ...hj], mid, pairBox, 1e10);
+              if (Aconvex / (Amin + 1e-10) <= limit) continue;
+            }
+            // Fourth/final check: exact voxel rendering fallback.
             if (!rendered) {
-              const pvi = polyvertsOf(di, pi, geom);
               rendered = new Uint8Array(Nz * Ny * Nx);
               for (let z = 0; z < Nz; z++) {
                 const rz = z * Nx * Ny;
@@ -525,7 +997,6 @@ export function suppress3D(dist, points, rays, threshold) {
                 }
               }
             }
-            const pvj = polyvertsOf(dist.subarray(j * nRays, (j + 1) * nRays), pj, geom);
             const maxOverlap = (Amin + 1e-10) * limit;
             const z0 = Math.max(bi0, bbox[6 * j]);
             const z1 = Math.min(bi1, bbox[6 * j + 1]);
@@ -666,14 +1137,24 @@ export async function segment3D(raw, depth, height, width, model, options) {
   });
   onStage("labels", kept.length);
   const labels = renderLabels3D(keptDist, keptPoints, keptProb, rays, depth, height, width);
-  const nuclei = measureNuclei3D(labels, raw, depth, height, width, kept.length).map((row) => ({
-    ...row,
-    probability: keptProb[row.id - 1],
-  }));
+  const measured = measureNuclei3D(labels, raw, depth, height, width, kept.length);
+  // Compact label IDs when any NMS survivor contributed 0 voxels so count, CSV and TIFF match.
+  let nuclei;
+  if (measured.length === kept.length) {
+    nuclei = measured.map((row) => ({ ...row, probability: keptProb[row.id - 1] }));
+  } else {
+    const remap = new Int32Array(kept.length + 1);
+    nuclei = measured.map((row, idx) => {
+      const nextId = idx + 1;
+      remap[row.id] = nextId;
+      return { ...row, id: nextId, probability: keptProb[row.id - 1] };
+    });
+    for (let i = 0; i < labels.length; i++) if (labels[i]) labels[i] = remap[labels[i]];
+  }
   return {
     labels,
     nuclei,
-    count: kept.length,
+    count: nuclei.length,
     candidates: candidates.prob.length,
     normalization: { low: normalized.low, high: normalized.high },
   };

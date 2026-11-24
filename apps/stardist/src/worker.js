@@ -27,8 +27,8 @@ self.onmessage = async ({ data: job }) => {
     const session = await ort.InferenceSession.create(model, { executionProviders: ["wasm"], graphOptimizationLevel: "all" });
     log(`ONNX Runtime ${ort.env.versions?.web ?? ""} on WebAssembly, ${ort.env.wasm.numThreads} threads`);
     const started = performance.now();
+    let result;
     try {
-      let result;
       if (spec.ndim === 3) {
         const run = async (tile, depth, height, width) => {
           const output = await session.run({ [spec.input]: new ort.Tensor("float32", tile, [1, depth, height, width, spec.channels]) });
@@ -74,11 +74,11 @@ self.onmessage = async ({ data: job }) => {
           },
         });
       }
-      const seconds = (performance.now() - started) / 1000;
-      self.postMessage({ type: "result", seconds, ...result }, [result.labels.buffer]);
     } finally {
       await session.release();
     }
+    const seconds = (performance.now() - started) / 1000;
+    self.postMessage({ type: "result", seconds, ...result }, [result.labels.buffer]);
   } catch (error) {
     self.postMessage({ type: "error", message: error.message || String(error) });
   }

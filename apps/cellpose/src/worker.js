@@ -26,6 +26,7 @@ self.onmessage = async ({ data: job }) => {
     const session = await ort.InferenceSession.create(model, { executionProviders: ["wasm"], graphOptimizationLevel: "all" });
     log(`ONNX Runtime ${ort.env.versions?.web ?? ""} on WebAssembly, ${ort.env.wasm.numThreads} threads`);
     const started = performance.now();
+    let result;
     try {
       const runBatch = async (inputData, batchSize, height, width) => {
         const output = await session.run({
@@ -34,7 +35,6 @@ self.onmessage = async ({ data: job }) => {
         return output.flows.data;
       };
 
-      let result;
       if (job.do3D) {
         result = await segment3D(job.primary, job.nuclear, job.depth, job.height, job.width, spec, {
           diameter: job.diameter,
@@ -70,11 +70,11 @@ self.onmessage = async ({ data: job }) => {
           },
         });
       }
-      const seconds = (performance.now() - started) / 1000;
-      self.postMessage({ type: "result", seconds, ...result }, [result.labels.buffer]);
     } finally {
       await session.release();
     }
+    const seconds = (performance.now() - started) / 1000;
+    self.postMessage({ type: "result", seconds, ...result }, [result.labels.buffer]);
   } catch (error) {
     self.postMessage({ type: "error", message: error.message || String(error) });
   }

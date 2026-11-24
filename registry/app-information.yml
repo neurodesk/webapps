@@ -2347,10 +2347,10 @@ apps:
         reference: "Caicedo JC, Goodman A, Karhohs KW, et al. Nucleus segmentation across imaging experiments: the 2018 Data Science Bowl. Nature Methods. 2019;16(12):1247–1253."
         doi: 10.1038/s41592-019-0612-7
       - group: Example data
-        title: The Cancer Imaging Archive (TCIA) H&E example
-        reference: "Clark K, Vendt B, Smith K, et al. The Cancer Imaging Archive (TCIA): maintaining and operating a public information repository. Journal of Digital Imaging. 2013;26(6):1045–1057."
+        title: The Cancer Imaging Archive (TCIA) H&E example (via StarDist 0.9.1)
+        reference: "Clark K, Vendt B, Smith K, et al. The Cancer Imaging Archive (TCIA): maintaining and operating a public information repository. Journal of Digital Imaging. 2013;26(6):1045–1057. Redistributed via StarDist 0.9.1 test_image_he_2d (BSD-3-Clause); see TCIA data usage policies."
         doi: 10.1007/s10278-013-9622-7
-        url: https://www.cancerimagingarchive.net
+        url: https://www.cancerimagingarchive.net/data-usage-policies-and-restrictions/
       - group: Browser inference
         title: ONNX Runtime Web
         reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."
