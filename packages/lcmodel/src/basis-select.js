@@ -12,6 +12,10 @@ const FIELD_FATAL = 0.2;
 const TE_CLOSE = 2;
 const TE_OK = 5;
 const TE_POOR = 15;
+// STEAM mixing-time differences, ms.
+const TM_CLOSE = 2;
+const TM_OK = 5;
+const TM_POOR = 15;
 
 const SEQUENCE_ALIASES = [
   [/special/i, "SPECIAL"],
@@ -105,6 +109,25 @@ export function assessBasis(data, basis) {
     score -= 10;
     const text = data.teMs > 0 ? "This basis set does not record its echo time." : "The echo time could not be read from the data.";
     notes.push({ level: "info", text });
+  }
+  if (dataSeq === "STEAM" && basisSeq === "STEAM") {
+    if (data.tmMs > 0 && basis.tmMs > 0) {
+      const dtm = Math.abs(data.tmMs - basis.tmMs);
+      if (dtm > TM_POOR) {
+        score -= 20;
+        notes.push({ level: "warning", text: `TM ${fmt(basis.tmMs)} ms vs ${fmt(data.tmMs)} ms: coupled metabolites may be biased.` });
+      } else if (dtm > TM_OK) {
+        score -= 10;
+        notes.push({ level: "warning", text: `TM ${fmt(basis.tmMs)} ms vs ${fmt(data.tmMs)} ms.` });
+      } else if (dtm > TM_CLOSE) {
+        score -= 4;
+        notes.push({ level: "info", text: `TM differs by ${fmt(dtm)} ms.` });
+      }
+    } else {
+      score -= 5;
+      const text = data.tmMs > 0 ? "This basis set does not record its mixing time." : "The mixing time could not be read from the data.";
+      notes.push({ level: "info", text });
+    }
   }
   // Neither the data nor their headers say whether editing was symmetric
   // (edit-OFF at 1.5 ppm, suppressing co-edited MM), so the standard set

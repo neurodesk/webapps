@@ -329,6 +329,7 @@ pub fn load(data: &[u8]) -> Res<Spectra> {
     let ppm: Vec<f64> = f.iter().map(|&x| -x / (bo * 42.577) + 4.65).collect();
     let t_axis = if npts == 0 { Vec::new() } else { octave_range(0.0, dt, (np - 1.0) * dt) };
     let te = js.get("EchoTime").and_then(json_f64).ok_or("The NIfTI-MRS header has no EchoTime (FID-A requires it).")?;
+    let tm = js.get("MixingTime").and_then(json_f64).filter(|&v| v.is_finite() && v > 0.0);
     let tr = js.get("RepetitionTime").and_then(json_f64).ok_or("The NIfTI-MRS header has no RepetitionTime (FID-A requires it).")?;
     let mut flags = fresh_flags();
     flags.averaged = dims.averages == 0;
@@ -344,6 +345,7 @@ pub fn load(data: &[u8]) -> Res<Spectra> {
         dwelltime: dt,
         txfrq: f0 * 1e6,
         te,
+        tm,
         tr,
         bo,
         seq: js.get("SequenceName").and_then(|v| v.as_str()).unwrap_or("").to_string(),
@@ -370,5 +372,30 @@ mod tests {
         h[0..4].copy_from_slice(&348i32.to_le_bytes());
         h[40..42].copy_from_slice(&4i16.to_le_bytes());
         assert!(load(&h).is_err());
+    }
+
+    #[test]
+    fn reads_mixing_time_in_seconds() {
+        let meta = br#"{"SpectrometerFrequency":[297.22],"ResonantNucleus":["1H"],"EchoTime":0.008,"MixingTime":0.032,"RepetitionTime":5.0,"SequenceName":"STEAM"}"#;
+        let esize = (meta.len() + 8).div_ceil(16) * 16;
+        let vox_offset = 352 + esize;
+        let mut buf = vec![0u8; vox_offset + 4 * 8];
+        buf[0..4].copy_from_slice(&348i32.to_le_bytes());
+        for (k, d) in [4i16, 1, 1, 1, 4].iter().enumerate() {
+            buf[40 + 2 * k..42 + 2 * k].copy_from_slice(&d.to_le_bytes());
+        }
+        buf[70..72].copy_from_slice(&32i16.to_le_bytes()); // complex64
+        buf[72..74].copy_from_slice(&64i16.to_le_bytes());
+        buf[92..96].copy_from_slice(&0.00025f32.to_le_bytes()); // dwelltime
+        buf[108..112].copy_from_slice(&(vox_offset as f32).to_le_bytes());
+        buf[344..348].copy_from_slice(b"n+1\0");
+        buf[348] = 1;
+        buf[352..356].copy_from_slice(&(esize as i32).to_le_bytes());
+        buf[356..360].copy_from_slice(&44i32.to_le_bytes());
+        buf[360..360 + meta.len()].copy_from_slice(meta);
+        let s = load(&buf).unwrap();
+        assert_eq!(s.te, 0.008);
+        assert_eq!(s.tm, Some(0.032));
+        assert_eq!(s.tr, 5.0);
     }
 }

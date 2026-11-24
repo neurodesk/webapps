@@ -176,6 +176,47 @@ pub fn dims_without(d: Dims, removed: usize) -> Dims {
     Dims { t: f(d.t), coils: f(d.coils), averages: f(d.averages), sub_specs: f(d.sub_specs), extras: f(d.extras) }
 }
 
+/// Set the 1-based `axis` of `sz` to `new_len`, apply MATLAB `squeeze`
+/// (`squeeze(&with_axis(sz, axis - 1, new_len))`), and remap `dims` so every
+/// singleton dimension dropped by `trim`/`squeeze` (and `axis` itself when
+/// `drop_axis` is true) becomes 0 while surviving axes point to their new
+/// 1-based positions.
+pub fn squeeze_axis_len(sz: &[usize], dims: Dims, axis: usize, new_len: usize, drop_axis: bool) -> (Vec<usize>, Dims) {
+    let trimmed = with_axis(sz, axis - 1, new_len);
+    if trimmed.len() <= 2 {
+        let map = |d: usize| if d == 0 || (drop_axis && d == axis) || d > 2 { 0 } else { d };
+        return (
+            trimmed,
+            Dims { t: map(dims.t), coils: map(dims.coils), averages: map(dims.averages), sub_specs: map(dims.sub_specs), extras: map(dims.extras) },
+        );
+    }
+    let mut new_pos = vec![0usize; trimmed.len() + 1];
+    let mut out_sz = Vec::new();
+    for (idx0, &len) in trimmed.iter().enumerate() {
+        let axis1 = idx0 + 1;
+        if !(drop_axis && axis1 == axis) && len != 1 {
+            out_sz.push(len);
+            new_pos[axis1] = out_sz.len();
+        }
+    }
+    while out_sz.len() < 2 {
+        out_sz.push(1);
+    }
+    let map = |d: usize| if d == 0 || d >= new_pos.len() { 0 } else { new_pos[d] };
+    (
+        out_sz,
+        Dims { t: map(dims.t), coils: map(dims.coils), averages: map(dims.averages), sub_specs: map(dims.sub_specs), extras: map(dims.extras) },
+    )
+}
+
+/// Set the 1-based `removed` axis of `sz` to length 1, apply MATLAB `squeeze`
+/// (`squeeze(&with_axis(sz, removed - 1, 1))`), and remap `dims` so `removed`
+/// and every other singleton dimension dropped by `trim`/`squeeze` become 0
+/// while surviving axes point to their new 1-based positions.
+pub fn squeeze_axis(sz: &[usize], dims: Dims, removed: usize) -> (Vec<usize>, Dims) {
+    squeeze_axis_len(sz, dims, removed, 1, true)
+}
+
 /// FID-A frequency axis for `n` points: `ppm = -f/(Bo*42.577)+4.65` with
 /// `f = -sw/2+sw/(2n) : sw/n : sw/2-sw/(2n)`.
 pub fn ppm_axis(n: usize, sw: f64, bo: f64) -> Vec<f64> {

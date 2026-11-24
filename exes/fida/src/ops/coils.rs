@@ -7,7 +7,7 @@ use std::f64::consts::PI;
 use super::averaging::op_averaging;
 use super::linalg::{lstsq, CMat};
 use super::subspecs::{op_combinesubspecs, op_four_step_combine, CombineMode};
-use super::util::{dims_without, phase1, squeeze, std_c, strides, sum_axis, with_axis};
+use super::util::{phase1, squeeze_axis, std_c, strides, sum_axis, with_axis};
 use crate::spectra::Spectra;
 
 /// Coil weighting mode.
@@ -193,8 +193,13 @@ pub fn op_addrcvrs(input: &Spectra, point: usize, mode: CoilMode, coilcombos: Op
     // fids_presum was pushed in (o, n, i) order, which is column-major order.
     let mut out = input.clone();
     out.fids = fids;
-    out.sz = squeeze(&with_axis(&input.sz, c - 1, 1));
-    out.dims = dims_without(input.dims, c);
+    let (sz, dims) = squeeze_axis(&input.sz, input.dims, c);
+    out.sz = sz;
+    out.dims = dims;
+    if input.dims.averages > 0 && out.dims.averages == 0 {
+        out.averages = 1;
+        out.flags.averaged = true;
+    }
     out.flags.writtentostruct = true;
     out.flags.addedrcvrs = true;
     let wgts = if mode == CoilMode::Gls { w_gls } else { vec![C::new(0.0, 0.0); nc] };

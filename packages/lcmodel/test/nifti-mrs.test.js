@@ -4,11 +4,12 @@ import { readFile } from "node:fs/promises";
 import { gzipSync } from "node:zlib";
 import { loadLcmodel } from "../src/wasm.js";
 
-function niftiMrs({ singleton = false, version = 1, water = false } = {}) {
+function niftiMrs({ singleton = false, version = 1, water = false, sequence = "PRESS", mixingTime = null } = {}) {
   const metadata = Buffer.from(JSON.stringify({
     SpectrometerFrequency: [123.25], ResonantNucleus: ["1H"],
     EchoTime: water ? 0.02 : 0.03, RepetitionTime: water ? 3 : 2,
-    SequenceName: "PRESS",
+    ...(mixingTime === null ? {} : { MixingTime: mixingTime }),
+    SequenceName: sequence,
     ...(singleton ? { dim_5: "DIM_COIL", dim_6: "DIM_DYN" } : { dim_5: "DIM_DYN" }),
   }));
   const extensionSize = Math.ceil((metadata.length + 8) / 16) * 16;
@@ -93,4 +94,14 @@ test("NIfTI-MRS acquisition times stay in milliseconds through preprocessing and
   assert.equal(result.header.trMs, 2000);
   assert.match(result.lcmodel.raw, /echot= 30\.00/);
   assert.match(result.lcmodel.h2o, /echot= 20\.00/);
+
+  lcm.reset();
+  lcm.addFile("steam.nii", niftiMrs({ sequence: "STEAM", mixingTime: 0.032 }));
+  const steamLoaded = lcm.load();
+  assert.deepEqual(steamLoaded.errors, []);
+  assert.equal(steamLoaded.datasets[0].header.tmMs, 32);
+  const steamResult = lcm.process(0);
+  assert.equal(steamResult.error, undefined);
+  assert.equal(steamResult.header.tmMs, 32);
+  assert.match(steamResult.lcmodel.raw, /seq= 'STEAM'/);
 });

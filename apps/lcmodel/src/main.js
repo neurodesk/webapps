@@ -594,6 +594,7 @@ function showDataset() {
     const edited = isEdited();
     const split = edited && h.editing;
     const parts = [edited ? "MEGA-PRESS" : h.family || "sequence not in header", `${h.fieldT ? h.fieldT.toFixed(2) : "?"} T`, `TE ${h.teMs} ms`];
+    if (h.tmMs > 0 && h.family === "STEAM") parts.push(`TM ${h.tmMs} ms`);
     if (h.coils > 1) parts.push(`${h.coils} coils`);
     if (h.averages > 1) parts.push(`${split ? h.averages / 2 : h.averages} averages`);
     if (h.subspectra > 1 || split) parts.push(`${split ? 2 : h.subspectra} subspectra`);
