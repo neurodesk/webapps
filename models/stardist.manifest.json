@@ -2,21 +2,77 @@
   "schema_version": 1,
   "app": "stardist",
   "repository": "neurodeskorg/webapps",
-  "revision": "e76a7bbd831da2bfdae49058700da81d6cca577c",
-  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/e76a7bbd831da2bfdae49058700da81d6cca577c/stardist/models/",
+  "revision": "2cc5042a0fad34811857bbdf89b1172bda338af4",
+  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2cc5042a0fad34811857bbdf89b1172bda338af4/stardist/models/",
   "license": "BSD-3-Clause",
   "license_note": "StarDist's pretrained models (github.com/stardist/stardist-models) are BSD-3-Clause, Copyright (c) 2018-2024, Uwe Schmidt, Martin Weigert.",
-  "model": {
-    "name": "2D_versatile_fluo",
-    "axes": "YXC",
-    "input": "input",
-    "outputs": ["prob", "dist"],
-    "n_rays": 32,
-    "grid": 2,
-    "div_by": 16,
-    "tile_overlap": [94, 94],
-    "thresholds": { "prob": 0.479071463157368, "nms": 0.3 },
-    "normalization": { "pmin": 1, "pmax": 99.8 }
+  "default_model": "2D_versatile_fluo",
+  "models": {
+    "2D_versatile_fluo": {
+      "name": "2D_versatile_fluo",
+      "label": "2D versatile fluorescence",
+      "ndim": 2,
+      "channels": 1,
+      "axes": "YXC",
+      "input": "input",
+      "outputs": ["prob", "dist"],
+      "n_rays": 32,
+      "grid": [2, 2],
+      "div_by": [16, 16],
+      "tile_overlap": [94, 94],
+      "thresholds": { "prob": 0.479071463157368, "nms": 0.3 },
+      "normalization": { "pmin": 1, "pmax": 99.8 },
+      "filename": "stardist-2d-versatile-fluo.onnx"
+    },
+    "2D_versatile_he": {
+      "name": "2D_versatile_he",
+      "label": "2D versatile H&E (RGB)",
+      "ndim": 2,
+      "channels": 3,
+      "axes": "YXC",
+      "input": "input",
+      "outputs": ["prob", "dist"],
+      "n_rays": 32,
+      "grid": [2, 2],
+      "div_by": [16, 16],
+      "tile_overlap": [94, 94],
+      "thresholds": { "prob": 0.6924782541382084, "nms": 0.3 },
+      "normalization": { "pmin": 1, "pmax": 99.8 },
+      "filename": "stardist-2d-versatile-he.onnx"
+    },
+    "2D_paper_dsb2018": {
+      "name": "2D_paper_dsb2018",
+      "label": "2D paper DSB 2018",
+      "ndim": 2,
+      "channels": 1,
+      "axes": "YXC",
+      "input": "input",
+      "outputs": ["prob", "dist"],
+      "n_rays": 32,
+      "grid": [1, 1],
+      "div_by": [8, 8],
+      "tile_overlap": [47, 47],
+      "thresholds": { "prob": 0.4178193636640508, "nms": 0.5 },
+      "normalization": { "pmin": 1, "pmax": 99.8 },
+      "filename": "stardist-2d-paper-dsb2018.onnx"
+    },
+    "3D_demo": {
+      "name": "3D_demo",
+      "label": "3D fluorescence (demo)",
+      "ndim": 3,
+      "channels": 1,
+      "axes": "ZYXC",
+      "input": "input",
+      "outputs": ["prob", "dist"],
+      "n_rays": 96,
+      "grid": [1, 2, 2],
+      "div_by": [1, 2, 2],
+      "tile_overlap": [17, 30, 30],
+      "anisotropy": [2.0, 1.0, 1.0],
+      "thresholds": { "prob": 0.7079326182611463, "nms": 0.3 },
+      "normalization": { "pmin": 1, "pmax": 99.8 },
+      "filename": "stardist-3d-demo.onnx"
+    }
   },
   "assets": [
     {
@@ -29,6 +85,39 @@
       "converter": "apps/stardist/validation/convert_model.py",
       "conversion": "tf2onnx 1.16.1 from_keras, opset 17 (tensorflow-cpu 2.15.1, stardist 0.9.1)",
       "keras_vs_onnx_max_abs_diff": { "prob": 1.27e-7, "dist": 3.84e-5 }
+    },
+    {
+      "filename": "stardist-2d-versatile-he.onnx",
+      "bytes": 5717568,
+      "sha256": "688350e1cf51245440f5f89e53b025e443f78dd73724f12ebf9179ec600451e1",
+      "source_url": "https://github.com/stardist/stardist-models/releases/download/v0.1/python_2D_versatile_he.zip",
+      "source_sha256": "f1696ef0631bd7e1c0e5c0d3017e2b4c6a95e284c6aab9c22fc2f08317817b28",
+      "weights_sha256": "ce23a21f09511132c51e2c7b077054355b6b0c1cbece61066dd280054ee7178f",
+      "converter": "apps/stardist/validation/convert_model.py",
+      "conversion": "tf2onnx 1.16.1 from_keras, opset 17 (tensorflow-cpu 2.15.1, stardist 0.9.1)",
+      "keras_vs_onnx_max_abs_diff": { "prob": 4.47e-7, "dist": 7.63e-5 }
+    },
+    {
+      "filename": "stardist-2d-paper-dsb2018.onnx",
+      "bytes": 5640372,
+      "sha256": "1442ed96ee21db96bb4f8afd3206124d314ab10969b32ba2ec13655b9dc82e89",
+      "source_url": "https://github.com/stardist/stardist-models/releases/download/v0.1/python_2D_paper_dsb2018.zip",
+      "source_sha256": "4c11cf68512341d9e8ce3d1278c64ceb8ac400582739f85fcab079a2e82840d2",
+      "weights_sha256": "784816ab04540be9d5069bea3de1183e1843c1a4a91abbec0b373e31f037fd39",
+      "converter": "apps/stardist/validation/convert_model.py",
+      "conversion": "tf2onnx 1.16.1 from_keras, opset 17 (tensorflow-cpu 2.15.1, stardist 0.9.1)",
+      "keras_vs_onnx_max_abs_diff": { "prob": 1.04e-6, "dist": 1.87e-4 }
+    },
+    {
+      "filename": "stardist-3d-demo.onnx",
+      "bytes": 6197533,
+      "sha256": "c9a9d20fd0d2f33a15a841c7133ceb3adfd6af2253bbd815eeec9ee0ee5e9135",
+      "source_url": "https://github.com/stardist/stardist-models/releases/download/v0.1/python_3D_demo.zip",
+      "source_sha256": "ea05831eb5acc8a2fd31eaa23f4460a196a9af53b14f40affb9d80885f699f90",
+      "weights_sha256": "8cce57ad459a4d86c16cfea6b17c0f28dac8fa1aec368c8cabc5a1d532a423bc",
+      "converter": "apps/stardist/validation/convert_model.py",
+      "conversion": "tf2onnx 1.16.1 from_keras, opset 17 (tensorflow-cpu 2.15.1, stardist 0.9.1)",
+      "keras_vs_onnx_max_abs_diff": { "prob": 7.45e-7, "dist": 1.81e-5 }
     }
   ]
 }

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { encode as encodePng } from "fast-png";
 import { writeLabelTiff } from "@neurodesk/webapp-components/file-io/tiff";
-import { MAX_DECODED_BYTES, nucleiCsv, readImage } from "../src/image-io.js";
+import { MAX_DECODED_BYTES, interleaveRgb, nucleiCsv, nucleiCsv3D, readImage, writeLabelsTiff } from "../src/image-io.js";
 
 const toBuffer = (bytes) => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 
@@ -183,4 +183,30 @@ test("other files and tiny images are refused with the reason", async () => {
 test("the table lists one row per nucleus", () => {
   const csv = nucleiCsv([{ id: 1, x: 10.25, y: 3.5, area: 42, mean: 120.123456789, probability: 0.98765 }]);
   assert.equal(csv, "id,centroid_x,centroid_y,area_px,mean_intensity,probability\n1,10.250,3.500,42,120.1235,0.9877\n");
+  const csv3d = nucleiCsv3D([{ id: 1, x: 10.25, y: 3.5, z: 2.125, volume: 120, mean: 450.5, probability: 0.91234 }]);
+  assert.equal(csv3d, "id,centroid_x,centroid_y,centroid_z,volume_vox,mean_intensity,probability\n1,10.250,3.500,2.125,120,450.5000,0.9123\n");
+});
+
+test("multi-page 3D label stacks roundtrip through writeLabelsTiff and readImage", async () => {
+  const width = 20;
+  const height = 18;
+  const depth = 6;
+  const labels = Int32Array.from({ length: depth * height * width }, (_, i) => i % 11);
+  const bytes = writeLabelsTiff(labels, width, height, depth);
+  const loaded = await readImage("labels3d.tif", toBuffer(bytes));
+  assert.equal(loaded.depth, depth);
+  assert.equal(loaded.is3dHint, true);
+  assert.ok(loaded.stack);
+  assert.equal(loaded.stack.depth, depth);
+  assert.equal(loaded.stack.channels.length, 1);
+  assert.deepEqual(Array.from(loaded.stack.channels[0].data), Array.from(labels));
+});
+
+test("interleaveRgb packs three RGB planes into interleaved HWC floats", () => {
+  const rgb = interleaveRgb([
+    { data: Uint8Array.from([10, 20]) },
+    { data: Uint8Array.from([30, 40]) },
+    { data: Uint8Array.from([50, 60]) },
+  ]);
+  assert.deepEqual(Array.from(rgb), [10, 30, 50, 20, 40, 60]);
 });

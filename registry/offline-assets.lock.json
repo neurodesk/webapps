@@ -4986,14 +4986,6 @@
       "kind": "example",
       "dependencies": []
     },
-    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/e76a7bbd831da2bfdae49058700da81d6cca577c/stardist/models/stardist-2d-versatile-fluo.onnx": {
-      "sha256": "cc5cb72c2b47ebdf55296fdb03cca87a512f458ee1defb0169cfe2506de5f0d3",
-      "bytes": 5715335,
-      "contentType": "application/octet-stream",
-      "kind": "model",
-      "license": "BSD-3-Clause",
-      "dependencies": []
-    },
     "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/54b983bf7ab16bd9d716008fd62ca4bdce63f72d/calcium-imaging/example/froemke-nv60-a1-gcamp-400frames.ome.tif": {
       "sha256": "574bb8e15f4ddf8308731b8a15f51b5e04e11ba3dfed6986233b529aedfa1c6e",
       "bytes": 41783273,
@@ -5422,6 +5414,52 @@
       "contentType": "text/plain; charset=utf-8",
       "kind": "attribution",
       "license": "CC-BY-4.0",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2cc5042a0fad34811857bbdf89b1172bda338af4/stardist/example/stardist-demo-nuclei-3d.tif": {
+      "sha256": "f5626d500c7a738cd321698f43df36e2ac149d98456579c5cbcf8af48c7253e8",
+      "bytes": 138925,
+      "contentType": "image/tiff",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2cc5042a0fad34811857bbdf89b1172bda338af4/stardist/example/tcia-he-nuclei-2d.png": {
+      "sha256": "ba5eb1e3745580332efd147d1719ea60bb6addad0e2ea2982ebb3902620953dd",
+      "bytes": 284273,
+      "contentType": "image/png",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2cc5042a0fad34811857bbdf89b1172bda338af4/stardist/models/stardist-2d-versatile-he.onnx": {
+      "sha256": "688350e1cf51245440f5f89e53b025e443f78dd73724f12ebf9179ec600451e1",
+      "bytes": 5717568,
+      "contentType": "application/octet-stream",
+      "kind": "model",
+      "license": "BSD-3-Clause",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2cc5042a0fad34811857bbdf89b1172bda338af4/stardist/models/stardist-2d-versatile-fluo.onnx": {
+      "sha256": "cc5cb72c2b47ebdf55296fdb03cca87a512f458ee1defb0169cfe2506de5f0d3",
+      "bytes": 5715335,
+      "contentType": "application/octet-stream",
+      "kind": "model",
+      "license": "BSD-3-Clause",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2cc5042a0fad34811857bbdf89b1172bda338af4/stardist/models/stardist-2d-paper-dsb2018.onnx": {
+      "sha256": "1442ed96ee21db96bb4f8afd3206124d314ab10969b32ba2ec13655b9dc82e89",
+      "bytes": 5640372,
+      "contentType": "application/octet-stream",
+      "kind": "model",
+      "license": "BSD-3-Clause",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2cc5042a0fad34811857bbdf89b1172bda338af4/stardist/models/stardist-3d-demo.onnx": {
+      "sha256": "c9a9d20fd0d2f33a15a841c7133ceb3adfd6af2253bbd815eeec9ee0ee5e9135",
+      "bytes": 6197533,
+      "contentType": "application/octet-stream",
+      "kind": "model",
+      "license": "BSD-3-Clause",
       "dependencies": []
     }
   },
@@ -6724,7 +6762,12 @@
     ],
     "stardist": [
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/e76a7bbd831da2bfdae49058700da81d6cca577c/stardist/example/dsb2018-nuclei-2d.tif",
-      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/e76a7bbd831da2bfdae49058700da81d6cca577c/stardist/models/stardist-2d-versatile-fluo.onnx"
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2cc5042a0fad34811857bbdf89b1172bda338af4/stardist/example/tcia-he-nuclei-2d.png",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2cc5042a0fad34811857bbdf89b1172bda338af4/stardist/example/stardist-demo-nuclei-3d.tif",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2cc5042a0fad34811857bbdf89b1172bda338af4/stardist/models/stardist-2d-versatile-fluo.onnx",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2cc5042a0fad34811857bbdf89b1172bda338af4/stardist/models/stardist-2d-versatile-he.onnx",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2cc5042a0fad34811857bbdf89b1172bda338af4/stardist/models/stardist-2d-paper-dsb2018.onnx",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2cc5042a0fad34811857bbdf89b1172bda338af4/stardist/models/stardist-3d-demo.onnx"
     ],
     "calcium-imaging": [
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/54b983bf7ab16bd9d716008fd62ca4bdce63f72d/calcium-imaging/example/froemke-nv60-a1-gcamp-400frames.ome.tif"

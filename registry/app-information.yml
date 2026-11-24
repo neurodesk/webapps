@@ -2320,17 +2320,22 @@ apps:
 
   stardist:
     packages:
-      - { name: StarDist, url: https://github.com/stardist/stardist, role: "pretrained 2D_versatile_fluo model (BSD-3-Clause); tiling, non-maximum suppression and label drawing ported from stardist 0.9.1 and csbdeep 0.8.1" }
+      - { name: StarDist, url: https://github.com/stardist/stardist, role: "pretrained 2D_versatile_fluo, 2D_versatile_he, 2D_paper_dsb2018 and 3D_demo models (BSD-3-Clause); 2D and 3D tiling, non-maximum suppression and label drawing ported from stardist 0.9.1 and csbdeep 0.8.1" }
       - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: model inference on the CPU (WebAssembly) }
-      - { name: Clipper, url: https://www.angusj.com/clipper2/Docs/Overview.htm, role: "polygon intersection for non-maximum suppression (clipper-lib 6.4.2, the JavaScript port of the Clipper 6.4.2 that StarDist uses)" }
-      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: "TIFF and OME-TIFF reading (@neurodesk/webapp-components/file-io/tiff)" }
+      - { name: Clipper, url: https://www.angusj.com/clipper2/Docs/Overview.htm, role: "polygon intersection for 2D non-maximum suppression (clipper-lib 6.4.2, the JavaScript port of the Clipper 6.4.2 that StarDist uses)" }
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: "2D and 3D TIFF and OME-TIFF reading (@neurodesk/webapp-components/file-io/tiff)" }
       - { name: fast-png, url: https://github.com/image-js/fast-png, role: PNG reading }
-      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: 2D and 3D image viewer }
     citations:
       - group: Nucleus segmentation
-        title: StarDist
+        title: StarDist (2D)
         reference: "Schmidt U, Weigert M, Broaddus C, Myers G. Cell detection with star-convex polygons. Medical Image Computing and Computer Assisted Intervention (MICCAI 2018). Lecture Notes in Computer Science 11071. 2018:265–273."
         doi: 10.1007/978-3-030-00934-2_30
+        code: https://github.com/stardist/stardist
+      - group: Nucleus segmentation
+        title: StarDist 3D
+        reference: "Weigert M, Schmidt U, Haase R, Sugawara K, Myers G. Star-convex polyhedra for 3D object detection and segmentation in microscopy. IEEE Winter Conference on Applications of Computer Vision (WACV 2020). 2020:3666–3673."
+        doi: 10.1109/WACV45572.2020.9093435
         code: https://github.com/stardist/stardist
       - group: Nucleus segmentation
         title: CSBDeep (normalization and tiled prediction)
@@ -2341,6 +2346,11 @@ apps:
         title: 2018 Data Science Bowl (BBBC038)
         reference: "Caicedo JC, Goodman A, Karhohs KW, et al. Nucleus segmentation across imaging experiments: the 2018 Data Science Bowl. Nature Methods. 2019;16(12):1247–1253."
         doi: 10.1038/s41592-019-0612-7
+      - group: Example data
+        title: The Cancer Imaging Archive (TCIA) H&E example
+        reference: "Clark K, Vendt B, Smith K, et al. The Cancer Imaging Archive (TCIA): maintaining and operating a public information repository. Journal of Digital Imaging. 2013;26(6):1045–1057."
+        doi: 10.1007/s10278-013-9622-7
+        url: https://www.cancerimagingarchive.net
       - group: Browser inference
         title: ONNX Runtime Web
         reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."

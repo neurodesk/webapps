@@ -57,6 +57,10 @@ test("a threshold outside 0.01-0.99 is refused at its field", async ({ page }) =
   await expect(page.locator("#advancedSettings")).toHaveAttribute("open", "");
   await page.locator("#resetSettings").click();
   await expect(page.locator("#probThresh")).toHaveValue("0.479071463157368");
+  await page.locator("#model").selectOption("2D_versatile_he");
+  await expect(page.locator("#probThresh")).toHaveValue("0.6924782541382084");
+  await page.locator("#model").selectOption("3D_demo");
+  await expect(page.locator("#probThresh")).toHaveValue("0.7079326182611463");
 });
 
 for (const failure of ["download", "unreadable image"]) {

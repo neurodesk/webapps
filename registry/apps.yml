@@ -1465,9 +1465,9 @@ apps:
     path: stardist
     catalog: microscopy
     title: StarDist
-    description: Segment cell nuclei in 2D fluorescence microscopy.
+    description: Segment cell nuclei in 2D fluorescence, H&E and 3D stacks.
     categories: [segmentation]
-    keywords: [StarDist, nucleus segmentation, nuclei, cell segmentation, instance segmentation, star-convex polygons, fluorescence microscopy, DAPI, OME-TIFF, deep learning]
+    keywords: [StarDist, StarDist3D, nucleus segmentation, nuclei, cell segmentation, instance segmentation, star-convex polygons, star-convex polyhedra, fluorescence microscopy, H&E, histology, brightfield, 3D microscopy, DAPI, OME-TIFF, deep learning]
     anatomy: [any]
     modalities: [microscopy]
     inputs: [tiff]

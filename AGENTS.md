@@ -439,9 +439,9 @@ The nightly `agent-interactions` job runs each viewport's catalog in three `--sh
 
 ## stardist
 
-- `src/stardist.js` ports StarDist 0.9.1's 2D prediction path (csbdeep normalization and tiling, sparse candidates, `c_non_max_suppression_inds`, `polygons_to_label`) and must keep giving Python's labels: on the example they are identical pixel for pixel, with and without tiling. NMS reproduces the C++ float32 arithmetic and uses `clipper-lib` 6.4.2, the JavaScript port of the Clipper StarDist links; keep both.
-- `validation/reference.json` is Python StarDist's result (`validation/reference.py`, environment in the README); the unit tests and `e2e/workflow.spec.js` read it. Rerecord it when the model, the example or the reference versions change.
-- The ONNX model is converted once by `validation/convert_model.py` and pinned in `models/stardist.manifest.json`, which also holds the model's thresholds, grid and tile overlap (94 px, from `_axes_tile_overlap`).
+- `src/stardist.js` (2D) and `src/stardist3d.js` (3D) port StarDist 0.9.1's 2D and 3D prediction paths (csbdeep normalization and tiling, sparse candidates, 2D `c_non_max_suppression_inds` / `polygons_to_label`, 3D `_COMMON_non_maximum_suppression_sparse` / `polyhedron_to_label`) and must keep giving Python's labels: on all examples (`2D_versatile_fluo`, `2D_versatile_he`, `2D_paper_dsb2018`, `3D_demo`) they are identical pixel/voxel for pixel/voxel, with and without tiling. 2D NMS reproduces the C++ float32 arithmetic and uses `clipper-lib` 6.4.2; 3D NMS uses isotropic sphere/bbox bounds and spherical-binned exact voxel overlap without Qhull, and `src/rays-3d-demo.json` holds `Rays_GoldenSpiral(n=96, anisotropy=[2, 1, 1])`.
+- `validation/reference.json` is Python StarDist's result (`validation/reference.py`, environment in the README); the unit tests and `e2e/workflow.spec.js` read it. Rerecord it when any model, example or reference version changes.
+- All four pretrained ONNX models are converted once by `validation/convert_model.py` and pinned in `models/stardist.manifest.json`, which also holds each model's thresholds, grid, `div_by` and `tile_overlap` (from `_axes_tile_overlap`).
 
 ## deconvolution
 

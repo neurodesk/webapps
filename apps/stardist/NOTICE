@@ -1,18 +1,19 @@
 StarDist web application
 Copyright 2026 Neurodesk contributors
 
-src/stardist.js ports, function by function, the 2D post-processing of StarDist
-0.9.1 (https://github.com/stardist/stardist: _predict_sparse_generator,
-c_non_max_suppression_inds, polygons_to_label) and the normalization and tiling
-of CSBDeep 0.8.1 (https://github.com/CSBDeep/CSBDeep: normalize, Tiling). Both
-are Copyright (c) 2018-2024, Uwe Schmidt, Martin Weigert, under the BSD 3-Clause
-licence (LICENSE).
-
-The model, stardist-2d-versatile-fluo.onnx, is StarDist's pretrained
-2D_versatile_fluo model (https://github.com/stardist/stardist-models, release
-v0.1, python_2D_versatile_fluo.zip), converted to ONNX by
-validation/convert_model.py. Copyright (c) 2018-2024, Uwe Schmidt, Martin
+src/stardist.js and src/stardist3d.js port, function by function, the 2D and 3D
+post-processing of StarDist 0.9.1 (https://github.com/stardist/stardist:
+_predict_sparse_generator, c_non_max_suppression_inds, polygons_to_label,
+_COMMON_non_maximum_suppression_sparse, polyhedron_to_label) and the
+normalization and tiling of CSBDeep 0.8.1 (https://github.com/CSBDeep/CSBDeep:
+normalize, Tiling). Both are Copyright (c) 2018-2024, Uwe Schmidt, Martin
 Weigert, under the BSD 3-Clause licence (LICENSE).
+
+The models (stardist-2d-versatile-fluo.onnx, stardist-2d-versatile-he.onnx,
+stardist-2d-paper-dsb2018.onnx and stardist-3d-demo.onnx) are StarDist's
+pretrained models (https://github.com/stardist/stardist-models, release v0.1),
+converted to ONNX by validation/convert_model.py. Copyright (c) 2018-2024,
+Uwe Schmidt, Martin Weigert, under the BSD 3-Clause licence (LICENSE).
 
 The bundled clipper-lib 6.4.2 (https://sourceforge.net/projects/jsclipper/), a
 JavaScript port of Angus Johnson's Clipper, is Copyright Angus Johnson 2010-2017
@@ -22,6 +23,9 @@ licence at http://www-cs-students.stanford.edu/~tjw/jsbn/LICENSE.
 
 Schmidt U, Weigert M, Broaddus C, Myers G (2018). Cell Detection with
 Star-Convex Polygons. MICCAI 2018.
+
+Weigert M, Schmidt U, Haase R, Sugawara K, Myers G (2020). Star-Convex Polyhedra
+for 3D Object Detection and Segmentation in Microscopy. WACV 2020.
 
 Boost Software License - Version 1.0 - August 17th, 2003
 

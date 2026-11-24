@@ -4,6 +4,9 @@
     "label": "Fluorescent nuclei (DSB 2018)",
     "description": "A 512 × 512 fluorescence image of cell nuclei from the 2018 Data Science Bowl (CC0).",
     "expectedResult": "About 118 nuclei are outlined; download the label image and the per-nucleus table.",
+    "parameters": {
+      "model": "2D_versatile_fluo"
+    },
     "files": [
       {
         "role": "image",
@@ -11,6 +14,42 @@
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/e76a7bbd831da2bfdae49058700da81d6cca577c/stardist/example/dsb2018-nuclei-2d.tif",
         "sha256": "f9ccc1571b92c861ff87e28463068b43f61bd47357ed0503f711e5cd1eb97750",
         "bytes": 524544
+      }
+    ]
+  },
+  {
+    "id": "tcia-he-nuclei",
+    "label": "H&E histology nuclei (TCIA)",
+    "description": "A 500 × 300 RGB H&E brightfield histology image from The Cancer Imaging Archive.",
+    "expectedResult": "About 183 nuclei are outlined with 2D_versatile_he; download the label TIFF and CSV table.",
+    "parameters": {
+      "model": "2D_versatile_he"
+    },
+    "files": [
+      {
+        "role": "image",
+        "name": "tcia-he-nuclei-2d.png",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2cc5042a0fad34811857bbdf89b1172bda338af4/stardist/example/tcia-he-nuclei-2d.png",
+        "sha256": "ba5eb1e3745580332efd147d1719ea60bb6addad0e2ea2982ebb3902620953dd",
+        "bytes": 284273
+      }
+    ]
+  },
+  {
+    "id": "stardist-3d-demo",
+    "label": "3D fluorescent nuclei (Synthetic)",
+    "description": "Synthetic 57 × 61 × 31 3D nuclei stack from StarDist (3D_demo is a synthetic demo model and does not establish accuracy on real tissue).",
+    "expectedResult": "About 30 3D nuclei are segmented across slices; inspect all three planes and download the 3D label TIFF and CSV table.",
+    "parameters": {
+      "model": "3D_demo"
+    },
+    "files": [
+      {
+        "role": "image",
+        "name": "stardist-demo-nuclei-3d.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2cc5042a0fad34811857bbdf89b1172bda338af4/stardist/example/stardist-demo-nuclei-3d.tif",
+        "sha256": "f5626d500c7a738cd321698f43df36e2ac149d98456579c5cbcf8af48c7253e8",
+        "bytes": 138925
       }
     ]
   }
