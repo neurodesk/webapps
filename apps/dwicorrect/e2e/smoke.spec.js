@@ -14,9 +14,9 @@ import { INPUTS, args as agreementArgs, assertAgreement, runNative } from "../..
 
 const examples = JSON.parse(readFileSync(new URL("../examples.json", import.meta.url), "utf8"));
 // The example's outliers with the MindGrab mask from the threaded CPU module, which headless
-// Chromium without a GPU runs: 144 slices in 51 volumes.
+// Chromium without a GPU runs: 144 slices in 52 volumes.
 const OUTLIER_STATUS = "144 outlier slices replaced";
-const FLAGGED_VOLUMES = 51;
+const FLAGGED_VOLUMES = 52;
 
 async function download(page, label) {
   const event = page.waitForEvent("download");
