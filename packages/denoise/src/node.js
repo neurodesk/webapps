@@ -237,12 +237,24 @@ function isLocalProcessDead(pid) {
   }
 }
 
-async function readJsonIfPresent(filePath) {
+async function readJsonStatus(filePath) {
+  let raw;
   try {
-    return JSON.parse(await readFile(filePath, "utf8"));
-  } catch {
-    return null;
+    raw = await readFile(filePath, "utf8");
+  } catch (error) {
+    if (error.code === "ENOENT") return { status: "missing", value: null };
+    return { status: "invalid", value: null };
   }
+  try {
+    return { status: "ok", value: JSON.parse(raw) };
+  } catch {
+    return { status: "invalid", value: null };
+  }
+}
+
+async function readJsonIfPresent(filePath) {
+  const result = await readJsonStatus(filePath);
+  return result.status === "ok" ? result.value : null;
 }
 
 async function pathExists(filePath) {
@@ -377,17 +389,24 @@ async function recoverInterruptedStages(resolvedDir, outputDir) {
       }
       if (!info.isDirectory()) continue;
       const trashPid = Number(trashMatch[1]);
-      const trashMeta = await readJsonIfPresent(join(trashPath, "_meta.json"));
-      if (
-        isLocalProcessDead(trashPid) &&
-        (!trashMeta || (trashMeta.host === hostname() && isLocalProcessDead(trashMeta.pid)))
-      ) {
+      if (!isLocalProcessDead(trashPid)) continue;
+      const trashMeta = await readJsonStatus(join(trashPath, "_meta.json"));
+      const trashManifest = await readJsonStatus(join(trashPath, "_manifest.json"));
+      if (trashMeta.status === "invalid" || trashManifest.status === "invalid") continue;
+      const metaOk =
+        trashMeta.status === "missing" ||
+        (trashMeta.value?.host === hostname() && isLocalProcessDead(trashMeta.value?.pid));
+      const manifestOk =
+        trashManifest.status === "missing" ||
+        (trashManifest.value?.host === hostname() && isLocalProcessDead(trashManifest.value?.pid));
+      if (metaOk && manifestOk) {
         await rm(trashPath, { recursive: true, force: true }).catch(() => {});
       }
       continue;
     }
 
-    if (LOCK_TMP_DIR_RE.test(entry)) {
+    const lockTmpMatch = entry.match(LOCK_TMP_DIR_RE);
+    if (lockTmpMatch) {
       const tmpPath = join(resolvedDir, entry);
       let info;
       try {
@@ -402,9 +421,16 @@ async function recoverInterruptedStages(resolvedDir, outputDir) {
       } catch {
         continue;
       }
-      if (tmpEntries.length === 1 && OWNER_FILE_RE.test(tmpEntries[0])) {
-        const parsed = await readJsonIfPresent(join(tmpPath, tmpEntries[0]));
-        if (parsed && parsed.host === hostname() && isLocalProcessDead(parsed.pid)) {
+      const expectedOwner = `owner-${lockTmpMatch[2]}.json`;
+      if (tmpEntries.length === 1 && tmpEntries[0] === expectedOwner) {
+        const parsed = await readJsonIfPresent(join(tmpPath, expectedOwner));
+        if (
+          parsed &&
+          parsed.host === hostname() &&
+          parsed.pid === Number(lockTmpMatch[1]) &&
+          parsed.token === lockTmpMatch[2] &&
+          isLocalProcessDead(parsed.pid)
+        ) {
           await rm(tmpPath, { recursive: true, force: true }).catch(() => {});
         }
       }
@@ -440,8 +466,8 @@ async function recoverInterruptedStages(resolvedDir, outputDir) {
     if (!info.isDirectory()) continue;
 
     const backupDir = join(stagePath, "_backup");
-    const rollbackFailed = await readJsonIfPresent(join(stagePath, "_rollback-failed.json"));
-    if (rollbackFailed) {
+    const rollbackFailedStatus = await readJsonStatus(join(stagePath, "_rollback-failed.json"));
+    if (rollbackFailedStatus.status !== "missing") {
       throw new Error(
         `Output directory '${outputDir}' contains preserved backup(s) from a failed rollback in '${backupDir}'. Restore or remove them manually before retrying.`,
       );
@@ -631,9 +657,30 @@ async function reserveOutputDir(outputDir, { overwrite = false, onLockInspect } 
       const nonInternal = [];
       for (const name of await readdir(resolved)) {
         if (name === LOCK_NAME) continue;
-        if (LOCK_TMP_DIR_RE.test(name)) {
-          const tmpInfo = await lstat(join(resolved, name)).catch(() => null);
-          if (tmpInfo?.isDirectory()) continue;
+        const lockTmpMatch = name.match(LOCK_TMP_DIR_RE);
+        if (lockTmpMatch) {
+          const tmpPath = join(resolved, name);
+          const tmpInfo = await lstat(tmpPath).catch(() => null);
+          if (tmpInfo?.isDirectory()) {
+            const tmpPid = Number(lockTmpMatch[1]);
+            const tmpToken = lockTmpMatch[2];
+            const tmpEntries = await readdir(tmpPath).catch(() => null);
+            const expectedOwner = `owner-${tmpToken}.json`;
+            if (tmpEntries && !isLocalProcessDead(tmpPid)) {
+              if (tmpEntries.length === 0) continue;
+              if (tmpEntries.length === 1 && tmpEntries[0] === expectedOwner) {
+                const owner = await readJsonStatus(join(tmpPath, expectedOwner));
+                if (
+                  owner.status === "ok" &&
+                  owner.value?.host === hostname() &&
+                  owner.value?.pid === tmpPid &&
+                  owner.value?.token === tmpToken
+                ) {
+                  continue;
+                }
+              }
+            }
+          }
         }
         nonInternal.push(name);
       }

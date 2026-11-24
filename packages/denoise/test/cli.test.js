@@ -782,6 +782,43 @@ test("user files and folders starting with internal dot-prefixes are never delet
       (await readdir(lockDir)).sort(),
       [".denoise-lock-tmp-sample_denoised.tif", ".denoise-lock-tmp-sample_provenance.json"],
     );
+
+    // Exact-pattern trash directory with corrupt/truncated _meta.json must NOT be deleted.
+    const child = spawnSync(process.execPath, ["-e", "process.exit(0)"]);
+    const deadPid = child.pid;
+    const corruptTrashOut = join(dir, "corrupt-trash-out");
+    const corruptTrash = join(corruptTrashOut, `.denoise-trash-${deadPid}-12345678`);
+    await mkdir(corruptTrash, { recursive: true });
+    await writeFile(join(corruptTrash, "_meta.json"), "{truncated", "utf8");
+    await writeFile(join(corruptTrash, "sentinel.txt"), "preserve\n", "utf8");
+
+    await assert.rejects(
+      () => denoiseFile({
+        input: otherInput,
+        outputDir: corruptTrashOut,
+        options: { method: "fgr-ridge", "max-scale": "4" },
+      }),
+      /not empty/i,
+    );
+    assert.equal(await readFile(join(corruptTrash, "sentinel.txt"), "utf8"), "preserve\n");
+
+    // Exact-pattern lock-temp directory without a matching live owner record must NOT bypass !overwrite.
+    for (const pid of [deadPid, process.pid]) {
+      const bogusLockOut = join(dir, `bogus-lock-${pid}`);
+      const bogusLockDir = join(bogusLockOut, `.denoise-lock-tmp-${pid}-0123456789abcdef`);
+      await mkdir(bogusLockDir, { recursive: true });
+      await writeFile(join(bogusLockDir, "sentinel.txt"), "user-data\n", "utf8");
+
+      await assert.rejects(
+        () => denoiseFile({
+          input: otherInput,
+          outputDir: bogusLockOut,
+          options: { method: "fgr-ridge", "max-scale": "4" },
+        }),
+        /not empty/i,
+      );
+      assert.equal(await readFile(join(bogusLockDir, "sentinel.txt"), "utf8"), "user-data\n");
+    }
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
