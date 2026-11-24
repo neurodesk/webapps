@@ -32,24 +32,29 @@ test('computeLaterality matches Raidionics convention and uses unrounded hemisph
   assert.equal(leftPlusUnlabelled.midlineCrossing, false);
 });
 
-test('prepareRegistrationInputsRas preserves tumour voxels outside the brain bounding box', () => {
-  const dims = [20, 10, 10];
-  const affine = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
+test('prepareRegistrationInputsRas preserves tumour voxels at native resolution without dropping sub-millimetre foci', () => {
+  const dims = [30, 12, 12];
+  const affine = [[0.6, 0, 0, 0], [0, 0.6, 0, 0], [0, 0, 0.6, 0], [0, 0, 0, 1]];
   const data = new Float32Array(dims[0] * dims[1] * dims[2]).fill(50);
   const brain = new Uint8Array(data.length);
   const tumour = new Uint8Array(data.length);
-  // Brain occupies x=[2..6]; tumour has one voxel inside brain (x=4) and one far outside (x=17).
-  for (let z = 3; z <= 6; z++) {
-    for (let y = 3; y <= 6; y++) {
-      for (let x = 2; x <= 6; x++) brain[voxelIndex(x, y, z, dims)] = 1;
+  // Brain occupies x=[2..10]; tumour has a 16-voxel focus inside brain and a 16-voxel focus outside brain (x=[24..25]).
+  for (let z = 2; z <= 9; z++) {
+    for (let y = 2; y <= 9; y++) {
+      for (let x = 2; x <= 10; x++) brain[voxelIndex(x, y, z, dims)] = 1;
     }
   }
-  tumour[voxelIndex(4, 4, 4, dims)] = 1;
-  tumour[voxelIndex(17, 4, 4, dims)] = 1;
+  for (let z = 4; z < 6; z++) {
+    for (let y = 4; y < 8; y++) {
+      for (let x = 5; x < 7; x++) tumour[voxelIndex(x, y, z, dims)] = 1;
+      for (let x = 24; x < 26; x++) tumour[voxelIndex(x, y, z, dims)] = 1;
+    }
+  }
   const prepared = prepareRegistrationInputsRas({ data, dims, affine }, brain, tumour);
   let maskSum = 0;
   for (let i = 0; i < prepared.mask.data.length; i++) maskSum += prepared.mask.data[i];
-  assert.equal(maskSum, 2, 'both tumour voxels must survive preparation for Greedy reslicing');
+  assert.equal(maskSum, 32, 'all 32 native-resolution tumour voxels across both foci must survive');
+  assert.equal(prepared.mask.affine[0][0], 0.6, 'moving tumour mask stays at native resolution for direct Greedy reslicing');
 });
 
 test('computeResectability selects hemisphere map and matches Kommers/Raidionics formula', () => {

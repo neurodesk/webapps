@@ -52,10 +52,10 @@ function makeSyntheticPair({ lps = false, translateMaskMm = 0, emptyMask = false
         }
       }
     }
-    // Lesion 2: 5 x 5 x 5 box separated by > 5 mm
+    // Lesion 2: 5 x 5 x 5 box separated by > 5 mm surface-to-surface (gap = sqrt(5^2 + 5^2) = 7.07 mm)
     for (let z = 10; z < 15; z++) {
-      for (let y = 21; y < 26; y++) {
-        for (let x = 21; x < 26; x++) {
+      for (let y = 23; y < 28; y++) {
+        for (let x = 23; x < 28; x++) {
           mask[idx(x, y, z)] = 1;
           if (!zeroT1) t1[idx(x, y, z)] = 210;
         }
@@ -328,6 +328,7 @@ test("UPENN-GBM skull-stripped example computes glioblastoma resectability", { t
   const report = JSON.parse(reportFile.bytes.toString("utf8"));
   const expectedHemi = report.rads.resectability.hemisphereMap === "left" ? "Left" : "Right";
   await page.locator("#resultsTab").click();
-  await expect(page.locator("#resultsReport")).toContainText("Glioblastoma resectability");
-  await expect(page.locator("#resultsReport")).toContainText(expectedHemi);
+  const resectSection = page.locator('#resultsReport section[aria-label^="Glioblastoma resectability"]');
+  await expect(resectSection).toBeVisible();
+  await expect(resectSection.locator("tr", { hasText: "Hemisphere probability map" }).locator("td").nth(1)).toHaveText(expectedHemi);
 });

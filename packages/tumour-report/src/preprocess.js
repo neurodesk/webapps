@@ -363,22 +363,46 @@ export function affinesMatch(a, b, { translationTolMm = 0.1, linearTol = 1e-3 } 
   return true;
 }
 
-export function gridsMatch(a, b, tolerances) {
+// Bounds physical voxel-to-RAS displacement across all 8 volume corners, so small
+// rotation/scale differences that accumulate across a large volume are rejected.
+export function gridsMatch(a, b, { maxCornerDisplacementMm = 0.1 } = {}) {
   if (!a?.dims || !b?.dims || a.dims.length !== 3 || b.dims.length !== 3) return false;
   for (let i = 0; i < 3; i++) {
-    if (a.dims[i] !== b.dims[i]) return false;
+    if (!Number.isInteger(a.dims[i]) || a.dims[i] <= 0 || a.dims[i] !== b.dims[i]) return false;
   }
-  return affinesMatch(a.affine, b.affine, tolerances);
-}
-
-function reflectIndex(i, n) {
-  if (n <= 1) return 0;
-  let p = i;
-  while (p < 0 || p >= n) {
-    if (p < 0) p = -p - 1;
-    if (p >= n) p = 2 * n - 1 - p;
+  if (!Array.isArray(a.affine) || !Array.isArray(b.affine) || a.affine.length !== 4 || b.affine.length !== 4) {
+    return false;
   }
-  return p;
+  for (let r = 0; r < 4; r++) {
+    if (!Array.isArray(a.affine[r]) || !Array.isArray(b.affine[r]) || a.affine[r].length !== 4 || b.affine[r].length !== 4) {
+      return false;
+    }
+    for (let c = 0; c < 4; c++) {
+      if (!Number.isFinite(Number(a.affine[r][c])) || !Number.isFinite(Number(b.affine[r][c]))) return false;
+    }
+    if (r === 3) {
+      for (let c = 0; c < 4; c++) {
+        const expected = c === 3 ? 1 : 0;
+        if (Math.abs(a.affine[3][c] - expected) > 1e-4 || Math.abs(b.affine[3][c] - expected) > 1e-4) return false;
+      }
+    }
+  }
+  const [nx, ny, nz] = a.dims;
+  const xs = [0, nx - 1];
+  const ys = [0, ny - 1];
+  const zs = [0, nz - 1];
+  for (const x of xs) {
+    for (const y of ys) {
+      for (const z of zs) {
+        const pa = applyAffinePoint(a.affine, x, y, z);
+        const pb = applyAffinePoint(b.affine, x, y, z);
+        if (Math.hypot(pa[0] - pb[0], pa[1] - pb[1], pa[2] - pb[2]) > maxCornerDisplacementMm) {
+          return false;
+        }
+      }
+    }
+  }
+  return true;
 }
 
 // Mirrors around boundary pixel centers (c b | a b c | b a), matching skimage.transform.resize mode='reflect'.
@@ -398,7 +422,8 @@ function clampIndex(i, n) {
   return i;
 }
 
-// Separable Gaussian smoothing with reflect boundary matching scipy/skimage anti_aliasing.
+// Separable Gaussian smoothing with mirror boundary (c b | a b c | b a) matching
+// skimage.transform.resize(..., mode='reflect', anti_aliasing=True) -> scipy mode='mirror'.
 function gaussianSmooth3d(data, dims, sigmas) {
   const [nx, ny, nz] = dims;
   let current = data;
@@ -426,7 +451,7 @@ function gaussianSmooth3d(data, dims, sigmas) {
           const base = idx - pos * stride;
           let acc = 0;
           for (let k = -radius; k <= radius; k++) {
-            acc += current[base + reflectIndex(pos + k, len) * stride] * kernel[k + radius];
+            acc += current[base + mirrorIndex(pos + k, len) * stride] * kernel[k + radius];
           }
           out[idx] = acc;
         }

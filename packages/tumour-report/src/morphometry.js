@@ -65,6 +65,7 @@ function computeIbsiMeshMetrics(voxels, bbox, affine, originMm) {
 
   let areaMm2 = 0;
   let signedVol6 = 0;
+  const vertMap = new Map();
 
   for (let iz = 0; iz < gz - 1; iz++) {
     const zBase = iz * gSlice;
@@ -86,16 +87,24 @@ function computeIbsiMeshMetrics(voxels, bbox, affine, originMm) {
         if (!tris.length) continue;
 
         const vx0 = minX - 1 + ix;
+        const edgeVertex = (e) => {
+          const m = MC_EDGE_MID_OFFSETS[e];
+          const hx = 2 * vx0 + Math.round(2 * m[0]);
+          const hy = 2 * vy0 + Math.round(2 * m[1]);
+          const hz = 2 * vz0 + Math.round(2 * m[2]);
+          const key = `${hx},${hy},${hz}`;
+          let pt = vertMap.get(key);
+          if (!pt) {
+            pt = applyAffinePoint(affine, vx0 + m[0], vy0 + m[1], vz0 + m[2]);
+            vertMap.set(key, pt);
+          }
+          return pt;
+        };
+
         for (let t = 0; t < tris.length; t += 3) {
-          const e0 = tris[t];
-          const e1 = tris[t + 1];
-          const e2 = tris[t + 2];
-          const m0 = MC_EDGE_MID_OFFSETS[e0];
-          const m1 = MC_EDGE_MID_OFFSETS[e1];
-          const m2 = MC_EDGE_MID_OFFSETS[e2];
-          const p0 = applyAffinePoint(affine, vx0 + m0[0], vy0 + m0[1], vz0 + m0[2]);
-          const p1 = applyAffinePoint(affine, vx0 + m1[0], vy0 + m1[1], vz0 + m1[2]);
-          const p2 = applyAffinePoint(affine, vx0 + m2[0], vy0 + m2[1], vz0 + m2[2]);
+          const p0 = edgeVertex(tris[t]);
+          const p1 = edgeVertex(tris[t + 1]);
+          const p2 = edgeVertex(tris[t + 2]);
           const e1x = p1[0] - p0[0];
           const e1y = p1[1] - p0[1];
           const e1z = p1[2] - p0[2];
@@ -131,6 +140,7 @@ function computeIbsiMeshMetrics(voxels, bbox, affine, originMm) {
     meshVolumeMl: meshVolumeMm3 * 1e-3,
     surfaceAreaMm2: areaMm2,
     sphericity: Math.min(1, Math.max(0, rawSphericity)),
+    verticesMm: Array.from(vertMap.values()),
   };
 }
 
@@ -159,7 +169,6 @@ function computeAxialBidimensional(compVoxels, affine, axialAxis) {
   const dot = eu[0] * ev[0] + eu[1] * ev[1] + eu[2] * ev[2];
   const vx = su > 0 ? dot / su : 0;
   const vy = Math.sqrt(Math.max(0, ev[0] * ev[0] + ev[1] * ev[1] + ev[2] * ev[2] - vx * vx));
-  const voxelDiag = Math.hypot(su, vy);
   // Inverse 2x2 mapping physical (px, py) -> voxel offsets (du, dv):
   // px = du * su + dv * vx, py = dv * vy
   const invSu = su > 1e-12 ? 1 / su : 0;
@@ -217,19 +226,95 @@ function computeAxialBidimensional(compVoxels, affine, axialAxis) {
       grid[(u - minU) + gw * (v - minV)] = 1;
     }
 
-    const isInsideUv = (u, v) => {
-      const ru = Math.round(u) - minU;
-      const rv = Math.round(v) - minV;
-      return ru >= 0 && ru < gw && rv >= 0 && rv < gh && grid[ru + gw * rv] === 1;
+    const isCellOccupied = (cu, cv) => {
+      const lu = cu - minU;
+      const lv = cv - minV;
+      return lu >= 0 && lu < gw && lv >= 0 && lv < gh && grid[lu + gw * lv] === 1;
     };
 
+    // Exact 2D Amanatides-Woo DDA ray traversal over unit voxel cells [u-0.5, u+0.5] x [v-0.5, v+0.5].
+    // Returns true iff every cell intersected by the open segment (u0, v0) -> (u1, v1) is occupied.
     const segmentInsideMask = (u0, v0, u1, v1) => {
-      const steps = Math.max(1, Math.ceil(2 * Math.hypot(u1 - u0, v1 - v0)));
-      for (let s = 1; s < steps; s++) {
-        const t = s / steps;
-        if (!isInsideUv(u0 + (u1 - u0) * t, v0 + (v1 - v0) * t)) return false;
+      const du = u1 - u0;
+      const dv = v1 - v0;
+      let cu = Math.floor(u0 + 0.5);
+      let cv = Math.floor(v0 + 0.5);
+      const endU = Math.floor(u1 + 0.5);
+      const endV = Math.floor(v1 + 0.5);
+      if (!isCellOccupied(cu, cv) || !isCellOccupied(endU, endV)) return false;
+      const stepU = du > 0 ? 1 : du < 0 ? -1 : 0;
+      const stepV = dv > 0 ? 1 : dv < 0 ? -1 : 0;
+      const tDeltaU = stepU !== 0 ? Math.abs(1 / du) : Infinity;
+      const tDeltaV = stepV !== 0 ? Math.abs(1 / dv) : Infinity;
+      let tMaxU = stepU !== 0 ? ((cu + (stepU > 0 ? 0.5 : -0.5) - u0) / du) : Infinity;
+      let tMaxV = stepV !== 0 ? ((cv + (stepV > 0 ? 0.5 : -0.5) - v0) / dv) : Infinity;
+      const eps = 1e-12;
+      const maxIter = gw + gh + 4;
+      for (let iter = 0; iter < maxIter; iter++) {
+        if (cu === endU && cv === endV) return true;
+        if (Math.abs(tMaxU - tMaxV) <= eps) {
+          // Ray passes through a shared grid corner: check diagonal target cell (and require at least one flanking cell so a diagonal never bridges across two empty corner-touching background cells).
+          const nextU = cu + stepU;
+          const nextV = cv + stepV;
+          if (!isCellOccupied(nextU, nextV)) return false;
+          if (!isCellOccupied(nextU, cv) && !isCellOccupied(cu, nextV)) return false;
+          cu = nextU;
+          cv = nextV;
+          tMaxU += tDeltaU;
+          tMaxV += tDeltaV;
+        } else if (tMaxU < tMaxV) {
+          cu += stepU;
+          tMaxU += tDeltaU;
+          if (!isCellOccupied(cu, cv)) return false;
+        } else {
+          cv += stepV;
+          tMaxV += tDeltaV;
+          if (!isCellOccupied(cu, cv)) return false;
+        }
       }
-      return true;
+      return false;
+    };
+
+    // Exact DDA ray distance in physical mm from (qu, qv) along unit physical direction (dx, dy)
+    // to the exact boundary where the ray first exits the occupied voxel union.
+    const rayExitDistanceMm = (qu, qv, dx, dy) => {
+      const [du, dv] = physDeltaToUv(dx, dy);
+      let cu = Math.floor(qu + 0.5);
+      let cv = Math.floor(qv + 0.5);
+      if (!isCellOccupied(cu, cv)) return 0;
+      const stepU = du > 1e-12 ? 1 : du < -1e-12 ? -1 : 0;
+      const stepV = dv > 1e-12 ? 1 : dv < -1e-12 ? -1 : 0;
+      const tDeltaU = stepU !== 0 ? Math.abs(1 / du) : Infinity;
+      const tDeltaV = stepV !== 0 ? Math.abs(1 / dv) : Infinity;
+      let tMaxU = stepU !== 0 ? ((cu + (stepU > 0 ? 0.5 : -0.5) - qu) / du) : Infinity;
+      let tMaxV = stepV !== 0 ? ((cv + (stepV > 0 ? 0.5 : -0.5) - qv) / dv) : Infinity;
+      const eps = 1e-12;
+      const maxIter = gw + gh + 4;
+      for (let iter = 0; iter < maxIter; iter++) {
+        if (Math.abs(tMaxU - tMaxV) <= eps) {
+          const tExit = tMaxU;
+          const nextU = cu + stepU;
+          const nextV = cv + stepV;
+          if (!isCellOccupied(nextU, nextV) || (!isCellOccupied(nextU, cv) && !isCellOccupied(cu, nextV))) {
+            return Math.max(0, tExit);
+          }
+          cu = nextU;
+          cv = nextV;
+          tMaxU += tDeltaU;
+          tMaxV += tDeltaV;
+        } else if (tMaxU < tMaxV) {
+          const tExit = tMaxU;
+          cu += stepU;
+          tMaxU += tDeltaU;
+          if (!isCellOccupied(cu, cv)) return Math.max(0, tExit);
+        } else {
+          const tExit = tMaxV;
+          cv += stepV;
+          tMaxV += tDeltaV;
+          if (!isCellOccupied(cu, cv)) return Math.max(0, tExit);
+        }
+      }
+      return 0;
     };
 
     // Collect 4-connected boundary pixels on this slice (endpoints of any maximal chord lie on the boundary).
@@ -276,47 +361,34 @@ function computeAxialBidimensional(compVoxels, affine, axialAxis) {
     const px = -uy;
     const py = ux;
 
-    // Step along strictly interior points of the supported major chord (excluding exact
-    // endpoint voxels so thin hollow rings / L-corners cannot produce a fake crossing chord)
-    // and measure the longest contiguous mask-supported perpendicular segment.
-    const stepMm = Math.max(0.25, 0.5 * Math.min(su, vy));
-    const [stepPu, stepPv] = physDeltaToUv(px * stepMm, py * stepMm);
-    const chordSteps = Math.max(2, Math.ceil(longDist / stepMm));
-    const maxPerpSteps = Math.ceil((Math.hypot(gw * su + gh * Math.abs(vx), gh * vy) + voxelDiag) / stepMm) + 2;
+    // Exact boundary-to-boundary length of the supported major axis via DDA from midpoint.
+    const midU = 0.5 * (pA[0] + pB[0]);
+    const midV = 0.5 * (pA[1] + pB[1]);
+    const rawLongMm = rayExitDistanceMm(midU, midV, ux, uy) + rayExitDistanceMm(midU, midV, -ux, -uy);
 
-    let maxPerpCenterDist = 0;
+    // Step along strictly interior points of the supported major chord (excluding exact
+    // endpoint cells so thin hollow rings / L-corners cannot produce a fake crossing chord)
+    // and measure exact boundary-to-boundary DDA perpendicular length.
+    const chordSteps = Math.max(2, Math.ceil(2 * Math.hypot(pB[0] - pA[0], pB[1] - pA[1])));
+    let maxPerpMm = 0;
     for (let s = 1; s < chordSteps; s++) {
       const t = s / chordSteps;
       const qu = pA[0] + (pB[0] - pA[0]) * t;
       const qv = pA[1] + (pB[1] - pA[1]) * t;
-      const rqu = Math.round(qu);
-      const rqv = Math.round(qv);
-      if ((rqu === pA[0] && rqv === pA[1]) || (rqu === pB[0] && rqv === pB[1])) continue;
-      if (!isInsideUv(qu, qv)) continue;
-      let posSteps = 0;
-      for (let k = 1; k <= maxPerpSteps; k++) {
-        if (!isInsideUv(qu + k * stepPu, qv + k * stepPv)) break;
-        posSteps = k;
-      }
-      let negSteps = 0;
-      for (let k = 1; k <= maxPerpSteps; k++) {
-        if (!isInsideUv(qu - k * stepPu, qv - k * stepPv)) break;
-        negSteps = k;
-      }
-      const span = (posSteps + negSteps) * stepMm;
-      if (span > maxPerpCenterDist) maxPerpCenterDist = span;
+      const cu = Math.floor(qu + 0.5);
+      const cv = Math.floor(qv + 0.5);
+      if ((cu === pA[0] && cv === pA[1]) || (cu === pB[0] && cv === pB[1])) continue;
+      if (!isCellOccupied(cu, cv)) continue;
+      const span = rayExitDistanceMm(qu, qv, px, py) + rayExitDistanceMm(qu, qv, -px, -py);
+      if (span > maxPerpMm) maxPerpMm = span;
+    }
+    if (maxPerpMm === 0) {
+      // Degenerate 2-voxel slice with no distinct interior cell between pA and pB.
+      maxPerpMm = rayExitDistanceMm(midU, midV, px, py) + rayExitDistanceMm(midU, midV, -px, -py);
     }
 
-    // Exact directional pixel width along unit vector (dx, dy) in physical coordinates.
-    const dirPixelWidth = (dx, dy) => {
-      const [du, dv] = physDeltaToUv(dx, dy);
-      const scale = Math.max(Math.abs(du), Math.abs(dv));
-      return scale > 1e-12 ? 1 / scale : Math.min(su, vy);
-    };
-    const rawLongMm = longDist + dirPixelWidth(ux, uy);
-    const rawShortMm = Math.min(rawLongMm, maxPerpCenterDist + dirPixelWidth(px, py));
-    const longMm = rawLongMm;
-    const shortMm = rawShortMm;
+    const longMm = Math.max(rawLongMm, maxPerpMm);
+    const shortMm = Math.min(rawLongMm, maxPerpMm);
     const prod = longMm * shortMm;
     const sliceMeasurable = longMm >= 10 && shortMm >= 10;
     if (sliceMeasurable) anySliceMeasurable10x10 = true;
@@ -535,7 +607,6 @@ export function computeNativeMorphometry({
 
   const buckets = Array.from({ length: count + 1 }, () => ({
     voxels: [],
-    surfaceMm: [],
     sumX: 0,
     sumY: 0,
     sumZ: 0,
@@ -567,19 +638,6 @@ export function computeNativeMorphometry({
         if (y > b.maxY) b.maxY = y;
         if (z < b.minZ) b.minZ = z;
         if (z > b.maxZ) b.maxZ = z;
-
-        const exposed = x === 0 || x === nx - 1
-          || y === 0 || y === ny - 1
-          || z === 0 || z === nz - 1
-          || labels[idx - 1] !== id
-          || labels[idx + 1] !== id
-          || labels[idx - nx] !== id
-          || labels[idx + nx] !== id
-          || labels[idx - slice] !== id
-          || labels[idx + slice] !== id;
-        if (exposed) {
-          b.surfaceMm.push(applyAffinePoint(affine, x, y, z));
-        }
       }
     }
   }
@@ -599,14 +657,14 @@ export function computeNativeMorphometry({
     const bboxVoxel = [b.minX, b.minY, b.minZ, b.maxX + 1, b.maxY + 1, b.maxZ + 1];
     const mesh = computeIbsiMeshMetrics(b.voxels, bboxVoxel, affine, cMm);
     const equivDiam = Math.cbrt((6 * volMm3) / Math.PI);
-    const max3d = exactMaxDiameter3dMm(b.surfaceMm);
+    const max3d = exactMaxDiameter3dMm(mesh.verticesMm);
     const axial = computeAxialBidimensional(b.voxels, affine, axAxis);
     rawLesions.push({
       voxels: n,
       volumeMl: Number(volMl.toFixed(3)),
       meshVolumeMl: Number(mesh.meshVolumeMl.toFixed(3)),
       _volumeMlExact: volMl,
-      _surfaceMm: b.surfaceMm,
+      _surfaceMm: mesh.verticesMm,
       centroidVoxel: [Number(cx.toFixed(2)), Number(cy.toFixed(2)), Number(cz.toFixed(2))],
       centroidMm: [Number(cMm[0].toFixed(2)), Number(cMm[1].toFixed(2)), Number(cMm[2].toFixed(2))],
       bboxVoxel,

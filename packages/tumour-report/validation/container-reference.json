@@ -19,10 +19,10 @@
   },
   "results": {
     "nativeBrain": {
-      "nodeVoxels": 523312,
+      "nodeVoxels": 525876,
       "containerVoxels": 525874,
-      "differing": 2582,
-      "dice": 0.99754
+      "differing": 4,
+      "dice": 1.0
     },
     "nativeTumour": {
       "nodeVoxels": 5211,
@@ -32,7 +32,7 @@
       "lesionCount": 3,
       "totalVolumeMl": 12.176,
       "multifocal": true,
-      "maxMinFociDistanceMm": 33.37
+      "maxMinFociDistanceMm": 32.47
     },
     "radsOnContainerMniMask": {
       "mniVoxels": 17339,
@@ -41,17 +41,17 @@
       "mniLobesPct": { "frontal_left": 66.19, "parietal_left": 31.73, "extracerebral-CSF_": 2.09 }
     },
     "mniGreedyAffineVsContainerAntsSyn": {
-      "nodeVoxels": 18225,
+      "nodeVoxels": 18224,
       "containerVoxels": 17339,
-      "dice": 0.89399,
+      "dice": 0.90414,
       "laterality": { "leftPct": 100, "rightPct": 0, "midlineCrossing": false },
-      "mniLobesPct": { "frontal_left": 63.8, "parietal_left": 34.46, "extracerebral-CSF_": 1.74 }
+      "mniLobesPct": { "frontal_left": 64.1, "parietal_left": 34.13, "extracerebral-CSF_": 1.77 }
     },
     "timingsNode4ThreadsSec": {
-      "segmentation": 93.33,
-      "mniRegistration": 30.32,
-      "rads": 3.69,
-      "total": 127.34
+      "segmentation": 94.28,
+      "mniRegistration": 23.01,
+      "rads": 3.66,
+      "total": 120.96
     }
   }
 }

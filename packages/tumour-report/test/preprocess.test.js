@@ -145,9 +145,14 @@ test('resizeLinear3d preserves constant fields and matches skimage reflect and S
   for (const [actual, expected] of zoom.map((v, i) => [v, [0, 1 / 3, 2 / 3, 1][i]])) {
     assert.ok(Math.abs(actual - expected) < 1e-6, `scipy zoom ${actual} !== ${expected}`);
   }
+
+  // 8-sample edge impulse resized to 2 samples with antiAliasing=true matches skimage 0.24.0 (0.16115).
+  const impulse = new Float32Array([1, 0, 0, 0, 0, 0, 0, 0]);
+  const aaDown = resizeLinear3d(impulse, [8, 1, 1], [2, 1, 1], { antiAliasing: true, alignCorners: false });
+  assert.ok(Math.abs(aaDown[0] - 0.16115) < 1e-4, `anti-aliased edge impulse ${aaDown[0]} !== 0.16115`);
 });
 
-test('affinesMatch and gridsMatch reject translated or rotated masks despite identical dims and spacing', () => {
+test('affinesMatch and gridsMatch reject translated, rotated, or corner-drifting masks', () => {
   const baseAffine = [
     [1, 0, 0, -10],
     [0, 1, 0, -20],
@@ -166,10 +171,18 @@ test('affinesMatch and gridsMatch reject translated or rotated masks despite ide
     [0, 0, 1, -30],
     [0, 0, 0, 1],
   ];
+  // Small 0.002 scale drift across 512 voxels accumulates > 1.0 mm displacement at the far corner.
+  const cornerDrift = [
+    [1.002, 0, 0, -10],
+    [0, 1, 0, -20],
+    [0, 0, 1, -30],
+    [0, 0, 0, 1],
+  ];
   assert.equal(affinesMatch(baseAffine, baseAffine), true);
   assert.equal(affinesMatch(baseAffine, translated), false);
   assert.equal(affinesMatch(baseAffine, flipped), false);
   assert.equal(gridsMatch({ dims: [32, 32, 24], affine: baseAffine }, { dims: [32, 32, 24], affine: translated }), false);
+  assert.equal(gridsMatch({ dims: [512, 512, 250], affine: baseAffine }, { dims: [512, 512, 250], affine: cornerDrift }), false);
   assert.equal(gridsMatch({ dims: [32, 32, 24], affine: baseAffine }, { dims: [32, 32, 24], affine: baseAffine }), true);
 });
 

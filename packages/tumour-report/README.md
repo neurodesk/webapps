@@ -28,11 +28,11 @@ ONNX Runtime inference runners (no DOM or runtime dependency inside `src/`):
    (`>= 0.1 mL`, `>= 5 mm`; distinct from Raidionics' MNI 6-connected HD95 multifocality).
 6. **MNI RADS characterization (`src/rads.js`):** brain-cropped 1 mm RAS alignment to
    `mni_icbm152_nlin_sym_09a` (`197 × 233 × 189`) via `@neurodesk/greedy` (affine NMI
-   default; optional deformable NMI with lesion masking), applying the transform to the full
-   native tumour mask, hemispheric laterality and bilateral midline crossing, MNI lobe and
-   Schaefer 7/17 cortical overlap, exact 3D EDT minimum surface distance and overlap across
-   64 BCB subcortical tracts (distinct from Raidionics' tract HD95), and Kommers et al. (2021)
-   resectability for glioblastoma.
+   default; optional deformable NMI with lesion masking), reslicing the native-resolution
+   cropped tumour mask directly onto the MNI grid, hemispheric laterality and bilateral
+   midline crossing, MNI lobe and Schaefer 7/17 cortical overlap, exact 3D EDT voxel-centre
+   distance and overlap across 64 BCB subcortical tracts (distinct from Raidionics' tract HD95),
+   and Kommers et al. (2021) resectability for glioblastoma.
 
 ## Models and Atlases
 
@@ -53,9 +53,9 @@ LPS, defaced skull-intact multifocal metastases).
 | Comparison | Node (`@neurodesk/tumour-report`) | Reference Container | Agreement |
 | --- | --- | --- | --- |
 | Native tumour mask | 5,211 voxels (3 foci, 12.18 mL) | 5,211 voxels | **Dice 1.00000** (0 differing voxels) |
-| Native brain mask | 523,312 voxels (1,222.7 mL) | 525,874 voxels | **Dice 0.99754** |
+| Native brain mask | 525,876 voxels (1,228.7 mL) | 525,874 voxels | **Dice 1.00000** (4 differing voxels) |
 | RADS on container MNI mask | Left 100%, Frontal 66.19%, Parietal 31.73%, Resect 0.8807 | Left 100%, Frontal 66.19%, Parietal 31.73%, Resect 0.8807 | **Exact match** |
-| End-to-end MNI mask (Greedy affine vs ANTs SyN) | 18,225 vox; Frontal 63.80%, Parietal 34.46% | 17,339 vox; Frontal 66.19%, Parietal 31.73% | **Dice 0.89399** (lobes within 2.7 pp) |
+| End-to-end MNI mask (Greedy affine vs ANTs SyN) | 18,224 vox; Frontal 64.10%, Parietal 34.13% | 17,339 vox; Frontal 66.19%, Parietal 31.73% | **Dice 0.90414** (lobes within 2.4 pp) |
 
 ## Tests
 

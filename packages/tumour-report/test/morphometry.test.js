@@ -63,12 +63,56 @@ test('computeNativeMorphometry measures a 10 mm radius sphere accurately on isot
   assert.ok(Math.abs(l.meshVolumeMl - 4.148) < 0.01, `unexpected IBSI mesh volume ${l.meshVolumeMl}`);
   assert.ok(Math.abs(l.surfaceAreaMm2 - 1372.04) < 0.1, `unexpected IBSI mesh area ${l.surfaceAreaMm2}`);
   assert.deepEqual(l.centroidMm, [16, 16, 16]);
-  assert.ok(Math.abs(l.maxDiameter3dMm - 20) < 0.5, `unexpected 3D diam ${l.maxDiameter3dMm}`);
+  assert.ok(Math.abs(l.maxDiameter3dMm - 20.5) < 0.6, `unexpected 3D mesh diam ${l.maxDiameter3dMm}`);
   assert.ok(Math.abs(l.axialBidimensional.longAxisMm - 21) < 1.5);
   assert.ok(Math.abs(l.axialBidimensional.shortAxisMm - 21) < 1.5);
   assert.ok(l.axialBidimensional.longAxisMm >= l.axialBidimensional.shortAxisMm);
   assert.equal(l.axialBidimensional.measurable10x10mm, true);
   assert.ok(Math.abs(l.sphericity - 0.9099) < 0.001, `unexpected IBSI sphericity ${l.sphericity}`);
+});
+
+test('single 1 mm voxel reports IBSI mesh diameter 1 mm, and 4 mm surface gap between cubes is not multifocal', () => {
+  const singleDims = [5, 5, 5];
+  const single = new Uint8Array(125);
+  single[voxelIndex(2, 2, 2, singleDims)] = 1;
+  const resSingle = computeNativeMorphometry({ tumourMask: single, dims: singleDims, affine: IDENTITY });
+  assert.equal(resSingle.lesions[0].maxDiameter3dMm, 1);
+
+  // Two 5x5x5 cubes (0.125 mL each) at x=[2..6] (right surface x=6.5) and x=[11..15] (left surface x=10.5):
+  // true surface gap = 4.0 mm (< 5.0 mm threshold) -> must NOT be multifocal.
+  const dims = [20, 10, 10];
+  const mask = new Uint8Array(dims[0] * dims[1] * dims[2]);
+  for (let z = 2; z < 7; z++) {
+    for (let y = 2; y < 7; y++) {
+      for (let x = 2; x < 7; x++) mask[voxelIndex(x, y, z, dims)] = 1;
+      for (let x = 11; x < 16; x++) mask[voxelIndex(x, y, z, dims)] = 1;
+    }
+  }
+  const resGap = computeNativeMorphometry({ tumourMask: mask, dims, affine: IDENTITY });
+  assert.equal(resGap.lesionCount, 2);
+  assert.equal(resGap.maxMinFociDistanceMm, 4);
+  assert.equal(resGap.multifocal, false);
+});
+
+test('single 20 x 6 mm row reports exact 20 x 6 mm and is not measurable, and diagonal across empty cells is rejected', () => {
+  // Single row: 20 voxels along x (1 mm) x 1 voxel along y (6 mm) -> exact 20 x 6 mm.
+  const dims = [24, 5, 3];
+  const affine = [[1, 0, 0, 0], [0, 6, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
+  const mask = new Uint8Array(dims[0] * dims[1] * dims[2]);
+  for (let x = 2; x < 22; x++) mask[voxelIndex(x, 2, 1, dims)] = 1;
+  const resRow = computeNativeMorphometry({ tumourMask: mask, dims, affine });
+  const ax = resRow.lesions[0].axialBidimensional;
+  assert.equal(ax.longAxisMm, 20);
+  assert.equal(ax.shortAxisMm, 6);
+  assert.equal(ax.measurable10x10mm, false);
+
+  // Two diagonally touching blocks separated by background corners: exact DDA must reject diagonal chord across empty cells.
+  const d2 = [12, 12, 3];
+  const diagMask = new Uint8Array(d2[0] * d2[1] * d2[2]);
+  // Diagonal chain of single cells (1,1), (2,2), (3,3), (4,4) with no flanking cells.
+  for (let i = 1; i <= 4; i++) diagMask[voxelIndex(i, i, 1, d2)] = 1;
+  const resDiag = computeNativeMorphometry({ tumourMask: diagMask, dims: d2, affine: IDENTITY });
+  assert.ok(resDiag.lesions[0].axialBidimensional.longAxisMm <= 1.5, `diagonal across empty corners was accepted: ${resDiag.lesions[0].axialBidimensional.longAxisMm}`);
 });
 
 test('IBSI Marching Cubes matches exact reference on 5x5x5 2mm cube and preserves area under shear', () => {
@@ -155,13 +199,13 @@ test('computeNativeMorphometry handles anisotropic affines and multifocality dis
     [0, 0, 0, 1],
   ];
   const mask = new Uint8Array(dims[0] * dims[1] * dims[2]);
-  // Focus 1: 10x6x4 = 240 voxels (0.24 mL) at x=[2..11] (mm -9..-4.5)
+  // Focus 1: 10x6x4 = 240 voxels (0.24 mL) at x=[2..11] (surface x=11.5 -> -4.25 mm)
   for (let z = 4; z < 8; z++) {
     for (let y = 4; y < 10; y++) {
       for (let x = 2; x < 12; x++) mask[voxelIndex(x, y, z, dims)] = 1;
     }
   }
-  // Focus 2: 8x5x4 = 160 voxels (0.16 mL) at x=[26..33] (mm +3..+6.5) -> gap = 7.5 mm >= 5 mm
+  // Focus 2: 8x5x4 = 160 voxels (0.16 mL) at x=[26..33] (surface x=25.5 -> +2.75 mm) -> true surface gap = 7.0 mm >= 5 mm
   for (let z = 4; z < 8; z++) {
     for (let y = 4; y < 9; y++) {
       for (let x = 26; x < 34; x++) mask[voxelIndex(x, y, z, dims)] = 1;
@@ -171,7 +215,7 @@ test('computeNativeMorphometry handles anisotropic affines and multifocality dis
   assert.equal(res.lesionCount, 2);
   assert.equal(res.multifocal, true);
   assert.equal(res.multifocalCount, 2);
-  assert.ok(Math.abs(res.maxMinFociDistanceMm - 7.5) < 0.01, `unexpected gap ${res.maxMinFociDistanceMm}`);
+  assert.ok(Math.abs(res.maxMinFociDistanceMm - 7.0) < 0.01, `unexpected gap ${res.maxMinFociDistanceMm}`);
   assert.equal(res.lesions[0].voxels, 240);
   assert.equal(res.lesions[1].voxels, 160);
 });

@@ -405,9 +405,10 @@ function cropMaskBbox(mask, dims, margin) {
   ];
 }
 
-// Crop brain-masked T1c tightly around brainMask for Greedy registration while cropping
-// the moving tumour mask around its own full bounding box so no tumour voxels outside
-// the brain mask are ever discarded before reslicing into MNI space.
+// Crop brain-masked T1c tightly around brainMask and resample to 1 mm RAS for Greedy
+// registration, while cropping the moving tumour mask around its own full bounding box
+// at native resolution (no intermediate 1 mm resampling) so Greedy reslices it directly
+// onto the MNI grid without dropping sub-millimetre foci.
 export function prepareRegistrationInputsRas(volume, brainMask, tumourMask, margin = 4) {
   const [nx, ny] = volume.dims;
   const brainBox = cropMaskBbox(brainMask, volume.dims, margin);
@@ -434,7 +435,7 @@ export function prepareRegistrationInputsRas(volume, brainMask, tumourMask, marg
   const maskBox = cropMaskBbox(tumourMask, volume.dims, 2) ?? brainBox;
   const [mMinX, mMinY, mMinZ, mMaxX, mMaxY, mMaxZ] = maskBox;
   const md = [mMaxX - mMinX, mMaxY - mMinY, mMaxZ - mMinZ];
-  const cropMask = new Float32Array(md[0] * md[1] * md[2]);
+  const cropMask = new Uint8Array(md[0] * md[1] * md[2]);
   for (let z = 0; z < md[2]; z++) {
     for (let y = 0; y < md[1]; y++) {
       const dstRow = md[0] * (y + md[1] * z);
@@ -446,14 +447,9 @@ export function prepareRegistrationInputsRas(volume, brainMask, tumourMask, marg
   }
   const mOrigin = applyAffinePoint(volume.affine, mMinX, mMinY, mMinZ);
   const mAffine = volume.affine.map((r, i) => (i < 3 ? [r[0], r[1], r[2], mOrigin[i]] : [...r]));
-  const rasMaskFloat = resampleToOutput({ data: cropMask, dims: md, affine: mAffine }, [1, 1, 1], 0);
-  const rasMask = new Uint8Array(rasMaskFloat.data.length);
-  for (let i = 0; i < rasMask.length; i++) {
-    if (rasMaskFloat.data[i] >= 0.5) rasMask[i] = 1;
-  }
   return {
     t1: rasT1,
-    mask: { data: rasMask, dims: rasMaskFloat.dims, affine: rasMaskFloat.affine },
+    mask: { data: cropMask, dims: md, affine: mAffine },
   };
 }
 
