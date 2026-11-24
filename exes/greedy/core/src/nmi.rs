@@ -243,15 +243,16 @@ pub(crate) fn corner_gradient(
 }
 
 pub(crate) fn score_from_histogram(joint: &[f64], sum: f64) -> Result<f64> {
-    // Greedy reports NaN for a transform with no overlapping samples.  Its
-    // L-BFGS line search rejects that trial and continues from the last
-    // valid transform; turning it into an error aborts the whole registration.
+    // Greedy reports NaN for a transform with no overlapping samples, or whose
+    // overlap falls in one joint bin (0/0).  Its L-BFGS line search rejects
+    // that trial and continues from the last valid transform; turning it into
+    // an error aborts the whole registration.
     if sum == 0.0 {
         return Ok(f64::NAN);
     }
     let (_, _, _, fixed_entropy, moving_entropy, joint_entropy) = entropies(joint, sum);
     if joint_entropy == 0.0 {
-        return Err(Error("NMI joint entropy is zero".into()));
+        return Ok(f64::NAN);
     }
     Ok((fixed_entropy + moving_entropy) / joint_entropy)
 }
@@ -271,7 +272,7 @@ pub(crate) fn score_gradient_from_histogram(joint: &[f64], sum: f64) -> Result<(
         joint_entropy,
     ) = entropies(joint, sum);
     if joint_entropy == 0.0 {
-        return Err(Error("NMI joint entropy is zero".into()));
+        return Ok((f64::NAN, vec![f64::NAN; BINS * BINS]));
     }
     let score = (fixed_entropy + moving_entropy) / joint_entropy;
     let mut gradient = vec![0.0; BINS * BINS];
@@ -381,6 +382,15 @@ mod tests {
         assert!(partial > 0, "no partial-volume mask voxel was tested");
         assert_eq!(levels[2].data, image(10.0).data);
         assert_eq!(masks[2], (0..n * n * n).map(inside).collect::<Vec<_>>());
+    }
+
+    /// SOOP sub-81's mirror affine: a line-search trial left one joint bin.
+    #[test]
+    fn single_bin_overlap_scores_nan_not_error() {
+        let mut joint = vec![0.0; BINS * BINS];
+        joint[BINS + 1] = 3.0;
+        assert!(score_from_histogram(&joint, 3.0).unwrap().is_nan());
+        assert!(score_gradient_from_histogram(&joint, 3.0).unwrap().0.is_nan());
     }
 
     #[test]
