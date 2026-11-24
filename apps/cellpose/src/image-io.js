@@ -2,6 +2,7 @@
 // DOM-free so the Node tests and the worker can use it.
 import {
   imagejDescription,
+  inspectTiffStack,
   isOmeDescription,
   omePageChannels,
   openTiffPlanes,
@@ -256,6 +257,14 @@ async function readTiff(name, buffer) {
     }
   }
   const isRgb = pages.length === 1 && decodedPages[0].length === 3 && decodedPages[0].every((sample, idx) => sample.kind === RGB[idx]);
+  let spacingMeta = ome ?? imagej;
+  if (imagej && !ome) {
+    try {
+      spacingMeta = (await inspectTiffStack(buffer, { rgb: "mean" })).metadata;
+    } catch {
+      // Multi-sample non-RGB ImageJ TIFFs keep description-only metadata.
+    }
+  }
   return {
     width,
     height,
@@ -265,7 +274,7 @@ async function readTiff(name, buffer) {
     isRgb,
     stack: null,
     is3dHint: false,
-    spacing: extractSpacing(ome ?? imagej),
+    spacing: extractSpacing(spacingMeta),
   };
 }
 
@@ -319,11 +328,15 @@ export function writeLabelsTiff(labels, width, height, depth = 1, spacing = null
   let max = 0;
   for (let i = 0; i < labels.length; i++) if (labels[i] > max) max = labels[i];
   const data = max <= 0xffff ? Uint16Array.from(labels) : Uint32Array.from(labels);
-  const pixelSize = spacing?.x && spacing?.y ? { x: spacing.x, y: spacing.y } : null;
+  const hasX = spacing?.x > 0;
+  const hasY = spacing?.y > 0;
+  const pixelSize = hasX || hasY ? { x: hasX ? spacing.x : spacing.y, y: hasY ? spacing.y : spacing.x } : null;
   if (depth <= 1 && !pixelSize) return writeLabelTiff(labels, width, height);
+  const zSpacing = spacing?.z > 0 && (pixelSize || spacing?.unit !== "micron") ? spacing.z : null;
+  const unit = pixelSize ? (spacing?.unit ?? "micron") : (zSpacing && spacing?.unit !== "micron" ? (spacing.unit ?? null) : null);
   const description = depth > 1
-    ? imagejDescription({ slices: depth, spacing: spacing?.z ?? null, unit: spacing?.unit ?? (pixelSize ? "micron" : null) })
-    : (pixelSize ? imagejDescription({ slices: 1, unit: spacing?.unit ?? "micron" }) : "");
+    ? imagejDescription({ slices: depth, spacing: zSpacing, unit })
+    : (pixelSize ? imagejDescription({ slices: 1, unit }) : "");
   return writeTiffStack({ width, height, data, description, pixelSize });
 }
 

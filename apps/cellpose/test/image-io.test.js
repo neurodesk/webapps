@@ -212,6 +212,14 @@ test("oversized PNG header is rejected before decompression and writeLabelsTiff 
   const back = await readImage("spaced.tif", tif.buffer.slice(tif.byteOffset, tif.byteOffset + tif.byteLength));
   assert.ok(Math.abs(back.spacing.z - 2.0) < 1e-4);
   assert.ok(Math.abs(back.spacing.x - 0.5) < 1e-4);
+
+  const yOnly = writeLabelsTiff(labels.subarray(0, 256), 16, 16, 1, { x: null, y: 0.25, z: null, unit: "micron" });
+  const backY = await readImage("yonly.tif", yOnly.buffer.slice(yOnly.byteOffset, yOnly.byteOffset + yOnly.byteLength));
+  assert.ok(Math.abs(backY.spacing.x - 0.25) < 1e-4);
+  assert.ok(Math.abs(backY.spacing.y - 0.25) < 1e-4);
+  const zOnly = writeLabelsTiff(labels, 16, 16, 2, { x: null, y: null, z: 1.5, unit: "micron" });
+  const backZ = await readImage("zonly.tif", zOnly.buffer.slice(zOnly.byteOffset, zOnly.byteOffset + zOnly.byteLength));
+  assert.equal(backZ.spacing, null);
 });
 
 test("OME-XML on a reduced-resolution IFD 0 and BinaryOnly OME-TIFFs are rejected", async () => {

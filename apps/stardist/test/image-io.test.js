@@ -284,6 +284,15 @@ test("writeLabelsTiff preserves physical spacing in 3D output", async () => {
   assert.equal(back.depth, 2);
   assert.ok(Math.abs(back.spacing.z - 1.25) < 1e-4);
   assert.ok(Math.abs(back.spacing.x - 0.25) < 1e-4);
+
+  // Partial X-only calibration mirrors to both in-plane axes; micron Z-only without XY drops micron unit.
+  const xOnly = writeLabelsTiff(labels.subarray(0, 256), 16, 16, 1, { x: 0.25, y: null, z: null, unit: "micron" });
+  const backX = await readImage("xonly.tif", toBuffer(xOnly));
+  assert.ok(Math.abs(backX.spacing.x - 0.25) < 1e-4);
+  assert.ok(Math.abs(backX.spacing.y - 0.25) < 1e-4);
+  const zOnly = writeLabelsTiff(labels, 16, 16, 2, { x: null, y: null, z: 1.5, unit: "micron" });
+  const backZ = await readImage("zonly.tif", toBuffer(zOnly));
+  assert.equal(backZ.spacing, null);
 });
 
 test("OME-XML on a reduced-resolution IFD 0 and BinaryOnly OME-TIFFs are rejected", async () => {

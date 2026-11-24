@@ -369,7 +369,8 @@ function resolveStagedSelection(image, preset) {
   const nuclearIndex = preset?.nuclearChannel && model.supportsNuclearChannel && preset.nuclearChannel <= channels.length
     ? preset.nuclearChannel - 1
     : -1;
-  const defaultAniso = image.spacing?.z && image.spacing?.x ? Number((image.spacing.z / image.spacing.x).toFixed(3)) : 1;
+  const inPlane = image.spacing?.x > 0 ? image.spacing.x : (image.spacing?.y > 0 ? image.spacing.y : null);
+  const defaultAniso = image.spacing?.z > 0 && inPlane ? Number((image.spacing.z / inPlane).toFixed(3)) : 1;
   const anisotropy = preset?.anisotropy ?? (defaultAniso >= 0.1 && defaultAniso <= 20 ? defaultAniso : 1);
   return { model, is3d, primaryIndex, nuclearIndex, anisotropy, preset };
 }

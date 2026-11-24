@@ -165,6 +165,23 @@ function voxelSpacing(image, model, is3d) {
   return [sx, sy, sz];
 }
 
+function exportSpacingFor(image, model, is3d) {
+  const sp = image.spacing;
+  const hasX = sp?.x > 0;
+  const hasY = sp?.y > 0;
+  if (hasX || hasY) {
+    const x = hasX ? sp.x : sp.y;
+    const y = hasY ? sp.y : sp.x;
+    const z = is3d ? (sp.z > 0 ? sp.z : (model.anisotropy?.[0] > 0 ? model.anisotropy[0] * x : null)) : null;
+    return { x, y, z, unit: sp.unit ?? "micron" };
+  }
+  if (is3d) {
+    if (sp?.z > 0 && sp?.unit !== "micron") return { x: null, y: null, z: sp.z, unit: sp.unit ?? null };
+    if (model.anisotropy?.[0] > 0) return { x: null, y: null, z: model.anisotropy[0], unit: null };
+  }
+  return null;
+}
+
 // A 2D or 3D scalar image as NIfTI whose rows run down the screen, preserving physical spacing.
 function niftiFile(image, data, name, depth = 1, spacing = [1, 1, 1]) {
   const { width, height } = image;
@@ -527,7 +544,8 @@ async function executeSegmentation(targetInput, model, settings, current) {
   current.throwIfAborted();
   log.log(`Normalized to the ${model.normalization.pmin}st and ${model.normalization.pmax}th percentiles: ${result.normalization.low} to ${result.normalization.high}`, "info", "analysis");
   const base = targetInput.file.name.replace(/\.(ome\.)?(tiff?|png)$/i, "");
-  const labelsFile = new File([writeLabelsTiff(result.labels, targetInput.width, targetInput.height, prepared.depth, targetInput.spacing)], outputName(base, "labels.tif"), { type: "image/tiff" });
+  const exportSpacing = exportSpacingFor(targetInput, model, model.ndim === 3);
+  const labelsFile = new File([writeLabelsTiff(result.labels, targetInput.width, targetInput.height, prepared.depth, exportSpacing)], outputName(base, "labels.tif"), { type: "image/tiff" });
   const csvText = model.ndim === 3 ? nucleiCsv3D(result.nuclei) : nucleiCsv(result.nuclei);
   const tableFile = new File([csvText], outputName(base, "nuclei.csv"), { type: "text/csv" });
   const nextOutputs = {
