@@ -137,7 +137,7 @@ test('each hosted offline workflow runs once, in its home catalogue suite, and e
   const sources = JSON.parse(await readFile(new URL('../registry/offline-assets.sources.json', import.meta.url), 'utf8'));
   const runs = registry.site.catalogs.flatMap(catalog => catalogWorkflowApps(registry, catalog));
   assert.deepEqual([...runs].sort(), ciWorkflowApps(registry).sort());
-  assert.deepEqual(catalogWorkflowApps(registry, registry.site.catalogs.find(catalog => catalog.id === 'preclinical')), [], 'preclinical serves copies only');
+  assert.deepEqual(catalogWorkflowApps(registry, registry.site.catalogs.find(catalog => catalog.id === 'preclinical')), ['brainchomp'], 'preclinical runs its home app workflow');
   for (const catalog of registry.site.catalogs) {
     const tested = modelWorkflowApps(registry, catalog, sources);
     assert.ok(tested.length, `${catalog.id}: no hosted workflow reads its model pack`);

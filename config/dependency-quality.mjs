@@ -13,6 +13,8 @@ export const generatedSources = {
   'packages/runtime-support/src/niimath/niimath.js': 'Committed Emscripten glue.',
   'packages/vesselboost/preprocessing/preprocessing.js': 'Committed wasm-bindgen glue.',
   'packages/runtime-support/src/nifti-js/index.js': 'Self-contained bundled NIfTI parser with embedded CommonJS modules.',
+  'apps/brainchomp/public/brainchomp/': 'Committed Emscripten glue from neuroneural/brainchomp-lib.',
+  'apps/brainchomp/vendor/brainchomp/': 'Vendored brainchomp-lib browser runtime bundle.',
 };
 
 export function isGenerated(path) {

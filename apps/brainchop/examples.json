@@ -2,8 +2,8 @@
   {
     "id": "t1-brain",
     "label": "T1-weighted brain MRI",
-    "description": "Cropped T1-weighted brain MRI for Brainchop tissue and atlas segmentation.",
-    "expectedResult": "A colored label map on the conformed 1 mm grid, downloadable as NIfTI.",
+    "description": "Cropped T1-weighted brain MRI for Brainchop tissue, subcortical and atlas segmentation.",
+    "expectedResult": "A colored label map or tissue fraction maps on the input image grid, downloadable as NIfTI.",
     "files": [
       {
         "role": "image",

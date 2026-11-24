@@ -2305,14 +2305,24 @@ apps:
 
   brainchop:
     packages:
+      - { name: "@brainchop/core", url: https://www.npmjs.com/package/@brainchop/core, role: "MindMap-24, MindMap-16, MindSnap-104 and CAT-lite tissue fraction inference on WebGPU, WebGL2 and CPU WASM" }
+      - { name: dcm2niix, url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
-      - { name: Brainchop, url: https://brainchop.org/, role: whole brain segmentation }
-      - { name: TensorFlow.js, url: https://www.tensorflow.org/js, role: WebGL inference }
     citations:
       - group: Segmentation
         title: Brainchop
         reference: "Masoud M, Hu F, Plis S. Brainchop: in-browser MRI volumetric segmentation and rendering. JOSS. 2023;8(83):5098."
-        url: https://doi.org/10.21105/joss.05098
+        doi: 10.21105/joss.05098
+      - group: Segmentation
+        title: Brainchop v4 / MindGrab MeshNet
+        reference: "Fani N, Masoud M, Hu F, Plis S, Rorden C. Brainchop: fast, compact in-browser 3D neuroimaging segmentation. NeuroImage. 2026;122074."
+        doi: 10.1016/j.neuroimage.2026.122074
+        code: https://github.com/neuroneural/brainchop-core
+      - group: Conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+        code: https://github.com/rordenlab/dcm2niix
       - group: Visualization
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
@@ -2904,6 +2914,31 @@ apps:
         title: UPENN-GBM
         reference: "Bakas S, Sako C, Akbari H, et al. The University of Pennsylvania glioblastoma (UPenn-GBM) cohort: advanced MRI, clinical, genomics, & radiomics. Scientific Data. 2022;9:453."
         doi: 10.1038/s41597-022-01560-7
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  brainchomp:
+    packages:
+      - { name: Brainchomp (brainchomp-lib), url: https://github.com/neuroneural/brainchomp, role: rodent skull stripping on WebGPU, WebGL2 and threaded CPU WASM }
+      - { name: dcm2niix, url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Rodent brain extraction
+        title: Brainchomp
+        reference: "NeuroNeural Contributors. Brainchomp: browser-based rodent brain extraction with WebGPU and WebGL2 [Computer software]."
+        url: https://brainchomp.org/
+        code: https://github.com/neuroneural/brainchomp
+      - group: Rodent brain extraction
+        title: Brainchop
+        reference: "Masoud M, Hu F, Plis S. Brainchop: in-browser MRI volumetric segmentation and rendering. JOSS. 2023;8(83):5098."
+        doi: 10.21105/joss.05098
+      - group: Conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+        code: https://github.com/rordenlab/dcm2niix
       - group: Visualization
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."

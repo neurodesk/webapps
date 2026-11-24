@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 2,
+  "app": "brainchomp",
+  "title": "Brainchomp",
+  "description": "Extract a rodent brain image and binary mask from mouse or rat MRI.",
+  "defaultOperation": "extract",
+  "operations": {
+    "extract": {
+      "title": "Extract rodent brain",
+      "description": "Extract a skull-stripped rodent brain image and binary brain mask on the input voxel grid.",
+      "mode": "batch",
+      "inputs": {
+        "image": {
+          "type": "neuro:volume",
+          "formats": [
+            "nifti",
+            "dicom"
+          ],
+          "space": "native",
+          "description": "One 3D rodent MRI volume with real voxel sizes.",
+          "source": "files",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "backend": {
+          "type": "string",
+          "description": "Execution backend (auto selects hardware WebGPU, hardware WebGL2, or threaded CPU).",
+          "enum": [
+            "auto",
+            "cpu"
+          ],
+          "default": "auto"
+        },
+        "opening": {
+          "type": "integer",
+          "description": "Morphological opening radius in 0.1 mm voxels to detach skull or muscle bridges (0 disables).",
+          "minimum": 0,
+          "maximum": 10,
+          "default": 4
+        }
+      },
+      "artifacts": {
+        "brain": {
+          "type": "neuro:volume",
+          "mediaType": "application/x-nifti",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "mask": {
+          "type": "neuro:mask",
+          "mediaType": "application/x-nifti",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

@@ -13,7 +13,7 @@ import { catalogApps, findCatalog, loadAppsRegistry, repoRoot } from '../lib/app
 export const hardwareWorkflowApps = new Set([
   'vesselboost', 'spinalcordtoolbox', 'calmar', 'seedseg', 'deface',
   'browserqc', 'synthsr', 'synthseg', 'syncro', 'dwi2trx', 'edgereg',
-  'greedy', 'ants', 'brain2print', 'topofit', 'fireants', 'brainchop',
+  'greedy', 'ants', 'brain2print', 'topofit', 'fireants',
 ]);
 // Apps whose browser tests need a hardware GPU but whose offline workflow
 // completed on every hosted runner without one (MindGrab on its CPU module,

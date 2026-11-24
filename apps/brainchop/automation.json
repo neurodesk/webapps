@@ -2,21 +2,23 @@
   "schemaVersion": 2,
   "app": "brainchop",
   "title": "Brainchop",
-  "description": "Whole brain T1 MRI segmentation with Brainchop.",
+  "description": "Whole-brain T1 MRI segmentation and tissue fraction maps with Brainchop.",
   "defaultOperation": "segment",
   "operations": {
     "segment": {
       "title": "Run segmentation",
-      "description": "Whole brain T1 MRI segmentation with Brainchop.",
+      "description": "Segment brain tissues, subcortical structures, or the 104-region Desikan-Killiany atlas.",
       "mode": "batch",
       "inputs": {
         "image": {
           "source": "files",
           "type": "neuro:volume",
           "formats": [
-            "nifti"
+            "nifti",
+            "dicom"
           ],
-          "description": "One NIfTI image.",
+          "space": "native",
+          "description": "One 3D T1-weighted brain MRI image.",
           "minimum": 1,
           "maximum": 1
         }
@@ -24,22 +26,102 @@
       "parameters": {
         "model": {
           "type": "string",
-          "default": "tissue-light",
+          "default": "mindmap",
           "enum": [
-            "tissue-light",
-            "tissue",
-            "subcortical",
-            "subcortical-small",
-            "aparc50",
-            "aparc104"
+            "mindmap",
+            "mindmap-fast",
+            "mindsnap"
           ],
-          "description": "Brainchop tissue or atlas network"
+          "description": "Brainchop segmentation network: mindmap (18-class MindMap-24), mindmap-fast (18-class MindMap-16), or mindsnap (104-class Desikan-Killiany MindSnap-104)."
+        },
+        "backend": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "cpu"
+          ],
+          "description": "Execution backend (auto selects hardware WebGPU, hardware WebGL2, or threaded CPU)."
+        },
+        "saveConform": {
+          "type": "boolean",
+          "default": false,
+          "description": "Return outputs on the conformed 256^3 1 mm grid instead of reslicing back to the input grid."
         }
       },
       "artifacts": {
         "segmentation": {
           "type": "neuro:label-map",
-          "mediaType": "application/octet-stream",
+          "mediaType": "application/x-nifti",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    },
+    "tissue-fractions": {
+      "title": "Compute tissue fraction maps",
+      "description": "Estimate continuous GM, WM, CSF, and brain partial-volume fraction maps with MindMap-24.",
+      "mode": "batch",
+      "inputs": {
+        "image": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti",
+            "dicom"
+          ],
+          "space": "native",
+          "description": "One 3D T1-weighted brain MRI image.",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "backend": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "cpu"
+          ],
+          "description": "Execution backend (auto selects hardware WebGPU, hardware WebGL2, or threaded CPU)."
+        },
+        "saveConform": {
+          "type": "boolean",
+          "default": false,
+          "description": "Return outputs on the conformed 256^3 1 mm grid instead of reslicing back to the input grid."
+        }
+      },
+      "artifacts": {
+        "gm": {
+          "type": "neuro:volume",
+          "mediaType": "application/x-nifti",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "wm": {
+          "type": "neuro:volume",
+          "mediaType": "application/x-nifti",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "csf": {
+          "type": "neuro:volume",
+          "mediaType": "application/x-nifti",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "brain": {
+          "type": "neuro:volume",
+          "mediaType": "application/x-nifti",
+          "space": "input",
           "minimum": 1,
           "maximum": 1
         }

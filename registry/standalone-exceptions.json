@@ -10,7 +10,7 @@
   "me-ica": "its meica CLI is released from niivue/meica-rs; no release is tagged yet",
   "ants-denoise": "ANTs ships DenoiseImage as its own command line: the Standalone dialog lists the Neurodesk ANTs container, whose DenoiseImage gives the app's voxels with one thread and the same options",
   "brainqcnet": "the authors publish BrainQCNet as a BIDS app container: the Standalone dialog lists garciaml/brainqcnetcpu 1.0.1, whose tables the app reproduces byte for byte (packages/brainqcnet/validation)",
-  "brainchop": "Browser TensorFlow.js inference with WebGL; no command-line package.",
+  "brainchop": "upstream neuroneural/brainchop-core publishes its own native and Python command line (pip install brainchop); no separate Neurodesk command line is packaged",
   "stardist": "Python StarDist (pip install stardist) is the command-line reference the app reproduces label for label on the example; no separate command line is packaged",
   "calcium-imaging": "no command-line package yet: v1 runs its pipeline (src/core) in browser workers only; CaImAn and Suite2p are the established command-line tools for batch work",
   "spot-detection": "the detector is a JavaScript port of Big-FISH, whose Python package (pip install big-fish) is the batch tool: on the example it gives the app's spot set and threshold; a packaged command line for the port is not done yet",
@@ -25,5 +25,6 @@
   "omezarr-convert": "no command line is packaged yet: @neurodesk/omezarr-convert runs in Node (validation/check-example.mjs), and bioformats2raw is the established native converter for batch work",
   "histo2mri": "no command-line package yet: v1 runs its pipeline (src/core) in a browser worker only; its Greedy affine and warp downloads run in the Greedy command line (greedy-rs) for batch reslicing",
   "deconvolution": "no command line yet: the Rust core in exes/deconvolution and the committed WebAssembly module in packages/deconvolution are ready to package through exes/node-cli in a later release",
-  "tumour-report": "the pinned dbouget/raidionics-rads:v1.3.2-py39-cpu container is the upstream command-line reference, and packages/tumour-report/validation holds voxel-exact native mask parity to it; a packaged Node CLI can follow via exes/node-cli"
+  "tumour-report": "the pinned dbouget/raidionics-rads:v1.3.2-py39-cpu container is the upstream command-line reference, and packages/tumour-report/validation holds voxel-exact native mask parity to it; a packaged Node CLI can follow via exes/node-cli",
+  "brainchomp": "browser-only v1 using vendored brainchomp-lib WebGPU/WebGL2/CPU WASM modules; no separate command-line package is released yet"
 }
