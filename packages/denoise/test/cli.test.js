@@ -642,6 +642,30 @@ test("interrupted recovery preserves already-restored originals across repeated 
     assert.deepEqual((await readdir(outDir)).sort(), ["sample_denoised.tif", "sample_provenance.json"]);
     assert.deepEqual(await readFile(join(outDir, "sample_denoised.tif")), oldTiff);
     assert.equal(await readFile(join(outDir, "sample_provenance.json"), "utf8"), oldProv);
+
+    // Simulate a SIGKILL midway through deleting `.denoise-trash-*` (where the staged TIFF was
+    // already unlinked while `_manifest.json` still exists inside `.denoise-trash-*`): retry
+    // must simply remove `.denoise-trash-*` without deleting the restored originals.
+    const trashDir = join(outDir, `.denoise-trash-${deadPid}-cafe0001`);
+    await mkdir(trashDir, { recursive: true });
+    await writeFile(
+      join(trashDir, "_manifest.json"),
+      `${JSON.stringify({ pid: deadPid, host: hostname(), stagedFiles: ["sample_denoised.tif", "sample_provenance.json"], overwrite: true })}\n`,
+      "utf8",
+    );
+    await writeFile(join(trashDir, "sample_provenance.json"), '{"methodId":"stale"}\n', "utf8");
+
+    await assert.rejects(
+      () => denoiseFile({
+        input: inputPath,
+        outputDir: outDir,
+        options: { method: "fgr-ridge", "max-scale": "4" },
+      }),
+      /not empty/i,
+    );
+    assert.deepEqual((await readdir(outDir)).sort(), ["sample_denoised.tif", "sample_provenance.json"]);
+    assert.deepEqual(await readFile(join(outDir, "sample_denoised.tif")), oldTiff);
+    assert.equal(await readFile(join(outDir, "sample_provenance.json"), "utf8"), oldProv);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

@@ -28,6 +28,7 @@ const CLI_METADATA_BYTES = 2 ** 25;
 const LOCK_NAME = ".denoise-run.lock";
 const LOCK_TMP_PREFIX = ".denoise-lock-tmp-";
 const STAGE_PREFIX = ".denoise-stage-";
+const TRASH_PREFIX = ".denoise-trash-";
 const PRESERVED_BACKUP_PREFIX = ".denoise-preserved-backup-";
 const OWNER_FILE_RE = /^owner-([0-9a-f]+)\.json$/;
 
@@ -326,6 +327,34 @@ async function tryClearStaleLock(lockPath, { onLockInspect } = {}) {
 }
 
 /**
+ * Atomically moves a completed or fully recovered staging directory out of the `.denoise-stage-*`
+ * recovery namespace into `.denoise-trash-*` before recursively deleting it. A `SIGKILL` midway
+ * through recursive deletion (e.g. after unlinking a staged output file or `_committed`, before
+ * unlinking `_manifest.json`) can then never cause the next run to misclassify already-restored
+ * or already-committed files in `resolvedDir` as partial outputs.
+ *
+ * Must be called only while holding the exclusive directory lock on `resolvedDir`.
+ */
+async function discardStageDir(resolvedDir, stagePath) {
+  const trashPath = join(resolvedDir, `${TRASH_PREFIX}${process.pid}-${randomBytes(4).toString("hex")}`);
+  try {
+    await rename(stagePath, trashPath);
+  } catch (error) {
+    if (error.code === "ENOENT") return;
+    // Fallback if rename fails: disarm `_manifest.json` first so recovery can never delete files
+    // in `resolvedDir`; if disarming also fails, leave `stagePath` intact rather than half-deleting.
+    try {
+      await unlink(join(stagePath, "_manifest.json"));
+    } catch (unlinkErr) {
+      if (unlinkErr.code !== "ENOENT") return;
+    }
+    await rm(stagePath, { recursive: true, force: true }).catch(() => {});
+    return;
+  }
+  await rm(trashPath, { recursive: true, force: true }).catch(() => {});
+}
+
+/**
  * Recovers any interrupted staging directories left by crashed local runs (or blocks if a prior
  * failed rollback preserved backups in `_backup` that require manual resolution). Must be called
  * only while holding the exclusive directory lock on `resolvedDir`.
@@ -333,6 +362,11 @@ async function tryClearStaleLock(lockPath, { onLockInspect } = {}) {
 async function recoverInterruptedStages(resolvedDir, outputDir) {
   const entries = await readdir(resolvedDir);
   for (const entry of entries) {
+    if (entry.startsWith(TRASH_PREFIX)) {
+      await rm(join(resolvedDir, entry), { recursive: true, force: true }).catch(() => {});
+      continue;
+    }
+
     if (entry.startsWith(LOCK_TMP_PREFIX)) {
       const tmpPath = join(resolvedDir, entry);
       let info;
@@ -401,7 +435,7 @@ async function recoverInterruptedStages(resolvedDir, outputDir) {
       const parsedPid = pidMatch ? Number(pidMatch[1]) : NaN;
       const stageContents = await readdir(stagePath);
       if (isLocalProcessDead(parsedPid) && stageContents.length === 0) {
-        await rm(stagePath, { recursive: true, force: true }).catch(() => {});
+        await discardStageDir(resolvedDir, stagePath);
         continue;
       }
       if (await pathExists(backupDir)) {
@@ -420,7 +454,7 @@ async function recoverInterruptedStages(resolvedDir, outputDir) {
     // If the interrupted run already finished publishing all outputs before dying during cleanup,
     // the outputs in `resolvedDir` are complete and `_backup` is obsolete.
     if (await pathExists(join(stagePath, "_committed"))) {
-      await rm(stagePath, { recursive: true, force: true }).catch(() => {});
+      await discardStageDir(resolvedDir, stagePath);
       continue;
     }
 
@@ -434,7 +468,7 @@ async function recoverInterruptedStages(resolvedDir, outputDir) {
 
     if (!manifest && backupFiles.length === 0) {
       // Crashed before publish touched any destination file.
-      await rm(stagePath, { recursive: true, force: true }).catch(() => {});
+      await discardStageDir(resolvedDir, stagePath);
       continue;
     }
 
@@ -499,7 +533,7 @@ async function recoverInterruptedStages(resolvedDir, outputDir) {
       );
     }
 
-    await rm(stagePath, { recursive: true, force: true }).catch(() => {});
+    await discardStageDir(resolvedDir, stagePath);
   }
 }
 
@@ -895,7 +929,7 @@ export async function denoiseFile({
     throw error;
   } finally {
     if (!preserveStageDir) {
-      await rm(stageDir, { recursive: true, force: true }).catch(() => {});
+      await discardStageDir(reservation.dir, stageDir);
     }
     await reservation.release({ removeIfEmpty: !published && !preserveStageDir });
   }
