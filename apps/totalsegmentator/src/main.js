@@ -14,10 +14,11 @@ import {
   ProgressManager,
 } from "@neurodesk/webapp-components/ui";
 import { createElement } from "@neurodesk/webapp-components/core";
-import { downloadFile } from "@neurodesk/webapp-components/file-io";
+import { decodeNiftiBuffer, downloadFile, parseNiftiHeader } from "@neurodesk/webapp-components/file-io";
 import { registerAppAutomation, runAbortable } from "@neurodesk/webapp-components/automation";
 import { readImageFiles, runDcm2niix } from "@neurodesk/runtime-support/dcm2niix-client";
 import { readVolume } from "@neurodesk/synthsr";
+import { MAX_INPUT_VOXELS } from "@neurodesk/totalsegmentator";
 import { colormapForTask } from "@neurodesk/totalsegmentator/labels";
 import { resolveTaskPlan, taskById } from "@neurodesk/totalsegmentator/models";
 import { segmentationResults } from "@neurodesk/totalsegmentator/results";
@@ -283,7 +284,7 @@ async function ensureViewer() {
       onApply: async (_stage, editedFile) => {
         const session = editing;
         const targetResult = lastResult;
-        const edited = readVolume(await editedFile.arrayBuffer());
+        const edited = readVolume(await editedFile.arrayBuffer(), { maxVoxels: MAX_INPUT_VOXELS });
         if (editing !== session || !targetResult || lastResult !== targetResult) return;
         const labels = Uint8Array.from(edited.data, (v) => Math.max(0, Math.min(255, Math.round(v))));
         const modality = taskById(targetResult.task).modality;
@@ -386,6 +387,29 @@ async function gzipFile(bytes, name, type) {
   return new File([compressed], name, { type });
 }
 
+const SPATIAL_UNIT_MM = { 1: 1000, 2: 1, 3: 0.001 };
+
+async function readNiftiGeometry(file) {
+  const raw = await file.arrayBuffer();
+  const headerBytes = await decodeNiftiBuffer(raw, { maxBytes: 352 });
+  const header = parseNiftiHeader(headerBytes);
+  const ndim = header.dims[0];
+  if (header.dims.slice(4, ndim + 1).some((d) => d > 1)) {
+    throw new Error("This operation needs a single 3D image. Extract a volume from this 4D image first.");
+  }
+  const dims = header.dims.slice(1, 4);
+  if (dims.some((d) => !Number.isInteger(d) || d < 2) || dims[0] * dims[1] * dims[2] > MAX_INPUT_VOXELS) {
+    throw new Error("Unsupported image dimensions.");
+  }
+  const scale = SPATIAL_UNIT_MM[header.xyztUnits & 7] || 1;
+  const affine = header.affine.map((row, r) => Array.from(row, (v) => (r < 3 ? v * scale : v)));
+  if (affine.flat().some((v) => !Number.isFinite(v))) throw new Error("Invalid NIfTI affine.");
+  const [[a, b, c], [d, e, f], [g, h, i]] = affine;
+  const det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+  if (Math.abs(det) < 1e-12) throw new Error("The image affine is singular.");
+  return { dims, affine };
+}
+
 function describeVolume(file, volume) {
   const spacing = [0, 1, 2].map((a) => Math.hypot(volume.affine[0][a], volume.affine[1][a], volume.affine[2][a]).toFixed(2));
   return `${file.name} · ${volume.dims.join(" × ")} · ${spacing.join(" × ")} mm`;
@@ -398,7 +422,7 @@ async function selectSeries(index) {
   const current = begin("loading", `Reading ${picked.label}…`);
   const activeSignal = current.controller.signal;
   try {
-    const vol = readVolume(await picked.file.arrayBuffer());
+    const vol = await readNiftiGeometry(picked.file);
     activeSignal.throwIfAborted();
     if (job !== current) return;
 
@@ -412,7 +436,7 @@ async function selectSeries(index) {
     end(current, `Ready · ${picked.file.name}`);
     await show();
   } catch (error) {
-    if (previousIndex >= 0) $("seriesSelect").value = String(previousIndex);
+    if (job === current && previousIndex >= 0) $("seriesSelect").value = String(previousIndex);
     const cancelled = error?.name === "AbortError" || activeSignal.aborted;
     end(current, cancelled ? "Cancelled" : (error.message || "Could not load series"), { success: false, error: !cancelled });
   }
@@ -435,7 +459,7 @@ async function loadInputFiles(fileList, { signal, assertCurrent = () => {}, onCo
 
     if (!images?.length) throw new Error("No readable 3D NIfTI or DICOM volume found.");
     const list = images.map((file) => ({ file, label: file.name }));
-    const firstVol = readVolume(await list[0].file.arrayBuffer());
+    const firstVol = await readNiftiGeometry(list[0].file);
     assertCurrent();
     activeSignal.throwIfAborted();
     if (job !== current) return false;
@@ -652,19 +676,17 @@ registerAppAutomation({
 
       let ownedJob = null;
       const cancelOwned = () => cancelSpecificJob(ownedJob);
-      if (inputs?.image?.length) {
-        await runAbortable(
-          signal,
-          () => loadInputFiles(inputs.image, { signal, onJob: (j) => { ownedJob = j; } }),
-          cancelOwned,
-        );
-      }
+      await runAbortable(
+        signal,
+        () => loadInputFiles(inputs.image, { signal, onJob: (j) => { ownedJob = j; } }),
+        cancelOwned,
+      );
       signal.throwIfAborted();
       const resolvedParams = {
         task: plan.task.id,
         resolution: plan.resolution,
         subset: plan.subset,
-        ...(parameters?.backend ? { backend: parameters.backend } : {}),
+        backend: parameters?.backend ?? "auto",
       };
       applyParameters(resolvedParams);
       return runAbortable(

@@ -10,7 +10,7 @@ import { CT_PART_LUTS, MR_PART_LUTS } from './labels.js';
 export const STEP = 0.5;
 export const MAX_INPUT_VOXELS = 512 * 1024 * 1024;
 export const MAX_RESAMPLED_VOXELS = 128 * 1024 * 1024;
-export const MAX_ACCUM_ELEMENTS = 360_000_000;
+export const MAX_ACCUM_ELEMENTS = 512_000_000;
 
 const product = (shape) => shape[0] * shape[1] * shape[2];
 
@@ -132,8 +132,8 @@ function jacobiEigen3x3(sym) {
 }
 
 // Finds the signed permutation aligning affine columns closest to canonical +R, +A, +S.
-// Exact port of nibabel.orientations.io_orientation: polar decomposition via SVD followed by
-// greedy axis assignment ordered from strongest to weakest column alignment (stable on ties).
+// Exact port of nibabel.orientations.io_orientation (NiBabel >= 5.4): polar decomposition via SVD
+// followed by greedy axis assignment ordered strongest to weakest (stable on ties).
 export function canonicalOrientation(affine) {
   const zooms = voxelSpacing(affine).map((s) => (s === 0 ? 1 : s));
   const RS = [0, 1, 2].map((row) => [0, 1, 2].map((col) => affine[row][col] / zooms[col]));
@@ -168,13 +168,12 @@ export function canonicalOrientation(affine) {
     }
   }
 
-  // Process input axes from strongest to weakest (stable on ties), matching nibabel.
+  // Process input axes from strongest to weakest (stable on ties), matching NiBabel >= 5.4.
   const colKey = [0, 1, 2].map((c) => Math.min(-(R[0][c] ** 2), -(R[1][c] ** 2), -(R[2][c] ** 2)));
   const inAxes = [0, 1, 2].sort((a, b) => (colKey[a] !== colKey[b] ? colKey[a] - colKey[b] : a - b));
 
   const invPerm = [0, 1, 2];
   const flip = [false, false, false];
-  const assigned = [false, false, false];
   for (const inAx of inAxes) {
     let outAx = 0;
     let bestAbs = -1;
@@ -188,7 +187,6 @@ export function canonicalOrientation(affine) {
     if (bestAbs > 1e-8) {
       invPerm[outAx] = inAx;
       flip[outAx] = R[outAx][inAx] < 0;
-      assigned[outAx] = true;
       R[outAx][0] = 0;
       R[outAx][1] = 0;
       R[outAx][2] = 0;
@@ -558,30 +556,64 @@ export function checkLogits(logits) {
   if (!varies) throw new Error('The network returned the same score for every voxel.');
 }
 
+// Chooses the ring-buffer slab axis (0=Z, 1=Y, 2=X) that minimizes peak accumulator size.
+export function bestSlabPlan(shape, patch, numClasses) {
+  let best = null;
+  for (let slabAxis = 0; slabAxis < 3; slabAxis++) {
+    const ax1 = slabAxis === 0 ? 1 : 0;
+    const ax2 = slabAxis === 2 ? 1 : 2;
+    const slabDepth = Math.min(patch[slabAxis], shape[slabAxis]);
+    const len1 = shape[ax1];
+    const len2 = shape[ax2];
+    const planeVoxels = len1 * len2;
+    const slabVoxels = slabDepth * planeVoxels;
+    const totalElems = numClasses * slabVoxels;
+    if (!best || slabVoxels < best.slabVoxels) {
+      best = { slabAxis, ax1, ax2, slabDepth, len1, len2, planeVoxels, slabVoxels, totalElems };
+    }
+  }
+  return best;
+}
+
+const FULL_RES_WITH_FAST_MODELS = new Set([
+  'total-ct-organs',
+  'total-ct-vertebrae',
+  'total-ct-cardiac',
+  'total-ct-muscles',
+  'total-ct-ribs',
+  'total-mr-organs',
+  'total-mr-muscles',
+]);
+
+function memoryLimitHint(model) {
+  if (model?.id && FULL_RES_WITH_FAST_MODELS.has(model.id)) {
+    return 'Use Fast (3 mm) mode, crop the scan, or run TotalSegmentator via the Standalone Neurodesk container.';
+  }
+  return 'Crop the scan to a smaller field of view or run TotalSegmentator via the Standalone Neurodesk container.';
+}
+
 // Runs one nnU-Net model over a normalized C-order [D, H, W] volume and returns Uint8Array argmax labels.
-// Uses a Z-slab ring buffer of depth min(patch[0], shape[0]) over unpadded voxels so peak memory
-// stays bounded regardless of scan length along Z.
+// Uses a ring-buffer slab along the axis that minimizes peak accumulator memory across Z, Y, and X.
 export async function predictSingleModel({ image, shape, model, runPatch, onPatch = () => {}, signal, useHalf = null }) {
   const patch = model.patch;
   const numClasses = model.num_classes;
   const [sz, sy, sx] = shape;
   const padded = padCentered(image, shape, patch);
   const [bz, by, bx] = padded.before;
-  const slabDepth = Math.min(patch[0], sz);
-  const sliceVoxels = sy * sx;
-  const slabVoxels = slabDepth * sliceVoxels;
-  const totalElems = numClasses * slabVoxels;
+  const { slabAxis, ax1, ax2, slabDepth, len1, len2, planeVoxels, slabVoxels, totalElems } = bestSlabPlan(shape, patch, numClasses);
   if (totalElems > MAX_ACCUM_ELEMENTS) {
     throw new Error(
-      `The resampled slab (${slabDepth} × ${sy} × ${sx} × ${numClasses} classes) exceeds browser memory limits. `
-      + 'Use the Fast (3 mm) mode or crop the scan first.',
+      `The resampled slab (${slabDepth} × ${len1} × ${len2} × ${numClasses} classes) exceeds browser memory limits. `
+      + memoryLimitHint(model),
     );
   }
 
-  const zOrigins = windowStarts(padded.shape[0], patch[0]);
-  const yOrigins = windowStarts(padded.shape[1], patch[1]);
-  const xOrigins = windowStarts(padded.shape[2], patch[2]);
-  const totalWindows = zOrigins.length * yOrigins.length * xOrigins.length;
+  const origins = [
+    windowStarts(padded.shape[0], patch[0]),
+    windowStarts(padded.shape[1], patch[1]),
+    windowStarts(padded.shape[2], patch[2]),
+  ];
+  const totalWindows = origins[0].length * origins[1].length * origins[2].length;
   const weights = gaussianWeights(patch);
   const patchVoxels = product(patch);
   const tile = new Float32Array(patchVoxels);
@@ -592,41 +624,55 @@ export async function predictSingleModel({ image, shape, model, runPatch, onPatc
     for (let i = 0; i < weights.length; i++) if (weights[i] < 1e-3) weights[i] = 1e-3;
   }
   const sum = halfBacked ? new Uint16Array(totalElems) : new Float32Array(totalElems);
-  const labels = new Uint8Array(sz * sliceVoxels);
+  const labels = new Uint8Array(sz * sy * sx);
 
-  let flushedZ = 0;
-  const flushUpTo = (limitZ) => {
-    const endZ = Math.min(limitZ, sz);
-    for (let z = flushedZ; z < endZ; z++) {
-      const slotOffset = (z % slabDepth) * sliceVoxels;
-      const outBase = z * sliceVoxels;
-      for (let i = 0; i < sliceVoxels; i++) {
-        const pos = slotOffset + i;
-        let bestClass = 0;
-        let bestVal = halfBacked ? F16_TO_F32[sum[pos]] : sum[pos];
-        for (let c = 1; c < numClasses; c++) {
-          const v = halfBacked ? F16_TO_F32[sum[c * slabVoxels + pos]] : sum[c * slabVoxels + pos];
-          if (v > bestVal) {
-            bestVal = v;
-            bestClass = c;
+  let flushed = 0;
+  const flushUpTo = (limit) => {
+    const end = Math.min(limit, shape[slabAxis]);
+    for (let s = flushed; s < end; s++) {
+      const slotOffset = (s % slabDepth) * planeVoxels;
+      for (let i1 = 0; i1 < len1; i1++) {
+        const rowPos = slotOffset + i1 * len2;
+        for (let i2 = 0; i2 < len2; i2++) {
+          const pos = rowPos + i2;
+          let bestClass = 0;
+          let bestVal = halfBacked ? F16_TO_F32[sum[pos]] : sum[pos];
+          for (let c = 1; c < numClasses; c++) {
+            const v = halfBacked ? F16_TO_F32[sum[c * slabVoxels + pos]] : sum[c * slabVoxels + pos];
+            if (v > bestVal) {
+              bestVal = v;
+              bestClass = c;
+            }
           }
+          const outIdx = slabAxis === 0
+            ? (s * sy + i1) * sx + i2
+            : slabAxis === 1
+              ? (i1 * sy + s) * sx + i2
+              : (i1 * sy + i2) * sx + s;
+          labels[outIdx] = bestClass;
         }
-        labels[outBase + i] = bestClass;
       }
       for (let c = 0; c < numClasses; c++) {
         const start = c * slabVoxels + slotOffset;
-        sum.fill(0, start, start + sliceVoxels);
+        sum.fill(0, start, start + planeVoxels);
       }
     }
-    flushedZ = endZ;
+    flushed = end;
   };
 
   let completed = 0;
-  for (const z0 of zOrigins) {
-    if (z0 > bz) flushUpTo(z0 - bz);
-    for (const y0 of yOrigins) {
-      for (const x0 of xOrigins) {
+  const before = padded.before;
+  for (const o0 of origins[slabAxis]) {
+    if (o0 > before[slabAxis]) flushUpTo(o0 - before[slabAxis]);
+    for (const o1 of origins[ax1]) {
+      for (const o2 of origins[ax2]) {
         signal?.throwIfAborted();
+        const orig = [0, 0, 0];
+        orig[slabAxis] = o0;
+        orig[ax1] = o1;
+        orig[ax2] = o2;
+        const [z0, y0, x0] = orig;
+
         let t = 0;
         for (let z = 0; z < patch[0]; z++) {
           for (let y = 0; y < patch[1]; y++) {
@@ -649,22 +695,68 @@ export async function predictSingleModel({ image, shape, model, runPatch, onPatc
         for (let c = 0; c < numClasses; c++) {
           const classDstBase = c * slabVoxels;
           const classSrcBase = c * patchVoxels;
-          for (let pz = pzStart; pz < pzEnd; pz++) {
-            const slotOffset = ((z0 + pz - bz) % slabDepth) * sliceVoxels;
-            const srcZ = pz * patch[1];
-            for (let py = pyStart; py < pyEnd; py++) {
-              const dstRow = classDstBase + slotOffset + (y0 + py - by) * sx + (x0 - bx);
-              const srcRow = (srcZ + py) * patch[2];
-              if (halfBacked) {
-                for (let px = pxStart; px < pxEnd; px++) {
-                  const p = srcRow + px;
-                  const dst = dstRow + px;
-                  sum[dst] = f32ToF16(F16_TO_F32[sum[dst]] + logits[classSrcBase + p] * weights[p]);
+          if (slabAxis === 0) {
+            for (let pz = pzStart; pz < pzEnd; pz++) {
+              const slotOffset = ((z0 + pz - bz) % slabDepth) * planeVoxels;
+              const srcZ = pz * patch[1];
+              for (let py = pyStart; py < pyEnd; py++) {
+                const dstRow = classDstBase + slotOffset + (y0 + py - by) * sx + (x0 - bx);
+                const srcRow = (srcZ + py) * patch[2];
+                if (halfBacked) {
+                  for (let px = pxStart; px < pxEnd; px++) {
+                    const p = srcRow + px;
+                    const dst = dstRow + px;
+                    sum[dst] = f32ToF16(F16_TO_F32[sum[dst]] + logits[classSrcBase + p] * weights[p]);
+                  }
+                } else {
+                  for (let px = pxStart; px < pxEnd; px++) {
+                    const p = srcRow + px;
+                    sum[dstRow + px] += logits[classSrcBase + p] * weights[p];
+                  }
                 }
-              } else {
-                for (let px = pxStart; px < pxEnd; px++) {
-                  const p = srcRow + px;
-                  sum[dstRow + px] += logits[classSrcBase + p] * weights[p];
+              }
+            }
+          } else if (slabAxis === 1) {
+            for (let pz = pzStart; pz < pzEnd; pz++) {
+              const uzOffset = (z0 + pz - bz) * sx + (x0 - bx);
+              const srcZ = pz * patch[1];
+              for (let py = pyStart; py < pyEnd; py++) {
+                const slotOffset = ((y0 + py - by) % slabDepth) * planeVoxels;
+                const dstRow = classDstBase + slotOffset + uzOffset;
+                const srcRow = (srcZ + py) * patch[2];
+                if (halfBacked) {
+                  for (let px = pxStart; px < pxEnd; px++) {
+                    const p = srcRow + px;
+                    const dst = dstRow + px;
+                    sum[dst] = f32ToF16(F16_TO_F32[sum[dst]] + logits[classSrcBase + p] * weights[p]);
+                  }
+                } else {
+                  for (let px = pxStart; px < pxEnd; px++) {
+                    const p = srcRow + px;
+                    sum[dstRow + px] += logits[classSrcBase + p] * weights[p];
+                  }
+                }
+              }
+            }
+          } else {
+            for (let pz = pzStart; pz < pzEnd; pz++) {
+              const uzBase = classDstBase + (z0 + pz - bz) * sy;
+              const srcZ = pz * patch[1];
+              for (let py = pyStart; py < pyEnd; py++) {
+                const dstBase = uzBase + (y0 + py - by);
+                const srcRow = (srcZ + py) * patch[2];
+                if (halfBacked) {
+                  for (let px = pxStart; px < pxEnd; px++) {
+                    const p = srcRow + px;
+                    const dst = dstBase + ((x0 + px - bx) % slabDepth) * planeVoxels;
+                    sum[dst] = f32ToF16(F16_TO_F32[sum[dst]] + logits[classSrcBase + p] * weights[p]);
+                  }
+                } else {
+                  for (let px = pxStart; px < pxEnd; px++) {
+                    const p = srcRow + px;
+                    const dst = dstBase + ((x0 + px - bx) % slabDepth) * planeVoxels;
+                    sum[dst] += logits[classSrcBase + p] * weights[p];
+                  }
                 }
               }
             }
@@ -676,8 +768,8 @@ export async function predictSingleModel({ image, shape, model, runPatch, onPatc
     }
   }
 
-  flushUpTo(sz);
-  return { labels, windows: totalWindows };
+  flushUpTo(shape[slabAxis]);
+  return { labels, windows: totalWindows, slabAxis };
 }
 
 // Predicts one model on a canonical RAS volume: resamples to model.spacing, crops to nonzero,
@@ -754,15 +846,14 @@ export function validatePlanMemory({ dims, affine, models, cropModel = null }) {
     if (voxels > MAX_RESAMPLED_VOXELS) {
       throw new Error(
         `The resampled volume (${target.join(' × ')} for ${label}) exceeds browser memory limits. `
-        + 'Use Fast (3 mm) mode or crop the scan first.',
+        + memoryLimitHint(model),
       );
     }
-    const slabDepth = Math.min(model.patch[0], target[0]);
-    const slabElems = model.num_classes * slabDepth * target[1] * target[2];
-    if (slabElems > MAX_ACCUM_ELEMENTS) {
+    const slab = bestSlabPlan(target, model.patch, model.num_classes);
+    if (slab.totalElems > MAX_ACCUM_ELEMENTS) {
       throw new Error(
-        `The resampled slab (${slabDepth} × ${target[1]} × ${target[2]} × ${model.num_classes} classes) exceeds browser memory limits. `
-        + 'Use Fast (3 mm) mode or crop the scan first.',
+        `The resampled slab (${slab.slabDepth} × ${slab.len1} × ${slab.len2} × ${model.num_classes} classes) exceeds browser memory limits. `
+        + memoryLimitHint(model),
       );
     }
   };

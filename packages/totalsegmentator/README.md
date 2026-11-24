@@ -17,8 +17,14 @@ License-gated commercial TotalSegmentator tasks (`appendicular_bones`, `tissue_t
 
 ## Reference validation
 
-Validated with `node packages/totalsegmentator/validation/validate.mjs` against TotalSegmentator's upstream reference segmentations:
+To reproduce reference validation locally, create a working directory with:
 
-- **CT `total` fast (3 mm)** on `example_ct_sm.nii.gz` vs `example_seg_fast.nii.gz`: **mean Dice = 0.99971**, 68/369,660 differing voxels (0.018%) across 40 detected structures.
-- **MRI `total_mr` full (1.5 mm, 2 parts)** on LPS `example_mr_sm.nii.gz` vs `example_seg_mr.nii.gz`: **99.946% voxel agreement** (115/212,940 differing voxels) across 24 detected structures, verifying canonical RAS reorientation (`asClosestCanonical` / `undoCanonical`), Z-score normalization and multi-part LUT combination.
-- **CT `total` full (1.5 mm, 5 parts)** on `example_ct_sm.nii.gz` vs `example_seg.nii.gz`: **99.411% voxel agreement** (2,178/369,660 differing voxels).
+- `onnx/`: the 12 pinned ONNX files listed in `model.manifest.json` (downloaded from `neurodeskorg/webapps` or exported with `scripts/export_model.py`).
+- `refs/`: `example_ct_sm.nii.gz`, `example_mr_sm.nii.gz`, `example_seg_fast.nii.gz`, `example_seg.nii.gz`, and `example_seg_mr.nii.gz` from `wasserth/TotalSegmentator` `tests/reference_files/`.
+
+Then run `node packages/totalsegmentator/validation/validate.mjs <workDir>` (or set `TOTALSEG_WORK_DIR`):
+
+- **CT `total` fast (3 mm)** on `example_ct_sm.nii.gz` vs `example_seg_fast.nii.gz`: **mean Dice = 0.99976**, 46/369,660 differing voxels (0.012%) across 40 detected structures.
+- **MRI `total_mr` full (1.5 mm, 2 parts)** on LPS `example_mr_sm.nii.gz` vs `example_seg_mr.nii.gz`: **mean Dice = 0.99945**, **99.987% voxel agreement** (27/212,940 differing voxels) across 23 detected structures, verifying canonical RAS reorientation (`asClosestCanonical` / `undoCanonical`), Z-score normalization and multi-part LUT combination.
+- **CT `total` full (1.5 mm, 5 parts)** on `example_ct_sm.nii.gz` vs `example_seg.nii.gz`: **mean Dice = 0.98204**, **99.442% voxel agreement** (2,064/369,660 differing voxels).
+- **MRI `vertebrae_mr`** (3 vertebrae detected) and **CT `abdominal_muscles`** (19 trunk-cropped muscles detected via 6 mm `body` model).

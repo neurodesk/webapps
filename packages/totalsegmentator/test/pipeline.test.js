@@ -258,39 +258,62 @@ describe('cropping, connected components and sliding window', () => {
     assert.equal(compareLabels(out.labels, out.labels, 'total').meanDice, 1);
   });
 
-  it('accumulates accurately across multiple Z-slab ring-buffer windows in both float32 and float16 modes', async () => {
-    const shape = [10, 4, 4]; // sz=10 > patch[0]=4 -> 4 overlapping zOrigins [0, 2, 4, 6]
-    const image = Float32Array.from({ length: 160 }, (_, i) => i);
+  it('accumulates accurately across ring-buffer windows on all three slab axes (Z, Y, X) in float32 and float16', async () => {
+    const cases = [
+      { shape: [10, 4, 4], expectedAxis: 0 },
+      { shape: [4, 10, 4], expectedAxis: 1 },
+      { shape: [4, 4, 10], expectedAxis: 2 },
+    ];
     const model = { patch: [4, 4, 4], num_classes: 3 };
-    for (const useHalf of [false, true]) {
-      const result = await predictSingleModel({
-        image,
-        shape,
-        model,
-        useHalf,
-        runPatch: async (tile) => {
-          const logits = new Float32Array(3 * 64);
-          for (let i = 0; i < 64; i++) {
-            // Peak Gaussian weight is 10, so logit 0.19999 produces weighted score 1.9999,
-            // exercising float16 mantissa carry across slab rollover alongside 3D corner voxels.
-            if (tile[i] < 80) {
-              logits[1 * 64 + i] = 0.19999;
-              logits[2 * 64 + i] = 0.15;
-            } else {
-              logits[1 * 64 + i] = 0.15;
-              logits[2 * 64 + i] = 0.19999;
+    for (const { shape, expectedAxis } of cases) {
+      const n = shape[0] * shape[1] * shape[2];
+      const image = Float32Array.from({ length: n }, (_, i) => i);
+      for (const useHalf of [false, true]) {
+        const result = await predictSingleModel({
+          image,
+          shape,
+          model,
+          useHalf,
+          runPatch: async (tile) => {
+            const logits = new Float32Array(3 * 64);
+            for (let i = 0; i < 64; i++) {
+              // Peak Gaussian weight is 10, so logit 0.19999 produces weighted score 1.9999,
+              // exercising float16 mantissa carry across slab rollover alongside 3D corner voxels.
+              if (tile[i] < 80) {
+                logits[1 * 64 + i] = 0.19999;
+                logits[2 * 64 + i] = 0.15;
+              } else {
+                logits[1 * 64 + i] = 0.15;
+                logits[2 * 64 + i] = 0.19999;
+              }
             }
-          }
-          return logits;
-        },
-      });
-      assert.equal(result.windows, 4);
-      for (let i = 0; i < 80; i++) assert.equal(result.labels[i], 1);
-      for (let i = 80; i < 160; i++) assert.equal(result.labels[i], 2);
+            return logits;
+          },
+        });
+        assert.equal(result.slabAxis, expectedAxis);
+        assert.equal(result.windows, 4);
+        for (let i = 0; i < 80; i++) assert.equal(result.labels[i], 1);
+        for (let i = 80; i < 160; i++) assert.equal(result.labels[i], 2);
+      }
     }
   });
 
-  it('rejects extreme resampled memory before allocating or loading models', async () => {
+  it('accepts clinical 500 mm CTs and adult trunks, and gives task-aware hints on extreme volumes', async () => {
+    const ct500Affine = [
+      [0.977, 0, 0, 0],
+      [0, 0.977, 0, 0],
+      [0, 0, 1.0, 0],
+      [0, 0, 0, 1],
+    ];
+    // 512x512x600 thin-slice 500 mm FOV clinical CT passes both Fast (3 mm) and Full (1.5 mm) plans.
+    validatePlanMemory({ dims: [512, 512, 600], affine: ct500Affine, ...resolveTaskPlan({ task: 'total', resolution: 'fast' }) });
+    validatePlanMemory({ dims: [512, 512, 600], affine: ct500Affine, ...resolveTaskPlan({ task: 'total', resolution: 'full', subset: 'all' }) });
+    // Typical and large cropped adult trunks pass abdominal_muscles via X-slab ring buffering.
+    const trunkAffine = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
+    const abdModels = resolveTaskPlan({ task: 'abdominal_muscles' }).models;
+    validatePlanMemory({ dims: [280, 200, 250], affine: trunkAffine, models: abdModels });
+    validatePlanMemory({ dims: [400, 300, 350], affine: trunkAffine, models: abdModels });
+
     const hugeSpacingAffine = [
       [1e5, 0, 0, 0],
       [0, 1e5, 0, 0],
@@ -305,9 +328,18 @@ describe('cropping, connected components and sliding window', () => {
         models: [resolveTaskPlan({ task: 'total', resolution: 'fast' }).models[0]],
         runModel: async () => { loaded = true; },
       }),
-      /exceeds browser memory limits/i,
+      (err) => /exceeds browser memory limits/i.test(err.message) && !/Fast \(3 mm\)/.test(err.message),
     );
     assert.equal(loaded, false);
+    // Full-resolution total suggests Fast (3 mm); abdominal_muscles does not.
+    assert.throws(
+      () => validatePlanMemory({ dims: [2, 2, 2], affine: hugeSpacingAffine, models: [resolveTaskPlan({ task: 'total', resolution: 'full', subset: 'ribs' }).models[0]] }),
+      /Use Fast \(3 mm\) mode/,
+    );
+    assert.throws(
+      () => validatePlanMemory({ dims: [2, 2, 2], affine: hugeSpacingAffine, models: abdModels }),
+      (err) => /Standalone Neurodesk container/.test(err.message) && !/Fast \(3 mm\)/.test(err.message),
+    );
     assert.throws(() => validatePlanMemory({
       dims: [2, 2, 2],
       affine: [[0, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]],

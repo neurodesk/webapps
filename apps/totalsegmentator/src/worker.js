@@ -90,7 +90,12 @@ self.onmessage = async ({ data: job }) => {
   try {
     const plan = resolveTaskPlan({ task: job.task, resolution: job.resolution, subset: job.subset });
     progress(0, "Reading input volume…");
-    const volume = readVolume(await job.file.arrayBuffer(), { maxVoxels: MAX_INPUT_VOXELS });
+    let volume;
+    try {
+      volume = readVolume(await job.file.arrayBuffer(), { maxVoxels: MAX_INPUT_VOXELS });
+    } catch (error) {
+      throw new Error((error?.message || String(error)).replace(/before synthesis\b/i, "before segmentation"));
+    }
     validatePlanMemory({ dims: volume.dims, affine: volume.affine, models: plan.models, cropModel: plan.cropModel });
     log(`Loaded ${job.file.name} (${volume.dims.join(" × ")} voxels)`);
 

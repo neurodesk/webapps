@@ -7,13 +7,17 @@ import ort from 'onnxruntime-node';
 import { readVolume } from '@neurodesk/synthsr';
 import { segmentVolume } from '../src/pipeline.js';
 import { compareLabels, structureStatistics } from '../src/results.js';
+import { MODELS } from '../src/models.js';
 
-const workDir = process.argv[2] || '/storage/home/ubuntu/tmp/totalseg-work';
-const entries = readFileSync(join(workDir, 'manifest-entries.jsonl'), 'utf8')
-  .trim()
-  .split('\n')
-  .map((line) => JSON.parse(line));
-const byId = Object.fromEntries(entries.map((e) => [e.id, e]));
+const workDir = process.argv[2] || process.env.TOTALSEG_WORK_DIR;
+if (!workDir) {
+  console.error('Usage: node packages/totalsegmentator/validation/validate.mjs <workDir>');
+  console.error('Set <workDir> (or TOTALSEG_WORK_DIR) containing:');
+  console.error('  onnx/  - the 12 pinned ONNX files from packages/totalsegmentator/model.manifest.json');
+  console.error('  refs/  - upstream wasserth/TotalSegmentator tests/reference_files/*.nii.gz');
+  process.exit(1);
+}
+const byId = Object.fromEntries(MODELS.map((m) => [m.id, m]));
 
 async function runModel(model, fn) {
   const onnxPath = join(workDir, 'onnx', model.filename);
