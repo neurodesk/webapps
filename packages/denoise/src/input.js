@@ -16,6 +16,7 @@ const METADATA_BYTES = 2 ** 25;
 
 /** Seconds per NIfTI-1 temporal unit code (`xyzt_units & 56`): unspecified/s, ms, us. */
 const NIFTI_TIME_UNIT_SECONDS = Object.freeze({ 0: 1, 8: 1, 16: 1e-3, 24: 1e-6 });
+const NIFTI_NON_TEMPORAL_UNITS = Object.freeze({ 32: "Hz", 40: "ppm", 48: "rad/s" });
 
 export function formatOf(name) {
   if (/\.(ome\.)?tiff?$/i.test(name)) return "tiff";
@@ -144,12 +145,16 @@ export async function readVolume(file, { signal, maxBytes = MAX_INPUT_BYTES, max
   let axisKind = "z";
   let frameInterval = null;
   if (nt > 1) {
+    const timeUnit = view.getUint8(123) & 56;
+    if (!Object.hasOwn(NIFTI_TIME_UNIT_SECONDS, timeUnit)) {
+      const label = NIFTI_NON_TEMPORAL_UNITS[timeUnit] ?? `unit code ${timeUnit}`;
+      throw new Error(`${file.name} uses non-temporal 4th-axis units (${label}); only 2D+T time-series (seconds, ms, µs or unspecified) are supported.`);
+    }
     dims = [nt, ny, nx];
     axisKind = "t";
-    const timeUnit = view.getUint8(123) & 56;
     const scale = NIFTI_TIME_UNIT_SECONDS[timeUnit];
     const dt = view.getFloat32(92, littleEndian);
-    frameInterval = scale && Number.isFinite(dt) && dt > 0 ? dt * scale : null;
+    frameInterval = Number.isFinite(dt) && dt > 0 ? dt * scale : null;
   } else {
     dims = [nz, ny, nx];
   }

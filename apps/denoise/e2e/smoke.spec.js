@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import http from "node:http";
 import { gunzipSync } from "node:zlib";
 import { readTiffStack as readTiff } from "@neurodesk/webapp-components/file-io/tiff";
+import { assertHardwareAdapter, hardwareGpu, readAdapterInfo } from "../../../test-utils/hardware-gpu.mjs";
 import { stackNifti, stackTiff } from "../src/config.js";
 import { createNormalRng, createRng, denoiseVolume } from "@neurodesk/denoise/core";
 import { readVolume } from "../src/input.js";
@@ -337,15 +338,23 @@ test("the WebMCP automation operation runs ZS-N2N with parameters and returns re
   const pending = page.waitForEvent("download");
   await page.evaluate(() => globalThis.neurodeskAutomation.dispatch("download", { artifactId: "image" }));
   const stack = await readTiffStack(readFileSync(await (await pending).path()));
-  if (report.report.provenance.details.backend === "cpu") {
-    expect(sha256(stack.data)).toBe(sha256(want.denoised));
-  } else {
+  if (hardwareGpu) {
+    // On hardware-GPU CI (macOS Apple Silicon Metal), the built production worker MUST run on WebGPU.
+    assertHardwareAdapter(await readAdapterInfo(page));
     expect(report.report.provenance.details.backend).toBe("webgpu");
     let maxDiff = 0;
+    let sumSq = 0;
     for (let i = 0; i < stack.data.length; i += 1) {
-      maxDiff = Math.max(maxDiff, Math.abs(stack.data[i] - want.denoised[i]));
+      const d = Math.abs(stack.data[i] - want.denoised[i]);
+      if (d > maxDiff) maxDiff = d;
+      sumSq += d * d;
     }
-    expect(maxDiff).toBeLessThan(0.5);
+    expect(Math.sqrt(sumSq / stack.data.length)).toBeLessThan(0.01);
+    expect(maxDiff).toBeLessThan(0.05);
+  } else {
+    // On software-emulated adapters (SwiftShader), the built worker must fall back cleanly to CPU.
+    expect(report.report.provenance.details.backend).toBe("cpu");
+    expect(sha256(stack.data)).toBe(sha256(want.denoised));
   }
 });
 

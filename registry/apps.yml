@@ -1884,6 +1884,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
+      hardware_gpu: true
       release: true
   - id: totalsegmentator
     path: totalsegmentator

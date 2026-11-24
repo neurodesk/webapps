@@ -122,12 +122,44 @@ export function exportNiftiBuffer(data, sourceVolume) {
   });
 }
 
+function omeDescription({ nx, ny, nz, axisKind, spacingUm, frameInterval }) {
+  const isMovie = axisKind === "t" && nz > 1;
+  const attrs = [
+    'ID="Pixels:0"',
+    'DimensionOrder="XYZCT"',
+    'Type="float"',
+    `SizeX="${nx}"`,
+    `SizeY="${ny}"`,
+    `SizeZ="${isMovie ? 1 : nz}"`,
+    'SizeC="1"',
+    `SizeT="${isMovie ? nz : 1}"`,
+  ];
+  if (spacingUm?.x > 0) attrs.push(`PhysicalSizeX="${spacingUm.x}"`, 'PhysicalSizeXUnit="µm"');
+  if (spacingUm?.y > 0) attrs.push(`PhysicalSizeY="${spacingUm.y}"`, 'PhysicalSizeYUnit="µm"');
+  if (!isMovie && spacingUm?.z > 0) attrs.push(`PhysicalSizeZ="${spacingUm.z}"`, 'PhysicalSizeZUnit="µm"');
+  if (isMovie && frameInterval > 0) attrs.push(`TimeIncrement="${frameInterval}"`, 'TimeIncrementUnit="s"');
+  return `<?xml version="1.0" encoding="UTF-8"?><OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06"><Image ID="Image:0"><Pixels ${attrs.join(" ")}/></Image></OME>`;
+}
+
 /**
- * Encodes a float32 `[nz, ny, nx]` volume as an ImageJ-compatible TIFF stack,
- * preserving XY micrometre calibration, Z spacing, and temporal `frameInterval` on 2D+T movies.
+ * Encodes a float32 `[nz, ny, nx]` volume as an ImageJ-compatible TIFF stack (or OME-XML TIFF
+ * when only one of X/Y is calibrated, so single-axis calibration is preserved without fabricating
+ * spacing on the unspecified axis), preserving micrometre calibration, Z spacing, and temporal
+ * `frameInterval` on 2D+T movies.
  */
 export function stackTiff(data, dims, spacingUm, { axisKind = "z", frameInterval = null } = {}) {
   const [nz, ny, nx] = dims;
+  const hasX = spacingUm?.x > 0;
+  const hasY = spacingUm?.y > 0;
+  if (hasX !== hasY) {
+    return writeTiffStack({
+      width: nx,
+      height: ny,
+      data,
+      description: omeDescription({ nx, ny, nz, axisKind, spacingUm, frameInterval }),
+    });
+  }
+
   let min = Infinity;
   let max = -Infinity;
   for (let i = 0; i < data.length; i += 1) {
@@ -135,7 +167,7 @@ export function stackTiff(data, dims, spacingUm, { axisKind = "z", frameInterval
     if (value < min) min = value;
     if (value > max) max = value;
   }
-  const hasXY = spacingUm?.x > 0 && spacingUm?.y > 0;
+  const hasXY = hasX && hasY;
   const descOpts = {
     min: Number.isFinite(min) ? min : 0,
     max: Number.isFinite(max) ? max : 0,
