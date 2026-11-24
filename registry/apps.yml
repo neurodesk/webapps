@@ -1885,6 +1885,32 @@ apps:
       shared_runtime: false
       browser_test: true
       release: false
+  - id: totalsegmentator
+    path: totalsegmentator
+    catalog: msk
+    title: TotalSegmentator
+    description: Segment organs, bones and muscles in CT and MRI.
+    categories: [segmentation]
+    keywords: [TotalSegmentator, CT, MRI, whole-body, segmentation, organs, bones, vertebrae, muscles, nnU-Net]
+    anatomy: [whole-body]
+    modalities: [ct, mri]
+    inputs: [dicom, nifti]
+    hardware: webgpu-optional
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: models/totalsegmentator.manifest.json
+    asset_manifest_schema: scientific-assets-v1
+    source: neurodesk/webapps@local
+    license: Apache-2.0
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    app_scoped_runtime_families: [ort-web-asyncify]
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: true
   - id: cellpose
     path: cellpose
     catalog: microscopy

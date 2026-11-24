@@ -3002,3 +3002,49 @@ apps:
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
+
+  totalsegmentator:
+    about:
+      - "Segment major organs, bones, vertebrae and muscles in 3D CT and MRI scans with TotalSegmentator v2, running nnU-Net v2 models directly in your browser on WebGPU or WebAssembly. Scans are automatically reoriented to canonical RAS for inference, resampled to the model's spacing, and restored to the input scan's exact orientation and voxel grid on output."
+      - "Includes openly licensed Apache-2.0 models from wasserth/TotalSegmentator: whole-body CT (117 structures, 3 mm fast or 1.5 mm 5-part full resolution with selectable anatomical subsets), whole-body MRI (50 structures, 3 mm fast or 1.5 mm 2-part full resolution), MRI vertebrae (25 structures), and CT abdominal muscles (22 T4–L4 muscles, automatically cropped to the trunk using the 6 mm body model). License-gated commercial TotalSegmentator tasks (appendicular_bones, tissue_types, thigh_shoulder_muscles) are not mirrored here."
+      - "The Results view and downloadable TSV report each detected structure's volume in mL along with mean and standard deviation Hounsfield units (CT) or signal intensity (MRI). Outputs are research estimates, not a clinical diagnosis."
+    packages:
+      - { name: TotalSegmentator, url: https://github.com/wasserth/TotalSegmentator, role: "whole-body CT, whole-body MRI, MRI vertebrae and CT abdominal muscle models (Apache-2.0, v2.0.0-weights and v2.5.0-weights)" }
+      - { name: nnU-Net, url: https://github.com/MIC-DKFZ/nnUNet, role: "preprocessing, CT/MR normalization and sliding-window prediction ported to JavaScript" }
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: "3D U-Net inference on WebGPU or WebAssembly" }
+      - { name: dcm2niix, url: https://github.com/rordenlab/dcm2niix, role: "local DICOM to NIfTI conversion" }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: "multiplanar image and label viewer" }
+    citations:
+      - group: Whole-body CT segmentation
+        title: TotalSegmentator
+        reference: "Wasserthal J, Breit HC, Meyer MT, Pradella M, Hinck D, Sauter AW, Heye T, Boll DT, Cyriac J, Yang S, Bach M, Segeroth M. TotalSegmentator: Robust Segmentation of 104 Anatomic Structures in CT Images. Radiology: Artificial Intelligence. 2023;5(5):e230024."
+        doi: 10.1148/ryai.230024
+        code: https://github.com/wasserth/TotalSegmentator
+      - group: Whole-body MRI segmentation
+        title: TotalSegmentator MRI
+        reference: "D'Antonoli TA, Berger LK, Indrakanti AK, Vishwanathan N, Weiss J, Jung M, Berkarda Z, Rau A, Reisert M, Küstner T, Walter A, Segeroth M, Sperl JI, Wasserthal J. TotalSegmentator MRI: Robust Sequence-Independent Segmentation of Multiple Anatomic Structures in MRI. Radiology. 2025;314(2):e241613."
+        doi: 10.1148/radiol.241613
+        code: https://github.com/wasserth/TotalSegmentator
+      - group: Abdominal and trunk muscles
+        title: Trunk musculature segmentation (abdominal_muscles)
+        reference: "Hong V, Pieper S, James J, Anderson DE, Pinter C, Chang YS, Aslan B, Kozono D, Doyle PF, Caplan S, Kang H, Balboni T, Spektor A, Huynh MA, Keko M, Kikinis R, Hackney DB, Alkalay RN. Automated Segmentation of Trunk Musculature with a Deep CNN Trained from Sparse Annotations in Radiation Therapy Patients with Metastatic Spine Disease. medRxiv. 2025."
+        doi: 10.1101/2025.01.13.25319967
+        code: https://github.com/wasserth/TotalSegmentator
+      - group: Segmentation framework
+        title: nnU-Net
+        reference: "Isensee F, Jaeger PF, Kohl SAA, Petersen J, Maier-Hein KH. nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation. Nature Methods. 2021;18(2):203–211."
+        doi: 10.1038/s41592-020-01008-z
+        code: https://github.com/MIC-DKFZ/nnUNet
+      - group: Browser inference
+        title: ONNX Runtime Web
+        reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."
+        url: https://onnxruntime.ai
+      - group: DICOM conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+        code: https://github.com/rordenlab/dcm2niix
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
