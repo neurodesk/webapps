@@ -272,3 +272,21 @@ test('a drop on a canvas inside a shadow root, as FreeBrowse renders NiiVue, ope
   assert.equal(reachedCanvas, false, 'the page drop takes it in the capture phase');
   assert.deepEqual([...input.files].map(f => f.name), ['scan.dcm']);
 });
+
+test('dropping two raster images fills both image slots and Undo clears a newly filled slot when another slot is occupied', async t => {
+  const { inputs, drop, undo } = dropSession('<input type="file" data-neurodesk-input="image"><input type="file" data-neurodesk-input="image">', t);
+  await drop('baseline.png', 'followup.jpg');
+  assert.deepEqual([...inputs[0].files].map(f => f.name), ['baseline.png']);
+  assert.deepEqual([...inputs[1].files].map(f => f.name), ['followup.jpg']);
+
+  // Empty the first slot via nd-files while the second stays occupied, then drop a file onto slot 1 -> Undo clears slot 1.
+  const { window } = { window: inputs[0].ownerDocument.defaultView };
+  inputs[0].files = [];
+  inputs[0].dispatchEvent(new window.CustomEvent('nd-files', { bubbles: true, detail: { files: [] } }));
+  await drop('replacement.png');
+  assert.deepEqual([...inputs[0].files].map(f => f.name), ['replacement.png']);
+  assert.ok(undo(), 'Undo appears when dropping into an empty slot alongside an occupied slot');
+  undo().click();
+  assert.deepEqual([...inputs[0].files], []);
+  assert.deepEqual([...inputs[1].files].map(f => f.name), ['followup.jpg']);
+});

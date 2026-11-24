@@ -70,12 +70,12 @@ test("single-slot loading runs comparison, exercises Curtain slider + drag, all 
   const follFile = makeSyntheticPairPng({ name: "nevus_t1.png", dx: 8, dy: -6, angleDeg: 10, radiusX: 33, radiusY: 23, lesionRgb: [70, 38, 30] });
 
   await page.goto("./");
-  await page.locator("#baselineInput").setInputFiles(baseFile);
-  await expect(page.locator("#baselineInfo")).toContainText("nevus_t0.png · 160 × 160");
+  await page.locator("#fixedInput").setInputFiles(baseFile);
+  await expect(page.locator("#fixedInfo")).toContainText("nevus_t0.png · 160×160");
   await expect(page.locator("#runButton")).toBeDisabled();
 
-  await page.locator("#followupInput").setInputFiles(follFile);
-  await expect(page.locator("#followupInfo")).toContainText("nevus_t1.png · 160 × 160");
+  await page.locator("#movingInput").setInputFiles(follFile);
+  await expect(page.locator("#movingInfo")).toContainText("nevus_t1.png · 160×160");
   await expect(page.locator("#runButton")).toBeEnabled();
 
   await page.locator("#runButton").click();
@@ -162,26 +162,26 @@ test("multi-file pick in one input is refused cleanly without mutating the other
   const follFile = makeSyntheticPairPng({ name: "slot_foll.png", dx: 4, dy: -3 });
 
   await page.goto("./");
-  await page.locator("#followupInput").setInputFiles(follFile);
-  await expect(page.locator("#followupInfo")).toContainText("slot_foll.png");
+  await page.locator("#movingInput").setInputFiles(follFile);
+  await expect(page.locator("#movingInfo")).toContainText("slot_foll.png");
 
-  await page.locator("#baselineInput").setInputFiles([baseFile, follFile]);
+  await page.locator("#fixedInput").setInputFiles([baseFile, follFile]);
   await expect(page.locator("#statusText")).toContainText("Select one image for baseline (and one for follow-up in its slot).");
-  await expect(page.locator("#baselineInfo")).toBeHidden();
-  await expect(page.locator("#followupInfo")).toContainText("slot_foll.png");
+  await expect(page.locator("#fixedInfo")).toBeHidden();
+  await expect(page.locator("#movingInfo")).toContainText("slot_foll.png");
   await expect(page.locator("#runButton")).toBeDisabled();
 });
 
 test("direct local corrupt file is refused cleanly", async ({ page }) => {
   await page.goto("./");
-  await page.locator("#baselineInput").setInputFiles({
+  await page.locator("#fixedInput").setInputFiles({
     name: "corrupt_lesion.jpg",
     mimeType: "image/jpeg",
     buffer: Buffer.from("definitely-not-a-valid-jpeg"),
   });
   await expect(page.locator("#statusText")).toContainText("corrupt_lesion.jpg is not a supported PNG or JPEG image.");
   await expect(page.locator("#statusText")).toHaveClass(/error/);
-  await expect(page.locator("#baselineInfo")).toBeHidden();
+  await expect(page.locator("#fixedInfo")).toBeHidden();
   await expect(page.locator("#runButton")).toBeDisabled();
 });
 
@@ -190,8 +190,8 @@ test("unregistrable flat images surface explicit registration failure and suppre
   const flatB = makeFlatPng("flat_b.png", 140);
 
   await page.goto("./");
-  await page.locator("#baselineInput").setInputFiles(flatA);
-  await page.locator("#followupInput").setInputFiles(flatB);
+  await page.locator("#fixedInput").setInputFiles(flatA);
+  await page.locator("#movingInput").setInputFiles(flatB);
   await expect(page.locator("#runButton")).toBeEnabled();
 
   await page.locator("#runButton").click();
@@ -207,8 +207,8 @@ test("pinned ISIC nevus example loads both captures, improves NCC at unit scale,
   const example = examples[0];
   await page.goto("./");
   await page.locator("select[data-neurodesk-example]").selectOption(example.id);
-  await expect(page.locator("#baselineInfo")).toContainText(example.files[0].name, { timeout: 120000 });
-  await expect(page.locator("#followupInfo")).toContainText(example.files[1].name, { timeout: 120000 });
+  await expect(page.locator("#fixedInfo")).toContainText(example.files[0].name, { timeout: 120000 });
+  await expect(page.locator("#movingInfo")).toContainText(example.files[1].name, { timeout: 120000 });
   await expect(page.locator("#runButton")).toBeEnabled();
 
   await page.locator("#runButton").click();
@@ -260,8 +260,8 @@ test("cancelling a comparison run leaves no outputs and allows retry", async ({ 
   const follFile = makeSyntheticPairPng({ name: "cancel_foll.png", dx: 5, dy: 4, angleDeg: 6 });
 
   await page.goto("./");
-  await page.locator("#baselineInput").setInputFiles(baseFile);
-  await page.locator("#followupInput").setInputFiles(follFile);
+  await page.locator("#fixedInput").setInputFiles(baseFile);
+  await page.locator("#movingInput").setInputFiles(follFile);
 
   // Hold the first worker reply so the cancel button can terminate it deterministically.
   await page.evaluate(() => {
@@ -360,8 +360,8 @@ test("uncorrelated noise images are rejected with low correlation failure and su
   const noiseB = makeNoisePng("noise_b.png", 0x88776655);
 
   await page.goto("./");
-  await page.locator("#baselineInput").setInputFiles(noiseA);
-  await page.locator("#followupInput").setInputFiles(noiseB);
+  await page.locator("#fixedInput").setInputFiles(noiseA);
+  await page.locator("#movingInput").setInputFiles(noiseB);
   await page.locator("#runButton").click();
 
   await expect(page.locator("#statusText")).toContainText("Images could not be reliably aligned (low correlation)", { timeout: 60000 });
@@ -376,10 +376,10 @@ test("1024x672 vs 2048x1344 crop uses shared uniform working scale and preserves
   const { baseline, followup } = makeCropPairPngs();
 
   await page.goto("./");
-  await page.locator("#baselineInput").setInputFiles(baseline);
-  await expect(page.locator("#baselineInfo")).toContainText("crop_1024x672.png · 1024 × 672");
-  await page.locator("#followupInput").setInputFiles(followup);
-  await expect(page.locator("#followupInfo")).toContainText("full_2048x1344.png · 2048 × 1344");
+  await page.locator("#fixedInput").setInputFiles(baseline);
+  await expect(page.locator("#fixedInfo")).toContainText("crop_1024x672.png · 1024×672");
+  await page.locator("#movingInput").setInputFiles(followup);
+  await expect(page.locator("#movingInfo")).toContainText("full_2048x1344.png · 2048×1344");
 
   await page.locator("#runButton").click();
   await expect(page.locator("#statusText")).toContainText("Aligned (NCC", { timeout: 90000 });
@@ -420,8 +420,8 @@ test("transparent baseline hole zeros alpha in downloaded aligned follow-up PNG"
   const opaqueFoll = makeSyntheticPairPng({ name: "opaque_foll.png", size, dx: 4, dy: -3, angleDeg: 5 });
 
   await page.goto("./");
-  await page.locator("#baselineInput").setInputFiles(holeBase);
-  await page.locator("#followupInput").setInputFiles(opaqueFoll);
+  await page.locator("#fixedInput").setInputFiles(holeBase);
+  await page.locator("#movingInput").setInputFiles(opaqueFoll);
   await page.locator("#runButton").click();
   await expect(page.locator("#statusText")).toContainText("Aligned (NCC", { timeout: 60000 });
 
@@ -431,81 +431,69 @@ test("transparent baseline hole zeros alpha in downloaded aligned follow-up PNG"
   expect(alignedDecoded.data[(20 * size + 20) * 4 + 3]).toBe(255);
 });
 
-test("fresh baseline drop and follow-up drop/replacement both offer Undo and keep slots independent", async ({ page }) => {
-  const baseFile = makeSyntheticPairPng({ name: "undo_base.png" });
+test("dropping a pair together fills both slots, Undo clears newly filled empty slot, and delayed follow-up drop cannot overwrite newer pick", async ({ page }) => {
+  const baseFile = makeSyntheticPairPng({ name: "pair_base.png" });
   const follFileA = makeSyntheticPairPng({ name: "drop_foll_a.png", dx: 4, dy: -2 });
   const follFileB = makeSyntheticPairPng({ name: "drop_foll_b.png", dx: -3, dy: 5 });
 
   await page.goto("./");
-  await page.evaluate(() => {
-    window.__baselineNdFiles = [];
-    document.getElementById("baselineInput").addEventListener("nd-files", (event) => {
-      window.__baselineNdFiles.push(event.detail?.files?.length ?? -1);
-    });
+
+  // 1. Dropping baseline + follow-up PNGs together on the page fills both slots cleanly.
+  await page.evaluate(({ a, b }) => {
+    const dt = new DataTransfer();
+    dt.items.add(new File([new Uint8Array(a.bytes)], a.name, { type: "image/png" }));
+    dt.items.add(new File([new Uint8Array(b.bytes)], b.name, { type: "image/png" }));
+    document.body.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt }));
+  }, {
+    a: { name: baseFile.name, bytes: [...baseFile.buffer] },
+    b: { name: follFileA.name, bytes: [...follFileA.buffer] },
   });
 
-  // 1. Fresh page (no prior history): drop directly onto page -> Undo must appear and clear baseline.
+  await expect(page.locator("#fixedInfo")).toContainText("pair_base.png");
+  await expect(page.locator("#movingInfo")).toContainText("drop_foll_a.png");
+  await expect(page.locator("#runButton")).toBeEnabled();
+
+  // Swap button exchanges baseline and follow-up cleanly.
+  await page.locator("#swapButton").click();
+  await expect(page.locator("#fixedInfo")).toContainText("drop_foll_a.png");
+  await expect(page.locator("#movingInfo")).toContainText("pair_base.png");
+
+  // 2. Clear baseline so only follow-up is loaded, drop a new file onto the page -> Undo restores empty baseline.
+  await page.locator("#fixedClear").click();
+  await expect(page.locator("#fixedInfo")).toBeHidden();
+  await expect(page.locator("#movingInfo")).toContainText("pair_base.png");
+
   await page.evaluate(({ name, bytes }) => {
     const dt = new DataTransfer();
     dt.items.add(new File([new Uint8Array(bytes)], name, { type: "image/png" }));
     document.body.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt }));
-  }, { name: baseFile.name, bytes: [...baseFile.buffer] });
+  }, { name: follFileB.name, bytes: [...follFileB.buffer] });
 
-  await expect(page.locator("#baselineInfo")).toContainText("undo_base.png");
-  await expect(page.locator("#baselineDropZone")).toHaveClass(/has-files/);
+  await expect(page.locator("#fixedInfo")).toContainText("drop_foll_b.png");
   await expect(page.locator(".nd-status-undo")).toBeVisible();
-
   await page.locator(".nd-status-undo").click();
-  await expect(page.locator("#baselineInfo")).toBeHidden();
-  await expect(page.locator("#baselineDropZone")).not.toHaveClass(/has-files/);
-  await expect(page.locator("#emptyState")).toBeVisible();
-  await expect(page.locator("#runButton")).toBeDisabled();
-  const ndHistory = await page.evaluate(() => window.__baselineNdFiles);
-  expect(ndHistory[ndHistory.length - 1]).toBe(0);
-
-  // 2. Load baseline, drop follow-up A onto #followupDropZone -> Undo clears follow-up without touching baseline.
-  await page.locator("#baselineInput").setInputFiles(baseFile);
-  await expect(page.locator("#baselineInfo")).toContainText("undo_base.png");
-
-  const dropOnFollowup = async (file) => {
-    await page.evaluate(({ name, bytes }) => {
-      const zone = document.getElementById("followupDropZone");
-      const dt = new DataTransfer();
-      dt.items.add(new File([new Uint8Array(bytes)], name, { type: "image/png" }));
-      zone.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: dt }));
-      zone.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt }));
-    }, { name: file.name, bytes: [...file.buffer] });
-  };
-
-  await dropOnFollowup(follFileA);
-  await expect(page.locator("#followupInfo")).toContainText("drop_foll_a.png");
-  await expect(page.locator("#baselineInfo")).toContainText("undo_base.png");
-  await expect(page.locator("#runButton")).toBeEnabled();
-  await expect(page.locator(".nd-status-undo")).toBeVisible();
-
-  await page.locator(".nd-status-undo").click();
-  await expect(page.locator("#followupInfo")).toBeHidden();
-  await expect(page.locator("#baselineInfo")).toContainText("undo_base.png");
+  await expect(page.locator("#fixedInfo")).toBeHidden();
+  await expect(page.locator("#movingInfo")).toContainText("pair_base.png");
   await expect(page.locator("#runButton")).toBeDisabled();
 
-  // 3. Load follow-up A, then replace via drop with follow-up B -> Undo restores follow-up A.
-  await page.locator("#followupInput").setInputFiles(follFileA);
-  await expect(page.locator("#followupInfo")).toContainText("drop_foll_a.png");
-
-  await dropOnFollowup(follFileB);
-  await expect(page.locator("#followupInfo")).toContainText("drop_foll_b.png");
-  await expect(page.locator(".nd-status-undo")).toBeVisible();
-
-  await page.locator(".nd-status-undo").click();
-  await expect(page.locator("#followupInfo")).toContainText("drop_foll_a.png");
-  await expect(page.locator("#baselineInfo")).toContainText("undo_base.png");
-  await expect(page.locator("#runButton")).toBeEnabled();
+  // 3. Direct drop on #movingSlot fills follow-up without replacing baseline.
+  await page.locator("#fixedInput").setInputFiles(baseFile);
+  await expect(page.locator("#fixedInfo")).toContainText("pair_base.png");
+  await page.evaluate(({ name, bytes }) => {
+    const zone = document.getElementById("movingSlot");
+    const dt = new DataTransfer();
+    dt.items.add(new File([new Uint8Array(bytes)], name, { type: "image/png" }));
+    zone.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: dt }));
+    zone.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt }));
+  }, { name: follFileA.name, bytes: [...follFileA.buffer] });
+  await expect(page.locator("#movingInfo")).toContainText("drop_foll_a.png");
+  await expect(page.locator("#fixedInfo")).toContainText("pair_base.png");
 
   // 4. A delayed follow-up drop read superseded by a newer file pick must NOT overwrite the newer pick.
   const staleDropFile = makeSyntheticPairPng({ name: "stale_drop.png", dx: -4, dy: 4 });
   const newerPickFile = makeSyntheticPairPng({ name: "newer_pick.png", dx: 2, dy: -3 });
   await page.evaluate(({ name, bytes }) => {
-    const zone = document.getElementById("followupDropZone");
+    const zone = document.getElementById("movingSlot");
     const file = new File([new Uint8Array(bytes)], name, { type: "image/png" });
     let releaseRead;
     window.__releaseDelayedFollowupDrop = () => releaseRead?.();
@@ -530,13 +518,13 @@ test("fresh baseline drop and follow-up drop/replacement both offer Undo and kee
     zone.dispatchEvent(event);
   }, { name: staleDropFile.name, bytes: [...staleDropFile.buffer] });
 
-  await page.locator("#followupInput").setInputFiles(newerPickFile);
-  await expect(page.locator("#followupInfo")).toContainText("newer_pick.png");
+  await page.locator("#movingInput").setInputFiles(newerPickFile);
+  await expect(page.locator("#movingInfo")).toContainText("newer_pick.png");
 
   await page.evaluate(() => window.__releaseDelayedFollowupDrop());
   await page.waitForTimeout(150);
-  await expect(page.locator("#followupInfo")).toContainText("newer_pick.png");
-  await expect(page.locator("#followupInfo")).not.toContainText("stale_drop.png");
+  await expect(page.locator("#movingInfo")).toContainText("newer_pick.png");
+  await expect(page.locator("#movingInfo")).not.toContainText("stale_drop.png");
 });
 
 test("cancelling a rerun from ΔE2000 view immediately clears the ΔE2000 heatmap from canvas", async ({ page }) => {
@@ -544,8 +532,8 @@ test("cancelling a rerun from ΔE2000 view immediately clears the ΔE2000 heatma
   const follFile = makeSyntheticPairPng({ name: "rerun_foll.png", dx: 6, dy: -4, angleDeg: 6, radiusX: 34, radiusY: 24, lesionRgb: [58, 30, 24] });
 
   await page.goto("./");
-  await page.locator("#baselineInput").setInputFiles(baseFile);
-  await page.locator("#followupInput").setInputFiles(follFile);
+  await page.locator("#fixedInput").setInputFiles(baseFile);
+  await page.locator("#movingInput").setInputFiles(follFile);
   await page.locator("#runButton").click();
   await expect(page.locator("#statusText")).toContainText("Aligned (NCC", { timeout: 60000 });
 

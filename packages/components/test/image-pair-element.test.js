@@ -452,3 +452,34 @@ for (const unavailable of ['file stream', 'DecompressionStream']) {
     }
   });
 }
+
+test('createImagePair supports raster slotLabels, exampleRoles, showFolder:false, and empty-change Undo reset', async () => {
+  const { window } = new JSDOM('<!doctype html><body></body>');
+  const cleared = [];
+  const pair = createImagePair({
+    slotLabels: { fixed: 'Baseline', moving: 'Follow-up' },
+    exampleRoles: { fixed: 'baseline', moving: 'followup' },
+    showFolder: false,
+    open: async (_slot, candidate) => ({ name: candidate.name, dims: [64, 64], dimensionality: 2 }),
+    clear: slot => cleared.push(slot),
+  }, window.document);
+  window.document.body.append(pair);
+
+  assert.equal(pair.querySelector('#fixedSlotTitle').textContent, 'Baseline image');
+  assert.equal(pair.querySelector('#movingSlotTitle').textContent, 'Follow-up image');
+  assert.equal(pair.querySelector('#fixedFolderInput'), null);
+  assert.equal(pair.querySelector('#swapButton').textContent, '⇅ Swap baseline and follow-up');
+
+  const input = pair.querySelector('#fixedInput');
+  Object.defineProperty(input, 'files', { get: () => input._files ?? [], set: files => { input._files = files; } });
+  input.files = [new window.File(['a'], 't0.png')];
+  input.dispatchEvent(new window.Event('change', { bubbles: true }));
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(pair.fixed?.image.name, 't0.png');
+
+  // Shell Undo delivering an empty FileList resets the slot cleanly.
+  input.files = [];
+  input.dispatchEvent(new window.Event('change', { bubbles: true }));
+  assert.equal(pair.fixed, null);
+  assert.deepEqual(cleared, ['fixed']);
+});

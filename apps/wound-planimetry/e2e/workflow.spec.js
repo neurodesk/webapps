@@ -142,8 +142,14 @@ test("keyboard coordinates, seed fallback warning, and uniform image no-wound wa
   await expect(page.locator("#pixelsPerMm")).toHaveValue("0");
   await page.locator("#referenceMm").blur();
   await expect(page.locator("#statusText")).toContainText("Ruler reference (mm) must be");
+  // Calibrated scale exceeding 1000 px/mm (100 px / 0.1 mm = 1000 is allowed, >1000 is rejected)
+  await page.locator("#rulerX2").fill("120");
+  await page.locator("#referenceMm").fill("0.1");
+  await page.locator("#applyRulerButton").click();
+  await expect(page.locator("#statusText")).toContainText("must be between 0 and 1000 px/mm");
+  await page.locator("#rulerX2").fill("110");
   await page.locator("#referenceMm").fill("10");
-  await page.locator("#referenceMm").blur();
+  await page.locator("#applyRulerButton").click();
   await expect(page.locator("#pixelsPerMm")).toHaveValue("10");
 
   await page.locator("#seedX").fill("4");

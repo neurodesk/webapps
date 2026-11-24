@@ -16,7 +16,7 @@ import { downloadFile } from "@neurodesk/webapp-components/file-io";
 import { decodeRasterImage } from "@neurodesk/webapp-components/file-io/raster-image";
 import { registerAppAutomation } from "@neurodesk/webapp-components/automation";
 import workerUrl from "./worker.js?worker&url";
-import { APP, MAX_IMAGE_BYTES, SettingsError, readReferenceMm, readSettings } from "./config.js";
+import { APP, MAX_IMAGE_BYTES, PARAMETER_BOUNDS, SettingsError, readReferenceMm, readSettings } from "./config.js";
 import { calibrationFromRuler } from "./core/planimetry.js";
 import { RYB_CLASS_NAMES, imagePixel, overlayLayerRgba } from "./display.js";
 import {
@@ -535,10 +535,18 @@ function applySeedPoint(pixel) {
   status(`Seed placed at (${seed[0]}, ${seed[1]}) · click Measure wound to segment`);
 }
 
+function validateCalibratedScale(cal) {
+  const { min, max } = PARAMETER_BOUNDS.pixelsPerMm;
+  if (!Number.isFinite(cal.pixelsPerMm) || cal.pixelsPerMm <= min || cal.pixelsPerMm > max) {
+    throw new SettingsError("pixelsPerMm", `Calibrated scale (${cal.pixelsPerMm.toFixed(1)} px/mm) must be between ${min} and ${max} px/mm.`);
+  }
+  return cal;
+}
+
 function applyRulerPoints(p1, p2) {
   try {
     const refMm = readReferenceMm($("referenceMm").value);
-    const cal = calibrationFromRuler(p1, p2, refMm);
+    const cal = validateCalibratedScale(calibrationFromRuler(p1, p2, refMm));
     ruler = { p1, p2, ...cal };
     rulerPending = null;
     $("pixelsPerMm").value = String(Number(cal.pixelsPerMm.toFixed(4)));
@@ -627,7 +635,7 @@ const onReferenceChange = (reportInvalid) => {
   invalidateRun();
   try {
     const refMm = readReferenceMm($("referenceMm").value);
-    const updated = calibrationFromRuler(ruler.p1, ruler.p2, refMm);
+    const updated = validateCalibratedScale(calibrationFromRuler(ruler.p1, ruler.p2, refMm));
     ruler = { p1: ruler.p1, p2: ruler.p2, ...updated };
     $("pixelsPerMm").value = String(Number(ruler.pixelsPerMm.toFixed(4)));
     draw();
@@ -874,6 +882,7 @@ async function loadFiles(filesPromise, signal, { label = "Reading wound image…
     if (loading === operation.controller) {
       progress.reset(input ? "Ready" : "Drag and drop files");
     }
+    $("imageInput").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: input?.file ? [input.file] : [] } }));
     throw error;
   } finally {
     operation.release();

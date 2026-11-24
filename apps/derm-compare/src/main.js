@@ -5,14 +5,12 @@ import "@neurodesk/webapp-components/styles/imaging-workspace.css";
 import "./derm-compare.css";
 import { mountImagingWorkspace } from "@neurodesk/webapp-components/core/mount-imaging-workspace";
 import {
-  bindFileDrop,
+  createImagePair,
   createResultList,
   createInfoDialog,
   createConsole,
   createViewerToolbar,
-  createExampleSelector,
   bindInfoTooltips,
-  deliverFiles,
   ProgressManager,
 } from "@neurodesk/webapp-components/ui";
 import { downloadFile } from "@neurodesk/webapp-components/file-io";
@@ -93,7 +91,7 @@ let lastFailure = null; // explicit registration failure message for report disp
 let outputs = {};
 let loading = null;
 let running = null;
-let slotQueue = Promise.resolve();
+let pair = null;
 
 let activeView = "curtain";
 let overlayOpacity = 0.5;
@@ -755,12 +753,12 @@ const results = createResultList({
   onDownload: (_stage, result) => downloadFile(result.file),
 });
 
-function setBusy(busy, { keepExampleControl = false } = {}) {
+function setBusy(busy) {
   results.inert = busy;
-  for (const id of ["baselineInput", "followupInput", "normalizeColor", "suppressHair", "allowScale", "maxAngle"]) {
+  if (pair) pair.disabled = busy;
+  for (const id of ["normalizeColor", "suppressHair", "allowScale", "maxAngle"]) {
     $(id).disabled = busy;
   }
-  if (!keepExampleControl) exampleControl?.setDisabled(busy);
   $("runButton").disabled = busy || !baseline || !followup;
   updatePlaybackControls();
 }
@@ -794,7 +792,6 @@ function clearOutputs() {
 function beginOperation(message, signal) {
   if (loading || running) throw new Error("Wait for the current operation to finish, or cancel it.");
   signal?.throwIfAborted();
-  withdrawSlotUndo();
   const controller = new AbortController();
   const abort = () => controller.abort(signal.reason);
   signal?.addEventListener("abort", abort, { once: true });
@@ -869,221 +866,86 @@ async function decodeImageFile(file, signal) {
   }
 }
 
-function reportSlotFiles(slot) {
-  const isBaseline = slot === "baseline";
-  const current = isBaseline ? baseline : followup;
-  const inputEl = $(isBaseline ? "baselineInput" : "followupInput");
-  inputEl.dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: current ? [current.file] : [] } }));
-}
-
-function formatSlotInfo(decoded) {
-  const scaled = decoded.originalWidth && (decoded.originalWidth !== decoded.width || decoded.originalHeight !== decoded.height);
-  return scaled
-    ? `${decoded.file.name} · ${decoded.width} × ${decoded.height} (from ${decoded.originalWidth} × ${decoded.originalHeight})`
-    : `${decoded.file.name} · ${decoded.width} × ${decoded.height}`;
-}
-
-function commitSlot(slot, decoded) {
-  const isBaseline = slot === "baseline";
-  if (isBaseline) baseline = decoded;
-  else followup = decoded;
-
-  const infoEl = $(isBaseline ? "baselineInfo" : "followupInfo");
-  const dropEl = $(isBaseline ? "baselineDropZone" : "followupDropZone");
-
-  infoEl.hidden = false;
-  infoEl.textContent = formatSlotInfo(decoded);
-  dropEl.classList.add("has-files");
-  reportSlotFiles(slot);
-}
-
-async function loadSingleSlotFile(slot, files, signal) {
-  const operation = beginOperation("Reading dermoscopy image…", signal);
-  loading = operation.controller;
-  setBusy(true);
-  progress.setCancellable(true);
-  const current = operation.controller.signal;
-  try {
-    current.throwIfAborted();
+pair = createImagePair({
+  examples,
+  slotLabels: { fixed: "Baseline", moving: "Follow-up" },
+  exampleRoles: { fixed: "baseline", moving: "followup" },
+  showFolder: false,
+  read: (files) => {
     if (!files.length) throw new Error("Choose a PNG or JPEG dermoscopy image.");
     if (files.length > 1) {
       throw new Error("Select one image for baseline (and one for follow-up in its slot).");
     }
-
-    const decoded = await decodeImageFile(files[0], current);
-    current.throwIfAborted();
-    clearOutputs();
-    commitSlot(slot, decoded);
-    if (slot === "baseline") refreshBaselineLayer();
-    else refreshFollowupPreviewLayer();
-    $("emptyState").hidden = true;
-    draw();
-    progress.setProgress(0);
-    const ready = Boolean(baseline && followup);
-    status(ready
-      ? `${decoded.file.name} loaded · ready to compare`
-      : `${decoded.file.name} loaded · add ${slot === "baseline" ? "follow-up" : "baseline"} image`);
-    log.log(`${slot === "baseline" ? "Baseline" : "Follow-up"}: ${formatSlotInfo(decoded)}`, "info", "analysis");
-  } catch (error) {
-    // Re-report the slot's true retained file so shell pageDrop Undo never records rejected files.
-    reportSlotFiles(slot);
-    progress.setProgress(0);
-    throw error;
-  } finally {
-    loading = null;
-    finishOperation(operation);
-    setBusy(false);
-  }
-}
-
-const SLOT_UNDO_MS = 8000;
-let slotUndoTimer = 0;
-let followupDropGeneration = 0;
-let pendingFollowupDrop = null;
-let pendingBaselineReplace = null;
-
-function withdrawSlotUndo() {
-  if (slotUndoTimer) {
-    window.clearTimeout(slotUndoTimer);
-    slotUndoTimer = 0;
-  }
-  const existing = document.querySelector(".nd-status-undo[data-slot-undo]");
-  if (existing) existing.remove();
-}
-
-function offerSlotUndo(slot, prevFile) {
-  withdrawSlotUndo();
-  const statusBar = document.querySelector("footer#status, #status");
-  if (!statusBar) return;
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "nd-status-undo";
-  button.dataset.slotUndo = slot;
-  button.textContent = "Undo";
-  button.addEventListener("click", () => {
-    withdrawSlotUndo();
-    if (prevFile) {
-      void enqueueSlotLoad(slot, [prevFile]);
-    } else {
-      void enqueueSlotClear(slot);
-    }
-  });
-  statusBar.append(button);
-  slotUndoTimer = window.setTimeout(() => {
-    button.remove();
-    slotUndoTimer = 0;
-  }, SLOT_UNDO_MS);
-}
-
-function clearSlot(slot) {
-  const isBaseline = slot === "baseline";
-  if (isBaseline) baseline = null;
-  else followup = null;
-
-  const infoEl = $(isBaseline ? "baselineInfo" : "followupInfo");
-  const dropEl = $(isBaseline ? "baselineDropZone" : "followupDropZone");
-  infoEl.hidden = true;
-  infoEl.textContent = "";
-  dropEl.classList.remove("has-files");
-
-  clearOutputs();
-  setBusy(Boolean(loading || running));
-  progress.reset(baseline || followup
-    ? `${isBaseline ? "Baseline" : "Follow-up"} cleared · add ${isBaseline ? "baseline" : "follow-up"} image`
-    : "Drag and drop files");
-  reportSlotFiles(slot);
-}
-
-function enqueueSlotClear(slot) {
-  if (slot === "followup") followupDropGeneration += 1;
-  withdrawSlotUndo();
-  exampleControl.cancel();
-  if (running) {
-    reportSlotFiles(slot);
-    reportError(new Error("Wait for the current operation to finish, or cancel it."));
-    return Promise.resolve();
-  }
-  const task = slotQueue.then(() => {
-    clearSlot(slot);
-  });
-  slotQueue = task.catch(() => {});
-  return task;
-}
-
-function enqueueSlotLoad(slot, files, { undoOnSuccess = null } = {}) {
-  if (slot === "followup") followupDropGeneration += 1;
-  withdrawSlotUndo();
-  exampleControl.cancel();
-  if (running) {
-    reportSlotFiles(slot);
-    reportError(new Error("Wait for the current operation to finish, or cancel it."));
-    return Promise.resolve();
-  }
-  const task = slotQueue.then(async () => {
-    await loadSingleSlotFile(slot, files);
-    if (undoOnSuccess) {
-      const { prevFile, onlyIfMissing } = undoOnSuccess;
-      if (!onlyIfMissing || !document.querySelector(".nd-status-undo")) {
-        offerSlotUndo(slot, prevFile);
-      }
-    }
-  });
-  slotQueue = task.catch(() => {});
-  return task.catch(reportError);
-}
-
-// Track pageDrop replacements when baseline was empty (fresh page), where pageDrop has no
-// prior snapshot of its own and would otherwise omit Undo.
-$("baselineInput").addEventListener("nd-replace", () => {
-  pendingBaselineReplace = { prevFile: baseline?.file ?? null };
-});
-
-$("baselineInput").addEventListener("change", (event) => {
-  const files = Array.from(event.target.files);
-  event.target.value = "";
-  const replaceInfo = pendingBaselineReplace;
-  pendingBaselineReplace = null;
-  if (files.length) {
-    const undoOnSuccess = replaceInfo && replaceInfo.prevFile === null
-      ? { prevFile: null, onlyIfMissing: true }
-      : null;
-    void enqueueSlotLoad("baseline", files, { undoOnSuccess });
-  } else {
-    void enqueueSlotClear("baseline");
-  }
-});
-
-$("followupInput").addEventListener("change", (event) => {
-  const files = Array.from(event.target.files);
-  event.target.value = "";
-  const dropInfo = pendingFollowupDrop;
-  pendingFollowupDrop = null;
-  if (files.length) {
-    const undoOnSuccess = dropInfo
-      ? { prevFile: dropInfo.prevFile, onlyIfMissing: false }
-      : null;
-    void enqueueSlotLoad("followup", files, { undoOnSuccess });
-  } else {
-    void enqueueSlotClear("followup");
-  }
-});
-
-// Secondary slot takes drops directly on its own field while #baselineDropZone remains on shell bindPageDrop.
-bindFileDrop(
-  $("followupDropZone"),
-  (filesPromise) => {
-    const dropGen = ++followupDropGeneration;
-    void filesPromise.then((files) => {
-      if (dropGen !== followupDropGeneration || !files.length || loading || running) return;
-      pendingFollowupDrop = { prevFile: followup?.file ?? null };
-      deliverFiles($("followupInput"), files);
-    }).catch((error) => {
-      if (dropGen === followupDropGeneration) reportError(error);
-    });
+    return [{ name: files[0].name, file: files[0] }];
   },
-  document,
-  () => Boolean(loading || running),
-);
+  open: async (slot, candidate, { signal }) => {
+    const decoded = candidate.decoded ?? await decodeImageFile(candidate.file, signal);
+    candidate.decoded = decoded;
+    if (slot === "fixed") {
+      baseline = decoded;
+      refreshBaselineLayer();
+    } else {
+      followup = decoded;
+      refreshFollowupPreviewLayer();
+    }
+    return {
+      name: decoded.file.name,
+      dims: [decoded.width, decoded.height],
+      dimensionality: 2,
+    };
+  },
+  clear: (slot) => {
+    if (slot === "fixed") {
+      baseline = null;
+      refreshBaselineLayer();
+    } else {
+      followup = null;
+      refreshFollowupPreviewLayer();
+    }
+  },
+  perform: async (message, task) => {
+    const operation = beginOperation(message);
+    loading = operation.controller;
+    setBusy(true);
+    progress.setCancellable(true);
+    try {
+      const out = await task(operation.controller.signal);
+      progress.setProgress(0);
+      return out;
+    } catch (error) {
+      progress.setProgress(0);
+      throw error;
+    } finally {
+      loading = null;
+      finishOperation(operation);
+      setBusy(false);
+    }
+  },
+  onStatus: (message, isError) => {
+    if (isError) reportError(new Error(message));
+    else status(message, false, "technical");
+  },
+  onChange: ({ slot, fixed, moving }) => {
+    clearOutputs();
+    $("emptyState").hidden = Boolean(baseline || followup);
+    draw();
+    setBusy(Boolean(loading || running));
+    const loaded = slot === "fixed" ? fixed : moving;
+    if (loaded) {
+      const label = slot === "fixed" ? "Baseline" : "Follow-up";
+      log.log(`${label}: ${loaded.image.name} · ${loaded.image.dims.join(" × ")}`, "info", "analysis");
+    }
+    if (baseline && followup) {
+      status(`${loaded?.image.name ?? baseline.file.name} loaded · ready to compare`);
+    } else if (baseline || followup) {
+      const missing = baseline ? "follow-up" : "baseline";
+      status(`${loaded?.image.name ?? (baseline || followup).file.name} loaded · add ${missing} image`);
+    } else {
+      progress.reset("Drag and drop files");
+    }
+  },
+});
+$("imagePair").replaceWith(pair);
 
 // Invalidate stale comparison outputs whenever processing settings change.
 function invalidateForSettingsChange() {
@@ -1096,61 +958,6 @@ for (const id of ["normalizeColor", "suppressHair", "allowScale", "maxAngle"]) {
   $(id).addEventListener("change", invalidateForSettingsChange);
 }
 $("maxAngle").addEventListener("input", invalidateForSettingsChange);
-
-const exampleControl = createExampleSelector({
-  examples,
-  fileActions: false,
-  onStatus: (message, error) => status(message, error, "technical"),
-  onLoad: async (example, { fetchFiles, assertCurrent, signal }) => {
-    followupDropGeneration += 1;
-    // Acquire the single cancellable loading operation BEFORE fetchFiles() starts.
-    const operation = beginOperation(`Loading ${example.label}…`, signal);
-    loading = operation.controller;
-    setBusy(true, { keepExampleControl: true });
-    progress.setCancellable(true);
-    const current = operation.controller.signal;
-    try {
-      const files = await fetchFiles();
-      current.throwIfAborted();
-      assertCurrent();
-
-      let baseFile = null;
-      let follFile = null;
-      example.files.forEach((meta, idx) => {
-        if (meta.role === "baseline") baseFile = files[idx];
-        else if (meta.role === "followup") follFile = files[idx];
-      });
-      if (!baseFile || !follFile) throw new Error("Example is missing baseline or follow-up file.");
-
-      status(`Reading ${example.label}…`, false, "technical");
-      const [bDecoded, fDecoded] = await Promise.all([
-        decodeImageFile(baseFile, current),
-        decodeImageFile(follFile, current),
-      ]);
-      current.throwIfAborted();
-      assertCurrent();
-
-      clearOutputs();
-      commitSlot("baseline", bDecoded);
-      commitSlot("followup", fDecoded);
-      refreshBaselineLayer();
-      refreshFollowupPreviewLayer();
-      $("emptyState").hidden = true;
-      draw();
-      progress.setProgress(0);
-      status(`Loaded ${bDecoded.file.name} and ${fDecoded.file.name} · ready to compare`);
-      log.log(`Example ${example.id}: baseline ${formatSlotInfo(bDecoded)}, follow-up ${formatSlotInfo(fDecoded)}`, "info", "analysis");
-    } catch (error) {
-      progress.setProgress(0);
-      throw error;
-    } finally {
-      loading = null;
-      finishOperation(operation);
-      setBusy(false);
-    }
-  },
-});
-$("exampleControl").append(exampleControl);
 
 // 7. Web Worker invocation for alignment & change detection.
 function runWorkerCompare(payload, { signal, onProgress } = {}) {
@@ -1368,7 +1175,7 @@ $("runButton").addEventListener("click", () => {
 });
 
 $("cancelButton").onclick = () => {
-  exampleControl.cancel();
+  pair.exampleControl?.cancel();
   loading?.abort();
   running?.abort();
 };
@@ -1394,18 +1201,9 @@ registerAppAutomation({
       try {
         // Apply settings only AFTER acquiring the operation lock.
         applyFormSettings(settings);
-        const [bDecoded, fDecoded] = await Promise.all([
-          decodeImageFile(baseFile, current),
-          decodeImageFile(follFile, current),
-        ]);
+        await pair.useWithin("fixed", { name: baseFile.name, file: baseFile }, current);
+        await pair.useWithin("moving", { name: follFile.name, file: follFile }, current);
         current.throwIfAborted();
-        clearOutputs();
-        commitSlot("baseline", bDecoded);
-        commitSlot("followup", fDecoded);
-        refreshBaselineLayer();
-        refreshFollowupPreviewLayer();
-        $("emptyState").hidden = true;
-        draw();
 
         return await executeComparisonLocked(current, settings, reportProgress);
       } catch (error) {
@@ -1430,7 +1228,7 @@ registerAppAutomation({
 
 window.addEventListener("pagehide", () => {
   stopFlicker();
-  exampleControl.cancel();
+  pair.exampleControl?.cancel();
   loading?.abort();
   running?.abort();
 });

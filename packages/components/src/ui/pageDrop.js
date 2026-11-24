@@ -13,7 +13,7 @@ const AUXILIARY = new Set([...AUXILIARY_KINDS.map(([kind]) => kind), 'metadata',
 const OWNED = '[data-drop-target], .nd-file, .file-upload-zone, .file-drop, .upload-zone';
 const UNDO_MS = 8000;
 const HIDE_MS = 150;
-const SCAN_FILE = /\.(nii(?:\.gz)?|mgz|mgh)$/i;
+const SCAN_FILE = /\.(nii(?:\.gz)?|mgz|mgh|png|jpe?g|webp|tiff?)$/i;
 // A dropped BIDS diffusion dataset is one input: its runs, gradients and sidecars stay together.
 // Other BIDS images (for example sub-01/anat/*_T1w and *_T2w) still fill the image slots in turn.
 const BIDS_DWI_IMAGE = /(^|\/)sub-[A-Za-z0-9]+\/(ses-[A-Za-z0-9]+\/)?dwi\/[^/]*_dwi\.nii(\.gz)?$/i;
@@ -177,7 +177,10 @@ export function bindPageDrop(doc = globalThis.document) {
       if (current !== generation || !files.length || !primary.isConnected || !usable(primary)) return;
       const plan = routeFiles(files, inputs.filter(input => input.isConnected && usable(input)), primary,
         new Set(inputs.filter(input => occupied.has(input))));
-      const snapshot = plan.filter(([input]) => previous.has(input)).map(([input]) => [input, previous.get(input)]);
+      const hadLoaded = inputs.some(input => occupied.has(input));
+      const snapshot = plan
+        .filter(([input]) => previous.has(input) || hadLoaded)
+        .map(([input]) => [input, previous.get(input) ?? []]);
       for (const [input, group] of plan) replace(input, group);
       offerUndo(snapshot);
     }).catch(error => {

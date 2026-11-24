@@ -73,8 +73,8 @@ for (const failure of ["download", "corrupt image"]) {
 
     await picker.selectOption(example.id);
     await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready", { timeout: 120000 });
-    await expect(page.locator("#baselineInfo")).toContainText(example.files[0].name);
-    await expect(page.locator("#followupInfo")).toContainText(example.files[1].name);
+    await expect(page.locator("#fixedInfo")).toContainText(example.files[0].name);
+    await expect(page.locator("#movingInfo")).toContainText(example.files[1].name);
     await expect(page.locator("#runButton")).toBeEnabled();
     expect(attempts0).toBe(2);
   });
@@ -107,8 +107,8 @@ test("cancelling during image reading prevents a late commit and permits retry",
   await page.getByRole("button", { name: "Cancel example download", exact: true }).click();
   await page.evaluate(() => window.finishExampleRead());
   await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "cancelled");
-  await expect(page.locator("#baselineInfo")).toBeHidden();
-  await expect(page.locator("#followupInfo")).toBeHidden();
+  await expect(page.locator("#fixedInfo")).toBeHidden();
+  await expect(page.locator("#movingInfo")).toBeHidden();
   await expect(page.locator("#runButton")).toBeDisabled();
 
   await picker.selectOption(example.id);

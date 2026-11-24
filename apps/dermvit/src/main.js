@@ -647,6 +647,7 @@ async function loadFiles(filesPromise, signal, { message = "Reading image…", f
       progress.stopTimer(true);
       progress.setCancellable(false);
       progress.setProgress(0);
+      $("imageInput").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: input?.file ? [input.file] : [] } }));
       throw error;
     } finally {
       loading = null;

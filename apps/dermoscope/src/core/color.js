@@ -29,11 +29,6 @@ export const DERMOSCOPIC_COLORS = Object.freeze([
   Object.freeze({ id: 6, key: "black", label: "Black", lab: Object.freeze([12, 1, 1]), rgb: Object.freeze([24, 24, 28]) }),
 ]);
 
-/** Rec.709 luminance in [0, 255]. */
-export function rgbLuminance(r, g, b) {
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-
 /** Compute per-pixel luminance Float32Array from RGBA bytes. */
 export function rgbaToLuminance(rgba, width, height) {
   const count = width * height;

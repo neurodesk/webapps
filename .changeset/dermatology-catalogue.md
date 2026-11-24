@@ -1,4 +1,5 @@
 ---
+"@neurodesk/webapp-components": patch
 "dermoscope": minor
 "skin-chromophore": minor
 "wound-planimetry": minor
