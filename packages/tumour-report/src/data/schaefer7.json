@@ -1,0 +1,37 @@
+[
+  {
+    "label": 1,
+    "name": "visual",
+    "region": "visual"
+  },
+  {
+    "label": 2,
+    "name": "somatomotor",
+    "region": "somatomotor"
+  },
+  {
+    "label": 3,
+    "name": "dorsalAttention",
+    "region": "dorsalAttention"
+  },
+  {
+    "label": 4,
+    "name": "salienceVentralAttention",
+    "region": "salienceVentralAttention"
+  },
+  {
+    "label": 5,
+    "name": "limbic",
+    "region": "limbic"
+  },
+  {
+    "label": 6,
+    "name": "frontoparietalControl",
+    "region": "frontoparietalControl"
+  },
+  {
+    "label": 7,
+    "name": "default",
+    "region": "default"
+  }
+]

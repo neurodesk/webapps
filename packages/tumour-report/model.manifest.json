@@ -1,0 +1,123 @@
+{
+  "schema_version": 1,
+  "app": "tumour-report",
+  "license": "BSD-2-Clause",
+  "preprocessing_contract": {
+    "source": "packages/tumour-report/src/preprocess.js",
+    "grid": "Native 3D scalar T1c NIfTI; cropped via crop_background_minimum, resampled to 1 mm canonical RAS (linear), and back-resampled to native space before thresholding",
+    "layout": "NCDHW; NIfTI voxel axes (X, Y, Z) transposed from Fortran order to C order [1, 1, X, Y, Z]",
+    "normalization": "Clip < 0 to 0, clip to [0, 99.5] percentile, zeromean_nonzero with ddof=1",
+    "prediction": "MRI_Brain single full-volume pass (128x128x144, threshold 0.9) followed by MRI_TumorCore/t1c 160^3 edge-snapped patch-wise inference with max aggregation (threshold 0.5) and 26-connected brain_overlap refinement",
+    "mni_template": "mni_icbm152_nlin_sym_09a (197 x 233 x 189, 1 mm RAS)"
+  },
+  "assets": [
+    {
+      "id": "mri-brain",
+      "kind": "model",
+      "filename": "raidionics-v13-brain.onnx",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/models/raidionics-v13-brain.onnx",
+      "bytes": 59882306,
+      "sha256": "343bf5ca4e037d8d0e0ee813ea83f86395a602864ddf59f52990ab3411bc4c4a",
+      "input_shape": [1, 1, 128, 128, 144],
+      "threshold": 0.9,
+      "source_sha256": "9e54176ad6cbe53d46274a9c618ca361306ef66264c123cb285f9d2316cca36d",
+      "rewrite_max_logit_change": 0.000023,
+      "float16_max_logit_change": 0.02795,
+      "source_url": "https://github.com/raidionics/Raidionics-models/releases/download/v1.3.0-rc/Raidionics-MRI_Brain-v13.zip",
+      "license": "BSD-2-Clause"
+    },
+    {
+      "id": "mri-tumorcore-t1c",
+      "kind": "model",
+      "filename": "raidionics-v13-tumorcore-t1c.onnx",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/models/raidionics-v13-tumorcore-t1c.onnx",
+      "bytes": 59882306,
+      "sha256": "69ef6ccecc4441e0006319e2366ebb430a0bbde7d53fb57b751ccd981ecff4d1",
+      "input_shape": [1, 1, 160, 160, 160],
+      "threshold": 0.5,
+      "source_sha256": "b2448c20952d4b36adb16e33597d41b62fd8ce262a2ab806d3059aef8694c6fe",
+      "rewrite_max_logit_change": 0.000046,
+      "float16_max_logit_change": 0.04603,
+      "source_url": "https://github.com/raidionics/Raidionics-models/releases/download/v1.3.0-rc/Raidionics-MRI_TumorCore-v13.zip",
+      "license": "BSD-2-Clause"
+    },
+    {
+      "id": "mni-icbm152-t1-brain",
+      "kind": "atlas",
+      "filename": "mni_icbm152_t1_brain.nii.gz",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/atlases/mni_icbm152_t1_brain.nii.gz",
+      "bytes": 5077119,
+      "sha256": "1be621a123861858f4157055093f88fc387669fe35d286495afbe801a406f6e4",
+      "license": "ICBM152 copyright notice of the Montreal Neurological Institute"
+    },
+    {
+      "id": "mni-lateralisation",
+      "kind": "atlas",
+      "filename": "mni_lateralisation.nii.gz",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/atlases/mni_lateralisation.nii.gz",
+      "bytes": 243001,
+      "sha256": "09a3233d2570782c749b8eab94cc63ef0e8741b224149a03ad3692e392dcca3a",
+      "license": "BSD-2-Clause"
+    },
+    {
+      "id": "mni-lobes",
+      "kind": "atlas",
+      "filename": "mni_lobes.nii.gz",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/atlases/mni_lobes.nii.gz",
+      "bytes": 297957,
+      "sha256": "d00dbb3646191cf3258528d259690699d501f1acdd36ed6ab2fa380337f2384b",
+      "license": "BSD-2-Clause"
+    },
+    {
+      "id": "schaefer7",
+      "kind": "atlas",
+      "filename": "schaefer7_mni.nii.gz",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/atlases/schaefer7_mni.nii.gz",
+      "bytes": 308843,
+      "sha256": "bead3c88cf9dbb5039023e58cb93a6b7bbdea11c4889c3e68704f1727e10cf56",
+      "license": "MIT"
+    },
+    {
+      "id": "schaefer17",
+      "kind": "atlas",
+      "filename": "schaefer17_mni.nii.gz",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/atlases/schaefer17_mni.nii.gz",
+      "bytes": 304633,
+      "sha256": "bde5bd6138cb9aeada6e1b1c7dcd5e8e595c724fefbfa02255a042c1f82b6a83",
+      "license": "MIT"
+    },
+    {
+      "id": "resect-left",
+      "kind": "atlas",
+      "filename": "resect_left_mni.nii.gz",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/atlases/resect_left_mni.nii.gz",
+      "bytes": 648430,
+      "sha256": "d4ca29d4fedfdf42aae417316e31be2248a211c6ccff3733661003abc5dfc830",
+      "license": "BSD-2-Clause"
+    },
+    {
+      "id": "resect-right",
+      "kind": "atlas",
+      "filename": "resect_right_mni.nii.gz",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/atlases/resect_right_mni.nii.gz",
+      "bytes": 678539,
+      "sha256": "9de895fac15090be153587faa8687f2bd98ee62e7c70fbba8eed516435072ac9",
+      "license": "BSD-2-Clause"
+    },
+    {
+      "id": "bcb-tracts",
+      "kind": "atlas",
+      "filename": "bcb_tracts.bin.gz",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/atlases/bcb_tracts.bin.gz",
+      "bytes": 365020,
+      "sha256": "c4190c8aa7b68e5478299f6abc490313a7bbd620aae3afe469bedec2a234827b",
+      "tract_count": 64,
+      "license": "BSD-3-Clause"
+    }
+  ],
+  "source_commit": "Raidionics-models v1.3.0-rc + dbouget/raidionics-rads:v1.3.2-py39-cpu@sha256:ef2861258f92e66c21ded1405ec5ffa856ffda9cd9bda38ae90e07ade01946ab",
+  "graph_optimization": "3D ConvTranspose(k=3,s=2,p=1,op=1) rewritten to bit-exact symmetric-pad polyphase 2x2x2 Conv + Slice + depth-to-space for ONNX Runtime WebGPU; weights >=1024 elements stored as float16 with Cast to float32 in graph. Built by packages/tumour-report/scripts/export_model.py.",
+  "repository": "neurodeskorg/webapps",
+  "revision": "1ab3106044c0b60d5f4636a1603b59f627239530",
+  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/"
+}

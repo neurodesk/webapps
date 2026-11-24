@@ -2842,3 +2842,69 @@ apps:
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
+
+  tumour-report:
+    about:
+      - "Segment contrast-enhancing brain tumours (glioblastoma, meningioma and brain metastases) on a single native-space post-contrast T1-weighted MRI (T1c) using the Raidionics v1.3 brain and tumour-core 3D AGU-Net models, or characterise an existing native-space binary tumour mask."
+      - "Native-space morphometry reports 26-connected per-lesion volume, physical RAS centroid, exact IBSI mesh 3D diameter, IBSI Marching Cubes surface area and sphericity, mask-supported axial bidimensional diameters (with a ≥10 × 10 mm measurability flag) and native minimum-surface-distance multifocality (distinct from Raidionics' MNI 6-CC HD95 multifocality). Optional MNI ICBM152 2009a alignment via Greedy WebAssembly adds hemispheric laterality, midline crossing, cortical lobe and Schaefer 7/17 network overlap, exact 3D EDT voxel-centre distance and overlap across 64 BCB subcortical white-matter tracts (distinct from Raidionics' tract HD95), and the Kommers et al. (2021) resectability index for glioblastoma."
+      - "On the BEAMSTER native T1c example, the native tumour mask matches the pinned dbouget/raidionics-rads:v1.3.2-py39-cpu container with Dice 1.00000 in Node (0 differing voxels) and Dice 0.99971 in Chromium WASM (3 differing boundary voxels out of 65.5M); packages/tumour-report/README.md lists the validation measurements."
+      - "Outputs are research estimates, not for clinical diagnosis or surgical planning. Verify all masks and atlas locations against the source MRI."
+    packages:
+      - { name: Raidionics, url: https://github.com/raidionics/Raidionics-models, role: brain and contrast-enhancing tumour-core 3D AGU-Net models (v1.3) and RADS atlases }
+      - { name: Greedy, url: https://github.com/pyushkevich/greedy, role: MNI ICBM152 2009a affine and deformable image registration in WebAssembly }
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: neural network inference on WebGPU or WebAssembly CPU }
+      - { name: dcm2niix, url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Tumour segmentation and RADS reporting
+        title: Raidionics
+        reference: "Bouget D, Alsinan D, Gaitan V, Helland RH, Pedersen A, Solheim O, Reinertsen I. Raidionics: an open software for pre- and postoperative central nervous system tumor segmentation and standardized reporting. Scientific Reports. 2023;13:15570."
+        doi: 10.1038/s41598-023-42048-7
+        code: https://github.com/raidionics/Raidionics
+      - group: Tumour segmentation and RADS reporting
+        title: Preoperative glioma segmentation and standardized reporting
+        reference: "Bouget D, Pedersen A, Jakola AS, Kavouridis V, Emblem KE, Eijgelaar RS, Kommers I, Ardon H, Barkhof F, Bello L, Berger MS, Conti Nibali M, Furtner J, Hervey-Jumper S, Idema AJS, Kiesel B, Kloet A, Mandonnet E, Müller DMJ, Robe PA, Rossi M, Sciortino T, van den Brink WA, Wagemakers M, Widhalm G, Witte MG, Zwinderman AH, De Witt Hamer PC, Solheim O, Reinertsen I. Preoperative brain tumor imaging: models and software for segmentation and standardized reporting. Frontiers in Neurology. 2022;13:932219."
+        doi: 10.3389/fneur.2022.932219
+        code: https://github.com/raidionics/raidionics_rads_lib
+      - group: Tumour segmentation and RADS reporting
+        title: Glioblastoma resectability atlas
+        reference: "Kommers I, Bouget D, Pedersen A, Eijgelaar RS, Ardon H, Barkhof F, Bello L, Berger MS, Conti Nibali M, Furtner J, Hervey-Jumper S, Idema AJS, Kiesel B, Kloet A, Mandonnet E, Müller DMJ, Robe PA, Rossi M, Sagberg LM, Sciortino T, van den Brink WA, Wagemakers M, Widhalm G, Witte MG, Zwinderman AH, Reinertsen I, Solheim O, De Witt Hamer PC. Glioblastoma surgery imaging-reporting and data system: standardized reporting of tumor volume, location, and resectability based on automated segmentations. Neuro-Oncology. 2021;23(11):1945–1955."
+        doi: 10.1093/neuonc/noab026
+      - group: Anatomical atlases and registration
+        title: MNI ICBM152 2009a template
+        reference: "Fonov V, Evans AC, Botteron K, Almli CR, McKinstry RC, Collins DL. Unbiased average age-appropriate atlases for pediatric studies. NeuroImage. 2011;54(1):313–327."
+        doi: 10.1016/j.neuroimage.2010.07.033
+      - group: Anatomical atlases and registration
+        title: Schaefer cortical parcellation
+        reference: "Schaefer A, Kong R, Gordon EM, Laumann TO, Zuo XN, Holmes AJ, Eickhoff SB, Yeo BTT. Local-global parcellation of the human cerebral cortex from intrinsic functional connectivity MRI. Cerebral Cortex. 2018;28(9):3095–3114."
+        doi: 10.1093/cercor/bhx179
+      - group: Anatomical atlases and registration
+        title: BCBtoolkit white-matter tract atlas
+        reference: "Foulon C, Cerliani L, Kinkingnéhun S, Levy R, Rosso C, Urbanski M, Volle E, Thiebaut de Schotten M. Advanced lesion symptom mapping analyses and implementation as BCBtoolkit. GigaScience. 2018;7(3):giy004."
+        doi: 10.1093/gigascience/giy004
+      - group: Anatomical atlases and registration
+        title: Greedy registration
+        reference: "Yushkevich PA, Pluta J, Wang H, Wisse LEM, Das S, Wolk D. Fast automatic segmentation of hippocampal subfields and medial temporal lobe subregions in 3 Tesla and 7 Tesla T2-weighted MRI. Alzheimer's & Dementia. 2016;12(7):P126–P127."
+        url: https://sites.google.com/view/greedyreg/about
+        code: https://github.com/pyushkevich/greedy
+      - group: Inference and conversion
+        title: ONNX Runtime Web
+        reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."
+        url: https://onnxruntime.ai
+      - group: Inference and conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+        code: https://github.com/rordenlab/dcm2niix
+      - group: Example data
+        title: BEAMSTER brain metastases cohort
+        reference: "BEAMSTER: Brain Metastases Stereotactic Radiosurgery MRI dataset. Figshare. 2025."
+        doi: 10.6084/m9.figshare.29365844.v1
+      - group: Example data
+        title: UPENN-GBM
+        reference: "Bakas S, Sako C, Akbari H, et al. The University of Pennsylvania glioblastoma (UPenn-GBM) cohort: advanced MRI, clinical, genomics, & radiomics. Scientific Data. 2022;9:453."
+        doi: 10.1038/s41597-022-01560-7
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
