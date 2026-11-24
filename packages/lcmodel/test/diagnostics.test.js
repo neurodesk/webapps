@@ -14,6 +14,12 @@ test("MYBASI 10 names both echo times", () => {
   assert.match(text, /basis set's echo time \(35 ms\) differs from the data's \(40 ms\) by 3 ms or more/);
 });
 
+test("MYBASI 11 explains PRESS vs STEAM sequence mismatch", () => {
+  const text = explainDiagnostic("1     ERROR MYBASI 11");
+  assert.ok(text.startsWith("1     ERROR MYBASI 11: "));
+  assert.match(text, /PRESS vs STEAM/);
+});
+
 test("repeated messages take LCModel's plural levels and are explained the same", () => {
   assert.match(explainDiagnostic("2    ERRORS MYBASI 10", { dataTeMs: 40, basisTeMs: 35 }), /\(35 ms\) differs from the data's \(40 ms\)/);
   assert.match(explainDiagnostic("3    info's RFALSI 12"), /information; the fit is unaffected/);

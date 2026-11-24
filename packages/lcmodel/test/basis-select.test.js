@@ -241,3 +241,19 @@ test("a .BASIS header is read whatever its case, spacing and exponent letter", (
   const bare = parseBasisHeader(" $BASIS1\n IDBASI = 'FID-A press-3t-te30',\n $END\n METABO = 'NAA'\n");
   assert.deepEqual([bare.hzpppm, bare.teMs, bare.sequence], [null, null, null]);
 });
+
+test("STEAM basis selection prefers matching mixing time and notes unverified or mismatched TM", () => {
+  const unknown = set("a-steam-custom", "STEAM", { teMs: 20 });
+  const tm10 = set("b-steam-tm10", "STEAM", { teMs: 20, tmMs: 10 });
+  const tm32 = set("z-steam-tm32", "STEAM", { teMs: 20, tmMs: 32 });
+  const data = { hzpppm: field3T, teMs: 20, tmMs: 32, sequence: "svs_st" };
+  const ranked = rankBases(data, [unknown, tm10, tm32]);
+  assert.deepEqual(ranked.map((r) => r.basis.id), ["z-steam-tm32", "a-steam-custom", "b-steam-tm10"]);
+  assert.deepEqual([ranked[0].level, ranked[0].notes], ["match", []]);
+  assert.deepEqual([ranked[1].level, notes(ranked[1])], ["match", [["info", "This basis set does not record its mixing time."]]]);
+  assert.equal(ranked[2].level, "warning");
+  assert.match(ranked[2].notes.map((n) => n.text).join(" "), /TM 10 ms vs 32 ms/);
+
+  const noDataTm = assessBasis({ hzpppm: field3T, teMs: 20, sequence: "svs_st" }, tm32);
+  assert.deepEqual([noDataTm.usable, noDataTm.level, notes(noDataTm)], [true, "match", [["info", "The mixing time could not be read from the data."]]]);
+});

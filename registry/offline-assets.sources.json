@@ -3543,6 +3543,20 @@
         "bytes": 16124,
         "kind": "example",
         "license": "MIT"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/b181b231d9e7686b364e78995efdce9768a57438/lcmodel/examples/siemens-steam/steam7t.dat",
+        "sha256": "3fcec0fb6619dab4829a2062ba06419cb800a70838a59f53bdbc24e01ee2d563",
+        "bytes": 70011424,
+        "kind": "example",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/b181b231d9e7686b364e78995efdce9768a57438/lcmodel/examples/siemens-steam/steam7t_w.dat",
+        "sha256": "5d4ac6d386d106c56914ef35d06330fa4bf13b32be53afd470f328f48375ae04",
+        "bytes": 3682624,
+        "kind": "example",
+        "license": "CC-BY-4.0"
       }
     ],
     "elastix": [

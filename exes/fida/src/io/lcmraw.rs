@@ -243,6 +243,7 @@ pub fn load(data: &[u8], kind: RawType) -> Res<Spectra> {
         txfrq: hzpppm * 1e6,
         // FID-A sets no te/tr here; the echot of an io_writelcm header is kept
         te: if echot.is_finite() { echot } else { 0.0 },
+        tm: None,
         tr: 0.0,
         bo,
         seq: String::new(),

@@ -296,6 +296,9 @@ export function explainDiagnostic(line, { dataTeMs = null, basisTeMs = null } = 
     const data = ms(dataTeMs);
     return `${line}: the basis set's echo time${basis ? ` (${basis})` : ""} differs from the data's${data ? ` (${data})` : ""} by 3 ms or more. LCModel still fits, but coupled metabolites (Glu, Gln, GABA, Ins) can be biased: check the TE the scanner recorded, or supply a basis set simulated at the data's TE.`;
   }
+  if (routine === "MYBASI" && number === "11") {
+    return `${line}: the basis set and the spectrum name different sequences (PRESS vs STEAM). LCModel still fits, but coupled metabolites will be biased: choose a basis set matching the acquired sequence.`;
+  }
   if (/^info/i.test(level)) return `${line} (LCModel information; the fit is unaffected)`;
   return `${line} (see LCModel's manual, section 12, for ${routine} ${number})`;
 }

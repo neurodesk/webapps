@@ -944,8 +944,8 @@
     },
     "siemens-special": {
       "files": {
-        "specialDLPFC.H2O": "659c9133e32387f1af8f738c11ddd5c1c076c42d80510da8de56d0a908bd9873",
-        "specialDLPFC.RAW": "0080eb5048022a5f871e41c4f0a20ff04ab414af51da39e59104df5fbd323856",
+        "specialDLPFC.H2O": "940be38eaedacdd255ba46e4f3af2ae32838608f42d9d642bf69ebd36d03ac01",
+        "specialDLPFC.RAW": "b790a8308a2c694d18e91b4af7d811c70a3b07eae176b75a9d08f54dccdc15bd",
         "specialDLPFC.control": "fab6081eeed388c767286dd8625df56f4426a10d4efcad96397e2e57731ed231",
         "specialDLPFC.coord": "ccfb71bb796924d66e9c3c9e59e8dc75fc4736ad6490e3e559d9b34224b4a44e",
         "specialDLPFC.table": "c548c1de56224a974a7cc182e332adf12cdba9f8fbef484602fa13518c18d63e",
@@ -963,11 +963,12 @@
           "Glu+Gln,5.737,3,1.039"
         ]
       },
-      "seconds": 18.1
+      "documents": {},
+      "seconds": 16.1
     },
     "siemens-megapress": {
       "files": {
-        "megapressDLPFC.RAW": "f00a273f54f9dbcf7edb81bcc1074413aad72f1ac15b5537373334b41f18ea10",
+        "megapressDLPFC.RAW": "eeabf4bd23cd01c161c08ac25b6b8bc7e380889ad5e2ca8b2f61f80c91068d7b",
         "megapressDLPFC.control": "1c8b5d28396f0e4b2f349de293aecf823a119655d8112960a97ffc5f466f4b83",
         "megapressDLPFC.coord": "db7d9fe6612a770315927c2638454c12b38174cc819967dae3631913092f66d0",
         "megapressDLPFC.table": "70bd74a132102d8ac004bd8fbde636441af8ce2c0a77b5dc412036f4b659b0eb",
@@ -985,12 +986,13 @@
           "Glu+Gln,7.74e-8,3,0.688,"
         ]
       },
-      "seconds": 8.1
+      "documents": {},
+      "seconds": 4
     },
     "philips-megapress": {
       "files": {
         "sub-01_megapress_act.H2O": "e0e5f5f24bfb6c3c7f68a5701a0f219f858b1c56109f39ee1bbf4315a08e159f",
-        "sub-01_megapress_act.RAW": "369f4aa8f5277208db94c78c3b086313e572ee555c29fd3f8ce4bde7bf48634d",
+        "sub-01_megapress_act.RAW": "a66904b183b32cde108bb68839fdb9edeaf9b4c636b0cf8cb9a005c281663c6a",
         "sub-01_megapress_act.control": "f160f64b0362f8da17c911ad72ccc1d10649bc9e9d2f6d818883e33700c184bc",
         "sub-01_megapress_act.coord": "d516602d28e02c9e55d146302bdb26ff5110437a6bb34d4b985f927b12ffce64",
         "sub-01_megapress_act.table": "3585cfe3011c60471fa517b1d98b1d0067e632c254984ca4f1b47eacf81b3592",
@@ -1008,12 +1010,13 @@
           "Glu+Gln,2.355,3,0.697,"
         ]
       },
-      "seconds": 6.1
+      "documents": {},
+      "seconds": 4
     },
     "philips-megapress-none": {
       "files": {
         "sub-01_megapress_act.H2O": "e0e5f5f24bfb6c3c7f68a5701a0f219f858b1c56109f39ee1bbf4315a08e159f",
-        "sub-01_megapress_act.RAW": "369f4aa8f5277208db94c78c3b086313e572ee555c29fd3f8ce4bde7bf48634d",
+        "sub-01_megapress_act.RAW": "a66904b183b32cde108bb68839fdb9edeaf9b4c636b0cf8cb9a005c281663c6a",
         "sub-01_megapress_act.control": "7ea23d0f13a56bac0066ea9d0d02984022af46d90f0a4c7875357d0a99bf0977",
         "sub-01_megapress_act.coord": "a9f6848ce335768e7c0c3a32714aba87080a59f8c431f3c4da9b8d6c35ea748e",
         "sub-01_megapress_act.table": "60e0a15d53c8f00b4a358298ae18a26f36925dfd56031d652f7fa0615eb68a93",
@@ -1029,7 +1032,8 @@
           "Glu+Gln,2.313,4,0.714"
         ]
       },
-      "seconds": 6.1
+      "documents": {},
+      "seconds": 4
     },
     "philips-megapress-unedited": {
       "files": {
@@ -1052,7 +1056,8 @@
           "Glu+Gln,4.441,13,0.589"
         ]
       },
-      "seconds": 18.2
+      "documents": {},
+      "seconds": 14.1
     },
     "philips-press-group": {
       "files": {
@@ -1581,7 +1586,7 @@
     "philips-megapress-tissue": {
       "files": {
         "sub-01_megapress_act.H2O": "e0e5f5f24bfb6c3c7f68a5701a0f219f858b1c56109f39ee1bbf4315a08e159f",
-        "sub-01_megapress_act.RAW": "369f4aa8f5277208db94c78c3b086313e572ee555c29fd3f8ce4bde7bf48634d",
+        "sub-01_megapress_act.RAW": "a66904b183b32cde108bb68839fdb9edeaf9b4c636b0cf8cb9a005c281663c6a",
         "sub-01_megapress_act.control": "f160f64b0362f8da17c911ad72ccc1d10649bc9e9d2f6d818883e33700c184bc",
         "sub-01_megapress_act.coord": "d516602d28e02c9e55d146302bdb26ff5110437a6bb34d4b985f927b12ffce64",
         "sub-01_megapress_act.table": "3585cfe3011c60471fa517b1d98b1d0067e632c254984ca4f1b47eacf81b3592",
@@ -1797,12 +1802,36 @@
           ]
         }
       },
-      "seconds": 6
+      "seconds": 4
+    },
+    "siemens-steam": {
+      "files": {
+        "steam7t.H2O": "323bfdcbea240bdf96c2beb680c6b75549261a3b7e81e9592ab3d3dbdd977452",
+        "steam7t.RAW": "43589760a57c54b4d95184fef8a824a15e57d399476cde4fa4b39b52245e7f9c",
+        "steam7t.control": "16f7fe5bb8427e9db6eb3cf852df1a25a6e8d61c2a3adb0b3e58b8a0f500b437",
+        "steam7t.coord": "096e4d9987be8bc70273539c1534bb3cce2b39476458dc523afc4c0f7bc46299",
+        "steam7t.table": "70ffd6e14349b1533770a7847ad537f0ad22212e38c4ceeac87b44cc94eda41d",
+        "steam7t_concentrations.csv": "70fb517249813598c1b50f717e912d7ac3d98a5733e24c5e7b5f902fda7cacc9",
+        "steam7t_fida.json": "a42e574e3ee4edc277c4162c4a94b317e977872d1b228f66506111688d12a5c7",
+        "steam7t_report.html": "95ee6103b4d13a03391b86e78921238e3237cdbd8b9740b66c69d1cb81a09c9f"
+      },
+      "headline": {
+        "steam7t_concentrations.csv": [
+          "GABA,0.834,10,0.133",
+          "Ins,4.021,3,0.644",
+          "GPC+PCh,1.396,2,0.224",
+          "NAA+NAAG,9.26,2,1.483",
+          "Cr+PCr,6.245,2,1",
+          "Glu+Gln,6.921,3,1.108"
+        ]
+      },
+      "documents": {},
+      "seconds": 22.1
     }
   },
   "browser": {
     "path": "apps/lcmodel/e2e/reference.spec.js: the app's fit and fit-group automation, its worker, the built assets",
-    "app": "lcmodel 0.8.20261022",
+    "app": "lcmodel 0.8.20261119",
     "browser": "Chromium 156.0.8078.4"
   }
 }

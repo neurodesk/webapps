@@ -228,6 +228,7 @@ pub fn load(files: &[(String, &[u8])], raw: bool, leftshift: usize) -> Res<Bruke
             dwelltime,
             txfrq,
             te,
+            tm: None,
             tr,
             bo,
             seq: sequence.clone(),

@@ -82,6 +82,7 @@ pub fn load(path: &Path) -> Spectra {
         dwelltime: num(&h, "dwelltime"),
         txfrq: num(&h, "txfrq"),
         te: num(&h, "te"),
+        tm: None,
         tr: num(&h, "tr"),
         bo: num(&h, "Bo"),
         seq: h.get("seq").and_then(|v| v.as_str()).unwrap_or("").to_string(),
