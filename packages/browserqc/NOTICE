@@ -1,7 +1,7 @@
 BrowserQC command line
 BSD-2-Clause, Copyright (c) 2026, Chris Rorden (BrowserQC); Node packaging by Neurodesk.
 
-Segmentation runs @brainchop/mindgrab 0.1.20260925 (MIT): the MindGrab brain mask
+Segmentation runs @brainchop/core 1.0.0 (MIT): the MindGrab brain mask
 and the MindMap, MindSnap and 18-class MeshNet models, with their weights compiled
 into the WebAssembly modules. Quality metrics run niimath 1.4.20260928 (BSD-2-Clause)
 compiled to WebAssembly by @niivue/niimath. See app/node_modules in a portable archive

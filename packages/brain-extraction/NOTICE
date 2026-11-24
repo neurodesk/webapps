@@ -13,7 +13,7 @@ skull-stripping for any brain image. NeuroImage 260:119474, 2022.
 https://doi.org/10.1016/j.neuroimage.2022.119474
 Model and processing through @neurodesk/synthstrip (Apache-2.0); see its NOTICE.
 
-MindGrab, used by the web app: @brainchop/mindgrab,
-https://github.com/neuroneural/brainchop
+MindGrab, used by the web app: @brainchop/core, MIT license:
+https://github.com/neuroneural/brainchop-core
 
 JavaScript adapters and packaging by Neurodesk, Apache-2.0.

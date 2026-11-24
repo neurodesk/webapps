@@ -1140,13 +1140,13 @@
         "sub-01_PRESS_35_act.table": "0075334d8be055d59a3424e67af12a9e08acaf93c667d3548537843d41aa8f1e",
         "sub-01_PRESS_35_act_concentrations.csv": "43c44349fe3ddced0d9e8e30042311d94c94265aa23c602eb212579df8aec3db",
         "sub-01_PRESS_35_act_fida.json": "e53f9cc1a052060b370c3965015afa2b31342d35a1b41c68344f284e13896bdd",
-        "sub-01_PRESS_35_act_report.html": "6088d2c4bfb00a6ea8e4093bf07fc6f1b577489a5d6ca59867e2069d3b811844",
-        "sub-01_PRESS_35_act_tissue_corrected.csv": "97eaeedcbbd52b72b35343e1fbf8d651e4383f82b2f18ad34768098860f91e5d",
-        "sub-01_PRESS_35_act_tissue_correction.json": "072ea1a4da367274c0e975f468c46aa4f080d10c5d19d84d94e02e3e3a27bbdb",
+        "sub-01_PRESS_35_act_report.html": "58839d3ad7b79a7a3e1e19b061e90bc8743c6f0d991c367304192783e217f336",
+        "sub-01_PRESS_35_act_tissue_corrected.csv": "44926aabf17ff516d27824c6f42e8a93b18eef68c492332241f45d5f4f9c3e6e",
+        "sub-01_PRESS_35_act_tissue_correction.json": "caa4b296ff2d42020f2efc2bd0bb48d6a610bf33ae9a13ef437427b866803ac2",
         "sub-01_PRESS_35_act_voxel_mask.nii": "8ae7fc4615990b13a1196807a12879feab945348a8e2cc89d9e68a435b726dfc",
-        "sub-01_T1w_defaced_csf.nii": "36329c235fc0d430414f6316943708dbc6cc6f62d1bd59fc7e4d81b22991bf4a",
-        "sub-01_T1w_defaced_gm.nii": "76efb91fe1804e3f88ede3b6f9c5411e5705b39cf22d8c0c925a697a45e2ec63",
-        "sub-01_T1w_defaced_wm.nii": "6533eb339d6c47d329528763613dfc8088158df2a148caeea443f328678589ba"
+        "sub-01_T1w_defaced_csf.nii": "3aaad8a7d1da5941420bfca4c4180098173c0b263a070f385fc0d55af8be11cf",
+        "sub-01_T1w_defaced_gm.nii": "0db920892df389167bfe26202c657406eb4b09c0995e83115d8ffbdf97d6495c",
+        "sub-01_T1w_defaced_wm.nii": "f9912d7ba2432c039f86c818f1c9d8012a2e23166f6d081dfa8b81d38d796977"
       },
       "headline": {
         "sub-01_PRESS_35_act_concentrations.csv": [
@@ -1161,21 +1161,21 @@
       "documents": {
         "sub-01_PRESS_35_act_tissue_correction.json": {
           "fractions": {
-            "gm": 0.48851148851148846,
-            "wm": 0.30269730269730266,
-            "csf": 0.20879120879120877
+            "gm": 0.427,
+            "wm": 0.287,
+            "csf": 0.286
           },
           "molalFractions": {
-            "gm": 0.488340233172273,
-            "wm": 0.25213602869102947,
-            "csf": 0.25952373813669755
+            "gm": 0.417905488638701,
+            "wm": 0.23405112302027697,
+            "csf": 0.34804338834102205
           },
           "fractionSource": {
-            "method": "MindMap partial-volume maps (@brainchop/mindgrab segmentTissues)",
-            "version": "0.1.20260925",
+            "method": "MindMap partial-volume maps (@brainchop/core segmentTissues)",
+            "version": "1.0.0",
             "backend": "cpu",
             "t1": "sub-01_T1w_defaced.nii.gz",
-            "coverage": 0.7967879897745976
+            "coverage": 0.7197162117804423
           },
           "voxel": {
             "affine": [
@@ -1264,7 +1264,7 @@
             {
               "name": "Ala",
               "lcmodel": 0.00454,
-              "corrected": 0.0111779056408541,
+              "corrected": 0.01228882981572499,
               "alphaCorrected": null,
               "t1Ms": 1265,
               "t2Ms": 154.5
@@ -1272,7 +1272,7 @@
             {
               "name": "Asc",
               "lcmodel": 0.68,
-              "corrected": 1.7035509192590805,
+              "corrected": 1.8728595500647918,
               "alphaCorrected": null,
               "t1Ms": 1265,
               "t2Ms": 143.5
@@ -1280,7 +1280,7 @@
             {
               "name": "Asp",
               "lcmodel": 2.59,
-              "corrected": 6.7384026883685815,
+              "corrected": 7.4081036759277925,
               "alphaCorrected": null,
               "t1Ms": 1265,
               "t2Ms": 124.25
@@ -1288,7 +1288,7 @@
             {
               "name": "Cr",
               "lcmodel": 1.149,
-              "corrected": 2.90146889767833,
+              "corrected": 3.189833466554808,
               "alphaCorrected": null,
               "t1Ms": 1350,
               "t2Ms": 156
@@ -1296,7 +1296,7 @@
             {
               "name": "GABA",
               "lcmodel": 0.303,
-              "corrected": 0.8962798809573006,
+              "corrected": 0.9853573002161188,
               "alphaCorrected": null,
               "t1Ms": 1310,
               "t2Ms": 88.5
@@ -1304,7 +1304,7 @@
             {
               "name": "Glc",
               "lcmodel": 1.096,
-              "corrected": 2.8235267923584733,
+              "corrected": 3.1041450291560975,
               "alphaCorrected": null,
               "t1Ms": 1265,
               "t2Ms": 128.75
@@ -1312,7 +1312,7 @@
             {
               "name": "Gln",
               "lcmodel": 0.796,
-              "corrected": 2.009056675807743,
+              "corrected": 2.208728215499684,
               "alphaCorrected": null,
               "t1Ms": 1265,
               "t2Ms": 139.25
@@ -1320,7 +1320,7 @@
             {
               "name": "Glu",
               "lcmodel": 7.09,
-              "corrected": 18.098309954361007,
+              "corrected": 19.897023478934102,
               "alphaCorrected": null,
               "t1Ms": 1220,
               "t2Ms": 126.25
@@ -1328,7 +1328,7 @@
             {
               "name": "Gly",
               "lcmodel": 0.724,
-              "corrected": 1.8945575652585775,
+              "corrected": 2.0828495286687705,
               "alphaCorrected": null,
               "t1Ms": 1265,
               "t2Ms": 121.75
@@ -1336,7 +1336,7 @@
             {
               "name": "GPC",
               "lcmodel": 0.775,
-              "corrected": 1.7255118080077103,
+              "corrected": 1.8970030375037643,
               "alphaCorrected": null,
               "t1Ms": 1190,
               "t2Ms": 233
@@ -1344,7 +1344,7 @@
             {
               "name": "GSH",
               "lcmodel": 0.541,
-              "corrected": 1.4332215713676721,
+              "corrected": 1.5756633259088328,
               "alphaCorrected": null,
               "t1Ms": 1265,
               "t2Ms": 116.75
@@ -1352,7 +1352,7 @@
             {
               "name": "Ins",
               "lcmodel": 4.769,
-              "corrected": 10.653336242336666,
+              "corrected": 11.712125711035002,
               "alphaCorrected": null,
               "t1Ms": 1120,
               "t2Ms": 198.75
@@ -1360,7 +1360,7 @@
             {
               "name": "Lac",
               "lcmodel": 0.312,
-              "corrected": 0.7988176741639871,
+              "corrected": 0.878208742048785,
               "alphaCorrected": null,
               "t1Ms": 1265,
               "t2Ms": 131.75
@@ -1368,7 +1368,7 @@
             {
               "name": "NAA",
               "lcmodel": 7.953,
-              "corrected": 18.380956567738483,
+              "corrected": 20.207761128846972,
               "alphaCorrected": null,
               "t1Ms": 1410,
               "t2Ms": 300.5
@@ -1376,7 +1376,7 @@
             {
               "name": "NAAG",
               "lcmodel": 0.0376,
-              "corrected": 0.09302645355169967,
+              "corrected": 0.10227195440611471,
               "alphaCorrected": null,
               "t1Ms": 1265,
               "t2Ms": 151.25
@@ -1392,7 +1392,7 @@
             {
               "name": "PCr",
               "lcmodel": 5.265,
-              "corrected": 13.295242599022108,
+              "corrected": 14.616599827163675,
               "alphaCorrected": null,
               "t1Ms": 1350,
               "t2Ms": 156
@@ -1400,7 +1400,7 @@
             {
               "name": "PE",
               "lcmodel": 6.214,
-              "corrected": 15.958533676773728,
+              "corrected": 17.544584000210214,
               "alphaCorrected": null,
               "t1Ms": 1265,
               "t2Ms": 130.25
@@ -1408,7 +1408,7 @@
             {
               "name": "Scyllo",
               "lcmodel": 0.308,
-              "corrected": 0.7722666702425728,
+              "corrected": 0.8490189475461024,
               "alphaCorrected": null,
               "t1Ms": 1265,
               "t2Ms": 143
@@ -1416,7 +1416,7 @@
             {
               "name": "Tau",
               "lcmodel": 0.38,
-              "corrected": 1.0181649875429173,
+              "corrected": 1.1193560456007414,
               "alphaCorrected": null,
               "t1Ms": 1265,
               "t2Ms": 112.5
@@ -1432,7 +1432,7 @@
             {
               "name": "GPC+PCh",
               "lcmodel": 0.775,
-              "corrected": 1.696678285865666,
+              "corrected": 1.8653038750688549,
               "alphaCorrected": null,
               "t1Ms": 1135,
               "t2Ms": 231.625
@@ -1440,7 +1440,7 @@
             {
               "name": "NAA+NAAG",
               "lcmodel": 7.991,
-              "corrected": 18.750086306151914,
+              "corrected": 20.613577091249304,
               "alphaCorrected": null,
               "t1Ms": 1337.5,
               "t2Ms": 225.875
@@ -1448,7 +1448,7 @@
             {
               "name": "Ins+Gly",
               "lcmodel": 5.493,
-              "corrected": 13.524280987932066,
+              "corrected": 14.868401360743915,
               "alphaCorrected": null,
               "t1Ms": 1265,
               "t2Ms": 154.5
@@ -1456,7 +1456,7 @@
             {
               "name": "Cr+PCr",
               "lcmodel": 6.414,
-              "corrected": 16.196711496700438,
+              "corrected": 17.806433293718484,
               "alphaCorrected": null,
               "t1Ms": 1350,
               "t2Ms": 156
@@ -1464,7 +1464,7 @@
             {
               "name": "Glu+Gln",
               "lcmodel": 7.886,
-              "corrected": 20.00399323444813,
+              "corrected": 21.992104459584947,
               "alphaCorrected": null,
               "t1Ms": 1242.5,
               "t2Ms": 132.75
@@ -1472,7 +1472,7 @@
             {
               "name": "Lip13a",
               "lcmodel": 15.131,
-              "corrected": 37.253940584088845,
+              "corrected": 40.95645020743058,
               "alphaCorrected": null,
               "t1Ms": 1265,
               "t2Ms": 154.5
@@ -1488,7 +1488,7 @@
             {
               "name": "Lip09",
               "lcmodel": 4.337,
-              "corrected": 10.678100608895203,
+              "corrected": 11.739351301938166,
               "alphaCorrected": null,
               "t1Ms": 1265,
               "t2Ms": 154.5
@@ -1496,7 +1496,7 @@
             {
               "name": "MM09",
               "lcmodel": 3.634,
-              "corrected": 8.947248700190263,
+              "corrected": 9.83647743399661,
               "alphaCorrected": null,
               "t1Ms": 1265,
               "t2Ms": 154.5
@@ -1504,7 +1504,7 @@
             {
               "name": "Lip20",
               "lcmodel": 2.554,
-              "corrected": 6.288187446418804,
+              "corrected": 6.913143469022384,
               "alphaCorrected": null,
               "t1Ms": 1265,
               "t2Ms": 154.5
@@ -1512,7 +1512,7 @@
             {
               "name": "MM20",
               "lcmodel": 5.101,
-              "corrected": 12.559140236563165,
+              "corrected": 13.807339403086603,
               "alphaCorrected": null,
               "t1Ms": 1265,
               "t2Ms": 154.5
@@ -1520,7 +1520,7 @@
             {
               "name": "MM12",
               "lcmodel": 2.214,
-              "corrected": 5.4510755702314935,
+              "corrected": 5.992834628197166,
               "alphaCorrected": null,
               "t1Ms": 1265,
               "t2Ms": 154.5
@@ -1528,7 +1528,7 @@
             {
               "name": "MM14",
               "lcmodel": 6.936,
-              "corrected": 17.07708227422115,
+              "corrected": 18.77430035283448,
               "alphaCorrected": null,
               "t1Ms": 1265,
               "t2Ms": 154.5
@@ -1536,7 +1536,7 @@
             {
               "name": "MM17",
               "lcmodel": 3.977,
-              "corrected": 9.791746857638053,
+              "corrected": 10.764906646946761,
               "alphaCorrected": null,
               "t1Ms": 1265,
               "t2Ms": 154.5
@@ -1544,7 +1544,7 @@
             {
               "name": "Lip13a+Lip13b",
               "lcmodel": 15.131,
-              "corrected": 37.253940584088845,
+              "corrected": 40.95645020743058,
               "alphaCorrected": null,
               "t1Ms": 1265,
               "t2Ms": 154.5
@@ -1552,7 +1552,7 @@
             {
               "name": "MM14+Lip13a+Lip13b+MM12",
               "lcmodel": 24.281,
-              "corrected": 59.7820984285415,
+              "corrected": 65.72358518846222,
               "alphaCorrected": null,
               "t1Ms": 1265,
               "t2Ms": 154.5
@@ -1560,7 +1560,7 @@
             {
               "name": "MM09+Lip09",
               "lcmodel": 7.97,
-              "corrected": 19.62288721533198,
+              "corrected": 21.573121945226468,
               "alphaCorrected": null,
               "t1Ms": 1265,
               "t2Ms": 154.5
@@ -1568,7 +1568,7 @@
             {
               "name": "MM20+Lip20",
               "lcmodel": 7.655,
-              "corrected": 18.84732768298197,
+              "corrected": 20.720482872108988,
               "alphaCorrected": null,
               "t1Ms": 1265,
               "t2Ms": 154.5
@@ -1576,7 +1576,7 @@
           ]
         }
       },
-      "seconds": 102.6
+      "seconds": 100
     },
     "philips-megapress-tissue": {
       "files": {
@@ -1802,7 +1802,7 @@
   },
   "browser": {
     "path": "apps/lcmodel/e2e/reference.spec.js: the app's fit and fit-group automation, its worker, the built assets",
-    "app": "lcmodel 0.8.20261022",
+    "app": "lcmodel 0.8.20261119",
     "browser": "Chromium 156.0.8078.4"
   }
 }

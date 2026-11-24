@@ -21,7 +21,7 @@ export async function readT1(files, log = () => {}) {
 }
 
 export async function segmentT1(t1, log = () => {}) {
-  const driver = await loadMindgrabCpu(import.meta.resolve("@brainchop/mindgrab/package.json"));
+  const driver = await loadMindgrabCpu(import.meta.resolve("@brainchop/core/package.json"));
   const result = await driver.segmentTissues(t1.buffer, { model: "mindmap", backend: "cpu", gzipOutput: false, onLog: log });
   const maps = Object.fromEntries(["gm", "wm", "csf"].map(key => {
     const file = result.tissues[key];
@@ -43,7 +43,7 @@ export function correctFromT1(segmentation, entry, header, stem, metaboliteRelax
   fit.correction = { ...correction, source: { kind: "segmentation", backend: segmentation.backend, coverage: fractions.coverage } };
   return [
     ...Object.values(tissueTexts(fit.correction, stem, fit.ratioTo, {
-      fractionSource: { method: "MindMap partial-volume maps (@brainchop/mindgrab segmentTissues)", version: segmentation.version, backend: segmentation.backend, t1: segmentation.name, coverage: fractions.coverage },
+      fractionSource: { method: "MindMap partial-volume maps (@brainchop/core segmentTissues)", version: segmentation.version, backend: segmentation.backend, t1: segmentation.name, coverage: fractions.coverage },
       voxel: header.voxel,
       voxelInT1Mm3: measured.volumeMm3,
     })),

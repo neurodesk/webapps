@@ -1,6 +1,6 @@
 {
   "browser": "chromium 156.0.8078.4",
-  "mindgrab": "0.1.20260925",
+  "mindgrab": "1.0.0",
   "niimathWasmSha256": "7facb7870512b4b5c84c9bc21742ddbefdadb03e8198d1edef9bbac1078a266b",
   "backend": "cpu",
   "example": {
@@ -10,7 +10,7 @@
   "cases": {
     "example-allineate": {
       "method": "allineate",
-      "seconds": 13.306,
+      "seconds": 10.68,
       "files": [
         "defaced.nii"
       ],
@@ -30,7 +30,7 @@
     },
     "example-allineate-robustfov": {
       "method": "allineate_robustfov",
-      "seconds": 12.745,
+      "seconds": 14.735,
       "files": [
         "defaced.nii"
       ],
@@ -50,14 +50,14 @@
     },
     "example-mindgrab": {
       "method": "mindgrab",
-      "seconds": 49.784,
+      "seconds": 41.228,
       "files": [
         "brain-mask.nii",
         "defaced.nii"
       ],
       "sha256": {
-        "brain-mask.nii": "95324ad19feee867641d219727edec53a8d53f041a9b1365654dff7e287bca74",
-        "defaced.nii": "46ff261d39117963997fa2bc5956984d99e1697eaeaa00eec1f74562537ae1bb"
+        "brain-mask.nii": "5d79e2bc61a39d7f2a6ba32554c135a9a6396c50941c3a3f65dd170fbea7717a",
+        "defaced.nii": "d330ca29adcc39d9495b047014cf0f11617c93667d3f66ac498b73cf3d126e04"
       },
       "image": {
         "dims": [
@@ -67,7 +67,7 @@
         ],
         "datatype": 4,
         "headerSha256": "d06747b6a290ac643df811ba188c28544da0d1614725d526f7b632e974fa41dd",
-        "nonzero": 1602690
+        "nonzero": 1596893
       },
       "mask": {
         "dims": [
@@ -76,26 +76,26 @@
           160
         ],
         "datatype": 2,
-        "headerSha256": "ac689aab742cb631538da372010af198fe0e523abd40ff97854c50fbfe450596",
-        "voxels": 1602690
+        "headerSha256": "3b477f90500bba2ce9ad8558dce06df2e5bae6904da4ae2288f537261cfa8926",
+        "voxels": 1596893
       },
       "maskReference": {
         "file": "example-mindgrab.mask.gz",
-        "bytes": 37352,
-        "sha256": "a28fcd3898b4cc121326b7d8db1bca1604b32ef6b1eb87ea92e1deceafaf108d",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/57ceacaadc952e14b31952c48a2069428c02fafc/deface/browser-reference/a28fcd3898b4cc121326b7d8db1bca1604b32ef6b1eb87ea92e1deceafaf108d.mask.gz"
+        "bytes": 37289,
+        "sha256": "f4cf98259fd44bc719458e99ddd86860800e86e1ecca7d470ce80ae1bd280870",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/984092918005bf4a8cfee342f57f155e0312e6bf/deface/browser-reference/f4cf98259fd44bc719458e99ddd86860800e86e1ecca7d470ce80ae1bd280870.mask.gz"
       }
     },
     "example-mindgrab-robust8": {
       "method": "mindgrab_robust8",
-      "seconds": 55.359,
+      "seconds": 45.256,
       "files": [
         "brain-mask.nii",
         "defaced.nii"
       ],
       "sha256": {
-        "brain-mask.nii": "5723a825ccd0a17f51091e6b5a5753c5a07024f021cc47ff071342213b1a02ad",
-        "defaced.nii": "9844421572b29bfc0769ce12ce69907b63ac996effce8875df98f6303f3e7a0a"
+        "brain-mask.nii": "8f5dc3bddbaf4ca6cc8c9b067029724e6b883e81a7cd4f33ffa379851b140acb",
+        "defaced.nii": "13f102a51d6d1946ba8c5f6d9b6d467317c6ad5631454015cad1ae8916e5bf13"
       },
       "image": {
         "dims": [
@@ -105,7 +105,7 @@
         ],
         "datatype": 4,
         "headerSha256": "d06747b6a290ac643df811ba188c28544da0d1614725d526f7b632e974fa41dd",
-        "nonzero": 2252903
+        "nonzero": 2245968
       },
       "mask": {
         "dims": [
@@ -114,14 +114,14 @@
           160
         ],
         "datatype": 2,
-        "headerSha256": "ac689aab742cb631538da372010af198fe0e523abd40ff97854c50fbfe450596",
-        "voxels": 2252903
+        "headerSha256": "3b477f90500bba2ce9ad8558dce06df2e5bae6904da4ae2288f537261cfa8926",
+        "voxels": 2245968
       },
       "maskReference": {
         "file": "example-mindgrab-robust8.mask.gz",
-        "bytes": 38461,
-        "sha256": "d9c0705795bf553008d1ec4704dab0176b44fa2276345894f007c033c38abca7",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/57ceacaadc952e14b31952c48a2069428c02fafc/deface/browser-reference/d9c0705795bf553008d1ec4704dab0176b44fa2276345894f007c033c38abca7.mask.gz"
+        "bytes": 38230,
+        "sha256": "d982193f2d2d739d6448f0bd64b45c40108e57292bfda0b11e1fe7ab6fc92b5b",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/984092918005bf4a8cfee342f57f155e0312e6bf/deface/browser-reference/d982193f2d2d739d6448f0bd64b45c40108e57292bfda0b11e1fe7ab6fc92b5b.mask.gz"
       }
     }
   }

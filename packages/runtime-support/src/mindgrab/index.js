@@ -2,7 +2,7 @@
 // runs in its own module worker (worker.js), which resolves `auto` to a hardware GPU or the
 // threaded CPU module (backend.js), so cancelling terminates it and frees its memory.
 // Pass `assetPath` pointing at the app's staged copies of the package's dist files.
-import { version } from '@brainchop/mindgrab/package.json';
+import { version } from '@brainchop/core/package.json';
 
 const abortError = (signal) => signal.reason ?? new DOMException('Cancelled', 'AbortError');
 

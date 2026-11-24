@@ -703,7 +703,7 @@ class Provenance(Base):
             with self.assertRaisesRegex(Inventory, 'bundle manifest is missing hrf_custom.mat'):
                 fixture.report(allow=False)
 
-    def test_arithmetic_reference_must_match_web_environment_and_intel_refuses_single(self):
+    def test_arithmetic_reference_must_match_web_environment_and_intel_runs_single(self):
         env_path = self.x.web / 'environment.json'
         env = json.loads(env_path.read_text())
         env['arithmeticReference'] = 'matlab-amd'
@@ -712,19 +712,16 @@ class Provenance(Base):
             self.x.report(reference='current')
         report = self.x.report(reference='matlab-amd')
         self.assertEqual(report['summary']['exactRuns'], 1)
-        # Intel reference expects single runs to refuse with the exact Intel message.
+        # Intel reference runs single-precision pRF/RC/CF except the universal single RC/CF Gaussian refusals.
         with scratch() as root:
             intel = Fixture(root, ['prf_gaussian_lh_average_single', 'rc_gaussian_lh_single', 'rc_hull_lh_double'])
             intel_env = json.loads((intel.web / 'environment.json').read_text())
             intel_env['arithmeticReference'] = 'matlab-intel'
             (intel.web / 'environment.json').write_text(json.dumps(intel_env))
-            # Convert prf_gaussian_lh_average_single from succeeded to the exact Intel refusal.
-            shutil.rmtree(intel.web / 'prf_gaussian_lh_average_single')
-            intel.edit_record('prf_gaussian_lh_average_single', status='refused', message=web_cli.INTEL_SINGLE_REFUSAL)
             intel_report = intel.report(reference='matlab-intel')
             by_id = {r['id']: r['class'] for r in intel_report['runs']}
             self.assertEqual(by_id, {
-                'prf_gaussian_lh_average_single': 'refused',
+                'prf_gaussian_lh_average_single': 'exact',
                 'rc_gaussian_lh_single': 'refused',
                 'rc_hull_lh_double': 'exact',
             })

@@ -76,7 +76,7 @@ pub(crate) fn correlation_with_reference(x: &[Complex64], y: &[f64], precision: 
         return Complex64::new(f64::NAN, f64::NAN);
     }
     if precision == Precision::Single {
-        return precision::correlation_complex_single(x, y);
+        return precision::correlation_complex_single_with_reference(x, y, reference);
     }
     let my = precision::mean_double(y);
     let yc: Vec<f64> = y.iter().map(|value| value - my).collect();

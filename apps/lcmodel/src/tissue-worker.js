@@ -1,6 +1,6 @@
-// MindMap's continuous tissue maps (@brainchop/mindgrab segmentTissues) in a
+// MindMap's continuous tissue maps (@brainchop/core segmentTissues) in a
 // worker: a WebGL2 run blocks its thread, and Cancel terminates the worker.
-import { segmentTissues } from "@brainchop/mindgrab";
+import { segmentTissues } from "@brainchop/core";
 
 self.onmessage = async ({ data: { input, options } }) => {
   try {

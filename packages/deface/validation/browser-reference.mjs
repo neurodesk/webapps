@@ -32,7 +32,7 @@ const pinned = JSON.parse(await readFile(REFERENCE_URL, 'utf8'));
 
 // MindGrab and niimath as the app resolves them: through @neurodesk/runtime-support.
 const runtime = createRequire(createRequire(import.meta.url).resolve('@neurodesk/runtime-support/mindgrab'));
-const mindgrabPackage = runtime.resolve('@brainchop/mindgrab/package.json');
+const mindgrabPackage = runtime.resolve('@brainchop/core/package.json');
 const mindgrabVersion = JSON.parse(await readFile(mindgrabPackage, 'utf8')).version;
 const mindgrabDist = join(mindgrabPackage, '..', 'dist');
 const niimathWasm = sha256(await readFile(fileURLToPath(new URL('../../runtime-support/src/niimath/niimath.wasm', import.meta.url))));

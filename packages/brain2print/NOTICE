@@ -4,7 +4,7 @@ MIT
 
 Third-party components
 
-@brainchop/mindgrab, MIT, https://github.com/neuroneural/brainchopC
+@brainchop/core, MIT, https://github.com/neuroneural/brainchop-core
   MindGrab, MindMap, MindSnap and the 18-class model, weights compiled into its WebAssembly.
 @niivue/niimath, BSD-2-Clause, https://github.com/rordenlab/niimath
 

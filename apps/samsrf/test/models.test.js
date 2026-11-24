@@ -143,22 +143,23 @@ test("arithmetic references round-trip through presets and imported models witho
   for (const value of ["auto", "intel", true, null, ["current"]]) {
     assert.throws(() => parseModel(JSON.stringify({ ...model, Arithmetic_Reference: value }), "prf"), /arithmetic reference/);
   }
-  assert.throws(() => parseModel(JSON.stringify({ ...model, Arithmetic_Reference: "matlab-intel", Data_Precision: "single" }), "prf"), /requires double precision/);
+  assert.doesNotThrow(() => parseModel(JSON.stringify({ ...model, Arithmetic_Reference: "matlab-intel", Data_Precision: "single" }), "prf"));
+  assert.throws(() => parseModel(JSON.stringify({ ...buildModel("revcor-fit", { dataPrecision: "single" }), Arithmetic_Reference: "matlab-intel" }), "rc"), /2D pRF fits need double precision/);
+  assert.throws(() => parseModel(JSON.stringify({ ...buildModel("example-cf", { dataPrecision: "single" }), Arithmetic_Reference: "matlab-intel", Fit_pRF: 1 }), "cf"), /Gaussian fits need double precision/);
 });
 
 function expectReference(model, reference) {
   assert.equal(model.Arithmetic_Reference ?? "current", reference);
 }
 
-test("Intel CSS requires the recorded SamSrf convention", () => {
+test("Intel CSS accepts both nonnegative and samsrf conventions", () => {
   const model = { ...buildModel("example-gaussian"), Compressive_Nonlinearity: true, Arithmetic_Reference: "matlab-intel" };
   delete model.Css_Convention;
-  for (const Css_Convention of [undefined, "nonnegative"]) {
-    assert.throws(() => parseModel(JSON.stringify({ ...model, Css_Convention }), "prf"), /Intel CSS requires Css_Convention='samsrf'/);
+  for (const Css_Convention of [undefined, "nonnegative", "samsrf"]) {
+    assert.doesNotThrow(() => parseModel(JSON.stringify({ ...model, Css_Convention }), "prf"));
   }
-  assert.doesNotThrow(() => parseModel(JSON.stringify({ ...model, Css_Convention: "samsrf" }), "prf"));
   assert.doesNotThrow(() => parseModel(JSON.stringify({ ...model, Compressive_Nonlinearity: [0] }), "prf"));
-  assert.throws(() => parseModel(JSON.stringify({ ...model, Compressive_Nonlinearity: [1] }), "prf"), /Intel CSS requires/);
+  assert.doesNotThrow(() => parseModel(JSON.stringify({ ...model, Compressive_Nonlinearity: [1] }), "prf"));
   for (const Arithmetic_Reference of ["current", "matlab-amd"]) {
     assert.doesNotThrow(() => parseModel(JSON.stringify({ ...model, Arithmetic_Reference }), "prf"));
   }

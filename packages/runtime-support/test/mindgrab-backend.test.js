@@ -59,9 +59,17 @@ test('hardware keeps MindGrab\'s order: WebGPU, then WebGL2 when WebGPU lacks sh
   assert.equal(chooseBackend({ webgpu: null, webgl2: { supported: true, renderer: nvidiaGl, caveat: false }, cpu: false }), 'webgl2')
 })
 
-test('without the CPU module a software renderer is still better than nothing', () => {
-  assert.equal(chooseBackend({ webgpu: { supported: true, info: swiftshaderAdapter }, webgl2: { supported: true, renderer: swiftshaderGl }, cpu: false }), 'webgpu')
-  assert.equal(chooseBackend({ webgpu: { supported: false, info: swiftshaderAdapter }, webgl2: { supported: true, renderer: swiftshaderGl }, cpu: false }), 'webgl2')
+test('software rasterisers are never chosen even without the CPU module; masked WebGL2 yields to CPU', () => {
+  assert.equal(chooseBackend({ webgpu: { supported: true, info: swiftshaderAdapter }, webgl2: { supported: true, renderer: swiftshaderGl }, cpu: false }), null)
+  assert.equal(chooseBackend({ webgpu: { supported: true, info: { vendor: 'microsoft', architecture: 'warp' } }, webgl2: { supported: false }, cpu: false }), null)
+  assert.equal(chooseBackend({ webgpu: { supported: true, software: true, info: {} }, webgl2: { supported: false }, cpu: false }), null)
+  assert.equal(chooseBackend({ webgpu: { supported: false, info: swiftshaderAdapter }, webgl2: { supported: true, renderer: swiftshaderGl }, cpu: false }), null)
+  assert.equal(chooseBackend({ webgpu: { supported: false }, webgl2: { supported: true, renderer: 'WebKit WebGL', software: undefined, caveat: true }, cpu: false }), null)
+  assert.equal(chooseBackend({ webgpu: null, webgl2: null, cpu: true }), 'cpu')
+  assert.equal(chooseBackend({ webgpu: { supported: false }, webgl2: { supported: true, renderer: '', software: undefined, caveat: false }, cpu: true }), 'cpu')
+  assert.equal(chooseBackend({ webgpu: { supported: false }, webgl2: { supported: true, renderer: 'WebKit WebGL', software: undefined, caveat: false }, cpu: true }), 'cpu')
+  assert.equal(chooseBackend({ webgpu: { supported: false }, webgl2: { supported: true, renderer: 'WebKit WebGL', software: undefined, caveat: false }, cpu: false }), 'webgl2')
+  assert.equal(chooseBackend({ webgpu: { supported: false }, webgl2: { supported: true, renderer: '', software: undefined, caveat: false }, cpu: false }), 'webgl2')
   assert.equal(chooseBackend({ webgpu: { supported: false }, webgl2: { supported: false }, cpu: true }), 'cpu')
   // Nothing at all: MindGrab's own auto explains every refusal.
   assert.equal(chooseBackend({ webgpu: { supported: false }, webgl2: { supported: false }, cpu: false }), 'auto')
@@ -124,6 +132,16 @@ test('withBackendChoice probes WebGL2 through a canvas element when OffscreenCan
     delete globalThis.document
   }
   assert.deepEqual(calls, ['cpu'], 'a context refused for a performance caveat means a software renderer')
+})
+
+test('withBackendChoice rejects when only software GPU rendering is available and CPU cannot run', async () => {
+  const calls = []
+  const mindgrab = fakeMindgrab({ webgpu: true, webgl2: false, cpu: false }, calls)
+  mindgrab.checkSupport = async () => ({ supported: true, software: true })
+  mindgrab.checkCpuSupport = () => ({ supported: false, reasons: ['cross-origin isolation is off'] })
+  const { segment } = withBackendChoice(mindgrab)
+  await assert.rejects(() => segment(new Uint8Array(), { model: 'mindgrab' }), { code: 'no-webgpu', message: /software GPU rendering.*cross-origin isolation is off/ })
+  assert.deepEqual(calls, [])
 })
 
 test('withBackendChoice treats WebGL2 as unavailable when no canvas exists', async () => {

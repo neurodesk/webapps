@@ -94,7 +94,7 @@ const intelCommand = (line) => /cargo\s+test\b/.test(line) && /-p samsrf-mkl-avx
 
 test('each samsrf-mkl-avx512 suite runs in CI with every fixture it reads, in complete pairs', async () => {
   const suites = await intelSuites();
-  assert.deepEqual([...suites.keys()], ['blas_recordings', 'divergence', 'recordings'], 'the crate\'s integration suites');
+  assert.deepEqual([...suites.keys()], ['blas_recordings', 'divergence', 'intel_norm_single_css', 'recordings'], 'the crate\'s integration suites');
   const invocations = checkIntelContract(await workflow('samsrf-native'), suites);
   for (const name of suites.keys()) assert.ok(invocations.some((invocation) => invocation.run.includes(name) && invocation.own.size > 0), `${name} runs with fixtures`);
 });
@@ -105,18 +105,22 @@ test('the samsrf-mkl-avx512 CI contract rejects a dropped suite, invocation, fix
   const mutants = {
     'every --test blas_recordings and --test divergence removed': rewriteCommands(flow, (line) =>
       intelCommand(line) ? line.replaceAll(' --test blas_recordings', '').replaceAll(' --test divergence', '') : line),
+    'the intel_norm_single_css invocation removed': rewriteCommands(flow, (line) =>
+      intelCommand(line) && line.includes('--test intel_norm_single_css') ? null : line),
     '--test divergence removed from the QR command': rewriteCommands(flow, (line) =>
       intelCommand(line) && line.includes('SAMSRF_QR_KERNELS_DIR') ? line.replace(' --test divergence', '') : line),
     'the single-kernels divergence invocation removed': rewriteCommands(flow, (line) =>
-      intelCommand(line) && line.includes('SAMSRF_SINGLE_KERNELS_DIR') ? null : line),
+      intelCommand(line) && line.includes('SAMSRF_SINGLE_KERNELS_DIR') && line.includes('--test divergence') ? null : line),
     'SAMSRF_ARITHMETIC_ORDER_DIR removed from the crate command': rewriteCommands(flow, (line) =>
       intelCommand(line) ? line.replace(/SAMSRF_ARITHMETIC_ORDER_DIR="[^"]*"\s+/, '') : line),
     'SAMSRF_CGG_DIR removed from the crate command': rewriteCommands(flow, (line) =>
       intelCommand(line) ? line.replace(/SAMSRF_CGG_DIR="[^"]*"\s+/, '') : line),
     'half of the CLI pair': rewriteCommands(flow, (line) =>
       intelCommand(line) ? line.replace(/SAMSRF_CLI_COURSES_DIR="[^"]*"\s+/, '') : line),
+    'half of the nonnegative CSS pair': rewriteCommands(flow, (line) =>
+      intelCommand(line) ? line.replace(/SAMSRF_INTEL_NONNEGATIVE_CSS_INPUT_DIR="[^"]*"\s+/, '') : line),
     'a fixture no suite of the command reads': rewriteCommands(flow, (line) =>
-      intelCommand(line) && line.includes('SAMSRF_SINGLE_KERNELS_DIR') ? line.replace(' --test divergence', ' --test recordings') : line),
+      intelCommand(line) && line.includes('SAMSRF_SINGLE_KERNELS_DIR') && line.includes('--test divergence') ? line.replace(' --test divergence', ' --test recordings') : line),
   };
   for (const [name, mutant] of Object.entries(mutants)) {
     assert.notDeepEqual(mutant, flow, `${name}: the mutation changed the workflow`);
@@ -621,10 +625,73 @@ test('the SamSrf Runtime reference builds only with a Compiler token and is vali
   assert.equal(publish.if, "inputs.runtime_cli == 'build'");
   assert.ok(cli.steps.indexOf(publish) > cli.steps.findIndex(step => /compiled-vs-source\.json/.test(step.run ?? '')), 'publish after the same-host gate');
   const runtime = flow.jobs['runtime-image'];
+  assert.deepEqual(runtime.permissions, { contents: 'read', packages: 'read' });
   assert.ok(!runtime.steps.some(step => step.uses?.startsWith('matlab-actions/')), 'no MATLAB on the Runtime-only host');
   assert.ok(!JSON.stringify(runtime).includes('secrets.'));
-  assert.equal(runtime.env.IMAGE, '${{ inputs.runtime_image }}');
-  assert.ok(!runtime.steps.some(step => /\$\{\{\s*inputs\./.test(step.run ?? '')), 'the image reaches scripts through the environment');
+  assert.deepEqual(runtime.env, { IMAGE: '${{ inputs.runtime_image }}' });
+  const pullStep = runtime.steps.find(step => /docker pull "\$IMAGE"/.test(step.run ?? ''));
+  assert.ok(pullStep, 'runtime-image pulls IMAGE in its own step');
+  assert.deepEqual(pullStep.env, { GITHUB_TOKEN: '${{ github.token }}', ACTOR: '${{ github.actor }}' });
+  const allowedNonPullExpressions = new Set(['${{ github.run_id }}', '${{ github.run_attempt }}', '${{ runner.temp }}']);
+  for (const step of runtime.steps) {
+    assert.ok(!/\$\{\{[\s\S]*?\}\}/.test(step.run ?? ''), `runtime-image shell scripts must not interpolate Actions expressions ("${step.name ?? step.uses}")`);
+    if (step === pullStep) continue;
+    assert.ok(!step.env?.GITHUB_TOKEN, `GITHUB_TOKEN must stay scoped to the pull step, not "${step.name ?? step.uses}"`);
+    const expressions = JSON.stringify(step).match(/\$\{\{[\s\S]*?\}\}/g) ?? [];
+    for (const expr of expressions) {
+      assert.ok(allowedNonPullExpressions.has(expr), `unexpected Actions expression ${expr} in runtime-image step "${step.name ?? step.uses}"`);
+    }
+  }
+  const runStepIndex = runtime.steps.findIndex(step => /run_runtime_cli\.py/.test(step.run ?? ''));
+  assert.ok(runtime.steps.indexOf(pullStep) < runStepIndex, 'pull and log out before running the container');
+  const runPullStep = (image, { failPull = false } = {}) => {
+    const stub = `
+docker() {
+  if [ "$1" = login ]; then
+    local token
+    token="$(cat)"
+    printf 'LOGIN:%s:%s\\n' "$*" "$token"
+  elif [ "$1" = pull ]; then
+    printf 'PULL:%s\\n' "$*"
+    ${failPull ? 'return 1' : 'return 0'}
+  elif [ "$1" = logout ]; then
+    printf 'LOGOUT:%s\\n' "$*"
+  else
+    printf 'OTHER:%s\\n' "$*"
+  fi
+}
+${pullStep.run}
+`;
+    try {
+      const stdout = execFileSync('bash', ['-e', '-c', stub], {
+        encoding: 'utf8',
+        env: { ...process.env, IMAGE: image, GITHUB_TOKEN: 'stub-token', ACTOR: 'stub-actor' },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      return { status: 0, lines: stdout.trim().split('\n').filter(Boolean) };
+    } catch (error) {
+      return { status: error.status ?? 1, lines: String(error.stdout ?? '').trim().split('\n').filter(Boolean) };
+    }
+  };
+  const ghcrImage = 'ghcr.io/neurodesk/samsrf-reference@sha256:' + '0'.repeat(64);
+  const ghcrOk = runPullStep(ghcrImage);
+  assert.equal(ghcrOk.status, 0);
+  assert.deepEqual(ghcrOk.lines, [
+    'LOGIN:login ghcr.io --username stub-actor --password-stdin:stub-token',
+    `PULL:pull ${ghcrImage}`,
+    'LOGOUT:logout ghcr.io',
+  ]);
+  const ghcrFail = runPullStep(ghcrImage, { failPull: true });
+  assert.notEqual(ghcrFail.status, 0);
+  assert.deepEqual(ghcrFail.lines, [
+    'LOGIN:login ghcr.io --username stub-actor --password-stdin:stub-token',
+    `PULL:pull ${ghcrImage}`,
+    'LOGOUT:logout ghcr.io',
+  ], 'docker logout must run even when docker pull fails');
+  const otherImage = 'docker.io/library/alpine@sha256:' + '1'.repeat(64);
+  const otherOk = runPullStep(otherImage);
+  assert.equal(otherOk.status, 0);
+  assert.deepEqual(otherOk.lines, [`PULL:pull ${otherImage}`], 'non-GHCR images must pull without GHCR login or logout');
   for (const event of ['pull_request', 'push', 'workflow_dispatch']) {
     for (const mode of ['none', 'source', 'build']) {
       for (const image of ['', 'ghcr.io/neurodesk/samsrf-reference@sha256:' + '0'.repeat(64)]) {

@@ -60,7 +60,7 @@ test('a check that reads a file of one app runs the apps it checks with it when 
 function segmentationsOf(apps) {
   const jobs = [];
   for (const family of manifest.families.filter((candidate) => candidate.deduplicate)) {
-    for (const file of family.files.filter((candidate) => /^brainchop-[a-z0-9]+\.wasm$/.test(candidate.name))) {
+    for (const file of family.files.filter((candidate) => /^brainchop-(?!.*-(?:gpu|gl)\.wasm$)[a-z0-9-]+\.wasm$/.test(candidate.name))) {
       const consumers = file.consumers ?? family.consumers ?? [];
       for (const app of apps.filter((candidate) => consumers.includes(candidate.id))) {
         jobs.push({ family, file, app, consumers, binaryPath: `_runtime/${family.target}/${file.name}` });

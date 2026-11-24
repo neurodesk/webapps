@@ -1,5 +1,5 @@
-import type { SegmentResult } from '@brainchop/mindgrab'
-import mindgrabPackage from '@brainchop/mindgrab/package.json' with { type: 'json' }
+import type { SegmentResult } from '@brainchop/core'
+import mindgrabPackage from '@brainchop/core/package.json' with { type: 'json' }
 import type { Model } from './models'
 import { runAbortable } from '@neurodesk/webapp-components/automation'
 

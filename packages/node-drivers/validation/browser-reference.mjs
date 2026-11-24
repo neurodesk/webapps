@@ -1,6 +1,6 @@
 // Records the browser outputs that the Node drivers must reproduce.
 //
-// Serves the pinned @brainchop/mindgrab and @niivue/niimath builds from a
+// Serves the pinned @brainchop/core and @niivue/niimath builds from a
 // cross-origin isolated loopback page and runs every case in Chromium: MindGrab
 // through the published wrapper's own CPU backend (segment / segmentTissues in
 // its module worker), niimath through callMain on the browser's WebAssembly.
@@ -23,7 +23,7 @@ const only = onlyIndex >= 0 ? new Set(process.argv[onlyIndex + 1].split(',')) : 
 const selected = cases => cases.filter(item => !only || only.has(item.id));
 
 const require = createRequire(import.meta.url);
-const mindgrabPackage = require.resolve('@brainchop/mindgrab/package.json');
+const mindgrabPackage = require.resolve('@brainchop/core/package.json');
 // @niivue/niimath exports niimath.js but not its package.json.
 const niimathDist = dirname(require.resolve('@niivue/niimath/niimath.js'));
 const niimathVersion = JSON.parse(await readFile(join(niimathDist, '..', 'package.json'), 'utf8')).version;
@@ -73,7 +73,7 @@ const origin = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch();
 const reference = {
   browser: `chromium ${browser.version()}`,
-  mindgrab: { package: '@brainchop/mindgrab', version: require('@brainchop/mindgrab/package.json').version, input: MINDGRAB_INPUT, cases: {} },
+  mindgrab: { package: '@brainchop/core', version: require('@brainchop/core/package.json').version, input: MINDGRAB_INPUT, cases: {} },
   niimath: { package: '@niivue/niimath', version: niimathVersion, cases: {} },
 };
 try {

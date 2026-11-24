@@ -64,7 +64,7 @@ run 42928350417; the source receipts do not attest the inputs), checked again on
 | --- | --- | --- |
 | `current` (default) | 20 runs exact, 2 differ, 2 refused; 163 of 168 maps | No run exact, 22 differ, 2 refused; 63 of 168 maps |
 | `matlab-amd` | 20 runs exact, 2 differ, 2 refused; 166 of 168 maps | No run exact, 22 differ, 2 refused; 63 of 168 maps |
-| `matlab-intel` | Double runs: none of 12 exact; 32 of their 92 maps. The 12 single runs are refused | Double runs: 10 of 12 exact, 2 differ; 90 of their 92 maps. The 12 single runs are refused |
+| `matlab-intel` | No run exact, 22 differ, 2 refused; 63 of 168 maps | 19 runs exact, 3 differ, 2 refused; 158 of 168 maps |
 
 A map is exact when every raw `Srf.Data` value, imaginary part and GIfTI value
 equals MATLAB's, bit for bit. Under `current` on the AMD host every float32
@@ -86,10 +86,15 @@ How these were checked: `run_web_matrix.mjs`, `compare_web_cli.py` and
 to `compare_web_cli.py` against each host's source execution (the Intel host on
 its own bundle), without mutating the bundle's plan models. `compare_web_cli.py`
 checks that `environment.json` records the matching `arithmeticReference` and
-classifies all 12 Intel single runs as `refused` (checking the single Gaussian
-refusal first and the Intel single-precision refusal on the remaining 10).
-The `matlab-amd` and `matlab-intel` counts agree with the
-reviewed accounting in
+classifies only the two universal single Gaussian runs (`rc_gaussian_lh_single`,
+`cf_gaussian_lh_single`) as `refused` across all three references. On Intel
+Xeon Platinum 8573C, `matlab-intel` reproduces 10 of 12 double runs (90 of 92
+double maps, leaving only the same 12 CF hull `y0` values as AMD) and 9 of 10
+runnable single-precision runs bit for bit (all 68 maps of those 9 runs, plus
+`Noise Ceiling` of `prf_css_lh_single`), leaving only the 12 complex vertices
+of `prf_css_lh_single` (mixed complex-double × real-single dot order not
+pre-registered). The `matlab-amd` and `matlab-intel` double counts agree with
+the reviewed accounting in
 [`matlab/intel-avx512/harness/cc528cf6-main4cdc/avx512-complex-qr/matrix.json`](matlab/intel-avx512/harness/cc528cf6-main4cdc/avx512-complex-qr/matrix.json)
 (aside from the 16 CF hull `y0` values resolved by #902).
 These are results on a finite set of recorded inputs, not general MATLAB
@@ -138,12 +143,12 @@ hull-area-1 (2 of 2) budgets are spent.
 | Limit | `current` (default) | `matlab-amd` | `matlab-intel` |
 | --- | --- | --- | --- |
 | Two double CF hull runs | Differ on AMD: 12 CF hull `y0` values and 29 global-regression values (at most 147 ULP); both RC hull runs are exact | Differ on AMD: the 12 CF hull `y0` values | Differ on Intel: the same 12 CF hull `y0` values; both RC hull runs are exact |
-| Whole-cortex global-signal sum | 2,000 of 2,000 values exact (AMD, double and single) | 2,000 of 2,000 values exact (AMD, double and single) | 1,000 of 1,000 double values exact (Intel, 0.0 rel err); single refused |
+| Whole-cortex global-signal sum | 2,000 of 2,000 values exact (AMD, double and single) | 2,000 of 2,000 values exact (AMD, double and single) | 1,000 of 1,000 double values exact (Intel, 0.0 rel err); single uses the same 1,024-column chunking |
 | Single RC 2D and single CF Gaussian fits | Refused | Refused | Refused |
-| Other single analyses | Run | Run | Refused |
-| CSS with `Css_Convention: "nonnegative"` | Runs | Runs | Refused |
+| Other single analyses | Run | Run | Run: 9 of 10 CLI runs bit-exact on Intel Xeon 8573C (`prf_css_lh_single` differs on its 12 complex vertices) |
+| CSS with `Css_Convention: "nonnegative"` | Runs | Runs | Runs: 48/48 evals and 12/12 Nelder-Mead fits bit-exact on Intel Xeon 6975P-C and AMD EPYC 7763 |
 | Fewer than two volumes | Runs | Runs | Refused |
-| Norms at rounding ties | AMD norm order, which matches the recorded AMD norms | AMD norm order, as `current` | Correctly rounded norm: two recorded one-ULP misses |
+| Norms at rounding ties | AMD norm order, which matches the recorded AMD norms | AMD norm order, as `current` | Resolved: portable software x87 80-bit `dnrm2`/`dznrm2` (168/168 real, 48/48 complex, 8/8 extreme, 1,200/1,200 `corr`) |
 | Small-shape `gampdf`, zero signs, single `sin`, `cos`, `exp` | Small-shape `gampdf` (29,376/29,376) and negative-base power zero signs (0/27,552 diffs) match MATLAB; single `sin`, `cos`, `exp` remain open | Same as `current` | Same as `current` |
 
 ### 1. Hull geometry and full-pipeline last bits (#732; historical #729)
@@ -217,52 +222,65 @@ and on Intel under `matlab-intel`).
   and `cos` at these inputs, shown on recordings not read before the rule is
   frozen.
 
-**Every `matlab-intel` single analysis.**
+**`matlab-intel` single-precision analyses (resolved for BLAS and two-column QR; mixed complex-single dot open).**
 
-- Evidence: where single runs first depart on Intel is located, with the AMD
-  hosts as control (`mkl-avx512/tests/divergence.rs`; [Intel AVX-512 and the
-  reference host](matlab/README.md#intel-avx-512-and-the-reference-host)):
-  `sgemv` in the single CF correlation, the `?gemv` update or the complex norm
-  in every single QR chain, and `x' * y`. The role of `sdot` is inferred by
-  elimination. No Intel single kernel is identified.
-- Product: refused, never run with another reference's kernels. The two single
-  Gaussian fits above (`rc_gaussian_lh_single`, `cf_gaussian_lh_single`) are
-  refused first with their own messages; the remaining ten single-precision
-  analyses that run under `current` and `matlab-amd` return:
-  "model: matlab-intel arithmetic requires Data_Precision 'double'; Intel
-  single-precision kernels are not implemented".
-- To move it: identify `sgemv`, the single QR and Q application and `sdot` on
-  Intel recordings not read before the model is frozen.
+- Evidence: the pre-registered recording (`intel-norm-single-css-reference.json`,
+  workflow run 45286336873 on commit `6ab8c5bca`, Hugging Face commit
+  `54645a921b7c442085b2db974ad78ed8b89d00d9`) and held-out recordings on Xeon
+  8573C (`single-kernels`) and Xeon 8370C (`qr-kernels`) establish MKL
+  AVX512_E1's single `sdot` (4,400/4,400 exact, lengths 2..=1,000), `sgemv_t`
+  (5,500/5,500 exact + 378/378 held-out Xeon 8573C), `scorr` (140/140 exact),
+  real two-column QR (`107/107` 1-col chains + `1,712/1,712` 8-col solves on
+  Xeon 8370C; `160/160` 1-RHS + `1,280/1,280` 8-RHS on Xeon 6975P-C), and
+  complex two-column QR (`67/67` 1-col chains + `1,072/1,072` 8-col solves on
+  Xeon 8370C, matching every stored component bit for bit, with zero imaginary
+  parts verified where MATLAB omitted the imaginary array on all-zero-imaginary
+  multi-RHS results such as `glm_single_1e-10_0.3_multi_ones-first`; `160/160`
+  1-RHS + `1,280/1,280` 8-RHS on Xeon 6975P-C), gated by
+  `mkl-avx512/tests/intel_norm_single_css.rs`. On the unseen 24-run Intel Xeon
+  8573C CLI matrix, 9 of 10 runnable single-precision runs match bit for bit;
+  only `prf_css_lh_single` differs on its 12 complex vertices (the mixed
+  complex-double × real-single `cdotc_real` dot order was not pre-registered).
+- Product: runs for all single-precision analyses except the two universal
+  single Gaussian refusals above (`rc_gaussian_lh_single`,
+  `cf_gaussian_lh_single`).
 
-**Intel CSS with the nonnegative convention.**
+**Intel CSS with the nonnegative convention (resolved).**
 
-- Evidence: the Intel CSS evidence covers SamSrf's complex power
-  (`Css_Convention: "samsrf"`): the recorded finite two-column complex QR
-  designs and the matrix's CSS runs. The `nonnegative` objective, which clips
-  responses before the power, has no Intel validation.
-- Product: refused: "model: MATLAB Intel CSS requires Css_Convention='samsrf';
-  nonnegative CSS is not supported by this reference". `current` and
-  `matlab-amd` keep both conventions; the default convention is unchanged.
-- Decision: the restriction is kept and documented. Lifting it needs an Intel
-  nonnegative CSS validation.
+- Evidence: `intel-norm-single-css-reference.json` (run 45286336873,
+  `nonnegative-css.json`) records 48 signed-aperture evaluations and 12 full
+  Nelder-Mead `fminsearch` fine fits on `x001_lh` across both Intel Xeon 6975P-C
+  and AMD EPYC 7763 (every seed verified to exercise both negative clipping and
+  positive compression). `mkl-avx512/tests/intel_norm_single_css.rs` matches all
+  48/48 evaluations (`objective`, `beta`) and all 12/12 fits (`fitted`, `fval`,
+  `1 - fval`, `exitflag`, `funcCount`, `iterations`, `beta`) bit for bit on both
+  hosts.
+- Product: runs under `current`, `matlab-amd`, and `matlab-intel`; `current`
+  retains its pre-existing default arithmetic unchanged.
 
 **Fewer than two volumes** under `matlab-intel` are refused: "model:
 matlab-intel arithmetic requires at least two volumes".
 
 ### 3. Numerical edge cases and coverage (#730, #731)
 
-**Two near-tie norm misses** (`matlab-intel` only).
+**Intel `dnrm2` / `dznrm2` near rounding midpoints (resolved).**
 
-- Evidence: the correctly rounded norm reproduces the recorded Intel norms
-  except two, whose exact value lies 6.4e-5 and 2.6e-4 ULP above a rounding
-  midpoint; MATLAB's result is one ULP lower. Both are pinned with the AMD order
-  as negative control (`mkl-avx512/tests/recordings.rs`,
-  `mkl-avx512/tests/blas_recordings.rs`).
-- Product: `matlab-intel` runs with the correctly rounded norm, so at such a
-  tie it can be one ULP above MATLAB's. No tolerance band is fitted to the two
-  examples.
-- To move it: MKL's `dnrm2` rule near midpoints, which needs a recording that
-  probes ties.
+- Evidence: the pre-registered blind probe suite (`intel-dnrm2-probes.json` /
+  `intel-norm-single-css-reference.json`, run 45286336873) uniquely identified
+  MKL AVX512_E1's `dnrm2`/`dznrm2` as four-lane x87 80-bit extended-precision
+  accumulation (`a0 += a2; a1 += a3;`, optional 2-element tail into `(a0, a1)`,
+  `tot = a0 + a1`, optional final element into `tot`, 64-bit RNE `sqrt`, then
+  53-bit RNE to `f64`). The portable zero-allocation software `F80`
+  implementation in `exes/samsrf/core/src/arithmetic/intel/mod.rs` reproduces
+  all 168/168 blind real near-midpoint norms, all 48/48 blind complex norms
+  (exact pre-registered SHA-256 `5db3763f…`), all 8/8 extreme-scale norms
+  (`2^±600`, `2^±1000`, exact pre-registered SHA-256 `20add51c…`), and all
+  1,200/1,200 `arithmetic-order` `corr` values including both previously pinned
+  near-tie misses (`n = 36` pair 6 and `n = 75` pair 16), with zero regressions
+  on any existing gate (`mkl-avx512/tests/recordings.rs`, `blas_recordings.rs`,
+  `intel_norm_single_css.rs`).
+- Product: `matlab-intel` uses this portable software `F80` `nrm2` across native
+  and WebAssembly builds (also removing `num-bigint` from production WASM).
 
 **Small-shape `gampdf` and zero signs (resolved on the pinned recordings).**
 
@@ -306,7 +324,7 @@ remain replay evidence, not blind holdouts.
 | The recorded cases keep exact rank and zero-column decisions; coefficient gates reflect demonstrated fidelity | `qr_reference.rs`: rank of all 348 designs, MATLAB's printed tolerance for all 89 warnings; 346 coefficients bit-identical, 2 at 0 ULPs with an imaginary zero MATLAB stores as real; frozen outcomes at 0 ULPs. `matlab_reference.rs` keeps the original 146 forward cases | Met on AMD | None on AMD |
 | Constant, nearly constant, rank-deficient, full-rank, extreme-scale, mixed real/complex and imaginary-underflow cases; imaginary coefficients asserted | The 348 designs of `qr-reference.json` cover each family; `qr_reference.rs` compares real and imaginary parts and requires a real result where MATLAB's is real | Met | None |
 | Complete single Gaussian and CSS outputs; parameter and score parity does not regress | `compare.mjs` (114 required source gates, single CSS included), `css_pipeline.rs` and `compare-css.mjs` (double CSS original 138/0, nonnegative 126/0 coefficients identical/differing), `css_diagnostics.rs` (108 traces bit for bit) | Met on AMD | Single Gaussian RC/CF fits are #729's and stay refused ([open limits](#open-numerical-limits)). History: before #873 and the single forward Beta/Baseline fix, the CLI matrix's single CSS run differed at 12-13 of 21 vertices and one single forward vertex in Beta (1 ULP) and Baseline (5 ULP); both runs are exact in the current frozen outcome |
-| Missing references fail CI; MATLAB, BLAS and thread settings recorded; backend residuals separated from port errors | Recordings' `environment.json` and `hosts.json` are asserted (interpreter, BLAS line, CPU); `qr_kernels.rs` requires six hosts, five AMD with identical bits; every chain step equals MKL's (`every_recorded_chain_step_matches_mkl_on_amd`, 345 chains) | Partial | Host metadata and finite repeats are recorded. #730's controls receipt shows MKL runs each CPU's own branch whatever is requested; MKL's thread functions are unobservable in MATLAB. Since #895 the `matlab-intel` reference reproduces Intel's recorded finite real and complex two-column double solves; Intel single kernels are not identified and are refused ([open limits](#open-numerical-limits)) |
+| Missing references fail CI; MATLAB, BLAS and thread settings recorded; backend residuals separated from port errors | Recordings' `environment.json` and `hosts.json` are asserted (interpreter, BLAS line, CPU); `qr_kernels.rs` requires six hosts, five AMD with identical bits; every chain step equals MKL's (`every_recorded_chain_step_matches_mkl_on_amd`, 345 chains); `intel_norm_single_css.rs` verifies all 107 real + 67 complex single chains and 1,712 real + 1,072 complex 8-col solves on Intel Xeon 8370C plus 320 1-RHS and 2,560 8-RHS blind single solves on Intel Xeon 6975P-C | Met on AMD and Intel (single & double two-column QR) | Host metadata and finite repeats are recorded. #730's controls receipt shows MKL runs each CPU's own branch whatever is requested; MKL's thread functions are unobservable in MATLAB. Single RC/CF Gaussian fits stay refused; `prf_css_lh_single` on Intel still differs on its 12 complex vertices pending a mixed complex-single dot probe ([open limits](#open-numerical-limits)) |
 | Before/after maximum ULP and absolute differences, and the covered domain, published without arbitrary-input claims | [Least-squares solves](matlab/README.md#least-squares-solves): acceptance checklist, finite-domain scope, history table (#773 → #795 → now) | Met | None |
 | Changeset and README say what is exact or tolerance-based | Changesets of #795, #812, #818, #822; README "Correlations and regressions" and the QR checklist | Met | None |
 

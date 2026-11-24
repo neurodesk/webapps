@@ -149,7 +149,7 @@ impl Prepared {
                 r * r
             }
             Precision::Single => {
-                let r = crate::precision::correlation_single(self.regressor(m), y, true);
+                let r = crate::precision::correlation_single_with_reference(self.regressor(m), y, true, self.model.arithmetic_reference);
                 f64::from(r * r)
             }
         };

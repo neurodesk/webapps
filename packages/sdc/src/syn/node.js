@@ -51,7 +51,7 @@ export async function nodeRuntime({ workers = 2, spawn = spawnRegistrationThread
     denoise: (image, options) => runTool('denoise', image, options),
     n4: (image, options) => runTool('n4', image, options),
     async mindgrab(image, { signal } = {}) {
-      mindgrab ??= await loadMindgrabCpu(import.meta.resolve('@brainchop/mindgrab/package.json'));
+      mindgrab ??= await loadMindgrabCpu(import.meta.resolve('@brainchop/core/package.json'));
       const result = await mindgrab.segment(image, { model: 'mindgrab', mask: true, gzipOutput: true, signal });
       if (!result?.mask) throw new Error('MindGrab returned no brain mask.');
       return new Uint8Array(result.mask);
@@ -105,7 +105,7 @@ export async function checkInstallation() {
   await loadFieldFit(await readFile(new URL('../sdc-field-fit.wasm', import.meta.url)));
   const { default: createN4Module } = await import('@neurodesk/n4/module');
   if (typeof createN4Module !== 'function') throw new Error('The N4 module did not load.');
-  const mindgrab = await loadMindgrabCpu(import.meta.resolve('@brainchop/mindgrab/package.json'));
+  const mindgrab = await loadMindgrabCpu(import.meta.resolve('@brainchop/core/package.json'));
   if (!mindgrab.MODELS?.mindgrab) throw new Error('The MindGrab package does not list the mindgrab model.');
   const bundled = process.env.NEURODESK_SDC_MODEL_DIR;
   if (bundled) await readPrior(bundled);

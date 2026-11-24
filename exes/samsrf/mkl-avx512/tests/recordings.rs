@@ -620,16 +620,14 @@ fn just_above_lower_midpoint(values: &[f64], rounded: f64, denominator: u64) -> 
 /// One recorded `corr` length: n, the 20 x and y courses (column-major) and MATLAB's r values.
 type CorrCase = (usize, Vec<f64>, Vec<f64>, Vec<f64>);
 
-/// The correctly rounded norm is a candidate for MKL's Intel `dnrm2`, not an identification
-/// of it. On the arithmetic-order recording's AVX512_E1 host (Xeon 6975P-C), `corr` from 25
-/// to 50 elements, where `x' * y` is MATLAB's host-independent pair tree, equals 519 of the
-/// 520 recorded values with that norm. The miss, n = 36 pair 6 (zero-based), is pinned: the exact norm of
-/// its centred y lies less than 1e-4 ULP above a rounding midpoint, and MATLAB's value needs
-/// that norm one ULP below the correctly rounded one. MKL's rounding near ties is not
-/// identified. Negative controls: the port's AMD order gives all 520 values on the AMD host
-/// and not on the Intel one, and the candidate is not the AMD order.
+/// MKL's AVX512_E1 x87 80-bit norm (`mkl_avx512::nrm2`) equals all 520 recorded `corr`
+/// values from 25 to 50 elements on the AVX512_E1 host (Xeon 6975P-C), including the
+/// near-tie vector `n = 36` pair 6 whose exact norm lies within 1e-4 ULP above a midpoint
+/// (where a correctly rounded norm misses by 1 ULP). Negative controls: the port's AMD order
+/// gives all 520 values on the AMD host and not on the Intel one, and the Intel norm is not
+/// the AMD order.
 #[test]
-fn correctly_rounded_norm_is_a_candidate_with_one_known_miss() {
+fn intel_x87_norm_equals_matlab_including_near_tie_case() {
     let Some(root) = env("SAMSRF_ARITHMETIC_ORDER_DIR") else { return };
     let (mut intel, mut amd) = (None, None);
     for host in ["ubuntu-22.04", "ubuntu-24.04"] {
@@ -664,24 +662,24 @@ fn correctly_rounded_norm_is_a_candidate_with_one_known_miss() {
         }
         misses
     };
-    let candidate = |v: &[f64]| mkl_avx512::nrm2(v);
+    let intel_norm = |v: &[f64]| mkl_avx512::nrm2(v);
     let amd_order = |v: &[f64]| samsrf_core::matlab_math::nrm2(v.iter().copied());
-    assert_eq!(misses(&intel, &candidate), vec![(36, 6)], "Intel host: the correctly rounded norm's misses");
-    // The pinned miss: one ULP below the correctly rounded y norm reproduces MATLAB, and the
-    // exact y norm lies just above the midpoint below the correctly rounded value.
+    assert!(misses(&intel, &intel_norm).is_empty(), "Intel host: all 520 corr values must match bit-for-bit");
+    // Confirm the near-tie vector (n = 36 pair 6) sits within 1e-4 ULP above the midpoint
+    // below the correctly rounded value (mkl_avx512::nrm2(&yc).next_up()), proving x87
+    // intermediate rounding was required to match MATLAB here.
     let (n, x, y, r) = cases(&intel).into_iter().find(|c| c.0 == 36).unwrap();
     let (x, y) = (&x[6 * n..7 * n], &y[6 * n..7 * n]);
     let (mx, my) = (matlab_mean(x), matlab_mean(y));
     let xc: Vec<f64> = x.iter().map(|v| v - mx).collect();
     let yc: Vec<f64> = y.iter().map(|v| v - my).collect();
-    let rounded = mkl_avx512::nrm2(&yc);
-    let one_below = samsrf_core::matlab_math::ddot_pairs(&xc, &yc) / mkl_avx512::nrm2(&xc) / rounded.next_down();
-    assert_eq!(one_below.to_bits(), r[6].to_bits(), "MATLAB's value needs the y norm one ULP lower");
-    assert!(just_above_lower_midpoint(&yc, rounded, 10_000), "the exact y norm is within 1e-4 ULP above a midpoint");
-    assert!(!just_above_lower_midpoint(&xc, mkl_avx512::nrm2(&xc), 10_000), "the x norm is not near a tie");
+    let ny = mkl_avx512::nrm2(&yc);
+    assert_eq!(short_corr(x, y, &intel_norm).to_bits(), r[6].to_bits());
+    assert!(just_above_lower_midpoint(&yc, ny.next_up(), 10_000), "n = 36 pair 6: exact y norm lies within 1e-4 ULP above midpoint");
+    assert!(!just_above_lower_midpoint(&xc, mkl_avx512::nrm2(&xc).next_up(), 10_000), "n = 36 pair 6: x norm is not near a tie");
     // Negative controls.
     assert!(misses(&amd, &amd_order).is_empty(), "AMD host: the port's AMD order");
-    assert!(!misses(&amd, &candidate).is_empty(), "the candidate is not MKL's AMD order");
+    assert!(!misses(&amd, &intel_norm).is_empty(), "the Intel norm is not MKL's AMD order");
     assert!(misses(&intel, &amd_order).len() > 100, "the AMD order is not the Intel host's");
 }
 

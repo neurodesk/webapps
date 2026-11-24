@@ -35,7 +35,7 @@
   "dependencies": {
     "@neurodesk/hmc-registration": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
-    "@brainchop/mindgrab": "0.1.20260925",
+    "@brainchop/core": "1.0.0",
     "@neurodesk/dwi2trx": "workspace:*",
     "@neurodesk/node-drivers": "workspace:*"
   },

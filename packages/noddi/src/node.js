@@ -19,7 +19,7 @@ import { fitDtifit } from './dtifit.js';
 import { multiShellPhantom, phantomTissue } from './phantom.js';
 import { NODDI_METHODS, loadNoddi } from './wasm.js';
 
-const MINDGRAB_PACKAGE = import.meta.resolve('@brainchop/mindgrab/package.json');
+const MINDGRAB_PACKAGE = import.meta.resolve('@brainchop/core/package.json');
 export const MINDGRAB_VERSION = JSON.parse(await readFile(new URL(MINDGRAB_PACKAGE), 'utf8')).version;
 const WASM = new URL('./noddi.wasm', import.meta.url);
 
