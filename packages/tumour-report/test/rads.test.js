@@ -14,7 +14,7 @@ import {
   prepareRegistrationInputsRas,
   squaredEdt3d,
 } from '../src/rads.js';
-import { voxelIndex, labelComponents26, resampleFromTo } from '../src/preprocess.js';
+import { voxelIndex, labelComponents26, resampleFromTo, invertAffine4, multiplyAffine4 } from '../src/preprocess.js';
 
 test('computeLaterality matches Raidionics convention and uses unrounded hemisphere counts for midlineCrossing', () => {
   const lat = new Uint8Array([1, 1, 2, 2, 0]);
@@ -326,4 +326,44 @@ test('prepareRegistrationInputsRas preserves every focus including a 1-voxel foc
   }
   assert.equal(directGe20, 35);
   assert.equal(prepGe20, directGe20, 'thin extension at RAS X >= 20 must survive orthogonalization');
+
+  // 45 deg in-plane rotation with -0.25 shear and connected 55-voxel extension on native y=11:
+  // every extension voxel and the 5-voxel tip at x=21 must be sampled (checked via inverse mapping).
+  const rotExtAffine = [
+    [Math.fround(c45), Math.fround(-s45 - 0.25), 0, 0],
+    [Math.fround(s45), Math.fround(c45), 0, 0],
+    [0, 0, 1, 0],
+    [0, 0, 0, 1],
+  ];
+  const rotExtTumour = new Uint8Array(extData.length);
+  for (let z = 3; z < 8; z++) {
+    for (let y = 5; y < 11; y++) {
+      for (let x = 5; x < 11; x++) rotExtTumour[voxelIndex(x, y, z, extDims)] = 1;
+    }
+    for (let x = 11; x <= 21; x++) rotExtTumour[voxelIndex(x, 11, z, extDims)] = 1;
+  }
+  const prepRotExt = prepareRegistrationInputsRas({ data: extData, dims: extDims, affine: rotExtAffine }, extBrain, rotExtTumour);
+  assert.equal(labelComponents26(prepRotExt.mask.data, prepRotExt.mask.dims).count, 1);
+  assert.equal(prepRotExt.mask.affine[2][2], 1, 'un-sheared Z axis keeps native 1 mm spacing');
+  const invRot = invertAffine4(rotExtAffine);
+  const backMap = multiplyAffine4(invRot, prepRotExt.mask.affine);
+  const hitExt = new Set();
+  const hitTip = new Set();
+  const [oxN, oyN, ozN] = prepRotExt.mask.dims;
+  for (let z = 0; z < ozN; z++) {
+    for (let y = 0; y < oyN; y++) {
+      for (let x = 0; x < oxN; x++) {
+        if (!prepRotExt.mask.data[x + oxN * (y + oyN * z)]) continue;
+        const sx = Math.round(backMap[0][0] * x + backMap[0][1] * y + backMap[0][2] * z + backMap[0][3]);
+        const sy = Math.round(backMap[1][0] * x + backMap[1][1] * y + backMap[1][2] * z + backMap[1][3]);
+        const sz = Math.round(backMap[2][0] * x + backMap[2][1] * y + backMap[2][2] * z + backMap[2][3]);
+        if (sy === 11 && sx >= 11 && sx <= 21 && sz >= 3 && sz < 8) {
+          hitExt.add(`${sx},${sy},${sz}`);
+          if (sx === 21) hitTip.add(`${sx},${sy},${sz}`);
+        }
+      }
+    }
+  }
+  assert.equal(hitExt.size, 55, 'all 55 extension voxels must be sampled');
+  assert.equal(hitTip.size, 5, 'all 5 tip voxels at x=21 must be sampled');
 });

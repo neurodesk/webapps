@@ -552,7 +552,7 @@ export function prepareRegistrationInputsRas(volume, brainMask, tumourMask, marg
       }
       const map = multiplyAffine4(invM, oa);
       const outComp = new Int32Array(nOut);
-      const covered = new Uint8Array(nativeCount + 1);
+      const voxelHit = new Uint8Array(cropMask.length);
       for (let z = 0; z < od[2]; z++) {
         const bz0 = map[0][2] * z + map[0][3];
         const bz1 = map[1][2] * z + map[1][3];
@@ -567,40 +567,31 @@ export function prepareRegistrationInputsRas(volume, brainMask, tumourMask, marg
             const sy = Math.round(map[1][0] * x + by1);
             const sz = Math.round(map[2][0] * x + by2);
             if (sx < 0 || sx > maxX || sy < 0 || sy > maxY || sz < 0 || sz > maxZ) continue;
-            const id = nativeLabels[sx + md[0] * sy + xySrc * sz];
+            const srcIdx = sx + md[0] * sy + xySrc * sz;
+            const id = nativeLabels[srcIdx];
             if (id) {
               outComp[dstRow + x] = id;
-              covered[id] = 1;
+              voxelHit[srcIdx] = 1;
             }
           }
         }
       }
 
-      // Stamp any native component missed by inverse nearest-neighbour sampling onto its
-      // own nearest orthogonal voxel without overwriting another component.
-      let collision = false;
-      for (let id = 1; id <= nativeCount; id++) {
-        if (covered[id]) continue;
-        let stamped = false;
+      // Require 100% spatial coverage of every occupied native voxel (no dropped focus,
+      // thin extension, or tip) before accepting the orthogonal grid.
+      let allVoxelsCovered = true;
+      for (let id = 1; id <= nativeCount && allVoxelsCovered; id++) {
         for (const [x, y, z] of compVoxels[id]) {
-          const pt = applyAffinePoint(mAffine, x, y, z);
-          const rx = Math.max(0, Math.min(od[0] - 1, Math.round((pt[0] - oa[0][3]) / steps[0])));
-          const ry = Math.max(0, Math.min(od[1] - 1, Math.round((pt[1] - oa[1][3]) / steps[1])));
-          const rz = Math.max(0, Math.min(od[2] - 1, Math.round((pt[2] - oa[2][3]) / steps[2])));
-          const oIdx = rx + od[0] * (ry + od[1] * rz);
-          if (outComp[oIdx] === 0 || outComp[oIdx] === id) {
-            outComp[oIdx] = id;
-            stamped = true;
-          } else {
-            collision = true;
+          if (!voxelHit[x + md[0] * y + xySrc * z]) {
+            allVoxelsCovered = false;
+            break;
           }
         }
-        if (!stamped) collision = true;
       }
 
       // Check whether any two distinct native components are 26-adjacent on this grid.
       let mergedComponents = false;
-      if (!collision && nativeCount > 1) {
+      if (allVoxelsCovered && nativeCount > 1) {
         const xyOut = od[0] * od[1];
         for (let z = 0; z < od[2] && !mergedComponents; z++) {
           const zOff = z * xyOut;
@@ -618,7 +609,7 @@ export function prepareRegistrationInputsRas(volume, brainMask, tumourMask, marg
         }
       }
 
-      if (!collision && !mergedComponents) {
+      if (allVoxelsCovered && !mergedComponents) {
         // Verify no single native 26-connected focus was split into disconnected fragments;
         // if so, bridge broken native 26-adjacent pairs along their physical midpoint when
         // doing so cannot touch another component.
