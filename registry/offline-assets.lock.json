@@ -5423,6 +5423,93 @@
       "kind": "attribution",
       "license": "CC-BY-4.0",
       "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/examples/BEAMSTER_A_038/BEAMSTER_A_038_T1c.nii.gz": {
+      "sha256": "050e300c1a2a49f8344808e3c4043b242ed6d87c1c223e2d24491394edb56614",
+      "bytes": 4500819,
+      "contentType": "application/gzip",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/atlases/mni_icbm152_t1_brain.nii.gz": {
+      "sha256": "1be621a123861858f4157055093f88fc387669fe35d286495afbe801a406f6e4",
+      "bytes": 5077119,
+      "contentType": "application/gzip",
+      "kind": "model",
+      "license": "ICBM152 copyright notice of the Montreal Neurological Institute",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/atlases/mni_lateralisation.nii.gz": {
+      "sha256": "09a3233d2570782c749b8eab94cc63ef0e8741b224149a03ad3692e392dcca3a",
+      "bytes": 243001,
+      "contentType": "application/gzip",
+      "kind": "model",
+      "license": "BSD-2-Clause",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/atlases/mni_lobes.nii.gz": {
+      "sha256": "d00dbb3646191cf3258528d259690699d501f1acdd36ed6ab2fa380337f2384b",
+      "bytes": 297957,
+      "contentType": "application/gzip",
+      "kind": "model",
+      "license": "BSD-2-Clause",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/atlases/schaefer17_mni.nii.gz": {
+      "sha256": "bde5bd6138cb9aeada6e1b1c7dcd5e8e595c724fefbfa02255a042c1f82b6a83",
+      "bytes": 304633,
+      "contentType": "application/gzip",
+      "kind": "model",
+      "license": "MIT",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/atlases/schaefer7_mni.nii.gz": {
+      "sha256": "bead3c88cf9dbb5039023e58cb93a6b7bbdea11c4889c3e68704f1727e10cf56",
+      "bytes": 308843,
+      "contentType": "application/gzip",
+      "kind": "model",
+      "license": "MIT",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/models/raidionics-v13-tumorcore-t1c.onnx": {
+      "sha256": "69ef6ccecc4441e0006319e2366ebb430a0bbde7d53fb57b751ccd981ecff4d1",
+      "bytes": 59882306,
+      "contentType": "application/octet-stream",
+      "kind": "model",
+      "license": "BSD-2-Clause",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/atlases/resect_left_mni.nii.gz": {
+      "sha256": "d4ca29d4fedfdf42aae417316e31be2248a211c6ccff3733661003abc5dfc830",
+      "bytes": 648430,
+      "contentType": "application/gzip",
+      "kind": "model",
+      "license": "BSD-2-Clause",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/atlases/resect_right_mni.nii.gz": {
+      "sha256": "9de895fac15090be153587faa8687f2bd98ee62e7c70fbba8eed516435072ac9",
+      "bytes": 678539,
+      "contentType": "application/gzip",
+      "kind": "model",
+      "license": "BSD-2-Clause",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/atlases/bcb_tracts.bin.gz": {
+      "sha256": "c4190c8aa7b68e5478299f6abc490313a7bbd620aae3afe469bedec2a234827b",
+      "bytes": 365020,
+      "contentType": "application/gzip",
+      "kind": "model",
+      "license": "BSD-3-Clause",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/models/raidionics-v13-brain.onnx": {
+      "sha256": "343bf5ca4e037d8d0e0ee813ea83f86395a602864ddf59f52990ab3411bc4c4a",
+      "bytes": 59882306,
+      "contentType": "application/octet-stream",
+      "kind": "model",
+      "license": "BSD-2-Clause",
+      "dependencies": []
     }
   },
   "apps": {
@@ -6808,6 +6895,20 @@
     "deconvolution": [
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/02fb0301173cf259099cc528b944a54a92075a03/deconvolution/example/hela-phalloidin488-confocal.tif",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/02fb0301173cf259099cc528b944a54a92075a03/deconvolution/example/README.md"
+    ],
+    "tumour-report": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/examples/BEAMSTER_A_038/BEAMSTER_A_038_T1c.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/examples/UPENN-GBM-00002_11/UPENN-GBM-00002_11_T1GD.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/models/raidionics-v13-brain.onnx",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/models/raidionics-v13-tumorcore-t1c.onnx",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/atlases/mni_icbm152_t1_brain.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/atlases/mni_lateralisation.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/atlases/mni_lobes.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/atlases/schaefer7_mni.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/atlases/schaefer17_mni.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/atlases/resect_left_mni.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/atlases/resect_right_mni.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/atlases/bcb_tracts.bin.gz"
     ]
   }
 }

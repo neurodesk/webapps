@@ -1,0 +1,57 @@
+{
+  "container": "dbouget/raidionics-rads:v1.3.2-py39-cpu@sha256:ef2861258f92e66c21ded1405ec5ffa856ffda9cd9bda38ae90e07ade01946ab",
+  "baseUrl": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/validation/container/",
+  "recordedAt": "2026-11-24",
+  "example": {
+    "dataset": "BEAMSTER v1 (CC BY 4.0, doi:10.6084/m9.figshare.29365844.v1)",
+    "subject": "Dataset_A_038",
+    "filename": "Dataset_A_038.nii.gz",
+    "md5": "2b976b36d787f90d1afe39226761f5a1",
+    "dims": [512, 512, 250],
+    "spacingMm": [1.367, 1.367, 1.25],
+    "orientation": "LPS"
+  },
+  "gates": {
+    "nativeTumourMinDice": 0.99,
+    "nativeBrainMinDice": 0.99,
+    "mniGreedyAffineMinDice": 0.85,
+    "lobeOverlapMaxPctPointDelta": 5.0
+  },
+  "results": {
+    "nativeBrain": {
+      "nodeVoxels": 523312,
+      "containerVoxels": 525874,
+      "differing": 2582,
+      "dice": 0.99754
+    },
+    "nativeTumour": {
+      "nodeVoxels": 5211,
+      "containerVoxels": 5211,
+      "differing": 0,
+      "dice": 1.0,
+      "lesionCount": 3,
+      "totalVolumeMl": 12.176,
+      "multifocal": true,
+      "maxMinFociDistanceMm": 33.37
+    },
+    "radsOnContainerMniMask": {
+      "mniVoxels": 17339,
+      "laterality": { "leftPct": 100, "rightPct": 0, "midlineCrossing": false },
+      "resectabilityIfGbm": { "expectedResectableMl": 15.27, "expectedResidualMl": 2.069, "resectabilityIndex": 0.8807 },
+      "mniLobesPct": { "frontal_left": 66.19, "parietal_left": 31.73, "extracerebral-CSF_": 2.09 }
+    },
+    "mniGreedyAffineVsContainerAntsSyn": {
+      "nodeVoxels": 18225,
+      "containerVoxels": 17339,
+      "dice": 0.89399,
+      "laterality": { "leftPct": 100, "rightPct": 0, "midlineCrossing": false },
+      "mniLobesPct": { "frontal_left": 63.8, "parietal_left": 34.46, "extracerebral-CSF_": 1.74 }
+    },
+    "timingsNode4ThreadsSec": {
+      "segmentation": 93.33,
+      "mniRegistration": 30.32,
+      "rads": 3.69,
+      "total": 127.34
+    }
+  }
+}
