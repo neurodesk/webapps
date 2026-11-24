@@ -1,5 +1,5 @@
-import * as mindgrab from '@brainchop/mindgrab'
-import { type SegmentOptions } from '@brainchop/mindgrab'
+import * as mindgrab from '@brainchop/core'
+import { type SegmentOptions } from '@brainchop/core'
 import { withBackendChoice } from '@neurodesk/runtime-support/mindgrab/backend'
 import { segmentForQc } from '@neurodesk/browserqc'
 import { parseModel } from './models'

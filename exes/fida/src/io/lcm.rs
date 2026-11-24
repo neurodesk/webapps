@@ -83,12 +83,24 @@ fn check(s: &Spectra) -> Res<Vec<String>> {
 /// The text FID-A's `io_writelcm(in, outfile, te)` writes, with any warnings
 /// FID-A prints (e.g. data not averaged). `te` is the echo time in ms.
 pub fn lcm_text_with_warnings(s: &Spectra, te: f64) -> Res<(String, Vec<String>)> {
+    lcm_text_with_seq(s, te, "PRESS")
+}
+
+/// Like [`lcm_text_with_warnings`], recording `seq` in `$SEQPAR` (e.g. `"STEAM"`,
+/// `"PRESS"`, `"sLASER"`, `"SPECIAL"`, `"MEGA-PRESS"`). LCModel's `MYBASI 11`
+/// checks `$SEQPAR` `seq` against the basis set's `SEQ` and warns on a
+/// PRESS/STEAM mismatch, so passing the dataset's sequence family avoids
+/// spurious diagnostics on STEAM data and preserves `seq` for the app's `.RAW`
+/// import path (FID-A's native `io_readlcmraw` leaves `seq` empty).
+pub fn lcm_text_with_seq(s: &Spectra, te: f64, seq: &str) -> Res<(String, Vec<String>)> {
     let warnings = check(s)?;
     let n = s.n();
+    let seq = if seq.trim().is_empty() { "PRESS" } else { seq.trim() };
+    let quoted_seq = seq.replace('\'', "''");
     let mut out = String::with_capacity(200 + 32 * n);
     out.push_str(" $SEQPAR");
     out.push_str(&format!("\n echot= {}", c_fixed(te, 2)));
-    out.push_str("\n seq= 'PRESS'");
+    out.push_str(&format!("\n seq= '{quoted_seq}'"));
     out.push_str(&format!("\n hzpppm= {}", c_fixed(s.txfrq / 1e6, 6)));
     out.push_str(&format!("\n NumberOfPoints= {n}"));
     out.push_str(&format!("\n dwellTime= {}", c_fixed(s.dwelltime, 6)));
@@ -143,5 +155,10 @@ mod tests {
         let (t, w) = lcm_text_with_warnings(&s, 30.0).unwrap();
         assert_eq!(w.len(), 1);
         assert_eq!(t.lines().count(), 12 + 4);
+        assert!(t.contains("\n seq= 'PRESS'\n"));
+        let (steam, _) = lcm_text_with_seq(&s, 11.0, "STEAM").unwrap();
+        assert!(steam.contains("\n seq= 'STEAM'\n"));
+        let (blank, _) = lcm_text_with_seq(&s, 11.0, "  ").unwrap();
+        assert!(blank.contains("\n seq= 'PRESS'\n"));
     }
 }

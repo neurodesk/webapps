@@ -12,7 +12,7 @@
     "lint": "node ../../scripts/lint.mjs --workspace"
   },
   "dependencies": {
-    "@brainchop/mindgrab": "0.1.20260925",
+    "@brainchop/core": "1.0.0",
     "@dipy/gpu-streamlines": "file:./vendor/gpu-streamlines",
     "@neurodesk/dwi2trx": "workspace:*",
     "@neurodesk/runtime-support": "workspace:*",

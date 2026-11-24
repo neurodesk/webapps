@@ -24,7 +24,7 @@
 use super::common::{maybe_gunzip, Res};
 use super::geometry::{self, Voxel};
 use crate::spectra::Spectra;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// One input file.
 #[derive(Clone, Copy, Debug)]
@@ -241,7 +241,7 @@ pub fn sniff(name: &str, bytes: &[u8]) -> Option<Format> {
 }
 
 const WATER_SUFFIXES: [&str; 7] = ["_w", "_ref", "_wref", "_water", "_h2o", "_water_off", "_nows"];
-const METABOLITE_SUFFIXES: [&str; 2] = ["_ws", "_act"];
+const METABOLITE_SUFFIXES: [&str; 3] = ["_ws", "_act", "_metab"];
 
 fn water_base(stem: &str) -> Option<String> {
     let low = stem.to_ascii_lowercase();
@@ -253,6 +253,146 @@ fn water_base(stem: &str) -> Option<String> {
         }
     }
     None
+}
+
+/// Strip Siemens TWIX `meas_MID<digits>_` / `FID<digits>` wrappers so raw
+/// scanner exports (`meas_MID310_STEAM_metab_FID115673` +
+/// `meas_MID312_STEAM_wref3_FID115675`) expose their protocol stem.
+fn twix_protocol_stem(stem: &str) -> Option<String> {
+    let low = stem.to_ascii_lowercase();
+    let rest = low.strip_prefix("meas_mid")?;
+    let digits_end = rest.bytes().take_while(|b| b.is_ascii_digit()).count();
+    if digits_end == 0 || rest.as_bytes().get(digits_end) != Some(&b'_') {
+        return None;
+    }
+    let parts: Vec<&str> = rest[digits_end + 1..]
+        .split('_')
+        .filter(|p| !p.is_empty())
+        .filter(|p| !p.strip_prefix("fid").is_some_and(|d| !d.is_empty() && d.bytes().all(|b| b.is_ascii_digit())))
+        .collect();
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("_"))
+    }
+}
+
+/// Water base of a TWIX protocol stem: standard water suffixes plus numbered
+/// water-reference tokens such as `_wref3` or `_water1`.
+fn twix_water_base(protocol: &str) -> Option<String> {
+    if let Some(base) = water_base(protocol) {
+        return Some(base);
+    }
+    let trimmed = protocol.trim_end_matches(|c: char| c.is_ascii_digit());
+    if trimmed.len() == protocol.len() {
+        return None;
+    }
+    for s in ["_wref", "_water", "_ref", "_h2o"] {
+        if let Some(b) = trimmed.strip_suffix(s) {
+            if !b.is_empty() {
+                return Some(b.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn twix_metab_protocol(ds: &Dataset) -> Option<String> {
+    if ds.format != Format::Twix {
+        return None;
+    }
+    twix_protocol_stem(&ds.name).map(|p| metabolite_base(&p).to_string())
+}
+
+fn twix_water_protocol(ds: &Dataset) -> Option<String> {
+    if ds.format != Format::Twix {
+        return None;
+    }
+    twix_protocol_stem(&ds.name)
+        .and_then(|p| twix_water_base(&p))
+        .map(|b| metabolite_base(&b).to_string())
+}
+
+fn twix_plain_water_protocol(ds: &Dataset) -> Option<String> {
+    if ds.format != Format::Twix {
+        return None;
+    }
+    twix_water_base(&ds.name.to_ascii_lowercase()).map(|b| metabolite_base(&b).to_string())
+}
+
+fn twix_effective_metab_protocol(ds: &Dataset) -> Option<String> {
+    if ds.format != Format::Twix {
+        return None;
+    }
+    twix_metab_protocol(ds).or_else(|| Some(metabolite_base(&ds.name.to_ascii_lowercase()).to_string()))
+}
+
+fn twix_effective_water_protocol(ds: &Dataset) -> Option<String> {
+    if ds.format != Format::Twix {
+        return None;
+    }
+    twix_water_protocol(ds).or_else(|| twix_plain_water_protocol(ds))
+}
+
+struct TwixAcquisition {
+    voxel: Option<Voxel>,
+    study: String,
+    frame_of_reference: String,
+    patient: String,
+}
+
+fn twix_header_text(hdr: &super::twix::TwixHeader, keys: &[(&str, &str)]) -> String {
+    for &(buf, key) in keys {
+        if let Some(val) = hdr.get(buf, key) {
+            let s = val.text().trim().to_string();
+            if !s.is_empty() {
+                return s;
+            }
+        }
+    }
+    String::new()
+}
+
+fn twix_acquisition(ds: &Dataset, files: &[NamedFile]) -> Option<TwixAcquisition> {
+    if ds.format != Format::Twix {
+        return None;
+    }
+    let hdr = super::twix::parse_header(files[ds.files[0]].bytes).ok()?;
+    Some(TwixAcquisition {
+        voxel: geometry::twix(&hdr),
+        study: twix_header_text(&hdr, &[("Config", "StudyLOID"), ("Meas", "StudyLOID"), ("Dicom", "StudyLOID")]),
+        frame_of_reference: twix_header_text(
+            &hdr,
+            &[("Config", "FrameOfReference"), ("Meas", "FrameOfReference"), ("Dicom", "FrameOfReference")],
+        ),
+        patient: twix_header_text(
+            &hdr,
+            &[
+                ("Config", "PatientID"),
+                ("Meas", "PatientID"),
+                ("Dicom", "PatientID"),
+                ("Config", "tPatientName"),
+                ("Meas", "tPatientName"),
+                ("Dicom", "tPatientName"),
+            ],
+        ),
+    })
+}
+
+fn same_twix_voxel(a: &Voxel, b: &Voxel) -> bool {
+    let ca = a.center_mm();
+    let cb = b.center_mm();
+    let sa = a.size_mm();
+    let sb = b.size_mm();
+    (0..3).all(|i| (ca[i] - cb[i]).abs() <= 1.0 && (sa[i] - sb[i]).abs() <= 1.0)
+}
+
+fn conflicting_twix_acquisition(a: Option<&TwixAcquisition>, b: Option<&TwixAcquisition>) -> bool {
+    let (Some(a), Some(b)) = (a, b) else { return false };
+    a.voxel.as_ref().zip(b.voxel.as_ref()).is_some_and(|(va, vb)| !same_twix_voxel(va, vb))
+        || (!a.study.is_empty() && !b.study.is_empty() && a.study != b.study)
+        || (!a.frame_of_reference.is_empty() && !b.frame_of_reference.is_empty() && a.frame_of_reference != b.frame_of_reference)
+        || (!a.patient.is_empty() && !b.patient.is_empty() && a.patient != b.patient)
 }
 
 /// The name a metabolite's water reference is named after: Philips (and
@@ -472,6 +612,11 @@ pub fn detect(files: &[NamedFile]) -> Detection {
                 let is_water = match fmt {
                     Format::LcModelRaw => ext == "h2o" || water_base(&stem).is_some(),
                     Format::GePfile => false,
+                    Format::Twix => {
+                        twix_water_base(&stem.to_ascii_lowercase()).is_some()
+                            || twix_protocol_stem(&stem).and_then(|p| twix_water_base(&p)).is_some()
+                            || dir_water
+                    }
                     _ => water_base(&stem).is_some() || dir_water,
                 };
                 datasets.push(Dataset { format: fmt, files: vec![i], name: stem, is_water });
@@ -510,6 +655,23 @@ pub fn detect(files: &[NamedFile]) -> Detection {
             voxels.insert(ds.files[0], voxel);
         }
     }
+    // Any `(dir, protocol)` containing a scanner-named twix file routes every
+    // twix metabolite and water reference for that `(dir, protocol)` (whether
+    // scanner-named or renamed) through the scoped twix post-pass so greedy
+    // stem/folder matching cannot bypass same-folder and uniqueness checks.
+    let scanner_twix_scopes: HashSet<(String, String)> = datasets
+        .iter()
+        .filter(|ds| ds.format == Format::Twix)
+        .filter_map(|ds| {
+            let proto = if ds.is_water { twix_water_protocol(ds) } else { twix_metab_protocol(ds) }?;
+            Some((dir_of(ds).to_string(), proto))
+        })
+        .collect();
+    let twix_acqs: HashMap<usize, TwixAcquisition> = if !scanner_twix_scopes.is_empty() {
+        datasets.iter().filter_map(|ds| twix_acquisition(ds, files).map(|acq| (ds.files[0], acq))).collect()
+    } else {
+        HashMap::new()
+    };
     let key = |ds: &Dataset| -> (Format, String) { (ds.format, ds.name.to_ascii_lowercase()) };
     let (water, metab): (Vec<Dataset>, Vec<Dataset>) = datasets.into_iter().partition(|d| d.is_water);
     let mut water: Vec<Option<Dataset>> = water.into_iter().map(Some).collect();
@@ -517,27 +679,40 @@ pub fn detect(files: &[NamedFile]) -> Detection {
         let (fmt, mname) = key(&m);
         let mpath = split_path(files[m.files[0]].name).0;
         let mdir = split_path(mpath).1.to_ascii_lowercase();
+        let defer_twix = fmt == Format::Twix
+            && (twix_metab_protocol(&m).is_some()
+                || twix_effective_metab_protocol(&m)
+                    .is_some_and(|proto| scanner_twix_scopes.contains(&(mpath.to_string(), proto))));
         let mut best: Option<(usize, usize)> = None;
-        for (wi, w) in water.iter().enumerate() {
-            let Some(w) = w else { continue };
-            if w.format != fmt {
-                continue;
-            }
-            let wname = w.name.to_ascii_lowercase();
-            let wdir = split_path(split_path(files[w.files[0]].name).0).1.to_ascii_lowercase();
-            let hit = match fmt {
-                Format::LcModelRaw => wname == mname || water_base(&wname).as_deref() == Some(&mname),
-                _ => {
-                    let wb = water_base(&wname);
-                    wb.as_deref() == Some(&mname)
-                        || wb.as_deref() == Some(metabolite_base(&mname))
-                        || (!mdir.is_empty() && water_base(&wdir).as_deref() == Some(&mdir))
+        if !defer_twix {
+            for (wi, w) in water.iter().enumerate() {
+                let Some(w) = w else { continue };
+                if w.format != fmt {
+                    continue;
                 }
-            };
-            if hit && !conflicting_dicom_identity(identities.get(&m.files[0]), identities.get(&w.files[0])) {
-                let shared = shared_dirs(mpath, split_path(files[w.files[0]].name).0);
-                if best.is_none_or(|(_, s)| shared > s) {
-                    best = Some((wi, shared));
+                if fmt == Format::Twix
+                    && (twix_protocol_stem(&w.name).is_some()
+                        || twix_effective_water_protocol(w)
+                            .is_some_and(|proto| scanner_twix_scopes.contains(&(dir_of(w).to_string(), proto))))
+                {
+                    continue;
+                }
+                let wname = w.name.to_ascii_lowercase();
+                let wdir = split_path(split_path(files[w.files[0]].name).0).1.to_ascii_lowercase();
+                let hit = match fmt {
+                    Format::LcModelRaw => wname == mname || water_base(&wname).as_deref() == Some(&mname),
+                    _ => {
+                        let wb = water_base(&wname);
+                        wb.as_deref() == Some(&mname)
+                            || wb.as_deref() == Some(metabolite_base(&mname))
+                            || (!mdir.is_empty() && water_base(&wdir).as_deref() == Some(&mdir))
+                    }
+                };
+                if hit && !conflicting_dicom_identity(identities.get(&m.files[0]), identities.get(&w.files[0])) {
+                    let shared = shared_dirs(mpath, split_path(files[w.files[0]].name).0);
+                    if best.is_none_or(|(_, s)| shared > s) {
+                        best = Some((wi, shared));
+                    }
                 }
             }
         }
@@ -594,6 +769,52 @@ pub fn detect(files: &[NamedFile]) -> Detection {
         }
         if let (Some(wi), false) = (unpaired, targets.is_empty()) {
             water[*wi] = None;
+        }
+    }
+    // Siemens twix scanner exports carry MID/FID counters around the protocol
+    // name (`meas_MID310_STEAM_metab_FID115673` + `meas_MID312_STEAM_wref3_FID115675`).
+    // Pair only a unique metabolite and unique water reference for that protocol
+    // within the exact same folder and with non-conflicting twix acquisition
+    // metadata (VOI, study, frame of reference, patient); leave ambiguous or
+    // cross-folder references unpaired for manual assignment.
+    let twix_water_matches = |w: &Dataset, proto: &str| {
+        twix_effective_water_protocol(w).as_deref() == Some(proto)
+    };
+    let twix_metab_matches = |m: &Dataset, proto: &str| {
+        twix_effective_metab_protocol(m).as_deref() == Some(proto)
+    };
+    let twix_waters: Vec<Option<(String, String)>> = water
+        .iter()
+        .map(|w| {
+            w.as_ref().and_then(|w| {
+                let proto = twix_effective_water_protocol(w)?;
+                let wdir = dir_of(w).to_string();
+                scanner_twix_scopes.contains(&(wdir.clone(), proto.clone())).then_some((wdir, proto))
+            })
+        })
+        .collect();
+    for (wi, candidate) in twix_waters.iter().enumerate() {
+        let Some((wdir, proto)) = candidate else { continue };
+        let water_count = water
+            .iter()
+            .flatten()
+            .chain(det.pairs.iter().filter_map(|p| p.water.as_ref()))
+            .filter(|w| dir_of(w) == wdir && twix_water_matches(w, proto))
+            .count();
+        if water_count != 1 {
+            continue;
+        }
+        let metab_targets: Vec<usize> = (0..det.pairs.len())
+            .filter(|&k| dir_of(&det.pairs[k].metabolite) == wdir && twix_metab_matches(&det.pairs[k].metabolite, proto))
+            .collect();
+        if let [k] = metab_targets[..] {
+            if det.pairs[k].water.is_none()
+                && water[wi].as_ref().is_some_and(|w| {
+                    !conflicting_twix_acquisition(twix_acqs.get(&det.pairs[k].metabolite.files[0]), twix_acqs.get(&w.files[0]))
+                })
+            {
+                det.pairs[k].water = water[wi].take();
+            }
         }
     }
     let mut unpaired: Vec<Dataset> = water.into_iter().flatten().collect();
@@ -1286,5 +1507,176 @@ mod tests {
         assert_eq!(d.pairs[0].metabolite.files.len(), 3);
         assert_eq!(d.pairs[0].water.as_ref().unwrap().name, "press_w");
         assert_eq!(d.ignored.len(), 1); // 2dseq
+    }
+
+    fn vb_twix(study: &str, voi_z: Option<i32>) -> Vec<u8> {
+        let mut body = Vec::new();
+        let nbufs: u32 = if voi_z.is_some() { 2 } else { 1 };
+        body.extend_from_slice(&nbufs.to_le_bytes());
+        let config = format!("<ParamString.\"StudyLOID\"> {{ \"{study}\" }}\n");
+        body.extend_from_slice(b"Config\0");
+        body.extend_from_slice(&(config.len() as u32).to_le_bytes());
+        body.extend_from_slice(config.as_bytes());
+        if let Some(z) = voi_z {
+            let meas = format!(
+                "### ASCCONV BEGIN ###\n\
+                 sSpecPara.sVoI.dReadoutFOV = 20\n\
+                 sSpecPara.sVoI.dPhaseFOV = 20\n\
+                 sSpecPara.sVoI.dThickness = 20\n\
+                 sSpecPara.sVoI.sPosition.dTra = {z}\n\
+                 ### ASCCONV END ###\n"
+            );
+            body.extend_from_slice(b"MeasYaps\0");
+            body.extend_from_slice(&(meas.len() as u32).to_le_bytes());
+            body.extend_from_slice(meas.as_bytes());
+        }
+        let hdr_len = (4 + body.len()).max(10000) as u32;
+        let mut twix = vec![0u8; hdr_len as usize + 16];
+        twix[0..4].copy_from_slice(&hdr_len.to_le_bytes());
+        twix[4..4 + body.len()].copy_from_slice(&body);
+        twix
+    }
+
+    #[test]
+    fn siemens_twix_scanner_names_pair_unique_same_folder_acquisitions() {
+        let twix = vb_twix("study-1", Some(0));
+        let files = [
+            nf("sub-01/meas_MID310_STEAM_metab_FID115673.dat", &twix),
+            nf("sub-01/meas_MID312_STEAM_wref3_FID115675.dat", &twix),
+        ];
+        let d = detect(&files);
+        assert_eq!(d.pairs.len(), 1, "{d:#?}");
+        assert_eq!(d.pairs[0].metabolite.name, "meas_MID310_STEAM_metab_FID115673");
+        assert_eq!(d.pairs[0].water.as_ref().unwrap().name, "meas_MID312_STEAM_wref3_FID115675");
+        assert!(d.unpaired_water.is_empty());
+
+        let mismatched = [
+            nf("meas_MID310_PRESS_metab_FID115673.dat", &twix),
+            nf("meas_MID312_STEAM_wref3_FID115675.dat", &twix),
+        ];
+        let dm = detect(&mismatched);
+        assert_eq!(dm.pairs.len(), 1);
+        assert!(dm.pairs[0].water.is_none());
+        assert_eq!(dm.unpaired_water.len(), 1);
+    }
+
+    #[test]
+    fn siemens_twix_scanner_names_do_not_pair_across_folders_or_when_ambiguous() {
+        let twix = vb_twix("study-1", Some(0));
+
+        // Sibling subject folders must never cross-pair.
+        let sibling = [
+            nf("sub-01/meas_MID310_STEAM_metab_FID115673.dat", &twix),
+            nf("sub-02/meas_MID312_STEAM_wref3_FID115675.dat", &twix),
+        ];
+        let ds = detect(&sibling);
+        assert_eq!(ds.pairs.len(), 1);
+        assert!(ds.pairs[0].water.is_none(), "{ds:#?}");
+        assert_eq!(ds.unpaired_water.len(), 1, "{ds:#?}");
+
+        // Two metabolites + one water of the same protocol in one folder: ambiguous.
+        let two_metabs = [
+            nf("session/meas_MID310_STEAM_metab_FID115673.dat", &twix),
+            nf("session/meas_MID320_STEAM_metab_FID115683.dat", &twix),
+            nf("session/meas_MID312_STEAM_wref3_FID115675.dat", &twix),
+        ];
+        let d2m = detect(&two_metabs);
+        assert_eq!(d2m.pairs.len(), 2);
+        assert!(d2m.pairs.iter().all(|p| p.water.is_none()), "{d2m:#?}");
+        assert_eq!(d2m.unpaired_water.len(), 1, "{d2m:#?}");
+
+        // One metabolite + two waters of the same protocol in one folder: ambiguous.
+        let two_waters = [
+            nf("session/meas_MID310_STEAM_metab_FID115673.dat", &twix),
+            nf("session/meas_MID311_STEAM_wref1_FID115674.dat", &twix),
+            nf("session/meas_MID312_STEAM_wref3_FID115675.dat", &twix),
+        ];
+        let d2w = detect(&two_waters);
+        assert_eq!(d2w.pairs.len(), 1);
+        assert!(d2w.pairs[0].water.is_none(), "{d2w:#?}");
+        assert_eq!(d2w.unpaired_water.len(), 2, "{d2w:#?}");
+
+        // Conflicting VOI in the same folder must not auto-pair.
+        let other_voi = vb_twix("study-1", Some(40));
+        let diff_voi = [
+            nf("session/meas_MID310_STEAM_metab_FID115673.dat", &twix),
+            nf("session/meas_MID312_STEAM_wref3_FID115675.dat", &other_voi),
+        ];
+        let dv = detect(&diff_voi);
+        assert!(dv.pairs[0].water.is_none(), "{dv:#?}");
+        assert_eq!(dv.unpaired_water.len(), 1, "{dv:#?}");
+
+        // Folder-suffix sibling (`sub-01/` + `sub-01_w/`) must not bypass the scoped TWIX pass.
+        let folder_suffix_bypass = [
+            nf("sub-01/meas_MID310_STEAM_metab_FID115673.dat", &twix),
+            nf("sub-01_w/meas_MID312_STEAM_wref3_FID115675.dat", &twix),
+        ];
+        let dfb = detect(&folder_suffix_bypass);
+        assert_eq!(dfb.pairs.len(), 1);
+        assert!(dfb.pairs[0].water.is_none(), "{dfb:#?}");
+        assert_eq!(dfb.unpaired_water.len(), 1, "{dfb:#?}");
+
+        // Exact `_w` filename plus a second scanner-named reference in the same folder is ambiguous.
+        let exact_w_plus_scanner = [
+            nf("session/meas_MID310_STEAM_metab_FID115673.dat", &twix),
+            nf("session/meas_MID310_STEAM_metab_FID115673_w.dat", &twix),
+            nf("session/meas_MID312_STEAM_wref3_FID115675.dat", &twix),
+        ];
+        let dew = detect(&exact_w_plus_scanner);
+        assert_eq!(dew.pairs.len(), 1);
+        assert!(dew.pairs[0].water.is_none(), "{dew:#?}");
+        assert_eq!(dew.unpaired_water.len(), 2, "{dew:#?}");
+
+        // Numbered non-scanner water alias (`STEAM_wref1.dat`) is classified as water and acts as a rival.
+        let numbered_rival = [
+            nf("session/meas_MID310_STEAM_metab_FID115673.dat", &twix),
+            nf("session/STEAM_wref1.dat", &twix),
+            nf("session/meas_MID312_STEAM_wref3_FID115675.dat", &twix),
+        ];
+        let dnr = detect(&numbered_rival);
+        assert_eq!(dnr.pairs.len(), 1, "{dnr:#?}");
+        assert!(dnr.pairs[0].water.is_none(), "{dnr:#?}");
+        assert_eq!(dnr.unpaired_water.len(), 2, "{dnr:#?}");
+
+        // Scanner-named metabolite + single renamed numbered water alias in the same folder pairs cleanly.
+        let mixed_unique = [
+            nf("session/meas_MID310_STEAM_metab_FID115673.dat", &twix),
+            nf("session/STEAM_wref1.dat", &twix),
+        ];
+        let dmu = detect(&mixed_unique);
+        assert_eq!(dmu.pairs.len(), 1, "{dmu:#?}");
+        assert_eq!(dmu.pairs[0].water.as_ref().unwrap().name, "STEAM_wref1");
+        assert!(dmu.unpaired_water.is_empty());
+
+        // Scanner-named metabolite + renamed metabolite + single water of the same protocol is ambiguous.
+        let mixed_two_metabs = [
+            nf("session/meas_MID310_STEAM_metab_FID115673.dat", &twix),
+            nf("session/STEAM_metab.dat", &twix),
+            nf("session/STEAM_w.dat", &twix),
+        ];
+        let dm2 = detect(&mixed_two_metabs);
+        assert_eq!(dm2.pairs.len(), 2, "{dm2:#?}");
+        assert!(dm2.pairs.iter().all(|p| p.water.is_none()), "{dm2:#?}");
+        assert_eq!(dm2.unpaired_water.len(), 1, "{dm2:#?}");
+
+        // Folder-suffix sibling with a scanner-named file lacking a water suffix must not cross-pair.
+        let folder_water_scanner = [
+            nf("session/STEAM_metab.dat", &twix),
+            nf("session_w/meas_MID312_STEAM_FID115675.dat", &twix),
+        ];
+        let dfws = detect(&folder_water_scanner);
+        assert_eq!(dfws.pairs.len(), 1, "{dfws:#?}");
+        assert!(dfws.pairs[0].water.is_none(), "{dfws:#?}");
+        assert_eq!(dfws.unpaired_water.len(), 1, "{dfws:#?}");
+
+        // Conflicting StudyLOID in the same folder must not auto-pair.
+        let other_study = vb_twix("study-2", Some(0));
+        let diff_study = [
+            nf("session/meas_MID310_STEAM_metab_FID115673.dat", &twix),
+            nf("session/meas_MID312_STEAM_wref3_FID115675.dat", &other_study),
+        ];
+        let dst = detect(&diff_study);
+        assert!(dst.pairs[0].water.is_none(), "{dst:#?}");
+        assert_eq!(dst.unpaired_water.len(), 1, "{dst:#?}");
     }
 }

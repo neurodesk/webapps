@@ -259,6 +259,6 @@ test('command line reports help, rejects unsupported options and checks both run
   assert.equal(report.executable, process.execPath);
   assert.equal(report.onnxRuntime, '1.29.0');
   assert.ok(report.betSmokeTestVoxels > 0);
-  assert.equal(report.mindgrab, '0.1.20260925');
+  assert.equal(report.mindgrab, '1.0.0');
   assert.equal(report.models, undefined);
 });

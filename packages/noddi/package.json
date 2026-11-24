@@ -38,7 +38,7 @@
     "lint": "node --check src/wasm.js && node --check src/dtifit.js && node --check src/pipeline.js && node --check src/fit-pool.js && node --check src/fit-worker.js && node --check src/phantom.js && node --check src/node.js && node --check src/node-worker.js && node --check bin/noddi.js"
   },
   "dependencies": {
-    "@brainchop/mindgrab": "0.1.20260925",
+    "@brainchop/core": "1.0.0",
     "@neurodesk/dwi2trx": "workspace:*",
     "@neurodesk/node-drivers": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*"

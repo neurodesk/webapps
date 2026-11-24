@@ -127,6 +127,7 @@ function acquisition(dataset) {
     ["Sequence", [h.sequence?.trim(), h.family && h.family !== h.sequence?.trim() ? `(${h.family})` : ""].filter(Boolean).join(" ")],
     ["Field", field && `${field}${h.hzpppm ? `, ${Number(h.hzpppm).toFixed(4)} MHz` : ""}`],
     ["TE / TR", h.teMs != null && `${h.teMs} ms${h.trMs ? ` / ${h.trMs} ms` : ""}`],
+    ["Mixing time (TM)", h.tmMs > 0 ? `${h.tmMs} ms` : null],
     ["Averages", h.averages],
     ["Coils", h.coils],
     ["Subspectra", h.subspectra > 1 ? h.subspectra : null],

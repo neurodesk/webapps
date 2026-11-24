@@ -349,6 +349,12 @@ pub fn load_folder(files: &[(String, &[u8])]) -> Res<(Spectra, DicomFile)> {
     let tr = need("alTR[0]")? * 1e-3;
     let date = info0.string(0x0040, 0x0244).unwrap_or_default();
     let sequence = phoenix_text(&csa, "tSequenceFileName").unwrap_or_default();
+    let seq_low = sequence.to_ascii_lowercase();
+    let tm = if seq_low.contains("steam") || seq_low.contains("svs_st") {
+        phoenix_num(&csa, "alTD[0]").filter(|&v| v.is_finite() && v > 0.0).map(|v| v * 1e-3)
+    } else {
+        None
+    };
     let mut data: Vec<Complex64> = Vec::with_capacity(npts_file * n_avg);
     for c in &cols {
         data.extend_from_slice(c);
@@ -389,6 +395,7 @@ pub fn load_folder(files: &[(String, &[u8])]) -> Res<(Spectra, DicomFile)> {
         dwelltime,
         txfrq,
         te,
+        tm,
         tr,
         bo,
         seq: sequence,
@@ -512,6 +519,7 @@ pub fn load_ima(data: &[u8], bo: f64, spectralwidth: f64, te: Option<f64>, tr: O
         dwelltime,
         txfrq: 42577000.0 * bo,
         te: te.unwrap_or(0.0),
+        tm: None,
         tr: tr.unwrap_or(0.0),
         bo,
         seq: String::new(),
@@ -543,5 +551,57 @@ mod tests {
         assert!(parse_dicom(b"").is_err());
         assert!(load_folder(&[("a".into(), &b"nope"[..])]).is_err());
         assert!(load_ima(b"nope", 3.0, 2000.0, None, None).is_err());
+    }
+
+    fn minimal_xa_dicom(seq_name: &str, td_us: Option<u32>) -> Vec<u8> {
+        let mut bytes = vec![0u8; 128];
+        bytes.extend_from_slice(b"DICM");
+        // (5600,0020) SpectroscopyData: 4 complex f32 samples (32 bytes).
+        bytes.extend_from_slice(&0x5600u16.to_le_bytes());
+        bytes.extend_from_slice(&0x0020u16.to_le_bytes());
+        bytes.extend_from_slice(b"OF");
+        bytes.extend_from_slice(&0u16.to_le_bytes());
+        bytes.extend_from_slice(&32u32.to_le_bytes());
+        for k in 0..4 {
+            bytes.extend_from_slice(&(1.0f32 / (k as f32 + 1.0)).to_le_bytes());
+            bytes.extend_from_slice(&0.0f32.to_le_bytes());
+        }
+        let mut phoenix = format!(
+            "### ASCCONV BEGIN ###\n\
+             tSequenceFileName = \"{seq_name}\"\n\
+             sSpecPara.lVectorSize = 4\n\
+             sRXSPEC.alDwellTime[0] = 250000\n\
+             sTXSPEC.asNucleusInfo[0].lFrequency = 297220000\n\
+             sProtConsistencyInfo.flNominalB0 = 7.0\n\
+             alTE[0] = 8000\n\
+             alTR[0] = 5000000\n"
+        );
+        if let Some(td) = td_us {
+            phoenix.push_str(&format!("alTD[0] = {td}\n"));
+        }
+        phoenix.push_str("### ASCCONV END ###\n");
+        let mut pbytes = phoenix.into_bytes();
+        if pbytes.len() % 2 != 0 {
+            pbytes.push(b' ');
+        }
+        bytes.extend_from_slice(&0x0029u16.to_le_bytes());
+        bytes.extend_from_slice(&0x1020u16.to_le_bytes());
+        bytes.extend_from_slice(b"OB");
+        bytes.extend_from_slice(&0u16.to_le_bytes());
+        bytes.extend_from_slice(&(pbytes.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(&pbytes);
+        bytes
+    }
+
+    #[test]
+    fn reads_mixing_time_for_steam_only() {
+        let steam = minimal_xa_dicom("%SiemensSeq%\\svs_st", Some(32000));
+        let (s, _) = load_folder(&[("1.dcm".into(), steam.as_slice())]).unwrap();
+        assert_eq!(s.te, 8.0);
+        assert_eq!(s.tm, Some(32.0));
+
+        let press = minimal_xa_dicom("%SiemensSeq%\\svs_se", Some(32000));
+        let (p, _) = load_folder(&[("1.dcm".into(), press.as_slice())]).unwrap();
+        assert_eq!(p.tm, None);
     }
 }

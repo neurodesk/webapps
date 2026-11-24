@@ -319,10 +319,14 @@ fn slope(v: &[f64]) -> f64 {
     polyfit(&x, v, 1)[0]
 }
 
-fn rm_bad_loop(input: &Spectra, o: &RmBadOptions, hooks: &mut Hooks, frac: f32) -> Result<(Spectra, RmBadReport), String> {
+fn rm_bad_loop(input: &Spectra, o: &RmBadOptions, hooks: &mut Hooks, frac: f32, warnings: &mut Vec<String>) -> Result<(Spectra, RmBadReport), String> {
     let before = if input.dims.averages > 0 { input.size(input.dims.averages) } else { 1 };
-    let mut rep = RmBadReport { nsd: o.nsd, averages_before: before, ..Default::default() };
+    let mut rep = RmBadReport { nsd: o.nsd, averages_before: before, averages_after: before, ..Default::default() };
     let mut cur = input.clone();
+    if before < 3 {
+        warnings.push(format!("Skipped bad-average removal: at least 3 averages are needed (got {before})."));
+        return Ok((cur, rep));
+    }
     let mut left: Vec<usize> = (0..before).collect();
     loop {
         hooks.step("Removing bad averages", frac)?;
@@ -409,7 +413,7 @@ pub fn run_pressproc_auto(raw: &Spectra, raww: Option<&Spectra>, opts: &PressOpt
     let mut outw_noproc = outw_cc.as_ref().map(op_averaging);
 
     let out_rm = if opts.rm_bad_averages.enabled && out_cc.dims.averages > 0 {
-        let (o, rep) = rm_bad_loop(&out_cc, &opts.rm_bad_averages, &mut hooks, 0.2)?;
+        let (o, rep) = rm_bad_loop(&out_cc, &opts.rm_bad_averages, &mut hooks, 0.2, &mut report.warnings)?;
         report.rm_bad_averages = Some(rep);
         o
     } else {
@@ -418,12 +422,18 @@ pub fn run_pressproc_auto(raw: &Spectra, raww: Option<&Spectra>, opts: &PressOpt
     drop(out_cc);
 
     let d = &opts.drift;
-    let (out_av, outw_av) = if d.enabled && out_rm.dims.averages > 0 {
-        hooks.step("Aligning the water reference", 0.3)?;
-        let outw_aa = match outw_cc.as_ref() {
-            Some(w) => Some(op_align_averages(w, Some(opts.water_tmax), AlignTo::Best)?.out),
-            None => None,
-        };
+    let outw_av = if let Some(w) = outw_cc.as_ref() {
+        if d.enabled && w.dims.averages > 0 && w.size(w.dims.averages) > 1 {
+            hooks.step("Aligning the water reference", 0.3)?;
+            let outw_aa = op_align_averages(w, Some(opts.water_tmax), AlignTo::Best)?.out;
+            Some(op_averaging(&outw_aa))
+        } else {
+            Some(op_averaging(w))
+        }
+    } else {
+        None
+    };
+    let out_av = if d.enabled && out_rm.dims.averages > 0 && out_rm.size(out_rm.dims.averages) > 1 {
         let na = out_rm.size(out_rm.dims.averages);
         let mut fscum = vec![0.0; na];
         let mut phscum = vec![0.0; na];
@@ -451,9 +461,9 @@ pub fn run_pressproc_auto(raw: &Spectra, raww: Option<&Spectra>, opts: &PressOpt
             report.warnings.push(format!("Drift correction stopped after {passes} passes with a residual trend of {fs_poly:.4} Hz and {phs_poly:.4} deg per average."));
         }
         report.drift = Some(DriftReport { iterations: passes, total_freq_drift: span(&fscum), total_phase_drift: span(&phscum), freq: fscum, phase: phscum });
-        (op_averaging(&cur), outw_aa.as_ref().map(op_averaging))
+        op_averaging(&cur)
     } else {
-        (op_averaging(&out_rm), outw_cc.as_ref().map(op_averaging))
+        op_averaging(&out_rm)
     };
     drop(outw_cc);
 
@@ -554,10 +564,7 @@ pub fn run_specialproc_auto(raw: &Spectra, raww: Option<&Spectra>, opts: &Specia
     if raw.dims.sub_specs == 0 || raw.size(raw.dims.sub_specs) != 2 {
         return Err("SPECIAL data need two subspectra.".into());
     }
-    if raw.dims.averages == 0 {
-        return Err("SPECIAL processing needs the individual averages.".into());
-    }
-    report.averages_raw = raw.size(raw.dims.averages);
+    report.averages_raw = if raw.dims.averages > 0 { raw.size(raw.dims.averages) } else { 1 };
     hooks.step("Combining receiver channels", 0.0)?;
     let co = &opts.coils;
     let cc = match raww {
@@ -577,18 +584,20 @@ pub fn run_specialproc_auto(raw: &Spectra, raww: Option<&Spectra>, opts: &Specia
     let mut out_noproc = op_combinesubspecs(&op_averaging(&out_cc), CombineMode::Diff)?;
     let mut out_w_noproc = out_w_cc.as_ref().map(|w| op_combinesubspecs(&op_averaging(w), CombineMode::Diff)).transpose()?;
 
-    let na = out_cc.size(out_cc.dims.averages);
-    let (out_ai, out_w_ai, mut fs_ai, mut phs_ai) = if opts.align_isis {
+    let na = if out_cc.dims.averages > 0 { out_cc.size(out_cc.dims.averages) } else { 1 };
+    let (out_ai, mut fs_ai, mut phs_ai) = if opts.align_isis && out_cc.dims.averages > 0 && na > 1 {
         let (ai, fs, phs) = align_special(&out_cc, opts.isis_tmax, &mut hooks, 0.1)?;
-        let wai = match out_w_cc.as_ref() {
-            Some(w) => Some(align_special(w, opts.isis_tmax, &mut hooks, 0.25)?.0),
-            None => None,
-        };
         let fs_m: Vec<f64> = (0..na).map(|k| (fs[k] + fs[na + k]) / 2.0).collect();
         let phs_m: Vec<f64> = (0..na).map(|k| (phs[k] + phs[na + k]) / 2.0).collect();
-        (ai, wai, fs_m, phs_m)
+        (ai, fs_m, phs_m)
     } else {
-        (out_cc, out_w_cc, vec![0.0; na], vec![0.0; na])
+        (out_cc, vec![0.0; na], vec![0.0; na])
+    };
+    let out_w_ai = match out_w_cc {
+        Some(w) if opts.align_isis && w.dims.averages > 0 && w.size(w.dims.averages) > 1 => {
+            Some(align_special(&w, opts.isis_tmax, &mut hooks, 0.25)?.0)
+        }
+        other => other,
     };
     report.isis_freq = fs_ai.clone();
     report.isis_phase = phs_ai.clone();
@@ -597,8 +606,8 @@ pub fn run_specialproc_auto(raw: &Spectra, raww: Option<&Spectra>, opts: &Specia
     let mut out_w_cs = out_w_ai.as_ref().map(|w| op_combinesubspecs(w, CombineMode::Diff)).transpose()?;
     drop(out_w_ai);
 
-    let out_rm = if opts.rm_bad_averages.enabled {
-        let (o, rep) = rm_bad_loop(&out_cs, &opts.rm_bad_averages, &mut hooks, 0.4)?;
+    let out_rm = if opts.rm_bad_averages.enabled && out_cs.dims.averages > 0 {
+        let (o, rep) = rm_bad_loop(&out_cs, &opts.rm_bad_averages, &mut hooks, 0.4, &mut report.warnings)?;
         let keep: Vec<usize> = (0..fs_ai.len()).filter(|k| !rep.removed.contains(k)).collect();
         fs_ai = keep.iter().map(|&k| fs_ai[k]).collect();
         phs_ai = keep.iter().map(|&k| phs_ai[k]).collect();
@@ -609,7 +618,7 @@ pub fn run_specialproc_auto(raw: &Spectra, raww: Option<&Spectra>, opts: &Specia
     };
 
     let d = &opts.drift;
-    let out_aa = if d.enabled {
+    let out_aa = if d.enabled && out_rm.dims.averages > 0 && out_rm.size(out_rm.dims.averages) > 1 {
         let nr = out_rm.size(out_rm.dims.averages);
         let mut fs_cum = fs_ai.clone();
         let mut phs_cum = phs_ai.clone();
@@ -623,7 +632,9 @@ pub fn run_specialproc_auto(raw: &Spectra, raww: Option<&Spectra>, opts: &Specia
                 DriftDomain::Freq => op_align_averages_fd(&cur, d.ppmmin, d.ppmmax, d.tmax, AlignTo::Best)?,
             };
             if let Some(w) = out_w_cs.as_ref() {
-                out_w_cs = Some(op_align_averages(w, Some(opts.water_tmax_factor * d.tmax), AlignTo::Best)?.out);
+                if w.dims.averages > 0 && w.size(w.dims.averages) > 1 {
+                    out_w_cs = Some(op_align_averages(w, Some(opts.water_tmax_factor * d.tmax), AlignTo::Best)?.out);
+                }
             }
             for k in 0..nr {
                 fs_cum[k] += a.fs[k];
@@ -640,6 +651,14 @@ pub fn run_specialproc_auto(raw: &Spectra, raww: Option<&Spectra>, opts: &Specia
         report.drift = Some(DriftReport { iterations: iter - 1, total_freq_drift: span(&fs_cum), total_phase_drift: span(&phs_cum), freq: fs_cum, phase: phs_cum });
         cur
     } else {
+        if d.enabled {
+            if let Some(w) = out_w_cs.as_ref() {
+                if w.dims.averages > 0 && w.size(w.dims.averages) > 1 {
+                    hooks.step("Aligning the water reference", 0.45)?;
+                    out_w_cs = Some(op_align_averages(w, Some(opts.water_tmax_factor * d.tmax), AlignTo::Best)?.out);
+                }
+            }
+        }
         out_rm
     };
 
@@ -753,7 +772,7 @@ pub fn run_megapressproc_auto(raw: &Spectra, raww: Option<&Spectra>, opts: &Mega
     let mut diff_noproc = op_combinesubspecs(&op_averaging(&out_cc), CombineMode::Diff)?;
 
     let out_rm = if opts.rm_bad_averages.enabled && out_cc.dims.averages > 0 {
-        let (o, rep) = rm_bad_loop(&out_cc, &opts.rm_bad_averages, &mut hooks, 0.2)?;
+        let (o, rep) = rm_bad_loop(&out_cc, &opts.rm_bad_averages, &mut hooks, 0.2, &mut report.warnings)?;
         report.rm_bad_averages = Some(rep);
         o
     } else {
@@ -762,12 +781,18 @@ pub fn run_megapressproc_auto(raw: &Spectra, raww: Option<&Spectra>, opts: &Mega
     drop(out_cc);
 
     let d = &opts.drift;
-    let (out_av, outw_av) = if d.enabled && out_rm.dims.averages > 0 {
-        hooks.step("Aligning the water reference", 0.3)?;
-        let outw_aa = match outw_cc.as_ref() {
-            Some(w) => Some(op_align_averages(w, Some(opts.water_tmax), AlignTo::Best)?.out),
-            None => None,
-        };
+    let outw_av = if let Some(w) = outw_cc.as_ref() {
+        if d.enabled && w.dims.averages > 0 && w.size(w.dims.averages) > 1 {
+            hooks.step("Aligning the water reference", 0.3)?;
+            let outw_aa = op_align_averages(w, Some(opts.water_tmax), AlignTo::Best)?.out;
+            Some(op_averaging(&outw_aa))
+        } else {
+            Some(op_averaging(w))
+        }
+    } else {
+        None
+    };
+    let out_av = if d.enabled && out_rm.dims.averages > 0 && out_rm.size(out_rm.dims.averages) > 1 {
         let na = out_rm.size(out_rm.dims.averages);
         let ns = out_rm.size(out_rm.dims.sub_specs);
         let mut fscum = vec![0.0; na * ns];
@@ -797,9 +822,9 @@ pub fn run_megapressproc_auto(raw: &Spectra, raww: Option<&Spectra>, opts: &Mega
         let first = fscum[..na].to_vec();
         let first_ph = phscum[..na].to_vec();
         report.drift = Some(DriftReport { iterations: iter, total_freq_drift: span(&first), total_phase_drift: span(&first_ph), freq: fscum, phase: phscum });
-        (op_averaging(&cur), outw_aa.as_ref().map(op_averaging))
+        op_averaging(&cur)
     } else {
-        (op_averaging(&out_rm), outw_cc.as_ref().map(op_averaging))
+        op_averaging(&out_rm)
     };
     drop(outw_cc);
 

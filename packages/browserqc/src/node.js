@@ -9,7 +9,7 @@ import { runNiimath } from '@neurodesk/node-drivers/niimath';
 import packageJson from '../package.json' with { type: 'json' };
 import { AIR_TEMPLATE, DEFAULT_MODEL, MODELS, checkAirTemplate, finishReport, parseModel, qcTissues, segmentForQc, sha256Hex } from './pipeline.js';
 
-const MINDGRAB_PACKAGE = import.meta.resolve('@brainchop/mindgrab/package.json');
+const MINDGRAB_PACKAGE = import.meta.resolve('@brainchop/core/package.json');
 // The package does not export its package.json; niimath.js sits in its dist/.
 const NIIMATH_PACKAGE = new URL('../package.json', import.meta.resolve('@niivue/niimath/niimath.js'));
 
@@ -58,7 +58,9 @@ async function packageVersion(url) {
 
 // Every MindGrab CPU module a model needs, and a niimath instance that runs.
 async function checkEngines() {
-  const modules = ['mindgrab', ...new Set(Object.entries(MODELS).map(([id, model]) => model.pve ?? id))];
+  const { canonicalModelName } = await import(new URL('dist/index.js', MINDGRAB_PACKAGE).href);
+  const canonical = canonicalModelName ?? ((name) => name);
+  const modules = ['mindgrab', ...new Set(Object.entries(MODELS).map(([id, model]) => canonical(model.pve ?? id)))];
   for (const name of modules) {
     for (const extension of ['js', 'wasm']) await access(new URL(`dist/brainchop-${name}.${extension}`, MINDGRAB_PACKAGE));
   }

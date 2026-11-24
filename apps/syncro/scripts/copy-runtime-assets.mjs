@@ -9,17 +9,19 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const mindgrab = dirname(createRequire(import.meta.url).resolve('@brainchop/mindgrab/package.json'))
+const mindgrab = dirname(createRequire(import.meta.url).resolve('@brainchop/core/package.json'))
 const stage = (from, to, files) => {
   mkdirSync(to, { recursive: true })
   for (const f of files) copyFileSync(join(from, f), join(to, f))
 }
-stage(join(mindgrab, 'dist'), join(here, '..', 'public', 'mindgrab'), [
-  'brainchop-mindgrab-gpu.js', 'brainchop-mindgrab-gpu.wasm',
+const mindgrabTarget = join(here, '..', 'public', 'mindgrab')
+rmSync(mindgrabTarget, { recursive: true, force: true })
+stage(join(mindgrab, 'dist', 'models'), join(mindgrabTarget, 'models'), ['mindgrab.bin'])
+stage(join(mindgrab, 'dist'), mindgrabTarget, [
   'brainchop-mindgrab-gl.js', 'brainchop-mindgrab-gl.wasm',
   'brainchop-mindgrab.js', 'brainchop-mindgrab.wasm',
 ])
-stage(mindgrab, join(here, '..', 'public', 'mindgrab'), ['LICENSE'])
+stage(mindgrab, mindgrabTarget, ['LICENSE'])
 stage(join(here, '..', '..', '..', 'packages', 'registration', 'wasm'), join(here, '..', 'public', 'registration'), [
   'syncro-registration.mjs', 'syncro-registration.wasm',
 ])

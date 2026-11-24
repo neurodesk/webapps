@@ -368,7 +368,7 @@ apps:
     hardware: webgpu-optional
     legacy_domain: niivue.github.io/deface
     runtime: vite-webgpu
-    app_scoped_runtime_families: [mindgrab-20260925]
+    app_scoped_runtime_families: [mindgrab-core-1-0-0]
     model_manifest: models/deface.manifest.json
     asset_manifest_schema: scientific-assets-v1
     source: niivue/deface@a27d54264256531db1cb17019a01319e78506e76
@@ -472,7 +472,7 @@ apps:
     hardware: webgpu-optional
     legacy_domain: neurolabusc.github.io/BrowserQC
     runtime: vite-webgpu
-    app_scoped_runtime_families: [mindgrab-20260925]
+    app_scoped_runtime_families: [mindgrab-core-1-0-0]
     model_manifest: models/browserqc.manifest.json
     asset_manifest_schema: scientific-assets-v1
     source: niivue/browserqc@30f385f498299ceb580ead4709e55ac695b7c55c
@@ -1105,7 +1105,7 @@ apps:
     hardware: webgpu-optional
     legacy_domain: null
     runtime: vite-wasm
-    app_scoped_runtime_families: [mindgrab-20260925]
+    app_scoped_runtime_families: [mindgrab-core-1-0-0]
     model_manifest: null
     asset_manifest_schema: null
     source: neurodesk/webapps@local
@@ -1185,7 +1185,7 @@ apps:
     handoff: none
     legacy_domain: null
     runtime: vite-wasm
-    app_scoped_runtime_families: [mindgrab-20260925]
+    app_scoped_runtime_families: [mindgrab-core-1-0-0]
     model_manifest: null
     asset_manifest_schema: null
     source: neurodesk/webapps@local
@@ -1291,7 +1291,7 @@ apps:
     hardware: cpu
     legacy_domain: null
     runtime: react-vite
-    app_scoped_runtime_families: [mindgrab-20260925]
+    app_scoped_runtime_families: [mindgrab-core-1-0-0]
     model_manifest: null
     asset_manifest_schema: null
     source: neurodesk/webapps@local

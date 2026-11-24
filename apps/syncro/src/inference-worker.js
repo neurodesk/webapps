@@ -8,8 +8,8 @@ import {createBrowserSession as createStripSession} from '@neurodesk/synthstrip/
 import { fetchModel } from '@neurodesk/webapp-components/worker';
 import {assets,browserSynthstrip} from '../../../packages/syncro/src/assets.js';
 import {runMindgrab} from '@neurodesk/brain-extraction/mindgrab';
-import * as mindgrab from '@brainchop/mindgrab';
-import mindgrabPackage from '@brainchop/mindgrab/package.json' with { type: 'json' };
+import * as mindgrab from '@brainchop/core';
+import mindgrabPackage from '@brainchop/core/package.json' with { type: 'json' };
 import {withBackendChoice} from '@neurodesk/runtime-support/mindgrab/backend';
 ort.env.wasm.wasmPaths={wasm:wasmURL,mjs:wasmModuleURL};
 ort.env.wasm.numThreads=self.crossOriginIsolated?Math.min(4,navigator.hardwareConcurrency||1):1;

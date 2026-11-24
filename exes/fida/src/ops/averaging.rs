@@ -4,29 +4,36 @@
 use num_complex::Complex64 as C;
 
 use super::basic::op_filter;
-use super::util::{dims_without, mean, median, polyfit, polyval, reduce_axis, select_axis, spec, squeeze, std, sum_axis, with_axis};
+use super::util::{mean, median, polyfit, polyval, reduce_axis, select_axis, spec, squeeze_axis, squeeze_axis_len, std, sum_axis, with_axis};
 use crate::spectra::Spectra;
 
 fn collapse(input: &Spectra, axis1: usize, fids: Vec<C>) -> Spectra {
     let mut out = input.clone();
     out.fids = fids;
-    out.sz = squeeze(&with_axis(&input.sz, axis1 - 1, 1));
-    out.dims = dims_without(input.dims, axis1);
+    let (sz, dims) = squeeze_axis(&input.sz, input.dims, axis1);
+    out.sz = sz;
+    out.dims = dims;
     out
 }
 
 /// op_averaging: mean over the averages dimension. Returns the input
-/// unchanged (FID-A prints a warning) when there is nothing to average.
+/// unchanged (FID-A prints a warning) when already averaged, and collapses an
+/// explicit singleton averages axis so downstream ops see averaged data.
 pub fn op_averaging(input: &Spectra) -> Spectra {
-    if input.flags.averaged || input.averages < 2 || input.dims.averages == 0 {
+    if input.flags.averaged || input.dims.averages == 0 {
         return input.clone();
     }
     let a = input.dims.averages;
-    let na = input.size(a) as f64;
-    let mut fids = sum_axis(&input.fids, &input.sz, a - 1);
-    for v in fids.iter_mut() {
-        *v /= na;
-    }
+    let na = input.size(a);
+    let fids = if na > 1 {
+        let mut s = sum_axis(&input.fids, &input.sz, a - 1);
+        for v in s.iter_mut() {
+            *v /= na as f64;
+        }
+        s
+    } else {
+        input.fids.clone()
+    };
     let mut out = collapse(input, a, fids);
     out.averages = 1;
     out.flags.writtentostruct = true;
@@ -36,19 +43,24 @@ pub fn op_averaging(input: &Spectra) -> Spectra {
 
 /// op_median: median over the averages, real and imaginary parts separately.
 pub fn op_median(input: &Spectra) -> Spectra {
-    if input.flags.averaged || input.dims.averages == 0 || input.averages < 2 {
+    if input.flags.averaged || input.dims.averages == 0 {
         return input.clone();
     }
     let a = input.dims.averages;
-    let mut re = Vec::new();
-    let mut im = Vec::new();
-    let fids = reduce_axis(&input.fids, &input.sz, a - 1, |line| {
-        re.clear();
-        im.clear();
-        re.extend(line.iter().map(|z| z.re));
-        im.extend(line.iter().map(|z| z.im));
-        C::new(median(&re), median(&im))
-    });
+    let na = input.size(a);
+    let fids = if na > 1 {
+        let mut re = Vec::new();
+        let mut im = Vec::new();
+        reduce_axis(&input.fids, &input.sz, a - 1, |line| {
+            re.clear();
+            im.clear();
+            re.extend(line.iter().map(|z| z.re));
+            im.extend(line.iter().map(|z| z.im));
+            C::new(median(&re), median(&im))
+        })
+    } else {
+        input.fids.clone()
+    };
     let mut out = collapse(input, a, fids);
     out.averages = 1;
     out.flags.writtentostruct = true;
@@ -101,6 +113,9 @@ pub fn op_rmbadaverages(input: &Spectra, nsd: f64, domain: Domain) -> Result<RmB
     }
     let ss = if input.dims.sub_specs > 0 { input.size(input.dims.sub_specs) } else { 1 };
     let na = input.size(2);
+    if na < 3 {
+        return Err(format!("op_rmbadaverages needs at least 3 averages (got {na})."));
+    }
     let nt = input.n();
     let infilt = match domain {
         Domain::Time => input.clone(),
@@ -179,6 +194,9 @@ pub fn op_rmworstaverage(input: &Spectra) -> Result<RmBad, String> {
         return Err("FID-A's op_rmworstaverage cannot handle subspectra (its z-score uses a matrix division).".into());
     }
     let na = input.size(2);
+    if na < 3 {
+        return Err(format!("op_rmworstaverage needs at least 3 averages (got {na})."));
+    }
     let nt = input.n();
     let infilt = op_filter(input, 10.0);
     let inavg = op_median(&infilt);
@@ -214,10 +232,11 @@ pub fn op_takeaverages(input: &Spectra, index: &[usize]) -> Result<Spectra, Stri
     let fids = select_axis(&input.fids, &input.sz, a - 1, index);
     let mut out = input.clone();
     out.fids = fids;
-    out.sz = squeeze(&with_axis(&input.sz, a - 1, index.len()));
-    if index.len() == 1 {
-        let d = dims_without(input.dims, a);
-        out.dims = crate::spectra::Dims { t: input.dims.t, ..d };
+    let (sz, dims) = squeeze_axis_len(&input.sz, input.dims, a, index.len(), index.len() == 1);
+    out.sz = sz;
+    out.dims = crate::spectra::Dims { t: input.dims.t, ..dims };
+    if input.dims.coils > 0 && out.dims.coils == 0 {
+        out.flags.addedrcvrs = true;
     }
     out.averages = if out.dims.averages == 0 { 1 } else { out.size(out.dims.averages) };
     out.raw_averages = out.averages;

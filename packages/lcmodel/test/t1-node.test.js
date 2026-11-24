@@ -60,6 +60,6 @@ test("the app and CLI pin the MindGrab build covered by the CPU browser referenc
   const app = await json("../../../apps/lcmodel/package.json");
   const command = await json("../package.json");
   const reference = await json("../../node-drivers/validation/reference.json");
-  assert.equal(command.dependencies["@brainchop/mindgrab"], app.dependencies["@brainchop/mindgrab"]);
-  assert.equal(command.dependencies["@brainchop/mindgrab"], reference.mindgrab.version);
+  assert.equal(command.dependencies["@brainchop/core"], app.dependencies["@brainchop/core"]);
+  assert.equal(command.dependencies["@brainchop/core"], reference.mindgrab.version);
 });

@@ -1,4 +1,4 @@
-// Runs @brainchop/mindgrab's threaded CPU modules under Node.
+// Runs @brainchop/core (or @brainchop/mindgrab)'s threaded CPU modules under Node.
 //
 // The published wrapper only runs in a browser: its CPU path refuses unless the
 // page is cross-origin isolated. The CPU modules themselves are Emscripten
@@ -22,11 +22,13 @@ const CPU_TIMEOUT_MS = 900_000;
 let previousRun = Promise.resolve();
 
 /**
- * @param {string | URL} packageJsonUrl the pinned package, e.g. `import.meta.resolve('@brainchop/mindgrab/package.json')`
+ * @param {string | URL} packageJsonUrl the pinned package, e.g. `import.meta.resolve('@brainchop/core/package.json')`
  */
 export async function loadMindgrabCpu(packageJsonUrl) {
-  const { version } = JSON.parse(await readFile(new URL(packageJsonUrl), 'utf8'));
-  const { MODELS, BrainchopError } = await import(new URL('dist/index.js', packageJsonUrl).href);
+  const { name: packageName = '@brainchop/core', version } = JSON.parse(await readFile(new URL(packageJsonUrl), 'utf8'));
+  const { MODELS, BrainchopError, canonicalModelName } = await import(new URL('dist/index.js', packageJsonUrl).href);
+  const canonical = canonicalModelName ?? ((model) => model);
+  const supportsNoTurbo = packageName === '@brainchop/core';
 
   const reject = (model, option, why) => {
     throw new BrainchopError('unsupported-option', `${model} does not support \`${option}\`: ${why}`);
@@ -42,8 +44,12 @@ export async function loadMindgrabCpu(packageJsonUrl) {
     if (options.ct) args.push('--ct');
     if (options.comply) args.push('--comply');
     if (options.legacyCleanup) {
-      if (options.model !== 'mindmap') reject(options.model, 'legacyCleanup', 'this compatibility option is only for MindMap');
+      if (model.outputKind !== 'labels') reject(options.model, 'legacyCleanup', 'this compatibility option is only for label models');
       args.push('--legacy-cleanup');
+    }
+    if (options.noTurbo) {
+      if (!supportsNoTurbo) reject(options.model, 'noTurbo', `${packageName} ${version} does not support --no-turbo`);
+      args.push('--no-turbo');
     }
     if (options.saveConform) {
       if (!model.capabilities.saveConform) reject(options.model, 'saveConform', 'its output is the input image with non-brain voxels floored, so it is inherently in the input space');
@@ -66,11 +72,12 @@ export async function loadMindgrabCpu(packageJsonUrl) {
   }
 
   function run({ model, args, input, primaryOutput, extraOutputs, threads, timeoutMs, onLog, signal }) {
+    const canonicalName = canonical(model);
     const log = [];
     const worker = new Worker(new URL('./mindgrab-worker.js', import.meta.url), {
       workerData: {
-        moduleUrl: new URL(`dist/brainchop-${model}.js`, packageJsonUrl).href,
-        model,
+        moduleUrl: new URL(`dist/brainchop-${canonicalName}.js`, packageJsonUrl).href,
+        model: canonicalName,
         args,
         threads,
         input,
@@ -125,7 +132,8 @@ export async function loadMindgrabCpu(packageJsonUrl) {
     }
     const { args, maskPath } = buildArgs(options);
     if (tissueMode) {
-      if ((options.model !== 'mindmap' && options.model !== '16chan18cls') || options.mask || options.borderMm || options.legacyCleanup) {
+      const canonicalModel = canonical(options.model);
+      if ((canonicalModel !== 'mindmap' && canonicalModel !== 'mindmap-fast' && canonicalModel !== '16chan18cls') || options.mask || options.borderMm || options.legacyCleanup) {
         reject(options.model, 'tissue fractions', 'requires an 18-class model without mask or categorical cleanup options');
       }
       args.push('--pve');
@@ -159,7 +167,9 @@ export async function loadMindgrabCpu(packageJsonUrl) {
   }
 
   return {
+    packageName,
     version,
+    supportsNoTurbo,
     MODELS,
     segment: (input, options) => segmentInternal(input, options, false),
     async segmentTissues(input, options) {

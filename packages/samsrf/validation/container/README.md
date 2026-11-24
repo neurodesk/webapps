@@ -2,10 +2,12 @@
 
 These checks use the compiled MATLAB application, without the Octave shims.
 The Neurodesk `v10.004_20241127` image contains an application that reports
-**SamSrf 10.003 (2024-11-04)**, running on MATLAB Runtime R2023b. The web port
-otherwise targets SamSrf 10.4, commit `41ed1e96`. A compiled SamSrf 10.4 with
-the reference repairs has since been built on a licensed host; it is local and
-not published ([#733 status](../matlab/README.md#building-a-matching-runtime-container)).
+**SamSrf 10.003 (2024-11-04)**, running on MATLAB Runtime R2023b. The web port otherwise targets SamSrf 10.4, commit `41ed1e96`. A compiled
+SamSrf 10.4 with the reference repairs (Build 5) has since been built on a
+licensed host, published privately to GHCR
+(`ghcr.io/neurodesk/samsrf-reference@sha256:c132e952abf617eebff01fbbb0d12e8b44a3af9850c15595092d761708f4ee0d`),
+and validated cross-host without a license
+([#733 status](../matlab/README.md#building-a-matching-runtime-container)).
 This directory stays the separate baseline for the unmodified 2024 image; its
 results are not replaced by the repaired build's.
 

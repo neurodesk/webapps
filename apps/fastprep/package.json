@@ -14,7 +14,7 @@
     "lint": "node ../../scripts/lint.mjs --workspace"
   },
   "dependencies": {
-    "@brainchop/mindgrab": "0.1.20261008",
+    "@brainchop/core": "1.0.0",
     "@neurodesk/fastprep": "workspace:*",
     "@neurodesk/greedy": "workspace:*",
     "@neurodesk/runtime-support": "workspace:*",

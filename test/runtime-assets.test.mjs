@@ -136,15 +136,16 @@ test('MindGrab binaries are shared per release while each app keeps its model mo
   const registry = await loadAppsRegistry();
   const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets/manifest.json'), 'utf8'));
   const families = manifest.families.filter(family => family.id.startsWith('mindgrab-wasm-'));
-  assert.ok(families.length >= 2, 'expected a shared MindGrab family per release');
+  assert.ok(families.length >= 1, 'expected a shared MindGrab family per release');
   const digest = async path => createHash('sha256').update(await readFile(path)).digest('hex');
   for (const family of families) {
     assert.equal(family.target, `mindgrab/${family.version}`, `${family.id}: one release per directory, so two releases never share a file name`);
     assert.equal(family.match_by, 'sha256');
-    const release = join(repoRoot, 'node_modules/.pnpm', `@brainchop+mindgrab@${family.version}`, 'node_modules/@brainchop/mindgrab/dist');
+    const pkgName = family.package ?? '@brainchop/mindgrab';
+    const release = join(repoRoot, 'node_modules/.pnpm', `${pkgName.replace('/', '+')}@${family.version}`, 'node_modules', pkgName, 'dist');
     for (const file of family.files) {
       const shared = `_runtime/${family.target}/${file.name}`;
-      assert.equal(await digest(join(release, file.name)), file.sha256, `${family.id}/${file.name}: not the binary of @brainchop/mindgrab ${family.version}`);
+      assert.equal(await digest(join(release, file.name)), file.sha256, `${family.id}/${file.name}: not the binary of ${pkgName} ${family.version}`);
       assert.equal(await digest(join(dist, shared)), file.sha256, shared);
       const consumers = file.consumers ?? family.consumers;
       assert.ok(consumers?.length > 1, `${family.id}/${file.name}: a shared binary lists the apps that load it`);
