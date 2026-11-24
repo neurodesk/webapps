@@ -390,7 +390,12 @@ mod tests {
         let mut joint = vec![0.0; BINS * BINS];
         joint[BINS + 1] = 3.0;
         assert!(score_from_histogram(&joint, 3.0).unwrap().is_nan());
-        assert!(score_gradient_from_histogram(&joint, 3.0).unwrap().0.is_nan());
+        assert!(
+            score_gradient_from_histogram(&joint, 3.0)
+                .unwrap()
+                .0
+                .is_nan()
+        );
     }
 
     #[test]
