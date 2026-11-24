@@ -2909,6 +2909,58 @@ apps:
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
 
+  denoise:
+    about:
+      - "Aydin FGR implements Noise2Self (Batson & Royer, ICML 2019) using strictly blind-spot (J-invariant) multiscale features — directional pairs, 8-neighbour statistics, cancellation-free hollow donut rings and off-plane 3D/2D+T neighbours — so for fixed normalization and a fixed fitted model f, f(F(x))_i never reads voxel x_i. As in Aydin, global normalization and histogram gradient-boosted trees or cross-validated Ridge regression are fit directly on the image with an in-image holdout split for early stopping and regularisation selection, requiring no external training data or pretrained weights."
+      - "Zero-Shot Noise2Noise (Mansour & Heckel, CVPR 2023) is a browser adaptation using the paper's 2-layer residual CNN and symmetric residual plus consistency objective on diagonal 2×2 downsampled sub-image pairs. To keep CPU runtimes interactive, it defaults to 16 channels, 48×48 random crops and 200 Adam steps (up to 48 channels and 1500 steps are configurable in Advanced settings), followed by seamless tiled inference."
+      - "Anscombe VST + Non-Local Means provides a classical Poisson-Gaussian baseline: it estimates shot-noise gain and Gaussian readout noise from smooth-region diagonal Haar wavelet details (Foi et al. 2008), stabilizes intensity-dependent variance with the Generalized Anscombe Transform (Makitalo & Foi 2013), applies fast integral-image Non-Local Means with mirror-padded patches (Buades et al. 2005; Darbon et al. 2008) and maps back via a continuous, monotone closed-form approximation to the unbiased inverse (Makitalo & Foi Eq. 21 with a continuous low-count quadratic ramp below the asymptotic branch)."
+      - "Every run writes the denoised image (float32 calibrated TIFF and NIfTI) and the noise residual map (input minus denoised), and reports estimated Haar noise-floor reduction and per-axis residual lag-1 autocorrelation in the Analysis console to help screen for over-smoothing."
+    packages:
+      - { name: Denoise core (JavaScript Worker), url: https://github.com/neurodesk/webapps/tree/main/apps/denoise/src/core, role: "Aydin FGR (J-invariant features, histogram GBDT and Ridge), Zero-Shot Noise2Noise CNN, Generalized Anscombe VST and fast integral-image Non-Local Means" }
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: "TIFF and OME-TIFF decoding through @neurodesk/webapp-components/file-io/tiff" }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Self-supervised denoising
+        title: Noise2Self (J-invariant self-supervised denoising)
+        reference: "Batson J, Royer L. Noise2Self: blind denoising by self-supervision. Proceedings of the 36th International Conference on Machine Learning (ICML). 2019;PMLR 97:524–533."
+        url: https://proceedings.mlr.press/v97/batson19a.html
+      - group: Self-supervised denoising
+        title: Aydin (Feature Generation & Regression)
+        reference: "Royer Lab. Aydin: user-friendly, feature-rich, and fast image denoising [Computer software]."
+        url: https://github.com/royerlab/aydin
+      - group: Self-supervised denoising
+        title: Zero-Shot Noise2Noise (ZS-N2N)
+        reference: "Mansour Y, Heckel R. Zero-Shot Noise2Noise: efficient image denoising without any data. Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). 2023:14018–14027."
+        doi: 10.1109/CVPR52729.2023.01347
+      - group: Classical Poisson-Gaussian denoising
+        title: Non-Local Means
+        reference: "Buades A, Coll B, Morel JM. A non-local algorithm for image denoising. Proceedings of the IEEE Computer Society Conference on Computer Vision and Pattern Recognition (CVPR). 2005;2:60–65."
+        doi: 10.1109/CVPR.2005.38
+      - group: Classical Poisson-Gaussian denoising
+        title: Fast integral-image Non-Local Means
+        reference: "Darbon J, Cunha A, Chan TF, Osher S, Jensen GJ. Fast nonlocal filtering applied to electron cryomicroscopy. 5th IEEE International Symposium on Biomedical Imaging (ISBI). 2008:1331–1334."
+        doi: 10.1109/ISBI.2008.4541250
+      - group: Classical Poisson-Gaussian denoising
+        title: Generalized Anscombe variance-stabilizing transform
+        reference: "Makitalo M, Foi A. Optimal inversion of the generalized Anscombe transformation for Poisson-Gaussian noise. IEEE Transactions on Image Processing. 2013;22(1):91–103."
+        doi: 10.1109/TIP.2012.2202675
+      - group: Classical Poisson-Gaussian denoising
+        title: Poisson-Gaussian noise estimation
+        reference: "Foi A, Trimeche M, Katkovnik V, Egiazarian K. Practical Poissonian-Gaussian noise modeling and fitting for single-image raw-data. IEEE Transactions on Image Processing. 2008;17(10):1737–1754."
+        doi: 10.1109/TIP.2008.2001399
+      - group: Example data
+        title: 2018 Data Science Bowl (BBBC038)
+        reference: "Caicedo JC, Goodman A, Karhohs KW, et al. Nucleus segmentation across imaging experiments: the 2018 Data Science Bowl. Nature Methods. 2019;16(12):1247–1253."
+        doi: 10.1038/s41592-019-0612-7
+      - group: Example data
+        title: Deconvolution Test Dataset (HeLa phalloidin-488 confocal)
+        reference: "Guiet R. Deconvolution Test Dataset. Zenodo. 2021. CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)."
+        doi: 10.5281/zenodo.5101351
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
   totalsegmentator:
     about:
       - "Segment major organs, bones, vertebrae and muscles in 3D CT and MRI scans with TotalSegmentator v2, running nnU-Net v2 models directly in your browser on WebGPU or WebAssembly. Scans are automatically reoriented to canonical RAS for inference, resampled to the model's spacing, and restored to the input scan's exact orientation and voxel grid on output."

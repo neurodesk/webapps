@@ -1858,6 +1858,33 @@ apps:
       shared_runtime: false
       browser_test: true
       release: true
+  - id: denoise
+    path: denoise
+    catalog: microscopy
+    also_in: [preclinical]
+    title: Denoise
+    description: Self-supervised denoising of 2D and 3D microscopy stacks.
+    categories: [preprocessing]
+    keywords: [denoising, self-supervised, Noise2Self, Aydin, FGR, Zero-Shot Noise2Noise, ZS-N2N, Anscombe, non-local means, fluorescence, confocal, two-photon, microscopy, TIFF]
+    anatomy: [any]
+    modalities: [microscopy]
+    inputs: [tiff, nifti]
+    hardware: cpu
+    handoff: none
+    legacy_domain: null
+    runtime: react-vite
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: MIT
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false
   - id: totalsegmentator
     path: totalsegmentator
     catalog: msk
