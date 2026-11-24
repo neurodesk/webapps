@@ -828,6 +828,20 @@
       "bytes": 4438531,
       "sha256": "15f4f19fef726947de2cdf53e86be76bb9fe6539630e382aca0b042b04fc23a5",
       "license": "MIT"
+    },
+    {
+      "filename": "examples/siemens-steam/steam7t.dat",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/b181b231d9e7686b364e78995efdce9768a57438/lcmodel/examples/siemens-steam/steam7t.dat",
+      "bytes": 70011424,
+      "sha256": "3fcec0fb6619dab4829a2062ba06419cb800a70838a59f53bdbc24e01ee2d563",
+      "license": "CC-BY-4.0"
+    },
+    {
+      "filename": "examples/siemens-steam/steam7t_w.dat",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/b181b231d9e7686b364e78995efdce9768a57438/lcmodel/examples/siemens-steam/steam7t_w.dat",
+      "bytes": 3682624,
+      "sha256": "5d4ac6d386d106c56914ef35d06330fa4bf13b32be53afd470f328f48375ae04",
+      "license": "CC-BY-4.0"
     }
   ],
   "repository": "neurodeskorg/webapps",
