@@ -625,10 +625,19 @@ test('the SamSrf Runtime reference builds only with a Compiler token and is vali
   assert.equal(publish.if, "inputs.runtime_cli == 'build'");
   assert.ok(cli.steps.indexOf(publish) > cli.steps.findIndex(step => /compiled-vs-source\.json/.test(step.run ?? '')), 'publish after the same-host gate');
   const runtime = flow.jobs['runtime-image'];
+  assert.deepEqual(runtime.permissions, { contents: 'read', packages: 'read' });
   assert.ok(!runtime.steps.some(step => step.uses?.startsWith('matlab-actions/')), 'no MATLAB on the Runtime-only host');
   assert.ok(!JSON.stringify(runtime).includes('secrets.'));
   assert.equal(runtime.env.IMAGE, '${{ inputs.runtime_image }}');
   assert.ok(!runtime.steps.some(step => /\$\{\{\s*inputs\./.test(step.run ?? '')), 'the image reaches scripts through the environment');
+  const pullStep = runtime.steps.find(step => /docker pull "\$IMAGE"/.test(step.run ?? ''));
+  assert.ok(pullStep, 'runtime-image pulls IMAGE in its own step');
+  assert.equal(pullStep.env?.GITHUB_TOKEN, '${{ github.token }}');
+  assert.match(pullStep.run, /docker login ghcr\.io/);
+  assert.match(pullStep.run, /docker logout ghcr\.io/);
+  const runStepIndex = runtime.steps.findIndex(step => /run_runtime_cli\.py/.test(step.run ?? ''));
+  assert.ok(runtime.steps.indexOf(pullStep) < runStepIndex, 'pull and log out before running the container');
+  assert.ok(!runtime.steps[runStepIndex].env?.GITHUB_TOKEN, 'GITHUB_TOKEN is scoped to the pull step');
   for (const event of ['pull_request', 'push', 'workflow_dispatch']) {
     for (const mode of ['none', 'source', 'build']) {
       for (const image of ['', 'ghcr.io/neurodesk/samsrf-reference@sha256:' + '0'.repeat(64)]) {
