@@ -18,8 +18,12 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
+import tomllib
 import urllib.request
 import zipfile
+
+from lib import windows_signing
 
 ROOT = Path(__file__).resolve().parents[1]
 CRATE = ROOT / 'exes/syncro'
@@ -75,7 +79,7 @@ def extract(archive, into):
         raise ValueError(f'{name}: unknown archive format')
 
 
-def stage_tools(target, stage, local):
+def stage_tools(target, stage, local, build_env):
     """Copy each tool's declared files and licences into the stage; returns {tool: version}."""
     versions = {}
     for tool, spec in MANIFEST['tools'].items():
@@ -84,8 +88,17 @@ def stage_tools(target, stage, local):
             shutil.copy2(local[tool], stage / 'bin' / exe)
             versions[tool] = f'local {local[tool]}'
             continue
-        if spec.get('blocked') or target not in spec['assets']:
-            raise SystemExit(f"{tool}: no pinned {target} asset. {spec.get('blocked', '')}")
+        if 'source' in spec:
+            source = ROOT / spec['source']
+            subprocess.run(['cargo', 'build', '--locked', '--release', '-p', tool],
+                           cwd=source, env=build_env, check=True)
+            shutil.copy2(source / 'target/release' / exe, stage / 'bin' / exe)
+            notices = stage / 'licenses' / tool
+            notices.mkdir(parents=True)
+            for licence in spec['licenses']:
+                shutil.copy2(source / licence, notices / licence)
+            versions[tool] = tomllib.loads((source / 'Cargo.toml').read_text())['workspace']['package']['version']
+            continue
         asset = spec['assets'][target]
         with tempfile.TemporaryDirectory(prefix=f'syncro-{tool}-') as directory:
             unpacked = Path(directory)
@@ -117,6 +130,59 @@ def ants_path(target):
     return found.parent
 
 
+MACOS_INSTALL = Path('usr/local/lib/neurodesk/syncro')
+
+
+def macos_package(stage, archive):
+    identity = os.environ.get('MACOS_SIGN_IDENTITY', '-')
+    installer = os.environ.get('MACOS_INSTALLER_IDENTITY')
+    if identity != '-' and not installer:
+        raise ValueError('Set MACOS_INSTALLER_IDENTITY to build a signed installer')
+    team = os.environ['EXPECTED_TEAM_ID'] if installer else None
+    with tempfile.TemporaryDirectory(prefix='syncro-installer-') as directory:
+        work = Path(directory)
+        payload = work / 'payload'
+        mac_bin = payload / 'usr/local/bin'
+        mac_bin.mkdir(parents=True)
+        (payload / MACOS_INSTALL.parent).mkdir(parents=True)
+        shutil.copytree(stage, payload / MACOS_INSTALL)
+        (mac_bin / 'syncro').symlink_to('../lib/neurodesk/syncro/syncro')
+        install = payload / MACOS_INSTALL
+        for binary in [install / 'syncro', *sorted((install / 'bin').iterdir())]:
+            options = ['--options', 'runtime', '--timestamp'] if installer else []
+            subprocess.run(['codesign', '--force', '--sign', identity, *options, str(binary)], check=True)
+            subprocess.run(['codesign', '--verify', '--strict', str(binary)], check=True)
+            if team:
+                signature = subprocess.check_output(['codesign', '-dv', '--verbose=4', str(binary)],
+                                                    stderr=subprocess.STDOUT, text=True)
+                if f'TeamIdentifier={team}' not in signature.splitlines():
+                    raise ValueError(f'{binary.name}: wrong signing team')
+        component = work / 'component.pkg'
+        subprocess.run(['pkgbuild', '--root', str(payload), '--identifier', 'org.neurodesk.syncro',
+                        '--version', VERSION, '--install-location', '/', str(component)], check=True)
+        options = ['--sign', installer] if installer else []
+        subprocess.run(['productbuild', '--package', str(component), *options, str(archive)], check=True)
+    if not team:
+        return ''
+    signature = subprocess.check_output(['pkgutil', '--check-signature', str(archive)], text=True)
+    if f'({team})' not in signature:
+        raise ValueError('SYNcro installer has the wrong signing team')
+    subprocess.run(['xcrun', 'notarytool', 'submit', str(archive), '--keychain-profile',
+                    os.environ['NOTARY_PROFILE'], '--wait'], check=True)
+    for attempt in range(4):
+        result = subprocess.run(['xcrun', 'stapler', 'staple', str(archive)])
+        if result.returncode == 0:
+            break
+        if attempt == 3:
+            result.check_returncode()
+        time.sleep(20 * (attempt + 1))
+    ticket = subprocess.check_output(['xcrun', 'stapler', 'validate', str(archive)],
+                                     stderr=subprocess.STDOUT, text=True)
+    gatekeeper = subprocess.check_output(['spctl', '--assess', '--type', 'install', '--verbose=4', str(archive)],
+                                         stderr=subprocess.STDOUT, text=True)
+    return signature + ticket + gatekeeper
+
+
 def package(target, local):
     expected_os, expected_arch = TARGETS[target]
     if (platform.system(), platform.machine()) != (expected_os, expected_arch):
@@ -134,28 +200,37 @@ def package(target, local):
         for sub in ('bin', 'templates', 'licenses'):
             (stage / sub).mkdir(parents=True)
         shutil.copy2(CRATE / 'target/release' / executable, stage / executable)
-        versions = stage_tools(target, stage, local)
+        versions = stage_tools(target, stage, local, build_env)
         for filename in ('MNI152_T1_1mm_brain.nii.gz', 'FSL-LICENSE.txt'):
             shutil.copy2(PACKAGE / 'data' / filename, stage / 'templates' / filename)
         for filename in ('README.md', 'LICENSE', 'NOTICE'):
             shutil.copy2(PACKAGE / filename, stage / filename)
         (stage / 'tools.json').write_text(json.dumps(versions, indent=2) + '\n')
+        signing_report = ''
         if target == 'windows-x64':
+            windows_signing.sign_tree(stage, (executable,))
             archive = dist / f'{name}.zip'
             with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as bundle:
                 for item in sorted(stage.rglob('*')):
                     bundle.write(item, f'{name}/{item.relative_to(stage).as_posix()}')
+        elif target == 'macos-arm64':
+            archive = dist / f'{name}.pkg'
+            signing_report = macos_package(stage, archive)
         else:
             archive = dist / f'{name}.tar.gz'
             with tarfile.open(archive, 'w:gz') as bundle:
                 bundle.add(stage, arcname=name)
         extracted = Path(directory) / 'extracted'
         extract(archive, extracted)
+        if target == 'windows-x64':
+            windows_signing.verify_tree(extracted / name, (executable,), native=True)
+        command = (extracted / 'usr/local/bin/syncro' if target == 'macos-arm64'
+                   else extracted / name / executable)
         # SYNCRO_CHECK_ANTSPATH: a local ANTs for a development check; CI runs the pinned release.
         env = dict(os.environ, ANTSPATH=os.environ.get('SYNCRO_CHECK_ANTSPATH') or str(ants_path(target)))
         env.pop('SYNCRO_HOME', None)
         check = subprocess.run(['node', str(PACKAGE / 'validation/package-check.mjs'), '--executable',
-                                str(extracted / name / executable)], env=env, capture_output=True, text=True)
+                                str(command)], env=env, capture_output=True, text=True, encoding='utf-8')
         report = check.stdout + check.stderr
         print(report)
         if check.returncode != 0:
@@ -163,7 +238,7 @@ def package(target, local):
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     Path(f'{archive}.sha256').write_text(f'{digest}  {archive.name}\n', encoding='utf-8', newline='\n')
     # The Standalone catalog accepts a receipt only when it records the archive's digest and name.
-    receipt = report.rstrip('\n') + f'\nsha256: {digest}  {archive.name}\n'
+    receipt = (report + signing_report).rstrip('\n') + f'\nsha256: {digest}  {archive.name}\n'
     Path(f'{archive}.validation.txt').write_text(receipt, encoding='utf-8', newline='\n')
     print(archive)
 

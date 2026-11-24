@@ -36,6 +36,27 @@ test('built runtime asset URLs return executable modules and WebAssembly',async(
  expect(weights.ok()).toBe(true);
  expect((await weights.body()).byteLength).toBeGreaterThan(100_000);
 });
+test('accepts a qform-only NIfTI-2 scan with a 180-degree rotation', async ({ page }) => {
+  const buffer = Buffer.alloc(544 + 16 ** 3);
+  buffer.writeInt32LE(540, 0);
+  buffer.set([110, 43, 50, 0, 13, 10, 26, 10], 4);
+  buffer.writeInt16LE(2, 12);
+  buffer.writeInt16LE(8, 14);
+  [3, 16, 16, 16, 1, 1, 1, 1].forEach((n, axis) => {
+    buffer.writeBigInt64LE(BigInt(n), 16 + 8 * axis);
+    buffer.writeDoubleLE(1, 104 + 8 * axis);
+  });
+  buffer.writeBigInt64LE(544n, 168);
+  buffer.writeInt32LE(1, 344);
+  buffer.writeDoubleLE(Math.sqrt(0.5), 352);
+  buffer.writeDoubleLE(Math.sqrt(0.5), 360);
+  for (let index = 544; index < buffer.length; index++) buffer[index] = index % 200;
+  await page.goto('./');
+  await page.locator('#movingInput').setInputFiles({ name: 'qform.nii', mimeType: 'application/octet-stream', buffer });
+  await expect(page.locator('#runButton')).toBeEnabled();
+  await expect(page.locator('#viewLabel')).toContainText('qform.nii');
+  await expect(page.locator('#viewerError')).toBeHidden();
+});
 test('geometry error keeps the explicit lesion input available before inference',async({page})=>{
  const modelRequests=[];page.context().on('request',r=>{if(r.url().includes('.onnx'))modelRequests.push(r.url());});
  await page.goto('./');

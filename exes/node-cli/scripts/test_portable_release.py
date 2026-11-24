@@ -23,7 +23,7 @@ portable_release = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = portable_release
 SPEC.loader.exec_module(portable_release)
 
-PACKAGES = ("packages/syncro", "packages/topofit")
+PACKAGES = ("packages/qsmbly", "packages/topofit")
 
 
 def package_version(package_dir):
@@ -119,14 +119,13 @@ class PortableReleaseTests(unittest.TestCase):
         self.assertEqual(seen, [str(directory.resolve() / "tool.pkg")])
 
     def test_release_target_derives_safe_names(self):
-        target = portable_release.load_target(ROOT, "packages/syncro", "linux-x64")
-        version = package_version("packages/syncro")
+        target = portable_release.load_target(ROOT, "packages/qsmbly", "linux-x64")
+        version = package_version("packages/qsmbly")
         self.assertEqual(target.version, version)
-        self.assertEqual(target.archive_name, f"syncro-{version}-linux-x64.tar.gz")
-        self.assertEqual(target.executable, "syncro")
-        self.assertEqual(target.package, "@neurodesk/syncro")
-        self.assertTrue(target.build)
-        windows = portable_release.load_target(ROOT, "packages/syncro", "windows-x64")
+        self.assertEqual(target.archive_name, f"qsmbly-{version}-linux-x64.tar.gz")
+        self.assertEqual(target.executable, "qsmbly")
+        self.assertEqual(target.package, "@neurodesk/qsmbly")
+        windows = portable_release.load_target(ROOT, "packages/qsmbly", "windows-x64")
         self.assertEqual(windows.private_node, "runtime/node.exe")
         self.assertEqual(windows.node_platform, "win32")
 
@@ -154,7 +153,7 @@ class PortableReleaseTests(unittest.TestCase):
 
     def test_unknown_target_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "target"):
-            portable_release.load_target(ROOT, "packages/syncro", "linux-arm64")
+            portable_release.load_target(ROOT, "packages/qsmbly", "linux-arm64")
         with self.assertRaisesRegex(ValueError, "target"):
             portable_release.load_target(ROOT, "packages/topofit", "windows-arm64")
 
@@ -200,13 +199,13 @@ class PortableReleaseTests(unittest.TestCase):
                     portable_release.load_target(repo, "packages/tool", "linux-x64")
 
     def test_readme_comes_from_the_release_spec(self):
-        syncro = portable_release.readme_text(portable_release.load_target(ROOT, "packages/syncro", "linux-x64"))
-        self.assertIn("  ./syncro input.nii.gz results --threads 4\n", syncro)
-        self.assertIn("SYNcro is research software.", syncro)
-        self.assertNotIn("quarantine", syncro)
+        linux = portable_release.readme_text(portable_release.load_target(ROOT, "packages/topofit", "linux-x64"))
+        self.assertIn("  ./topofit input.nii.gz results\n", linux)
+        self.assertIn("TopoFit is research software.", linux)
+        self.assertNotIn("quarantine", linux)
         windows = portable_release.readme_text(portable_release.load_target(ROOT, "packages/topofit", "windows-x64"))
         self.assertIn("  .\\topofit.exe self-check\n", windows)
-        self.assertNotIn("SYNcro", windows)
+        self.assertNotIn("./topofit", windows)
         macos = portable_release.readme_text(portable_release.load_target(ROOT, "packages/topofit", "macos-arm64"))
         self.assertIn("  topofit self-check\n", macos)
         self.assertIn("  topofit input.nii.gz results\n", macos)
@@ -254,7 +253,7 @@ class PortableReleaseTests(unittest.TestCase):
             windows = runtime / "win32/x64"
             windows.mkdir(parents=True)
             (windows / "onnxruntime_binding.node").write_text("foreign")
-            portable_release._prune_onnx_runtime(app, portable_release.load_target(ROOT, "packages/syncro", "linux-x64"))
+            portable_release._prune_onnx_runtime(app, portable_release.load_target(ROOT, "packages/topofit", "linux-x64"))
             self.assertEqual(
                 sorted(path.name for path in linux.iterdir()),
                 ["libonnxruntime.so.1", "libonnxruntime_providers_shared.so", "onnxruntime_binding.node"],

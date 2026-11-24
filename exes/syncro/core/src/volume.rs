@@ -170,10 +170,12 @@ fn nifti1(raw: Vec<u8>) -> Result<Vec<u8>, String> {
                 a * a + d * d - c * c - b * b,
             ],
         ];
-        let qfac = if real64(104) == 0.0 { 1.0 } else { real64(104) };
+        let qfac = if real64(104) < 0.0 { -1.0 } else { 1.0 };
         for (r, row) in rot.iter().enumerate() {
             for (k, &e) in row.iter().enumerate() {
-                let v = e * real64(112 + 8 * k) * if k == 2 { qfac } else { 1.0 };
+                let spacing = real64(112 + 8 * k);
+                let spacing = if spacing > 0.0 { spacing } else { 1.0 };
+                let v = e * spacing * if k == 2 { qfac } else { 1.0 };
                 put(&mut h, 280 + 16 * r + 4 * k, &(v as f32).to_le_bytes());
             }
             put(&mut h, 280 + 16 * r + 12, &real(376 + 8 * r).to_le_bytes());

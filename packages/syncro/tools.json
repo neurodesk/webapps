@@ -1,5 +1,5 @@
 {
-  "comment": "Native tools bundled into the syncro archives (scripts/package-syncro.py), each an exact release asset checked by SHA-256. `files` maps a path inside the asset (after extracting a zip, tar.gz or macOS pkg payload) to its place in the archive. ANTs is not bundled: the release check runs it from the pinned validation asset. A licence an asset lacks (the synthsr macOS installer ships none) is copied from `licenseSource` in this repository, which built that release.",
+  "comment": "Native tools bundled into the syncro archives (scripts/package-syncro.py), from the release checkout's locked Greedy source or exact release assets checked by SHA-256. `files` maps a path inside the asset (after extracting a zip, tar.gz or macOS pkg payload) to its place in the archive. ANTs is not bundled: the release check runs it from the pinned validation asset. A licence an asset lacks (the synthsr macOS installer ships none) is copied from `licenseSource` in this repository, which built that release.",
   "tools": {
     "synthsr": {
       "version": "0.6.20261119",
@@ -37,36 +37,12 @@
       }
     },
     "greedy-rs": {
-      "version": "0.9.20261119",
+      "source": "exes/greedy",
       "licenses": [
         "LICENSE",
         "NOTICE",
         "THIRD_PARTY_NOTICES.md"
-      ],
-      "licenseSource": "exes/greedy",
-      "assets": {
-        "linux-x64": {
-          "url": "https://github.com/neurodesk/webapps/releases/download/greedy-v0.9.20261119/greedy-0.9.20261119-linux-x64.tar.gz",
-          "sha256": "0358db9dd0fce16f7177e25a79ef5fcd091af36f6cc681b44b9dd2f7001d1760",
-          "files": {
-            "greedy-0.9.20261119-linux-x64/greedy-rs": "bin/greedy-rs"
-          }
-        },
-        "windows-x64": {
-          "url": "https://github.com/neurodesk/webapps/releases/download/greedy-v0.9.20261119/greedy-0.9.20261119-windows-x64.zip",
-          "sha256": "8be698df81dedb41aa21f5a147d9f46c6ed6367f07696bbddabacb44dd8121a8",
-          "files": {
-            "greedy-0.9.20261119-windows-x64/greedy-rs.exe": "bin/greedy-rs.exe"
-          }
-        },
-        "macos-arm64": {
-          "url": "https://github.com/neurodesk/webapps/releases/download/greedy-v0.9.20261119/greedy-0.9.20261119-macos-arm64.pkg",
-          "sha256": "a97958a1771af73baa910f8052a33ccc3a488eeac207c7a37cbbaa2e1b0032e9",
-          "files": {
-            "usr/local/bin/greedy-rs": "bin/greedy-rs"
-          }
-        }
-      }
+      ]
     },
     "niimath": {
       "version": "v1.0.20261016",

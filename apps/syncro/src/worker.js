@@ -94,7 +94,7 @@ self.onmessage = async ({ data: job }) => {
     };
     if (templateRepresentations[templateHash] !== template.byteLength) throw new Error('MNI template checksum mismatch.');
     const files = new Files();
-    const templatePath = template[0] === 0x1f && template[1] === 0x8b ? 'in/MNI152_T1_1mm_brain.nii.gz' : 'in/MNI152_T1_1mm_brain.nii';
+    const templatePath = template[0] === 0x1f && template[1] === 0x8b ? 'template/MNI152_T1_1mm_brain.nii.gz' : 'template/MNI152_T1_1mm_brain.nii';
     files.put(templatePath, template);
     const place = (file) => {
       if (!file) return undefined;

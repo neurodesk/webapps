@@ -6,27 +6,35 @@ on:
     paths:
       - '.github/workflows/syncro-native.yml'
       - 'exes/syncro/**'
+      - 'exes/greedy/**'
       - 'exes/pipeline-host/**'
       - 'exes/nifti/**'
       - 'exes/synthsr/src/nifti.rs'
       - 'packages/syncro/**'
       - 'packages/synthsr/src/**'
       - 'scripts/package-syncro.py'
+      - '.github/actions/windows-signing/**'
+      - 'scripts/lib/windows_signing.py'
+      - 'scripts/windows-signing.ps1'
   push:
     branches: [main]
     paths:
       - '.github/workflows/syncro-native.yml'
       - 'exes/syncro/**'
+      - 'exes/greedy/**'
       - 'exes/pipeline-host/**'
       - 'exes/nifti/**'
       - 'exes/synthsr/src/nifti.rs'
       - 'packages/syncro/**'
       - 'packages/synthsr/src/**'
       - 'scripts/package-syncro.py'
+      - '.github/actions/windows-signing/**'
+      - 'scripts/lib/windows_signing.py'
+      - 'scripts/windows-signing.ps1'
   workflow_dispatch:
     inputs:
       sign_release:
-        description: Attach every verified archive to the existing SYNcro release
+        description: Sign the macOS installer and attach the verified packages to the existing SYNcro release
         type: boolean
         default: false
 
@@ -36,6 +44,9 @@ concurrency:
 
 permissions:
   contents: read
+
+env:
+  WINDOWS_SIGNING_ENABLED: ${{ github.event_name != 'pull_request' && vars.WINDOWS_SIGNING_ENABLED || 'false' }}
 
 jobs:
   # Release bookkeeping (changelogs, version bumps) runs this workflow neither
@@ -72,8 +83,8 @@ jobs:
       - name: Test the core and the command line
         working-directory: exes/syncro
         run: |
-          cargo test --locked --workspace
-          cargo clippy --locked --workspace --all-targets -- -D warnings
+          cargo test --locked --workspace --all-features
+          cargo clippy --locked --workspace --all-features --all-targets -- -D warnings
           cargo fmt --all --check
       - name: Test the shared host
         working-directory: exes/pipeline-host
@@ -100,7 +111,7 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm --filter @neurodesk/syncro test:core
 
-  # Archives from the tool releases pinned in packages/syncro/tools.json, each checked by
+  # Archives build Greedy from this checkout and stage the other tools pinned in packages/syncro/tools.json. Each is checked by
   # validation/package-check.mjs after extraction.
   native:
     needs: core
@@ -116,10 +127,23 @@ jobs:
             platform: macos-arm64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+      - uses: ./.github/actions/windows-signing
+        if: runner.os == 'Windows'
+        with:
+          enabled: ${{ env.WINDOWS_SIGNING_ENABLED }}
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          endpoint: ${{ vars.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
+          account: ${{ vars.AZURE_ARTIFACT_SIGNING_ACCOUNT }}
+          profile: ${{ vars.AZURE_ARTIFACT_SIGNING_PROFILE }}
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
@@ -130,7 +154,19 @@ jobs:
         with:
           toolchain: '1.99.1'
       - name: Package, extract and run the release check
+        if: runner.os != 'macOS' || github.event_name != 'workflow_dispatch' || !inputs.sign_release
         run: python scripts/package-syncro.py package ${{ matrix.platform }}
+      - name: Sign, notarize and check the macOS installer
+        if: runner.os == 'macOS' && github.event_name == 'workflow_dispatch' && inputs.sign_release
+        env:
+          APPLEID: ${{ secrets.APPLEID }}
+          APPLEIDPASS: ${{ secrets.APPLEIDPASS }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          CSC_INSTALLER_LINK: ${{ secrets.CSC_INSTALLER_LINK }}
+          CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.CSC_INSTALLER_KEY_PASSWORD }}
+        run: exes/synthsr/scripts/ci_macos_release.sh exes/syncro
       - name: Check that each receipt records its archive's digest
         run: node scripts/check-native-receipts.mjs exes/syncro/dist
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -166,6 +202,7 @@ jobs:
           test "$(git rev-parse "$tag^{commit}")" = "$GITHUB_SHA"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "release=syncro@$version" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: syncro-*
@@ -174,7 +211,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.target.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.target.outputs.version }}
         run: |
+          test -f "release-bundle/syncro-macos-arm64/syncro-$RELEASE_VERSION-macos-arm64.pkg"
           for target in linux-x64 windows-x64 macos-arm64; do
             (cd "release-bundle/syncro-$target" && shasum -a 256 -c *.sha256)
           done

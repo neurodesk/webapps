@@ -3,6 +3,7 @@
 use neurodesk_pipeline_host::native::{Native, tool_path};
 use neurodesk_pipeline_host::{Host, block_on};
 use serde_json::{Value, json};
+use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 use syncro_core::pipeline::{self, Device, Normalization, Options};
@@ -157,6 +158,8 @@ fn home() -> PathBuf {
         .map(PathBuf::from)
         .unwrap_or_else(|| {
             let exe = std::env::current_exe().unwrap_or_default();
+            #[cfg(target_os = "macos")]
+            let exe = exe.canonicalize().unwrap_or(exe);
             let dir = exe.parent().unwrap_or(Path::new("."));
             // An archive's syncro sits at its root; an installed one in <home>/bin.
             if dir.file_name().is_some_and(|n| n == "bin") && !dir.join("bin").is_dir() {
@@ -314,16 +317,7 @@ fn start(a: Args) -> Result<(), String> {
     }
     let tools = find_tools(&bin, a.normalization)?;
     let out = absolute(&a.output);
-    if Path::new(&out).exists() {
-        if !a.resume {
-            return Err("Output directory already exists. Choose a new directory or --resume an interrupted SYNcro run.".into());
-        }
-        if !Path::new(&out).join("work/syncro.json").is_file() {
-            return Err(format!(
-                "{out} is not an interrupted SYNcro run; --resume needs the output directory of one."
-            ));
-        }
-    }
+    let out_path = Path::new(&out);
     // Inputs resolve against the caller's directory, before the run changes into the output.
     let host = Native {
         bin,
@@ -347,13 +341,47 @@ fn start(a: Args) -> Result<(), String> {
         software: tools.clone(),
     };
     // Tools run in the output directory, so commands.sh names work/... and the outputs as the browser does.
-    let created = !Path::new(&out).exists();
-    std::fs::create_dir_all(&out).map_err(|e| format!("{out}: {e}"))?;
+    if let Some(parent) = out_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("{out}: {e}"))?;
+    }
+    let created = match std::fs::create_dir(out_path) {
+        Ok(()) => true,
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+            if !a.resume {
+                return Err("Output directory already exists. Choose a new directory or --resume an interrupted SYNcro run.".into());
+            }
+            false
+        }
+        Err(e) => return Err(format!("{out}: {e}")),
+    };
+    if !created && !out_path.join("work/syncro.json").is_file() {
+        return Err(format!(
+            "{out} is not an interrupted SYNcro run; --resume needs the output directory of one."
+        ));
+    }
+    let lock = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(out_path.join(".syncro.lock"))
+        .map_err(|e| format!("{out}: could not open the run lock: {e}"))?;
+    match lock.try_lock() {
+        Ok(()) => {}
+        Err(std::fs::TryLockError::WouldBlock) => {
+            return Err(format!(
+                "{out}: another SYNcro process is using this directory."
+            ));
+        }
+        Err(std::fs::TryLockError::Error(e)) => {
+            return Err(format!("{out}: could not lock the run directory: {e}"));
+        }
+    }
     std::env::set_current_dir(&out).map_err(|e| format!("{out}: {e}"))?;
     let result = block_on(pipeline::run(&host, &o, &|stage| eprintln!("[{stage}]")));
     // Inputs refused before any record was written leave nothing behind, so the same command can run again.
     if result.is_err() && created && !Path::new("work/syncro.json").is_file() {
         let _ = std::env::set_current_dir(std::env::temp_dir());
+        drop(lock);
         let _ = std::fs::remove_dir_all(&out);
     }
     let mut provenance = result?;

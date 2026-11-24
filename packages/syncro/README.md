@@ -42,9 +42,10 @@ syncro INPUT OUTPUT_DIR [--lesion FILE] [--pathological FILE] [--ct] [--normaliz
 - `--heal` (experimental, native builds with the `heal` feature; the web app has none) fills the lesion from the
   mirrored scan before SynthSR. On CQ500 (CT), ARC (chronic MR) and SOOP (acute MR, 6 mm TRACE) healed
   outputs did slightly worse than raw, so raw is the default; keep `--heal` for edge cases. The mirror flips the
-  voxel axis whose direction is closest to left-right, and a 12-dof NMI affine from the identity aligns it; a
-  `mirror.mat` with an axis scale outside 0.8-1.25 is rejected, `heal: mirror alignment rejected` is logged and
-  the run continues unhealed (`"healed": false` in provenance), identical to raw.
+  voxel axis whose direction is closest to left-right, and a 12-dof NMI affine from the identity aligns it; the
+  run continues unhealed if the lesion is empty on the primary grid or the alignment reflects anatomy or
+  stretches it outside 0.8–1.25 in any direction. The log explains the decision and provenance records
+  `"healed": false`.
 
 A gantry-tilted scan (a sheared affine, as CT often has) is resampled onto an orthogonal grid that covers it,
 filled with its darkest voxel, before anything else; its lesion map follows on the same grid.
@@ -76,8 +77,8 @@ uint8. Inputs whose names would give duplicate outputs are refused.
 - `exes/syncro`: the core (`core`), the command line (`cli`) and the WebAssembly build (`wasm`); `cargo test`
   there checks the de-shearing against the JavaScript it replaced and the commands of every input case.
 - `pnpm --filter @neurodesk/syncro test:core` builds the WebAssembly core and checks it emits the same commands.
-- `scripts/package-syncro.py package TARGET` assembles an archive from the tool releases pinned in `tools.json`
-  and runs `validation/package-check.mjs` on the extracted copy.
+- `scripts/package-syncro.py package TARGET` builds Greedy from the same checkout, stages the tool releases
+  pinned in `tools.json`, and runs `validation/package-check.mjs` on the extracted copy.
 
 [validation/README.md](validation/README.md) holds the container comparisons, which predate the Rust core. Current
 evidence covers a few real scans, not clinical validation. Review the acquired image, brain mask and MNI alignment

@@ -39,6 +39,11 @@ pub(super) async fn heal<H: Host>(
         work("healed.nii"),
     );
     let scan = read(&read_all(h, primary_path).await?)?;
+    let lesion = on_scan_grid(&read(&read_all(h, lesion_path).await?)?, &scan)?;
+    if !lesion.data.contains(&1) {
+        h.log("heal: lesion is empty on the primary grid; continuing without healing");
+        return Ok(None);
+    }
     let mirrored = mirror(&scan);
     put(h, &mirror_path, &volume::write(&mirrored, "Mirrored scan")).await?;
     let (fixed, moving) = if ct {
@@ -78,15 +83,8 @@ pub(super) async fn heal<H: Host>(
     ]);
     r.step(argv, vec![], std::slice::from_ref(&matrix), false)
         .await?;
-    let scales = axis_scales(&String::from_utf8_lossy(&read_all(h, &matrix).await?))?;
-    if scales
-        .iter()
-        .any(|s| !(SCALE_LIMITS.0..=SCALE_LIMITS.1).contains(s))
-    {
-        h.log(&format!(
-            "heal: mirror alignment rejected (axis scales {:.2} {:.2} {:.2}); continuing without healing",
-            scales[0], scales[1], scales[2]
-        ));
+    if !near_rigid(&String::from_utf8_lossy(&read_all(h, &matrix).await?))? {
+        h.log("heal: mirror alignment rejected (principal stretches outside 0.8–1.25 or a reflection); continuing without healing");
         return Ok(None);
     }
     r.greedy_reslice(
@@ -99,7 +97,6 @@ pub(super) async fn heal<H: Host>(
     )
     .await?;
     let aligned = read(&read_all(h, &aligned).await?)?;
-    let lesion = on_scan_grid(&read(&read_all(h, lesion_path).await?)?, &scan)?;
     let weights = feather(&lesion);
     let data = scan
         .data
@@ -131,20 +128,54 @@ fn on_scan_grid(lesion: &Volume<f32>, scan: &Volume<f32>) -> Result<Volume<u8>, 
     resample_nearest(&binary, &grid)
 }
 
-/// The lengths of the linear part's columns in a Greedy matrix file (four rows of four numbers).
-// ponytail: column norms, not singular values; shear-only runaways would pass, none seen.
-fn axis_scales(text: &str) -> Result<[f64; 3], String> {
+fn determinant(m: [[f64; 3]; 3]) -> f64 {
+    let [[a, b, c], [d, e, f], [g, h, i]] = m;
+    a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g)
+}
+
+fn positive_semidefinite(m: [[f64; 3]; 3]) -> bool {
+    // All principal minors must be nonnegative, within round-off at the limits.
+    let nonnegative = |x: f64| x >= -1e-12;
+    (0..3).all(|i| nonnegative(m[i][i]))
+        && [(0, 1), (0, 2), (1, 2)]
+            .into_iter()
+            .all(|(i, j)| nonnegative(m[i][i] * m[j][j] - m[i][j].powi(2)))
+        && nonnegative(determinant(m))
+}
+
+/// A proper affine with principal stretches in range. Squared stretches are the
+/// eigenvalues of AᵀA. Testing both bounds also rejects shear with unit column lengths.
+fn near_rigid(text: &str) -> Result<bool, String> {
     let m: Vec<f64> = text
         .split_whitespace()
-        .filter_map(|t| t.parse().ok())
-        .collect();
+        .map(str::parse)
+        .collect::<Result<_, _>>()
+        .map_err(|_| "mirror.mat: expected a numeric affine")?;
     if m.len() != 16 {
         return Err(format!(
             "mirror.mat: expected 16 numbers, found {}",
             m.len()
         ));
     }
-    Ok([0, 1, 2].map(|c| (0..3).map(|r| m[4 * r + c].powi(2)).sum::<f64>().sqrt()))
+    let linear = std::array::from_fn(|r| std::array::from_fn(|c| m[4 * r + c]));
+    if !m.iter().all(|x| x.is_finite()) || determinant(linear) <= 0.0 {
+        return Ok(false);
+    }
+    let gram = |i: usize, j: usize| linear.iter().map(|r| r[i] * r[j]).sum::<f64>();
+    let (min, max) = SCALE_LIMITS;
+    let lower = std::array::from_fn(|i| {
+        std::array::from_fn(|j| gram(i, j) - if i == j { min * min } else { 0.0 })
+    });
+    let upper = std::array::from_fn(|i| {
+        std::array::from_fn(|j| {
+            if i == j {
+                max * max - gram(i, j)
+            } else {
+                -gram(i, j)
+            }
+        })
+    });
+    Ok(positive_semidefinite(lower) && positive_semidefinite(upper))
 }
 
 /// Flips the voxel axis that runs left-right (the one whose direction points most along world x, whatever the
@@ -231,7 +262,7 @@ fn smooth_axis(data: &mut [f32], dims: [usize; 3], axis: usize, sigma: f64) {
     };
     let mut line = vec![0f32; n as usize];
     for start in 0..data.len() {
-        if start / stride % n as usize != 0 {
+        if !(start / stride).is_multiple_of(n as usize) {
             continue;
         }
         for (c, v) in line.iter_mut().enumerate() {
@@ -319,17 +350,27 @@ mod tests {
 
     /// SOOP sub-683's runaway mirror affine (12 dof, 6 mm slices) against its rigid solution.
     #[test]
-    fn axis_scales_flag_a_runaway_mirror_fit() {
+    fn near_rigid_rejects_runaway_and_sheared_mirror_fits() {
         let runaway = "1.148 1.185 -54.23 -79.25\n-0.164 1.368 -22.79 -40.96\n-0.305 -2.830 153.5 233.2\n0 0 0 1\n";
         let rigid =
             "0.970 0.030 -0.241 2.12\n-0.027 0.999 0.017 -0.37\n0.242 -0.010 0.970 2.25\n0 0 0 1\n";
-        assert!(axis_scales(runaway).unwrap()[2] > 100.0);
-        assert!(
-            axis_scales(rigid)
-                .unwrap()
-                .iter()
-                .all(|s| (s - 1.0).abs() < 0.01)
-        );
+        let sheared = "1 0.99 0 0
+0 0.14106736 0 0
+0 0 1 0
+0 0 0 1";
+        let reflected = "-1 0 0 0
+0 1 0 0
+0 0 1 0
+0 0 0 1";
+        let at_limits = "0.8 0 0 0
+0 1.25 0 0
+0 0 1 0
+0 0 0 1";
+        assert!(!near_rigid(runaway).unwrap());
+        assert!(!near_rigid(sheared).unwrap());
+        assert!(!near_rigid(reflected).unwrap());
+        assert!(near_rigid(rigid).unwrap());
+        assert!(near_rigid(at_limits).unwrap());
     }
 
     /// scipy.ndimage.gaussian_filter(np.eye(1, 9, 4)[0], 1.0): truncate 4 sigma, reflected borders.

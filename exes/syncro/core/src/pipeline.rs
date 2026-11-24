@@ -325,15 +325,17 @@ pub async fn run<H: Host>(h: &H, o: &Options, stage: &dyn Fn(&str)) -> Result<Va
         h.mkdirs(&o.out)?;
     }
     let (input_hash, template_hash) = (sha256(&input_bytes), sha256(&template_bytes));
-    let mut fingerprint = vec![json!([input_name, input_hash])];
-    for p in [&o.pathological, &o.lesion].into_iter().flatten() {
-        fingerprint.push(json!([file_name(p), sha256(&read_all(h, p).await?)]));
+    let mut fingerprint = json!({ "primary": [input_name, input_hash] });
+    for (role, input) in [("pathological", &o.pathological), ("lesion", &o.lesion)] {
+        if let Some(p) = input {
+            fingerprint[role] = json!([file_name(p), sha256(&read_all(h, p).await?)]);
+        }
     }
     let run_record = json!({
         "version": env!("CARGO_PKG_VERSION"),
         "inputs": fingerprint,
         "template": template_hash,
-        "options": {"ct": o.ct, "normalization": format!("{:?}", o.normalization), "keepSynth": o.keep_synth, "heal": o.heal},
+        "options": {"ct": o.ct, "normalization": format!("{:?}", o.normalization), "keepSynth": o.keep_synth, "heal": o.heal, "device": format!("{:?}", o.device), "threads": o.threads},
         "software": o.software,
     })
     .to_string();

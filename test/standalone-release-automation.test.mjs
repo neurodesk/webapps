@@ -148,6 +148,21 @@ test('a tag from before the Rust SYNcro keeps its portable release source', () =
   assert.deepEqual(nativeReleases(new Map()).get('syncro').map((source) => source.workflow), ['syncro-native.yml']);
   assert.equal(split.get('synthseg').length, 2, 'SynthSeg keeps both sources');
 });
+test('native SYNcro requires the installer and retains the catalog commands', async () => {
+  const rust = nativeReleases(new Map());
+  const catalog = { apps: { syncro: { downloads: [] } } };
+  const tag = 'syncro-v1.0.20261124';
+  const archives = ['syncro-1.0.20261124-linux-x64.tar.gz', 'syncro-1.0.20261124-windows-x64.zip'];
+  const receipt = async () => `sha256: ${'a'.repeat(64)}\n`;
+  await assert.rejects(update(catalog, verifiedRelease([...archives, 'syncro-1.0.20261124-macos-arm64.tar.gz'], tag),
+    rust, 'syncro@1.0.20261124', receipt), /lacks macos-arm64/);
+  const installer = 'syncro-1.0.20261124-macos-arm64.pkg';
+  applyCatalogUpdate(catalog, await update(catalog, verifiedRelease([...archives, installer], tag),
+    rust, 'syncro@1.0.20261124', receipt));
+  const macos = catalog.apps.syncro.downloads.find((download) => download.platform === 'macos-arm64');
+  assert.equal(macos.modelsIncluded, true);
+  assert.equal(macos.command, `sudo installer -pkg ${installer} -target /\nsyncro self-check\nsyncro input.nii.gz results --threads 4`);
+});
 const rustMacos = Object.freeze({
   kind: 'cli',
   platform: 'macos-arm64',
