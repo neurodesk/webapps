@@ -405,6 +405,13 @@ pub fn correlation_complex_single_with_reference(
         if mag > 1.0 {
             re /= mag;
             im /= mag;
+            while libm::hypotf(re, im) > 1.0 {
+                if re.abs() >= im.abs() {
+                    re = re.abs().next_down().copysign(re);
+                } else {
+                    im = im.abs().next_down().copysign(im);
+                }
+            }
         }
     }
     Complex64::new(f64::from(re), f64::from(im))
@@ -463,12 +470,20 @@ mod tests {
             crate::arithmetic::ArithmeticReference::MatlabIntel,
         );
         assert_eq!(neg, -1.0f32);
-        let pred = crate::css::predict(&[0.0, 0.0, -1.0], 0.5, &[1.0], 1);
-        let rc = correlation_complex_single_with_reference(
-            &pred,
-            &[0.0, 0.0, 5.0],
-            crate::arithmetic::ArithmeticReference::MatlabIntel,
-        );
-        assert!(libm::hypotf(rc.re as f32, rc.im as f32) <= 1.0, "complex |r| must not exceed 1: {rc:?}");
+        for (raw, exp, obs) in [
+            ([0.0, 0.0, -1.0], 0.5, [0.0, 0.0, 5.0]),
+            ([0.0, 0.0, -1.3], 1.76, [0.0, 0.0, 179.0]),
+        ] {
+            let pred = crate::css::predict(&raw, exp, &[1.0], 1);
+            let rc = correlation_complex_single_with_reference(
+                &pred,
+                &obs,
+                crate::arithmetic::ArithmeticReference::MatlabIntel,
+            );
+            assert!(
+                libm::hypotf(rc.re as f32, rc.im as f32) <= 1.0,
+                "complex |r| must not exceed 1 for raw={raw:?} exp={exp} obs={obs:?}: {rc:?}"
+            );
+        }
     }
 }
