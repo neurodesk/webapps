@@ -42,8 +42,7 @@ pub struct Options {
     pub threads: usize,
     pub device: Device,
     pub keep_synth: bool,
-    /// Enantiomorphic healing before SynthSR (experimental; needs the `heal` feature, a lesion and no
-    /// pathological scan).
+    /// Enantiomorphic healing before SynthSR (experimental; needs the `heal` feature and a lesion).
     pub heal: bool,
     /// The tools' identities (native: path, version, SHA-256); a resume with different software reruns nothing
     /// and fails.
@@ -442,7 +441,8 @@ pub async fn run<H: Host>(h: &H, o: &Options, stage: &dyn Fn(&str)) -> Result<Va
                 &lesion_path,
                 &onto,
                 &[&pathological_matrix],
-                false,
+                // Nearest: a linear reslice of the uint8 lesion truncates border voxels (a one-slice lesion to 0).
+                true,
                 0.0,
             )
             .await?;

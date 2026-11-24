@@ -215,13 +215,14 @@ fn feather(lesion: &Volume<u8>) -> Vec<f32> {
 
 /// One separable Gaussian pass along `axis`, scipy's kernel and `reflect` border (d c b a | a b c d).
 fn smooth_axis(data: &mut [f32], dims: [usize; 3], axis: usize, sigma: f64) {
-    let radius = (4.0 * sigma + 0.5) as i64;
+    let n = dims[axis] as i64;
+    // Capped at the line: a near-zero voxel size in a header must not ask for millions of taps.
+    let radius = ((4.0 * sigma + 0.5) as i64).min(n);
     let mut kernel: Vec<f64> = (-radius..=radius)
         .map(|x| (-0.5 * (x * x) as f64 / (sigma * sigma)).exp())
         .collect();
     let sum: f64 = kernel.iter().sum();
     kernel.iter_mut().for_each(|k| *k /= sum);
-    let n = dims[axis] as i64;
     let stride = [1, dims[0], dims[0] * dims[1]][axis];
     let reflect = |mut i: i64| {
         let period = 2 * n;
