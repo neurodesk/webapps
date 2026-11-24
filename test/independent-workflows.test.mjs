@@ -94,7 +94,7 @@ const intelCommand = (line) => /cargo\s+test\b/.test(line) && /-p samsrf-mkl-avx
 
 test('each samsrf-mkl-avx512 suite runs in CI with every fixture it reads, in complete pairs', async () => {
   const suites = await intelSuites();
-  assert.deepEqual([...suites.keys()], ['blas_recordings', 'divergence', 'recordings'], 'the crate\'s integration suites');
+  assert.deepEqual([...suites.keys()], ['blas_recordings', 'divergence', 'intel_norm_single_css', 'recordings'], 'the crate\'s integration suites');
   const invocations = checkIntelContract(await workflow('samsrf-native'), suites);
   for (const name of suites.keys()) assert.ok(invocations.some((invocation) => invocation.run.includes(name) && invocation.own.size > 0), `${name} runs with fixtures`);
 });
@@ -105,18 +105,22 @@ test('the samsrf-mkl-avx512 CI contract rejects a dropped suite, invocation, fix
   const mutants = {
     'every --test blas_recordings and --test divergence removed': rewriteCommands(flow, (line) =>
       intelCommand(line) ? line.replaceAll(' --test blas_recordings', '').replaceAll(' --test divergence', '') : line),
+    'the intel_norm_single_css invocation removed': rewriteCommands(flow, (line) =>
+      intelCommand(line) && line.includes('--test intel_norm_single_css') ? null : line),
     '--test divergence removed from the QR command': rewriteCommands(flow, (line) =>
       intelCommand(line) && line.includes('SAMSRF_QR_KERNELS_DIR') ? line.replace(' --test divergence', '') : line),
     'the single-kernels divergence invocation removed': rewriteCommands(flow, (line) =>
-      intelCommand(line) && line.includes('SAMSRF_SINGLE_KERNELS_DIR') ? null : line),
+      intelCommand(line) && line.includes('SAMSRF_SINGLE_KERNELS_DIR') && line.includes('--test divergence') ? null : line),
     'SAMSRF_ARITHMETIC_ORDER_DIR removed from the crate command': rewriteCommands(flow, (line) =>
       intelCommand(line) ? line.replace(/SAMSRF_ARITHMETIC_ORDER_DIR="[^"]*"\s+/, '') : line),
     'SAMSRF_CGG_DIR removed from the crate command': rewriteCommands(flow, (line) =>
       intelCommand(line) ? line.replace(/SAMSRF_CGG_DIR="[^"]*"\s+/, '') : line),
     'half of the CLI pair': rewriteCommands(flow, (line) =>
       intelCommand(line) ? line.replace(/SAMSRF_CLI_COURSES_DIR="[^"]*"\s+/, '') : line),
+    'half of the nonnegative CSS pair': rewriteCommands(flow, (line) =>
+      intelCommand(line) ? line.replace(/SAMSRF_INTEL_NONNEGATIVE_CSS_INPUT_DIR="[^"]*"\s+/, '') : line),
     'a fixture no suite of the command reads': rewriteCommands(flow, (line) =>
-      intelCommand(line) && line.includes('SAMSRF_SINGLE_KERNELS_DIR') ? line.replace(' --test divergence', ' --test recordings') : line),
+      intelCommand(line) && line.includes('SAMSRF_SINGLE_KERNELS_DIR') && line.includes('--test divergence') ? line.replace(' --test divergence', ' --test recordings') : line),
   };
   for (const [name, mutant] of Object.entries(mutants)) {
     assert.notDeepEqual(mutant, flow, `${name}: the mutation changed the workflow`);

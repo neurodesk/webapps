@@ -365,10 +365,6 @@ impl Fields {
             "samsrf" => crate::css::Convention::Samsrf,
             _ => return Err(Error::Model("Css_Convention must be 'nonnegative' or 'samsrf'".into())),
         };
-        if arithmetic_reference == ArithmeticReference::MatlabIntel
-            && compressive_nonlinearity && css_convention == crate::css::Convention::Nonnegative {
-            return Err(Error::Model("MATLAB Intel CSS requires Css_Convention='samsrf'; nonnegative CSS is not supported by this reference".into()));
-        }
         if !(0.0..=100.0).contains(&coarse_fit_percentile) {
             return Err(Error::Model("Coarse fit percentile invalid! It should probably be between 99.9-100...".into()));
         }
@@ -772,25 +768,29 @@ mod tests {
     }
 
     #[test]
-    fn intel_css_requires_the_samsrf_convention() {
+    fn intel_css_accepts_both_conventions() {
         let mut map = minimal_prf();
         map.insert("Arithmetic_Reference".into(), serde_json::json!("matlab-intel"));
         map.insert("Compressive_Nonlinearity".into(), serde_json::json!(true));
-        for convention in [None, Some("nonnegative")] {
+        for convention in [None, Some("nonnegative"), Some("samsrf")] {
+            let mut copy = map.clone();
             if let Some(value) = convention {
-                map.insert("Css_Convention".into(), serde_json::json!(value));
+                copy.insert("Css_Convention".into(), serde_json::json!(value));
             }
-            assert_eq!(model_error(&Value::Object(map.clone()).to_string(), AnalysisKind::Prf),
-                "MATLAB Intel CSS requires Css_Convention='samsrf'; nonnegative CSS is not supported by this reference");
+            let parsed = prf(&Value::Object(copy).to_string()).unwrap();
+            let expected = if convention == Some("samsrf") {
+                crate::css::Convention::Samsrf
+            } else {
+                crate::css::Convention::Nonnegative
+            };
+            assert_eq!(parsed.css_convention, expected);
         }
-        map.insert("Css_Convention".into(), serde_json::json!("samsrf"));
-        assert!(prf(&Value::Object(map.clone()).to_string()).is_ok());
-        map.insert("Css_Convention".into(), serde_json::json!("nonnegative"));
         for reference in ["current", "matlab-amd"] {
-            map.insert("Arithmetic_Reference".into(), serde_json::json!(reference));
-            assert!(prf(&Value::Object(map.clone()).to_string()).is_ok());
+            let mut copy = map.clone();
+            copy.insert("Arithmetic_Reference".into(), serde_json::json!(reference));
+            copy.insert("Css_Convention".into(), serde_json::json!("nonnegative"));
+            assert!(prf(&Value::Object(copy).to_string()).is_ok());
         }
-        map.insert("Arithmetic_Reference".into(), serde_json::json!("matlab-intel"));
         map.insert("Compressive_Nonlinearity".into(), serde_json::json!(false));
         assert!(prf(&Value::Object(map).to_string()).is_ok());
     }

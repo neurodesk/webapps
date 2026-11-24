@@ -53,7 +53,7 @@ test('references belong to each job, survive shards, and never leak into another
   } finally { jobs.forEach((job) => job.free()); }
 });
 
-test('preprocessing must declare the same reference as the fit; Intel never falls back to single', () => {
+test('preprocessing must declare the same reference as the fit; Intel supports both double and single precision', () => {
   const input = spec('matlab-intel');
   for (const reference of ['current', 'matlab-amd', undefined]) {
     assert.throws(() => samsrf.createJob({ ...input, data: { ...input.data, arithmeticReference: reference } }), /preprocessing and model/);
@@ -62,17 +62,35 @@ test('preprocessing must declare the same reference as the fit; Intel never fall
     assert.throws(() => new samsrf.RunAccumulator(3, null, { arithmeticReference: value }), /arithmetic reference/);
     assert.throws(() => samsrf.parseModel('rc', JSON.stringify({ ...JSON.parse(input.model), Arithmetic_Reference: value })), /Arithmetic_Reference/);
   }
-  assert.throws(() => new samsrf.RunAccumulator(3, null, { precision: 'single', arithmeticReference: 'matlab-intel' }), /Intel single-precision kernels are not implemented/);
-  assert.throws(() => samsrf.parseModel('rc', JSON.stringify({ ...JSON.parse(input.model), Data_Precision: 'single' })), /Intel single-precision kernels are not implemented/);
+  const singleAcc = new samsrf.RunAccumulator(3, null, { precision: 'single', arithmeticReference: 'matlab-intel' });
+  const run = samsrf.readGiftiRun(bytes);
+  try {
+    singleAcc.pushRun(run);
+    const data = singleAcc.finish();
+    assert.equal(data.arithmeticReference, 'matlab-intel');
+    const singleJob = samsrf.createJob({
+      ...input,
+      model: JSON.stringify({ ...JSON.parse(input.model), Data_Precision: 'single' }),
+      data: { volumes: data.volumes, vertices: Uint32Array.of(0, 1, 2), courses: data.data, arithmeticReference: data.arithmeticReference },
+    });
+    try {
+      const part = singleJob.run(0, singleJob.vertexCount);
+      const merged = singleJob.merge([part]);
+      assert.equal(merged.arithmeticReference, 'matlab-intel');
+    } finally { singleJob.free(); }
+  } finally {
+    singleAcc.free();
+    run.free();
+  }
+  assert.doesNotThrow(() => samsrf.parseModel('rc', JSON.stringify({ ...JSON.parse(input.model), Data_Precision: 'single' })));
 });
 
-test('Intel CSS refuses an omitted or nonnegative convention at the WASM boundary', () => {
+test('Intel CSS accepts both nonnegative and samsrf conventions at the WASM boundary', () => {
   const model = JSON.parse(readFileSync(new URL('../../../exes/samsrf/core/tests/data/Example_2D_Gaussian_pRF.json', import.meta.url)));
   Object.assign(model, { Arithmetic_Reference: 'matlab-intel', Compressive_Nonlinearity: true });
-  for (const Css_Convention of [undefined, 'nonnegative']) {
-    assert.throws(() => samsrf.parseModel('prf', JSON.stringify({ ...model, Css_Convention })), /Intel CSS requires Css_Convention='samsrf'/);
+  for (const Css_Convention of [undefined, 'nonnegative', 'samsrf']) {
+    assert.doesNotThrow(() => samsrf.parseModel('prf', JSON.stringify({ ...model, Css_Convention })));
   }
-  assert.doesNotThrow(() => samsrf.parseModel('prf', JSON.stringify({ ...model, Css_Convention: 'samsrf' })));
   for (const Arithmetic_Reference of ['current', 'matlab-amd']) {
     assert.doesNotThrow(() => samsrf.parseModel('prf', JSON.stringify({ ...model, Arithmetic_Reference })));
   }
@@ -85,19 +103,15 @@ test('unsupported paths are refused with their exact messages', () => {
   const rc = { Name: 'test', TR: 1, Scaling_Factor: 1, Hrf: 1, Aperture_File: 'ap' };
   const rcFit = { ...rc, Data_Precision: 'single', Prf_Function: '@(P,ApWidth)prf_gaussian_rf(P(1),P(2),P(3),ApWidth)', Param_Names: ['x0', 'y0', 'Sigma'], Scaled_Param: [1, 1, 1], SeedPar_Function: '@(V)[V(2:3);V(4)]' };
   const cfFit = { Name: 'CF', SeedRoi: 'seed', Template: 'template', Data_Precision: 'single', Fit_pRF: 1 };
-  // The single Gaussian refusals come first, whatever the reference.
+  // The single Gaussian refusals apply across every arithmetic reference.
   for (const Arithmetic_Reference of [undefined, 'current', 'matlab-amd', 'matlab-intel']) {
     refused(() => samsrf.parseModel('rc', JSON.stringify({ ...rcFit, Arithmetic_Reference })), 'Data_Precision=single with a Prf_Function fit is not supported by this port');
     refused(() => samsrf.parseModel('cf', JSON.stringify({ ...cfFit, Arithmetic_Reference })), 'Data_Precision=single with Fit_pRF=1 is not supported by this port');
   }
   const prf = JSON.parse(readFileSync(new URL('../../../exes/samsrf/core/tests/data/Example_2D_Gaussian_pRF.json', import.meta.url)));
-  const intelSingle = "model: matlab-intel arithmetic requires Data_Precision 'double'; Intel single-precision kernels are not implemented";
   for (const [kind, model] of [['prf', { ...prf, Data_Precision: 'single' }], ['rc', { ...rc, Data_Precision: 'single' }], ['cf', { ...cfFit, Fit_pRF: 0 }], ['cf', { ...cfFit, Fit_pRF: -1 }]]) {
-    refused(() => samsrf.parseModel(kind, JSON.stringify({ ...model, Arithmetic_Reference: 'matlab-intel' })), intelSingle);
+    assert.doesNotThrow(() => samsrf.parseModel(kind, JSON.stringify({ ...model, Arithmetic_Reference: 'matlab-intel' })));
   }
-  refused(() => new samsrf.RunAccumulator(3, null, { precision: 'single', arithmeticReference: 'matlab-intel' }), intelSingle);
-  refused(() => samsrf.parseModel('prf', JSON.stringify({ ...prf, Arithmetic_Reference: 'matlab-intel', Compressive_Nonlinearity: true, Css_Convention: 'nonnegative' })),
-    "model: MATLAB Intel CSS requires Css_Convention='samsrf'; nonnegative CSS is not supported by this reference");
   const apertures = samsrf.readApertures(matFile({ ApFrm: { dims: [2, 2, 1], data: [1, 0, 0, 0] } }), 'mat');
   try {
     refused(() => samsrf.createJob({ kind: 'rc', model: JSON.stringify({ ...rc, Arithmetic_Reference: 'matlab-intel' }), totalVertices: 2, apertures: apertures.serialize(),

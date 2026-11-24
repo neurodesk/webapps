@@ -204,14 +204,13 @@ fn just_above_lower_midpoint(values: &[f64], rounded: f64, denominator: u64) -> 
 }
 
 /// MATLAB's `corr` at all 60 recorded lengths (25-80, 96, 100, 128, 250; 20 pairs each):
-/// the research kernels reproduce 1,198 of the 1,200 values on the AVX512_E1 host. The two
-/// misses (n = 36 pair 6, n = 75 pair 16) are pinned: in each the exact norm of the centred
-/// y lies less than 1e-3 ULP above a rounding midpoint, MATLAB's value equals the result
-/// with that norm one ULP below the correctly rounded one, and the x norm is not near a tie.
-/// MKL's rounding near ties is not identified. The shipped kernels give all 1,200 values on
-/// the AMD host and differ on the Intel one.
+/// with the identified x87 80-bit `dnrm2` (`samsrf_mkl_avx512::nrm2`), the Intel kernels
+/// reproduce all 1,200 of 1,200 values on the AVX512_E1 host, including both near-tie
+/// vectors (`n = 36` pair 6 and `n = 75` pair 16) that a correctly rounded norm misses by
+/// 1 ULP. The shipped kernels give all 1,200 values on the AMD host and differ on the Intel
+/// one.
 #[test]
-fn correlations_equal_matlab_except_two_near_tie_norms() {
+fn correlations_equal_matlab_on_each_host() {
     let Some(root) = env("SAMSRF_ARITHMETIC_ORDER_DIR") else { return };
     let (intel, amd) = arithmetic_order_hosts(&root);
     let cases = |dir: &Path| -> Vec<CorrCase> {
@@ -234,18 +233,19 @@ fn correlations_equal_matlab_except_two_near_tie_norms() {
         }
         misses
     };
-    let pinned = vec![(36, 6), (75, 16)];
-    assert_eq!(misses(&intel, blas::correlation), pinned, "AVX512_E1 host");
-    for (n, x, y, r) in cases(&intel).into_iter().filter(|c| pinned.iter().any(|p| p.0 == c.0)) {
-        let j = pinned.iter().find(|p| p.0 == n).unwrap().1;
+    assert!(misses(&intel, blas::correlation).is_empty(), "AVX512_E1 host: all 1,200 corr values must match bit-for-bit");
+    // Confirm both previously pinned near-tie vectors sit within 1e-3 ULP above the midpoint
+    // below the correctly rounded value (`ny.next_up()`), while `nrm2` hits MATLAB exactly.
+    let near_ties = [(36usize, 6usize), (75, 16)];
+    for (n, x, y, r) in cases(&intel).into_iter().filter(|c| near_ties.iter().any(|p| p.0 == c.0)) {
+        let j = near_ties.iter().find(|p| p.0 == n).unwrap().1;
         let (x, y) = (&x[j * n..(j + 1) * n], &y[j * n..(j + 1) * n]);
         let centre = |v: &[f64]| { let m = blas::matlab_mean(v); v.iter().map(|t| t - m).collect::<Vec<_>>() };
         let (xc, yc) = (centre(x), centre(y));
         let ny = samsrf_mkl_avx512::nrm2(&yc);
-        let lower = blas::ddot(&xc, &yc) / samsrf_mkl_avx512::nrm2(&xc) / ny.next_down();
-        assert!(same(lower, r[j]), "n = {n} pair {j}: MATLAB needs the y norm one ULP lower");
-        assert!(just_above_lower_midpoint(&yc, ny, 1000), "n = {n} pair {j}: the exact y norm is within 1e-3 ULP above a midpoint");
-        assert!(!just_above_lower_midpoint(&xc, samsrf_mkl_avx512::nrm2(&xc), 1000), "n = {n} pair {j}: the x norm is not near a tie");
+        assert!(same(blas::correlation(x, y), r[j]), "n = {n} pair {j}: Intel x87 norm matches MATLAB");
+        assert!(just_above_lower_midpoint(&yc, ny.next_up(), 1000), "n = {n} pair {j}: exact y norm is within 1e-3 ULP above midpoint");
+        assert!(!just_above_lower_midpoint(&xc, samsrf_mkl_avx512::nrm2(&xc).next_up(), 1000), "n = {n} pair {j}: x norm is not near a tie");
     }
     assert!(misses(&amd, amd_correlation).is_empty(), "AMD host, shipped kernels");
     assert!(misses(&intel, amd_correlation).len() > 100, "the shipped kernels must differ on the Intel host");

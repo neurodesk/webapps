@@ -35,10 +35,7 @@ impl ArithmeticReference {
         }
     }
 
-    pub fn validate(self, precision: Precision) -> Result<()> {
-        if self == Self::MatlabIntel && precision == Precision::Single {
-            return Err(Error::Model("matlab-intel arithmetic requires Data_Precision 'double'; Intel single-precision kernels are not implemented".into()));
-        }
+    pub fn validate(self, _precision: Precision) -> Result<()> {
         Ok(())
     }
 
@@ -46,6 +43,13 @@ impl ArithmeticReference {
         match self {
             Self::MatlabIntel => intel::blas::ddot(x, y),
             _ => crate::matlab_math::ddot(x, y),
+        }
+    }
+
+    pub fn sdot(self, x: &[f32], y: &[f32]) -> f32 {
+        match self {
+            Self::MatlabIntel => intel::single::sdot(x, y),
+            _ => crate::precision::dot_single(x, y),
         }
     }
 
@@ -67,6 +71,13 @@ impl ArithmeticReference {
         match self {
             Self::MatlabIntel => intel::blas::gemv_t(y, columns),
             _ => crate::lstsq::gemv_t_double(y, columns),
+        }
+    }
+
+    pub fn gemv_single(self, y: &[f32], columns: &[&[f32]]) -> Vec<f32> {
+        match self {
+            Self::MatlabIntel => intel::single::gemv_t(y, columns),
+            _ => crate::precision::gemv_t_single(y, columns),
         }
     }
 }

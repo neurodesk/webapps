@@ -1,10 +1,9 @@
-//! MATLAB R2023b's real double least squares as MKL 2021.3 ran it on its AVX512_E1 branch
-//! on the recorded Intel Xeon hosts (8370C, 8573C, 6975P-C): `[a b] \ Y` (`?geqp3`,
-//! `?ormqr`, `?trsv`/`?trsm`), `detrend`'s fit and `samsrf_removenoise`; and, in [`blas`]
-//! (research, branch t3/samsrf-intel-cf), MATLAB's real double `x' * y`, `y' * A`, `corr`
-//! and CF profile on that branch. The [`complex`] module adds a mixed complex/real dot
-//! candidate from 24 seen vectors. [`complex_qr`] adds a finite two-column complex-double
-//! QR candidate from staged recordings; neither identifies a general complex BLAS.
+//! MATLAB R2023b's least squares and BLAS kernels as MKL 2021.3 ran them on its AVX512_E1
+//! branch on the recorded Intel Xeon hosts (8370C, 8573C, 6975P-C): real double `[a b] \ Y`
+//! (`?geqp3`, `?ormqr`, `?trsv`/`?trsm`), `detrend`'s fit and `samsrf_removenoise`; real
+//! double `x' * y`, `y' * A`, `corr` and CF profile in [`blas`]; single-precision `sdot`,
+//! `sgemv`, `corr`, CF profile and two-column real/complex QR in [`single`]; mixed
+//! complex/real double dot in [`complex`]; and two-column complex double QR in [`complex_qr`].
 //!
 //! The shipped port (`crate::lstsq`) follows MKL's CNR `auto` branch on AMD hosts.
 //! MATLAB on those Intel hosts rounds the same solves differently, so one output cannot
@@ -12,42 +11,192 @@
 //! Intel recordings. It is used only when the caller explicitly selects matlab-intel;
 //! the default arithmetic and CPU-independent selection remain unchanged.
 //!
-//! Fitted on the pinned Intel Xeon 8370C kernel recording (run 43127453138): every step of
-//! its 95 real double two-column chains and Q'Y and coefficients of its 190 eight-column
-//! solves. The frozen model then reproduced the constants-gamma-gemv direct `detrend` cases
-//! and the double `samsrf_removenoise` revcor cases, but both had been read before the
-//! freeze, so they corroborate it by replay, not as blind holdouts. See
-//! packages/samsrf/validation/matlab/intel-avx512/README.md.
+//! `nrm2` implements MKL's AVX512_E1 `dnrm2`/`dznrm2` accumulation order in portable
+//! software 80-bit extended precision (64-bit significand, 15-bit exponent, round to nearest
+//! ties to even): four-lane unrolled sum of squares combined in pairs `(a0 + a2)` and
+//! `(a1 + a3)`, optional 2-element tail into `(a0, a1)`, `tot = a0 + a1`, optional final
+//! element into `tot`, 64-bit RNE square root, and 53-bit RNE conversion to `f64`. Confirmed
+//! bit-exact on all 168 real near-midpoint probes, all 48 complex near-midpoint probes, all
+//! 8 extreme-scale probes (`2^+-600`, `2^+-1000`), and all 1,200 recorded `corr` values
+//! including both previously missed near-tie vectors (`n = 36` pair 6 and `n = 75` pair 16).
 //!
-//! Established only for what was recorded: finite real two-column designs with 2, 3, 16,
-//! 37, 250 or 1,500 rows, solved for 1-3, 5-12, 21, 76 or 96 right-hand sides or for every
-//! vertex of a whole-hemisphere run, including the recorded rank-1 designs and the
-//! `xLARFG` rescale of subnormal reflectors. Not established by any recording: more than
-//! two columns (norm downdating and later pivots), reflectors that end in zeros (`xLARF`'s
-//! trim), the `xLARFG` halving path, exact and near rounding ties of the norm (see `nrm2`),
-//! nonfinite inputs, single and complex designs, and every other MKL kernel. Changing those
-//! paths leaves every gate passing (mutation review, 2026-11-18).
+//! Established only for what was recorded: finite two-column real/complex designs in double
+//! and single precision, plus the recorded BLAS lengths and shapes. Not established by any
+//! recording: more than two columns (norm downdating and later pivots), reflectors that end
+//! in zeros (`xLARF`'s trim) on Intel, the `xLARFG` halving path, nonfinite inputs, and
+//! every other MKL kernel.
 
 use crate::timeseries::TimeSeries;
 use crate::{Error, Result};
+pub mod blas;
 pub mod complex;
 pub mod complex_qr;
-
-use num_bigint::BigUint;
-
-pub mod blas;
-
+pub mod single;
 
 /// `xLARFG`'s rescaling threshold, `safmin / (eps / 2)` as LAPACK computes it.
 const RESCALE: f64 = f64::MIN_POSITIVE / (f64::EPSILON * 0.5);
 
-/// The correctly rounded Euclidean norm (round to nearest, ties to even) of the exact sum
-/// of squares; NaN if any value is NaN, infinity if any is infinite. This is a candidate for
-/// MKL's `dnrm2` on the AVX512_E1 branch, not an identification of it: it equals the Intel
-/// norms evaluated by the gates except two, where the exact norm lies 6.4e-5 and 2.6e-4 ULP
-/// above a rounding midpoint and MATLAB's result is one ULP lower (both pinned in the gates:
-/// `recordings.rs` and `blas_recordings.rs`). MKL's rounding that
-/// close to a tie is not known.
+/// Nonnegative IEEE 754 binary80 (x87 80-bit extended precision) accumulator:
+/// 64-bit explicit-integer significand (`sig == 0` for zero, otherwise `sig >= 1 << 63`)
+/// representing `sig * 2^(exp - 63)`, with round-to-nearest ties-to-even arithmetic.
+///
+/// Any sum of squares of finite `f64` values has `exp` well within `[-2148, 2111]`, far
+/// inside x87's 15-bit exponent range `[-16382, 16383]`, so intermediate sums never
+/// overflow or underflow extended precision.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct F80 {
+    sig: u64,
+    exp: i32,
+}
+
+impl F80 {
+    const ZERO: Self = Self { sig: 0, exp: 0 };
+
+    /// Exact square of a finite `f64`, rounded once to 64-bit extended precision (RNE).
+    fn from_f64_sq(value: f64) -> Self {
+        let bits = value.abs().to_bits();
+        if bits == 0 {
+            return Self::ZERO;
+        }
+        let raw_exp = (bits >> 52) as i32;
+        let frac = bits & ((1u64 << 52) - 1);
+        let (m, e) = if raw_exp == 0 {
+            let shift = frac.leading_zeros() as i32 - 11;
+            (frac << shift, -1022 - shift)
+        } else {
+            (frac | (1u64 << 52), raw_exp - 1023)
+        };
+        let product = (m as u128) * (m as u128);
+        let (shift, mut exp) = if (product >> 105) != 0 {
+            (42u32, 2 * e + 1)
+        } else {
+            (41u32, 2 * e)
+        };
+        let mut sig = (product >> shift) as u64;
+        let rem = product & ((1u128 << shift) - 1);
+        let half = 1u128 << (shift - 1);
+        if rem > half || (rem == half && (sig & 1) == 1) {
+            let (next, carry) = sig.overflowing_add(1);
+            if carry {
+                sig = 1u64 << 63;
+                exp += 1;
+            } else {
+                sig = next;
+            }
+        }
+        Self { sig, exp }
+    }
+
+    /// Nonnegative extended-precision addition, rounded to 64-bit significand (RNE).
+    fn add(self, other: Self) -> Self {
+        if self.sig == 0 {
+            return other;
+        }
+        if other.sig == 0 {
+            return self;
+        }
+        let (a, b) = if self.exp >= other.exp { (self, other) } else { (other, self) };
+        let diff = (a.exp - b.exp) as u32;
+        if diff > 64 {
+            return a;
+        }
+        if diff == 64 {
+            let half = 1u64 << 63;
+            let round_up = b.sig > half || (b.sig == half && (a.sig & 1) == 1);
+            if round_up {
+                let (next, carry) = a.sig.overflowing_add(1);
+                return if carry {
+                    Self { sig: half, exp: a.exp + 1 }
+                } else {
+                    Self { sig: next, exp: a.exp }
+                };
+            }
+            return a;
+        }
+        let sum = ((a.sig as u128) << 63) + ((b.sig as u128) << (63 - diff));
+        let (shift, mut exp) = if (sum >> 127) != 0 {
+            (64u32, a.exp + 1)
+        } else {
+            (63u32, a.exp)
+        };
+        let mut sig = (sum >> shift) as u64;
+        let rem = sum & ((1u128 << shift) - 1);
+        let half = 1u128 << (shift - 1);
+        if rem > half || (rem == half && (sig & 1) == 1) {
+            let (next, carry) = sig.overflowing_add(1);
+            if carry {
+                sig = 1u64 << 63;
+                exp += 1;
+            } else {
+                sig = next;
+            }
+        }
+        Self { sig, exp }
+    }
+
+    /// 64-bit RNE square root (`fsqrt`), followed by 53-bit RNE conversion to `f64` (`fstpl`).
+    fn sqrt_to_f64(self) -> f64 {
+        if self.sig == 0 {
+            return 0.0;
+        }
+        let even_exp = self.exp & !1;
+        let parity = (self.exp - even_exp) as u32;
+        let rad = (self.sig as u128) << (63 + parity);
+        let mut q = rad.isqrt();
+        let rem = rad - q * q;
+        // For integer rad, sqrt(rad) is never an exact half-integer q + 0.5, so RNE is rem > q.
+        if rem > q {
+            q += 1;
+        }
+        Self { sig: q as u64, exp: even_exp / 2 }.to_f64()
+    }
+
+    /// Exact RNE conversion from nonnegative 80-bit extended precision to `f64`.
+    fn to_f64(self) -> f64 {
+        if self.sig == 0 {
+            return 0.0;
+        }
+        if self.exp > 1023 {
+            return f64::INFINITY;
+        }
+        if self.exp >= -1022 {
+            let mut mant = self.sig >> 11;
+            let rem = self.sig & ((1u64 << 11) - 1);
+            if rem > (1u64 << 10) || (rem == (1u64 << 10) && (mant & 1) == 1) {
+                mant += 1;
+            }
+            let mut exp = self.exp;
+            if mant == (1u64 << 53) {
+                mant >>= 1;
+                exp += 1;
+            }
+            if exp > 1023 {
+                return f64::INFINITY;
+            }
+            return f64::from_bits((((exp + 1023) as u64) << 52) | (mant & ((1u64 << 52) - 1)));
+        }
+        let shift = (-1011 - self.exp) as u32;
+        if shift > 64 {
+            return 0.0;
+        }
+        if shift == 64 {
+            return if self.sig > (1u64 << 63) { f64::from_bits(1) } else { 0.0 };
+        }
+        let mut mant = self.sig >> shift;
+        let rem = self.sig & ((1u64 << shift) - 1);
+        let half = 1u64 << (shift - 1);
+        if rem > half || (rem == half && (mant & 1) == 1) {
+            mant += 1;
+        }
+        f64::from_bits(mant)
+    }
+}
+
+/// MKL's `dnrm2` / `dznrm2` on the AVX512_E1 branch (`x87_4_2_1_stride`): four 80-bit
+/// extended-precision accumulators over blocks of four, combined as `(a0 + a2)` and
+/// `(a1 + a3)`, optional 2-element tail into `(a0, a1)`, `tot = a0 + a1`, optional final
+/// element into `tot`, 64-bit RNE square root, and 53-bit RNE conversion to `f64`.
+/// Returns NaN if any value is NaN, infinity if any finite-free value is infinite.
 pub fn nrm2(values: &[f64]) -> f64 {
     if values.iter().any(|v| v.is_nan()) {
         return f64::NAN;
@@ -55,37 +204,28 @@ pub fn nrm2(values: &[f64]) -> f64 {
     if values.iter().any(|v| v.is_infinite()) {
         return f64::INFINITY;
     }
-    // Every finite double is m * 2^k (integer m < 2^53, k >= -1074), so the sum of squares
-    // is an integer n times 2^-2148 and the norm is sqrt(n) * 2^-1074.
-    let mut n = BigUint::default();
-    for &value in values.iter().filter(|v| **v != 0.0) {
-        let bits = value.abs().to_bits();
-        let (exponent, fraction) = ((bits >> 52) as i64, bits & ((1 << 52) - 1));
-        let (m, k) = if exponent == 0 { (fraction, -1074) } else { (fraction | (1 << 52), exponent - 1075) };
-        n += (BigUint::from(m) * BigUint::from(m)) << ((2 * k + 2148) as usize);
+    let (mut a0, mut a1, mut a2, mut a3) = (F80::ZERO, F80::ZERO, F80::ZERO, F80::ZERO);
+    let mut i = 0;
+    let n = values.len();
+    while i + 4 <= n {
+        a0 = a0.add(F80::from_f64_sq(values[i]));
+        a1 = a1.add(F80::from_f64_sq(values[i + 1]));
+        a2 = a2.add(F80::from_f64_sq(values[i + 2]));
+        a3 = a3.add(F80::from_f64_sq(values[i + 3]));
+        i += 4;
     }
-    if n.bits() == 0 {
-        return 0.0;
+    a0 = a0.add(a2);
+    a1 = a1.add(a3);
+    if i + 2 <= n {
+        a0 = a0.add(F80::from_f64_sq(values[i]));
+        a1 = a1.add(F80::from_f64_sq(values[i + 1]));
+        i += 2;
     }
-    // r = floor(sqrt(n 4^t)) with at least 55 bits, so the kept bits, a guard bit and a
-    // sticky bit are all in r.
-    let t = (56 - (n.bits() as i64) / 2).max(0);
-    let scaled = n << (2 * t as usize);
-    let r = scaled.sqrt();
-    let exact = &r * &r == scaled;
-    let length = r.bits() as i64;
-    // The norm is in [2^e, 2^(e+1)) with e = length - 1 - t - 1074; its last kept place is
-    // 2^(e - 52), or 2^-1074 for subnormal results.
-    let e = length - 1 - t - 1074;
-    let unit = (e - 52).max(-1074);
-    let dropped = (unit + t + 1074) as u64;
-    let mut mantissa: u64 = (&r >> dropped).try_into().expect("at most 54 kept bits");
-    let guard = r.bit(dropped - 1);
-    let below = r.trailing_zeros().is_none_or(|zeros| zeros < dropped - 1);
-    if guard && (below || !exact || mantissa & 1 == 1) {
-        mantissa += 1;
+    let mut tot = a0.add(a1);
+    if i < n {
+        tot = tot.add(F80::from_f64_sq(values[i]));
     }
-    libm::ldexp(mantissa as f64, unit as i32)
+    tot.sqrt_to_f64()
 }
 
 /// `xLAPY2`.
@@ -458,36 +598,33 @@ pub fn remove_noise(data: &mut TimeSeries, covariate: &[f64]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use num_bigint::BigUint;
 
-    /// Exact check that `r` is a nearest double to the norm: the sum of squares lies
-    /// between the squares of the midpoints to `r`'s neighbours, in integers.
-    fn correctly_rounded(values: &[f64], r: f64) -> bool {
+    /// Exact check that `r` is within one ULP of the exact Euclidean norm.
+    fn within_one_ulp(values: &[f64], r: f64) -> bool {
         let scaled = |value: f64| -> (u64, i64) {
             let bits = value.abs().to_bits();
             let (exponent, fraction) = ((bits >> 52) as i64, bits & ((1 << 52) - 1));
             if exponent == 0 { (fraction, -1074) } else { (fraction | (1 << 52), exponent - 1075) }
         };
-        // Sum of squares as n * 2^-2148.
         let mut n = BigUint::default();
         for &value in values.iter().filter(|v| **v != 0.0) {
             let (m, k) = scaled(value);
             n += (BigUint::from(m) * BigUint::from(m)) << ((2 * k + 2148) as usize);
         }
-        // r = M 2^u; its midpoints are (2M -+ 1) 2^(u-1), squared (2M -+ 1)^2 2^(2u - 2).
-        let (m, u) = scaled(r);
-        let (mut low, mut high) = (BigUint::from(2 * m - 1).pow(2), BigUint::from(2 * m + 1).pow(2));
-        let shift = 2 * u - 2 + 2148;
-        if shift >= 0 {
-            low <<= shift as usize;
-            high <<= shift as usize;
-        } else {
-            n <<= (-shift) as usize;
-        }
+        let (ml, ul) = scaled(r.next_down());
+        let (mh, uh) = scaled(r.next_up());
+        let mut low = BigUint::from(ml).pow(2);
+        let mut high = BigUint::from(mh).pow(2);
+        let shift_l = 2 * ul + 2148;
+        let shift_h = 2 * uh + 2148;
+        if shift_l >= 0 { low <<= shift_l as usize; }
+        if shift_h >= 0 { high <<= shift_h as usize; }
         low <= n && n <= high
     }
 
     #[test]
-    fn the_norm_is_correctly_rounded() {
+    fn f80_norm_handles_exact_extreme_and_rounding_edges() {
         assert_eq!(nrm2(&[3.0, 4.0]), 5.0);
         assert_eq!(nrm2(&[]), 0.0);
         assert_eq!(nrm2(&[0.0, -0.0]), 0.0);
@@ -495,11 +632,28 @@ mod tests {
         assert_eq!(nrm2(&[1.0, 1.0]), 2f64.sqrt());
         assert!(nrm2(&[1.0, f64::NAN, f64::INFINITY]).is_nan());
         assert_eq!(nrm2(&[1.0, f64::NEG_INFINITY]), f64::INFINITY);
-        // Squares beyond the exponent range stay exact, and subnormal norms are rounded
-        // on the subnormal grid.
+        // Squares beyond f64 exponent range stay exact in 15-bit F80 exponent.
         assert_eq!(nrm2(&[libm::ldexp(3.0, 900), libm::ldexp(4.0, 900)]), libm::ldexp(5.0, 900));
         assert_eq!(nrm2(&[libm::ldexp(3.0, -1074), libm::ldexp(4.0, -1074)]), libm::ldexp(5.0, -1074));
+        assert_eq!(nrm2(&[libm::ldexp(1.0, 1000), libm::ldexp(1.0, 1000)]), libm::ldexp(2f64.sqrt(), 1000));
+        assert_eq!(nrm2(&[libm::ldexp(1.0, -1000), libm::ldexp(1.0, -1000)]), libm::ldexp(2f64.sqrt(), -1000));
         assert_eq!(nrm2(&[f64::MAX, f64::MAX]), f64::INFINITY);
+        // F80 diff == 64 tie-to-even and carry edge cases.
+        let half = 1u64 << 63;
+        let even = F80 { sig: half, exp: 0 };
+        let odd = F80 { sig: half + 1, exp: 0 };
+        let max_sig = F80 { sig: u64::MAX, exp: 0 };
+        let tie = F80 { sig: half, exp: -64 };
+        let above_tie = F80 { sig: half + 1, exp: -64 };
+        assert_eq!(even.add(tie), even);
+        assert_eq!(odd.add(tie), F80 { sig: half + 2, exp: 0 });
+        assert_eq!(even.add(above_tie), odd);
+        assert_eq!(max_sig.add(tie), F80 { sig: half, exp: 1 });
+        // Subnormal F80 -> f64 rounding boundary at 2^-1075 (half of min subnormal).
+        assert_eq!(F80 { sig: half, exp: -1075 }.to_f64(), 0.0);
+        assert_eq!(F80 { sig: half + 1, exp: -1075 }.to_f64(), f64::from_bits(1));
+        assert_eq!(F80 { sig: half, exp: -1074 }.to_f64(), f64::from_bits(1));
+
         let mut state = 0x9e37_79b9_7f4a_7c15u64;
         let mut next = move || {
             state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
@@ -516,7 +670,7 @@ mod tests {
                 })
                 .collect();
             let r = nrm2(&values);
-            assert!(correctly_rounded(&values, r), "case {case}: {r}");
+            assert!(within_one_ulp(&values, r), "case {case}: {r}");
         }
     }
 

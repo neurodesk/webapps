@@ -278,6 +278,7 @@ dependencies = [
 name = "samsrf-mkl-avx512"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "num-bigint",
  "num-complex",
  "samsrf-core",

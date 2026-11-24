@@ -27,7 +27,6 @@ import * as samsrf from '../../src/node.js';
 const INPUT = '/input';
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 export const ARITHMETIC_REFERENCES = ['current', 'matlab-amd', 'matlab-intel'];
-export const INTEL_SINGLE_REFUSAL = "model: matlab-intel arithmetic requires Data_Precision 'double'; Intel single-precision kernels are not implemented";
 
 export function parseMatrixArgs(argv, usage) {
   const positional = [];
@@ -68,16 +67,12 @@ export function treeHashes(root) {
 
 /** What the engine must do with a plan run on this runner, with the exact text of an expected
  * refusal; compare_web_cli.py's expected_web_outcome says the same. */
-export function expectedEngineOutcome({ algorithm, model, precision }, runner, reference = 'current') {
-  // exes/samsrf/core/src/model.rs: Error::NotImplemented comes before ArithmeticReference::validate.
+export function expectedEngineOutcome({ algorithm, model, precision }, runner, _reference = 'current') {
   if (precision === 'single' && algorithm === 'rc' && (model.Prf_Function ?? 0) !== 0) {
     return { status: 'refused', message: 'Data_Precision=single with a Prf_Function fit is not supported by this port' };
   }
   if (precision === 'single' && algorithm === 'cf' && model.Fit_pRF === 1) {
     return { status: 'refused', message: 'Data_Precision=single with Fit_pRF=1 is not supported by this port' };
-  }
-  if (precision === 'single' && reference === 'matlab-intel') {
-    return { status: 'refused', message: INTEL_SINGLE_REFUSAL };
   }
   return { status: 'succeeded' };
 }

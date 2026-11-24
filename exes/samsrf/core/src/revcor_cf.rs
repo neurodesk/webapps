@@ -18,7 +18,7 @@ use crate::mapset::Maps;
 use crate::mesh::Adjacency;
 use crate::model::{CfModel, CfParameterEstimate, FineFit};
 use crate::optim::{self, FminsearchOptions};
-use crate::precision::{gemv_t_single, mean_double, sum_single, Precision};
+use crate::precision::{mean_double, sum_single, Precision};
 use crate::prf;
 use crate::surface::Surface;
 
@@ -189,7 +189,7 @@ impl Prepared {
         let yc = centre_single(y);
         let ny = norm_single(&yc);
         let columns: Vec<&[f32]> = self.seed_centred.iter().map(Vec::as_slice).collect();
-        let r: Vec<f32> = gemv_t_single(&yc, &columns).iter().zip(&self.seed_norms).map(|(product, nx)| {
+        let r: Vec<f32> = self.model.arithmetic_reference.gemv_single(&yc, &columns).iter().zip(&self.seed_norms).map(|(product, nx)| {
             // corr.m limits each coefficient to [-1, 1]: r = r ./ abs(r) where |r| > 1.
             let r = (product / ny) / nx;
             if r.abs() > 1.0 { r / r.abs() } else { r }

@@ -355,6 +355,15 @@ jobs:
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-controls" packages/samsrf/validation/matlab/controls-reference.json
           python3 -I packages/samsrf/validation/matlab/analyse-controls.py "$RUNNER_TEMP/samsrf-controls" "$RUNNER_TEMP/samsrf-qr-kernels"
           python3 -I packages/samsrf/validation/matlab/qr-accuracy.py "$RUNNER_TEMP/samsrf-qr-reference/ubuntu-24.04/compatible" "$RUNNER_TEMP/samsrf-qr-port.json" "$RUNNER_TEMP/samsrf-qr-accuracy.json"
+      - name: Intel x87 dnrm2, single-precision BLAS/QR, and nonnegative CSS gates (#730, #731)
+        run: |
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-intel-norm-single-css" packages/samsrf/validation/matlab/intel-norm-single-css-reference.json
+          SAMSRF_INTEL_NORM_SINGLE_CSS_DIR="$RUNNER_TEMP/samsrf-intel-norm-single-css" \
+          SAMSRF_INTEL_NONNEGATIVE_CSS_INPUT_DIR="$RUNNER_TEMP/samsrf-matrix-input" \
+          SAMSRF_SINGLE_KERNELS_DIR="$RUNNER_TEMP/samsrf-single-kernels" \
+          SAMSRF_QR_KERNELS_DIR="$RUNNER_TEMP/samsrf-qr-kernels" \
+          SAMSRF_QR_REFERENCE_DIR="$RUNNER_TEMP/samsrf-qr-reference" \
+            cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-mkl-avx512 --test intel_norm_single_css -- --nocapture
       - name: Retain the full CSS comparison including remaining differences
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7

@@ -731,9 +731,10 @@ test("explicit arithmetic references run through workers and are retained in dow
   }
   await page.locator("#arithmeticReference").selectOption("matlab-intel");
   await page.locator("#dataPrecision").selectOption("single");
+  await page.locator("#advancedSettings").evaluate(element => { element.open = false; });
   await page.locator("#runButton").click();
-  await expect(page.locator("#statusText")).toContainText("Intel single-precision kernels are not implemented");
-  await expect(page.locator("#downloadAll")).toBeDisabled();
+  await expect(page.locator("#statusText")).toContainText("Reverse-correlation maps ready");
+  await expect(page.locator("#downloadAll")).toBeEnabled();
   await page.locator("#analysis").selectOption("prf");
   const css = {
     Name: "css", TR: 1, Scaling_Factor: 1, Hrf: 1,
@@ -743,7 +744,17 @@ test("explicit arithmetic references run through workers and are retained in dow
     Arithmetic_Reference: "matlab-intel", Css_Convention: "nonnegative",
   };
   await page.locator("#modelInput").setInputFiles(payload("css.json", JSON.stringify(css)));
-  await expect(page.locator("#statusText")).toContainText("Intel CSS requires Css_Convention='samsrf'");
+  await expect(page.locator("#statusText")).not.toContainText("not supported");
+  await page.locator("#analysis").selectOption("rc");
+  const rcSingleGaussian = {
+    Name: "rc_single_gaussian", TR: 1, Scaling_Factor: 1, Hrf: 1, Aperture_File: "ap",
+    Data_Precision: "single", Arithmetic_Reference: "matlab-intel",
+    Prf_Function: "@(P,ApWidth)prf_gaussian_rf(P(1),P(2),P(3),ApWidth)",
+    Param_Names: ["x0", "y0", "Sigma"], Scaled_Param: [1, 1, 1],
+    SeedPar_Function: "@(V)[V(2:3);V(4)]",
+  };
+  await page.locator("#modelInput").setInputFiles(payload("rc_single_gaussian.json", JSON.stringify(rcSingleGaussian)));
+  await expect(page.locator("#statusText")).toContainText("Data_Precision=single with a Prf_Function fit is not supported by this port");
   await expect(page.locator("#downloadAll")).toBeDisabled();
 });
 

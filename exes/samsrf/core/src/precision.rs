@@ -263,7 +263,7 @@ pub fn sum_single(values: &[f32]) -> f32 {
     sums.iter().copied().fold(0.0, |sum, value| sum + value)
 }
 
-fn dot_single(x: &[f32], y: &[f32]) -> f32 {
+pub(crate) fn dot_single(x: &[f32], y: &[f32]) -> f32 {
     let mut sums = [[0.0f32; 4]; 4];
     let mut offset = 0;
     while offset + 32 <= x.len() {
@@ -324,6 +324,15 @@ fn gemv_column(y: &[f32], a: &[f32], lanes: usize) -> f32 {
 /// Correlate a double prediction and single observations. The coarse fit passes
 /// observations first to MATLAB's corr, reversing the order of the two divisions.
 pub fn correlation_single(prediction: &[f64], observed: &[f64], observations_first: bool) -> f32 {
+    correlation_single_with_reference(prediction, observed, observations_first, crate::arithmetic::ArithmeticReference::Current)
+}
+
+pub fn correlation_single_with_reference(
+    prediction: &[f64],
+    observed: &[f64],
+    observations_first: bool,
+    reference: crate::arithmetic::ArithmeticReference,
+) -> f32 {
     if prediction.len() != observed.len() || prediction.len() < 2 {
         return f32::NAN;
     }
@@ -332,10 +341,14 @@ pub fn correlation_single(prediction: &[f64], observed: &[f64], observations_fir
     let yc: Vec<f32> = observations.iter().map(|value| value - mean_y).collect();
     let mean_x = mean_double(prediction);
     let xc: Vec<f64> = prediction.iter().map(|value| value - mean_x).collect();
-    let nx = xc.iter().map(|value| value * value).sum::<f64>().sqrt();
+    let nx = if reference == crate::arithmetic::ArithmeticReference::MatlabIntel {
+        reference.norm(&xc)
+    } else {
+        xc.iter().map(|value| value * value).sum::<f64>().sqrt()
+    };
     let ny = yc.iter().map(|&value| f64::from(value).powi(2)).sum::<f64>().sqrt() as f32;
     let xs: Vec<f32> = xc.iter().map(|&value| value as f32).collect();
-    let dot = dot_single(&xs, &yc);
+    let dot = reference.sdot(&xs, &yc);
     if observations_first {
         let first = dot / ny;
         (f64::from(first) / nx) as f32
@@ -348,16 +361,31 @@ pub fn correlation_single(prediction: &[f64], observed: &[f64], observations_fir
 /// Mixed complex prediction and real single observations. MATLAB accumulates
 /// these two components in sequence, unlike its real vector dot product.
 pub fn correlation_complex_single(x: &[num_complex::Complex64], y: &[f64]) -> num_complex::Complex64 {
+    correlation_complex_single_with_reference(x, y, crate::arithmetic::ArithmeticReference::Current)
+}
+
+pub fn correlation_complex_single_with_reference(
+    x: &[num_complex::Complex64],
+    y: &[f64],
+    reference: crate::arithmetic::ArithmeticReference,
+) -> num_complex::Complex64 {
     use num_complex::Complex64;
     if x.iter().all(|v| v.im as f32 == 0.0) {
-        return Complex64::new(f64::from(correlation_single(&x.iter().map(|v| v.re).collect::<Vec<_>>(), y, false)), 0.0);
+        return Complex64::new(
+            f64::from(correlation_single_with_reference(&x.iter().map(|v| v.re).collect::<Vec<_>>(), y, false, reference)),
+            0.0,
+        );
     }
     let ys: Vec<f32> = y.iter().map(|&v| v as f32).collect();
     let my = sum_single(&ys) / ys.len() as f32;
     let yc: Vec<f32> = ys.iter().map(|&v| v - my).collect();
     let mx = mean_complex(x);
     let xc: Vec<Complex64> = x.iter().map(|&v| v - mx).collect();
-    let nx = xc.iter().map(|v| v.norm_sqr()).sum::<f64>().sqrt();
+    let nx = if reference == crate::arithmetic::ArithmeticReference::MatlabIntel {
+        reference.norm(&xc.iter().flat_map(|v| [v.re, v.im]).collect::<Vec<_>>())
+    } else {
+        xc.iter().map(|v| v.norm_sqr()).sum::<f64>().sqrt()
+    };
     let ny = yc.iter().map(|&v| f64::from(v).powi(2)).sum::<f64>().sqrt() as f32;
     let mut real = 0.0f32;
     let mut imaginary = 0.0f32;

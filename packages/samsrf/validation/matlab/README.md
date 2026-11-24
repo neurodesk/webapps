@@ -12,23 +12,32 @@ itself remains excluded from WebAssembly.
 
 The earlier test-only and blocked-shipping statements below describe their
 historical heads. This change preserves the old production result by default;
-it does not waive #876's losses under an implicit AMD default. Intel single
-precision and nonnegative CSS are refused; Intel CSS requires the recorded
-`samsrf` convention. Opt-ins have separate provenance and cannot share
-preprocessed data or shards with another choice. Browser ZIPs include the
-reference and saved model; individual GIfTIs retain their original encoding.
+it does not waive #876's losses under an implicit AMD default. Under #730 and
+#731, `matlab-intel` now supports both double and single precision (except the
+universal single RC/CF Gaussian refusals) and both `samsrf` and `nonnegative`
+CSS conventions, using the identified portable software x87 80-bit `dnrm2`/
+`dznrm2` and AVX512_E1 single-precision BLAS and two-column QR kernels. Opt-ins
+have separate provenance and cannot share preprocessed data or shards with
+another choice. Browser ZIPs include the reference and saved model; individual
+GIfTIs retain their original encoding.
 
-`check_arithmetic_references.mjs` holds current, AMD and supported Intel runs
-against literal output hashes in `arithmetic-reference-outputs.json`. History
-(at #895): the frozen default outcome was 18 exact AMD runs and 157/168 maps,
-the Intel double option retained 110 real-double hull discrepancies, and source
-MATLAB inputs were unattested. After #902 and #915–#917, the frozen AMD default
-is 20 exact runs and 163/168 maps (`matlab-amd`: 166/168; `matlab-intel` on
-Intel: 10/12 double runs and 90/92 maps, leaving 12 CF hull `y0` values), and
-`run_source_cli.m` attests source inputs prospectively (verified in Build 5).
-The two norm near-tie misses, unrecorded numerical edge cases, single precision,
-and publication of the compiled Runtime image remain open. Recordings previously
-exposed to research stay replay evidence, not blind holdouts.
+`check_arithmetic_references.mjs` holds all 24 runs of `current`, `matlab-amd`,
+and `matlab-intel` against literal output hashes in
+`arithmetic-reference-outputs.json`. History (at #895): the frozen default
+outcome was 18 exact AMD runs and 157/168 maps, the Intel double option retained
+110 real-double hull discrepancies, and source MATLAB inputs were unattested.
+After #902 and #915–#919, the frozen AMD default is 20 exact runs and 163/168
+maps (`matlab-amd`: 166/168), `run_source_cli.m` attests source inputs
+prospectively (verified in Build 5), and `matlab-intel` on Intel Xeon Platinum
+8573C reaches 19 exact runs and 158/168 maps (10/12 double + 9/10 runnable
+single-precision runs exact, leaving only the 12 CF hull `y0` values and the 12
+complex vertices of `prf_css_lh_single`), while the two `dnrm2` near-tie misses
+and Intel nonnegative CSS are resolved (pinned in
+`intel-norm-single-css-reference.json`, run 45286336873, Hugging Face commit
+`54645a921b7c442085b2db974ad78ed8b89d00d9`). Unrecorded numerical edge cases
+(including mixed complex-single dot on Intel), the 12 CF hull `y0` values, and
+GHCR publication of the compiled Runtime image remain open. Recordings
+previously exposed to research stay replay evidence, not blind holdouts.
 
 The separately authorized [cleanup-order-1 experiment](cleanup-order-1/result.md)
 finished with an undecided STOP on an unexpected warning. Its one-dispatch
