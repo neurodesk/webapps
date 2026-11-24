@@ -171,6 +171,9 @@ class Runtime(unittest.TestCase):
         self.assertIn('--read-only', command)
         self.assertIn('--init', command)
         self.assertIn(f'{Path("bundle").resolve()}:/input:ro', command)
+        self.assertIn('HOME=/tmp', command)
+        self.assertIn('JAVA_TOOL_OPTIONS=-Duser.home=/tmp', command)
+        self.assertIn('MCR_CACHE_ROOT=/tmp/mcr-cache', command)
         self.assertIn('MKL_CBWR=COMPATIBLE', command)
         self.assertEqual(command[-3:], [DIGEST, 'prf', 'm'])
 

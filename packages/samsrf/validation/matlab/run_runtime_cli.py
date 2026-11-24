@@ -38,10 +38,15 @@ def require_pinned(image):
 def docker_command(image, bundle, directory, argv, name=None, detach=False):
     # --init forwards SIGINT/SIGTERM: the application would otherwise be PID 1,
     # which ignores signals it has no handler for.
+    # OpenJDK 8 resolves user.home via getpwuid rather than $HOME; when the
+    # calling UID (e.g. 1001 on GitHub Actions) is absent from /etc/passwd, it
+    # falls back to "?" and writes /results/?/.java/fonts/... into the workdir.
     command = ['docker', 'run', '--init', '--network', 'none', '--read-only',
                '--tmpfs', '/tmp:rw,exec,size=4g',
                '--user', f'{os.getuid()}:{os.getgid()}',
-               '--env', 'HOME=/tmp', '--env', 'MCR_CACHE_ROOT=/tmp/mcr-cache']
+               '--env', 'HOME=/tmp',
+               '--env', 'JAVA_TOOL_OPTIONS=-Duser.home=/tmp',
+               '--env', 'MCR_CACHE_ROOT=/tmp/mcr-cache']
     for key, value in CONTROLS.items():
         command += ['--env', f'{key}={value}']
     command += ['--volume', f'{Path(bundle).resolve()}:/input:ro',
