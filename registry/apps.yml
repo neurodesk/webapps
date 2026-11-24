@@ -1464,9 +1464,9 @@ apps:
     path: stardist
     catalog: microscopy
     title: StarDist
-    description: Segment cell nuclei in 2D fluorescence microscopy.
+    description: Segment cell nuclei in 2D fluorescence, H&E and 3D stacks.
     categories: [segmentation]
-    keywords: [StarDist, nucleus segmentation, nuclei, cell segmentation, instance segmentation, star-convex polygons, fluorescence microscopy, DAPI, OME-TIFF, deep learning]
+    keywords: [StarDist, StarDist3D, nucleus segmentation, nuclei, cell segmentation, instance segmentation, star-convex polygons, star-convex polyhedra, fluorescence microscopy, H&E, histology, brightfield, 3D microscopy, DAPI, OME-TIFF, deep learning]
     anatomy: [any]
     modalities: [microscopy]
     inputs: [tiff]
@@ -1704,9 +1704,9 @@ apps:
     path: microsam
     catalog: microscopy
     title: micro-sam
-    description: Segment cells in 2D microscopy from clicks and boxes.
+    description: Segment 2D/3D microscopy images from clicks and boxes.
     categories: [segmentation]
-    keywords: [micro-sam, Segment Anything, SAM, interactive segmentation, cell segmentation, nucleus segmentation, instance segmentation, light microscopy, fluorescence microscopy, point prompts, box prompts, OME-TIFF, annotation]
+    keywords: [micro-sam, Segment Anything, SAM, interactive segmentation, cell segmentation, nucleus segmentation, organelle segmentation, electron microscopy, 3D Z-stack, instance segmentation, light microscopy, fluorescence microscopy, point prompts, box prompts, OME-TIFF, annotation]
     anatomy: [any]
     modalities: [microscopy]
     inputs: [tiff]
@@ -1857,6 +1857,113 @@ apps:
       shared_runtime: false
       browser_test: true
       release: true
+  - id: denoise
+    path: denoise
+    catalog: microscopy
+    also_in: [preclinical]
+    title: Denoise
+    description: Self-supervised denoising of 2D and 3D microscopy stacks.
+    categories: [preprocessing]
+    keywords: [denoising, self-supervised, Noise2Self, Aydin, FGR, Zero-Shot Noise2Noise, ZS-N2N, Anscombe, non-local means, fluorescence, confocal, two-photon, microscopy, TIFF]
+    anatomy: [any]
+    modalities: [microscopy]
+    inputs: [tiff, nifti]
+    hardware: cpu
+    handoff: none
+    legacy_domain: null
+    runtime: react-vite
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: MIT
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false
+  - id: totalsegmentator
+    path: totalsegmentator
+    catalog: msk
+    title: TotalSegmentator
+    description: Segment organs, bones and muscles in CT and MRI.
+    categories: [segmentation]
+    keywords: [TotalSegmentator, CT, MRI, whole-body, segmentation, organs, bones, vertebrae, muscles, nnU-Net]
+    anatomy: [whole-body]
+    modalities: [ct, mri]
+    inputs: [dicom, nifti]
+    hardware: webgpu-optional
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: models/totalsegmentator.manifest.json
+    asset_manifest_schema: scientific-assets-v1
+    source: neurodesk/webapps@local
+    license: Apache-2.0
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    app_scoped_runtime_families: [ort-web-asyncify]
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: true
+  - id: cellpose
+    path: cellpose
+    catalog: microscopy
+    title: Cellpose
+    description: Segment cells and nuclei in 2D and 3D microscopy.
+    categories: [segmentation]
+    keywords: [Cellpose, cyto3, nuclei, cell segmentation, nucleus segmentation, cytoplasm, instance segmentation, microscopy, fluorescence, brightfield, phase contrast, OME-TIFF, deep learning]
+    anatomy: [any]
+    modalities: [microscopy]
+    inputs: [tiff]
+    hardware: cpu
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: models/cellpose.manifest.json
+    asset_manifest_schema: scientific-assets-v1
+    source: neurodesk/webapps@local
+    license: BSD-3-Clause
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    handoff: none
+    app_scoped_runtime_families: [ort-web-asyncify]
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false
+  - id: medsam2
+    path: medsam2
+    catalog: neuro
+    also_in: [msk, preclinical]
+    title: MedSAM2
+    description: Segment 3D MRI and CT interactively from clicks and boxes.
+    categories: [segmentation]
+    keywords: [MedSAM2, SAM 2, interactive segmentation, 3D segmentation, MRI, CT, point prompts, box prompts, memory propagation]
+    anatomy: [any]
+    modalities: [mri, ct]
+    inputs: [dicom, nifti]
+    hardware: webgpu-optional
+    legacy_domain: null
+    runtime: vite-webgpu
+    model_manifest: models/medsam2.manifest.json
+    asset_manifest_schema: scientific-assets-v1
+    source: neurodesk/webapps@local
+    license: Apache-2.0
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    app_scoped_runtime_families: [ort-web-asyncify]
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false
   - id: brainchomp
     path: brainchomp
     catalog: preclinical

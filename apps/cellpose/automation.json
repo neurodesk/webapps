@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 2,
+  "app": "cellpose",
+  "title": "Cellpose",
+  "description": "Segment cells and nuclei in 2D and 3D microscopy using pretrained Cellpose 3 models (cyto3 and nuclei).",
+  "defaultOperation": "segment",
+  "operations": {
+    "segment": {
+      "title": "Segment cells",
+      "description": "Run a pretrained Cellpose 3 model (cyto3 or nuclei) on a 2D image or 3D multi-page TIFF/OME-TIFF stack and return the label TIFF and per-cell CSV table.",
+      "mode": "batch",
+      "inputs": {
+        "image": {
+          "source": "files",
+          "type": "neuro:microscopy-image",
+          "formats": [
+            "tif",
+            "tiff",
+            "png"
+          ],
+          "description": "One 2D TIFF, OME-TIFF or PNG image, or a 3D multi-page TIFF/OME-TIFF stack",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "model": {
+          "type": "string",
+          "enum": [
+            "cyto3",
+            "nuclei"
+          ],
+          "default": "cyto3",
+          "description": "Pretrained Cellpose 3 model: cyto3 for whole cells/cytoplasm or nuclei for nuclear stains"
+        },
+        "channel": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256,
+          "default": 1,
+          "description": "Primary channel to segment (cytoplasm/membrane for cyto3, nuclear stain for nuclei), counting from 1"
+        },
+        "nuclearChannel": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 256,
+          "default": 0,
+          "description": "Optional nuclear channel (1-based) to guide cyto3 cell segmentation; 0 means none"
+        },
+        "diameter": {
+          "type": "number",
+          "minimum": 5,
+          "maximum": 500,
+          "description": "Expected object diameter in pixels (omitted uses the model default: 30 for cyto3, 17 for nuclei)"
+        },
+        "flowThresh": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 3,
+          "default": 0.4,
+          "description": "Maximum allowed flow error in 2D (lower keeps stricter masks; 0 disables flow filtering)"
+        },
+        "cellprobThresh": {
+          "type": "number",
+          "minimum": -6,
+          "maximum": 6,
+          "default": 0,
+          "description": "Cell probability logit threshold (decrease to find more or dimmer cells)"
+        },
+        "minSize": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000,
+          "default": 15,
+          "description": "Minimum mask area in pixels (2D) or volume in voxels (3D)"
+        },
+        "do3D": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run 3D ortho-plane (YX, ZY, ZX) segmentation on a 3D multi-page stack"
+        },
+        "anisotropy": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 20,
+          "default": 1,
+          "description": "Ratio of Z spacing to XY pixel spacing for 3D segmentation"
+        }
+      },
+      "artifacts": {
+        "labels": {
+          "type": "neuro:label-map",
+          "mediaType": "image/tiff",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "table": {
+          "type": "file:cells-table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

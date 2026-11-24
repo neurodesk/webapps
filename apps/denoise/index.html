@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Denoise — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Input image</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose a TIFF, OME-TIFF or NIfTI image or stack" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop a TIFF, OME-TIFF or NIfTI image</span>
+          </label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Denoising</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="method">Method
+              <span class="nd-info-icon" tabindex="0" aria-label="About the denoising methods">i<span class="nd-info-tooltip">Aydin FGR trains a Noise2Self regressor (boosted trees or Ridge) on blind-spot multiscale features directly on your image. Zero-Shot Noise2Noise trains a small 2-layer residual CNN on downsampled pairs. Anscombe VST + NLM stabilizes Poisson-Gaussian shot noise before Non-Local Means filtering.</span></span>
+            </label>
+            <select id="method">
+              <option value="fgr-gbdt" selected>Aydin FGR (Boosted Trees)</option>
+              <option value="fgr-ridge">Aydin FGR (Fast Ridge)</option>
+              <option value="zs-n2n">Zero-Shot Noise2Noise (CNN)</option>
+              <option value="vst-nlm">Anscombe VST + Non-Local Means</option>
+            </select>
+          </div>
+          <div class="nd-field">
+            <label for="mode">Context
+              <span class="nd-info-icon" tabindex="0" aria-label="About 2D vs 3D context">i<span class="nd-info-tooltip">Auto uses neighbouring Z slices or time frames when the input is a stack. Choose 2D slice-by-slice when Z spacing is very coarse or motion is large between frames.</span></span>
+            </label>
+            <select id="mode">
+              <option value="auto" selected>Auto (3D for stacks)</option>
+              <option value="2d">2D slice-by-slice</option>
+              <option value="3d">3D stack / time-series</option>
+            </select>
+          </div>
+
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <div class="nd-row">
+                <div class="nd-field">
+                  <label for="nTrees">Trees
+                    <span class="nd-info-icon" tabindex="0" aria-label="About tree count">i<span class="nd-info-tooltip">Maximum gradient-boosted trees for Aydin FGR-GBDT (10-200). Self-supervised validation stops early when error plateaus.</span></span>
+                  </label>
+                  <input id="nTrees" type="number" min="10" max="200" step="10" value="80" />
+                </div>
+                <div class="nd-field">
+                  <label for="maxDepth">Tree depth</label>
+                  <input id="maxDepth" type="number" min="2" max="6" step="1" value="4" />
+                </div>
+              </div>
+              <div class="nd-field">
+                <label for="maxScale">Max feature radius <small>px</small>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About feature radius">i<span class="nd-info-tooltip">Largest hollow donut ring radius used for J-invariant FGR features. Larger radii capture broader background context.</span></span>
+                </label>
+                <select id="maxScale">
+                  <option value="2">2 px (fine)</option>
+                  <option value="4">4 px (medium)</option>
+                  <option value="8" selected>8 px (multiscale)</option>
+                </select>
+              </div>
+              <div class="nd-row">
+                <div class="nd-field">
+                  <label for="iterations">Training steps
+                    <span class="nd-info-icon" tabindex="0" aria-label="About ZS-N2N training steps">i<span class="nd-info-tooltip">Adam optimisation steps for Zero-Shot Noise2Noise (50-1500). More steps refine detail at higher runtime.</span></span>
+                  </label>
+                  <input id="iterations" type="number" min="50" max="1500" step="50" value="200" disabled />
+                </div>
+                <div class="nd-field">
+                  <label for="channels">CNN channels</label>
+                  <input id="channels" type="number" min="16" max="48" step="8" value="16" disabled />
+                </div>
+              </div>
+              <div class="nd-row">
+                <div class="nd-field">
+                  <label for="noiseModel">Noise model
+                    <span class="nd-info-icon" tabindex="0" aria-label="About VST-NLM noise model">i<span class="nd-info-tooltip">Poisson-Gaussian applies the Generalized Anscombe Transform before NLM to handle intensity-dependent shot noise.</span></span>
+                  </label>
+                  <select id="noiseModel" disabled>
+                    <option value="poisson-gaussian" selected>Poisson-Gaussian</option>
+                    <option value="gaussian">Gaussian</option>
+                  </select>
+                </div>
+                <div class="nd-field">
+                  <label for="nlmStrength">Filter strength</label>
+                  <input id="nlmStrength" type="number" min="0.2" max="3.0" step="0.1" value="1.0" disabled />
+                </div>
+              </div>
+              <div class="nd-field">
+                <label for="seed">Random seed</label>
+                <input id="seed" type="number" min="0" max="2147483647" step="1" value="42" />
+              </div>
+            </div>
+          </details>
+
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Denoise image</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Image viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop a microscopy image or stack anywhere, or choose an example.</p>
+      </div>
+      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Denoising progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel denoising" aria-label="Cancel denoising" hidden>×</button>
+    </footer>
+
+    <template id="aboutContent">
+      <p>Denoise runs self-supervised image denoising directly in your browser with no external training data or pretrained weights. Choose Aydin-style FGR (Noise2Self blind-spot multiscale features with gradient-boosted trees or cross-validated Ridge), a browser adaptation of Zero-Shot Noise2Noise (a lightweight 2-layer residual CNN trained on downsampled pairs), or Generalized Anscombe Variance-Stabilized Non-Local Means. Every run also writes the noise residual map and per-axis lag-1 autocorrelation to help screen for over-smoothing.</p>
+    </template>
+    <template id="privacyContent">
+      <p>Images are processed locally in this browser and are never uploaded.</p>
+    </template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

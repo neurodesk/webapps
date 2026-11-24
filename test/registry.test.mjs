@@ -215,6 +215,7 @@ test('catalog assigns task categories and shares apps across related categories'
     'omezarr-convert': ['conversion'],
     'calcium-imaging': ['calcium-imaging'],
     stardist: ['segmentation'],
+    cellpose: ['segmentation'],
     microsam: ['segmentation'],
     neuromorph: ['morphometry'],
     'structure-tensor': ['fibre-orientation'],
@@ -294,7 +295,7 @@ test('every app belongs to exactly one declared catalogue', async () => {
   for (const app of registry.apps) assert.ok(ids.has(app.catalog), `${app.id} must name a declared catalogue`);
   assert.deepEqual(
     registry.apps.filter(({ catalog }) => catalog === 'msk').map(({ id }) => id).sort(),
-    ['carotid-flow', 'musclemap', 'seedseg'],
+    ['carotid-flow', 'musclemap', 'seedseg', 'totalsegmentator'],
   );
 });
 

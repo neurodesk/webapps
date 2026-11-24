@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cellpose — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Input image</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose a 2D or 3D TIFF, OME-TIFF or PNG image" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop a 2D or 3D TIFF, OME-TIFF or PNG image</span>
+          </label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+          <div class="nd-field" id="channelField" hidden>
+            <label for="channel">Primary channel
+              <span class="nd-info-icon" tabindex="0" aria-label="About the primary channel">i<span class="nd-info-tooltip">Channel to segment: cytoplasm or membrane for cyto3, or nuclear stain for nuclei.</span></span>
+            </label>
+            <select id="channel"></select>
+          </div>
+          <div class="nd-field" id="nuclearChannelField" hidden>
+            <label for="nuclearChannel">Nuclear channel <small>optional</small>
+              <span class="nd-info-icon" tabindex="0" aria-label="About the nuclear channel">i<span class="nd-info-tooltip">Optional nuclear stain (DAPI/Hoechst) to guide whole-cell segmentation with cyto3.</span></span>
+            </label>
+            <select id="nuclearChannel"></select>
+          </div>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Cell segmentation</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="model">Model
+              <span class="nd-info-icon" tabindex="0" aria-label="About Cellpose models">i<span class="nd-info-tooltip">Choose cyto3 for whole cells and cytoplasm (fluorescence, phase contrast, brightfield) or nuclei for nuclear stains.</span></span>
+            </label>
+            <select id="model">
+              <option value="cyto3">cyto3 (cells &amp; cytoplasm)</option>
+              <option value="nuclei">nuclei (nuclear stain)</option>
+            </select>
+          </div>
+          <div class="nd-field">
+            <label for="diameter">Cell diameter <small>px</small>
+              <span class="nd-info-icon" tabindex="0" aria-label="About cell diameter">i<span class="nd-info-tooltip">Approximate object diameter in pixels. Images are rescaled to the model's training diameter (30 px for cyto3, 17 px for nuclei).</span></span>
+            </label>
+            <input id="diameter" type="number" min="5" max="500" step="1" value="30" />
+          </div>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <label class="nd-check" for="do3D">
+                <input id="do3D" type="checkbox" />
+                <span>3D stack segmentation
+                  <span class="nd-info-icon" tabindex="0" aria-label="About 3D segmentation">i<span class="nd-info-tooltip">Runs Cellpose across YX, ZY and ZX planes and averages 3D gradient flows on a multi-page 3D TIFF/OME-TIFF stack.</span></span>
+                </span>
+              </label>
+              <div class="nd-field" id="anisotropyField" hidden>
+                <label for="anisotropy">Z anisotropy <small>dz / dxy</small>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About Z anisotropy">i<span class="nd-info-tooltip">Ratio of Z slice spacing to XY pixel spacing. Use 1 for isotropic stacks or larger values when Z slices are spaced further apart.</span></span>
+                </label>
+                <input id="anisotropy" type="number" min="0.1" max="20" step="0.1" value="1" />
+              </div>
+              <div class="nd-field">
+                <label for="flowThresh">Flow error threshold <small>0–3</small>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the flow error threshold">i<span class="nd-info-tooltip">Maximum allowed error between predicted 2D flows and flows recomputed from each mask. Increase to keep more masks; 0 disables filtering.</span></span>
+                </label>
+                <input id="flowThresh" type="number" min="0" max="3" step="0.05" value="0.4" />
+              </div>
+              <div class="nd-field">
+                <label for="cellprobThresh">Cell probability <small>-6–6</small>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the cell probability threshold">i<span class="nd-info-tooltip">Logit threshold for foreground pixels. Decrease (e.g. -2) to detect dimmer or sparser cells; increase to be more selective.</span></span>
+                </label>
+                <input id="cellprobThresh" type="number" min="-6" max="6" step="0.5" value="0" />
+              </div>
+              <div class="nd-field">
+                <label for="minSize">Minimum size <small>px / vox</small>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About minimum size">i<span class="nd-info-tooltip">Removes masks smaller than this area (2D pixels) or volume (3D voxels).</span></span>
+                </label>
+                <input id="minSize" type="number" min="1" max="100000" step="1" value="15" />
+              </div>
+              <button id="resetSettings" class="nd-btn nd-btn-secondary nd-btn-sm" type="button">Model defaults</button>
+            </div>
+          </details>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Segment cells</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Image viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop an image anywhere, or choose an example.</p>
+      </div>
+      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Processing progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel processing" aria-label="Cancel processing" hidden>×</button>
+    </footer>
+
+    <template id="aboutContent">
+      <p>Cellpose segments cells and nuclei in 2D and 3D microscopy by predicting spatial gradient flows toward each cell centre together with a foreground probability map, then following those flows to cluster pixels or voxels into individual instances.</p>
+      <p>This app runs two pretrained Cellpose 3 models locally in the browser with ONNX Runtime on WebAssembly: cyto3 (generalist whole-cell and cytoplasm segmentation across fluorescence, phase contrast and brightfield, with an optional nuclear channel) and nuclei (dedicated nuclear stain segmentation). Both models support 2D images and 3D multi-page TIFF/OME-TIFF stacks via Cellpose's orthogonal-plane (YX, ZY, ZX) flow averaging.</p>
+      <p>Images are rescaled to each model's training diameter, normalized to the 1st and 99th percentiles, predicted in overlapping 224 × 224 tiles with Gaussian blending, and post-processed with a port of Cellpose 3.1.1.1 flow dynamics, flow-error filtering and hole filling. Note that while Cellpose code and model weights are BSD-3-Clause, parts of the cyto3 training set carry non-commercial (CC-BY-NC) restrictions.</p>
+    </template>
+    <template id="privacyContent"><p>Images are processed locally in this browser and are never uploaded. Each model is downloaded once on demand from the Neurodesk dataset on Hugging Face and verified against its checksum.</p></template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

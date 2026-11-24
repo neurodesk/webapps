@@ -8,7 +8,7 @@ import { PAIRWISE_DEFAULTS } from "./core/pairwise.js";
 export const APP = Object.freeze({
   id: "stitching",
   title: automation.title,
-  version: "0.2.20261119",
+  version: "0.2.20261124",
 });
 
 export const LAYOUTS = Object.freeze({

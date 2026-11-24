@@ -137,6 +137,7 @@ test('microscopy catalogue groups apps by task without repeating its domain', as
   assert.equal(document.querySelector('[data-category-filter="microscopy"]'), null);
   const expected = {
     stardist: 'segmentation',
+    cellpose: 'segmentation',
     microsam: 'segmentation',
     'spot-detection': 'spot-detection',
     'calcium-imaging': 'calcium-imaging',
@@ -153,6 +154,7 @@ test('microscopy catalogue groups apps by task without repeating its domain', as
     niimath: 'preprocessing',
     mri2vid: 'visualization',
     deconvolution: 'preprocessing',
+    denoise: 'preprocessing',
   };
   const cards = [...document.querySelectorAll('[data-app-card]')];
   assert.equal(cards.length, Object.keys(expected).length);

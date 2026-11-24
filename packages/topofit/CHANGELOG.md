@@ -1,5 +1,18 @@
 # @neurodesk/topofit
 
+## 0.17.20261124
+
+### Minor Changes
+
+- 07006ac: A named search region can now be viewed two ways. View on a hemisphere's parcellation draws the mapped atlas on its mid-surface, the search region in its atlas colours, the other areas faded, found patches white, and turns the 3D view to face the region. A new output, `topofit_region_mask.nii`, holds the region filled between the white and pial surfaces on the source grid (unsigned 8-bit, left 1, right 2); View overlays it on the original image's slices. The app and the `topofit` command line write the same mask, automation returns it as the `region-mask` artifact, and `readAnnotation` reads a written parcellation back. Searches of the whole cortex or an ROI are byte-identical, manifest included. In a named-region search every earlier file is byte-identical except the processing manifest, which lists every output and so gains the mask's SHA-256 entry. QC, patch QC and region-mask volumes written for a NIfTI-2 scan now have valid NIfTI-1 headers on the scan's grid; until now their headers were NIfTI-2 bytes copied into a NIfTI-1 layout. Outputs for NIfTI-1 scans are unchanged.
+
+### Patch Changes
+
+- fbd3081: Resolve NIfTI-1 and NIfTI-2 world affines through one shared `resolveWorldAffine` function that applies `sform_code`/`qform_code` precedence, `qfac`, 180° quaternion normalization (`nifti_quatern_to_dmat44`), and `xyzt_units` millimetre scaling while refusing non-finite or singular affines. Align loaded NiiVue volumes onto that same millimetre grid without copying voxels so surfaces, QC overlays, region masks, and crosshair coordinates agree with the anatomy for qform-only NIfTI-2 scans and micrometre or metre scans in both formats, and guard viewer loads against stale completions after cancellation. NIfTI-1 millimetre outputs remain byte-identical.
+- Updated dependencies [dce0e7f]
+- Updated dependencies [94d6e09]
+  - @neurodesk/webapp-components@0.29.0
+
 ## 0.16.20261119
 
 ### Minor Changes

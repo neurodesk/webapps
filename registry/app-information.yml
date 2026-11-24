@@ -2330,17 +2330,22 @@ apps:
 
   stardist:
     packages:
-      - { name: StarDist, url: https://github.com/stardist/stardist, role: "pretrained 2D_versatile_fluo model (BSD-3-Clause); tiling, non-maximum suppression and label drawing ported from stardist 0.9.1 and csbdeep 0.8.1" }
+      - { name: StarDist, url: https://github.com/stardist/stardist, role: "pretrained 2D_versatile_fluo, 2D_versatile_he, 2D_paper_dsb2018 and 3D_demo models (BSD-3-Clause); 2D and 3D tiling, non-maximum suppression and label drawing ported from stardist 0.9.1 and csbdeep 0.8.1" }
       - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: model inference on the CPU (WebAssembly) }
-      - { name: Clipper, url: https://www.angusj.com/clipper2/Docs/Overview.htm, role: "polygon intersection for non-maximum suppression (clipper-lib 6.4.2, the JavaScript port of the Clipper 6.4.2 that StarDist uses)" }
-      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: "TIFF and OME-TIFF reading (@neurodesk/webapp-components/file-io/tiff)" }
+      - { name: Clipper, url: https://www.angusj.com/clipper2/Docs/Overview.htm, role: "polygon intersection for 2D non-maximum suppression (clipper-lib 6.4.2, the JavaScript port of the Clipper 6.4.2 that StarDist uses)" }
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: "2D and 3D TIFF and OME-TIFF reading (@neurodesk/webapp-components/file-io/tiff)" }
       - { name: fast-png, url: https://github.com/image-js/fast-png, role: PNG reading }
-      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: 2D and 3D image viewer }
     citations:
       - group: Nucleus segmentation
-        title: StarDist
+        title: StarDist (2D)
         reference: "Schmidt U, Weigert M, Broaddus C, Myers G. Cell detection with star-convex polygons. Medical Image Computing and Computer Assisted Intervention (MICCAI 2018). Lecture Notes in Computer Science 11071. 2018:265–273."
         doi: 10.1007/978-3-030-00934-2_30
+        code: https://github.com/stardist/stardist
+      - group: Nucleus segmentation
+        title: StarDist 3D
+        reference: "Weigert M, Schmidt U, Haase R, Sugawara K, Myers G. Star-convex polyhedra for 3D object detection and segmentation in microscopy. IEEE Winter Conference on Applications of Computer Vision (WACV 2020). 2020:3666–3673."
+        doi: 10.1109/WACV45572.2020.9093435
         code: https://github.com/stardist/stardist
       - group: Nucleus segmentation
         title: CSBDeep (normalization and tiled prediction)
@@ -2351,6 +2356,11 @@ apps:
         title: 2018 Data Science Bowl (BBBC038)
         reference: "Caicedo JC, Goodman A, Karhohs KW, et al. Nucleus segmentation across imaging experiments: the 2018 Data Science Bowl. Nature Methods. 2019;16(12):1247–1253."
         doi: 10.1038/s41592-019-0612-7
+      - group: Example data
+        title: Human skin H&E histology (scikit-image skin, Public Domain)
+        reference: "van der Walt S, Schönberger JL, Nunez-Iglesias J, et al. scikit-image: image processing in Python. PeerJ. 2014;2:e453. Includes human epidermis and dermis H&E histology by Kilbad (Wikimedia Commons, public domain / CC0-1.0)."
+        doi: 10.7717/peerj.453
+        url: https://en.wikipedia.org/wiki/File:Normal_Epidermis_and_Dermis_with_Intradermal_Nevus_10x.JPG
       - group: Browser inference
         title: ONNX Runtime Web
         reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."
@@ -2619,7 +2629,7 @@ apps:
 
   microsam:
     packages:
-      - { name: micro-sam, url: https://github.com/computational-cell-analytics/micro-sam, role: "light-microscopy generalist ViT-T model (vit_t_lm, CC BY 4.0); preprocessing and prompt handling ported from micro-sam 1.8.14 (MIT)" }
+      - { name: micro-sam, url: https://github.com/computational-cell-analytics/micro-sam, role: "light-microscopy (vit_t_lm) and EM organelle (vit_t_em_organelles) ViT-T models (CC BY 4.0); 2D/3D preprocessing, prompting and Z-stack propagation ported from micro-sam (MIT)" }
       - { name: MobileSAM, url: https://github.com/ChaoningZhang/MobileSAM, role: "TinyViT image encoder and the ONNX prompt decoder graph (Apache-2.0)" }
       - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: model inference on WebGPU or the CPU (WebAssembly) }
       - { name: Pillow, url: https://github.com/python-pillow/Pillow, role: "bilinear resampling ported from Pillow 13.0.0 (MIT-CMU), as micro-sam resizes images" }
@@ -2853,6 +2863,38 @@ apps:
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
 
+  cellpose:
+    packages:
+      - { name: Cellpose, url: https://github.com/MouseLand/cellpose, role: "pretrained cyto3 and nuclei models (BSD-3-Clause; cyto3 and nuclei training sets include CC-BY-NC datasets); 2D/3D tiling, gradient flow tracking, flow-error filtering and hole filling ported from cellpose 3.1.1.1" }
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: model inference on the CPU (WebAssembly) }
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: "2D and 3D TIFF and OME-TIFF reading (@neurodesk/webapp-components/file-io/tiff)" }
+      - { name: fast-png, url: https://github.com/image-js/fast-png, role: PNG reading }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: 2D and 3D image viewer }
+    citations:
+      - group: Cell segmentation
+        title: Cellpose
+        reference: "Stringer C, Wang T, Michaelos M, Pachitariu M. Cellpose: a generalist algorithm for cellular segmentation. Nature Methods. 2021;18(1):100–106."
+        doi: 10.1038/s41592-020-01018-x
+        code: https://github.com/MouseLand/cellpose
+      - group: Cell segmentation
+        title: Cellpose3 (cyto3)
+        reference: "Stringer C, Pachitariu M. Cellpose3: one-click image restoration for improved cellular segmentation. Nature Methods. 2025;22(3):592–599."
+        doi: 10.1038/s41592-025-02595-5
+        code: https://github.com/MouseLand/cellpose
+      - group: Example data
+        title: Allen Institute for Cell Science (cells3d via scikit-image)
+        reference: "van der Walt S, Schönberger JL, Nunez-Iglesias J, et al. scikit-image: image processing in Python (cells3d fluorescence volume from the Allen Institute for Cell Science, CC0 1.0). PeerJ. 2014;2:e453."
+        doi: 10.7717/peerj.453
+        url: https://scikit-image.org/docs/stable/api/skimage.data.html#skimage.data.cells3d
+      - group: Browser inference
+        title: ONNX Runtime Web
+        reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."
+        url: https://onnxruntime.ai
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
   tumour-report:
     about:
       - "Segment contrast-enhancing brain tumours (glioblastoma, meningioma and brain metastases) on a single native-space post-contrast T1-weighted MRI (T1c) using the Raidionics v1.3 brain and tumour-core 3D AGU-Net models, or characterise an existing native-space binary tumour mask."
@@ -2914,6 +2956,135 @@ apps:
         title: UPENN-GBM
         reference: "Bakas S, Sako C, Akbari H, et al. The University of Pennsylvania glioblastoma (UPenn-GBM) cohort: advanced MRI, clinical, genomics, & radiomics. Scientific Data. 2022;9:453."
         doi: 10.1038/s41597-022-01560-7
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  denoise:
+    about:
+      - "Aydin FGR implements Noise2Self (Batson & Royer, ICML 2019) using strictly blind-spot (J-invariant) multiscale features — directional pairs, 8-neighbour statistics, cancellation-free hollow donut rings and off-plane 3D/2D+T neighbours — so for fixed normalization and a fixed fitted model f, f(F(x))_i never reads voxel x_i. As in Aydin, global normalization and histogram gradient-boosted trees or cross-validated Ridge regression are fit directly on the image with an in-image holdout split for early stopping and regularisation selection, requiring no external training data or pretrained weights."
+      - "Zero-Shot Noise2Noise (Mansour & Heckel, CVPR 2023) is a browser adaptation using the paper's 2-layer residual CNN and symmetric residual plus consistency objective on diagonal 2×2 downsampled sub-image pairs. To keep CPU runtimes interactive, it defaults to 16 channels, 48×48 random crops and 200 Adam steps (up to 48 channels and 1500 steps are configurable in Advanced settings), followed by seamless tiled inference."
+      - "Anscombe VST + Non-Local Means provides a classical Poisson-Gaussian baseline: it estimates shot-noise gain and Gaussian readout noise from smooth-region diagonal Haar wavelet details (Foi et al. 2008), stabilizes intensity-dependent variance with the Generalized Anscombe Transform (Makitalo & Foi 2013), applies fast integral-image Non-Local Means with mirror-padded patches (Buades et al. 2005; Darbon et al. 2008) and maps back via a continuous, monotone closed-form approximation to the unbiased inverse (Makitalo & Foi Eq. 21 with a continuous low-count quadratic ramp below the asymptotic branch)."
+      - "Every run writes the denoised image (float32 calibrated TIFF and NIfTI) and the noise residual map (input minus denoised), and reports estimated Haar noise-floor reduction and per-axis residual lag-1 autocorrelation in the Analysis console to help screen for over-smoothing."
+    packages:
+      - { name: Denoise core (JavaScript Worker), url: https://github.com/neurodesk/webapps/tree/main/apps/denoise/src/core, role: "Aydin FGR (J-invariant features, histogram GBDT and Ridge), Zero-Shot Noise2Noise CNN, Generalized Anscombe VST and fast integral-image Non-Local Means" }
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: "TIFF and OME-TIFF decoding through @neurodesk/webapp-components/file-io/tiff" }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Self-supervised denoising
+        title: Noise2Self (J-invariant self-supervised denoising)
+        reference: "Batson J, Royer L. Noise2Self: blind denoising by self-supervision. Proceedings of the 36th International Conference on Machine Learning (ICML). 2019;PMLR 97:524–533."
+        url: https://proceedings.mlr.press/v97/batson19a.html
+      - group: Self-supervised denoising
+        title: Aydin (Feature Generation & Regression)
+        reference: "Royer Lab. Aydin: user-friendly, feature-rich, and fast image denoising [Computer software]."
+        url: https://github.com/royerlab/aydin
+      - group: Self-supervised denoising
+        title: Zero-Shot Noise2Noise (ZS-N2N)
+        reference: "Mansour Y, Heckel R. Zero-Shot Noise2Noise: efficient image denoising without any data. Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). 2023:14018–14027."
+        doi: 10.1109/CVPR52729.2023.01347
+      - group: Classical Poisson-Gaussian denoising
+        title: Non-Local Means
+        reference: "Buades A, Coll B, Morel JM. A non-local algorithm for image denoising. Proceedings of the IEEE Computer Society Conference on Computer Vision and Pattern Recognition (CVPR). 2005;2:60–65."
+        doi: 10.1109/CVPR.2005.38
+      - group: Classical Poisson-Gaussian denoising
+        title: Fast integral-image Non-Local Means
+        reference: "Darbon J, Cunha A, Chan TF, Osher S, Jensen GJ. Fast nonlocal filtering applied to electron cryomicroscopy. 5th IEEE International Symposium on Biomedical Imaging (ISBI). 2008:1331–1334."
+        doi: 10.1109/ISBI.2008.4541250
+      - group: Classical Poisson-Gaussian denoising
+        title: Generalized Anscombe variance-stabilizing transform
+        reference: "Makitalo M, Foi A. Optimal inversion of the generalized Anscombe transformation for Poisson-Gaussian noise. IEEE Transactions on Image Processing. 2013;22(1):91–103."
+        doi: 10.1109/TIP.2012.2202675
+      - group: Classical Poisson-Gaussian denoising
+        title: Poisson-Gaussian noise estimation
+        reference: "Foi A, Trimeche M, Katkovnik V, Egiazarian K. Practical Poissonian-Gaussian noise modeling and fitting for single-image raw-data. IEEE Transactions on Image Processing. 2008;17(10):1737–1754."
+        doi: 10.1109/TIP.2008.2001399
+      - group: Example data
+        title: 2018 Data Science Bowl (BBBC038)
+        reference: "Caicedo JC, Goodman A, Karhohs KW, et al. Nucleus segmentation across imaging experiments: the 2018 Data Science Bowl. Nature Methods. 2019;16(12):1247–1253."
+        doi: 10.1038/s41592-019-0612-7
+      - group: Example data
+        title: Deconvolution Test Dataset (HeLa phalloidin-488 confocal)
+        reference: "Guiet R. Deconvolution Test Dataset. Zenodo. 2021. CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)."
+        doi: 10.5281/zenodo.5101351
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  totalsegmentator:
+    about:
+      - "Segment major organs, bones, vertebrae and muscles in 3D CT and MRI scans with TotalSegmentator v2, running nnU-Net v2 models directly in your browser on WebGPU or WebAssembly. Scans are automatically reoriented to canonical RAS for inference, resampled to the model's spacing, and restored to the input scan's exact orientation and voxel grid on output."
+      - "Includes openly licensed Apache-2.0 models from wasserth/TotalSegmentator: whole-body CT (117 structures, 3 mm fast or 1.5 mm 5-part full resolution with selectable anatomical subsets), whole-body MRI (50 structures, 3 mm fast or 1.5 mm 2-part full resolution), MRI vertebrae (25 structures), and CT abdominal muscles (22 T4–L4 muscles, automatically cropped to the trunk using the 6 mm body model). License-gated commercial TotalSegmentator tasks (appendicular_bones, tissue_types, thigh_shoulder_muscles) are not mirrored here."
+      - "The Results view and downloadable TSV report each detected structure's volume in mL along with mean and standard deviation Hounsfield units (CT) or signal intensity (MRI). Outputs are research estimates, not a clinical diagnosis."
+    packages:
+      - { name: TotalSegmentator, url: https://github.com/wasserth/TotalSegmentator, role: "whole-body CT, whole-body MRI, MRI vertebrae and CT abdominal muscle models (Apache-2.0, v2.0.0-weights and v2.5.0-weights)" }
+      - { name: nnU-Net, url: https://github.com/MIC-DKFZ/nnUNet, role: "preprocessing, CT/MR normalization and sliding-window prediction ported to JavaScript" }
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: "3D U-Net inference on WebGPU or WebAssembly" }
+      - { name: dcm2niix, url: https://github.com/rordenlab/dcm2niix, role: "local DICOM to NIfTI conversion" }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: "multiplanar image and label viewer" }
+    citations:
+      - group: Whole-body CT segmentation
+        title: TotalSegmentator
+        reference: "Wasserthal J, Breit HC, Meyer MT, Pradella M, Hinck D, Sauter AW, Heye T, Boll DT, Cyriac J, Yang S, Bach M, Segeroth M. TotalSegmentator: Robust Segmentation of 104 Anatomic Structures in CT Images. Radiology: Artificial Intelligence. 2023;5(5):e230024."
+        doi: 10.1148/ryai.230024
+        code: https://github.com/wasserth/TotalSegmentator
+      - group: Whole-body MRI segmentation
+        title: TotalSegmentator MRI
+        reference: "D'Antonoli TA, Berger LK, Indrakanti AK, Vishwanathan N, Weiss J, Jung M, Berkarda Z, Rau A, Reisert M, Küstner T, Walter A, Segeroth M, Sperl JI, Wasserthal J. TotalSegmentator MRI: Robust Sequence-Independent Segmentation of Multiple Anatomic Structures in MRI. Radiology. 2025;314(2):e241613."
+        doi: 10.1148/radiol.241613
+        code: https://github.com/wasserth/TotalSegmentator
+      - group: Abdominal and trunk muscles
+        title: Trunk musculature segmentation (abdominal_muscles)
+        reference: "Hong V, Pieper S, James J, Anderson DE, Pinter C, Chang YS, Aslan B, Kozono D, Doyle PF, Caplan S, Kang H, Balboni T, Spektor A, Huynh MA, Keko M, Kikinis R, Hackney DB, Alkalay RN. Automated Segmentation of Trunk Musculature with a Deep CNN Trained from Sparse Annotations in Radiation Therapy Patients with Metastatic Spine Disease. medRxiv. 2025."
+        doi: 10.1101/2025.01.13.25319967
+        code: https://github.com/wasserth/TotalSegmentator
+      - group: Segmentation framework
+        title: nnU-Net
+        reference: "Isensee F, Jaeger PF, Kohl SAA, Petersen J, Maier-Hein KH. nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation. Nature Methods. 2021;18(2):203–211."
+        doi: 10.1038/s41592-020-01008-z
+        code: https://github.com/MIC-DKFZ/nnUNet
+      - group: Browser inference
+        title: ONNX Runtime Web
+        reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."
+        url: https://onnxruntime.ai
+      - group: DICOM conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+        code: https://github.com/rordenlab/dcm2niix
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  medsam2:
+    packages:
+      - { name: MedSAM2, url: https://github.com/bowang-lab/MedSAM2, role: "3D medical image interactive segmentation model (sam2.1_hiera_t512, MedSAM2_latest.pt, CC BY-SA 4.0)" }
+      - { name: SAM 2, url: https://github.com/facebookresearch/sam2, role: "Hiera-Tiny image encoder, prompt decoder, memory encoder and memory attention architecture (Apache-2.0)" }
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: model inference on WebGPU or the CPU (WebAssembly) }
+      - { name: dcm2niix, url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion in WebAssembly }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: 3D medical image viewer and mask editor host }
+    citations:
+      - group: Interactive 3D segmentation
+        title: MedSAM2
+        reference: "Ma J, Yang Z, Kim S, et al. MedSAM2: Segment Anything in 3D Medical Images and Videos. arXiv:2504.03600. 2025."
+        doi: 10.48550/arXiv.2504.03600
+        code: https://github.com/bowang-lab/MedSAM2
+      - group: Interactive 3D segmentation
+        title: SAM 2
+        reference: "Ravi N, Gabeur V, Hu Y-T, et al. SAM 2: Segment Anything in Images and Videos. arXiv:2408.00714. 2024."
+        doi: 10.48550/arXiv.2408.00714
+        code: https://github.com/facebookresearch/sam2
+      - group: Conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+      - group: Browser inference
+        title: ONNX Runtime Web
+        reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."
+        url: https://onnxruntime.ai
       - group: Visualization
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."

@@ -2,7 +2,7 @@ import { readVolume, writeVolume } from '@neurodesk/synthsr';
 import { chooseBackend } from '@neurodesk/runtime-support/mindgrab/backend';
 import * as brainchomp from '../vendor/brainchomp/index.js';
 import { applyWorldRemap, INPUT_WORLD_REMAP } from './orient.js';
-import { BRAINCHOMP_LIB_VERSION, DEFAULT_OPENING_RADIUS } from './config.js';
+import { BRAINCHOMP_LIB_REVISION, DEFAULT_OPENING_RADIUS } from './config.js';
 
 async function resolveBackend(requested, onLog) {
   if (requested && requested !== 'auto') return requested;
@@ -94,7 +94,7 @@ self.onmessage = async ({ data: job }) => {
       provenance: {
         method: 'Brainchomp',
         library: 'brainchomp-lib',
-        libraryVersion: BRAINCHOMP_LIB_VERSION,
+        libraryRevision: BRAINCHOMP_LIB_REVISION,
         backend: result.backend,
         openingRadius: opening,
         elapsedMs: result.elapsedMs,

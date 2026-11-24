@@ -2,12 +2,12 @@
   "schemaVersion": 2,
   "app": "microsam",
   "title": "micro-sam",
-  "description": "Segment objects in a 2D light-microscopy image from point and box prompts with Segment Anything for Microscopy (vit_t_lm).",
+  "description": "Segment objects in a 2D microscopy image or 3D Z-stack from point and box prompts with Segment Anything for Microscopy (vit_t_lm or vit_t_em_organelles).",
   "defaultOperation": "segment",
   "operations": {
     "segment": {
       "title": "Segment from prompts",
-      "description": "Compute micro-sam's image embedding, segment one object per prompt and return the label image and a per-object table.",
+      "description": "Compute micro-sam slice embeddings, segment one object per prompt (with optional 3D Z-stack propagation) and return the label TIFF and per-object CSV table.",
       "mode": "batch",
       "inputs": {
         "image": {
@@ -18,7 +18,7 @@
             "tiff",
             "png"
           ],
-          "description": "One 2D TIFF, OME-TIFF or PNG light-microscopy image",
+          "description": "One 2D TIFF, OME-TIFF, PNG image or 3D OME-TIFF/ImageJ Z-stack",
           "minimum": 1,
           "maximum": 1
         }
@@ -26,8 +26,17 @@
       "parameters": {
         "prompts": {
           "type": "string",
-          "description": "JSON array, one entry per object: {\"points\": [[x, y, 1 or 0], ...], \"box\": [x0, y0, x1, y1] or null}, in pixels from the top-left; 1 is a positive and 0 a negative point",
+          "description": "JSON array, one entry per object: {\"points\": [[x, y, 1 or 0], ...], \"box\": [x0, y0, x1, y1] or null, \"slice\"?: 0, \"propagate\"?: false}, in pixels from the top-left; 1 is a positive and 0 a negative point",
           "required": true
+        },
+        "model": {
+          "type": "string",
+          "enum": [
+            "vit_t_lm",
+            "vit_t_em_organelles"
+          ],
+          "default": "vit_t_lm",
+          "description": "micro-sam generalist model: vit_t_lm for light microscopy or vit_t_em_organelles for electron microscopy organelles"
         },
         "channel": {
           "type": "integer",
@@ -35,6 +44,20 @@
           "maximum": 64,
           "default": 0,
           "description": "Channel or page the model sees, counting from 1; 0 uses colour (RGB) when the image has it, else the first channel"
+        },
+        "iouThreshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.5,
+          "description": "Adjacent-slice IoU threshold below which 3D Z-stack propagation stops"
+        },
+        "boxExtension": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.5,
+          "default": 0.1,
+          "description": "Relative margin added to the projected bounding box during 3D Z-stack propagation"
         },
         "backend": {
           "type": "string",

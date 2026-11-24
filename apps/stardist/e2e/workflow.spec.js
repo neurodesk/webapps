@@ -1,18 +1,21 @@
-// StarDist on the pinned example, end to end in the production build: the label image must be
-// Python StarDist 0.9.1's (validation/reference.json) pixel for pixel, with and without tiling and
-// on a crop that needs padding; cancelling a run and the automation contract.
+// StarDist on the pinned 2D and 3D examples, end to end in the production build: the label
+// images must match Python StarDist 0.9.1 (validation/reference.json) pixel/voxel for
+// pixel/voxel across all four models (2D_versatile_fluo, 2D_versatile_he, 2D_paper_dsb2018,
+// 3D_demo), with tiling, padding, cancellation and the automation contract.
 import { test, expect } from "@playwright/test";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
-import { writeLabelTiff } from "@neurodesk/webapp-components/file-io/tiff";
+import { writeLabelTiff, writeTiffStack } from "@neurodesk/webapp-components/file-io/tiff";
 import { MODEL } from "../src/config.js";
 import { examples, matchLabels, readLabelTiff, reference, referenceLabels } from "./reference.mjs";
 
-const [example] = examples;
-const [exampleFile] = example.files;
+const fluoExample = examples.find((item) => item.id === "dsb2018-nuclei");
+const heExample = examples.find((item) => item.id === "skin-he-nuclei");
+const demo3dExample = examples.find((item) => item.id === "stardist-3d-demo");
+const [exampleFile] = fluoExample.files;
 const expectedCount = reference.example["1x1"].count;
 
-async function loadExample(page) {
+async function loadExample(page, example = fluoExample) {
   await page.goto("./");
   await page.getByRole("combobox", { name: "Input", exact: true }).selectOption(example.id);
   await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready", { timeout: 90000 });
@@ -60,9 +63,9 @@ async function checkAgainstPython(page, label, key) {
   return labels;
 }
 
-test("the example's nuclei match Python StarDist's", async ({ page }) => {
+test("the 2D fluorescence example's nuclei match Python StarDist's", async ({ page }) => {
   test.setTimeout(240000);
-  await loadExample(page);
+  await loadExample(page, fluoExample);
   await page.locator("#runButton").click();
   await checkAgainstPython(page, "untiled", "1x1");
   await expect(page.locator("#outputSection")).toHaveAttribute("open", "");
@@ -74,12 +77,118 @@ test("the example's nuclei match Python StarDist's", async ({ page }) => {
 
 test("tiled prediction gives the same nuclei", async ({ page }) => {
   test.setTimeout(240000);
-  await loadExample(page);
+  await loadExample(page, fluoExample);
   await page.locator("#advancedSettings > summary").click();
   await page.locator("#tiles").selectOption("2");
   await page.locator("#runButton").click();
   await expect(page.locator("#technicalLog")).toContainText("2 × 2 tiles");
   await checkAgainstPython(page, "tiled", "2x2");
+});
+
+test("2D_versatile_he segments the RGB H&E example identically to Python StarDist", async ({ page }) => {
+  test.setTimeout(240000);
+  await loadExample(page, heExample);
+  await expect(page.locator("#model")).toHaveValue("2D_versatile_he");
+  await expect(page.locator("#fileInfo")).toContainText("RGB");
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toHaveText(`${reference.he.count} nuclei segmented`, { timeout: 120000 });
+  const labelsFile = await download(page, "Nucleus labels");
+  expect(labelsFile.name).toBe("skin-he-nuclei-2d_stardist_labels.tif");
+  const { width, height, labels } = await readLabelTiff(labelsFile.bytes);
+  expect([height, width]).toEqual(reference.he.shape.slice(0, 2));
+  expect(labelHash(labels)).toBe(reference.he.labels_sha256);
+  const table = await download(page, "Nucleus table");
+  const rows = table.bytes.toString("utf8").trim().split("\n");
+  expect(rows[0]).toBe("id,centroid_x,centroid_y,area_px,mean_intensity,probability");
+  expect(rows.length - 1).toBe(reference.he.nuclei.length);
+  rows.slice(1).forEach((row, index) => {
+    const [id, x, y, pixels, mean] = row.split(",").map(Number);
+    const [wantId, wantX, wantY, wantArea, wantMean] = reference.he.nuclei[index];
+    expect([id, pixels]).toEqual([wantId, wantArea]);
+    expect(Math.abs(x - wantX)).toBeLessThan(6e-4);
+    expect(Math.abs(y - wantY)).toBeLessThan(6e-4);
+    expect(Math.abs(mean - wantMean) / wantMean).toBeLessThan(1e-5);
+  });
+});
+
+test("2D_paper_dsb2018 segments the fluorescence example identically to Python StarDist", async ({ page }) => {
+  test.setTimeout(240000);
+  await loadExample(page, fluoExample);
+  await page.locator("#model").selectOption("2D_paper_dsb2018");
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toHaveText(`${reference.paper_dsb2018.count} nuclei segmented`, { timeout: 120000 });
+  const labelsFile = await download(page, "Nucleus labels");
+  const { labels } = await readLabelTiff(labelsFile.bytes);
+  expect(labelHash(labels)).toBe(reference.paper_dsb2018.labels_sha256);
+  const table = await download(page, "Nucleus table");
+  const rows = table.bytes.toString("utf8").trim().split("\n");
+  expect(rows[0]).toBe("id,centroid_x,centroid_y,area_px,mean_intensity,probability");
+  expect(rows.length - 1).toBe(reference.paper_dsb2018.count);
+  const totalArea = rows.slice(1).reduce((sum, row) => sum + Number(row.split(",")[3]), 0);
+  expect(totalArea).toBe(labels.filter(Boolean).length);
+});
+
+test("3D_demo segments the 3D example identically to Python StarDist3D", async ({ page }) => {
+  test.setTimeout(240000);
+  await loadExample(page, demo3dExample);
+  await expect(page.locator("#model")).toHaveValue("3D_demo");
+  await expect(page.locator("#fileInfo")).toContainText("57 × 61 × 31");
+  await page.locator("#runButton").click();
+  const want = reference.demo_3d.example["1x1x1"];
+  await expect(page.locator("#statusText")).toHaveText(`${want.count} nuclei segmented`, { timeout: 180000 });
+  const labelsFile = await download(page, "Nucleus labels");
+  expect(labelsFile.name).toBe("stardist-demo-nuclei-3d_stardist_labels.tif");
+  const { width, height, depth, labels } = await readLabelTiff(labelsFile.bytes);
+  expect([depth, height, width]).toEqual(reference.demo_3d.shape);
+  expect(labelHash(labels)).toBe(want.labels_sha256);
+  const table = await download(page, "Nucleus table");
+  expect(table.name).toBe("stardist-demo-nuclei-3d_stardist_nuclei.csv");
+  const rows = table.bytes.toString("utf8").trim().split("\n");
+  expect(rows[0]).toBe("id,centroid_x,centroid_y,centroid_z,volume_vox,mean_intensity,probability");
+  expect(rows.length - 1).toBe(want.nuclei.length);
+  rows.slice(1).forEach((row, index) => {
+    const [id, x, y, z, vol, mean] = row.split(",").map(Number);
+    const [wantId, wantX, wantY, wantZ, wantVol, wantMean] = want.nuclei[index];
+    expect([id, vol]).toEqual([wantId, wantVol]);
+    expect(Math.abs(x - wantX)).toBeLessThan(5e-4);
+    expect(Math.abs(y - wantY)).toBeLessThan(5e-4);
+    expect(Math.abs(z - wantZ)).toBeLessThan(5e-4);
+    expect(Math.abs(mean - wantMean) / wantMean).toBeLessThan(1e-6);
+  });
+});
+
+test("3D_demo tiled prediction across real seams matches Python StarDist3D", async ({ page }) => {
+  test.setTimeout(240000);
+  const [file3d] = demo3dExample.files;
+  const response = await fetch(file3d.url);
+  const { width, height, depth, labels: src } = await readLabelTiff(Buffer.from(await response.arrayBuffer()));
+  const mosaicW = width * 2;
+  const mosaicH = height * 2;
+  const mosaic = new Uint16Array(depth * mosaicH * mosaicW);
+  for (let z = 0; z < depth; z++) {
+    for (let y = 0; y < height; y++) {
+      const row = src.subarray((z * height + y) * width, (z * height + y + 1) * width);
+      mosaic.set(row, (z * mosaicH + y) * mosaicW);
+      mosaic.set(row, (z * mosaicH + y) * mosaicW + width);
+      mosaic.set(row, (z * mosaicH + y + height) * mosaicW);
+      mosaic.set(row, (z * mosaicH + y + height) * mosaicW + width);
+    }
+  }
+  const buffer = Buffer.from(writeTiffStack({ width: mosaicW, height: mosaicH, data: mosaic }));
+  await page.goto("./");
+  await page.locator("#imageInput").setInputFiles({ name: "mosaic-3d.tif", mimeType: "image/tiff", buffer });
+  await expect(page.locator("#model")).toHaveValue("3D_demo");
+  await expect(page.locator("#fileInfo")).toContainText(`${mosaicW} × ${mosaicH} × ${depth}`);
+  await page.locator("#advancedSettings > summary").click();
+  await page.locator("#tiles").selectOption("2");
+  await page.locator("#runButton").click();
+  const want = reference.demo_3d.tiled_seam;
+  await expect(page.locator("#technicalLog")).toContainText("2 × 2 × 2 tiles", { timeout: 180000 });
+  await expect(page.locator("#statusText")).toHaveText(`${want.count} nuclei segmented`, { timeout: 180000 });
+  const labelsFile = await download(page, "Nucleus labels");
+  const result = await readLabelTiff(labelsFile.bytes);
+  expect([result.depth, result.height, result.width]).toEqual(want.shape);
+  expect(labelHash(result.labels)).toBe(want.labels_sha256);
 });
 
 test("a crop that is not a multiple of 16 is padded as StarDist pads it", async ({ page }) => {
@@ -114,10 +223,10 @@ test("cancelling a run stops its worker, leaves no output and permits a retry", 
     if (attempts === 1) await held;
     return route.fulfill({ response: await route.fetch() }).catch(() => {});
   });
-  await loadExample(page);
+  await loadExample(page, fluoExample);
   await page.locator("#runButton").click();
   await expect(page.locator("#cancelButton")).toBeVisible();
-  await expect(page.locator("#statusText")).toContainText("Downloading the StarDist model");
+  await expect(page.locator("#statusText")).toContainText("Downloading StarDist");
   await page.locator("#cancelButton").click();
   release();
   await expect(page.locator("#statusText")).toHaveText("Cancelled");

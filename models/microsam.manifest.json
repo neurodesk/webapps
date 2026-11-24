@@ -5,7 +5,7 @@
   "revision": "65a020cd019ef92fa32a9aa2cef08e67e66686ed",
   "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/65a020cd019ef92fa32a9aa2cef08e67e66686ed/microsam/models/",
   "license": "CC-BY-4.0",
-  "license_note": "micro-sam's vit_t_lm (BioImage.IO faithful-chicken 1.1) is CC BY 4.0, by Anwai Archit, Constantin Pape and the micro-sam contributors (Archit et al., Nature Methods 2025). It is fine-tuned from MobileSAM (Apache-2.0), distilled from Segment Anything (Apache-2.0). Modified: converted to ONNX by apps/microsam/validation/export_onnx.py, with TinyViT's cached attention biases at the zero cache micro-sam's PyTorch path runs with, so the checkpoint's trained attention biases are not in the encoder; every other weight is unchanged. The Apache-2.0 text is LICENSE-APACHE-2.0 beside the model files.",
+  "license_note": "micro-sam's vit_t_lm (BioImage.IO faithful-chicken 1.1) and vit_t_em_organelles (BioImage.IO greedy-whale 1.3) are CC BY 4.0, by Anwai Archit, Constantin Pape and the micro-sam contributors (Archit et al., Nature Methods 2025). Both are fine-tuned from MobileSAM (Apache-2.0), distilled from Segment Anything (Apache-2.0). Modified: converted to ONNX by apps/microsam/validation/export_onnx.py, with TinyViT's cached attention biases at the zero cache micro-sam's PyTorch path runs with, so the checkpoint's trained attention biases are not in the encoder; every other weight is unchanged. The Apache-2.0 text is LICENSE-APACHE-2.0 beside the model files.",
   "model": {
     "name": "vit_t_lm",
     "source_url": "https://uk1s3.embassy.ebi.ac.uk/public-datasets/bioimage.io/faithful-chicken/1.1/files/vit_t.pt",
@@ -16,8 +16,28 @@
     "image_size": 1024,
     "embedding_shape": [1, 256, 64, 64]
   },
+  "models": {
+    "vit_t_lm": {
+      "label": "Light microscopy (ViT-T)",
+      "source_url": "https://uk1s3.embassy.ebi.ac.uk/public-datasets/bioimage.io/faithful-chicken/1.1/files/vit_t.pt",
+      "source_sha256": "32b92ab64959088878a1cc3e52b9b64aaa0ba4b24c98e9959746d7390bec7b7a",
+      "source_xxh128": "72ec5074774761a6e5c05a08942f981e",
+      "cached_attention_bias_absmax": 0,
+      "image_size": 1024,
+      "embedding_shape": [1, 256, 64, 64]
+    },
+    "vit_t_em_organelles": {
+      "label": "Electron microscopy — organelles (ViT-T)",
+      "source_url": "https://hypha.aicell.io/bioimage-io/artifacts/greedy-whale/files/vit_t.pt",
+      "source_sha256": "d8422c7a2d84ac338476ae59f4c5b56ee44860f7b9fae9269a1270131a496c10",
+      "cached_attention_bias_absmax": 0,
+      "image_size": 1024,
+      "embedding_shape": [1, 256, 64, 64]
+    }
+  },
   "assets": [
     {
+      "model": "vit_t_lm",
       "filename": "microsam-vit-t-lm-encoder.onnx",
       "role": "encoder",
       "bytes": 28045411,
@@ -27,6 +47,7 @@
       "torch_vs_onnx_max_abs_diff": 2.62e-6
     },
     {
+      "model": "vit_t_lm",
       "filename": "microsam-vit-t-lm-decoder.onnx",
       "role": "decoder",
       "bytes": 16496933,
@@ -34,6 +55,28 @@
       "inputs": ["image_embeddings", "point_coords", "point_labels", "mask_input", "has_mask_input", "orig_im_size"],
       "outputs": ["masks", "iou_predictions", "low_res_masks"],
       "torch_vs_onnx_max_abs_diff": { "masks": 6.2e-4, "iou_predictions": 1.8e-7 }
+    },
+    {
+      "model": "vit_t_em_organelles",
+      "filename": "microsam-vit-t-em-organelles-encoder.onnx",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/9fbdabcd3f177e3a050c6ffec54663abc54d8085/microsam/models/microsam-vit-t-em-organelles-encoder.onnx",
+      "role": "encoder",
+      "bytes": 28045411,
+      "sha256": "0a5d7dd771f232465dfb869e6e029beb0aa11001799783bffee93c8a769a7cee",
+      "input": "image",
+      "output": "image_embeddings",
+      "torch_vs_onnx_max_abs_diff": 2.38e-6
+    },
+    {
+      "model": "vit_t_em_organelles",
+      "filename": "microsam-vit-t-em-organelles-decoder.onnx",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/9fbdabcd3f177e3a050c6ffec54663abc54d8085/microsam/models/microsam-vit-t-em-organelles-decoder.onnx",
+      "role": "decoder",
+      "bytes": 16496933,
+      "sha256": "dda39a04c81337d264c175a883d946f9f33d428303e34d170899c1064c2818dc",
+      "inputs": ["image_embeddings", "point_coords", "point_labels", "mask_input", "has_mask_input", "orig_im_size"],
+      "outputs": ["masks", "iou_predictions", "low_res_masks"],
+      "torch_vs_onnx_max_abs_diff": { "masks": 4.98e-4, "iou_predictions": 3.58e-7 }
     }
   ]
 }

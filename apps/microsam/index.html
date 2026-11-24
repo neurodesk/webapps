@@ -12,9 +12,9 @@
         <div class="nd-section-content">
           <div id="exampleControl"></div>
           <label class="nd-file" id="dropZone">
-            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose a TIFF, OME-TIFF or PNG image" />
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose a 2D image or 3D Z-stack (TIFF, OME-TIFF or PNG)" />
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            <span>Drop a 2D TIFF, OME-TIFF or PNG image</span>
+            <span>Drop a 2D image or 3D Z-stack (TIFF, OME-TIFF or PNG)</span>
           </label>
           <p id="fileInfo" class="nd-file-info" hidden></p>
           <div class="nd-field" id="channelField" hidden>
@@ -23,12 +23,27 @@
             </label>
             <select id="channel"></select>
           </div>
+          <div class="nd-field" id="sliceField" hidden>
+            <label for="sliceSlider">Slice <span id="sliceLabel">1 / 1</span>
+              <span class="nd-info-icon" tabindex="0" aria-label="About Z-slices">i<span class="nd-info-tooltip">Scroll the wheel or press [ and ] to move through Z-slices. Prompt an object on one slice, then propagate in 3D.</span></span>
+            </label>
+            <input id="sliceSlider" type="range" min="0" max="0" step="1" value="0" />
+          </div>
         </div>
       </details>
 
       <details class="nd-sidebar-section" id="taskSection" open>
         <summary class="nd-section-title">Segment</summary>
         <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="model">Model
+              <span class="nd-info-icon" tabindex="0" aria-label="About the models">i<span class="nd-info-tooltip">Choose the light-microscopy generalist (vit_t_lm) for fluorescence and brightfield images, or the electron-microscopy organelle generalist (vit_t_em_organelles) for EM data.</span></span>
+            </label>
+            <select id="model">
+              <option value="vit_t_lm">Light microscopy (ViT-T)</option>
+              <option value="vit_t_em_organelles">Electron microscopy — organelles (ViT-T)</option>
+            </select>
+          </div>
           <button id="embedButton" class="nd-btn nd-btn-primary" type="button" disabled>Compute embeddings</button>
           <div class="nd-field">
             <span class="nd-viewer-label" id="toolLabel">Click adds
@@ -43,6 +58,7 @@
             <button id="acceptButton" class="nd-btn nd-btn-secondary" type="button" disabled>Accept object</button>
             <button id="clearButton" class="nd-btn nd-btn-secondary" type="button" disabled>Clear prompts</button>
           </div>
+          <button id="propagateButton" class="nd-btn nd-btn-secondary" type="button" hidden disabled>Propagate in 3D</button>
           <button id="undoButton" class="nd-btn nd-btn-secondary" type="button" disabled>Undo</button>
           <p id="objectInfo" class="nd-file-info" hidden></p>
           <details class="nd-sidebar-section" id="advancedSettings">
@@ -57,6 +73,18 @@
                   <option value="webgpu">WebGPU</option>
                   <option value="wasm">WebAssembly (CPU)</option>
                 </select>
+              </div>
+              <div class="nd-field" id="iouField" hidden>
+                <label for="iouThreshold">3D stop IoU
+                  <span class="nd-info-icon" tabindex="0" aria-label="About 3D stop IoU">i<span class="nd-info-tooltip">3D propagation stops when overlap (IoU) between adjacent slices falls below this value.</span></span>
+                </label>
+                <input id="iouThreshold" type="number" min="0" max="1" step="0.05" value="0.5" />
+              </div>
+              <div class="nd-field" id="boxExtField" hidden>
+                <label for="boxExtension">3D box extension
+                  <span class="nd-info-icon" tabindex="0" aria-label="About 3D box extension">i<span class="nd-info-tooltip">Relative margin added to the projected bounding box on each adjacent slice.</span></span>
+                </label>
+                <input id="boxExtension" type="number" min="0" max="0.5" step="0.05" value="0.1" />
               </div>
             </div>
           </details>
@@ -91,22 +119,26 @@
     </footer>
 
     <template id="aboutContent">
-      <p>Interactive 2D segmentation of light-microscopy images with Segment Anything for
-        Microscopy (micro-sam). The app computes the image embedding once with micro-sam's
-        light-microscopy generalist ViT-T model (<code>vit_t_lm</code>); every click or box then runs
-        only the small prompt decoder, so masks update as you prompt. Accept an object to add it to
-        the label image; the label TIFF and a per-object CSV table are the outputs.</p>
+      <p>Interactive 2D and 3D Z-stack segmentation of light and electron microscopy images with
+        Segment Anything for Microscopy (micro-sam). Choose the light-microscopy generalist
+        (<code>vit_t_lm</code>) or the electron-microscopy organelle generalist
+        (<code>vit_t_em_organelles</code>). The app computes the slice embedding once and runs only
+        the small prompt decoder for every click or box, so masks update as you prompt. On 3D
+        Z-stacks, <strong>Propagate in 3D</strong> projects the mask's bounding box across adjacent
+        slices following micro-sam's <code>segment_mask_in_volume</code>. Accepted objects form a
+        2D or 3D label TIFF and a per-object CSV table.</p>
       <p>The preprocessing, mask choice and prompt handling follow micro-sam's own
-        <code>precompute_image_embeddings</code> and <code>segment_from_points</code>,
-        <code>segment_from_box</code> and <code>segment_from_box_and_points</code>. On the example,
-        24 fixed prompts give micro-sam's PyTorch masks pixel for pixel, in Python's ONNX Runtime and in
-        this browser (the browser test requires identical masks). A single positive click keeps the best of
-        SAM's three masks by predicted IoU; any other prompt keeps the single-mask output. A new object
-        never takes pixels that an accepted object already has.</p>
-      <p>Version 1 segments one 2D image of up to 4096 × 4096 pixels without tiling. SAM sees the image at
-        1024 pixels along its longest side, so very small objects in large images are hard to
-        prompt; crop large images first. micro-sam's automatic instance segmentation, tracking and
-        3D segmentation are not included.</p>
+        <code>precompute_image_embeddings</code>, <code>segment_from_points</code>,
+        <code>segment_from_box</code>, <code>segment_from_box_and_points</code> and
+        <code>segment_mask_in_volume</code>. On the BBBC038 example, 24 fixed prompts give
+        micro-sam's PyTorch masks pixel for pixel in Python's ONNX Runtime and in this browser.
+        A single positive click keeps the best of SAM's three masks by predicted IoU; any other
+        prompt keeps the single-mask output. A new object never takes pixels that an accepted
+        object already has.</p>
+      <p>Each plane can be up to 4096 × 4096 pixels without tiling. SAM sees each slice at 1024
+        pixels along its longest side, so very small objects in large fields of view are easier to
+        prompt after cropping. micro-sam's automatic instance segmentation and time-series tracking
+        are not included.</p>
     </template>
     <template id="privacyContent"><p>Images are processed locally in this browser and are never uploaded. The model files are downloaded from Hugging Face and cached by the browser.</p></template>
 

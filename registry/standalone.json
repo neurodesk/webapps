@@ -2574,6 +2574,43 @@
       "downloads": [],
       "containers": []
     },
+    "denoise": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "totalsegmentator": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": [
+        {
+          "id": "totalsegmentator",
+          "label": "totalsegmentator 2.18.0 (20261012)",
+          "url": "https://hub.docker.com/r/vnmd/totalsegmentator_2.18.0",
+          "dockerImage": "vnmd/totalsegmentator_2.18.0:20261012",
+          "apptainerUrl": "https://neurocontainers.neurodesk.workers.dev/totalsegmentator_2.18.0_20261012.simg",
+          "apptainerName": "totalsegmentator_2.18.0_20261012"
+        }
+      ]
+    },
+    "cellpose": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "medsam2": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
     "brainchomp": {
       "desktop": true,
       "profile": "interactive",

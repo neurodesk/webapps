@@ -4,23 +4,27 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   boxFromCorners,
+  boxFromMask,
   chooseToken,
   clickPixel,
   commitObject,
+  commitObject3D,
   decoderInputs,
   maskFromLogits,
   maskFromRuns,
   maskIou,
   maskRuns,
   measureObjects,
+  measureObjects3D,
   objectsCsv,
+  objectsCsv3D,
   parsePrompts,
   roundHalfEven,
   uncommitObject,
 } from "../src/segmentation.js";
 import { embeddingSummary } from "../src/summary.js";
 import { labelColour, overlayRgba } from "../src/display.js";
-import { MODEL } from "../src/config.js";
+import { MODEL, MODELS, modelById } from "../src/config.js";
 
 const reference = JSON.parse(readFileSync(new URL("../validation/reference.json", import.meta.url), "utf8"));
 const manifest = JSON.parse(readFileSync(new URL("../../../models/microsam.manifest.json", import.meta.url), "utf8"));
@@ -154,6 +158,45 @@ test("label colours are distinct and the overlay leaves background clear", () =>
 
 test("the model URLs come from the pinned manifest", () => {
   assert.match(MODEL.encoder.url, /^https:\/\/huggingface\.co\/datasets\/neurodeskorg\/webapps\/resolve\/[0-9a-f]{40}\/microsam\/models\/microsam-vit-t-lm-encoder\.onnx$/);
-  assert.equal(MODEL.decoder.sha256, manifest.assets.find((asset) => asset.role === "decoder").sha256);
+  assert.equal(MODEL.decoder.sha256, manifest.assets.find((asset) => asset.model === "vit_t_lm" && asset.role === "decoder").sha256);
   assert.equal(manifest.license, "CC-BY-4.0");
+  assert.deepEqual(MODELS.map((item) => item.id), ["vit_t_lm", "vit_t_em_organelles"]);
+  const em = modelById("vit_t_em_organelles");
+  assert.match(em.encoder.url, /^https:\/\/huggingface\.co\/datasets\/neurodeskorg\/webapps\/resolve\/[0-9a-f]{40}\/microsam\/models\/microsam-vit-t-em-organelles-encoder\.onnx$/);
+  assert.throws(() => modelById("unknown"), /Unknown micro-sam model/);
+});
+
+test("boxFromMask computes tight and extended boxes for 3D propagation", () => {
+  const mask = new Uint8Array(100); // 10 x 10
+  for (let y = 2; y <= 5; y++) for (let x = 3; x <= 6; x++) mask[y * 10 + x] = 1;
+  assert.deepEqual(boxFromMask(mask, 10, 10, 0), [3, 2, 7, 6]);
+  // width=4, height=4 -> 25% extension adds 1 px on each side
+  assert.deepEqual(boxFromMask(mask, 10, 10, 0.25), [2, 1, 8, 7]);
+  assert.equal(boxFromMask(new Uint8Array(100), 10, 10, 0.1), null);
+});
+
+test("3D commit, measurement and CSV work across Z-slices", () => {
+  const width = 4;
+  const height = 3;
+  const depth = 2;
+  const labels = new Uint32Array(depth * width * height);
+  const masks = new Map([
+    [0, Uint8Array.of(1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0)],
+    [1, Uint8Array.of(1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0)],
+  ]);
+  const claimed = commitObject3D(labels, masks, width * height, 1);
+  assert.equal(claimed.length, 6);
+  const planesAt = (z) => [{ label: "Intensity", kind: "sample 1", data: Uint16Array.from({ length: 12 }, () => (z + 1) * 100) }];
+  const objects = [{ id: 1, score: 0.9, prompt: { points: [[0, 0, 1]], box: null } }];
+  const rows = measureObjects3D(labels, width, height, depth, planesAt, objects);
+  assert.equal(rows[0].volume, 6);
+  assert.equal(rows[0].slices, 2);
+  assert.deepEqual(rows[0].box, [0, 0, 0, 2, 2, 2]);
+  assert.match(objectsCsv3D(rows, planesAt(0)), /^id,volume_vx,slices,centroid_x,centroid_y,centroid_z,bbox_x0,bbox_y0,bbox_z0,bbox_x1,bbox_y1,bbox_z1,mean_intensity,predicted_iou,prompt\n1,6,2,/);
+  uncommitObject(labels, claimed);
+  assert.equal(labels.some(Boolean), false);
+  assert.deepEqual(parsePrompts('[{"points":[[1,2,1]],"slice":1,"propagate":true}]', 10, 10, 3), [
+    { points: [[1, 2, 1]], box: null, slice: 1, propagate: true },
+  ]);
+  assert.throws(() => parsePrompts('[{"points":[[1,2,1]],"slice":3}]', 10, 10, 3), /outside 0\.\.2/);
 });
