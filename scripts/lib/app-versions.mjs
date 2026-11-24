@@ -24,6 +24,7 @@ export const LINKED_PACKAGES = Object.freeze({
   '@neurodesk/carotid-flow': 'carotid-flow',
   '@neurodesk/deface': 'deface',
   '@neurodesk/degibbs': 'degibbs',
+  '@neurodesk/denoise': 'denoise',
   '@neurodesk/dicompare': 'dicompare',
   '@neurodesk/nii2tvx': 'disconnectome',
   '@neurodesk/mri2vid': 'mri2vid',

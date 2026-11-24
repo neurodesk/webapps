@@ -5,6 +5,7 @@ import { denoiseFgr } from "./fgr.js";
 import { assertFiniteVoxels, residualDiagnostics } from "./metrics.js";
 import { denoiseVstNlm } from "./vst-nlm.js";
 import { denoiseZsN2n } from "./zsn2n.js";
+import { denoiseZsN2nAuto } from "./zsn2n-webgpu.js";
 
 export const METHODS = Object.freeze({
   "fgr-gbdt": Object.freeze({
@@ -191,12 +192,16 @@ export function denoiseVolume(data, dims, rawSettings = {}, onProgress) {
       onProgress: emit,
     });
   } else if (settings.method === "zs-n2n") {
-    outcome = denoiseZsN2n(data, dims, {
+    const cpuOutcome = denoiseZsN2n(data, dims, {
       iterations: settings.iterations,
       channels: settings.channels,
       seed: settings.seed,
       onProgress: emit,
     });
+    outcome = {
+      denoised: cpuOutcome.denoised,
+      details: { backend: "cpu", ...cpuOutcome.details },
+    };
   } else {
     outcome = denoiseVstNlm(data, dims, {
       noiseModel: settings.noiseModel,
@@ -206,6 +211,10 @@ export function denoiseVolume(data, dims, rawSettings = {}, onProgress) {
     });
   }
 
+  return finalizeVolume(data, dims, settings, outcome, onProgress);
+}
+
+function finalizeVolume(data, dims, settings, outcome, onProgress) {
   assertFiniteVoxels(outcome.denoised, "Denoised output");
   onProgress?.(0.97, "Computing residual diagnostics…");
   const { residual, ...diagnostics } = residualDiagnostics(data, outcome.denoised, dims);
@@ -219,4 +228,36 @@ export function denoiseVolume(data, dims, rawSettings = {}, onProgress) {
     details: outcome.details,
     settings,
   };
+}
+
+/**
+ * Asynchronous counterpart to `denoiseVolume` that accelerates `zs-n2n` on hardware WebGPU
+ * when available and falls back seamlessly to CPU. All other methods run identically on CPU.
+ *
+ * @param {Float32Array} data
+ * @param {[number, number, number]} dims
+ * @param {Partial<typeof DEFAULT_SETTINGS>} [rawSettings]
+ * @param {(fraction: number, stage: string) => void} [onProgress]
+ * @param {{ preferWebGpu?: boolean, allowSoftwareAdapter?: boolean }} [runtime]
+ */
+export async function denoiseVolumeAsync(data, dims, rawSettings = {}, onProgress, runtime = {}) {
+  const settings = runSettings(rawSettings);
+  if (settings.method !== "zs-n2n") {
+    return denoiseVolume(data, dims, settings, onProgress);
+  }
+  const [nz, ny, nx] = dims;
+  if (!(nz >= 1 && ny >= 1 && nx >= 1) || data.length !== nz * ny * nx) {
+    throw new Error(`Volume dimensions [${dims.join(", ")}] do not match data length ${data.length}.`);
+  }
+  assertFiniteVoxels(data, "Input image");
+  const emit = (fraction, stage) => onProgress?.(Math.min(0.96, Math.max(0, fraction * 0.96)), stage);
+  const outcome = await denoiseZsN2nAuto(data, dims, {
+    iterations: settings.iterations,
+    channels: settings.channels,
+    seed: settings.seed,
+    preferWebGpu: runtime.preferWebGpu ?? true,
+    allowSoftwareAdapter: runtime.allowSoftwareAdapter ?? false,
+    onProgress: emit,
+  });
+  return finalizeVolume(data, dims, settings, outcome, onProgress);
 }

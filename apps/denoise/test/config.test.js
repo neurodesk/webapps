@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { APP, assertValidDims, outputNames, provenance, resolvedSpacingUm, stackNifti, stackTiff, stem } from "../src/config.js";
 import { checkSingleChannelStack, formatOf, readVolume } from "../src/input.js";
-import { DEFAULT_SETTINGS } from "../src/core/denoise.js";
+import { DEFAULT_SETTINGS } from "@neurodesk/denoise/core";
 
 test("APP identity and output names strip TIFF and NIfTI extensions cleanly", () => {
   assert.equal(APP.id, "denoise");

@@ -1,4 +1,5 @@
 import { withBrowserBuild } from "../../test-utils/playwright-build.mjs";
+import { gpuBrowser } from "../../test-utils/hardware-gpu.mjs";
 import { defineConfig } from "@playwright/test";
 
 // Serve the BUILT output so the shared preview headers and worker/wasm asset
@@ -10,5 +11,8 @@ export default defineConfig({
     url: "http://localhost:4173",
     reuseExistingServer: !process.env.CI,
   },
-  use: { baseURL: "http://localhost:4173" },
+  use: {
+    baseURL: "http://localhost:4173",
+    ...gpuBrowser,
+  },
 });

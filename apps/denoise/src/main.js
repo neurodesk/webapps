@@ -17,7 +17,7 @@ import {
 import { createFloat32Nifti, downloadFile } from "@neurodesk/webapp-components/file-io";
 import { gzipFile } from "@neurodesk/webapp-components/file-io/bids-derivatives";
 import { registerAppAutomation } from "@neurodesk/webapp-components/automation";
-import { DEFAULT_SETTINGS, METHODS, runSettings } from "./core/denoise.js";
+import { DEFAULT_SETTINGS, METHODS, runSettings } from "@neurodesk/denoise/core";
 import workerUrl from "./worker.js?worker&url";
 import { APP, outputNames, provenance, resolvedSpacingUm, stackNifti, stackTiff } from "./config.js";
 import { readVolume } from "./input.js";
@@ -468,8 +468,11 @@ async function denoise(signal, settings = formSettings()) {
       `Y ${diagnostics.residualAutocorrY.toFixed(3)}`,
       ...(diagnostics.residualAutocorrZ === null ? [] : [`${input.axisKind === "t" ? "T" : "Z"} ${diagnostics.residualAutocorrZ.toFixed(3)}`]),
     ];
+    const backendNote = details?.backend
+      ? ` on ${details.backend === "webgpu" ? `WebGPU (${details.adapter ?? "GPU"})` : "CPU"}`
+      : "";
     log.log(
-      `${methodInfo.label} finished in ${seconds.toFixed(1)} s · estimated noise σ: ${diagnostics.inputNoiseSigma.toPrecision(3)} → ${diagnostics.denoisedNoiseSigma.toPrecision(3)} (noise-floor drop ${diagnostics.noiseFloorDropDb.toFixed(1)} dB) · residual lag-1 autocorr (${acParts.join(", ")})`,
+      `${methodInfo.label}${backendNote} finished in ${seconds.toFixed(1)} s · estimated noise σ: ${diagnostics.inputNoiseSigma.toPrecision(3)} → ${diagnostics.denoisedNoiseSigma.toPrecision(3)} (noise-floor drop ${diagnostics.noiseFloorDropDb.toFixed(1)} dB) · residual lag-1 autocorr (${acParts.join(", ")})`,
       "info",
       "analysis",
     );

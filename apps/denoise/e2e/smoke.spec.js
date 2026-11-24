@@ -5,11 +5,11 @@
 import { test, expect } from "@playwright/test";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import http from "node:http";
 import { gunzipSync } from "node:zlib";
 import { readTiffStack as readTiff } from "@neurodesk/webapp-components/file-io/tiff";
 import { stackNifti, stackTiff } from "../src/config.js";
-import { denoiseVolume } from "../src/core/denoise.js";
-import { createNormalRng, createRng } from "../src/core/rng.js";
+import { createNormalRng, createRng, denoiseVolume } from "@neurodesk/denoise/core";
 import { readVolume } from "../src/input.js";
 
 const examples = JSON.parse(readFileSync(new URL("../examples.json", import.meta.url), "utf8"));
@@ -337,5 +337,97 @@ test("the WebMCP automation operation runs ZS-N2N with parameters and returns re
   const pending = page.waitForEvent("download");
   await page.evaluate(() => globalThis.neurodeskAutomation.dispatch("download", { artifactId: "image" }));
   const stack = await readTiffStack(readFileSync(await (await pending).path()));
-  expect(sha256(stack.data)).toBe(sha256(want.denoised));
+  if (report.report.provenance.details.backend === "cpu") {
+    expect(sha256(stack.data)).toBe(sha256(want.denoised));
+  } else {
+    expect(report.report.provenance.details.backend).toBe("webgpu");
+    let maxDiff = 0;
+    for (let i = 0; i < stack.data.length; i += 1) {
+      maxDiff = Math.max(maxDiff, Math.abs(stack.data[i] - want.denoised[i]));
+    }
+    expect(maxDiff).toBeLessThan(0.5);
+  }
+});
+
+test("ZS-N2N WebGPU compute shaders compile, execute, and match CPU numerically in Chromium", async ({ page }) => {
+  test.setTimeout(120000);
+  const coreDir = new URL("../../../packages/denoise/src/core/", import.meta.url);
+  const server = http.createServer((req, res) => {
+    const pathname = new URL(req.url, "http://localhost").pathname;
+    if (pathname === "/") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end("<!doctype html><title>WebGPU ZS-N2N Parity</title>");
+      return;
+    }
+    const match = /^\/([a-z0-9-]+\.js)$/.exec(pathname);
+    if (!match) {
+      res.writeHead(404);
+      res.end();
+      return;
+    }
+    res.writeHead(200, { "Content-Type": "application/javascript; charset=utf-8" });
+    res.end(readFileSync(new URL(match[1], coreDir), "utf8"));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address();
+
+  try {
+    await page.goto(`http://localhost:${port}/`);
+    const result = await page.evaluate(async () => {
+      const { denoiseZsN2n } = await import("/zsn2n.js");
+      const { denoiseZsN2nAuto, denoiseZsN2nWebGpu, probeWebGpuAdapter } = await import("/zsn2n-webgpu.js");
+      const { createNormalRng, createRng } = await import("/rng.js");
+
+      const h = 32;
+      const w = 32;
+      const randn = createNormalRng(createRng(123));
+      const noisy = new Float32Array(h * w);
+      for (let y = 0; y < h; y += 1) {
+        for (let x = 0; x < w; x += 1) {
+          noisy[y * w + x] = 60 + 40 * Math.sin(x / 4) * Math.cos(y / 4) + randn() * 8;
+        }
+      }
+
+      const opts = { iterations: 40, channels: 16, patchSize: 24, seed: 42 };
+      const cpu = denoiseZsN2n(noisy, [1, h, w], opts);
+      const defaultProbe = await probeWebGpuAdapter();
+      const auto = await denoiseZsN2nAuto(noisy, [1, h, w], opts);
+      const gpu = await denoiseZsN2nWebGpu(noisy, [1, h, w], { ...opts, allowSoftwareAdapter: true });
+
+      let maxDiff = 0;
+      let sumSq = 0;
+      for (let i = 0; i < cpu.denoised.length; i += 1) {
+        const d = Math.abs(gpu.denoised[i] - cpu.denoised[i]);
+        if (d > maxDiff) maxDiff = d;
+        sumSq += d * d;
+      }
+      const rmse = Math.sqrt(sumSq / cpu.denoised.length);
+      return {
+        defaultProbeAvailable: defaultProbe.available,
+        defaultProbeSoftware: Boolean(defaultProbe.software),
+        autoBackend: auto.details.backend,
+        gpuBackend: gpu.details.backend,
+        gpuInitialLoss: gpu.details.initialLoss,
+        gpuFinalLoss: gpu.details.finalLoss,
+        cpuInitialLoss: cpu.details.initialLoss,
+        cpuFinalLoss: cpu.details.finalLoss,
+        maxDiff,
+        rmse,
+      };
+    });
+
+    expect(result.gpuBackend).toBe("webgpu");
+    expect(result.gpuFinalLoss).toBeLessThan(result.gpuInitialLoss);
+    expect(Math.abs(result.gpuInitialLoss - result.cpuInitialLoss)).toBeLessThan(1e-3);
+    expect(Math.abs(result.gpuFinalLoss - result.cpuFinalLoss)).toBeLessThan(5e-3);
+    expect(result.rmse).toBeLessThan(0.01);
+    expect(result.maxDiff).toBeLessThan(0.05);
+
+    if (result.defaultProbeSoftware && !result.defaultProbeAvailable) {
+      // On software adapters (SwiftShader), default auto mode must fall back cleanly to CPU.
+      expect(result.autoBackend).toBe("cpu");
+    }
+  } finally {
+    server.close();
+  }
 });

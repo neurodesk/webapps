@@ -71,6 +71,7 @@ jobs:
         compute-server-native
         deface-native
         degibbs-native
+        denoise-native
         dwi-native
         dwi2trx-native
         dwidenoise-native
@@ -106,6 +107,7 @@ jobs:
         compute-server-native
         deface-native
         degibbs-native
+        denoise-native
         dwi-native
         dwi2trx-native
         dwidenoise-native
@@ -244,6 +246,17 @@ jobs:
     needs: gate
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"degibbs-native"')) }}
     uses: ./.github/workflows/degibbs-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  denoise-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"denoise-native"')) }}
+    uses: ./.github/workflows/denoise-native.yml
     permissions:
       actions: read
       contents: write

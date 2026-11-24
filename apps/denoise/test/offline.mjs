@@ -3,8 +3,7 @@ import { createHash } from "node:crypto";
 import { gunzipSync } from "node:zlib";
 import { expect } from "@playwright/test";
 import { stackTiff } from "../src/config.js";
-import { denoiseVolume } from "../src/core/denoise.js";
-import { createNormalRng, createRng } from "../src/core/rng.js";
+import { createNormalRng, createRng, denoiseVolume } from "@neurodesk/denoise/core";
 
 function sha256(typedArray) {
   return createHash("sha256")

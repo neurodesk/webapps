@@ -542,6 +542,9 @@ importers:
 
   apps/denoise:
     dependencies:
+      '@neurodesk/denoise':
+        specifier: workspace:*
+        version: link:../../packages/denoise
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
@@ -2097,6 +2100,12 @@ importers:
         version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.1)
 
   packages/degibbs:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+
+  packages/denoise:
     dependencies:
       '@neurodesk/webapp-components':
         specifier: workspace:*
