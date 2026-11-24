@@ -30,4 +30,4 @@ Models and reference outputs are reproduced with:
 
 ## License
 
-Application code and ported Cellpose algorithms are BSD-3-Clause (see `LICENSE` and `NOTICE`). Note that while Cellpose code and weights are BSD-3-Clause, parts of the `cyto3` training dataset carry non-commercial (CC-BY-NC) restrictions.
+Application code and ported Cellpose algorithms are BSD-3-Clause (see `LICENSE` and `NOTICE`). Note that while Cellpose code and weights are BSD-3-Clause, parts of the `cyto3` and `nuclei` training datasets carry non-commercial (CC-BY-NC) restrictions.

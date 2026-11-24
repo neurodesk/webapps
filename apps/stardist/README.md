@@ -26,11 +26,11 @@ as filled labels or outlines over the image in NiiVue (2D axial, full-colour RGB
 | Network | Keras U-Net (2D) or ResNet (3D) | the same weights as ONNX (opset 17), ONNX Runtime Web 1.29 on WebAssembly |
 | Candidates | `_predict_sparse_generator`, `b = 2` | `predictCandidates` / `predictCandidates3D` |
 | 2D NMS | `c_non_max_suppression_inds` (Clipper 6.4.2 intersections) | `suppress` with `clipper-lib` 6.4.2, float32 arithmetic |
-| 3D NMS | `_COMMON_non_maximum_suppression_sparse` (`use_bbox`, `use_kdtree`) | `suppress3D` in `src/stardist3d.js` (isotropic sphere/bbox bounds + spherical-binned exact voxel overlap) |
+| 3D NMS | `_COMMON_non_maximum_suppression_sparse` (`use_bbox`, `use_kdtree`) | `suppress3D` in `src/stardist3d.js` (isotropic sphere/bbox bounds, continuous kernel/convex-hull tests, and exact voxel overlap) |
 | Labels | `polygons_to_label` (2D) / `polyhedron_to_label` (3D) | `renderLabels` (2D) / `renderLabels3D` (3D) |
 | Table | `skimage.measure.regionprops` | `measureNuclei` (2D) / `measureNuclei3D` (3D) |
 
-Automatic tiling uses one tile per 1024 pixels per axis in 2D and per 64 × 256 × 256 voxels in 3D.
+Automatic tiling uses one tile per 1024 pixels per axis in 2D and splits 3D stacks so each overlapped tile's output stays within 64 MiB.
 The worker (`src/worker.js`) runs one segmentation and is terminated to cancel.
 
 ## Validation

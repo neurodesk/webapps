@@ -150,12 +150,16 @@ function applyModelDefaults(model) {
 function voxelSpacing(image, model, is3d) {
   const sp = image.spacing;
   // NIfTI-1 stores millimetres; convert calibrated micrometre spacings (`1 µm = 0.001 mm`).
+  // When only one in-plane axis is calibrated, assume square pixels to avoid distorting aspect ratio.
+  const hasX = sp?.x > 0;
+  const hasY = sp?.y > 0;
+  const hasXY = hasX || hasY;
   const unitScale = sp?.unit === "micron" ? 1e-3 : 1;
-  const sx = sp?.x && sp.x > 0 ? sp.x * unitScale : 1;
-  const sy = sp?.y && sp.y > 0 ? sp.y * unitScale : 1;
+  const sx = hasXY ? (hasX ? sp.x : sp.y) * unitScale : 1;
+  const sy = hasXY ? (hasY ? sp.y : sp.x) * unitScale : 1;
   let sz = 1;
   if (is3d) {
-    if (sp?.z && sp.z > 0) sz = sp.z * unitScale;
+    if (sp?.z > 0 && (hasXY || sp?.unit !== "micron")) sz = sp.z * unitScale;
     else if (model.anisotropy?.[0] > 0) sz = model.anisotropy[0] * sx;
   }
   return [sx, sy, sz];
@@ -251,6 +255,15 @@ function show(labels, snapshot = null) {
       await applyDisplay();
     }
     $("emptyState").hidden = true;
+  });
+  return shown;
+}
+
+function clearViewer() {
+  shown = shown.catch(() => {}).then(async () => {
+    await viewerReady();
+    await viewer.loadVolumes([]);
+    $("emptyState").hidden = false;
   });
   return shown;
 }
@@ -376,8 +389,9 @@ async function loadFiles(filesPromise, signal, { preferredModel } = {}) {
     progress.setProgress(0);
     status(`${nextInput.file.name} loaded`);
   } catch (error) {
-    if (viewerTouched && prevInput) {
-      void show(prevLabels, { image: prevInput, model: prevModel, channelIndex: prevChannel }).catch(() => {});
+    if (viewerTouched) {
+      if (prevInput) await show(prevLabels, { image: prevInput, model: prevModel, channelIndex: prevChannel }).catch(() => {});
+      else await clearViewer().catch(() => {});
     }
     throw error;
   } finally {
@@ -584,8 +598,13 @@ function importFiles(files) {
   return loadFiles(files).catch(report);
 }
 
+let activeAutomation = false;
 $("cancelButton").onclick = () => {
   exampleControl.cancel();
+  if (activeAutomation) {
+    void automation.dispatch("cancel").catch(() => {}).finally(() => running?.abort());
+    return;
+  }
   loading?.abort();
   running?.abort();
 };
@@ -632,7 +651,7 @@ $("runButton").addEventListener("click", () => {
   void runSegmentation(undefined, settings).catch(report);
 });
 
-registerAppAutomation({
+const automation = registerAppAutomation({
   app: APP.id,
   operations: {
     segment: async ({ inputs, parameters, signal }) => {
@@ -640,6 +659,7 @@ registerAppAutomation({
       const settings = segmentationSettings(parameters, model);
       const operation = begin("Reading image…", signal);
       running = operation.controller;
+      activeAutomation = true;
       const current = operation.controller.signal;
       progress.setCancellable(true);
       const prevInput = input;
@@ -664,14 +684,17 @@ registerAppAutomation({
         return await executeSegmentation(nextInput, model, settings, current);
       } catch (error) {
         progress.reset();
+        report(error);
         if (committed && runSnapshot) {
           // Keep the newly committed input and its preview coherent if the run fails.
-          void show(null, runSnapshot).catch(() => {});
-        } else if (viewerTouched && prevInput) {
-          void show(prevLabels, { image: prevInput, model: prevModel, channelIndex: prevChannel }).catch(() => {});
+          await show(null, runSnapshot).catch(() => {});
+        } else if (viewerTouched) {
+          if (prevInput) await show(prevLabels, { image: prevInput, model: prevModel, channelIndex: prevChannel }).catch(() => {});
+          else await clearViewer().catch(() => {});
         }
         throw error;
       } finally {
+        activeAutomation = false;
         running = null;
         finish(operation);
       }

@@ -179,18 +179,32 @@ function applyModelDefaults(model) {
  */
 function resolveVoxelSpacing(image, is3d, anisotropy = 1) {
   const sp = image.spacing;
+  const hasX = sp?.x > 0;
+  const hasY = sp?.y > 0;
+  const hasXY = hasX || hasY;
   const unitScale = sp?.unit === "micron" ? 1e-3 : 1;
-  const sx = sp?.x && sp.x > 0 ? sp.x * unitScale : 1;
-  const sy = sp?.y && sp.y > 0 ? sp.y * unitScale : 1;
+  const sx = hasXY ? (hasX ? sp.x : sp.y) * unitScale : 1;
+  const sy = hasXY ? (hasY ? sp.y : sp.x) * unitScale : 1;
   const sz = is3d ? anisotropy * sx : 1;
   return [sx, sy, sz];
 }
 
 function exportSpacingFor(image, is3d, anisotropy) {
-  if (!is3d) return image.spacing ?? null;
   const sp = image.spacing;
-  if (sp?.x && sp?.y) {
-    return { x: sp.x, y: sp.y, z: anisotropy * sp.x, unit: sp.unit ?? "micron" };
+  const hasX = sp?.x > 0;
+  const hasY = sp?.y > 0;
+  if (!is3d) {
+    if (hasX && hasY) return sp;
+    if (hasX || hasY) {
+      const xy = hasX ? sp.x : sp.y;
+      return { x: xy, y: xy, z: sp.z ?? null, unit: sp.unit ?? "micron" };
+    }
+    return null;
+  }
+  if (hasX || hasY) {
+    const x = hasX ? sp.x : sp.y;
+    const y = hasY ? sp.y : sp.x;
+    return { x, y, z: anisotropy * x, unit: sp.unit ?? "micron" };
   }
   return { x: null, y: null, z: anisotropy, unit: null };
 }
@@ -281,6 +295,15 @@ function show(labels, snapshot = null) {
       await applyDisplay();
     }
     $("emptyState").hidden = true;
+  });
+  return shown;
+}
+
+function clearViewer() {
+  shown = shown.catch(() => {}).then(async () => {
+    await viewerReady();
+    await viewer.loadVolumes([]);
+    $("emptyState").hidden = false;
   });
   return shown;
 }
@@ -413,8 +436,9 @@ async function loadFiles(filesPromise, signal, { preset } = {}) {
     progress.setProgress(0);
     status(`${nextInput.file.name} loaded`);
   } catch (error) {
-    if (viewerTouched && prevSnapshot) {
-      void show(prevLabels, prevSnapshot).catch(() => {});
+    if (viewerTouched) {
+      if (prevSnapshot) await show(prevLabels, prevSnapshot).catch(() => {});
+      else await clearViewer().catch(() => {});
     }
     throw error;
   } finally {
@@ -647,8 +671,13 @@ function importFiles(files) {
   return loadFiles(files).catch(report);
 }
 
+let activeAutomation = false;
 $("cancelButton").onclick = () => {
   exampleControl.cancel();
+  if (activeAutomation) {
+    void automation.dispatch("cancel").catch(() => {}).finally(() => running?.abort());
+    return;
+  }
   loading?.abort();
   running?.abort();
 };
@@ -713,7 +742,7 @@ $("runButton").addEventListener("click", () => {
   void runSegmentation(undefined, settings).catch(report);
 });
 
-registerAppAutomation({
+const automation = registerAppAutomation({
   app: APP.id,
   operations: {
     segment: async ({ inputs, parameters, signal }) => {
@@ -721,6 +750,7 @@ registerAppAutomation({
       const settings = segmentationSettings(parameters, model);
       const operation = begin("Reading image…", signal);
       running = operation.controller;
+      activeAutomation = true;
       const current = operation.controller.signal;
       progress.setCancellable(true);
       const prevSnapshot = currentSnapshot();
@@ -757,14 +787,17 @@ registerAppAutomation({
         return await executeSegmentation(nextInput, model, settings, current);
       } catch (error) {
         progress.reset();
+        report(error);
         if (committed && runSnapshot) {
           // Keep the newly committed input and its preview coherent if the run fails.
-          void show(null, runSnapshot).catch(() => {});
-        } else if (viewerTouched && prevSnapshot) {
-          void show(prevLabels, prevSnapshot).catch(() => {});
+          await show(null, runSnapshot).catch(() => {});
+        } else if (viewerTouched) {
+          if (prevSnapshot) await show(prevLabels, prevSnapshot).catch(() => {});
+          else await clearViewer().catch(() => {});
         }
         throw error;
       } finally {
+        activeAutomation = false;
         running = null;
         finish(operation);
       }

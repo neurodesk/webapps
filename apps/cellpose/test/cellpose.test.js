@@ -267,10 +267,10 @@ test("segment2D and segment3D reject non-finite inputs, non-finite outputs, and 
     /Cellpose model output contains non-finite/,
   );
 
-  // Oversized 2D rescale budget: 768x768 at diameter=5 (6x rescale -> ~652 MiB live buffers) must fail before inference.
+  // Oversized 2D rescale budget: 588x588 at diameter=5 (6x rescale -> ~529 MiB live buffers with Float64 navg) must fail before inference.
   let invoked = false;
   await assert.rejects(
-    segment2D(new Float32Array(768 * 768).fill(1), null, 768, 768, MODELS.cyto3, {
+    segment2D(new Float32Array(588 * 588).fill(1), null, 588, 588, MODELS.cyto3, {
       diameter: 5,
       runBatch: async () => {
         invoked = true;
@@ -281,16 +281,20 @@ test("segment2D and segment3D reject non-finite inputs, non-finite outputs, and 
   );
   assert.equal(invoked, false);
 
-  // Oversized 3D rescale budget: 1024x1024x32 at diameter=5 (6x rescale -> >7B voxels) must fail before allocating.
-  const dummyVol = new Float32Array(1);
+  // Oversized 3D rescale budget: 20x85x85 at diameter=6 (5x rescale -> >550 MiB live in ortho pass) must fail before inference.
+  let invoked3d = false;
   await assert.rejects(
-    segment3D(dummyVol, null, 32, 1024, 1024, MODELS.cyto3, {
-      diameter: 5,
+    segment3D(new Float32Array(20 * 85 * 85).fill(1), null, 20, 85, 85, MODELS.cyto3, {
+      diameter: 6,
       anisotropy: 1,
-      runBatch: async () => new Float32Array(0),
+      runBatch: async () => {
+        invoked3d = true;
+        return new Float32Array(0);
+      },
     }),
     /limit 512 MiB/,
   );
+  assert.equal(invoked3d, false);
 });
 
 test("segment3D scales flow iteration count with diameter and handles anisotropy", async () => {

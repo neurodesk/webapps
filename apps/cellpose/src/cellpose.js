@@ -272,51 +272,55 @@ export async function runOrtho3D(vol0, vol1, depth, height, width, options) {
   let completedBase = 0;
 
   // 1) YX planes (z = 0..depth-1): predicts (dY, dX, cellprob)
-  const yx0 = [];
-  const yx1 = vol1 ? [] : null;
-  for (let z = 0; z < depth; z++) {
-    yx0.push(vol0.subarray(z * planeYX, (z + 1) * planeYX));
-    if (yx1) yx1.push(vol1.subarray(z * planeYX, (z + 1) * planeYX));
-  }
-  const [yxDY, yxDX, yxCP] = await runNetStack(yx0, yx1, height, width, {
-    ...options,
-    onSlice: (done) => onPlane(completedBase + done, totalSlices, "YX"),
-  });
-  for (let i = 0; i < voxels; i++) {
-    dY[i] += yxDY[i];
-    dX[i] += yxDX[i];
-    cellprob[i] += yxCP[i];
+  {
+    const yx0 = [];
+    const yx1 = vol1 ? [] : null;
+    for (let z = 0; z < depth; z++) {
+      yx0.push(vol0.subarray(z * planeYX, (z + 1) * planeYX));
+      if (yx1) yx1.push(vol1.subarray(z * planeYX, (z + 1) * planeYX));
+    }
+    const [yxDY, yxDX, yxCP] = await runNetStack(yx0, yx1, height, width, {
+      ...options,
+      onSlice: (done) => onPlane(completedBase + done, totalSlices, "YX"),
+    });
+    for (let i = 0; i < voxels; i++) {
+      dY[i] += yxDY[i];
+      dX[i] += yxDX[i];
+      cellprob[i] += yxCP[i];
+    }
   }
   completedBase += depth;
 
   // 2) ZY planes (indexed by y = 0..height-1, each slice is [depth, width]): predicts (dZ, dX, cellprob)
   // Matches cellpose pm=(1,0,2,3) -> shape (Ly, Lz, Lx), cp=(0,2)
-  const zy0 = [];
-  const zy1 = vol1 ? [] : null;
-  for (let y = 0; y < height; y++) {
-    const s0 = new Float32Array(depth * width);
-    const s1 = vol1 ? new Float32Array(depth * width) : null;
-    for (let z = 0; z < depth; z++) {
-      const from = z * planeYX + y * width;
-      s0.set(vol0.subarray(from, from + width), z * width);
-      if (s1) s1.set(vol1.subarray(from, from + width), z * width);
+  {
+    const zy0 = [];
+    const zy1 = vol1 ? [] : null;
+    for (let y = 0; y < height; y++) {
+      const s0 = new Float32Array(depth * width);
+      const s1 = vol1 ? new Float32Array(depth * width) : null;
+      for (let z = 0; z < depth; z++) {
+        const from = z * planeYX + y * width;
+        s0.set(vol0.subarray(from, from + width), z * width);
+        if (s1) s1.set(vol1.subarray(from, from + width), z * width);
+      }
+      zy0.push(s0);
+      if (zy1) zy1.push(s1);
     }
-    zy0.push(s0);
-    if (zy1) zy1.push(s1);
-  }
-  const [zyDZ, zyDX, zyCP] = await runNetStack(zy0, zy1, depth, width, {
-    ...options,
-    onSlice: (done) => onPlane(completedBase + done, totalSlices, "ZY"),
-  });
-  for (let y = 0; y < height; y++) {
-    const sBase = y * depth * width;
-    for (let z = 0; z < depth; z++) {
-      const dst = z * planeYX + y * width;
-      const src = sBase + z * width;
-      for (let x = 0; x < width; x++) {
-        dZ[dst + x] += zyDZ[src + x];
-        dX[dst + x] += zyDX[src + x];
-        cellprob[dst + x] += zyCP[src + x];
+    const [zyDZ, zyDX, zyCP] = await runNetStack(zy0, zy1, depth, width, {
+      ...options,
+      onSlice: (done) => onPlane(completedBase + done, totalSlices, "ZY"),
+    });
+    for (let y = 0; y < height; y++) {
+      const sBase = y * depth * width;
+      for (let z = 0; z < depth; z++) {
+        const dst = z * planeYX + y * width;
+        const src = sBase + z * width;
+        for (let x = 0; x < width; x++) {
+          dZ[dst + x] += zyDZ[src + x];
+          dX[dst + x] += zyDX[src + x];
+          cellprob[dst + x] += zyCP[src + x];
+        }
       }
     }
   }
@@ -324,37 +328,39 @@ export async function runOrtho3D(vol0, vol1, depth, height, width, options) {
 
   // 3) ZX planes (indexed by x = 0..width-1, each slice is [depth, height]): predicts (dZ, dY, cellprob)
   // Matches cellpose pm=(2,0,1,3) -> shape (Lx, Lz, Ly), cp=(0,1)
-  const zx0 = [];
-  const zx1 = vol1 ? [] : null;
-  for (let x = 0; x < width; x++) {
-    const s0 = new Float32Array(depth * height);
-    const s1 = vol1 ? new Float32Array(depth * height) : null;
-    for (let z = 0; z < depth; z++) {
-      const zOff = z * planeYX;
-      const dst = z * height;
-      for (let y = 0; y < height; y++) {
-        const at = zOff + y * width + x;
-        s0[dst + y] = vol0[at];
-        if (s1) s1[dst + y] = vol1[at];
+  {
+    const zx0 = [];
+    const zx1 = vol1 ? [] : null;
+    for (let x = 0; x < width; x++) {
+      const s0 = new Float32Array(depth * height);
+      const s1 = vol1 ? new Float32Array(depth * height) : null;
+      for (let z = 0; z < depth; z++) {
+        const zOff = z * planeYX;
+        const dst = z * height;
+        for (let y = 0; y < height; y++) {
+          const at = zOff + y * width + x;
+          s0[dst + y] = vol0[at];
+          if (s1) s1[dst + y] = vol1[at];
+        }
       }
+      zx0.push(s0);
+      if (zx1) zx1.push(s1);
     }
-    zx0.push(s0);
-    if (zx1) zx1.push(s1);
-  }
-  const [zxDZ, zxDY, zxCP] = await runNetStack(zx0, zx1, depth, height, {
-    ...options,
-    onSlice: (done) => onPlane(completedBase + done, totalSlices, "ZX"),
-  });
-  for (let x = 0; x < width; x++) {
-    const sBase = x * depth * height;
-    for (let z = 0; z < depth; z++) {
-      const zOff = z * planeYX;
-      const src = sBase + z * height;
-      for (let y = 0; y < height; y++) {
-        const at = zOff + y * width + x;
-        dZ[at] += zxDZ[src + y];
-        dY[at] += zxDY[src + y];
-        cellprob[at] += zxCP[src + y];
+    const [zxDZ, zxDY, zxCP] = await runNetStack(zx0, zx1, depth, height, {
+      ...options,
+      onSlice: (done) => onPlane(completedBase + done, totalSlices, "ZX"),
+    });
+    for (let x = 0; x < width; x++) {
+      const sBase = x * depth * height;
+      for (let z = 0; z < depth; z++) {
+        const zOff = z * planeYX;
+        const src = sBase + z * height;
+        for (let y = 0; y < height; y++) {
+          const at = zOff + y * width + x;
+          dZ[at] += zxDZ[src + y];
+          dY[at] += zxDY[src + y];
+          cellprob[at] += zxCP[src + y];
+        }
       }
     }
   }
@@ -1037,14 +1043,16 @@ function checkWorkingSet2D(height, width, resH, resW, hasNuclear, diameter, mode
   const pad = getPadYX(resH, resW, model.divBy, model.extraPad);
   const padPx = pad.Ly * pad.Lx;
   const inputPlanes = hasNuclear ? 2 : 1;
-  // Phase 1 (tiled inference): norm (orig) + resized inputs (res) + padded 2ch input (pad) +
-  // 4 output/weight accumulators (pad) + 3 unpadded output planes (res) + tile batch (~16 MiB).
+  // Phase 1 (tiled inference peak at crop allocation): norm (orig) + resized inputs (res) +
+  // padded 2ch input (2*4) + yf[0..2] (3*4) + Float64Array navg (8) = 28 B/padPx +
+  // 3 unpadded output planes (res) + tile input/output/mask scratch.
+  const tileScratch = 6 * model.bsize * model.bsize * 4;
   const inferencePeak =
-    (origPx * inputPlanes + resPx * (inputPlanes + 3) + padPx * 6) * 4 + 16 * 1024 * 1024;
-  // Phase 2 (unresize + dynamics + clustering): resized outputs + unresized flows (3) +
+    (origPx * inputPlanes + resPx * (inputPlanes + 3)) * 4 + padPx * 28 + tileScratch;
+  // Phase 2 (unresize + dynamics + clustering): norm + resized outputs + unresized flows (3) +
   // followFlows (inds + pts = 3) + clusterMasks (+40 padded h1, h2, seedMap, labels).
   const histPx = (height + 40) * (width + 40);
-  const clusterPeak = (resPx * 3 + origPx * 7 + histPx * 4) * 4;
+  const clusterPeak = (origPx * (inputPlanes + 7) + resPx * 3 + histPx * 4) * 4;
   const bytes = Math.max(inferencePeak, clusterPeak);
   if (bytes > MAX_WORKING_SET_BYTES) {
     const mib = Math.round(bytes / (1024 * 1024));
@@ -1052,17 +1060,33 @@ function checkWorkingSet2D(height, width, resH, resW, hasNuclear, diameter, mode
   }
 }
 
-function checkWorkingSet3D(depth, height, width, resD, resH, resW, hasNuclear, diameter, anisotropy) {
+function slicePassScratchBytes(sh, sw, model) {
+  const pad = getPadYX(sh, sw, model.divBy, model.extraPad);
+  const padPlane = pad.Ly * pad.Lx;
+  const nTiles =
+    tileStarts(pad.Ly, model.bsize, model.tileOverlap).starts.length *
+    tileStarts(pad.Lx, model.bsize, model.tileOverlap).starts.length;
+  if (nTiles === 1) return (5 * 8 + 2) * padPlane * 4;
+  return padPlane * 28 + sh * sw * 12 + 6 * model.bsize * model.bsize * 4;
+}
+
+function checkWorkingSet3D(depth, height, width, resD, resH, resW, hasNuclear, diameter, anisotropy, model) {
   const origVox = depth * height * width;
   const resVox = resD * resH * resW;
   const inputVols = hasNuclear ? 2 : 1;
-  // Phase 1 (ortho inference): norm (orig) + resized inputs (res) + 4 ortho accumulators (res) +
-  // per-axis transposed slice buffers (~2 full res volumes worst case).
-  const inferencePeak = (origVox * inputVols + resVox * (inputVols + 6)) * 4;
-  // Phase 2 (unresize + 3D dynamics + clustering): resized flows (4) + unresized flows (4) +
+  // Phase 1 (ortho inference peak within one axis pass): norm (orig) + resized inputs (res) +
+  // 4 ortho accumulators (dZ, dY, dX, cellprob) + transposed slice inputs (inputVols) +
+  // 3 full-volume runNetStack outputs (out0, out1, out2) + worst-case slice/tile scratch.
+  const sliceScratch = Math.max(
+    slicePassScratchBytes(resH, resW, model),
+    slicePassScratchBytes(resD, resW, model),
+    slicePassScratchBytes(resD, resH, model),
+  );
+  const inferencePeak = (origVox * inputVols + resVox * (2 * inputVols + 7)) * 4 + sliceScratch;
+  // Phase 2 (unresize + 3D dynamics + clustering): norm + resized flows (4) + unresized flows (4) +
   // followFlows3D (inds + 3*pts = 4) + clusterMasks (+40 padded h1, h2, seedMap, labels).
   const histVox = (depth + 40) * (height + 40) * (width + 40);
-  const clusterPeak = (resVox * 4 + origVox * 9 + histVox * 4) * 4;
+  const clusterPeak = (origVox * (inputVols + 9) + resVox * 4 + histVox * 4) * 4;
   const bytes = Math.max(inferencePeak, clusterPeak);
   if (bytes > MAX_WORKING_SET_BYTES) {
     const mib = Math.round(bytes / (1024 * 1024));
@@ -1090,8 +1114,8 @@ export async function segment2D(primaryRaw, nuclearRaw, height, width, model, op
 
   const norm0 = normalize99(primaryRaw, 1, 99);
   const norm1 = nuclearRaw ? normalize99(nuclearRaw, 1, 99) : null;
-  const in0 = rescale !== 1 ? resizePlane2D(norm0.data, height, width, resH, resW) : norm0.data;
-  const in1 = norm1 ? (rescale !== 1 ? resizePlane2D(norm1.data, height, width, resH, resW) : norm1.data) : null;
+  let in0 = rescale !== 1 ? resizePlane2D(norm0.data, height, width, resH, resW) : norm0.data;
+  let in1 = norm1 ? (rescale !== 1 ? resizePlane2D(norm1.data, height, width, resH, resW) : norm1.data) : null;
 
   const checkedRunBatch = async (inputData, batchSize, bh, bw) => {
     const flows = await runBatch(inputData, batchSize, bh, bw);
@@ -1099,7 +1123,7 @@ export async function segment2D(primaryRaw, nuclearRaw, height, width, model, op
     return flows;
   };
 
-  const netOut = await runNet2D(in0, in1, resH, resW, {
+  let netOut = await runNet2D(in0, in1, resH, resW, {
     bsize: model.bsize,
     tileOverlap: model.tileOverlap,
     div: model.divBy,
@@ -1107,10 +1131,14 @@ export async function segment2D(primaryRaw, nuclearRaw, height, width, model, op
     runBatch: checkedRunBatch,
     onTile,
   });
+  in0 = null;
+  in1 = null;
 
+  const tiles = netOut.tiles;
   const dY = rescale !== 1 ? resizePlane2D(netOut.dY, resH, resW, height, width) : netOut.dY;
   const dX = rescale !== 1 ? resizePlane2D(netOut.dX, resH, resW, height, width) : netOut.dX;
   const cellprob = rescale !== 1 ? resizePlane2D(netOut.cellprob, resH, resW, height, width) : netOut.cellprob;
+  netOut = null;
 
   const niter = Math.max(1, Math.trunc((1 / rescale) * 200));
   onStage("dynamics", niter);
@@ -1127,7 +1155,7 @@ export async function segment2D(primaryRaw, nuclearRaw, height, width, model, op
     labels,
     cells,
     count: cells.length,
-    tiles: netOut.tiles,
+    tiles,
     normalization: { low: norm0.low, high: norm0.high },
   };
 }
@@ -1183,12 +1211,12 @@ export async function segment3D(primaryRaw, nuclearRaw, depth, height, width, mo
   const resD = rescale !== 1 || anisotropy !== 1 ? Math.max(4, Math.floor(depth * anisotropy * rescale)) : depth;
   const resH = rescale !== 1 ? Math.max(16, Math.floor(height * rescale)) : height;
   const resW = rescale !== 1 ? Math.max(16, Math.floor(width * rescale)) : width;
-  checkWorkingSet3D(depth, height, width, resD, resH, resW, Boolean(nuclearRaw), diameter, anisotropy);
+  checkWorkingSet3D(depth, height, width, resD, resH, resW, Boolean(nuclearRaw), diameter, anisotropy, model);
 
   const norm0 = normalize99(primaryRaw, 1, 99);
   const norm1 = nuclearRaw ? normalize99(nuclearRaw, 1, 99) : null;
-  const in0 = resD !== depth || resH !== height || resW !== width ? resizeVolume3D(norm0.data, depth, height, width, resD, resH, resW) : norm0.data;
-  const in1 = norm1 ? (resD !== depth || resH !== height || resW !== width ? resizeVolume3D(norm1.data, depth, height, width, resD, resH, resW) : norm1.data) : null;
+  let in0 = resD !== depth || resH !== height || resW !== width ? resizeVolume3D(norm0.data, depth, height, width, resD, resH, resW) : norm0.data;
+  let in1 = norm1 ? (resD !== depth || resH !== height || resW !== width ? resizeVolume3D(norm1.data, depth, height, width, resD, resH, resW) : norm1.data) : null;
 
   const checkedRunBatch = async (inputData, batchSize, bh, bw) => {
     const flows = await runBatch(inputData, batchSize, bh, bw);
@@ -1196,7 +1224,7 @@ export async function segment3D(primaryRaw, nuclearRaw, depth, height, width, mo
     return flows;
   };
 
-  const netOut = await runOrtho3D(in0, in1, resD, resH, resW, {
+  let netOut = await runOrtho3D(in0, in1, resD, resH, resW, {
     bsize: model.bsize,
     tileOverlap: model.tileOverlap,
     div: model.divBy,
@@ -1204,12 +1232,15 @@ export async function segment3D(primaryRaw, nuclearRaw, depth, height, width, mo
     runBatch: checkedRunBatch,
     onPlane,
   });
+  in0 = null;
+  in1 = null;
 
   const needUnresize = resD !== depth || resH !== height || resW !== width;
   const dZ = needUnresize ? resizeVolume3D(netOut.dZ, resD, resH, resW, depth, height, width) : netOut.dZ;
   const dY = needUnresize ? resizeVolume3D(netOut.dY, resD, resH, resW, depth, height, width) : netOut.dY;
   const dX = needUnresize ? resizeVolume3D(netOut.dX, resD, resH, resW, depth, height, width) : netOut.dX;
   const cellprob = needUnresize ? resizeVolume3D(netOut.cellprob, resD, resH, resW, depth, height, width) : netOut.cellprob;
+  netOut = null;
 
   // Match Cellpose 3.1.1.1 models.py:529-537 (resample=True): scale flow steps with diameter.
   const niter = Math.max(1, Math.trunc((1 / rescale) * 200));
