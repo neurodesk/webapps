@@ -21,5 +21,11 @@ export async function verifyOffline(page, { download }) {
   assert.equal(nifti.readInt16LE(70), 2, 'labels are uint8');
   const labels = new Set(nifti.subarray(352));
   assert.ok(labels.size >= 25, `expected >= 25 structures, got ${labels.size}`);
-  return { filename: segmentation.filename, structures: labels.size - 1 };
+
+  const stats = await download('#resultList .nd-volume-toggle:has-text("Structure statistics") .nd-download-btn');
+  assert.equal(stats.filename, 'example_ct_sm_totalseg_total_stats.tsv');
+  const tsvText = Buffer.from(stats.bytes).toString('utf8');
+  assert.ok(tsvText.includes('mean_hu'), 'TSV includes mean_hu column');
+  assert.ok(tsvText.includes('liver'), 'TSV includes liver row');
+  return { filename: segmentation.filename, statsFilename: stats.filename, structures: labels.size - 1 };
 }

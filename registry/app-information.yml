@@ -2865,6 +2865,11 @@ apps:
         reference: "D'Antonoli TA, Berger LK, Indrakanti AK, Vishwanathan N, Weiss J, Jung M, Berkarda Z, Rau A, Reisert M, Küstner T, Walter A, Segeroth M, Sperl JI, Wasserthal J. TotalSegmentator MRI: Robust Sequence-Independent Segmentation of Multiple Anatomic Structures in MRI. Radiology. 2025;314(2):e241613."
         doi: 10.1148/radiol.241613
         code: https://github.com/wasserth/TotalSegmentator
+      - group: Abdominal and trunk muscles
+        title: Trunk musculature segmentation (abdominal_muscles)
+        reference: "Hong V, Pieper S, James J, Anderson DE, Pinter C, Chang YS, Aslan B, Kozono D, Doyle PF, Caplan S, Kang H, Balboni T, Spektor A, Huynh MA, Keko M, Kikinis R, Hackney DB, Alkalay RN. Automated Segmentation of Trunk Musculature with a Deep CNN Trained from Sparse Annotations in Radiation Therapy Patients with Metastatic Spine Disease. medRxiv. 2025."
+        doi: 10.1101/2025.01.13.25319967
+        code: https://github.com/wasserth/TotalSegmentator
       - group: Segmentation framework
         title: nnU-Net
         reference: "Isensee F, Jaeger PF, Kohl SAA, Petersen J, Maier-Hein KH. nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation. Nature Methods. 2021;18(2):203–211."

@@ -5,7 +5,6 @@ import NiiVue, { MULTIPLANAR_TYPE, SLICE_TYPE, SHOW_RENDER } from "@niivue/niivu
 import { mountImagingWorkspace } from "@neurodesk/webapp-components/core/mount-imaging-workspace";
 import {
   createResultList,
-  bindFileDrop,
   createInfoDialog,
   createConsole,
   createViewerToolbar,
@@ -20,7 +19,7 @@ import { registerAppAutomation, runAbortable } from "@neurodesk/webapp-component
 import { readImageFiles, runDcm2niix } from "@neurodesk/runtime-support/dcm2niix-client";
 import { readVolume } from "@neurodesk/synthsr";
 import { colormapForTask } from "@neurodesk/totalsegmentator/labels";
-import { taskById } from "@neurodesk/totalsegmentator/models";
+import { resolveTaskPlan, taskById } from "@neurodesk/totalsegmentator/models";
 import { segmentationResults } from "@neurodesk/totalsegmentator/results";
 import { APP, describePlan, distinctGroups, filterReportRows } from "./config.js";
 import examples from "../examples.json";
@@ -155,6 +154,17 @@ function syncTaskControls() {
   $("modelHint").textContent = describePlan(selectedTaskParams());
 }
 
+function applyParameters(params) {
+  if (!params) return;
+  if (params.task) $("taskSelect").value = params.task;
+  syncTaskControls();
+  if (params.resolution && !$("resolutionField").hidden) $("resolutionSelect").value = params.resolution;
+  syncTaskControls();
+  if (params.subset && !$("subsetField").hidden) $("subsetSelect").value = params.subset;
+  if (params.backend) $("backend").value = params.backend;
+  syncTaskControls();
+}
+
 function refreshControls() {
   const busy = job !== null;
   exampleControl.setDisabled(busy);
@@ -169,6 +179,7 @@ function refreshControls() {
 }
 
 function begin(kind, message) {
+  if (job) throw new Error("Another operation is already running.");
   const controller = new AbortController();
   job = { kind, controller, worker: null };
   progress.begin(message);
@@ -271,33 +282,47 @@ async function ensureViewer() {
       nv: viewer,
       onApply: async (_stage, editedFile) => {
         const session = editing;
+        const targetResult = lastResult;
         const edited = readVolume(await editedFile.arrayBuffer());
-        if (editing !== session || !lastResult) return;
+        if (editing !== session || !targetResult || lastResult !== targetResult) return;
         const labels = Uint8Array.from(edited.data, (v) => Math.max(0, Math.min(255, Math.round(v))));
-        const modality = taskById(lastResult.task).modality;
+        const modality = taskById(targetResult.task).modality;
         const built = segmentationResults({
           labels,
-          imageData: lastResult.imageData,
+          imageData: targetResult.imageData,
           dims: edited.dims,
           affine: edited.affine,
-          task: lastResult.task,
+          task: targetResult.task,
           modality,
-        }, source.file.name);
+        }, targetResult.sourceFile.name);
         const segFile = await gzipFile(built.segmentation.bytes, `${built.segmentation.name}.gz`, "application/gzip");
         const tableFile = new File([built.table.text], built.table.name, { type: "text/tab-separated-values" });
-        lastResult = { ...lastResult, rows: built.rows, segFile, tableFile };
+        if (editing !== session || lastResult !== targetResult) return;
+        lastResult = { ...targetResult, rows: built.rows, segFile, tableFile };
         outputs = {
-          input: { description: "Input scan", file: source.file },
+          input: { description: "Input scan", file: targetResult.sourceFile },
           segmentation: { description: "Segmentation mask", file: segFile, editable: true },
-          statistics: { description: "Structure statistics (TSV)", file: tableFile, downloadableOnly: false },
+          statistics: { description: "Structure statistics (TSV)", file: tableFile },
         };
+        editing = null;
         populateReportGroups(built.rows);
-        closeEdit();
         renderOutputs();
         status(`Mask updated · ${built.rows.length} structures`);
+        await show();
       },
-      onCancel: () => closeEdit(),
+      onCancel: () => {
+        if (!editing) return;
+        editing = null;
+        status("Edit discarded");
+      },
+      onError: (_stage, error) => status(error.message, true),
     });
+    editor.addEventListener("nd-mask-edit-end", () => {
+      editing = null;
+      results.setEditingEnabled(true);
+    });
+    editor.addEventListener("nd-mask-edit-start", ({ detail }) => status(detail.message));
+    toolbar.after(editor);
     viewer.createExtensionContext().on("locationChange", (event) => {
       $("location").textContent = event.detail.string;
     });
@@ -368,21 +393,36 @@ function describeVolume(file, volume) {
 
 async function selectSeries(index) {
   const picked = seriesList[index];
-  if (!picked) return;
-  const vol = readVolume(await picked.file.arrayBuffer());
-  source = { file: picked.file, dims: vol.dims, affine: vol.affine };
-  $("fileInfo").textContent = describeVolume(picked.file, vol);
-  $("fileInfo").hidden = false;
-  $("emptyState").hidden = true;
-  $("dropZone").classList.add("has-files");
-  clearResults();
-  await show();
+  if (!picked || job) return;
+  const previousIndex = seriesList.findIndex((entry) => entry.file === source?.file);
+  const current = begin("loading", `Reading ${picked.label}…`);
+  const activeSignal = current.controller.signal;
+  try {
+    const vol = readVolume(await picked.file.arrayBuffer());
+    activeSignal.throwIfAborted();
+    if (job !== current) return;
+
+    source = { file: picked.file, dims: vol.dims, affine: vol.affine };
+    $("seriesSelect").value = String(index);
+    $("fileInfo").textContent = describeVolume(picked.file, vol);
+    $("fileInfo").hidden = false;
+    $("emptyState").hidden = true;
+    $("dropZone").classList.add("has-files");
+    clearResults();
+    end(current, `Ready · ${picked.file.name}`);
+    await show();
+  } catch (error) {
+    if (previousIndex >= 0) $("seriesSelect").value = String(previousIndex);
+    const cancelled = error?.name === "AbortError" || activeSignal.aborted;
+    end(current, cancelled ? "Cancelled" : (error.message || "Could not load series"), { success: false, error: !cancelled });
+  }
 }
 
-async function loadInputFiles(fileList, { signal, assertCurrent = () => {} } = {}) {
+async function loadInputFiles(fileList, { signal, assertCurrent = () => {}, onCommit, onJob } = {}) {
   const files = Array.from(fileList || []);
-  if (!files.length) return;
+  if (!files.length) return false;
   const current = begin("loading", "Reading scan…");
+  onJob?.(current);
   const abort = () => current.controller.abort(signal?.reason ?? new DOMException("Cancelled", "AbortError"));
   signal?.addEventListener("abort", abort, { once: true });
   const activeSignal = current.controller.signal;
@@ -391,14 +431,14 @@ async function loadInputFiles(fileList, { signal, assertCurrent = () => {} } = {
     const images = await readImageFiles(files, { signal: activeSignal });
     assertCurrent();
     activeSignal.throwIfAborted();
-    if (job !== current) return;
+    if (job !== current) return false;
 
     if (!images?.length) throw new Error("No readable 3D NIfTI or DICOM volume found.");
     const list = images.map((file) => ({ file, label: file.name }));
     const firstVol = readVolume(await list[0].file.arrayBuffer());
     assertCurrent();
     activeSignal.throwIfAborted();
-    if (job !== current) return;
+    if (job !== current) return false;
 
     seriesList = list;
     $("seriesField").hidden = list.length <= 1;
@@ -410,9 +450,11 @@ async function loadInputFiles(fileList, { signal, assertCurrent = () => {} } = {
     $("fileInfo").hidden = false;
     $("emptyState").hidden = true;
     $("dropZone").classList.add("has-files");
+    onCommit?.();
     clearResults();
     end(current, `Ready · ${list[0].file.name}`);
     await show();
+    return true;
   } catch (error) {
     const cancelled = error?.name === "AbortError" || activeSignal.aborted;
     end(current, cancelled ? "Cancelled" : (error.message || "Could not load scan"), { success: false, error: !cancelled });
@@ -422,94 +464,109 @@ async function loadInputFiles(fileList, { signal, assertCurrent = () => {} } = {
   }
 }
 
-function runSegmentation(overrideParams = null, reportProgress = null) {
+function runSegmentation(overrideParams = null, reportProgress = null, { onJob } = {}) {
   if (!source) return Promise.reject(new Error("Load a CT or MRI scan first."));
   if (job) return Promise.reject(new Error("A job is already running."));
-  closeEdit();
+  const runSource = source;
   const params = overrideParams ? { ...selectedTaskParams(), ...overrideParams } : selectedTaskParams();
+  let plan;
+  try {
+    plan = resolveTaskPlan({ task: params.task, resolution: params.resolution, subset: params.subset });
+  } catch (error) {
+    return Promise.reject(error);
+  }
+  const cancelledEdit = closeEdit();
   const current = begin("running", "Starting TotalSegmentator…");
+  onJob?.(current);
 
   return new Promise((resolve, reject) => {
     current.completion = { resolve, reject };
-    const worker = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
-    current.worker = worker;
-
-    worker.onmessage = async ({ data }) => {
+    Promise.resolve(cancelledEdit).then(() => {
       if (job !== current) return;
-      if (data.type === "progress") {
-        progress.setProgress(data.value, data.message);
-        reportProgress?.(data.value, data.message);
-        return;
-      }
-      if (data.type === "log") {
-        log.log(data.message, "info");
-        return;
-      }
-      if (data.type === "error") {
-        end(current, data.message || "Segmentation failed", { success: false, error: true });
-        return;
-      }
-      if (data.type === "result") {
-        try {
-          progress.setProgress(0.98, "Writing outputs…");
-          const modality = taskById(params.task).modality;
-          const built = segmentationResults({
-            labels: data.labels,
-            imageData: data.imageData,
-            dims: data.dims,
-            affine: data.affine,
-            task: params.task,
-            modality,
-          }, source.file.name);
-          const segFile = await gzipFile(built.segmentation.bytes, `${built.segmentation.name}.gz`, "application/gzip");
-          const tableFile = new File([built.table.text], built.table.name, { type: "text/tab-separated-values" });
-          if (job !== current) return;
+      const worker = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
+      current.worker = worker;
 
-          lastResult = {
-            task: params.task,
-            rows: built.rows,
-            imageData: data.imageData,
-            segFile,
-            tableFile,
-            provenance: data.provenance,
-          };
-          overlayVisible = true;
-          outputs = {
-            input: { description: "Input scan", file: source.file },
-            segmentation: { description: "Segmentation mask", file: segFile, editable: true },
-            statistics: { description: "Structure statistics (TSV)", file: tableFile },
-          };
-          populateReportGroups(built.rows);
-          const summary = `Segmentation complete · ${built.rows.length} structures (${data.provenance.seconds} s)`;
-          end(current, summary, {
-            success: true,
-            value: {
-              artifacts: [
-                { role: "segmentation", file: segFile },
-                { role: "statistics", file: tableFile },
-              ],
-              measurements: { structures: built.rows },
-              provenance: data.provenance,
-            },
-          });
-          await show();
-        } catch (error) {
-          end(current, error.message || "Failed to write outputs", { success: false, error: true });
+      worker.onmessage = async ({ data }) => {
+        if (job !== current) return;
+        if (data.type === "progress") {
+          progress.setProgress(data.value, data.message);
+          reportProgress?.({ value: data.value, message: data.message });
+          return;
         }
-      }
-    };
+        if (data.type === "log") {
+          log.log(data.message, "info");
+          return;
+        }
+        if (data.type === "error") {
+          end(current, data.message || "Segmentation failed", { success: false, error: true });
+          return;
+        }
+        if (data.type === "result") {
+          try {
+            progress.setProgress(0.98, "Writing outputs…");
+            const modality = plan.task.modality;
+            const built = segmentationResults({
+              labels: data.labels,
+              imageData: data.imageData,
+              dims: data.dims,
+              affine: data.affine,
+              task: plan.task.id,
+              modality,
+            }, runSource.file.name);
+            const segFile = await gzipFile(built.segmentation.bytes, `${built.segmentation.name}.gz`, "application/gzip");
+            const tableFile = new File([built.table.text], built.table.name, { type: "text/tab-separated-values" });
+            if (job !== current) return;
 
-    worker.onerror = (event) => {
+            lastResult = {
+              task: plan.task.id,
+              sourceFile: runSource.file,
+              rows: built.rows,
+              imageData: data.imageData,
+              segFile,
+              tableFile,
+              provenance: data.provenance,
+            };
+            overlayVisible = true;
+            outputs = {
+              input: { description: "Input scan", file: runSource.file },
+              segmentation: { description: "Segmentation mask", file: segFile, editable: true },
+              statistics: { description: "Structure statistics (TSV)", file: tableFile },
+            };
+            populateReportGroups(built.rows);
+            const summary = `Segmentation complete · ${built.rows.length} structures (${data.provenance.seconds} s)`;
+            end(current, summary, {
+              success: true,
+              value: {
+                artifacts: [
+                  { role: "segmentation", file: segFile },
+                  { role: "statistics", file: tableFile },
+                ],
+                measurements: { structures: built.rows },
+                provenance: data.provenance,
+              },
+            });
+            await show();
+          } catch (error) {
+            end(current, error.message || "Failed to write outputs", { success: false, error: true });
+          }
+        }
+      };
+
+      worker.onerror = (event) => {
+        if (job !== current) return;
+        end(current, event.message || "Worker error", { success: false, error: true });
+      };
+
+      worker.postMessage({
+        file: runSource.file,
+        task: plan.task.id,
+        resolution: plan.resolution,
+        subset: plan.subset,
+        backend: params.backend,
+      });
+    }, (error) => {
       if (job !== current) return;
-      end(current, event.message || "Worker error", { success: false, error: true });
-    };
-
-    worker.postMessage({
-      file: source.file,
-      task: params.task,
-      resolution: params.resolution,
-      subset: params.subset,
-      backend: params.backend,
+      end(current, error?.message || "Failed to start segmentation", { success: false, error: true });
     });
   });
 }
@@ -518,17 +575,20 @@ function runSegmentation(overrideParams = null, reportProgress = null) {
 const exampleControl = createExampleSelector({
   examples,
   scope: $("controls"),
-  onLoad: async (_example, { fetchFiles, assertCurrent, signal }) => {
+  onLoad: async (example, { fetchFiles, assertCurrent, signal }) => {
     const fetched = await fetchFiles();
     assertCurrent();
-    await loadInputFiles(fetched, { signal, assertCurrent });
+    await loadInputFiles(fetched, {
+      signal,
+      assertCurrent,
+      onCommit: () => {
+        if (example.automation?.parameters) applyParameters(example.automation.parameters);
+      },
+    });
   },
 });
 $("exampleControl").append(exampleControl);
 
-bindFileDrop($("dropZone"), (dropped) => {
-  void loadInputFiles(dropped).catch(() => {});
-});
 $("imageInput").addEventListener("change", (event) => {
   void loadInputFiles(event.target.files).catch(() => {});
 });
@@ -541,11 +601,7 @@ $("subsetSelect").addEventListener("change", () => syncTaskControls());
 $("runButton").addEventListener("click", () => {
   void runSegmentation().catch(() => {});
 });
-$("cancelButton").addEventListener("click", () => {
-  if (!job) return;
-  job.controller.abort(new DOMException("Cancelled by user", "AbortError"));
-  end(job, "Cancelled", { success: false });
-});
+$("cancelButton").addEventListener("click", () => cancelJob());
 
 toolbar.control("overlayOpacity").addEventListener("input", (event) => {
   overlayOpacity = Number(event.target.value);
@@ -565,12 +621,15 @@ syncTaskControls();
 refreshControls();
 renderReportTable();
 
+function cancelSpecificJob(target) {
+  if (!target || job !== target) return;
+  target.controller.abort(new DOMException("Cancelled by user", "AbortError"));
+  end(target, "Cancelled", { success: false });
+}
+
 function cancelJob() {
   exampleControl.cancel();
-  if (!job) return;
-  const current = job;
-  current.controller.abort(new DOMException("Cancelled by user", "AbortError"));
-  end(current, "Cancelled", { success: false });
+  cancelSpecificJob(job);
 }
 
 // WebMCP / browser automation registration.
@@ -579,18 +638,40 @@ registerAppAutomation({
   convertDicom: runDcm2niix,
   operations: {
     segment: async ({ inputs, parameters, signal, progress: reportProgress }) => {
+      const plan = resolveTaskPlan({
+        task: parameters?.task ?? "total",
+        resolution: parameters?.resolution ?? "fast",
+        subset: parameters?.subset ?? "all",
+      });
+      if (parameters?.backend !== undefined && !["auto", "wasm"].includes(parameters.backend)) {
+        throw new Error(`Unsupported backend: ${parameters.backend}`);
+      }
+      if (job) throw new Error("Another operation is already running.");
+      signal.throwIfAborted();
       exampleControl.cancel();
+
+      let ownedJob = null;
+      const cancelOwned = () => cancelSpecificJob(ownedJob);
       if (inputs?.image?.length) {
-        await runAbortable(signal, () => loadInputFiles(inputs.image, { signal }), cancelJob);
+        await runAbortable(
+          signal,
+          () => loadInputFiles(inputs.image, { signal, onJob: (j) => { ownedJob = j; } }),
+          cancelOwned,
+        );
       }
       signal.throwIfAborted();
-      if (parameters?.task) $("taskSelect").value = parameters.task;
-      if (parameters?.resolution && !$("resolutionField").hidden) $("resolutionSelect").value = parameters.resolution;
-      syncTaskControls();
-      if (parameters?.subset && !$("subsetField").hidden) $("subsetSelect").value = parameters.subset;
-      if (parameters?.backend) $("backend").value = parameters.backend;
-      syncTaskControls();
-      return runAbortable(signal, () => runSegmentation(parameters, reportProgress), cancelJob);
+      const resolvedParams = {
+        task: plan.task.id,
+        resolution: plan.resolution,
+        subset: plan.subset,
+        ...(parameters?.backend ? { backend: parameters.backend } : {}),
+      };
+      applyParameters(resolvedParams);
+      return runAbortable(
+        signal,
+        () => runSegmentation(resolvedParams, reportProgress, { onJob: (j) => { ownedJob = j; } }),
+        cancelOwned,
+      );
     },
   },
 });

@@ -8,7 +8,7 @@ import wasmURL from "onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm?url";
 import wasmModuleURL from "onnxruntime-web/ort-wasm-simd-threaded.asyncify.mjs?url";
 import { readVolume } from "@neurodesk/synthsr";
 import { fetchModel } from "@neurodesk/webapp-components/worker";
-import { MAX_INPUT_VOXELS, segmentVolume } from "@neurodesk/totalsegmentator";
+import { MAX_INPUT_VOXELS, segmentVolume, validatePlanMemory } from "@neurodesk/totalsegmentator";
 import { resolveTaskPlan } from "@neurodesk/totalsegmentator/models";
 
 ort.env.wasm.wasmPaths = { wasm: wasmURL, mjs: wasmModuleURL };
@@ -91,6 +91,7 @@ self.onmessage = async ({ data: job }) => {
     const plan = resolveTaskPlan({ task: job.task, resolution: job.resolution, subset: job.subset });
     progress(0, "Reading input volume…");
     const volume = readVolume(await job.file.arrayBuffer(), { maxVoxels: MAX_INPUT_VOXELS });
+    validatePlanMemory({ dims: volume.dims, affine: volume.affine, models: plan.models, cropModel: plan.cropModel });
     log(`Loaded ${job.file.name} (${volume.dims.join(" × ")} voxels)`);
 
     const started = performance.now();
@@ -107,11 +108,12 @@ self.onmessage = async ({ data: job }) => {
     }
 
     const usedModels = plan.cropModel ? [plan.cropModel, ...plan.models] : plan.models;
-    const imageCopy = new Float32Array(volume.data);
+    // Transfer the original voxel buffer directly instead of duplicating a full volume in RAM.
+    const imageData = volume.data instanceof Float32Array ? volume.data : Float32Array.from(volume.data);
     self.postMessage({
       type: "result",
       labels: result.labels,
-      imageData: imageCopy,
+      imageData,
       dims: result.dims,
       affine: result.affine,
       provenance: {
@@ -124,7 +126,7 @@ self.onmessage = async ({ data: job }) => {
         windows: result.windows,
         seconds: Math.round((performance.now() - started) / 100) / 10,
       },
-    }, [result.labels.buffer, imageCopy.buffer]);
+    }, [result.labels.buffer, imageData.buffer]);
   } catch (error) {
     self.postMessage({ type: "error", message: error.message || String(error) });
   }

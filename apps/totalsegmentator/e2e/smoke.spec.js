@@ -79,14 +79,27 @@ test("CT example runs 3 mm segmentation, populates Results table and downloads N
   const tsvText = readFileSync(await tsvDownload.path(), "utf8");
   expect(tsvText).toContain("mean_hu");
   expect(tsvText).toContain("liver");
+
+  // Open mask editor toolbar, verify controls appear, then cancel and verify Edit re-enables
+  const editButton = page.locator("#resultList .nd-volume-toggle", { hasText: "Segmentation mask" }).getByRole("button", { name: "Edit", exact: true });
+  await editButton.click();
+  const editorBar = page.locator("nd-mask-editor");
+  await expect(editorBar).toBeVisible();
+  await expect(editButton).toBeDisabled();
+  await editorBar.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(editorBar).toBeHidden();
+  await expect(editButton).toBeEnabled();
+  await expect(page.locator("#statusText")).toContainText("Edit discarded");
 });
 
-test("MRI example runs 3 mm total_mr segmentation on LPS scan", async ({ page }) => {
+test("MRI example auto-selects total_mr and runs 3 mm segmentation on LPS scan", async ({ page }) => {
   test.setTimeout(180000);
   await page.goto("/");
-  await page.locator("#taskSelect").selectOption("total_mr");
+  await expect(page.locator("#taskSelect")).toHaveValue("total");
   await page.locator("select[data-neurodesk-example]").selectOption("mr-abdomen");
   await expect(page.locator("#fileInfo")).toContainText("example_mr_sm.nii.gz", { timeout: 120000 });
+  await expect(page.locator("#taskSelect")).toHaveValue("total_mr");
+  await expect(page.locator("#resolutionSelect")).toHaveValue("fast");
   await page.locator("#advancedSettings").evaluate((section) => { section.open = true; });
   await page.locator("#backend").selectOption("wasm");
   await page.locator("#runButton").click();

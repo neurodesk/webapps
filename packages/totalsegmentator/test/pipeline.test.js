@@ -19,6 +19,7 @@ import {
   targetShapeForSpacing,
   uncropBox,
   undoCanonical,
+  validatePlanMemory,
   voxelSpacing,
   windows,
   windowStarts,
@@ -86,10 +87,49 @@ describe('orientation (asClosestCanonical / undoCanonical)', () => {
     const restored = undoCanonical(volume.data, volume.dims, dims, orientation);
     assert.deepEqual([...restored], [...data]);
   });
+
+  it('matches NiBabel io_orientation on oblique rotations where global sum differs from greedy', () => {
+    // Orthogonal rotation where column 2 strongly aligns with Z, and columns 0/1 are rotated ~46 deg in XY.
+    // NiBabel assigns strongest column first and swaps X/Y; naive sum can diverge on oblique/sheared variants.
+    const c = Math.cos(0.8);
+    const s = Math.sin(0.8);
+    const oblique = [
+      [c, -s, 0, 0],
+      [s, c, 0, 0],
+      [0, 0, 1, 0],
+      [0, 0, 0, 1],
+    ];
+    const o = canonicalOrientation(oblique);
+    assert.deepEqual(o.invPerm, [1, 0, 2]);
+    assert.deepEqual(o.flip, [true, false, false]);
+
+    // Sheared oblique affine verified against nibabel.orientations.io_orientation.
+    const sheared = [
+      [0.6, 0.7, 0.05, -10],
+      [-0.65, 0.62, 0.1, 5],
+      [0.1, -0.05, 0.98, 20],
+      [0, 0, 0, 1],
+    ];
+    const dims = [2, 3, 2];
+    const data = Float32Array.from({ length: 12 }, (_, i) => i + 1);
+    const { volume, orientation } = asClosestCanonical({ data, dims, affine: sheared });
+    // World coordinates of every canonical voxel must match its original voxel world coordinates.
+    const world = (aff, x, y, z) => [0, 1, 2].map((r) => aff[r][0] * x + aff[r][1] * y + aff[r][2] * z + aff[r][3]);
+    const restored = undoCanonical(volume.data, volume.dims, dims, orientation);
+    assert.deepEqual([...restored], [...data]);
+    // Value 1 was at orig (0,0,0); locate it in canonical grid and verify identical world coords.
+    const idx1 = volume.data.indexOf(1);
+    const cx = idx1 % volume.dims[0];
+    const cy = Math.floor(idx1 / volume.dims[0]) % volume.dims[1];
+    const cz = Math.floor(idx1 / (volume.dims[0] * volume.dims[1]));
+    const wOrig = world(sheared, 0, 0, 0);
+    const wCan = world(volume.affine, cx, cy, cz);
+    for (let r = 0; r < 3; r++) assert.ok(Math.abs(wOrig[r] - wCan[r]) < 1e-6);
+  });
 });
 
 describe('resampling and normalization', () => {
-  it('matches scipy roundHalfEven and linear zoom endpoints', () => {
+  it('matches scipy roundHalfEven shapes and scipy order-0 half-voxel ties', () => {
     assert.equal(roundHalfEven(2.5), 2);
     assert.equal(roundHalfEven(3.5), 4);
     assert.deepEqual(targetShapeForSpacing([10, 20, 30], [3, 3, 3], [1.5, 1.5, 1.5]), [20, 40, 60]);
@@ -98,9 +138,9 @@ describe('resampling and normalization', () => {
     assert.equal(up[0], 0);
     assert.equal(up[1], 5);
     assert.equal(up[2], 10);
-    const labels = Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8]);
-    const nn = resampleZoom(labels, [2, 2, 2], [2, 2, 4], 0);
-    assert.deepEqual([...nn.slice(0, 4)], [1, 1, 2, 2]);
+    // SciPy ndimage.zoom([3, 7], 1.5, order=0, mode='nearest') -> [3, 7, 7] (floor(0.5 + 0.5) = 1).
+    const tie = resampleZoom(Uint8Array.from([3, 7]), [1, 1, 2], [1, 1, 3], 0);
+    assert.deepEqual([...tie], [3, 7, 7]);
   });
 
   it('applies CT clip + z-score and MR whole-volume z-score', () => {
@@ -117,7 +157,17 @@ describe('resampling and normalization', () => {
     assert.ok(Math.abs(mean) < 1e-6);
   });
 
-  it('round-trips float16 helper accurately', () => {
+  it('packs IEEE-754 float16 with exact exponent carry and round-to-nearest-even', () => {
+    // 1.9999 carries mantissa overflow into exponent -> 2.0 (0x4000), NOT 1.0 (0x3c00)!
+    assert.equal(f32ToF16(1.9999), 0x4000);
+    assert.equal(f16ToF32(f32ToF16(1.9999)), 2);
+    // Exact halfway ties round to even (normal and subnormal).
+    assert.equal(f32ToF16(1 + 2 ** -11), 0x3c00); // tie between even 0 and odd 1 -> 0
+    assert.equal(f32ToF16(1 + 3 * 2 ** -11), 0x3c02); // tie between odd 1 and even 2 -> 2
+    assert.equal(f32ToF16(2 ** -25), 0x0000); // smallest subnormal tie -> 0 (even)
+    assert.equal(f32ToF16(3 * 2 ** -25), 0x0002); // subnormal tie between 1 and 2 -> 2 (even)
+    assert.equal(f32ToF16(65520), 0x7c00); // overflow -> +Inf
+    assert.equal(f32ToF16(-65520), 0xfc00); // overflow -> -Inf
     for (const v of [0, 1, -1, 0.5, 12.25, -42.5, 1000]) {
       assert.ok(Math.abs(f16ToF32(f32ToF16(v)) - v) <= Math.abs(v) * 1e-3 + 1e-4);
     }
@@ -208,32 +258,66 @@ describe('cropping, connected components and sliding window', () => {
     assert.equal(compareLabels(out.labels, out.labels, 'total').meanDice, 1);
   });
 
-  it('accumulates accurately across multiple Z-slab ring-buffer windows', async () => {
+  it('accumulates accurately across multiple Z-slab ring-buffer windows in both float32 and float16 modes', async () => {
     const shape = [10, 4, 4]; // sz=10 > patch[0]=4 -> 4 overlapping zOrigins [0, 2, 4, 6]
     const image = Float32Array.from({ length: 160 }, (_, i) => i);
     const model = { patch: [4, 4, 4], num_classes: 3 };
-    const result = await predictSingleModel({
-      image,
-      shape,
-      model,
-      runPatch: async (tile) => {
-        const logits = new Float32Array(3 * 64);
-        for (let i = 0; i < 64; i++) {
-          // Class 1 for first half of z (values < 80), class 2 for second half (values >= 80).
-          if (tile[i] < 80) logits[1 * 64 + i] = 10;
-          else logits[2 * 64 + i] = 10;
-        }
-        return logits;
-      },
-    });
-    assert.equal(result.windows, 4);
-    for (let i = 0; i < 80; i++) assert.equal(result.labels[i], 1);
-    for (let i = 80; i < 160; i++) assert.equal(result.labels[i], 2);
+    for (const useHalf of [false, true]) {
+      const result = await predictSingleModel({
+        image,
+        shape,
+        model,
+        useHalf,
+        runPatch: async (tile) => {
+          const logits = new Float32Array(3 * 64);
+          for (let i = 0; i < 64; i++) {
+            // Peak Gaussian weight is 10, so logit 0.19999 produces weighted score 1.9999,
+            // exercising float16 mantissa carry across slab rollover alongside 3D corner voxels.
+            if (tile[i] < 80) {
+              logits[1 * 64 + i] = 0.19999;
+              logits[2 * 64 + i] = 0.15;
+            } else {
+              logits[1 * 64 + i] = 0.15;
+              logits[2 * 64 + i] = 0.19999;
+            }
+          }
+          return logits;
+        },
+      });
+      assert.equal(result.windows, 4);
+      for (let i = 0; i < 80; i++) assert.equal(result.labels[i], 1);
+      for (let i = 80; i < 160; i++) assert.equal(result.labels[i], 2);
+    }
+  });
+
+  it('rejects extreme resampled memory before allocating or loading models', async () => {
+    const hugeSpacingAffine = [
+      [1e5, 0, 0, 0],
+      [0, 1e5, 0, 0],
+      [0, 0, 1e5, 0],
+      [0, 0, 0, 1],
+    ];
+    let loaded = false;
+    await assert.rejects(
+      () => segmentVolume({
+        volume: { data: new Float32Array(8), dims: [2, 2, 2], affine: hugeSpacingAffine },
+        task: 'total',
+        models: [resolveTaskPlan({ task: 'total', resolution: 'fast' }).models[0]],
+        runModel: async () => { loaded = true; },
+      }),
+      /exceeds browser memory limits/i,
+    );
+    assert.equal(loaded, false);
+    assert.throws(() => validatePlanMemory({
+      dims: [2, 2, 2],
+      affine: [[0, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]],
+      models: [resolveTaskPlan({ task: 'total', resolution: 'fast' }).models[0]],
+    }), /invalid.*spacing/i);
   });
 });
 
 describe('manifest, tasks and label maps', () => {
-  it('exposes all 12 models and resolves every task and subset plan', () => {
+  it('exposes all 12 models, resolves valid plans, and rejects invalid task/subset combinations', () => {
     assert.equal(MODELS.length, 12);
     assert.equal(TASKS.length, 4);
     assert.equal(resolveTaskPlan({ task: 'total', resolution: 'fast' }).models.length, 1);
@@ -245,6 +329,10 @@ describe('manifest, tasks and label maps', () => {
     const abd = resolveTaskPlan({ task: 'abdominal_muscles' });
     assert.equal(abd.models.length, 1);
     assert.equal(abd.cropModel.id, 'body-ct-6mm');
+    // Invalid subset combinations must fail loudly instead of silently falling back.
+    assert.throws(() => resolveTaskPlan({ task: 'total_mr', resolution: 'full', subset: 'ribs' }), /Unsupported subset/);
+    assert.throws(() => resolveTaskPlan({ task: 'total', resolution: 'fast', subset: 'muscles' }), /requires full resolution/);
+    assert.throws(() => resolveTaskPlan({ task: 'vertebrae_mr', subset: 'organs' }), /does not support subset/);
   });
 
   it('provides complete colormaps and valid LUTs for every task', () => {

@@ -69,28 +69,46 @@ export function resolveTaskPlan({ task = 'total', resolution = 'fast', subset = 
   const spec = taskById(task);
   if (task === 'total') {
     if (resolution === 'fast') {
+      if (subset && subset !== 'all') {
+        throw new Error(`Subset "${subset}" requires full resolution (1.5 mm) for task "${task}".`);
+      }
       return { task: spec, resolution: 'fast', subset: 'all', models: [modelById('total-ct-3mm')], cropModel: null };
     }
     if (resolution === 'full') {
-      const group = CT_SUBSETS.find((entry) => entry.id === subset) ?? CT_SUBSETS[0];
+      const group = CT_SUBSETS.find((entry) => entry.id === subset);
+      if (!group) {
+        throw new Error(`Unsupported subset "${subset}" for task "${task}". Valid subsets: ${CT_SUBSETS.map((s) => s.id).join(', ')}.`);
+      }
       return { task: spec, resolution: 'full', subset: group.id, models: group.modelIds.map(modelById), cropModel: null };
     }
     throw new Error(`Unsupported resolution "${resolution}" for task "${task}".`);
   }
   if (task === 'total_mr') {
     if (resolution === 'fast') {
+      if (subset && subset !== 'all') {
+        throw new Error(`Subset "${subset}" requires full resolution (1.5 mm) for task "${task}".`);
+      }
       return { task: spec, resolution: 'fast', subset: 'all', models: [modelById('total-mr-3mm')], cropModel: null };
     }
     if (resolution === 'full') {
-      const group = MR_SUBSETS.find((entry) => entry.id === subset) ?? MR_SUBSETS[0];
+      const group = MR_SUBSETS.find((entry) => entry.id === subset);
+      if (!group) {
+        throw new Error(`Unsupported subset "${subset}" for task "${task}". Valid subsets: ${MR_SUBSETS.map((s) => s.id).join(', ')}.`);
+      }
       return { task: spec, resolution: 'full', subset: group.id, models: group.modelIds.map(modelById), cropModel: null };
     }
     throw new Error(`Unsupported resolution "${resolution}" for task "${task}".`);
   }
   if (task === 'vertebrae_mr') {
+    if (subset && subset !== 'all') {
+      throw new Error(`Task "${task}" does not support subset "${subset}".`);
+    }
     return { task: spec, resolution: 'full', subset: 'all', models: [modelById('vertebrae-mr')], cropModel: null };
   }
   if (task === 'abdominal_muscles') {
+    if (subset && subset !== 'all') {
+      throw new Error(`Task "${task}" does not support subset "${subset}".`);
+    }
     return {
       task: spec,
       resolution: 'full',

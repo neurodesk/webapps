@@ -9,11 +9,12 @@ import { CT_PART_LUTS, MR_PART_LUTS } from './labels.js';
 
 export const STEP = 0.5;
 export const MAX_INPUT_VOXELS = 512 * 1024 * 1024;
-const MAX_ACCUM_ELEMENTS = 600_000_000;
+export const MAX_RESAMPLED_VOXELS = 128 * 1024 * 1024;
+export const MAX_ACCUM_ELEMENTS = 360_000_000;
 
 const product = (shape) => shape[0] * shape[1] * shape[2];
 
-// IEEE-754 float16 <-> float32 conversion for compact multi-class logit accumulation.
+// IEEE-754 float16 <-> float32 conversion with round-to-nearest-even and exact carry propagation.
 const f32View = new Float32Array(1);
 const u32View = new Uint32Array(f32View.buffer);
 
@@ -32,16 +33,42 @@ for (let h = 0; h < 65536; h++) {
 export function f32ToF16(value) {
   f32View[0] = value;
   const bits = u32View[0];
-  const sign = (bits >> 16) & 0x8000;
-  const exp = ((bits >> 23) & 0xff) - 127 + 15;
-  let mant = bits & 0x007fffff;
-  if (exp <= 0) {
-    if (exp < -10) return sign;
-    mant = (mant | 0x00800000) >> (1 - exp);
-    return sign | ((mant + 0x00001000) >> 13);
+  const sign = (bits >>> 16) & 0x8000;
+  const exp = (bits >>> 23) & 0xff;
+  const frac = bits & 0x007fffff;
+
+  if (exp === 0xff) {
+    // Infinity or quiet NaN.
+    return sign | 0x7c00 | (frac ? ((frac >>> 13) | 1) : 0);
   }
-  if (exp >= 31) return sign | 0x7c00 | (mant && exp === 143 ? 1 : 0);
-  return sign | (exp << 10) | ((mant + 0x00001000) >> 13);
+
+  let hExp = exp - 127 + 15;
+  if (hExp >= 31) return sign | 0x7c00;
+
+  if (hExp <= 0) {
+    // Subnormal or underflow. Smallest halfway is 2^-25 (exp=102, hExp=-10, frac=0).
+    if (hExp < -10) return sign;
+    const mant = 0x00800000 | frac;
+    const shift = 14 - hExp; // 14..24
+    const half = 1 << (shift - 1);
+    const mask = (1 << shift) - 1;
+    let q = mant >>> shift;
+    const rem = mant & mask;
+    if (rem > half || (rem === half && (q & 1))) q++;
+    // If q === 1024 (0x0400), carry promotes directly into smallest normal (hExp=1, mant=0).
+    return sign | q;
+  }
+
+  // Normal float16: round 23-bit fraction down to 10 bits using round-to-nearest-even.
+  let q = frac >>> 13;
+  const rem = frac & 0x1fff;
+  if (rem > 0x1000 || (rem === 0x1000 && (q & 1))) q++;
+  if (q === 0x0400) {
+    q = 0;
+    hExp++;
+    if (hExp >= 31) return sign | 0x7c00;
+  }
+  return sign | (hExp << 10) | q;
 }
 
 export function f16ToF32(bits) {
@@ -60,36 +87,112 @@ export function voxelSpacing(affine) {
   return [0, 1, 2].map((a) => Math.hypot(affine[0][a], affine[1][a], affine[2][a]));
 }
 
-// Finds the signed permutation aligning affine columns closest to canonical +R, +A, +S.
-// Exact match to nibabel.orientations.io_orientation for orthogonal and oblique scans.
-const PERMUTATIONS = [
-  [0, 1, 2],
-  [0, 2, 1],
-  [1, 0, 2],
-  [1, 2, 0],
-  [2, 0, 1],
-  [2, 1, 0],
-];
-
-export function canonicalOrientation(affine) {
-  const norms = voxelSpacing(affine).map((s) => (s > 0 ? s : 1));
-  const unit = [0, 1, 2].map((row) => [0, 1, 2].map((col) => affine[row][col] / norms[col]));
-  let bestPerm = PERMUTATIONS[0];
-  let bestScore = -1;
-  for (const perm of PERMUTATIONS) {
-    const score = Math.abs(unit[perm[0]][0]) + Math.abs(unit[perm[1]][1]) + Math.abs(unit[perm[2]][2]);
-    if (score > bestScore) {
-      bestScore = score;
-      bestPerm = perm;
+// Symmetric 3x3 Jacobi eigendecomposition: A = V * diag(d) * V^T.
+function jacobiEigen3x3(sym) {
+  const A = sym.map((row) => [...row]);
+  const V = [
+    [1, 0, 0],
+    [0, 1, 0],
+    [0, 0, 1],
+  ];
+  for (let iter = 0; iter < 50; iter++) {
+    let p = 0;
+    let q = 1;
+    let maxOff = Math.abs(A[0][1]);
+    if (Math.abs(A[0][2]) > maxOff) { p = 0; q = 2; maxOff = Math.abs(A[0][2]); }
+    if (Math.abs(A[1][2]) > maxOff) { p = 1; q = 2; maxOff = Math.abs(A[1][2]); }
+    if (maxOff <= 1e-15) break;
+    const app = A[p][p];
+    const aqq = A[q][q];
+    const apq = A[p][q];
+    const tau = (aqq - app) / (2 * apq);
+    const t = tau >= 0 ? 1 / (tau + Math.hypot(1, tau)) : -1 / (-tau + Math.hypot(1, tau));
+    const c = 1 / Math.hypot(1, t);
+    const s = t * c;
+    A[p][p] = app - t * apq;
+    A[q][q] = aqq + t * apq;
+    A[p][q] = 0;
+    A[q][p] = 0;
+    for (let r = 0; r < 3; r++) {
+      if (r !== p && r !== q) {
+        const arp = A[r][p];
+        const arq = A[r][q];
+        A[r][p] = c * arp - s * arq;
+        A[p][r] = A[r][p];
+        A[r][q] = s * arp + c * arq;
+        A[q][r] = A[r][q];
+      }
+      const vrp = V[r][p];
+      const vrq = V[r][q];
+      V[r][p] = c * vrp - s * vrq;
+      V[r][q] = s * vrp + c * vrq;
     }
   }
-  // invPerm[canAxis] = origAxis that maps to canAxis (0=R, 1=A, 2=S).
-  const invPerm = [0, 0, 0];
+  return { values: [A[0][0], A[1][1], A[2][2]], vectors: V };
+}
+
+// Finds the signed permutation aligning affine columns closest to canonical +R, +A, +S.
+// Exact port of nibabel.orientations.io_orientation: polar decomposition via SVD followed by
+// greedy axis assignment ordered from strongest to weakest column alignment (stable on ties).
+export function canonicalOrientation(affine) {
+  const zooms = voxelSpacing(affine).map((s) => (s === 0 ? 1 : s));
+  const RS = [0, 1, 2].map((row) => [0, 1, 2].map((col) => affine[row][col] / zooms[col]));
+  // Gram matrix G = RS^T * RS.
+  const G = [0, 1, 2].map((i) => [0, 1, 2].map((j) => RS[0][i] * RS[0][j] + RS[1][i] * RS[1][j] + RS[2][i] * RS[2][j]));
+  const { values, vectors } = jacobiEigen3x3(G);
+  const singular = values.map((v) => Math.sqrt(Math.max(0, v)));
+  const maxS = Math.max(...singular);
+  const tol = maxS * 3 * Number.EPSILON;
+
+  // R = P[:, keep] * Qs[keep] = sum_{k: s_k > tol} ((RS * v_k) / s_k) * v_k^T.
+  const R = [
+    [0, 0, 0],
+    [0, 0, 0],
+    [0, 0, 0],
+  ];
+  for (let k = 0; k < 3; k++) {
+    if (singular[k] <= tol) continue;
+    const invS = 1 / singular[k];
+    const v0 = vectors[0][k];
+    const v1 = vectors[1][k];
+    const v2 = vectors[2][k];
+    const p = [
+      (RS[0][0] * v0 + RS[0][1] * v1 + RS[0][2] * v2) * invS,
+      (RS[1][0] * v0 + RS[1][1] * v1 + RS[1][2] * v2) * invS,
+      (RS[2][0] * v0 + RS[2][1] * v1 + RS[2][2] * v2) * invS,
+    ];
+    for (let r = 0; r < 3; r++) {
+      R[r][0] += p[r] * v0;
+      R[r][1] += p[r] * v1;
+      R[r][2] += p[r] * v2;
+    }
+  }
+
+  // Process input axes from strongest to weakest (stable on ties), matching nibabel.
+  const colKey = [0, 1, 2].map((c) => Math.min(-(R[0][c] ** 2), -(R[1][c] ** 2), -(R[2][c] ** 2)));
+  const inAxes = [0, 1, 2].sort((a, b) => (colKey[a] !== colKey[b] ? colKey[a] - colKey[b] : a - b));
+
+  const invPerm = [0, 1, 2];
   const flip = [false, false, false];
-  for (let origAxis = 0; origAxis < 3; origAxis++) {
-    const canAxis = bestPerm[origAxis];
-    invPerm[canAxis] = origAxis;
-    flip[canAxis] = unit[canAxis][origAxis] < 0;
+  const assigned = [false, false, false];
+  for (const inAx of inAxes) {
+    let outAx = 0;
+    let bestAbs = -1;
+    for (let r = 0; r < 3; r++) {
+      const a = Math.abs(R[r][inAx]);
+      if (a > bestAbs) {
+        bestAbs = a;
+        outAx = r;
+      }
+    }
+    if (bestAbs > 1e-8) {
+      invPerm[outAx] = inAx;
+      flip[outAx] = R[outAx][inAx] < 0;
+      assigned[outAx] = true;
+      R[outAx][0] = 0;
+      R[outAx][1] = 0;
+      R[outAx][2] = 0;
+    }
   }
   const identity = invPerm[0] === 0 && invPerm[1] === 1 && invPerm[2] === 2 && !flip[0] && !flip[1] && !flip[2];
   return { invPerm, flip, identity };
@@ -220,7 +323,8 @@ function resampleAxis(data, shape, axis, newSize, order) {
   for (let o = 0; o < newSize; o++) {
     const x = o * scale;
     if (order === 0) {
-      idx0[o] = Math.min(Math.max(roundHalfEven(x), 0), oldSize - 1);
+      // Match scipy.ndimage.zoom order=0 nearest-neighbor rounding: floor(x + 0.5).
+      idx0[o] = Math.min(Math.max(Math.floor(x + 0.5), 0), oldSize - 1);
     } else {
       const f = Math.min(Math.max(Math.floor(x), 0), oldSize - 1);
       idx0[o] = f;
@@ -457,7 +561,7 @@ export function checkLogits(logits) {
 // Runs one nnU-Net model over a normalized C-order [D, H, W] volume and returns Uint8Array argmax labels.
 // Uses a Z-slab ring buffer of depth min(patch[0], shape[0]) over unpadded voxels so peak memory
 // stays bounded regardless of scan length along Z.
-export async function predictSingleModel({ image, shape, model, runPatch, onPatch = () => {}, signal }) {
+export async function predictSingleModel({ image, shape, model, runPatch, onPatch = () => {}, signal, useHalf = null }) {
   const patch = model.patch;
   const numClasses = model.num_classes;
   const [sz, sy, sx] = shape;
@@ -481,8 +585,13 @@ export async function predictSingleModel({ image, shape, model, runPatch, onPatc
   const weights = gaussianWeights(patch);
   const patchVoxels = product(patch);
   const tile = new Float32Array(patchVoxels);
-  const useHalf = totalElems > 16_000_000;
-  const sum = useHalf ? new Uint16Array(totalElems) : new Float32Array(totalElems);
+  const halfBacked = useHalf ?? (totalElems > 16_000_000);
+  if (halfBacked) {
+    // Keep extreme 3D corner weights above float16 underflow (1e-4 of peak 10) so single-window
+    // scan corners never collapse to 0 and tie with background class 0.
+    for (let i = 0; i < weights.length; i++) if (weights[i] < 1e-3) weights[i] = 1e-3;
+  }
+  const sum = halfBacked ? new Uint16Array(totalElems) : new Float32Array(totalElems);
   const labels = new Uint8Array(sz * sliceVoxels);
 
   let flushedZ = 0;
@@ -494,9 +603,9 @@ export async function predictSingleModel({ image, shape, model, runPatch, onPatc
       for (let i = 0; i < sliceVoxels; i++) {
         const pos = slotOffset + i;
         let bestClass = 0;
-        let bestVal = useHalf ? F16_TO_F32[sum[pos]] : sum[pos];
+        let bestVal = halfBacked ? F16_TO_F32[sum[pos]] : sum[pos];
         for (let c = 1; c < numClasses; c++) {
-          const v = useHalf ? F16_TO_F32[sum[c * slabVoxels + pos]] : sum[c * slabVoxels + pos];
+          const v = halfBacked ? F16_TO_F32[sum[c * slabVoxels + pos]] : sum[c * slabVoxels + pos];
           if (v > bestVal) {
             bestVal = v;
             bestClass = c;
@@ -546,7 +655,7 @@ export async function predictSingleModel({ image, shape, model, runPatch, onPatc
             for (let py = pyStart; py < pyEnd; py++) {
               const dstRow = classDstBase + slotOffset + (y0 + py - by) * sx + (x0 - bx);
               const srcRow = (srcZ + py) * patch[2];
-              if (useHalf) {
+              if (halfBacked) {
                 for (let px = pxStart; px < pxEnd; px++) {
                   const p = srcRow + px;
                   const dst = dstRow + px;
@@ -616,6 +725,56 @@ const PART_LUTS_BY_MODEL = Object.freeze({
   'total-mr-muscles': MR_PART_LUTS.muscles,
 });
 
+// Validates input geometry and bounds resampled / accumulator memory BEFORE allocating buffers or fetching models.
+export function validatePlanMemory({ dims, affine, models, cropModel = null }) {
+  if (!dims || dims.length !== 3 || dims.some((d) => !Number.isSafeInteger(d) || d <= 0)) {
+    throw new Error('TotalSegmentator requires a valid 3D volume.');
+  }
+  if (!affine || affine.length !== 4 || affine.some((row) => !row || row.length !== 4 || row.some((v) => !Number.isFinite(v)))) {
+    throw new Error('Input volume has a non-finite spatial affine.');
+  }
+  if (product(dims) > MAX_INPUT_VOXELS) {
+    throw new Error(`Input volume (${dims.join(' × ')}) exceeds the 512M voxel limit.`);
+  }
+  const spacing = voxelSpacing(affine);
+  if (spacing.some((s) => !Number.isFinite(s) || s <= 0)) {
+    throw new Error('Input volume has invalid (zero or non-finite) voxel spacing.');
+  }
+  const { invPerm } = canonicalOrientation(affine);
+  const canDims = [dims[invPerm[0]], dims[invPerm[1]], dims[invPerm[2]]];
+  const canShape = [canDims[2], canDims[1], canDims[0]];
+  const canSpacingZyx = [spacing[invPerm[2]], spacing[invPerm[1]], spacing[invPerm[0]]];
+
+  const checkModelGrid = (model, label) => {
+    const target = targetShapeForSpacing(canShape, canSpacingZyx, model.spacing);
+    if (target.some((n) => !Number.isFinite(n) || n <= 0)) {
+      throw new Error(`Invalid resampled grid for ${label}.`);
+    }
+    const voxels = product(target);
+    if (voxels > MAX_RESAMPLED_VOXELS) {
+      throw new Error(
+        `The resampled volume (${target.join(' × ')} for ${label}) exceeds browser memory limits. `
+        + 'Use Fast (3 mm) mode or crop the scan first.',
+      );
+    }
+    const slabDepth = Math.min(model.patch[0], target[0]);
+    const slabElems = model.num_classes * slabDepth * target[1] * target[2];
+    if (slabElems > MAX_ACCUM_ELEMENTS) {
+      throw new Error(
+        `The resampled slab (${slabDepth} × ${target[1]} × ${target[2]} × ${model.num_classes} classes) exceeds browser memory limits. `
+        + 'Use Fast (3 mm) mode or crop the scan first.',
+      );
+    }
+  };
+
+  if (cropModel) {
+    // Only check the crop model upfront; the cropped volume's shape is checked once the trunk box is known.
+    checkModelGrid(cropModel, cropModel.id);
+  } else {
+    for (const model of models) checkModelGrid(model, model.id);
+  }
+}
+
 // Runs a full TotalSegmentator task (single-model, multi-part, or body-cropped abdominal_muscles).
 // `runModel(model, fn)` opens/caches the model's ONNX session, calls `fn(runPatch)`, and releases it.
 export async function segmentVolume({
@@ -630,9 +789,7 @@ export async function segmentVolume({
   if (!volume?.data || !volume?.dims || volume.dims.length !== 3) {
     throw new Error('TotalSegmentator requires a 3D NIfTI or DICOM volume.');
   }
-  if (product(volume.dims) > MAX_INPUT_VOXELS) {
-    throw new Error(`Input volume (${volume.dims.join(' × ')}) exceeds the 512M voxel limit.`);
-  }
+  validatePlanMemory({ dims: volume.dims, affine: volume.affine, models, cropModel });
 
   let workingVolume = volume;
   let cropRegion = null;
@@ -687,6 +844,7 @@ export async function segmentVolume({
       croppedAffine[r][3] = volume.affine[r][0] * bx + volume.affine[r][1] * by + volume.affine[r][2] * bz + volume.affine[r][3];
     }
     workingVolume = { data: croppedData, dims: croppedDims, affine: croppedAffine };
+    validatePlanMemory({ dims: workingVolume.dims, affine: workingVolume.affine, models });
   }
 
   // Canonical RAS reorientation.
