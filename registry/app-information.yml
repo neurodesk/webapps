@@ -3114,3 +3114,185 @@ apps:
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
+
+  dermoscope:
+    about:
+      - "Dermoscope ABCD preprocesses dermoscopic skin-lesion photographs, segments the lesion border, and computes quantitative ABCD dermoscopy morphometrics locally in your browser. Preprocessing removes dark hair artifacts with DullRazor directional morphological closing and inpainting, estimates illuminant color constancy with Shades of Gray (Minkowski p-norm), and masks dark circular dermoscope rims before multi-channel Otsu segmentation."
+      - "Quantitative metrics follow the ABCD rule of dermatoscopy (Nachbar & Stolz 1994; Kasmi & Mokrani 2016): principal-axis shape and CIELAB color asymmetry (A), 8-sector radial border abruptness and compactness (B), 6-color dermoscopic palette proportions in CIELAB (C), and equivalent diameter plus differential-structure count for an educational Total Dermoscopy Score (TDS). Research and educational tool only; not a medical device or clinical diagnosis."
+    packages:
+      - { name: "Canvas 2D Viewer & Web Worker pipeline", url: https://github.com/neurodesk/webapps/tree/main/apps/dermoscope, role: "DullRazor hair removal, Shades of Gray color constancy, Otsu segmentation, ABCD morphometry and interactive 2D viewer" }
+      - { name: fast-png, url: https://github.com/image-js/fast-png, role: "PNG encoding and decoding" }
+    citations:
+      - group: Hair removal
+        title: DullRazor
+        reference: "Lee T, Ng V, Gallagher R, Coldman A, McLean D. DullRazor: A software approach to hair removal from images. Computers in Biology and Medicine. 1997;27(6):533–543."
+        doi: 10.1016/s0010-4825(97)00020-6
+      - group: Color constancy
+        title: Shades of Gray color constancy
+        reference: "Finlayson GD, Trezzi E. Shades of gray and colour constancy. Color and Imaging Conference. 2004;12(1):37–41."
+        doi: 10.2352/CIC.2004.12.1.art00008
+      - group: Color constancy
+        title: Color constancy in dermoscopy
+        reference: "Barata C, Celebi ME, Marques JS. Improving dermoscopy image classification using color constancy. IEEE Journal of Biomedical and Health Informatics. 2015;19(3):1146–1152."
+        doi: 10.1109/JBHI.2014.2336473
+      - group: Segmentation
+        title: Otsu thresholding
+        reference: "Otsu N. A threshold selection method from gray-level histograms. IEEE Transactions on Systems, Man, and Cybernetics. 1979;9(1):62–66."
+        doi: 10.1109/TSMC.1979.4310076
+      - group: Dermoscopy scoring
+        title: ABCD rule of dermatoscopy
+        reference: "Nachbar F, Stolz W, Merkle T, et al. The ABCD rule of dermatoscopy: high prospective value in the diagnosis of doubtful melanocytic skin lesions. Journal of the American Academy of Dermatology. 1994;30(4):551–559."
+        doi: 10.1016/s0190-9622(94)70061-3
+      - group: Dermoscopy scoring
+        title: Automated ABCD rule implementation
+        reference: "Kasmi R, Mokrani K. Classification of malignant melanoma and benign skin lesions: implementation of automatic ABCD rule. IET Image Processing. 2016;10(6):448–455."
+        doi: 10.1049/iet-ipr.2015.0385
+      - group: Example data
+        title: ISIC Archive (CC-0)
+        reference: "International Skin Imaging Collaboration (ISIC). ISIC Archive public domain (CC-0) dermoscopic images (ISIC_0000000, ISIC_0000002, ISIC_0000022)."
+        url: https://www.isic-archive.com/
+
+  skin-chromophore:
+    about:
+      - "Skin Chromophore computes quantitative skin colorimetry and uncalibrated RGB optical-density chromophore proxies from clinical or dermoscopic photographs locally in your browser. It converts sRGB to CIE L*a*b* (D65), computes the Individual Typology Angle (ITA°) with 6-band Chardon/Del Bino skin typology classification for valid yellow-positive skin pixels (b* > 1), RGB proxies for Erythema Index (EI) and Melanin Index (MI), and fixed-basis melanin and hemoglobin optical-density projections inspired by Tsumura et al. (1999)."
+      - "Compare a target lesion or erythema region against perilesional reference skin with mean, standard deviation and median colorimetry plus exact CIEDE2000 (ΔE2000) perceptual color difference. Optional Shades of Gray white-balance normalization helps standardize clinical lighting. Research and educational tool only; not a medical device or calibrated spectrophotometer."
+    packages:
+      - { name: "Canvas 2D Viewer & Web Worker pipeline", url: https://github.com/neurodesk/webapps/tree/main/apps/skin-chromophore, role: "CIELAB, ITA°, RGB EI/MI proxies, fixed-basis melanin/hemoglobin optical-density projection, CIEDE2000 and interactive heatmap viewer" }
+      - { name: fast-png, url: https://github.com/image-js/fast-png, role: "PNG encoding" }
+    citations:
+      - group: Skin typology
+        title: Individual Typology Angle (ITA°)
+        reference: "Chardon A, Cretois I, Hourseau C. Skin colour typology and suntanning pathways. International Journal of Cosmetic Science. 1991;13(4):191–208."
+        doi: 10.1111/j.1467-2494.1991.tb00561.x
+      - group: Skin typology
+        title: ITA° classification and pigmentation
+        reference: "Del Bino S, Bernerd F. Variations in skin colour and the biological consequences of ultraviolet radiation exposure. British Journal of Dermatology. 2013;169(Suppl 3):33–40."
+        doi: 10.1111/bjd.12529
+      - group: Erythema and melanin indices (clinical background)
+        title: Erythema and melanin optical indices
+        reference: "Diffey BL, Oliver RJ, Farr PM. A portable instrument for quantifying erythema induced by ultraviolet radiation. British Journal of Dermatology. 1984;111(6):663–672 (spectrophotometric background; this app computes uncalibrated camera RGB proxies)."
+        doi: 10.1111/j.1365-2133.1984.tb14149.x
+      - group: Erythema and melanin indices (clinical background)
+        title: Narrow-band skin reflectance spectrophotometry
+        reference: "Takiwaki H, Overgaard L, Serup J. Comparison of narrow-band reflectance spectrophotometric and tristimulus colorimetric measurements of skin color. Skin Pharmacology. 1994;7(4):217–225."
+        doi: 10.1159/000211297
+      - group: Chromophore separation (optical-density background)
+        title: Melanin and hemoglobin optical-density model
+        reference: "Tsumura N, Haneishi H, Miyake Y. Independent-component analysis of skin color image. Journal of the Optical Society of America A. 1999;16(9):2169–2176 (optical-density framework; this app uses a fixed 3×3 physiological RGB basis rather than per-image ICA)."
+        doi: 10.1364/josaa.16.002169
+      - group: Color constancy
+        title: Shades of Gray white balance
+        reference: "Finlayson GD, Trezzi E. Shades of gray and colour constancy. Color and Imaging Conference. 2004;12(1):37–41."
+        doi: 10.2352/CIC.2004.12.1.art00008
+      - group: Color difference
+        title: CIEDE2000 color-difference formula
+        reference: "Sharma G, Wu W, Dalal EN. The CIEDE2000 color-difference formula: Implementation notes, supplementary test data, and mathematical observations. Color Research & Application. 2005;30(1):21–30."
+        doi: 10.1002/col.20070
+      - group: Example data
+        title: ISIC Archive (CC-0)
+        reference: "International Skin Imaging Collaboration (ISIC). ISIC Archive public domain (CC-0) dermoscopic images (ISIC_0001115, ISIC_0000013, ISIC_0000004)."
+        url: https://www.isic-archive.com/
+
+  wound-planimetry:
+    about:
+      - "Wound Planimetry measures calibrated wound or skin-lesion geometry and color-based Red–Yellow–Black (RYB) tissue estimates locally in your browser. Set physical scale with an interactive two-point ruler or direct pixels-per-millimetre calibration, segment the wound bed with CIELAB chromaticity scoring and optional seed placement, and measure physical area (cm²), perimeter (mm), major length, perpendicular width, and Kundin ellipsoid area."
+      - "Inside the segmented mask, fixed CIELAB/HSV color rules estimate Red (granulation-like), Yellow (slough-like), Black (eschar-like), and Unclassified shares. These are heuristic color-based estimates inspired by clinical RYB wound assessment rather than a trained tissue classifier. Research and educational tool only; not a medical device."
+    packages:
+      - { name: "Canvas 2D Viewer & Web Worker pipeline", url: https://github.com/neurodesk/webapps/tree/main/apps/wound-planimetry, role: "calibrated digital planimetry, CIELAB wound segmentation, color-based RYB tissue estimation and interactive ruler viewer" }
+      - { name: fast-png, url: https://github.com/image-js/fast-png, role: "PNG encoding and decoding" }
+    citations:
+      - group: Digital planimetry
+        title: Kundin ellipsoid wound area approximation
+        reference: "Kundin JI. A new way to size up a wound. American Journal of Nursing. 1989;89(2):206–207."
+        url: https://pubmed.ncbi.nlm.nih.gov/2916597/
+      - group: Thresholding
+        title: Otsu thresholding
+        reference: "Otsu N. A threshold selection method from gray-level histograms. IEEE Transactions on Systems, Man, and Cybernetics. 1979;9(1):62–66."
+        doi: 10.1109/TSMC.1979.4310076
+      - group: Clinical background (RYB wound assessment)
+        title: Chronic wound tissue classification background
+        reference: "Mukherjee R, Manohar DD, Das DK, Achar A, Mitra A, Chakraborty C. Automated tissue classification framework for reproducible chronic wound assessment. BioMed Research International. 2014;2014:851582 (clinical background for RYB tissue categories; this app uses explicit color thresholds rather than trained classifiers)."
+        doi: 10.1155/2014/851582
+      - group: Example data
+        title: Diabetic neuropathic heel ulcer (CC BY 3.0)
+        reference: "Moore J. Creating the ideal microcosm for rapid incorporation of bioengineered alternative tissues using an advanced hydrogel impregnated gauze dressing: a case series. The Foot and Ankle Online Journal. 2008;1(9):2 (Wikimedia Commons, CC BY 3.0: https://creativecommons.org/licenses/by/3.0/)."
+        url: https://commons.wikimedia.org/wiki/File:Neuropathic_heel_ulcer_diabetic.jpg
+      - group: Example data
+        title: Venous dorsal leg ulcer (CC BY 3.0)
+        reference: "Moore J. Creating the ideal microcosm for rapid incorporation of bioengineered alternative tissues using an advanced hydrogel impregnated gauze dressing: a case series. The Foot and Ankle Online Journal. 2008;1(9):2 (Wikimedia Commons, CC BY 3.0: https://creativecommons.org/licenses/by/3.0/)."
+        url: https://commons.wikimedia.org/wiki/File:Venous_ulcer_dorsal_leg.jpg
+
+  derm-compare:
+    about:
+      - "DermCompare aligns a baseline and follow-up dermoscopic photograph and highlights structural and chromatic change locally in your browser. Optional DullRazor hair removal and Shades of Gray normalization reduce lighting and hair differences before multi-scale rigid (translation and rotation) registration aligns the follow-up to the baseline frame."
+      - "Inspect aligned pairs with clinical blink/flicker toggle, swipe curtain, checkerboard, or a quantitative CIEDE2000 (ΔE2000) change heatmap and baseline-vs-follow-up lesion contour overlay reporting area change, Dice overlap, and chromatic shift. Research and educational tool only; not a medical device."
+    packages:
+      - { name: "Canvas 2D Viewer & Web Worker pipeline", url: https://github.com/neurodesk/webapps/tree/main/apps/derm-compare, role: "rigid multi-scale dermoscopy registration, flicker/curtain/checkerboard comparator and CIEDE2000 change mapping" }
+      - { name: fast-png, url: https://github.com/image-js/fast-png, role: "PNG encoding and decoding" }
+    citations:
+      - group: Sequential dermoscopy
+        title: Sequential digital dermoscopy for incipient melanoma
+        reference: "Kittler H, Guitera P, Riedl E, et al. Identification of clinically featureless incipient melanoma using sequential dermoscopy imaging. Archives of Dermatology. 2006;142(9):1113–1119."
+        doi: 10.1001/archderm.142.9.1113
+      - group: Sequential dermoscopy
+        title: Follow-up of melanocytic skin lesions
+        reference: "Kittler H, Pehamberger H, Wolff K, Binder M. Follow-up of melanocytic skin lesions with digital epiluminescence microscopy: patterns of modifications observed in early melanoma, atypical nevi, and common nevi. Journal of the American Academy of Dermatology. 2000;43(3):467–476."
+        doi: 10.1067/mjd.2000.107504
+      - group: Dermoscopy image analysis
+        title: Automated analysis of pigmented skin lesions
+        reference: "Korotkov K, Garcia R. Computerized analysis of pigmented skin lesions: a review. Artificial Intelligence in Medicine. 2012;56(2):69–90."
+        doi: 10.1016/j.artmed.2012.08.002
+      - group: Color difference
+        title: CIEDE2000 color-difference formula
+        reference: "Sharma G, Wu W, Dalal EN. The CIEDE2000 color-difference formula: Implementation notes, supplementary test data, and mathematical observations. Color Research & Application. 2005;30(1):21–30."
+        doi: 10.1002/col.20070
+      - group: Preprocessing
+        title: DullRazor hair suppression
+        reference: "Lee T, Ng V, Gallagher R, Coldman A, McLean D. DullRazor: A software approach to hair removal from images. Computers in Biology and Medicine. 1997;27(6):533–543."
+        doi: 10.1016/s0010-4825(97)00020-6
+      - group: Preprocessing
+        title: Shades of Gray color constancy
+        reference: "Finlayson GD, Trezzi E. Shades of gray and colour constancy. Color and Imaging Conference. 2004;12(1):37–41."
+        doi: 10.2352/CIC.2004.12.1.art00008
+      - group: Segmentation
+        title: Otsu thresholding
+        reference: "Otsu N. A threshold selection method from gray-level histograms. IEEE Transactions on Systems, Man, and Cybernetics. 1979;9(1):62–66."
+        doi: 10.1109/TSMC.1979.4310076
+      - group: Example data
+        title: ISIC Archive multi-capture lesion IL_7114869 (CC-0)
+        reference: "International Skin Imaging Collaboration (ISIC). ISIC Archive public domain (CC-0) paired dermoscopic captures of lesion IL_7114869 (ISIC_0011414, ISIC_0011415; capture interval unspecified)."
+        url: https://www.isic-archive.com/
+
+  dermvit:
+    about:
+      - "DermViT runs a quantized Vision Transformer (ViT-Base-Patch16-224) fine-tuned on the 7-class HAM10000 dermoscopy dataset locally in your browser with ONNX Runtime Web (WebGPU or threaded WebAssembly CPU). It reports uncalibrated softmax scores across melanocytic nevi (NV), melanoma (MEL), benign keratosis-like lesions (BKL), basal cell carcinoma (BCC), actinic keratoses (AKIEC), vascular lesions (VASC), and dermatofibroma (DF)."
+      - "Optional Shades of Gray color constancy and occlusion sensitivity mapping (5 × 5 patch perturbation) let researchers inspect which lesion regions drive the uncalibrated softmax scores and how illumination preprocessing shifts predictions. The first run downloads the 87 MB MIT-licensed quantized ONNX model and caches it locally. Strictly for research and educational exploration — not validated for clinical diagnosis or triage."
+    packages:
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: "ViT-Base quantized ONNX inference on WebGPU or CPU (WebAssembly)" }
+      - { name: Skin Mole ViT ONNX, url: https://huggingface.co/sazio/skin-mole-vit-onnx, role: "MIT-licensed 8-bit quantized ONNX export of Anwarkh1/Skin_Cancer-Image_Classification (Apache-2.0)" }
+      - { name: fast-png, url: https://github.com/image-js/fast-png, role: "PNG encoding" }
+    citations:
+      - group: Architecture
+        title: Vision Transformer (ViT)
+        reference: "Dosovitskiy A, Beyer L, Kolesnikov A, et al. An image is worth 16x16 words: Transformers for image recognition at scale. International Conference on Learning Representations (ICLR). 2021."
+        doi: 10.48550/arXiv.2010.11929
+      - group: Training dataset
+        title: HAM10000 dataset
+        reference: "Tschandl P, Rosendahl C, Kittler H. The HAM10000 dataset, a large collection of multi-source dermatoscopic images of common pigmented skin lesions. Scientific Data. 2018;5:180161."
+        doi: 10.1038/sdata.2018.161
+      - group: Color constancy
+        title: Shades of Gray color constancy
+        reference: "Finlayson GD, Trezzi E. Shades of gray and colour constancy. Color and Imaging Conference. 2004;12(1):37–41."
+        doi: 10.2352/CIC.2004.12.1.art00008
+      - group: Interpretability
+        title: Occlusion sensitivity visualization
+        reference: "Zeiler MD, Fergus R. Visualizing and understanding convolutional networks. European Conference on Computer Vision (ECCV). 2014:818–833."
+        doi: 10.1007/978-3-319-10590-1_53
+      - group: Browser inference
+        title: ONNX Runtime Web
+        reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."
+        url: https://onnxruntime.ai
+      - group: Example data
+        title: ISIC Archive (CC-0)
+        reference: "International Skin Imaging Collaboration (ISIC). ISIC Archive public domain (CC-0) dermoscopic images (ISIC_0000000, ISIC_0000013, ISIC_0001115)."
+        url: https://www.isic-archive.com/

@@ -147,6 +147,7 @@ test('the Worker-hosted sites deploy as assets-only Workers on their own domains
     { host: 'mskapps.sciget.org', site: 'msk' },
     { host: 'microscopyapps.sciget.org', site: 'microscopy' },
     { host: 'preclinicalapps.sciget.org', site: 'preclinical' },
+    { host: 'dermatologyapps.sciget.org', site: 'dermatology' },
     { host: 'webapps.sciget.org', site: 'hub' },
   ]);
   assert.deepEqual(workerConfig('mskapps.sciget.org', 'msk'), {

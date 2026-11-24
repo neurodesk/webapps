@@ -254,7 +254,7 @@ test('registry rejects unknown or missing facets', async () => {
   const raw = parse(await readFile(join(repoRoot, 'registry', 'apps.yml'), 'utf8'));
   const path = join(await mkdtemp(join(tmpdir(), 'apps-facets-')), 'apps.yml');
   for (const [field, value, message] of [
-    ['inputs', ['png'], /inputs for musclemap must be a non-empty array of unique values/],
+    ['inputs', ['bmp'], /inputs for musclemap must be a non-empty array of unique values/],
     ['anatomy', [], /anatomy for musclemap must be a non-empty array/],
     ['modalities', ['mri', 'mri'], /modalities for musclemap must be a non-empty array of unique values/],
     ['hardware', 'gpu', /hardware for musclemap must be one of/],

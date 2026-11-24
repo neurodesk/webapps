@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 2,
+  "app": "derm-compare",
+  "title": "DermCompare",
+  "description": "Sequential digital dermoscopy alignment and CIEDE2000 change detection (Kittler et al. 2000, 2006; Korotkov & Garcia 2012).",
+  "defaultOperation": "compare",
+  "operations": {
+    "compare": {
+      "title": "Align and compare dermoscopy pair",
+      "description": "Register a follow-up dermoscopy image onto a baseline image and quantify lesion area overlap and CIEDE2000 color change.",
+      "mode": "batch",
+      "inputs": {
+        "baseline": {
+          "source": "files",
+          "type": "file:image",
+          "formats": [
+            "jpg",
+            "jpeg",
+            "png"
+          ],
+          "description": "Baseline 2D dermoscopy image (PNG or JPEG).",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "followup": {
+          "source": "files",
+          "type": "file:image",
+          "formats": [
+            "jpg",
+            "jpeg",
+            "png"
+          ],
+          "description": "Follow-up 2D dermoscopy image (PNG or JPEG).",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "normalizeColor": {
+          "type": "boolean",
+          "default": true,
+          "description": "Apply Shades of Gray (p=6) color constancy before registration and CIEDE2000 computation."
+        },
+        "suppressHair": {
+          "type": "boolean",
+          "default": true,
+          "description": "Apply directional morphological hair suppression before registration and CIEDE2000 computation."
+        },
+        "allowScale": {
+          "type": "boolean",
+          "default": false,
+          "description": "Allow similarity scaling (0.85 to 1.15) in addition to rigid translation and rotation."
+        },
+        "maxAngle": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 90,
+          "default": 25,
+          "description": "Maximum coarse rotation search span in degrees (±maxAngle)."
+        }
+      },
+      "artifacts": {
+        "aligned": {
+          "type": "file:image",
+          "mediaType": "image/png",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "changeMap": {
+          "type": "file:image",
+          "mediaType": "image/png",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "metrics": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "provenance": {
+          "type": "neuro:provenance",
+          "mediaType": "application/json",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

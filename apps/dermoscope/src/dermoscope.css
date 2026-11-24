@@ -1,0 +1,4 @@
+/* Pointer inspection over the dermoscopic canvas. */
+.dermoscope-canvas {
+  cursor: crosshair;
+}

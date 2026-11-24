@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 2,
+  "app": "dermoscope",
+  "title": "Dermoscope ABCD",
+  "description": "Deterministic dermoscopic lesion preprocessing (dark-corner masking, DullRazor hair removal, Shades of Gray color constancy), Otsu lesion border segmentation, and experimental automated ABCD morphometry.",
+  "defaultOperation": "analyze",
+  "operations": {
+    "analyze": {
+      "title": "Analyze lesion (ABCD)",
+      "description": "Run DullRazor hair removal, Shades of Gray color constancy, CIE L*a*b* Otsu lesion border segmentation, and experimental automated A/B/C morphometry (with optional clinician-entered D for Stolz TDS) on one dermoscopy image.",
+      "mode": "batch",
+      "inputs": {
+        "image": {
+          "source": "files",
+          "type": "neuro:raster-image",
+          "formats": [
+            "jpg",
+            "jpeg",
+            "png"
+          ],
+          "description": "One 2D dermoscopic photograph in JPEG or PNG format",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "removeHair": {
+          "type": "boolean",
+          "default": true,
+          "description": "Apply DullRazor directional morphological closing and bilinear hair inpainting"
+        },
+        "colorConstancy": {
+          "type": "boolean",
+          "default": true,
+          "description": "Apply Shades of Gray (Minkowski p = 6) illuminant color constancy"
+        },
+        "thresholdBias": {
+          "type": "number",
+          "minimum": -0.3,
+          "maximum": 0.3,
+          "default": 0,
+          "description": "Offset added to the automatic Otsu segmentation threshold (-0.3 expands, +0.3 tightens the lesion border)"
+        },
+        "pixelsPerMm": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000,
+          "default": 0,
+          "description": "Optional spatial calibration in pixels per millimetre on the input image (0 leaves measurements in pixels)"
+        },
+        "differentialStructures": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5,
+          "default": 0,
+          "description": "Optional clinician/educational count of dermoscopic differential structures (1–5) used to compute Stolz Total Dermoscopy Score; 0 leaves D unscored (A/B/C only)"
+        }
+      },
+      "artifacts": {
+        "preprocessed": {
+          "type": "neuro:raster-image",
+          "mediaType": "image/png",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "mask": {
+          "type": "neuro:label-map",
+          "mediaType": "image/png",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "metrics": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "provenance": {
+          "type": "neuro:provenance",
+          "mediaType": "application/json",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

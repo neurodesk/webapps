@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dermoscope ABCD — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Input image</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose dermoscopy image" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop a dermoscopy image (JPEG or PNG)</span>
+          </label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">ABCD analysis</summary>
+        <div class="nd-section-content">
+          <label class="nd-check">
+            <input id="removeHair" type="checkbox" checked />
+            Remove hairs (DullRazor)
+          </label>
+          <label class="nd-check">
+            <input id="colorConstancy" type="checkbox" checked />
+            Color constancy (Shades of Gray)
+          </label>
+          <div class="nd-field">
+            <label for="differentialStructures">Differential structures (D)
+              <span class="nd-info-icon" tabindex="0" aria-label="About differential structures">i<span class="nd-info-tooltip">Optional clinician or educational count of dermoscopic structures (1–5: network, structureless areas, dots, globules, streaks). Leave unscored to report automated A, B, and C only, or enter 1–5 to compute Stolz's composite TDS.</span></span>
+            </label>
+            <select id="differentialStructures">
+              <option value="0" selected>Not scored (A/B/C only)</option>
+              <option value="1">1 structure</option>
+              <option value="2">2 structures</option>
+              <option value="3">3 structures</option>
+              <option value="4">4 structures</option>
+              <option value="5">5 structures</option>
+            </select>
+          </div>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <div class="nd-field">
+                <label for="thresholdBias">Border bias <small>-0.3 to 0.3</small>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About border bias">i<span class="nd-info-tooltip">Offset added to the automatic Otsu threshold. Negative values expand the lesion mask; positive values tighten it.</span></span>
+                </label>
+                <input id="thresholdBias" type="number" min="-0.3" max="0.3" step="0.05" value="0" inputmode="decimal" />
+              </div>
+              <div class="nd-field">
+                <label for="pixelsPerMm">Scale <small>px/mm</small>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About scale calibration">i<span class="nd-info-tooltip">Optional spatial calibration on the input image in pixels per millimetre. Set 0 to keep geometric outputs in pixels.</span></span>
+                </label>
+                <input id="pixelsPerMm" type="number" min="0" max="1000" step="any" value="0" inputmode="decimal" />
+              </div>
+            </div>
+          </details>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Analyze lesion</button>
+          <p class="nd-hint">Experimental morphometry only — not validated for clinical diagnosis.</p>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="canvas" class="dermoscope-canvas" aria-label="Dermoscopy lesion viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop an image anywhere, or choose an example.</p>
+        <section id="report" class="nd-viewer-report" aria-label="ABCD analysis report" hidden></section>
+      </div>
+      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Processing progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel processing" aria-label="Cancel processing" hidden>×</button>
+    </footer>
+
+    <template id="aboutContent">
+      <p>Dermoscope ABCD runs a deterministic, browser-native dermoscopic lesion analysis pipeline in a Web Worker. A, B, and C are experimental automated morphometrics intended strictly for research and education — not clinical diagnosis. The Nachbar &amp; Stolz (1994) ABCD/TDS weights and thresholds were evaluated on clinician-scored lesions rather than automated software outputs.</p>
+      <p><strong>Input assumptions &amp; preprocessing.</strong> JPEG and PNG inputs are decoded as stored 8-bit sRGB pixels without EXIF rotation, ICC color-profile conversion, or alpha premultiplication. Transparent pixels (alpha &lt; 128) are excluded from statistics, segmentation, hole-filling, and morphometry. Images larger than 512 px on their longest edge are downsampled bilinearly while preserving per-axis calibration scale. Dark circular dermoscope rims (luminance &lt; 22, morphologically guarded against thin corner-to-lesion hairs and dilated by 2 px) are excluded. Optional DullRazor hair removal (Lee et al. 1997) applies directional closing across 0°, 45°, 90°, and 135° with anisotropy and thin-and-long verification to preserve compact dark pigment dots and lesion cores, then bilinearly inpaints verified hairs. Optional Shades of Gray color constancy (Finlayson &amp; Trezzi 2004; Barata et al. 2015) estimates the illuminant with Minkowski p = 6 over valid non-saturated pixels.</p>
+      <p><strong>Segmentation &amp; experimental ABCD morphometry.</strong> Perilesional skin CIE L*a*b* (D65) is estimated from the outer 5–15% valid ring, combined with inverted L* and inverted blue intensity using small-lesion-preserving normalization, thresholded with Otsu plus optional user bias, cleaned with 3×3 closing and opening, filtered to the highest area × center-proximity component, hole-filled over valid pixels, and traced with Jacob's-criterion 8-connected Moore-Neighbor contour tracing. Images without genuine foreground-vs-background contrast or a lesion ≥ 16 px report a segmentation failure with no scores. Following Nachbar &amp; Stolz (1994) and Kasmi &amp; Mokrani (2016), the app computes experimental Asymmetry (A, 0–2), Border abruptness via mask-verified weighted Lab contrast (0.7·ΔE₇₆ + 0.3·|ΔL*|) across 8 angular sectors (B, 0–8, marking unmeasurable sectors unavailable), and Color variegation across 6 CIE L*a*b* prototypes (C, 1–6). Composite TDS = 1.3A + 0.1B + 0.5C + 0.5D is calculated only when a clinician/educational Differential structures count (D, 1–5) is explicitly entered.</p>
+    </template>
+    <template id="privacyContent">
+      <p>Dermoscopy images are decoded and analyzed locally in your browser inside a Web Worker and are never uploaded. Only the optional ISIC Archive example photographs are downloaded from the Neurodesk dataset on Hugging Face.</p>
+    </template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

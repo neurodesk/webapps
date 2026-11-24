@@ -101,6 +101,26 @@ site:
         app_id: org.sciget.preclinical
         release: preclinical-webapps
         executable: preclinical-webapps
+    - id: dermatology
+      host: dermatologyapps.sciget.org
+      # Chrome's WebMCP origin trial token for this host; empty until one is registered.
+      webmcp_origin_trial: ''
+      hosting: worker
+      title: Dermatology Webapps
+      heading: Run Dermatology Imaging Tools in Your Browser
+      description: Analyse dermoscopic lesions, map skin chromophores, measure wounds, compare follow-up photos and classify lesions in your browser without uploading your images.
+      brand:
+        name: SciGet
+        logo: sciget-logo.svg
+        icon: sciget-icon.svg
+        theme: sciget
+        home: https://sciget.org/
+        more_apps: More dermatology web apps
+      desktop:
+        product_name: Dermatology Webapps
+        app_id: org.sciget.dermatology
+        release: dermatology-webapps
+        executable: dermatology-webapps
   analytics:
     measurement_id: G-4Z9774J59Y
     period_days: 30
@@ -149,7 +169,13 @@ site:
       description: Map fibre orientation and coherency in tissue images.
     - id: morphometry
       title: Morphometry
-      description: Measure neuronal shape, branching and Sholl profiles.
+      description: Measure neuronal, lesion and wound shape, area and profiles.
+    - id: colorimetry
+      title: Colorimetry & Chromophores
+      description: Quantify skin pigmentation, erythema, melanin and perceptual colour differences.
+    - id: classification
+      title: Classification
+      description: Classify lesions and inspect model predictions.
     - id: spot-detection
       title: Spot Detection
       description: Detect and count fluorescent spots in microscopy images.
@@ -1985,6 +2011,137 @@ apps:
     maintainers: [neurodesk]
     support_status: experimental
     shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false
+  - id: dermoscope
+    path: dermoscope
+    catalog: dermatology
+    title: Dermoscope ABCD
+    description: Remove hair, segment lesions and compute ABCD dermoscopy.
+    categories: [morphometry, segmentation]
+    keywords: [dermoscopy, skin lesion, ABCD, TDS, DullRazor, hair removal, melanoma, nevus]
+    anatomy: [skin]
+    modalities: [dermoscopy]
+    inputs: [jpeg, png]
+    hardware: cpu
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: MIT
+    maintainers: [neurodesk]
+    support_status: experimental
+    handoff: none
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false
+  - id: skin-chromophore
+    path: skin-chromophore
+    catalog: dermatology
+    title: Skin Chromophore
+    description: Map skin melanin, erythema, ITA typology and CIEDE2000.
+    categories: [colorimetry]
+    keywords: [dermatology, melanin, erythema, hemoglobin, ITA, CIELAB, colorimetry, CIEDE2000]
+    anatomy: [skin]
+    modalities: [dermoscopy, photography]
+    inputs: [jpeg, png]
+    hardware: cpu
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: MIT
+    maintainers: [neurodesk]
+    support_status: experimental
+    handoff: none
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false
+  - id: wound-planimetry
+    path: wound-planimetry
+    catalog: dermatology
+    title: Wound Planimetry
+    description: Measure calibrated wound area and RYB tissue composition.
+    categories: [morphometry, segmentation]
+    keywords: [wound, ulcer, planimetry, area, granulation, slough, eschar, RYB, dermatology]
+    anatomy: [skin]
+    modalities: [photography]
+    inputs: [jpeg, png]
+    hardware: cpu
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: MIT
+    maintainers: [neurodesk]
+    support_status: experimental
+    handoff: none
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false
+  - id: derm-compare
+    path: derm-compare
+    catalog: dermatology
+    title: DermCompare
+    description: Align sequential dermoscopy images and measure change.
+    categories: [registration]
+    keywords: [sequential dermoscopy, mole tracking, registration, flicker, change detection, melanoma]
+    anatomy: [skin]
+    modalities: [dermoscopy]
+    inputs: [jpeg, png]
+    hardware: cpu
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: MIT
+    maintainers: [neurodesk]
+    support_status: experimental
+    handoff: none
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false
+  - id: dermvit
+    path: dermvit
+    catalog: dermatology
+    title: DermViT
+    description: Classify dermoscopic lesions with a HAM10000 ViT model.
+    categories: [classification]
+    keywords: [skin lesion, classification, ViT, HAM10000, ONNX, dermoscopy, saliency, melanoma]
+    anatomy: [skin]
+    modalities: [dermoscopy]
+    inputs: [jpeg, png]
+    hardware: webgpu-optional
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: models/dermvit.manifest.json
+    asset_manifest_schema: scientific-assets-v1
+    source: neurodesk/webapps@local
+    license: MIT
+    maintainers: [neurodesk]
+    support_status: experimental
+    handoff: none
+    shell: imaging-workspace
+    app_scoped_runtime_families: [ort-web-asyncify]
     ci:
       toolchains: [node]
       shared_runtime: false
