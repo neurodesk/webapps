@@ -295,31 +295,40 @@ self.onmessage = async ({ data: job }) => {
       progress(0.79, "Initializing Greedy registration…");
       greedyReady ??= initGreedy();
       await greedyReady;
-      const mniNorm = await normalizeToMniWithGreedy({
-        volume,
-        brainMask: brainMask ?? nonZeroMask(volume.data),
-        tumourMask,
-        mniTemplateBytes: atlasBundle.mniTemplateBytes,
-        greedyApi,
-        deformable: Boolean(job.deformableMni),
-        onProgress: (ev) => progress(0.84, `${ev.message}…`),
-      });
-      registrationMode = mniNorm.mode;
-      if (mniNorm.mniVoxels === 0) {
-        warnings.push("Warped tumour mask is empty in MNI space; MNI anatomical characterization unavailable.");
-        log("Warped tumour mask is empty in MNI space; omitting MNI RADS report.");
-      } else {
-        mniMask = mniNorm.mniMask;
-        mniDims = mniNorm.dims;
-        mniAffine = mniNorm.affine;
-        progress(0.92, "Computing MNI RADS anatomical report…");
-        rads = computeMniRads({
-          mniMask,
-          dims: mniDims,
-          tumourType: job.tumourType,
-          atlases: atlasBundle.atlases,
+      let mniNorm = null;
+      try {
+        mniNorm = await normalizeToMniWithGreedy({
+          volume,
+          brainMask: brainMask ?? nonZeroMask(volume.data),
+          tumourMask,
+          mniTemplateBytes: atlasBundle.mniTemplateBytes,
+          greedyApi,
+          deformable: Boolean(job.deformableMni),
+          onProgress: (ev) => progress(0.84, `${ev.message}…`),
         });
-        log(`MNI RADS (${registrationMode}): ${rads.mniVolumeMl.toFixed(2)} mL, Left ${rads.laterality.leftPct}% / Right ${rads.laterality.rightPct}%`);
+      } catch (regErr) {
+        const detail = regErr instanceof Error ? regErr.message : String(regErr);
+        warnings.push(`MNI registration failed (${detail}); emitting native-space report only.`);
+        log(`MNI registration failed (${detail}); omitting MNI RADS report.`);
+      }
+      if (mniNorm) {
+        registrationMode = mniNorm.mode;
+        if (mniNorm.mniVoxels === 0) {
+          warnings.push("Warped tumour mask is empty in MNI space; MNI anatomical characterization unavailable.");
+          log("Warped tumour mask is empty in MNI space; omitting MNI RADS report.");
+        } else {
+          mniMask = mniNorm.mniMask;
+          mniDims = mniNorm.dims;
+          mniAffine = mniNorm.affine;
+          progress(0.92, "Computing MNI RADS anatomical report…");
+          rads = computeMniRads({
+            mniMask,
+            dims: mniDims,
+            tumourType: job.tumourType,
+            atlases: atlasBundle.atlases,
+          });
+          log(`MNI RADS (${registrationMode}): ${rads.mniVolumeMl.toFixed(2)} mL, Left ${rads.laterality.leftPct}% / Right ${rads.laterality.rightPct}%`);
+        }
       }
     } else if (job.computeMniReport && morphometry.lesionCount === 0) {
       log("No tumour voxels segmented; skipping MNI anatomical registration.");

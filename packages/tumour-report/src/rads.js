@@ -3,7 +3,7 @@
 // (BSD-2-Clause), plus Greedy WASM MNI normalization helper.
 import { gunzip, registerAffineGreedy, registerSvfGreedy, resliceAffineGreedy, resliceGreedy } from '@neurodesk/greedy';
 import { readVolume, writeVolume } from '@neurodesk/synthsr';
-import { applyAffinePoint, resampleToOutput } from './preprocess.js';
+import { applyAffinePoint, resampleToOutput, voxelSpacingMm } from './preprocess.js';
 import mniLobesLabels from './data/mni_lobes.json' with { type: 'json' };
 import schaefer7Labels from './data/schaefer7.json' with { type: 'json' };
 import schaefer17Labels from './data/schaefer17.json' with { type: 'json' };
@@ -405,10 +405,24 @@ function cropMaskBbox(mask, dims, margin) {
   ];
 }
 
+function hasAffineShear(affine, tol = 1e-5) {
+  const cols = [0, 1, 2].map((c) => [affine[0][c], affine[1][c], affine[2][c]]);
+  const norms = cols.map((v) => Math.hypot(v[0], v[1], v[2]));
+  for (let i = 0; i < 3; i++) {
+    for (let j = i + 1; j < 3; j++) {
+      if (norms[i] <= 0 || norms[j] <= 0) return true;
+      const cos = Math.abs(cols[i][0] * cols[j][0] + cols[i][1] * cols[j][1] + cols[i][2] * cols[j][2]) / (norms[i] * norms[j]);
+      if (cos > tol) return true;
+    }
+  }
+  return false;
+}
+
 // Crop brain-masked T1c tightly around brainMask and resample to 1 mm RAS for Greedy
-// registration, while cropping the moving tumour mask around its own full bounding box
-// at native resolution (no intermediate 1 mm resampling) so Greedy reslices it directly
-// onto the MNI grid without dropping sub-millimetre foci.
+// registration, while cropping the moving tumour mask around its own full bounding box.
+// For orthogonal affines the mask stays at native resolution (no intermediate resampling);
+// for sheared affines (which Greedy rejects), it is resampled to an orthogonal RAS grid
+// at the scan's own finest voxel spacing so sub-millimetre foci are preserved.
 export function prepareRegistrationInputsRas(volume, brainMask, tumourMask, margin = 4) {
   const [nx, ny] = volume.dims;
   const brainBox = cropMaskBbox(brainMask, volume.dims, margin);
@@ -447,6 +461,22 @@ export function prepareRegistrationInputsRas(volume, brainMask, tumourMask, marg
   }
   const mOrigin = applyAffinePoint(volume.affine, mMinX, mMinY, mMinZ);
   const mAffine = volume.affine.map((r, i) => (i < 3 ? [r[0], r[1], r[2], mOrigin[i]] : [...r]));
+  if (hasAffineShear(mAffine)) {
+    const finest = Math.min(...voxelSpacingMm(mAffine));
+    const resampled = resampleToOutput(
+      { data: Float32Array.from(cropMask), dims: md, affine: mAffine },
+      [finest, finest, finest],
+      0,
+    );
+    const orthoMask = new Uint8Array(resampled.data.length);
+    for (let i = 0; i < orthoMask.length; i++) {
+      if (resampled.data[i] >= 0.5) orthoMask[i] = 1;
+    }
+    return {
+      t1: rasT1,
+      mask: { data: orthoMask, dims: resampled.dims, affine: resampled.affine },
+    };
+  }
   return {
     t1: rasT1,
     mask: { data: cropMask, dims: md, affine: mAffine },

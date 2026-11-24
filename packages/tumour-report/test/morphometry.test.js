@@ -4,6 +4,7 @@ import {
   axialAxisIndex,
   computeNativeMorphometry,
   exactMaxDiameter3dMm,
+  exactMinMeshDistanceMm,
   exactMinSurfaceDistanceMm,
 } from '../src/morphometry.js';
 import { voxelIndex } from '../src/preprocess.js';
@@ -228,4 +229,60 @@ test('axialAxisIndex detects superior-inferior axis on sagittal acquisitions', (
     [0, 0, 0, 1],
   ];
   assert.equal(axialAxisIndex(sagittalAffine), 1);
+});
+
+test('axial bidimensional measurement is invariant under mirroring and rotation of L-shaped lesions', () => {
+  const dims = [28, 28, 3];
+  const makeL = (flipX, flipY) => {
+    const mask = new Uint8Array(dims[0] * dims[1] * dims[2]);
+    for (let y = 0; y < 24; y++) {
+      for (let x = 0; x < 24; x++) {
+        if (x < 12 || y < 12) {
+          const mx = flipX ? 23 - x : x;
+          const my = flipY ? 23 - y : y;
+          mask[voxelIndex(mx + 2, my + 2, 1, dims)] = 1;
+        }
+      }
+    }
+    return mask;
+  };
+  const expected = [];
+  for (const [fx, fy] of [[false, false], [true, false], [false, true], [true, true]]) {
+    const res = computeNativeMorphometry({ tumourMask: makeL(fx, fy), dims, affine: IDENTITY });
+    const ax = res.lesions[0].axialBidimensional;
+    assert.equal(ax.longAxisMm, 33.94, `flip=(${fx},${fy}) longAxisMm=${ax.longAxisMm}`);
+    assert.equal(ax.shortAxisMm, 16.97, `flip=(${fx},${fy}) shortAxisMm=${ax.shortAxisMm}`);
+    assert.equal(ax.measurable10x10mm, true, `flip=(${fx},${fy}) measurable`);
+    expected.push(`${ax.longAxisMm}x${ax.shortAxisMm}`);
+  }
+  assert.equal(new Set(expected).size, 1);
+});
+
+test('exact triangle-to-triangle mesh distance avoids false multifocality on parallel faces 4.99 mm apart', () => {
+  // Two 7x7x7 cubes (~0.342 mL each) with sheared affine so opposing mesh faces are strictly
+  // parallel at 4.99 mm apart while vertices are laterally staggered by 0.45 mm
+  // (vertex-only distance = sqrt(4.99^2 + 0.45^2) = 5.01 mm > 5 mm, true face distance = 4.99 mm < 5 mm).
+  const dims = [24, 12, 12];
+  const affine = [
+    [0.998, 0, 0, 0],
+    [0.09, 1, 0, 0],
+    [0, 0, 1, 0],
+    [0, 0, 0, 1],
+  ];
+  const mask = new Uint8Array(dims[0] * dims[1] * dims[2]);
+  for (let z = 2; z < 9; z++) {
+    for (let y = 2; y < 9; y++) {
+      for (let x = 2; x < 9; x++) mask[voxelIndex(x, y, z, dims)] = 1;
+      for (let x = 14; x < 21; x++) mask[voxelIndex(x, y, z, dims)] = 1;
+    }
+  }
+  const res = computeNativeMorphometry({ tumourMask: mask, dims, affine });
+  assert.equal(res.lesionCount, 2);
+  assert.equal(res.maxMinFociDistanceMm, 4.99);
+  assert.equal(res.multifocal, false);
+
+  // Direct triangle-to-triangle check on staggered coplanar-normal triangles 4.99 mm apart.
+  const triA = [[[0, 0, 0], [4, 0, 0], [0, 4, 0]]];
+  const triB = [[[1, 1, 4.99], [5, 1, 4.99], [1, 5, 4.99]]];
+  assert.ok(Math.abs(exactMinMeshDistanceMm(triA, triB) - 4.99) < 1e-9);
 });

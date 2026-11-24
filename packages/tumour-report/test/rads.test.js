@@ -1,10 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import initGreedy, * as greedyApi from '@neurodesk/greedy/wasm-single';
+import { writeVolume } from '@neurodesk/synthsr';
 import {
   computeCorticalOverlap,
   computeLaterality,
   computeResectability,
   computeSubcorticalTracts,
+  normalizeToMniWithGreedy,
   parseBcbTractsPack,
   prepareRegistrationInputsRas,
   squaredEdt3d,
@@ -141,4 +146,51 @@ test('parseBcbTractsPack and computeSubcorticalTracts score overlapping and near
   assert.equal(res.nearby.length, 1);
   assert.equal(res.nearby[0].name, 'TractB');
   assert.equal(res.nearby[0].minDistanceMm, 4);
+});
+
+test('normalizeToMniWithGreedy succeeds on sheared NIfTIs by orthogonalizing the cropped mask at native spacing', async () => {
+  const require = createRequire(import.meta.url);
+  const wasmPath = require.resolve('@neurodesk/greedy/wasm-single').replace(/\.js$/, '_bg.wasm');
+  await initGreedy({ module_or_path: readFileSync(wasmPath) });
+
+  const dims = [32, 32, 32];
+  const fixedData = new Float32Array(dims[0] * dims[1] * dims[2]);
+  const brain = new Uint8Array(fixedData.length);
+  const tumour = new Uint8Array(fixedData.length);
+  for (let z = 6; z < 26; z++) {
+    for (let y = 6; y < 26; y++) {
+      for (let x = 6; x < 26; x++) {
+        const r2 = (x - 16) ** 2 + (y - 16) ** 2 + (z - 16) ** 2;
+        if (r2 < 100) {
+          const idx = voxelIndex(x, y, z, dims);
+          fixedData[idx] = 100 - r2;
+          brain[idx] = 1;
+        }
+      }
+    }
+  }
+  for (let z = 14; z < 18; z++) {
+    for (let y = 14; y < 18; y++) {
+      for (let x = 14; x < 18; x++) tumour[voxelIndex(x, y, z, dims)] = 1;
+    }
+  }
+
+  const fixedBytes = new Uint8Array(writeVolume({
+    data: fixedData,
+    dims,
+    affine: [[1, 0, 0, -16], [0, 1, 0, -16], [0, 0, 1, -16], [0, 0, 0, 1]],
+  }));
+  const shearedAffine = [[1, 0.25, 0, -16], [0, 1, 0, -16], [0, 0, 1, -16], [0, 0, 0, 1]];
+
+  const prepared = prepareRegistrationInputsRas({ data: fixedData, dims, affine: shearedAffine }, brain, tumour);
+  assert.equal(prepared.mask.affine[0][1], 0, 'sheared moving mask is resampled to orthogonal RAS grid');
+
+  const res = await normalizeToMniWithGreedy({
+    volume: { data: fixedData, dims, affine: shearedAffine },
+    brainMask: brain,
+    tumourMask: tumour,
+    mniTemplateBytes: fixedBytes,
+    greedyApi,
+  });
+  assert.ok(res.mniVoxels >= 48, `expected non-empty MNI mask for sheared scan, got ${res.mniVoxels}`);
 });
