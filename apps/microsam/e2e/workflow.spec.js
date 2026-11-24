@@ -5,7 +5,10 @@
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { fromArrayBuffer } from "geotiff";
+import { writeTiffStack } from "@neurodesk/webapp-components/file-io/tiff";
 import { example, exampleFile, iou, pinned, reference, routeExample, routeModels, runsToMask } from "./fixtures.mjs";
+import { MODELS } from "../src/config.js";
+import { readImage } from "../src/image-io.js";
 
 const { width, height } = reference.image;
 const KINDS = ["point", "box", "point-negative", "box-point"];
@@ -214,4 +217,96 @@ test("prompts outside the image are refused before the embedding", async ({ page
   });
   expect(snapshot.state).toBe("failed");
   expect(snapshot.error.message).toBe("Object 1: point (400, 10) is outside the 360 × 360 image.");
+});
+
+test("EM organelle model (vit_t_em_organelles) and 3D Z-stack propagation work end to end", async ({ page }) => {
+  test.setTimeout(360000);
+  await routeModels(page, { models: MODELS });
+  await page.goto("./");
+
+  // 1. Run vit_t_em_organelles via automation on the example image
+  const bytes = await pinned(exampleFile);
+  await page.locator("#neurodesk-input-transfer").setInputFiles({ name: exampleFile.name, mimeType: "image/tiff", buffer: bytes });
+  const [firstBox] = ofKind("box");
+  await page.evaluate(async (parameters) => {
+    await globalThis.neurodeskAutomation.dispatch("adopt", { role: "image" });
+    await globalThis.neurodeskAutomation.dispatch("start", { parameters });
+  }, { prompts: JSON.stringify([firstBox.prompt]), model: "vit_t_em_organelles", backend: "wasm" });
+  await expect.poll(() => page.evaluate(async () => (await globalThis.neurodeskAutomation.dispatch("snapshot")).state), { timeout: 150000 }).toMatch(/succeeded|failed/);
+  const emSnap = await page.evaluate(() => globalThis.neurodeskAutomation.dispatch("snapshot"));
+  expect(emSnap.error?.message ?? null).toBeNull();
+  expect(emSnap.report.provenance.model).toBe("vit_t_em_organelles");
+  expect(emSnap.report.provenance.objects[0].area).toBeGreaterThan(100);
+
+  // 2. Build a real 3-slice 360x360 microscopy Z-stack with distinct shifted planes per slice,
+  // verify 3D controls appear, prompt a real nucleus on the middle slice, propagate in 3D across
+  // all 3 slices, and verify reopening the exported 3D label TIFF preserves Z-axis metadata and
+  // distinct per-slice masks.
+  const img2d = await readImage(exampleFile.name, bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+  const plane0 = img2d.planes[0].data;
+  const planeLen = img2d.width * img2d.height;
+  const shiftPlane = (src, dx) => {
+    const out = new src.constructor(planeLen);
+    for (let y = 0; y < img2d.height; y++) {
+      const row = y * img2d.width;
+      for (let x = 0; x < img2d.width; x++) {
+        const sx = Math.min(img2d.width - 1, Math.max(0, x - dx));
+        out[row + x] = src[row + sx];
+      }
+    }
+    return out;
+  };
+  const stackData = new plane0.constructor(planeLen * 3);
+  stackData.set(shiftPlane(plane0, -3), 0);
+  stackData.set(plane0, planeLen);
+  stackData.set(shiftPlane(plane0, 3), planeLen * 2);
+  const stackBytes = Buffer.from(writeTiffStack({
+    width: img2d.width,
+    height: img2d.height,
+    data: stackData,
+    description: "ImageJ=1.54f\nimages=3\nslices=3\n",
+  }));
+  await page.locator("#imageInput").setInputFiles({ name: "nuclei-stack.tif", mimeType: "image/tiff", buffer: stackBytes });
+  await expect(page.locator("#sliceField")).toBeVisible({ timeout: 30000 });
+  await expect(page.locator("#sliceLabel")).toHaveText("2 / 3");
+  await expect(page.locator("#propagateButton")).toBeVisible();
+  await page.locator("#model").selectOption("vit_t_lm");
+  await page.locator("#advancedSettings summary").click();
+  await page.locator("#backend").selectOption("wasm");
+  await page.locator("#embedButton").click();
+  await expect(page.locator("#statusText")).toHaveText(/^Embeddings ready/, { timeout: 150000 });
+
+  const [firstPoint] = ofKind("point");
+  const [px, py] = firstPoint.prompt.points[0];
+  const canvas = page.locator("#canvas");
+  const box = await canvas.boundingBox();
+  const scale = Math.min(box.width / img2d.width, box.height / img2d.height);
+  const ox = (box.width - img2d.width * scale) / 2;
+  const oy = (box.height - img2d.height * scale) / 2;
+  await page.mouse.click(box.x + ox + (px + 0.5) * scale, box.y + oy + (py + 0.5) * scale);
+  await expect(page.locator("#propagateButton")).toBeEnabled({ timeout: 30000 });
+  await page.locator("#propagateButton").click();
+  await expect(page.locator("#statusText")).toContainText("Propagated across 3 slices", { timeout: 240000 });
+  await page.locator("#acceptButton").click();
+  await expect(page.locator("#outputSection")).toHaveAttribute("open", "");
+  const table = await download(page, "Object table");
+  const lines = table.bytes.toString("utf8").trim().split("\n");
+  expect(lines[0]).toMatch(/^id,volume_vx,slices,centroid_x,centroid_y,centroid_z,/);
+  const [, volumeVx, slices] = lines[1].split(",");
+  expect(Number(slices)).toBe(3);
+  expect(Number(volumeVx)).toBeGreaterThan(3000);
+  const labelsTiff = await download(page, "Object labels");
+  const reopened = await readImage(labelsTiff.name, labelsTiff.bytes.buffer.slice(labelsTiff.bytes.byteOffset, labelsTiff.bytes.byteOffset + labelsTiff.bytes.byteLength));
+  expect(reopened.depth).toBe(3);
+  expect(reopened.planes).toHaveLength(1);
+  const s0 = reopened.slices[0][0].data;
+  const s1 = reopened.slices[1][0].data;
+  const s2 = reopened.slices[2][0].data;
+  expect(s0.some(Boolean)).toBe(true);
+  expect(s1.some(Boolean)).toBe(true);
+  expect(s2.some(Boolean)).toBe(true);
+  // Distinct per-slice masks confirm slice order and content are preserved (no duplication/permutation).
+  let diff02 = 0;
+  for (let i = 0; i < s0.length; i++) if (s0[i] !== s2[i]) diff02++;
+  expect(diff02).toBeGreaterThan(50);
 });

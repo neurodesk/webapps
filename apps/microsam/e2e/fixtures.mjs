@@ -3,7 +3,7 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { MODEL } from "../src/config.js";
+import { MODELS } from "../src/config.js";
 
 export const examples = JSON.parse(readFileSync(new URL("../examples.json", import.meta.url), "utf8"));
 export const reference = JSON.parse(readFileSync(new URL("../validation/reference.json", import.meta.url), "utf8"));
@@ -26,14 +26,16 @@ export async function pinned({ url, sha256, bytes }) {
   return data;
 }
 
-/** Serves the two model files from the cache (fetchModel still verifies them in the page). */
-export async function routeModels(page, { hold = null } = {}) {
-  for (const asset of [MODEL.encoder, MODEL.decoder]) {
-    const body = await pinned(asset);
-    await page.route(asset.url, async (route) => {
-      if (hold) await hold(asset);
-      await route.fulfill({ body, headers: { "content-type": "application/octet-stream", "access-control-allow-origin": "*" } });
-    });
+/** Serves model files from the cache (fetchModel still verifies them in the page). */
+export async function routeModels(page, { hold = null, models = [MODELS[0]] } = {}) {
+  for (const model of models) {
+    for (const asset of [model.encoder, model.decoder]) {
+      const body = await pinned(asset);
+      await page.route(asset.url, async (route) => {
+        if (hold) await hold(asset);
+        await route.fulfill({ body, headers: { "content-type": "application/octet-stream", "access-control-allow-origin": "*" } });
+      });
+    }
   }
 }
 

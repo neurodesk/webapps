@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 2,
+  "app": "medsam2",
+  "title": "MedSAM2",
+  "description": "Interactive 3D segmentation of MRI and CT scans from point and box prompts with MedSAM2 (SAM 2.1 Hiera-Tiny).",
+  "defaultOperation": "segment",
+  "operations": {
+    "segment": {
+      "title": "Segment 3D volume from prompts",
+      "description": "Segment one or more 3D objects from slice point/box prompts using MedSAM2's image encoder, prompt decoder and bidirectional 3D memory propagation.",
+      "mode": "batch",
+      "inputs": {
+        "image": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti",
+            "dicom"
+          ],
+          "description": "One 3D NIfTI volume or DICOM series",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "prompts": {
+          "type": "string",
+          "description": "JSON array, one entry per object: {\"axis\"?: \"axial\"|\"coronal\"|\"sagittal\", \"slice\": int, \"points\"?: [[x, y, 1|0], ...], \"box\"?: [x0, y0, x1, y1], \"propagate\"?: true, \"range\"?: [minSlice, maxSlice]}",
+          "required": true
+        },
+        "window": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "ct-soft",
+            "ct-lung",
+            "ct-bone",
+            "ct-brain",
+            "full"
+          ],
+          "default": "auto",
+          "description": "Intensity window preset (auto uses 0.5-99.5% percentile for MRI)"
+        },
+        "stopOnEmpty": {
+          "type": "boolean",
+          "default": false,
+          "description": "Stop propagation along a direction when two consecutive slices have no foreground"
+        },
+        "backend": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "webgpu",
+            "wasm"
+          ],
+          "default": "auto",
+          "description": "Inference backend; auto prefers hardware WebGPU and falls back to WebAssembly"
+        }
+      },
+      "artifacts": {
+        "labels": {
+          "type": "neuro:label-map",
+          "mediaType": "application/octet-stream",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "table": {
+          "type": "neuro:table",
+          "mediaType": "text/tab-separated-values",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

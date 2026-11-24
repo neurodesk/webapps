@@ -54,15 +54,27 @@ test("NaN pixels are read, then refused before the model sees them", async () =>
   assert.throws(() => channelToUint8(image.planes[0].data), /NaN or infinite/);
 });
 
-test("OME-TIFF channels take their names; Z-stacks and ImageJ stacks are refused", async () => {
+test("OME-TIFF channels take their names; OME and ImageJ Z-stacks are read as 3D volumes", async () => {
   const image = await readImage("two-channels.ome.tif", fixture("two-channels.ome.tif"));
   assert.equal(image.format, "OME-TIFF");
+  assert.equal(image.depth, 1);
   assert.deepEqual(image.planes.map((plane) => plane.label), ["DAPI", "GFP & co"]);
   assert.equal(image.planes[1].data[4], base(4, 0) * 2);
-  await assert.rejects(readImage("stack.ome.tif", fixture("stack.ome.tif")), /Z-stack \(3 slices, 1 time points\)/);
-  await assert.rejects(readImage("zstack-imagej.tif", fixture("zstack-imagej.tif")), /ImageJ Z-stack/);
+
+  const stack = await readImage("stack.ome.tif", fixture("stack.ome.tif"));
+  assert.equal(stack.format, "OME-TIFF");
+  assert.equal(stack.depth, 3);
+  assert.equal(stack.slices.length, 3);
+  assert.equal(channelChoices(stack)[0].planesAt(2)[0].data[1], base(1, 0));
+
+  const ijStack = await readImage("zstack-imagej.tif", fixture("zstack-imagej.tif"));
+  assert.equal(ijStack.format, "ImageJ TIFF");
+  assert.equal(ijStack.depth, 2);
+  assert.equal(ijStack.slices.length, 2);
+
   const hyperstack = await readImage("hyperstack.tif", fixture("hyperstack.tif"));
   assert.equal(hyperstack.format, "ImageJ TIFF");
+  assert.equal(hyperstack.depth, 1);
   assert.deepEqual(hyperstack.planes.map((plane) => plane.label), ["Channel 1", "Channel 2"]);
 });
 
@@ -90,8 +102,8 @@ test("TiffData layouts the reader cannot follow are refused", () => {
 test("OME-XML with a namespace prefix, single quotes and entities is understood", () => {
   const xml = `<?xml version="1.0"?><ome:OME xmlns:ome="http://www.openmicroscopy.org/Schemas/OME/2016-06"><ome:Image ID='Image:0'>`
     + `<ome:Pixels SizeC='2' SizeZ="1" SizeT='1'><ome:Channel Name='A &amp; B'/><ome:Channel Name="&#67;y5"/></ome:Pixels></ome:Image></ome:OME>`;
-  assert.deepEqual(describedLayout("x.ome.tif", xml, [0, 1]), { format: "OME-TIFF", names: ["A & B", "Cy5"] });
-  assert.throws(() => describedLayout("x.ome.tif", xml.replace("SizeZ=\"1\"", "SizeZ='4'"), [0, 1]), /Z-stack/);
+  assert.deepEqual(describedLayout("x.ome.tif", xml, [0, 1]), { format: "OME-TIFF", depth: 1, names: ["A & B", "Cy5"] });
+  assert.throws(() => describedLayout("x.ome.tif", xml.replace("SizeT='1'", "SizeT='4'"), [0, 1]), /time series/);
   const two = xml.replace("</ome:OME>", "<ome:Image ID='Image:1'><ome:Pixels SizeC='1'/></ome:Image></ome:OME>");
   assert.throws(() => describedLayout("x.ome.tif", two, [0, 1]), /holds 2 OME images/);
 });

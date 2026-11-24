@@ -36,11 +36,11 @@ def sha256(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def main(checkpoint, out_dir):
+def main(checkpoint, out_dir, model_type="vit_t_lm"):
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     torch.manual_seed(0)
-    _, sam = get_sam_model(model_type="vit_t_lm", checkpoint_path=checkpoint, device="cpu", return_sam=True)
+    _, sam = get_sam_model(model_type=model_type, checkpoint_path=checkpoint, device="cpu", return_sam=True)
     assert not any(module.training for module in sam.modules())
     cached = [module.ab for module in sam.image_encoder.modules() if hasattr(module, "ab")]
     attention_bias_absmax = max(float(ab.abs().max()) for ab in cached)
@@ -49,7 +49,8 @@ def main(checkpoint, out_dir):
     manifest = json.loads((Path(__file__).resolve().parents[3] / "models" / "microsam.manifest.json").read_text())
     assert cached and attention_bias_absmax == 0 == manifest["model"]["cached_attention_bias_absmax"], attention_bias_absmax
 
-    encoder_path = out / "microsam-vit-t-lm-encoder.onnx"
+    slug = model_type.replace("_", "-")
+    encoder_path = out / f"microsam-{slug}-encoder.onnx"
     image = torch.randn(1, 3, 1024, 1024)
     with torch.no_grad():
         torch_embedding = sam.image_encoder(image).numpy()
@@ -60,7 +61,7 @@ def main(checkpoint, out_dir):
         )
     onnx.checker.check_model(onnx.load(encoder_path))
 
-    decoder_path = out / "microsam-vit-t-lm-decoder.onnx"
+    decoder_path = out / f"microsam-{slug}-decoder.onnx"
     decoder = SamOnnxModel(sam, return_single_mask=False)
     decoder.training = False
     embed_dim = sam.prompt_encoder.embed_dim
@@ -105,4 +106,4 @@ def main(checkpoint, out_dir):
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:3])
+    main(*sys.argv[1:4])

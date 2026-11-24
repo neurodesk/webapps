@@ -2619,7 +2619,7 @@ apps:
 
   microsam:
     packages:
-      - { name: micro-sam, url: https://github.com/computational-cell-analytics/micro-sam, role: "light-microscopy generalist ViT-T model (vit_t_lm, CC BY 4.0); preprocessing and prompt handling ported from micro-sam 1.8.14 (MIT)" }
+      - { name: micro-sam, url: https://github.com/computational-cell-analytics/micro-sam, role: "light-microscopy (vit_t_lm) and EM organelle (vit_t_em_organelles) ViT-T models (CC BY 4.0); 2D/3D preprocessing, prompting and Z-stack propagation ported from micro-sam (MIT)" }
       - { name: MobileSAM, url: https://github.com/ChaoningZhang/MobileSAM, role: "TinyViT image encoder and the ONNX prompt decoder graph (Apache-2.0)" }
       - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: model inference on WebGPU or the CPU (WebAssembly) }
       - { name: Pillow, url: https://github.com/python-pillow/Pillow, role: "bilinear resampling ported from Pillow 13.0.0 (MIT-CMU), as micro-sam resizes images" }
@@ -3044,6 +3044,37 @@ apps:
         reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
         doi: 10.1016/j.jneumeth.2016.03.001
         code: https://github.com/rordenlab/dcm2niix
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  medsam2:
+    packages:
+      - { name: MedSAM2, url: https://github.com/bowang-lab/MedSAM2, role: "3D medical image interactive segmentation model (sam2.1_hiera_t512, MedSAM2_latest.pt, CC BY-SA 4.0)" }
+      - { name: SAM 2, url: https://github.com/facebookresearch/sam2, role: "Hiera-Tiny image encoder, prompt decoder, memory encoder and memory attention architecture (Apache-2.0)" }
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: model inference on WebGPU or the CPU (WebAssembly) }
+      - { name: dcm2niix, url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion in WebAssembly }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: 3D medical image viewer and mask editor host }
+    citations:
+      - group: Interactive 3D segmentation
+        title: MedSAM2
+        reference: "Ma J, Yang Z, Kim S, et al. MedSAM2: Segment Anything in 3D Medical Images and Videos. arXiv:2504.03600. 2025."
+        doi: 10.48550/arXiv.2504.03600
+        code: https://github.com/bowang-lab/MedSAM2
+      - group: Interactive 3D segmentation
+        title: SAM 2
+        reference: "Ravi N, Gabeur V, Hu Y-T, et al. SAM 2: Segment Anything in Images and Videos. arXiv:2408.00714. 2024."
+        doi: 10.48550/arXiv.2408.00714
+        code: https://github.com/facebookresearch/sam2
+      - group: Conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+      - group: Browser inference
+        title: ONNX Runtime Web
+        reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."
+        url: https://onnxruntime.ai
       - group: Visualization
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."

@@ -28,5 +28,6 @@
   "tumour-report": "the pinned dbouget/raidionics-rads:v1.3.2-py39-cpu container is the upstream command-line reference, and packages/tumour-report/validation holds voxel-exact native mask parity to it; a packaged Node CLI can follow via exes/node-cli",
   "denoise": "no command-line package yet: v1 runs its self-supervised denoising core (apps/denoise/src/core) in browser workers and Node tests; Aydin (pip install aydin) is the established native tool for batch CLI work",
   "totalsegmentator": "upstream TotalSegmentator (wasserth/TotalSegmentator) ships the native Python CLI and Neurodesk packages it as totalsegmentator 2.18.0: the Standalone dialog lists the Neurodesk container (Docker and Apptainer), and packages/totalsegmentator/validation/validate.mjs verifies the JS pipeline against upstream reference outputs",
-  "cellpose": "Python Cellpose (pip install cellpose) is the command-line reference the app reproduces on the 2D and 3D examples; no separate command line is packaged"
+  "cellpose": "Python Cellpose (pip install cellpose) is the command-line reference the app reproduces on the 2D and 3D examples; no separate command line is packaged",
+  "medsam2": "MedSAM2 (bowang-lab/MedSAM2 in Python) is the upstream reference; interactive slice prompting has no separate command line"
 }
