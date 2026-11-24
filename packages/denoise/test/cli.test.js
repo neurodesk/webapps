@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -195,7 +195,12 @@ test("single-axis XY calibration in a 2D+T OME-TIFF is preserved without fabrica
       options: { method: "vst-nlm", "noise-model": "gaussian", format: "auto" },
     });
 
-    const outVol = await readVolume(new File([await readFile(join(outDir, "movie_denoised.tif"))], "movie_denoised.tif"));
+    const outBytes = await readFile(join(outDir, "movie_denoised.tif"));
+    const xmlText = Buffer.from(outBytes).toString("latin1");
+    assert.match(xmlText, /<Channel ID="Channel:0" SamplesPerPixel="1"\/>/);
+    assert.match(xmlText, /<TiffData FirstC="0" FirstT="0" FirstZ="0" IFD="0" PlaneCount="3"\/>/);
+
+    const outVol = await readVolume(new File([outBytes], "movie_denoised.tif"));
     assert.equal(outVol.axisKind, "t");
     assert.deepEqual(outVol.dims, [3, 24, 24]);
     assert.ok(Math.abs(outVol.spacingUm.x - 0.25) < 1e-6);
@@ -229,6 +234,131 @@ test("denoiseFile enforces maxFileBytes before reading file bytes into memory", 
       () => denoiseFile({ input: inputPath, outputDir: outDir, maxBytes: 1024, maxFileBytes: 1024 }),
       /too large/i,
     );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("a late rename failure rolls back newly published files and restores overwritten outputs", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "denoise-rollback-test-"));
+  try {
+    const inputPath = join(dir, "sample.tif");
+    await writeFile(inputPath, syntheticTiff([1, 24, 24]));
+
+    // Case A: fresh directory — fail on provenance rename after denoised TIFF moved.
+    const freshOut = join(dir, "fresh");
+    await mkdir(freshOut);
+    await assert.rejects(
+      () => denoiseFile({
+        input: inputPath,
+        outputDir: freshOut,
+        options: { method: "fgr-ridge", "max-scale": "4" },
+        renameFn: async (src, dst) => {
+          if (dst.endsWith("sample_provenance.json")) {
+            const err = new Error("EACCES: permission denied");
+            err.code = "EACCES";
+            throw err;
+          }
+          return rename(src, dst);
+        },
+      }),
+      /EACCES/,
+    );
+    assert.deepEqual(await readdir(freshOut), []);
+
+    // Case B: --overwrite directory — restore prior TIFF and provenance verbatim on failure.
+    const overwriteOut = join(dir, "existing");
+    await mkdir(overwriteOut);
+    const oldTiff = Buffer.from("prior-denoised-tiff-bytes");
+    const oldProv = '{"methodId":"prior"}\n';
+    await writeFile(join(overwriteOut, "sample_denoised.tif"), oldTiff);
+    await writeFile(join(overwriteOut, "sample_provenance.json"), oldProv, "utf8");
+
+    await assert.rejects(
+      () => denoiseFile({
+        input: inputPath,
+        outputDir: overwriteOut,
+        options: { method: "fgr-ridge", "max-scale": "4", overwrite: true },
+        renameFn: async (src, dst) => {
+          if (dst === join(overwriteOut, "sample_provenance.json")) {
+            const err = new Error("EACCES: permission denied");
+            err.code = "EACCES";
+            throw err;
+          }
+          return rename(src, dst);
+        },
+      }),
+      /EACCES/,
+    );
+    assert.deepEqual((await readdir(overwriteOut)).sort(), ["sample_denoised.tif", "sample_provenance.json"]);
+    assert.deepEqual(await readFile(join(overwriteOut, "sample_denoised.tif")), oldTiff);
+    assert.equal(await readFile(join(overwriteOut, "sample_provenance.json"), "utf8"), oldProv);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("stale lock from a dead local PID is safely recovered while a live-PID lock is respected", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "denoise-stale-lock-test-"));
+  try {
+    const inputPath = join(dir, "sample.tif");
+    await writeFile(inputPath, syntheticTiff([1, 24, 24]));
+
+    // Find an unused PID by spawning and awaiting a short-lived child process.
+    const child = spawnSync(process.execPath, ["-e", "process.exit(0)"]);
+    const deadPid = child.pid;
+    const staleOut = join(dir, "stale-out");
+    await mkdir(staleOut);
+    await writeFile(
+      join(staleOut, ".denoise-run.lock"),
+      `${JSON.stringify({ pid: deadPid, host: hostname(), startedAt: Date.now() - 10_000, token: "dead" })}\n`,
+      "utf8",
+    );
+    await mkdir(join(staleOut, `.denoise-stage-${deadPid}-abcd1234`));
+
+    // Recovery succeeds without --overwrite and cleans the dead staging dir.
+    const recovered = await denoiseFile({
+      input: inputPath,
+      outputDir: staleOut,
+      options: { method: "fgr-ridge", "max-scale": "4" },
+    });
+    assert.ok(recovered.outputs.length === 2);
+    assert.deepEqual((await readdir(staleOut)).sort(), ["sample_denoised.tif", "sample_provenance.json"]);
+
+    // A lock held by a live PID (our own PID) MUST NOT be stolen even with --overwrite.
+    const liveOut = join(dir, "live-out");
+    await mkdir(liveOut);
+    await writeFile(
+      join(liveOut, ".denoise-run.lock"),
+      `${JSON.stringify({ pid: process.pid, host: hostname(), startedAt: Date.now(), token: "live" })}\n`,
+      "utf8",
+    );
+    await assert.rejects(
+      () => denoiseFile({
+        input: inputPath,
+        outputDir: liveOut,
+        options: { method: "fgr-ridge", "max-scale": "4", overwrite: true },
+      }),
+      /locked/i,
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("named pipe (FIFO) input is rejected immediately without hanging on open", { skip: process.platform === "win32" }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), "denoise-fifo-test-"));
+  try {
+    const fifoPath = join(dir, "pipe.tif");
+    const mk = spawnSync("mkfifo", [fifoPath]);
+    assert.equal(mk.status, 0, mk.stderr?.toString());
+    const outDir = join(dir, "out");
+    const started = performance.now();
+    await assert.rejects(
+      () => denoiseFile({ input: fifoPath, outputDir: outDir, options: { method: "fgr-ridge" } }),
+      /not a regular file/i,
+    );
+    assert.ok(performance.now() - started < 2000, "FIFO rejection must not block");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

@@ -2,7 +2,9 @@
 // Runs the exact same self-supervised denoising core and calibrated TIFF/NIfTI encoders
 // as the Denoise web application.
 import { randomBytes } from "node:crypto";
+import { constants as fsConstants } from "node:fs";
 import { lstat, mkdir, open, readFile, readdir, rename, rm, rmdir, stat, unlink, writeFile } from "node:fs/promises";
+import { hostname } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { gzipSync } from "node:zlib";
 import { InputTooLargeError } from "@neurodesk/webapp-components/file-io/input-limits";
@@ -24,6 +26,7 @@ export const MAX_CLI_INPUT_BYTES = 2 ** 28;
 const CLI_METADATA_BYTES = 2 ** 25;
 
 const LOCK_FILE = ".denoise-run.lock";
+const STAGE_PREFIX = ".denoise-stage-";
 
 export const OUTPUT_FORMATS = Object.freeze(["auto", "tiff", "nifti", "both"]);
 
@@ -158,11 +161,15 @@ export function parseCliOptions(values = {}) {
 }
 
 /**
- * Opens an input file and reads at most `maxFileBytes` without allocating unbounded memory.
+ * Opens an input file non-blockingly (`O_NONBLOCK` on POSIX so FIFOs/pipes never hang),
+ * rejects non-regular files and oversized files before reading, and reads at most `maxFileBytes`.
  * Returns a zero-copy File-like object compatible with `readVolume` and `assertNiftiDecodedSize`.
  */
 async function readBoundedInputFile(resolvedInput, inputName, maxFileBytes) {
-  const fh = await open(resolvedInput, "r");
+  // O_NONBLOCK prevents open() from blocking indefinitely on a named pipe (FIFO) with no writer;
+  // POSIX ignores O_NONBLOCK for regular files.
+  const openFlags = fsConstants.O_RDONLY | (fsConstants.O_NONBLOCK ?? 0);
+  const fh = await open(resolvedInput, openFlags);
   try {
     const info = await fh.stat();
     if (!info.isFile()) throw new Error(`${inputName} is not a regular file.`);
@@ -211,10 +218,52 @@ async function readBoundedInputFile(resolvedInput, inputName, maxFileBytes) {
   }
 }
 
+function isLocalProcessDead(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch (error) {
+    // ESRCH means no process with this PID exists; EPERM means it exists under another user.
+    return error.code === "ESRCH";
+  }
+}
+
+/**
+ * Attempts to atomically reclaim a provably stale `.denoise-run.lock` left by a crashed local
+ * process (`ESRCH`). Uses atomic `rename` so at most one concurrent recoverer can claim it.
+ */
+async function tryReclaimStaleLock(resolvedDir, lockPath) {
+  let raw;
+  try {
+    raw = await readFile(lockPath, "utf8");
+  } catch {
+    return null;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!parsed || parsed.host !== hostname() || !isLocalProcessDead(parsed.pid)) {
+    return null;
+  }
+  const claimed = join(resolvedDir, `.denoise-stale-${process.pid}-${randomBytes(4).toString("hex")}`);
+  try {
+    await rename(lockPath, claimed);
+  } catch {
+    // Another process already reclaimed or removed the lock.
+    return null;
+  }
+  await unlink(claimed).catch(() => {});
+  return parsed.pid;
+}
+
 /**
  * Exclusively reserves `outputDir` before processing by atomically creating `.denoise-run.lock`
  * with `O_CREAT | O_EXCL` (`wx`), preventing concurrent CLI runs from colliding or interleaving
- * outputs. Returns a handle with `release({ removeIfEmpty })`.
+ * outputs, while safely recovering locks left behind by killed/crashed local processes.
  */
 async function reserveOutputDir(outputDir, { overwrite = false } = {}) {
   const resolved = resolve(outputDir);
@@ -229,17 +278,31 @@ async function reserveOutputDir(outputDir, { overwrite = false } = {}) {
   }
 
   const lockPath = join(resolved, LOCK_FILE);
-  let lockHandle;
-  try {
-    lockHandle = await open(lockPath, "wx");
-    await lockHandle.writeFile(`${process.pid}\n`, "utf8");
-  } catch (error) {
-    if (error.code === "EEXIST") {
-      throw new Error(`Output directory '${outputDir}' is locked by another running denoise process (or contains ${LOCK_FILE}).`);
+  const token = randomBytes(8).toString("hex");
+  const lockPayload = `${JSON.stringify({ pid: process.pid, host: hostname(), startedAt: Date.now(), token })}\n`;
+  let reclaimedDeadPid = null;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    let lockHandle;
+    try {
+      lockHandle = await open(lockPath, "wx");
+      await lockHandle.writeFile(lockPayload, "utf8");
+      break;
+    } catch (error) {
+      if (error.code === "EEXIST" && attempt === 0) {
+        const deadPid = await tryReclaimStaleLock(resolved, lockPath);
+        if (deadPid !== null) {
+          reclaimedDeadPid = deadPid;
+          continue;
+        }
+      }
+      if (error.code === "EEXIST") {
+        throw new Error(`Output directory '${outputDir}' is locked by another running denoise process (or contains ${LOCK_FILE}).`);
+      }
+      throw error;
+    } finally {
+      await lockHandle?.close();
     }
-    throw error;
-  } finally {
-    await lockHandle?.close();
   }
 
   const release = async ({ removeIfEmpty = false } = {}) => {
@@ -250,6 +313,16 @@ async function reserveOutputDir(outputDir, { overwrite = false } = {}) {
   };
 
   try {
+    if (reclaimedDeadPid !== null) {
+      // Remove any orphaned staging directory left by the crashed process whose lock we reclaimed.
+      const deadStagePrefix = `${STAGE_PREFIX}${reclaimedDeadPid}-`;
+      const existing = await readdir(resolved);
+      for (const entry of existing) {
+        if (entry.startsWith(deadStagePrefix)) {
+          await rm(join(resolved, entry), { recursive: true, force: true }).catch(() => {});
+        }
+      }
+    }
     if (!overwrite) {
       const entries = (await readdir(resolved)).filter((name) => name !== LOCK_FILE);
       if (entries.length > 0) {
@@ -286,6 +359,55 @@ async function assertPublishableTargets(dir, filenames, { overwrite }) {
 }
 
 /**
+ * Publishes all staged files into `dir` with transactional rollback: backs up any existing
+ * targets that would be overwritten, renames every staged file into place, and on any failure
+ * removes newly published files and restores every backed-up original file.
+ */
+async function publishStagedFiles(dir, stageDir, stagedFiles, { overwrite, renameFn = rename } = {}) {
+  const backupDir = join(stageDir, "_backup");
+  const backedUp = [];
+  const publishedNames = [];
+
+  try {
+    if (overwrite) {
+      for (const name of stagedFiles) {
+        const target = join(dir, name);
+        let exists = false;
+        try {
+          await lstat(target);
+          exists = true;
+        } catch (error) {
+          if (error.code !== "ENOENT") throw error;
+        }
+        if (exists) {
+          if (!backedUp.length) await mkdir(backupDir, { recursive: false });
+          await renameFn(target, join(backupDir, name));
+          backedUp.push(name);
+        }
+      }
+    }
+
+    const written = [];
+    for (const name of stagedFiles) {
+      const finalPath = join(dir, name);
+      await renameFn(join(stageDir, name), finalPath);
+      publishedNames.push(name);
+      written.push(finalPath);
+    }
+    return written;
+  } catch (error) {
+    // Roll back any newly published files, then restore every backed-up original file.
+    for (const name of publishedNames) {
+      await unlink(join(dir, name)).catch(() => {});
+    }
+    for (const name of backedUp) {
+      await rename(join(backupDir, name), join(dir, name)).catch(() => {});
+    }
+    throw error;
+  }
+}
+
+/**
  * Denoises one TIFF/OME-TIFF/NIfTI file on disk and writes calibrated outputs + provenance JSON
  * atomically into `outputDir`.
  */
@@ -296,6 +418,7 @@ export async function denoiseFile({
   onProgress,
   maxBytes = MAX_CLI_INPUT_BYTES,
   maxFileBytes = maxBytes + CLI_METADATA_BYTES,
+  renameFn = rename,
 }) {
   if (!input) throw new Error("Input file path is required.");
   if (!outputDir) throw new Error("Output directory path is required.");
@@ -307,7 +430,7 @@ export async function denoiseFile({
   const volume = await readVolume(file, { maxBytes, maxFileBytes });
 
   const reservation = await reserveOutputDir(outputDir, { overwrite });
-  const stageDir = join(reservation.dir, `.denoise-stage-${process.pid}-${randomBytes(4).toString("hex")}`);
+  const stageDir = join(reservation.dir, `${STAGE_PREFIX}${process.pid}-${randomBytes(4).toString("hex")}`);
   let published = false;
 
   try {
@@ -372,14 +495,9 @@ export async function denoiseFile({
     await writeFile(join(stageDir, names.provenance), `${JSON.stringify(record, null, 2)}\n`, "utf8");
     stagedFiles.push(names.provenance);
 
-    // Re-check targets right before commit, then move all staged files into place together.
+    // Re-check targets right before commit, then publish atomically with rollback on failure.
     await assertPublishableTargets(reservation.dir, stagedFiles, { overwrite });
-    const written = [];
-    for (const name of stagedFiles) {
-      const finalPath = join(reservation.dir, name);
-      await rename(join(stageDir, name), finalPath);
-      written.push(finalPath);
-    }
+    const written = await publishStagedFiles(reservation.dir, stageDir, stagedFiles, { overwrite, renameFn });
     published = true;
 
     return {

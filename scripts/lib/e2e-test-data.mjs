@@ -91,6 +91,7 @@ export const provisioners = {
   browserqc: { env: ['BROWSERQC_BROWSER_REFERENCE'], provision: async () => ({ BROWSERQC_BROWSER_REFERENCE: 'check' }) },
   brainchop: { env: [], provision: async () => ({}) },
   brain2print: { env: [], provision: async () => ({}) },
+  denoise: { env: [], provision: async () => ({}) },
   // Synthetic NIfTI/DICOM fixtures are generated in the suite; the worker verifies pinned models.
   seedseg: { env: [], provision: async () => ({}) },
   calmar: { env: ['CALMAR_AUTOMATION_IMAGE'], provision: async () => ({ CALMAR_AUTOMATION_IMAGE: 'example' }) },

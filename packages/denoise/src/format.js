@@ -128,6 +128,7 @@ function omeDescription({ nx, ny, nz, axisKind, spacingUm, frameInterval }) {
     'ID="Pixels:0"',
     'DimensionOrder="XYZCT"',
     'Type="float"',
+    'BigEndian="false"',
     `SizeX="${nx}"`,
     `SizeY="${ny}"`,
     `SizeZ="${isMovie ? 1 : nz}"`,
@@ -138,7 +139,15 @@ function omeDescription({ nx, ny, nz, axisKind, spacingUm, frameInterval }) {
   if (spacingUm?.y > 0) attrs.push(`PhysicalSizeY="${spacingUm.y}"`, 'PhysicalSizeYUnit="µm"');
   if (!isMovie && spacingUm?.z > 0) attrs.push(`PhysicalSizeZ="${spacingUm.z}"`, 'PhysicalSizeZUnit="µm"');
   if (isMovie && frameInterval > 0) attrs.push(`TimeIncrement="${frameInterval}"`, 'TimeIncrementUnit="s"');
-  return `<?xml version="1.0" encoding="UTF-8"?><OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06"><Image ID="Image:0"><Pixels ${attrs.join(" ")}/></Image></OME>`;
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.openmicroscopy.org/Schemas/OME/2016-06 http://www.openmicroscopy.org/Schemas/OME/2016-06/ome.xsd">',
+    '<Image ID="Image:0" Name="Image0">',
+    `<Pixels ${attrs.join(" ")}>`,
+    '<Channel ID="Channel:0" SamplesPerPixel="1"/>',
+    `<TiffData FirstC="0" FirstT="0" FirstZ="0" IFD="0" PlaneCount="${nz}"/>`,
+    "</Pixels></Image></OME>",
+  ].join("");
 }
 
 /**
