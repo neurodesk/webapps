@@ -1350,6 +1350,9 @@ jobs:
     name: Runtime-only validation of the published reference image
     runs-on: ubuntu-24.04
     timeout-minutes: 240
+    permissions:
+      contents: read
+      packages: read
     env:
       IMAGE: ${{ inputs.runtime_image }}
     steps:
@@ -1361,6 +1364,16 @@ jobs:
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-cli" packages/samsrf/validation/matlab/cli-reference.json
           python3 -m venv "$RUNNER_TEMP/samsrf-cli-venv"
           "$RUNNER_TEMP/samsrf-cli-venv/bin/pip" install --only-binary=:all: -r packages/samsrf/validation/matlab/requirements-cli.txt
+      - name: Pull the reference image
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          if [[ "$IMAGE" == ghcr.io/* ]]; then
+            trap 'docker logout ghcr.io || true' EXIT
+            echo "$GITHUB_TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
+          fi
+          docker pull "$IMAGE"
       - name: Run, repeat, interrupt and fail the image without MATLAB
         run: |
           cli="$RUNNER_TEMP/samsrf-cli"
@@ -1368,7 +1381,6 @@ jobs:
           python3 "$matlab/cli_plan.py" verify "$cli/bundle" "$cli/bundle-sha256.json"
           chmod -R a-w "$cli/bundle"
           if command -v matlab; then echo 'MATLAB must not be installed on this host' >&2; exit 1; fi
-          docker pull "$IMAGE"
           for run in runtime-1 runtime-2 interrupt; do
             python3 "$matlab/cli_plan.py" stage "$cli/plan.json" "$cli/bundle" "$cli/$run"
           done
