@@ -387,7 +387,7 @@ function computeAxialBidimensional(compVoxels, affine, axialAxis) {
     }
 
     let bestLongD2 = -1;
-    let bestPairs = [[boundary[0], boundary[0]]];
+    let bestPairs = [[boundary[0], boundary[0], 0]];
     for (let i = 0; i < boundary.length; i++) {
       const a = boundary[i];
       for (let j = i + 1; j < boundary.length; j++) {
@@ -395,25 +395,28 @@ function computeAxialBidimensional(compVoxels, affine, axialAxis) {
         const dx = b[2] - a[2];
         const dy = b[3] - a[3];
         const d2 = dx * dx + dy * dy;
-        const tol = 1e-9 * Math.max(1, bestLongD2);
-        if (d2 + tol < bestLongD2) continue;
+        const collectTol = 2e-9 * Math.max(1, bestLongD2);
+        if (d2 + collectTol < bestLongD2) continue;
         if (!segmentInsideMask(a[0], a[1], b[0], b[1])) continue;
-        if (d2 > bestLongD2 + tol) {
+        if (d2 > bestLongD2 + collectTol) {
           bestLongD2 = d2;
-          bestPairs = [[a, b]];
+          bestPairs = [[a, b, d2]];
         } else {
-          bestPairs.push([a, b]);
+          if (d2 > bestLongD2) bestLongD2 = d2;
+          bestPairs.push([a, b, d2]);
         }
       }
     }
+    const finalTol = 1e-9 * Math.max(1, bestLongD2);
+    const tiedPairs = bestLongD2 > 0
+      ? bestPairs.filter((entry) => bestLongD2 - entry[2] <= finalTol)
+      : bestPairs;
 
-    // Evaluate every tied maximal supported chord so selection is strictly independent of
-    // voxel traversal order, mirroring, and in-plane rotation.
-    let sliceLongMm = 0;
-    let sliceShortMm = 0;
-    let bestRawLong = -1;
-    let bestPerp = -1;
-    for (const [pA, pB] of bestPairs) {
+    // Evaluate every tied maximal supported chord (filtered against the final true maximum)
+    // so selection is strictly independent of voxel traversal order, mirroring, and rotation.
+    const measured = [];
+    let maxRawLong = -1;
+    for (const [pA, pB] of tiedPairs) {
       const longDist = Math.hypot(pB[2] - pA[2], pB[3] - pA[3]);
       let ux = 1;
       let uy = 0;
@@ -451,16 +454,21 @@ function computeAxialBidimensional(compVoxels, affine, axialAxis) {
         maxPerpMm = rayExitDistanceMm(midU, midV, px, py) + rayExitDistanceMm(midU, midV, -px, -py);
       }
 
-      if (rawLongMm > bestRawLong + 1e-9 || (Math.abs(rawLongMm - bestRawLong) <= 1e-9 && maxPerpMm > bestPerp)) {
-        bestRawLong = rawLongMm;
-        bestPerp = maxPerpMm;
-        sliceLongMm = Math.max(rawLongMm, maxPerpMm);
-        sliceShortMm = Math.min(rawLongMm, maxPerpMm);
-      }
+      if (rawLongMm > maxRawLong) maxRawLong = rawLongMm;
+      measured.push({ rawLongMm, maxPerpMm });
     }
 
-    const longMm = sliceLongMm;
-    const shortMm = sliceShortMm;
+    const rawLongTol = 1e-9 * Math.max(1, maxRawLong);
+    let chosen = measured[0];
+    for (let i = 0; i < measured.length; i++) {
+      const m = measured[i];
+      if (maxRawLong - m.rawLongMm > rawLongTol) continue;
+      if (maxRawLong - chosen.rawLongMm > rawLongTol || m.maxPerpMm > chosen.maxPerpMm) {
+        chosen = m;
+      }
+    }
+    const longMm = Math.max(chosen.rawLongMm, chosen.maxPerpMm);
+    const shortMm = Math.min(chosen.rawLongMm, chosen.maxPerpMm);
     const prod = longMm * shortMm;
     const sliceMeasurable = longMm + 1e-6 >= 10 && shortMm + 1e-6 >= 10;
     if (sliceMeasurable) anySliceMeasurable10x10 = true;

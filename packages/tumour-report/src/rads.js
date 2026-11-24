@@ -3,7 +3,15 @@
 // (BSD-2-Clause), plus Greedy WASM MNI normalization helper.
 import { gunzip, registerAffineGreedy, registerSvfGreedy, resliceAffineGreedy, resliceGreedy } from '@neurodesk/greedy';
 import { readVolume, writeVolume } from '@neurodesk/synthsr';
-import { applyAffinePoint, resampleToOutput, voxelSpacingMm } from './preprocess.js';
+import {
+  applyAffinePoint,
+  invertAffine4,
+  labelComponents26,
+  multiplyAffine4,
+  resampleToOutput,
+  vox2OutVox,
+  voxelSpacingMm,
+} from './preprocess.js';
 import mniLobesLabels from './data/mni_lobes.json' with { type: 'json' };
 import schaefer7Labels from './data/schaefer7.json' with { type: 'json' };
 import schaefer17Labels from './data/schaefer17.json' with { type: 'json' };
@@ -463,59 +471,132 @@ export function prepareRegistrationInputsRas(volume, brainMask, tumourMask, marg
   const mAffine = volume.affine.map((r, i) => (i < 3 ? [r[0], r[1], r[2], mOrigin[i]] : [...r]));
   if (hasAffineShear(mAffine)) {
     const finest = Math.min(...voxelSpacingMm(mAffine));
-    const resampled = resampleToOutput(
-      { data: Float32Array.from(cropMask), dims: md, affine: mAffine },
-      [finest, finest, finest],
-      0,
-    );
-    const od = resampled.dims;
-    const oa = resampled.affine;
-    const orthoMask = new Uint8Array(resampled.data.length);
-    for (let i = 0; i < orthoMask.length; i++) {
-      if (resampled.data[i] >= 0.5) orthoMask[i] = 1;
-    }
-    // Guarantee no occupied native voxel (e.g. a single-voxel focus on a rotated sheared grid)
-    // is silently dropped by inverse nearest-neighbour sampling: if none of its 8 surrounding
-    // output grid corners is occupied, stamp its nearest orthogonal grid voxel.
+    const invM = invertAffine4(mAffine);
+    const perpSpacings = [0, 1, 2].map((r) => {
+      const n = Math.hypot(invM[r][0], invM[r][1], invM[r][2]);
+      return n > 1e-12 ? 1 / n : finest;
+    });
+    let step = Math.max(finest / 4, Math.min(finest, ...perpSpacings));
+    const { labels: nativeLabels, count: nativeCount } = labelComponents26(cropMask, md);
+    // Group native voxel coordinates by 26-connected component so coverage is tracked per focus.
+    const compVoxels = Array.from({ length: nativeCount + 1 }, () => []);
     for (let z = 0; z < md[2]; z++) {
       for (let y = 0; y < md[1]; y++) {
         const row = md[0] * (y + md[1] * z);
         for (let x = 0; x < md[0]; x++) {
-          if (!cropMask[row + x]) continue;
+          const id = nativeLabels[row + x];
+          if (id) compVoxels[id].push([x, y, z]);
+        }
+      }
+    }
+
+    const MAX_ORTHO_VOXELS = 32_000_000;
+    let bestResult = null;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const { dims: od, affine: oa } = vox2OutVox(md, mAffine, [step, step, step]);
+      const nOut = od[0] * od[1] * od[2];
+      if (attempt > 0 && nOut > MAX_ORTHO_VOXELS) break;
+      const map = multiplyAffine4(invM, oa);
+      const outComp = new Int32Array(nOut);
+      const covered = new Uint8Array(nativeCount + 1);
+      const maxX = md[0] - 1;
+      const maxY = md[1] - 1;
+      const maxZ = md[2] - 1;
+      const xySrc = md[0] * md[1];
+      for (let z = 0; z < od[2]; z++) {
+        const bz0 = map[0][2] * z + map[0][3];
+        const bz1 = map[1][2] * z + map[1][3];
+        const bz2 = map[2][2] * z + map[2][3];
+        for (let y = 0; y < od[1]; y++) {
+          const by0 = map[0][1] * y + bz0;
+          const by1 = map[1][1] * y + bz1;
+          const by2 = map[2][1] * y + bz2;
+          const dstRow = od[0] * (y + od[1] * z);
+          for (let x = 0; x < od[0]; x++) {
+            const sx = Math.round(map[0][0] * x + by0);
+            const sy = Math.round(map[1][0] * x + by1);
+            const sz = Math.round(map[2][0] * x + by2);
+            if (sx < 0 || sx > maxX || sy < 0 || sy > maxY || sz < 0 || sz > maxZ) continue;
+            const id = nativeLabels[sx + md[0] * sy + xySrc * sz];
+            if (id) {
+              outComp[dstRow + x] = id;
+              covered[id] = 1;
+            }
+          }
+        }
+      }
+
+      // Stamp any native component missed by inverse nearest-neighbour sampling onto its
+      // own nearest orthogonal voxel; if that voxel belongs to another component or distinct
+      // foci merge on this grid, refine the spacing to separate them.
+      let collision = false;
+      for (let id = 1; id <= nativeCount; id++) {
+        if (covered[id]) continue;
+        let stamped = false;
+        for (const [x, y, z] of compVoxels[id]) {
           const pt = applyAffinePoint(mAffine, x, y, z);
-          const fx = (pt[0] - oa[0][3]) / finest;
-          const fy = (pt[1] - oa[1][3]) / finest;
-          const fz = (pt[2] - oa[2][3]) / finest;
-          const x0 = Math.max(0, Math.min(od[0] - 1, Math.floor(fx)));
-          const x1 = Math.max(0, Math.min(od[0] - 1, Math.ceil(fx)));
-          const y0 = Math.max(0, Math.min(od[1] - 1, Math.floor(fy)));
-          const y1 = Math.max(0, Math.min(od[1] - 1, Math.ceil(fy)));
-          const z0 = Math.max(0, Math.min(od[2] - 1, Math.floor(fz)));
-          const z1 = Math.max(0, Math.min(od[2] - 1, Math.ceil(fz)));
-          let represented = false;
-          for (let oz = z0; oz <= z1 && !represented; oz++) {
-            for (let oy = y0; oy <= y1 && !represented; oy++) {
-              const oRow = od[0] * (oy + od[1] * oz);
-              for (let ox = x0; ox <= x1; ox++) {
-                if (orthoMask[oRow + ox]) {
-                  represented = true;
-                  break;
+          const rx = Math.max(0, Math.min(od[0] - 1, Math.round((pt[0] - oa[0][3]) / step)));
+          const ry = Math.max(0, Math.min(od[1] - 1, Math.round((pt[1] - oa[1][3]) / step)));
+          const rz = Math.max(0, Math.min(od[2] - 1, Math.round((pt[2] - oa[2][3]) / step)));
+          const oIdx = rx + od[0] * (ry + od[1] * rz);
+          if (outComp[oIdx] === 0 || outComp[oIdx] === id) {
+            outComp[oIdx] = id;
+            stamped = true;
+          } else {
+            collision = true;
+          }
+        }
+        if (!stamped) collision = true;
+      }
+
+      // Verify no two distinct native components touch (26-adjacent) on the output grid.
+      let mergedComponents = false;
+      if (!collision && nativeCount > 1) {
+        const xyOut = od[0] * od[1];
+        for (let z = 0; z < od[2] && !mergedComponents; z++) {
+          const zOff = z * xyOut;
+          for (let y = 0; y < od[1] && !mergedComponents; y++) {
+            const yOff = zOff + y * od[0];
+            for (let x = 0; x < od[0] && !mergedComponents; x++) {
+              const id = outComp[yOff + x];
+              if (!id) continue;
+              for (let dz = -1; dz <= 1 && !mergedComponents; dz++) {
+                const nz = z + dz;
+                if (nz < 0 || nz >= od[2]) continue;
+                for (let dy = -1; dy <= 1 && !mergedComponents; dy++) {
+                  const ny = y + dy;
+                  if (ny < 0 || ny >= od[1]) continue;
+                  for (let dx = -1; dx <= 1; dx++) {
+                    if (dx === 0 && dy === 0 && dz === 0) continue;
+                    const nx = x + dx;
+                    if (nx < 0 || nx >= od[0]) continue;
+                    const nid = outComp[nx + od[0] * ny + xyOut * nz];
+                    if (nid && nid !== id) {
+                      mergedComponents = true;
+                      break;
+                    }
+                  }
                 }
               }
             }
           }
-          if (!represented) {
-            const rx = Math.max(0, Math.min(od[0] - 1, Math.round(fx)));
-            const ry = Math.max(0, Math.min(od[1] - 1, Math.round(fy)));
-            const rz = Math.max(0, Math.min(od[2] - 1, Math.round(fz)));
-            orthoMask[rx + od[0] * (ry + od[1] * rz)] = 1;
-          }
         }
       }
+
+      const orthoMask = new Uint8Array(nOut);
+      for (let i = 0; i < nOut; i++) {
+        if (outComp[i] > 0) orthoMask[i] = 1;
+      }
+      bestResult = { data: orthoMask, dims: od, affine: oa };
+
+      if (!collision && !mergedComponents) {
+        break;
+      }
+      step *= 0.5;
     }
     return {
       t1: rasT1,
-      mask: { data: orthoMask, dims: od, affine: oa },
+      mask: bestResult,
     };
   }
   return {

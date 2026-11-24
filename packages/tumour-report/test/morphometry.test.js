@@ -284,6 +284,26 @@ test('axial bidimensional measurement is invariant under mirroring and rotation 
     }
   }
   assert.equal(asymSeen.size, 1);
+
+  // Reversing both in-plane axes with affine adjusted to preserve the same physical lesion
+  // (with near-tied chords separated by ~1e-10) must return identical results regardless of
+  // traversal order (tie window anchored to final true maximum, never a running value).
+  const revDims = [28, 28, 3];
+  const revA = new Uint8Array(revDims[0] * revDims[1] * revDims[2]);
+  const revB = new Uint8Array(revDims[0] * revDims[1] * revDims[2]);
+  for (let y = 0; y < 22; y++) {
+    for (let x = 0; x < 22; x++) {
+      if (x < 3 || (x < 12 && y < 12) || y < 2) {
+        revA[voxelIndex(x + 2, y + 2, 1, revDims)] = 1;
+        revB[voxelIndex(25 - x, 25 - y, 1, revDims)] = 1;
+      }
+    }
+  }
+  const affA = [[1, 1e-10, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
+  const affB = [[-1, -1e-10, 0, 27], [0, -1, 0, 27], [0, 0, 1, 0], [0, 0, 0, 1]];
+  const resRevA = computeNativeMorphometry({ tumourMask: revA, dims: revDims, affine: affA }).lesions[0].axialBidimensional;
+  const resRevB = computeNativeMorphometry({ tumourMask: revB, dims: revDims, affine: affB }).lesions[0].axialBidimensional;
+  assert.deepEqual(resRevA, resRevB);
 });
 
 test('exact triangle-to-triangle mesh distance avoids false multifocality on parallel faces 4.99 mm apart and stays inclusive at rotated 5.00 mm', () => {

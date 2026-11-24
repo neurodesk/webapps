@@ -228,4 +228,29 @@ test('prepareRegistrationInputsRas preserves every focus including a 1-voxel foc
   }
   const prepTwo = prepareRegistrationInputsRas({ data, dims, affine }, brain, twoFoci);
   assert.equal(labelComponents26(prepTwo.mask.data, prepTwo.mask.dims).count, 2);
+
+  // Close singleton foci at (5,5,5) and (4,7,5) under 0.5 mm spacing, 45 deg rotation, and 0.4 shear:
+  // per-component coverage tracking must keep both foci separated rather than collapsing onto one.
+  const closeDims = [12, 12, 12];
+  const rad45 = Math.PI / 4;
+  const c45 = Math.cos(rad45);
+  const s45 = Math.sin(rad45);
+  const closeAffine = [
+    [0.5 * c45, -0.5 * s45 + 0.4, 0, 0],
+    [0.5 * s45, 0.5 * c45, 0, 0],
+    [0, 0, 0.5, 0],
+    [0, 0, 0, 1],
+  ];
+  const closeData = new Float32Array(12 * 12 * 12).fill(50);
+  const closeBrain = new Uint8Array(closeData.length);
+  for (let z = 2; z < 10; z++) {
+    for (let y = 2; y < 10; y++) {
+      for (let x = 2; x < 10; x++) closeBrain[voxelIndex(x, y, z, closeDims)] = 1;
+    }
+  }
+  const closeTumour = new Uint8Array(closeData.length);
+  closeTumour[voxelIndex(5, 5, 5, closeDims)] = 1;
+  closeTumour[voxelIndex(4, 7, 5, closeDims)] = 1;
+  const prepClose = prepareRegistrationInputsRas({ data: closeData, dims: closeDims, affine: closeAffine }, closeBrain, closeTumour);
+  assert.equal(labelComponents26(prepClose.mask.data, prepClose.mask.dims).count, 2);
 });
