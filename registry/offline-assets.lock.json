@@ -6927,6 +6927,10 @@
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/atlases/resect_left_mni.nii.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/atlases/resect_right_mni.nii.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/atlases/bcb_tracts.bin.gz"
+    ],
+    "denoise": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/e76a7bbd831da2bfdae49058700da81d6cca577c/stardist/example/dsb2018-nuclei-2d.tif",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/02fb0301173cf259099cc528b944a54a92075a03/deconvolution/example/hela-phalloidin488-confocal.tif"
     ]
   }
 }

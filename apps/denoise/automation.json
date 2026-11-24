@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 2,
+  "app": "denoise",
+  "title": "Denoise",
+  "description": "Self-supervised denoising of 2D and 3D microscopy images and stacks in the browser: Aydin FGR (Noise2Self boosted trees or Ridge), Zero-Shot Noise2Noise (ZS-N2N), and Anscombe VST Non-Local Means.",
+  "defaultOperation": "denoise",
+  "operations": {
+    "denoise": {
+      "title": "Denoise image",
+      "description": "Denoise one single-channel 2D image, 3D Z-stack or 2D+T time-series without external training data, returning the denoised image (TIFF and NIfTI) and noise residual map (TIFF) with residual quality diagnostics.",
+      "mode": "batch",
+      "inputs": {
+        "image": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "tif",
+            "tiff",
+            "nifti"
+          ],
+          "description": "One single-channel 2D image, 3D Z-stack or 2D+T stack: TIFF, OME-TIFF, ImageJ TIFF or NIfTI",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "method": {
+          "type": "string",
+          "enum": [
+            "fgr-gbdt",
+            "fgr-ridge",
+            "zs-n2n",
+            "vst-nlm"
+          ],
+          "default": "fgr-gbdt",
+          "description": "fgr-gbdt: Aydin FGR with boosted trees (Noise2Self); fgr-ridge: Aydin FGR with cross-validated Ridge; zs-n2n: Zero-Shot Noise2Noise residual CNN; vst-nlm: Generalized Anscombe VST + Non-Local Means"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "2d",
+            "3d"
+          ],
+          "default": "auto",
+          "description": "auto uses 3D/spatiotemporal context when the input has multiple slices or frames; 2d processes slices laterally; 3d uses neighbouring planes"
+        },
+        "nTrees": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 200,
+          "default": 80,
+          "description": "Maximum boosting rounds for fgr-gbdt (early stopping may stop sooner)"
+        },
+        "maxDepth": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 6,
+          "default": 4,
+          "description": "Maximum tree depth for fgr-gbdt"
+        },
+        "maxScale": {
+          "type": "integer",
+          "enum": [
+            2,
+            4,
+            8
+          ],
+          "default": 8,
+          "description": "Largest J-invariant donut ring radius in pixels for FGR methods"
+        },
+        "iterations": {
+          "type": "integer",
+          "minimum": 50,
+          "maximum": 1500,
+          "default": 200,
+          "description": "Adam optimisation steps for zs-n2n"
+        },
+        "channels": {
+          "type": "integer",
+          "minimum": 16,
+          "maximum": 48,
+          "default": 16,
+          "description": "Hidden channel width of the 2-layer zs-n2n residual CNN"
+        },
+        "noiseModel": {
+          "type": "string",
+          "enum": [
+            "poisson-gaussian",
+            "gaussian"
+          ],
+          "default": "poisson-gaussian",
+          "description": "Noise variance model for vst-nlm (poisson-gaussian applies Generalized Anscombe VST)"
+        },
+        "nlmStrength": {
+          "type": "number",
+          "minimum": 0.2,
+          "maximum": 3.0,
+          "default": 1.0,
+          "description": "Non-Local Means filtering strength multiplier h / sigma for vst-nlm"
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647,
+          "default": 42,
+          "description": "Deterministic random seed for self-supervised sampling and CNN initialisation"
+        }
+      },
+      "artifacts": {
+        "image": {
+          "type": "neuro:volume",
+          "mediaType": "image/tiff",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "nifti": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "residual": {
+          "type": "neuro:volume",
+          "mediaType": "image/tiff",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}
