@@ -139,12 +139,20 @@ fn nifti1(raw: Vec<u8>) -> Result<Vec<u8>, String> {
     for k in 0..18 {
         put(&mut h, 256 + 4 * k, &real(352 + 8 * k).to_le_bytes());
     }
-    // A unit f64 quaternion can exceed norm 1 once narrowed (0.6, 0.8, 0 -> 1 + 5e-8) and its rotation becomes NaN,
-    // so a selected qform is built in f64, as nifti-reader-js reads NIfTI-2, and stored as the sform.
+    // A unit quaternion can exceed norm 1 once narrowed (0.6, 0.8, 0 -> 1 + 5e-8) and its rotation becomes NaN, so a
+    // selected qform is built in f64 and stored as the sform, with nifti_quatern_to_mat44's near-unit case: a 180°
+    // rotation (b = c = sqrt(0.5)) rounds to 1 + 2e-16 even in f64, so (b, c, d) is normalised and a set to 0.
     let (qcode, scode) = (int(344, 4), int(348, 4));
     if qcode > 0 && scode < qcode {
-        let [b, c, d] = [0, 1, 2].map(|k| real64(352 + 8 * k));
-        let a = (1.0 - (b * b + c * c + d * d)).sqrt();
+        let [mut b, mut c, mut d] = [0, 1, 2].map(|k| real64(352 + 8 * k));
+        let norm = b * b + c * c + d * d;
+        let a = if 1.0 - norm < 1e-7 {
+            let s = norm.sqrt();
+            (b, c, d) = (b / s, c / s, d / s);
+            0.0
+        } else {
+            (1.0 - norm).sqrt()
+        };
         let rot = [
             [
                 a * a + b * b - c * c - d * d,
@@ -311,13 +319,23 @@ mod tests {
         for o in [112, 120, 128] {
             q[o..o + 8].copy_from_slice(&1f64.to_le_bytes());
         }
-        let expected = [[-0.28, 0.96, 0.0], [0.96, 0.28, 0.0], [0.0, 0.0, -1.0]];
-        let qv = super::read(&q).unwrap();
-        for (row, want) in qv.affine.iter().zip(expected) {
-            for (got, want) in row.iter().zip(want) {
-                assert!((got - want).abs() < 1e-6, "{:?}", qv.affine);
+        let close = |q: &[u8], expected: [[f64; 3]; 3]| {
+            let affine = super::read(q).unwrap().affine;
+            for (row, want) in affine.iter().zip(expected) {
+                for (got, want) in row.iter().zip(want) {
+                    assert!((got - want).abs() < 1e-6, "{affine:?}");
+                }
             }
+        };
+        close(
+            &q,
+            [[-0.28, 0.96, 0.0], [0.96, 0.28, 0.0], [0.0, 0.0, -1.0]],
+        );
+        // A 180° rotation, b = c = sqrt(0.5): |q|^2 is 1 + 2e-16 in f64 (re-audit).
+        for o in [352, 360] {
+            q[o..o + 8].copy_from_slice(&0.5f64.sqrt().to_le_bytes());
         }
+        close(&q, [[0.0, 1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, -1.0]]);
         // An empty lesion stored scaled: 100 * 0.01 - 1 is 0 in f64, but not with float32 scaling.
         empty[12..14].copy_from_slice(&2i16.to_le_bytes());
         empty[14..16].copy_from_slice(&8i16.to_le_bytes());
