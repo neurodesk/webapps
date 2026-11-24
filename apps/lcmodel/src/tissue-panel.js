@@ -7,7 +7,7 @@
 import NiiVue, { SLICE_TYPE } from "@niivue/niivue";
 import { version as mindgrabVersion } from "@brainchop/core/package.json";
 import { readImageFiles } from "@neurodesk/runtime-support/dcm2niix-client";
-import { isSoftwareAdapter, isSoftwareRenderer } from "@neurodesk/runtime-support/mindgrab/backend";
+import { chooseBackend as chooseMindgrabBackend, isSoftwareAdapter } from "@neurodesk/runtime-support/mindgrab/backend";
 import { decodeNiftiBuffer, parseNiftiHeader, readNiftiImageData, extractNiftiHeader, createFloat32Nifti } from "@neurodesk/webapp-components/file-io";
 import { bindFileDrop } from "@neurodesk/webapp-components/ui";
 import { voxelWeights, tissueFractions } from "@neurodesk/lcmodel/voxel";
@@ -250,19 +250,30 @@ export function createTissuePanel(hooks) {
     const limits = adapter?.limits;
     const bufferOk = !limits || ((limits.maxBufferSize ?? Infinity) >= WEBGPU_MIN_BUFFER_BYTES && (limits.maxStorageBufferBindingSize ?? Infinity) >= WEBGPU_MIN_BUFFER_BYTES);
     hooks.log.log(`Browser: ${navigator.userAgent}; WebGPU: ${gpu}${softwareGpu ? " (software fallback)" : ""}${adapter && !adapter.features?.has("shader-f16") ? ", f32 fallback" : ""}`);
-    if (adapter && !softwareGpu && bufferOk) return "webgpu";
-    const voxels = t1.dims[0] * t1.dims[1] * t1.dims[2];
-    if (voxels > WEBGL2_MAX_VOXELS && globalThis.crossOriginIsolated) {
-      hooks.log.log(`The T1 has ${voxels.toLocaleString("en")} voxels, more than the WebGL2 module's 768 MiB heap holds (256³): segmenting on the CPU`);
-      return "cpu";
+    const choice = chooseMindgrabBackend({
+      webgpu: { supported: Boolean(adapter && bufferOk), software: softwareGpu },
+      webgl2: () => {
+        const voxels = t1.dims[0] * t1.dims[1] * t1.dims[2];
+        if (voxels > WEBGL2_MAX_VOXELS && globalThis.crossOriginIsolated) {
+          hooks.log.log(`The T1 has ${voxels.toLocaleString("en")} voxels, more than the WebGL2 module's 768 MiB heap holds (256³): segmenting on the CPU`);
+          return { supported: false };
+        }
+        const gl = new OffscreenCanvas(1, 1).getContext("webgl2");
+        if (!gl) return { supported: false };
+        const debug = gl.getExtension("WEBGL_debug_renderer_info");
+        const renderer = debug ? String(gl.getParameter(debug.UNMASKED_RENDERER_WEBGL)) : "";
+        gl.getExtension("WEBGL_lose_context")?.loseContext();
+        const caveatGl = new OffscreenCanvas(1, 1).getContext("webgl2", { failIfMajorPerformanceCaveat: true });
+        const caveat = !caveatGl;
+        caveatGl?.getExtension("WEBGL_lose_context")?.loseContext();
+        return { supported: true, renderer, caveat };
+      },
+      cpu: Boolean(globalThis.crossOriginIsolated),
+    });
+    if (choice === null) {
+      throw new Error("No hardware GPU is available for MindMap and the CPU backend requires cross-origin isolation.");
     }
-    const gl = new OffscreenCanvas(1, 1).getContext("webgl2");
-    const debug = gl?.getExtension("WEBGL_debug_renderer_info");
-    const renderer = debug ? String(gl.getParameter(debug.UNMASKED_RENDERER_WEBGL)) : "";
-    gl?.getExtension("WEBGL_lose_context")?.loseContext();
-    const software = !gl || isSoftwareRenderer({ renderer }) || !renderer;
-    if (software && globalThis.crossOriginIsolated) return "cpu";
-    return gl && !isSoftwareRenderer({ renderer }) ? "webgl2" : "cpu";
+    return choice === "auto" ? "cpu" : choice;
   }
 
   /** Segment the T1 (once per T1) and measure the voxel. */
