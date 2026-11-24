@@ -379,9 +379,17 @@ fn twix_acquisition(ds: &Dataset, files: &[NamedFile]) -> Option<TwixAcquisition
     })
 }
 
+fn same_twix_voxel(a: &Voxel, b: &Voxel) -> bool {
+    let ca = a.center_mm();
+    let cb = b.center_mm();
+    let sa = a.size_mm();
+    let sb = b.size_mm();
+    (0..3).all(|i| (ca[i] - cb[i]).abs() <= 1.0 && (sa[i] - sb[i]).abs() <= 1.0)
+}
+
 fn conflicting_twix_acquisition(a: Option<&TwixAcquisition>, b: Option<&TwixAcquisition>) -> bool {
     let (Some(a), Some(b)) = (a, b) else { return false };
-    a.voxel.as_ref().zip(b.voxel.as_ref()).is_some_and(|(va, vb)| va != vb)
+    a.voxel.as_ref().zip(b.voxel.as_ref()).is_some_and(|(va, vb)| !same_twix_voxel(va, vb))
         || (!a.study.is_empty() && !b.study.is_empty() && a.study != b.study)
         || (!a.frame_of_reference.is_empty() && !b.frame_of_reference.is_empty() && a.frame_of_reference != b.frame_of_reference)
         || (!a.patient.is_empty() && !b.patient.is_empty() && a.patient != b.patient)
@@ -647,11 +655,6 @@ pub fn detect(files: &[NamedFile]) -> Detection {
             voxels.insert(ds.files[0], voxel);
         }
     }
-    let twix_acqs: HashMap<usize, TwixAcquisition> = if datasets.iter().filter(|ds| ds.format == Format::Twix).count() > 1 {
-        datasets.iter().filter_map(|ds| twix_acquisition(ds, files).map(|acq| (ds.files[0], acq))).collect()
-    } else {
-        HashMap::new()
-    };
     // Any `(dir, protocol)` containing a scanner-named twix file routes every
     // twix metabolite and water reference for that `(dir, protocol)` (whether
     // scanner-named or renamed) through the scoped twix post-pass so greedy
@@ -664,6 +667,11 @@ pub fn detect(files: &[NamedFile]) -> Detection {
             Some((dir_of(ds).to_string(), proto))
         })
         .collect();
+    let twix_acqs: HashMap<usize, TwixAcquisition> = if !scanner_twix_scopes.is_empty() {
+        datasets.iter().filter_map(|ds| twix_acquisition(ds, files).map(|acq| (ds.files[0], acq))).collect()
+    } else {
+        HashMap::new()
+    };
     let key = |ds: &Dataset| -> (Format, String) { (ds.format, ds.name.to_ascii_lowercase()) };
     let (water, metab): (Vec<Dataset>, Vec<Dataset>) = datasets.into_iter().partition(|d| d.is_water);
     let mut water: Vec<Option<Dataset>> = water.into_iter().map(Some).collect();
@@ -700,10 +708,7 @@ pub fn detect(files: &[NamedFile]) -> Detection {
                             || (!mdir.is_empty() && water_base(&wdir).as_deref() == Some(&mdir))
                     }
                 };
-                if hit
-                    && !conflicting_dicom_identity(identities.get(&m.files[0]), identities.get(&w.files[0]))
-                    && !conflicting_twix_acquisition(twix_acqs.get(&m.files[0]), twix_acqs.get(&w.files[0]))
-                {
+                if hit && !conflicting_dicom_identity(identities.get(&m.files[0]), identities.get(&w.files[0])) {
                     let shared = shared_dirs(mpath, split_path(files[w.files[0]].name).0);
                     if best.is_none_or(|(_, s)| shared > s) {
                         best = Some((wi, shared));

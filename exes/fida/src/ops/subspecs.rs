@@ -60,7 +60,7 @@ pub fn op_combinesubspecs(input: &Spectra, mode: CombineMode) -> Result<Spectra,
         out.averages = 1;
         out.flags.averaged = true;
     } else {
-        out.averages = (input.averages / 2).max(1);
+        out.averages = input.averages / 2;
     }
     out.flags.writtentostruct = true;
     out.flags.subtracted = true;
