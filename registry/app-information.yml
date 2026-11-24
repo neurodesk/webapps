@@ -2347,10 +2347,10 @@ apps:
         reference: "Caicedo JC, Goodman A, Karhohs KW, et al. Nucleus segmentation across imaging experiments: the 2018 Data Science Bowl. Nature Methods. 2019;16(12):1247–1253."
         doi: 10.1038/s41592-019-0612-7
       - group: Example data
-        title: The Cancer Imaging Archive (TCIA) H&E example (via StarDist 0.9.1)
-        reference: "Clark K, Vendt B, Smith K, et al. The Cancer Imaging Archive (TCIA): maintaining and operating a public information repository. Journal of Digital Imaging. 2013;26(6):1045–1057. Redistributed via StarDist 0.9.1 test_image_he_2d (BSD-3-Clause); see TCIA data usage policies."
-        doi: 10.1007/s10278-013-9622-7
-        url: https://www.cancerimagingarchive.net/data-usage-policies-and-restrictions/
+        title: Human skin H&E histology (scikit-image skin, Public Domain)
+        reference: "van der Walt S, Schönberger JL, Nunez-Iglesias J, et al. scikit-image: image processing in Python. PeerJ. 2014;2:e453. Includes human epidermis and dermis H&E histology by Kilbad (Wikimedia Commons, public domain / CC0-1.0)."
+        doi: 10.7717/peerj.453
+        url: https://en.wikipedia.org/wiki/File:Normal_Epidermis_and_Dermis_with_Intradermal_Nevus_10x.JPG
       - group: Browser inference
         title: ONNX Runtime Web
         reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."

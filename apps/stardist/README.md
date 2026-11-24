@@ -55,9 +55,9 @@ python -I reference.py <models-dir> reference.json [browser-labels.tif ...]
   3D NMS and polyhedron rendering matching Python StarDist 0.9.1 voxel for voxel (30 nuclei from
   302 candidates, identical SHA-256), 3D regionprops and 3D tiled prediction.
 - Browser (`e2e/workflow.spec.js`, production build, Chromium): every model (`2D_versatile_fluo`
-  untiled, 2 × 2 tiled and non-multiple-of-16 crop; `2D_versatile_he` 183 nuclei; `2D_paper_dsb2018`
-  121 nuclei; `3D_demo` 30 nuclei) reproduces Python StarDist 0.9.1's label image SHA-256 byte for
-  byte and skimage regionprops' CSV table.
+  untiled, 2 × 2 tiled and non-multiple-of-16 crop; `2D_versatile_he` 37 nuclei; `2D_paper_dsb2018`
+  121 nuclei; `3D_demo` 30 nuclei untiled and 4-tile 3D seam mosaic) reproduces Python StarDist
+  0.9.1's label image SHA-256 byte for byte and skimage regionprops' CSV table.
 
 ## Data and licences
 
@@ -68,8 +68,9 @@ python -I reference.py <models-dir> reference.json [browser-labels.tif ...]
 - Examples:
   - `dsb2018-nuclei-2d.tif` (512 × 512, 16-bit): StarDist's `test_image_nuclei_2d` from the 2018
     Data Science Bowl (BBBC038v1, CC0 1.0; Caicedo et al., Nature Methods 2019).
-  - `tcia-he-nuclei-2d.png` (500 × 300, RGB): lossless PNG of StarDist's `test_image_he_2d` from
-    The Cancer Imaging Archive (Clark et al., J Digit Imaging 2013).
+  - `skin-he-nuclei-2d.png` (512 × 512, RGB): 512 × 512 crop of `skimage.data.skin()` (human
+    epidermis and dermis H&E histology by Kilbad on Wikimedia Commons, public domain / CC0-1.0;
+    distributed in scikit-image, van der Walt et al., PeerJ 2014).
   - `stardist-demo-nuclei-3d.tif` (57 × 61 × 31, 16-bit): StarDist's synthetic
     `test_image_nuclei_3d` (BSD-3-Clause). `3D_demo` is a demonstration model trained on synthetic
     3D nuclei and does not establish accuracy on real tissue.

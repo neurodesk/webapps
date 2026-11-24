@@ -107,9 +107,7 @@
     </footer>
 
     <template id="aboutContent">
-      <p>StarDist finds cell nuclei in 2D and 3D microscopy by predicting, for every grid pixel or voxel, the probability that it lies inside a nucleus and the radial distances to the boundary along star-convex rays (32 rays in 2D polygons, 96 golden-spiral rays in 3D polyhedra). Non-maximum suppression keeps the most probable candidate where objects overlap.</p>
-      <p>This app ships all four official pretrained StarDist models, converted to ONNX and run locally with ONNX Runtime on the CPU: 2D_versatile_fluo (single-channel 2D fluorescence nuclei, trained on the 2018 Data Science Bowl), 2D_versatile_he (RGB 2D H&amp;E brightfield histology, trained on MoNuSeg and TNBC), 2D_paper_dsb2018 (original 2018 StarDist paper model), and 3D_demo (3D star-convex polyhedra demonstration model trained on synthetic 3D fluorescence nuclei).</p>
-      <p>Images are normalized to their 1st and 99.8th percentiles (jointly across RGB channels for H&amp;E) and predicted with CSBDeep tiling. Non-maximum suppression and label drawing are ports of StarDist 0.9.1 and match Python StarDist to the pixel or voxel on all examples. Note that 3D_demo is a synthetic demonstration model and is not a general-purpose 3D tissue model.</p>
+      <p>StarDist segments cell nuclei in 2D fluorescence, 2D RGB H&amp;E brightfield, and 3D microscopy stacks locally on ONNX Runtime WebAssembly using star-convex polygons (32 rays) and polyhedra (96 rays) ported from StarDist 0.9.1 (2D_versatile_fluo, 2D_versatile_he, 2D_paper_dsb2018, and the synthetic 3D_demo model).</p>
     </template>
     <template id="privacyContent"><p>Images are processed locally in this browser and are never uploaded. Each model is downloaded once on demand from the Neurodesk dataset on Hugging Face and verified against its checksum.</p></template>
 

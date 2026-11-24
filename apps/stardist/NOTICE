@@ -15,9 +15,10 @@ pretrained models (https://github.com/stardist/stardist-models, release v0.1),
 converted to ONNX by validation/convert_model.py. Copyright (c) 2018-2020,
 Martin Weigert, Uwe Schmidt, under the BSD 3-Clause licence (LICENSE).
 
-The H&E example (`tcia-he-nuclei-2d.png`) is derived from StarDist 0.9.1's
-`test_image_he_2d()` (`stardist/data/images/histo.jpg`, BSD-3-Clause), originally
-from The Cancer Imaging Archive (TCIA; https://www.cancerimagingarchive.net/data-usage-policies-and-restrictions/).
+The H&E example (`skin-he-nuclei-2d.png`) is a 512 × 512 crop (`[200:712, 0:512]`)
+of `skimage.data.skin()` (human epidermis and dermis with intradermal nevus,
+Wikimedia Commons, author Kilbad, released to the public domain / CC0-1.0;
+https://en.wikipedia.org/wiki/File:Normal_Epidermis_and_Dermis_with_Intradermal_Nevus_10x.JPG).
 
 The bundled clipper-lib 6.4.2 (https://sourceforge.net/projects/jsclipper/), a
 JavaScript port of Angus Johnson's Clipper, is Copyright Angus Johnson 2010-2017

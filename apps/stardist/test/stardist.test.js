@@ -384,3 +384,21 @@ test("segment3D compacts empty survivors so count, CSV rows and label IDs stay a
   assert.equal(res.count, 1);
   assert.equal(res.nuclei[0].id, 1);
 });
+
+test("automaticTiles3D budgets elongated 3D stacks below the 64 MiB per-tile cap", () => {
+  const demo3d = resolveModel("3D_demo");
+  const tiles = automaticTiles3D(128, 256, 8192, demo3d);
+  const [bd, bh, bw] = demo3d.divBy;
+  const [od, oh, ow] = demo3d.tileOverlap;
+  const [gd, gh, gw] = demo3d.grid;
+  const maxSpan = (size, block, overlap, nTiles) => {
+    const padded = size + ((block - (size % block)) % block);
+    const plan = axisTiles(padded, nTiles, block, Math.ceil(overlap / block));
+    return Math.max(...plan.map((t) => t.read[1] - t.read[0]));
+  };
+  const td = maxSpan(128, bd, od, tiles[0]);
+  const th = maxSpan(256, bh, oh, tiles[1]);
+  const tw = maxSpan(8192, bw, ow, tiles[2]);
+  const bytes = (td / gd) * (th / gh) * (tw / gw) * (demo3d.nRays + 1) * 4;
+  assert.ok(bytes <= 64 * 1024 * 1024, `expected tile bytes <= 64 MiB, got ${(bytes / 1048576).toFixed(1)} MiB (${tiles.join("x")})`);
+});

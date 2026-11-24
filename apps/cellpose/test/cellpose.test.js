@@ -267,6 +267,20 @@ test("segment2D and segment3D reject non-finite inputs, non-finite outputs, and 
     /Cellpose model output contains non-finite/,
   );
 
+  // Oversized 2D rescale budget: 768x768 at diameter=5 (6x rescale -> ~652 MiB live buffers) must fail before inference.
+  let invoked = false;
+  await assert.rejects(
+    segment2D(new Float32Array(768 * 768).fill(1), null, 768, 768, MODELS.cyto3, {
+      diameter: 5,
+      runBatch: async () => {
+        invoked = true;
+        return new Float32Array(0);
+      },
+    }),
+    /limit 512 MiB/,
+  );
+  assert.equal(invoked, false);
+
   // Oversized 3D rescale budget: 1024x1024x32 at diameter=5 (6x rescale -> >7B voxels) must fail before allocating.
   const dummyVol = new Float32Array(1);
   await assert.rejects(

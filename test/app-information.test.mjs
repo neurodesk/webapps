@@ -26,7 +26,7 @@ const REQUIRED_METHODS = {
   sdc: ['arxiv.org/abs/2403.10706', '10.1088/0031-9155/57/18/5715', '10.5281/zenodo.3758524', '10.3389/fninf.2017.00017', '10.1371/journal.pone.0152472', '10.1016/j.media.2007.06.004', '10.1109/TMI.2010.2046908', '10.1002/jmri.22003', 'arxiv.org/abs/2506.11860', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   dwicorrect: ['10.1016/j.neuroimage.2015.10.019', '10.1016/j.neuroimage.2016.06.058', '10.1016/j.neuroimage.2017.02.085', '10.1016/j.neuroimage.2015.07.067', '10.1016/j.media.2013.02.010', '10.1038/s41592-021-01185-5', 'arxiv.org/abs/2403.10706', '10.1088/0031-9155/57/18/5715', 'arxiv.org/abs/2506.11860', '10.21105/joss.05098', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   dwidenoise: ['arxiv.org/abs/2011.01355', '10.3389/fninf.2014.00008', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
-  stardist: ['10.1007/978-3-030-00934-2_30', '10.1109/WACV45572.2020.9093435', '10.1038/s41592-018-0216-7', '10.1038/s41592-019-0612-7', '10.1007/s10278-013-9622-7', 'onnxruntime.ai', 'github.com/niivue/niivue'],
+  stardist: ['10.1007/978-3-030-00934-2_30', '10.1109/WACV45572.2020.9093435', '10.1038/s41592-018-0216-7', '10.1038/s41592-019-0612-7', '10.7717/peerj.453', 'onnxruntime.ai', 'github.com/niivue/niivue'],
   cellpose: ['10.1038/s41592-020-01018-x', '10.1038/s41592-025-02595-5', '10.7717/peerj.453', 'onnxruntime.ai', 'github.com/niivue/niivue'],
   degibbs: ['10.1002/mrm.26054', '10.1016/j.neuroimage.2019.116137', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   'microscope-qc': ['10.1083/jcb.202107093', '10.1111/jmi.13041', '10.1038/nmeth.3102', '10.1038/nbt899', '10.5281/zenodo.10522322', '10.1038/nmeth.2089', 'github.com/niivue/niivue'],

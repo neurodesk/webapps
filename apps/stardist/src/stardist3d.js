@@ -61,7 +61,7 @@ function maxTileDimensions(paddedDepth, paddedHeight, paddedWidth, nTiles, model
 
 /**
  * Automatic 3D tiling: chooses tile counts from the ACTUAL overlapped tile shape so every tile's
- * 96-ray float32 output fits inside the WebAssembly working-set budget.
+ * 96-ray float32 output fits inside the WebAssembly working-set budget, including elongated stacks.
  */
 export function automaticTiles3D(depth, height, width, model = null) {
   if (!model) {
@@ -75,35 +75,40 @@ export function automaticTiles3D(depth, height, width, model = null) {
   const padD = depth + ((divZ - (depth % divZ)) % divZ);
   const padH = height + ((divY - (height % divY)) % divY);
   const padW = width + ((divX - (width % divX)) % divX);
+  const maxTiles = [Math.max(1, Math.floor(padD / divZ)), Math.max(1, Math.floor(padH / divY)), Math.max(1, Math.floor(padW / divX))];
   const tiles = [1, 1, 1];
-  for (let iter = 0; iter < 64; iter++) {
+  for (let iter = 0; iter < 512; iter++) {
     const info = maxTileDimensions(padD, padH, padW, tiles, model);
     if (info.outputBytes <= MAX_3D_AUTO_TILE_OUTPUT_BYTES) break;
-    // Grow the axis with the largest padded tile span above its minimum overlap footprint.
-    const candidates = [
-      { axis: 0, span: info.maxD, canGrow: tiles[0] < Math.floor(padD / divZ) },
-      { axis: 1, span: info.maxH, canGrow: tiles[1] < Math.floor(padH / divY) },
-      { axis: 2, span: info.maxW, canGrow: tiles[2] < Math.floor(padW / divX) },
-    ].filter((c) => c.canGrow);
-    if (!candidates.length) break;
-    candidates.sort((a, b) => b.span - a.span);
-    const chosen = candidates[0].axis;
-    const prevSpan = [info.maxD, info.maxH, info.maxW][chosen];
-    tiles[chosen]++;
-    const after = maxTileDimensions(padD, padH, padW, tiles, model);
-    const nextSpan = [after.maxD, after.maxH, after.maxW][chosen];
-    if (nextSpan >= prevSpan) {
-      tiles[chosen]--;
-      // Splitting further along this axis cannot shrink the overlap floor; try the next axis.
-      const alt = candidates.slice(1).find((c) => {
-        const probe = [...tiles];
-        probe[c.axis]++;
-        const probeInfo = maxTileDimensions(padD, padH, padW, probe, model);
-        return [probeInfo.maxD, probeInfo.maxH, probeInfo.maxW][c.axis] < [info.maxD, info.maxH, info.maxW][c.axis];
-      });
-      if (!alt) break;
-      tiles[alt.axis]++;
+    const spans = [info.maxD, info.maxH, info.maxW];
+    const order = [0, 1, 2].sort((a, b) => spans[b] - spans[a]);
+    let progressed = false;
+    for (const axis of order) {
+      if (tiles[axis] >= maxTiles[axis]) continue;
+      // Take an analytical jump proportional to the excess ratio on large elongated axes,
+      // then verify it actually shrinks the overlapped tile span.
+      const excess = info.outputBytes / MAX_3D_AUTO_TILE_OUTPUT_BYTES;
+      const step = excess > 4 ? Math.max(1, Math.min(maxTiles[axis] - tiles[axis], Math.ceil(tiles[axis] * (Math.min(excess, 8) ** 0.35 - 1)))) : 1;
+      const probe = [...tiles];
+      probe[axis] = Math.min(maxTiles[axis], tiles[axis] + step);
+      const after = maxTileDimensions(padD, padH, padW, probe, model);
+      const nextSpan = [after.maxD, after.maxH, after.maxW][axis];
+      if (nextSpan < spans[axis]) {
+        tiles[axis] = probe[axis];
+        progressed = true;
+        break;
+      }
+      if (step > 1) {
+        probe[axis] = tiles[axis] + 1;
+        const afterOne = maxTileDimensions(padD, padH, padW, probe, model);
+        if ([afterOne.maxD, afterOne.maxH, afterOne.maxW][axis] < spans[axis]) {
+          tiles[axis] = probe[axis];
+          progressed = true;
+          break;
+        }
+      }
     }
+    if (!progressed) break;
   }
   return tiles;
 }
@@ -910,27 +915,32 @@ export function suppress3D(dist, points, rays, threshold) {
     cells.get(key).push(i);
   }
 
-  const pvCache = new Array(n);
-  const kernelCache = new Array(n);
-  const hullCache = new Array(n);
-  const getPolyverts = (idx) => {
-    if (!pvCache[idx]) pvCache[idx] = polyvertsOf(dist.subarray(idx * nRays, (idx + 1) * nRays), pts.subarray(3 * idx, 3 * idx + 3), geom);
-    return pvCache[idx];
-  };
-  const getKernel = (idx) => {
-    if (!kernelCache[idx]) kernelCache[idx] = kernelHalfspacesOf(getPolyverts(idx), geom);
-    return kernelCache[idx];
-  };
-  const getHull = (idx) => {
-    if (hullCache[idx] === undefined) hullCache[idx] = convexHullHalfspaces(getPolyverts(idx), nRays);
-    return hullCache[idx];
+  // Bounded LRU cache (at most 64 neighbor geometries) so dense 3D NMS stays under ~1 MiB heap.
+  const GEOM_CACHE_LIMIT = 64;
+  const geomCache = new Map();
+  const getNeighborGeom = (idx) => {
+    let entry = geomCache.get(idx);
+    if (entry) {
+      geomCache.delete(idx);
+      geomCache.set(idx, entry);
+      return entry;
+    }
+    const pv = polyvertsOf(dist.subarray(idx * nRays, (idx + 1) * nRays), pts.subarray(3 * idx, 3 * idx + 3), geom);
+    entry = { pv, kernel: null, hull: undefined };
+    if (geomCache.size >= GEOM_CACHE_LIMIT) geomCache.delete(geomCache.keys().next().value);
+    geomCache.set(idx, entry);
+    return entry;
   };
 
   const suppressed = new Uint8Array(n);
   const limit = f32(threshold);
   for (let i = 0; i < n - 1; i++) {
-    if (suppressed[i]) continue;
+    if (suppressed[i]) {
+      geomCache.delete(i);
+      continue;
+    }
     const pi = pts.subarray(3 * i, 3 * i + 3);
+    const di = dist.subarray(i * nRays, (i + 1) * nRays);
     const bi0 = bbox[6 * i];
     const bi1 = bbox[6 * i + 1];
     const bi2 = bbox[6 * i + 2];
@@ -946,6 +956,9 @@ export function suppress3D(dist, points, rays, threshold) {
     const Nz = bi1 - bi0 + 1;
     const Ny = bi3 - bi2 + 1;
     const Nx = bi5 - bi4 + 1;
+    let pvi = null;
+    let ki = null;
+    let hi = undefined;
     let rendered = null;
     for (let gz = cz - span; gz <= cz + span; gz++) {
       for (let gy = cy - span; gy <= cy + span; gy++) {
@@ -965,23 +978,28 @@ export function suppress3D(dist, points, rays, threshold) {
             const Alower = intersectSphereIso(rInnerIso[i], pi, rInnerIso[j], pj, aniso);
             if (Math.max(0, Alower / (Amin + 1e-10)) > limit) {
               suppressed[j] = 1;
+              geomCache.delete(j);
               continue;
             }
             // Second check: continuous kernel intersection (lower bound, matching qhull_overlap_kernel).
-            const pvi = getPolyverts(i);
-            const pvj = getPolyverts(j);
+            if (!pvi) pvi = polyvertsOf(di, pi, geom);
+            if (!ki) ki = kernelHalfspacesOf(pvi, geom);
+            const gj = getNeighborGeom(j);
+            const pvj = gj.pv;
+            if (!gj.kernel) gj.kernel = kernelHalfspacesOf(pvj, geom);
             const mid = [0.5 * (pi[0] + pj[0]), 0.5 * (pi[1] + pj[1]), 0.5 * (pi[2] + pj[2])];
             const pairBox = pairEnclosingBox(pvi, pvj, nRays);
-            const Akernel = halfspaceIntersectionVolume([...getKernel(i), ...getKernel(j)], mid, pairBox, 0);
+            const Akernel = halfspaceIntersectionVolume([...ki, ...gj.kernel], mid, pairBox, 0);
             if (Akernel / (Amin + 1e-10) > limit) {
               suppressed[j] = 1;
+              geomCache.delete(j);
               continue;
             }
             // Third check: continuous convex-hull intersection (upper bound, matching qhull_overlap_convex_hulls).
-            const hi = getHull(i);
-            const hj = getHull(j);
-            if (hi && hj) {
-              const Aconvex = halfspaceIntersectionVolume([...hi, ...hj], mid, pairBox, 1e10);
+            if (hi === undefined) hi = convexHullHalfspaces(pvi, nRays);
+            if (gj.hull === undefined) gj.hull = convexHullHalfspaces(pvj, nRays);
+            if (hi && gj.hull) {
+              const Aconvex = halfspaceIntersectionVolume([...hi, ...gj.hull], mid, pairBox, 1e10);
               if (Aconvex / (Amin + 1e-10) <= limit) continue;
             }
             // Fourth/final check: exact voxel rendering fallback.
@@ -1014,6 +1032,7 @@ export function suppress3D(dist, points, rays, threshold) {
                     inter++;
                     if (inter > maxOverlap) {
                       suppressed[j] = 1;
+                      geomCache.delete(j);
                       break outer;
                     }
                   }
@@ -1024,6 +1043,7 @@ export function suppress3D(dist, points, rays, threshold) {
         }
       }
     }
+    geomCache.delete(i);
   }
 
   const kept = [];

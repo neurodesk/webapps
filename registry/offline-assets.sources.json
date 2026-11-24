@@ -7121,11 +7121,11 @@
         "kind": "example"
       },
       {
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2cc5042a0fad34811857bbdf89b1172bda338af4/stardist/example/tcia-he-nuclei-2d.png",
-        "sha256": "ba5eb1e3745580332efd147d1719ea60bb6addad0e2ea2982ebb3902620953dd",
-        "bytes": 284273,
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/096c23dbc810fb960b5f7d6319195628d40c0b87/stardist/example/skin-he-nuclei-2d.png",
+        "sha256": "d6fb28b106b2b74cf101be3d1e08a55fe01fb09a9316fd673c830dbbf94250b7",
+        "bytes": 582428,
         "kind": "example",
-        "license": "BSD-3-Clause"
+        "license": "CC0-1.0"
       },
       {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2cc5042a0fad34811857bbdf89b1172bda338af4/stardist/example/stardist-demo-nuclei-3d.tif",

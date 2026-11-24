@@ -69,7 +69,7 @@ test("invalid thresholds are refused and model defaults restore cleanly", async 
   await expect(page.locator("#nuclearChannelField")).toBeHidden();
 });
 
-for (const failure of ["download", "unreadable image"]) {
+for (const failure of ["download", "corrupted checksum"]) {
   test(`a failed ${failure} can retry the same example`, async ({ page }) => {
     test.setTimeout(120000);
     let attempts = 0;

@@ -2,11 +2,13 @@
 // DOM-free so the Node tests and the worker can use it.
 import {
   imagejDescription,
+  isOmeDescription,
   omePageChannels,
   openTiffPlanes,
   openTiffStackPages,
   parseImagejDescription,
   parseOmeDescription,
+  readTiffDescription,
   writeLabelTiff,
   writeTiffStack,
 } from "@neurodesk/webapp-components/file-io/tiff";
@@ -112,8 +114,14 @@ async function readTiff(name, buffer) {
     throw new Error(`${name} holds ${(bytes / 2 ** 30).toFixed(1)} GB of pixels in ${pages.length} pages; save the plane to segment as its own image.`);
   }
 
-  const ome = parseOmeDescription(tiff.description);
-  const imagej = ome ? null : parseImagejDescription(tiff.description);
+  // Always read IFD 0's description directly (even if IFD 0 is reduced-resolution) so OME-XML
+  // time-series or BinaryOnly companion-file headers cannot be silently dropped.
+  const rawDescription = (await readTiffDescription(buffer)) || tiff.description;
+  const ome = parseOmeDescription(rawDescription);
+  if (!ome && isOmeDescription(rawDescription)) {
+    throw new Error(`${name} references OME-XML metadata in a companion file; open the companion file set in Fiji and save it as one OME-TIFF.`);
+  }
+  const imagej = ome ? null : parseImagejDescription(rawDescription);
   if (ome && ome.images > 1) {
     throw new Error(`${name} holds ${ome.images} OME image series; save the series you need as its own file.`);
   }

@@ -149,11 +149,13 @@ function applyModelDefaults(model) {
 
 function voxelSpacing(image, model, is3d) {
   const sp = image.spacing;
-  const sx = sp?.x && sp.x > 0 ? sp.x : 1;
-  const sy = sp?.y && sp.y > 0 ? sp.y : 1;
+  // NIfTI-1 stores millimetres; convert calibrated micrometre spacings (`1 µm = 0.001 mm`).
+  const unitScale = sp?.unit === "micron" ? 1e-3 : 1;
+  const sx = sp?.x && sp.x > 0 ? sp.x * unitScale : 1;
+  const sy = sp?.y && sp.y > 0 ? sp.y * unitScale : 1;
   let sz = 1;
   if (is3d) {
-    if (sp?.z && sp.z > 0) sz = sp.z;
+    if (sp?.z && sp.z > 0) sz = sp.z * unitScale;
     else if (model.anisotropy?.[0] > 0) sz = model.anisotropy[0] * sx;
   }
   return [sx, sy, sz];
@@ -349,6 +351,7 @@ function commitInput(files, nextInput, nextModel) {
     applyModelDefaults(nextModel);
   }
   syncChannelControl(nextInput, nextModel);
+  if ($("channel").options.length > 0) $("channel").value = "0";
   $("imageInput").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files } }));
   $("fileInfo").hidden = false;
   $("fileInfo").textContent = formatFileInfo(nextInput.file, nextInput);
@@ -644,21 +647,27 @@ registerAppAutomation({
       const prevChannel = selectedChannelIndex();
       const prevLabels = outputs.labels?.view ?? null;
       let viewerTouched = false;
+      let committed = false;
+      let runSnapshot = null;
       try {
         const { files, nextInput } = await decodeAndStageInput(Promise.resolve(inputs.image), current, { preferredModel: model.name });
         prepareInputForModel(nextInput, model, settings);
-        const runSnapshot = { image: nextInput, model, channelIndex: settings.channel - 1 };
+        runSnapshot = { image: nextInput, model, channelIndex: settings.channel - 1 };
         viewerTouched = true;
         await show(null, runSnapshot);
         current.throwIfAborted();
         commitInput(files, nextInput, model);
         showSettings(settings, model, nextInput);
+        committed = true;
         progress.setProgress(0, `Segmenting ${nextInput.file.name}…`);
         status(`Segmenting ${nextInput.file.name}…`, false, "technical");
         return await executeSegmentation(nextInput, model, settings, current);
       } catch (error) {
         progress.reset();
-        if (viewerTouched && prevInput) {
+        if (committed && runSnapshot) {
+          // Keep the newly committed input and its preview coherent if the run fails.
+          void show(null, runSnapshot).catch(() => {});
+        } else if (viewerTouched && prevInput) {
           void show(prevLabels, { image: prevInput, model: prevModel, channelIndex: prevChannel }).catch(() => {});
         }
         throw error;

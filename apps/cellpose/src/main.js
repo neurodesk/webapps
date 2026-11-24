@@ -173,29 +173,26 @@ function applyModelDefaults(model) {
 }
 
 /**
- * Physical voxel spacing `[sx, sy, sz]` for NIfTI display and label TIFF export.
- * Explicit run anisotropy overrides Z spacing ratio when different from 1 or uncalibrated.
+ * Physical voxel spacing `[sx, sy, sz]` in NIfTI units (millimetres when calibrated in µm,
+ * pixel-relative otherwise). In 3D, Z spacing always honors the active anisotropy ratio (`dz / dxy`)
+ * so the 3D viewer and downloaded label TIFF agree with inference even when anisotropy is 1.
  */
 function resolveVoxelSpacing(image, is3d, anisotropy = 1) {
   const sp = image.spacing;
-  const sx = sp?.x && sp.x > 0 ? sp.x : 1;
-  const sy = sp?.y && sp.y > 0 ? sp.y : 1;
-  let sz = 1;
-  if (is3d) {
-    if (anisotropy !== 1) sz = anisotropy * sx;
-    else if (sp?.z && sp.z > 0) sz = sp.z;
-    else sz = sx;
-  }
+  const unitScale = sp?.unit === "micron" ? 1e-3 : 1;
+  const sx = sp?.x && sp.x > 0 ? sp.x * unitScale : 1;
+  const sy = sp?.y && sp.y > 0 ? sp.y * unitScale : 1;
+  const sz = is3d ? anisotropy * sx : 1;
   return [sx, sy, sz];
 }
 
 function exportSpacingFor(image, is3d, anisotropy) {
   if (!is3d) return image.spacing ?? null;
-  const [sx, sy, sz] = resolveVoxelSpacing(image, true, anisotropy);
-  if (image.spacing?.x && image.spacing?.y) {
-    return { x: sx, y: sy, z: sz, unit: image.spacing.unit ?? "micron" };
+  const sp = image.spacing;
+  if (sp?.x && sp?.y) {
+    return { x: sp.x, y: sp.y, z: anisotropy * sp.x, unit: sp.unit ?? "micron" };
   }
-  return { x: null, y: null, z: sz, unit: null };
+  return { x: null, y: null, z: anisotropy, unit: null };
 }
 
 // A 2D or 3D scalar image as NIfTI whose rows run down the screen, honoring physical/anisotropic spacing.
@@ -729,6 +726,8 @@ registerAppAutomation({
       const prevSnapshot = currentSnapshot();
       const prevLabels = outputs.labels?.view ?? null;
       let viewerTouched = false;
+      let committed = false;
+      let runSnapshot = null;
       try {
         const { files, nextInput } = await decodeInputFiles(Promise.resolve(inputs.image), current);
         const prepared = prepareInputForRun(nextInput, model, settings);
@@ -740,7 +739,7 @@ registerAppAutomation({
           anisotropy: settings.anisotropy,
           preset: settings,
         };
-        const runSnapshot = {
+        runSnapshot = {
           image: nextInput,
           is3d: settings.do3D,
           primaryIndex: prepared.primaryIndex,
@@ -752,12 +751,16 @@ registerAppAutomation({
         current.throwIfAborted();
         commitInput(files, nextInput, staged);
         showSettings(settings, model, nextInput);
+        committed = true;
         progress.setProgress(0, `Segmenting ${nextInput.file.name}…`);
         status(`Segmenting ${nextInput.file.name}…`, false, "technical");
         return await executeSegmentation(nextInput, model, settings, current);
       } catch (error) {
         progress.reset();
-        if (viewerTouched && prevSnapshot) {
+        if (committed && runSnapshot) {
+          // Keep the newly committed input and its preview coherent if the run fails.
+          void show(null, runSnapshot).catch(() => {});
+        } else if (viewerTouched && prevSnapshot) {
           void show(prevLabels, prevSnapshot).catch(() => {});
         }
         throw error;

@@ -6,12 +6,13 @@ Cellpose Webapp — Third-Party Notices
    License: BSD 3-Clause License (see LICENSE)
 
 2. Pretrained Cellpose 3 model weights (`cyto3` and `nuclei`)
-   Source: https://www.cellpose.org/models/cyto3 and https://www.cellpose.org/models/nucleitorch_0
+   Repository & license: https://github.com/MouseLand/cellpose (tag v3.1.1.1, LICENSE & README.md)
+   Download URLs: https://www.cellpose.org/models/cyto3 and https://www.cellpose.org/models/nucleitorch_0
    Copyright © 2020 Howard Hughes Medical Institute
    Weight license: BSD 3-Clause License (see LICENSE)
-   Training-data notice: Portions of the Cellpose 3 `cyto3` training datasets carry
-   non-commercial (CC-BY-NC) restrictions. Review the upstream Cellpose terms before
-   commercial use.
+   Training-data notice: Per the tagged Cellpose v3.1.1.1 README, training datasets used for
+   `cyto3` and `nuclei` include portions under non-commercial (CC-BY-NC) restrictions. Review the
+   upstream Cellpose terms before commercial use.
 
 3. Example microscopy data (`allen-cells-2d.ome.tif`, `allen-cells-3d.ome.tif`)
    Derived from `skimage.data.cells3d()` (Allen Institute for Cell Science).

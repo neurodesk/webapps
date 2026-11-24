@@ -285,3 +285,23 @@ test("writeLabelsTiff preserves physical spacing in 3D output", async () => {
   assert.ok(Math.abs(back.spacing.z - 1.25) < 1e-4);
   assert.ok(Math.abs(back.spacing.x - 0.25) < 1e-4);
 });
+
+test("OME-XML on a reduced-resolution IFD 0 and BinaryOnly OME-TIFFs are rejected", async () => {
+  const mkPlane = (v) => new Uint16Array(16 * 16).fill(v);
+  const timeXml = '<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06"><Image ID="Image:0"><Pixels DimensionOrder="XYZCT" SizeX="16" SizeY="16" SizeZ="1" SizeC="1" SizeT="5"><TiffData/></Pixels></Image></OME>';
+  const reducedFirst = tiff([
+    { width: 16, height: 16, bits: 16, samples: [mkPlane(1)], tags: { 254: [1], 270: timeXml } },
+    ...Array.from({ length: 5 }, (_, i) => ({ width: 16, height: 16, bits: 16, samples: [mkPlane(i + 2)] })),
+  ]);
+  await assert.rejects(readImage("thumb-movie.ome.tif", reducedFirst), /time series/);
+
+  const binaryOnlyXml = '<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06"><BinaryOnly MetadataFile="companion.ome" UUID="urn:uuid:1234"/></OME>';
+  const companionBuf = tiff(Array.from({ length: 5 }, (_, i) => ({
+    width: 16,
+    height: 16,
+    bits: 16,
+    samples: [mkPlane(i + 1)],
+    tags: i ? {} : { 270: binaryOnlyXml },
+  })));
+  await assert.rejects(readImage("companion.ome.tif", companionBuf), /companion file/);
+});

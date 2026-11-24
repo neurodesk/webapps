@@ -1031,12 +1031,21 @@ function assertFiniteArray(values, label) {
   }
 }
 
-function checkWorkingSet2D(height, width, resH, resW, hasNuclear, diameter) {
+function checkWorkingSet2D(height, width, resH, resW, hasNuclear, diameter, model) {
   const origPx = height * width;
   const resPx = resH * resW;
-  // Normalized + resized inputs + 3 flow/prob planes (res & orig) + dynamics/labels buffers.
+  const pad = getPadYX(resH, resW, model.divBy, model.extraPad);
+  const padPx = pad.Ly * pad.Lx;
   const inputPlanes = hasNuclear ? 2 : 1;
-  const bytes = (origPx * (inputPlanes + 6) + resPx * (inputPlanes + 4)) * 4;
+  // Phase 1 (tiled inference): norm (orig) + resized inputs (res) + padded 2ch input (pad) +
+  // 4 output/weight accumulators (pad) + 3 unpadded output planes (res) + tile batch (~16 MiB).
+  const inferencePeak =
+    (origPx * inputPlanes + resPx * (inputPlanes + 3) + padPx * 6) * 4 + 16 * 1024 * 1024;
+  // Phase 2 (unresize + dynamics + clustering): resized outputs + unresized flows (3) +
+  // followFlows (inds + pts = 3) + clusterMasks (+40 padded h1, h2, seedMap, labels).
+  const histPx = (height + 40) * (width + 40);
+  const clusterPeak = (resPx * 3 + origPx * 7 + histPx * 4) * 4;
+  const bytes = Math.max(inferencePeak, clusterPeak);
   if (bytes > MAX_WORKING_SET_BYTES) {
     const mib = Math.round(bytes / (1024 * 1024));
     throw new Error(`At diameter ${diameter} px, rescaling ${width} × ${height} to ${resW} × ${resH} needs ~${mib} MiB (limit 512 MiB); increase diameter or crop the image.`);
@@ -1046,10 +1055,15 @@ function checkWorkingSet2D(height, width, resH, resW, hasNuclear, diameter) {
 function checkWorkingSet3D(depth, height, width, resD, resH, resW, hasNuclear, diameter, anisotropy) {
   const origVox = depth * height * width;
   const resVox = resD * resH * resW;
-  const paddedHist = (depth + 2) * (height + 2) * (width + 2);
-  // Resized volumes + 4 ortho accumulators (res & orig) + padded histogram + labels.
   const inputVols = hasNuclear ? 2 : 1;
-  const bytes = (origVox * (inputVols + 6) + resVox * (inputVols + 4) + paddedHist * 2) * 4;
+  // Phase 1 (ortho inference): norm (orig) + resized inputs (res) + 4 ortho accumulators (res) +
+  // per-axis transposed slice buffers (~2 full res volumes worst case).
+  const inferencePeak = (origVox * inputVols + resVox * (inputVols + 6)) * 4;
+  // Phase 2 (unresize + 3D dynamics + clustering): resized flows (4) + unresized flows (4) +
+  // followFlows3D (inds + 3*pts = 4) + clusterMasks (+40 padded h1, h2, seedMap, labels).
+  const histVox = (depth + 40) * (height + 40) * (width + 40);
+  const clusterPeak = (resVox * 4 + origVox * 9 + histVox * 4) * 4;
+  const bytes = Math.max(inferencePeak, clusterPeak);
   if (bytes > MAX_WORKING_SET_BYTES) {
     const mib = Math.round(bytes / (1024 * 1024));
     throw new Error(`At diameter ${diameter} px and anisotropy ${anisotropy}, rescaling ${width} × ${height} × ${depth} to ${resW} × ${resH} × ${resD} needs ~${mib} MiB (limit 512 MiB); increase diameter, reduce anisotropy, or crop the stack.`);
@@ -1072,7 +1086,7 @@ export async function segment2D(primaryRaw, nuclearRaw, height, width, model, op
   const rescale = model.diamMean / diameter;
   const resH = rescale !== 1 ? Math.max(16, Math.floor(height * rescale)) : height;
   const resW = rescale !== 1 ? Math.max(16, Math.floor(width * rescale)) : width;
-  checkWorkingSet2D(height, width, resH, resW, Boolean(nuclearRaw), diameter);
+  checkWorkingSet2D(height, width, resH, resW, Boolean(nuclearRaw), diameter, model);
 
   const norm0 = normalize99(primaryRaw, 1, 99);
   const norm1 = nuclearRaw ? normalize99(nuclearRaw, 1, 99) : null;

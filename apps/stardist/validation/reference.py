@@ -6,23 +6,27 @@ Run once in the environment described in convert_model.py, after it:
 
 <models-dir> holds the extracted 2D_versatile_fluo, 2D_versatile_he,
 2D_paper_dsb2018 and 3D_demo folders written by convert_model.py. The script
-uses StarDist 0.9.1's built-in test images (test_image_nuclei_2d,
-test_image_he_2d and test_image_nuclei_3d) and writes reference.json, which the
-unit tests and the browser tests read.
+uses StarDist 0.9.1's built-in test images (test_image_nuclei_2d and
+test_image_nuclei_3d) plus the pinned public-domain H&E skin histology example
+(skimage.data.skin()[200:712, 0:512]) and writes reference.json, which the unit
+tests and the browser tests read.
 """
 
 import base64
 import hashlib
+import io
 import json
 import sys
+import urllib.request
 from pathlib import Path
 
 import numpy as np
 import tifffile
+from PIL import Image
 from csbdeep.internals.predict import Tiling
 from csbdeep.utils import normalize
 from skimage.measure import regionprops
-from stardist.data import abspath, test_image_he_2d, test_image_nuclei_2d, test_image_nuclei_3d
+from stardist.data import abspath, test_image_nuclei_2d, test_image_nuclei_3d
 from stardist.geometry import polygons_to_label
 from stardist.matching import matching
 from stardist.models import StarDist2D, StarDist3D
@@ -36,6 +40,8 @@ PAD_SHAPES = ((157, 203), (5, 3), (16, 33), (1, 18))
 PAD_3D_SHAPES = ((31, 61, 57), (5, 7, 9), (4, 8, 8))
 SOURCE_2D = "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/e76a7bbd831da2bfdae49058700da81d6cca577c/stardist/"
 SOURCE_NEW = "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2cc5042a0fad34811857bbdf89b1172bda338af4/stardist/"
+HE_EXAMPLE_URL = "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/096c23dbc810fb960b5f7d6319195628d40c0b87/stardist/example/skin-he-nuclei-2d.png"
+HE_EXAMPLE_SHA256 = "d6fb28b106b2b74cf101be3d1e08a55fe01fb09a9316fd673c830dbbf94250b7"
 
 
 def f32(values):
@@ -169,13 +175,16 @@ def main(models_dir, out_path, *browser):
     tiled = matching(results["1x1"], results["2x2"], thresh=0.5)
     example["2x2"]["vs_1x1"] = {"f1": float(tiled.f1), "mean_matched_iou": float(tiled.mean_matched_score)}
 
-    # 2D_versatile_he on test_image_he_2d (RGB)
-    he_img = test_image_he_2d()
+    # 2D_versatile_he on pinned public-domain skin H&E histology (RGB, 512 x 512)
+    he_bytes = urllib.request.urlopen(HE_EXAMPLE_URL).read()
+    actual_he_sha = hashlib.sha256(he_bytes).hexdigest()
+    assert actual_he_sha == HE_EXAMPLE_SHA256, f"Unexpected H&E example SHA-256: {actual_he_sha}"
+    he_img = np.asarray(Image.open(io.BytesIO(he_bytes)).convert("RGB"), dtype=np.uint8)
     he_x = normalize(he_img, PMIN, PMAX, axis=(0, 1, 2))
     he_mi, he_ma = np.percentile(he_img, PMIN), np.percentile(he_img, PMAX)
     he_labels, _ = he_model.predict_instances(he_x, show_tile_progress=False)
     he_ref = {
-        "image": {"url": SOURCE_NEW + "example/tcia-he-nuclei-2d.png"},
+        "image": {"url": HE_EXAMPLE_URL, "sha256": HE_EXAMPLE_SHA256},
         "shape": list(he_img.shape),
         "normalization": {"pmin": PMIN, "pmax": PMAX, "low": float(np.float32(he_mi)), "high": float(np.float32(he_ma))},
         "thresholds": {"prob": float(he_model.thresholds.prob), "nms": float(he_model.thresholds.nms)},
@@ -218,6 +227,15 @@ def main(models_dir, out_path, *browser):
         }
         if n_tiles == (1, 1, 1):
             ex3d[key]["nuclei"] = nucleus_table_3d(labels3, img3d)
+    mosaic3d = np.tile(img3d, (1, 2, 2))
+    mosaic3d_x = normalize(mosaic3d, PMIN, PMAX, axis=(0, 1, 2))
+    mosaic3d_labels, _ = demo3d.predict_instances(mosaic3d_x, n_tiles=(2, 2, 2), show_tile_progress=False)
+    tiled_seam = {
+        "shape": list(mosaic3d.shape),
+        "n_tiles": [2, 2, 2],
+        "count": int(mosaic3d_labels.max()),
+        "labels_sha256": label_hash(mosaic3d_labels),
+    }
     demo3d_ref = {
         "image": {"url": SOURCE_NEW + "example/stardist-demo-nuclei-3d.tif", "sha256": hashlib.sha256(img3d_path.read_bytes()).hexdigest()},
         "mask": {"url": SOURCE_NEW + "validation/stardist-demo-nuclei-3d-mask.tif", "sha256": hashlib.sha256(mask3d_path.read_bytes()).hexdigest()},
@@ -234,6 +252,7 @@ def main(models_dir, out_path, *browser):
             "labels_sha256": ex3d["1x1x1"]["labels_sha256"],
         },
         "example": ex3d,
+        "tiled_seam": tiled_seam,
     }
 
     reference = {
