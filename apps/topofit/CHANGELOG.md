@@ -1,5 +1,27 @@
 # topofit
 
+## 0.17.20261124
+
+### Minor Changes
+
+- 07006ac: A named search region can now be viewed two ways. View on a hemisphere's parcellation draws the mapped atlas on its mid-surface, the search region in its atlas colours, the other areas faded, found patches white, and turns the 3D view to face the region. A new output, `topofit_region_mask.nii`, holds the region filled between the white and pial surfaces on the source grid (unsigned 8-bit, left 1, right 2); View overlays it on the original image's slices. The app and the `topofit` command line write the same mask, automation returns it as the `region-mask` artifact, and `readAnnotation` reads a written parcellation back. Searches of the whole cortex or an ROI are byte-identical, manifest included. In a named-region search every earlier file is byte-identical except the processing manifest, which lists every output and so gains the mask's SHA-256 entry. QC, patch QC and region-mask volumes written for a NIfTI-2 scan now have valid NIfTI-1 headers on the scan's grid; until now their headers were NIfTI-2 bytes copied into a NIfTI-1 layout. Outputs for NIfTI-1 scans are unchanged.
+
+### Patch Changes
+
+- fbd3081: Resolve NIfTI-1 and NIfTI-2 world affines through one shared `resolveWorldAffine` function that applies `sform_code`/`qform_code` precedence, `qfac`, 180° quaternion normalization (`nifti_quatern_to_dmat44`), and `xyzt_units` millimetre scaling while refusing non-finite or singular affines. Align loaded NiiVue volumes onto that same millimetre grid without copying voxels so surfaces, QC overlays, region masks, and crosshair coordinates agree with the anatomy for qform-only NIfTI-2 scans and micrometre or metre scans in both formats, and guard viewer loads against stale completions after cancellation. NIfTI-1 millimetre outputs remain byte-identical.
+- 94d6e09: In a browser that offers WebMCP, every app registers tools with the browser's built-in AI agent. The agent can read what the app does, load any of its examples, use the files you already opened or ask you to choose others, run any operation and wait for its report, run it again with other settings without asking for the files again, move and restyle the viewer, and save an output of the run it names. When it needs a decision, it asks you in a dialog that says an AI agent is asking, and closing the dialog declines. It uses files you opened in the app only after you confirm them in a dialog that lists them. It loads data from a web address only after you allow that address, the viewer gets that one file and not a redirect, and for a ZARRo store the dialog names the store's address, under which ZARRo then reads without following a redirect. It changes only how the viewer shows images, never their data or position, it never removes what the viewer shows unless the dialog says so, and it cannot capture the viewer or save images from it. When you use the page yourself, a request the agent already started does nothing more, and before it uses its files or the results of its latest run again it asks you in one dialog that names them and what that run was given, its files and the address it read; declining releases them. A dialog names what it asks about as it is when it opens, and if that changes before you allow it, it shows the change in place and asks again; loading the same example again is no change, and on the third change the dialog closes as declined. Escape, the close button and a click beside the dialog all decline, also after it showed a change. After you allow it, the agent gets that run's report and outputs exactly as the run ended, even if the page shows other results by then. Opening other files, picking an example or a handoff releases them at once, so it never runs on or reports an earlier examination by mistake. It can read what the viewer shows at any time, as you see it. Each app's Privacy dialog says what such an agent can read and do. Browsers without WebMCP load none of this. No browser enables WebMCP by default yet: Chrome offers it behind a testing flag, and each catalogue can hold an origin trial token for its host.
+
+  Automation contracts can mark a parameter `required: true`. Easy MP2RAGE's acquisition values, QSMbly's echo times and field strength and micro-sam's prompts are now required, and the desktop contract schema and NeuroFlow tools accept and publish the mark.
+
+- Updated dependencies [f316dac]
+- Updated dependencies [dce0e7f]
+- Updated dependencies [fbd3081]
+- Updated dependencies [07006ac]
+- Updated dependencies [94d6e09]
+  - @neurodesk/runtime-support@0.10.0
+  - @neurodesk/webapp-components@0.29.0
+  - @neurodesk/topofit@0.17.20261124
+
 ## 0.16.20261119
 
 ### Minor Changes

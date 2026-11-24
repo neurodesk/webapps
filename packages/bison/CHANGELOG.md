@@ -1,5 +1,18 @@
 # @neurodesk/bison
 
+## 0.2.20261124
+
+### Patch Changes
+
+- Updated dependencies [f316dac]
+- Updated dependencies [01e85d7]
+- Updated dependencies [dce0e7f]
+- Updated dependencies [01e85d7]
+- Updated dependencies [94d6e09]
+  - @neurodesk/node-drivers@0.4.0
+  - @neurodesk/webapp-components@0.29.0
+  - @neurodesk/greedy@0.10.20261124
+
 ## 0.2.20261119
 
 ### Patch Changes
