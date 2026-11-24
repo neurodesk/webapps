@@ -433,7 +433,7 @@ pub async fn run<H: Host>(h: &H, o: &Options, stage: &dyn Fn(&str)) -> Result<Va
         has_pathological.then_some("pathological-registration"),
     );
     #[cfg(feature = "heal")]
-    let synthsr_input = if o.heal {
+    let (synthsr_input, healed) = if o.heal {
         // A lesion drawn on the pathological scan follows its affine onto the primary grid first (as SYNcro.py).
         let lesion_on_primary = if has_pathological {
             let onto = work("lesion-primary-grid.nii");
@@ -450,12 +450,15 @@ pub async fn run<H: Host>(h: &H, o: &Options, stage: &dyn Fn(&str)) -> Result<Va
         } else {
             lesion_path.clone()
         };
-        heal::heal(&mut r, &primary_path, &lesion_on_primary, fill, o.ct).await?
+        match heal::heal(&mut r, &primary_path, &lesion_on_primary, fill, o.ct).await? {
+            Some(healed) => (healed, true),
+            None => (primary_path.clone(), false),
+        }
     } else {
-        primary_path.clone()
+        (primary_path.clone(), false)
     };
     #[cfg(not(feature = "heal"))]
-    let synthsr_input = primary_path.clone();
+    let (synthsr_input, healed) = (primary_path.clone(), false);
     let synthetic = work("t1.nii");
     let mut argv = vec!["synthsr".to_string(), synthsr_input, synthetic.clone()];
     if o.ct {
@@ -789,7 +792,7 @@ pub async fn run<H: Host>(h: &H, o: &Options, stage: &dyn Fn(&str)) -> Result<Va
         "version": env!("CARGO_PKG_VERSION"),
         "ct": o.ct,
         "keepSynth": o.keep_synth,
-        "healed": o.heal,
+        "healed": healed,
         "brainExtractor": "mindgrab",
         "normalization": match o.normalization { Normalization::Greedy => "greedy", Normalization::Ants => "ants" },
         "threads": o.threads,

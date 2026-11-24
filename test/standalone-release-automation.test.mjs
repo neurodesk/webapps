@@ -140,6 +140,14 @@ const nodeSpec = {
   },
 };
 const split = nativeReleases(new Map([['synthseg', { packageDir: 'packages/synthseg', spec: nodeSpec }]]));
+
+test('a tag from before the Rust SYNcro keeps its portable release source', () => {
+  const targets = { 'linux-x64': { archive: 'tar.gz', executable: 'syncro' }, 'windows-x64': { archive: 'zip', executable: 'syncro.exe' }, 'macos-arm64': { archive: 'tar.gz', executable: 'syncro' } };
+  const historical = nativeReleases(new Map([['syncro', { packageDir: 'packages/syncro', spec: { app: 'syncro', run: 'input.nii.gz results', targets } }]]));
+  assert.deepEqual(historical.get('syncro').map((source) => source.portable), [true]);
+  assert.deepEqual(nativeReleases(new Map()).get('syncro').map((source) => source.workflow), ['syncro-native.yml']);
+  assert.equal(split.get('synthseg').length, 2, 'SynthSeg keeps both sources');
+});
 const rustMacos = Object.freeze({
   kind: 'cli',
   platform: 'macos-arm64',

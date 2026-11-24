@@ -39,6 +39,12 @@ syncro INPUT OUTPUT_DIR [--lesion FILE] [--pathological FILE] [--ct] [--normaliz
 - `--ct` marks a CT in Hounsfield units. Modality is explicit; there is no automatic CT detection.
 - `--resume` reuses the steps an interrupted run finished. It refuses a directory that is not a SYNcro run and
   any change to an input's name or content, the options or the tools.
+- `--heal` (experimental, native builds with the `heal` feature; the web app has none) fills the lesion from the
+  mirrored scan before SynthSR. On CQ500 (CT), ARC (chronic MR) and SOOP (acute MR, 6 mm TRACE) healed
+  outputs did slightly worse than raw, so raw is the default; keep `--heal` for edge cases. The mirror flips the
+  voxel axis whose direction is closest to left-right, and a 12-dof NMI affine from the identity aligns it; a
+  `mirror.mat` with an axis scale outside 0.8-1.25 is rejected, `heal: mirror alignment rejected` is logged and
+  the run continues unhealed (`"healed": false` in provenance), identical to raw.
 
 A gantry-tilted scan (a sheared affine, as CT often has) is resampled onto an orthogonal grid that covers it,
 filled with its darkest voxel, before anything else; its lesion map follows on the same grid.
