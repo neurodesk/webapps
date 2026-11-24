@@ -1,5 +1,26 @@
 # @neurodesk/hmc
 
+## 0.5.20261124
+
+### Minor Changes
+
+- f316dac: Migrate every MindGrab/MindMap/MindSnap app, package and Node driver from the preview `@brainchop/mindgrab` releases (`0.1.20260813`, `0.1.20260925`, `0.1.20261008`) to `@brainchop/core@1.0.0`.
+
+  - Replaces `-gpu.wasm` binaries with `@brainchop/core`'s pure-JS WebGPU V4 runtime (`models/*.bin`, optional `shader-f16` with `f32` fallback, automatic `LowMem128` + paced Z-chunking), alongside updated WebGL2 (`glGetError` / `isContextLost()` checks) and threaded CPU WASM fallbacks.
+  - Picks up explicit `inference-failed` errors on empty masks or degenerate segmentations, MindMap-18 v4.0 Gold, MindSnap-104 v4.0 Gold, MindMap-Fast v3.5 (`16chan18cls` alias), and coil-flare-safe conform (`f_high = 0.98`).
+  - Unifies all shared MindGrab WASM binaries under `_runtime/mindgrab/1.0.0/` (`mindgrab-wasm-1-0-0`), strips duplicate bundled MindGrab weights/WASM from `ants`, `fireants`, `greedy`, `brain2print`, and `fastprep`, updates `brainchop-mindgrab` CLI options (`-v`/`--version`, `--no-turbo`), updates package/repository links to `neuroneural/brainchop-core`, and re-records all Chromium CPU validation baselines (MindGrab FreeSurfer SynthSeg Dice 0.9799).
+
+### Patch Changes
+
+- Updated dependencies [f316dac]
+- Updated dependencies [01e85d7]
+- Updated dependencies [dce0e7f]
+- Updated dependencies [3364bea]
+- Updated dependencies [94d6e09]
+  - @neurodesk/node-drivers@0.4.0
+  - @neurodesk/dwi2trx@0.9.20261124
+  - @neurodesk/webapp-components@0.29.0
+
 ## 0.4.20261119
 
 ### Patch Changes

@@ -1,5 +1,13 @@
 # @neurodesk/mri2vid
 
+## 0.6.20261124
+
+### Patch Changes
+
+- Updated dependencies [f316dac]
+- Updated dependencies [01e85d7]
+  - @neurodesk/node-drivers@0.4.0
+
 ## 0.6.20261119
 
 ## 0.6.20261113

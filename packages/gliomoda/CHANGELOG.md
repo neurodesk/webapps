@@ -1,5 +1,11 @@
 # @neurodesk/gliomoda
 
+## 0.1.6
+
+### Patch Changes
+
+- @neurodesk/synthsr@0.6.20261124
+
 ## 0.1.5
 
 ### Patch Changes
