@@ -47,7 +47,8 @@ def main(checkpoint, out_dir, model_type="vit_t_lm"):
     # models/microsam.manifest.json records the zero cache (cached_attention_bias_absmax: 0): the
     # exported encoder folds it in and leaves the checkpoint's trained attention_biases unused.
     manifest = json.loads((Path(__file__).resolve().parents[3] / "models" / "microsam.manifest.json").read_text())
-    assert cached and attention_bias_absmax == 0 == manifest["model"]["cached_attention_bias_absmax"], attention_bias_absmax
+    model_meta = manifest.get("models", {}).get(model_type, manifest["model"])
+    assert cached and attention_bias_absmax == 0 == model_meta["cached_attention_bias_absmax"], attention_bias_absmax
 
     slug = model_type.replace("_", "-")
     encoder_path = out / f"microsam-{slug}-encoder.onnx"

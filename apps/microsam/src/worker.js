@@ -21,17 +21,27 @@ const EMBEDDING_DIMS = [1, 256, 64, 64];
 const MAX_CACHED_SLICES = 48;
 let loadedModelId = null;
 let encoderBytes = null;
+let encoderSession = null;
+let encoderBackend = null;
+let webgpuFailed = false;
 let decoder = null;
 const embeddings = new Map();
 
-function storeEmbedding(slice, embedding) {
+function storeEmbedding(slice, embedding, pinSlice = null) {
   if (embeddings.has(slice)) embeddings.delete(slice);
   embeddings.set(slice, embedding);
   const evicted = [];
   while (embeddings.size > MAX_CACHED_SLICES) {
-    const oldest = embeddings.keys().next().value;
-    embeddings.delete(oldest);
-    evicted.push(oldest);
+    let victim = null;
+    for (const key of embeddings.keys()) {
+      if (key !== pinSlice && key !== slice) {
+        victim = key;
+        break;
+      }
+    }
+    if (victim === null) break;
+    embeddings.delete(victim);
+    evicted.push(victim);
   }
   return evicted;
 }
@@ -48,6 +58,11 @@ function download(asset, label, from, to) {
 async function ensureModel(modelId) {
   if (loadedModelId === modelId && encoderBytes && decoder) return;
   const model = modelById(modelId);
+  if (encoderSession) {
+    await encoderSession.release();
+    encoderSession = null;
+    encoderBackend = null;
+  }
   if (decoder) {
     await decoder.release();
     decoder = null;
@@ -62,32 +77,59 @@ async function ensureModel(modelId) {
   loadedModelId = modelId;
 }
 
-async function encode(bytes, backend, tensor) {
-  const session = await ort.InferenceSession.create(bytes, { executionProviders: [backend], graphOptimizationLevel: "all" });
+async function ensureEncoderSession(backend) {
+  const desired = backend === "webgpu" && !webgpuFailed ? "webgpu" : "wasm";
+  if (encoderSession && encoderBackend === desired) return desired;
+  if (encoderSession) {
+    await encoderSession.release();
+    encoderSession = null;
+    encoderBackend = null;
+  }
   try {
-    const output = await session.run({ image: new ort.Tensor("float32", tensor, [1, 3, 1024, 1024]) });
-    const data = output.image_embeddings.data;
-    return data instanceof Float32Array ? data : Float32Array.from(data);
-  } finally {
-    await session.release();
+    encoderSession = await ort.InferenceSession.create(encoderBytes, { executionProviders: [desired], graphOptimizationLevel: "all" });
+    encoderBackend = desired;
+    return desired;
+  } catch (error) {
+    if (desired !== "webgpu") throw error;
+    webgpuFailed = true;
+    log(`WebGPU failed (${error.message}); computing embeddings on the CPU`);
+    encoderSession = await ort.InferenceSession.create(encoderBytes, { executionProviders: ["wasm"], graphOptimizationLevel: "all" });
+    encoderBackend = "wasm";
+    return "wasm";
   }
 }
 
-async function embed({ id, modelId = DEFAULT_MODEL_ID, slice = 0, tensor, backend }) {
+async function encode(backend, tensor) {
+  let used = await ensureEncoderSession(backend);
+  const runOnce = async () => {
+    const input = new ort.Tensor("float32", tensor, [1, 3, 1024, 1024]);
+    let output;
+    try {
+      output = await encoderSession.run({ image: input });
+      const data = await output.image_embeddings.getData();
+      return data instanceof Float32Array ? Float32Array.from(data) : Float32Array.from(data);
+    } finally {
+      input.dispose();
+      if (output) for (const t of Object.values(output)) t.dispose();
+    }
+  };
+  try {
+    return { used, embedding: await runOnce() };
+  } catch (error) {
+    if (used !== "webgpu") throw error;
+    webgpuFailed = true;
+    log(`WebGPU failed (${error.message}); computing embeddings on the CPU`);
+    used = await ensureEncoderSession("wasm");
+    return { used, embedding: await runOnce() };
+  }
+}
+
+async function embed({ id, modelId = DEFAULT_MODEL_ID, slice = 0, pinSlice = null, tensor, backend }) {
   await ensureModel(modelId);
   progress(0.7, slice ? `Computing slice ${slice + 1} embedding…` : "Computing the image embedding…");
   const started = performance.now();
-  let used = backend;
-  let embedding;
-  try {
-    embedding = await encode(encoderBytes, used, tensor);
-  } catch (error) {
-    if (used !== "webgpu") throw error;
-    log(`WebGPU failed (${error.message}); computing the embedding on the CPU`);
-    used = "wasm";
-    embedding = await encode(encoderBytes, used, tensor);
-  }
-  const evicted = storeEmbedding(slice, embedding);
+  const { used, embedding } = await encode(backend, tensor);
+  const evicted = storeEmbedding(slice, embedding, pinSlice);
   const seconds = (performance.now() - started) / 1000;
   log(`Encoder (${modelId}, slice ${slice + 1}) on ${used === "webgpu" ? "WebGPU" : `WebAssembly, ${ort.env.wasm.numThreads} threads`} in ${seconds.toFixed(1)} s (ONNX Runtime Web ${ort.env.versions?.web ?? ""})`);
   self.postMessage({ type: "embedded", id, slice, modelId, backend: used, seconds, summary: embeddingSummary(embedding), evicted });

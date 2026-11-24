@@ -29,6 +29,7 @@ import {
   extractSliceUint8,
   readNifti3D,
   sliceGeometry,
+  toNativeLabels,
 } from "./volume.js";
 import {
   boxFromCorners,
@@ -402,13 +403,13 @@ async function editResult(stage, result) {
 
 async function applyEditedMask(file) {
   const decoded = await decodeNiftiBuffer(await file.arrayBuffer());
-  const { data } = readNiftiImageData(decoded, Uint8Array);
-  const ras = orientToRAS(data, volume.nativeDims, volume.perm, volume.flip, Uint8Array);
+  const { data: nativeLabels } = readNiftiImageData(decoded, Uint8Array);
+  const ras = orientToRAS(nativeLabels, volume.nativeDims, volume.perm, volume.flip, Uint8Array);
   labels = ras.data;
   const reconciled = reconcileObjectsFromLabels(labels, volume.dims, objects);
   objects = reconciled.objects;
   nextId = reconciled.nextId;
-  refreshOutputs(objects.length ? file : null);
+  refreshOutputs(objects.length ? file : null, objects.length ? nativeLabels : null);
   refreshOverlay();
   drawPromptCanvas();
   updateControls();
@@ -548,16 +549,17 @@ function updateControls() {
   $("objectInfo").textContent = `${objects.length} ${objects.length === 1 ? "object" : "objects"} accepted`;
 }
 
-function refreshOutputs(editedFile = null) {
+function refreshOutputs(editedFile = null, editedNativeLabels = null) {
   if (!volume || !objects.length) {
     outputs = {};
     results.render();
     $("outputSection").open = false;
     return;
   }
-  const segBytes = editedFile ? null : exportLabelsNifti(labels, volume);
+  const nativeLabels = editedNativeLabels ?? toNativeLabels(labels, volume);
+  const segBytes = editedFile ? null : exportLabelsNifti(labels, volume, nativeLabels);
   const segFile = editedFile ?? new File([segBytes], `${baseName()}_medsam2_seg.nii`, { type: "application/octet-stream" });
-  const rows = measureObjects3D(labels, volume.dims, volume.voxelVolumeMm3, objects);
+  const rows = measureObjects3D(nativeLabels, volume.nativeDims, volume.voxelVolumeMm3, objects, volume.perm);
   const tableFile = new File([objectsTsv(rows)], `${baseName()}_medsam2_volumes.tsv`, { type: "text/tab-separated-values" });
   outputs = {
     segmentation: {
@@ -587,10 +589,11 @@ function resetSession() {
   volumeGeneration++;
   editing = null;
   editor?.cancel();
+  const hadActiveWork = Boolean(decodeRun || propagating);
   decodeRun?.abort();
   decodeRun = null;
   propagating?.abort();
-  stopWorker();
+  if (hadActiveWork) stopWorker();
   resetPrompt();
   objects = [];
   nextId = 1;
@@ -843,10 +846,11 @@ async function accept() {
   const usedPrompt = pending3D ? pending3D.prompt : pending.prompt;
   const score = pending3D ? pending3D.score : pending.score;
   const backend = pending3D ? pending3D.backend : pending.backend;
+  const nonEmptySlices = [...sliceMasks.values()].filter((m) => m.some(Boolean)).length;
+  if (!nonEmptySlices) throw new Error("MedSAM2 predicted an empty mask; adjust your prompt.");
   const claimed = commitObject3D(labels, sliceMasks, volume.dims, targetAxis, id);
   if (!claimed.length) throw new Error("This mask lies inside accepted objects; prompt a new object or undo one.");
   nextId++;
-  const nonEmptySlices = [...sliceMasks.values()].filter((m) => m.some(Boolean)).length;
   const object = {
     id,
     claimed,
@@ -1007,8 +1011,10 @@ $("clearButton").onclick = clearPrompt;
 $("undoButton").onclick = undo;
 
 document.addEventListener("keydown", (event) => {
-  if (event.target.closest?.("input, select, textarea, dialog") || !volume || editing) return;
-  if (event.key === "Enter" && (pending || pending3D)) {
+  if (event.defaultPrevented || !volume || editing || loading || propagating) return;
+  if (document.querySelector(".nd-modal.open, .nd-modal[aria-hidden='false'], dialog[open], [role='dialog']:not([aria-hidden='true'])")) return;
+  if (event.target.closest?.("input, select, textarea, [contenteditable], dialog, .nd-modal")) return;
+  if (event.key === "Enter" && !decoding && (pending || pending3D) && !event.target.closest?.("button, a, summary")) {
     event.preventDefault();
     void accept().catch(report);
   } else if (event.key === "Escape" && (hasPrompt(prompt) || pending3D)) {

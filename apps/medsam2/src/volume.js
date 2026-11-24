@@ -83,15 +83,31 @@ export async function readNifti3D(name, buffer) {
   };
 }
 
+/** Reorients a RAS uint8 label volume back onto the input NIfTI's native voxel grid. */
+export function toNativeLabels(rasLabels, volume) {
+  return inverseOrient(rasLabels, volume.dims, volume.perm, volume.flip, volume.nativeDims, Uint8Array);
+}
+
 /** Exports a RAS uint8 label volume back onto the input NIfTI's native grid and header. */
-export function exportLabelsNifti(rasLabels, volume) {
-  const nativeLabels = inverseOrient(rasLabels, volume.dims, volume.perm, volume.flip, volume.nativeDims, Uint8Array);
+export function exportLabelsNifti(rasLabels, volume, nativeLabels = toNativeLabels(rasLabels, volume)) {
   return new Uint8Array(createUint8Nifti(nativeLabels, volume.headerBytes, volume.nativeDims));
 }
 
+/** Exact linear-interpolated percentile on a sorted Float32Array, matching numpy.percentile. */
+function sortedPercentile(sorted, q) {
+  const n = sorted.length;
+  if (n === 1) return sorted[0];
+  const pos = (q / 100) * (n - 1);
+  const idx = Math.floor(pos);
+  const frac = pos - idx;
+  if (frac === 0 || idx + 1 >= n) return sorted[idx];
+  return sorted[idx] + frac * (sorted[idx + 1] - sorted[idx]);
+}
+
 /**
- * Computes [lo, hi] intensity window matching MedSAM2's preprocessing:
- * - "auto": 0.5th and 99.5th percentile over positive voxels (falls back to all finite voxels)
+ * Computes [lo, hi] intensity window:
+ * - "auto": exact 0.5th and 99.5th percentile over positive voxels (matching numpy.percentile),
+ *   falling back to all finite voxels when none are positive
  * - "full": finite min and max
  * - CT presets: fixed Hounsfield bounds
  */
@@ -101,55 +117,30 @@ export function computeWindow(data, presetId = "auto") {
 
   let min = Infinity;
   let max = -Infinity;
+  let finiteCount = 0;
   let positiveCount = 0;
   for (let i = 0; i < data.length; i++) {
     const v = data[i];
     if (!Number.isFinite(v)) continue;
+    finiteCount++;
     if (v < min) min = v;
     if (v > max) max = v;
     if (v > 0) positiveCount++;
   }
-  if (!Number.isFinite(min) || !Number.isFinite(max)) return { lo: 0, hi: 1 };
+  if (!finiteCount) return { lo: 0, hi: 1 };
   if (presetId === "full" || min === max) return { lo: min, hi: max === min ? min + 1 : max };
 
-  // Histogram-based percentile (4096 bins) for fast, exact-enough 0.5–99.5% bounds on large 3D MRIs.
-  const BINS = 4096;
-  const hist = new Uint32Array(BINS);
   const usePositive = positiveCount > 0;
-  let loBound = usePositive ? Infinity : min;
-  if (usePositive) {
-    for (let i = 0; i < data.length; i++) {
-      const v = data[i];
-      if (v > 0 && v < loBound) loBound = v;
-    }
-  }
-  const span = Math.max(max - loBound, 1e-7);
-  let total = 0;
+  const sample = new Float32Array(usePositive ? positiveCount : finiteCount);
+  let at = 0;
   for (let i = 0; i < data.length; i++) {
     const v = data[i];
     if (!Number.isFinite(v) || (usePositive && v <= 0)) continue;
-    const bin = Math.min(BINS - 1, Math.max(0, Math.floor(((v - loBound) / span) * (BINS - 1))));
-    hist[bin]++;
-    total++;
+    sample[at++] = v;
   }
-  if (!total) return { lo: min, hi: max };
-  const targetLo = total * 0.005;
-  const targetHi = total * 0.995;
-  let acc = 0;
-  let lo = loBound;
-  let hi = max;
-  let foundLo = false;
-  for (let b = 0; b < BINS; b++) {
-    acc += hist[b];
-    if (!foundLo && acc >= targetLo) {
-      lo = loBound + (b / (BINS - 1)) * span;
-      foundLo = true;
-    }
-    if (acc >= targetHi) {
-      hi = loBound + (b / (BINS - 1)) * span;
-      break;
-    }
-  }
+  sample.sort();
+  const lo = sortedPercentile(sample, 0.5);
+  let hi = sortedPercentile(sample, 99.5);
   if (hi <= lo) hi = lo + 1e-6;
   return { lo, hi };
 }
@@ -244,7 +235,8 @@ export function bilinearResize2D(src, srcW, srcH, dstW, dstH) {
 
 /**
  * Builds the `1 × 3 × 512 × 512` ImageNet-normalized float32 encoder tensor for one 2D greyscale
- * uint8 slice (replicated to RGB, matching MedSAM2's `resize_grayscale_to_rgb_and_resize`).
+ * uint8 slice using bilinear resize (rounded to integer byte steps before / 255.0) and replicated
+ * across the three RGB channels.
  */
 export function sliceToEncoderTensor(sliceUint8, width, height) {
   const resized = bilinearResize2D(sliceUint8, width, height, IMAGE_SIZE, IMAGE_SIZE);
@@ -255,7 +247,6 @@ export function sliceToEncoderTensor(sliceUint8, width, height) {
     const invStd = 1 / IMG_STD[c];
     const offset = c * plane;
     for (let i = 0; i < plane; i++) {
-      // Round resized uint8 value as PIL resize returns uint8 before / 255.0
       const v = Math.round(resized[i]) / 255.0;
       tensor[offset + i] = (v - mean) * invStd;
     }

@@ -283,7 +283,7 @@ function updateControls() {
   $("embedButton").disabled = busy || !input || prompting;
   $("positiveTool").disabled = !prompting;
   $("negativeTool").disabled = !prompting;
-  $("acceptButton").disabled = !prompting || (!pending && !pending3D) || decoding !== null;
+  $("acceptButton").disabled = busy || (!pending3D && (!prompting || !pending));
   $("propagateButton").disabled = !stack || !prompting || !pending || decoding !== null;
   $("clearButton").disabled = !hasPrompt(prompt) && !pending3D;
   $("undoButton").disabled = !hasPrompt(prompt) && !pending3D && !objects.length;
@@ -308,13 +308,13 @@ function refreshOutputs() {
   const planes0 = selected.planesAt(0);
   let labelBytes;
   if (is3D()) {
-    let maxLabel = 0;
-    for (let i = 0; i < labels.length; i++) if (labels[i] > maxLabel) maxLabel = labels[i];
+    const zSpacing = input.pixelSize?.z ? `spacing=${input.pixelSize.z}\nunit=micron\n` : "";
     labelBytes = writeTiffStack({
       width: input.width,
       height: input.height,
-      data: maxLabel <= 0xffff ? Uint16Array.from(labels) : Uint32Array.from(labels),
-      description: `ImageJ=1.54f\nimages=${input.depth}\nslices=${input.depth}\n`,
+      data: labels instanceof Uint16Array ? labels : Uint16Array.from(labels),
+      pixelSize: input.pixelSize ?? null,
+      description: `ImageJ=1.54f\nimages=${input.depth}\nslices=${input.depth}\n${zSpacing}`,
     });
   } else {
     labelBytes = writeLabelTiff(labels, input.width, input.height);
@@ -348,12 +348,18 @@ function resetEmbeddings() {
   resetPrompt();
 }
 
+function allocLabels(image) {
+  if (!image) return null;
+  const total = image.depth * image.width * image.height;
+  return image.depth > 1 ? new Uint16Array(total) : new Uint32Array(total);
+}
+
 function resetSession() {
   resetEmbeddings();
   objects = [];
   nextId = 1;
   currentSlice = 0;
-  labels = input ? new Uint32Array(input.depth * input.width * input.height) : null;
+  labels = allocLabels(input);
   refreshOutputs();
 }
 
@@ -396,7 +402,7 @@ async function loadFiles(filesPromise, signal) {
     resetSession();
     input = { file, ...image, choices };
     currentSlice = image.depth > 1 ? Math.floor(image.depth / 2) : 0;
-    labels = new Uint32Array(image.depth * image.width * image.height);
+    labels = allocLabels(image);
     $("channel").replaceChildren(...choices.map((item) => new Option(item.label, item.id)));
     $("channelField").hidden = choices.length < 2;
     refreshBase();
@@ -495,11 +501,11 @@ function ensureSessionWorker(selectedChoice, model) {
   return embedding;
 }
 
-async function embedOneSlice(session, selectedChoice, model, sliceIndex, backend, signal) {
+async function embedOneSlice(session, selectedChoice, model, sliceIndex, backend, signal, pinSlice = null) {
   if (session.slices.has(sliceIndex)) return session.slices.get(sliceIndex);
   const resized = resizedChannels(selectedChoice.planesAt(sliceIndex).map((plane) => plane.data), input.width, input.height);
   const tensor = encoderTensor(resized);
-  const result = await call(session.worker, { type: "embed", modelId: model.id, slice: sliceIndex, tensor, backend }, [tensor.buffer], signal);
+  const result = await call(session.worker, { type: "embed", modelId: model.id, slice: sliceIndex, pinSlice, tensor, backend }, [tensor.buffer], signal);
   signal?.throwIfAborted();
   for (const evicted of result.evicted ?? []) session.slices.delete(evicted);
   const info = { backend: result.backend, seconds: result.seconds, summary: result.summary };
@@ -649,7 +655,7 @@ async function propagate3D(signal, {
         if (!box) break;
         doneSteps++;
         progress.setProgress(Math.min(0.99, doneSteps / Math.max(1, totalSteps)), `Propagating · slice ${z + 1} of ${input.depth}`);
-        await embedOneSlice(session, selected, model, z, backend, current);
+        await embedOneSlice(session, selected, model, z, backend, current, seed.slice);
         const decoded = await decode({ points: [], box }, z, current);
         current.throwIfAborted();
         const overlap = maskIou(prevMask, decoded.mask);
@@ -682,7 +688,10 @@ async function propagate3D(signal, {
 
 async function accept() {
   if (decoding) await decoding.catch(() => null);
-  if ((!pending && !pending3D) || !ready()) return null;
+  if (!input || (!pending3D && (!pending || !ready()))) return null;
+  if (labels instanceof Uint16Array && nextId > 0xffff) {
+    throw new Error("At most 65,535 objects can be stored in a 16-bit 3D label stack.");
+  }
   const planeSize = input.width * input.height;
   if (pending3D) {
     const id = nextId;
@@ -843,8 +852,10 @@ $("propagateButton").onclick = () => void propagate3D().catch(report);
 $("clearButton").onclick = clearPrompt;
 $("undoButton").onclick = undo;
 document.addEventListener("keydown", (event) => {
-  if (event.target.closest?.("input, select, textarea, dialog") || !input) return;
-  if (event.key === "Enter" && (pending || pending3D)) {
+  if (event.defaultPrevented || !input || loading || embedRun || propagateRun) return;
+  if (document.querySelector(".nd-modal.open, .nd-modal[aria-hidden='false'], dialog[open], [role='dialog']:not([aria-hidden='true'])")) return;
+  if (event.target.closest?.("input, select, textarea, [contenteditable], dialog, .nd-modal")) return;
+  if (event.key === "Enter" && !decoding && (pending3D || (pending && ready())) && !event.target.closest?.("button, a, summary")) {
     event.preventDefault();
     void accept().catch(report);
   } else if (event.key === "Escape" && (hasPrompt(prompt) || pending3D)) {

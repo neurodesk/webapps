@@ -25,7 +25,7 @@
       "parameters": {
         "prompts": {
           "type": "string",
-          "description": "JSON array, one entry per object: {\"axis\"?: \"axial\"|\"coronal\"|\"sagittal\", \"slice\": int, \"points\"?: [[x, y, 1|0], ...], \"box\"?: [x0, y0, x1, y1], \"propagate\"?: true, \"range\"?: [minSlice, maxSlice]}",
+          "description": "JSON array in canonical RAS slice coordinates (axial col L->R / row A->P, coronal col L->R / row S->I, sagittal col P->A / row S->I), one entry per object: {\"axis\"?: \"axial\"|\"coronal\"|\"sagittal\", \"slice\": int, \"points\"?: [[x, y, 1|0], ...], \"box\"?: [x0, y0, x1, y1], \"propagate\"?: true, \"range\"?: [minSlice, maxSlice]}",
           "required": true
         },
         "window": {

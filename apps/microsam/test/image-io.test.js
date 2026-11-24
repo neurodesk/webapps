@@ -108,6 +108,20 @@ test("OME-XML with a namespace prefix, single quotes and entities is understood"
   assert.throws(() => describedLayout("x.ome.tif", two, [0, 1]), /holds 2 OME images/);
 });
 
+test("OME-TIFF 3D Z-stacks map XYZTC and XYTZC identically to Z-fastest ordering", () => {
+  for (const order of ["XYZCT", "XYZTC", "XYTZC"]) {
+    const xml = `<OME><Image ID="Image:0"><Pixels DimensionOrder="${order}" SizeC="2" SizeZ="3" SizeT="1"><Channel Name="A"/><Channel Name="B"/></Pixels></Image></OME>`;
+    const layout = describedLayout("stack.ome.tif", xml, [0, 1, 2, 3, 4, 5]);
+    assert.equal(layout.depth, 3);
+    assert.deepEqual(layout.pageMap, [[0, 3], [1, 4], [2, 5]], order);
+    const xmlTd = xml.replace("</Pixels>", '<TiffData IFD="0" PlaneCount="6"/></Pixels>');
+    const layoutTd = describedLayout("stack.ome.tif", xmlTd, [0, 1, 2, 3, 4, 5]);
+    assert.deepEqual(layoutTd.pageMap, [[0, 3], [1, 4], [2, 5]], `${order} TiffData`);
+  }
+  const xmlCz = `<OME><Image ID="Image:0"><Pixels DimensionOrder="XYTCZ" SizeC="2" SizeZ="3" SizeT="1"><Channel Name="A"/><Channel Name="B"/></Pixels></Image></OME>`;
+  assert.deepEqual(describedLayout("stack.ome.tif", xmlCz, [0, 1, 2, 3, 4, 5]).pageMap, [[0, 1], [2, 3], [4, 5]]);
+});
+
 test("a palette TIFF is its red, green and blue colours, offered together", async () => {
   const image = await readImage("palette-blue.tif", fixture("palette-blue.tif"));
   assert.deepEqual(image.planes.map((plane) => plane.label), ["red", "green", "blue"]);

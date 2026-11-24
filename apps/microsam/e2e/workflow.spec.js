@@ -224,19 +224,22 @@ test("EM organelle model (vit_t_em_organelles) and 3D Z-stack propagation work e
   await routeModels(page, { models: MODELS });
   await page.goto("./");
 
-  // 1. Run vit_t_em_organelles via automation on the example image
+  // 1. Run vit_t_em_organelles via automation on the example image and verify parity against PyTorch reference-em.json
+  const emRef = JSON.parse(readFileSync(new URL("../validation/reference-em.json", import.meta.url), "utf8"));
   const bytes = await pinned(exampleFile);
   await page.locator("#neurodesk-input-transfer").setInputFiles({ name: exampleFile.name, mimeType: "image/tiff", buffer: bytes });
-  const [firstBox] = ofKind("box");
   await page.evaluate(async (parameters) => {
     await globalThis.neurodeskAutomation.dispatch("adopt", { role: "image" });
     await globalThis.neurodeskAutomation.dispatch("start", { parameters });
-  }, { prompts: JSON.stringify([firstBox.prompt]), model: "vit_t_em_organelles", backend: "wasm" });
+  }, { prompts: JSON.stringify([emRef.case.prompt]), model: "vit_t_em_organelles", backend: "wasm" });
   await expect.poll(() => page.evaluate(async () => (await globalThis.neurodeskAutomation.dispatch("snapshot")).state), { timeout: 150000 }).toMatch(/succeeded|failed/);
   const emSnap = await page.evaluate(() => globalThis.neurodeskAutomation.dispatch("snapshot"));
   expect(emSnap.error?.message ?? null).toBeNull();
   expect(emSnap.report.provenance.model).toBe("vit_t_em_organelles");
-  expect(emSnap.report.provenance.objects[0].area).toBeGreaterThan(100);
+  const emObj = emSnap.report.provenance.objects[0];
+  const emGotMask = runsToMask(emObj.runs, width * height);
+  const emRefMask = runsToMask(emRef.case.runs, width * height);
+  expect(iou(emGotMask, emRefMask)).toBeGreaterThanOrEqual(0.999);
 
   // 2. Build a real 3-slice 360x360 microscopy Z-stack with distinct shifted planes per slice,
   // verify 3D controls appear, prompt a real nucleus on the middle slice, propagate in 3D across

@@ -30,6 +30,7 @@ const EMPTY_LBL = Int32Array.of(-1);
 
 let sessions = null;
 let loadedBackend = null;
+let webgpuFailed = false;
 const embeddingCache = new Map();
 
 const progress = (value, message) => self.postMessage({ type: "progress", value, message });
@@ -55,7 +56,7 @@ async function createSession(bytes, backend) {
 }
 
 async function ensureSessions(requestedBackend) {
-  const desired = requestedBackend === "webgpu" ? "webgpu" : "wasm";
+  const desired = requestedBackend === "webgpu" && !webgpuFailed ? "webgpu" : "wasm";
   if (sessions && loadedBackend === desired) return loadedBackend;
   if (sessions) {
     for (const s of Object.values(sessions)) await s.release();
@@ -70,6 +71,7 @@ async function ensureSessions(requestedBackend) {
     imageEncoder = await createSession(encBytes, used);
   } catch (error) {
     if (used !== "webgpu") throw error;
+    webgpuFailed = true;
     log(`WebGPU initialization failed (${error.message}); falling back to WebAssembly CPU`);
     used = "wasm";
     imageEncoder = await createSession(encBytes, "wasm");

@@ -15,13 +15,14 @@ import {
   sliceToRas,
 } from "../src/volume.js";
 
-test("computeWindow handles auto MRI percentile, CT presets and full range", () => {
-  const data = Float32Array.from({ length: 1000 }, (_, i) => i);
+test("computeWindow handles exact numpy-style auto MRI percentile, CT presets and full range", () => {
+  const data = Float32Array.from({ length: 1001 }, (_, i) => i);
+  // Positive values are 1..1000 (n=1000): 0.5% -> pos 4.995 -> 5.995; 99.5% -> pos 994.005 -> 995.005
   const autoWin = computeWindow(data, "auto");
-  assert.ok(autoWin.lo >= 0 && autoWin.lo <= 20);
-  assert.ok(autoWin.hi >= 980 && autoWin.hi <= 1000);
+  assert.ok(Math.abs(autoWin.lo - 5.995) < 1e-4, `lo=${autoWin.lo}`);
+  assert.ok(Math.abs(autoWin.hi - 995.005) < 1e-4, `hi=${autoWin.hi}`);
   assert.deepEqual(computeWindow(data, "ct-soft"), { lo: -160, hi: 240 });
-  assert.deepEqual(computeWindow(data, "full"), { lo: 0, hi: 999 });
+  assert.deepEqual(computeWindow(data, "full"), { lo: 0, hi: 1000 });
 });
 
 test("sliceGeometry and sliceToRas map all three anatomical axes consistently", () => {

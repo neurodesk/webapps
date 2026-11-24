@@ -196,8 +196,12 @@ export function reconcileObjectsFromLabels(labels3d, dims, existingObjects) {
   return { objects: reconciled, nextId: maxId + 1 };
 }
 
-/** Volumetric measurements for every accepted label in RAS space. */
-export function measureObjects3D(labels3d, dims, voxelVolumeOrPixDims, objects) {
+/**
+ * Volumetric measurements for every accepted label on the exported native NIfTI voxel grid,
+ * so centroid and bounding-box voxel columns match the exported `.nii` label file 1-to-1.
+ * `perm` maps RAS axes `[0, 1, 2]` (sagittal, coronal, axial) to native axes for slice counts.
+ */
+export function measureObjects3D(labels3d, dims, voxelVolumeOrPixDims, objects, perm = [0, 1, 2]) {
   const [nx, ny, nz] = dims;
   const voxelMm3 = typeof voxelVolumeOrPixDims === "number"
     ? voxelVolumeOrPixDims
@@ -223,8 +227,11 @@ export function measureObjects3D(labels3d, dims, voxelVolumeOrPixDims, objects) 
         if (at === undefined) continue;
         const s = stats[at];
         const axis = objects[at].axis ?? "axial";
+        const rasAxis = axis === "sagittal" ? 0 : axis === "coronal" ? 1 : 2;
+        const nativeAxis = perm[rasAxis];
+        const sliceCoord = nativeAxis === 0 ? x : nativeAxis === 1 ? y : z;
         s.voxels++;
-        s.slices.add(axis === "coronal" ? y : axis === "sagittal" ? x : z);
+        s.slices.add(sliceCoord);
         s.sx += x;
         s.sy += y;
         s.sz += z;

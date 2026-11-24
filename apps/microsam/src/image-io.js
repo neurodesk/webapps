@@ -10,6 +10,8 @@ import { convertIndexedToRgb, decode as decodePng } from "fast-png";
  */
 export const MAX_SIDE = 4096;
 export const MAX_PIXELS = MAX_SIDE * MAX_SIDE;
+/** The most 3D voxels a Z-stack may hold, checked before decoding so label buffers stay bounded. */
+export const MAX_VOXELS = 128 * 1024 * 1024;
 /** The most decoded sample bytes a file may hold across the planes it keeps, checked before decoding. */
 export const MAX_DECODED_BYTES = 2 ** 30;
 const MIN_SIZE = 8;
@@ -46,7 +48,8 @@ function omeStackLayout(name, ome, ifds) {
     throw new Error(`${name} declares ${sizeZ} Z-slices × ${sizeC} channels but holds ${pages} pages.`);
   }
   const effectiveC = pages === sizeZ ? 1 : sizeC;
-  const order = String(ome.dimensionOrder || "XYZCT").slice(2);
+  // Since sizeT === 1 is enforced, strip T so XYZTC and XYTZC map identically to ZC / CZ.
+  const order = String(ome.dimensionOrder || "XYZCT").slice(2).replace(/T/g, "");
   const byIfd = new Map(ifds.map((ifd, pageIndex) => [ifd, pageIndex]));
   const pageMap = Array.from({ length: sizeZ }, () => new Array(effectiveC).fill(-1));
   if (ome.tiffData?.length) {
@@ -96,6 +99,7 @@ function omeStackLayout(name, ome, ifds) {
     sizeC: effectiveC,
     names: effectiveC > 1 ? omeChannelLabels(ome, effectiveC) : null,
     pageMap,
+    pixelSize: ome.pixelSize ?? null,
   };
 }
 
@@ -133,9 +137,10 @@ export function describedLayout(name, description, ifds) {
         sizeC,
         names: sizeC > 1 ? Array.from({ length: sizeC }, (_, i) => `Channel ${i + 1}`) : null,
         pageMap,
+        pixelSize: imagej.pixelSize ?? null,
       };
     }
-    return { format: "ImageJ TIFF", depth: 1, names: imagej.sizeC === pages && pages > 1 ? Array.from({ length: pages }, (_, i) => `Channel ${i + 1}`) : null };
+    return { format: "ImageJ TIFF", depth: 1, names: imagej.sizeC === pages && pages > 1 ? Array.from({ length: pages }, (_, i) => `Channel ${i + 1}`) : null, pixelSize: imagej.pixelSize ?? null };
   }
   return null;
 }
@@ -150,6 +155,10 @@ async function readTiff(name, buffer) {
   const layout = describedLayout(name, tiff.description, pages.map((page) => page.ifd));
   if (pages.some((page) => page.width !== width || page.height !== height)) {
     throw new Error(`${name} has pages of different sizes; save the image to segment on its own.`);
+  }
+  const depth = layout?.depth ?? 1;
+  if (depth > 1 && width * height * depth > MAX_VOXELS) {
+    throw new Error(`${name} (${width} × ${height} × ${depth}) exceeds the ${MAX_VOXELS.toLocaleString()} voxel limit; crop the stack first.`);
   }
   const bytes = tiff.decodedBytes();
   if (bytes > MAX_DECODED_BYTES) {
@@ -169,7 +178,7 @@ async function readTiff(name, buffer) {
       });
       return slicePlanes;
     });
-    return { width, height, depth: layout.depth, format: layout.format, planes: slices[0], slices };
+    return { width, height, depth: layout.depth, format: layout.format, pixelSize: layout.pixelSize ?? null, planes: slices[0], slices };
   }
   const planes = [];
   for (const [index, samples] of decodedPages.entries()) {
@@ -179,7 +188,7 @@ async function readTiff(name, buffer) {
       planes.push({ label: [page, part].filter(Boolean).join(" · ") || "Intensity", kind, data });
     }
   }
-  return { width, height, depth: 1, format: layout?.format ?? "TIFF", planes, slices: [planes] };
+  return { width, height, depth: 1, format: layout?.format ?? "TIFF", pixelSize: layout?.pixelSize ?? null, planes, slices: [planes] };
 }
 
 /** PNG samples below 8 bits, packed from the high bit and padded to a byte per row, as bytes. */

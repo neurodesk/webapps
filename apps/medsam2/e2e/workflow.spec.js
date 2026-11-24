@@ -79,10 +79,10 @@ test("automation matches PyTorch SAM2VideoPredictor for rolling box and single-p
       if (got[i]) totalA++;
       if (expected[i]) totalB++;
     }
-    expect(iou, `box slice ${z} IoU`).toBeGreaterThanOrEqual(0.95);
+    expect(iou, `box slice ${z} IoU`).toBeGreaterThanOrEqual(0.985);
   }
   const dice3d = (2 * totalInter) / (totalA + totalB);
-  expect(dice3d).toBeGreaterThanOrEqual(0.98);
+  expect(dice3d).toBeGreaterThanOrEqual(0.995);
 
   const table = await download(page, "Volume table");
   expect(table.name).toBe("T1_head_medsam2_volumes.tsv");
@@ -104,13 +104,14 @@ test("automation matches PyTorch SAM2VideoPredictor for rolling box and single-p
     const z = Number(zStr);
     const got = extractLabelSlice(ptVol.data, ptVol.dims, "axial", z).map((v) => (v === 1 ? 1 : 0));
     const expected = runsToMask(refSlice.runs, nx * ny);
+    expect(maskIou(got, expected), `point slice ${z} IoU`).toBeGreaterThanOrEqual(0.95);
     for (let i = 0; i < got.length; i++) {
       if (got[i] && expected[i]) ptInter++;
       if (got[i]) ptA++;
       if (expected[i]) ptB++;
     }
   }
-  expect((2 * ptInter) / (ptA + ptB)).toBeGreaterThanOrEqual(0.95);
+  expect((2 * ptInter) / (ptA + ptB)).toBeGreaterThanOrEqual(0.98);
 });
 
 test("automation requires explicit selection when multiple volumes are provided", async ({ page }) => {

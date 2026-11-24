@@ -1,9 +1,11 @@
 """Export MedSAM2 (sam2.1_hiera_t512, MedSAM2_latest.pt) to four ONNX graphs and verify
 exact numerical parity against PyTorch SAM2VideoPredictor.
 """
+import argparse
 import hashlib
 import json
 import math
+import os
 import sys
 from pathlib import Path
 
@@ -14,8 +16,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-SCRATCH = Path("/storage/home/ubuntu/.tmp/seg-export")
-sys.path.insert(0, str(SCRATCH / "MedSAM2"))
+MEDSAM2_DIR = Path(os.environ.get("MEDSAM2_DIR", "MedSAM2")).resolve()
+if MEDSAM2_DIR.exists():
+    sys.path.insert(0, str(MEDSAM2_DIR))
 
 from sam2.build_sam import build_sam2_video_predictor_npz
 from sam2.modeling.sam2_utils import get_1d_sine_pe
@@ -244,8 +247,12 @@ class MemoryAttentionWrapper(nn.Module):
 
 
 def main():
-    ckpt = SCRATCH / "checkpoints" / "MedSAM2_latest.pt"
-    out = SCRATCH / "onnx-medsam2"
+    parser = argparse.ArgumentParser(description="Export MedSAM2 (sam2.1_hiera_t512) to four ONNX graphs.")
+    parser.add_argument("--checkpoint", type=Path, default=Path(os.environ.get("MEDSAM2_CHECKPOINT", "MedSAM2_latest.pt")))
+    parser.add_argument("--out-dir", type=Path, default=Path(os.environ.get("MEDSAM2_OUT_DIR", "onnx-medsam2")))
+    args = parser.parse_args()
+    ckpt = args.checkpoint
+    out = args.out_dir
     out.mkdir(parents=True, exist_ok=True)
 
     torch.manual_seed(0)
