@@ -38,19 +38,22 @@ The **Arithmetic reference** setting in the app, or `Arithmetic_Reference` in a
 CLI/API model, accepts `current` (default), `matlab-amd`, and `matlab-intel`.
 The default preserves the existing production output, including its double
 normal-equation global regression. `matlab-amd` selects the recorded AMD QR
-regression; `matlab-intel` selects the reviewed Intel double real and complex
-kernels. Selection never depends on the machine running the analysis.
+regression; `matlab-intel` selects the reviewed Intel AVX512_E1 double and
+single BLAS, x87 80-bit `dnrm2`/`dznrm2`, and two-column QR kernels. Selection
+never depends on the machine running the analysis.
 
 These are arithmetic references, not a promise of universal MATLAB parity.
 The recorded AMD and Intel MATLAB builds disagree for identical inputs. Intel
-requires double precision and at least two volumes. Intel CSS requires
-`Css_Convention: "samsrf"`; its nonnegative CSS objective is not implemented.
-Unsupported choices are refused, not silently routed to AMD. Hull geometry differences and two near-tie norm
-cases remain unresolved. The recorded complex QR evidence covers finite
-two-column designs; other numerical edge cases are not established by MATLAB
-recordings. See [the validation record](validation/matlab/README.md). The
-results of each reference on both recorded hosts, and every open limit with
-the product's behaviour, are in
+requires at least two volumes, and supports both `nonnegative` and `samsrf` CSS
+conventions as well as single precision (except the universal single RC 2D and
+single CF Gaussian refusals). Unsupported choices are refused, not silently
+routed to AMD. Twelve CF hull `y0` values (1 ULP, float32 GIfTIs exact) and
+mixed complex-single dot on Intel (`prf_css_lh_single` complex vertices) remain
+open. The recorded QR evidence covers finite two-column designs; other
+numerical edge cases are not established by MATLAB recordings. See
+[the validation record](validation/matlab/README.md). The results of each
+reference on both recorded hosts, and every open limit with the product's
+behaviour, are in
 [validation/acceptance.md](validation/acceptance.md#open-numerical-limits).
 
 When using the API, pass the same `arithmeticReference` to `RunAccumulator` or
@@ -392,7 +395,7 @@ ratio; this app implements the `SamSrfAnalysis` path without those wrappers.
 
 Pick the `Arithmetic_Reference` for the MKL branch the MATLAB run reports:
 `matlab-amd` for `CNR branch auto` on AMD, `matlab-intel` for `AVX512_E1` on
-Intel (double only). The default `current` keeps the earlier production output.
+Intel. The default `current` keeps the earlier production output.
 
 Run MATLAB in a fresh results directory. Its `src_<Name>.mat` search-space
 cache and `reg_<aperture>.mat` convolved-regressor cache validate dimensions,

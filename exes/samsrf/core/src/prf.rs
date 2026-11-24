@@ -352,6 +352,14 @@ pub fn compress(prediction: &mut [f64], exponent: f64) {
     }
 }
 
+/// Nonnegative-clipped compressive nonlinearity using MATLAB's `pow` for explicit
+/// MATLAB arithmetic references (`matlab-amd` and `matlab-intel`).
+pub(crate) fn compress_matlab(prediction: &mut [f64], exponent: f64) {
+    for value in prediction {
+        *value = if *value > 0.0 { crate::matlab_math::pow(*value, exponent) } else { 0.0 };
+    }
+}
+
 /// `prf_errfun`: `1 - corr(prediction, observed)^2` for parameters `p` (the pRF
 /// parameters, then the five HRF parameters when `hrf` is `Fit`), with the HRF
 /// bounds check, compressive nonlinearity and downsampling SamSrf applies.
@@ -460,6 +468,16 @@ pub fn errfun_with_reference(
             let yp = crate::css::predict(&yp, exponent, &kernel, downsampling);
             return Ok(crate::css::objective_with_reference(&yp, observed, precision, reference));
         }
+        if reference != crate::arithmetic::ArithmeticReference::Current {
+            compress_matlab(&mut yp, exponent);
+            let yp = crate::matlab_math::convolve_real(&yp, &kernel, downsampling);
+            if precision == Precision::Double {
+                let yp: Vec<Complex64> = yp.into_iter().map(|value| Complex64::new(value, 0.0)).collect();
+                return Ok(crate::css::objective_with_reference(&yp, observed, precision, reference));
+            }
+            let r = precision::correlation_single_with_reference(&yp, observed, false, reference);
+            return Ok(Complex64::new(f64::from(1.0f32 - r * r), 0.0));
+        }
         compress(&mut yp, exponent);
     } else if precision == Precision::Double {
         // prf_errfun without CSS: prf_convolve_hrf's conv, corr and 1 - R^2, in the
@@ -477,7 +495,7 @@ pub fn errfun_with_reference(
                 1.0 - r * r
             }
             Precision::Single => {
-                let r = precision::correlation_single(&yp, observed, false);
+                let r = precision::correlation_single_with_reference(&yp, observed, false, reference);
                 f64::from(1.0f32 - r * r)
             }
         },
