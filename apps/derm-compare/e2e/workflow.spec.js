@@ -572,3 +572,69 @@ test("cancelling a rerun from ΔE2000 view immediately clears the ΔE2000 heatma
   const afterCancelPng = await page.evaluate(() => document.getElementById("canvas").toDataURL());
   expect(afterCancelPng).not.toBe(diffCanvasPng);
 });
+
+test("automation comparison withdraws page-drop Undo immediately and preserves results", async ({ page }) => {
+  const droppedA = makeSyntheticPairPng({ name: "dropped_a.png" });
+  const droppedB = makeSyntheticPairPng({ name: "dropped_b.png", dx: 4, dy: -3 });
+  const autoBase = makeSyntheticPairPng({ name: "auto_base.png", lesionRgb: [110, 72, 54] });
+  const autoFoll = makeSyntheticPairPng({ name: "auto_foll.png", dx: 5, dy: -4, angleDeg: 5, radiusX: 33, radiusY: 23, lesionRgb: [62, 34, 26] });
+
+  await page.goto("./");
+
+  // Stage automation inputs first, then drop a different pair on the page so Undo is visible right before start.
+  await page.locator("#neurodesk-input-transfer").setInputFiles(autoBase);
+  await page.evaluate(() => globalThis.neurodeskAutomation.dispatch("adopt", { role: "baseline" }));
+  await page.locator("#neurodesk-input-transfer").setInputFiles(autoFoll);
+  await page.evaluate(() => globalThis.neurodeskAutomation.dispatch("adopt", { role: "followup" }));
+
+  await page.evaluate(({ a, b }) => {
+    const dt = new DataTransfer();
+    dt.items.add(new File([new Uint8Array(a.bytes)], a.name, { type: "image/png" }));
+    dt.items.add(new File([new Uint8Array(b.bytes)], b.name, { type: "image/png" }));
+    document.body.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt }));
+  }, {
+    a: { name: droppedA.name, bytes: [...droppedA.buffer] },
+    b: { name: droppedB.name, bytes: [...droppedB.buffer] },
+  });
+  await expect(page.locator("#fixedInfo")).toContainText("dropped_a.png");
+  await expect(page.locator("#movingInfo")).toContainText("dropped_b.png");
+  await expect(page.locator(".nd-status-undo")).toBeVisible();
+
+  // Hold the worker momentarily so we can verify Undo is already withdrawn during the active worker run.
+  await page.evaluate(() => {
+    const post = Worker.prototype.postMessage;
+    window.__releaseAutoWorker = null;
+    Worker.prototype.postMessage = function (message, transfer) {
+      if (message?.type === "compare" && !window.__autoWorkerHeld) {
+        window.__autoWorkerHeld = true;
+        window.__releaseAutoWorker = () => post.call(this, message, transfer);
+        return;
+      }
+      return post.call(this, message, transfer);
+    };
+  });
+
+  // Start the automation comparison; Undo must disappear while the worker is running and stay gone after.
+  await page.evaluate(async () => {
+    await globalThis.neurodeskAutomation.dispatch("start", {
+      operation: "compare",
+      parameters: { normalizeColor: true, suppressHair: true, allowScale: false, maxAngle: 20 },
+    });
+  });
+  await page.waitForFunction(() => window.__autoWorkerHeld === true);
+  await expect(page.locator(".nd-status-undo")).toHaveCount(0);
+
+  await page.evaluate(() => window.__releaseAutoWorker?.());
+
+  await expect.poll(
+    () => page.evaluate(async () => (await globalThis.neurodeskAutomation.dispatch("snapshot")).state),
+    { timeout: 60000 },
+  ).toMatch(/succeeded|failed/);
+
+  const snapshot = await page.evaluate(() => globalThis.neurodeskAutomation.dispatch("snapshot"));
+  expect(snapshot.state).toBe("succeeded");
+  await expect(page.locator(".nd-status-undo")).toHaveCount(0);
+  await expect(page.locator("#fixedInfo")).toContainText("auto_base.png");
+  await expect(page.locator("#movingInfo")).toContainText("auto_foll.png");
+  await expect(page.locator("#resultList .nd-volume-toggle")).toHaveCount(4);
+});

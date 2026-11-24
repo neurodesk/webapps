@@ -33,7 +33,8 @@ export function defineImagePair(view = globalThis.window) {
     #initialized = false;
     #drops = [];
     #dropGen = { fixed: 0, moving: 0 };
-    #busy = 0;
+    #loading = 0;
+    #loadingExample = false;
     #example;
     #queue = Promise.resolve();
 
@@ -51,7 +52,10 @@ export function defineImagePair(view = globalThis.window) {
       this.#initialized = false;
     }
 
-    attributeChangedCallback() {
+    attributeChangedCallback(name, oldValue, newValue) {
+      if (name === 'disabled' && oldValue === null && newValue !== null && this.#loading === 0 && !this.#loadingExample) {
+        this.#report({ cancelPending: true });
+      }
       this.#refresh();
     }
 
@@ -83,12 +87,14 @@ export function defineImagePair(view = globalThis.window) {
       const message = this.#hasFolderPicker()
         ? `Reading the ${name} image · converting DICOM if needed…`
         : `Reading the ${name} image…`;
-      return this.#operation(message, signal => this.#loadFiles(slot, files, signal), { force });
+      return this.#operation(message, signal => this.#loadFiles(slot, files, signal), { force, allowReplace: true });
     }
 
     /** Put one already-read candidate into a slot, as automation and an app action do. */
     use(slot, candidate) {
+      if (this.disabled) return Promise.resolve();
       this.#dropGen[slot] += 1;
+      this.#report({ cancelPending: true });
       const name = this.#slotLabel(slot).toLowerCase();
       return this.#operation(`Loading the ${name} image…`, signal => this.#commit(slot, [candidate], 0, signal));
     }
@@ -99,11 +105,13 @@ export function defineImagePair(view = globalThis.window) {
      */
     async useWithin(slot, candidate, signal) {
       this.#dropGen[slot] += 1;
+      this.#report({ cancelPending: true });
       await this.#commit(slot, [candidate], 0, signal);
     }
 
     async loadWithin(slot, files, signal) {
       this.#dropGen[slot] += 1;
+      this.#report({ cancelPending: true });
       await this.#loadFiles(slot, files, signal);
     }
 
@@ -117,9 +125,11 @@ export function defineImagePair(view = globalThis.window) {
     }
 
     swap() {
-      if (this.lockedFixed) return Promise.resolve();
+      if (this.disabled || this.lockedFixed) return Promise.resolve();
+      if (!this.#state.fixed && !this.#state.moving) return Promise.resolve();
       this.#dropGen.fixed += 1;
       this.#dropGen.moving += 1;
+      this.#report({ cancelPending: true });
       const fixedName = this.#slotLabel('fixed').toLowerCase();
       const movingName = this.#slotLabel('moving').toLowerCase();
       return this.#operation(`Swapping the ${fixedName} and ${movingName} images…`, signal => this.#swap(signal));
@@ -138,6 +148,7 @@ export function defineImagePair(view = globalThis.window) {
               if (gen !== this.#dropGen[slot] || !files?.length || this.disabled) return;
               const previousState = this.#state[slot];
               const previousFile = previousState?.candidate?.file ?? null;
+              this.#report({ cancelPending: true });
               const loadPromise = this.load(slot, Promise.resolve(files));
               const activeGen = this.#dropGen[slot];
               await loadPromise;
@@ -234,7 +245,10 @@ export function defineImagePair(view = globalThis.window) {
         for (const entry of this.templates) select.append(new window.Option(entry.label, entry.id));
         select.addEventListener('change', () => {
           const entry = this.templates.find(item => item.id === select.value);
-          if (entry) void this.#operation(`Loading the ${entry.label} template…`, signal => this.#loadTemplate(entry, signal));
+          if (entry && !this.disabled) {
+            this.#report({ cancelPending: true });
+            void this.#operation(`Loading the ${entry.label} template…`, signal => this.#loadTemplate(entry, signal));
+          }
         });
         field.append(label, select);
         section.append(field);
@@ -246,7 +260,8 @@ export function defineImagePair(view = globalThis.window) {
       seriesField.append(element(doc, 'label', { htmlFor: `${slot}Series` }, `${slot === 'fixed' ? 'Fixed' : 'Moving'} series`), series);
       series.addEventListener('change', () => {
         const state = this.#state[slot];
-        if (!state) return;
+        if (!state || this.disabled) return;
+        this.#report({ cancelPending: true });
         const index = Number(series.value);
         void this.#operation(`Loading the ${slot} series…`, signal => this.#commit(slot, state.series, index, signal));
       });
@@ -271,7 +286,7 @@ export function defineImagePair(view = globalThis.window) {
         input.value = '';
         const fromReplace = replacing;
         replacing = false;
-        const canQueueWhileBusy = fromReplace && this.#busy > 0;
+        const canQueueWhileBusy = fromReplace && this.#loading > 0;
         if (this.disabled && !canQueueWhileBusy) {
           this.#report();
           return;
@@ -301,17 +316,17 @@ export function defineImagePair(view = globalThis.window) {
       return run;
     }
 
-    #operation(message, task, { force = false } = {}) {
+    #operation(message, task, { force = false, allowReplace = false } = {}) {
       if (this.disabled && !force) return Promise.resolve();
       this.#example?.reset();
-      this.#busy += 1;
+      if (allowReplace) this.#loading += 1;
       return this.#enqueue(async () => {
         try {
           await this.#perform(message, task);
         } catch (error) {
           if (error?.name !== 'AbortError') this.onStatus?.(error?.message || String(error), true);
         } finally {
-          this.#busy = Math.max(0, this.#busy - 1);
+          if (allowReplace) this.#loading = Math.max(0, this.#loading - 1);
           this.#refresh();
           this.#report();
         }
@@ -353,40 +368,46 @@ export function defineImagePair(view = globalThis.window) {
       this.#dropGen.fixed += 1;
       this.#dropGen.moving += 1;
       // The selector reports a failure itself, so this task rethrows instead of reporting.
-      await this.#enqueue(() => this.#perform(`Loading ${example.label}…`, async taskSignal => {
-        const loadSignal = taskSignal ? AbortSignal.any([taskSignal, signal]) : signal;
-        const onAppAbort = () => this.#example?.cancel();
-        taskSignal?.addEventListener('abort', onAppAbort, { once: true });
+      await this.#enqueue(async () => {
+        this.#loadingExample = true;
         try {
-          const files = await fetchFiles();
-          loadSignal?.throwIfAborted();
-          assertCurrent();
-          const byRole = Object.fromEntries(example.files.map((asset, index) => [asset.role, { asset, file: files[index] }]));
-          const slots = IMAGE_SLOTS.filter(slot => byRole[this.#slotRole(slot)] && !this.#isLocked(slot));
-          if (!slots.length) {
-            const fixedName = this.#slotLabel('fixed').toLowerCase();
-            const movingName = this.#slotLabel('moving').toLowerCase();
-            throw new Error(`${example.label} has no ${fixedName} or ${movingName} image.`);
-          }
-          for (const slot of slots) {
-            const { asset, file } = byRole[this.#slotRole(slot)];
-            const read = this.read ?? (list => list.map(item => ({ name: item.name, file: item })));
-            const candidates = await read([file], { slot, signal: loadSignal });
-            loadSignal?.throwIfAborted();
-            assertCurrent();
-            if (!candidates?.length) throw new Error(`The example ${this.#slotLabel(slot).toLowerCase()} image could not be read.`);
-            if (asset.brainExtracted !== undefined) candidates[0].brainExtracted = asset.brainExtracted;
-            await this.#commit(slot, candidates, 0, loadSignal);
-            loadSignal?.throwIfAborted();
-            assertCurrent();
-          }
+          await this.#perform(`Loading ${example.label}…`, async taskSignal => {
+            const loadSignal = taskSignal ? AbortSignal.any([taskSignal, signal]) : signal;
+            const onAppAbort = () => this.#example?.cancel();
+            taskSignal?.addEventListener('abort', onAppAbort, { once: true });
+            try {
+              const files = await fetchFiles();
+              loadSignal?.throwIfAborted();
+              assertCurrent();
+              const byRole = Object.fromEntries(example.files.map((asset, index) => [asset.role, { asset, file: files[index] }]));
+              const slots = IMAGE_SLOTS.filter(slot => byRole[this.#slotRole(slot)] && !this.#isLocked(slot));
+              if (!slots.length) {
+                const fixedName = this.#slotLabel('fixed').toLowerCase();
+                const movingName = this.#slotLabel('moving').toLowerCase();
+                throw new Error(`${example.label} has no ${fixedName} or ${movingName} image.`);
+              }
+              for (const slot of slots) {
+                const { asset, file } = byRole[this.#slotRole(slot)];
+                const read = this.read ?? (list => list.map(item => ({ name: item.name, file: item })));
+                const candidates = await read([file], { slot, signal: loadSignal });
+                loadSignal?.throwIfAborted();
+                assertCurrent();
+                if (!candidates?.length) throw new Error(`The example ${this.#slotLabel(slot).toLowerCase()} image could not be read.`);
+                if (asset.brainExtracted !== undefined) candidates[0].brainExtracted = asset.brainExtracted;
+                await this.#commit(slot, candidates, 0, loadSignal);
+                loadSignal?.throwIfAborted();
+                assertCurrent();
+              }
+            } finally {
+              taskSignal?.removeEventListener('abort', onAppAbort);
+            }
+          });
         } finally {
-          taskSignal?.removeEventListener('abort', onAppAbort);
+          this.#loadingExample = false;
+          this.#refresh();
+          this.#report();
         }
-      }).finally(() => {
-        this.#refresh();
-        this.#report();
-      }));
+      });
     }
 
     async #commit(slot, series, index, signal) {
