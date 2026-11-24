@@ -13,6 +13,7 @@ export function basisLibrary(manifest) {
       sequence: set.sequence,
       hzpppm: set.hzpppm,
       teMs: set.teMs,
+      tmMs: set.simulation?.tm_ms ?? null,
       shapedPulses: set.pulses === "shaped",
       coEditedMM: set.coEditedMM === true,
       mmSuppressed: set.mmSuppressed === true,

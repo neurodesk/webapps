@@ -5,7 +5,7 @@ import { mindgrabAssets, mindgrabFromAssetPath } from '../../scripts/lib/mindgra
 // Resolve MindGrab through the package that pins it, not the app's own install.
 const require = createRequire(import.meta.resolve('@neurodesk/deface/browser'))
 const runtimeRequire = createRequire(require.resolve('@neurodesk/runtime-support/mindgrab'))
-const mindgrabPackage = runtimeRequire.resolve('@brainchop/mindgrab/package.json')
+const mindgrabPackage = runtimeRequire.resolve('@brainchop/core/package.json')
 
 // Base path, worker format, COOP/COEP dev headers and the production _headers
 // file come from the shared helper (registry path: /deface/).
@@ -25,6 +25,6 @@ export default neurodeskViteConfig({
   // niimath runtime comes from the workspace runtime-support package, and Vite
   // resolves its worker assets from source during dev and build.
   optimizeDeps: {
-    exclude: ['@niivue/dcm2niix', '@brainchop/mindgrab'],
+    exclude: ['@niivue/dcm2niix', '@brainchop/core'],
   },
 })

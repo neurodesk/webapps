@@ -1,7 +1,7 @@
 //! Synthetic-signal tests for every op: known shifts, phases, SNR and
 //! linewidths are recovered. These need no data.
 
-use fida::ops::pipeline::{run_pressproc_auto, run_specialproc_auto, PressOptions, SpecialOptions, CANCELLED};
+use fida::ops::pipeline::{run_megapressproc_auto, run_pressproc_auto, run_specialproc_auto, MegaOptions, PressOptions, SpecialOptions, CANCELLED};
 use fida::ops::util::{fid_from_spec, ppm_axis, spec, t_axis};
 use fida::ops::*;
 use fida::{Dims, Flags, Spectra};
@@ -66,6 +66,7 @@ fn spectra(fids: Vec<C>, sz: Vec<usize>, dims: Dims, averages: usize, subspecs: 
         dwelltime: 1.0 / SW,
         txfrq: txfrq(),
         te: 30.0,
+        tm: None,
         tr: 2000.0,
         bo: BO,
         seq: "press".into(),
@@ -491,4 +492,151 @@ fn special_pipeline_runs_on_synthetic_data() {
     assert!(!r.report.warnings.is_empty(), "missing-water warning expected");
     assert!(r.report.drift.is_some());
     assert_eq!(r.report.isis_freq.len(), na);
+}
+
+fn special_raw(na: usize, nc: usize, shifts: &[(f64, f64)], water: bool) -> Spectra {
+    let base = if water {
+        fid(&[(4.65, 10.0, 0.05)])
+    } else {
+        fid(&[(2.01, 1.0, 0.08), (3.03, 0.8, 0.08), (3.21, 0.6, 0.08)])
+    };
+    let unwanted = fid(&[(1.3, 1.5, 0.03)]);
+    let mut rng = Rng(if water { 41 } else { 37 });
+    let mut fids = Vec::new();
+    for sub in 0..2 {
+        for k in 0..na {
+            let (hz, deg) = shifts.get(k).copied().unwrap_or((0.0, 0.0));
+            for c in 0..nc {
+                let g = C::from_polar(1.0, 0.4 * c as f64);
+                let sig: Vec<C> = if sub == 0 {
+                    base.iter().zip(&unwanted).map(|(m, u)| m + u).collect()
+                } else {
+                    base.iter().zip(&unwanted).map(|(m, u)| m - u).collect()
+                };
+                fids.extend(shift(&sig, hz, deg).iter().map(|v| v * g + C::new(rng.normal(), rng.normal()) * 0.005));
+            }
+        }
+    }
+    if nc > 1 {
+        spectra(fids, vec![N, nc, na, 2], Dims { t: 1, coils: 2, averages: 3, sub_specs: 4, extras: 0 }, na * 2, 2)
+    } else {
+        let mut s = spectra(fids, vec![N, na, 2], Dims { t: 1, coils: 0, averages: 2, sub_specs: 3, extras: 0 }, na * 2, 2);
+        s.flags.addedrcvrs = true;
+        s
+    }
+}
+
+fn megapress_raw(na: usize, nc: usize, shifts: &[(f64, f64)]) -> Spectra {
+    let off = fid(&[(2.01, 1.0, 0.08), (3.03, 0.8, 0.08), (3.21, 0.6, 0.08)]);
+    let on = fid(&[(2.01, 0.2, 0.08), (3.01, 0.25, 0.06), (3.03, 0.8, 0.08), (3.21, 0.6, 0.08)]);
+    let mut rng = Rng(53);
+    let mut fids = Vec::new();
+    for sub in 0..2 {
+        let base = if sub == 0 { &off } else { &on };
+        for k in 0..na {
+            let (hz, deg) = shifts.get(k).copied().unwrap_or((0.0, 0.0));
+            for c in 0..nc {
+                let g = C::from_polar(1.0, 0.3 * c as f64);
+                fids.extend(shift(base, hz, deg).iter().map(|v| v * g + C::new(rng.normal(), rng.normal()) * 0.005));
+            }
+        }
+    }
+    if nc > 1 {
+        spectra(fids, vec![N, nc, na, 2], Dims { t: 1, coils: 2, averages: 3, sub_specs: 4, extras: 0 }, na * 2, 2)
+    } else {
+        let mut s = spectra(fids, vec![N, na, 2], Dims { t: 1, coils: 0, averages: 2, sub_specs: 3, extras: 0 }, na * 2, 2);
+        s.flags.addedrcvrs = true;
+        s
+    }
+}
+
+fn water_raw(shifts: &[(f64, f64)], nc: usize) -> Spectra {
+    let base = fid(&[(4.65, 10.0, 0.05)]);
+    let mut rng = Rng(61);
+    let mut fids = Vec::new();
+    for &(hz, deg) in shifts {
+        for c in 0..nc {
+            let g = C::from_polar(1.0, 0.3 * c as f64);
+            fids.extend(shift(&base, hz, deg).iter().map(|v| v * g + C::new(rng.normal(), rng.normal()) * 0.002));
+        }
+    }
+    if nc > 1 {
+        spectra(fids, vec![N, nc, shifts.len()], Dims { t: 1, coils: 2, averages: 3, sub_specs: 0, extras: 0 }, shifts.len(), 1)
+    } else {
+        let mut s = spectra(fids, vec![N, shifts.len()], Dims { t: 1, coils: 0, averages: 2, sub_specs: 0, extras: 0 }, shifts.len(), 1);
+        s.flags.addedrcvrs = true;
+        s
+    }
+}
+
+#[test]
+fn low_average_scans_succeed_across_all_pipelines_and_align_multi_average_water() {
+    // 1- and 2-average PRESS (multicoil and single-coil with explicit singleton average axis).
+    let raw2 = press_raw(&[(0.0, 0.0), (0.2, 1.0)], 4, 0.01);
+    let r2 = run_pressproc_auto(&raw2, None, &PressOptions::default(), &mut |_, _| {}, &|| false).unwrap();
+    assert_eq!(r2.out.sz, vec![N, 1]);
+    assert!(r2.report.warnings.iter().any(|w| w.contains("at least 3 averages")), "{:?}", r2.report.warnings);
+    assert_eq!(r2.report.rm_bad_averages.as_ref().unwrap().averages_after, 2);
+
+    let combined2 = fida::ops::coils::op_addrcvrs(&raw2, 1, fida::ops::coils::CoilMode::W, None, false).unwrap().out;
+    assert!(op_rmbadaverages(&combined2, 4.0, Domain::Time).is_err());
+    assert!(op_rmworstaverage(&combined2).is_err());
+
+    let raw1_mc = press_raw(&[(0.0, 0.0)], 4, 0.005);
+    let water_drifted = water_raw(&[(0.0, 0.0), (6.0, 40.0), (-5.0, -35.0), (4.0, 25.0)], 4);
+    let r1_mc = run_pressproc_auto(&raw1_mc, Some(&water_drifted), &PressOptions::default(), &mut |_, _| {}, &|| false).unwrap();
+    assert_eq!(r1_mc.out.sz, vec![N, 1]);
+    assert!(r1_mc.out.flags.averaged && r1_mc.out.dims.averages == 0);
+    // Multi-average water reference must still be aligned when metabolite has 1 average.
+    let w_aligned_peak = spec(&r1_mc.outw.as_ref().unwrap().fids).iter().map(|z| z.norm()).fold(0.0, f64::max);
+    let w_noproc_peak = spec(&r1_mc.outw_noproc.as_ref().unwrap().fids).iter().map(|z| z.norm()).fold(0.0, f64::max);
+    assert!(w_aligned_peak > w_noproc_peak * 1.15, "water peak should sharpen after alignment: {w_aligned_peak} vs {w_noproc_peak}");
+
+    // Single-coil PRESS with explicit singleton average axis (dims.averages == 2, size == 1).
+    let raw1_sc = averaged(&metab(), &[(0.0, 0.0)], 0.005, 71);
+    let r1_sc = run_pressproc_auto(&raw1_sc, None, &PressOptions::default(), &mut |_, _| {}, &|| false).unwrap();
+    assert_eq!(r1_sc.out.sz, vec![N, 1]);
+    assert!(r1_sc.out.flags.averaged && r1_sc.out.dims.averages == 0);
+
+    // 1- and 2-average SPECIAL (multicoil and single-coil), plus multi-average water alignment.
+    for (na, nc) in [(1, 2), (1, 1), (2, 2)] {
+        let m = special_raw(na, nc, &[(0.0, 0.0), (0.5, 5.0)], false);
+        let w = special_raw(4, nc, &[(0.0, 0.0), (6.0, 40.0), (-5.0, -35.0), (4.0, 25.0)], true);
+        let rs = run_specialproc_auto(&m, Some(&w), &SpecialOptions::default(), &mut |_, _| {}, &|| false).unwrap();
+        assert_eq!(rs.out.sz, vec![N, 1]);
+        assert!(rs.out.flags.averaged && rs.out.dims.averages == 0);
+        if na == 1 {
+            let aligned = spec(&rs.outw.as_ref().unwrap().fids).iter().map(|z| z.norm()).fold(0.0, f64::max);
+            let noproc = spec(&rs.outw_noproc.as_ref().unwrap().fids).iter().map(|z| z.norm()).fold(0.0, f64::max);
+            assert!(aligned > noproc * 1.15, "SPECIAL water peak should sharpen: {aligned} vs {noproc}");
+        }
+    }
+
+    // 1- and 2-average MEGA-PRESS (multicoil and single-coil), plus multi-average water alignment.
+    for (na, nc) in [(1, 2), (1, 1), (2, 2)] {
+        let m = megapress_raw(na, nc, &[(0.0, 0.0), (0.5, 5.0)]);
+        let w = water_raw(&[(0.0, 0.0), (6.0, 40.0), (-5.0, -35.0), (4.0, 25.0)], nc);
+        let rm = run_megapressproc_auto(&m, Some(&w), &MegaOptions::default(), &mut |_, _| {}, &|| false).unwrap();
+        assert_eq!(rm.diff.sz, vec![N, 1]);
+        assert!(rm.diff.flags.averaged && rm.diff.dims.averages == 0);
+        if na == 1 {
+            let w_out = rm.outw.as_ref().unwrap();
+            let aligned = spec(&w_out.fids).iter().map(|z| z.norm()).fold(0.0, f64::max);
+            let w_cc = fida::ops::coils::op_addrcvrs(&w, 1, fida::ops::coils::CoilMode::W, None, false).unwrap().out;
+            let unaligned = spec(&op_averaging(&w_cc).fids).iter().map(|z| z.norm()).fold(0.0, f64::max);
+            assert!(aligned > unaligned * 1.15, "MEGA-PRESS water peak should sharpen: {aligned} vs {unaligned}");
+        }
+    }
+
+    // Multi-index op_takeaverages remaps dims when squeeze drops a singleton coil axis.
+    let s_singleton_coil = spectra(
+        vec![C::new(1.0, 0.0); 16 * 1 * 3 * 2],
+        vec![16, 1, 3, 2],
+        Dims { t: 1, coils: 2, averages: 3, sub_specs: 4, extras: 0 },
+        6,
+        2,
+    );
+    let took = op_takeaverages(&s_singleton_coil, &[0, 1]).unwrap();
+    assert_eq!(took.sz, vec![16, 2, 2]);
+    assert_eq!(took.dims, Dims { t: 1, coils: 0, averages: 2, sub_specs: 3, extras: 0 });
 }

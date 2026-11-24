@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { gunzipSync } from 'node:zlib';
 import createNiimath from '@niivue/niimath/niimath.js';
-import mindgrabPackage from '@brainchop/mindgrab/package.json' with { type: 'json' };
+import mindgrabPackage from '@brainchop/core/package.json' with { type: 'json' };
 import { UsageError, parseMindgrabArgs } from '../src/mindgrab-cli.js';
 import { runNiimath } from '../src/niimath.js';
 import { MINDGRAB_INPUT, pinnedFile } from '../validation/cases.mjs';
@@ -24,10 +24,14 @@ function brainchopMindgrab(args, options = {}) {
 
 test('reads the native argv that meica-rs and fastprep pass', () => {
   assert.deepEqual(parseMindgrabArgs(['/d/ref.nii.gz', '-o', '/d/stripped.nii.gz', '--mask', '/d/mask.nii.gz', '--border', '2']), {
-    help: false, input: '/d/ref.nii.gz', output: '/d/stripped.nii.gz', mask: '/d/mask.nii.gz', borderMm: 2, ct: false, comply: false,
+    help: false, version: false, input: '/d/ref.nii.gz', output: '/d/stripped.nii.gz', mask: '/d/mask.nii.gz', borderMm: 2, ct: false, comply: false,
   });
   assert.deepEqual(parseMindgrabArgs(['--ct', '--comply', '--output', 'b.nii', '-backend', 'cpu', 'a.nii']), {
-    help: false, input: 'a.nii', output: 'b.nii', ct: true, comply: true,
+    help: false, version: false, input: 'a.nii', output: 'b.nii', ct: true, comply: true,
+  });
+  assert.deepEqual(parseMindgrabArgs(['--version']), { version: true });
+  assert.deepEqual(parseMindgrabArgs(['--no-turbo', 'a.nii']), {
+    help: false, version: false, input: 'a.nii', output: 'output.nii.gz', ct: false, comply: false, noTurbo: true,
   });
 });
 
@@ -60,7 +64,7 @@ test('rejects what the native command line rejects and what the CPU build cannot
 
 // The CPU module carries the native parser, so its own --help lists every native option.
 async function nativeHelp() {
-  const moduleUrl = new URL('dist/brainchop-mindgrab.js', import.meta.resolve('@brainchop/mindgrab/package.json')).href;
+  const moduleUrl = new URL('dist/brainchop-mindgrab.js', import.meta.resolve('@brainchop/core/package.json')).href;
   const script = `
     const { default: create } = await import(${JSON.stringify(moduleUrl)});
     const lines = [];
@@ -98,11 +102,35 @@ test('handles every option the native command line of this MindGrab version acce
   }
 });
 
-test('--help names MindGrab, its package version and --mask', async () => {
+test('--help names MindGrab, its package version and --mask; --version matches native output', async () => {
   const { code, stdout } = await brainchopMindgrab(['--help']);
   assert.equal(code, 0);
   assert.match(stdout, new RegExp(`BrainChop mindgrab: .*\\(v${mindgrabPackage.version.replaceAll('.', '\\.')}\\)`));
   assert.match(stdout, /--mask \[PATH\]/);
+  assert.match(stdout, /--no-turbo/);
+  const ver = await brainchopMindgrab(['--version']);
+  assert.equal(ver.code, 0);
+  assert.equal(ver.stdout.trim(), `brainchop-mindgrab ${mindgrabPackage.version}`);
+});
+
+test('preview package help omits --no-turbo and rejects --no-turbo as a usage error', async () => {
+  const pkgDir = await mkdtemp(join(tmpdir(), 'brainchop-preview-pkg-'));
+  try {
+    const { mkdir } = await import('node:fs/promises');
+    await mkdir(join(pkgDir, 'dist'), { recursive: true });
+    await writeFile(join(pkgDir, 'package.json'), JSON.stringify({ name: '@brainchop/mindgrab', version: '0.1.20260925', type: 'module' }));
+    await writeFile(join(pkgDir, 'dist', 'index.js'), 'export const MODELS = { mindgrab: { outputKind: "mask", capabilities: { mask: true, border: true, saveConform: false } } }; export class BrainchopError extends Error { constructor(code, message) { super(message); this.code = code; } }');
+    const env = { ...process.env, BRAINCHOP_MINDGRAB_PACKAGE: pkgDir };
+    const help = await brainchopMindgrab(['--help'], { env });
+    assert.equal(help.code, 0);
+    assert.match(help.stdout, /@brainchop\/mindgrab 0\.1\.20260925/);
+    assert.doesNotMatch(help.stdout, /--no-turbo/);
+    const noTurbo = await brainchopMindgrab(['--no-turbo', 'in.nii'], { env });
+    assert.equal(noTurbo.code, 2);
+    assert.match(noTurbo.stderr, /--no-turbo is not supported by @brainchop\/mindgrab 0\.1\.20260925/);
+  } finally {
+    await rm(pkgDir, { recursive: true, force: true });
+  }
 });
 
 test('a usage error exits 2 before loading MindGrab', async () => {

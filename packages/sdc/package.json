@@ -44,7 +44,7 @@
     "directory": "packages/sdc"
   },
   "dependencies": {
-    "@brainchop/mindgrab": "0.1.20260925",
+    "@brainchop/core": "1.0.0",
     "@neurodesk/ants-denoise": "workspace:*",
     "@neurodesk/hmc": "workspace:*",
     "@neurodesk/hmc-registration": "workspace:*",

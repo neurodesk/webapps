@@ -550,9 +550,8 @@ fn read_mdhs(b: &Bytes, start: usize, vd: bool) -> Res<(Vec<Acq>, bool)> {
     Ok((acqs, is_eof))
 }
 
-fn parse_scan(data: &[u8]) -> Res<Scan> {
-    let b = Bytes::new(data, "twix");
-    if data.len() < 8 {
+fn parse_header_layout(b: &Bytes) -> Res<(bool, usize, usize)> {
+    if b.b.len() < 8 {
         return Err("This file is too small to be Siemens twix raw data.".into());
     }
     let first = b.u32le(0)?;
@@ -570,9 +569,22 @@ fn parse_scan(data: &[u8]) -> Res<Scan> {
         (false, 0)
     };
     let hdr_len = b.u32le(off)? as usize;
-    if hdr_len < 4 || off.checked_add(hdr_len).map(|e| e > data.len()).unwrap_or(true) {
+    if hdr_len < 4 || off.checked_add(hdr_len).map(|e| e > b.b.len()).unwrap_or(true) {
         return Err("This does not look like a Siemens twix file (the measurement header length is out of range).".into());
     }
+    Ok((vd, off, hdr_len))
+}
+
+/// Parse only the measurement header of a twix file (skipping the MDH scan).
+pub fn parse_header(data: &[u8]) -> Res<TwixHeader> {
+    let b = Bytes::new(data, "twix");
+    let (_, off, _) = parse_header_layout(&b)?;
+    read_twix_hdr(&b, off + 4)
+}
+
+fn parse_scan(data: &[u8]) -> Res<Scan> {
+    let b = Bytes::new(data, "twix");
+    let (vd, off, hdr_len) = parse_header_layout(&b)?;
     let hdr = read_twix_hdr(&b, off + 4)?;
     let (mut acqs, is_eof) = read_mdhs(&b, off + hdr_len, vd)?;
     if is_eof {
@@ -1089,6 +1101,13 @@ pub fn load_with(data: &[u8], opts: TwixOptions) -> Res<TwixResult> {
     let bo = hdr.num("Dicom", "flMagneticFieldStrength")?;
     let n_averages = if v_xa { hdr.num("Meas", "lAverages") } else { hdr.num("Meas", "Averages") };
     let te = hdr.num("MeasYaps", "alTE[0]")?;
+    let seq_low = seq.to_ascii_lowercase();
+    let is_steam = seq_low.contains("steam") || seq_low.contains("svs_st");
+    let tm = if is_steam {
+        hdr.num("MeasYaps", "alTD[0]").ok().filter(|&v| v.is_finite() && v > 0.0).map(|v| v / 1000.0)
+    } else {
+        None
+    };
     let tr = hdr.num("MeasYaps", "alTR[0]")?;
 
     let mut w_refs = false;
@@ -1380,6 +1399,7 @@ pub fn load_with(data: &[u8], opts: TwixOptions) -> Res<TwixResult> {
             dwelltime,
             txfrq,
             te: te / 1000.0,
+            tm,
             tr: tr / 1000.0,
             bo,
             seq: seq.clone(),

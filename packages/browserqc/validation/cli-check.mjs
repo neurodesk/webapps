@@ -24,7 +24,7 @@ function check(passed, line) {
 
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 const reference = await readReference();
-check(reference.mindgrab === packageJson.dependencies['@brainchop/mindgrab'], `reference was recorded with the pinned MindGrab ${reference.mindgrab}`);
+check(reference.mindgrab === packageJson.dependencies['@brainchop/core'], `reference was recorded with the pinned MindGrab ${reference.mindgrab}`);
 check(reference.niimath === packageJson.dependencies['@niivue/niimath'], `reference was recorded with the pinned niimath ${reference.niimath}`);
 check(JSON.stringify(reference.inputs) === JSON.stringify(EXAMPLE_SHA256), 'reference was recorded from the pinned example inputs');
 check(CASES.every((model) => reference.browser?.cases?.[model]?.artifacts), `reference holds the web app's downloads for ${CASES.join(', ')}`);

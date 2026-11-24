@@ -15,7 +15,7 @@
     "test:e2e": "node ../../test-utils/run-browser-tests.mjs \"node test/smoke.mjs && playwright test\""
   },
   "dependencies": {
-    "@brainchop/mindgrab": "0.1.20260925",
+    "@brainchop/core": "1.0.0",
     "@neurodesk/browserqc": "workspace:*",
     "@neurodesk/runtime-support": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",

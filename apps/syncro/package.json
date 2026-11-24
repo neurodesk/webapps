@@ -12,7 +12,7 @@
     "lint": "node --check src/main.js && node --check src/worker.js"
   },
   "dependencies": {
-    "@brainchop/mindgrab": "0.1.20260813",
+    "@brainchop/core": "1.0.0",
     "@neurodesk/brain-extraction": "workspace:*",
     "@neurodesk/greedy": "workspace:*",
     "@neurodesk/registration": "workspace:*",

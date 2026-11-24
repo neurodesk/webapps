@@ -1,0 +1,41 @@
+Raidionics brain tumour segmentation and standardized reporting (RADS)
+Bouget D, Alsinan D, Gaitan V, et al. Raidionics: an open software for pre- and
+postoperative central nervous system tumor segmentation and standardized
+reporting. Scientific Reports. 2023;13:15570.
+https://doi.org/10.1038/s41598-023-42048-7
+
+Bouget D, Pedersen A, Jakola AS, et al. Preoperative Brain Tumor Imaging: Models
+and Software for Segmentation and Standardized Reporting. Frontiers in
+Neurology. 2022;13:932219.
+https://doi.org/10.3389/fneur.2022.932219
+
+Upstream repositories (BSD-2-Clause, SINTEF Digital, Health Research):
+- https://github.com/raidionics/Raidionics
+- https://github.com/dbouget/raidionics_seg_lib
+- https://github.com/dbouget/raidionics_rads_lib
+- https://github.com/raidionics/Raidionics-models (release v1.3.0-rc)
+
+Pre-trained ONNX models (`MRI_Brain` and `MRI_TumorCore/t1c`) are rewritten for
+WebGPU 3D Conv compatibility and stored with float16 weights by
+scripts/export_model.py, then mirrored on Hugging Face and pinned by size and
+SHA-256 in model.manifest.json.
+
+Atlases and templates on the MNI ICBM 152 2009a symmetric 1 mm grid:
+- MNI ICBM 152 nonlinear symmetric 2009a template (Fonov et al., NeuroImage
+  2009, 2011; MNI ICBM152 copyright notice):
+  https://www.bic.mni.mcgill.ca/ServicesAtlases/ICBM152NLin2009
+- MNI structural lobes and lateralisation masks (BSD-2-Clause, raidionics_rads_lib).
+- Schaefer 2018 7-network and 17-network cortical parcellations (MIT License;
+  Schaefer et al., Cerebral Cortex 2018):
+  https://github.com/ThomasYeoLab/CBIG
+- BCBtoolkit white-matter tract probability atlases (BSD-3-Clause; Foulon et
+  al., GigaScience 2018):
+  https://github.com/Chrisfoulon/BCBToolKit
+- Glioblastoma resection probability maps (Kommers et al., Neuro-Oncology 2021,
+  https://doi.org/10.1093/neuonc/noab026; distributed in raidionics_rads_lib
+  under BSD-2-Clause).
+
+Registration uses @neurodesk/greedy (Apache-2.0, Rust/WebAssembly port of
+Greedy by Paul Yushkevich / PICSL).
+
+JavaScript port and packaging by Neurodesk, Apache-2.0.

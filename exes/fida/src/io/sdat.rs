@@ -185,6 +185,7 @@ pub fn load(sdat: &[u8], spar: &[u8], subspecs: usize) -> Res<Spectra> {
         dwelltime,
         txfrq,
         te,
+        tm: None,
         tr,
         bo,
         seq: text(&h, "scan_id"),

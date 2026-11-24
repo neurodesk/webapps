@@ -102,9 +102,9 @@ importers:
 
   apps/ants:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260813
-        version: 0.1.20260813
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/ants':
         specifier: workspace:*
         version: link:../../packages/ants
@@ -186,9 +186,9 @@ importers:
 
   apps/brain-extraction:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/brain-extraction':
         specifier: workspace:*
         version: link:../../packages/brain-extraction
@@ -220,9 +220,9 @@ importers:
 
   apps/brain2print:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/brain2print':
         specifier: workspace:*
         version: link:../../packages/brain2print
@@ -292,9 +292,9 @@ importers:
 
   apps/browserqc:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/browserqc':
         specifier: workspace:*
         version: link:../../packages/browserqc
@@ -722,9 +722,9 @@ importers:
 
   apps/dwi2trx:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@dipy/gpu-streamlines':
         specifier: file:./vendor/gpu-streamlines
         version: file:apps/dwi2trx/vendor/gpu-streamlines
@@ -893,9 +893,9 @@ importers:
 
   apps/fastprep:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20261008
-        version: 0.1.20261008
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/fastprep':
         specifier: workspace:*
         version: link:../../packages/fastprep
@@ -939,9 +939,9 @@ importers:
 
   apps/fireants:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260813
-        version: 0.1.20260813
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@fireants/fireants':
         specifier: 0.1.20260913
         version: 0.1.20260913
@@ -995,9 +995,9 @@ importers:
 
   apps/greedy:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260813
-        version: 0.1.20260813
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/greedy':
         specifier: workspace:*
         version: link:../../packages/greedy
@@ -1073,9 +1073,9 @@ importers:
 
   apps/lcmodel:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/lcmodel':
         specifier: workspace:*
         version: link:../../packages/lcmodel
@@ -1587,9 +1587,9 @@ importers:
 
   apps/syncro:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260813
-        version: 0.1.20260813
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/brain-extraction':
         specifier: workspace:*
         version: link:../../packages/brain-extraction
@@ -1717,6 +1717,40 @@ importers:
       vite:
         specifier: ^6.3.2
         version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.0)
+
+  apps/tumour-report:
+    dependencies:
+      '@neurodesk/greedy':
+        specifier: workspace:*
+        version: link:../../packages/greedy
+      '@neurodesk/runtime-support':
+        specifier: workspace:*
+        version: link:../../packages/runtime-support
+      '@neurodesk/synthsr':
+        specifier: workspace:*
+        version: link:../../packages/synthsr
+      '@neurodesk/tumour-report':
+        specifier: workspace:*
+        version: link:../../packages/tumour-report
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      '@niivue/niivue':
+        specifier: 1.0.0-rc.33
+        version: 1.0.0-rc.33
+      onnxruntime-web:
+        specifier: 1.29.0
+        version: 1.29.0
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.64.0
+        version: 1.64.0
+      playwright:
+        specifier: 1.64.0
+        version: 1.64.0
+      vite:
+        specifier: ^6.3.2
+        version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.1)
 
   apps/vesselboost:
     dependencies:
@@ -1852,9 +1886,9 @@ importers:
 
   packages/brain-extraction:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/node-drivers':
         specifier: workspace:*
         version: link:../node-drivers
@@ -1874,9 +1908,9 @@ importers:
 
   packages/brain2print:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/node-drivers':
         specifier: workspace:*
         version: link:../node-drivers
@@ -1909,9 +1943,9 @@ importers:
 
   packages/browserqc:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/node-drivers':
         specifier: workspace:*
         version: link:../node-drivers
@@ -1973,9 +2007,9 @@ importers:
 
   packages/deface:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/node-drivers':
         specifier: workspace:*
         version: link:../node-drivers
@@ -2048,9 +2082,9 @@ importers:
 
   packages/dwi2trx:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/node-drivers':
         specifier: workspace:*
         version: link:../node-drivers
@@ -2134,9 +2168,9 @@ importers:
         specifier: 0.1.20261021
         version: 0.1.20261021
     devDependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20261008
-        version: 0.1.20261008
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/node-drivers':
         specifier: workspace:*
         version: link:../node-drivers
@@ -2164,9 +2198,9 @@ importers:
 
   packages/hmc:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/dwi2trx':
         specifier: workspace:*
         version: link:../dwi2trx
@@ -2192,9 +2226,9 @@ importers:
 
   packages/lcmodel:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/node-drivers':
         specifier: workspace:*
         version: link:../node-drivers
@@ -2236,9 +2270,9 @@ importers:
 
   packages/n4:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/node-drivers':
         specifier: workspace:*
         version: link:../node-drivers
@@ -2282,9 +2316,9 @@ importers:
 
   packages/noddi:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/dwi2trx':
         specifier: workspace:*
         version: link:../dwi2trx
@@ -2297,9 +2331,9 @@ importers:
 
   packages/node-drivers:
     devDependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@niivue/niimath':
         specifier: 1.4.20260928
         version: 1.4.20260928
@@ -2351,9 +2385,9 @@ importers:
 
   packages/runtime-support:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../components
@@ -2382,9 +2416,9 @@ importers:
 
   packages/sdc:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/ants-denoise':
         specifier: workspace:*
         version: link:../ants-denoise
@@ -2443,9 +2477,9 @@ importers:
 
   packages/syncro:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260813
-        version: 0.1.20260813
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/node-drivers':
         specifier: workspace:*
         version: link:../node-drivers
@@ -2528,6 +2562,19 @@ importers:
       '@playwright/test':
         specifier: 1.64.0
         version: 1.64.0
+
+  packages/tumour-report:
+    dependencies:
+      '@neurodesk/greedy':
+        specifier: workspace:*
+        version: link:../greedy
+      '@neurodesk/synthsr':
+        specifier: workspace:*
+        version: link:../synthsr
+    devDependencies:
+      onnxruntime-node:
+        specifier: 1.29.0
+        version: 1.29.0
 
   packages/vesselboost:
     dependencies:
@@ -3021,17 +3068,8 @@ packages:
   '@borewit/text-codec@0.2.2':
     resolution: {integrity: sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ==}
 
-  '@brainchop/mindgrab@0.1.20260813':
-    resolution: {integrity: sha512-HpushBfOzG5yhzgKmhjy1q+8DYxLdM96LeeciF+W2wwStKFzNW1ABY87fwGZjFXcivoWVv+HWPfakBe/GrQPsA==}
-    deprecated: 'Replaced by @brainchop/core (same API): npm i @brainchop/core'
-
-  '@brainchop/mindgrab@0.1.20260925':
-    resolution: {integrity: sha512-FFuU3IMQqrUuiHdm6l0//eXZ5X4vuOTgq4yK4qgUn5dOiMnY7LjRP+SpFULCZK3H4zW/mNuONXAE/Ex1PZvbvA==}
-    deprecated: 'Replaced by @brainchop/core (same API): npm i @brainchop/core'
-
-  '@brainchop/mindgrab@0.1.20261008':
-    resolution: {integrity: sha512-pU+2152MT5mFqY3MbSV32jzVsm3yq5dOezM0HJGZTyPb5r8KxSri/BH9nFbI6docK9+TxFAH0JN2AmrqQmyB4A==}
-    deprecated: 'Replaced by @brainchop/core (same API): npm i @brainchop/core'
+  '@brainchop/core@1.0.0':
+    resolution: {integrity: sha512-7gf04PrZ5gJMfyHd0D0Cp9USyubrLNv5aevdTIDDNwgttc7j4GmAWb2cgEjiYs0LGsqG0zKSLWFzAJmNPCWzMQ==}
 
   '@cbor-extract/cbor-extract-darwin-arm64@2.2.2':
     resolution: {integrity: sha512-ZKZ/F8US7JR92J4DMct6cLW/Y66o2K576+zjlEN/MevH70bFIsB10wkZEQPLzl2oNh2SMGy55xpJ9JoBRl5DOA==}
@@ -10704,15 +10742,7 @@ snapshots:
 
   '@borewit/text-codec@0.2.2': {}
 
-  '@brainchop/mindgrab@0.1.20260813':
-    dependencies:
-      '@webgpu/types': 0.1.71
-
-  '@brainchop/mindgrab@0.1.20260925':
-    dependencies:
-      '@webgpu/types': 0.1.71
-
-  '@brainchop/mindgrab@0.1.20261008':
+  '@brainchop/core@1.0.0':
     dependencies:
       '@webgpu/types': 0.1.71
 

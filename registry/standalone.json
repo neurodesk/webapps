@@ -2567,6 +2567,13 @@
       "downloads": [],
       "containers": []
     },
+    "tumour-report": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
     "cellpose": {
       "desktop": true,
       "profile": "interactive",

@@ -127,7 +127,9 @@ fitting, both as Rust ports compiled to WebAssembly (`packages/lcmodel`).
 
 Examples (Hugging Face `neurodeskorg/webapps`, `lcmodel/examples/`): FID-A's GE
 PRESS phantom (3 T, TE 35 ms), FID-A's Siemens SPECIAL in vivo data (2.89 T,
-TE 8.5 ms, 178 MB) and MEGA-PRESS data (TE 68 ms, 86 MB), headers de-identified,
+TE 8.5 ms, 178 MB) and MEGA-PRESS data (TE 68 ms, 86 MB), William T. Clarke's
+Siemens 7 T STEAM in vivo data (6.98 T, TE 11 ms, TM 32 ms, 74 MB, CC-BY-4.0,
+Zenodo `10.5281/zenodo.5654857`), headers de-identified,
 Osprey's Philips MEGA-PRESS data (SDAT, TE 68 ms, MIT), Osprey's Philips PRESS
 data of two subjects (TE 35 ms, MIT, the group example), Osprey's Philips PRESS
 sub-01 (TE 35 ms) with its T1, defaced with the Deface app's

@@ -6,7 +6,7 @@ import { loadMindgrabCpu } from '../src/mindgrab.js';
 import { MINDGRAB_CASES, MINDGRAB_INPUT, REFERENCE_URL, mindgrabOutputs, pinnedFile, sha256 } from '../validation/cases.mjs';
 
 const reference = JSON.parse(await readFile(REFERENCE_URL, 'utf8')).mindgrab;
-const mindgrab = await loadMindgrabCpu(import.meta.resolve('@brainchop/mindgrab/package.json'));
+const mindgrab = await loadMindgrabCpu(import.meta.resolve('@brainchop/core/package.json'));
 const input = new Uint8Array(1024);
 
 // A uint8 NIfTI-1 of n^3 zeros.
@@ -35,7 +35,7 @@ test('refuses GPU backends and options the model does not support before loading
     [{ model: 'mindmap', mask: true }, /mindmap does not support `mask`/],
     [{ model: 'mindgrab', saveConform: true }, /mindgrab does not support `saveConform`/],
     [{ model: 'mindgrab', borderMm: -1 }, /borderMm must be a non-negative number/],
-    [{ model: 'mindgrab', legacyCleanup: true }, /only for MindMap/],
+    [{ model: 'mindgrab', legacyCleanup: true }, /only for label models/],
   ]) {
     await assert.rejects(mindgrab.segment(input, options), error => error.code === 'unsupported-option' && message.test(error.message));
   }

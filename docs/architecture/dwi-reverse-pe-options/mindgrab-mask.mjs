@@ -15,7 +15,7 @@ const encode = (buffer, path) => {
 };
 
 const require = createRequire(new URL('../../../packages/node-drivers/package.json', import.meta.url));
-const modelPackage = pathToFileURL(require.resolve('@brainchop/mindgrab/package.json'));
+const modelPackage = pathToFileURL(require.resolve('@brainchop/core/package.json'));
 const mindgrab = await loadMindgrabCpu(modelPackage);
 const { image, mask } = await mindgrab.segment(await readFile(input), { model: 'mindgrab', mask: true });
 await writeFile(maskOut, encode(mask, maskOut));

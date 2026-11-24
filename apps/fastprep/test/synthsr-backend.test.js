@@ -18,7 +18,7 @@ const stubs = {
   }`,
   "@neurodesk/webapp-components/worker": "export const fetchModel = async () => new ArrayBuffer(1);",
   "@neurodesk/greedy": "export const loadGreedy = async () => ({});",
-  "@brainchop/mindgrab": "export const segment = () => {}; export const segmentTissues = () => {};",
+  "@brainchop/core": "export const segment = () => {}; export const segmentTissues = () => {};",
   "@neurodesk/synthsr": `export async function runSynthsr({ options = {}, createSession }) {
     await createSession(new Uint8Array(1), options.backend, globalThis.synthsrShape);
     return { buffer: new ArrayBuffer(1) };

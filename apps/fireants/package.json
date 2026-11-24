@@ -13,7 +13,7 @@
     "lint": "node ../../scripts/lint.mjs --workspace"
   },
   "dependencies": {
-    "@brainchop/mindgrab": "0.1.20260813",
+    "@brainchop/core": "1.0.0",
     "@fireants/fireants": "0.1.20260913",
     "@neurodesk/fireants": "workspace:*",
     "@neurodesk/runtime-support": "workspace:*",

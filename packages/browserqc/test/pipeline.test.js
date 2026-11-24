@@ -13,7 +13,7 @@ test('the model catalog is the web app\'s, which upstream BrowserQC owns', async
 test('the command line pins the web app\'s MindGrab and niimath builds', async () => {
   const app = await json('../../../apps/browserqc/package.json');
   const cli = await json('../package.json');
-  for (const name of ['@brainchop/mindgrab', '@niivue/niimath']) assert.equal(cli.dependencies[name], app.dependencies[name], name);
+  for (const name of ['@brainchop/core', '@niivue/niimath']) assert.equal(cli.dependencies[name], app.dependencies[name], name);
 });
 
 test('the air template pin is the BrowserQC asset manifest\'s', async () => {

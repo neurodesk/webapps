@@ -80,7 +80,7 @@ fn size_of(s: &Spectra, dim: usize) -> usize {
 
 /// What the interface shows about a dataset and uses to pick a basis set.
 pub fn header(s: &Spectra) -> Value {
-    json!({
+    let mut h = json!({
         "points": s.n(),
         "spectralWidthHz": s.spectralwidth,
         "dwellTime": s.dwelltime,
@@ -93,13 +93,20 @@ pub fn header(s: &Spectra) -> Value {
         "coils": size_of(s, s.dims.coils),
         "averages": size_of(s, s.dims.averages),
         "subspectra": size_of(s, s.dims.sub_specs),
-    })
+    });
+    if let Some(tm) = s.tm {
+        h["tmMs"] = json!(tm);
+    }
+    h
 }
 
 // FID-A preserves NIfTI-MRS seconds; the application and LCModel use milliseconds.
 fn normalize_timing(s: &mut Spectra, format: Format) {
     if format == Format::NiftiMrs {
         s.te *= 1000.0;
+        if let Some(tm) = s.tm.as_mut() {
+            *tm *= 1000.0;
+        }
         s.tr *= 1000.0;
     }
 }
@@ -483,13 +490,26 @@ pub fn spectrum_trace(s: &Spectra, lo: f64, hi: f64) -> Value {
     json!({ "ppm": ppm, "real": re })
 }
 
+fn lcm_seq(seq: &str, edited: bool) -> &'static str {
+    if edited {
+        return "MEGA-PRESS";
+    }
+    match family(seq) {
+        "" => "PRESS",
+        fam => fam,
+    }
+}
+
 /// LCModel inputs for a processed dataset: .RAW text, .H2O text and the
 /// acquisition numbers the control file needs.
 pub fn lcmodel_inputs(p: &Processed) -> Result<Value, String> {
-    let (raw, mut warnings) = lcm::lcm_text_with_warnings(&p.metab, p.metab.te)?;
+    let edited = p.edit_off.is_some();
+    let seq = lcm_seq(&p.metab.seq, edited);
+    let (raw, mut warnings) = lcm::lcm_text_with_seq(&p.metab, p.metab.te, seq)?;
     let h2o = match &p.water {
         Some(w) => {
-            let (t, w2) = lcm::lcm_text_with_warnings(w, w.te)?;
+            let wseq = lcm_seq(&w.seq, false);
+            let (t, w2) = lcm::lcm_text_with_seq(w, w.te, wseq)?;
             warnings.extend(w2);
             if w.n() != p.metab.n() || (w.dwelltime - p.metab.dwelltime).abs() > 1e-12 {
                 warnings.push("The water reference has a different length or dwell time; it is not used.".into());
@@ -507,7 +527,7 @@ pub fn lcmodel_inputs(p: &Processed) -> Result<Value, String> {
         "deltat": p.metab.dwelltime,
         "hzpppm": p.metab.txfrq / 1e6,
         "teMs": p.metab.te,
-        "edited": p.edit_off.is_some(),
+        "edited": edited,
         "editOff": match &p.edit_off {
             Some(off) => json!(lcm::lcm_text(off, off.te)?),
             None => Value::Null,

@@ -21,6 +21,7 @@ test("MindGrab adapter requests the mask and records its injected runtime and ba
     volume,
     assetPath: "https://example.test/syncro/mindgrab/",
     runtime: {
+      package: "@brainchop/mindgrab",
       version: "0.1.20260813",
       segment: async (input, received) => {
         options = received;

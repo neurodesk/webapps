@@ -1,8 +1,8 @@
 {
-  "browser": "chromium 153.0.8010.12",
+  "browser": "chromium 156.0.8078.4",
   "mindgrab": {
-    "package": "@brainchop/mindgrab",
-    "version": "0.1.20260925",
+    "package": "@brainchop/core",
+    "version": "1.0.0",
     "input": {
       "name": "T1_head.nii.gz",
       "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz",
@@ -15,10 +15,10 @@
           "model": "mindgrab",
           "mask": true
         },
-        "seconds": 48.047,
+        "seconds": 43.186,
         "outputs": {
-          "image": "46ff261d39117963997fa2bc5956984d99e1697eaeaa00eec1f74562537ae1bb",
-          "mask": "95324ad19feee867641d219727edec53a8d53f041a9b1365654dff7e287bca74"
+          "image": "d330ca29adcc39d9495b047014cf0f11617c93667d3f66ac498b73cf3d126e04",
+          "mask": "5d79e2bc61a39d7f2a6ba32554c135a9a6396c50941c3a3f65dd170fbea7717a"
         }
       },
       "mindmap-tissues": {
@@ -26,12 +26,12 @@
         "options": {
           "model": "mindmap"
         },
-        "seconds": 68.413,
+        "seconds": 75.168,
         "outputs": {
-          "gm": "1c860e3d798381b814d082515bbb9c6c7b786b0cee1d7f2793868987583a8f6a",
-          "wm": "a5be6062b19e7553c2f0830fa9bc4f72071dcff465866c215a9c5d2d8a5ce50e",
-          "csf": "a919c7d8d73be8b3922f73b2a7c40808130db5e5e097e57bd9e99683a70258bc",
-          "brain": "70f2d79b52a67032aaaa308a821e5c95b29d3be87e1c79598e2fe2abb4ced467"
+          "gm": "769a521e9688eb48c8468fb094211ebe3be8091dc0b489268682fc140908cf2e",
+          "wm": "3ca50a757e05661ad1b45b6b912ec4f7b193b8e5f1422e7240e8a0941d5941b1",
+          "csf": "c1a765638273ddc010ce78a34770fc1de871f2a9b5ca978cf0e0211472fcb49e",
+          "brain": "66243ce4ff8559cd68ae17ee6dfe0f76885a9a0e24cde2a31f23590da9bd7d21"
         }
       },
       "mindsnap-labels": {
@@ -39,9 +39,9 @@
         "options": {
           "model": "mindsnap"
         },
-        "seconds": 54.522,
+        "seconds": 66.701,
         "outputs": {
-          "image": "01f318e2df7429edf80f021660b7b19ae163c38819fd7f0fa0d15f4b897f2209"
+          "image": "e771e2a984dd51fb8fc2224ac00ed3e69f785d0c4b8cf10940a5182b72661085"
         }
       },
       "16chan18cls-labels": {
@@ -49,9 +49,9 @@
         "options": {
           "model": "16chan18cls"
         },
-        "seconds": 25.926,
+        "seconds": 34.604,
         "outputs": {
-          "image": "28f1032d39a7e2b9493e68f2fdfe3c4325f1471f82d333b0b6f86cf31c10366d"
+          "image": "83ab1fc2c072deb2b83dbd5f98a54183994103d31721e302f6a0e19d7bb9ba9d"
         }
       }
     }

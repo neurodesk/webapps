@@ -426,6 +426,7 @@ pub fn load(data: &[u8], subspecs: usize) -> Res<GeResult> {
             dwelltime,
             txfrq,
             te: g.te,
+            tm: None,
             tr: g.tr,
             bo,
             seq: String::new(),

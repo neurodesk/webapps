@@ -24,7 +24,7 @@ async function defaultMask(series, buffer, bvals, bvecs, hmc, signal) {
   if (!volumes.length) throw new Error("The gradient table has no b0 volume for the default brain mask.");
   const mean = meanVolumes(series.data, voxels, volumes);
   signal?.throwIfAborted();
-  const runtime = await loadMindgrabCpu(import.meta.resolve("@brainchop/mindgrab/package.json"));
+  const runtime = await loadMindgrabCpu(import.meta.resolve("@brainchop/core/package.json"));
   const result = await runtime.segment(new Uint8Array(createNiftiFromData(mean, buffer, { dims: series.dims })), {
     model: "mindgrab", mask: true, gzipOutput: false,
   });
@@ -74,7 +74,7 @@ export async function correctFiles({ dwi, bval, bvec, output, maskFile, sidecarF
 
 /** Initializes the bundled CPU mask runtime; its models are compiled into the pinned package. */
 export async function prepareModels() {
-  await loadMindgrabCpu(import.meta.resolve("@brainchop/mindgrab/package.json"));
+  await loadMindgrabCpu(import.meta.resolve("@brainchop/core/package.json"));
 }
 
 /** Executes the pinned registration kernel's resampler on an identity phantom. */

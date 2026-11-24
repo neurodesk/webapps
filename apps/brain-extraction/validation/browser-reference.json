@@ -1,6 +1,6 @@
 {
   "example": "t1-head",
-  "recorded": "2026-10-07, e2e/app.spec.js on the production build in Chromium (Playwright 1.63), linux-x64 with 8 cores: BET on QSMbly's threaded WebAssembly bundle, SynthStrip on ONNX Runtime Web 1.29.0 WebAssembly with 4 threads. MindGrab added 2026-10-08 on the same setup: @brainchop/mindgrab 0.1.20260925 on its CPU backend. SynthStrip without CSF added 2026-10-19 on the production build in Chromium (Playwright 1.64), linux-x64 with 8 cores: the same runtime with the synthstrip-nocsf-browser.onnx graph. BET updated 2026-11-12 from the production app in Chromium with qsm-core 0.41.0 (8a655f4), the shared affine-aware compact WASM. Whole-head SynthSeg Dice 0.9317 passes the unchanged 0.93 gate.",
+  "recorded": "2026-10-07, e2e/app.spec.js on the production build in Chromium (Playwright 1.63), linux-x64 with 8 cores: BET on QSMbly's threaded WebAssembly bundle, SynthStrip on ONNX Runtime Web 1.29.0 WebAssembly with 4 threads. MindGrab added 2026-10-08 on the same setup: @brainchop/mindgrab 0.1.20260925 on its CPU backend. SynthStrip without CSF added 2026-10-19 on the production build in Chromium (Playwright 1.64), linux-x64 with 8 cores: the same runtime with the synthstrip-nocsf-browser.onnx graph. BET updated 2026-11-12 from the production app in Chromium with qsm-core 0.41.0 (8a655f4), the shared affine-aware compact WASM. Whole-head SynthSeg Dice 0.9317 passes the unchanged 0.93 gate. MindGrab updated 2026-11-23 from the production app in Chromium with @brainchop/core 1.0.0 on its CPU backend (Whole-head SynthSeg Dice 0.9799).",
   "methods": {
     "bet": {
       "tolerance": {
@@ -47,18 +47,18 @@
     },
     "mindgrab": {
       "tolerance": {
-        "basis": "The command line runs @brainchop/mindgrab 0.1.20260925's CPU modules, the WebAssembly this browser run used, through @neurodesk/node-drivers/mindgrab, whose outputs match Chromium's byte for byte on Linux, Windows and macOS (packages/node-drivers/validation/reference.json). Any difference is a defect.",
+        "basis": "The command line runs @brainchop/core 1.0.0's CPU modules, the WebAssembly this browser run used, through @neurodesk/node-drivers/mindgrab, whose outputs match Chromium's byte for byte on Linux, Windows and macOS (packages/node-drivers/validation/reference.json). Any difference is a defect.",
         "relative": 0,
         "minimumDice": 1
       },
-      "version": "0.1.20260925",
-      "maskVoxels": 1602690,
-      "maskSha256": "96681e7b502a938c7051d1170d37699f2af7a93f6b63fb20ea506a58dec7423e",
-      "brainSha256": "c16d2fbbd53bc28de84f5d4dfd69b9080949a38b6a52bdd773887b891f82f002",
+      "version": "1.0.0",
+      "maskVoxels": 1596893,
+      "maskSha256": "10fd68fefc10575d89a9d51c86fe88276fe63a0705f94001a5ad329bc1c59f1c",
+      "brainSha256": "7e53f20a68cc04132c4e701055f9b8371abc7d01ab23c054fcbb74ad6c72293f",
       "brainHeaderSha256": "f6d0d240380458d5328c87625178204d46a9d5ec09f9dee8d217d2524a9dd7cf",
       "maskHeaderSha256": "a2659a350b6b39b3bd1886daf7e27bfaafe2a20fe6679056529c40a562856abe",
       "background": 0,
-      "brainMean": 140.145,
+      "brainMean": 140.433,
       "brainMax": 362
     }
   }

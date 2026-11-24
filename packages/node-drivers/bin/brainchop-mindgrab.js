@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// brainchop-mindgrab for machines without the native brainchopC build: the same
-// command line, run on @brainchop/mindgrab's CPU WebAssembly.
+// brainchop-mindgrab for machines without the native brainchop-core build: the same
+// command line, run on @brainchop/core's CPU WebAssembly.
 
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -12,11 +12,14 @@ import { loadMindgrabCpu } from '../src/mindgrab.js';
 function mindgrabPackageUrl() {
   const dir = process.env.BRAINCHOP_MINDGRAB_PACKAGE;
   if (dir) return pathToFileURL(resolve(dir, 'package.json'));
-  try {
-    return import.meta.resolve('@brainchop/mindgrab/package.json');
-  } catch {
-    throw new Error('cannot find @brainchop/mindgrab; install it next to this command (npm install @brainchop/mindgrab) or set BRAINCHOP_MINDGRAB_PACKAGE to its directory');
+  for (const specifier of ['@brainchop/core/package.json', '@brainchop/mindgrab/package.json']) {
+    try {
+      return import.meta.resolve(specifier);
+    } catch {
+      // Try fallback package name.
+    }
   }
+  throw new Error('cannot find @brainchop/core; install it next to this command (npm install @brainchop/core) or set BRAINCHOP_MINDGRAB_PACKAGE to its directory');
 }
 
 async function save(path, nifti) {
@@ -28,14 +31,20 @@ try {
   const args = parseMindgrabArgs(process.argv.slice(2));
   const mindgrab = await loadMindgrabCpu(mindgrabPackageUrl());
   if (args.help) {
-    console.log(mindgrabHelp(mindgrab.version));
+    console.log(mindgrabHelp(mindgrab.version, { packageName: mindgrab.packageName, supportsNoTurbo: mindgrab.supportsNoTurbo }));
+  } else if (args.version) {
+    console.log(`brainchop-mindgrab ${mindgrab.version}`);
   } else {
+    if (args.noTurbo && !mindgrab.supportsNoTurbo) {
+      throw new UsageError(`--no-turbo is not supported by ${mindgrab.packageName} ${mindgrab.version}`);
+    }
     const result = await mindgrab.segment(await readFile(args.input), {
       model: 'mindgrab',
       mask: args.mask !== undefined,
       borderMm: args.borderMm,
       ct: args.ct,
       comply: args.comply,
+      noTurbo: args.noTurbo,
       gzipOutput: false,
     });
     await save(args.output, new Uint8Array(result.image));

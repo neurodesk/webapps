@@ -14,12 +14,13 @@ import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
+import { mindgrabFromAssetPath } from '../../../scripts/lib/mindgrab-asset-path-plugin.mjs';
 import { CASES, REFERENCE_URL, caseInputs, compareOutputs, measureOutputs } from './cases.mjs';
 
 const check = process.argv.includes('--check');
 const require = createRequire(import.meta.url);
-const mindgrabVersion = require('@brainchop/mindgrab/package.json').version;
-const mindgrabDist = join(require.resolve('@brainchop/mindgrab/package.json'), '..', 'dist');
+const mindgrabVersion = require('@brainchop/core/package.json').version;
+const mindgrabDist = join(require.resolve('@brainchop/core/package.json'), '..', 'dist');
 const n4Kernel = join(fileURLToPath(import.meta.resolve('@neurodesk/n4/wasm')), '..');
 
 const work = await mkdtemp(join(tmpdir(), 'sdc-browser-reference-'));
@@ -29,8 +30,8 @@ await build({
   logLevel: 'warn',
   build: { outDir: site, emptyOutDir: true, target: 'esnext', assetsInlineLimit: 0 },
   // As in the apps: MindGrab loads its modules from assetPath, not from a bundled copy.
-  worker: { format: 'es', rollupOptions: { external: [/^\.\/brainchop-[\w-]+\.js$/] } },
-  optimizeDeps: { exclude: ['@brainchop/mindgrab'] },
+  worker: { format: 'es', plugins: () => [mindgrabFromAssetPath()] },
+  optimizeDeps: { exclude: ['@brainchop/core'] },
 });
 
 const inputs = new Map(Object.entries(caseInputs()));

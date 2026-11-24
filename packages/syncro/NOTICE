@@ -1,7 +1,7 @@
 SYNcro pipeline: Neurodesk, BSD-2-Clause.
 https://github.com/neurodesk/neurocontainers/tree/main/recipes/syncro
 SynthSR and SynthStrip: Apache-2.0, see their packages and source citations.
-MindGrab / Brainchop: MIT, https://github.com/neuroneural/brainchopC
+MindGrab / Brainchop: MIT, https://github.com/neuroneural/brainchop-core
 ANTs 2.6.2 / ITK registration: Apache-2.0, see packages/registration/NOTICE.
 The bundled MNI152_T1_1mm_brain template is distributed by FSL, courtesy of MNI.
 Template terms are separate from the code license: see data/FSL-LICENSE.txt.

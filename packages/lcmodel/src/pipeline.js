@@ -97,6 +97,7 @@ export function acquisitionMessage(name, header) {
     header.fieldT && `${header.fieldT.toFixed(2)} T`,
     header.hzpppm && `${header.hzpppm} MHz`,
     header.teMs && `TE ${Number(header.teMs.toFixed(2))} ms`,
+    header.tmMs && `TM ${Number(header.tmMs.toFixed(2))} ms`,
     header.trMs && `TR ${Number(header.trMs.toFixed(2))} ms`,
     header.deltat && `dwell time ${Number((header.deltat * 1000).toPrecision(6))} ms`,
   ].filter(Boolean).join(", ");
@@ -197,7 +198,7 @@ export function headerFor(input, k, acquisition) {
   }
   const ds = input.datasets[k];
   const sequence = isEdited(input, k) ? "MEGA-PRESS" : ds.header.family || ds.header.sequence;
-  return { hzpppm: ds.header.hzpppm, teMs: ds.header.teMs, sequence };
+  return { hzpppm: ds.header.hzpppm, teMs: ds.header.teMs, tmMs: ds.header.tmMs ?? null, sequence };
 }
 
 // ---------------------------------------------------------------------------
