@@ -1,0 +1,87 @@
+[
+  {
+    "label": 1,
+    "name": "visualCentral",
+    "region": "visualCentral"
+  },
+  {
+    "label": 2,
+    "name": "visualPeripheral",
+    "region": "visualPeripheral"
+  },
+  {
+    "label": 3,
+    "name": "somatomotorA",
+    "region": "somatomotorA"
+  },
+  {
+    "label": 4,
+    "name": "somatomotorBAuditory",
+    "region": "somatomotorBAuditory"
+  },
+  {
+    "label": 5,
+    "name": "dorsalAttentionA",
+    "region": "dorsalAttentionA"
+  },
+  {
+    "label": 6,
+    "name": "dorsalAttentionB",
+    "region": "dorsalAttentionB"
+  },
+  {
+    "label": 7,
+    "name": "salienceVentralAttentionA",
+    "region": "salienceVentralAttentionA"
+  },
+  {
+    "label": 8,
+    "name": "salienceVentralAttentionB",
+    "region": "salienceVentralAttentionB"
+  },
+  {
+    "label": 9,
+    "name": "limbicOrbitofrontal",
+    "region": "limbicOrbitofrontal"
+  },
+  {
+    "label": 10,
+    "name": "limbicTemporopolar",
+    "region": "limbicTemporopolar"
+  },
+  {
+    "label": 11,
+    "name": "frontoparietalControlA",
+    "region": "frontoparietalControlA"
+  },
+  {
+    "label": 12,
+    "name": "frontoparietalControlB",
+    "region": "frontoparietalControlB"
+  },
+  {
+    "label": 13,
+    "name": "frontoparietalControlC",
+    "region": "frontoparietalControlC"
+  },
+  {
+    "label": 14,
+    "name": "defaultA",
+    "region": "defaultA"
+  },
+  {
+    "label": 15,
+    "name": "defaultB",
+    "region": "defaultB"
+  },
+  {
+    "label": 16,
+    "name": "defaultC",
+    "region": "defaultC"
+  },
+  {
+    "label": 17,
+    "name": "temporoparietal",
+    "region": "temporoparietal"
+  }
+]

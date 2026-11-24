@@ -1,0 +1,44 @@
+[
+  {
+    "id": "beamster-a-038",
+    "label": "Brain metastases, native T1c (BEAMSTER)",
+    "description": "Defaced skull-intact 3D post-contrast T1 MRI (512 × 512 × 250, 1.37 × 1.37 × 1.25 mm) with three left frontoparietal lung metastases from the open BEAMSTER cohort (CC BY 4.0).",
+    "expectedResult": "Native-space brain and tumour-core masks (3 lesions, ~12.2 mL total), per-lesion morphometry with clickable centroids, MNI152 cortical lobe and Schaefer 7/17 overlap, and 64-tract BCB white-matter proximity.",
+    "automation": {
+      "parameters": {
+        "tumourType": "metastasis",
+        "skullStripped": false
+      }
+    },
+    "files": [
+      {
+        "role": "t1c",
+        "name": "BEAMSTER_A_038_T1c.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1ab3106044c0b60d5f4636a1603b59f627239530/tumour-report/examples/BEAMSTER_A_038/BEAMSTER_A_038_T1c.nii.gz",
+        "sha256": "050e300c1a2a49f8344808e3c4043b242ed6d87c1c223e2d24491394edb56614",
+        "bytes": 4500819
+      }
+    ]
+  },
+  {
+    "id": "upenn-gbm-00002",
+    "label": "Glioblastoma, skull-stripped T1c (UPENN-GBM)",
+    "description": "Preoperative skull-stripped post-contrast T1 MRI (240 × 240 × 155, 1 mm) of an adult glioblastoma from the UPENN-GBM cohort (CC BY 4.0).",
+    "expectedResult": "Tumour-core mask, native morphometry, MNI152 anatomical report and Kommers glioblastoma resectability index with skull-stripped mode enabled.",
+    "automation": {
+      "parameters": {
+        "tumourType": "glioblastoma",
+        "skullStripped": true
+      }
+    },
+    "files": [
+      {
+        "role": "t1c",
+        "name": "UPENN-GBM-00002_11_T1GD.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cddf84f3c1decfa10ed3b750648fc062911c4223/gliomoda/examples/UPENN-GBM-00002_11/UPENN-GBM-00002_11_T1GD.nii.gz",
+        "sha256": "462062c55658b10cd28d50a8e09c76704ff6c3b33d69c234db4953c1ec6f87a0",
+        "bytes": 2151118
+      }
+    ]
+  }
+]
