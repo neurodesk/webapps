@@ -188,5 +188,5 @@ test('the command line refuses bad arguments before reading the input', async (t
 test('self-check runs the vendored niimath WebAssembly and loads MindGrab', async () => {
   const report = await checkInstallation();
   assert.equal(report.niimathSmokeTestVoxels, 512);
-  assert.equal(report.mindgrab, '0.1.20260925');
+  assert.equal(report.mindgrab, '1.0.0');
 });

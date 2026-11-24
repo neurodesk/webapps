@@ -7,7 +7,7 @@ Third-party components
 niimath, BSD-2-Clause, https://github.com/rordenlab/niimath
   The BSD-only WebAssembly build vendored in @neurodesk/runtime-support, with its
   affine -deface engine.
-@brainchop/mindgrab, MIT, https://github.com/neuroneural/brainchopC
+@brainchop/core, MIT, https://github.com/neuroneural/brainchop-core
   MindGrab brain extraction, weights compiled into its WebAssembly.
 MNI152 average template avg152T1 and its face mask, downloaded once from the
   Hugging Face revision pinned in model.manifest.json and checked by SHA-256.

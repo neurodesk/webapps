@@ -1,5 +1,5 @@
-import { segment } from '@brainchop/mindgrab';
-import mindgrabPackage from '@brainchop/mindgrab/package.json' with { type: 'json' };
+import { segment } from '@brainchop/core';
+import mindgrabPackage from '@brainchop/core/package.json' with { type: 'json' };
 import { readVolume, writeVolume } from '@neurodesk/synthsr';
 
 const asBuffer = bytes => bytes instanceof ArrayBuffer
@@ -28,7 +28,7 @@ export async function runMindgrab({ volume, assetPath, backend = 'auto', runtime
     mask,
     provenance: {
       method: 'MindGrab',
-      package: '@brainchop/mindgrab',
+      package: '@brainchop/core',
       version: runtime.version,
       model: 'mindgrab',
       backend: result.backend,

@@ -96,7 +96,7 @@ test('self-check reports the pinned runtimes and models', () => {
   assert.equal(result.status, 0, result.stderr);
   const report = JSON.parse(result.stdout);
   assert.equal(report.executable, process.execPath);
-  assert.equal(report.mindgrab, '0.1.20260925');
+  assert.equal(report.mindgrab, '1.0.0');
   assert.equal(report.niimath, '1.4.20260928');
   assert.deepEqual(report.models, ['16chan18cls', 'mindmap', 'mindsnap', 'mindmap-pve']);
 });

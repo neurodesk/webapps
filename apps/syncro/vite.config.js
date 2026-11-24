@@ -10,4 +10,4 @@ function assets(){return {name:'syncro-assets',async generateBundle(){
  for(const name of ['FSL-LICENSE.txt'])this.emitFile({type:'asset',fileName:'data/'+name,source:await readFile(new URL('../../packages/syncro/data/'+name,import.meta.url))});
 }};}
 // The workers always pass assetPath (mindgrab/), so MindGrab's bundled fallback modules and their WASM are left out.
-export default neurodeskViteConfig({appId:'syncro',plugins:[assets(),isolationFallback()],worker:{plugins:()=>[mindgrabFromAssetPath()]},build:{target:'esnext'},optimizeDeps:{exclude:['onnxruntime-web','@neurodesk/runtime-support/niimath']},server:{host:'127.0.0.1',port:5175},preview:{host:'127.0.0.1',port:5175}});
+export default neurodeskViteConfig({appId:'syncro',plugins:[assets(),isolationFallback()],worker:{plugins:()=>[mindgrabFromAssetPath()]},build:{target:'esnext'},optimizeDeps:{exclude:['onnxruntime-web','@neurodesk/runtime-support/niimath','@brainchop/core']},server:{host:'127.0.0.1',port:5175},preview:{host:'127.0.0.1',port:5175}});

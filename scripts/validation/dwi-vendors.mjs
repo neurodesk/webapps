@@ -86,7 +86,7 @@ async function prepareMask(entry) {
   input.meanB0 = null;
   globalThis.gc?.();
   const require = createRequire(join(root, 'packages/noddi/package.json'));
-  const packageUrl = pathToFileURL(require.resolve('@brainchop/mindgrab/package.json'));
+  const packageUrl = pathToFileURL(require.resolve('@brainchop/core/package.json'));
   const driver = await loadMindgrabCpu(packageUrl);
   console.log(`${entry.id}: generating the default MindGrab CPU mask from the full-volume mean b0`);
   const result = await driver.segment(meanB0, MASK_OPTIONS);

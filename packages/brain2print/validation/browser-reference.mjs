@@ -16,6 +16,7 @@ import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
+import { mindgrabFromAssetPath } from '../../../scripts/lib/mindgrab-asset-path-plugin.mjs';
 import { CASES, REFERENCE_URL, caseInput } from './cases.mjs';
 import { compareOutputs, measureOutputs } from './measure.mjs';
 
@@ -25,9 +26,9 @@ const only = onlyIndex >= 0 ? new Set(process.argv[onlyIndex + 1].split(',')) : 
 const selected = CASES.filter(({ id }) => !only || only.has(id));
 
 const require = createRequire(import.meta.url);
-const mindgrabVersion = require('@brainchop/mindgrab/package.json').version;
+const mindgrabVersion = require('@brainchop/core/package.json').version;
 const niimathVersion = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).dependencies['@niivue/niimath'];
-const mindgrabDist = join(require.resolve('@brainchop/mindgrab/package.json'), '..', 'dist');
+const mindgrabDist = join(require.resolve('@brainchop/core/package.json'), '..', 'dist');
 
 const work = await mkdtemp(join(tmpdir(), 'brain2print-browser-reference-'));
 const site = join(work, 'site');
@@ -36,7 +37,7 @@ await build({
   logLevel: 'warn',
   build: { outDir: site, emptyOutDir: true, target: 'esnext', assetsInlineLimit: 0 },
   // As in the app: MindGrab loads its modules from assetPath, not from a bundled copy.
-  worker: { format: 'es', rollupOptions: { external: [/^\.\/brainchop-[\w-]+\.js$/] } },
+  worker: { format: 'es', plugins: () => [mindgrabFromAssetPath()] },
   optimizeDeps: { exclude: ['@niivue/niimath'] },
 });
 

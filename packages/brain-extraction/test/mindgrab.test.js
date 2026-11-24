@@ -47,6 +47,6 @@ test("MindGrab adapter requests the mask and records its injected runtime and ba
   });
   assert.deepEqual([...result.mask.data], [0, 1, 1, 1, 1, 1, 1, 0]);
   assert.equal(result.provenance.backend, "webgl2");
-  assert.equal(result.provenance.package, "@brainchop/mindgrab");
+  assert.equal(result.provenance.package, "@brainchop/core");
   assert.equal(result.provenance.version, "0.1.20260813");
 });

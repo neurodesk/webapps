@@ -18,6 +18,6 @@ export default neurodeskViteConfig({
   // Vite's dev dep-prebundler cannot resolve @niivue/dcm2niix's WASM worker
   // after it moves under .vite/deps. Keep that package as source in dev. The
   optimizeDeps: {
-    exclude: ['@niivue/dcm2niix', '@niivue/niimath', '@brainchop/mindgrab'],
+    exclude: ['@niivue/dcm2niix', '@niivue/niimath', '@brainchop/core'],
   },
 })

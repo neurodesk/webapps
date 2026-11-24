@@ -8,7 +8,7 @@ import { serveSite } from "../../../test-utils/serve-site.mjs";
 import { isUrlWithinServiceWorkerScope } from "../../../scripts/lib/runtime-support.mjs";
 
 const require = createRequire(import.meta.url);
-const packageDir = dirname(require.resolve("@brainchop/mindgrab/package.json"));
+const packageDir = dirname(require.resolve("@brainchop/core/package.json"));
 const { version } = JSON.parse(await readFile(join(packageDir, "package.json"), "utf8"));
 const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
 
@@ -17,7 +17,7 @@ test("MindMap loads its unchanged CPU runtime inside the app scope without host 
   const assets = await readdir(new URL("../dist/assets/", import.meta.url));
   expect(assets.filter(name => /^brainchop-.*\.wasm$/.test(name))).toEqual([]);
   const runtimePath = `brainchop/${version}/`;
-  for (const name of ["worker.js", ...["", "-gl", "-gpu"].flatMap(backend => ["js", "wasm"].map(ext => `brainchop-mindmap${backend}.${ext}`))]) {
+  for (const name of ["worker.js", "models/mindmap.bin", ...["", "-gl"].flatMap(backend => ["js", "wasm"].map(ext => `brainchop-mindmap${backend}.${ext}`))]) {
     const staged = await readFile(new URL(`../dist/${runtimePath}${name}`, import.meta.url));
     expect(sha256(staged)).toBe(sha256(await readFile(join(packageDir, "dist", name))));
   }

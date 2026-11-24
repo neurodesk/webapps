@@ -31,7 +31,7 @@ Emscripten `niimath.js` build works, including DWI2TRX's pinned `@niivue/niimath
 
 ### MindGrab on the CPU
 
-`loadMindgrabCpu` drives `@brainchop/mindgrab`'s threaded CPU modules
+`loadMindgrabCpu` drives `@brainchop/core`'s threaded CPU modules
 (Emscripten pthreads on `worker_threads`, weights compiled into the `.wasm`).
 It returns `segment` and `segmentTissues` with the browser wrapper's options and
 result shape. A `signal` option (an `AbortSignal`) terminates the run's worker thread
@@ -40,11 +40,11 @@ and rejects with the signal's reason. To use `runMindgrab` from `@neurodesk/brai
 Given a decoded input `volume`:
 
 ```js
-import mindgrabPackage from '@brainchop/mindgrab/package.json' with { type: 'json' };
+import mindgrabPackage from '@brainchop/core/package.json' with { type: 'json' };
 import { runMindgrab } from '@neurodesk/brain-extraction/mindgrab';
 import { loadMindgrabCpu } from '@neurodesk/node-drivers/mindgrab';
 
-const { segment } = await loadMindgrabCpu(import.meta.resolve('@brainchop/mindgrab/package.json'));
+const { segment } = await loadMindgrabCpu(import.meta.resolve('@brainchop/core/package.json'));
 const { brain, mask, provenance } = await runMindgrab({
   volume,
   backend: 'cpu',
@@ -82,23 +82,24 @@ brainchop-mindgrab ref.nii.gz -o stripped.nii.gz --mask mask.nii.gz --border 2
 It reads `.nii` and `.nii.gz`, gzips each output whose name ends in `.gz`, and
 writes the mask as uint8 on the input grid. The output defaults to
 `output.nii.gz`; a bare `--mask` writes `mask.nii.gz`. It accepts `-o`/`--output`,
-`--mask [PATH]`, `--border MM`, `--ct`, `--comply` and `-backend auto|cpu`.
+`--mask [PATH]`, `--border MM`, `--ct`, `--comply`, `--no-turbo`, `-v`/`--version`
+and `-backend auto|cpu`.
 `--crop`, `--export-classes` and `-cpu N` exit with status 2, as usage errors
 do; a failed run exits with status 1. `-h` prints the MindGrab package version.
 The tests fail when a MindGrab release adds an option the command line neither
 accepts nor refuses.
 
-The command line imports `@brainchop/mindgrab` from its own directory through
+The command line imports `@brainchop/core` from its own directory through
 Node's resolution, or from the directory `BRAINCHOP_MINDGRAB_PACKAGE` names.
 To install it without the monorepo, copy `bin/brainchop-mindgrab.js` and
 `src/mindgrab.js`, `src/mindgrab-worker.js` and `src/mindgrab-cli.js` into one
-directory, keeping `bin/` and `src/`, and install the MindGrab version this
-package pins beside them with Node 22 or later:
+directory, keeping `bin/` and `src/`, and install the `@brainchop/core` version
+this package pins beside them with Node 22 or later:
 
 ```sh
 cd /opt/brainchop-mindgrab
 echo '{ "private": true, "type": "module" }' > package.json
-npm install --no-audit --no-fund @brainchop/mindgrab@0.1.20260925
+npm install --no-audit --no-fund @brainchop/core@1.0.0
 ln -s /opt/brainchop-mindgrab/bin/brainchop-mindgrab.js /usr/local/bin/brainchop-mindgrab
 ```
 

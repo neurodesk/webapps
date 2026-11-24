@@ -190,7 +190,7 @@ test('self-check fits the phantom tensor with the pinned dtifit build', () => {
   const report = JSON.parse(run.stdout);
   assert.equal(report.niimath, NIIMATH_VERSION);
   assert.equal(report.niimath, '1.4.20261114');
-  assert.equal(report.mindgrab, '0.1.20260925');
+  assert.equal(report.mindgrab, '1.0.0');
   assert.equal(report.phantomFa, 0.603);
 });
 

@@ -1,21 +1,18 @@
 #!/usr/bin/env node
-// Stage @brainchop/mindgrab's WebGPU wasm into public/ so Vite serves it under
-// `assetPath`. It cannot stay in node_modules: these three are fetched by URLs
+// Stage @brainchop/core's WebGPU weights into public/ so Vite serves them under
+// `assetPath`. They cannot stay in node_modules: these are fetched by URLs
 // computed at run time, so Vite never emits them. WebGPU only — see AGENTS.md.
 
-import { copyFileSync, mkdirSync } from 'node:fs'
+import { copyFileSync, mkdirSync, rmSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const from = join(here, '..', 'node_modules', '@brainchop', 'mindgrab', 'dist')
+const require = createRequire(import.meta.url)
+const from = join(dirname(require.resolve('@brainchop/core/package.json')), 'dist')
 const to = join(here, '..', 'public', 'brainchop')
 
-const files = [
-  'worker.js',
-  'brainchop-mindgrab-gpu.js',
-  'brainchop-mindgrab-gpu.wasm',
-]
-
-mkdirSync(to, { recursive: true })
-for (const f of files) copyFileSync(join(from, f), join(to, f))
+rmSync(to, { recursive: true, force: true })
+mkdirSync(join(to, 'models'), { recursive: true })
+for (const f of ['worker.js', 'models/mindgrab.bin']) copyFileSync(join(from, f), join(to, f))

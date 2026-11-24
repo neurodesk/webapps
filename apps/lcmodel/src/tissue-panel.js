@@ -5,8 +5,9 @@
 // object returned by createTissuePanel; the science lives in voxel.js and
 // tissue.js.
 import NiiVue, { SLICE_TYPE } from "@niivue/niivue";
-import { version as mindgrabVersion } from "@brainchop/mindgrab/package.json";
+import { version as mindgrabVersion } from "@brainchop/core/package.json";
 import { readImageFiles } from "@neurodesk/runtime-support/dcm2niix-client";
+import { isSoftwareAdapter, isSoftwareRenderer } from "@neurodesk/runtime-support/mindgrab/backend";
 import { decodeNiftiBuffer, parseNiftiHeader, readNiftiImageData, extractNiftiHeader, createFloat32Nifti } from "@neurodesk/webapp-components/file-io";
 import { bindFileDrop } from "@neurodesk/webapp-components/ui";
 import { voxelWeights, tissueFractions } from "@neurodesk/lcmodel/voxel";
@@ -16,10 +17,11 @@ const $ = (id) => document.getElementById(id);
 const FIELDS = { gm: "fGm", wm: "fWm", csf: "fCsf" };
 const MAPS = { gm: { label: "Grey matter", colormap: "green" }, wm: { label: "White matter", colormap: "blue" }, csf: { label: "CSF", colormap: "violet" } };
 const fixed = (x, digits = 2) => Number(x).toFixed(digits);
-// MindMap's WebGPU and WebGL2 modules have a fixed 768 MiB heap: a T1 larger
-// than its own 256^3 grid (0.8 mm isotropic, GE's 512 x 512 matrices) runs out
-// of memory there, so those go to the growable threaded CPU module.
-const GPU_MAX_VOXELS = 256 ** 3;
+// MindMap's WebGL2 WASM module has a fixed 768 MiB heap: a T1 larger than its
+// own 256^3 grid (0.8 mm isotropic, GE's 512 x 512 matrices) runs out of memory
+// on WebGL2, so when WebGPU V4 is unavailable those go to the growable CPU module.
+const WEBGL2_MAX_VOXELS = 256 ** 3;
+const WEBGPU_MIN_BUFFER_BYTES = 128 * 1024 * 1024;
 
 function t1HeaderFacts(header) {
   const types = { 2: "uint8", 4: "int16", 8: "int32", 16: "float32", 64: "float64", 256: "int8", 512: "uint16", 768: "uint32" };
@@ -236,30 +238,31 @@ export function createTissuePanel(hooks) {
   }
 
   /**
-   * mindgrab's `auto` takes WebGL2 whenever WebGPU is missing, even on a
-   * software renderer (SwiftShader, llvmpipe), where MindMap takes many
-   * minutes; its threaded CPU module is far faster there. Prefer WebGPU,
-   * then hardware WebGL2, then the CPU (the page is cross-origin isolated).
-   * On an isolated page, a T1 too large for the GPU heap takes the CPU.
+   * Prefer hardware WebGPU (pure-JS V4 supports f16 and f32 fallback down to
+   * 128 MiB storage buffers), then hardware WebGL2 (within its 256^3 WASM heap),
+   * then the threaded CPU module (cross-origin isolated).
    */
   async function chooseBackend() {
-    const adapter = await navigator.gpu?.requestAdapter().catch(() => null);
+    const adapter = await navigator.gpu?.requestAdapter({ powerPreference: "high-performance" }).catch(() => null);
     const info = adapter?.info;
     const gpu = info ? [info.vendor, info.architecture, info.device, info.description].filter(Boolean).join(" ") || "unnamed adapter" : "no WebGPU adapter";
-    hooks.log.log(`Browser: ${navigator.userAgent}; WebGPU: ${gpu}${info?.isFallbackAdapter ? " (software fallback)" : ""}${adapter && !adapter.features.has("shader-f16") ? ", no shader-f16" : ""}`);
+    const softwareGpu = isSoftwareAdapter(info) || Boolean(adapter?.isFallbackAdapter);
+    const limits = adapter?.limits;
+    const bufferOk = !limits || ((limits.maxBufferSize ?? Infinity) >= WEBGPU_MIN_BUFFER_BYTES && (limits.maxStorageBufferBindingSize ?? Infinity) >= WEBGPU_MIN_BUFFER_BYTES);
+    hooks.log.log(`Browser: ${navigator.userAgent}; WebGPU: ${gpu}${softwareGpu ? " (software fallback)" : ""}${adapter && !adapter.features?.has("shader-f16") ? ", f32 fallback" : ""}`);
+    if (adapter && !softwareGpu && bufferOk) return "webgpu";
     const voxels = t1.dims[0] * t1.dims[1] * t1.dims[2];
-    if (voxels > GPU_MAX_VOXELS && globalThis.crossOriginIsolated) {
-      hooks.log.log(`The T1 has ${voxels.toLocaleString("en")} voxels, more than the GPU modules' 768 MiB heap holds (256³): segmenting on the CPU`);
+    if (voxels > WEBGL2_MAX_VOXELS && globalThis.crossOriginIsolated) {
+      hooks.log.log(`The T1 has ${voxels.toLocaleString("en")} voxels, more than the WebGL2 module's 768 MiB heap holds (256³): segmenting on the CPU`);
       return "cpu";
     }
-    if (adapter && !adapter.info?.isFallbackAdapter && adapter.features.has("shader-f16")) return "webgpu";
     const gl = new OffscreenCanvas(1, 1).getContext("webgl2");
     const debug = gl?.getExtension("WEBGL_debug_renderer_info");
     const renderer = debug ? String(gl.getParameter(debug.UNMASKED_RENDERER_WEBGL)) : "";
     gl?.getExtension("WEBGL_lose_context")?.loseContext();
-    const software = !gl || /swiftshader|llvmpipe|software|softpipe/i.test(renderer);
+    const software = !gl || isSoftwareRenderer({ renderer }) || !renderer;
     if (software && globalThis.crossOriginIsolated) return "cpu";
-    return gl ? "webgl2" : "cpu";
+    return gl && !isSoftwareRenderer({ renderer }) ? "webgl2" : "cpu";
   }
 
   /** Segment the T1 (once per T1) and measure the voxel. */
@@ -319,7 +322,7 @@ export function createTissuePanel(hooks) {
   function resultFiles(result, stem, ratioTo) {
     if (!result?.rows) return {};
     const texts = tissueTexts(result, stem, ratioTo, {
-      fractionSource: measured ? { method: "MindMap partial-volume maps (@brainchop/mindgrab segmentTissues)", version: mindgrabVersion, backend: maps?.backend, t1: t1?.name, coverage: measured.coverage } : "entered",
+      fractionSource: measured ? { method: "MindMap partial-volume maps (@brainchop/core segmentTissues)", version: mindgrabVersion, backend: maps?.backend, t1: t1?.name, coverage: measured.coverage } : "entered",
       voxel: dataset?.voxel ?? null,
       voxelInT1Mm3: weights?.volumeMm3 ?? null,
     });

@@ -7,7 +7,7 @@ import { mindgrabAssets, mindgrabFromAssetPath } from "../../scripts/lib/mindgra
 // Resolve MindGrab and niimath through the packages that pin them, as deface does.
 const require = createRequire(import.meta.url);
 const runtimeRequire = createRequire(require.resolve("@neurodesk/runtime-support/mindgrab"));
-const mindgrabPackage = runtimeRequire.resolve("@brainchop/mindgrab/package.json");
+const mindgrabPackage = runtimeRequire.resolve("@brainchop/core/package.json");
 const dwi2trxRequire = createRequire(require.resolve("@neurodesk/dwi2trx/niimath-version"));
 const niimathLicensePath = join(dirname(dwi2trxRequire.resolve("@niivue/niimath/package.json")), "LICENSE");
 
@@ -28,5 +28,5 @@ export default neurodeskViteConfig({
   worker: { plugins: () => [mindgrabFromAssetPath()] },
   build: { target: "esnext", outDir: "dist", assetsInlineLimit: 0 },
   // Both load WASM through module URLs, which Vite's development prebundler cannot process.
-  optimizeDeps: { exclude: ["@brainchop/mindgrab", "@niivue/niimath"] },
+  optimizeDeps: { exclude: ["@brainchop/core", "@niivue/niimath"] },
 });
