@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { checkInstallation, denoiseFile, parseCliOptions } from "../src/node.js";
@@ -575,6 +575,132 @@ test("recovering from a killed overwrite run restores both originals instead of 
     });
     assert.equal(res.outputs.length, 2);
     assert.deepEqual((await readdir(freshDir)).sort(), ["sample_denoised.tif", "sample_provenance.json"]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("interrupted recovery preserves already-restored originals across repeated crashes", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "denoise-double-crash-test-"));
+  try {
+    const inputPath = join(dir, "sample.tif");
+    await writeFile(inputPath, syntheticTiff([1, 24, 24]));
+    const child = spawnSync(process.execPath, ["-e", "process.exit(0)"]);
+    const deadPid = child.pid;
+
+    const oldTiff = Buffer.from("original-tiff-double-crash");
+    const oldProv = '{"methodId":"original-double-crash"}\n';
+
+    const outDir = join(dir, "out");
+    const stageDir = join(outDir, `.denoise-stage-${deadPid}-feed1234`);
+    await mkdir(join(outDir, ".denoise-run.lock"), { recursive: true });
+    await writeFile(
+      join(outDir, ".denoise-run.lock", "owner-dead9999.json"),
+      `${JSON.stringify({ pid: deadPid, host: hostname(), startedAt: Date.now() - 10_000, token: "dead9999" })}\n`,
+      "utf8",
+    );
+    await mkdir(join(stageDir, "_backup"), { recursive: true });
+    await writeFile(join(stageDir, "_meta.json"), `${JSON.stringify({ pid: deadPid, host: hostname() })}\n`, "utf8");
+    await writeFile(
+      join(stageDir, "_manifest.json"),
+      `${JSON.stringify({ pid: deadPid, host: hostname(), stagedFiles: ["sample_denoised.tif", "sample_provenance.json"], overwrite: true })}\n`,
+      "utf8",
+    );
+    await writeFile(join(stageDir, "_backup", "sample_denoised.tif"), oldTiff);
+    await writeFile(join(stageDir, "_backup", "sample_provenance.json"), oldProv, "utf8");
+    await writeFile(join(outDir, "sample_denoised.tif"), Buffer.from("partial-new-tiff"));
+    await writeFile(join(stageDir, "sample_provenance.json"), '{"methodId":"partial-new"}\n', "utf8");
+    // Block provenance restore on the first recovery attempt so TIFF is restored while provenance
+    // remains in _backup (exact disk state of a second crash mid-recovery).
+    await mkdir(join(outDir, "sample_provenance.json"));
+
+    await assert.rejects(
+      () => denoiseFile({
+        input: inputPath,
+        outputDir: outDir,
+        options: { method: "fgr-ridge", "max-scale": "4" },
+      }),
+      /Cannot recover interrupted run/i,
+    );
+
+    // Partial TIFF was moved back into stageDir AND original TIFF was restored into outDir.
+    assert.deepEqual(await readFile(join(outDir, "sample_denoised.tif")), oldTiff);
+    assert.deepEqual(await readFile(join(stageDir, "sample_denoised.tif")), Buffer.from("partial-new-tiff"));
+
+    // Remove the blocking directory and retry without --overwrite: must keep restored TIFF,
+    // finish restoring provenance, remove stageDir, and reject with non-empty directory.
+    await rm(join(outDir, "sample_provenance.json"), { recursive: true, force: true });
+    await assert.rejects(
+      () => denoiseFile({
+        input: inputPath,
+        outputDir: outDir,
+        options: { method: "fgr-ridge", "max-scale": "4" },
+      }),
+      /not empty/i,
+    );
+
+    assert.deepEqual((await readdir(outDir)).sort(), ["sample_denoised.tif", "sample_provenance.json"]);
+    assert.deepEqual(await readFile(join(outDir, "sample_denoised.tif")), oldTiff);
+    assert.equal(await readFile(join(outDir, "sample_provenance.json"), "utf8"), oldProv);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("failed rollback protects preserved backups even if _rollback-failed.json cannot be written", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "denoise-marker-fail-test-"));
+  try {
+    const inputPath = join(dir, "sample.tif");
+    await writeFile(inputPath, syntheticTiff([1, 24, 24]));
+
+    const outDir = join(dir, "existing");
+    await mkdir(outDir);
+    const oldTiff = Buffer.from("original-tiff-marker-fail");
+    const oldProv = '{"methodId":"original-marker-fail"}\n';
+    await writeFile(join(outDir, "sample_denoised.tif"), oldTiff);
+    await writeFile(join(outDir, "sample_provenance.json"), oldProv, "utf8");
+
+    let caught;
+    try {
+      await denoiseFile({
+        input: inputPath,
+        outputDir: outDir,
+        options: { method: "fgr-ridge", "max-scale": "4", overwrite: true },
+        renameFn: async (src, dst) => {
+          if (dst === join(outDir, "sample_provenance.json")) {
+            // Block both restoring provenance AND writing _rollback-failed.json inside stageDir.
+            const stageDir = dirname(src);
+            await mkdir(join(stageDir, "_rollback-failed.json"));
+            await mkdir(dst);
+            const err = new Error("EACCES: permission denied");
+            err.code = "EACCES";
+            throw err;
+          }
+          return rename(src, dst);
+        },
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    assert.ok(caught, "expected rollback failure");
+    assert.ok(caught.preservedBackupDir, "expected preservedBackupDir");
+    assert.match(caught.preservedBackupDir, /\.denoise-preserved-backup-/);
+    assert.deepEqual(await readFile(join(outDir, "sample_denoised.tif")), oldTiff);
+    assert.equal(await readFile(join(caught.preservedBackupDir, "sample_provenance.json"), "utf8"), oldProv);
+
+    // Even after removing the blocking directory and retrying with --overwrite, the preserved
+    // backup directory MUST still block automatic overwrite until manually resolved.
+    await rm(join(outDir, "sample_provenance.json"), { recursive: true, force: true });
+    await assert.rejects(
+      () => denoiseFile({
+        input: inputPath,
+        outputDir: outDir,
+        options: { method: "fgr-ridge", "max-scale": "4", overwrite: true },
+      }),
+      /preserved backup/i,
+    );
+    assert.equal(await readFile(join(caught.preservedBackupDir, "sample_provenance.json"), "utf8"), oldProv);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

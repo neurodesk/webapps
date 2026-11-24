@@ -28,6 +28,7 @@ const CLI_METADATA_BYTES = 2 ** 25;
 const LOCK_NAME = ".denoise-run.lock";
 const LOCK_TMP_PREFIX = ".denoise-lock-tmp-";
 const STAGE_PREFIX = ".denoise-stage-";
+const PRESERVED_BACKUP_PREFIX = ".denoise-preserved-backup-";
 const OWNER_FILE_RE = /^owner-([0-9a-f]+)\.json$/;
 
 export const OUTPUT_FORMATS = Object.freeze(["auto", "tiff", "nifti", "both"]);
@@ -356,6 +357,21 @@ async function recoverInterruptedStages(resolvedDir, outputDir) {
       continue;
     }
 
+    if (entry.startsWith(PRESERVED_BACKUP_PREFIX)) {
+      const preservedPath = join(resolvedDir, entry);
+      let info;
+      try {
+        info = await lstat(preservedPath);
+      } catch {
+        continue;
+      }
+      if (!info.isDirectory()) continue;
+      const preservedBackup = join(preservedPath, "_backup");
+      throw new Error(
+        `Output directory '${outputDir}' contains preserved backup(s) from a failed rollback in '${preservedBackup}'. Restore or remove them manually before retrying.`,
+      );
+    }
+
     if (!entry.startsWith(STAGE_PREFIX)) continue;
     const stagePath = join(resolvedDir, entry);
     let info;
@@ -424,27 +440,45 @@ async function recoverInterruptedStages(resolvedDir, outputDir) {
 
     const recoveryFailures = [];
     const stagedFiles = Array.isArray(manifest?.stagedFiles) ? manifest.stagedFiles : [];
+    const backupSet = new Set(backupFiles);
+    const blockedNames = new Set();
 
-    // Remove any partial outputs that the killed run already moved into `resolvedDir`.
+    // Move any partial outputs that the killed run already moved into `resolvedDir` back into
+    // `stagePath` BEFORE restoring any `_backup` files. This preserves the invariant that
+    // `stagePath/<name>` exists whenever `resolvedDir/<name>` holds a restored original, so even
+    // a second SIGKILL mid-recovery cannot mistake a restored original for a partial output.
     for (const name of stagedFiles) {
-      if (await pathExists(join(stagePath, name))) continue;
+      const stagedTarget = join(stagePath, name);
+      if (await pathExists(stagedTarget)) continue;
       const target = join(resolvedDir, name);
       try {
         const targetInfo = await lstat(target);
         if (targetInfo.isDirectory()) {
           recoveryFailures.push(`${name} (destination is a directory)`);
+          blockedNames.add(name);
         } else {
-          await unlink(target);
+          await rename(target, stagedTarget);
         }
       } catch (error) {
-        if (error.code !== "ENOENT") {
+        if (error.code === "ENOENT") {
+          if (backupSet.has(name)) {
+            try {
+              await writeFile(stagedTarget, "");
+            } catch (markerErr) {
+              recoveryFailures.push(`${name} (${markerErr.code || markerErr.message})`);
+              blockedNames.add(name);
+            }
+          }
+        } else {
           recoveryFailures.push(`${name} (${error.code || error.message})`);
+          blockedNames.add(name);
         }
       }
     }
 
     // Restore every backed-up original file into `resolvedDir` without clobbering unexpected entries.
     for (const name of backupFiles) {
+      if (blockedNames.has(name)) continue;
       const src = join(backupDir, name);
       const dst = join(resolvedDir, name);
       if (await pathExists(dst)) {
@@ -631,7 +665,13 @@ async function publishStagedFiles(dir, stageDir, stagedFiles, { overwrite, renam
         await rename(dst, staged);
       } catch (moveErr) {
         if (moveErr.code === "ENOENT") {
-          await writeFile(staged, "").catch(() => {});
+          if (backedUp.includes(name)) {
+            try {
+              await writeFile(staged, "");
+            } catch (markerErr) {
+              clearFailures.set(name, markerErr);
+            }
+          }
         } else {
           clearFailures.set(name, moveErr);
         }
@@ -658,27 +698,70 @@ async function publishStagedFiles(dir, stageDir, stagedFiles, { overwrite, renam
       .map(([name, err]) => ({ name, error: err }));
 
     if (restoreFailures.length > 0 || unremovedNew.length > 0) {
+      let reportedBackupDir = backupDir;
+      let protectionError = null;
       if (restoreFailures.length > 0) {
-        await writeFile(
-          join(stageDir, "_rollback-failed.json"),
-          `${JSON.stringify(
-            {
-              pid: process.pid,
-              host: hostname(),
-              failedAt: Date.now(),
-              backupDir,
-              unrestored: restoreFailures.map((f) => ({ name: f.name, reason: f.error.message })),
-            },
-            null,
-            2,
-          )}\n`,
-          "utf8",
-        ).catch(() => {});
+        // Layer 1: Atomically rename `stageDir` to `.denoise-preserved-backup-*` (requires zero
+        // new disk blocks and does not depend on writeFile succeeding).
+        const preservedDir = join(dir, `${PRESERVED_BACKUP_PREFIX}${process.pid}-${randomBytes(4).toString("hex")}`);
+        let protectedByRename = false;
+        try {
+          await rename(stageDir, preservedDir);
+          protectedByRename = true;
+          reportedBackupDir = join(preservedDir, "_backup");
+        } catch (renameErr) {
+          protectionError = renameErr;
+        }
+
+        // Layer 2: Write diagnostic `_rollback-failed.json` inside the preserved directory.
+        const markerDir = protectedByRename ? preservedDir : stageDir;
+        let protectedByMarker = false;
+        try {
+          await writeFile(
+            join(markerDir, "_rollback-failed.json"),
+            `${JSON.stringify(
+              {
+                pid: process.pid,
+                host: hostname(),
+                failedAt: Date.now(),
+                backupDir: reportedBackupDir,
+                unrestored: restoreFailures.map((f) => ({ name: f.name, reason: f.error.message })),
+              },
+              null,
+              2,
+            )}\n`,
+            "utf8",
+          );
+          protectedByMarker = true;
+        } catch (markerErr) {
+          if (!protectedByRename) protectionError = markerErr;
+        }
+
+        if (protectedByRename || protectedByMarker) {
+          protectionError = null;
+        } else {
+          // Layer 3 (fail-closed last resort): remove `_manifest.json` and `_meta.json` so
+          // recoverInterruptedStages refuses to auto-recover or overwrite non-empty `_backup`.
+          try {
+            await unlink(join(stageDir, "_manifest.json")).catch((e) => {
+              if (e.code !== "ENOENT") throw e;
+            });
+            await unlink(join(stageDir, "_meta.json")).catch((e) => {
+              if (e.code !== "ENOENT") throw e;
+            });
+            protectionError = null;
+          } catch (unlinkErr) {
+            protectionError = unlinkErr;
+          }
+        }
       }
       const parts = [];
       if (restoreFailures.length > 0) {
         const names = restoreFailures.map((f) => `${f.name} (${f.error.code || f.error.message})`).join(", ");
-        parts.push(`rollback failed to restore ${names}; original backup(s) preserved in '${backupDir}'`);
+        parts.push(`rollback failed to restore ${names}; original backup(s) preserved in '${reportedBackupDir}'`);
+        if (protectionError) {
+          parts.push(`could not mark backup as protected (${protectionError.code || protectionError.message})`);
+        }
       }
       if (unremovedNew.length > 0) {
         const names = unremovedNew.map((f) => `${f.name} (${f.error.code || f.error.message})`).join(", ");
@@ -687,7 +770,7 @@ async function publishStagedFiles(dir, stageDir, stagedFiles, { overwrite, renam
       const wrapped = new Error(`${error.message}; ${parts.join("; ")}`, { cause: error });
       wrapped.code = error.code;
       if (restoreFailures.length > 0) {
-        wrapped.preservedBackupDir = backupDir;
+        wrapped.preservedBackupDir = reportedBackupDir;
       }
       throw wrapped;
     }
