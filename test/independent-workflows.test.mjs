@@ -628,15 +628,19 @@ test('the SamSrf Runtime reference builds only with a Compiler token and is vali
   assert.deepEqual(runtime.permissions, { contents: 'read', packages: 'read' });
   assert.ok(!runtime.steps.some(step => step.uses?.startsWith('matlab-actions/')), 'no MATLAB on the Runtime-only host');
   assert.ok(!JSON.stringify(runtime).includes('secrets.'));
-  assert.equal(runtime.env.IMAGE, '${{ inputs.runtime_image }}');
-  assert.ok(!JSON.stringify(runtime.env).includes('github.token'), 'job env must not expose github.token');
-  assert.ok(!runtime.steps.some(step => /\$\{\{[^}]*\binputs\./.test(step.run ?? '')), 'the image reaches scripts through the environment');
+  assert.deepEqual(runtime.env, { IMAGE: '${{ inputs.runtime_image }}' });
   const pullStep = runtime.steps.find(step => /docker pull "\$IMAGE"/.test(step.run ?? ''));
   assert.ok(pullStep, 'runtime-image pulls IMAGE in its own step');
   assert.deepEqual(pullStep.env, { GITHUB_TOKEN: '${{ github.token }}', ACTOR: '${{ github.actor }}' });
+  const allowedNonPullExpressions = new Set(['${{ github.run_id }}', '${{ github.run_attempt }}', '${{ runner.temp }}']);
   for (const step of runtime.steps) {
+    assert.ok(!/\$\{\{[\s\S]*?\}\}/.test(step.run ?? ''), `runtime-image shell scripts must not interpolate Actions expressions ("${step.name ?? step.uses}")`);
     if (step === pullStep) continue;
-    assert.ok(!JSON.stringify(step).includes('github.token') && !step.env?.GITHUB_TOKEN, `github.token must stay scoped to the pull step, not "${step.name ?? step.uses}"`);
+    assert.ok(!step.env?.GITHUB_TOKEN, `GITHUB_TOKEN must stay scoped to the pull step, not "${step.name ?? step.uses}"`);
+    const expressions = JSON.stringify(step).match(/\$\{\{[\s\S]*?\}\}/g) ?? [];
+    for (const expr of expressions) {
+      assert.ok(allowedNonPullExpressions.has(expr), `unexpected Actions expression ${expr} in runtime-image step "${step.name ?? step.uses}"`);
+    }
   }
   const runStepIndex = runtime.steps.findIndex(step => /run_runtime_cli\.py/.test(step.run ?? ''));
   assert.ok(runtime.steps.indexOf(pullStep) < runStepIndex, 'pull and log out before running the container');
