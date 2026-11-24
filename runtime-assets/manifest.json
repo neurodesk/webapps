@@ -184,23 +184,6 @@
       ]
     },
     {
-      "id": "niimath-wasm-bsd",
-      "version": "0.9.25",
-      "target": "niimath/runtime-support-bsd-7facb787",
-      "deduplicate": true,
-      "consumers": ["deface"],
-      "match_by": "sha256",
-      "reason": "Share the BSD-only niimath binary vendored in packages/runtime-support (src/niimath) used by Deface; each app keeps the single-threaded niimath module in its own worker bundle, which names the binary in a static new URL.",
-      "files": [
-        {
-          "name": "niimath.wasm",
-          "source_app": "deface",
-          "source": "assets/niimath-B7cfsv2E.wasm",
-          "sha256": "7facb7870512b4b5c84c9bc21742ddbefdadb03e8198d1edef9bbac1078a266b"
-        }
-      ]
-    },
-    {
       "id": "niimath-wasm-20261114",
       "version": "1.4.20261114",
       "target": "niimath/1.4.20261114",
