@@ -483,3 +483,76 @@ test('createImagePair supports raster slotLabels, exampleRoles, showFolder:false
   assert.equal(pair.fixed, null);
   assert.deepEqual(cleared, ['fixed']);
 });
+
+test('nd-replace Undo queued while a decode holds the pair disabled still runs once decode finishes', async () => {
+  let releaseDecode;
+  let decodeStarted;
+  const started = new Promise(resolve => { decodeStarted = resolve; });
+  const gate = new Promise(resolve => { releaseDecode = resolve; });
+  const { pair, $, window } = setup({
+    perform: async (_msg, task) => {
+      pair.disabled = true;
+      try { return await task(undefined); } finally { pair.disabled = false; }
+    },
+    open: async (_slot, candidate) => {
+      if (candidate.name === 'dropped.png') {
+        decodeStarted();
+        await gate;
+      }
+      return { name: candidate.name, dims: [32, 32], dimensionality: 2 };
+    },
+  });
+  await pair.use('fixed', { name: 'original.png', file: new window.File(['a'], 'original.png') });
+  assert.equal(pair.fixed?.image.name, 'original.png');
+
+  const input = $('fixedInput');
+  Object.defineProperty(input, 'files', { get: () => input._files ?? [], set: files => { input._files = files; } });
+  // Start a dropped load that holds decode open (pair.disabled === true).
+  input.files = [new window.File(['b'], 'dropped.png')];
+  input.dispatchEvent(new window.CustomEvent('nd-replace', { bubbles: true }));
+  input.dispatchEvent(new window.Event('change', { bubbles: true }));
+  await started;
+  assert.equal(pair.disabled, true);
+
+  // Click Undo while decode is held open -> shell fires nd-replace + change with original file.
+  input.files = [new window.File(['a'], 'original.png')];
+  input.dispatchEvent(new window.CustomEvent('nd-replace', { bubbles: true }));
+  input.dispatchEvent(new window.Event('change', { bubbles: true }));
+
+  releaseDecode();
+  await settle();
+  assert.equal(pair.fixed?.image.name, 'original.png');
+});
+
+test('example downloads enter perform before fetch resolves so app footer cancel aborts download', async () => {
+  let fetchAborted = false;
+  let enteredPerform = false;
+  const controller = new AbortController();
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (_url, init = {}) => new Promise((_resolve, reject) => {
+    init.signal?.addEventListener('abort', () => {
+      fetchAborted = true;
+      reject(new DOMException('Aborted', 'AbortError'));
+    }, { once: true });
+  });
+  try {
+    const { pair, window } = setup({
+      examples: [{ id: 'pair', label: 'Pair', files: [{ role: 'fixed', name: 'f.png', url: 'https://example.test/f.png' }] }],
+      perform: (_msg, task) => {
+        enteredPerform = true;
+        return task(controller.signal);
+      },
+      open: async (_slot, candidate) => ({ name: candidate.name, dimensionality: 2 }),
+    });
+    const select = pair.exampleControl.select;
+    select.value = 'pair';
+    select.dispatchEvent(new window.Event('change'));
+    await new Promise(resolve => setTimeout(resolve, 10));
+    assert.equal(enteredPerform, true, 'perform started before fetch resolved');
+    controller.abort();
+    await settle();
+    assert.equal(fetchAborted, true, 'aborting perform signal cancels example fetch');
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});

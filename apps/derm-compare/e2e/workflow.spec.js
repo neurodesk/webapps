@@ -458,25 +458,29 @@ test("dropping a pair together fills both slots, Undo clears newly filled empty 
   await expect(page.locator("#fixedInfo")).toContainText("drop_foll_a.png");
   await expect(page.locator("#movingInfo")).toContainText("pair_base.png");
 
-  // 2. Clear baseline so only follow-up is loaded, drop a new file onto the page -> Undo restores empty baseline.
+  // 2. Clear baseline so only follow-up is loaded, drop TWO images together -> fills both slots cleanly.
   await page.locator("#fixedClear").click();
   await expect(page.locator("#fixedInfo")).toBeHidden();
   await expect(page.locator("#movingInfo")).toContainText("pair_base.png");
 
-  await page.evaluate(({ name, bytes }) => {
+  await page.evaluate(({ a, b }) => {
     const dt = new DataTransfer();
-    dt.items.add(new File([new Uint8Array(bytes)], name, { type: "image/png" }));
+    dt.items.add(new File([new Uint8Array(a.bytes)], a.name, { type: "image/png" }));
+    dt.items.add(new File([new Uint8Array(b.bytes)], b.name, { type: "image/png" }));
     document.body.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt }));
-  }, { name: follFileB.name, bytes: [...follFileB.buffer] });
-
+  }, {
+    a: { name: follFileB.name, bytes: [...follFileB.buffer] },
+    b: { name: follFileA.name, bytes: [...follFileA.buffer] },
+  });
   await expect(page.locator("#fixedInfo")).toContainText("drop_foll_b.png");
+  await expect(page.locator("#movingInfo")).toContainText("drop_foll_a.png");
   await expect(page.locator(".nd-status-undo")).toBeVisible();
   await page.locator(".nd-status-undo").click();
   await expect(page.locator("#fixedInfo")).toBeHidden();
   await expect(page.locator("#movingInfo")).toContainText("pair_base.png");
   await expect(page.locator("#runButton")).toBeDisabled();
 
-  // 3. Direct drop on #movingSlot fills follow-up without replacing baseline.
+  // 3. Direct drop on #movingSlot fills follow-up without replacing baseline, and Undo restores previous follow-up.
   await page.locator("#fixedInput").setInputFiles(baseFile);
   await expect(page.locator("#fixedInfo")).toContainText("pair_base.png");
   await page.evaluate(({ name, bytes }) => {
@@ -487,6 +491,10 @@ test("dropping a pair together fills both slots, Undo clears newly filled empty 
     zone.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt }));
   }, { name: follFileA.name, bytes: [...follFileA.buffer] });
   await expect(page.locator("#movingInfo")).toContainText("drop_foll_a.png");
+  await expect(page.locator("#fixedInfo")).toContainText("pair_base.png");
+  await expect(page.locator(".nd-status-undo")).toBeVisible();
+  await page.locator(".nd-status-undo").click();
+  await expect(page.locator("#movingInfo")).toContainText("pair_base.png");
   await expect(page.locator("#fixedInfo")).toContainText("pair_base.png");
 
   // 4. A delayed follow-up drop read superseded by a newer file pick must NOT overwrite the newer pick.

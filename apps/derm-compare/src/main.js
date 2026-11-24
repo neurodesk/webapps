@@ -1199,10 +1199,16 @@ registerAppAutomation({
       progress.setCancellable(true);
       const current = operation.controller.signal;
       try {
-        // Apply settings only AFTER acquiring the operation lock.
+        // Apply settings only AFTER acquiring the operation lock, and decode both files
+        // before committing either slot so a corrupt second file never leaves a mixed pair.
         applyFormSettings(settings);
-        await pair.useWithin("fixed", { name: baseFile.name, file: baseFile }, current);
-        await pair.useWithin("moving", { name: follFile.name, file: follFile }, current);
+        const [bDecoded, fDecoded] = await Promise.all([
+          decodeImageFile(baseFile, current),
+          decodeImageFile(follFile, current),
+        ]);
+        current.throwIfAborted();
+        await pair.useWithin("fixed", { name: baseFile.name, file: baseFile, decoded: bDecoded }, current);
+        await pair.useWithin("moving", { name: follFile.name, file: follFile, decoded: fDecoded }, current);
         current.throwIfAborted();
 
         return await executeComparisonLocked(current, settings, reportProgress);

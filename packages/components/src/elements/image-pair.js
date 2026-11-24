@@ -76,13 +76,13 @@ export function defineImagePair(view = globalThis.window) {
     }
 
     /** Read files into a slot, as the picker and a drop do. */
-    load(slot, files) {
+    load(slot, files, { force = false } = {}) {
       this.#dropGen[slot] += 1;
       const name = this.#slotLabel(slot).toLowerCase();
       const message = this.#hasFolderPicker()
         ? `Reading the ${name} image · converting DICOM if needed…`
         : `Reading the ${name} image…`;
-      return this.#operation(message, signal => this.#loadFiles(slot, files, signal));
+      return this.#operation(message, signal => this.#loadFiles(slot, files, signal), { force });
     }
 
     /** Put one already-read candidate into a slot, as automation and an app action do. */
@@ -133,9 +133,19 @@ export function defineImagePair(view = globalThis.window) {
         if (parts.section && !this.#isLocked(slot)) {
           this.#drops.push(bindFileDrop(parts.section, filesPromise => {
             const gen = ++this.#dropGen[slot];
-            void Promise.resolve(filesPromise).then(files => {
+            void Promise.resolve(filesPromise).then(async files => {
               if (gen !== this.#dropGen[slot] || !files?.length || this.disabled) return;
-              void this.load(slot, Promise.resolve(files));
+              const previousState = this.#state[slot];
+              const previousFile = previousState?.candidate?.file ?? null;
+              const loadPromise = this.load(slot, Promise.resolve(files));
+              const activeGen = this.#dropGen[slot];
+              await loadPromise;
+              if (activeGen === this.#dropGen[slot] && this.#state[slot] !== previousState && parts.input) {
+                parts.input.dispatchEvent(new window.CustomEvent('nd-slot-drop', {
+                  bubbles: true,
+                  detail: { previousFiles: previousFile ? [previousFile] : [] },
+                }));
+              }
             }, error => {
               if (gen === this.#dropGen[slot]) this.onStatus?.(error?.message || String(error), true);
             });
@@ -253,12 +263,21 @@ export function defineImagePair(view = globalThis.window) {
         input.setAttribute('webkitdirectory', '');
         input.setAttribute('directory', '');
       }
+      let replacing = false;
+      input.addEventListener('nd-replace', () => { replacing = true; });
       input.addEventListener('change', () => {
         const files = Array.from(input.files || []);
         input.value = '';
-        if (this.disabled) return;
-        if (files.length) void this.load(slot, Promise.resolve(files));
-        else this.reset(slot);
+        const fromReplace = replacing;
+        replacing = false;
+        if (this.disabled && !fromReplace) return;
+        if (files.length) {
+          void this.load(slot, Promise.resolve(files), { force: fromReplace });
+        } else if (fromReplace && this.disabled) {
+          void this.#enqueue(() => this.reset(slot));
+        } else {
+          this.reset(slot);
+        }
       });
       wrapper.append(input, element(doc, 'span', {}, text));
       parent.append(wrapper);
@@ -277,8 +296,8 @@ export function defineImagePair(view = globalThis.window) {
       return run;
     }
 
-    #operation(message, task) {
-      if (this.disabled) return Promise.resolve();
+    #operation(message, task, { force = false } = {}) {
+      if (this.disabled && !force) return Promise.resolve();
       this.#example?.reset();
       return this.#enqueue(async () => {
         try {
@@ -325,27 +344,36 @@ export function defineImagePair(view = globalThis.window) {
     async #loadExample(example, { fetchFiles, assertCurrent, signal }) {
       this.#dropGen.fixed += 1;
       this.#dropGen.moving += 1;
-      const files = await fetchFiles();
-      assertCurrent();
-      const byRole = Object.fromEntries(example.files.map((asset, index) => [asset.role, { asset, file: files[index] }]));
-      const slots = IMAGE_SLOTS.filter(slot => byRole[this.#slotRole(slot)] && !this.#isLocked(slot));
-      if (!slots.length) {
-        const fixedName = this.#slotLabel('fixed').toLowerCase();
-        const movingName = this.#slotLabel('moving').toLowerCase();
-        throw new Error(`${example.label} has no ${fixedName} or ${movingName} image.`);
-      }
       // The selector reports a failure itself, so this task rethrows instead of reporting.
       await this.#enqueue(() => this.#perform(`Loading ${example.label}…`, async taskSignal => {
         const loadSignal = taskSignal ? AbortSignal.any([taskSignal, signal]) : signal;
-        for (const slot of slots) {
-          const { asset, file } = byRole[this.#slotRole(slot)];
-          const read = this.read ?? (list => list.map(item => ({ name: item.name, file: item })));
-          const candidates = await read([file], { slot, signal: loadSignal });
+        const onAppAbort = () => this.#example?.cancel();
+        taskSignal?.addEventListener('abort', onAppAbort, { once: true });
+        try {
+          const files = await fetchFiles();
+          loadSignal?.throwIfAborted();
           assertCurrent();
-          if (!candidates?.length) throw new Error(`The example ${this.#slotLabel(slot).toLowerCase()} image could not be read.`);
-          if (asset.brainExtracted !== undefined) candidates[0].brainExtracted = asset.brainExtracted;
-          await this.#commit(slot, candidates, 0, loadSignal);
-          assertCurrent();
+          const byRole = Object.fromEntries(example.files.map((asset, index) => [asset.role, { asset, file: files[index] }]));
+          const slots = IMAGE_SLOTS.filter(slot => byRole[this.#slotRole(slot)] && !this.#isLocked(slot));
+          if (!slots.length) {
+            const fixedName = this.#slotLabel('fixed').toLowerCase();
+            const movingName = this.#slotLabel('moving').toLowerCase();
+            throw new Error(`${example.label} has no ${fixedName} or ${movingName} image.`);
+          }
+          for (const slot of slots) {
+            const { asset, file } = byRole[this.#slotRole(slot)];
+            const read = this.read ?? (list => list.map(item => ({ name: item.name, file: item })));
+            const candidates = await read([file], { slot, signal: loadSignal });
+            loadSignal?.throwIfAborted();
+            assertCurrent();
+            if (!candidates?.length) throw new Error(`The example ${this.#slotLabel(slot).toLowerCase()} image could not be read.`);
+            if (asset.brainExtracted !== undefined) candidates[0].brainExtracted = asset.brainExtracted;
+            await this.#commit(slot, candidates, 0, loadSignal);
+            loadSignal?.throwIfAborted();
+            assertCurrent();
+          }
+        } finally {
+          taskSignal?.removeEventListener('abort', onAppAbort);
         }
       }).finally(() => {
         this.#refresh();

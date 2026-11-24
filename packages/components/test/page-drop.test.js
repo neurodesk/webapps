@@ -289,4 +289,18 @@ test('dropping two raster images fills both image slots and Undo clears a newly 
   undo().click();
   assert.deepEqual([...inputs[0].files], []);
   assert.deepEqual([...inputs[1].files].map(f => f.name), ['followup.jpg']);
+
+  // Dropping two raster images when ONLY slot 2 is occupied routes image 1 to empty slot 1 and image 2 to slot 2.
+  await drop('new_base.png', 'new_foll.png');
+  assert.deepEqual([...inputs[0].files].map(f => f.name), ['new_base.png']);
+  assert.deepEqual([...inputs[1].files].map(f => f.name), ['new_foll.png']);
+});
+
+test('fresh page drop on a two-image-slot page offers Undo to clear the slot', async t => {
+  const { inputs, drop, undo } = dropSession('<input type="file" data-neurodesk-input="image"><input type="file" data-neurodesk-input="image">', t);
+  await drop('first.png');
+  assert.deepEqual([...inputs[0].files].map(f => f.name), ['first.png']);
+  assert.ok(undo(), 'fresh drop on a two-slot page offers Undo');
+  undo().click();
+  assert.deepEqual([...inputs[0].files], []);
 });
