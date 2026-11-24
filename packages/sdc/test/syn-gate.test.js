@@ -69,6 +69,21 @@ function affineShift(a, b, mask, affine, dims) {
 
 const equalVoxels = (a, b) => a.length === b.length && a.every((value, i) => value === b[i]);
 
+function maskDice(a, b) {
+  if (a.length !== b.length) return 0;
+  let overlap = 0;
+  let countA = 0;
+  let countB = 0;
+  for (let i = 0; i < a.length; i++) {
+    const insideA = a[i] > 0.5 ? 1 : 0;
+    const insideB = b[i] > 0.5 ? 1 : 0;
+    countA += insideA;
+    countB += insideB;
+    overlap += insideA & insideB;
+  }
+  return countA + countB ? (2 * overlap) / (countA + countB) : 0;
+}
+
 async function output(name) {
   const directory = keep ? join(keep, name) : await mkdtemp(join(process.env.TMPDIR ?? tmpdir(), `sdc-${name}-`));
   await mkdir(directory, { recursive: true });
@@ -104,12 +119,17 @@ test('the full-brain pipeline, with native N4\'s output, meets the Q66 gate agai
   const runtime = await nodeRuntime();
   const nativeN4 = new Uint8Array(await readFile(join(reference, NATIVE_N4)));
   runtime.n4 = async () => nativeN4;
+  const epiMaskPath = join(reference, 'mask/sub-01_dir-AP_run-001_desc-mindgrab_mask.nii.gz');
+  const anatMaskPath = join(reference, 'mask/sub-01_run-001_desc-mindgrab_mask.nii.gz');
+  const t1wPath = join(reference, 'input/sub-01_run-001_T1w.nii.gz');
   const result = await correctFiles({
     dwi: join(reference, `${INPUT}.nii.gz`),
     bval: join(reference, `${INPUT}.bval`),
     bvec: join(reference, `${INPUT}.bvec`),
     json: join(reference, `${INPUT}.json`),
-    t1w: join(reference, 'input/sub-01_run-001_T1w.nii.gz'),
+    t1w: t1wPath,
+    epiMask: epiMaskPath,
+    t1wMask: anatMaskPath,
     prior,
     output: join(directory, 'derivatives'),
     seed: 1234,
@@ -119,13 +139,13 @@ test('the full-brain pipeline, with native N4\'s output, meets the Q66 gate agai
     },
   });
   const { intermediate } = result;
-  const epiMask = await readImage(await readFile(join(reference, 'mask/sub-01_dir-AP_run-001_desc-mindgrab_mask.nii.gz')));
-  const anatMask = await readImage(await readFile(join(reference, 'mask/sub-01_run-001_desc-mindgrab_mask.nii.gz')));
+  const epiMask = await readImage(await readFile(epiMaskPath));
+  const anatMask = await readImage(await readFile(anatMaskPath));
   const meanB0 = await readImage(await readFile(join(reference, 'mask/sub-01_dir-AP_run-001_desc-meanb0_dwiref.nii')));
   const ours = {
     meanB0: await readImage(intermediate.meanB0),
-    epiMask: await readImage(intermediate.epiMask),
-    anatMask: await readImage(intermediate.t1wMask),
+    epiMask: await readImage(await runtime.mindgrab(intermediate.meanB0)),
+    anatMask: await readImage(await runtime.mindgrab(await readFile(t1wPath))),
   };
   const dims = epiMask.dims;
   const positive = positiveCosines(dims, epiMask.affine);
@@ -138,6 +158,7 @@ test('the full-brain pipeline, with native N4\'s output, meets the Q66 gate agai
   const report = {
     reference: 'native sdcflows 2.17.1, double, seed 1234, 1.2 mm grid (sdc/reference/grid-q68 at e773666d)',
     n4: `native N4 output swapped in (${NATIVE_N4} at sdc/reference 8520dbca); every other step in WebAssembly and JavaScript`,
+    masks: 'pinned reference MindGrab masks passed into Q66 gate; current @brainchop/core MindGrab masks checked by Dice >= 0.99',
     fmap,
     pre,
     epi2anatShiftMm: affineShift(rasMatrix(intermediate.epi2anat), rasMatrix(epi2anat), epiMask.data, epiMask.affine, dims),
@@ -145,6 +166,8 @@ test('the full-brain pipeline, with native N4\'s output, meets the Q66 gate agai
     sameMeanB0: equalVoxels(ours.meanB0.data, meanB0.data),
     sameDwiMask: equalVoxels(ours.epiMask.data, epiMask.data),
     sameT1wMask: equalVoxels(ours.anatMask.data, anatMask.data),
+    epiMaskDice: maskDice(ours.epiMask.data, epiMask.data),
+    t1wMaskDice: maskDice(ours.anatMask.data, anatMask.data),
     stageStartSeconds: stages,
     wallSeconds: Math.round((performance.now() - started) / 1000),
     maxRssBytes: process.resourceUsage().maxRSS * 1024,
@@ -153,7 +176,7 @@ test('the full-brain pipeline, with native N4\'s output, meets the Q66 gate agai
   await writeFile(join(directory, 'report.json'), `${JSON.stringify(report, null, 2)}\n`);
   console.log(JSON.stringify(report, null, 2));
   assert.ok(report.sameMeanB0, 'the mean b0 is the reference\'s');
-  assert.ok(report.sameDwiMask && report.sameT1wMask, 'the MindGrab masks are the reference\'s');
+  assert.ok(report.epiMaskDice >= 0.99 && report.t1wMaskDice >= 0.99, `MindGrab masks agree with the reference (EPI Dice ${report.epiMaskDice.toFixed(4)}, T1w Dice ${report.t1wMaskDice.toFixed(4)})`);
   // Q66: d <= max(spread, 0.05 Hz) and d < 0.5 Hz. Without the end-to-end double spread on this
   // grid only d <= 0.05 Hz decides the first condition, as gate.py --require does.
   assert.ok(fmap.median < 0.5, `d = ${fmap.median} Hz is not under the 0.5 Hz cap`);

@@ -37,7 +37,7 @@ export async function checkAirTemplate(bytes) {
 /**
  * Runs MindGrab's brain mask, then the model's tissue fractions or labels, on
  * the input's own grid. Outputs are uncompressed NIfTI whatever the input.
- * `segmenter` has @brainchop/mindgrab's `segment` and `segmentTissues`.
+ * `segmenter` has @brainchop/core's `segment` and `segmentTissues`.
  */
 export async function segmentForQc(segmenter, input, model, options = {}) {
   const shared = { ...options, gzipOutput: false };

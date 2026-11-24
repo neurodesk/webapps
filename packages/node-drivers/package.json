@@ -27,7 +27,7 @@
     "validate:browser": "node validation/browser-reference.mjs --check"
   },
   "devDependencies": {
-    "@brainchop/mindgrab": "0.1.20260925",
+    "@brainchop/core": "1.0.0",
     "@niivue/niimath": "1.4.20260928",
     "@playwright/test": "1.63.0"
   }

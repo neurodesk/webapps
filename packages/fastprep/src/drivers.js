@@ -81,7 +81,7 @@ export function niimathDriver(createModule) {
   };
 }
 
-/** brainchop-mindgrab / brainchop-mindmap through @brainchop/mindgrab's segment() and segmentTissues(). */
+/** brainchop-mindgrab / brainchop-mindmap through @brainchop/core's segment() and segmentTissues(). */
 export function mindgrabDriver({ segment, segmentTissues }, options = {}) {
   const arity = { '-backend': 1, '-o': 1, '--mask': 1, '--pve': 0 };
   return async (argv, { files }) => {

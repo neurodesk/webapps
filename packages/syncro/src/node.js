@@ -33,7 +33,7 @@ export async function checkInstallation({
   if(typeof greedyApi.register_nmi_svf_wasm!=='function')throw new Error('Greedy module did not load.');
   const [{default:createModule},ort]=await Promise.all([import(registrationModule),import('onnxruntime-node')]);
   if(typeof createModule!=='function')throw new Error('Registration module did not load.');
-  const mindgrab=await loadMindgrabCpu(import.meta.resolve('@brainchop/mindgrab/package.json'));
+  const mindgrab=await loadMindgrabCpu(import.meta.resolve('@brainchop/core/package.json'));
   const tensor=new ort.Tensor('float32',Float32Array.of(0),[1]);
   if(tensor.size!==1)throw new Error('ONNX Runtime tensor check failed.');
   const bundledModels=process.env.NEURODESK_SYNCRO_MODEL_DIR ? await downloadModels({offline:true}) : null;
@@ -151,7 +151,7 @@ export async function normalize({input,output,additional=[],ct=false,normalizati
     synthesize:args=>cached('synthsr',()=>runSynthsr({buffer:args.buffer,options:{ct,backend:'cpu'},loadModel:async()=>models.synthsr,createSession,Tensor:ort.Tensor,onProgress:args.onProgress,runtime:{threads,onnxRuntime:ort.env.versions.node}}),
       r=>({'synthsr.nii':new Uint8Array(r.buffer)}),(f,provenance)=>({buffer:asBuffer(f['synthsr.nii']),provenance})),
     extractBrain:args=>cached(brainExtractor,brainExtractor==='mindgrab'
-      ? async()=>{const {segment,version}=await loadMindgrabCpu(import.meta.resolve('@brainchop/mindgrab/package.json'));return runMindgrab({...args,backend:'cpu',runtime:{segment:(input,options)=>segment(input,{...options,threads}),version}});}
+      ? async()=>{const {segment,version}=await loadMindgrabCpu(import.meta.resolve('@brainchop/core/package.json'));return runMindgrab({...args,backend:'cpu',runtime:{segment:(input,options)=>segment(input,{...options,threads}),version}});}
       : ()=>runSynthstrip({...args,loadModel:async()=>models.synthstrip,createSession,Tensor:ort.Tensor}),
       r=>({'brain.nii':new Uint8Array(writeVolume(r.brain)),'mask.nii':new Uint8Array(writeVolume(r.mask))}),
       (f,provenance)=>({brain:readVolume(asBuffer(f['brain.nii'])),mask:{...readVolume(asBuffer(f['mask.nii'])),data:Uint8Array.from(readVolume(asBuffer(f['mask.nii'])).data)},provenance})),

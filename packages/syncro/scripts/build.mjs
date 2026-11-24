@@ -14,8 +14,8 @@ const require = createRequire(join(root, 'package.json'));
 // The Node driver loads MindGrab's modules from disk, so the wrapper stays external; its package.json is
 // inlined from SYNcro's pin because esbuild drops the JSON import attribute on external imports.
 const mindgrab = { name: 'mindgrab', setup(build) {
-  build.onResolve({ filter: /^@brainchop\/mindgrab$/ }, (args) => ({ path: args.path, external: true }));
-  build.onResolve({ filter: /^@brainchop\/mindgrab\/package\.json$/ }, () => ({ path: require.resolve('@brainchop/mindgrab/package.json') }));
+  build.onResolve({ filter: /^@brainchop\/core$/ }, (args) => ({ path: args.path, external: true }));
+  build.onResolve({ filter: /^@brainchop\/core\/package\.json$/ }, () => ({ path: require.resolve('@brainchop/core/package.json') }));
 } };
 const outdir = values.outdir ? resolve(values.outdir) : join(root, 'dist');
 await mkdir(outdir, { recursive: true });

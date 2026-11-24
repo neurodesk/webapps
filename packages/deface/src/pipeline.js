@@ -2,7 +2,7 @@
 // niimath and MindGrab runtimes and run the same argv, so both write the same files.
 //
 // niimath: `run(args, { inputs, output })` runs one niimath argv over named files and resolves to
-// the named output. mindgrab: `{ version, segment }` with @brainchop/mindgrab's `segment`.
+// the named output. mindgrab: `{ version, segment }` with @brainchop/core's `segment`.
 
 /** The web app's methods (apps/deface/automation.json), in its menu order. */
 export const METHODS = Object.freeze({

@@ -49,7 +49,7 @@ apps:
     packages:
       - { name: NiFreeze, url: https://github.com/nipreps/nifreeze, role: Gaussian-process and b0-template estimator reference at commit 3bcfb00 }
       - { name: ANTs WebAssembly, url: https://github.com/ANTsX/ANTs, role: float rigid registration and B-spline resampling }
-      - { name: MindGrab, url: https://www.npmjs.com/package/@brainchop/mindgrab, role: CPU brain mask of the mean b0 }
+      - { name: MindGrab, url: https://www.npmjs.com/package/@brainchop/core, role: CPU brain mask of the mean b0 }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
     citations:
       - group: Motion correction
@@ -1024,7 +1024,7 @@ apps:
       - Greedy performs affine or affine followed by deformable MRI registration locally in the browser. Custom inputs can be brain extracted with MindGrab before registration.
     packages:
       - { name: greedy-rs (Rust → WebAssembly), url: https://github.com/neurodesk/webapps/tree/main/exes/greedy, role: affine and stationary-velocity deformable registration }
-      - { name: MindGrab (brainchop), url: https://github.com/neuroneural/brainchopC, role: brain extraction for custom inputs }
+      - { name: MindGrab (brainchop), url: https://github.com/neuroneural/brainchop-core, role: brain extraction for custom inputs }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
       - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
     citations:
@@ -1062,7 +1062,7 @@ apps:
   brain2print:
     packages:
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
-      - { name: MindGrab, url: https://www.npmjs.com/package/@brainchop/mindgrab, role: brain segmentation }
+      - { name: MindGrab, url: https://www.npmjs.com/package/@brainchop/core, role: brain segmentation }
       - { name: niimath, url: https://github.com/rordenlab/niimath, role: mesh generation }
       - { name: dcm2niix, url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
     citations:
@@ -1143,7 +1143,7 @@ apps:
       - ANTs registers a moving image to a stationary image locally in the browser with an affine stage followed by SyN symmetric diffeomorphic registration. Custom inputs can be brain extracted with MindGrab before registration.
     packages:
       - { name: ANTs SyN (WebAssembly), url: https://github.com/ANTsX/ANTs, role: affine and diffeomorphic registration }
-      - { name: MindGrab (brainchop), url: https://github.com/neuroneural/brainchopC, role: brain extraction for custom inputs }
+      - { name: MindGrab (brainchop), url: https://github.com/neuroneural/brainchop-core, role: brain extraction for custom inputs }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
       - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
     citations:
@@ -1190,7 +1190,7 @@ apps:
       - FireANTs performs diffeomorphic brain-image registration locally in the browser with CPU or WebGPU execution and Greedy or SyN transform presets.
     packages:
       - { name: "@fireants/fireants (C/WebAssembly)", url: https://www.npmjs.com/package/@fireants/fireants, role: CPU and WebGPU image registration }
-      - { name: MindGrab (brainchop), url: https://github.com/neuroneural/brainchopC, role: brain extraction for custom inputs }
+      - { name: MindGrab (brainchop), url: https://github.com/neuroneural/brainchop-core, role: brain extraction for custom inputs }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
       - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
     citations:
@@ -1341,7 +1341,7 @@ apps:
     packages:
       - { name: LCModel 6.3-1N (Rust port), url: https://github.com/schorschinho/LCModel, role: linear-combination model fitting }
       - { name: FID-A (Rust port), url: https://github.com/CIC-methods/FID-A, role: preprocessing, file readers and basis-set simulation }
-      - { name: MindMap (@brainchop/mindgrab), url: https://www.npmjs.com/package/@brainchop/mindgrab, role: grey matter, white matter and CSF partial-volume maps of the T1 }
+      - { name: MindMap (@brainchop/core), url: https://www.npmjs.com/package/@brainchop/core, role: grey matter, white matter and CSF partial-volume maps of the T1 }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: T1 viewer with the voxel overlay }
       - { name: dcm2niix, url: https://github.com/rordenlab/dcm2niix, role: T1 DICOM to NIfTI conversion }
     citations:

@@ -21,7 +21,7 @@ import createModule from "../wasm/n4-bias.mjs";
 import { DEFAULTS, createN4, divideVolumes, rescaleBias } from "./index.js";
 import { METHOD, b0Volumes, n4Sidecar, outputNames, parseBval } from "./pipeline.js";
 
-const MINDGRAB_PACKAGE = import.meta.resolve("@brainchop/mindgrab/package.json");
+const MINDGRAB_PACKAGE = import.meta.resolve("@brainchop/core/package.json");
 export const MINDGRAB_VERSION = JSON.parse(await readFile(new URL(MINDGRAB_PACKAGE), "utf8")).version;
 
 /** The web app's MindGrab call (runtime-support's brainMask), here on the CPU. */

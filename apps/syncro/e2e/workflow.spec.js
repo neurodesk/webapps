@@ -21,17 +21,20 @@ async function expectCentered(page,locator){
  expect(Math.abs(box.y-(viewport.height-box.height)/2)).toBeLessThan(2);
 }
 test('built runtime asset URLs return executable modules and WebAssembly',async({request})=>{
- for(const path of ['mindgrab/brainchop-mindgrab-gpu.js','mindgrab/brainchop-mindgrab-gl.js','mindgrab/brainchop-mindgrab.js','greedy-wasm/greedy_rs_wasm.js','greedy-wasm/snippets/wasm-bindgen-rayon-38edf6e439f6d70d/src/workerHelpers.no-bundler.js','registration/syncro-registration.mjs']){
+ for(const path of ['mindgrab/brainchop-mindgrab-gl.js','mindgrab/brainchop-mindgrab.js','greedy-wasm/greedy_rs_wasm.js','greedy-wasm/snippets/wasm-bindgen-rayon-38edf6e439f6d70d/src/workerHelpers.no-bundler.js','registration/syncro-registration.mjs']){
   const response=await request.get(path);
   expect(response.ok()).toBe(true);
   expect(response.headers()['content-type']).toMatch(/javascript/);
   expect(await response.text()).not.toMatch(/<!doctype html>/i);
  }
- for(const path of ['mindgrab/brainchop-mindgrab-gpu.wasm','mindgrab/brainchop-mindgrab-gl.wasm','mindgrab/brainchop-mindgrab.wasm','greedy-wasm/greedy_rs_wasm_bg.wasm','registration/syncro-registration.wasm']){
+ for(const path of ['mindgrab/brainchop-mindgrab-gl.wasm','mindgrab/brainchop-mindgrab.wasm','greedy-wasm/greedy_rs_wasm_bg.wasm','registration/syncro-registration.wasm']){
   const response=await request.get(path);
   expect(response.ok()).toBe(true);
   expect([...((await response.body()).subarray(0,4))]).toEqual([0,97,115,109]);
  }
+ const weights=await request.get('mindgrab/models/mindgrab.bin');
+ expect(weights.ok()).toBe(true);
+ expect((await weights.body()).byteLength).toBeGreaterThan(100_000);
 });
 test('geometry error keeps the explicit lesion input available before inference',async({page})=>{
  const modelRequests=[];page.context().on('request',r=>{if(r.url().includes('.onnx'))modelRequests.push(r.url());});

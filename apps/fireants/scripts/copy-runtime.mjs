@@ -6,7 +6,7 @@ const require = createRequire(import.meta.url);
 const publicRoot = new URL("../public/", import.meta.url);
 const fireantsRoot = dirname(require.resolve("@fireants/fireants/package.json"));
 const fireantsTarget = new URL("cfireants/", publicRoot);
-const mindgrabRoot = dirname(require.resolve("@brainchop/mindgrab/package.json"));
+const mindgrabRoot = dirname(require.resolve("@brainchop/core/package.json"));
 const mindgrabTarget = new URL("brainchop/", publicRoot);
 
 await rm(fireantsTarget, { recursive: true, force: true });
@@ -27,11 +27,10 @@ for (const name of ["LICENSE", "THIRD_PARTY_NOTICES.md"]) {
   await cp(join(fireantsRoot, name), new URL(name, fireantsTarget));
 }
 
-await mkdir(mindgrabTarget, { recursive: true });
+await mkdir(new URL("models/", mindgrabTarget), { recursive: true });
 for (const name of [
   "worker.js",
-  "brainchop-mindgrab-gpu.js",
-  "brainchop-mindgrab-gpu.wasm",
+  "models/mindgrab.bin",
   "brainchop-mindgrab-gl.js",
   "brainchop-mindgrab-gl.wasm",
   "brainchop-mindgrab.js",

@@ -18,7 +18,7 @@ function stubs() {
     writeFileSync(join(bin, name), `#!/bin/sh\necho "${name} $*" >> ${log}\n${body}\n`)
     chmodSync(join(bin, name), 0o755)
   }
-  for (const m of ['16chan18cls', 'mindmap', 'mindsnap', 'mindgrab']) stub(`brainchop-${m}`, 'true')
+  for (const m of ['mindmap-fast', 'mindmap', 'mindsnap', 'mindgrab']) stub(`brainchop-${m}`, 'true')
   stub('niimath', `while [ "$1" != "--json" ]; do shift; done; echo '{"cjv": 1, "provenance": {"air_template": "/x/avg152T1.nii.gz"}}' > "$2"`)
   return { bin, argv: () => readFileSync(log, 'utf8').trim().split('\n') }
 }
@@ -54,6 +54,16 @@ test('pve: brainchop-mindmap --pve, fractions passed CSF, GM, WM', () => {
   const [, seg, qc] = argv()
   assert.match(seg, /^brainchop-mindmap \S*T1\.nii --pve -o \S+pve\.nii$/)
   assert.match(qc, /--pve \S+pve_csf\.nii \S+pve_gm\.nii \S+pve_wm\.nii --mask \S+mask\.nii --air /)
+})
+
+test('16chan18cls invokes the renamed brainchop-mindmap-fast executable and keeps its public label', () => {
+  const { bin, argv } = stubs()
+  const { status, report } = runCli(bin, '--model', '16chan18cls')
+  assert.equal(status, 0)
+  const [, seg, qc] = argv()
+  assert.match(seg, /^brainchop-mindmap-fast \S*T1\.nii -o \S+seg\.nii$/)
+  assert.match(qc, /^niimath --qc \S*T1\.nii --seg \S+seg\.nii --csf 3,4,11,12 --wm 1,5 --mask \S+mask\.nii --air /)
+  assert.equal(report.provenance.segmentation, 'brainchop 16chan18cls (Subcortical + GWM, 16ch)')
 })
 
 test('a missing executable is named', () => {

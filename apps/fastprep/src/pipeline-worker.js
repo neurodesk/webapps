@@ -9,7 +9,7 @@ import { loadGreedy } from "@neurodesk/greedy";
 import { loadMeica } from "@niivue/meica";
 import { runSynthsr } from "@neurodesk/synthsr";
 import { chooseBrowserBackend, createBrowserSession } from "@neurodesk/synthsr/browser";
-import * as mindgrab from "@brainchop/mindgrab";
+import * as mindgrab from "@brainchop/core";
 import { withBackendChoice } from "@neurodesk/runtime-support/mindgrab/backend";
 import * as ort from "onnxruntime-web/webgpu";
 import ortWasm from "onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm?url";
@@ -62,7 +62,7 @@ self.onmessage = async ({ data }) => {
       runtimes: {
         niimath,
         mindgrab: withBackendChoice(mindgrab),
-        mindgrabOptions: { backend: "auto", worker: false, timeoutMs: 900_000, onLog: (line) => post({ log: line }) },
+        mindgrabOptions: { backend: "auto", worker: false, assetPath: `${base}mindgrab/`, timeoutMs: 900_000, onLog: (line) => post({ log: line }) },
         greedy,
         synthsr,
         sdc: () => loadSdc(fetch(sdcWasm)),

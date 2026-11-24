@@ -27,6 +27,6 @@ export default neurodeskViteConfig({
   // These browser runtimes load WASM or WGSL assets through native module URLs.
   // Vite's development prebundler cannot process those imports.
   optimizeDeps: {
-    exclude: ['@dipy/gpu-streamlines', '@niivue/dcm2niix', '@niivue/niimath'],
+    exclude: ['@dipy/gpu-streamlines', '@niivue/dcm2niix', '@niivue/niimath', '@brainchop/core'],
   },
 })

@@ -19,7 +19,7 @@ const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const offlineByDefault = () => process.env.NEURODESK_OFFLINE === '1';
 
 // The MindGrab package this package pins, which the web app also serves.
-const loadMindgrab = () => loadMindgrabCpu(import.meta.resolve('@brainchop/mindgrab/package.json'));
+const loadMindgrab = () => loadMindgrabCpu(import.meta.resolve('@brainchop/core/package.json'));
 
 /** niimath on the web app's vendored WebAssembly build, one fresh module per command. */
 export const niimath = Object.freeze({

@@ -121,15 +121,30 @@ test("a GPU run that fails is measured on the CPU instead", async ({ page }) => 
   test.skip(!process.env.LCMODEL_E2E_LARGE, "set LCMODEL_E2E_LARGE=1: segmentation on the CPU takes minutes");
   test.setTimeout(1200000);
   await proxyAssets(page);
-  // The page sees a usable WebGPU adapter, so the app picks WebGPU, but
-  // MindMap's GPU build cannot be fetched in its worker: the GPU run fails
-  // the same way with or without a real GPU, as a driver or device limit can
-  // fail mid-run on a user's machine.
-  await page.context().route(/brainchop-mindmap-(gpu|gl)\.(js|wasm)$/, (route) => route.abort());
-  await page.addInitScript(() => {
-    const adapter = { info: { isFallbackAdapter: false }, features: new Set(["shader-f16"]), limits: {}, requestDevice: async () => { throw new Error("no device in this test"); } };
-    Object.defineProperty(navigator, "gpu", { value: { requestAdapter: async () => adapter, getPreferredCanvasFormat: () => "bgra8unorm" } });
+  // The page and worker both see a usable WebGPU adapter, so the app picks
+  // WebGPU and the worker tries to fetch MindMap's WebGPU weights even in
+  // headless Chromium without a GPU. Aborting the weights request makes the
+  // GPU run fail deterministically and exercise the real CPU fallback.
+  let blockedGpuRequests = 0;
+  await page.context().route(/(?:models\/mindmap\.bin|brainchop-mindmap-gl\.(?:js|wasm))$/, (route) => {
+    blockedGpuRequests += 1;
+    return route.abort();
   });
+  const gpuShim = `(() => {
+    const limits = { maxBufferSize: 256 * 1024 * 1024, maxStorageBufferBindingSize: 256 * 1024 * 1024, maxComputeWorkgroupStorageSize: 32768 };
+    const device = { limits, features: new Set(), lost: new Promise(() => {}), destroy() {} };
+    const adapter = { info: { isFallbackAdapter: false }, features: new Set(), limits, requestDevice: async () => device };
+    Object.defineProperty(navigator, "gpu", { configurable: true, value: { requestAdapter: async () => adapter, getPreferredCanvasFormat: () => "bgra8unorm" } });
+  })();\n`;
+  await page.context().route(/\/tissue-worker-[^/]+\.js$/, async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({
+      response,
+      contentType: "text/javascript",
+      body: gpuShim + (await response.text()),
+    });
+  });
+  await page.addInitScript(gpuShim);
   await page.goto("/");
   await page.getByRole("combobox", { name: "Input", exact: true }).selectOption(EXAMPLE);
   await expect(page.locator("#t1Info")).toContainText("256 × 256 × 204", { timeout: 300000 });
@@ -138,6 +153,7 @@ test("a GPU run that fails is measured on the CPU instead", async ({ page }) => 
   const log = page.locator("#technicalLog");
   await expect(log).toContainText("Segmenting with MindMap on webgpu");
   await expect(log).toContainText("segmenting on the CPU instead", { timeout: 120000 });
+  expect(blockedGpuRequests).toBeGreaterThan(0);
   await expect(page.locator("#tissueSummary")).toContainText("MindMap", { timeout: 1100000 });
   await expect(log).toContainText("MindMap tissue maps on cpu");
 });

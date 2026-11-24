@@ -20,10 +20,13 @@
     "./freebrowse-viewer": "./src/freebrowse-viewer/index.js",
     "./streamed-onnx": "./src/streamed-onnx/session.js",
     "./mindgrab": "./src/mindgrab/index.js",
-    "./mindgrab/backend": "./src/mindgrab/backend.js"
+    "./mindgrab/backend": {
+      "types": "./src/mindgrab/backend.d.ts",
+      "default": "./src/mindgrab/backend.js"
+    }
   },
   "dependencies": {
-    "@brainchop/mindgrab": "0.1.20260925",
+    "@brainchop/core": "1.0.0",
     "@neurodesk/webapp-components": "workspace:*",
     "@niivue/dcm2niix": "1.4.20261029",
     "@niivue/niivue": "1.0.0-rc.26",

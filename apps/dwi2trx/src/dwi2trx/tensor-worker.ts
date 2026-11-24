@@ -1,7 +1,8 @@
-import { version as mindgrabVersion } from '@brainchop/mindgrab/package.json'
-import { segment } from '@brainchop/mindgrab'
+import { version as mindgrabVersion } from '@brainchop/core/package.json'
+import { checkSupport, segment } from '@brainchop/core'
 import { MASK_OPTIONS, TENSOR_MAPS, assertMaskOnGrid, extractB0, fitTensor } from '@neurodesk/dwi2trx'
 import { runNiimath } from '@neurodesk/dwi2trx/runner'
+import { isSoftwareAdapter } from '@neurodesk/runtime-support/mindgrab/backend'
 import type { DwiInput } from './state'
 
 const bytes = async (file: File) => new Uint8Array(await file.arrayBuffer())
@@ -18,14 +19,21 @@ self.onmessage = async ({ data }: MessageEvent<{ input: DwiInput; mask?: File; a
     } else {
       self.postMessage({ type: 'progress', message: 'Brain extraction (mindgrab)…' })
       try {
-        const b0 = await extractB0(runNiimath, { dwi, bvalText: await data.input.bval.text() })
-        const result = await segment(b0, { ...MASK_OPTIONS, worker: false, backend: 'webgpu', assetPath: data.assetPath })
-        maskProvenance = { model: MASK_OPTIONS.model, version: mindgrabVersion, backend: result.backend, elapsedMs: result.elapsedMs }
-        if (result.mask) {
-          const computed = new Uint8Array(await new Blob([result.mask]).arrayBuffer())
-          await assertMaskOnGrid(dwi, computed)
-          mask = computed
-        } else maskFailure = 'MindGrab returned no brain mask'
+        const support = await checkSupport(MASK_OPTIONS.model)
+        const adapter = support.supported ? await navigator.gpu?.requestAdapter({ powerPreference: 'high-performance' }).catch(() => null) : null
+        const software = Boolean(support.software) || isSoftwareAdapter(adapter?.info)
+        if (!support.supported || software) {
+          maskFailure = software ? 'WebGPU adapter is software-rendered' : (support.reasons.join('; ') || 'WebGPU is unavailable')
+        } else {
+          const b0 = await extractB0(runNiimath, { dwi, bvalText: await data.input.bval.text() })
+          const result = await segment(b0, { ...MASK_OPTIONS, worker: false, backend: 'webgpu', assetPath: data.assetPath })
+          maskProvenance = { model: MASK_OPTIONS.model, version: mindgrabVersion, backend: result.backend, elapsedMs: result.elapsedMs }
+          if (result.mask) {
+            const computed = new Uint8Array(await new Blob([result.mask]).arrayBuffer())
+            await assertMaskOnGrid(dwi, computed)
+            mask = computed
+          } else maskFailure = 'MindGrab returned no brain mask'
+        }
       } catch (error) {
         maskFailure = error instanceof Error ? error.message : String(error)
       }

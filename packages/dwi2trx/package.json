@@ -30,7 +30,7 @@
     "lint": "node --check src/tensor.js && node --check src/gradients.js && node --check src/runner.js && node --check src/node-runner.js && node --check src/node.js && node --check src/niimath-version.js && node --check bin/dwi2trx.js"
   },
   "dependencies": {
-    "@brainchop/mindgrab": "0.1.20260925",
+    "@brainchop/core": "1.0.0",
     "@neurodesk/node-drivers": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
     "@niivue/niimath": "1.4.20261114"

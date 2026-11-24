@@ -9,4 +9,5 @@ export default neurodeskViteConfig({
   build: { target: "es2022", outDir: "dist", assetsInlineLimit: 0 },
   // The tissue worker always passes assetPath to the versioned MindMap runtime.
   worker: { plugins: () => [mindgrabFromAssetPath()] },
+  optimizeDeps: { exclude: ["@brainchop/core"] },
 });

@@ -24,7 +24,7 @@
     "lint": "node --check src/*.js scripts/*.mjs validation/*.mjs"
   },
   "devDependencies": {
-    "@brainchop/mindgrab": "0.1.20261008",
+    "@brainchop/core": "1.0.0",
     "@neurodesk/node-drivers": "workspace:*",
     "@niivue/niimath": "1.4.20261016"
   },

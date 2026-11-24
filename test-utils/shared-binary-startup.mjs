@@ -160,7 +160,7 @@ async function runProbe({ page, workerUrl, timeoutMs = 60_000, message }) {
 }
 
 // A MindGrab threaded CPU binary (`brainchop-<model>.wasm`); the WebGPU and WebGL2 builds end in -gpu and -gl.
-const MINDGRAB_CPU_BINARY = /^brainchop-([a-z0-9]+)\.wasm$/;
+const MINDGRAB_CPU_BINARY = /^brainchop-(?!.*-(?:gpu|gl)\.wasm$)([a-z0-9-]+)\.wasm$/;
 // Hosted runners finish one CPU segmentation in a few minutes; MindGrab's own CPU limit is 15 minutes.
 const SEGMENTATION_TIMEOUT_MS = 16 * 60_000;
 
@@ -318,8 +318,9 @@ export async function verifySharedBinaries({ browser, registry, repoRoot, apps =
           // MindGrab imports `<assetPath>/brainchop-<model>.js`, so the module beside which the app staged the binary is the one it runs.
           const module = loaders.filter(loader => loader.path.endsWith(`/${file.name.replace(/\.wasm$/, '.js')}`));
           assert.equal(module.length, 1, `${id}: expected one staged ${file.name.replace(/\.wasm$/, '.js')} that loads ${binaryPath}`);
-          const api = join(repoRoot, 'node_modules/.pnpm', `@brainchop+mindgrab@${family.version}`, 'node_modules/@brainchop/mindgrab/dist/index.js');
-          assert.ok(await exists(api), `${family.id}: its version must be the @brainchop/mindgrab release of its binaries; ${api} is missing`);
+          const pkgName = family.package ?? '@brainchop/mindgrab';
+          const api = join(repoRoot, 'node_modules/.pnpm', `${pkgName.replace('/', '+')}@${family.version}`, 'node_modules', pkgName, 'dist/index.js');
+          assert.ok(await exists(api), `${family.id}: its version must be the ${pkgName} release of its binaries; ${api} is missing`);
           const apiPath = `${app.path}/__mindgrab_api_${family.version}.js`;
           const probePath = `${app.path}/__mindgrab_segmentation_${segmentations.length}.mjs`;
           const path = join(scratch, `segmentation-${segmentations.length}.mjs`);

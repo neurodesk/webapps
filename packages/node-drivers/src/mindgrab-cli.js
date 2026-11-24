@@ -1,4 +1,4 @@
-// The command line of the native brainchop-mindgrab (brainchopC), limited to the
+// The command line of the native brainchop-mindgrab (brainchop-core), limited to the
 // options the CPU WebAssembly build runs. Usage errors read as the native ones do.
 
 export class UsageError extends Error {}
@@ -9,10 +9,10 @@ const UNSUPPORTED = new Set(['--crop', '--export-classes', '-cpu']);
 
 /**
  * @param {string[]} argv the arguments after the program name
- * @returns {{ help: true } | { help: false, input: string, output: string, mask?: string, borderMm?: number, ct: boolean, comply: boolean }}
+ * @returns {{ help: true } | { version: true } | { help: false, version: false, input: string, output: string, mask?: string, borderMm?: number, ct: boolean, comply: boolean, noTurbo?: boolean }}
  */
 export function parseMindgrabArgs(argv) {
-  const parsed = { help: false, output: 'output.nii.gz', ct: false, comply: false };
+  const parsed = { help: false, version: false, output: 'output.nii.gz', ct: false, comply: false };
   const inputs = [];
   const value = (i, name) => {
     if (i >= argv.length) throw new UsageError(`${name} requires a value`);
@@ -21,9 +21,11 @@ export function parseMindgrabArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '-h' || arg === '--help') return { help: true };
+    else if (arg === '-v' || arg === '--version') return { version: true };
     else if (arg === '-o' || arg === '--output') parsed.output = value(++i, arg);
     else if (arg === '--ct') parsed.ct = true;
     else if (arg === '--comply') parsed.comply = true;
+    else if (arg === '--no-turbo') parsed.noTurbo = true;
     else if (arg === '--mask') {
       // An optional value, as in the native parser: the next argument is the path unless it is an option.
       parsed.mask = i + 1 < argv.length && !argv[i + 1].startsWith('-') ? argv[++i] : 'mask.nii.gz';
@@ -45,29 +47,36 @@ export function parseMindgrabArgs(argv) {
   return { ...parsed, input: inputs[0] };
 }
 
-export function mindgrabHelp(version) {
-  return `usage: brainchop-mindgrab [-h] [-o OUTPUT] [--ct] [--comply]
-                          [--mask [PATH]] [--border MM] [-backend auto|cpu] input
+export function mindgrabHelp(version, { packageName = '@brainchop/core', supportsNoTurbo = packageName === '@brainchop/core' } = {}) {
+  const usageFlags = supportsNoTurbo
+    ? '[--mask [PATH]] [--border MM] [--no-turbo] [-backend auto|cpu] input'
+    : '[--mask [PATH]] [--border MM] [-backend auto|cpu] input';
+  const noTurboLine = supportsNoTurbo
+    ? '  --no-turbo            Exact CPU instead of approximate default\n'
+    : '';
+  return `usage: brainchop-mindgrab [-h] [-v] [-o OUTPUT] [--ct] [--comply]
+                          ${usageFlags}
 
 BrainChop mindgrab: skull stripping in any modality (v${version})
-Node CPU build of @brainchop/mindgrab ${version} (@neurodesk/node-drivers)
+Node CPU build of ${packageName} ${version} (@neurodesk/node-drivers)
 
 positional arguments:
   input                 Input NIfTI file (.nii or .nii.gz)
 
 options:
   -h, --help            show this help message and exit
+  -v, --version         show the version and exit
   -o OUTPUT, --output OUTPUT
                         Output path (default: output.nii.gz)
   --ct                  CT scan: convert Hounsfield to Cormack units
   --comply              Insert compliance transform before conform
   --mask [PATH]         Save binary brain mask (default: mask.nii.gz)
   --border MM           Grow mask border in mm (default: 0)
-  -backend NAME, --backend NAME
+${noTurboLine}  -backend NAME, --backend NAME
                         Select auto|cpu
 
 Outputs ending in .gz are gzipped. Set BRAINCHOP_MINDGRAB_PACKAGE to the directory
-of an installed @brainchop/mindgrab to use it instead of the one Node resolves.
+of an installed ${packageName} to use it instead of the one Node resolves.
 
 Examples:
   brainchop-mindgrab input.nii.gz -o output.nii.gz

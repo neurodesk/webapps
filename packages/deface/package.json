@@ -30,7 +30,7 @@
     "lint": "node --check src/*.js && node --check bin/deface.js"
   },
   "dependencies": {
-    "@brainchop/mindgrab": "0.1.20260925",
+    "@brainchop/core": "1.0.0",
     "@neurodesk/node-drivers": "workspace:*",
     "@neurodesk/runtime-support": "workspace:*"
   },
