@@ -14,7 +14,7 @@ import {
   prepareRegistrationInputsRas,
   squaredEdt3d,
 } from '../src/rads.js';
-import { voxelIndex, labelComponents26 } from '../src/preprocess.js';
+import { voxelIndex, labelComponents26, resampleFromTo } from '../src/preprocess.js';
 
 test('computeLaterality matches Raidionics convention and uses unrounded hemisphere counts for midlineCrossing', () => {
   const lat = new Uint8Array([1, 1, 2, 2, 0]);
@@ -287,4 +287,43 @@ test('prepareRegistrationInputsRas preserves every focus including a 1-voxel foc
   diagTumour[voxelIndex(4, 4, 5, closeDims)] = 1;
   const prepDiag = prepareRegistrationInputsRas({ data: closeData, dims: closeDims, affine: diagAffine }, closeBrain, diagTumour);
   assert.equal(labelComponents26(prepDiag.mask.data, prepDiag.mask.dims).count, 1);
+
+  // Connected 1-voxel-thick extension under RAS X = x + 0.5y shear must preserve spatial coverage
+  // (not skip the thin row) as well as component count.
+  const extDims = [30, 20, 12];
+  const extAffine = [
+    [1, 0.5, 0, 0],
+    [0, 1, 0, 0],
+    [0, 0, 1, 0],
+    [0, 0, 0, 1],
+  ];
+  const extData = new Float32Array(30 * 20 * 12).fill(50);
+  const extBrain = new Uint8Array(extData.length).fill(1);
+  const extTumour = new Uint8Array(extData.length);
+  for (let z = 3; z < 8; z++) {
+    for (let y = 5; y < 10; y++) {
+      for (let x = 5; x < 11; x++) extTumour[voxelIndex(x, y, z, extDims)] = 1;
+    }
+    for (let x = 5; x <= 21; x++) extTumour[voxelIndex(x, 10, z, extDims)] = 1;
+  }
+  const prepExt = prepareRegistrationInputsRas({ data: extData, dims: extDims, affine: extAffine }, extBrain, extTumour);
+  assert.equal(labelComponents26(prepExt.mask.data, prepExt.mask.dims).count, 1);
+  assert.equal(prepExt.mask.affine[2][2], 1, 'un-sheared Z axis keeps native 1 mm spacing');
+  const targetDims = [40, 20, 12];
+  const targetAffine = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
+  const directReslice = resampleFromTo({ data: Float32Array.from(extTumour), dims: extDims, affine: extAffine }, targetDims, targetAffine, 0);
+  const prepReslice = resampleFromTo({ data: Float32Array.from(prepExt.mask.data), dims: prepExt.mask.dims, affine: prepExt.mask.affine }, targetDims, targetAffine, 0);
+  let directGe20 = 0;
+  let prepGe20 = 0;
+  for (let z = 0; z < 12; z++) {
+    for (let y = 0; y < 20; y++) {
+      for (let x = 20; x < 40; x++) {
+        const i = voxelIndex(x, y, z, targetDims);
+        if (directReslice.data[i] >= 0.5) directGe20++;
+        if (prepReslice.data[i] >= 0.5) prepGe20++;
+      }
+    }
+  }
+  assert.equal(directGe20, 35);
+  assert.equal(prepGe20, directGe20, 'thin extension at RAS X >= 20 must survive orthogonalization');
 });

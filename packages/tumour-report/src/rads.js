@@ -495,7 +495,14 @@ export function prepareRegistrationInputsRas(volume, brainMask, tumourMask, marg
           minNative = colSpacings[c];
         }
       }
-      return Number.isFinite(minNative) ? minNative : Math.min(...colSpacings);
+      const nativeStep = Number.isFinite(minNative) ? minNative : Math.min(...colSpacings);
+      // Cap each sheared RAS axis by the physical sampling distance 1 / ||(A^-1)[:, r]||_2
+      // so stepping one output voxel along RAS axis r moves <= 1 native voxel and cannot skip
+      // a 1-voxel-thick lesion extension. Un-sheared axes stay at exact native resolution.
+      if (!axisHasShear[r]) return nativeStep;
+      const colNorm = Math.hypot(invM[0][r], invM[1][r], invM[2][r]);
+      const rasStep = colNorm > 1e-12 ? 1 / colNorm : nativeStep;
+      return Math.min(nativeStep, rasStep);
     });
     const steps = [...baseSteps];
 
