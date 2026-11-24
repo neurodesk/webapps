@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/denoise",
-  "version": "0.0.20261124",
+  "version": "0.1.20261124",
   "description": "Self-supervised microscopy denoising core (Aydin FGR, Zero-Shot Noise2Noise with WebGPU, Anscombe VST + NLM) and portable command line",
   "type": "module",
   "license": "MIT",
