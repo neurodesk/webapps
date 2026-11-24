@@ -85,7 +85,9 @@ test('cropped head fixture cannot publish nearly empty normalized outputs', asyn
   await page.locator('#settingsSection > summary').click();
   await page.locator('#synthsrBackend').selectOption('wasm');
   await page.locator('#runButton').click();
-  await expect(page.locator('#statusText')).toContainText('Normalization failed', { timeout: 19 * 60 * 1000 });
+  // Refused either by the coverage gate or earlier, when the few-voxel "brain" leaves Greedy's deformable NMI
+  // histogram empty (BrainChop Core MindGrab in the browser); either way nothing is published.
+  await expect(page.locator('#statusText')).toContainText(/Normalization failed|non-finite values/, { timeout: 19 * 60 * 1000 });
   await expect(page.locator('#download')).toBeDisabled();
   await expect(page.locator('#downloadSelected')).toBeDisabled();
   await expect(page.locator('#runButton')).toBeEnabled();
