@@ -401,11 +401,20 @@ pub fn correlation_complex_single_with_reference(
     let divide = |dot: f32| (f64::from(dot) / nx) as f32 / ny;
     let (mut re, mut im) = (divide(real), divide(imaginary));
     if reference == crate::arithmetic::ArithmeticReference::MatlabIntel {
-        let mag = libm::hypot(f64::from(re), f64::from(im));
-        if mag > 1.0 {
-            re = (f64::from(re) / mag) as f32;
-            im = (f64::from(im) / mag) as f32;
-            while libm::hypot(f64::from(re), f64::from(im)) > 1.0 {
+        let exceeds = |re: f32, im: f32| {
+            let c = Complex64::new(f64::from(re), f64::from(im));
+            c.norm_sqr() > 1.0
+                || c.norm() > 1.0
+                || libm::hypot(c.re, c.im) > 1.0
+                || libm::hypotf(re, im) > 1.0
+        };
+        if exceeds(re, im) {
+            let mag = libm::hypot(f64::from(re), f64::from(im));
+            if mag > 1.0 {
+                re = (f64::from(re) / mag) as f32;
+                im = (f64::from(im) / mag) as f32;
+            }
+            while exceeds(re, im) {
                 if re.abs() >= im.abs() {
                     re = re.abs().next_down().copysign(re);
                 } else {
@@ -473,6 +482,7 @@ mod tests {
         for (raw, exp, obs) in [
             ([0.0, 0.0, -1.0], 0.5, [0.0, 0.0, 5.0]),
             ([0.0, 0.0, -1.3], 1.76, [0.0, 0.0, 179.0]),
+            ([0.0, 0.0, -1.0], 1.000000005, [0.0, 0.0, 5.0]),
         ] {
             let pred = crate::css::predict(&raw, exp, &[1.0], 1);
             let rc = correlation_complex_single_with_reference(
