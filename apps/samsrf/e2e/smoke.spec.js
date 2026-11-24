@@ -744,7 +744,17 @@ test("explicit arithmetic references run through workers and are retained in dow
     Arithmetic_Reference: "matlab-intel", Css_Convention: "nonnegative",
   };
   await page.locator("#modelInput").setInputFiles(payload("css.json", JSON.stringify(css)));
-  await expect(page.locator("#statusText")).not.toContainText("not supported");
+  await expect(page.locator("#statusText")).toContainText("Loaded model css.json");
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toContainText("pRF maps ready");
+  await expect(page.locator("#downloadAll")).toBeEnabled();
+  const cssPending = page.waitForEvent("download");
+  await page.locator("#downloadAll").click();
+  const cssArchive = await cssPending;
+  const cssEntries = unzipSync(readFileSync(await cssArchive.path()));
+  const cssProvenance = JSON.parse(new TextDecoder().decode(cssEntries["lh_css_Css_provenance.json"]));
+  expect(cssProvenance.arithmeticReference).toBe("matlab-intel");
+  expect(cssProvenance.model.Css_Convention).toBe("nonnegative");
   await page.locator("#analysis").selectOption("rc");
   const rcSingleGaussian = {
     Name: "rc_single_gaussian", TR: 1, Scaling_Factor: 1, Hrf: 1, Aperture_File: "ap",
@@ -754,7 +764,7 @@ test("explicit arithmetic references run through workers and are retained in dow
     SeedPar_Function: "@(V)[V(2:3);V(4)]",
   };
   await page.locator("#modelInput").setInputFiles(payload("rc_single_gaussian.json", JSON.stringify(rcSingleGaussian)));
-  await expect(page.locator("#statusText")).toContainText("Data_Precision=single with a Prf_Function fit is not supported by this port");
+  await expect(page.locator("#statusText")).toContainText("2D pRF fits need double precision");
   await expect(page.locator("#downloadAll")).toBeDisabled();
 });
 

@@ -382,34 +382,97 @@ fn nonnegative_css_evals_and_fits_equal_matlab_on_each_host() {
         let shape = rec["courses"]["shape"].as_array().unwrap();
         let volumes = shape[0].as_u64().unwrap() as usize;
         let xy = apertures.scaled_xy(radius);
+        let xy_val = samsrf_core::fit_prf::xy_value(&xy);
         let hrf_spec = ErrfunHrf::Kernel(hrf.clone());
+        let corr_double = |pred: &[f64], y: &[f64]| -> f64 {
+            let centre = |vals: &[f64]| -> Vec<f64> {
+                let m = intel::blas::matlab_mean(vals);
+                vals.iter().map(|v| v - m).collect()
+            };
+            let (xc, yc) = (centre(pred), centre(y));
+            let r = reference.ddot(&xc, &yc) / reference.norm(&xc) / reference.norm(&yc);
+            if r.abs() > 1.0 { r / r.abs() } else { r }
+        };
 
-        // 48 evaluations.
+        // 48 evaluations: check rawYp, convolved predicted, r, objective (1 - r^2), and beta
+        // from the port's own predicted vector (never feeding MATLAB's recorded prediction).
         let evals = rec["evals"].as_array().unwrap();
         assert_eq!(evals.len(), 48);
         for case in evals {
             let v = case["vertex"].as_u64().unwrap() as usize - 1;
             let y = &courses[v * volumes..(v + 1) * volumes];
             let params: Vec<f64> = case["params"].as_array().unwrap().iter().map(|p| p.as_f64().unwrap()).collect();
+            let rfp = gaussian.evaluate(&[samsrf_core::expr::Value::column(params.clone()), xy_val.clone()]).unwrap();
+            let raw = prf::predict_timecourse(&rfp.data, &apertures);
+            let want_raw = array_f64(dir, &case["rawYp"]);
+            for (t, (&got, &want)) in raw.iter().zip(&want_raw).enumerate() {
+                assert!(same_f64(got, want), "{label} eval {} rawYp[{t}]", case["id"]);
+            }
+            let mut clipped = raw.clone();
+            for val in &mut clipped {
+                *val = if *val > 0.0 { samsrf_core::matlab_math::pow(*val, params[3]) } else { 0.0 };
+            }
+            let pred = samsrf_core::matlab_math::convolve_real(&clipped, &hrf, downsampling);
+            let want_pred = array_f64(dir, &case["predicted"]);
+            for (t, (&got, &want)) in pred.iter().zip(&want_pred).enumerate() {
+                assert!(same_f64(got, want), "{label} eval {} predicted[{t}]", case["id"]);
+            }
+            let r = corr_double(&pred, y);
             let obj = prf::errfun_with_reference(
                 &gaussian, &apertures, &xy, &hrf_spec, &params, y, downsampling,
                 true, Precision::Double, css::Convention::Nonnegative, reference,
             ).unwrap();
             let scalars = array_f64(dir, &case["scalars"]);
+            assert!(same_f64(r, scalars[0]), "{label} eval {} r", case["id"]);
             assert!(same_f64(obj.re, scalars[1]), "{label} eval {} objective", case["id"]);
             assert_eq!(obj.im.to_bits(), 0, "{label} eval {} must stay real", case["id"]);
 
-            // Recompute predicted and beta through the exact same path as fit_prf.rs.
-            let pred = array_f64(dir, &case["predicted"]);
             let beta = array_f64(dir, &case["beta"]);
             let x_col: Vec<Complex64> = pred.iter().map(|&val| Complex64::new(val, 0.0)).collect();
             let (amp, base) = lstsq::regress_on_ones_with_reference(&x_col, y, Precision::Double, reference);
             assert!(same_f64(base.re, beta[0]) && same_f64(amp.re, beta[1]), "{label} eval {} beta", case["id"]);
         }
 
-        // 12 full Nelder-Mead fine fits.
+        // 12 full Nelder-Mead fine fits (plus production fit_prf::Prepared::fit_vertex beta path).
         let fits = rec["fits"].as_array().unwrap();
         assert_eq!(fits.len(), 12);
+        let model_json = serde_json::json!({
+            "Name": "nn_css_gate",
+            "TR": rec["tr"],
+            "Scaling_Factor": radius,
+            "Hrf": hrf,
+            "Aperture_File": "aps",
+            "Downsample_Predictions": downsampling,
+            "Prf_Function": "@(P,ApWidth)prf_gaussian_rf(P(1),P(2),P(3),ApWidth)",
+            "Param_Names": ["x0", "y0", "Sigma"],
+            "Scaled_Param": [1, 1, 1],
+            "Only_Positive": [0, 0, 1],
+            "Param1": [0.0],
+            "Param2": [0.0],
+            "Param3": [1.0],
+            "Compressive_Nonlinearity": true,
+            "Css_Convention": "nonnegative",
+            "Arithmetic_Reference": reference.name(),
+            "Fine_Fit_Threshold": 0.0,
+            "Replace_Bad_Fits": false
+        });
+        let prf_model = match samsrf_core::model::parse_model_json(
+            samsrf_core::model::AnalysisKind::Prf,
+            &model_json.to_string(),
+        ).unwrap() {
+            samsrf_core::model::Model::Prf(m) => m,
+            _ => unreachable!(),
+        };
+        let prepared = samsrf_core::fit_prf::Prepared::new(
+            &prf_model,
+            apertures.clone(),
+            &samsrf_core::hrf::ResolvedHrf::Kernel(hrf.clone()),
+            volumes,
+            true,
+            &mut |_, _| {},
+        ).unwrap();
+
+        let mut fit_vertex_checked = 0usize;
         for case in fits {
             let v = case["vertex"].as_u64().unwrap() as usize - 1;
             let y = &courses[v * volumes..(v + 1) * volumes];
@@ -444,18 +507,39 @@ fn nonnegative_css_evals_and_fits_equal_matlab_on_each_host() {
             assert_eq!(res.func_count, case["funcCount"].as_u64().unwrap() as usize, "{label} fit {} funcCount", case["id"]);
             assert_eq!(res.iterations, case["iterations"].as_u64().unwrap() as usize, "{label} fit {} iterations", case["id"]);
 
-            // Check fitted beta and rFit^2 via prf_gaussian_rf + compress + convolve + regress_on_ones_with_reference.
-            let xy_val = samsrf_core::fit_prf::xy_value(&xy);
-            let rfp = gaussian.evaluate(&[samsrf_core::expr::Value::column(res.x.clone()), xy_val]).unwrap();
+            let rfp = gaussian.evaluate(&[samsrf_core::expr::Value::column(res.x.clone()), xy_val.clone()]).unwrap();
             let mut raw = prf::predict_timecourse(&rfp.data, &apertures);
             for val in &mut raw {
                 *val = if *val > 0.0 { samsrf_core::matlab_math::pow(*val, res.x[3]) } else { 0.0 };
             }
             let pred = samsrf_core::matlab_math::convolve_real(&raw, &hrf, downsampling);
+            let r_fit = corr_double(&pred, y);
+            assert!(same_f64(r_fit, want_scalars[2]), "{label} fit {} rFit", case["id"]);
+            assert!(same_f64(r_fit * r_fit, want_scalars[3]), "{label} fit {} rFit^2", case["id"]);
             let pred_c: Vec<Complex64> = pred.iter().map(|&val| Complex64::new(val, 0.0)).collect();
             let (amp, base) = lstsq::regress_on_ones_with_reference(&pred_c, y, Precision::Double, reference);
             assert!(same_f64(base.re, want_beta[0]) && same_f64(amp.re, want_beta[1]), "{label} fit {} beta", case["id"]);
+
+            // Exercise the production fit_prf::Prepared::fit_vertex path end-to-end when the fit
+            // passes SamSrf's post-fit bounds filter (positive R^2, scaled params in bounds, sigma > 0, exponent > 0).
+            let in_bounds = (1.0 - res.fval) > 0.0
+                && res.x[0].abs() <= 2.0 * radius
+                && res.x[1].abs() <= 2.0 * radius
+                && res.x[2] > 0.0 && res.x[2].abs() <= 2.0 * radius
+                && res.x[3] > 0.0;
+            if in_bounds {
+                let row = prepared.fit_vertex(y, &seed, 1.0, None).unwrap();
+                // row layout: [R^2, x0, y0, Sigma, Exponent, Beta, Baseline]
+                assert!(same_f64(row[0].re, want_scalars[1]), "{label} fit_vertex {} R^2", case["id"]);
+                for k in 0..4 {
+                    assert!(same_f64(row[1 + k].re, want_fitted[k]), "{label} fit_vertex {} param[{k}]", case["id"]);
+                }
+                assert!(same_f64(row[5].re, want_beta[1]), "{label} fit_vertex {} Beta", case["id"]);
+                assert!(same_f64(row[6].re, want_beta[0]), "{label} fit_vertex {} Baseline", case["id"]);
+                fit_vertex_checked += 1;
+            }
         }
+        assert!(fit_vertex_checked > 0, "{label}: production fit_vertex path must be exercised");
     }
 }
 
@@ -526,7 +610,10 @@ fn held_out_single_kernels_equal_matlab_on_intel_xeon_8573c() {
 /// #731 held-out gate on Intel Xeon 8370C (`SAMSRF_QR_KERNELS_DIR` + `SAMSRF_QR_REFERENCE_DIR`):
 /// every single real (107 chains + 214 x 8 = 1,712 multi-RHS solves) and complex (67 chains +
 /// 134 x 8 = 1,072 multi-RHS solves) step (pivot, packed factor, tau, Q'y / Q^H y, coefficients)
-/// matches MKL bit-for-bit.
+/// matches every component MATLAB stored bit-for-bit (matching `qr_kernels.rs`, where MATLAB
+/// omits the imaginary array on all-zero-imaginary multi-RHS results such as
+/// `glm_single_1e-10_0.3_multi_ones-first`, the gate asserts bit-exact real parts and zero
+/// imaginary parts).
 #[test]
 fn held_out_single_qr_kernels_equal_matlab_on_intel_xeon_8370c() {
     let Some([kernels, designs_root]) = fixture_pair(["SAMSRF_QR_KERNELS_DIR", "SAMSRF_QR_REFERENCE_DIR"]) else { return };

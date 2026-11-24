@@ -349,12 +349,17 @@ pub fn correlation_single_with_reference(
     let ny = yc.iter().map(|&value| f64::from(value).powi(2)).sum::<f64>().sqrt() as f32;
     let xs: Vec<f32> = xc.iter().map(|&value| value as f32).collect();
     let dot = reference.sdot(&xs, &yc);
-    if observations_first {
+    let r = if observations_first {
         let first = dot / ny;
         (f64::from(first) / nx) as f32
     } else {
         let first = (f64::from(dot) / nx) as f32;
         (f64::from(first) / f64::from(ny)) as f32
+    };
+    if reference == crate::arithmetic::ArithmeticReference::MatlabIntel && r.abs() > 1.0 {
+        r / r.abs()
+    } else {
+        r
     }
 }
 
@@ -431,5 +436,24 @@ mod tests {
         // Exact MATLAB scalar from corr_single_n250_offset0.
         assert_eq!(f64::from(r), 0.8235538005828857);
         assert_eq!(f64::from(1.0f32 - r * r), 0.3217591643333435);
+    }
+
+    #[test]
+    fn intel_mixed_single_correlation_clamps_magnitude_to_one() {
+        let r = correlation_single_with_reference(
+            &[0.0, 0.0, 100.0],
+            &[0.0, 0.0, 23.0],
+            false,
+            crate::arithmetic::ArithmeticReference::MatlabIntel,
+        );
+        assert_eq!(r, 1.0f32);
+        assert_eq!(1.0f32 - r * r, 0.0f32);
+        let neg = correlation_single_with_reference(
+            &[0.0, 0.0, 100.0],
+            &[0.0, 0.0, -23.0],
+            false,
+            crate::arithmetic::ArithmeticReference::MatlabIntel,
+        );
+        assert_eq!(neg, -1.0f32);
     }
 }

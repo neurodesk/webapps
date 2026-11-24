@@ -483,7 +483,9 @@ impl RealDesign {
                 }
             }
         }
-        let tolerance = rows.max(n) as f32 * f32::EPSILON * a.first().map_or(0.0, |column| column[0].abs());
+        let tolerance = rows.max(n) as f32
+            * f32::EPSILON
+            * a.first().and_then(|column| column.first()).map_or(0.0, |value| value.abs());
         let rank = (0..steps).take_while(|&i| a[i][i].abs() > tolerance).count();
         Self { packed: a, taus, pivot, rank }
     }
@@ -772,5 +774,8 @@ mod tests {
         let complex = ComplexDesign::new(&[&cx, &cones]);
         let (beta, _) = complex.solve(&cy, 1, 0);
         assert!(beta[0].re.is_finite() && beta[1].re.is_finite());
+        let empty = RealDesign::new(&[&[], &[]]);
+        assert_eq!(empty.rank(), 0);
+        assert_eq!(empty.solve(&[], 1, 0), vec![0.0, 0.0]);
     }
 }

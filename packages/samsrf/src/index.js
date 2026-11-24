@@ -192,7 +192,7 @@ export function removeNoise({ volumes, vertices, data }, covariates, nCovariates
 export const ARITHMETIC_REFERENCES = Object.freeze({
   current: 'Current (default)',
   'matlab-amd': 'MATLAB AMD reference',
-  'matlab-intel': 'MATLAB Intel reference (double only)',
+  'matlab-intel': 'MATLAB Intel reference',
 });
 
 export function arithmeticReference(value = 'current') {
