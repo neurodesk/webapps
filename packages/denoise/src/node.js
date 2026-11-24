@@ -30,6 +30,10 @@ const LOCK_TMP_PREFIX = ".denoise-lock-tmp-";
 const STAGE_PREFIX = ".denoise-stage-";
 const TRASH_PREFIX = ".denoise-trash-";
 const PRESERVED_BACKUP_PREFIX = ".denoise-preserved-backup-";
+const LOCK_TMP_DIR_RE = /^\.denoise-lock-tmp-(\d+)-([0-9a-f]{16})$/;
+const STAGE_DIR_RE = /^\.denoise-stage-(\d+)-([0-9a-f]{8})$/;
+const TRASH_DIR_RE = /^\.denoise-trash-(\d+)-([0-9a-f]{8})$/;
+const PRESERVED_BACKUP_DIR_RE = /^\.denoise-preserved-backup-(\d+)-([0-9a-f]{8})$/;
 const OWNER_FILE_RE = /^owner-([0-9a-f]+)\.json$/;
 
 export const OUTPUT_FORMATS = Object.freeze(["auto", "tiff", "nifti", "both"]);
@@ -362,12 +366,28 @@ async function discardStageDir(resolvedDir, stagePath) {
 async function recoverInterruptedStages(resolvedDir, outputDir) {
   const entries = await readdir(resolvedDir);
   for (const entry of entries) {
-    if (entry.startsWith(TRASH_PREFIX)) {
-      await rm(join(resolvedDir, entry), { recursive: true, force: true }).catch(() => {});
+    const trashMatch = entry.match(TRASH_DIR_RE);
+    if (trashMatch) {
+      const trashPath = join(resolvedDir, entry);
+      let info;
+      try {
+        info = await lstat(trashPath);
+      } catch {
+        continue;
+      }
+      if (!info.isDirectory()) continue;
+      const trashPid = Number(trashMatch[1]);
+      const trashMeta = await readJsonIfPresent(join(trashPath, "_meta.json"));
+      if (
+        isLocalProcessDead(trashPid) &&
+        (!trashMeta || (trashMeta.host === hostname() && isLocalProcessDead(trashMeta.pid)))
+      ) {
+        await rm(trashPath, { recursive: true, force: true }).catch(() => {});
+      }
       continue;
     }
 
-    if (entry.startsWith(LOCK_TMP_PREFIX)) {
+    if (LOCK_TMP_DIR_RE.test(entry)) {
       const tmpPath = join(resolvedDir, entry);
       let info;
       try {
@@ -391,7 +411,7 @@ async function recoverInterruptedStages(resolvedDir, outputDir) {
       continue;
     }
 
-    if (entry.startsWith(PRESERVED_BACKUP_PREFIX)) {
+    if (PRESERVED_BACKUP_DIR_RE.test(entry)) {
       const preservedPath = join(resolvedDir, entry);
       let info;
       try {
@@ -401,12 +421,15 @@ async function recoverInterruptedStages(resolvedDir, outputDir) {
       }
       if (!info.isDirectory()) continue;
       const preservedBackup = join(preservedPath, "_backup");
-      throw new Error(
-        `Output directory '${outputDir}' contains preserved backup(s) from a failed rollback in '${preservedBackup}'. Restore or remove them manually before retrying.`,
-      );
+      if (await pathExists(preservedBackup)) {
+        throw new Error(
+          `Output directory '${outputDir}' contains preserved backup(s) from a failed rollback in '${preservedBackup}'. Restore or remove them manually before retrying.`,
+        );
+      }
+      continue;
     }
 
-    if (!entry.startsWith(STAGE_PREFIX)) continue;
+    if (!STAGE_DIR_RE.test(entry)) continue;
     const stagePath = join(resolvedDir, entry);
     let info;
     try {
@@ -605,10 +628,16 @@ async function reserveOutputDir(outputDir, { overwrite = false, onLockInspect } 
   try {
     await recoverInterruptedStages(resolved, outputDir);
     if (!overwrite) {
-      const entries = (await readdir(resolved)).filter(
-        (name) => name !== LOCK_NAME && !name.startsWith(LOCK_TMP_PREFIX),
-      );
-      if (entries.length > 0) {
+      const nonInternal = [];
+      for (const name of await readdir(resolved)) {
+        if (name === LOCK_NAME) continue;
+        if (LOCK_TMP_DIR_RE.test(name)) {
+          const tmpInfo = await lstat(join(resolved, name)).catch(() => null);
+          if (tmpInfo?.isDirectory()) continue;
+        }
+        nonInternal.push(name);
+      }
+      if (nonInternal.length > 0) {
         throw new Error(`Output directory '${outputDir}' is not empty. Choose a new directory or pass --overwrite.`);
       }
     }

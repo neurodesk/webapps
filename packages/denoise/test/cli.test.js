@@ -730,6 +730,63 @@ test("failed rollback protects preserved backups even if _rollback-failed.json c
   }
 });
 
+test("user files and folders starting with internal dot-prefixes are never deleted or ignored", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "denoise-prefix-collision-test-"));
+  try {
+    const trashNamedInput = join(dir, ".denoise-trash-archive.tif");
+    const otherInput = join(dir, "other.tif");
+    const lockNamedInput = join(dir, ".denoise-lock-tmp-sample.tif");
+    await writeFile(trashNamedInput, syntheticTiff([1, 24, 24]));
+    await writeFile(otherInput, syntheticTiff([1, 24, 24]));
+    await writeFile(lockNamedInput, syntheticTiff([1, 24, 24]));
+
+    const outDir = join(dir, "out");
+    await denoiseFile({
+      input: trashNamedInput,
+      outputDir: outDir,
+      options: { method: "fgr-ridge", "max-scale": "4" },
+    });
+    await mkdir(join(outDir, ".denoise-trash-keep"));
+    await writeFile(join(outDir, ".denoise-trash-keep", "sentinel.txt"), "keep-me\n", "utf8");
+
+    await assert.rejects(
+      () => denoiseFile({
+        input: otherInput,
+        outputDir: outDir,
+        options: { method: "fgr-ridge", "max-scale": "4" },
+      }),
+      /not empty/i,
+    );
+
+    assert.deepEqual(
+      (await readdir(outDir)).sort(),
+      [".denoise-trash-archive_denoised.tif", ".denoise-trash-archive_provenance.json", ".denoise-trash-keep"],
+    );
+    assert.equal(await readFile(join(outDir, ".denoise-trash-keep", "sentinel.txt"), "utf8"), "keep-me\n");
+
+    const lockDir = join(dir, "lock-named-out");
+    await denoiseFile({
+      input: lockNamedInput,
+      outputDir: lockDir,
+      options: { method: "fgr-ridge", "max-scale": "4" },
+    });
+    await assert.rejects(
+      () => denoiseFile({
+        input: otherInput,
+        outputDir: lockDir,
+        options: { method: "fgr-ridge", "max-scale": "4" },
+      }),
+      /not empty/i,
+    );
+    assert.deepEqual(
+      (await readdir(lockDir)).sort(),
+      [".denoise-lock-tmp-sample_denoised.tif", ".denoise-lock-tmp-sample_provenance.json"],
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("named pipe (FIFO) input is rejected immediately without hanging on open", { skip: process.platform === "win32" }, async () => {
   const dir = await mkdtemp(join(tmpdir(), "denoise-fifo-test-"));
   try {
