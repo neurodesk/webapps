@@ -196,6 +196,21 @@ test("empty brain mask and empty tumour mask render Results view cleanly without
   await expect(page.locator("#resultsReport")).toContainText("No contrast-enhancing lesions were segmented.");
 });
 
+test("Greedy initialization failure falls back to native-space report with a warning", async ({ page }) => {
+  const { t1Buffer, maskBuffer } = makeSyntheticPair();
+  await page.context().route("**/greedy_rs_wasm_bg*.wasm", (route) => route.fulfill({ status: 500, body: "" }));
+  await page.goto("./");
+  await page.locator("#imageInput").setInputFiles({ name: "fallback_t1c.nii", mimeType: "application/octet-stream", buffer: t1Buffer });
+  await page.locator("#maskInput").setInputFiles({ name: "fallback_mask.nii", mimeType: "application/octet-stream", buffer: maskBuffer });
+  await page.locator("#advancedSettings summary").click();
+  await page.locator("#skullStripped").check();
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toContainText("Report ready · 2 lesions", { timeout: 120000 });
+  await page.locator("#resultsTab").click();
+  await expect(page.locator("#resultsReport")).toContainText("MNI registration failed");
+  await expect(page.locator("#resultsReport")).toContainText("Per-lesion native morphometry");
+});
+
 for (const failure of ["download", "empty image"]) {
   test(`a failed example ${failure} can retry the same example`, async ({ page }) => {
     const [first] = beamster.files;

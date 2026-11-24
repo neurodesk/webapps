@@ -468,13 +468,54 @@ export function prepareRegistrationInputsRas(volume, brainMask, tumourMask, marg
       [finest, finest, finest],
       0,
     );
+    const od = resampled.dims;
+    const oa = resampled.affine;
     const orthoMask = new Uint8Array(resampled.data.length);
     for (let i = 0; i < orthoMask.length; i++) {
       if (resampled.data[i] >= 0.5) orthoMask[i] = 1;
     }
+    // Guarantee no occupied native voxel (e.g. a single-voxel focus on a rotated sheared grid)
+    // is silently dropped by inverse nearest-neighbour sampling: if none of its 8 surrounding
+    // output grid corners is occupied, stamp its nearest orthogonal grid voxel.
+    for (let z = 0; z < md[2]; z++) {
+      for (let y = 0; y < md[1]; y++) {
+        const row = md[0] * (y + md[1] * z);
+        for (let x = 0; x < md[0]; x++) {
+          if (!cropMask[row + x]) continue;
+          const pt = applyAffinePoint(mAffine, x, y, z);
+          const fx = (pt[0] - oa[0][3]) / finest;
+          const fy = (pt[1] - oa[1][3]) / finest;
+          const fz = (pt[2] - oa[2][3]) / finest;
+          const x0 = Math.max(0, Math.min(od[0] - 1, Math.floor(fx)));
+          const x1 = Math.max(0, Math.min(od[0] - 1, Math.ceil(fx)));
+          const y0 = Math.max(0, Math.min(od[1] - 1, Math.floor(fy)));
+          const y1 = Math.max(0, Math.min(od[1] - 1, Math.ceil(fy)));
+          const z0 = Math.max(0, Math.min(od[2] - 1, Math.floor(fz)));
+          const z1 = Math.max(0, Math.min(od[2] - 1, Math.ceil(fz)));
+          let represented = false;
+          for (let oz = z0; oz <= z1 && !represented; oz++) {
+            for (let oy = y0; oy <= y1 && !represented; oy++) {
+              const oRow = od[0] * (oy + od[1] * oz);
+              for (let ox = x0; ox <= x1; ox++) {
+                if (orthoMask[oRow + ox]) {
+                  represented = true;
+                  break;
+                }
+              }
+            }
+          }
+          if (!represented) {
+            const rx = Math.max(0, Math.min(od[0] - 1, Math.round(fx)));
+            const ry = Math.max(0, Math.min(od[1] - 1, Math.round(fy)));
+            const rz = Math.max(0, Math.min(od[2] - 1, Math.round(fz)));
+            orthoMask[rx + od[0] * (ry + od[1] * rz)] = 1;
+          }
+        }
+      }
+    }
     return {
       t1: rasT1,
-      mask: { data: orthoMask, dims: resampled.dims, affine: resampled.affine },
+      mask: { data: orthoMask, dims: od, affine: oa },
     };
   }
   return {

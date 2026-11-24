@@ -193,6 +193,7 @@ function computeAxialBidimensional(compVoxels, affine, axialAxis) {
     crossProductMm2: 0,
     measurable10x10mm: false,
   };
+  let bestProd = -1;
   let anySliceMeasurable10x10 = false;
 
   for (const [sliceIndex, uvList] of bySlice.entries()) {
@@ -200,9 +201,10 @@ function computeAxialBidimensional(compVoxels, affine, axialAxis) {
       const longMm = Math.max(su, vy);
       const shortMm = Math.min(su, vy);
       const prod = longMm * shortMm;
-      const sliceMeasurable = longMm >= 10 && shortMm >= 10;
+      const sliceMeasurable = longMm + 1e-6 >= 10 && shortMm + 1e-6 >= 10;
       if (sliceMeasurable) anySliceMeasurable10x10 = true;
-      if (prod > best.crossProductMm2) {
+      if (prod > bestProd) {
+        bestProd = prod;
         best = {
           sliceIndex,
           axialAxis,
@@ -385,8 +387,7 @@ function computeAxialBidimensional(compVoxels, affine, axialAxis) {
     }
 
     let bestLongD2 = -1;
-    let pA = boundary[0];
-    let pB = boundary[0];
+    let bestPairs = [[boundary[0], boundary[0]]];
     for (let i = 0; i < boundary.length; i++) {
       const a = boundary[i];
       for (let j = i + 1; j < boundary.length; j++) {
@@ -394,58 +395,77 @@ function computeAxialBidimensional(compVoxels, affine, axialAxis) {
         const dx = b[2] - a[2];
         const dy = b[3] - a[3];
         const d2 = dx * dx + dy * dy;
-        if (d2 <= bestLongD2) continue;
-        if (segmentInsideMask(a[0], a[1], b[0], b[1])) {
+        const tol = 1e-9 * Math.max(1, bestLongD2);
+        if (d2 + tol < bestLongD2) continue;
+        if (!segmentInsideMask(a[0], a[1], b[0], b[1])) continue;
+        if (d2 > bestLongD2 + tol) {
           bestLongD2 = d2;
-          pA = a;
-          pB = b;
+          bestPairs = [[a, b]];
+        } else {
+          bestPairs.push([a, b]);
         }
       }
     }
 
-    const longDist = bestLongD2 > 0 ? Math.sqrt(bestLongD2) : 0;
-    let ux = 1;
-    let uy = 0;
-    if (longDist > 1e-9) {
-      ux = (pB[2] - pA[2]) / longDist;
-      uy = (pB[3] - pA[3]) / longDist;
-    }
-    const px = -uy;
-    const py = ux;
+    // Evaluate every tied maximal supported chord so selection is strictly independent of
+    // voxel traversal order, mirroring, and in-plane rotation.
+    let sliceLongMm = 0;
+    let sliceShortMm = 0;
+    let bestRawLong = -1;
+    let bestPerp = -1;
+    for (const [pA, pB] of bestPairs) {
+      const longDist = Math.hypot(pB[2] - pA[2], pB[3] - pA[3]);
+      let ux = 1;
+      let uy = 0;
+      if (longDist > 1e-9) {
+        ux = (pB[2] - pA[2]) / longDist;
+        uy = (pB[3] - pA[3]) / longDist;
+      }
+      const px = -uy;
+      const py = ux;
 
-    // Exact boundary-to-boundary length of the supported major axis starting from exact
-    // occupied endpoint centres pA and pB (never rounds a shared midpoint corner asymmetrically).
-    const rawLongMm = longDist
-      + rayExitDistanceMm(pB[0], pB[1], ux, uy)
-      + rayExitDistanceMm(pA[0], pA[1], -ux, -uy);
+      // Exact boundary-to-boundary length of the supported major axis starting from exact
+      // occupied endpoint centres pA and pB (never rounds a shared midpoint corner asymmetrically).
+      const rawLongMm = longDist
+        + rayExitDistanceMm(pB[0], pB[1], ux, uy)
+        + rayExitDistanceMm(pA[0], pA[1], -ux, -uy);
 
-    // Step along strictly interior points of the supported major chord (excluding exact
-    // endpoint cells so thin hollow rings / L-corners cannot produce a fake crossing chord)
-    // and measure exact boundary-to-boundary DDA perpendicular length.
-    const chordSteps = Math.max(2, Math.ceil(2 * Math.hypot(pB[0] - pA[0], pB[1] - pA[1])));
-    let maxPerpMm = 0;
-    for (let s = 1; s < chordSteps; s++) {
-      const t = s / chordSteps;
-      const qu = pA[0] + (pB[0] - pA[0]) * t;
-      const qv = pA[1] + (pB[1] - pA[1]) * t;
-      const inEndpointA = Math.abs(qu - pA[0]) <= 0.5 + 1e-9 && Math.abs(qv - pA[1]) <= 0.5 + 1e-9;
-      const inEndpointB = Math.abs(qu - pB[0]) <= 0.5 + 1e-9 && Math.abs(qv - pB[1]) <= 0.5 + 1e-9;
-      if (inEndpointA || inEndpointB) continue;
-      const span = rayExitDistanceMm(qu, qv, px, py) + rayExitDistanceMm(qu, qv, -px, -py);
-      if (span > maxPerpMm) maxPerpMm = span;
-    }
-    if (maxPerpMm === 0) {
-      const midU = 0.5 * (pA[0] + pB[0]);
-      const midV = 0.5 * (pA[1] + pB[1]);
-      maxPerpMm = rayExitDistanceMm(midU, midV, px, py) + rayExitDistanceMm(midU, midV, -px, -py);
+      // Step along strictly interior points of the supported major chord (excluding closed
+      // endpoint cells so thin hollow rings / L-corners cannot produce a fake crossing chord)
+      // and measure exact boundary-to-boundary DDA perpendicular length.
+      const chordSteps = Math.max(2, Math.ceil(2 * Math.hypot(pB[0] - pA[0], pB[1] - pA[1])));
+      let maxPerpMm = 0;
+      for (let s = 1; s < chordSteps; s++) {
+        const t = s / chordSteps;
+        const qu = pA[0] + (pB[0] - pA[0]) * t;
+        const qv = pA[1] + (pB[1] - pA[1]) * t;
+        const inEndpointA = Math.abs(qu - pA[0]) <= 0.5 + 1e-9 && Math.abs(qv - pA[1]) <= 0.5 + 1e-9;
+        const inEndpointB = Math.abs(qu - pB[0]) <= 0.5 + 1e-9 && Math.abs(qv - pB[1]) <= 0.5 + 1e-9;
+        if (inEndpointA || inEndpointB) continue;
+        const span = rayExitDistanceMm(qu, qv, px, py) + rayExitDistanceMm(qu, qv, -px, -py);
+        if (span > maxPerpMm) maxPerpMm = span;
+      }
+      if (maxPerpMm === 0) {
+        const midU = 0.5 * (pA[0] + pB[0]);
+        const midV = 0.5 * (pA[1] + pB[1]);
+        maxPerpMm = rayExitDistanceMm(midU, midV, px, py) + rayExitDistanceMm(midU, midV, -px, -py);
+      }
+
+      if (rawLongMm > bestRawLong + 1e-9 || (Math.abs(rawLongMm - bestRawLong) <= 1e-9 && maxPerpMm > bestPerp)) {
+        bestRawLong = rawLongMm;
+        bestPerp = maxPerpMm;
+        sliceLongMm = Math.max(rawLongMm, maxPerpMm);
+        sliceShortMm = Math.min(rawLongMm, maxPerpMm);
+      }
     }
 
-    const longMm = Math.max(rawLongMm, maxPerpMm);
-    const shortMm = Math.min(rawLongMm, maxPerpMm);
+    const longMm = sliceLongMm;
+    const shortMm = sliceShortMm;
     const prod = longMm * shortMm;
-    const sliceMeasurable = longMm >= 10 && shortMm >= 10;
+    const sliceMeasurable = longMm + 1e-6 >= 10 && shortMm + 1e-6 >= 10;
     if (sliceMeasurable) anySliceMeasurable10x10 = true;
-    if (prod > best.crossProductMm2) {
+    if (prod > bestProd) {
+      bestProd = prod;
       best = {
         sliceIndex,
         axialAxis,
@@ -961,7 +981,7 @@ export function computeNativeMorphometry({
       const d = exactMinMeshDistanceMm(qualifying[i]._trianglesMm, main._trianglesMm);
       if (d > maxMinDist) maxMinDist = d;
     }
-    if (maxMinDist >= multifocalDistanceThresholdMm) {
+    if (maxMinDist + 1e-6 >= multifocalDistanceThresholdMm) {
       multifocal = true;
     }
   }

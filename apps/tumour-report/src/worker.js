@@ -293,10 +293,10 @@ self.onmessage = async ({ data: job }) => {
       const atlasBundle = await fetchRadsAtlases(job.tumourType);
       atlasMeta = atlasBundle.atlasMeta;
       progress(0.79, "Initializing Greedy registration…");
-      greedyReady ??= initGreedy();
-      await greedyReady;
       let mniNorm = null;
       try {
+        greedyReady ??= initGreedy();
+        await greedyReady;
         mniNorm = await normalizeToMniWithGreedy({
           volume,
           brainMask: brainMask ?? nonZeroMask(volume.data),
@@ -307,6 +307,7 @@ self.onmessage = async ({ data: job }) => {
           onProgress: (ev) => progress(0.84, `${ev.message}…`),
         });
       } catch (regErr) {
+        greedyReady = null;
         const detail = regErr instanceof Error ? regErr.message : String(regErr);
         warnings.push(`MNI registration failed (${detail}); emitting native-space report only.`);
         log(`MNI registration failed (${detail}); omitting MNI RADS report.`);

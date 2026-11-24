@@ -14,7 +14,7 @@ import {
   prepareRegistrationInputsRas,
   squaredEdt3d,
 } from '../src/rads.js';
-import { voxelIndex } from '../src/preprocess.js';
+import { voxelIndex, labelComponents26 } from '../src/preprocess.js';
 
 test('computeLaterality matches Raidionics convention and uses unrounded hemisphere counts for midlineCrossing', () => {
   const lat = new Uint8Array([1, 1, 2, 2, 0]);
@@ -193,4 +193,39 @@ test('normalizeToMniWithGreedy succeeds on sheared NIfTIs by orthogonalizing the
     greedyApi,
   });
   assert.ok(res.mniVoxels >= 48, `expected non-empty MNI mask for sheared scan, got ${res.mniVoxels}`);
+});
+
+test('prepareRegistrationInputsRas preserves every focus including a 1-voxel focus under rotation and shear', () => {
+  const dims = [24, 24, 24];
+  const rad15 = (15 * Math.PI) / 180;
+  const c = Math.cos(rad15);
+  const s = Math.sin(rad15);
+  const affine = [
+    [0.5 * c, -0.5 * s + 0.02, 0, 0],
+    [0.5 * s, 0.5 * c, 0, 0],
+    [0, 0, 0.5, 0],
+    [0, 0, 0, 1],
+  ];
+  const data = new Float32Array(dims[0] * dims[1] * dims[2]).fill(50);
+  const brain = new Uint8Array(data.length);
+  for (let z = 2; z < 22; z++) {
+    for (let y = 2; y < 22; y++) {
+      for (let x = 2; x < 22; x++) brain[voxelIndex(x, y, z, dims)] = 1;
+    }
+  }
+  // Single-voxel focus at (12, 12, 12) alone must survive orthogonalization.
+  const single = new Uint8Array(data.length);
+  single[voxelIndex(12, 12, 12, dims)] = 1;
+  const prepSingle = prepareRegistrationInputsRas({ data, dims, affine }, brain, single);
+  assert.equal(labelComponents26(prepSingle.mask.data, prepSingle.mask.dims).count, 1);
+
+  // With a second focus present, BOTH distinct foci must survive orthogonalization.
+  const twoFoci = Uint8Array.from(single);
+  for (let z = 4; z < 7; z++) {
+    for (let y = 4; y < 7; y++) {
+      for (let x = 4; x < 7; x++) twoFoci[voxelIndex(x, y, z, dims)] = 1;
+    }
+  }
+  const prepTwo = prepareRegistrationInputsRas({ data, dims, affine }, brain, twoFoci);
+  assert.equal(labelComponents26(prepTwo.mask.data, prepTwo.mask.dims).count, 2);
 });
