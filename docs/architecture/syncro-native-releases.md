@@ -8,7 +8,7 @@ native process. [SYNcro command reference](../../packages/syncro/README.md)
 
 | Target | Format | Entry point |
 | --- | --- | --- |
-| Linux x64 | `.tar.gz` | `syncro` in the extracted directory |
+| Linux x64 (Ubuntu 24.04) | `.tar.gz` | `syncro` in the extracted directory |
 | Windows x64 | `.zip` | `syncro.exe` in the extracted directory |
 | macOS Apple silicon | `.pkg` | `/usr/local/bin/syncro` |
 

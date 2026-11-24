@@ -11,3 +11,6 @@ SYNcro's pipeline is one Rust core (`exes/syncro`) for the web app and the stand
 The standalone release builds Greedy from the same checkout as the browser and retains the notarized macOS
 installer and Windows signing support. The browser keeps the verified MNI template separate from uploads
 and accepts qform-only NIfTI-2 scans, including 180-degree rotations.
+
+The Linux archive targets Ubuntu 24.04 and compatible distributions. The CLI reports a tool's launch error
+during self-check, including missing system libraries.

@@ -194,31 +194,32 @@ fn search_path() {
     }
 }
 
-fn version(tool: &str, path: &Path) -> String {
-    let args: &[&str] = if tool == "brainchop-mindgrab" {
-        &["--help"]
-    } else {
-        &["--version"]
+fn version(tool: &str, path: &Path) -> Result<String, String> {
+    let flag = match tool {
+        "brainchop-mindgrab" | "antsApplyTransforms" => "--help",
+        _ => "--version",
     };
-    let out = Command::new(path).args(args).output();
-    let text = out
-        .map(|o| {
-            String::from_utf8_lossy(&o.stdout).to_string() + &String::from_utf8_lossy(&o.stderr)
-        })
-        .unwrap_or_default();
-    match tool {
-        // "BrainChop mindgrab: skull stripping in any modality (v0.1.20260923)"
-        "brainchop-mindgrab" => text
-            .split("(v")
-            .nth(1)
-            .and_then(|s| s.split(')').next())
-            .map(String::from),
-        _ => text
-            .lines()
-            .find(|l| !l.trim().is_empty())
-            .map(|l| l.trim().to_string()),
+    let output = Command::new(path)
+        .arg(flag)
+        .output()
+        .map_err(|e| format!("{tool}: could not start {}: {e}", path.display()))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.status.success() {
+        return Err(format!(
+            "{tool}: {} {flag} failed ({}):\n{stdout}{stderr}",
+            path.display(),
+            output.status
+        ));
     }
-    .unwrap_or_else(|| "unknown".into())
+    let text = stdout.to_string() + &stderr;
+    Ok(match tool {
+        "brainchop-mindgrab" => text.split("(v").nth(1).and_then(|s| s.split(')').next()),
+        "antsApplyTransforms" => None,
+        _ => text.lines().map(str::trim).find(|line| !line.is_empty()),
+    }
+    .unwrap_or("unknown")
+    .to_string())
 }
 
 fn sha256_file(path: &Path) -> String {
@@ -243,7 +244,7 @@ fn find_tools(bin: &Path, normalization: Normalization) -> Result<Value, String>
             Some(p) => {
                 found.insert(
                     tool.into(),
-                    json!({"path": p, "version": version(tool, &p), "sha256": sha256_file(&p)}),
+                    json!({"path": p, "version": version(tool, &p)?, "sha256": sha256_file(&p)}),
                 );
             }
             None => missing.push(tool),

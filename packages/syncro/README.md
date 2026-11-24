@@ -14,6 +14,8 @@ The archive holds `syncro` (or `syncro.exe`), the native tools in `bin/` (`synth
 `greedy-rs`, `niimath`; their models are built in), the MNI template in `templates/` and every tool's licence in
 `licenses/`. It needs no Node.js, Python, FreeSurfer, network or model download. Keep the extracted directory
 intact: `syncro` finds its tools next to itself (or set `SYNCRO_HOME`), then on `PATH`.
+The Linux archive targets Ubuntu 24.04 and compatible distributions. Bundled SynthSR requires glibc 2.38
+or later and a libstdc++ providing `GLIBCXX_3.4.32`.
 
 ```bash
 version=MAJOR.MINOR.YYYYMMDD
