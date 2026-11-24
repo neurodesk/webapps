@@ -629,15 +629,65 @@ test('the SamSrf Runtime reference builds only with a Compiler token and is vali
   assert.ok(!runtime.steps.some(step => step.uses?.startsWith('matlab-actions/')), 'no MATLAB on the Runtime-only host');
   assert.ok(!JSON.stringify(runtime).includes('secrets.'));
   assert.equal(runtime.env.IMAGE, '${{ inputs.runtime_image }}');
-  assert.ok(!runtime.steps.some(step => /\$\{\{\s*inputs\./.test(step.run ?? '')), 'the image reaches scripts through the environment');
+  assert.ok(!JSON.stringify(runtime.env).includes('github.token'), 'job env must not expose github.token');
+  assert.ok(!runtime.steps.some(step => /\$\{\{[^}]*\binputs\./.test(step.run ?? '')), 'the image reaches scripts through the environment');
   const pullStep = runtime.steps.find(step => /docker pull "\$IMAGE"/.test(step.run ?? ''));
   assert.ok(pullStep, 'runtime-image pulls IMAGE in its own step');
-  assert.equal(pullStep.env?.GITHUB_TOKEN, '${{ github.token }}');
-  assert.match(pullStep.run, /docker login ghcr\.io/);
-  assert.match(pullStep.run, /docker logout ghcr\.io/);
+  assert.deepEqual(pullStep.env, { GITHUB_TOKEN: '${{ github.token }}', ACTOR: '${{ github.actor }}' });
+  for (const step of runtime.steps) {
+    if (step === pullStep) continue;
+    assert.ok(!JSON.stringify(step).includes('github.token') && !step.env?.GITHUB_TOKEN, `github.token must stay scoped to the pull step, not "${step.name ?? step.uses}"`);
+  }
   const runStepIndex = runtime.steps.findIndex(step => /run_runtime_cli\.py/.test(step.run ?? ''));
   assert.ok(runtime.steps.indexOf(pullStep) < runStepIndex, 'pull and log out before running the container');
-  assert.ok(!runtime.steps[runStepIndex].env?.GITHUB_TOKEN, 'GITHUB_TOKEN is scoped to the pull step');
+  const runPullStep = (image, { failPull = false } = {}) => {
+    const stub = `
+docker() {
+  if [ "$1" = login ]; then
+    local token
+    token="$(cat)"
+    printf 'LOGIN:%s:%s\\n' "$*" "$token"
+  elif [ "$1" = pull ]; then
+    printf 'PULL:%s\\n' "$*"
+    ${failPull ? 'return 1' : 'return 0'}
+  elif [ "$1" = logout ]; then
+    printf 'LOGOUT:%s\\n' "$*"
+  else
+    printf 'OTHER:%s\\n' "$*"
+  fi
+}
+${pullStep.run}
+`;
+    try {
+      const stdout = execFileSync('bash', ['-e', '-c', stub], {
+        encoding: 'utf8',
+        env: { ...process.env, IMAGE: image, GITHUB_TOKEN: 'stub-token', ACTOR: 'stub-actor' },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      return { status: 0, lines: stdout.trim().split('\n').filter(Boolean) };
+    } catch (error) {
+      return { status: error.status ?? 1, lines: String(error.stdout ?? '').trim().split('\n').filter(Boolean) };
+    }
+  };
+  const ghcrImage = 'ghcr.io/neurodesk/samsrf-reference@sha256:' + '0'.repeat(64);
+  const ghcrOk = runPullStep(ghcrImage);
+  assert.equal(ghcrOk.status, 0);
+  assert.deepEqual(ghcrOk.lines, [
+    'LOGIN:login ghcr.io --username stub-actor --password-stdin:stub-token',
+    `PULL:pull ${ghcrImage}`,
+    'LOGOUT:logout ghcr.io',
+  ]);
+  const ghcrFail = runPullStep(ghcrImage, { failPull: true });
+  assert.notEqual(ghcrFail.status, 0);
+  assert.deepEqual(ghcrFail.lines, [
+    'LOGIN:login ghcr.io --username stub-actor --password-stdin:stub-token',
+    `PULL:pull ${ghcrImage}`,
+    'LOGOUT:logout ghcr.io',
+  ], 'docker logout must run even when docker pull fails');
+  const otherImage = 'docker.io/library/alpine@sha256:' + '1'.repeat(64);
+  const otherOk = runPullStep(otherImage);
+  assert.equal(otherOk.status, 0);
+  assert.deepEqual(otherOk.lines, [`PULL:pull ${otherImage}`], 'non-GHCR images must pull without GHCR login or logout');
   for (const event of ['pull_request', 'push', 'workflow_dispatch']) {
     for (const mode of ['none', 'source', 'build']) {
       for (const image of ['', 'ghcr.io/neurodesk/samsrf-reference@sha256:' + '0'.repeat(64)]) {
