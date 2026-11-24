@@ -1869,7 +1869,7 @@ apps:
     anatomy: [any]
     modalities: [microscopy]
     inputs: [tiff, nifti]
-    hardware: cpu
+    hardware: webgpu-optional
     handoff: none
     legacy_domain: null
     runtime: react-vite
@@ -1884,7 +1884,8 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      hardware_gpu: true
+      release: true
   - id: totalsegmentator
     path: totalsegmentator
     catalog: msk

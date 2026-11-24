@@ -1,17 +1,24 @@
 // Module worker running self-supervised denoising off the main thread.
-// One worker per run: terminating it cancels the run immediately and frees its buffers.
+// Uses hardware WebGPU automatically for Zero-Shot Noise2Noise when available,
+// with transparent fallback to CPU. One worker per run: terminating it cancels immediately.
 
-import { denoiseVolume } from "./core/denoise.js";
+import { denoiseVolumeAsync } from "@neurodesk/denoise/core";
 
-self.onmessage = ({ data }) => {
+self.onmessage = async ({ data }) => {
   try {
     if (data.type !== "denoise") {
       throw new Error(`Unknown worker request '${data.type}'.`);
     }
-    const { image, dims, settings } = data;
-    const result = denoiseVolume(image, dims, settings, (fraction, stage) => {
-      self.postMessage({ type: "progress", fraction, stage });
-    });
+    const { image, dims, settings, runtime } = data;
+    const result = await denoiseVolumeAsync(
+      image,
+      dims,
+      settings,
+      (fraction, stage) => {
+        self.postMessage({ type: "progress", fraction, stage });
+      },
+      runtime,
+    );
     self.postMessage(
       {
         type: "result",

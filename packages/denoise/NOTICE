@@ -1,0 +1,10 @@
+Denoise (@neurodesk/denoise)
+Copyright (c) Neurodesk Contributors
+Licensed under the MIT License (see LICENSE).
+
+Methods implemented from published literature:
+- Noise2Self: Batson J, Royer L. ICML 2019; PMLR 97:524-533.
+- Aydin (Feature Generation & Regression): Royer Lab (https://github.com/royerlab/aydin).
+- Zero-Shot Noise2Noise (ZS-N2N): Mansour Y, Heckel R. CVPR 2023:14018-14027.
+- Non-Local Means: Buades A, Coll B, Morel JM. CVPR 2005;2:60-65; Darbon J et al. ISBI 2008:1331-1334.
+- Generalized Anscombe Transform: Makitalo M, Foi A. IEEE TIP 2013;22(1):91-103; Foi A et al. IEEE TIP 2008;17(10):1737-1754.

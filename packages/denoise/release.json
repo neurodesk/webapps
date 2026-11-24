@@ -1,0 +1,39 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "denoise-v",
+  "displayName": "Denoise",
+  "app": "denoise",
+  "run": "stack.tif results --method fgr-gbdt",
+  "readme": {
+    "run": "Denoise a 2D image, 3D Z-stack or 2D+T time-series",
+    "notes": [
+      "Input is a single-channel TIFF, OME-TIFF, ImageJ TIFF or NIfTI (.nii, .nii.gz) file.",
+      "Choose --method fgr-gbdt (default), fgr-ridge, zs-n2n, or vst-nlm.",
+      "Pass --residual to also save the noise residual map (input minus denoised).",
+      "Add --help for every option: mode, tree count, depth, scale radius, CNN steps/channels, and output format.",
+      "",
+      "No network connection is required and no external pretrained weights are downloaded.",
+      "Denoise is research software. Inspect the residual map and autocorrelation diagnostics before quantitative analysis.",
+      "Please cite Batson & Royer 2019 (Noise2Self), Royer Lab (Aydin), Mansour & Heckel 2023 (ZS-N2N),",
+      "Buades et al. 2005 / Darbon et al. 2008 (NLM), and Makitalo & Foi 2013 / Foi et al. 2008 (GAT)."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "denoise"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "denoise.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "denoise"
+    }
+  }
+}

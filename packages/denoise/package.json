@@ -1,0 +1,40 @@
+{
+  "name": "@neurodesk/denoise",
+  "version": "0.1.20261124",
+  "description": "Self-supervised microscopy denoising core (Aydin FGR, Zero-Shot Noise2Noise with WebGPU, Anscombe VST + NLM) and portable command line",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@neurodesk/webapp-components": "workspace:*"
+  },
+  "bin": {
+    "denoise": "./bin/denoise.js"
+  },
+  "exports": {
+    ".": "./src/core/index.js",
+    "./core": "./src/core/index.js",
+    "./core/*": "./src/core/*.js",
+    "./format": "./src/format.js",
+    "./input": "./src/input.js",
+    "./node": "./src/node.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check bin/denoise.js && node --check src/node.js && node --check src/format.js && node --check src/input.js && node --check src/core/denoise.js && node --check src/core/zsn2n-webgpu.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/denoise"
+  }
+}

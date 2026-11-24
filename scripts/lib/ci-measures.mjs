@@ -79,6 +79,7 @@ export const WORKFLOWS = Object.freeze({
   'deconvolution-native': TEST,
   'deface-native': TEST,
   'degibbs-native': TEST,
+  'denoise-native': TEST,
   'dependency-quality': TEST,
   'desktop-source-approval': TEST,
   'dicompare-native': TEST,
