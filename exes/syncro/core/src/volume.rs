@@ -139,6 +139,39 @@ fn nifti1(raw: Vec<u8>) -> Result<Vec<u8>, String> {
     for k in 0..18 {
         put(&mut h, 256 + 4 * k, &real(352 + 8 * k).to_le_bytes());
     }
+    // A unit f64 quaternion can exceed norm 1 once narrowed (0.6, 0.8, 0 -> 1 + 5e-8) and its rotation becomes NaN,
+    // so a selected qform is built in f64, as nifti-reader-js reads NIfTI-2, and stored as the sform.
+    let (qcode, scode) = (int(344, 4), int(348, 4));
+    if qcode > 0 && scode < qcode {
+        let [b, c, d] = [0, 1, 2].map(|k| real64(352 + 8 * k));
+        let a = (1.0 - (b * b + c * c + d * d)).sqrt();
+        let rot = [
+            [
+                a * a + b * b - c * c - d * d,
+                2.0 * (b * c - a * d),
+                2.0 * (b * d + a * c),
+            ],
+            [
+                2.0 * (b * c + a * d),
+                a * a + c * c - b * b - d * d,
+                2.0 * (c * d - a * b),
+            ],
+            [
+                2.0 * (b * d - a * c),
+                2.0 * (c * d + a * b),
+                a * a + d * d - c * c - b * b,
+            ],
+        ];
+        let qfac = if real64(104) == 0.0 { 1.0 } else { real64(104) };
+        for (r, row) in rot.iter().enumerate() {
+            for (k, &e) in row.iter().enumerate() {
+                let v = e * real64(112 + 8 * k) * if k == 2 { qfac } else { 1.0 };
+                put(&mut h, 280 + 16 * r + 4 * k, &(v as f32).to_le_bytes());
+            }
+            put(&mut h, 280 + 16 * r + 12, &real(376 + 8 * r).to_le_bytes());
+        }
+        put(&mut h, 254, &(qcode as i16).to_le_bytes());
+    }
     h[123] = raw[500 + if le { 0 } else { 3 }];
     h[344..348].copy_from_slice(b"n+1\0");
     let offset = usize::try_from(int(168, 8)).map_err(|_| "The NIfTI voxel data is truncated.")?;
@@ -268,6 +301,23 @@ mod tests {
         assert_eq!(v.dims, [2, 2, 2]);
         assert_eq!(v.data, (1..=8).map(|v| v as f32).collect::<Vec<_>>());
         assert_eq!(v.affine, sform);
+        // A valid quaternion (0.6, 0.8, 0) selected over the sform (audit 2026-11-24): narrowed to f32 its norm
+        // exceeds 1; nifti-reader-js gives [[-0.28, 0.96, 0], [0.96, 0.28, 0], [0, 0, -1]] from the f64 header.
+        let mut q = b.clone();
+        q[344..348].copy_from_slice(&2i32.to_le_bytes());
+        for (o, v) in [(104, 1.0), (352, 0.6), (360, 0.8)] {
+            q[o..o + 8].copy_from_slice(&f64::to_le_bytes(v));
+        }
+        for o in [112, 120, 128] {
+            q[o..o + 8].copy_from_slice(&1f64.to_le_bytes());
+        }
+        let expected = [[-0.28, 0.96, 0.0], [0.96, 0.28, 0.0], [0.0, 0.0, -1.0]];
+        let qv = super::read(&q).unwrap();
+        for (row, want) in qv.affine.iter().zip(expected) {
+            for (got, want) in row.iter().zip(want) {
+                assert!((got - want).abs() < 1e-6, "{:?}", qv.affine);
+            }
+        }
         // An empty lesion stored scaled: 100 * 0.01 - 1 is 0 in f64, but not with float32 scaling.
         empty[12..14].copy_from_slice(&2i16.to_le_bytes());
         empty[14..16].copy_from_slice(&8i16.to_le_bytes());
