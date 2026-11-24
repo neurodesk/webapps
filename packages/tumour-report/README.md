@@ -21,15 +21,18 @@ ONNX Runtime inference runners (no DOM or runtime dependency inside `src/`):
 4. **Tumour core (`MRI_TumorCore/t1c`):** clip & `zeromean_nonzero` on 1 mm RAS volume,
    edge-snapped `160³` patches with element-wise `max` aggregation, sigmoid, back-resample
    to native grid, threshold `0.5`, and 26-connected `brain_overlap` refinement.
-5. **Native morphometry (`src/morphometry.js`):** 26-connected per-lesion table (volumes
-   from `|det(affine₃ₓ₃)|`, physical centroids, 3D diameter, surface area, IBSI sphericity,
-   automated axial bidimensional diameters) and multifocality (`>= 0.1 mL`, `>= 5 mm`).
+5. **Native morphometry (`src/morphometry.js`):** 26-connected per-lesion table (voxel volume
+   from `|det(affine₃ₓ₃)|`, physical RAS centroids, exact 3D maximum Euclidean diameter,
+   IBSI Lorensen Marching Cubes physical mesh surface area/volume/sphericity, mask-supported
+   automated axial bidimensional diameters) and native minimum-surface-distance multifocality
+   (`>= 0.1 mL`, `>= 5 mm`; distinct from Raidionics' MNI 6-connected HD95 multifocality).
 6. **MNI RADS characterization (`src/rads.js`):** brain-cropped 1 mm RAS alignment to
    `mni_icbm152_nlin_sym_09a` (`197 × 233 × 189`) via `@neurodesk/greedy` (affine NMI
-   default; optional deformable NMI with lesion masking), hemispheric laterality and
-   midline crossing, MNI lobe and Schaefer 7/17 cortical overlap, exact 3D EDT proximity
-   and overlap across 64 BCB subcortical tracts, and Kommers et al. (2021) resectability
-   for glioblastoma.
+   default; optional deformable NMI with lesion masking), applying the transform to the full
+   native tumour mask, hemispheric laterality and bilateral midline crossing, MNI lobe and
+   Schaefer 7/17 cortical overlap, exact 3D EDT minimum surface distance and overlap across
+   64 BCB subcortical tracts (distinct from Raidionics' tract HD95), and Kommers et al. (2021)
+   resectability for glioblastoma.
 
 ## Models and Atlases
 

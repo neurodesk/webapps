@@ -5,6 +5,7 @@ import {
   TUMOUR_PATCH_DIMS,
   checkLogits,
   fromModelTensor,
+  padForPatches,
   patchBoundaries,
   segmentTumour,
   toModelTensor,
@@ -41,6 +42,29 @@ test('patchBoundaries snaps final window to volume edge', () => {
   assert.equal(patches.length, 2);
   assert.deepEqual(patches[0], [[0, 160], [0, 160], [0, 160]]);
   assert.deepEqual(patches[1], [[0, 160], [20, 180], [0, 160]]);
+});
+
+test('padForPatches pads odd small crops symmetrically with edge replication matching Raidionics', () => {
+  // 159-voxel axis: ceil((160 - 159)/2) = 1 on BOTH sides -> 161 padded -> 2 edge-snapped 160 patches.
+  const dims = [159, 2, 2];
+  const data = new Float32Array(159 * 2 * 2);
+  for (let x = 0; x < 159; x++) {
+    for (let y = 0; y < 2; y++) {
+      for (let z = 0; z < 2; z++) {
+        data[voxelIndex(x, y, z, dims)] = x + 10;
+      }
+    }
+  }
+  const padded = padForPatches(data, dims, [160, 2, 2]);
+  assert.deepEqual(padded.dims, [161, 2, 2]);
+  assert.deepEqual(padded.before, [1, 0, 0]);
+  // Edge replication: index 0 equals first sample (10), index 160 equals last sample (168).
+  assert.equal(padded.data[voxelIndex(0, 0, 0, padded.dims)], 10);
+  assert.equal(padded.data[voxelIndex(160, 0, 0, padded.dims)], 168);
+  const patches = patchBoundaries(padded.dims, [160, 2, 2]);
+  assert.equal(patches.length, 2);
+  assert.deepEqual(patches[0][0], [0, 160]);
+  assert.deepEqual(patches[1][0], [1, 161]);
 });
 
 test('segmentTumour runs injected runners, supports skullStripped bypass, and builds complete report', async () => {

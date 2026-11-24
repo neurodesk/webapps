@@ -13,46 +13,58 @@ const upenn = examples[1];
 const brainModel = assetById("mri-brain");
 const bytesOf = (buffer) => buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
 
-function makeSyntheticPair() {
+function makeSyntheticPair({ lps = false, translateMaskMm = 0, emptyMask = false, zeroT1 = false } = {}) {
   const dims = [32, 32, 24];
-  const affine = [
-    [1, 0, 0, -16],
-    [0, 1, 0, -16],
-    [0, 0, 1, -12],
-    [0, 0, 0, 1],
-  ];
+  const affine = lps
+    ? [
+      [-1, 0, 0, 16],
+      [0, -1, 0, 16],
+      [0, 0, 1, -12],
+      [0, 0, 0, 1],
+    ]
+    : [
+      [1, 0, 0, -16],
+      [0, 1, 0, -16],
+      [0, 0, 1, -12],
+      [0, 0, 0, 1],
+    ];
+  const maskAffine = affine.map((row, r) => (r === 0 ? [row[0], row[1], row[2], row[3] + translateMaskMm] : [...row]));
   const count = dims[0] * dims[1] * dims[2];
   const t1 = new Float32Array(count);
   const mask = new Uint8Array(count);
   const idx = (x, y, z) => x + dims[0] * (y + dims[1] * z);
-  for (let z = 4; z < 20; z++) {
-    for (let y = 4; y < 28; y++) {
-      for (let x = 4; x < 28; x++) {
-        t1[idx(x, y, z)] = 100;
+  if (!zeroT1) {
+    for (let z = 4; z < 20; z++) {
+      for (let y = 4; y < 28; y++) {
+        for (let x = 4; x < 28; x++) {
+          t1[idx(x, y, z)] = 100;
+        }
       }
     }
   }
-  // Lesion 1: 12 x 12 x 6 box (measurable >= 10x10 mm on axial slices)
-  for (let z = 9; z < 15; z++) {
-    for (let y = 6; y < 18; y++) {
-      for (let x = 6; x < 18; x++) {
-        mask[idx(x, y, z)] = 1;
-        t1[idx(x, y, z)] = 220;
+  if (!emptyMask) {
+    // Lesion 1: 12 x 12 x 6 box (measurable >= 10x10 mm on axial slices)
+    for (let z = 9; z < 15; z++) {
+      for (let y = 6; y < 18; y++) {
+        for (let x = 6; x < 18; x++) {
+          mask[idx(x, y, z)] = 1;
+          if (!zeroT1) t1[idx(x, y, z)] = 220;
+        }
       }
     }
-  }
-  // Lesion 2: 5 x 5 x 5 box separated by > 5 mm
-  for (let z = 10; z < 15; z++) {
-    for (let y = 21; y < 26; y++) {
-      for (let x = 21; x < 26; x++) {
-        mask[idx(x, y, z)] = 1;
-        t1[idx(x, y, z)] = 210;
+    // Lesion 2: 5 x 5 x 5 box separated by > 5 mm
+    for (let z = 10; z < 15; z++) {
+      for (let y = 21; y < 26; y++) {
+        for (let x = 21; x < 26; x++) {
+          mask[idx(x, y, z)] = 1;
+          if (!zeroT1) t1[idx(x, y, z)] = 210;
+        }
       }
     }
   }
   return {
     t1Buffer: Buffer.from(writeVolume({ data: t1, dims, affine }, "synthetic t1c")),
-    maskBuffer: Buffer.from(writeVolume({ data: mask, dims, affine }, "synthetic mask")),
+    maskBuffer: Buffer.from(writeVolume({ data: mask, dims, affine: maskAffine }, "synthetic mask")),
   };
 }
 
@@ -107,8 +119,8 @@ test("a 4D volume is refused clearly", async ({ page }) => {
   await expect(page.locator("#runButton")).toBeDisabled();
 });
 
-test("supplied-mask mode computes native morphometry, renders clickable Results tab and downloads outputs", async ({ page }) => {
-  const { t1Buffer, maskBuffer } = makeSyntheticPair();
+test("supplied-mask mode computes native morphometry on LPS scan, jumps crosshair to centroid, and downloads outputs", async ({ page }) => {
+  const { t1Buffer, maskBuffer } = makeSyntheticPair({ lps: true });
   await page.goto("./");
   await page.locator("#imageInput").setInputFiles({ name: "synth_t1c.nii", mimeType: "application/octet-stream", buffer: t1Buffer });
   await expect(page.locator("#runButton")).toBeEnabled();
@@ -119,17 +131,6 @@ test("supplied-mask mode computes native morphometry, renders clickable Results 
   await page.locator("#runButton").click();
   await expect(page.locator("#statusText")).toHaveText(/^Report ready · 2 lesions · [\d.]+ mL$/, { timeout: 60000 });
 
-  await expect(page.locator("#resultsTab")).toBeEnabled();
-  await page.locator("#resultsTab").click();
-  await expect(page.locator("#resultsReport")).toBeVisible();
-  await expect(page.locator("#resultsReport")).toContainText("Per-lesion native morphometry");
-  await expect(page.locator("#resultsReport")).toContainText("Multifocal");
-
-  // Clicking a lesion jumps back to the 3-plane viewer at its centroid.
-  await page.locator('#resultsReport [role="button"]').first().click();
-  await expect(page.locator("#resultsReport")).toBeHidden();
-  await expect(page.locator("#statusText")).toContainText("Focused lesion #1");
-
   const reportFile = await downloadRow(page, "Report (JSON)");
   expect(reportFile.name).toBe("synth_t1c_report.json");
   const report = JSON.parse(reportFile.bytes.toString("utf8"));
@@ -137,8 +138,62 @@ test("supplied-mask mode computes native morphometry, renders clickable Results 
   expect(report.morphometry.multifocal).toBe(true);
   expect(report.morphometry.lesions[0].axialBidimensional.measurable10x10mm).toBe(true);
 
+  await expect(page.locator("#resultsTab")).toBeEnabled();
+  await page.locator("#resultsTab").click();
+  await expect(page.locator("#resultsReport")).toBeVisible();
+  await expect(page.locator("#resultsReport")).toContainText("Per-lesion native morphometry");
+  await expect(page.locator("#resultsReport")).toContainText("Multifocal");
+
+  // Clicking lesion #2 jumps back to the 3-plane viewer and moves NiiVue crosshair to lesion #2's RAS centroid.
+  await page.locator('#resultsReport [role="button"]').nth(1).click();
+  await expect(page.locator("#resultsReport")).toBeHidden();
+  await expect(page.locator("#statusText")).toContainText("Focused lesion #2");
+  const expectedMm = report.morphometry.lesions[1].centroidMm;
+  await expect.poll(async () => {
+    const state = await page.evaluate(() => window.neurodeskAutomation.dispatch("viewers.state", { viewerId: "main" }));
+    const pos = state?.position?.value;
+    if (!pos) return Infinity;
+    return Math.hypot(pos[0] - expectedMm[0], pos[1] - expectedMm[1], pos[2] - expectedMm[2]);
+  }, { timeout: 10000 }).toBeLessThan(1.5);
+
   const lesionsTsv = await downloadRow(page, "Lesions table (TSV)");
   expect(lesionsTsv.bytes.toString("utf8").trim().split("\n")).toHaveLength(3);
+});
+
+test("translated supplied mask (42 mm shift) is refused at import and failed example preserves existing mask", async ({ page }) => {
+  const { t1Buffer, maskBuffer } = makeSyntheticPair();
+  const { maskBuffer: shiftedMask } = makeSyntheticPair({ translateMaskMm: 42 });
+  await page.goto("./");
+  await page.locator("#imageInput").setInputFiles({ name: "base_t1c.nii", mimeType: "application/octet-stream", buffer: t1Buffer });
+  await expect(page.locator("#runButton")).toBeEnabled();
+
+  await page.locator("#maskInput").setInputFiles({ name: "shifted_mask.nii", mimeType: "application/octet-stream", buffer: shiftedMask });
+  await expect(page.locator("#statusText")).toContainText("not aligned to the T1c voxel-to-RAS grid");
+  await expect(page.locator("#runButton")).toHaveText("Segment & characterize");
+
+  // Load a valid aligned mask, then trigger a failed example download: existing mask must remain intact.
+  await page.locator("#maskInput").setInputFiles({ name: "aligned_mask.nii", mimeType: "application/octet-stream", buffer: maskBuffer });
+  await expect(page.locator("#runButton")).toHaveText("Characterize mask");
+  await page.route(beamster.files[0].url, (route) => route.fulfill({ status: 503, body: "" }));
+  await page.getByRole("combobox", { name: "Input", exact: true }).selectOption(beamster.id);
+  await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "error", { timeout: 30000 });
+  await expect(page.locator("#runButton")).toHaveText("Characterize mask");
+  await expect(page.locator("#maskInfo")).toContainText("aligned_mask.nii");
+});
+
+test("empty brain mask and empty tumour mask render Results view cleanly without error", async ({ page }) => {
+  const { t1Buffer, maskBuffer } = makeSyntheticPair({ emptyMask: true, zeroT1: true });
+  await page.goto("./");
+  await page.locator("#imageInput").setInputFiles({ name: "zero_t1c.nii", mimeType: "application/octet-stream", buffer: t1Buffer });
+  await page.locator("#maskInput").setInputFiles({ name: "empty_mask.nii", mimeType: "application/octet-stream", buffer: maskBuffer });
+  await page.locator("#computeMniReport").uncheck();
+  await page.locator("#advancedSettings summary").click();
+  await page.locator("#skullStripped").check();
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toHaveText("Report ready · No lesions segmented", { timeout: 60000 });
+  await page.locator("#resultsTab").click();
+  await expect(page.locator("#resultsReport")).toBeVisible();
+  await expect(page.locator("#resultsReport")).toContainText("No contrast-enhancing lesions were segmented.");
 });
 
 for (const failure of ["download", "empty image"]) {
@@ -269,6 +324,10 @@ test("UPENN-GBM skull-stripped example computes glioblastoma resectability", { t
   await page.locator("#backend").selectOption("wasm");
   await page.locator("#runButton").click();
   await expect(page.locator("#statusText")).toHaveText(/^Report ready · \d+ lesions? · [\d.]+ mL$/, { timeout: 14 * 60 * 1000 });
+  const reportFile = await downloadRow(page, "Report (JSON)");
+  const report = JSON.parse(reportFile.bytes.toString("utf8"));
+  const expectedHemi = report.rads.resectability.hemisphereMap === "left" ? "Left" : "Right";
   await page.locator("#resultsTab").click();
   await expect(page.locator("#resultsReport")).toContainText("Glioblastoma resectability");
+  await expect(page.locator("#resultsReport")).toContainText(expectedHemi);
 });

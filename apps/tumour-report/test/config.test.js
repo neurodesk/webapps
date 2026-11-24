@@ -62,17 +62,12 @@ test("statusSummary handles empty, single and multifocal reports", () => {
   assert.equal(statusSummary({ morphometry: { lesionCount: 3, totalVolumeMl: 12.18 } }), "Report ready · 3 lesions · 12.2 mL");
 });
 
-test("geometryMatches compares dims and voxel spacing", () => {
-  assert.equal(
-    geometryMatches({ dims: [64, 64, 40], spacingMm: [1, 1, 1] }, { dims: [64, 64, 40], spacingMm: [1.01, 1, 0.99] }),
-    true,
-  );
-  assert.equal(
-    geometryMatches({ dims: [64, 64, 40], spacingMm: [1, 1, 1] }, { dims: [64, 64, 41], spacingMm: [1, 1, 1] }),
-    false,
-  );
-  assert.equal(
-    geometryMatches({ dims: [64, 64, 40], spacingMm: [1, 1, 1] }, { dims: [64, 64, 40], spacingMm: [2, 1, 1] }),
-    false,
-  );
+test("geometryMatches compares dims and full 4x4 affine matrices", () => {
+  const base = [[1, 0, 0, -10], [0, 1, 0, -20], [0, 0, 1, -30], [0, 0, 0, 1]];
+  const translated = [[1, 0, 0, 32], [0, 1, 0, -20], [0, 0, 1, -30], [0, 0, 0, 1]];
+  const scaled = [[2, 0, 0, -10], [0, 1, 0, -20], [0, 0, 1, -30], [0, 0, 0, 1]];
+  assert.equal(geometryMatches({ dims: [64, 64, 40], affine: base }, { dims: [64, 64, 40], affine: base }), true);
+  assert.equal(geometryMatches({ dims: [64, 64, 40], affine: base }, { dims: [64, 64, 41], affine: base }), false);
+  assert.equal(geometryMatches({ dims: [64, 64, 40], affine: base }, { dims: [64, 64, 40], affine: translated }), false);
+  assert.equal(geometryMatches({ dims: [64, 64, 40], affine: base }, { dims: [64, 64, 40], affine: scaled }), false);
 });

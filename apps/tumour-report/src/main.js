@@ -7,7 +7,6 @@ import NiiVue, { MULTIPLANAR_TYPE, SLICE_TYPE, SHOW_RENDER } from "@niivue/niivu
 import { mountImagingWorkspace } from "@neurodesk/webapp-components/core/mount-imaging-workspace";
 import {
   createResultList,
-  bindFileDrop,
   createFileField,
   createInfoDialog,
   createConsole,
@@ -20,6 +19,7 @@ import { createElement } from "@neurodesk/webapp-components/core";
 import { downloadFile } from "@neurodesk/webapp-components/file-io";
 import { describeNiftiFile } from "@neurodesk/webapp-components/file-io/nifti";
 import { readImageFiles, runDcm2niix } from "@neurodesk/runtime-support/dcm2niix-client";
+import { readVolume } from "@neurodesk/synthsr";
 import { createNiivueAdapter, registerAppAutomation, runAbortable } from "@neurodesk/webapp-components/automation";
 import { caseName } from "@neurodesk/tumour-report/results";
 import {
@@ -374,6 +374,8 @@ function renderReportView(report) {
   ];
   if (m.brainVolumeMl !== null) {
     summaryRows.push(["Brain volume", `${m.brainVolumeMl.toFixed(1)} mL`]);
+  }
+  if (m.brainPercentage !== null) {
     summaryRows.push(["Tumour / brain ratio", `${m.brainPercentage.toFixed(2)} %`]);
   }
   if (m.maxMinFociDistanceMm >= 0) {
@@ -450,7 +452,7 @@ function renderReportView(report) {
           ["Resectability index", r.resectabilityIndex.toFixed(3)],
           ["Expected resectable volume", `${r.expectedResectableMl.toFixed(2)} mL`],
           ["Expected residual volume", `${r.expectedResidualMl.toFixed(2)} mL`],
-          ["Hemisphere probability map", r.hemisphere === "left" ? "Left" : "Right"],
+          ["Hemisphere probability map", r.hemisphereMap === "left" ? "Left" : "Right"],
         ].map(([k, v]) => createElement("tr", {}, [
           createElement("td", { text: k }),
           createElement("td", { className: "nd-numeric", text: v }),
@@ -531,11 +533,14 @@ async function readSingle3dImage(files, label, signal) {
   if (description.dimensionality !== 3 || description.frames !== 1) {
     throw new Error(`${file.name} must be a single 3D volume.`);
   }
+  const volume = readVolume(await file.arrayBuffer());
+  signal?.throwIfAborted();
+  const fullDescription = { ...description, dims: volume.dims, affine: volume.affine };
   const summary = `${file.name} · ${description.dims.join(" × ")} · ${description.spacingMm.map((mm) => mm.toFixed(2)).join(" × ")} mm`;
-  return { file, description, summary };
+  return { file, description: fullDescription, summary };
 }
 
-async function loadT1c(chosen, signal) {
+async function loadT1c(chosen, signal, { clearMask = false, beforeCommit = null, afterCommit = null } = {}) {
   if (job) throw new Error("Wait for the current step to finish or cancel it, then retry.");
   const current = begin("loading", "Reading T1c scan…");
   const abort = () => current.controller.abort();
@@ -545,11 +550,13 @@ async function loadT1c(chosen, signal) {
     if (!chosen.length) throw new Error("Choose a post-contrast T1 NIfTI or DICOM series.");
     const parsed = await readSingle3dImage(chosen, "T1c", current.controller.signal);
     current.controller.signal.throwIfAborted();
+    beforeCommit?.();
     t1cInput = parsed;
-    if (maskInput && !geometryMatches(t1cInput.description, maskInput.description)) {
+    if (maskInput && (clearMask || !geometryMatches(t1cInput.description, maskInput.description))) {
       maskInput = null;
       maskField.input.dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: [] } }));
     }
+    afterCommit?.();
     $("imageInput").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: [t1cInput.file] } }));
     renderInputs();
     clearResults();
@@ -586,7 +593,7 @@ async function loadMask(chosen, signal) {
     const parsed = await readSingle3dImage([raw], "tumour mask", current.controller.signal);
     current.controller.signal.throwIfAborted();
     if (t1cInput && !geometryMatches(t1cInput.description, parsed.description)) {
-      throw new Error(`Mask (${parsed.description.dims.join(" × ")}) does not match T1c (${t1cInput.description.dims.join(" × ")}).`);
+      throw new Error(`Mask (${parsed.description.dims.join(" × ")}) is not aligned to the T1c voxel-to-RAS grid (${t1cInput.description.dims.join(" × ")}).`);
     }
     maskInput = parsed;
     maskField.input.dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: [maskInput.file] } }));
@@ -620,7 +627,6 @@ $("imageInput").addEventListener("change", (event) => {
   event.target.value = "";
   if (chosen.length) void importT1c(chosen);
 });
-bindFileDrop($("dropZone"), importT1c);
 
 maskField.onFiles(importMask);
 $("clearMaskButton").addEventListener("click", () => {
@@ -643,14 +649,16 @@ const exampleControl = createExampleSelector({
   onLoad: async (example, { fetchFiles, assertCurrent, signal }) => {
     const fetched = await fetchFiles();
     assertCurrent();
-    maskInput = null;
-    maskField.input.dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: [] } }));
-    await loadT1c(fetched, signal);
-    assertCurrent();
     const params = example.automation?.parameters;
-    if (params?.tumourType) $("tumourType").value = params.tumourType;
-    if (typeof params?.skullStripped === "boolean") $("skullStripped").checked = params.skullStripped;
-    refreshControls();
+    await loadT1c(fetched, signal, {
+      clearMask: true,
+      beforeCommit: assertCurrent,
+      afterCommit: () => {
+        if (params?.tumourType) $("tumourType").value = params.tumourType;
+        if (typeof params?.skullStripped === "boolean") $("skullStripped").checked = params.skullStripped;
+      },
+    });
+    assertCurrent();
   },
 });
 $("exampleControl").append(exampleControl);

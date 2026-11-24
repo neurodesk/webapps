@@ -6,19 +6,50 @@ import {
   computeResectability,
   computeSubcorticalTracts,
   parseBcbTractsPack,
+  prepareRegistrationInputsRas,
   squaredEdt3d,
 } from '../src/rads.js';
 import { voxelIndex } from '../src/preprocess.js';
 
-test('computeLaterality matches Raidionics convention (1=right, 2=left, midline crossing)', () => {
+test('computeLaterality matches Raidionics convention and uses unrounded hemisphere counts for midlineCrossing', () => {
   const lat = new Uint8Array([1, 1, 2, 2, 0]);
   const rightOnly = computeLaterality(new Uint8Array([1, 1, 0, 0, 0]), lat);
-  assert.deepEqual(rightOnly, { leftPct: 0, rightPct: 100, midlineCrossing: false });
+  assert.equal(rightOnly.leftPct, 0);
+  assert.equal(rightOnly.rightPct, 100);
+  assert.equal(rightOnly.unlabelledPct, 0);
+  assert.equal(rightOnly.midlineCrossing, false);
 
   const bilateral = computeLaterality(new Uint8Array([1, 0, 1, 1, 0]), lat);
   assert.equal(bilateral.leftPct, 66.67);
   assert.equal(bilateral.rightPct, 33.33);
   assert.equal(bilateral.midlineCrossing, true);
+
+  // 1 left + 1 unlabelled must NOT assert midline crossing!
+  const leftPlusUnlabelled = computeLaterality(new Uint8Array([0, 0, 1, 0, 1]), lat);
+  assert.equal(leftPlusUnlabelled.leftPct, 50);
+  assert.equal(leftPlusUnlabelled.rightPct, 0);
+  assert.equal(leftPlusUnlabelled.unlabelledPct, 50);
+  assert.equal(leftPlusUnlabelled.midlineCrossing, false);
+});
+
+test('prepareRegistrationInputsRas preserves tumour voxels outside the brain bounding box', () => {
+  const dims = [20, 10, 10];
+  const affine = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
+  const data = new Float32Array(dims[0] * dims[1] * dims[2]).fill(50);
+  const brain = new Uint8Array(data.length);
+  const tumour = new Uint8Array(data.length);
+  // Brain occupies x=[2..6]; tumour has one voxel inside brain (x=4) and one far outside (x=17).
+  for (let z = 3; z <= 6; z++) {
+    for (let y = 3; y <= 6; y++) {
+      for (let x = 2; x <= 6; x++) brain[voxelIndex(x, y, z, dims)] = 1;
+    }
+  }
+  tumour[voxelIndex(4, 4, 4, dims)] = 1;
+  tumour[voxelIndex(17, 4, 4, dims)] = 1;
+  const prepared = prepareRegistrationInputsRas({ data, dims, affine }, brain, tumour);
+  let maskSum = 0;
+  for (let i = 0; i < prepared.mask.data.length; i++) maskSum += prepared.mask.data[i];
+  assert.equal(maskSum, 2, 'both tumour voxels must survive preparation for Greedy reslicing');
 });
 
 test('computeResectability selects hemisphere map and matches Kommers/Raidionics formula', () => {

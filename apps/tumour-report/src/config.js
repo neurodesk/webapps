@@ -1,6 +1,7 @@
 // Pure configuration, label styling and report formatting for Brain Tumour Report.
 // No DOM imports so unit tests can run directly in Node.js.
 import { TUMOUR_TYPES } from "@neurodesk/tumour-report/models";
+import { gridsMatch } from "@neurodesk/tumour-report/preprocess";
 
 export const APP = Object.freeze({
   id: "tumour-report",
@@ -78,15 +79,6 @@ export function statusSummary(report) {
   return `Report ready · ${count} · ${m.totalVolumeMl.toFixed(1)} mL`;
 }
 
-export function geometryMatches(a, b, toleranceMm = 0.05) {
-  if (!a?.dims || !b?.dims || a.dims.length !== 3 || b.dims.length !== 3) return false;
-  for (let i = 0; i < 3; i++) {
-    if (a.dims[i] !== b.dims[i]) return false;
-  }
-  if (a.spacingMm && b.spacingMm) {
-    for (let i = 0; i < 3; i++) {
-      if (Math.abs(a.spacingMm[i] - b.spacingMm[i]) > toleranceMm) return false;
-    }
-  }
-  return true;
+export function geometryMatches(a, b, tolerances) {
+  return gridsMatch(a, b, tolerances);
 }

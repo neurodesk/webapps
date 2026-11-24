@@ -77,25 +77,30 @@ function sigmoidInPlace(arr) {
   return arr;
 }
 
-// Reproduces raidionics_seg_lib padding_for_inference_both_ends_patchwise + patch grid.
+// Reproduces raidionics_seg_lib padding_for_inference_both_ends_patchwise:
+// when d < patchDim, pads BOTH ends by ceil((patchDim - d) / 2) using edge replication.
 export function padForPatches(data, dims, patchDims = TUMOUR_PATCH_DIMS) {
-  const extra = dims.map((d, a) => Math.max(0, patchDims[a] - d));
-  const before = extra.map((e) => Math.floor(e / 2));
-  const paddedDims = dims.map((d, a) => d + extra[a]);
-  if (extra.every((e) => e === 0)) {
-    return { data, dims: [...dims], before, extra };
+  const before = dims.map((d, a) => (d < patchDims[a] ? Math.ceil((patchDims[a] - d) / 2) : 0));
+  const paddedDims = dims.map((d, a) => d + 2 * before[a]);
+  if (before.every((b) => b === 0)) {
+    return { data, dims: [...dims], before, extra: [0, 0, 0] };
   }
   const [nx, ny, nz] = dims;
   const [px, py, pz] = paddedDims;
   const out = new Float32Array(px * py * pz);
-  for (let z = 0; z < nz; z++) {
-    for (let y = 0; y < ny; y++) {
-      const srcBase = nx * (y + ny * z);
-      const dstBase = before[0] + px * (before[1] + y + py * (before[2] + z));
-      out.set(data.subarray(srcBase, srcBase + nx), dstBase);
+  const clamp = (v, n) => (v < 0 ? 0 : v >= n ? n - 1 : v);
+  for (let z = 0; z < pz; z++) {
+    const sz = clamp(z - before[2], nz);
+    for (let y = 0; y < py; y++) {
+      const sy = clamp(y - before[1], ny);
+      const dstRow = px * (y + py * z);
+      const srcRow = nx * (sy + ny * sz);
+      for (let x = 0; x < px; x++) {
+        out[dstRow + x] = data[srcRow + clamp(x - before[0], nx)];
+      }
     }
   }
-  return { data: out, dims: paddedDims, before, extra };
+  return { data: out, dims: paddedDims, before, extra: before.map((b) => 2 * b) };
 }
 
 export function patchBoundaries(dims, patchDims = TUMOUR_PATCH_DIMS) {
@@ -194,6 +199,60 @@ function thresholdMask(prob, threshold) {
   return mask;
 }
 
+// Shared Raidionics v1.3 MRI_Brain extraction path used by both full segmentation
+// and supplied-mask MNI registration: skimage-style input resize (mode='reflect')
+// and SciPy-zoom endpoint-aligned probability upsampling.
+export async function extractBrainMask({
+  volume,
+  cropped = null,
+  resampled = null,
+  cropBbox = null,
+  runBrain,
+  onProgress = () => {},
+  signal,
+}) {
+  validateVolume(volume, 'T1c');
+  signal?.throwIfAborted();
+  if (typeof runBrain !== 'function') {
+    throw new Error('Brain segmentation runner is required for skull-intact scans.');
+  }
+  let fg = cropped;
+  let bbox = cropBbox;
+  if (!fg || !bbox) {
+    const out = cropBackgroundMinimum(volume);
+    fg = out.volume;
+    bbox = out.cropBbox;
+  }
+  const vol1mm = resampled ?? resampleToOutput(fg, [1, 1, 1], 1);
+  signal?.throwIfAborted();
+
+  onProgress({ stage: 'brain', message: 'Segmenting brain mask' });
+  const resized = resizeLinear3d(vol1mm.data, vol1mm.dims, BRAIN_INPUT_DIMS, { antiAliasing: true, alignCorners: false });
+  const brainInput = toModelTensor(clipAndNormalize(resized), BRAIN_INPUT_DIMS);
+  const brainLogitsC = await runBrain(brainInput, [1, 1, ...BRAIN_INPUT_DIMS]);
+  signal?.throwIfAborted();
+  checkLogits(brainLogitsC);
+  const brainProbSmall = sigmoidInPlace(fromModelTensor(brainLogitsC, BRAIN_INPUT_DIMS));
+  const brainProb1mm = resizeLinear3d(brainProbSmall, BRAIN_INPUT_DIMS, vol1mm.dims, { antiAliasing: false, alignCorners: true });
+  const brainProbFg = resampleFromTo(
+    { data: brainProb1mm, dims: vol1mm.dims, affine: vol1mm.affine },
+    fg.dims,
+    fg.affine,
+    1,
+  );
+  const brainMask = uncropMask(thresholdMask(brainProbFg.data, BRAIN_THRESHOLD), bbox, volume.dims);
+  let brainVoxels = 0;
+  for (let i = 0; i < brainMask.length; i++) brainVoxels += brainMask[i];
+  const brainMl = brainVoxels * voxelVolumeMl(volume.affine);
+  const warnings = [];
+  if (brainMl < SMALL_BRAIN_WARNING_ML) {
+    warnings.push(
+      `Brain mask is unusually small (${brainMl.toFixed(0)} mL). If this scan is already skull-stripped, enable "Input is already skull-stripped" in Advanced settings.`,
+    );
+  }
+  return { brainMask, warnings };
+}
+
 export async function segmentTumour({
   volume,
   skullStripped = false,
@@ -218,32 +277,17 @@ export async function segmentTumour({
       if (volume.data[i] > 0) brainMask[i] = 1;
     }
   } else {
-    if (typeof runBrain !== 'function') {
-      throw new Error('Brain segmentation runner is required for skull-intact scans.');
-    }
-    onProgress({ stage: 'brain', message: 'Segmenting brain mask' });
-    const resized = resizeLinear3d(resampled.data, resampled.dims, BRAIN_INPUT_DIMS);
-    const brainInput = toModelTensor(clipAndNormalize(resized), BRAIN_INPUT_DIMS);
-    const brainLogitsC = await runBrain(brainInput, [1, 1, ...BRAIN_INPUT_DIMS]);
-    signal?.throwIfAborted();
-    checkLogits(brainLogitsC);
-    const brainProbSmall = sigmoidInPlace(fromModelTensor(brainLogitsC, BRAIN_INPUT_DIMS));
-    const brainProb1mm = resizeLinear3d(brainProbSmall, BRAIN_INPUT_DIMS, resampled.dims);
-    const brainProbFg = resampleFromTo(
-      { data: brainProb1mm, dims: resampled.dims, affine: resampled.affine },
-      cropped.dims,
-      cropped.affine,
-      1,
-    );
-    brainMask = uncropMask(thresholdMask(brainProbFg.data, BRAIN_THRESHOLD), cropBbox, volume.dims);
-    let brainVoxels = 0;
-    for (let i = 0; i < brainMask.length; i++) brainVoxels += brainMask[i];
-    const brainMl = brainVoxels * voxelVolumeMl(volume.affine);
-    if (brainMl < SMALL_BRAIN_WARNING_ML) {
-      warnings.push(
-        `Brain mask is unusually small (${brainMl.toFixed(0)} mL). If this scan is already skull-stripped, enable "Input is already skull-stripped" in Options.`,
-      );
-    }
+    const brainOut = await extractBrainMask({
+      volume,
+      cropped,
+      resampled,
+      cropBbox,
+      runBrain,
+      onProgress,
+      signal,
+    });
+    brainMask = brainOut.brainMask;
+    warnings.push(...brainOut.warnings);
   }
 
   if (typeof runTumorCore !== 'function') {

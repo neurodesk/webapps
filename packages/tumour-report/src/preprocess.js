@@ -348,6 +348,29 @@ export function resampleToOutput(volume, voxelSizes = [1, 1, 1], order = 1) {
   return resampleFromTo(volume, dims, affine, order);
 }
 
+export function affinesMatch(a, b, { translationTolMm = 0.1, linearTol = 1e-3 } = {}) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== 4 || b.length !== 4) return false;
+  for (let r = 0; r < 4; r++) {
+    if (!Array.isArray(a[r]) || !Array.isArray(b[r]) || a[r].length !== 4 || b[r].length !== 4) return false;
+    for (let c = 0; c < 4; c++) {
+      const av = Number(a[r][c]);
+      const bv = Number(b[r][c]);
+      if (!Number.isFinite(av) || !Number.isFinite(bv)) return false;
+      const tol = r < 3 && c === 3 ? translationTolMm : linearTol;
+      if (Math.abs(av - bv) > tol) return false;
+    }
+  }
+  return true;
+}
+
+export function gridsMatch(a, b, tolerances) {
+  if (!a?.dims || !b?.dims || a.dims.length !== 3 || b.dims.length !== 3) return false;
+  for (let i = 0; i < 3; i++) {
+    if (a.dims[i] !== b.dims[i]) return false;
+  }
+  return affinesMatch(a.affine, b.affine, tolerances);
+}
+
 function reflectIndex(i, n) {
   if (n <= 1) return 0;
   let p = i;
@@ -356,6 +379,23 @@ function reflectIndex(i, n) {
     if (p >= n) p = 2 * n - 1 - p;
   }
   return p;
+}
+
+// Mirrors around boundary pixel centers (c b | a b c | b a), matching skimage.transform.resize mode='reflect'.
+function mirrorIndex(i, n) {
+  if (n <= 1) return 0;
+  let p = i;
+  while (p < 0 || p >= n) {
+    if (p < 0) p = -p;
+    if (p >= n) p = 2 * (n - 1) - p;
+  }
+  return p;
+}
+
+function clampIndex(i, n) {
+  if (i < 0) return 0;
+  if (i >= n) return n - 1;
+  return i;
 }
 
 // Separable Gaussian smoothing with reflect boundary matching scipy/skimage anti_aliasing.
@@ -397,16 +437,18 @@ function gaussianSmooth3d(data, dims, sigmas) {
   return current;
 }
 
-// Reproduces skimage.transform.resize(vol, dstDims, order=1, mode='reflect', anti_aliasing=True).
-export function resizeLinear3d(data, srcDims, dstDims, { antiAliasing = true } = {}) {
+// Reproduces skimage.transform.resize(vol, dstDims, order=1, mode='reflect', anti_aliasing=True)
+// by default (alignCorners=false), or scipy.ndimage.zoom(vol, order=1) when alignCorners=true.
+export function resizeLinear3d(data, srcDims, dstDims, { antiAliasing, alignCorners = false } = {}) {
   const [sxN, syN, szN] = srcDims;
   const [dxN, dyN, dzN] = dstDims;
   if (sxN === dxN && syN === dyN && szN === dzN) {
     return Float32Array.from(data);
   }
+  const useAntiAliasing = antiAliasing ?? !alignCorners;
   const factors = [sxN / dxN, syN / dyN, szN / dzN];
   let source = data;
-  if (antiAliasing) {
+  if (useAntiAliasing) {
     const sigmas = factors.map((f) => (f > 1 ? (f - 1) / 2 : 0));
     if (sigmas.some((s) => s > 0)) {
       source = gaussianSmooth3d(data, srcDims, sigmas);
@@ -415,25 +457,33 @@ export function resizeLinear3d(data, srcDims, dstDims, { antiAliasing = true } =
   const coords = [0, 1, 2].map((a) => {
     const srcLen = srcDims[a];
     const dstLen = dstDims[a];
-    const scale = srcLen / dstLen;
     const c = new Float64Array(dstLen);
-    for (let i = 0; i < dstLen; i++) {
-      c[i] = (i + 0.5) * scale - 0.5;
+    if (alignCorners) {
+      const scale = dstLen > 1 ? (srcLen - 1) / (dstLen - 1) : 0;
+      for (let i = 0; i < dstLen; i++) {
+        c[i] = i * scale;
+      }
+    } else {
+      const scale = srcLen / dstLen;
+      for (let i = 0; i < dstLen; i++) {
+        c[i] = (i + 0.5) * scale - 0.5;
+      }
     }
     return c;
   });
 
   const out = new Float32Array(dxN * dyN * dzN);
   const xySrc = sxN * syN;
-  const clampCoord = (v, n) => {
+  const mapIndex = alignCorners ? clampIndex : mirrorIndex;
+  const mapCoord = (v, n) => {
     const i0 = Math.floor(v);
     const f = v - i0;
-    return [reflectIndex(i0, n), reflectIndex(i0 + 1, n), f];
+    return [mapIndex(i0, n), mapIndex(i0 + 1, n), f];
   };
 
-  const xMap = Array.from({ length: dxN }, (_, x) => clampCoord(coords[0][x], sxN));
-  const yMap = Array.from({ length: dyN }, (_, y) => clampCoord(coords[1][y], syN));
-  const zMap = Array.from({ length: dzN }, (_, z) => clampCoord(coords[2][z], szN));
+  const xMap = Array.from({ length: dxN }, (_, x) => mapCoord(coords[0][x], sxN));
+  const yMap = Array.from({ length: dyN }, (_, y) => mapCoord(coords[1][y], syN));
+  const zMap = Array.from({ length: dzN }, (_, z) => mapCoord(coords[2][z], szN));
 
   for (let z = 0; z < dzN; z++) {
     const [z0, z1, fz] = zMap[z];

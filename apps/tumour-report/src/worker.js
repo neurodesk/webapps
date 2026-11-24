@@ -14,23 +14,12 @@ import { gunzip } from "@neurodesk/greedy";
 import { readVolume } from "@neurodesk/synthsr";
 import { fetchModel } from "@neurodesk/webapp-components/worker";
 import {
-  BRAIN_INPUT_DIMS,
-  BRAIN_THRESHOLD,
-  SMALL_BRAIN_WARNING_ML,
-  checkLogits,
-  fromModelTensor,
+  extractBrainMask,
   segmentTumour,
-  toModelTensor,
 } from "@neurodesk/tumour-report";
 import {
-  clipAndNormalize,
-  cropBackgroundMinimum,
-  resampleFromTo,
-  resampleToOutput,
-  resizeLinear3d,
-  uncropMask,
+  gridsMatch,
   validateVolume,
-  voxelVolumeMl,
 } from "@neurodesk/tumour-report/preprocess";
 import { computeNativeMorphometry } from "@neurodesk/tumour-report/morphometry";
 import { computeMniRads, normalizeToMniWithGreedy, parseBcbTractsPack } from "@neurodesk/tumour-report/rads";
@@ -107,39 +96,10 @@ async function runSingleSession(modelBytes, backend, fn) {
 }
 
 async function runBrainMaskOnly(volume, brainBytes, backend) {
-  const warnings = [];
-  const { volume: cropped, cropBbox } = cropBackgroundMinimum(volume);
-  const resampled = resampleToOutput(cropped, [1, 1, 1], 1);
-  const resized = resizeLinear3d(resampled.data, resampled.dims, BRAIN_INPUT_DIMS);
-  const brainInput = toModelTensor(clipAndNormalize(resized), BRAIN_INPUT_DIMS);
-  const brainLogitsC = await runSingleSession(brainBytes, backend, (run) => run(brainInput, [1, 1, ...BRAIN_INPUT_DIMS]));
-  checkLogits(brainLogitsC);
-  const probSmall = fromModelTensor(brainLogitsC, BRAIN_INPUT_DIMS);
-  for (let i = 0; i < probSmall.length; i++) {
-    const v = probSmall[i];
-    probSmall[i] = v >= 0 ? 1 / (1 + Math.exp(-v)) : Math.exp(v) / (1 + Math.exp(v));
-  }
-  const prob1mm = resizeLinear3d(probSmall, BRAIN_INPUT_DIMS, resampled.dims);
-  const probFg = resampleFromTo(
-    { data: prob1mm, dims: resampled.dims, affine: resampled.affine },
-    cropped.dims,
-    cropped.affine,
-    1,
-  );
-  const maskFg = new Uint8Array(probFg.data.length);
-  for (let i = 0; i < probFg.data.length; i++) {
-    if (probFg.data[i] >= BRAIN_THRESHOLD) maskFg[i] = 1;
-  }
-  const brainMask = uncropMask(maskFg, cropBbox, volume.dims);
-  let brainVoxels = 0;
-  for (let i = 0; i < brainMask.length; i++) brainVoxels += brainMask[i];
-  const brainMl = brainVoxels * voxelVolumeMl(volume.affine);
-  if (brainMl < SMALL_BRAIN_WARNING_ML) {
-    warnings.push(
-      `Brain mask is unusually small (${brainMl.toFixed(0)} mL). If this scan is already skull-stripped, enable "Input is already skull-stripped" in Advanced settings.`,
-    );
-  }
-  return { brainMask, warnings };
+  return extractBrainMask({
+    volume,
+    runBrain: (tile, shape) => runSingleSession(brainBytes, backend, (run) => run(tile, shape)),
+  });
 }
 
 function nonZeroMask(data) {
@@ -267,8 +227,8 @@ self.onmessage = async ({ data: job }) => {
       progress(0.05, "Reading supplied tumour mask…");
       const maskVol = readVolume(await job.maskFile.arrayBuffer());
       validateVolume(maskVol, "Tumour mask");
-      if (maskVol.dims.some((d, i) => d !== volume.dims[i])) {
-        throw new Error(`Supplied tumour mask (${maskVol.dims.join(" × ")}) does not match T1c dimensions (${volume.dims.join(" × ")}).`);
+      if (!gridsMatch(volume, maskVol)) {
+        throw new Error(`Supplied tumour mask (${maskVol.dims.join(" × ")}) is not aligned to the T1c voxel-to-RAS grid (${volume.dims.join(" × ")}).`);
       }
       tumourMask = nonZeroMask(maskVol.data);
       log(`Using supplied tumour mask ${job.maskFile.name}`);
@@ -344,18 +304,23 @@ self.onmessage = async ({ data: job }) => {
         deformable: Boolean(job.deformableMni),
         onProgress: (ev) => progress(0.84, `${ev.message}…`),
       });
-      mniMask = mniNorm.mniMask;
-      mniDims = mniNorm.dims;
-      mniAffine = mniNorm.affine;
       registrationMode = mniNorm.mode;
-      progress(0.92, "Computing MNI RADS anatomical report…");
-      rads = computeMniRads({
-        mniMask,
-        dims: mniDims,
-        tumourType: job.tumourType,
-        atlases: atlasBundle.atlases,
-      });
-      log(`MNI RADS (${registrationMode}): ${rads.mniVolumeMl.toFixed(2)} mL, Left ${rads.laterality.leftPct}% / Right ${rads.laterality.rightPct}%`);
+      if (mniNorm.mniVoxels === 0) {
+        warnings.push("Warped tumour mask is empty in MNI space; MNI anatomical characterization unavailable.");
+        log("Warped tumour mask is empty in MNI space; omitting MNI RADS report.");
+      } else {
+        mniMask = mniNorm.mniMask;
+        mniDims = mniNorm.dims;
+        mniAffine = mniNorm.affine;
+        progress(0.92, "Computing MNI RADS anatomical report…");
+        rads = computeMniRads({
+          mniMask,
+          dims: mniDims,
+          tumourType: job.tumourType,
+          atlases: atlasBundle.atlases,
+        });
+        log(`MNI RADS (${registrationMode}): ${rads.mniVolumeMl.toFixed(2)} mL, Left ${rads.laterality.leftPct}% / Right ${rads.laterality.rightPct}%`);
+      }
     } else if (job.computeMniReport && morphometry.lesionCount === 0) {
       log("No tumour voxels segmented; skipping MNI anatomical registration.");
     }

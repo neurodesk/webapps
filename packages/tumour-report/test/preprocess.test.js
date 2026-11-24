@@ -1,10 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  affinesMatch,
   binaryFillHoles6,
   brainOverlapRefinement,
   clipAndNormalize,
   cropBackgroundMinimum,
+  gridsMatch,
   invertAffine4,
   labelComponents26,
   multiplyAffine4,
@@ -123,14 +125,52 @@ test('vox2OutVox and resampleToOutput round-trip LPS anisotropic image to canoni
   }
 });
 
-test('resizeLinear3d preserves constant fields and resizes cleanly', () => {
+test('resizeLinear3d preserves constant fields and matches skimage reflect and SciPy zoom conventions', () => {
   const src = new Float32Array(8 * 8 * 8).fill(3.5);
   const down = resizeLinear3d(src, [8, 8, 8], [4, 4, 4]);
   assert.equal(down.length, 64);
   for (const v of down) assert.ok(Math.abs(v - 3.5) < 1e-5);
-  const up = resizeLinear3d(down, [4, 4, 4], [6, 8, 10]);
+  const up = resizeLinear3d(down, [4, 4, 4], [6, 8, 10], { alignCorners: true });
   assert.equal(up.length, 480);
   for (const v of up) assert.ok(Math.abs(v - 3.5) < 1e-5);
+
+  // [0, 1] resized to 4 samples: skimage reflect gives [0.25, 0.25, 0.75, 0.75];
+  // SciPy zoom (alignCorners=true) gives [0, 1/3, 2/3, 1].
+  const ramp = new Float32Array([0, 1]);
+  const skimage = Array.from(resizeLinear3d(ramp, [2, 1, 1], [4, 1, 1], { antiAliasing: false, alignCorners: false }));
+  for (const [actual, expected] of skimage.map((v, i) => [v, [0.25, 0.25, 0.75, 0.75][i]])) {
+    assert.ok(Math.abs(actual - expected) < 1e-6, `skimage reflect ${actual} !== ${expected}`);
+  }
+  const zoom = Array.from(resizeLinear3d(ramp, [2, 1, 1], [4, 1, 1], { alignCorners: true }));
+  for (const [actual, expected] of zoom.map((v, i) => [v, [0, 1 / 3, 2 / 3, 1][i]])) {
+    assert.ok(Math.abs(actual - expected) < 1e-6, `scipy zoom ${actual} !== ${expected}`);
+  }
+});
+
+test('affinesMatch and gridsMatch reject translated or rotated masks despite identical dims and spacing', () => {
+  const baseAffine = [
+    [1, 0, 0, -10],
+    [0, 1, 0, -20],
+    [0, 0, 1, -30],
+    [0, 0, 0, 1],
+  ];
+  const translated = [
+    [1, 0, 0, 32],
+    [0, 1, 0, -20],
+    [0, 0, 1, -30],
+    [0, 0, 0, 1],
+  ];
+  const flipped = [
+    [-1, 0, 0, -10],
+    [0, 1, 0, -20],
+    [0, 0, 1, -30],
+    [0, 0, 0, 1],
+  ];
+  assert.equal(affinesMatch(baseAffine, baseAffine), true);
+  assert.equal(affinesMatch(baseAffine, translated), false);
+  assert.equal(affinesMatch(baseAffine, flipped), false);
+  assert.equal(gridsMatch({ dims: [32, 32, 24], affine: baseAffine }, { dims: [32, 32, 24], affine: translated }), false);
+  assert.equal(gridsMatch({ dims: [32, 32, 24], affine: baseAffine }, { dims: [32, 32, 24], affine: baseAffine }), true);
 });
 
 test('clipAndNormalize clips negative values, 99.5th percentile, and z-scores nonzero with ddof=1', () => {

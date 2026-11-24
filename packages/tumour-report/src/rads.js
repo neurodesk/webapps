@@ -19,8 +19,9 @@ function round2(v) {
   return Math.round(v * 100) / 100;
 }
 
-// Reproduces raidionicsrads compute_lateralisation (target='full'):
-// latMask == 1 -> right hemisphere, latMask == 2 -> left hemisphere.
+// Reproduces raidionicsrads lateralisation percentages (latMask == 1 -> right, 2 -> left)
+// while determining bilateral midline crossing from unrounded hemisphere voxel counts
+// (left > 0 && right > 0) and reporting unlabelled coverage explicitly.
 export function computeLaterality(mniMask, latMask) {
   if (mniMask.length !== latMask.length) {
     throw new Error('Tumour mask and lateralisation atlas dimensions do not match.');
@@ -35,13 +36,31 @@ export function computeLaterality(mniMask, latMask) {
     if (side === 1) right++;
     else if (side === 2) left++;
   }
+  const unlabelled = total - left - right;
   if (total === 0) {
-    return { leftPct: 0, rightPct: 0, midlineCrossing: false };
+    return {
+      leftPct: 0,
+      rightPct: 0,
+      unlabelledPct: 0,
+      leftVoxels: 0,
+      rightVoxels: 0,
+      unlabelledVoxels: 0,
+      midlineCrossing: false,
+    };
   }
   const leftPct = round2((left / total) * 100);
   const rightPct = round2((right / total) * 100);
-  const midlineCrossing = Math.max(leftPct, rightPct) < 100;
-  return { leftPct, rightPct, midlineCrossing };
+  const unlabelledPct = round2((unlabelled / total) * 100);
+  const midlineCrossing = left > 0 && right > 0;
+  return {
+    leftPct,
+    rightPct,
+    unlabelledPct,
+    leftVoxels: left,
+    rightVoxels: right,
+    unlabelledVoxels: unlabelled,
+    midlineCrossing,
+  };
 }
 
 // Reproduces raidionicsrads compute_resectability_index (Kommers et al., Neuro-Oncology 2021).
@@ -352,11 +371,9 @@ export function computeMniRads({
   };
 }
 
-// Crop brain-masked T1c + tumour mask tightly around brainMask and resample to 1 mm canonical RAS
-// so Greedy's `-ia-image-centers` starts directly on the brain center of mass even on wide/off-center
-// clinical or radiotherapy-planning fields of view (e.g. 512x512 LPS acquisitions).
-function prepareBrainCroppedRas(volume, brainMask, tumourMask, margin = 4) {
-  const [nx, ny, nz] = volume.dims;
+// Crop a volume tightly around a binary mask (+margin) and resample to 1 mm canonical RAS.
+function cropMaskBbox(mask, dims, margin) {
+  const [nx, ny, nz] = dims;
   let minX = nx;
   let minY = ny;
   let minZ = nz;
@@ -367,7 +384,7 @@ function prepareBrainCroppedRas(volume, brainMask, tumourMask, margin = 4) {
     for (let y = 0; y < ny; y++) {
       const row = nx * (y + ny * z);
       for (let x = 0; x < nx; x++) {
-        if (!brainMask[row + x]) continue;
+        if (!mask[row + x]) continue;
         if (x < minX) minX = x;
         if (x + 1 > maxX) maxX = x + 1;
         if (y < minY) minY = y;
@@ -377,34 +394,59 @@ function prepareBrainCroppedRas(volume, brainMask, tumourMask, margin = 4) {
       }
     }
   }
-  if (maxX < 0) {
+  if (maxX < 0) return null;
+  return [
+    Math.max(0, minX - margin),
+    Math.max(0, minY - margin),
+    Math.max(0, minZ - margin),
+    Math.min(nx, maxX + margin),
+    Math.min(ny, maxY + margin),
+    Math.min(nz, maxZ + margin),
+  ];
+}
+
+// Crop brain-masked T1c tightly around brainMask for Greedy registration while cropping
+// the moving tumour mask around its own full bounding box so no tumour voxels outside
+// the brain mask are ever discarded before reslicing into MNI space.
+export function prepareRegistrationInputsRas(volume, brainMask, tumourMask, margin = 4) {
+  const [nx, ny] = volume.dims;
+  const brainBox = cropMaskBbox(brainMask, volume.dims, margin);
+  if (!brainBox) {
     throw new Error('Brain mask is empty; cannot register to MNI space.');
   }
-  minX = Math.max(0, minX - margin);
-  minY = Math.max(0, minY - margin);
-  minZ = Math.max(0, minZ - margin);
-  maxX = Math.min(nx, maxX + margin);
-  maxY = Math.min(ny, maxY + margin);
-  maxZ = Math.min(nz, maxZ + margin);
-  const cd = [maxX - minX, maxY - minY, maxZ - minZ];
-  const count = cd[0] * cd[1] * cd[2];
-  const cropT1 = new Float32Array(count);
-  const cropMask = new Float32Array(count);
-  for (let z = 0; z < cd[2]; z++) {
-    for (let y = 0; y < cd[1]; y++) {
-      const dstRow = cd[0] * (y + cd[1] * z);
-      const srcRow = minX + nx * (minY + y + ny * (minZ + z));
-      for (let x = 0; x < cd[0]; x++) {
+  const [bMinX, bMinY, bMinZ, bMaxX, bMaxY, bMaxZ] = brainBox;
+  const bd = [bMaxX - bMinX, bMaxY - bMinY, bMaxZ - bMinZ];
+  const cropT1 = new Float32Array(bd[0] * bd[1] * bd[2]);
+  for (let z = 0; z < bd[2]; z++) {
+    for (let y = 0; y < bd[1]; y++) {
+      const dstRow = bd[0] * (y + bd[1] * z);
+      const srcRow = bMinX + nx * (bMinY + y + ny * (bMinZ + z));
+      for (let x = 0; x < bd[0]; x++) {
         const si = srcRow + x;
         if (brainMask[si]) cropT1[dstRow + x] = volume.data[si];
-        if (tumourMask[si]) cropMask[dstRow + x] = 1;
       }
     }
   }
-  const origin = applyAffinePoint(volume.affine, minX, minY, minZ);
-  const cropAffine = volume.affine.map((r, i) => (i < 3 ? [r[0], r[1], r[2], origin[i]] : [...r]));
-  const rasT1 = resampleToOutput({ data: cropT1, dims: cd, affine: cropAffine }, [1, 1, 1], 1);
-  const rasMaskFloat = resampleToOutput({ data: cropMask, dims: cd, affine: cropAffine }, [1, 1, 1], 0);
+  const bOrigin = applyAffinePoint(volume.affine, bMinX, bMinY, bMinZ);
+  const bAffine = volume.affine.map((r, i) => (i < 3 ? [r[0], r[1], r[2], bOrigin[i]] : [...r]));
+  const rasT1 = resampleToOutput({ data: cropT1, dims: bd, affine: bAffine }, [1, 1, 1], 1);
+
+  const maskBox = cropMaskBbox(tumourMask, volume.dims, 2) ?? brainBox;
+  const [mMinX, mMinY, mMinZ, mMaxX, mMaxY, mMaxZ] = maskBox;
+  const md = [mMaxX - mMinX, mMaxY - mMinY, mMaxZ - mMinZ];
+  const cropMask = new Float32Array(md[0] * md[1] * md[2]);
+  for (let z = 0; z < md[2]; z++) {
+    for (let y = 0; y < md[1]; y++) {
+      const dstRow = md[0] * (y + md[1] * z);
+      const srcRow = mMinX + nx * (mMinY + y + ny * (mMinZ + z));
+      for (let x = 0; x < md[0]; x++) {
+        if (tumourMask[srcRow + x]) cropMask[dstRow + x] = 1;
+      }
+    }
+  }
+  const mOrigin = applyAffinePoint(volume.affine, mMinX, mMinY, mMinZ);
+  const mAffine = volume.affine.map((r, i) => (i < 3 ? [r[0], r[1], r[2], mOrigin[i]] : [...r]));
+  const rasMaskFloat = resampleToOutput({ data: cropMask, dims: md, affine: mAffine }, [1, 1, 1], 0);
   const rasMask = new Uint8Array(rasMaskFloat.data.length);
   for (let i = 0; i < rasMask.length; i++) {
     if (rasMaskFloat.data[i] >= 0.5) rasMask[i] = 1;
@@ -415,7 +457,7 @@ function prepareBrainCroppedRas(volume, brainMask, tumourMask, margin = 4) {
   };
 }
 
-// Normalize a native-space brain-masked T1c + tumour mask onto ICBM 152 2009a
+// Normalize a native-space brain-masked T1c + full tumour mask onto ICBM 152 2009a
 // using @neurodesk/greedy (affine NMI default, optional deformable SVF with NMI).
 export async function normalizeToMniWithGreedy({
   volume,
@@ -428,7 +470,7 @@ export async function normalizeToMniWithGreedy({
 }) {
   if (!greedyApi) throw new Error('Greedy WebAssembly API is required for MNI normalization.');
   const fixedBytes = await gunzip(mniTemplateBytes);
-  const prepared = prepareBrainCroppedRas(volume, brainMask, tumourMask);
+  const prepared = prepareRegistrationInputsRas(volume, brainMask, tumourMask);
   const movingT1Bytes = new Uint8Array(writeVolume(prepared.t1, 'Brain-masked 1mm RAS T1c'));
   const movingMaskBytes = new Uint8Array(writeVolume(prepared.mask, 'Tumour mask 1mm RAS'));
 
@@ -508,11 +550,16 @@ export async function normalizeToMniWithGreedy({
 
   const mniVol = readVolume(warpedMaskBytes.slice().buffer);
   const mniMask = new Uint8Array(mniVol.data.length);
+  let mniVoxels = 0;
   for (let i = 0; i < mniMask.length; i++) {
-    if (mniVol.data[i] >= 0.5) mniMask[i] = 1;
+    if (mniVol.data[i] >= 0.5) {
+      mniMask[i] = 1;
+      mniVoxels++;
+    }
   }
   return {
     mniMask,
+    mniVoxels,
     dims: mniVol.dims,
     affine: mniVol.affine,
     warpedT1Bytes,
