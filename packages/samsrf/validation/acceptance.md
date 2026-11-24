@@ -233,9 +233,10 @@ and on Intel under `matlab-intel`).
   real two-column QR (`107/107` 1-col chains + `1,712/1,712` 8-col solves on
   Xeon 8370C; `160/160` 1-RHS + `1,280/1,280` 8-RHS on Xeon 6975P-C), and
   complex two-column QR (`67/67` 1-col chains + `1,072/1,072` 8-col solves on
-  Xeon 8370C, matching every component MATLAB stored including all-zero
-  imaginary parts where MATLAB stores a real multi-RHS array; `160/160` 1-RHS +
-  `1,280/1,280` 8-RHS on Xeon 6975P-C), gated by
+  Xeon 8370C, matching every stored component bit for bit, with zero imaginary
+  parts verified where MATLAB omitted the imaginary array on all-zero-imaginary
+  multi-RHS results such as `glm_single_1e-10_0.3_multi_ones-first`; `160/160`
+  1-RHS + `1,280/1,280` 8-RHS on Xeon 6975P-C), gated by
   `mkl-avx512/tests/intel_norm_single_css.rs`. On the unseen 24-run Intel Xeon
   8573C CLI matrix, 9 of 10 runnable single-precision runs match bit for bit;
   only `prf_css_lh_single` differs on its 12 complex vertices (the mixed

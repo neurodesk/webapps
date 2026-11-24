@@ -398,8 +398,16 @@ pub fn correlation_complex_single_with_reference(
         real += x.re as f32 * y;
         imaginary -= x.im as f32 * y;
     }
-    let divide = |dot: f32| f64::from((f64::from(dot) / nx) as f32 / ny);
-    Complex64::new(divide(real), divide(imaginary))
+    let divide = |dot: f32| (f64::from(dot) / nx) as f32 / ny;
+    let (mut re, mut im) = (divide(real), divide(imaginary));
+    if reference == crate::arithmetic::ArithmeticReference::MatlabIntel {
+        let mag = libm::hypotf(re, im);
+        if mag > 1.0 {
+            re /= mag;
+            im /= mag;
+        }
+    }
+    Complex64::new(f64::from(re), f64::from(im))
 }
 
 #[cfg(test)]
@@ -455,5 +463,12 @@ mod tests {
             crate::arithmetic::ArithmeticReference::MatlabIntel,
         );
         assert_eq!(neg, -1.0f32);
+        let pred = crate::css::predict(&[0.0, 0.0, -1.0], 0.5, &[1.0], 1);
+        let rc = correlation_complex_single_with_reference(
+            &pred,
+            &[0.0, 0.0, 5.0],
+            crate::arithmetic::ArithmeticReference::MatlabIntel,
+        );
+        assert!(libm::hypotf(rc.re as f32, rc.im as f32) <= 1.0, "complex |r| must not exceed 1: {rc:?}");
     }
 }

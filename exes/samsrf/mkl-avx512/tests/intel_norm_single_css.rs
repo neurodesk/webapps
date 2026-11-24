@@ -405,6 +405,7 @@ fn nonnegative_css_evals_and_fits_equal_matlab_on_each_host() {
             let rfp = gaussian.evaluate(&[samsrf_core::expr::Value::column(params.clone()), xy_val.clone()]).unwrap();
             let raw = prf::predict_timecourse(&rfp.data, &apertures);
             let want_raw = array_f64(dir, &case["rawYp"]);
+            assert_eq!(raw.len(), want_raw.len(), "{label} eval {} rawYp len", case["id"]);
             for (t, (&got, &want)) in raw.iter().zip(&want_raw).enumerate() {
                 assert!(same_f64(got, want), "{label} eval {} rawYp[{t}]", case["id"]);
             }
@@ -414,6 +415,7 @@ fn nonnegative_css_evals_and_fits_equal_matlab_on_each_host() {
             }
             let pred = samsrf_core::matlab_math::convolve_real(&clipped, &hrf, downsampling);
             let want_pred = array_f64(dir, &case["predicted"]);
+            assert_eq!(pred.len(), want_pred.len(), "{label} eval {} predicted len", case["id"]);
             for (t, (&got, &want)) in pred.iter().zip(&want_pred).enumerate() {
                 assert!(same_f64(got, want), "{label} eval {} predicted[{t}]", case["id"]);
             }
@@ -493,6 +495,7 @@ fn nonnegative_css_evals_and_fits_equal_matlab_on_each_host() {
             let want_fitted = array_f64(dir, &case["fitted"]);
             let want_scalars = array_f64(dir, &case["scalars"]);
             let want_beta = array_f64(dir, &case["beta"]);
+            assert_eq!(res.x.len(), want_fitted.len(), "{label} fit {} param len", case["id"]);
             for (k, (&got, &want)) in res.x.iter().zip(&want_fitted).enumerate() {
                 assert!(same_f64(got, want), "{label} fit {} param[{k}]: got {got:?} want {want:?}", case["id"]);
             }
