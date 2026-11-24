@@ -1,0 +1,39 @@
+{
+  "name": "@neurodesk/totalsegmentator",
+  "version": "0.1.0",
+  "description": "TotalSegmentator v2 (CT & MRI) whole-body, vertebrae and abdominal muscle segmentation for browsers",
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": "./src/pipeline.js",
+    "./models": "./src/models.js",
+    "./labels": "./src/labels.js",
+    "./results": "./src/results.js",
+    "./manifest": "./model.manifest.json"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/*.js"
+  },
+  "dependencies": {
+    "@neurodesk/synthsr": "workspace:*"
+  },
+  "devDependencies": {
+    "onnxruntime-node": "1.29.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/totalsegmentator"
+  },
+  "files": [
+    "src",
+    "model.manifest.json",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ]
+}
