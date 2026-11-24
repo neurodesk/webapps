@@ -1705,9 +1705,9 @@ apps:
     path: microsam
     catalog: microscopy
     title: micro-sam
-    description: Segment cells in 2D microscopy from clicks and boxes.
+    description: Segment 2D/3D microscopy images from clicks and boxes.
     categories: [segmentation]
-    keywords: [micro-sam, Segment Anything, SAM, interactive segmentation, cell segmentation, nucleus segmentation, instance segmentation, light microscopy, fluorescence microscopy, point prompts, box prompts, OME-TIFF, annotation]
+    keywords: [micro-sam, Segment Anything, SAM, interactive segmentation, cell segmentation, nucleus segmentation, organelle segmentation, electron microscopy, 3D Z-stack, instance segmentation, light microscopy, fluorescence microscopy, point prompts, box prompts, OME-TIFF, annotation]
     anatomy: [any]
     modalities: [microscopy]
     inputs: [tiff]
@@ -1932,6 +1932,34 @@ apps:
     support_status: experimental
     shell: imaging-workspace
     handoff: none
+    app_scoped_runtime_families: [ort-web-asyncify]
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false
+
+  - id: medsam2
+    path: medsam2
+    catalog: neuro
+    also_in: [msk, preclinical]
+    title: MedSAM2
+    description: Segment 3D MRI and CT interactively from clicks and boxes.
+    categories: [segmentation]
+    keywords: [MedSAM2, SAM 2, interactive segmentation, 3D segmentation, MRI, CT, point prompts, box prompts, memory propagation]
+    anatomy: [any]
+    modalities: [mri, ct]
+    inputs: [dicom, nifti]
+    hardware: webgpu-optional
+    legacy_domain: null
+    runtime: vite-webgpu
+    model_manifest: models/medsam2.manifest.json
+    asset_manifest_schema: scientific-assets-v1
+    source: neurodesk/webapps@local
+    license: Apache-2.0
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
     app_scoped_runtime_families: [ort-web-asyncify]
     ci:
       toolchains: [node]

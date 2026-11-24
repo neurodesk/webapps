@@ -5707,6 +5707,54 @@
       "kind": "model",
       "license": "Apache-2.0",
       "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/9fbdabcd3f177e3a050c6ffec54663abc54d8085/microsam/models/microsam-vit-t-em-organelles-encoder.onnx": {
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/9fbdabcd3f177e3a050c6ffec54663abc54d8085/microsam/models/microsam-vit-t-em-organelles-encoder.onnx",
+      "sha256": "0a5d7dd771f232465dfb869e6e029beb0aa11001799783bffee93c8a769a7cee",
+      "bytes": 28045411,
+      "path": "assets/0a/0a5d7dd771f232465dfb869e6e029beb0aa11001799783bffee93c8a769a7cee-microsam-vit-t-em-organelles-encoder.onnx",
+      "kind": "model",
+      "license": "CC-BY-4.0"
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/9fbdabcd3f177e3a050c6ffec54663abc54d8085/microsam/models/microsam-vit-t-em-organelles-decoder.onnx": {
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/9fbdabcd3f177e3a050c6ffec54663abc54d8085/microsam/models/microsam-vit-t-em-organelles-decoder.onnx",
+      "sha256": "dda39a04c81337d264c175a883d946f9f33d428303e34d170899c1064c2818dc",
+      "bytes": 16496933,
+      "path": "assets/dd/dda39a04c81337d264c175a883d946f9f33d428303e34d170899c1064c2818dc-microsam-vit-t-em-organelles-decoder.onnx",
+      "kind": "model",
+      "license": "CC-BY-4.0"
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/626afea1c4e3dc42387dcaff3ab31bef5327e036/medsam2/models/medsam2-image-encoder.onnx": {
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/626afea1c4e3dc42387dcaff3ab31bef5327e036/medsam2/models/medsam2-image-encoder.onnx",
+      "sha256": "5659538a74f53b2ca9a53238b74e90311fd6ec2e51931aae1da78fa539f38b53",
+      "bytes": 115353088,
+      "path": "assets/56/5659538a74f53b2ca9a53238b74e90311fd6ec2e51931aae1da78fa539f38b53-medsam2-image-encoder.onnx",
+      "kind": "model",
+      "license": "CC-BY-SA-4.0"
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/626afea1c4e3dc42387dcaff3ab31bef5327e036/medsam2/models/medsam2-mask-decoder.onnx": {
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/626afea1c4e3dc42387dcaff3ab31bef5327e036/medsam2/models/medsam2-mask-decoder.onnx",
+      "sha256": "28d45bb34153ae8afbf309de685b786edb4b1671586e01e56ec979308e1f5550",
+      "bytes": 18848860,
+      "path": "assets/28/28d45bb34153ae8afbf309de685b786edb4b1671586e01e56ec979308e1f5550-medsam2-mask-decoder.onnx",
+      "kind": "model",
+      "license": "CC-BY-SA-4.0"
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/626afea1c4e3dc42387dcaff3ab31bef5327e036/medsam2/models/medsam2-memory-encoder.onnx": {
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/626afea1c4e3dc42387dcaff3ab31bef5327e036/medsam2/models/medsam2-memory-encoder.onnx",
+      "sha256": "b494a85774ccd015ad87b3d8223edf897458573448e836080759f9726c8811e1",
+      "bytes": 5590784,
+      "path": "assets/b4/b494a85774ccd015ad87b3d8223edf897458573448e836080759f9726c8811e1-medsam2-memory-encoder.onnx",
+      "kind": "model",
+      "license": "CC-BY-SA-4.0"
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/626afea1c4e3dc42387dcaff3ab31bef5327e036/medsam2/models/medsam2-memory-attention.onnx": {
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/626afea1c4e3dc42387dcaff3ab31bef5327e036/medsam2/models/medsam2-memory-attention.onnx",
+      "sha256": "b3a8add55a5abcc02092293998da156111b3930d745a9b7c0ed59bb1800d2b42",
+      "bytes": 26057593,
+      "path": "assets/b3/b3a8add55a5abcc02092293998da156111b3930d745a9b7c0ed59bb1800d2b42-medsam2-memory-attention.onnx",
+      "kind": "model",
+      "license": "CC-BY-SA-4.0"
     }
   },
   "apps": {
@@ -7073,7 +7121,9 @@
     "microsam": [
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/5524b8b6e48334617904a6da19ac62a7bffff86b/microsam/example/bbbc038-nuclei.tif",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/65a020cd019ef92fa32a9aa2cef08e67e66686ed/microsam/models/microsam-vit-t-lm-encoder.onnx",
-      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/65a020cd019ef92fa32a9aa2cef08e67e66686ed/microsam/models/microsam-vit-t-lm-decoder.onnx"
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/65a020cd019ef92fa32a9aa2cef08e67e66686ed/microsam/models/microsam-vit-t-lm-decoder.onnx",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/9fbdabcd3f177e3a050c6ffec54663abc54d8085/microsam/models/microsam-vit-t-em-organelles-encoder.onnx",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/9fbdabcd3f177e3a050c6ffec54663abc54d8085/microsam/models/microsam-vit-t-em-organelles-decoder.onnx"
     ],
     "microscope-qc": [
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2609ad8a2e76afd5c8442660d4267250947fae06/microscope-qc/example/evos-40x-na095-tetraspeck-100nm.ome.tif",
@@ -7139,6 +7189,13 @@
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/6173981d93715333a83cd270165e7636b031276d/totalsegmentator/models/totalsegmentator-total-mr-muscles.onnx",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/6173981d93715333a83cd270165e7636b031276d/totalsegmentator/models/totalsegmentator-vertebrae-mr.onnx",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/6173981d93715333a83cd270165e7636b031276d/totalsegmentator/models/totalsegmentator-abdominal-muscles-ct.onnx"
+    ],
+    "medsam2": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/626afea1c4e3dc42387dcaff3ab31bef5327e036/medsam2/models/medsam2-image-encoder.onnx",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/626afea1c4e3dc42387dcaff3ab31bef5327e036/medsam2/models/medsam2-mask-decoder.onnx",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/626afea1c4e3dc42387dcaff3ab31bef5327e036/medsam2/models/medsam2-memory-encoder.onnx",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/626afea1c4e3dc42387dcaff3ab31bef5327e036/medsam2/models/medsam2-memory-attention.onnx"
     ]
   }
 }

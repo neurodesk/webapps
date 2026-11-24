@@ -1,12 +1,14 @@
 # micro-sam
 
-Interactive 2D segmentation of light-microscopy images with Segment Anything for Microscopy
-(micro-sam; Archit et al., Nature Methods 2025). The app computes the image embedding once with
-micro-sam's light-microscopy generalist ViT-T model (`vit_t_lm`), then runs the prompt decoder for
-every positive or negative click and every box. Accepted objects form a label image (uncompressed
-16- or 32-bit TIFF) and a per-object CSV table (`id, area_px, centroid_x, centroid_y, bbox_x0,
-bbox_y0, bbox_x1, bbox_y1, mean_intensity` (or one mean per colour channel), `predicted_iou,
-prompt`). Input is one TIFF, OME-TIFF, ImageJ TIFF or PNG image of up to 4096 × 4096 pixels (16 megapixels).
+Interactive 2D and 3D Z-stack segmentation of light and electron microscopy images with Segment
+Anything for Microscopy (micro-sam; Archit et al., Nature Methods 2025). Choose the
+light-microscopy generalist ViT-T model (`vit_t_lm`) or the electron-microscopy organelle
+generalist (`vit_t_em_organelles`). The app computes each slice's embedding once, then runs the
+prompt decoder for every positive or negative click and every box. On 3D Z-stacks, **Propagate in
+3D** projects each slice's mask bounding box across adjacent slices (`segment_mask_in_volume`).
+Accepted objects form a 2D or 3D label image (uncompressed 16- or 32-bit TIFF) and a per-object CSV
+table. Input is one 2D TIFF, OME-TIFF, ImageJ TIFF, PNG or 3D OME-TIFF / ImageJ Z-stack of up to
+4096 × 4096 pixels per plane (up to 512 planes, 1 GB decoded).
 
 ## Pipeline
 
@@ -103,10 +105,9 @@ The annotation is pinned on Hugging Face beside the example (`microsam/validatio
   `NOTICE` holds the attributions and the model licence, `LICENSE-APACHE-2.0` the Apache-2.0 text
   for the traced MobileSAM and Segment Anything graphs, and the build ships all three at the app's root.
 
-## Not in v1
+## Not included
 
-- micro-sam's automatic instance segmentation (AMG/AIS decoders), tiling for large images, 3D,
-  tracking, and the larger `vit_b_lm`/`vit_l_lm` models. `vit_t_lm` is the smallest model and
-  runs on the CPU in about 6 s for the example.
+- micro-sam's automatic instance segmentation (AMG/AIS decoders), tiling for images over 4096 × 4096,
+  time-series tracking, and the larger `vit_b_lm`/`vit_l_lm` models.
 - Mask input from the previous prediction (micro-sam's `segment_from_points` does not pass one either).
 - Editing accepted masks by hand; the shared `nd-mask-editor` needs a NiiVue viewer.

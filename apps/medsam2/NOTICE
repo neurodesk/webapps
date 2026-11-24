@@ -1,0 +1,25 @@
+MedSAM2 web app
+===============
+
+This app is Apache-2.0 licensed (LICENSE). It runs four ONNX models exported from MedSAM2
+and SAM 2.1.
+
+MedSAM2 model weights (CC BY-SA 4.0)
+------------------------------------
+The app downloads medsam2-image-encoder.onnx, medsam2-mask-decoder.onnx,
+medsam2-memory-encoder.onnx and medsam2-memory-attention.onnx (models/medsam2.manifest.json),
+converted from wanglab/MedSAM2 MedSAM2_latest.pt (https://huggingface.co/wanglab/MedSAM2,
+sha256 c92743b99f00d078bf32a3afcc38aaa9faf1c1692dffe3eaa7a90938c1991060) by Jun Ma, Bo Wang
+and contributors (Ma et al., "MedSAM2: Segment Anything in 3D Medical Images and Videos",
+arXiv:2504.03600, 2025). Licensed under CC BY-SA 4.0
+(https://creativecommons.org/licenses/by-sa/4.0/).
+
+Modifications: converted to ONNX opset 17 by apps/medsam2/validation/export_onnx.py.
+Complex-valued axial RoPE and boolean-indexed prompt embedding are expressed in mathematically
+equivalent real-valued operations; all trained weights are unchanged.
+
+SAM 2.1 architecture and code (Apache-2.0)
+------------------------------------------
+MedSAM2 fine-tunes Meta's Segment Anything Model 2.1 (sam2.1_hiera_tiny), Copyright (c) Meta
+Platforms, Inc. and affiliates (https://github.com/facebookresearch/sam2), licensed under the
+Apache License, Version 2.0 (LICENSE).

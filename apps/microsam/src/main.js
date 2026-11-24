@@ -1,6 +1,6 @@
-// micro-sam: interactive 2D segmentation of light-microscopy images with Segment Anything for
-// Microscopy. src/preprocess.js and src/segmentation.js hold the numerics; src/worker.js runs the
-// ONNX encoder once per image and the prompt decoder once per prompt change.
+// micro-sam: interactive 2D and 3D Z-stack segmentation of light and electron microscopy images
+// with Segment Anything for Microscopy. src/preprocess.js and src/segmentation.js hold the
+// numerics; src/worker.js caches slice embeddings and runs the prompt decoder per change.
 import "@neurodesk/webapp-components/styles/imaging-workspace.css";
 import "./microsam.css";
 import { mountImagingWorkspace } from "@neurodesk/webapp-components/core/mount-imaging-workspace";
@@ -17,18 +17,23 @@ import {
 import { downloadFile } from "@neurodesk/webapp-components/file-io";
 import { registerAppAutomation } from "@neurodesk/webapp-components/automation";
 import workerUrl from "./worker.js?worker&url";
-import { APP, MODEL } from "./config.js";
-import { writeLabelTiff } from "@neurodesk/webapp-components/file-io/tiff";
+import { APP, DEFAULT_MODEL_ID, modelById } from "./config.js";
+import { writeLabelTiff, writeTiffStack } from "@neurodesk/webapp-components/file-io/tiff";
 import { channelChoices, readImage } from "./image-io.js";
 import { channelToUint8, encoderTensor, resizedChannels, threeChannels } from "./preprocess.js";
 import {
   boxFromCorners,
+  boxFromMask,
   clickPixel,
   commitObject,
+  commitObject3D,
   hasPrompt,
+  maskIou,
   maskRuns,
   measureObjects,
+  measureObjects3D,
   objectsCsv,
+  objectsCsv3D,
   parsePrompts,
   uncommitObject,
 } from "./segmentation.js";
@@ -73,18 +78,21 @@ const info = createInfoDialog();
 $("aboutBtn").onclick = () => info.open(`About ${APP.title}`, $("aboutContent"));
 $("privacyBtn").onclick = () => info.open("Privacy", $("privacyContent"));
 
-// The loaded image ({ file, width, height, format, planes, choices }), the model input chosen
-// from it, the worker holding its embedding, the objects accepted so far and the pending prompt.
+// The loaded image ({ file, width, height, depth, format, planes, slices, choices }), the active
+// slice, the worker session holding cached slice embeddings, accepted objects and pending prompt.
 let input = null;
+let currentSlice = 0;
 let loading = null;
 let embedding = null;
 let embedRun = null;
+let propagateRun = null;
 let labels = null;
 let objects = [];
 let nextId = 1;
 let prompt = { points: [], box: null };
 let promptOrder = [];
 let pending = null;
+let pending3D = null;
 let promptVersion = 0;
 let decoding = null;
 let negativeTool = false;
@@ -106,8 +114,22 @@ function choice() {
   return input?.choices.find((item) => item.id === $("channel").value) ?? input?.choices[0];
 }
 
+function selectedModel() {
+  return modelById($("model").value || DEFAULT_MODEL_ID);
+}
+
+function is3D() {
+  return Boolean(input && input.depth > 1);
+}
+
+function sliceLabels(z = currentSlice) {
+  if (!labels || !input) return null;
+  const planeSize = input.width * input.height;
+  return labels.subarray(z * planeSize, (z + 1) * planeSize);
+}
+
 // ---------------------------------------------------------------------------------------------
-// Viewer: the image as micro-sam sees it, the objects, the pending mask and the prompts.
+// Viewer: the current slice as micro-sam sees it, the objects, the pending mask and the prompts.
 
 const canvas = $("canvas");
 const context = canvas.getContext("2d");
@@ -126,13 +148,25 @@ function paintLayer(layer, pixels) {
 }
 
 function refreshBase() {
-  const planes = threeChannels(choice().planes).map((plane) => channelToUint8(plane.data));
+  const planes = threeChannels(choice().planesAt(currentSlice)).map((plane) => channelToUint8(plane.data));
   paintLayer(layers.base, baseRgba(planes, input.width, input.height));
+}
+
+function previewMaskForSlice(z) {
+  if (pending3D?.masks.has(z)) return pending3D.masks.get(z);
+  if (pending && pending.slice === z) return pending.mask;
+  return null;
 }
 
 function refreshOverlay() {
   paintLayer(layers.overlay, overlayRgba({
-    labels, width: input.width, height: input.height, mode: display, opacity, preview: pending?.mask ?? null, previewId: nextId,
+    labels: sliceLabels(currentSlice),
+    width: input.width,
+    height: input.height,
+    mode: display,
+    opacity,
+    preview: previewMaskForSlice(currentSlice),
+    previewId: nextId,
   }));
 }
 
@@ -174,12 +208,14 @@ function draw() {
   context.imageSmoothingEnabled = false;
   context.drawImage(layers.base, view.x, view.y, input.width * scale, input.height * scale);
   context.drawImage(layers.overlay, view.x, view.y, input.width * scale, input.height * scale);
-  if (prompt.box) drawBox(prompt.box, ratio, false);
-  if (drag?.moved) {
-    const box = boxFromCorners(drag.start, drag.end, input.width, input.height);
-    if (box) drawBox(box, ratio, true);
+  if (!pending3D || pending?.slice === currentSlice) {
+    if (prompt.box) drawBox(prompt.box, ratio, false);
+    if (drag?.moved) {
+      const box = boxFromCorners(drag.start, drag.end, input.width, input.height);
+      if (box) drawBox(box, ratio, true);
+    }
+    for (const [x, y, label] of prompt.points) drawMarker(x, y, label === 1, ratio);
   }
-  for (const [x, y, label] of prompt.points) drawMarker(x, y, label === 1, ratio);
 }
 
 new ResizeObserver(() => draw()).observe(canvas);
@@ -208,23 +244,49 @@ const results = createResultList({
   onDownload: (_stage, result) => downloadFile(result.file),
 });
 
+function sliceEmbedded(z = currentSlice) {
+  return Boolean(
+    embedding
+    && embedding.choice === choice()?.id
+    && embedding.modelId === selectedModel().id
+    && embedding.slices.has(z)
+    && !embedRun
+    && !propagateRun,
+  );
+}
+
 function ready() {
-  return Boolean(embedding && embedding.choice === choice()?.id && !embedRun);
+  return sliceEmbedded(currentSlice);
 }
 
 function updateControls() {
-  const busy = Boolean(loading || embedRun || decoding);
+  const busy = Boolean(loading || embedRun || propagateRun || decoding);
   const prompting = ready();
+  const stack = is3D();
   $("imageInput").disabled = busy;
   $("channel").disabled = busy;
+  $("model").disabled = busy;
   $("backend").disabled = busy;
+  $("sliceSlider").disabled = busy || !stack;
+  $("iouThreshold").disabled = busy;
+  $("boxExtension").disabled = busy;
+  $("sliceField").hidden = !stack;
+  $("propagateButton").hidden = !stack;
+  $("iouField").hidden = !stack;
+  $("boxExtField").hidden = !stack;
+  if (stack) {
+    $("sliceSlider").max = String(input.depth - 1);
+    $("sliceSlider").value = String(currentSlice);
+    $("sliceLabel").textContent = `${currentSlice + 1} / ${input.depth}`;
+  }
   exampleControl?.setDisabled(busy);
   $("embedButton").disabled = busy || !input || prompting;
   $("positiveTool").disabled = !prompting;
   $("negativeTool").disabled = !prompting;
-  $("acceptButton").disabled = !prompting || !pending || decoding !== null;
-  $("clearButton").disabled = !hasPrompt(prompt);
-  $("undoButton").disabled = !hasPrompt(prompt) && !objects.length;
+  $("acceptButton").disabled = busy || (!pending3D && (!prompting || !pending));
+  $("propagateButton").disabled = !stack || !prompting || !pending || decoding !== null;
+  $("clearButton").disabled = !hasPrompt(prompt) && !pending3D;
+  $("undoButton").disabled = !hasPrompt(prompt) && !pending3D && !objects.length;
   $("positiveTool").setAttribute("aria-pressed", String(!negativeTool));
   $("negativeTool").setAttribute("aria-pressed", String(negativeTool));
   $("objectInfo").hidden = !input;
@@ -242,10 +304,26 @@ function refreshOutputs() {
     $("outputSection").open = false;
     return;
   }
-  const planes = choice().planes;
-  const rows = measureObjects(labels, input.width, planes, objects);
-  const labelsFile = new File([writeLabelTiff(labels, input.width, input.height)], `${baseName()}_microsam-labels.tif`, { type: "image/tiff" });
-  const tableFile = new File([objectsCsv(rows, planes)], `${baseName()}_microsam-objects.csv`, { type: "text/csv" });
+  const selected = choice();
+  const planes0 = selected.planesAt(0);
+  let labelBytes;
+  if (is3D()) {
+    const zSpacing = input.pixelSize?.z ? `spacing=${input.pixelSize.z}\nunit=micron\n` : "";
+    labelBytes = writeTiffStack({
+      width: input.width,
+      height: input.height,
+      data: labels instanceof Uint16Array ? labels : Uint16Array.from(labels),
+      pixelSize: input.pixelSize ?? null,
+      description: `ImageJ=1.54f\nimages=${input.depth}\nslices=${input.depth}\n${zSpacing}`,
+    });
+  } else {
+    labelBytes = writeLabelTiff(labels, input.width, input.height);
+  }
+  const labelsFile = new File([labelBytes], `${baseName()}_microsam-labels.tif`, { type: "image/tiff" });
+  const csv = is3D()
+    ? objectsCsv3D(measureObjects3D(labels, input.width, input.height, input.depth, (z) => selected.planesAt(z), objects), planes0)
+    : objectsCsv(measureObjects(labels, input.width, planes0, objects), planes0);
+  const tableFile = new File([csv], `${baseName()}_microsam-objects.csv`, { type: "text/csv" });
   outputs = {
     labels: { description: `Object labels · ${objects.length} ${objects.length === 1 ? "object" : "objects"}`, file: labelsFile },
     table: { description: "Object table · CSV", file: tableFile, viewable: false },
@@ -258,17 +336,30 @@ function resetPrompt() {
   prompt = { points: [], box: null };
   promptOrder = [];
   pending = null;
+  pending3D = null;
   promptVersion++;
 }
 
-function resetSession() {
+function resetEmbeddings() {
   embedRun?.abort();
+  propagateRun?.abort();
   stopWorker(embedding?.worker);
   embedding = null;
   resetPrompt();
+}
+
+function allocLabels(image) {
+  if (!image) return null;
+  const total = image.depth * image.width * image.height;
+  return image.depth > 1 ? new Uint16Array(total) : new Uint32Array(total);
+}
+
+function resetSession() {
+  resetEmbeddings();
   objects = [];
   nextId = 1;
-  labels = input ? new Uint32Array(input.width * input.height) : null;
+  currentSlice = 0;
+  labels = allocLabels(input);
   refreshOutputs();
 }
 
@@ -276,7 +367,7 @@ function resetSession() {
 // Loading.
 
 function begin(message, signal) {
-  if (loading || embedRun) throw new Error("Wait for the current operation to finish, or cancel it.");
+  if (loading || embedRun || propagateRun) throw new Error("Wait for the current operation to finish, or cancel it.");
   signal?.throwIfAborted();
   const controller = new AbortController();
   const abort = () => controller.abort(signal.reason);
@@ -301,7 +392,7 @@ async function loadFiles(filesPromise, signal) {
   try {
     const files = await filesPromise;
     current.throwIfAborted();
-    if (files.length !== 1) throw new Error(`Choose one 2D image; this selection has ${files.length} files.`);
+    if (files.length !== 1) throw new Error(`Choose one image or Z-stack; this selection has ${files.length} files.`);
     const [file] = files;
     if (!file.size) throw new Error(`${file.name} is empty.`);
     const image = await readImage(file.name, await file.arrayBuffer());
@@ -310,7 +401,8 @@ async function loadFiles(filesPromise, signal) {
     input = null;
     resetSession();
     input = { file, ...image, choices };
-    labels = new Uint32Array(image.width * image.height);
+    currentSlice = image.depth > 1 ? Math.floor(image.depth / 2) : 0;
+    labels = allocLabels(image);
     $("channel").replaceChildren(...choices.map((item) => new Option(item.label, item.id)));
     $("channelField").hidden = choices.length < 2;
     refreshBase();
@@ -319,11 +411,12 @@ async function loadFiles(filesPromise, signal) {
     draw();
     $("imageInput").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files } }));
     $("fileInfo").hidden = false;
-    $("fileInfo").textContent = `${file.name} · ${image.width} × ${image.height} · ${image.format}${image.planes.length > 1 ? ` · ${image.planes.length} channels` : ""}`;
+    const dims = image.depth > 1 ? `${image.width} × ${image.height} × ${image.depth}` : `${image.width} × ${image.height}`;
+    $("fileInfo").textContent = `${file.name} · ${dims} · ${image.format}${image.planes.length > 1 ? ` · ${image.planes.length} channels` : ""}`;
     $("dropZone").classList.add("has-files");
     progress.setProgress(0);
     status(`${file.name} loaded · compute embeddings to start prompting`);
-    log.log(`${file.name}: ${image.width} × ${image.height}, ${image.format}, ${image.planes.map((plane) => plane.label).join(", ")}`, "info", "analysis");
+    log.log(`${file.name}: ${dims}, ${image.format}, ${image.planes.map((plane) => plane.label).join(", ")}`, "info", "analysis");
   } finally {
     loading = null;
     finish(operation);
@@ -331,7 +424,7 @@ async function loadFiles(filesPromise, signal) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// The worker: one per image session, terminated to cancel the embedding.
+// The worker: one per image/model/channel session, caching slice embeddings.
 
 let messageId = 0;
 const replies = new Map();
@@ -393,34 +486,65 @@ async function resolveBackend(requested) {
   return adapter ? "webgpu" : "wasm";
 }
 
-async function computeEmbedding(signal, requested = $("backend").value) {
+function ensureSessionWorker(selectedChoice, model) {
+  if (embedding && embedding.choice === selectedChoice.id && embedding.modelId === model.id) return embedding;
+  stopWorker(embedding?.worker);
+  embedding = {
+    worker: startWorker(),
+    choice: selectedChoice.id,
+    modelId: model.id,
+    backend: null,
+    seconds: 0,
+    summary: null,
+    slices: new Map(),
+  };
+  return embedding;
+}
+
+async function embedOneSlice(session, selectedChoice, model, sliceIndex, backend, signal, pinSlice = null) {
+  if (session.slices.has(sliceIndex)) return session.slices.get(sliceIndex);
+  const resized = resizedChannels(selectedChoice.planesAt(sliceIndex).map((plane) => plane.data), input.width, input.height);
+  const tensor = encoderTensor(resized);
+  const result = await call(session.worker, { type: "embed", modelId: model.id, slice: sliceIndex, pinSlice, tensor, backend }, [tensor.buffer], signal);
+  signal?.throwIfAborted();
+  for (const evicted of result.evicted ?? []) session.slices.delete(evicted);
+  const info = { backend: result.backend, seconds: result.seconds, summary: result.summary };
+  session.slices.set(sliceIndex, info);
+  session.backend = result.backend;
+  session.seconds = result.seconds;
+  session.summary = result.summary;
+  return info;
+}
+
+async function computeEmbedding(signal, requested = $("backend").value, sliceIndex = currentSlice) {
   if (!input) throw new Error("Load an image before computing its embedding.");
-  const operation = begin(`Computing the embedding of ${input.file.name}…`, signal);
+  const selected = choice();
+  const model = selectedModel();
+  const label = is3D() ? `slice ${sliceIndex + 1} of ${input.file.name}` : input.file.name;
+  const operation = begin(`Computing the embedding of ${label}…`, signal);
   embedRun = operation.controller;
   const current = operation.controller.signal;
-  const selected = choice();
-  stopWorker(embedding?.worker);
-  embedding = null;
+  const session = ensureSessionWorker(selected, model);
   resetPrompt();
   refreshOverlay();
   draw();
   updateControls();
-  const worker = startWorker();
-  const abort = () => stopWorker(worker);
+  const abort = () => {
+    stopWorker(session.worker);
+    if (embedding === session) embedding = null;
+  };
   current.addEventListener("abort", abort, { once: true });
   try {
     const backend = await resolveBackend(requested);
-    const resized = resizedChannels(selected.planes.map((plane) => plane.data), input.width, input.height);
-    const tensor = encoderTensor(resized);
-    log.log(`micro-sam ${MODEL.name} on ${selected.label} of ${input.file.name}, resized to ${resized.width} × ${resized.height}`, "info", "analysis");
-    const result = await call(worker, { type: "embed", tensor, backend }, [tensor.buffer], current);
+    const resized = resizedChannels(selected.planesAt(sliceIndex).map((plane) => plane.data), input.width, input.height);
+    log.log(`micro-sam ${model.id} on ${selected.label} of ${label}, resized to ${resized.width} × ${resized.height}`, "info", "analysis");
+    const result = await embedOneSlice(session, selected, model, sliceIndex, backend, current);
     current.throwIfAborted();
-    embedding = { worker, choice: selected.id, backend: result.backend, seconds: result.seconds, summary: result.summary };
     progress.end("Embeddings ready · click or drag on the image");
     status(`Embeddings ready in ${result.seconds.toFixed(1)} s · click or drag on the image`);
     return embedding;
   } catch (error) {
-    stopWorker(worker);
+    abort();
     progress.reset(input ? "Ready" : undefined);
     throw error;
   } finally {
@@ -431,15 +555,16 @@ async function computeEmbedding(signal, requested = $("backend").value) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Prompting: every change decodes the latest prompt; older answers are dropped.
+// Prompting & 3D propagation.
 
-async function decode(snapshot) {
-  const result = await call(embedding.worker, { type: "decode", prompt: snapshot, height: input.height, width: input.width });
-  return { mask: result.mask, score: result.score, token: result.token, prompt: structuredClone(snapshot) };
+async function decode(snapshot, sliceIndex = currentSlice, signal = null) {
+  const result = await call(embedding.worker, { type: "decode", slice: sliceIndex, prompt: snapshot, height: input.height, width: input.width }, [], signal);
+  return { slice: sliceIndex, mask: result.mask, score: result.score, token: result.token, prompt: structuredClone(snapshot) };
 }
 
 function promptChanged() {
   const version = ++promptVersion;
+  pending3D = null;
   if (!hasPrompt(prompt)) {
     pending = null;
     refreshOverlay();
@@ -449,9 +574,10 @@ function promptChanged() {
   }
   draw();
   const snapshot = structuredClone(prompt);
+  const sliceIndex = currentSlice;
   const run = (decoding ?? Promise.resolve()).catch(() => {}).then(async () => {
     if (version !== promptVersion || !ready()) return null;
-    const result = await decode(snapshot);
+    const result = await decode(snapshot, sliceIndex);
     log.log(`Decoded ${JSON.stringify(snapshot)}: ${result.mask.reduce((sum, value) => sum + value, 0)} px, token ${result.token}, predicted IoU ${result.score.toFixed(3)}`, "info", "technical");
     if (version !== promptVersion) return null;
     pending = result;
@@ -461,7 +587,6 @@ function promptChanged() {
   });
   decoding = run;
   updateControls();
-  // A decode outrun by a newer prompt or ended with its session is not the user's error.
   run.catch((error) => {
     if (version === promptVersion) report(error);
   }).finally(() => {
@@ -483,23 +608,136 @@ function setBox(box) {
   return promptChanged();
 }
 
+function numericInput(id, fallback) {
+  const raw = $(id).value.trim();
+  if (raw === "") return fallback;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+/**
+ * Bidirectional 3D slice propagation matching micro-sam's `segment_mask_in_volume` (projection="box"):
+ * starting from `seed` on `seed.slice`, projects each slice's bounding box (+ `boxExtension`) to
+ * adjacent slices in both directions until the mask is empty or 2D IoU with the previous slice
+ * falls below `iouThreshold`.
+ */
+async function propagate3D(signal, {
+  iouThreshold = numericInput("iouThreshold", 0.5),
+  boxExtension = numericInput("boxExtension", 0.1),
+  requestedBackend = $("backend").value,
+} = {}) {
+  if (!is3D() || !pending) throw new Error("Prompt an object on one slice before propagating in 3D.");
+  if (!pending.mask.some(Boolean)) throw new Error("The current prompt produced an empty mask; prompt an object before propagating in 3D.");
+  const seed = pending;
+  const selected = choice();
+  const model = selectedModel();
+  const session = embedding;
+  const operation = begin(`Propagating in 3D from slice ${seed.slice + 1}…`, signal);
+  propagateRun = operation.controller;
+  const current = operation.controller.signal;
+  const abort = () => {
+    stopWorker(session?.worker);
+    if (embedding === session) embedding = null;
+  };
+  current.addEventListener("abort", abort, { once: true });
+  updateControls();
+  const masks = new Map([[seed.slice, seed.mask]]);
+  const scores = [seed.score];
+  const backend = session.backend || await resolveBackend(requestedBackend);
+  const totalSteps = input.depth - 1;
+  let doneSteps = 0;
+  try {
+    for (const step of [1, -1]) {
+      let prevMask = seed.mask;
+      for (let z = seed.slice + step; z >= 0 && z < input.depth; z += step) {
+        current.throwIfAborted();
+        const box = boxFromMask(prevMask, input.width, input.height, boxExtension);
+        if (!box) break;
+        doneSteps++;
+        progress.setProgress(Math.min(0.99, doneSteps / Math.max(1, totalSteps)), `Propagating · slice ${z + 1} of ${input.depth}`);
+        await embedOneSlice(session, selected, model, z, backend, current, seed.slice);
+        const decoded = await decode({ points: [], box }, z, current);
+        current.throwIfAborted();
+        const overlap = maskIou(prevMask, decoded.mask);
+        if (overlap < iouThreshold || !decoded.mask.some(Boolean)) {
+          log.log(`3D propagation stopped at slice ${z + 1} (IoU ${overlap.toFixed(3)} < ${iouThreshold})`, "info", "technical");
+          break;
+        }
+        masks.set(z, decoded.mask);
+        scores.push(decoded.score);
+        prevMask = decoded.mask;
+      }
+    }
+    const meanScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+    pending3D = { masks, seedSlice: seed.slice, score: meanScore, token: seed.token, prompt: seed.prompt };
+    refreshOverlay();
+    draw();
+    progress.end(`Propagated across ${masks.size} of ${input.depth} slices · click Accept object`);
+    status(`Propagated across ${masks.size} slices · inspect or click Accept object`);
+    return pending3D;
+  } catch (error) {
+    if (current.aborted) abort();
+    progress.reset("Ready");
+    throw error;
+  } finally {
+    current.removeEventListener("abort", abort);
+    propagateRun = null;
+    finish(operation);
+  }
+}
+
 async function accept() {
   if (decoding) await decoding.catch(() => null);
-  if (!pending || !ready()) return null;
+  if (!input || (!pending3D && (!pending || !ready()))) return null;
+  if (labels instanceof Uint16Array && nextId > 0xffff) {
+    throw new Error("At most 65,535 objects can be stored in a 16-bit 3D label stack.");
+  }
+  const planeSize = input.width * input.height;
+  if (pending3D) {
+    const id = nextId;
+    const claimed = commitObject3D(labels, pending3D.masks, planeSize, id);
+    if (!claimed.length) throw new Error("This 3D mask lies inside accepted objects; prompt a new object or undo one.");
+    nextId++;
+    let area = 0;
+    for (const mask of pending3D.masks.values()) for (let i = 0; i < mask.length; i++) if (mask[i]) area++;
+    const object = {
+      id,
+      claimed,
+      score: pending3D.score,
+      token: pending3D.token,
+      prompt: pending3D.prompt,
+      area,
+      slices: pending3D.masks.size,
+      slice: pending3D.seedSlice,
+    };
+    objects.push(object);
+    log.log(`Object ${id}: ${object.claimed.length} vx across ${object.slices} slices (predicted IoU ${object.score.toFixed(3)})`, "info", "analysis");
+    resetPrompt();
+    refreshOverlay();
+    refreshOutputs();
+    draw();
+    updateControls();
+    status(`Object ${id} accepted (${object.slices} slices) · ${objects.length} ${objects.length === 1 ? "object" : "objects"}`);
+    return object;
+  }
+  const candidate = pending;
+  const digest = await crypto.subtle.digest("SHA-256", candidate.mask);
+  if (!ready() || pending !== candidate) return null;
   const id = nextId;
-  const claimed = commitObject(labels, pending.mask, id);
+  const claimed = commitObject(labels, candidate.mask, id, candidate.slice * planeSize);
   if (!claimed.length) throw new Error("This mask lies inside accepted objects; prompt a new object or undo one.");
   nextId++;
-  const digest = await crypto.subtle.digest("SHA-256", pending.mask);
   const object = {
     id,
     claimed,
-    score: pending.score,
-    token: pending.token,
-    prompt: pending.prompt,
-    area: pending.mask.reduce((sum, value) => sum + value, 0),
+    score: candidate.score,
+    token: candidate.token,
+    prompt: candidate.prompt,
+    area: candidate.mask.reduce((sum, value) => sum + value, 0),
     sha256: [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join(""),
-    runs: maskRuns(pending.mask),
+    runs: maskRuns(candidate.mask),
+    slice: candidate.slice,
+    slices: 1,
   };
   objects.push(object);
   log.log(`Object ${id}: ${object.claimed.length} px (mask ${object.area} px, token ${object.token}, predicted IoU ${object.score.toFixed(3)})`, "info", "analysis");
@@ -520,6 +758,13 @@ function clearPrompt() {
 }
 
 function undo() {
+  if (pending3D) {
+    pending3D = null;
+    refreshOverlay();
+    draw();
+    updateControls();
+    return;
+  }
   if (hasPrompt(prompt)) {
     if (promptOrder.pop() === "box") prompt.box = null;
     else prompt.points.pop();
@@ -537,7 +782,24 @@ function undo() {
   status(`Object ${object.id} removed`);
 }
 
+function setSlice(nextSlice) {
+  if (!is3D()) return;
+  const clamped = Math.max(0, Math.min(input.depth - 1, nextSlice));
+  if (clamped === currentSlice) return;
+  currentSlice = clamped;
+  if (!pending3D) resetPrompt();
+  refreshBase();
+  refreshOverlay();
+  draw();
+  updateControls();
+}
+
 canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+canvas.addEventListener("wheel", (event) => {
+  if (!is3D() || loading || embedRun || propagateRun) return;
+  event.preventDefault();
+  setSlice(currentSlice + (event.deltaY > 0 ? 1 : -1));
+}, { passive: false });
 canvas.addEventListener("pointerdown", (event) => {
   if (!ready() || (event.button !== 0 && event.button !== 2)) return;
   canvas.setPointerCapture(event.pointerId);
@@ -547,7 +809,10 @@ canvas.addEventListener("pointerdown", (event) => {
 canvas.addEventListener("pointermove", (event) => {
   if (input) {
     const pixel = clickPixel(...toImage(event), input.width, input.height);
-    $("location").textContent = pixel ? `x ${pixel[0]} · y ${pixel[1]}${labels[pixel[1] * input.width + pixel[0]] ? ` · object ${labels[pixel[1] * input.width + pixel[0]]}` : ""}` : "";
+    const slice = sliceLabels(currentSlice);
+    const objId = pixel ? slice[pixel[1] * input.width + pixel[0]] : 0;
+    const zPart = is3D() ? ` · z ${currentSlice}` : "";
+    $("location").textContent = pixel ? `x ${pixel[0]} · y ${pixel[1]}${zPart}${objId ? ` · object ${objId}` : ""}` : "";
   }
   if (!drag) return;
   drag.end = toImage(event);
@@ -573,6 +838,7 @@ canvas.addEventListener("pointercancel", () => {
   draw();
 });
 
+$("sliceSlider").addEventListener("input", () => setSlice(Number($("sliceSlider").value)));
 $("positiveTool").onclick = () => {
   negativeTool = false;
   updateControls();
@@ -582,26 +848,42 @@ $("negativeTool").onclick = () => {
   updateControls();
 };
 $("acceptButton").onclick = () => void accept().catch(report);
+$("propagateButton").onclick = () => void propagate3D().catch(report);
 $("clearButton").onclick = clearPrompt;
 $("undoButton").onclick = undo;
 document.addEventListener("keydown", (event) => {
-  if (event.target.closest?.("input, select, textarea, dialog") || !input) return;
-  if (event.key === "Enter" && pending) {
+  if (event.defaultPrevented || !input || loading || embedRun || propagateRun) return;
+  if (document.querySelector(".nd-modal.open, .nd-modal[aria-hidden='false'], dialog[open], [role='dialog']:not([aria-hidden='true'])")) return;
+  if (event.target.closest?.("input, select, textarea, [contenteditable], dialog, .nd-modal")) return;
+  if (event.key === "Enter" && !decoding && (pending3D || (pending && ready())) && !event.target.closest?.("button, a, summary")) {
     event.preventDefault();
     void accept().catch(report);
-  } else if (event.key === "Escape" && hasPrompt(prompt)) {
+  } else if (event.key === "Escape" && (hasPrompt(prompt) || pending3D)) {
     clearPrompt();
   } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
     event.preventDefault();
     undo();
+  } else if (is3D() && (event.key === "[" || event.key === "ArrowDown")) {
+    event.preventDefault();
+    setSlice(currentSlice - 1);
+  } else if (is3D() && (event.key === "]" || event.key === "ArrowUp")) {
+    event.preventDefault();
+    setSlice(currentSlice + 1);
   }
 });
 
 $("embedButton").onclick = () => void computeEmbedding().catch(report);
+$("model").addEventListener("change", () => {
+  resetEmbeddings();
+  if (input) {
+    refreshOverlay();
+    draw();
+    status(`${selectedModel().label} selected · compute embeddings to prompt`);
+  }
+  updateControls();
+});
 $("channel").addEventListener("change", () => {
-  stopWorker(embedding?.worker);
-  embedding = null;
-  resetPrompt();
+  resetEmbeddings();
   refreshBase();
   refreshOverlay();
   refreshOutputs();
@@ -619,6 +901,7 @@ $("cancelButton").onclick = () => {
   exampleControl.cancel();
   loading?.abort();
   embedRun?.abort();
+  propagateRun?.abort();
 };
 $("imageInput").addEventListener("change", (event) => {
   const files = Array.from(event.target.files);
@@ -652,28 +935,51 @@ registerAppAutomation({
   operations: {
     segment: async ({ inputs, parameters, signal }) => {
       await loadFiles(Promise.resolve(inputs.image), signal);
-      selectChannel(parameters.channel);
-      const prompts = parsePrompts(parameters.prompts, input.width, input.height);
-      await computeEmbedding(signal, parameters.backend);
+      selectChannel(parameters.channel ?? 0);
+      const model = modelById(parameters.model ?? DEFAULT_MODEL_ID);
+      $("model").value = model.id;
+      const prompts = parsePrompts(parameters.prompts, input.width, input.height, input.depth);
+      const backend = parameters.backend ?? "auto";
       for (const item of prompts) {
         signal?.throwIfAborted();
-        prompt = structuredClone(item);
+        const slice = item.slice ?? 0;
+        if (is3D()) setSlice(slice);
+        if (!sliceEmbedded(slice)) await computeEmbedding(signal, backend, slice);
+        prompt = { points: structuredClone(item.points), box: item.box ? [...item.box] : null };
         promptOrder = [...prompt.points.map(() => "point"), ...(prompt.box ? ["box"] : [])];
         await promptChanged();
+        if (item.propagate && is3D()) {
+          await propagate3D(signal, {
+            iouThreshold: parameters.iouThreshold ?? 0.5,
+            boxExtension: parameters.boxExtension ?? 0.1,
+            requestedBackend: backend,
+          });
+        }
         if (!(await accept())) throw new Error("The decoder returned no mask.");
       }
       return {
         artifacts: [{ role: "labels", file: outputs.labels.file }, { role: "table", file: outputs.table.file }],
         provenance: {
           method: "micro-sam interactive segmentation",
-          model: MODEL.name,
-          encoderSha256: MODEL.encoder.sha256,
-          decoderSha256: MODEL.decoder.sha256,
+          model: model.name,
+          encoderSha256: model.encoder.sha256,
+          decoderSha256: model.decoder.sha256,
           channel: choice().label,
           backend: embedding.backend,
           embeddingSeconds: Number(embedding.seconds.toFixed(2)),
           embedding: embedding.summary,
-          objects: objects.map(({ id, token, score, area, sha256, runs, prompt: used, claimed }) => ({ id, token, score, area, claimed: claimed.length, sha256, runs, prompt: used })),
+          depth: input.depth,
+          objects: objects.map(({ id, token, score, area, sha256, runs, prompt: used, claimed, slices, slice }) => ({
+            id,
+            token,
+            score,
+            area,
+            claimed: claimed.length,
+            ...(sha256 ? { sha256 } : {}),
+            ...(runs ? { runs } : {}),
+            ...(is3D() ? { slice, slices } : {}),
+            prompt: used,
+          })),
         },
       };
     },
@@ -683,6 +989,7 @@ window.addEventListener("pagehide", () => {
   exampleControl.destroy();
   loading?.abort();
   embedRun?.abort();
+  propagateRun?.abort();
   stopWorker(embedding?.worker);
 });
 

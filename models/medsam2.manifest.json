@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "app": "medsam2",
+  "repository": "neurodeskorg/webapps",
+  "revision": "626afea1c4e3dc42387dcaff3ab31bef5327e036",
+  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/626afea1c4e3dc42387dcaff3ab31bef5327e036/medsam2/models/",
+  "license": "CC-BY-SA-4.0",
+  "license_note": "MedSAM2 (wanglab/MedSAM2 MedSAM2_latest.pt) is CC BY-SA 4.0, by Jun Ma, Bo Wang and contributors (Ma et al., arXiv:2504.03600, 2025). It is fine-tuned from Meta's SAM 2.1 Hiera-Tiny (Apache-2.0). Modified: converted to four ONNX graphs (opset 17) by apps/medsam2/validation/export_onnx.py with real-valued axial RoPE, ONNX-safe point embedding and ORT basic constant folding on the image encoder; all weights are unchanged.",
+  "model": {
+    "name": "medsam2_hiera_t512",
+    "config": "configs/sam2.1_hiera_t512.yaml",
+    "source_url": "https://huggingface.co/wanglab/MedSAM2/resolve/main/MedSAM2_latest.pt",
+    "source_sha256": "c92743b99f00d078bf32a3afcc38aaa9faf1c1692dffe3eaa7a90938c1991060",
+    "conversion": "torch.onnx.export opset 17, torch 2.5.1, bowang-lab/MedSAM2 sam2.1_hiera_t512",
+    "image_size": 512,
+    "num_maskmem": 7,
+    "max_obj_ptrs": 16
+  },
+  "assets": [
+    {
+      "filename": "medsam2-image-encoder.onnx",
+      "role": "image_encoder",
+      "bytes": 115353088,
+      "sha256": "5659538a74f53b2ca9a53238b74e90311fd6ec2e51931aae1da78fa539f38b53",
+      "input": "image",
+      "outputs": ["high_res_0", "high_res_1", "vision_feats", "image_embed_no_mem"],
+      "torch_vs_onnx_max_abs_diff": 1.79e-6
+    },
+    {
+      "filename": "medsam2-mask-decoder.onnx",
+      "role": "mask_decoder",
+      "bytes": 18848860,
+      "sha256": "28d45bb34153ae8afbf309de685b786edb4b1671586e01e56ec979308e1f5550",
+      "inputs": ["image_embed", "high_res_0", "high_res_1", "point_coords", "point_labels", "mask_input", "has_mask_input"],
+      "outputs": ["low_res_masks", "iou_predictions", "obj_ptrs", "object_score_logits"],
+      "torch_vs_onnx_max_abs_diff": { "low_res_masks": 2.29e-5, "iou_predictions": 5.36e-7, "obj_ptrs": 1.07e-6 }
+    },
+    {
+      "filename": "medsam2-memory-encoder.onnx",
+      "role": "memory_encoder",
+      "bytes": 5590784,
+      "sha256": "b494a85774ccd015ad87b3d8223edf897458573448e836080759f9726c8811e1",
+      "inputs": ["pix_feat", "high_res_mask", "object_score_logits", "is_mask_from_pts"],
+      "outputs": ["maskmem_features", "maskmem_pos_enc"],
+      "torch_vs_onnx_max_abs_diff": 3.07e-6
+    },
+    {
+      "filename": "medsam2-memory-attention.onnx",
+      "role": "memory_attention",
+      "bytes": 26057593,
+      "sha256": "b3a8add55a5abcc02092293998da156111b3930d745a9b7c0ed59bb1800d2b42",
+      "inputs": ["vision_feats", "maskmem_feats", "maskmem_pos", "maskmem_tpos_idx", "obj_ptrs", "obj_pos_norm"],
+      "outputs": ["pix_feat_with_mem"],
+      "torch_vs_onnx_max_abs_diff": 4.53e-6
+    }
+  ]
+}

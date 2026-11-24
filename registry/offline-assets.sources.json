@@ -7731,6 +7731,20 @@
         "bytes": 16496933,
         "kind": "model",
         "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/9fbdabcd3f177e3a050c6ffec54663abc54d8085/microsam/models/microsam-vit-t-em-organelles-encoder.onnx",
+        "sha256": "0a5d7dd771f232465dfb869e6e029beb0aa11001799783bffee93c8a769a7cee",
+        "bytes": 28045411,
+        "kind": "model",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/9fbdabcd3f177e3a050c6ffec54663abc54d8085/microsam/models/microsam-vit-t-em-organelles-decoder.onnx",
+        "sha256": "dda39a04c81337d264c175a883d946f9f33d428303e34d170899c1064c2818dc",
+        "bytes": 16496933,
+        "kind": "model",
+        "license": "CC-BY-4.0"
       }
     ],
     "microscope-qc": [
@@ -8060,6 +8074,42 @@
         "bytes": 33152834,
         "kind": "model",
         "license": "Apache-2.0"
+      }
+    ],
+    "medsam2": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz",
+        "kind": "example",
+        "sha256": "58220b40d179b7a93dd3ce231dd7afaa39989c75658b2b8e4c2f34abf8f16416",
+        "bytes": 5176902
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/626afea1c4e3dc42387dcaff3ab31bef5327e036/medsam2/models/medsam2-image-encoder.onnx",
+        "sha256": "5659538a74f53b2ca9a53238b74e90311fd6ec2e51931aae1da78fa539f38b53",
+        "bytes": 115353088,
+        "kind": "model",
+        "license": "CC-BY-SA-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/626afea1c4e3dc42387dcaff3ab31bef5327e036/medsam2/models/medsam2-mask-decoder.onnx",
+        "sha256": "28d45bb34153ae8afbf309de685b786edb4b1671586e01e56ec979308e1f5550",
+        "bytes": 18848860,
+        "kind": "model",
+        "license": "CC-BY-SA-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/626afea1c4e3dc42387dcaff3ab31bef5327e036/medsam2/models/medsam2-memory-encoder.onnx",
+        "sha256": "b494a85774ccd015ad87b3d8223edf897458573448e836080759f9726c8811e1",
+        "bytes": 5590784,
+        "kind": "model",
+        "license": "CC-BY-SA-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/626afea1c4e3dc42387dcaff3ab31bef5327e036/medsam2/models/medsam2-memory-attention.onnx",
+        "sha256": "b3a8add55a5abcc02092293998da156111b3930d745a9b7c0ed59bb1800d2b42",
+        "bytes": 26057593,
+        "kind": "model",
+        "license": "CC-BY-SA-4.0"
       }
     ]
   },

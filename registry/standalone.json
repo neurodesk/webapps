@@ -2603,6 +2603,13 @@
       "assets": [],
       "downloads": [],
       "containers": []
+    },
+    "medsam2": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
     }
   }
 }
