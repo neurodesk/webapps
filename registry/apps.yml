@@ -1832,3 +1832,30 @@ apps:
       shared_runtime: false
       browser_test: true
       release: false
+  - id: cellpose
+    path: cellpose
+    catalog: microscopy
+    title: Cellpose
+    description: Segment cells and nuclei in 2D and 3D microscopy.
+    categories: [segmentation]
+    keywords: [Cellpose, cyto3, nuclei, cell segmentation, nucleus segmentation, cytoplasm, instance segmentation, microscopy, fluorescence, brightfield, phase contrast, OME-TIFF, deep learning]
+    anatomy: [any]
+    modalities: [microscopy]
+    inputs: [tiff]
+    hardware: cpu
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: models/cellpose.manifest.json
+    asset_manifest_schema: scientific-assets-v1
+    source: neurodesk/webapps@local
+    license: BSD-3-Clause
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    handoff: none
+    app_scoped_runtime_families: [ort-web-asyncify]
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false

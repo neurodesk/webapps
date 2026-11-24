@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "app": "cellpose",
+  "repository": "neurodeskorg/webapps",
+  "revision": "bc1de48f8c0857d30f2330e986eef29ec77603b3",
+  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/bc1de48f8c0857d30f2330e986eef29ec77603b3/cellpose/models/",
+  "license": "BSD-3-Clause",
+  "license_note": "Cellpose code and pretrained model weights (github.com/MouseLand/cellpose) are BSD-3-Clause, Copyright (c) 2020-2024 Howard Hughes Medical Institute. Some Cellpose 3 training datasets (including the cyto3 training set) carry non-commercial (CC-BY-NC) restrictions.",
+  "default_model": "cyto3",
+  "models": {
+    "cyto3": {
+      "name": "cyto3",
+      "label": "cyto3 (cells & cytoplasm)",
+      "diam_mean": 30.0,
+      "channels": 2,
+      "supports_nuclear_channel": true,
+      "input": "input",
+      "outputs": ["flows", "style"],
+      "bsize": 224,
+      "tile_overlap": 0.1,
+      "div_by": 16,
+      "extra_pad": 1,
+      "defaults": {
+        "diameter": 30.0,
+        "flow_threshold": 0.4,
+        "cellprob_threshold": 0.0,
+        "min_size": 15,
+        "max_size_fraction": 0.4
+      },
+      "normalization": { "lower": 1, "upper": 99 },
+      "filename": "cellpose-cyto3.onnx"
+    },
+    "nuclei": {
+      "name": "nuclei",
+      "label": "nuclei (nuclear stain)",
+      "diam_mean": 17.0,
+      "channels": 2,
+      "supports_nuclear_channel": false,
+      "input": "input",
+      "outputs": ["flows", "style"],
+      "bsize": 224,
+      "tile_overlap": 0.1,
+      "div_by": 16,
+      "extra_pad": 1,
+      "defaults": {
+        "diameter": 17.0,
+        "flow_threshold": 0.4,
+        "cellprob_threshold": 0.0,
+        "min_size": 15,
+        "max_size_fraction": 0.4
+      },
+      "normalization": { "lower": 1, "upper": 99 },
+      "filename": "cellpose-nuclei.onnx"
+    }
+  },
+  "assets": [
+    {
+      "filename": "cellpose-cyto3.onnx",
+      "bytes": 26489378,
+      "sha256": "e307443e09ad20d03dc7d10fdba968ce70ee7294b38e9e42d68b89fde8330fd1",
+      "source_url": "https://www.cellpose.org/models/cyto3",
+      "source_sha256": "2dc3087a8abd7da46d1ab0ddd5824639933cc3ff63b382af3fa1939a392db93c",
+      "converter": "apps/cellpose/validation/export_model.py",
+      "conversion": "torch.onnx.export opset 17 (torch 2.5.1+cpu, cellpose 3.1.1.1, onnx 1.16.2, onnxruntime 1.19.2)",
+      "pytorch_vs_onnx_max_abs_diff": { "flows": 1.98e-5, "style": 1.19e-7 }
+    },
+    {
+      "filename": "cellpose-nuclei.onnx",
+      "bytes": 26489378,
+      "sha256": "e6ebcede6fca35ae50916257952fe8a7af085ec1a8ffad732cc0ad16a4e8d82a",
+      "source_url": "https://www.cellpose.org/models/nucleitorch_0",
+      "source_sha256": "89ca45e4a45048d5010d29621466b1274b91b3dcb9714dce9f9e90a9a8671303",
+      "converter": "apps/cellpose/validation/export_model.py",
+      "conversion": "torch.onnx.export opset 17 (torch 2.5.1+cpu, cellpose 3.1.1.1, onnx 1.16.2, onnxruntime 1.19.2)",
+      "pytorch_vs_onnx_max_abs_diff": { "flows": 5.91e-5, "style": 1.49e-7 }
+    }
+  ]
+}

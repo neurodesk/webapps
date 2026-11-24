@@ -1,0 +1,26 @@
+Cellpose web application
+Copyright 2026 Neurodesk contributors
+
+src/cellpose.js ports the Cellpose 3.1.1.1 inference, tiling and mask
+reconstruction pipeline (https://github.com/MouseLand/cellpose: normalize99,
+get_pad_yx, make_tiles, average_tiles, _taper_mask, run_net, run_3D,
+follow_flows, steps_interp, map_coordinates, get_masks_torch,
+masks_to_flows_cpu, flow_error, remove_bad_flow_masks,
+fill_holes_and_remove_small_masks). Cellpose is Copyright (c) 2020-2025,
+Howard Hughes Medical Institute, authored by Carsen Stringer and Marius
+Pachitariu, under the BSD 3-Clause licence (LICENSE).
+
+The ONNX models (cellpose-cyto3.onnx and cellpose-nuclei.onnx) are converted
+from Cellpose's pretrained cyto3 and nucleitorch_0 weights
+(https://www.cellpose.org/models/cyto3 and
+https://www.cellpose.org/models/nucleitorch_0) by validation/export_model.py.
+While the Cellpose codebase is BSD-3-Clause, several training datasets used to
+train the pretrained Cellpose weights (including the Cellpose training set and
+TissueNet) are licensed under CC-BY-NC (Attribution-NonCommercial); commercial
+deployments should train models on commercially permissible data.
+
+Stringer C, Wang T, Michaelos M, Pachitariu M (2021). Cellpose: a generalist
+algorithm for cellular segmentation. Nature Methods 18(1):100-106.
+
+Stringer C, Pachitariu M (2025). Cellpose3: one-click image restoration for
+improved segmentation. Nature Methods 22:592-599.

@@ -443,6 +443,12 @@ The nightly `agent-interactions` job runs each viewport's catalog in three `--sh
 - `validation/reference.json` is Python StarDist's result (`validation/reference.py`, environment in the README); the unit tests and `e2e/workflow.spec.js` read it. Rerecord it when any model, example or reference version changes.
 - All four pretrained ONNX models are converted once by `validation/convert_model.py` and pinned in `models/stardist.manifest.json`, which also holds each model's thresholds, grid, `div_by` and `tile_overlap` (from `_axes_tile_overlap`).
 
+## cellpose
+
+- `src/cellpose.js` ports Cellpose 3.1.1.1's 2D and 3D pipelines (`normalize99`, `getPadYX`, `taperMask`, tiled `runNet2D`, ortho-plane `runOrtho3D`, Euler `followFlows2D` / `followFlows3D`, histogram-peak `clusterMasks`, 2D `removeBadFlowMasks2D` and `fillHolesAndRemoveSmallMasks`). On the CC0 Allen Institute 2D and 3D examples (`cyto3` 2D, `nuclei` 2D and `cyto3` 3D), browser outputs match Python Cellpose 3.1.1.1 with F1 = 1.00 and mean matched IoU > 0.99.
+- `validation/reference.json` records Python Cellpose 3.1.1.1 outputs (`validation/reference.py`); unit tests and `e2e/workflow.spec.js` check against it.
+- Pretrained `cyto3` and `nuclei` ONNX models are exported by `validation/export_model.py` (with `mkldnn=False` and dynamic-shape `mean` in `make_style`) and pinned in `models/cellpose.manifest.json`.
+
 ## deconvolution
 
 - `exes/deconvolution` (Rust: `core` PSF, FFT and Richardson-Lucy; `wasm` its surface) builds the committed `packages/deconvolution/wasm`, which the app's worker and Node load. After a Rust change run `pnpm --filter @neurodesk/deconvolution build:wasm` (Rust 1.98.1, wasm-pack 0.13.1, binaryen `version_117`, SIMD128 on) and commit; `deconvolution-native.yml` fails when a rebuild differs. Then rerun `apps/deconvolution/scripts/record-reference.mjs`: the e2e tests hold the browser's example output to `e2e/expected.json` byte for byte.

@@ -5461,6 +5461,38 @@
       "kind": "model",
       "license": "BSD-3-Clause",
       "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/bc1de48f8c0857d30f2330e986eef29ec77603b3/cellpose/example/allen-cells-2d.ome.tif": {
+      "sha256": "800f360b6aa91a93da29da7a4b28ca8191b2f62529b71c41dad5021eecc9e2af",
+      "bytes": 263274,
+      "contentType": "image/tiff",
+      "kind": "example",
+      "license": "CC0-1.0",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/bc1de48f8c0857d30f2330e986eef29ec77603b3/cellpose/example/allen-cells-3d.ome.tif": {
+      "sha256": "768e71dadf4d8793cd0655c835b0ac6870646cc10383c09374e6773210b0115f",
+      "bytes": 167958,
+      "contentType": "image/tiff",
+      "kind": "example",
+      "license": "CC0-1.0",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/bc1de48f8c0857d30f2330e986eef29ec77603b3/cellpose/models/cellpose-cyto3.onnx": {
+      "sha256": "e307443e09ad20d03dc7d10fdba968ce70ee7294b38e9e42d68b89fde8330fd1",
+      "bytes": 26489378,
+      "contentType": "application/octet-stream",
+      "kind": "model",
+      "license": "BSD-3-Clause",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/bc1de48f8c0857d30f2330e986eef29ec77603b3/cellpose/models/cellpose-nuclei.onnx": {
+      "sha256": "e6ebcede6fca35ae50916257952fe8a7af085ec1a8ffad732cc0ad16a4e8d82a",
+      "bytes": 26489378,
+      "contentType": "application/octet-stream",
+      "kind": "model",
+      "license": "BSD-3-Clause",
+      "dependencies": []
     }
   },
   "apps": {
@@ -6851,6 +6883,12 @@
     "deconvolution": [
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/02fb0301173cf259099cc528b944a54a92075a03/deconvolution/example/hela-phalloidin488-confocal.tif",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/02fb0301173cf259099cc528b944a54a92075a03/deconvolution/example/README.md"
+    ],
+    "cellpose": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/bc1de48f8c0857d30f2330e986eef29ec77603b3/cellpose/example/allen-cells-2d.ome.tif",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/bc1de48f8c0857d30f2330e986eef29ec77603b3/cellpose/example/allen-cells-3d.ome.tif",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/bc1de48f8c0857d30f2330e986eef29ec77603b3/cellpose/models/cellpose-cyto3.onnx",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/bc1de48f8c0857d30f2330e986eef29ec77603b3/cellpose/models/cellpose-nuclei.onnx"
     ]
   }
 }
