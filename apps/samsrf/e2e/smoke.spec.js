@@ -744,7 +744,7 @@ test("explicit arithmetic references run through workers and are retained in dow
     Arithmetic_Reference: "matlab-intel", Css_Convention: "nonnegative",
   };
   await page.locator("#modelInput").setInputFiles(payload("css.json", JSON.stringify(css)));
-  await expect(page.locator("#statusText")).toContainText("Loaded model css.json");
+  await expect(page.locator("#statusText")).toContainText("Model css loaded from css.json");
   await page.locator("#runButton").click();
   await expect(page.locator("#statusText")).toContainText("pRF maps ready");
   await expect(page.locator("#downloadAll")).toBeEnabled();
