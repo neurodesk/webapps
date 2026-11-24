@@ -253,4 +253,38 @@ test('prepareRegistrationInputsRas preserves every focus including a 1-voxel foc
   closeTumour[voxelIndex(4, 7, 5, closeDims)] = 1;
   const prepClose = prepareRegistrationInputsRas({ data: closeData, dims: closeDims, affine: closeAffine }, closeBrain, closeTumour);
   assert.equal(labelComponents26(prepClose.mask.data, prepClose.mask.dims).count, 2);
+
+  // Adding a distant 3rd focus on a 70^3 grid must still preserve all 3 foci within the voxel budget
+  // (refining only sheared axes so un-sheared Z keeps native resolution).
+  const bigDims = [70, 70, 70];
+  const bigData = new Float32Array(70 * 70 * 70).fill(50);
+  const bigBrain = new Uint8Array(bigData.length);
+  for (let z = 2; z < 68; z++) {
+    for (let y = 2; y < 68; y++) {
+      for (let x = 2; x < 68; x++) bigBrain[voxelIndex(x, y, z, bigDims)] = 1;
+    }
+  }
+  const bigTumour = new Uint8Array(bigData.length);
+  bigTumour[voxelIndex(5, 5, 5, bigDims)] = 1;
+  bigTumour[voxelIndex(4, 7, 5, bigDims)] = 1;
+  bigTumour[voxelIndex(67, 67, 67, bigDims)] = 1;
+  const prepBig = prepareRegistrationInputsRas({ data: bigData, dims: bigDims, affine: closeAffine }, bigBrain, bigTumour);
+  assert.equal(labelComponents26(prepBig.mask.data, prepBig.mask.dims).count, 3);
+
+  // Diagonal 26-connected pair (5,5,5) and (4,4,5) under 1 mm, 10 deg rotation, and 0.1 shear
+  // forms one native focus and must NOT be split into two components.
+  const rad10 = (10 * Math.PI) / 180;
+  const c10 = Math.cos(rad10);
+  const s10 = Math.sin(rad10);
+  const diagAffine = [
+    [c10, -s10 + 0.1, 0, 0],
+    [s10, c10, 0, 0],
+    [0, 0, 1, 0],
+    [0, 0, 0, 1],
+  ];
+  const diagTumour = new Uint8Array(closeData.length);
+  diagTumour[voxelIndex(5, 5, 5, closeDims)] = 1;
+  diagTumour[voxelIndex(4, 4, 5, closeDims)] = 1;
+  const prepDiag = prepareRegistrationInputsRas({ data: closeData, dims: closeDims, affine: diagAffine }, closeBrain, diagTumour);
+  assert.equal(labelComponents26(prepDiag.mask.data, prepDiag.mask.dims).count, 1);
 });
