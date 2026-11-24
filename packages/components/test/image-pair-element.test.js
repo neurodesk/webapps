@@ -556,3 +556,30 @@ test('example downloads enter perform before fetch resolves so app footer cancel
     globalThis.fetch = previousFetch;
   }
 });
+
+test('external disable blocks nd-replace Undo and Swap withdraws pending Undo via cancelPending', async () => {
+  const { pair, $, window } = setup();
+  const fileA = new window.File(['a'], 'a.png');
+  const fileB = new window.File(['b'], 'b.png');
+  await pair.use('fixed', { name: 'a.png', file: fileA });
+  await pair.use('moving', { name: 'b.png', file: fileB });
+
+  // External disable (e.g. active processing worker, #busy === 0) must block nd-replace Undo clears.
+  pair.disabled = true;
+  const fixedInput = $('fixedInput');
+  Object.defineProperty(fixedInput, 'files', { get: () => fixedInput._files ?? [], set: files => { fixedInput._files = files; } });
+  fixedInput.files = [];
+  fixedInput.dispatchEvent(new window.CustomEvent('nd-replace', { bubbles: true }));
+  fixedInput.dispatchEvent(new window.Event('change', { bubbles: true }));
+  await settle();
+  assert.equal(pair.fixed?.image.name, 'a.png', 'external disable preserves inputs against stale Undo');
+
+  // Swap reports cancelPending: true so pageDrop withdraws any stale Undo button.
+  pair.disabled = false;
+  const cancelFlags = [];
+  fixedInput.addEventListener('nd-files', event => cancelFlags.push(Boolean(event.detail?.cancelPending)));
+  await pair.swap();
+  assert.equal(pair.fixed?.image.name, 'b.png');
+  assert.equal(pair.moving?.image.name, 'a.png');
+  assert.ok(cancelFlags.includes(true), 'Swap emits cancelPending: true to withdraw stale Undo');
+});

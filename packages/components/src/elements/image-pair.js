@@ -33,6 +33,7 @@ export function defineImagePair(view = globalThis.window) {
     #initialized = false;
     #drops = [];
     #dropGen = { fixed: 0, moving: 0 };
+    #busy = 0;
     #example;
     #queue = Promise.resolve();
 
@@ -106,13 +107,13 @@ export function defineImagePair(view = globalThis.window) {
       await this.#loadFiles(slot, files, signal);
     }
 
-    reset(slot) {
+    reset(slot, { cancelPending = false } = {}) {
       if (slot === 'fixed' && this.lockedFixed) return;
       this.#dropGen[slot] += 1;
       this.#example?.reset();
       this.#state[slot] = null;
       this.clear?.(slot);
-      this.#changed(slot);
+      this.#changed(slot, { cancelPending });
     }
 
     swap() {
@@ -205,7 +206,7 @@ export function defineImagePair(view = globalThis.window) {
       if (this.slotHelp?.[slot]) header.append(' ', renderInfoIcon(this.slotHelp[slot], { label: `About the ${lower} image` }, doc));
       const clear = element(doc, 'button', { id: `${slot}Clear`, className: 'nd-btn-icon nd-btn-icon-sm nd-image-slot-clear', type: 'button', 'aria-label': `Clear the ${lower} image`, title: `Clear the ${lower} image` }, '×');
       clear.hidden = true;
-      clear.addEventListener('click', () => this.reset(slot));
+      clear.addEventListener('click', () => this.reset(slot, { cancelPending: true }));
       header.append(clear);
       const info = element(doc, 'p', { id: `${slot}Info`, className: 'nd-file-info', 'aria-live': 'polite' });
       info.hidden = true;
@@ -270,10 +271,14 @@ export function defineImagePair(view = globalThis.window) {
         input.value = '';
         const fromReplace = replacing;
         replacing = false;
-        if (this.disabled && !fromReplace) return;
+        const canQueueWhileBusy = fromReplace && this.#busy > 0;
+        if (this.disabled && !canQueueWhileBusy) {
+          this.#report();
+          return;
+        }
         if (files.length) {
-          void this.load(slot, Promise.resolve(files), { force: fromReplace });
-        } else if (fromReplace && this.disabled) {
+          void this.load(slot, Promise.resolve(files), { force: canQueueWhileBusy });
+        } else if (canQueueWhileBusy) {
           void this.#enqueue(() => this.reset(slot));
         } else {
           this.reset(slot);
@@ -299,12 +304,14 @@ export function defineImagePair(view = globalThis.window) {
     #operation(message, task, { force = false } = {}) {
       if (this.disabled && !force) return Promise.resolve();
       this.#example?.reset();
+      this.#busy += 1;
       return this.#enqueue(async () => {
         try {
           await this.#perform(message, task);
         } catch (error) {
           if (error?.name !== 'AbortError') this.onStatus?.(error?.message || String(error), true);
         } finally {
+          this.#busy = Math.max(0, this.#busy - 1);
           this.#refresh();
           this.#report();
         }
@@ -312,12 +319,13 @@ export function defineImagePair(view = globalThis.window) {
     }
 
     // Tell the page drop which slots hold an image, so a dropped scan goes to an empty one.
-    #report() {
+    #report({ cancelPending = false } = {}) {
       for (const slot of IMAGE_SLOTS) {
         const input = this.#parts[slot]?.input;
         if (!input) continue;
         const file = this.#state[slot]?.candidate?.file;
-        input.dispatchEvent(new window.CustomEvent('nd-files', { bubbles: true, detail: { files: file ? [file] : [] } }));
+        const detail = cancelPending ? { files: file ? [file] : [], cancelPending: true } : { files: file ? [file] : [] };
+        input.dispatchEvent(new window.CustomEvent('nd-files', { bubbles: true, detail }));
       }
     }
 
@@ -429,13 +437,13 @@ export function defineImagePair(view = globalThis.window) {
         throw error;
       }
       this.#state = { fixed: moving, moving: fixed };
-      this.#changed('fixed');
+      this.#changed('fixed', { cancelPending: true });
     }
 
-    #changed(slot) {
+    #changed(slot, { cancelPending = false } = {}) {
       this.#error = this.#validate();
       this.#refresh();
-      this.#report();
+      this.#report({ cancelPending });
       const detail = { slot, fixed: this.#state.fixed, moving: this.#state.moving, ready: this.ready, error: this.#error };
       this.onChange?.(detail);
       this.dispatchEvent(new window.CustomEvent('nd-image-pair-change', { bubbles: true, composed: true, detail }));

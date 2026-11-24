@@ -1135,6 +1135,7 @@ async function executeComparisonLocked(current, settings, onAutomationProgress) 
 
 async function runCompare(signal, requestedSettings = null, onAutomationProgress = null) {
   if (!baseline || !followup) throw new Error("Load both a baseline and a follow-up image before comparing.");
+  document.querySelector(".nd-status-undo")?.remove();
   const settings = requestedSettings ?? readFormSettings();
   const operation = beginOperation("Aligning and comparing dermoscopy pair…", signal);
   running = operation.controller;
