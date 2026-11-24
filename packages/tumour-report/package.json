@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/tumour-report",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Raidionics brain tumour segmentation and standardized anatomical characterization for browsers and Node.js",
   "type": "module",
   "license": "Apache-2.0",
