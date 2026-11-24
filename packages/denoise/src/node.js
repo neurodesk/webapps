@@ -30,11 +30,12 @@ const LOCK_TMP_PREFIX = ".denoise-lock-tmp-";
 const STAGE_PREFIX = ".denoise-stage-";
 const TRASH_PREFIX = ".denoise-trash-";
 const PRESERVED_BACKUP_PREFIX = ".denoise-preserved-backup-";
-const LOCK_TMP_DIR_RE = /^\.denoise-lock-tmp-(\d+)-([0-9a-f]{16})$/;
-const STAGE_DIR_RE = /^\.denoise-stage-(\d+)-([0-9a-f]{8})$/;
-const TRASH_DIR_RE = /^\.denoise-trash-(\d+)-([0-9a-f]{8})$/;
-const PRESERVED_BACKUP_DIR_RE = /^\.denoise-preserved-backup-(\d+)-([0-9a-f]{8})$/;
+const LOCK_TMP_DIR_RE = /^\.denoise-lock-tmp-([1-9]\d{0,9})-([0-9a-f]{16})$/;
+const STAGE_DIR_RE = /^\.denoise-stage-([1-9]\d{0,9})-([0-9a-f]{8})$/;
+const TRASH_DIR_RE = /^\.denoise-trash-([1-9]\d{0,9})-([0-9a-f]{8})$/;
+const PRESERVED_BACKUP_DIR_RE = /^\.denoise-preserved-backup-([1-9]\d{0,9})-([0-9a-f]{8})$/;
 const OWNER_FILE_RE = /^owner-([0-9a-f]+)\.json$/;
+const MAX_SAFE_PID = 2 ** 31 - 1;
 
 export const OUTPUT_FORMATS = Object.freeze(["auto", "tiff", "nifti", "both"]);
 
@@ -226,8 +227,12 @@ async function readBoundedInputFile(resolvedInput, inputName, maxFileBytes) {
   }
 }
 
+function isValidPid(pid) {
+  return Number.isSafeInteger(pid) && pid > 0 && pid <= MAX_SAFE_PID;
+}
+
 function isLocalProcessDead(pid) {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
+  if (!isValidPid(pid)) return false;
   try {
     process.kill(pid, 0);
     return false;
@@ -237,12 +242,32 @@ function isLocalProcessDead(pid) {
   }
 }
 
+function isLocalProcessAlive(pid) {
+  if (!isValidPid(pid)) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    // EPERM means the process exists under another user; ESRCH / EINVAL mean it is not alive.
+    return error.code === "EPERM";
+  }
+}
+
 async function readJsonStatus(filePath) {
+  let info;
+  try {
+    info = await lstat(filePath);
+  } catch (error) {
+    if (error.code === "ENOENT") return { status: "missing", value: null };
+    return { status: "invalid", value: null };
+  }
+  // Reject symlinks (including dangling symlinks whose target returns ENOENT on readFile) and
+  // non-regular files so an existing metadata entry is never misclassified as missing.
+  if (!info.isFile()) return { status: "invalid", value: null };
   let raw;
   try {
     raw = await readFile(filePath, "utf8");
-  } catch (error) {
-    if (error.code === "ENOENT") return { status: "missing", value: null };
+  } catch {
     return { status: "invalid", value: null };
   }
   try {
@@ -255,6 +280,15 @@ async function readJsonStatus(filePath) {
 async function readJsonIfPresent(filePath) {
   const result = await readJsonStatus(filePath);
   return result.status === "ok" ? result.value : null;
+}
+
+async function isRegularFile(filePath) {
+  try {
+    return (await lstat(filePath)).isFile();
+  } catch (error) {
+    if (error.code === "ENOENT") return false;
+    throw error;
+  }
 }
 
 async function pathExists(filePath) {
@@ -305,20 +339,10 @@ async function tryClearStaleLock(lockPath, { onLockInspect } = {}) {
   if (!match) return false;
 
   const ownerPath = join(lockPath, ownerEntry);
-  let raw;
-  try {
-    raw = await readFile(ownerPath, "utf8");
-  } catch (error) {
-    if (error.code === "ENOENT") return true;
-    return false;
-  }
-
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return false;
-  }
+  const ownerStatus = await readJsonStatus(ownerPath);
+  if (ownerStatus.status === "missing") return true;
+  if (ownerStatus.status !== "ok") return false;
+  const parsed = ownerStatus.value;
   if (
     !parsed ||
     parsed.host !== hostname() ||
@@ -502,7 +526,7 @@ async function recoverInterruptedStages(resolvedDir, outputDir) {
 
     // If the interrupted run already finished publishing all outputs before dying during cleanup,
     // the outputs in `resolvedDir` are complete and `_backup` is obsolete.
-    if (await pathExists(join(stagePath, "_committed"))) {
+    if (await isRegularFile(join(stagePath, "_committed"))) {
       await discardStageDir(resolvedDir, stagePath);
       continue;
     }
@@ -666,7 +690,7 @@ async function reserveOutputDir(outputDir, { overwrite = false, onLockInspect } 
             const tmpToken = lockTmpMatch[2];
             const tmpEntries = await readdir(tmpPath).catch(() => null);
             const expectedOwner = `owner-${tmpToken}.json`;
-            if (tmpEntries && !isLocalProcessDead(tmpPid)) {
+            if (tmpEntries && isLocalProcessAlive(tmpPid)) {
               if (tmpEntries.length === 0) continue;
               if (tmpEntries.length === 1 && tmpEntries[0] === expectedOwner) {
                 const owner = await readJsonStatus(join(tmpPath, expectedOwner));

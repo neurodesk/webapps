@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -818,6 +818,59 @@ test("user files and folders starting with internal dot-prefixes are never delet
         /not empty/i,
       );
       assert.equal(await readFile(join(bogusLockDir, "sentinel.txt"), "utf8"), "user-data\n");
+    }
+
+    // Empty lock-temp directories with invalid or dead PIDs must NOT bypass !overwrite.
+    for (const badPid of ["999999999999999999999", String(deadPid)]) {
+      const emptyLockOut = join(dir, `empty-lock-${badPid}`);
+      const emptyLockDir = join(emptyLockOut, `.denoise-lock-tmp-${badPid}-0123456789abcdef`);
+      await mkdir(emptyLockDir, { recursive: true });
+      await assert.rejects(
+        () => denoiseFile({
+          input: otherInput,
+          outputDir: emptyLockOut,
+          options: { method: "fgr-ridge", "max-scale": "4" },
+        }),
+        /not empty/i,
+      );
+      assert.deepEqual(await readdir(emptyLockOut), [`.denoise-lock-tmp-${badPid}-0123456789abcdef`]);
+    }
+
+    // Dangling metadata symlinks must be treated as invalid (not missing), blocking deletion.
+    if (process.platform !== "win32") {
+      const danglingTrashOut = join(dir, "dangling-trash-out");
+      const danglingTrash = join(danglingTrashOut, `.denoise-trash-${deadPid}-12345678`);
+      await mkdir(danglingTrash, { recursive: true });
+      await symlink(join(dir, "nonexistent-target.json"), join(danglingTrash, "_meta.json"));
+      await writeFile(join(danglingTrash, "sentinel.txt"), "keep-dangling-trash\n", "utf8");
+
+      await assert.rejects(
+        () => denoiseFile({
+          input: otherInput,
+          outputDir: danglingTrashOut,
+          options: { method: "fgr-ridge", "max-scale": "4" },
+        }),
+        /not empty/i,
+      );
+      assert.equal(await readFile(join(danglingTrash, "sentinel.txt"), "utf8"), "keep-dangling-trash\n");
+
+      const danglingStageOut = join(dir, "dangling-stage-out");
+      const danglingStage = join(danglingStageOut, `.denoise-stage-${deadPid}-12345678`);
+      await mkdir(danglingStage, { recursive: true });
+      await writeFile(join(danglingStage, "_meta.json"), `${JSON.stringify({ pid: deadPid, host: hostname() })}\n`, "utf8");
+      await writeFile(join(danglingStage, "_committed"), "ok\n", "utf8");
+      await symlink(join(dir, "nonexistent-rollback.json"), join(danglingStage, "_rollback-failed.json"));
+      await writeFile(join(danglingStage, "sentinel.txt"), "keep-dangling-stage\n", "utf8");
+
+      await assert.rejects(
+        () => denoiseFile({
+          input: otherInput,
+          outputDir: danglingStageOut,
+          options: { method: "fgr-ridge", "max-scale": "4", overwrite: true },
+        }),
+        /preserved backup/i,
+      );
+      assert.equal(await readFile(join(danglingStage, "sentinel.txt"), "utf8"), "keep-dangling-stage\n");
     }
   } finally {
     await rm(dir, { recursive: true, force: true });
