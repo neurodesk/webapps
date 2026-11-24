@@ -26,5 +26,6 @@
   "histo2mri": "no command-line package yet: v1 runs its pipeline (src/core) in a browser worker only; its Greedy affine and warp downloads run in the Greedy command line (greedy-rs) for batch reslicing",
   "deconvolution": "no command line yet: the Rust core in exes/deconvolution and the committed WebAssembly module in packages/deconvolution are ready to package through exes/node-cli in a later release",
   "tumour-report": "the pinned dbouget/raidionics-rads:v1.3.2-py39-cpu container is the upstream command-line reference, and packages/tumour-report/validation holds voxel-exact native mask parity to it; a packaged Node CLI can follow via exes/node-cli",
+  "denoise": "no command-line package yet: v1 runs its self-supervised denoising core (apps/denoise/src/core) in browser workers and Node tests; Aydin (pip install aydin) is the established native tool for batch CLI work",
   "cellpose": "Python Cellpose (pip install cellpose) is the command-line reference the app reproduces on the 2D and 3D examples; no separate command line is packaged"
 }

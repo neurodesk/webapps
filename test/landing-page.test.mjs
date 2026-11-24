@@ -154,6 +154,7 @@ test('microscopy catalogue groups apps by task without repeating its domain', as
     niimath: 'preprocessing',
     mri2vid: 'visualization',
     deconvolution: 'preprocessing',
+    denoise: 'preprocessing',
   };
   const cards = [...document.querySelectorAll('[data-app-card]')];
   assert.equal(cards.length, Object.keys(expected).length);

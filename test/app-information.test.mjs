@@ -84,6 +84,7 @@ const REQUIRED_METHODS = {
   bison: ['10.1002/mrm.28547', '10.1016/j.neuroimage.2017.06.009', '10.1016/j.neuroimage.2010.07.033', '10.1016/S1053-8119(09)70884-5', 'sites.google.com/view/greedyreg/about', '10.1109/TMI.2010.2046908', '10.1002/jmri.22003', '10.52294/001c.94384', '10.18112/openneuro.ds007522.v2.0.1', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   gliomoda: ['10.1101/2025.11.12.25339968', '10.48550/arXiv.2507.09036', '10.1038/s41592-020-01008-z', '10.1038/s41597-022-01560-7', 'onnxruntime.ai', 'github.com/niivue/niivue'],
   'tumour-report': ['10.1038/s41598-023-42048-7', '10.3389/fneur.2022.932219', '10.1093/neuonc/noab026', '10.1016/j.neuroimage.2010.07.033', '10.1093/cercor/bhx179', '10.1093/gigascience/giy004', 'sites.google.com/view/greedyreg/about', 'onnxruntime.ai', '10.1016/j.jneumeth.2016.03.001', '10.6084/m9.figshare.29365844.v1', '10.1038/s41597-022-01560-7', 'github.com/niivue/niivue'],
+  denoise: ['proceedings.mlr.press/v97/batson19a.html', 'github.com/royerlab/aydin', '10.1109/CVPR52729.2023.01347', '10.1109/CVPR.2005.38', '10.1109/ISBI.2008.4541250', '10.1109/TIP.2012.2202675', '10.1109/TIP.2008.2001399', '10.1038/s41592-019-0612-7', '10.5281/zenodo.5101351', 'github.com/niivue/niivue'],
 };
 
 test('every registered app has app information with packages and cited methods', () => {

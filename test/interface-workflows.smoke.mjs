@@ -919,6 +919,39 @@ try {
     await expect(page.locator('#fileInfo')).toContainText('interface-t2.nii');
     await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
   });
+  await check('denoise', async page => {
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await expect(page.locator('#runButton')).toBeDisabled();
+    await page.locator('#imageInput').setInputFiles(fieldImage('interface-cells.tif'));
+    await expect(page.locator('#fileInfo')).toContainText('interface-cells.tif · 48 × 36 (2D)');
+    await expect(page.locator('#runButton')).toBeEnabled();
+    await page.locator('#method').selectOption('fgr-ridge');
+    // The settings chosen in Advanced settings must survive closing that section and its parent.
+    const advanced = page.locator('#advancedSettings > summary');
+    await expect(page.locator('#maxScale')).toBeHidden();
+    await advanced.tap();
+    await page.locator('#maxScale').selectOption('4');
+    await page.locator('#seed').fill('7');
+    await advanced.tap();
+    await expect(page.locator('#maxScale')).toBeHidden();
+    await advanced.tap();
+    await expect(page.locator('#maxScale')).toHaveValue('4');
+    await expect(page.locator('#seed')).toHaveValue('7');
+    const task = page.locator('#taskSection > summary');
+    await task.tap();
+    await expect(page.locator('#method')).toBeHidden();
+    await task.tap();
+    await expect(page.locator('#method')).toHaveValue('fgr-ridge');
+    await page.locator('#runButton').tap();
+    await expect(page.locator('#statusText')).toHaveText('Image denoised', { timeout: 120000 });
+    await expect(page.locator('#outputSection')).toHaveAttribute('open', '');
+    await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(4);
+    // A new image withdraws the results of the old one.
+    await page.locator('#imageInput').setInputFiles(fieldImage('interface-cells-2.tif'));
+    await expect(page.locator('#fileInfo')).toContainText('interface-cells-2.tif');
+    await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
+  });
   await check('brainqcnet', async page => {
     await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
     await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);

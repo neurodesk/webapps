@@ -1,0 +1,32 @@
+[
+  {
+    "id": "dsb2018-nuclei",
+    "label": "Fluorescent nuclei, 2D (DSB 2018)",
+    "description": "512 × 512 fluorescence image of cell nuclei from the 2018 Data Science Bowl (CC0).",
+    "expectedResult": "In a few seconds, a denoised 2D fluorescence image (TIFF and NIfTI) with lower background shot noise and a noise residual map to screen for over-smoothing.",
+    "files": [
+      {
+        "role": "image",
+        "name": "dsb2018-nuclei-2d.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/e76a7bbd831da2bfdae49058700da81d6cca577c/stardist/example/dsb2018-nuclei-2d.tif",
+        "sha256": "f9ccc1571b92c861ff87e28463068b43f61bd47357ed0503f711e5cd1eb97750",
+        "bytes": 524544
+      }
+    ]
+  },
+  {
+    "id": "hela-phalloidin-confocal",
+    "label": "HeLa actin, 3D confocal",
+    "description": "Confocal 3D stack of HeLa cells with phalloidin-488 actin (Zeiss LSM 710, 256 × 256 × 41 at 66 nm × 130 nm). Romain Guiet, EPFL BIOP, Zenodo 5101351, CC BY 4.0.",
+    "expectedResult": "A 3D-denoised confocal actin stack (TIFF and NIfTI) using lateral and axial J-invariant context, plus the noise residual stack.",
+    "files": [
+      {
+        "role": "image",
+        "name": "hela-phalloidin488-confocal.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/02fb0301173cf259099cc528b944a54a92075a03/deconvolution/example/hela-phalloidin488-confocal.tif",
+        "sha256": "a79ed0b43b7ed37fa6b70eed6a2b72202daf67e528db871533d77c9b6ae8f266",
+        "bytes": 2782466
+      }
+    ]
+  }
+]
