@@ -401,11 +401,11 @@ pub fn correlation_complex_single_with_reference(
     let divide = |dot: f32| (f64::from(dot) / nx) as f32 / ny;
     let (mut re, mut im) = (divide(real), divide(imaginary));
     if reference == crate::arithmetic::ArithmeticReference::MatlabIntel {
-        let mag = libm::hypotf(re, im);
+        let mag = libm::hypot(f64::from(re), f64::from(im));
         if mag > 1.0 {
-            re /= mag;
-            im /= mag;
-            while libm::hypotf(re, im) > 1.0 {
+            re = (f64::from(re) / mag) as f32;
+            im = (f64::from(im) / mag) as f32;
+            while libm::hypot(f64::from(re), f64::from(im)) > 1.0 {
                 if re.abs() >= im.abs() {
                     re = re.abs().next_down().copysign(re);
                 } else {
@@ -481,8 +481,13 @@ mod tests {
                 crate::arithmetic::ArithmeticReference::MatlabIntel,
             );
             assert!(
-                libm::hypotf(rc.re as f32, rc.im as f32) <= 1.0,
-                "complex |r| must not exceed 1 for raw={raw:?} exp={exp} obs={obs:?}: {rc:?}"
+                libm::hypot(rc.re, rc.im) <= 1.0
+                    && rc.norm() <= 1.0
+                    && rc.norm_sqr() <= 1.0
+                    && libm::hypotf(rc.re as f32, rc.im as f32) <= 1.0,
+                "complex |r| must not exceed 1 for raw={raw:?} exp={exp} obs={obs:?}: {rc:?} (norm={}, norm_sqr={})",
+                rc.norm(),
+                rc.norm_sqr()
             );
         }
     }
