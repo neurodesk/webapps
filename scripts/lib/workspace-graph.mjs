@@ -46,7 +46,7 @@ const SOURCE_FILE = /\.[cm]?[jt]s$/;
 // A whole line that is a `//` comment. Triple-slash lines stay: TypeScript's
 // `/// <reference path>` directives are compiler inputs.
 const LINE_COMMENT = /^[ \t]*\/\/(?!\/).*$/gm;
-const ROOT_SCRIPT_CALL = /\bpnpm (?:-w |--workspace-root )?(?:run )?([A-Za-z0-9_@][\w.:/@-]*)/g;
+const ROOT_SCRIPT_CALL = /\bpnpm (?:-w |--workspace-root )?(?:run )?['"]?([A-Za-z0-9_@][\w.:/@-]*)['"]?/g;
 // An app's code names a file of another app by a relative path: a kit its build
 // stages, a fixture its tests read.
 const APP_CODE = /\.[cm]?[jt]sx?$/;
@@ -374,7 +374,7 @@ function expandedCommandTexts(commands, rootScripts) {
   return texts;
 }
 
-const WORKSPACE_ROOT_SCRIPT_CALL = /\bpnpm (?:-w|--workspace-root) (?:run )?([A-Za-z0-9_@][\w.:/@-]*)/g;
+const WORKSPACE_ROOT_SCRIPT_CALL = /\bpnpm (?:-w|--workspace-root) (?:run )?['"]?([A-Za-z0-9_@][\w.:/@-]*)['"]?/g;
 
 // Expand root package.json scripts explicitly invoked from a workspace manifest
 // via `pnpm -w [run] <script>` or `pnpm --workspace-root [run] <script>`,
@@ -498,6 +498,9 @@ export async function loadConservativeWorkspaceGraph(root) {
           pendingRootFiles.push(match[1]);
         }
       }
+      for (const [, top, name] of cmd.matchAll(SCRIPT_REFERENCE)) {
+        if (nodeSet.has(`${top}/${name}`)) uses.add(`${top}/${name}`);
+      }
     }
     const manifestPath = join(root, node, 'package.json');
     for await (const file of textFiles(join(root, node))) {
@@ -576,6 +579,11 @@ export async function loadConservativeWorkspaceGraph(root) {
         pendingRootFiles.push(target);
       } else {
         uses.add(`${top}/${name}`);
+        const exactJson = inner?.endsWith('.json') && `${top}/${name}${inner}`;
+        if (exactJson && await isRegularUnlinkedFile(root, exactJson)) {
+          uses.add(exactJson);
+          pendingRootFiles.push(exactJson);
+        }
       }
     }
     for (const [, name] of text.matchAll(BARE_IMPORT)) {
