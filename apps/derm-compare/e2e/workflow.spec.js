@@ -77,6 +77,9 @@ test("single-slot loading runs comparison, exercises Curtain slider + drag, all 
   await page.locator("#movingInput").setInputFiles(follFile);
   await expect(page.locator("#movingInfo")).toContainText("nevus_t1.png · 160×160");
   await expect(page.locator("#runButton")).toBeEnabled();
+  const playFlicker = page.getByRole("button", { name: "Play flicker" });
+  await expect(playFlicker).toBeDisabled();
+  await expect(page.getByText("Flicker is available after alignment.")).toBeVisible();
 
   await page.locator("#runButton").click();
   await expect(page.locator("#statusText")).toContainText("Aligned (NCC", { timeout: 60000 });
@@ -100,18 +103,21 @@ test("single-slot loading runs comparison, exercises Curtain slider + drag, all 
   await page.mouse.up();
   expect(Number(await curtainSlider.inputValue())).toBeLessThan(50);
 
-  // Flicker view activates playback toggle, disables Curtain slider, and pauses cleanly.
-  await page.locator(".nd-view-tab", { hasText: "Flicker" }).click();
-  await expect(page.locator("#flickerToggle")).toBeEnabled();
+  // Playback can start from Curtain and switches the viewer to Flicker.
+  await expect(page.getByText("Flicker is available after alignment.")).toBeHidden();
+  await playFlicker.click();
+  await expect(page.locator(".nd-view-tab", { hasText: "Flicker" })).toHaveAttribute("aria-pressed", "true");
   await expect(curtainSlider).toBeDisabled();
   await expect(page.locator("#viewHint")).toContainText("Flicker:");
-  await page.locator("#flickerToggle").click();
-  await expect(page.locator("#flickerToggle")).toHaveAttribute("aria-pressed", "true");
+  const pauseFlicker = page.getByRole("button", { name: "Pause flicker" });
+  await pauseFlicker.click();
   await expect(page.locator("#viewHint")).toContainText("paused");
+  await page.getByRole("button", { name: "Resume flicker" }).click();
+  await expect(page.locator("#viewHint")).toContainText("Flicker:");
 
-  // Checker view disables flicker toggle.
+  // Playback can also restart from another comparison view.
   await page.locator(".nd-view-tab", { hasText: "Checker" }).click();
-  await expect(page.locator("#flickerToggle")).toBeDisabled();
+  await expect(playFlicker).toBeEnabled();
   await expect(page.locator("#viewHint")).toContainText("Checkerboard");
 
   // ΔE2000 view shows 0–30 legend hint and respects 0% opacity.
@@ -150,11 +156,24 @@ test("single-slot loading runs comparison, exercises Curtain slider + drag, all 
   expect(provJson.registration.alignedNcc).toBeGreaterThan(provJson.registration.initialNcc);
   expect(provJson.registration.scale).toBe(1);
 
-  // Changing a processing setting clears stale comparison outputs.
-  await page.locator("#advancedSettings summary").click();
+  // Changing a setting prompts a rerun, and a successful rerun restores playback.
+  const settingsSummary = page.locator("#advancedSettings summary");
+  await settingsSummary.click();
+  await expect(page.getByText("Run Align & compare to apply these settings.")).toBeVisible();
   await page.locator("#allowScale").check();
   await expect(page.locator("#resultList .nd-volume-toggle")).toHaveCount(0);
-  await expect(page.locator("#statusText")).toContainText("Settings changed");
+  await expect(page.locator("#statusText")).toHaveText("Settings changed · rerun Align & compare");
+  await expect(page.locator("#progress")).toHaveAttribute("value", "0");
+  await expect(page.locator("#elapsed")).toBeEmpty();
+  await expect(page.locator("#viewHint")).toHaveText("Unaligned preview");
+  await expect(playFlicker).toBeDisabled();
+  await settingsSummary.click();
+  await settingsSummary.click();
+  await expect(page.locator("#allowScale")).toBeChecked();
+  await page.getByRole("button", { name: "Rerun Align & compare" }).click();
+  await expect(page.locator("#statusText")).toContainText("Aligned (NCC", { timeout: 60000 });
+  await expect(page.getByRole("button", { name: "Align & compare", exact: true })).toBeEnabled();
+  await expect(playFlicker).toBeEnabled();
 });
 
 test("multi-file pick in one input is refused cleanly without mutating the other slot", async ({ page }) => {
@@ -568,7 +587,7 @@ test("cancelling a rerun from ΔE2000 view immediately clears the ΔE2000 heatma
 
   await expect(page.locator("#statusText")).toHaveText("Cancelled");
   await expect(page.locator("#canvas")).toHaveAttribute("data-mode", "preview");
-  await expect(page.locator("#viewHint")).toContainText("Preview");
+  await expect(page.locator("#viewHint")).toHaveText("Unaligned preview");
   const afterCancelPng = await page.evaluate(() => document.getElementById("canvas").toDataURL());
   expect(afterCancelPng).not.toBe(diffCanvasPng);
 });
