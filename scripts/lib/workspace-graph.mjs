@@ -415,16 +415,45 @@ function isSafeProcessUse(idNode, ancestors) {
   if (SAFE_PROCESS_READ_PROPS.has(prop)) return true;
   if (prop === 'argv') {
     const greatGrand = ancestors[ancestors.length - 3];
-    return Boolean(
+    const isSafeMethod =
       grandparent?.type === 'MemberExpression'
       && grandparent.object === parent
       && !grandparent.computed
       && (grandparent.property?.name === 'slice' || grandparent.property?.name === 'includes')
       && greatGrand?.type === 'CallExpression'
-      && greatGrand.callee === grandparent,
-    );
+      && greatGrand.callee === grandparent;
+    const isReadOnlyIndex =
+      grandparent?.type === 'MemberExpression'
+      && grandparent.object === parent
+      && grandparent.computed
+      && grandparent.property?.type === 'Literal'
+      && typeof grandparent.property.value === 'number'
+      && !(greatGrand?.type === 'AssignmentExpression' && greatGrand.left === grandparent)
+      && !(greatGrand?.type === 'UpdateExpression' && greatGrand.argument === grandparent)
+      && !(greatGrand?.type === 'UnaryExpression' && greatGrand.operator === 'delete' && greatGrand.argument === grandparent);
+    return Boolean(isSafeMethod || isReadOnlyIndex);
   }
   return false;
+}
+
+function collectPatternNames(pattern, onName) {
+  if (!pattern || typeof pattern !== 'object') return;
+  if (pattern.type === 'Identifier') {
+    onName(pattern.name);
+  } else if (pattern.type === 'ObjectPattern') {
+    for (const prop of pattern.properties ?? []) {
+      if (prop.type === 'RestElement') collectPatternNames(prop.argument, onName);
+      else collectPatternNames(prop.value, onName);
+    }
+  } else if (pattern.type === 'ArrayPattern') {
+    for (const element of pattern.elements ?? []) {
+      if (element) collectPatternNames(element, onName);
+    }
+  } else if (pattern.type === 'AssignmentPattern') {
+    collectPatternNames(pattern.left, onName);
+  } else if (pattern.type === 'RestElement') {
+    collectPatternNames(pattern.argument, onName);
+  }
 }
 
 // Verify that `pathToFileURL` comes from `node:url`, `resolve` from `node:path`,
@@ -464,9 +493,19 @@ function esmGuardBindingAuth(ast) {
       for (const item of node) scan(item);
       return;
     }
-    if ((node.type === 'FunctionDeclaration' || node.type === 'ClassDeclaration') && node.id?.name) checkDeclName(node.id.name);
-    if (node.type === 'VariableDeclarator' && node.id?.type === 'Identifier') checkDeclName(node.id.name);
-    if (node.type === 'AssignmentExpression' && node.left?.type === 'Identifier') checkDeclName(node.left.name);
+    if ((node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ClassDeclaration' || node.type === 'ClassExpression') && node.id?.name) {
+      checkDeclName(node.id.name);
+    }
+    if (isFunctionNode(node) && Array.isArray(node.params)) {
+      for (const param of node.params) collectPatternNames(param, checkDeclName);
+    }
+    if (node.type === 'CatchClause' && node.param) collectPatternNames(node.param, checkDeclName);
+    if (node.type === 'VariableDeclarator' && node.id) collectPatternNames(node.id, checkDeclName);
+    if (node.type === 'AssignmentExpression' && node.left) collectPatternNames(node.left, checkDeclName);
+    if ((node.type === 'ForInStatement' || node.type === 'ForOfStatement') && node.left && node.left.type !== 'VariableDeclaration') {
+      collectPatternNames(node.left, checkDeclName);
+    }
+    if (node.type === 'UpdateExpression' && node.argument) collectPatternNames(node.argument, checkDeclName);
     for (const key of Object.keys(node)) {
       if (!AST_SKIP.has(key)) scan(node[key]);
     }
@@ -642,21 +681,39 @@ function isProcessArgvNode(node) {
   );
 }
 
+function isFlagDropFilter(fn) {
+  if (!fn || (fn.type !== 'ArrowFunctionExpression' && fn.type !== 'FunctionExpression')) return false;
+  if (fn.params?.length !== 1 || fn.params[0]?.type !== 'Identifier') return false;
+  const param = fn.params[0].name;
+  let expr = fn.body;
+  if (expr?.type === 'BlockStatement') {
+    if (expr.body?.length !== 1 || expr.body[0]?.type !== 'ReturnStatement') return false;
+    expr = expr.body[0].argument;
+  }
+  if (expr?.type !== 'BinaryExpression' || expr.operator !== '!==') return false;
+  const isFlagLit = (n) => n?.type === 'Literal' && typeof n.value === 'string' && n.value.startsWith('-');
+  const isParam = (n) => n?.type === 'Identifier' && n.name === param;
+  return (isParam(expr.left) && isFlagLit(expr.right)) || (isFlagLit(expr.left) && isParam(expr.right));
+}
+
 function isArgvSlice2Expr(node) {
   if (node?.type !== 'CallExpression' || node.callee?.type !== 'MemberExpression' || node.callee.computed) return false;
   const method = node.callee.property?.type === 'Identifier' ? node.callee.property.name : null;
   if (method === 'slice' && isProcessArgvNode(node.callee.object)) {
     return node.arguments?.length === 1 && node.arguments[0]?.type === 'Literal' && node.arguments[0].value === 2;
   }
-  if (method === 'filter') return isArgvSlice2Expr(node.callee.object);
+  if (method === 'filter' && node.arguments?.length === 1 && isFlagDropFilter(node.arguments[0])) {
+    return isArgvSlice2Expr(node.callee.object);
+  }
   return false;
 }
 
 // Whether a caller module passes only the CLI's argv[2] app argument to its
-// imported `provisionTestData` binding (never a literal app id or fallback).
+// imported `provisionTestData` binding (never a literal, shadowed param, or fallback).
 function callerPreservesAppIdentity(ast, localFnName) {
   if (!ast || !localFnName || astMayMutateProcessArgv(ast, false)) return false;
   const argvAppVars = new Set();
+  const argvDeclNodes = new Set();
   for (const stmt of ast.body ?? []) {
     if (stmt.type !== 'VariableDeclaration' || stmt.kind !== 'const') continue;
     for (const decl of stmt.declarations ?? []) {
@@ -669,33 +726,136 @@ function callerPreservesAppIdentity(ast, localFnName) {
         && decl.init.property.value === 2
       ) {
         argvAppVars.add(decl.id.name);
+        argvDeclNodes.add(decl);
       } else if (
         decl.id?.type === 'ArrayPattern'
         && decl.id.elements?.[0]?.type === 'Identifier'
         && isArgvSlice2Expr(decl.init)
       ) {
         argvAppVars.add(decl.id.elements[0].name);
+        argvDeclNodes.add(decl);
       }
     }
   }
+  if (argvAppVars.size === 0) return false;
+  // Reject any nested/shadowing binding or reassignment of an argvAppVar.
+  const shadowed = new Set();
+  const checkShadow = (node) => {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      for (const item of node) checkShadow(item);
+      return;
+    }
+    const mark = (name) => {
+      if (argvAppVars.has(name)) shadowed.add(name);
+    };
+    if (node.type === 'VariableDeclarator' && !argvDeclNodes.has(node) && node.id) collectPatternNames(node.id, mark);
+    if ((node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ClassDeclaration' || node.type === 'ClassExpression') && node.id?.name) mark(node.id.name);
+    if (isFunctionNode(node) && Array.isArray(node.params)) {
+      for (const param of node.params) collectPatternNames(param, mark);
+    }
+    if (node.type === 'CatchClause' && node.param) collectPatternNames(node.param, mark);
+    if (node.type === 'AssignmentExpression' && node.left) collectPatternNames(node.left, mark);
+    if ((node.type === 'ForInStatement' || node.type === 'ForOfStatement') && node.left && node.left.type !== 'VariableDeclaration') {
+      collectPatternNames(node.left, mark);
+    }
+    if (node.type === 'UpdateExpression' && node.argument) collectPatternNames(node.argument, mark);
+    for (const key of Object.keys(node)) {
+      if (!AST_SKIP.has(key)) checkShadow(node[key]);
+    }
+  };
+  checkShadow(ast);
   let valid = true;
   walkAstIdentifiers(ast, (idNode, ancestors) => {
     if (!valid || idNode.name !== localFnName) return;
     const parent = ancestors[ancestors.length - 1];
     const okCall = Boolean(
-      parent?.type === 'CallExpression'
+      !ancestors.some(isFunctionNode)
+      && parent?.type === 'CallExpression'
       && parent.callee === idNode
       && parent.arguments?.length >= 1
       && parent.arguments[0]?.type === 'Identifier'
-      && argvAppVars.has(parent.arguments[0].name),
+      && argvAppVars.has(parent.arguments[0].name)
+      && !shadowed.has(parent.arguments[0].name),
     );
     if (!okCall) valid = false;
   });
   return valid;
 }
 
+// Tokenize one shell segment while noting whether any `$` in a word was
+// suppressed by single quotes or backslash escapes (e.g. `'$APP'` or `\$APP`).
+function tokenizeShellWordsWithExpansion(segment) {
+  const words = [];
+  let current = '';
+  let hasToken = false;
+  let literalDollar = false;
+  let quote = null;
+  for (let i = 0; i < segment.length; i++) {
+    const ch = segment[i];
+    const next = segment[i + 1];
+    if (quote === "'") {
+      if (ch === "'") quote = null;
+      else {
+        if (ch === '$') literalDollar = true;
+        current += ch;
+      }
+      hasToken = true;
+      continue;
+    }
+    if (ch === '\\' && next !== undefined) {
+      if (next === '\n') {
+        i++;
+        continue;
+      }
+      if (next === '\r' && segment[i + 2] === '\n') {
+        i += 2;
+        continue;
+      }
+      if (next === '$') literalDollar = true;
+      current += next;
+      hasToken = true;
+      i++;
+      continue;
+    }
+    if (segment.startsWith('${{', i)) {
+      const close = segment.indexOf('}}', i + 3);
+      if (close !== -1) {
+        current += segment.slice(i, close + 2);
+        hasToken = true;
+        i = close + 1;
+        continue;
+      }
+    }
+    if (quote === '"') {
+      if (ch === '"') quote = null;
+      else current += ch;
+      hasToken = true;
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      hasToken = true;
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      if (hasToken) {
+        words.push({ value: current, literalDollar });
+        current = '';
+        hasToken = false;
+        literalDollar = false;
+      }
+      continue;
+    }
+    current += ch;
+    hasToken = true;
+  }
+  if (hasToken) words.push({ value: current, literalDollar });
+  return words;
+}
+
 // Whether every CATALOG CI invocation of `entryFile` passes `${{ matrix.app }}`
-// (directly or via an unmodified single-step env var) as its first CLI argument.
+// (directly or via an expanded, unmodified single-step env var) as its first CLI argument.
 function ciCommandsPreserveMatrixApp(catalogCmds, entryFile) {
   for (const entry of catalogCmds ?? []) {
     const cmd = typeof entry === 'string' ? entry : entry.cmd;
@@ -706,13 +866,14 @@ function ciCommandsPreserveMatrixApp(catalogCmds, entryFile) {
       const seg = segments[segIdx];
       if (!seg.includes(entryFile)) continue;
       if (segIdx !== 0 || /`|\$\(/.test(seg)) return false;
-      const words = tokenizeShellWords(seg);
-      const entryIdx = words.findIndex((w) => w === entryFile || w === `./${entryFile}`);
+      const words = tokenizeShellWordsWithExpansion(seg);
+      const entryIdx = words.findIndex((w) => w.value === entryFile || w.value === `./${entryFile}`);
       if (entryIdx < 0 || entryIdx + 1 >= words.length) return false;
-      if (words.slice(0, entryIdx).some((w) => w.includes('=') || w === 'env')) return false;
-      const arg = words[entryIdx + 1];
-      if (arg === '${{ matrix.app }}') continue;
-      const varMatch = arg.match(/^\$(?:([A-Za-z_]\w*)|\{([A-Za-z_]\w*)\})$/);
+      if (words.slice(0, entryIdx).some((w) => w.value.includes('=') || w.value === 'env')) return false;
+      const argToken = words[entryIdx + 1];
+      if (argToken.value === '${{ matrix.app }}') continue;
+      if (argToken.literalDollar) return false;
+      const varMatch = argToken.value.match(/^\$(?:([A-Za-z_]\w*)|\{([A-Za-z_]\w*)\})$/);
       if (!varMatch || !stepEnv) return false;
       const varName = varMatch[1] ?? varMatch[2];
       if (!Object.hasOwn(stepEnv, varName) || String(stepEnv[varName]).trim() !== '${{ matrix.app }}') return false;
@@ -2112,6 +2273,8 @@ export async function loadConservativeWorkspaceGraph(root) {
   const runtimeWorkspaceEdges = new Map();
   const externalImporterDeps = new Map();
   const analyzedRootFiles = new Map();
+  const moduleImportEdges = new Map();
+  const opaqueImporters = new Set();
   const rootFileImportModes = new Map();
   const recordImportMode = (target, namedImports, importerFile = null, localBindings = null) => {
     const entry = rootFileImportModes.get(target) ?? { allExports: false, names: new Set(), importers: [] };
@@ -2293,20 +2456,26 @@ export async function loadConservativeWorkspaceGraph(root) {
       }
     }
     const runtimeTargets = new Set();
+    const importedFiles = new Set();
     if (analysis) {
       for (const spec of analysis.specifiers) {
         if (spec.value === null) {
+          opaqueImporters.add(file);
           if (fileOwner) externalImporterDeps.set(file, fileOwner);
           continue;
         }
         if (spec.value.startsWith('.') || spec.value.startsWith('/')) {
           const resolvedTarget = relative(root, resolve(root, dirname(file), spec.value)).split(sep).join('/');
-          if ((ROOT_DIRS.some((dir) => resolvedTarget.startsWith(dir)) || ROOT_CONFIG.test(resolvedTarget)) && resolvedTarget !== file) {
-            recordImportMode(resolvedTarget, spec.namedImports, file, spec.localBindings);
+          if (resolvedTarget !== file) {
+            importedFiles.add(resolvedTarget);
+            if (ROOT_DIRS.some((dir) => resolvedTarget.startsWith(dir)) || ROOT_CONFIG.test(resolvedTarget)) {
+              recordImportMode(resolvedTarget, spec.namedImports, file, spec.localBindings);
+            }
           }
           continue;
         }
         if (isBuiltin(spec.value)) continue;
+        opaqueImporters.add(file);
         const pkgName = spec.value.startsWith('@') ? spec.value.split('/').slice(0, 2).join('/') : spec.value.split('/')[0];
         if (nodeByPackageName.has(pkgName)) {
           const wsNode = nodeByPackageName.get(pkgName);
@@ -2323,6 +2492,7 @@ export async function loadConservativeWorkspaceGraph(root) {
         if (!isBuiltin(name) && !nodeByPackageName.has(name)) externalImporterDeps.set(file, fileOwner);
       }
     }
+    if (importedFiles.size > 0) moduleImportEdges.set(file, importedFiles);
     if (runtimeTargets.size > 0) runtimeWorkspaceEdges.set(file, runtimeTargets);
     const imports = [...text.matchAll(ROOT_IMPORT)].map(([, path]) => relative(root, resolve(root, dirname(file), path)).split(sep).join('/'));
     const named = [...text.matchAll(ROOT_NAMED)].map(([, path, dir, name]) => path ?? `${dir}/${name}`);
@@ -2343,26 +2513,93 @@ export async function loadConservativeWorkspaceGraph(root) {
     }
   }
   const catalogDirect = edges.get(CATALOG) ?? new Set();
-  const rootReachable = (start) => {
+  const extraPeerCache = new Map();
+  const loadPeerModule = async (peer) => {
+    if (analyzedRootFiles.has(peer)) {
+      return {
+        kind: 'js',
+        ast: analyzedRootFiles.get(peer).ast,
+        imports: moduleImportEdges.get(peer) ?? new Set(),
+        opaque: opaqueImporters.has(peer),
+      };
+    }
+    if (extraPeerCache.has(peer)) return extraPeerCache.get(peer);
+    if (peer.endsWith('.json') && await isRegularUnlinkedFile(root, peer)) {
+      const info = { kind: 'json' };
+      extraPeerCache.set(peer, info);
+      return info;
+    }
+    if (!SOURCE_FILE.test(peer) || !await isRegularUnlinkedFile(root, peer)) {
+      const info = { kind: 'opaque' };
+      extraPeerCache.set(peer, info);
+      return info;
+    }
+    const source = await readFile(join(root, peer), 'utf8').catch(() => null);
+    if (source === null) {
+      const info = { kind: 'opaque' };
+      extraPeerCache.set(peer, info);
+      return info;
+    }
+    const analysis = analyzeScriptFile(withoutLineComments(source, peer), peer);
+    if (!analysis) {
+      const info = { kind: 'opaque' };
+      extraPeerCache.set(peer, info);
+      return info;
+    }
+    const imports = new Set();
+    let opaque = false;
+    for (const spec of analysis.specifiers) {
+      if (spec.value === null) {
+        opaque = true;
+        continue;
+      }
+      if (spec.value.startsWith('.') || spec.value.startsWith('/')) {
+        const resolvedTarget = relative(root, resolve(root, dirname(peer), spec.value)).split(sep).join('/');
+        if (resolvedTarget !== peer) imports.add(resolvedTarget);
+        continue;
+      }
+      if (!isBuiltin(spec.value)) opaque = true;
+    }
+    const info = { kind: 'js', ast: analysis.ast, imports, opaque };
+    extraPeerCache.set(peer, info);
+    return info;
+  };
+  const coLoadedModules = async (start) => {
     const seen = new Set([start]);
     const stack = [start];
+    let hasOpaque = false;
     while (stack.length) {
-      for (const next of edges.get(stack.pop()) ?? []) {
-        if (/^(?:scripts|test-utils|registry|test)\//.test(next) && !seen.has(next)) {
+      const current = stack.pop();
+      const info = await loadPeerModule(current);
+      if (info.kind === 'opaque') {
+        hasOpaque = true;
+        continue;
+      }
+      if (info.kind === 'json') continue;
+      if (info.opaque) hasOpaque = true;
+      for (const next of info.imports) {
+        if (!seen.has(next)) {
           seen.add(next);
           stack.push(next);
         }
       }
     }
-    return seen;
+    return { seen, hasOpaque };
   };
-  const entryReaches = new Map([...catalogDirect].map((entry) => [entry, rootReachable(entry)]));
-  const coLoadedMutatesArgv = (targetFile) => {
-    for (const [entry, reached] of entryReaches) {
-      if (!reached.has(targetFile)) continue;
-      for (const peer of reached) {
-        if (!analyzedRootFiles.has(peer)) continue;
-        if (astMayMutateProcessArgv(analyzedRootFiles.get(peer).ast, peer !== entry)) return true;
+  const entryReaches = new Map();
+  for (const entry of catalogDirect) {
+    if (!SOURCE_FILE.test(entry)) continue;
+    entryReaches.set(entry, await coLoadedModules(entry));
+  }
+  const coLoadedMutatesArgv = async (targetFile) => {
+    for (const [entry, { seen, hasOpaque }] of entryReaches) {
+      if (!seen.has(targetFile)) continue;
+      if (hasOpaque) return true;
+      for (const peer of seen) {
+        const info = await loadPeerModule(peer);
+        if (info.kind === 'json') continue;
+        if (info.kind !== 'js') return true;
+        if (astMayMutateProcessArgv(info.ast, peer !== entry)) return true;
       }
     }
     return false;
@@ -2373,14 +2610,25 @@ export async function loadConservativeWorkspaceGraph(root) {
   for (const [file, { ast, workspaceRefs }] of analyzedRootFiles) {
     if (file === 'scripts/lib/e2e-test-data.mjs') {
       const mode = rootFileImportModes.get(file);
-      const callersPreserveIdentity = Boolean(mode) && mode.importers.every(({ file: importerFile, bindings: impBindings }) => {
-        const dispatchBindings = impBindings.filter((b) => b.imported === 'provisionTestData');
-        if (dispatchBindings.length === 0) return true;
-        if (!catalogDirect.has(importerFile)) return false;
-        const callerAst = analyzedRootFiles.get(importerFile)?.ast;
-        if (!ciCommandsPreserveMatrixApp(expandedByEntry.get(CATALOG), importerFile)) return false;
-        return dispatchBindings.every((b) => callerPreservesAppIdentity(callerAst, b.local));
-      });
+      let callersPreserveIdentity = Boolean(mode);
+      if (callersPreserveIdentity) {
+        for (const { file: importerFile, bindings: impBindings } of mode.importers) {
+          const dispatchBindings = impBindings.filter((b) => b.imported === 'provisionTestData');
+          if (dispatchBindings.length === 0) continue;
+          if (!catalogDirect.has(importerFile) || await coLoadedMutatesArgv(importerFile)) {
+            callersPreserveIdentity = false;
+            break;
+          }
+          const callerAst = analyzedRootFiles.get(importerFile)?.ast;
+          if (
+            !ciCommandsPreserveMatrixApp(expandedByEntry.get(CATALOG), importerFile)
+            || !dispatchBindings.every((b) => callerPreservesAppIdentity(callerAst, b.local))
+          ) {
+            callersPreserveIdentity = false;
+            break;
+          }
+        }
+      }
       const callerSafe = !catalogDirect.has(file) && Boolean(mode) && !mode.allExports && !mode.names.has('provisioners') && callersPreserveIdentity;
       const prov = callerSafe ? computeProvisionerOnlyRanges(ast) : { ok: false, entries: [] };
       e2eProvisionersNarrowable = prov.ok;
@@ -2417,7 +2665,7 @@ export async function loadConservativeWorkspaceGraph(root) {
     if (!catalogDirect.has(file) && /^(?:scripts|test-utils|registry|test)\//.test(file)) {
       const mode = rootFileImportModes.get(file);
       if (mode && !mode.allExports && mode.names.size > 0) {
-        skipRanges = computeUnreachableExportRanges(ast, mode.names, coLoadedMutatesArgv(file));
+        skipRanges = computeUnreachableExportRanges(ast, mode.names, await coLoadedMutatesArgv(file));
       }
     }
     if (skipRanges.length === 0) continue;
