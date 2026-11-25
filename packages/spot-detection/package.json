@@ -1,0 +1,44 @@
+{
+  "name": "@neurodesk/spot-detection",
+  "version": "0.1.20261124",
+  "description": "smFISH 2D and 3D spot detection (Big-FISH LoG detector, automatic elbow threshold, Gaussian sub-pixel fit, per-cell counts) and portable command line",
+  "type": "module",
+  "license": "BSD-3-Clause",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@neurodesk/webapp-components": "workspace:*"
+  },
+  "bin": {
+    "spot-detection": "./bin/spot-detection.js"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./bigfish": "./src/bigfish.js",
+    "./subpixel": "./src/subpixel.js",
+    "./outputs": "./src/outputs.js",
+    "./pipeline": "./src/pipeline.js",
+    "./settings": "./src/settings.js",
+    "./image-stack": "./src/image-stack.js",
+    "./volumes": "./src/volumes.js",
+    "./synthetic": "./src/synthetic.js",
+    "./node": "./src/node.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check bin/spot-detection.js && node --check src/index.js && node --check src/settings.js && node --check src/bigfish.js && node --check src/subpixel.js && node --check src/outputs.js && node --check src/pipeline.js && node --check src/image-stack.js && node --check src/volumes.js && node --check src/synthetic.js && node --check src/node.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/spot-detection"
+  }
+}

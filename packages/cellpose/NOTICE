@@ -1,0 +1,27 @@
+Cellpose Webapp — Third-Party Notices
+
+1. Cellpose 3.1.1.1 source code (ported to JavaScript in src/cellpose.js)
+   Source: https://github.com/MouseLand/cellpose (tag v3.1.1.1)
+   Copyright © 2020 Howard Hughes Medical Institute
+   License: BSD 3-Clause License (see LICENSE)
+
+2. Pretrained Cellpose 3 model weights (`cyto3` and `nuclei`)
+   Repository & license: https://github.com/MouseLand/cellpose (tag v3.1.1.1, LICENSE & README.md)
+   Download URLs: https://www.cellpose.org/models/cyto3 and https://www.cellpose.org/models/nucleitorch_0
+   Copyright © 2020 Howard Hughes Medical Institute
+   Weight license: BSD 3-Clause License (see LICENSE)
+   Training-data notice: Per the tagged Cellpose v3.1.1.1 README, training datasets used for
+   `cyto3` and `nuclei` include portions under non-commercial (CC-BY-NC) restrictions. Review the
+   upstream Cellpose terms before commercial use.
+
+3. Example microscopy data (`allen-cells-2d.ome.tif`, `allen-cells-3d.ome.tif`)
+   Derived from `skimage.data.cells3d()` (Allen Institute for Cell Science).
+   License: CC0 1.0 Universal (Public Domain Dedication).
+
+4. References
+   - Stringer C, Wang T, Michaelos M, Pachitariu M. Cellpose: a generalist algorithm
+     for cellular segmentation. Nature Methods 18, 100–106 (2021).
+     https://doi.org/10.1038/s41592-020-01018-x
+   - Stringer C, Pachitariu M. Cellpose3: one-click image restoration for improved
+     cellular segmentation. Nature Methods 22, 592–599 (2025).
+     https://doi.org/10.1038/s41592-025-02595-5

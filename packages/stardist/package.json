@@ -1,0 +1,46 @@
+{
+  "name": "@neurodesk/stardist",
+  "version": "0.2.20261124",
+  "description": "StarDist 2D and 3D star-convex nucleus segmentation core and portable command line",
+  "type": "module",
+  "license": "BSD-3-Clause",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@neurodesk/webapp-components": "workspace:*",
+    "clipper-lib": "6.4.2",
+    "fast-png": "8.0.0",
+    "onnxruntime-node": "1.29.0"
+  },
+  "bin": {
+    "stardist": "./bin/stardist.js"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./models": "./src/models.js",
+    "./settings": "./src/settings.js",
+    "./stardist": "./src/stardist.js",
+    "./stardist3d": "./src/stardist3d.js",
+    "./image-io": "./src/image-io.js",
+    "./manifest": "./model.manifest.json",
+    "./node": "./src/node.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "model.manifest.json",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check bin/stardist.js && node --check src/index.js && node --check src/models.js && node --check src/settings.js && node --check src/stardist.js && node --check src/stardist3d.js && node --check src/image-io.js && node --check src/node.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/stardist"
+  }
+}
