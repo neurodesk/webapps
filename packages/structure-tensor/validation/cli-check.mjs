@@ -138,10 +138,32 @@ try {
   const vecRaw = gunzipSync(readFileSync(join(out3d, "synthetic_fibres_3d_fibre_vectors.nii.gz")), { maxOutputLength: 32 * 1024 * 1024 });
   const dv = new DataView(vecRaw.buffer, vecRaw.byteOffset, vecRaw.byteLength);
   assert.equal(dv.getInt32(0, true), 348);
+  assert.equal(dv.getInt16(70, true), 16, "fibre vectors datatype must be float32 (16)");
   assert.deepEqual([dv.getInt16(42, true), dv.getInt16(44, true), dv.getInt16(46, true), dv.getInt16(48, true)], [64, 64, 32, 3]);
+  // Independently sample vector field (vx, vy, vz) from raw frame-major NIfTI bytes at left and right lattice centers.
+  const voxOffset = Math.ceil(dv.getFloat32(108, true));
+  const voxelsPerFrame = 64 * 64 * 32;
+  const vecData = new Float32Array(vecRaw.buffer, vecRaw.byteOffset + voxOffset, voxelsPerFrame * 3);
+  const sampleVec = (idx) => [vecData[idx], vecData[voxelsPerFrame + idx], vecData[2 * voxelsPerFrame + idx]];
+  const checkVector = (vec, expectedAzDeg, expectedElDeg, label) => {
+    const norm = Math.hypot(vec[0], vec[1], vec[2]);
+    assert.ok(Math.abs(norm - 1) < 1e-3, `${label}: expected unit vector, got |v|=${norm}`);
+    // Fibre orientation is sign-invariant (+v and -v represent the same axis; orient with vx >= 0 for angle comparison).
+    const sign = vec[0] < 0 ? -1 : 1;
+    const vx = vec[0] * sign;
+    const vy = vec[1] * sign;
+    const vz = vec[2] * sign;
+    const azDeg = (Math.atan2(-vy, vx) * 180) / Math.PI;
+    const elDeg = (Math.asin(Math.max(-1, Math.min(1, vz))) * 180) / Math.PI;
+    assert.ok(Math.abs(angleDiff(azDeg, expectedAzDeg)) < 3, `${label}: raw vector azimuth ${azDeg.toFixed(2)}° vs ${expectedAzDeg}°`);
+    assert.ok(Math.abs(elDeg - expectedElDeg) < 3, `${label}: raw vector elevation ${elDeg.toFixed(2)}° vs ${expectedElDeg}°`);
+  };
+  checkVector(sampleVec(leftIdx), 30, 0, "left-half fibre vector");
+  checkVector(sampleVec(rightIdx), -45, 40, "right-half fibre vector");
 
+  console.log(`network_isolation=${useUnshare ? "unshare-rn" : "fallback"}`);
   console.log(
-    `PASS structure-tensor (${useUnshare ? "unshare -rn" : "offline"}): 2D dominant=${summary2d.dominant.orientation.toFixed(2)}° (counted=${summary2d.countedVoxels}), 3D left=(${azTiff.data[leftIdx].toFixed(1)}°, ${elTiff.data[leftIdx].toFixed(1)}°) right=(${azTiff.data[rightIdx].toFixed(1)}°, ${elTiff.data[rightIdx].toFixed(1)}°)`,
+    `PASS structure-tensor (${useUnshare ? "unshare -rn" : "fallback"}): 2D dominant=${summary2d.dominant.orientation.toFixed(2)}° (counted=${summary2d.countedVoxels}), 3D left=(${azTiff.data[leftIdx].toFixed(1)}°, ${elTiff.data[leftIdx].toFixed(1)}°) right=(${azTiff.data[rightIdx].toFixed(1)}°, ${elTiff.data[rightIdx].toFixed(1)}°)`,
   );
 } finally {
   rmSync(work, { recursive: true, force: true });

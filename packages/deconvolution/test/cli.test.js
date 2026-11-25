@@ -183,3 +183,158 @@ test("deconvolveFile runs RL, RL-TV, measured PSF and preserves NIfTI qform & sf
   const check = await checkInstallation();
   assert.equal(check.ok, true);
 });
+
+test("deconvolveFile preserves NIfTI sform diagonal [2, -3, 4] with pixdim [1, 1, 1] verbatim when no spacing override is passed", async (t) => {
+  const work = await mkdtemp(join(tmpdir(), "deconv-sform-"));
+  t.after(() => rm(work, { recursive: true, force: true }));
+
+  const dims = [9, 16, 16];
+  const data = new Float32Array(9 * 16 * 16).fill(10);
+  data[(4 * 16 + 8) * 16 + 8] = 200;
+
+  // Build NIfTI-1 with pixdim=[1, 1, 1] (unit=3 micrometres -> 1 um isotropic) and distinct sform diagonal [2, -3, 4] + qform!
+  const niiBuf = stackNifti(data, dims, { x: 1, y: 1, z: 1 });
+  const dv = new DataView(niiBuf);
+  dv.setUint8(123, 3); // micrometres
+  dv.setFloat32(80, 1, true);
+  dv.setFloat32(84, 1, true);
+  dv.setFloat32(88, 1, true);
+  dv.setInt16(252, 1, true); // qform_code = 1
+  dv.setFloat32(268, 11, true);
+  dv.setFloat32(272, 22, true);
+  dv.setFloat32(276, 33, true);
+  dv.setInt16(254, 2, true); // sform_code = 2
+  dv.setFloat32(280, 2, true);
+  dv.setFloat32(284, 0, true);
+  dv.setFloat32(288, 0, true);
+  dv.setFloat32(292, 100, true);
+  dv.setFloat32(296, 0, true);
+  dv.setFloat32(300, -3, true);
+  dv.setFloat32(304, 0, true);
+  dv.setFloat32(308, 200, true);
+  dv.setFloat32(312, 0, true);
+  dv.setFloat32(316, 0, true);
+  dv.setFloat32(320, 4, true);
+  dv.setFloat32(324, 300, true);
+
+  const inNii = join(work, "aniso_sform.nii.gz");
+  await writeFile(inNii, gzipSync(new Uint8Array(niiBuf)));
+
+  const psfData = new Float32Array(5 * 5 * 5);
+  psfData[(2 * 5 + 2) * 5 + 2] = 10;
+  const psfPath = join(work, "psf.tif");
+  await writeFile(psfPath, new Uint8Array(stackTiff(psfData, [5, 5, 5], { x: 1, y: 1, z: 1 })));
+
+  const outDir = join(work, "out");
+  await deconvolveFile({
+    input: inNii,
+    outputDir: outDir,
+    options: { psf: psfPath, method: "rl", iterations: "2" },
+  });
+
+  const outBytes = gunzipBounded(await readFile(join(outDir, "aniso_sform_deconvolved.nii.gz")));
+  const odv = new DataView(outBytes);
+  assert.equal(odv.getInt16(252, true), 1);
+  assert.equal(odv.getFloat32(268, true), 11);
+  assert.equal(odv.getFloat32(272, true), 22);
+  assert.equal(odv.getFloat32(276, true), 33);
+  assert.equal(odv.getInt16(254, true), 2);
+  assert.equal(odv.getFloat32(280, true), 2);
+  assert.equal(odv.getFloat32(292, true), 100);
+  assert.equal(odv.getFloat32(300, true), -3);
+  assert.equal(odv.getFloat32(308, true), 200);
+  assert.equal(odv.getFloat32(320, true), 4);
+  assert.equal(odv.getFloat32(324, true), 300);
+  assert.equal(odv.getFloat32(80, true), 1);
+  assert.equal(odv.getFloat32(84, true), 1);
+  assert.equal(odv.getFloat32(88, true), 1);
+});
+
+test("deconvolveFile supports NIfTI-2 input and preserves qform and sform in NIfTI-2 output", async (t) => {
+  const work = await mkdtemp(join(tmpdir(), "deconv-nifti2-"));
+  t.after(() => rm(work, { recursive: true, force: true }));
+
+  const dims = [9, 16, 16];
+  const voxels = new Float32Array(9 * 16 * 16).fill(10);
+  voxels[(4 * 16 + 8) * 16 + 8] = 200;
+
+  const buf = new ArrayBuffer(544 + voxels.byteLength);
+  const v = new DataView(buf);
+  v.setInt32(0, 540, true);
+  new Uint8Array(buf, 4, 8).set([0x6e, 0x2b, 0x32, 0x00, 0x0d, 0x0a, 0x1a, 0x0a]);
+  v.setInt16(12, 16, true);
+  v.setInt16(14, 32, true);
+  v.setBigInt64(16, 3n, true);
+  v.setBigInt64(24, 16n, true);
+  v.setBigInt64(32, 16n, true);
+  v.setBigInt64(40, 9n, true);
+  for (let i = 0; i < 4; i += 1) v.setBigInt64(48 + i * 8, 1n, true);
+  v.setFloat64(104, 1, true);
+  v.setFloat64(112, 0.1, true);
+  v.setFloat64(120, 0.1, true);
+  v.setFloat64(128, 0.2, true);
+  v.setBigInt64(168, 544n, true);
+  v.setFloat64(176, 1, true);
+  v.setFloat64(184, 0, true);
+  v.setInt32(344, 1, true); // qform_code
+  v.setFloat64(376, 5, true);
+  v.setFloat64(384, 6, true);
+  v.setFloat64(392, 7, true);
+  v.setInt32(348, 2, true); // sform_code
+  v.setFloat64(400, 2, true);
+  v.setFloat64(440, -3, true);
+  v.setFloat64(480, 4, true);
+  v.setInt32(500, 3, true); // micrometres
+  new Uint8Array(buf, 544).set(new Uint8Array(voxels.buffer));
+
+  const inNii2 = join(work, "stack2.nii.gz");
+  await writeFile(inNii2, gzipSync(new Uint8Array(buf)));
+  const outDir = join(work, "out-nifti2");
+  await deconvolveFile({
+    input: inNii2,
+    outputDir: outDir,
+    options: { modality: "widefield", method: "rl", iterations: "2", "psf-xy": "5", "psf-z": "5" },
+  });
+  const outBytes = gunzipBounded(await readFile(join(outDir, "stack2_deconvolved.nii.gz")));
+  const odv = new DataView(outBytes);
+  assert.equal(odv.getInt32(0, true), 540, "NIfTI-2 output preserved");
+  assert.equal(odv.getInt32(344, true), 1);
+  assert.equal(odv.getFloat64(376, true), 5);
+  assert.equal(odv.getInt32(348, true), 2);
+  assert.equal(odv.getFloat64(400, true), 2);
+  assert.equal(odv.getFloat64(440, true), -3);
+  assert.equal(odv.getFloat64(480, true), 4);
+});
+
+test("strict Node API validation and failed-write .partial cleanup", async (t) => {
+  const work = await mkdtemp(join(tmpdir(), "deconv-strict-"));
+  t.after(() => rm(work, { recursive: true, force: true }));
+
+  assert.throws(() => parseCliOptions({ bogusFlag: "1" }), /Unknown option/);
+  assert.throws(() => parseCliOptions({ overwrite: "false" }), /must be a boolean/);
+  assert.throws(() => parseCliOptions({ offline: "true" }), /must be a boolean/);
+  await assert.rejects(() => checkInstallation({ cacheDir: "" }), /non-empty/);
+  await assert.rejects(() => checkInstallation({ extra: 1 }), /Unknown option/);
+
+  const prevOffline = process.env.NEURODESK_OFFLINE;
+  try {
+    process.env.NEURODESK_OFFLINE = "1";
+    assert.throws(() => parseCliOptions({ offline: false }), /NEURODESK_OFFLINE=1/);
+  } finally {
+    if (prevOffline === undefined) delete process.env.NEURODESK_OFFLINE;
+    else process.env.NEURODESK_OFFLINE = prevOffline;
+  }
+
+  const dir = join(work, "efbig");
+  await mkdir(dir);
+  await assert.rejects(
+    () => commitOutputs(dir, [{ name: "a.tif", data: Buffer.from("abc") }], {
+      writeFileFn: async (p) => {
+        await writeFile(p, Buffer.from("a"));
+        throw Object.assign(new Error("EFBIG"), { code: "EFBIG" });
+      },
+    }),
+    /EFBIG/,
+  );
+  assert.deepEqual(await readdir(dir), []);
+});

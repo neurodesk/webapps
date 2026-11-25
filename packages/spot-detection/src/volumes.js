@@ -7,15 +7,26 @@ const QOFFSET = 268;
 // Build a NIfTI-1 ArrayBuffer whose qform and sform agree (y flipped so row 0 is at the top).
 export function niftiBuffer(image, voxelNm) {
   const [nz, ny, nx] = image.shape.length === 3 ? image.shape : [1, ...image.shape];
-  const [dz, dy, dx] = voxelNm.map((nm) => nm / 1e6);
-  const affine = [[dx, 0, 0, 0], [0, -dy, 0, (ny - 1) * dy], [0, 0, dz, 0], [0, 0, 0, 1]];
+  const [dz, dy, dx] = voxelNm.map((nm) => {
+    const mm = nm / 1e6;
+    const f32 = Math.fround(mm);
+    if (!Number.isFinite(f32) || !(f32 > 0)) {
+      throw new Error(`Voxel size ${nm} nm (${mm} mm) is not representable as a positive finite float32 in NIfTI-1.`);
+    }
+    return mm;
+  });
+  const yOffset = (ny - 1) * dy;
+  if (!Number.isFinite(Math.fround(yOffset))) {
+    throw new Error(`NIfTI-1 y-offset (${yOffset} mm) overflows float32 for height ${ny} and spacing ${dy} mm.`);
+  }
+  const affine = [[dx, 0, 0, 0], [0, -dy, 0, yOffset], [0, 0, dz, 0], [0, 0, 0, 1]];
   const buffer = createNiftiFromVolume({ hdr: { dims: [3, nx, ny, nz, 1, 1, 1, 1], pixDims: [-1, dx, dy, dz, 1, 1, 1, 1], affine }, img: image.data });
   const view = new DataView(buffer);
   view.setFloat32(QUATERN, 1, true);
   view.setFloat32(QUATERN + 4, 0, true);
   view.setFloat32(QUATERN + 8, 0, true);
   view.setFloat32(QOFFSET, 0, true);
-  view.setFloat32(QOFFSET + 4, (ny - 1) * dy, true);
+  view.setFloat32(QOFFSET + 4, yOffset, true);
   view.setFloat32(QOFFSET + 8, 0, true);
   return buffer;
 }

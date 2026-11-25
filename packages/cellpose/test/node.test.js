@@ -177,3 +177,63 @@ test("segmentFile runs full 2D pipeline offline with mocked batch runner and wri
   const csv = await readFile(join(outDir, "synth_cellpose_cells.csv"), "utf8");
   assert.match(csv, /^id,centroid_x,centroid_y,area_px,mean_intensity\n1,/);
 });
+
+test("unconditional ORT_DISABLE_TELEMETRY=1 keeps isolated HOME empty even when ORT_DISABLE_TELEMETRY=0 is inherited", async (t) => {
+  const work = await mkdtemp(join(tmpdir(), "cellpose-telemetry-"));
+  t.after(() => rm(work, { recursive: true, force: true }));
+  const fakeHome = join(work, "home");
+  await mkdir(fakeHome);
+
+  const run = spawnSync(process.execPath, [BIN, "self-check"], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      HOME: fakeHome,
+      XDG_CONFIG_HOME: join(fakeHome, ".config"),
+      XDG_CACHE_HOME: join(fakeHome, ".cache"),
+      XDG_DATA_HOME: join(fakeHome, ".local", "share"),
+      ORT_DISABLE_TELEMETRY: "0",
+      NEURODESK_CELLPOSE_MODEL_DIR: "",
+    },
+  });
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(JSON.parse(run.stdout).ok, true);
+  assert.deepEqual(await readdir(fakeHome), [], "isolated HOME must stay completely empty (no onnxruntime telemetry)");
+});
+
+test("strict Node API validation and failed-write .partial cleanup", async (t) => {
+  const work = await mkdtemp(join(tmpdir(), "cellpose-strict-"));
+  t.after(() => rm(work, { recursive: true, force: true }));
+
+  assert.throws(() => parseCliOptions({ bogus: "1" }), /Unknown option/);
+  assert.throws(() => parseCliOptions({ overwrite: "false" }), /must be a boolean/);
+  assert.throws(() => parseCliOptions({ offline: "true" }), /must be a boolean/);
+  assert.throws(() => parseCliOptions({ do3D: "true" }), /must be a boolean/);
+  await assert.rejects(() => checkInstallation({ cacheDir: "" }), /non-empty/);
+  await assert.rejects(() => checkInstallation({ extra: true }), /Unknown option/);
+  await assert.rejects(() => downloadModels({ cacheDir: "   " }), /non-empty/);
+  await assert.rejects(() => downloadModels({ unknownKey: 1 }), /Unknown option/);
+
+  const prevOffline = process.env.NEURODESK_OFFLINE;
+  try {
+    process.env.NEURODESK_OFFLINE = "1";
+    assert.throws(() => parseCliOptions({ offline: false }), /NEURODESK_OFFLINE=1/);
+    await assert.rejects(() => downloadModels({ offline: false }), /NEURODESK_OFFLINE=1/);
+  } finally {
+    if (prevOffline === undefined) delete process.env.NEURODESK_OFFLINE;
+    else process.env.NEURODESK_OFFLINE = prevOffline;
+  }
+
+  const dir = join(work, "efbig");
+  await mkdir(dir);
+  await assert.rejects(
+    () => commitOutputs(dir, [{ name: "a.tif", data: Buffer.from("abc") }], {
+      writeFileFn: async (p) => {
+        await writeFile(p, Buffer.from("a"));
+        throw Object.assign(new Error("EFBIG"), { code: "EFBIG" });
+      },
+    }),
+    /EFBIG/,
+  );
+  assert.deepEqual(await readdir(dir), []);
+});

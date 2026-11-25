@@ -2,7 +2,7 @@
 // Runs the exact same WebAssembly Gibson-Lanni PSF and Richardson-Lucy / RL-TV solver
 // and calibrated TIFF/NIfTI encoders as the Deconvolution web application.
 import { randomBytes } from "node:crypto";
-import { constants as fsConstants, readFileSync } from "node:fs";
+import { constants as fsConstants, readFileSync, rmSync, rmdirSync, unlinkSync } from "node:fs";
 import { lstat, mkdir, open, readdir, rename, rm, rmdir, stat, unlink, writeFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -35,7 +35,7 @@ import {
   prepareMeasuredPsf,
   runSettings,
 } from "./index.js";
-import { MAX_INPUT_BYTES, readVolume } from "./input.js";
+import { MAX_INPUT_BYTES, createFloat32Nifti2, readVolume } from "./input.js";
 
 let loaded = null;
 
@@ -49,7 +49,7 @@ export function loadDeconvolution() {
 
 export const MAX_CLI_INPUT_BYTES = MAX_INPUT_BYTES;
 const CLI_METADATA_BYTES = 2 ** 26;
-const LOCK_NAME = ".deconvolution-run.lock";
+export const LOCK_NAME = ".neurodesk-cli.lock";
 
 export const OPTIONS = Object.freeze({
   modality: {
@@ -170,12 +170,45 @@ export const OPTIONS = Object.freeze({
   },
 });
 
+const ALLOWED_OPTION_KEYS = new Set([
+  "modality",
+  "method",
+  "iterations",
+  "tv-weight",
+  "tvWeight",
+  "na",
+  "immersion-index",
+  "immersionIndex",
+  "sample-index",
+  "sampleIndex",
+  "emission-nm",
+  "emissionNm",
+  "excitation-nm",
+  "excitationNm",
+  "depth-um",
+  "depthUm",
+  "voxel-xy",
+  "voxelXy",
+  "voxel-z",
+  "voxelZ",
+  "psf-xy",
+  "psfXy",
+  "psf-z",
+  "psfZ",
+  "psf",
+  "overwrite",
+  "offline",
+]);
+
 export function optionName(key) {
   return OPTIONS[key]?.flag ?? key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
 }
 
 export function assertNonEmptyString(raw, flag) {
   if (raw === undefined) return undefined;
+  if (typeof raw !== "string" && typeof raw !== "number") {
+    throw new Error(`--${flag} must be a non-empty string.`);
+  }
   const trimmed = String(raw).trim();
   if (!trimmed) throw new Error(`--${flag} requires a non-empty value.`);
   return trimmed;
@@ -189,8 +222,19 @@ export function rejectDisallowedFlags(values, allowed, command) {
   }
 }
 
+function parseBooleanOption(raw, flag) {
+  if (raw === undefined) return false;
+  if (typeof raw !== "boolean") {
+    throw new Error(`--${flag} must be a boolean, got ${typeof raw} (${JSON.stringify(raw)}).`);
+  }
+  return raw;
+}
+
 function parseNumeric(raw, flag, { integer = false, min = -Infinity, max = Infinity } = {}) {
   if (raw === undefined) return undefined;
+  if (typeof raw === "boolean" || raw === null) {
+    throw new Error(`--${flag} must be a finite number, got ${JSON.stringify(raw)}.`);
+  }
   const trimmed = assertNonEmptyString(raw, flag);
   const value = Number(trimmed);
   if (!Number.isFinite(value)) throw new Error(`--${flag} must be a finite number, got '${raw}'.`);
@@ -200,6 +244,15 @@ function parseNumeric(raw, flag, { integer = false, min = -Infinity, max = Infin
 }
 
 export function parseCliOptions(values = {}) {
+  if (values === null || typeof values !== "object" || Array.isArray(values)) {
+    throw new Error("Options must be a plain object.");
+  }
+  for (const [key, value] of Object.entries(values)) {
+    if (value !== undefined && !ALLOWED_OPTION_KEYS.has(key)) {
+      throw new Error(`Unknown option '${key}'.`);
+    }
+  }
+
   const method = assertNonEmptyString(values.method, "method") ?? "rl";
   if (!Object.hasOwn(METHODS, method)) {
     throw new Error(`--method must be one of: ${Object.keys(METHODS).join(", ")}.`);
@@ -232,6 +285,16 @@ export function parseCliOptions(values = {}) {
   if (psfXy !== undefined && psfXy % 2 === 0) throw new Error(`--psf-xy must be an odd integer from 1 to ${MAX_PSF_SIDE}.`);
   if (psfZ !== undefined && psfZ % 2 === 0) throw new Error(`--psf-z must be an odd integer from 1 to ${MAX_PSF_SIDE}.`);
 
+  const overwrite = parseBooleanOption(values.overwrite, "overwrite");
+  const envOffline = process.env.NEURODESK_OFFLINE === "1";
+  if (values.offline !== undefined) {
+    const explicit = parseBooleanOption(values.offline, "offline");
+    if (envOffline && explicit === false) {
+      throw new Error("Cannot set offline: false while NEURODESK_OFFLINE=1 is active.");
+    }
+  }
+  const offline = envOffline || Boolean(values.offline);
+
   return {
     settings,
     optics,
@@ -240,8 +303,8 @@ export function parseCliOptions(values = {}) {
     voxelZ,
     psfXy,
     psfZ,
-    overwrite: Boolean(values.overwrite),
-    offline: Boolean(values.offline),
+    overwrite,
+    offline,
   };
 }
 
@@ -327,7 +390,7 @@ async function mkdirTracking(targetDir) {
 }
 
 export async function claimOutputDir(outputDir, { overwrite = false, readdirFn = readdir } = {}) {
-  if (!outputDir || !String(outputDir).trim()) throw new Error("Output directory path is required.");
+  if (typeof outputDir !== "string" || !outputDir.trim()) throw new Error("Output directory path is required.");
   const dir = resolve(outputDir);
   const createdDirs = await mkdirTracking(dir);
   const cleanupCreated = async () => {
@@ -342,12 +405,52 @@ export async function claimOutputDir(outputDir, { overwrite = false, readdirFn =
   } catch (error) {
     await cleanupCreated();
     if (error.code === "EEXIST") {
-      throw new Error(`Output directory '${outputDir}' is locked by another running deconvolution process (or contains ${LOCK_NAME}).`);
+      throw new Error(`Output directory '${outputDir}' is locked by another running CLI process (or contains ${LOCK_NAME}).`);
     }
     throw error;
   }
   let lockHeld = true;
+  const activePartials = new Set();
+
+  const cleanupSyncOnSignal = (signal) => {
+    for (const p of activePartials) {
+      try {
+        rmSync(p, { recursive: true, force: true });
+      } catch {
+        // Ignore best-effort cleanup error on terminating signal.
+      }
+    }
+    activePartials.clear();
+    if (lockHeld) {
+      lockHeld = false;
+      try {
+        unlinkSync(lockPath);
+      } catch {
+        // Ignore best-effort lock unlink error on terminating signal.
+      }
+    }
+    for (let i = createdDirs.length - 1; i >= 0; i -= 1) {
+      try {
+        rmdirSync(createdDirs[i]);
+      } catch {
+        // Ignore non-empty or already-removed directory on terminating signal.
+      }
+    }
+    process.off("SIGINT", cleanupSyncOnSignal);
+    process.off("SIGTERM", cleanupSyncOnSignal);
+    process.kill(process.pid, signal);
+  };
+
+  process.on("SIGINT", cleanupSyncOnSignal);
+  process.on("SIGTERM", cleanupSyncOnSignal);
+
   const release = async ({ removeCreated = false } = {}) => {
+    process.off("SIGINT", cleanupSyncOnSignal);
+    process.off("SIGTERM", cleanupSyncOnSignal);
+    for (const p of activePartials) {
+      await rm(p, { recursive: true, force: true }).catch(() => {});
+    }
+    activePartials.clear();
     if (lockHeld) {
       lockHeld = false;
       await unlink(lockPath).catch(() => {});
@@ -355,7 +458,7 @@ export async function claimOutputDir(outputDir, { overwrite = false, readdirFn =
     if (removeCreated) await cleanupCreated();
   };
   try {
-    await lockHandle.writeFile(`${JSON.stringify({ pid: process.pid, host: hostname(), startedAt: Date.now() })}\n`, "utf8");
+    await lockHandle.writeFile(`${JSON.stringify({ tool: "deconvolution", pid: process.pid, host: hostname(), startedAt: Date.now() })}\n`, "utf8");
     await lockHandle.close();
     lockHandle = null;
     if (!overwrite) {
@@ -369,10 +472,20 @@ export async function claimOutputDir(outputDir, { overwrite = false, readdirFn =
     await release({ removeCreated: true });
     throw error;
   }
-  return { dir, createdDirs, release };
+  return {
+    dir,
+    createdDirs,
+    trackPartial: (p) => { activePartials.add(p); },
+    untrackPartial: (p) => { activePartials.delete(p); },
+    release,
+  };
 }
 
-export async function commitOutputs(dir, files, { overwrite = false, renameFn = rename } = {}) {
+export async function commitOutputs(
+  dir,
+  files,
+  { overwrite = false, renameFn = rename, writeFileFn = writeFile, trackPartial, untrackPartial } = {},
+) {
   const token = randomBytes(6).toString("hex");
   for (const file of files) {
     const target = join(dir, file.name);
@@ -389,11 +502,16 @@ export async function commitOutputs(dir, files, { overwrite = false, renameFn = 
   try {
     for (const file of files) {
       const partialPath = join(dir, `.${file.name}.${token}.partial`);
-      await writeFile(partialPath, file.data, { flag: "wx" });
-      staged.push({ name: file.name, partialPath, finalPath: join(dir, file.name) });
+      const entry = { name: file.name, partialPath, finalPath: join(dir, file.name) };
+      staged.push(entry);
+      trackPartial?.(partialPath);
+      await writeFileFn(partialPath, file.data, { flag: "wx" });
     }
   } catch (error) {
-    for (const entry of staged) await rm(entry.partialPath, { force: true }).catch(() => {});
+    for (const entry of staged) {
+      await rm(entry.partialPath, { force: true }).catch(() => {});
+      untrackPartial?.(entry.partialPath);
+    }
     throw error;
   }
 
@@ -402,14 +520,14 @@ export async function commitOutputs(dir, files, { overwrite = false, renameFn = 
   try {
     if (overwrite) {
       for (const entry of staged) {
-        let exists = false;
+        let info = null;
         try {
-          await lstat(entry.finalPath);
-          exists = true;
+          info = await lstat(entry.finalPath);
         } catch (error) {
           if (error.code !== "ENOENT") throw error;
         }
-        if (exists) {
+        if (info) {
+          if (info.isDirectory()) throw new Error(`Cannot overwrite existing directory '${entry.finalPath}'.`);
           const backupPath = join(dir, `.${entry.name}.${token}.backup`);
           await renameFn(entry.finalPath, backupPath);
           backedUp.push({ finalPath: entry.finalPath, backupPath });
@@ -418,6 +536,7 @@ export async function commitOutputs(dir, files, { overwrite = false, renameFn = 
     }
     for (const entry of staged) {
       await renameFn(entry.partialPath, entry.finalPath);
+      untrackPartial?.(entry.partialPath);
       committed.push(entry);
     }
   } catch (error) {
@@ -427,7 +546,10 @@ export async function commitOutputs(dir, files, { overwrite = false, renameFn = 
     for (let i = backedUp.length - 1; i >= 0; i -= 1) {
       await rename(backedUp[i].backupPath, backedUp[i].finalPath).catch(() => {});
     }
-    for (const entry of staged) await rm(entry.partialPath, { force: true }).catch(() => {});
+    for (const entry of staged) {
+      await rm(entry.partialPath, { force: true }).catch(() => {});
+      untrackPartial?.(entry.partialPath);
+    }
     throw error;
   }
 
@@ -544,9 +666,18 @@ export async function deconvolveFile({
     const names = outputNames(volume.name);
     const provenanceName = names.tiff.replace(/_deconvolved\.tif$/, "_provenance.json");
     const tiffBytes = new Uint8Array(stackTiff(estimate, volume.dims, spacingUm));
-    const niftiRaw = volume.format === "nifti"
-      ? setNiftiSpacing(createFloat32Nifti(estimate, volume.niftiHeader), spacingUm)
-      : stackNifti(estimate, volume.dims, spacingUm);
+    const spacingOverridden = parsed.voxelXy !== undefined || parsed.voxelZ !== undefined;
+    let niftiRaw;
+    if (volume.format === "nifti") {
+      if (volume.niftiVersion === 2) {
+        niftiRaw = createFloat32Nifti2(estimate, volume.niftiMeta, spacingOverridden ? spacingUm : null);
+      } else {
+        const base = createFloat32Nifti(estimate, volume.niftiHeader);
+        niftiRaw = spacingOverridden ? setNiftiSpacing(base, spacingUm) : base;
+      }
+    } else {
+      niftiRaw = stackNifti(estimate, volume.dims, spacingUm);
+    }
     const niftiGz = gzipSync(new Uint8Array(niftiRaw));
     const psfTiffBytes = new Uint8Array(stackTiff(Float32Array.from(psf.data), psf.dims, spacingUm));
     const record = provenance({
@@ -567,7 +698,12 @@ export async function deconvolveFile({
         { name: names.psfTiff, data: psfTiffBytes },
         { name: provenanceName, data: Buffer.from(`${JSON.stringify(record, null, 2)}\n`, "utf8") },
       ],
-      { overwrite: parsed.overwrite, renameFn },
+      {
+        overwrite: parsed.overwrite,
+        renameFn,
+        trackPartial: reservation.trackPartial,
+        untrackPartial: reservation.untrackPartial,
+      },
     );
     committed = true;
 
@@ -586,7 +722,16 @@ export async function deconvolveFile({
 }
 
 /** Offline self-check: verifies WASM module loading, Gibson-Lanni PSF and RL solver on a tiny 3D phantom. */
-export async function checkInstallation({ cacheDir } = {}) {
+export async function checkInstallation(opts = {}) {
+  if (opts === null || typeof opts !== "object" || Array.isArray(opts)) {
+    throw new Error("Options must be a plain object.");
+  }
+  for (const [key, value] of Object.entries(opts)) {
+    if (value !== undefined && key !== "cacheDir") {
+      throw new Error(`Unknown option '${key}' for checkInstallation.`);
+    }
+  }
+  const cacheDir = opts.cacheDir !== undefined ? assertNonEmptyString(opts.cacheDir, "cache-dir") : undefined;
   const resolvedCache = cacheDir ? resolve(cacheDir) : undefined;
   const wasm = loadDeconvolution();
   const psf = wasm.gibsonLanniPsf(1.4, 1.518, 1.47, 0.52, 0.0, 0.1, 0.2, 5, 5, 0.0);

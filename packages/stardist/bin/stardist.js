@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-process.env.ORT_DISABLE_TELEMETRY ??= "1";
+process.env.ORT_DISABLE_TELEMETRY = "1";
 import { parseArgs } from "node:util";
 import {
   assertNonEmptyString,

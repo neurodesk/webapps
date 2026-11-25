@@ -140,4 +140,5 @@ if (failures.length) {
   console.error(`\n${failures.length} check(s) failed:\n- ${failures.join("\n- ")}`);
   process.exit(1);
 }
-console.log(`\nAll @neurodesk/cellpose portable CLI checks passed${canUnshare ? " (unshare -rn)" : ""}.`);
+console.log(`network_isolation=${canUnshare ? "unshare-rn" : "fallback"}`);
+console.log(`\nAll @neurodesk/cellpose portable CLI checks passed (${canUnshare ? "unshare -rn" : "fallback"}).`);

@@ -2721,6 +2721,9 @@ importers:
       jpeg-js:
         specifier: 0.4.4
         version: 0.4.4
+      pngjs:
+        specifier: 7.0.0
+        version: 7.0.0
 
   packages/syncro:
     dependencies:

@@ -6,8 +6,9 @@ import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
-import { checkInstallation, claimOutputDir, commitOutputs, detectSpotsFile, parseCliOptions } from "../src/node.js";
+import { checkInstallation, claimOutputDir, commitOutputs, detectSpotsFile, LOCK_NAME, parseCliOptions } from "../src/node.js";
 import { syntheticImage } from "../src/synthetic.js";
+import { niftiBuffer } from "../src/volumes.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const binPath = resolve(here, "../bin/spot-detection.js");
@@ -192,6 +193,67 @@ test("output directory lock prevents concurrent runs, cleans up created dirs on 
     assert.equal(readFileSync(join(outDir, "a.csv"), "utf8"), "old-a");
     assert.equal(readFileSync(join(outDir, "b.csv"), "utf8"), "old-b");
     assert.deepEqual(readdirSync(outDir).sort(), ["a.csv", "b.csv"]);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+});
+
+test("rejects float32-overflowing spacing/radii (1e46) in CLI options and niftiBuffer", () => {
+  assert.throws(
+    () => parseCliOptions({ "voxel-yx": "1e46", "radius-yx": "1e46" }),
+    /float32/,
+  );
+  assert.throws(
+    () => parseCliOptions({ "voxel-z": "1e-45" }),
+    /float32/,
+  );
+  assert.throws(
+    () => niftiBuffer({ shape: [1, 8, 8], data: new Uint8Array(64) }, [300, 1e46, 1e46]),
+    /float32/,
+  );
+});
+
+test("strict Node API validation, cross-CLI shared lock, and failed-write .partial cleanup", async () => {
+  const work = mkdtempSync(join(tmpdir(), "spot-detection-strict-"));
+  try {
+    assert.throws(() => parseCliOptions({ bogus: "1" }), /Unknown option/);
+    assert.throws(() => parseCliOptions({ overwrite: "false" }), /must be a boolean/);
+    assert.throws(() => parseCliOptions({ projection: "true" }), /must be a boolean/);
+    assert.throws(() => parseCliOptions({ noSubpixel: "false" }), /must be a boolean/);
+    await assert.rejects(() => checkInstallation({ cacheDir: "" }), /non-empty/);
+    await assert.rejects(() => checkInstallation({ extra: 1 }), /Unknown option/);
+
+    const prevOffline = process.env.NEURODESK_OFFLINE;
+    try {
+      process.env.NEURODESK_OFFLINE = "1";
+      assert.throws(() => parseCliOptions({ offline: false }), /NEURODESK_OFFLINE=1/);
+    } finally {
+      if (prevOffline === undefined) delete process.env.NEURODESK_OFFLINE;
+      else process.env.NEURODESK_OFFLINE = prevOffline;
+    }
+
+    // Cross-CLI contention: if deconvolution (or another CLI) holds .neurodesk-cli.lock, spot-detection is blocked
+    const { claimOutputDir: claimDeconv } = await import("../../deconvolution/src/node.js");
+    const sharedDir = join(work, "shared-out");
+    const deconvRes = await claimDeconv(sharedDir, { overwrite: true });
+    try {
+      assert.equal(LOCK_NAME, ".neurodesk-cli.lock");
+      await assert.rejects(() => claimOutputDir(sharedDir, { overwrite: true }), /locked by another/);
+    } finally {
+      await deconvRes.release({ removeCreated: false });
+    }
+
+    // Failed write (simulated EFBIG) still unlinks .partial
+    await assert.rejects(
+      () => commitOutputs(sharedDir, [{ name: "out.csv", data: Buffer.from("abc") }], {
+        writeFileFn: async (p) => {
+          writeFileSync(p, "a");
+          throw Object.assign(new Error("EFBIG"), { code: "EFBIG" });
+        },
+      }),
+      /EFBIG/,
+    );
+    assert.deepEqual(readdirSync(sharedDir), []);
   } finally {
     rmSync(work, { recursive: true, force: true });
   }

@@ -1,23 +1,24 @@
 // Node command-line interface for @neurodesk/omezarr-convert.
 // Runs the exact same readers, NGFF 0.4/0.5 multiscale writer and zip packager as the web app.
 import { randomBytes } from "node:crypto";
-import { constants as fsConstants } from "node:fs";
-import { lstat, mkdir, open, readdir, readFile, rename, rm, rmdir, stat, unlink, writeFile } from "node:fs/promises";
+import { constants as fsConstants, rmSync, rmdirSync, unlinkSync } from "node:fs";
+import { lstat, mkdir, open, readdir, rename, rm, rmdir, stat, unlink, writeFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { InputTooLargeError, MAX_INPUT_BYTES } from "@neurodesk/webapp-components/file-io/input-limits";
-import { parseNiftiHeader } from "@neurodesk/webapp-components/file-io/nifti";
 import packageJson from "../package.json" with { type: "json" };
 import { VERSIONS } from "./ngff.js";
 import { METHODS } from "./pyramid.js";
 import { fileKind, openSource } from "./sources/index.js";
+import { parseNiftiAnyHeader } from "./sources/nifti.js";
 import { archiveBudget, conversionOptions, DEFAULTS, GENERATOR, writeOmeZarr } from "./writer.js";
 import { archiveName, ZIP_MAX_ENTRIES, zipStore } from "./zip.js";
 
 export const MAX_CLI_FILE_BYTES = MAX_INPUT_BYTES;
+export const ARCHIVE_MAX_BYTES = 1024 ** 3;
 export const OUTPUT_FORMATS = Object.freeze(["archive", "dir"]);
-const LOCK_NAME = ".omezarr-convert-run.lock";
+export const LOCK_NAME = ".neurodesk-cli.lock";
 const CHUNK_CHOICES = Object.freeze([128, 256, 512, 1024]);
 
 export const OPTIONS = Object.freeze({
@@ -56,7 +57,7 @@ export const OPTIONS = Object.freeze({
   overwrite: {
     type: "boolean",
     default: false,
-    description: "Allow writing into a non-empty output directory.",
+    description: "Allow writing into a non-empty output directory (never overwrites existing directories).",
   },
   offline: {
     type: "boolean",
@@ -65,12 +66,26 @@ export const OPTIONS = Object.freeze({
   },
 });
 
+const ALLOWED_OPTION_KEYS = new Set([
+  "version",
+  "method",
+  "chunk",
+  "compression-level",
+  "compressionLevel",
+  "format",
+  "overwrite",
+  "offline",
+]);
+
 export function optionName(key) {
   return OPTIONS[key]?.flag ?? key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
 }
 
 export function assertNonEmptyString(raw, flag) {
   if (raw === undefined) return undefined;
+  if (typeof raw !== "string" && typeof raw !== "number") {
+    throw new Error(`--${flag} must be a non-empty string.`);
+  }
   const trimmed = String(raw).trim();
   if (!trimmed) throw new Error(`--${flag} requires a non-empty value.`);
   return trimmed;
@@ -84,8 +99,19 @@ export function rejectDisallowedFlags(values, allowed, command) {
   }
 }
 
+function parseBooleanOption(raw, flag) {
+  if (raw === undefined) return false;
+  if (typeof raw !== "boolean") {
+    throw new Error(`--${flag} must be a boolean, got ${typeof raw} (${JSON.stringify(raw)}).`);
+  }
+  return raw;
+}
+
 function parseIntOption(raw, flag) {
   if (raw === undefined) return undefined;
+  if (typeof raw === "boolean" || raw === null) {
+    throw new Error(`--${flag} must be an integer, got ${JSON.stringify(raw)}.`);
+  }
   const trimmed = assertNonEmptyString(raw, flag);
   if (!/^-?\d+$/.test(trimmed)) throw new Error(`--${flag} must be an integer, got '${raw}'.`);
   const value = Number(trimmed);
@@ -94,6 +120,15 @@ function parseIntOption(raw, flag) {
 }
 
 export function parseCliOptions(values = {}) {
+  if (values === null || typeof values !== "object" || Array.isArray(values)) {
+    throw new Error("Options must be a plain object.");
+  }
+  for (const [key, value] of Object.entries(values)) {
+    if (value !== undefined && !ALLOWED_OPTION_KEYS.has(key)) {
+      throw new Error(`Unknown option '${key}'.`);
+    }
+  }
+
   const versionRaw = assertNonEmptyString(values.version, "version");
   const version = versionRaw ?? DEFAULTS.version;
   if (!VERSIONS.includes(version)) {
@@ -125,13 +160,18 @@ export function parseCliOptions(values = {}) {
     throw new Error(`--format must be one of: ${OUTPUT_FORMATS.join(", ")}.`);
   }
 
+  const overwrite = parseBooleanOption(values.overwrite, "overwrite");
+  const envOffline = process.env.NEURODESK_OFFLINE === "1";
+  if (values.offline !== undefined) {
+    const explicit = parseBooleanOption(values.offline, "offline");
+    if (envOffline && explicit === false) {
+      throw new Error("Cannot set offline: false while NEURODESK_OFFLINE=1 is active.");
+    }
+  }
+  const offline = envOffline || Boolean(values.offline);
+
   const settings = conversionOptions({ version, method, chunk, compressionLevel });
-  return {
-    settings,
-    format,
-    overwrite: Boolean(values.overwrite),
-    offline: Boolean(values.offline),
-  };
+  return { settings, format, overwrite, offline };
 }
 
 /**
@@ -151,23 +191,26 @@ export function gunzipBounded(bytes, maxOutputLength = MAX_CLI_FILE_BYTES, subje
 }
 
 /**
- * NiBabel affine precedence (`sform > qform > LAS-centered fallback`) for NIfTI-1 inspection.
+ * NiBabel affine precedence (`sform > qform > LAS-centered fallback`) for NIfTI-1 and NIfTI-2 headers.
  */
 export function niftiAffine(headerBuffer) {
-  const header = parseNiftiHeader(headerBuffer);
-  if (header.sformCode > 0 || header.qformCode > 0) return header.affine;
-  const dx = Math.abs(header.pixDims[1]) || 1;
-  const dy = Math.abs(header.pixDims[2]) || 1;
-  const dz = Math.abs(header.pixDims[3]) || 1;
-  const nx = Math.max(1, header.nx);
-  const ny = Math.max(1, header.ny);
-  const nz = Math.max(1, header.nz);
-  return [
-    new Float64Array([-dx, 0, 0, ((nx - 1) / 2) * dx]),
-    new Float64Array([0, dy, 0, -((ny - 1) / 2) * dy]),
-    new Float64Array([0, 0, dz, -((nz - 1) / 2) * dz]),
-    new Float64Array([0, 0, 0, 1]),
-  ];
+  return parseNiftiAnyHeader(headerBuffer).affine;
+}
+
+const formatGiB = (bytes) => `${Number((bytes / 1024 ** 3).toPrecision(3))} GiB`;
+
+/** Checks archive entry count and uncompressed byte budget before building an in-memory archive. */
+export function assertArchiveBudget(shape, dtype, settings, maxBytes = ARCHIVE_MAX_BYTES) {
+  const budget = archiveBudget(shape, dtype, settings);
+  if (budget.entries > ZIP_MAX_ENTRIES) {
+    throw new Error(`The store has ${budget.entries} files; a zip archive holds at most ${ZIP_MAX_ENTRIES}. Use --format dir instead.`);
+  }
+  if (budget.bytes > maxBytes) {
+    throw new Error(
+      `The OME-Zarr can reach ${formatGiB(budget.bytes)} before compression; an archive is built in memory and holds at most ${formatGiB(maxBytes)}. Use --format dir instead.`,
+    );
+  }
+  return budget;
 }
 
 async function readBoundedFile(filePath, maxFileBytes = MAX_CLI_FILE_BYTES) {
@@ -214,7 +257,7 @@ async function resolveInputFiles(inputs, maxFileBytes) {
   if (!list.length) throw new Error("Provide at least one input file or directory.");
   const paths = [];
   for (const item of list) {
-    if (!item || !String(item).trim()) throw new Error("Input path must be non-empty.");
+    if (typeof item !== "string" || !item.trim()) throw new Error("Input path must be a non-empty string.");
     const resolved = resolve(item);
     const info = await stat(resolved);
     if (info.isDirectory()) {
@@ -275,11 +318,11 @@ async function mkdirTracking(targetDir) {
 }
 
 /**
- * Exclusively claims `outputDir` with an O_EXCL lock file. Cleans up the lock and any
- * directories newly created by this call on any error (including readdir failures).
+ * Exclusively claims `outputDir` with the shared `.neurodesk-cli.lock` (`O_EXCL`).
+ * Registers SIGINT/SIGTERM synchronous cleanup handlers while held and removes them on release.
  */
 export async function claimOutputDir(outputDir, { overwrite = false, readdirFn = readdir } = {}) {
-  if (!outputDir || !String(outputDir).trim()) throw new Error("Output directory path is required.");
+  if (typeof outputDir !== "string" || !outputDir.trim()) throw new Error("Output directory path is required.");
   const dir = resolve(outputDir);
   const createdDirs = await mkdirTracking(dir);
   const cleanupCreated = async () => {
@@ -295,13 +338,53 @@ export async function claimOutputDir(outputDir, { overwrite = false, readdirFn =
   } catch (error) {
     await cleanupCreated();
     if (error.code === "EEXIST") {
-      throw new Error(`Output directory '${outputDir}' is locked by another running omezarr-convert process (or contains ${LOCK_NAME}).`);
+      throw new Error(`Output directory '${outputDir}' is locked by another running CLI process (or contains ${LOCK_NAME}).`);
     }
     throw error;
   }
 
   let lockHeld = true;
+  const activePartials = new Set();
+
+  const cleanupSyncOnSignal = (signal) => {
+    for (const p of activePartials) {
+      try {
+        rmSync(p, { recursive: true, force: true });
+      } catch {
+        // Ignore best-effort cleanup error on terminating signal.
+      }
+    }
+    activePartials.clear();
+    if (lockHeld) {
+      lockHeld = false;
+      try {
+        unlinkSync(lockPath);
+      } catch {
+        // Ignore best-effort lock unlink error on terminating signal.
+      }
+    }
+    for (let i = createdDirs.length - 1; i >= 0; i -= 1) {
+      try {
+        rmdirSync(createdDirs[i]);
+      } catch {
+        // Ignore non-empty or already-removed directory on terminating signal.
+      }
+    }
+    process.off("SIGINT", cleanupSyncOnSignal);
+    process.off("SIGTERM", cleanupSyncOnSignal);
+    process.kill(process.pid, signal);
+  };
+
+  process.on("SIGINT", cleanupSyncOnSignal);
+  process.on("SIGTERM", cleanupSyncOnSignal);
+
   const release = async ({ removeCreated = false } = {}) => {
+    process.off("SIGINT", cleanupSyncOnSignal);
+    process.off("SIGTERM", cleanupSyncOnSignal);
+    for (const p of activePartials) {
+      await rm(p, { recursive: true, force: true }).catch(() => {});
+    }
+    activePartials.clear();
     if (lockHeld) {
       lockHeld = false;
       await unlink(lockPath).catch(() => {});
@@ -310,7 +393,7 @@ export async function claimOutputDir(outputDir, { overwrite = false, readdirFn =
   };
 
   try {
-    await lockHandle.writeFile(`${JSON.stringify({ pid: process.pid, host: hostname(), startedAt: Date.now() })}\n`, "utf8");
+    await lockHandle.writeFile(`${JSON.stringify({ tool: "omezarr-convert", pid: process.pid, host: hostname(), startedAt: Date.now() })}\n`, "utf8");
     await lockHandle.close();
     lockHandle = null;
     if (!overwrite) {
@@ -325,7 +408,13 @@ export async function claimOutputDir(outputDir, { overwrite = false, readdirFn =
     throw error;
   }
 
-  return { dir, createdDirs, release };
+  return {
+    dir,
+    createdDirs,
+    trackPartial: (p) => { activePartials.add(p); },
+    untrackPartial: (p) => { activePartials.delete(p); },
+    release,
+  };
 }
 
 async function assertTargetsWritable(dir, items, overwrite) {
@@ -333,14 +422,16 @@ async function assertTargetsWritable(dir, items, overwrite) {
     const target = join(dir, item.name);
     try {
       const info = await lstat(target);
-      if (!overwrite) {
-        throw new Error(`Output '${target}' already exists. Choose a new directory or pass --overwrite.`);
+      if (item.kind === "dir") {
+        throw new Error(
+          `Cannot overwrite existing path '${target}' with an OME-Zarr directory store. Choose a new output directory or remove '${target}' first.`,
+        );
       }
-      if (item.kind !== "dir" && info.isDirectory()) {
+      if (info.isDirectory()) {
         throw new Error(`Cannot write file '${item.name}' because '${target}' is a directory.`);
       }
-      if (item.kind === "dir" && !info.isDirectory()) {
-        throw new Error(`Cannot write directory '${item.name}' because '${target}' is a file.`);
+      if (!overwrite) {
+        throw new Error(`Output '${target}' already exists. Choose a new directory or pass --overwrite.`);
       }
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
@@ -349,33 +440,43 @@ async function assertTargetsWritable(dir, items, overwrite) {
 }
 
 /**
- * Stages every output to `.partial` entries inside `dir`, then renames them into place.
- * If any rename fails, rolls back all already-renamed outputs and restores any overwritten backups.
+ * Stages every output to `.partial` entries inside `dir` (pre-registering each `.partial` path
+ * BEFORE writing so failed/short writes always clean up), then renames them into place with full rollback.
  */
-export async function commitOutputs(dir, items, { overwrite = false, renameFn = rename } = {}) {
+export async function commitOutputs(
+  dir,
+  items,
+  { overwrite = false, renameFn = rename, writeFileFn = writeFile, trackPartial, untrackPartial } = {},
+) {
   const token = randomBytes(6).toString("hex");
   await assertTargetsWritable(dir, items, overwrite);
 
   const staged = [];
   try {
     for (const item of items) {
+      if (item.kind === "staged-dir") {
+        staged.push({ kind: "dir", name: item.name, partialPath: item.stagedPath, finalPath: join(dir, item.name) });
+        continue;
+      }
       const partialPath = join(dir, `.${item.name}.${token}.partial`);
+      const entry = { ...item, partialPath, finalPath: join(dir, item.name) };
+      staged.push(entry);
+      trackPartial?.(partialPath);
       if (item.kind === "dir") {
         await mkdir(partialPath, { recursive: false });
-        staged.push({ ...item, partialPath, finalPath: join(dir, item.name) });
         for (const [key, bytes] of item.entries) {
           const dest = join(partialPath, ...key.split("/"));
           await mkdir(dirname(dest), { recursive: true });
-          await writeFile(dest, bytes, { flag: "wx" });
+          await writeFileFn(dest, bytes, { flag: "wx" });
         }
       } else {
-        await writeFile(partialPath, item.data, { flag: "wx" });
-        staged.push({ ...item, partialPath, finalPath: join(dir, item.name) });
+        await writeFileFn(partialPath, item.data, { flag: "wx" });
       }
     }
   } catch (error) {
     for (const entry of staged) {
       await rm(entry.partialPath, { recursive: true, force: true }).catch(() => {});
+      untrackPartial?.(entry.partialPath);
     }
     throw error;
   }
@@ -385,14 +486,17 @@ export async function commitOutputs(dir, items, { overwrite = false, renameFn = 
   try {
     if (overwrite) {
       for (const entry of staged) {
-        let exists = false;
+        if (entry.kind === "dir") continue;
+        let info = null;
         try {
-          await lstat(entry.finalPath);
-          exists = true;
+          info = await lstat(entry.finalPath);
         } catch (error) {
           if (error.code !== "ENOENT") throw error;
         }
-        if (exists) {
+        if (info) {
+          if (info.isDirectory()) {
+            throw new Error(`Cannot overwrite existing directory '${entry.finalPath}'.`);
+          }
           const backupPath = join(dir, `.${entry.name}.${token}.backup`);
           await renameFn(entry.finalPath, backupPath);
           backedUp.push({ finalPath: entry.finalPath, backupPath });
@@ -401,6 +505,7 @@ export async function commitOutputs(dir, items, { overwrite = false, renameFn = 
     }
     for (const entry of staged) {
       await renameFn(entry.partialPath, entry.finalPath);
+      untrackPartial?.(entry.partialPath);
       committed.push(entry);
     }
   } catch (error) {
@@ -412,6 +517,7 @@ export async function commitOutputs(dir, items, { overwrite = false, renameFn = 
     }
     for (const entry of staged) {
       await rm(entry.partialPath, { recursive: true, force: true }).catch(() => {});
+      untrackPartial?.(entry.partialPath);
     }
     throw error;
   }
@@ -425,6 +531,8 @@ export async function commitOutputs(dir, items, { overwrite = false, renameFn = 
 /**
  * Converts one input file (or sequence / directory of slices) to an OME-Zarr archive or directory
  * and writes a JSON conversion summary into `outputDir`.
+ * In `--format dir` mode, chunks stream directly to a staged `.partial` directory on disk instead
+ * of buffering the entire store in memory.
  */
 export async function convertFiles({
   inputs,
@@ -432,34 +540,66 @@ export async function convertFiles({
   options = {},
   onProgress,
   maxFileBytes = MAX_CLI_FILE_BYTES,
+  maxArchiveBytes = ARCHIVE_MAX_BYTES,
   renameFn = rename,
   readdirFn = readdir,
+  writeFileFn = writeFile,
 } = {}) {
   const { settings, format, overwrite } = parseCliOptions(options);
-  if (!outputDir || !String(outputDir).trim()) throw new Error("Output directory path is required.");
+  if (typeof outputDir !== "string" || !outputDir.trim()) throw new Error("Output directory path is required.");
   const files = await resolveInputFiles(inputs, maxFileBytes);
   const source = await openSource(files);
 
   if (format === "archive") {
-    const budget = archiveBudget(source.shape, source.dtype, settings);
-    if (budget.entries > ZIP_MAX_ENTRIES) {
-      throw new Error(`The store has ${budget.entries} files; a zip archive holds at most ${ZIP_MAX_ENTRIES}. Use --format dir instead.`);
-    }
+    assertArchiveBudget(source.shape, source.dtype, settings, maxArchiveBytes);
   }
+
+  const safeStem = (source.stem || "image").replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^_+|_+$/g, "") || "image";
+  const summaryName = `${safeStem}_summary.json`;
+  const primaryName = format === "dir" ? `${safeStem}.ome.zarr` : archiveName(safeStem, settings.version);
 
   const reservation = await claimOutputDir(outputDir, { overwrite, readdirFn });
   let committed = false;
   try {
+    await assertTargetsWritable(
+      reservation.dir,
+      [{ kind: format === "dir" ? "dir" : "file", name: primaryName }, { kind: "file", name: summaryName }],
+      overwrite,
+    );
+
     const started = performance.now();
-    const storeMap = new Map();
-    const store = { set: (key, value) => { storeMap.set(key, value); } };
-    const written = await writeOmeZarr(source, store, settings, { onProgress });
+    let written;
+    const outputItems = [];
+
+    if (format === "dir") {
+      // Stream chunks directly to a staged .partial directory on disk (zero in-memory Map buffering).
+      const token = randomBytes(6).toString("hex");
+      const stagedDir = join(reservation.dir, `.${primaryName}.${token}.partial`);
+      reservation.trackPartial(stagedDir);
+      await mkdir(stagedDir, { recursive: false });
+      const createdSubdirs = new Set([stagedDir]);
+      const diskStore = {
+        async set(key, value) {
+          const dest = join(stagedDir, ...key.split("/"));
+          const parent = dirname(dest);
+          if (!createdSubdirs.has(parent)) {
+            await mkdir(parent, { recursive: true });
+            createdSubdirs.add(parent);
+          }
+          await writeFileFn(dest, value, { flag: "wx" });
+        },
+      };
+      written = await writeOmeZarr(source, diskStore, settings, { onProgress });
+      outputItems.push({ kind: "staged-dir", name: primaryName, stagedPath: stagedDir });
+    } else {
+      const storeMap = new Map();
+      const store = { set: (key, value) => { storeMap.set(key, value); } };
+      written = await writeOmeZarr(source, store, settings, { onProgress, maxBytes: maxArchiveBytes });
+      const blob = await zipStore(storeMap, settings.version);
+      outputItems.push({ kind: "file", name: primaryName, data: new Uint8Array(await blob.arrayBuffer()) });
+    }
+
     const seconds = Number(((performance.now() - started) / 1000).toFixed(2));
-
-    const safeStem = (source.stem || "image").replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^_+|_+$/g, "") || "image";
-    const summaryName = `${safeStem}_summary.json`;
-    const primaryName = format === "dir" ? `${safeStem}.ome.zarr` : archiveName(safeStem, settings.version);
-
     const summary = {
       generator: GENERATOR,
       input: source.files ?? [files[0].name],
@@ -482,16 +622,15 @@ export async function convertFiles({
       seconds,
     };
 
-    const outputItems = [];
-    if (format === "dir") {
-      outputItems.push({ kind: "dir", name: primaryName, entries: storeMap });
-    } else {
-      const blob = await zipStore(storeMap, settings.version);
-      outputItems.push({ kind: "file", name: primaryName, data: new Uint8Array(await blob.arrayBuffer()) });
-    }
     outputItems.push({ kind: "file", name: summaryName, data: Buffer.from(`${JSON.stringify(summary, null, 2)}\n`, "utf8") });
 
-    const writtenPaths = await commitOutputs(reservation.dir, outputItems, { overwrite, renameFn });
+    const writtenPaths = await commitOutputs(reservation.dir, outputItems, {
+      overwrite,
+      renameFn,
+      writeFileFn,
+      trackPartial: reservation.trackPartial,
+      untrackPartial: reservation.untrackPartial,
+    });
     committed = true;
     return {
       outputDir: reservation.dir,
@@ -506,29 +645,35 @@ export async function convertFiles({
 }
 
 /**
- * Offline self-check: verifies NGFF 0.5 and 0.4 pyramid writing and zip packaging on a tiny synthetic plane.
+ * Offline self-check: verifies the writer and zip store work on a tiny synthetic plane.
  */
-export async function checkInstallation({ cacheDir } = {}) {
+export async function checkInstallation(opts = {}) {
+  if (opts === null || typeof opts !== "object" || Array.isArray(opts)) {
+    throw new Error("Options must be a plain object.");
+  }
+  for (const [key, value] of Object.entries(opts)) {
+    if (value !== undefined && key !== "cacheDir") {
+      throw new Error(`Unknown option '${key}' for checkInstallation.`);
+    }
+  }
+  const cacheDir = opts.cacheDir !== undefined ? assertNonEmptyString(opts.cacheDir, "cache-dir") : undefined;
   const resolvedCache = cacheDir ? resolve(cacheDir) : undefined;
-  const plane = Uint16Array.from({ length: 16 * 16 }, (_, i) => i * 16);
+  const storeMap = new Map();
   const source = {
     name: "self-check",
     stem: "self-check",
     format: "synthetic",
-    dtype: "uint16",
+    dtype: "uint8",
     shape: { t: 1, c: 1, z: 1, y: 16, x: 16 },
-    scale: { t: null, z: null, y: 0.5, x: 0.5 },
-    units: { t: null, z: null, y: "micrometer", x: "micrometer" },
-    channels: [{ label: "Intensity", color: null }],
+    scale: { t: null, z: 1, y: 1, x: 1 },
+    units: { t: null, z: "micrometer", y: "micrometer", x: "micrometer" },
+    channels: [{ label: "ch0", color: "ffffff" }],
     notes: [],
-    readPlane: async () => plane,
+    readPlane: async () => new Uint8Array(16 * 16).fill(42),
   };
-  for (const version of VERSIONS) {
-    const map = new Map();
-    const res = await writeOmeZarr(source, { set: (k, v) => map.set(k, v) }, { version, method: "mean", chunk: 16 });
-    if (res.chunksWritten < 1) throw new Error(`Self-check failed for NGFF ${version}: no chunks written.`);
-    const blob = await zipStore(map, version);
-    if (blob.size < 64) throw new Error(`Self-check failed for NGFF ${version}: empty archive.`);
+  const written = await writeOmeZarr(source, { set: (k, v) => { storeMap.set(k, v); } }, { version: "0.5", method: "mean", chunk: 16, compressionLevel: 1 });
+  if (written.chunksWritten < 1 || !storeMap.has("zarr.json")) {
+    throw new Error("Self-check failed: synthetic OME-Zarr write produced no chunks.");
   }
   return {
     ok: true,

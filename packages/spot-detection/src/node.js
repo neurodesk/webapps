@@ -2,7 +2,7 @@
 // Runs the exact same Big-FISH LoG detector, elbow threshold, sub-pixel fit, per-cell counter
 // and NIfTI spot-ring overlay writer as the Spot detection web application.
 import { randomBytes } from "node:crypto";
-import { constants as fsConstants } from "node:fs";
+import { constants as fsConstants, rmSync, rmdirSync, unlinkSync } from "node:fs";
 import { lstat, mkdir, open, readdir, rename, rm, rmdir, stat, unlink, writeFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -16,7 +16,7 @@ import { syntheticImage } from "./synthetic.js";
 import { niftiBuffer, overlayVolume } from "./volumes.js";
 
 export const MAX_CLI_FILE_BYTES = MAX_INPUT_BYTES;
-const LOCK_NAME = ".spot-detection-run.lock";
+export const LOCK_NAME = ".neurodesk-cli.lock";
 
 export const OPTIONS = Object.freeze({
   labels: {
@@ -77,12 +77,33 @@ export const OPTIONS = Object.freeze({
   },
 });
 
+const ALLOWED_OPTION_KEYS = new Set([
+  "labels",
+  "voxel-z",
+  "voxelZ",
+  "voxel-yx",
+  "voxelYx",
+  "radius-z",
+  "radiusZ",
+  "radius-yx",
+  "radiusYx",
+  "threshold",
+  "projection",
+  "no-subpixel",
+  "noSubpixel",
+  "overwrite",
+  "offline",
+]);
+
 export function optionName(key) {
   return OPTIONS[key]?.flag ?? key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
 }
 
 export function assertNonEmptyString(raw, flag) {
   if (raw === undefined) return undefined;
+  if (typeof raw !== "string" && typeof raw !== "number") {
+    throw new Error(`--${flag} must be a non-empty string.`);
+  }
   const trimmed = String(raw).trim();
   if (!trimmed) throw new Error(`--${flag} requires a non-empty value.`);
   return trimmed;
@@ -96,26 +117,66 @@ export function rejectDisallowedFlags(values, allowed, command) {
   }
 }
 
-function parseNumeric(raw, flag, { min = -Infinity, exclusiveMin = false } = {}) {
+function parseBooleanOption(raw, flag) {
+  if (raw === undefined) return false;
+  if (typeof raw !== "boolean") {
+    throw new Error(`--${flag} must be a boolean, got ${typeof raw} (${JSON.stringify(raw)}).`);
+  }
+  return raw;
+}
+
+function parseNumeric(raw, flag, { min = -Infinity, exclusiveMin = false, float32Positive = false, float32Mm = false } = {}) {
   if (raw === undefined) return undefined;
+  if (typeof raw === "boolean" || raw === null) {
+    throw new Error(`--${flag} must be a finite number, got ${JSON.stringify(raw)}.`);
+  }
   const trimmed = assertNonEmptyString(raw, flag);
   const value = Number(trimmed);
   if (!Number.isFinite(value)) throw new Error(`--${flag} must be a finite number, got '${raw}'.`);
   if (exclusiveMin ? !(value > min) : value < min) {
     throw new Error(`--${flag} must be ${exclusiveMin ? "greater than" : "at least"} ${min}.`);
   }
+  if (float32Positive) {
+    const f32 = Math.fround(value);
+    if (!Number.isFinite(f32) || !(f32 > 0)) {
+      throw new Error(`--${flag} (${raw}) must be representable as a positive finite float32.`);
+    }
+  }
+  if (float32Mm) {
+    const mmF32 = Math.fround(value / 1e6);
+    if (!Number.isFinite(mmF32) || !(mmF32 > 0)) {
+      throw new Error(`--${flag} (${raw} nm) overflows or underflows NIfTI-1 float32 spacing.`);
+    }
+  }
   return value;
 }
 
 export function parseCliOptions(values = {}) {
+  if (values === null || typeof values !== "object" || Array.isArray(values)) {
+    throw new Error("Options must be a plain object.");
+  }
+  for (const [key, value] of Object.entries(values)) {
+    if (value !== undefined && !ALLOWED_OPTION_KEYS.has(key)) {
+      throw new Error(`Unknown option '${key}'.`);
+    }
+  }
   const labelsPath = assertNonEmptyString(values.labels, "labels") ?? null;
-  const voxelZ = parseNumeric(values["voxel-z"] ?? values.voxelZ, "voxel-z", { min: 0, exclusiveMin: true });
-  const voxelYx = parseNumeric(values["voxel-yx"] ?? values.voxelYx, "voxel-yx", { min: 0, exclusiveMin: true });
-  const radiusZ = parseNumeric(values["radius-z"] ?? values.radiusZ, "radius-z", { min: 0, exclusiveMin: true });
-  const radiusYx = parseNumeric(values["radius-yx"] ?? values.radiusYx, "radius-yx", { min: 0, exclusiveMin: true });
+  const voxelZ = parseNumeric(values["voxel-z"] ?? values.voxelZ, "voxel-z", { min: 0, exclusiveMin: true, float32Positive: true, float32Mm: true });
+  const voxelYx = parseNumeric(values["voxel-yx"] ?? values.voxelYx, "voxel-yx", { min: 0, exclusiveMin: true, float32Positive: true, float32Mm: true });
+  const radiusZ = parseNumeric(values["radius-z"] ?? values.radiusZ, "radius-z", { min: 0, exclusiveMin: true, float32Positive: true });
+  const radiusYx = parseNumeric(values["radius-yx"] ?? values.radiusYx, "radius-yx", { min: 0, exclusiveMin: true, float32Positive: true });
   const threshold = parseNumeric(values.threshold, "threshold", { min: 0 });
-  const projection = Boolean(values.projection);
-  const subpixel = !Boolean(values["no-subpixel"] ?? values.noSubpixel);
+  const projection = parseBooleanOption(values.projection, "projection");
+  const subpixel = !parseBooleanOption(values["no-subpixel"] ?? values.noSubpixel, "no-subpixel");
+  const overwrite = parseBooleanOption(values.overwrite, "overwrite");
+  const envOffline = process.env.NEURODESK_OFFLINE === "1";
+  if (values.offline !== undefined) {
+    const explicit = parseBooleanOption(values.offline, "offline");
+    if (envOffline && explicit === false) {
+      throw new Error("Cannot set offline: false while NEURODESK_OFFLINE=1 is active.");
+    }
+  }
+  const offline = envOffline || Boolean(values.offline);
 
   // Validate eagerly before any file I/O using default voxel sizes if omitted.
   detectionSettings({
@@ -137,8 +198,8 @@ export function parseCliOptions(values = {}) {
     threshold: threshold ?? null,
     projection,
     subpixel,
-    overwrite: Boolean(values.overwrite),
-    offline: Boolean(values.offline),
+    overwrite,
+    offline,
   };
 }
 
@@ -208,7 +269,7 @@ async function mkdirTracking(targetDir) {
 }
 
 export async function claimOutputDir(outputDir, { overwrite = false, readdirFn = readdir } = {}) {
-  if (!outputDir || !String(outputDir).trim()) throw new Error("Output directory path is required.");
+  if (typeof outputDir !== "string" || !outputDir.trim()) throw new Error("Output directory path is required.");
   const dir = resolve(outputDir);
   const createdDirs = await mkdirTracking(dir);
   const cleanupCreated = async () => {
@@ -221,12 +282,52 @@ export async function claimOutputDir(outputDir, { overwrite = false, readdirFn =
   } catch (error) {
     await cleanupCreated();
     if (error.code === "EEXIST") {
-      throw new Error(`Output directory '${outputDir}' is locked by another running spot-detection process (or contains ${LOCK_NAME}).`);
+      throw new Error(`Output directory '${outputDir}' is locked by another running CLI process (or contains ${LOCK_NAME}).`);
     }
     throw error;
   }
   let lockHeld = true;
+  const activePartials = new Set();
+
+  const cleanupSyncOnSignal = (signal) => {
+    for (const p of activePartials) {
+      try {
+        rmSync(p, { recursive: true, force: true });
+      } catch {
+        // Ignore best-effort cleanup error on terminating signal.
+      }
+    }
+    activePartials.clear();
+    if (lockHeld) {
+      lockHeld = false;
+      try {
+        unlinkSync(lockPath);
+      } catch {
+        // Ignore best-effort lock unlink error on terminating signal.
+      }
+    }
+    for (let i = createdDirs.length - 1; i >= 0; i -= 1) {
+      try {
+        rmdirSync(createdDirs[i]);
+      } catch {
+        // Ignore non-empty or already-removed directory on terminating signal.
+      }
+    }
+    process.off("SIGINT", cleanupSyncOnSignal);
+    process.off("SIGTERM", cleanupSyncOnSignal);
+    process.kill(process.pid, signal);
+  };
+
+  process.on("SIGINT", cleanupSyncOnSignal);
+  process.on("SIGTERM", cleanupSyncOnSignal);
+
   const release = async ({ removeCreated = false } = {}) => {
+    process.off("SIGINT", cleanupSyncOnSignal);
+    process.off("SIGTERM", cleanupSyncOnSignal);
+    for (const p of activePartials) {
+      await rm(p, { recursive: true, force: true }).catch(() => {});
+    }
+    activePartials.clear();
     if (lockHeld) {
       lockHeld = false;
       await unlink(lockPath).catch(() => {});
@@ -234,7 +335,7 @@ export async function claimOutputDir(outputDir, { overwrite = false, readdirFn =
     if (removeCreated) await cleanupCreated();
   };
   try {
-    await lockHandle.writeFile(`${JSON.stringify({ pid: process.pid, host: hostname(), startedAt: Date.now() })}\n`, "utf8");
+    await lockHandle.writeFile(`${JSON.stringify({ tool: "spot-detection", pid: process.pid, host: hostname(), startedAt: Date.now() })}\n`, "utf8");
     await lockHandle.close();
     lockHandle = null;
     if (!overwrite) {
@@ -248,10 +349,20 @@ export async function claimOutputDir(outputDir, { overwrite = false, readdirFn =
     await release({ removeCreated: true });
     throw error;
   }
-  return { dir, createdDirs, release };
+  return {
+    dir,
+    createdDirs,
+    trackPartial: (p) => { activePartials.add(p); },
+    untrackPartial: (p) => { activePartials.delete(p); },
+    release,
+  };
 }
 
-export async function commitOutputs(dir, files, { overwrite = false, renameFn = rename } = {}) {
+export async function commitOutputs(
+  dir,
+  files,
+  { overwrite = false, renameFn = rename, writeFileFn = writeFile, trackPartial, untrackPartial } = {},
+) {
   const token = randomBytes(6).toString("hex");
   for (const file of files) {
     const target = join(dir, file.name);
@@ -268,11 +379,16 @@ export async function commitOutputs(dir, files, { overwrite = false, renameFn = 
   try {
     for (const file of files) {
       const partialPath = join(dir, `.${file.name}.${token}.partial`);
-      await writeFile(partialPath, file.data, { flag: "wx" });
-      staged.push({ name: file.name, partialPath, finalPath: join(dir, file.name) });
+      const entry = { name: file.name, partialPath, finalPath: join(dir, file.name) };
+      staged.push(entry);
+      trackPartial?.(partialPath);
+      await writeFileFn(partialPath, file.data, { flag: "wx" });
     }
   } catch (error) {
-    for (const entry of staged) await rm(entry.partialPath, { force: true }).catch(() => {});
+    for (const entry of staged) {
+      await rm(entry.partialPath, { force: true }).catch(() => {});
+      untrackPartial?.(entry.partialPath);
+    }
     throw error;
   }
 
@@ -281,14 +397,14 @@ export async function commitOutputs(dir, files, { overwrite = false, renameFn = 
   try {
     if (overwrite) {
       for (const entry of staged) {
-        let exists = false;
+        let info = null;
         try {
-          await lstat(entry.finalPath);
-          exists = true;
+          info = await lstat(entry.finalPath);
         } catch (error) {
           if (error.code !== "ENOENT") throw error;
         }
-        if (exists) {
+        if (info) {
+          if (info.isDirectory()) throw new Error(`Cannot overwrite existing directory '${entry.finalPath}'.`);
           const backupPath = join(dir, `.${entry.name}.${token}.backup`);
           await renameFn(entry.finalPath, backupPath);
           backedUp.push({ finalPath: entry.finalPath, backupPath });
@@ -297,12 +413,16 @@ export async function commitOutputs(dir, files, { overwrite = false, renameFn = 
     }
     for (const entry of staged) {
       await renameFn(entry.partialPath, entry.finalPath);
+      untrackPartial?.(entry.partialPath);
       committed.push(entry);
     }
   } catch (error) {
     for (let i = committed.length - 1; i >= 0; i -= 1) await unlink(committed[i].finalPath).catch(() => {});
     for (let i = backedUp.length - 1; i >= 0; i -= 1) await rename(backedUp[i].backupPath, backedUp[i].finalPath).catch(() => {});
-    for (const entry of staged) await rm(entry.partialPath, { force: true }).catch(() => {});
+    for (const entry of staged) {
+      await rm(entry.partialPath, { force: true }).catch(() => {});
+      untrackPartial?.(entry.partialPath);
+    }
     throw error;
   }
 
@@ -382,7 +502,12 @@ export async function detectSpotsFile({
       { name: provenanceName, data: Buffer.from(`${JSON.stringify(record, null, 2)}\n`, "utf8") },
     ];
 
-    const written = await commitOutputs(reservation.dir, outputFiles, { overwrite: parsed.overwrite, renameFn });
+    const written = await commitOutputs(reservation.dir, outputFiles, {
+      overwrite: parsed.overwrite,
+      renameFn,
+      trackPartial: reservation.trackPartial,
+      untrackPartial: reservation.untrackPartial,
+    });
     committed = true;
 
     return {
@@ -400,7 +525,16 @@ export async function detectSpotsFile({
 }
 
 /** Offline self-check: detects synthetic diffraction-limited spots and verifies exact recovery. */
-export async function checkInstallation({ cacheDir } = {}) {
+export async function checkInstallation(opts = {}) {
+  if (opts === null || typeof opts !== "object" || Array.isArray(opts)) {
+    throw new Error("Options must be a plain object.");
+  }
+  for (const [key, value] of Object.entries(opts)) {
+    if (value !== undefined && key !== "cacheDir") {
+      throw new Error(`Unknown option '${key}' for checkInstallation.`);
+    }
+  }
+  const cacheDir = opts.cacheDir !== undefined ? assertNonEmptyString(opts.cacheDir, "cache-dir") : undefined;
   const resolvedCache = cacheDir ? resolve(cacheDir) : undefined;
   const image = syntheticImage([64, 64], 12, 3);
   const result = analyse(image, {

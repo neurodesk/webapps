@@ -10,10 +10,10 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { gunzipSync } from "node:zlib";
 import examples from "../../../apps/deconvolution/examples.json" with { type: "json" };
 import expected from "../../../apps/deconvolution/e2e/expected.json" with { type: "json" };
 import { readVolume } from "../src/input.js";
-import { gunzipBounded } from "../src/node.js";
 
 const { values } = parseArgs({ options: { executable: { type: "string" } } });
 const command = values.executable
@@ -90,12 +90,41 @@ try {
   check(run.status === 0, `hela-rl: CLI exits 0${run.status ? ` (${run.stderr.trim()})` : ""}`);
 
   const outTiff = await readVolume(new File([await readFile(join(outDir, "hela-phalloidin488-confocal_deconvolved.tif"))], "hela-phalloidin488-confocal_deconvolved.tif"));
-  const outNii = await readVolume(new File([await readFile(join(outDir, "hela-phalloidin488-confocal_deconvolved.nii.gz"))], "hela-phalloidin488-confocal_deconvolved.nii.gz"), { gunzip: gunzipBounded });
   const psfTiff = await readVolume(new File([await readFile(join(outDir, "hela-phalloidin488-confocal_psf.tif"))], "hela-phalloidin488-confocal_psf.tif"));
   const prov = JSON.parse(await readFile(join(outDir, "hela-phalloidin488-confocal_provenance.json"), "utf8"));
 
+  // Independently inspect the raw NIfTI-1 output header and float32 voxel payload (without calling our own NIfTI reader).
+  const rawNii = gunzipSync(await readFile(join(outDir, "hela-phalloidin488-confocal_deconvolved.nii.gz")), { maxOutputLength: 64 * 1024 * 1024 });
+  const niiView = new DataView(rawNii.buffer, rawNii.byteOffset, rawNii.byteLength);
+  const sizeofHdr = niiView.getInt32(0, true);
+  const magic = rawNii.subarray(344, 348).toString("ascii");
+  const niiDims = [niiView.getInt16(46, true), niiView.getInt16(44, true), niiView.getInt16(42, true)];
+  const datatype = niiView.getInt16(70, true);
+  const bitpix = niiView.getInt16(72, true);
+  const voxOffset = Math.ceil(niiView.getFloat32(108, true));
+  const qformCode = niiView.getInt16(252, true);
+  const sformCode = niiView.getInt16(254, true);
+  const niiVoxels = new Float32Array(
+    rawNii.buffer,
+    rawNii.byteOffset + voxOffset,
+    niiDims[0] * niiDims[1] * niiDims[2],
+  );
+  let niiSum = 0;
+  let niiMax = -Infinity;
+  for (let i = 0; i < niiVoxels.length; i += 1) {
+    niiSum += niiVoxels[i];
+    if (niiVoxels[i] > niiMax) niiMax = niiVoxels[i];
+  }
+  const niiMean = niiSum / niiVoxels.length;
+  const niiDigest = sha256(new Uint8Array(niiVoxels.buffer, niiVoxels.byteOffset, niiVoxels.byteLength));
+
   check(outTiff.dims.join("x") === expected.dims.join("x"), `deconvolved TIFF dims ${outTiff.dims.join("x")} == ${expected.dims.join("x")}`);
-  check(outNii.dims.join("x") === expected.dims.join("x"), `deconvolved NIfTI dims ${outNii.dims.join("x")} == ${expected.dims.join("x")}`);
+  check(sizeofHdr === 348 && magic === "n+1\0" && datatype === 16 && bitpix === 32 && qformCode > 0 && sformCode > 0,
+    `raw NIfTI-1 header valid (sizeof_hdr=${sizeofHdr}, datatype=${datatype}, bitpix=${bitpix}, qform=${qformCode}, sform=${sformCode})`);
+  check(niiDims.join("x") === expected.dims.join("x"), `raw NIfTI dims ${niiDims.join("x")} == ${expected.dims.join("x")}`);
+  check(niiDigest === expected.sha256, `raw NIfTI voxels SHA-256 matches e2e reference (${niiDigest.slice(0, 12)})`);
+  check(Math.abs(niiMean - expected.mean) < 1e-4 && Math.abs(niiMax - expected.max) < 1e-3,
+    `raw NIfTI mean ${niiMean.toFixed(4)} (~${expected.mean.toFixed(4)}), max ${niiMax.toFixed(2)} (~${expected.max.toFixed(2)})`);
   check(psfTiff.dims.join("x") === expected.psfDims.join("x"), `PSF TIFF dims ${psfTiff.dims.join("x")} == ${expected.psfDims.join("x")}`);
 
   let sum = 0;
@@ -106,9 +135,9 @@ try {
   }
   const mean = sum / outTiff.data.length;
   const digest = sha256(new Uint8Array(outTiff.data.buffer, outTiff.data.byteOffset, outTiff.data.byteLength));
-  check(digest === expected.sha256, `deconvolved voxels SHA-256 matches e2e reference (${digest.slice(0, 12)})`);
+  check(digest === expected.sha256, `deconvolved TIFF voxels SHA-256 matches e2e reference (${digest.slice(0, 12)})`);
   check(Math.abs(mean - expected.mean) < 1e-4 && Math.abs(max - expected.max) < 1e-3,
-    `mean ${mean.toFixed(4)} (~${expected.mean.toFixed(4)}), max ${max.toFixed(2)} (~${expected.max.toFixed(2)})`);
+    `TIFF mean ${mean.toFixed(4)} (~${expected.mean.toFixed(4)}), max ${max.toFixed(2)} (~${expected.max.toFixed(2)})`);
   check(prov.iterations === expected.iterations && prov.psf.source === "Gibson-Lanni", "writes valid provenance JSON");
 } finally {
   await rm(work, { recursive: true, force: true });
@@ -118,4 +147,5 @@ if (failures.length) {
   console.error(`\n${failures.length} check(s) failed:\n- ${failures.join("\n- ")}`);
   process.exit(1);
 }
-console.log(`\nAll @neurodesk/deconvolution portable CLI checks passed${canUnshare ? " (unshare -rn)" : ""}.`);
+console.log(`network_isolation=${canUnshare ? "unshare-rn" : "fallback"}`);
+console.log(`\nAll @neurodesk/deconvolution portable CLI checks passed (${canUnshare ? "unshare -rn" : "fallback"}).`);

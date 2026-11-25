@@ -2,7 +2,7 @@
 // Runs the exact same StarDist 2D/3D normalization, tiling, NMS, polygon/polyhedron
 // rasterization and TIFF/CSV writers as the StarDist web application, on ONNX Runtime CPU.
 import { createHash, randomBytes } from "node:crypto";
-import { constants as fsConstants } from "node:fs";
+import { constants as fsConstants, rmSync, rmdirSync, unlinkSync } from "node:fs";
 import { lstat, mkdir, open, readdir, readFile, rename, rm, rmdir, stat, unlink, writeFile } from "node:fs/promises";
 import { availableParallelism, homedir, hostname } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -14,12 +14,12 @@ import { outputName, segmentationSettings } from "./settings.js";
 import { automaticTiles, segment } from "./stardist.js";
 import { automaticTiles3D, segment3D } from "./stardist3d.js";
 
-// Disable ONNX Runtime telemetry before lazily importing onnxruntime-node.
-process.env.ORT_DISABLE_TELEMETRY ??= "1";
+// Unconditionally disable ONNX Runtime telemetry before lazily importing onnxruntime-node.
+process.env.ORT_DISABLE_TELEMETRY = "1";
 
 let ortPromise = null;
 async function loadOrt() {
-  process.env.ORT_DISABLE_TELEMETRY ??= "1";
+  process.env.ORT_DISABLE_TELEMETRY = "1";
   ortPromise ??= import("onnxruntime-node");
   return ortPromise;
 }
@@ -27,7 +27,7 @@ async function loadOrt() {
 // A one-node ONNX graph (Identity, float32[1], opset 13) proves the native CPU runtime executes.
 const IDENTITY_MODEL = Buffer.from("CAc6NwoQCgF4EgF5IghJZGVudGl0eRIBZ1oPCgF4EgoKCAgBEgQKAggBYg8KAXkSCgoICAESBAoCCAFCAhAN", "base64");
 
-const LOCK_NAME = ".stardist-run.lock";
+export const LOCK_NAME = ".neurodesk-cli.lock";
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const offlineByDefault = () => process.env.NEURODESK_OFFLINE === "1";
 
@@ -88,12 +88,30 @@ export const OPTIONS = Object.freeze({
   },
 });
 
+const ALLOWED_OPTION_KEYS = new Set([
+  "model",
+  "channel",
+  "prob-thresh",
+  "probThresh",
+  "nms-thresh",
+  "nmsThresh",
+  "tiles",
+  "threads",
+  "cache-dir",
+  "cacheDir",
+  "offline",
+  "overwrite",
+]);
+
 export function optionName(key) {
   return OPTIONS[key]?.flag ?? key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
 }
 
 export function assertNonEmptyString(raw, flag) {
   if (raw === undefined) return undefined;
+  if (typeof raw !== "string" && typeof raw !== "number") {
+    throw new Error(`--${flag} must be a non-empty string.`);
+  }
   const trimmed = String(raw).trim();
   if (!trimmed) throw new Error(`--${flag} requires a non-empty value.`);
   return trimmed;
@@ -107,8 +125,19 @@ export function rejectDisallowedFlags(values, allowed, command) {
   }
 }
 
+function parseBooleanOption(raw, flag) {
+  if (raw === undefined) return false;
+  if (typeof raw !== "boolean") {
+    throw new Error(`--${flag} must be a boolean, got ${typeof raw} (${JSON.stringify(raw)}).`);
+  }
+  return raw;
+}
+
 function parseNumeric(raw, flag, { integer = false, min = -Infinity, max = Infinity } = {}) {
   if (raw === undefined) return undefined;
+  if (typeof raw === "boolean" || raw === null) {
+    throw new Error(`--${flag} must be a finite number, got ${JSON.stringify(raw)}.`);
+  }
   const trimmed = assertNonEmptyString(raw, flag);
   const value = Number(trimmed);
   if (!Number.isFinite(value)) throw new Error(`--${flag} must be a finite number, got '${raw}'.`);
@@ -136,6 +165,14 @@ export function defaultCacheDir() {
 }
 
 export function parseCliOptions(values = {}) {
+  if (values === null || typeof values !== "object" || Array.isArray(values)) {
+    throw new Error("Options must be a plain object.");
+  }
+  for (const [key, value] of Object.entries(values)) {
+    if (value !== undefined && !ALLOWED_OPTION_KEYS.has(key)) {
+      throw new Error(`Unknown option '${key}'.`);
+    }
+  }
   const modelId = assertNonEmptyString(values.model, "model") ?? DEFAULT_MODEL_ID;
   const model = resolveModel(modelId);
 
@@ -147,14 +184,25 @@ export function parseCliOptions(values = {}) {
   const threads = resolveThreads(threadsRaw);
   const cacheDir = assertNonEmptyString(values["cache-dir"] ?? values.cacheDir, "cache-dir") ?? defaultCacheDir();
 
+  const overwrite = parseBooleanOption(values.overwrite, "overwrite");
+  const envOffline = offlineByDefault();
+  let offline = envOffline;
+  if (values.offline !== undefined) {
+    const explicit = parseBooleanOption(values.offline, "offline");
+    if (envOffline && explicit === false) {
+      throw new Error("Cannot set offline: false while NEURODESK_OFFLINE=1 is active.");
+    }
+    offline = envOffline || explicit;
+  }
+
   const settings = segmentationSettings({ model: model.name, channel, probThresh, nmsThresh, tiles }, model);
   return {
     model,
     settings,
     threads,
     cacheDir,
-    offline: values.offline !== undefined ? Boolean(values.offline) : offlineByDefault(),
-    overwrite: Boolean(values.overwrite),
+    offline,
+    overwrite,
   };
 }
 
@@ -202,11 +250,29 @@ async function loadModelAsset(asset, { cacheDir, offline, onProgress }) {
   return bytes;
 }
 
-export async function downloadModels({
-  cacheDir = defaultCacheDir(),
-  offline = offlineByDefault(),
-  onProgress = () => {},
-} = {}) {
+export async function downloadModels(opts = {}) {
+  if (opts === null || typeof opts !== "object" || Array.isArray(opts)) {
+    throw new Error("Options must be a plain object.");
+  }
+  const allowed = new Set(["cacheDir", "offline", "onProgress"]);
+  for (const [key, value] of Object.entries(opts)) {
+    if (value !== undefined && !allowed.has(key)) {
+      throw new Error(`Unknown option '${key}' for downloadModels.`);
+    }
+  }
+  const cacheDir = opts.cacheDir !== undefined
+    ? assertNonEmptyString(opts.cacheDir, "cache-dir")
+    : defaultCacheDir();
+  const envOffline = offlineByDefault();
+  let offline = envOffline;
+  if (opts.offline !== undefined) {
+    const explicit = parseBooleanOption(opts.offline, "offline");
+    if (envOffline && explicit === false) {
+      throw new Error("Cannot set offline: false while NEURODESK_OFFLINE=1 is active.");
+    }
+    offline = envOffline || explicit;
+  }
+  const onProgress = opts.onProgress ?? (() => {});
   for (const asset of MODEL_ASSETS) {
     await loadModelAsset(asset, { cacheDir, offline, onProgress });
   }
@@ -287,7 +353,7 @@ async function mkdirTracking(targetDir) {
 }
 
 export async function claimOutputDir(outputDir, { overwrite = false, readdirFn = readdir } = {}) {
-  if (!outputDir || !String(outputDir).trim()) throw new Error("Output directory path is required.");
+  if (typeof outputDir !== "string" || !outputDir.trim()) throw new Error("Output directory path is required.");
   const dir = resolve(outputDir);
   const createdDirs = await mkdirTracking(dir);
   const cleanupCreated = async () => {
@@ -300,12 +366,52 @@ export async function claimOutputDir(outputDir, { overwrite = false, readdirFn =
   } catch (error) {
     await cleanupCreated();
     if (error.code === "EEXIST") {
-      throw new Error(`Output directory '${outputDir}' is locked by another running stardist process (or contains ${LOCK_NAME}).`);
+      throw new Error(`Output directory '${outputDir}' is locked by another running CLI process (or contains ${LOCK_NAME}).`);
     }
     throw error;
   }
   let lockHeld = true;
+  const activePartials = new Set();
+
+  const cleanupSyncOnSignal = (signal) => {
+    for (const p of activePartials) {
+      try {
+        rmSync(p, { recursive: true, force: true });
+      } catch {
+        // Ignore best-effort cleanup error on terminating signal.
+      }
+    }
+    activePartials.clear();
+    if (lockHeld) {
+      lockHeld = false;
+      try {
+        unlinkSync(lockPath);
+      } catch {
+        // Ignore best-effort lock unlink error on terminating signal.
+      }
+    }
+    for (let i = createdDirs.length - 1; i >= 0; i -= 1) {
+      try {
+        rmdirSync(createdDirs[i]);
+      } catch {
+        // Ignore non-empty or already-removed directory on terminating signal.
+      }
+    }
+    process.off("SIGINT", cleanupSyncOnSignal);
+    process.off("SIGTERM", cleanupSyncOnSignal);
+    process.kill(process.pid, signal);
+  };
+
+  process.on("SIGINT", cleanupSyncOnSignal);
+  process.on("SIGTERM", cleanupSyncOnSignal);
+
   const release = async ({ removeCreated = false } = {}) => {
+    process.off("SIGINT", cleanupSyncOnSignal);
+    process.off("SIGTERM", cleanupSyncOnSignal);
+    for (const p of activePartials) {
+      await rm(p, { recursive: true, force: true }).catch(() => {});
+    }
+    activePartials.clear();
     if (lockHeld) {
       lockHeld = false;
       await unlink(lockPath).catch(() => {});
@@ -313,7 +419,7 @@ export async function claimOutputDir(outputDir, { overwrite = false, readdirFn =
     if (removeCreated) await cleanupCreated();
   };
   try {
-    await lockHandle.writeFile(`${JSON.stringify({ pid: process.pid, host: hostname(), startedAt: Date.now() })}\n`, "utf8");
+    await lockHandle.writeFile(`${JSON.stringify({ tool: "stardist", pid: process.pid, host: hostname(), startedAt: Date.now() })}\n`, "utf8");
     await lockHandle.close();
     lockHandle = null;
     if (!overwrite) {
@@ -327,10 +433,20 @@ export async function claimOutputDir(outputDir, { overwrite = false, readdirFn =
     await release({ removeCreated: true });
     throw error;
   }
-  return { dir, createdDirs, release };
+  return {
+    dir,
+    createdDirs,
+    trackPartial: (p) => { activePartials.add(p); },
+    untrackPartial: (p) => { activePartials.delete(p); },
+    release,
+  };
 }
 
-export async function commitOutputs(dir, files, { overwrite = false, renameFn = rename } = {}) {
+export async function commitOutputs(
+  dir,
+  files,
+  { overwrite = false, renameFn = rename, writeFileFn = writeFile, trackPartial, untrackPartial } = {},
+) {
   const token = randomBytes(6).toString("hex");
   for (const file of files) {
     const target = join(dir, file.name);
@@ -347,11 +463,16 @@ export async function commitOutputs(dir, files, { overwrite = false, renameFn = 
   try {
     for (const file of files) {
       const partialPath = join(dir, `.${file.name}.${token}.partial`);
-      await writeFile(partialPath, file.data, { flag: "wx" });
-      staged.push({ name: file.name, partialPath, finalPath: join(dir, file.name) });
+      const entry = { name: file.name, partialPath, finalPath: join(dir, file.name) };
+      staged.push(entry);
+      trackPartial?.(partialPath);
+      await writeFileFn(partialPath, file.data, { flag: "wx" });
     }
   } catch (error) {
-    for (const entry of staged) await rm(entry.partialPath, { force: true }).catch(() => {});
+    for (const entry of staged) {
+      await rm(entry.partialPath, { force: true }).catch(() => {});
+      untrackPartial?.(entry.partialPath);
+    }
     throw error;
   }
 
@@ -360,14 +481,14 @@ export async function commitOutputs(dir, files, { overwrite = false, renameFn = 
   try {
     if (overwrite) {
       for (const entry of staged) {
-        let exists = false;
+        let info = null;
         try {
-          await lstat(entry.finalPath);
-          exists = true;
+          info = await lstat(entry.finalPath);
         } catch (error) {
           if (error.code !== "ENOENT") throw error;
         }
-        if (exists) {
+        if (info) {
+          if (info.isDirectory()) throw new Error(`Cannot overwrite existing directory '${entry.finalPath}'.`);
           const backupPath = join(dir, `.${entry.name}.${token}.backup`);
           await renameFn(entry.finalPath, backupPath);
           backedUp.push({ finalPath: entry.finalPath, backupPath });
@@ -376,12 +497,16 @@ export async function commitOutputs(dir, files, { overwrite = false, renameFn = 
     }
     for (const entry of staged) {
       await renameFn(entry.partialPath, entry.finalPath);
+      untrackPartial?.(entry.partialPath);
       committed.push(entry);
     }
   } catch (error) {
     for (let i = committed.length - 1; i >= 0; i -= 1) await unlink(committed[i].finalPath).catch(() => {});
     for (let i = backedUp.length - 1; i >= 0; i -= 1) await rename(backedUp[i].backupPath, backedUp[i].finalPath).catch(() => {});
-    for (const entry of staged) await rm(entry.partialPath, { force: true }).catch(() => {});
+    for (const entry of staged) {
+      await rm(entry.partialPath, { force: true }).catch(() => {});
+      untrackPartial?.(entry.partialPath);
+    }
     throw error;
   }
 
@@ -574,7 +699,12 @@ export async function segmentFile({
         { name: tableName, data: Buffer.from(csvText, "utf8") },
         { name: provName, data: Buffer.from(`${JSON.stringify(provenance, null, 2)}\n`, "utf8") },
       ],
-      { overwrite: parsed.overwrite, renameFn },
+      {
+        overwrite: parsed.overwrite,
+        renameFn,
+        trackPartial: reservation.trackPartial,
+        untrackPartial: reservation.untrackPartial,
+      },
     );
     committed = true;
 
@@ -595,7 +725,16 @@ export async function segmentFile({
  * Self-check verifying ONNX Runtime CPU execution and (when --cache-dir or NEURODESK_STARDIST_MODEL_DIR
  * is set) SHA-256 integrity of all bundled StarDist models offline.
  */
-export async function checkInstallation({ cacheDir } = {}) {
+export async function checkInstallation(opts = {}) {
+  if (opts === null || typeof opts !== "object" || Array.isArray(opts)) {
+    throw new Error("Options must be a plain object.");
+  }
+  for (const [key, value] of Object.entries(opts)) {
+    if (value !== undefined && key !== "cacheDir") {
+      throw new Error(`Unknown option '${key}' for checkInstallation.`);
+    }
+  }
+  const cacheDir = opts.cacheDir !== undefined ? assertNonEmptyString(opts.cacheDir, "cache-dir") : undefined;
   const ort = await loadOrt();
   const session = await ort.InferenceSession.create(IDENTITY_MODEL, { executionProviders: ["cpu"] });
   let output;

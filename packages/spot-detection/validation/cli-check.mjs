@@ -130,8 +130,9 @@ try {
   );
   assertValidNiftiGz(join(outMip, "experiment_1_smfish_fov_1_mip_spots.nii.gz"), [500, 650, 1]);
 
+  console.log(`network_isolation=${useUnshare ? "unshare-rn" : "fallback"}`);
   console.log(
-    `PASS spot-detection (${useUnshare ? "unshare -rn" : "offline"}): 3D=${prov3d.spots} spots @ t=${prov3d.threshold}, MIP=${provMip.spots} spots @ t=${provMip.threshold}`,
+    `PASS spot-detection (${useUnshare ? "unshare -rn" : "fallback"}): 3D=${prov3d.spots} spots @ t=${prov3d.threshold}, MIP=${provMip.spots} spots @ t=${provMip.threshold}`,
   );
 } finally {
   rmSync(work, { recursive: true, force: true });
