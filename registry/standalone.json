@@ -2490,7 +2490,41 @@
       "desktop": true,
       "profile": "batch",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/spot-detection-v0.1.20261124/spot-detection-0.1.20261124-linux-x64.tar.gz",
+          "sha256": "051c1b528eacb31c234d85e4f9f2bcb20ce0002cac3928481f3641ed2f89bf92",
+          "bytes": 47650239,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/spot-detection-v0.1.20261124/spot-detection-0.1.20261124-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": false,
+          "command": "tar -xzf spot-detection-0.1.20261124-linux-x64.tar.gz\n./spot-detection-0.1.20261124-linux-x64/spot-detection stack.tif results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/spot-detection-v0.1.20261124/spot-detection-0.1.20261124-macos-arm64.pkg",
+          "sha256": "d0e2c8eb30a780e880ec70f94022989cc97f7d3b12ff3fd22e7d683adbcdb794",
+          "bytes": 41337087,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/spot-detection-v0.1.20261124/spot-detection-0.1.20261124-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": false,
+          "command": "sudo installer -pkg spot-detection-0.1.20261124-macos-arm64.pkg -target /\nspot-detection self-check\nspot-detection stack.tif results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/spot-detection-v0.1.20261124/spot-detection-0.1.20261124-windows-x64.zip",
+          "sha256": "00c2d54c9dc1e35534a468d625fbbe108ce2f96703e9ca4f2f9e0a8e4ed81408",
+          "bytes": 38420948,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/spot-detection-v0.1.20261124/spot-detection-0.1.20261124-windows-x64.zip.validation.txt",
+          "modelsIncluded": false,
+          "command": "Expand-Archive -Path .\\spot-detection-0.1.20261124-windows-x64.zip -DestinationPath .\n.\\spot-detection-0.1.20261124-windows-x64\\spot-detection.exe stack.tif results"
+        }
+      ],
       "containers": []
     },
     "gliomoda": {
