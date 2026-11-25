@@ -2734,7 +2734,41 @@
       "desktop": true,
       "profile": "batch",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/deconvolution-v0.1.20261124/deconvolution-0.1.20261124-linux-x64.tar.gz",
+          "sha256": "75f393216de5f27f0b34b5747ab2fa4b935d841e3e3616593ee90d455178d8d0",
+          "bytes": 47802853,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/deconvolution-v0.1.20261124/deconvolution-0.1.20261124-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": false,
+          "command": "tar -xzf deconvolution-0.1.20261124-linux-x64.tar.gz\n./deconvolution-0.1.20261124-linux-x64/deconvolution stack.tif results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/deconvolution-v0.1.20261124/deconvolution-0.1.20261124-macos-arm64.pkg",
+          "sha256": "ae1773dc705822fd2ab6f75efe7c637d8ee56f9fbd8c45ccd5a1c51d6e265168",
+          "bytes": 41504968,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/deconvolution-v0.1.20261124/deconvolution-0.1.20261124-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": false,
+          "command": "sudo installer -pkg deconvolution-0.1.20261124-macos-arm64.pkg -target /\ndeconvolution self-check\ndeconvolution stack.tif results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/deconvolution-v0.1.20261124/deconvolution-0.1.20261124-windows-x64.zip",
+          "sha256": "052e229b1a3e5f45b62652c0800a237a4d3b4d3f08584ddf91b0a58b840a19a9",
+          "bytes": 38585997,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/deconvolution-v0.1.20261124/deconvolution-0.1.20261124-windows-x64.zip.validation.txt",
+          "modelsIncluded": false,
+          "command": "Expand-Archive -Path .\\deconvolution-0.1.20261124-windows-x64.zip -DestinationPath .\n.\\deconvolution-0.1.20261124-windows-x64\\deconvolution.exe stack.tif results"
+        }
+      ],
       "containers": []
     },
     "tumour-report": {
