@@ -2771,7 +2771,41 @@
       "desktop": true,
       "profile": "batch",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.2.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/cellpose-v0.2.20261124/cellpose-0.2.20261124-linux-x64.tar.gz",
+          "sha256": "afa2ba4bbadd491cece902145a886614829588bcbba765076afca277d7a0f299",
+          "bytes": 114331955,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/cellpose-v0.2.20261124/cellpose-0.2.20261124-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": true,
+          "command": "tar -xzf cellpose-0.2.20261124-linux-x64.tar.gz\n./cellpose-0.2.20261124-linux-x64/cellpose image.tif results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.2.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/cellpose-v0.2.20261124/cellpose-0.2.20261124-macos-arm64.pkg",
+          "sha256": "7f9453ce0a5c72fb36c2a558a646509854cc3ad78fdd3dc3a38012fb4b431fd2",
+          "bytes": 115954496,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/cellpose-v0.2.20261124/cellpose-0.2.20261124-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": true,
+          "command": "sudo installer -pkg cellpose-0.2.20261124-macos-arm64.pkg -target /\ncellpose self-check\ncellpose image.tif results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.2.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/cellpose-v0.2.20261124/cellpose-0.2.20261124-windows-x64.zip",
+          "sha256": "f6309c82a6529e3014a9240ab545cbac633e978e78643ff615c495e3570800ff",
+          "bytes": 116671658,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/cellpose-v0.2.20261124/cellpose-0.2.20261124-windows-x64.zip.validation.txt",
+          "modelsIncluded": true,
+          "command": "Expand-Archive -Path .\\cellpose-0.2.20261124-windows-x64.zip -DestinationPath .\n.\\cellpose-0.2.20261124-windows-x64\\cellpose.exe image.tif results"
+        }
+      ],
       "containers": []
     },
     "medsam2": {
