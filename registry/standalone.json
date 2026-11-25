@@ -2693,7 +2693,41 @@
       "desktop": true,
       "profile": "batch",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/histo2mri-v0.1.20261124/histo2mri-0.1.20261124-linux-x64.tar.gz",
+          "sha256": "00e5c7f979460761701a70f51c047c69f47625adb3e199dff2f8781947db43f3",
+          "bytes": 47951124,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/histo2mri-v0.1.20261124/histo2mri-0.1.20261124-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": false,
+          "command": "tar -xzf histo2mri-0.1.20261124-linux-x64.tar.gz\n./histo2mri-0.1.20261124-linux-x64/histo2mri mri.nii.gz section.tif out --slice 50"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/histo2mri-v0.1.20261124/histo2mri-0.1.20261124-macos-arm64.pkg",
+          "sha256": "017c1208e326dc5c12a102ec91382629638b636e1a946dacd348abeafcfaae88",
+          "bytes": 41650930,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/histo2mri-v0.1.20261124/histo2mri-0.1.20261124-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": false,
+          "command": "sudo installer -pkg histo2mri-0.1.20261124-macos-arm64.pkg -target /\nhisto2mri self-check\nhisto2mri mri.nii.gz section.tif out --slice 50"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/histo2mri-v0.1.20261124/histo2mri-0.1.20261124-windows-x64.zip",
+          "sha256": "28877d7b9dc589274193fbc29cc6001c3847ae0374ee2c258354e620af8c4609",
+          "bytes": 38734126,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/histo2mri-v0.1.20261124/histo2mri-0.1.20261124-windows-x64.zip.validation.txt",
+          "modelsIncluded": false,
+          "command": "Expand-Archive -Path .\\histo2mri-0.1.20261124-windows-x64.zip -DestinationPath .\n.\\histo2mri-0.1.20261124-windows-x64\\histo2mri.exe mri.nii.gz section.tif out --slice 50"
+        }
+      ],
       "containers": []
     },
     "deconvolution": {
