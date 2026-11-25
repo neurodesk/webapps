@@ -12,6 +12,7 @@
     "lint": "node ../../scripts/lint.mjs --workspace"
   },
   "dependencies": {
+    "@neurodesk/cellpose": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
     "@niivue/niivue": "1.0.0-rc.33",
     "fast-png": "8.0.0",

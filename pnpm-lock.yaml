@@ -423,6 +423,9 @@ importers:
 
   apps/cellpose:
     dependencies:
+      '@neurodesk/cellpose':
+        specifier: workspace:*
+        version: link:../../packages/cellpose
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
@@ -1619,6 +1622,9 @@ importers:
 
   apps/spot-detection:
     dependencies:
+      '@neurodesk/spot-detection':
+        specifier: workspace:*
+        version: link:../../packages/spot-detection
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
@@ -1635,6 +1641,9 @@ importers:
 
   apps/stardist:
     dependencies:
+      '@neurodesk/stardist':
+        specifier: workspace:*
+        version: link:../../packages/stardist
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
@@ -1688,6 +1697,9 @@ importers:
 
   apps/structure-tensor:
     dependencies:
+      '@neurodesk/structure-tensor':
+        specifier: workspace:*
+        version: link:../../packages/structure-tensor
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
@@ -2159,6 +2171,18 @@ importers:
         specifier: workspace:*
         version: link:../components
 
+  packages/cellpose:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      fast-png:
+        specifier: 8.0.0
+        version: 8.0.0
+      onnxruntime-node:
+        specifier: 1.29.0
+        version: 1.29.0
+
   packages/components:
     dependencies:
       geotiff:
@@ -2183,7 +2207,11 @@ importers:
 
   packages/cryo-em: {}
 
-  packages/deconvolution: {}
+  packages/deconvolution:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
 
   packages/deface:
     dependencies:
@@ -2660,6 +2688,39 @@ importers:
       onnxruntime-node:
         specifier: 1.29.0
         version: 1.29.0
+
+  packages/spot-detection:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+
+  packages/stardist:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      clipper-lib:
+        specifier: 6.4.2
+        version: 6.4.2
+      fast-png:
+        specifier: 8.0.0
+        version: 8.0.0
+      onnxruntime-node:
+        specifier: 1.29.0
+        version: 1.29.0
+
+  packages/structure-tensor:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      fast-png:
+        specifier: 8.0.0
+        version: 8.0.0
+      jpeg-js:
+        specifier: 0.4.4
+        version: 0.4.4
 
   packages/syncro:
     dependencies:

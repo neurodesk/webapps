@@ -1,0 +1,15 @@
+@neurodesk/structure-tensor
+Copyright (c) Neurodesk contributors
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This package implements the 2D and 3D structure-tensor orientation analysis
+method described by:
+- R. Rezakhaniha, A. Agianniotis, J. T. C. Schrauwen, A. Griffa, D. Sage,
+  C. V. C. Bouten, F. N. van de Vosse, M. Unser, N. Stergiopulos,
+  "Experimental investigation of collagen waviness and orientation in the
+  arterial adventitia using confocal laser scanning microscopy",
+  Biomechanics and Modeling in Mechanobiology, 11(3–4), 461–473 (2012).
+- Z. Püspöki, M. Storath, D. Sage, M. Unser,
+  "Transforms and Operators for Directional Bioimage Analysis: A Survey",
+  Advances in Anatomy, Embryology and Cell Biology, 219, 69–93 (2016).

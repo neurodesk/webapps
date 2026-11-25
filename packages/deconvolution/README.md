@@ -13,6 +13,18 @@ sizing, measured-PSF preparation, input checks and the memory plan.
 
 ## Building the module
 
+## Command line
+
+`bin/deconvolution.js` deconvolves single-channel 3D TIFF or NIfTI stacks from the command line, and is packaged as a standalone executable via `exes/node-cli` (`release.json`):
+
+```sh
+deconvolution stack.tif results --modality confocal --na 1.4 --emission-nm 525 --excitation-nm 488
+deconvolution stack.tif results --psf measured_bead.tif --method rltv --iterations 30
+deconvolution self-check
+```
+
+### Building the WebAssembly module
+
 After changing `exes/deconvolution`, run `pnpm --filter @neurodesk/deconvolution build:wasm`
 (Rust 1.98.1, wasm-pack 0.13.1 and binaryen `version_117` wasm-opt on `PATH`) and commit
 `wasm/`. The build enables WebAssembly SIMD128 for RustFFT's vectorised butterflies (1.5 times

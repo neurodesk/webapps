@@ -1,0 +1,41 @@
+{
+  "name": "@neurodesk/structure-tensor",
+  "version": "0.1.20261124",
+  "description": "2D and 3D Gaussian structure-tensor fibre orientation, coherency and energy analysis (OrientationJ method) and portable command line",
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@neurodesk/webapp-components": "workspace:*",
+    "fast-png": "8.0.0",
+    "jpeg-js": "0.4.4"
+  },
+  "bin": {
+    "structure-tensor": "./bin/structure-tensor.js"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./tensor": "./src/tensor.js",
+    "./settings": "./src/settings.js",
+    "./tiff": "./src/tiff.js",
+    "./node": "./src/node.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check bin/structure-tensor.js && node --check src/index.js && node --check src/tensor.js && node --check src/settings.js && node --check src/tiff.js && node --check src/node.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/structure-tensor"
+  }
+}

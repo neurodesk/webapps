@@ -1,0 +1,38 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "omezarr-convert-v",
+  "displayName": "OME-Zarr Converter",
+  "app": "omezarr-convert",
+  "bundleModels": false,
+  "run": "input.tif results",
+  "readme": {
+    "run": "Convert microscopy TIFF, PNG/JPEG sequences or NIfTI to multiscale OME-Zarr",
+    "notes": [
+      "Input is a TIFF, OME-TIFF, NIfTI (.nii, .nii.gz), or a PNG/JPEG/TIFF slice sequence.",
+      "Choose --version 0.5 (default, .ozx) or 0.4 (.ome.zarr.zip), and --format archive or dir.",
+      "Choose --method mean (default, intensity) or nearest (label masks).",
+      "Add --help for every option: chunk size, compression level, and overwrite.",
+      "",
+      "No network connection is required and no external models are downloaded.",
+      "Please cite Moore et al. 2021 (OME-NGFF) and Moore et al. 2023 (OME-Zarr)."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "omezarr-convert"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "omezarr-convert.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "omezarr-convert"
+    }
+  }
+}

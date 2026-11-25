@@ -2440,7 +2440,7 @@
     },
     "stardist": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
       "downloads": [],
       "containers": []
@@ -2454,7 +2454,7 @@
     },
     "spot-detection": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
       "downloads": [],
       "containers": []
@@ -2491,7 +2491,7 @@
     },
     "structure-tensor": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
       "downloads": [],
       "containers": []
@@ -2548,7 +2548,7 @@
     },
     "omezarr-convert": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
       "downloads": [],
       "containers": []
@@ -2562,7 +2562,7 @@
     },
     "deconvolution": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
       "downloads": [],
       "containers": []
@@ -2599,7 +2599,7 @@
     },
     "cellpose": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
       "downloads": [],
       "containers": []
