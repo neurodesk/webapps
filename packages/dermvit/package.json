@@ -37,7 +37,8 @@
     "@neurodesk/webapp-components": "workspace:*",
     "fast-png": "8.0.0",
     "jpeg-js": "0.4.4",
-    "onnxruntime-node": "1.29.0"
+    "onnxruntime-node": "1.29.0",
+    "pngjs": "7.0.0"
   },
   "repository": {
     "type": "git",

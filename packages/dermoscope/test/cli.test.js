@@ -1,7 +1,7 @@
 // Offline CLI tests for @neurodesk/dermoscope.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -36,7 +36,7 @@ test("checkInstallation passes offline and reports private executable metadata",
   assert.equal(report.node, process.version);
 });
 
-test("CLI runs end-to-end on PNG and JPEG inputs with calibration and optional D", async () => {
+test("CLI runs end-to-end on PNG and JPEG inputs with calibration, locking, and optional D", async () => {
   const work = await mkdtemp(join(tmpdir(), "dermoscope-cli-"));
   try {
     const rgba = syntheticLesionRgba(96, 96);
@@ -74,12 +74,25 @@ test("CLI runs end-to-end on PNG and JPEG inputs with calibration and optional D
     const retry = spawnSync(process.execPath, [BIN, jpgPath, outJpg], { encoding: "utf8" });
     assert.notEqual(retry.status, 0);
     assert.match(retry.stderr, /not empty/);
+
+    // Existing lock file rejected without deleting it
+    const lockedDir = join(work, "locked");
+    await mkdir(lockedDir);
+    const lockPath = join(lockedDir, ".dermoscope.lock");
+    await writeFile(lockPath, '{"pid":99999}\n');
+    await assert.rejects(() => analyzeFile({ input: pngPath, outputDir: lockedDir, overwrite: true }), /locked/);
+    await stat(lockPath);
+
+    // Newly created output directory removed if processing fails
+    const badOut = join(work, "failed-out");
+    await assert.rejects(() => analyzeFile({ input: join(work, "missing.png"), outputDir: badOut }));
+    await assert.rejects(() => stat(badOut), { code: "ENOENT" });
   } finally {
     await rm(work, { recursive: true, force: true });
   }
 });
 
-test("CLI --help, self-check, and calibration flag validation", () => {
+test("CLI --help, self-check, per-subcommand option checks, and strict flag validation", () => {
   const help = spawnSync(process.execPath, [BIN, "--help"], { encoding: "utf8" });
   assert.equal(help.status, 0);
   assert.match(help.stdout, /Usage: dermoscope INPUT OUTPUT_DIR/);
@@ -88,6 +101,20 @@ test("CLI --help, self-check, and calibration flag validation", () => {
   assert.equal(selfCheck.status, 0, selfCheck.stderr);
   assert.equal(JSON.parse(selfCheck.stdout).ok, true);
 
+  const badSelf = spawnSync(process.execPath, [BIN, "self-check", "--threshold-bias=bogus"], { encoding: "utf8" });
+  assert.notEqual(badSelf.status, 0);
+  assert.match(badSelf.stderr, /--threshold-bias is not valid with self-check/);
+
+  const badDl = spawnSync(process.execPath, [BIN, "download-models", "--threshold-bias=0.1"], { encoding: "utf8" });
+  assert.notEqual(badDl.status, 0);
+  assert.match(badDl.stderr, /--threshold-bias is not valid with download-models/);
+
+  const emptyBias = spawnSync(process.execPath, [BIN, "a.png", "out", "--threshold-bias="], { encoding: "utf8" });
+  assert.notEqual(emptyBias.status, 0);
+  assert.match(emptyBias.stderr, /--threshold-bias requires a non-empty value/);
+
   assert.equal(resolvePixelsPerMm({ mmPerPixel: "0.2" }), 5);
   assert.throws(() => resolvePixelsPerMm({ pixelsPerMm: "10", mmPerPixel: "0.1" }), /not both/);
+  assert.throws(() => resolvePixelsPerMm({ pixelsPerMm: "" }), /finite number/);
+  assert.throws(() => resolvePixelsPerMm({ mmPerPixel: "" }), /finite number/);
 });

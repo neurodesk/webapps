@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Portable release validation for @neurodesk/derm-compare.
-// Downloads pinned ISIC paired dermoscopy images from apps/derm-compare/examples.json into
-// tmpdir() (never touching isolated $HOME), verifies SHA-256, runs the packaged CLI,
-// and checks NCC improvement, overlap, CIEDE2000 metrics, and PNG outputs.
+// Prefetches pinned ISIC paired dermoscopy images from apps/derm-compare/examples.json into
+// tmpdir() (never touching isolated $HOME), verifies SHA-256 up front, then runs every
+// packaged CLI invocation under network isolation (unshare -rn on Linux when available),
+// checking NCC improvement, overlap, CIEDE2000 metrics, and PNG outputs.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
@@ -10,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { decode as decodePng } from "fast-png";
+import { PNG } from "pngjs";
 
 const { values } = parseArgs({ options: { executable: { type: "string" } } });
 const command = values.executable
@@ -28,6 +29,19 @@ function check(passed, message) {
 }
 
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
+
+function probeNetworkIsolation() {
+  if (process.platform !== "linux") return false;
+  const probe = spawnSync("unshare", ["-rn", "sh", "-c", "ip link set lo up && true"], {
+    stdio: "ignore",
+  });
+  return !probe.error && probe.status === 0;
+}
+
+const useNetIsolation = probeNetworkIsolation();
+console.log(
+  `INFO network_isolation=${useNetIsolation ? "unshare-rn" : "none (platform/unprivileged)"}`,
+);
 
 async function fetchPinnedExample(entry) {
   const cacheDir = join(tmpdir(), "neurodesk-dermatology-examples");
@@ -54,7 +68,10 @@ async function fetchPinnedExample(entry) {
 }
 
 function runCli(args) {
-  const run = spawnSync(command[0], [...command.slice(1), ...args], {
+  const spawnCmd = useNetIsolation
+    ? ["unshare", "-rn", "sh", "-c", 'ip link set lo up && exec "$@"', "--", ...command, ...args]
+    : [...command, ...args];
+  const run = spawnSync(spawnCmd[0], spawnCmd.slice(1), {
     stdio: ["ignore", "pipe", "pipe"],
     encoding: "utf8",
   });
@@ -62,18 +79,21 @@ function runCli(args) {
   return run;
 }
 
+// Prefetch & SHA-256 verify all pinned fixtures up front before any CLI invocation.
+const pair = examples.find((item) => item.id === "isic-nevus-pair");
+const baseEntry = pair.files.find((f) => f.role === "baseline");
+const follEntry = pair.files.find((f) => f.role === "followup");
+const [basePath, follPath] = await Promise.all([
+  fetchPinnedExample(baseEntry),
+  fetchPinnedExample(follEntry),
+]);
+
 const work = await mkdtemp(join(tmpdir(), "derm-compare-cli-check-"));
 try {
   const selfCheck = runCli(["self-check"]);
   check(selfCheck.status === 0, `self-check exits 0 (status ${selfCheck.status})`);
   const selfInfo = JSON.parse(selfCheck.stdout.trim());
   check(selfInfo.ok === true, `self-check reports ok=true (${selfInfo.version})`);
-
-  const pair = examples.find((item) => item.id === "isic-nevus-pair");
-  const baseEntry = pair.files.find((f) => f.role === "baseline");
-  const follEntry = pair.files.find((f) => f.role === "followup");
-  const basePath = await fetchPinnedExample(baseEntry);
-  const follPath = await fetchPinnedExample(follEntry);
 
   const outDir = join(work, "out-pair");
   const run = runCli([basePath, follPath, outDir]);
@@ -85,17 +105,25 @@ try {
 
   const prov = JSON.parse(await readFile(join(outDir, `${stem}_provenance.json`), "utf8"));
   const csv = await readFile(join(outDir, `${stem}_metrics.csv`), "utf8");
-  const alignedPng = decodePng(await readFile(join(outDir, `${stem}_aligned.png`)));
-  const diffPng = decodePng(await readFile(join(outDir, `${stem}_deltaE2000.png`)));
+  const alignedPng = PNG.sync.read(await readFile(join(outDir, `${stem}_aligned.png`)), { checkCRC: true });
+  const diffPng = PNG.sync.read(await readFile(join(outDir, `${stem}_deltaE2000.png`)), { checkCRC: true });
 
-  check(prov.registration.registered === true && prov.registration.alignedNcc > prov.registration.initialNcc,
-    `isic-nevus-pair: NCC improved ${prov.registration.initialNcc.toFixed(3)} -> ${prov.registration.alignedNcc.toFixed(3)}`);
-  check(prov.registration.overlapPct > 40 && Number.isFinite(prov.metrics.overlapMeanDeltaE),
-    `isic-nevus-pair: overlap ${prov.registration.overlapPct.toFixed(1)}%, mean ΔE2000 ${prov.metrics.overlapMeanDeltaE.toFixed(2)}`);
-  check(alignedPng.width === diffPng.width && alignedPng.height === diffPng.height && alignedPng.width > 0,
-    `isic-nevus-pair: aligned and ΔE2000 PNGs encoded (${alignedPng.width}x${alignedPng.height})`);
-  check(csv.includes("aligned_ncc,") && csv.includes("overlap_mean_delta_e2000,"),
-    "isic-nevus-pair: metrics CSV contains registration and ΔE2000 rows");
+  check(
+    prov.registration.registered === true && prov.registration.alignedNcc > prov.registration.initialNcc,
+    `isic-nevus-pair: NCC improved ${prov.registration.initialNcc.toFixed(3)} -> ${prov.registration.alignedNcc.toFixed(3)}`,
+  );
+  check(
+    prov.registration.overlapPct > 40 && Number.isFinite(prov.metrics.overlapMeanDeltaE),
+    `isic-nevus-pair: overlap ${prov.registration.overlapPct.toFixed(1)}%, mean ΔE2000 ${prov.metrics.overlapMeanDeltaE.toFixed(2)}`,
+  );
+  check(
+    alignedPng.width === diffPng.width && alignedPng.height === diffPng.height && alignedPng.width > 0,
+    `isic-nevus-pair: aligned and ΔE2000 PNGs verified with CRC (${alignedPng.width}x${alignedPng.height})`,
+  );
+  check(
+    csv.includes("aligned_ncc,") && csv.includes("overlap_mean_delta_e2000,"),
+    "isic-nevus-pair: metrics CSV contains registration and ΔE2000 rows",
+  );
 } finally {
   await rm(work, { recursive: true, force: true });
 }

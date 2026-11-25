@@ -2,7 +2,7 @@
 // Runs the exact same uniform pair downscaling, preprocessing, multi-scale NCC registration,
 // CIEDE2000 analysis, and PNG/CSV/JSON serializers as the DermCompare web application.
 import { randomUUID } from "node:crypto";
-import { mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, open, readdir, rename, rm, rmdir, stat, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import packageJson from "../package.json" with { type: "json" };
 import { LIMITS, buildProvenance, readSettings } from "./config.js";
@@ -11,27 +11,142 @@ import { buildChangeMapRgba } from "./display.js";
 import { encodeRgbaPng, metricsCsv, outputStem, provenanceJson } from "./outputs.js";
 import { readRasterImageFile } from "./raster.js";
 
-async function writeAtomically(filePath, bytes) {
-  const partial = `${filePath}.${randomUUID()}.partial`;
-  try {
-    await writeFile(partial, bytes, { flag: "wx" });
-    await rename(partial, filePath);
-  } catch (error) {
-    await rm(partial, { force: true });
-    throw error;
+function parseStrictNumber(raw, label) {
+  if (typeof raw === "number") {
+    if (!Number.isFinite(raw)) throw new Error(`${label} must be a finite number, got "${raw}".`);
+    return raw;
   }
+  if (typeof raw !== "string" || raw.trim() === "") {
+    throw new Error(`${label} must be a finite number, got "${raw}".`);
+  }
+  const value = Number(raw.trim());
+  if (!Number.isFinite(value)) {
+    throw new Error(`${label} must be a finite number, got "${raw}".`);
+  }
+  return value;
 }
 
-async function assertOutputDir(directory, { overwrite = false } = {}) {
-  let entries;
+export async function reserveOutputDir(outputDir, { overwrite = false, tool = "derm-compare" } = {}) {
+  const dir = resolve(outputDir);
+  let createdDir = false;
   try {
-    entries = await readdir(directory);
+    const info = await stat(dir);
+    if (!info.isDirectory()) {
+      throw new Error(`Output path ${dir} exists and is not a directory.`);
+    }
   } catch (error) {
-    if (error.code === "ENOENT") return;
+    if (error.code !== "ENOENT") throw error;
+    await mkdir(dir, { recursive: true });
+    createdDir = true;
+  }
+
+  const lockName = `.${tool}.lock`;
+  const lockPath = join(dir, lockName);
+  let handle;
+  try {
+    handle = await open(lockPath, "wx");
+  } catch (error) {
+    if (createdDir) {
+      await rmdir(dir).catch(() => {});
+    }
+    if (error.code === "EEXIST") {
+      throw new Error(
+        `Output directory ${dir} is locked by another ${tool} run (${lockName}). Wait for it to finish or remove a stale lock file.`,
+      );
+    }
     throw error;
   }
-  if (!overwrite && entries.length > 0) {
-    throw new Error(`Output directory ${directory} is not empty. Choose a new directory or pass --overwrite.`);
+
+  let released = false;
+  const release = async ({ removeIfEmpty = false } = {}) => {
+    if (released) return;
+    released = true;
+    await rm(lockPath, { force: true }).catch(() => {});
+    if (removeIfEmpty && createdDir) {
+      const remaining = await readdir(dir).catch(() => null);
+      if (remaining && remaining.length === 0) {
+        await rmdir(dir).catch(() => {});
+      }
+    }
+  };
+
+  try {
+    const meta = JSON.stringify({ pid: process.pid, tool, startedAt: new Date().toISOString() });
+    await handle.writeFile(`${meta}\n`, "utf8");
+    await handle.close();
+    handle = null;
+
+    const entries = await readdir(dir);
+    const others = entries.filter((entry) => entry !== lockName);
+    if (!overwrite && others.length > 0) {
+      throw new Error(`Output directory ${dir} is not empty. Choose a new directory or pass --overwrite.`);
+    }
+  } catch (error) {
+    if (handle) await handle.close().catch(() => {});
+    await release({ removeIfEmpty: true });
+    throw error;
+  }
+
+  return { dir, lockPath, createdDir, release };
+}
+
+export async function publishOutputs(dir, files, { overwrite = false } = {}) {
+  const token = randomUUID();
+  const staged = [];
+  const backups = [];
+  const committed = [];
+
+  try {
+    for (const { name, bytes } of files) {
+      const target = join(dir, name);
+      const partial = join(dir, `.${name}.${token}.partial`);
+      await writeFile(partial, bytes, { flag: "wx" });
+      staged.push({ name, target, partial, moved: false });
+    }
+
+    for (const item of staged) {
+      let existingInfo = null;
+      try {
+        existingInfo = await stat(item.target);
+      } catch (error) {
+        if (error.code !== "ENOENT") throw error;
+      }
+      if (existingInfo) {
+        if (existingInfo.isDirectory()) {
+          throw new Error(`Output file path ${item.target} is a directory.`);
+        }
+        if (!overwrite) {
+          throw new Error(`Output file ${item.target} already exists. Pass --overwrite to replace it.`);
+        }
+        const backup = join(dir, `.${item.name}.${token}.backup`);
+        await rename(item.target, backup);
+        backups.push({ target: item.target, backup });
+      }
+      await rename(item.partial, item.target);
+      item.moved = true;
+      committed.push(item.target);
+    }
+
+    for (const { backup } of backups) {
+      await rm(backup, { force: true }).catch(() => {});
+    }
+    return committed;
+  } catch (error) {
+    const backedUpTargets = new Set(backups.map((b) => b.target));
+    for (const target of [...committed].reverse()) {
+      if (!backedUpTargets.has(target)) {
+        await rm(target, { force: true }).catch(() => {});
+      }
+    }
+    for (const { target, backup } of [...backups].reverse()) {
+      await rename(backup, target).catch(() => {});
+    }
+    for (const item of staged) {
+      if (!item.moved) {
+        await rm(item.partial, { force: true }).catch(() => {});
+      }
+    }
+    throw error;
   }
 }
 
@@ -51,101 +166,114 @@ export async function compareFiles({
   normalizeColor = true,
   suppressHair = true,
   allowScale = false,
-  maxAngle = 25,
+  maxAngle,
   overwrite = false,
   onProgress = () => {},
 } = {}) {
-  if (!baseline || !followup || !outputDir) {
+  if (
+    !baseline ||
+    !followup ||
+    !outputDir ||
+    String(baseline).trim() === "" ||
+    String(followup).trim() === "" ||
+    String(outputDir).trim() === ""
+  ) {
     throw new Error("Provide a baseline image, a follow-up image, and an output directory.");
   }
   const started = performance.now();
-  const settings = readSettings({ normalizeColor, suppressHair, allowScale, maxAngle });
-  const destination = resolve(outputDir);
-  await assertOutputDir(destination, { overwrite });
+  const parsedMaxAngle = maxAngle === undefined ? 25 : parseStrictNumber(maxAngle, "--max-angle");
+  const settings = readSettings({ normalizeColor, suppressHair, allowScale, maxAngle: parsedMaxAngle });
+  const reservation = await reserveOutputDir(outputDir, { overwrite, tool: "derm-compare" });
+  let published = false;
 
-  const maxDecodedBytes = LIMITS.maxDecodedPixels * 4;
-  onProgress(0.03, "Decoding baseline and follow-up images…");
-  const baseImg = await readRasterImageFile(resolve(baseline), { maxBytes: maxDecodedBytes });
-  const follImg = await readRasterImageFile(resolve(followup), { maxBytes: maxDecodedBytes });
-  validateDimensions(baseImg, baseImg.name);
-  validateDimensions(follImg, follImg.name);
+  try {
+    const maxDecodedBytes = LIMITS.maxDecodedPixels * 4;
+    onProgress(0.03, "Decoding baseline and follow-up images…");
+    const baseImg = await readRasterImageFile(resolve(baseline), { maxBytes: maxDecodedBytes });
+    const follImg = await readRasterImageFile(resolve(followup), { maxBytes: maxDecodedBytes });
+    validateDimensions(baseImg, baseImg.name);
+    validateDimensions(follImg, follImg.name);
 
-  const result = runComparison({
-    baselineRgba: baseImg.rgba,
-    baselineWidth: baseImg.width,
-    baselineHeight: baseImg.height,
-    followupRgba: follImg.rgba,
-    followupWidth: follImg.width,
-    followupHeight: follImg.height,
-    settings,
-    maxWorkingDimension: LIMITS.maxWorkingDimension,
-    onProgress: (value, message) => onProgress(0.08 + 0.82 * value, message),
-  });
+    const result = runComparison({
+      baselineRgba: baseImg.rgba,
+      baselineWidth: baseImg.width,
+      baselineHeight: baseImg.height,
+      followupRgba: follImg.rgba,
+      followupWidth: follImg.width,
+      followupHeight: follImg.height,
+      settings,
+      maxWorkingDimension: LIMITS.maxWorkingDimension,
+      onProgress: (value, message) => onProgress(0.08 + 0.82 * value, message),
+    });
 
-  if (!result.registered) {
-    throw new Error(result.reason || "Insufficient image texture or overlap for registration.");
-  }
+    if (!result.registered) {
+      throw new Error(result.reason || "Insufficient image texture or overlap for registration.");
+    }
 
-  onProgress(0.92, "Encoding PNG, CSV, and JSON outputs…");
-  const changeMapRgba = buildChangeMapRgba({
-    baselineRgba: result.baselineRgba,
-    deltaEMap: result.deltaEMap,
-    validMask: result.validMask,
-    deltaEMask: result.deltaEMask,
-    baselineMask: result.baselineMask,
-    followupMask: result.followupMask,
-    width: result.width,
-    height: result.height,
-    opacity: 0.72,
-    showContours: true,
-  });
-  const alignedPng = encodeRgbaPng(result.warpedFollowupRgba, result.width, result.height);
-  const changeMapPng = encodeRgbaPng(changeMapRgba, result.width, result.height);
-  const elapsedSeconds = (performance.now() - started) / 1000;
-
-  const provenance = buildProvenance({
-    baseline: {
-      name: baseImg.name,
+    onProgress(0.92, "Encoding PNG, CSV, and JSON outputs…");
+    const changeMapRgba = buildChangeMapRgba({
+      baselineRgba: result.baselineRgba,
+      deltaEMap: result.deltaEMap,
+      validMask: result.validMask,
+      deltaEMask: result.deltaEMask,
+      baselineMask: result.baselineMask,
+      followupMask: result.followupMask,
       width: result.width,
       height: result.height,
-      originalWidth: baseImg.width,
-      originalHeight: baseImg.height,
-    },
-    followup: {
-      name: follImg.name,
-      width: result.followupWidth ?? follImg.width,
-      height: result.followupHeight ?? follImg.height,
-      originalWidth: follImg.width,
-      originalHeight: follImg.height,
-    },
-    settings,
-    preprocessing: result.preprocessing,
-    registration: result.registration,
-    metrics: result.metrics,
-    elapsedSeconds,
-  });
+      opacity: 0.72,
+      showContours: true,
+    });
+    const alignedPng = encodeRgbaPng(result.warpedFollowupRgba, result.width, result.height);
+    const changeMapPng = encodeRgbaPng(changeMapRgba, result.width, result.height);
+    const elapsedSeconds = (performance.now() - started) / 1000;
 
-  const stem = `${outputStem(baseImg.name)}_vs_${outputStem(follImg.name)}`;
-  await mkdir(destination, { recursive: true });
-  const alignedPath = join(destination, `${stem}_aligned.png`);
-  const deltaEPath = join(destination, `${stem}_deltaE2000.png`);
-  const csvPath = join(destination, `${stem}_metrics.csv`);
-  const jsonPath = join(destination, `${stem}_provenance.json`);
+    const provenance = buildProvenance({
+      baseline: {
+        name: baseImg.name,
+        width: result.width,
+        height: result.height,
+        originalWidth: baseImg.width,
+        originalHeight: baseImg.height,
+      },
+      followup: {
+        name: follImg.name,
+        width: result.followupWidth ?? follImg.width,
+        height: result.followupHeight ?? follImg.height,
+        originalWidth: follImg.width,
+        originalHeight: follImg.height,
+      },
+      settings,
+      preprocessing: result.preprocessing,
+      registration: result.registration,
+      metrics: result.metrics,
+      elapsedSeconds,
+    });
 
-  await writeAtomically(alignedPath, alignedPng);
-  await writeAtomically(deltaEPath, changeMapPng);
-  await writeAtomically(csvPath, Buffer.from(metricsCsv({ ...result, settings }), "utf8"));
-  await writeAtomically(jsonPath, Buffer.from(provenanceJson(provenance), "utf8"));
+    const stem = `${outputStem(baseImg.name)}_vs_${outputStem(follImg.name)}`;
+    const outputs = await publishOutputs(
+      reservation.dir,
+      [
+        { name: `${stem}_metrics.csv`, bytes: Buffer.from(metricsCsv({ ...result, settings }), "utf8") },
+        { name: `${stem}_provenance.json`, bytes: Buffer.from(provenanceJson(provenance), "utf8") },
+        { name: `${stem}_aligned.png`, bytes: alignedPng },
+        { name: `${stem}_deltaE2000.png`, bytes: changeMapPng },
+      ],
+      { overwrite },
+    );
+    published = true;
 
-  onProgress(1, "Comparison complete");
-  return {
-    outputDir: destination,
-    outputs: [csvPath, jsonPath, alignedPath, deltaEPath],
-    primaryOutput: csvPath,
-    result,
-    provenance,
-    seconds: elapsedSeconds,
-  };
+    onProgress(1, "Comparison complete");
+    return {
+      outputDir: reservation.dir,
+      outputs,
+      primaryOutput: outputs[0],
+      result,
+      provenance,
+      seconds: elapsedSeconds,
+    };
+  } finally {
+    await reservation.release({ removeIfEmpty: !published });
+  }
 }
 
 /** Offline self-check verifying rigid registration and CIEDE2000 on a synthetic shifted pair. */

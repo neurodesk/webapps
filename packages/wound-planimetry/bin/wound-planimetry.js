@@ -31,6 +31,34 @@ Segmentation & RYB options:
 Writes <stem>_wound-ryb-overlay.png, <stem>_wound-mask.png,
 <stem>_wound-planimetry.csv, and <stem>_wound-provenance.json into OUTPUT_DIR.`;
 
+const STRING_OPTIONS = [
+  "cache-dir",
+  "pixels-per-mm",
+  "mm-per-pixel",
+  "scale-mm",
+  "scale-px",
+  "ruler",
+  "sensitivity",
+  "eschar-l",
+  "granulation-a",
+  "slough-b",
+  "seed",
+  "overlay-opacity",
+];
+
+function validateOptions(values, allowed, context) {
+  const allowedSet = new Set(allowed);
+  for (const [key, value] of Object.entries(values)) {
+    if (value === undefined) continue;
+    if (!allowedSet.has(key)) {
+      throw new Error(`--${key} is not valid with ${context}.`);
+    }
+    if (STRING_OPTIONS.includes(key) && String(value).trim() === "") {
+      throw new Error(`--${key} requires a non-empty value.`);
+    }
+  }
+}
+
 try {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
@@ -52,18 +80,40 @@ try {
     },
   });
   const [command] = positionals;
-  if (values["cache-dir"] !== undefined && command !== "download-models") {
-    throw new Error("--cache-dir only applies to download-models.");
-  }
   if (values.help) {
     console.log(HELP);
   } else if (command === "self-check") {
-    if (positionals.length !== 1) throw new Error("self-check does not accept arguments.");
+    validateOptions(values, [], "self-check");
+    if (positionals.length !== 1) throw new Error("self-check does not accept positional arguments.");
     console.log(JSON.stringify(await checkInstallation()));
   } else if (command === "download-models") {
+    validateOptions(values, ["cache-dir"], "download-models");
     if (positionals.length !== 1) throw new Error("download-models does not accept positional arguments.");
-    console.log(`0 model files: wound-planimetry is deterministic and has nothing to install in ${resolve(values["cache-dir"] ?? ".")}`);
+    console.log(
+      `0 model files: wound-planimetry is deterministic and has nothing to install in ${resolve(values["cache-dir"] ?? ".")}`,
+    );
   } else {
+    if (values["cache-dir"] !== undefined) {
+      throw new Error("--cache-dir only applies to download-models.");
+    }
+    validateOptions(
+      values,
+      [
+        "pixels-per-mm",
+        "mm-per-pixel",
+        "scale-mm",
+        "scale-px",
+        "ruler",
+        "sensitivity",
+        "eschar-l",
+        "granulation-a",
+        "slough-b",
+        "seed",
+        "overlay-opacity",
+        "overwrite",
+      ],
+      "wound-planimetry",
+    );
     if (positionals.length !== 2) {
       throw new Error("Provide an input image (JPEG/PNG) and an output directory. Use --help for options.");
     }

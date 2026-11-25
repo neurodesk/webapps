@@ -2254,6 +2254,9 @@ importers:
       jpeg-js:
         specifier: 0.4.4
         version: 0.4.4
+      pngjs:
+        specifier: 7.0.0
+        version: 7.0.0
 
   packages/dermoscope:
     dependencies:
@@ -2266,6 +2269,9 @@ importers:
       jpeg-js:
         specifier: 0.4.4
         version: 0.4.4
+      pngjs:
+        specifier: 7.0.0
+        version: 7.0.0
 
   packages/dermvit:
     dependencies:
@@ -2281,6 +2287,9 @@ importers:
       onnxruntime-node:
         specifier: 1.29.0
         version: 1.29.0
+      pngjs:
+        specifier: 7.0.0
+        version: 7.0.0
 
   packages/desktop:
     dependencies:
@@ -2717,6 +2726,9 @@ importers:
       jpeg-js:
         specifier: 0.4.4
         version: 0.4.4
+      pngjs:
+        specifier: 7.0.0
+        version: 7.0.0
 
   packages/spinalcordtoolbox:
     dependencies:
@@ -2881,6 +2893,9 @@ importers:
       jpeg-js:
         specifier: 0.4.4
         version: 0.4.4
+      pngjs:
+        specifier: 7.0.0
+        version: 7.0.0
 
   scripts/quality:
     dependencies:

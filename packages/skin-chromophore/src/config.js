@@ -80,6 +80,7 @@ export function buildProvenance({
   originalHeight = height,
   downscaled = false,
   format,
+  colorSpace = "srgb (color-managed decode)",
   settings,
   analysis,
   manualRoi,
@@ -97,7 +98,7 @@ export function buildProvenance({
       width,
       height,
       downscaled,
-      colorSpace: "srgb (color-managed decode)",
+      colorSpace,
     },
     settings: {
       ...settings,

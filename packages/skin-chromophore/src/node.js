@@ -2,7 +2,7 @@
 // Runs the exact same CIE L*a*b*, ITA°, CIEDE2000, RGB EI/MI, fixed-basis melanin/hemoglobin
 // OD proxies, ROI analysis, and PNG/CSV/JSON serializers as the Skin Chromophore web app.
 import { randomUUID } from "node:crypto";
-import { mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, open, readdir, rename, rm, rmdir, stat, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import packageJson from "../package.json" with { type: "json" };
 import {
@@ -16,63 +16,188 @@ import { analyzeSkinImage } from "./core/analyze.js";
 import { colorimetryCsv, encodeMapPng, outputStem, provenanceJson } from "./outputs.js";
 import { readRasterImageFile } from "./raster.js";
 
-async function writeAtomically(filePath, bytes) {
-  const partial = `${filePath}.${randomUUID()}.partial`;
+function parseStrictInteger(raw, label) {
+  if (typeof raw === "number") {
+    if (!Number.isInteger(raw)) throw new Error(`${label} must be an integer, got "${raw}".`);
+    return raw;
+  }
+  if (typeof raw !== "string" || !/^[+-]?\d+$/.test(raw.trim())) {
+    throw new Error(`${label} must be an integer, got "${raw}".`);
+  }
+  const value = Number(raw.trim());
+  if (!Number.isSafeInteger(value)) {
+    throw new Error(`${label} must be an integer, got "${raw}".`);
+  }
+  return value;
+}
+
+export async function reserveOutputDir(outputDir, { overwrite = false, tool = "skin-chromophore" } = {}) {
+  const dir = resolve(outputDir);
+  let createdDir = false;
   try {
-    await writeFile(partial, bytes, { flag: "wx" });
-    await rename(partial, filePath);
+    const info = await stat(dir);
+    if (!info.isDirectory()) {
+      throw new Error(`Output path ${dir} exists and is not a directory.`);
+    }
   } catch (error) {
-    await rm(partial, { force: true });
+    if (error.code !== "ENOENT") throw error;
+    await mkdir(dir, { recursive: true });
+    createdDir = true;
+  }
+
+  const lockName = `.${tool}.lock`;
+  const lockPath = join(dir, lockName);
+  let handle;
+  try {
+    handle = await open(lockPath, "wx");
+  } catch (error) {
+    if (createdDir) {
+      await rmdir(dir).catch(() => {});
+    }
+    if (error.code === "EEXIST") {
+      throw new Error(
+        `Output directory ${dir} is locked by another ${tool} run (${lockName}). Wait for it to finish or remove a stale lock file.`,
+      );
+    }
+    throw error;
+  }
+
+  let released = false;
+  const release = async ({ removeIfEmpty = false } = {}) => {
+    if (released) return;
+    released = true;
+    await rm(lockPath, { force: true }).catch(() => {});
+    if (removeIfEmpty && createdDir) {
+      const remaining = await readdir(dir).catch(() => null);
+      if (remaining && remaining.length === 0) {
+        await rmdir(dir).catch(() => {});
+      }
+    }
+  };
+
+  try {
+    const meta = JSON.stringify({ pid: process.pid, tool, startedAt: new Date().toISOString() });
+    await handle.writeFile(`${meta}\n`, "utf8");
+    await handle.close();
+    handle = null;
+
+    const entries = await readdir(dir);
+    const others = entries.filter((entry) => entry !== lockName);
+    if (!overwrite && others.length > 0) {
+      throw new Error(`Output directory ${dir} is not empty. Choose a new directory or pass --overwrite.`);
+    }
+  } catch (error) {
+    if (handle) await handle.close().catch(() => {});
+    await release({ removeIfEmpty: true });
+    throw error;
+  }
+
+  return { dir, lockPath, createdDir, release };
+}
+
+export async function publishOutputs(dir, files, { overwrite = false } = {}) {
+  const token = randomUUID();
+  const staged = [];
+  const backups = [];
+  const committed = [];
+
+  try {
+    for (const { name, bytes } of files) {
+      const target = join(dir, name);
+      const partial = join(dir, `.${name}.${token}.partial`);
+      await writeFile(partial, bytes, { flag: "wx" });
+      staged.push({ name, target, partial, moved: false });
+    }
+
+    for (const item of staged) {
+      let existingInfo = null;
+      try {
+        existingInfo = await stat(item.target);
+      } catch (error) {
+        if (error.code !== "ENOENT") throw error;
+      }
+      if (existingInfo) {
+        if (existingInfo.isDirectory()) {
+          throw new Error(`Output file path ${item.target} is a directory.`);
+        }
+        if (!overwrite) {
+          throw new Error(`Output file ${item.target} already exists. Pass --overwrite to replace it.`);
+        }
+        const backup = join(dir, `.${item.name}.${token}.backup`);
+        await rename(item.target, backup);
+        backups.push({ target: item.target, backup });
+      }
+      await rename(item.partial, item.target);
+      item.moved = true;
+      committed.push(item.target);
+    }
+
+    for (const { backup } of backups) {
+      await rm(backup, { force: true }).catch(() => {});
+    }
+    return committed;
+  } catch (error) {
+    const backedUpTargets = new Set(backups.map((b) => b.target));
+    for (const target of [...committed].reverse()) {
+      if (!backedUpTargets.has(target)) {
+        await rm(target, { force: true }).catch(() => {});
+      }
+    }
+    for (const { target, backup } of [...backups].reverse()) {
+      await rename(backup, target).catch(() => {});
+    }
+    for (const item of staged) {
+      if (!item.moved) {
+        await rm(item.partial, { force: true }).catch(() => {});
+      }
+    }
     throw error;
   }
 }
 
-async function assertOutputDir(directory, { overwrite = false } = {}) {
-  let entries;
-  try {
-    entries = await readdir(directory);
-  } catch (error) {
-    if (error.code === "ENOENT") return;
-    throw error;
-  }
-  if (!overwrite && entries.length > 0) {
-    throw new Error(`Output directory ${directory} is not empty. Choose a new directory or pass --overwrite.`);
-  }
-}
-
-/** Area-averaged bilinear downsampling of an RGBA image to (outWidth x outHeight). */
+/** Exact fractional area-weighted downsampling of an RGBA image to (outWidth x outHeight). */
 export function downsampleRgbaBilinear(rgba, width, height, outWidth, outHeight) {
   if (width === outWidth && height === outHeight) return rgba;
   const out = new Uint8ClampedArray(outWidth * outHeight * 4);
   const scaleX = width / outWidth;
   const scaleY = height / outHeight;
   for (let y = 0; y < outHeight; y += 1) {
-    const sy0 = Math.floor(y * scaleY);
-    const sy1 = Math.min(height, Math.max(sy0 + 1, Math.ceil((y + 1) * scaleY)));
+    const y0 = y * scaleY;
+    const y1 = (y + 1) * scaleY;
+    const sy0 = Math.floor(y0);
+    const sy1 = Math.min(height, Math.ceil(y1));
     for (let x = 0; x < outWidth; x += 1) {
-      const sx0 = Math.floor(x * scaleX);
-      const sx1 = Math.min(width, Math.max(sx0 + 1, Math.ceil((x + 1) * scaleX)));
+      const x0 = x * scaleX;
+      const x1 = (x + 1) * scaleX;
+      const sx0 = Math.floor(x0);
+      const sx1 = Math.min(width, Math.ceil(x1));
       let r = 0;
       let g = 0;
       let b = 0;
       let a = 0;
-      let count = 0;
+      let totalWeight = 0;
       for (let sy = sy0; sy < sy1; sy += 1) {
+        const wy = Math.min(y1, sy + 1) - Math.max(y0, sy);
+        if (wy <= 0) continue;
         const row = sy * width;
         for (let sx = sx0; sx < sx1; sx += 1) {
+          const wx = Math.min(x1, sx + 1) - Math.max(x0, sx);
+          if (wx <= 0) continue;
+          const w = wx * wy;
           const p = (row + sx) * 4;
-          r += rgba[p];
-          g += rgba[p + 1];
-          b += rgba[p + 2];
-          a += rgba[p + 3];
-          count += 1;
+          r += rgba[p] * w;
+          g += rgba[p + 1] * w;
+          b += rgba[p + 2] * w;
+          a += rgba[p + 3] * w;
+          totalWeight += w;
         }
       }
       const dst = (y * outWidth + x) * 4;
-      out[dst] = Math.round(r / count);
-      out[dst + 1] = Math.round(g / count);
-      out[dst + 2] = Math.round(b / count);
-      out[dst + 3] = Math.round(a / count);
+      const inv = totalWeight > 0 ? 1 / totalWeight : 0;
+      out[dst] = Math.round(r * inv);
+      out[dst + 1] = Math.round(g * inv);
+      out[dst + 2] = Math.round(b * inv);
+      out[dst + 3] = Math.round(a * inv);
     }
   }
   return out;
@@ -88,76 +213,84 @@ export async function analyzeFile({
   overwrite = false,
   onProgress = () => {},
 } = {}) {
-  if (!input || !outputDir) {
+  if (!input || !outputDir || String(input).trim() === "" || String(outputDir).trim() === "") {
     throw new Error("Provide an input JPEG/PNG image and an output directory.");
   }
-  const parsedMaxSide = Number(maxSide);
-  if (!Number.isInteger(parsedMaxSide) || parsedMaxSide < 32 || parsedMaxSide > 8192) {
+  if (typeof roiMode !== "string" || roiMode.trim() === "") {
+    throw new Error(`--roi-mode must be a non-empty value ("auto" or "central"), got "${roiMode}".`);
+  }
+  const parsedMaxSide = parseStrictInteger(maxSide, "--max-side");
+  if (parsedMaxSide < 32 || parsedMaxSide > 8192) {
     throw new Error(`--max-side must be an integer between 32 and 8192, got "${maxSide}".`);
   }
   const started = performance.now();
-  const settings = readSettings({ whiteBalance, maskVignette, roiMode });
-  const destination = resolve(outputDir);
-  await assertOutputDir(destination, { overwrite });
+  const settings = readSettings({ whiteBalance, maskVignette, roiMode: roiMode.trim() });
+  const reservation = await reserveOutputDir(outputDir, { overwrite, tool: "skin-chromophore" });
+  let published = false;
 
-  onProgress(0.05, "Decoding input image…");
-  const decoded = await readRasterImageFile(resolve(input), { maxBytes: MAX_DECODED_BYTES });
-  const dims = computeAnalysisDimensions(decoded.width, decoded.height, parsedMaxSide);
-  const workingRgba = dims.downscaled
-    ? downsampleRgbaBilinear(decoded.rgba, decoded.width, decoded.height, dims.width, dims.height)
-    : decoded.rgba;
+  try {
+    onProgress(0.05, "Decoding input image…");
+    const decoded = await readRasterImageFile(resolve(input), { maxBytes: MAX_DECODED_BYTES });
+    const dims = computeAnalysisDimensions(decoded.width, decoded.height, parsedMaxSide);
+    const workingRgba = dims.downscaled
+      ? downsampleRgbaBilinear(decoded.rgba, decoded.width, decoded.height, dims.width, dims.height)
+      : decoded.rgba;
 
-  const analysis = analyzeSkinImage(
-    workingRgba,
-    dims.width,
-    dims.height,
-    settings,
-    (value, message) => onProgress(0.1 + 0.72 * value, message),
-  );
+    const analysis = analyzeSkinImage(
+      workingRgba,
+      dims.width,
+      dims.height,
+      settings,
+      (value, message) => onProgress(0.1 + 0.72 * value, message),
+    );
 
-  onProgress(0.85, "Encoding hemoglobin, melanin, and ITA° PNG maps…");
-  const hemoglobinPng = encodeMapPng("hemoglobin", analysis);
-  const melaninPng = encodeMapPng("melanin", analysis);
-  const itaPng = encodeMapPng("ita", analysis);
-  const csvText = colorimetryCsv(analysis);
-  const record = buildProvenance({
-    file: { name: decoded.name, size: decoded.size },
-    width: dims.width,
-    height: dims.height,
-    originalWidth: decoded.width,
-    originalHeight: decoded.height,
-    downscaled: dims.downscaled,
-    format: decoded.format,
-    settings,
-    analysis,
-    manualRoi: null,
-  });
-  const jsonText = provenanceJson(record);
+    onProgress(0.85, "Encoding hemoglobin, melanin, and ITA° PNG maps…");
+    const hemoglobinPng = encodeMapPng("hemoglobin", analysis);
+    const melaninPng = encodeMapPng("melanin", analysis);
+    const itaPng = encodeMapPng("ita", analysis);
+    const csvText = colorimetryCsv(analysis);
+    const record = buildProvenance({
+      file: { name: decoded.name, size: decoded.size },
+      width: dims.width,
+      height: dims.height,
+      originalWidth: decoded.width,
+      originalHeight: decoded.height,
+      downscaled: dims.downscaled,
+      format: decoded.format,
+      colorSpace: decoded.colorSpaceDescription,
+      settings,
+      analysis,
+      manualRoi: null,
+    });
+    const jsonText = provenanceJson(record);
 
-  const stem = outputStem(decoded.name);
-  await mkdir(destination, { recursive: true });
-  const hbPath = join(destination, `${stem}_hemoglobin.png`);
-  const melPath = join(destination, `${stem}_melanin.png`);
-  const itaPath = join(destination, `${stem}_ita.png`);
-  const csvPath = join(destination, `${stem}_colorimetry.csv`);
-  const jsonPath = join(destination, `${stem}_provenance.json`);
+    const stem = outputStem(decoded.name);
+    const outputs = await publishOutputs(
+      reservation.dir,
+      [
+        { name: `${stem}_colorimetry.csv`, bytes: Buffer.from(csvText, "utf8") },
+        { name: `${stem}_provenance.json`, bytes: Buffer.from(jsonText, "utf8") },
+        { name: `${stem}_hemoglobin.png`, bytes: hemoglobinPng },
+        { name: `${stem}_melanin.png`, bytes: melaninPng },
+        { name: `${stem}_ita.png`, bytes: itaPng },
+      ],
+      { overwrite },
+    );
+    published = true;
 
-  await writeAtomically(hbPath, hemoglobinPng);
-  await writeAtomically(melPath, melaninPng);
-  await writeAtomically(itaPath, itaPng);
-  await writeAtomically(csvPath, Buffer.from(csvText, "utf8"));
-  await writeAtomically(jsonPath, Buffer.from(jsonText, "utf8"));
-
-  const seconds = (performance.now() - started) / 1000;
-  onProgress(1, "Analysis complete");
-  return {
-    outputDir: destination,
-    outputs: [csvPath, jsonPath, hbPath, melPath, itaPath],
-    primaryOutput: csvPath,
-    analysis,
-    provenance: record,
-    seconds,
-  };
+    const seconds = (performance.now() - started) / 1000;
+    onProgress(1, "Analysis complete");
+    return {
+      outputDir: reservation.dir,
+      outputs,
+      primaryOutput: outputs[0],
+      analysis,
+      provenance: record,
+      seconds,
+    };
+  } finally {
+    await reservation.release({ removeIfEmpty: !published });
+  }
 }
 
 /** Offline self-check running colorimetry and chromophore proxy analysis on a synthetic skin image. */

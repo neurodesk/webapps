@@ -1,7 +1,7 @@
 // Offline CLI tests for @neurodesk/wound-planimetry.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -51,7 +51,7 @@ test("checkInstallation passes offline and reports executable metadata", async (
   assert.equal(report.node, process.version);
 });
 
-test("resolveCalibration handles --pixels-per-mm, --mm-per-pixel, --scale-mm/--scale-px/--ruler, and conflicts", () => {
+test("resolveCalibration handles --pixels-per-mm, --mm-per-pixel, --scale-mm/--scale-px/--ruler, conflicts, and empty values", () => {
   assert.deepEqual(resolveCalibration(), { pixelsPerMm: 0, ruler: null });
   assert.equal(resolveCalibration({ pixelsPerMm: "12.5" }).pixelsPerMm, 12.5);
   assert.equal(resolveCalibration({ mmPerPixel: "0.2" }).pixelsPerMm, 5);
@@ -66,9 +66,17 @@ test("resolveCalibration handles --pixels-per-mm, --mm-per-pixel, --scale-mm/--s
   assert.throws(() => resolveCalibration({ pixelsPerMm: "10", mmPerPixel: "0.1" }), /only one calibration method/);
   assert.throws(() => resolveCalibration({ scaleMm: "10" }), /requires either --scale-px .* or --ruler/);
   assert.throws(() => resolveCalibration({ scalePx: "100" }), /require --scale-mm/);
+
+  // Strict empty/malformed rejections (never coerce "" to 0)
+  assert.throws(() => resolveCalibration({ pixelsPerMm: "" }), /finite number/);
+  assert.throws(() => resolveCalibration({ mmPerPixel: "" }), /finite number/);
+  assert.throws(() => resolveCalibration({ scaleMm: "", scalePx: "100" }), /finite number/);
+  assert.throws(() => resolveCalibration({ scaleMm: "10", scalePx: "" }), /finite number/);
+  assert.throws(() => resolveCalibration({ scaleMm: "10", ruler: ",0,100,0" }), /X1,Y1,X2,Y2/);
+  assert.throws(() => resolveCalibration({ scaleMm: "10", ruler: "0,0,100," }), /X1,Y1,X2,Y2/);
 });
 
-test("CLI runs end-to-end on PNG and JPEG inputs with ruler and mm-per-pixel calibration", async () => {
+test("CLI runs end-to-end on PNG and JPEG inputs with ruler, mm-per-pixel calibration, and locking", async () => {
   const work = await mkdtemp(join(tmpdir(), "wound-planimetry-cli-"));
   try {
     const rgba = syntheticWoundRgba(80, 80);
@@ -105,12 +113,29 @@ test("CLI runs end-to-end on PNG and JPEG inputs with ruler and mm-per-pixel cal
     const csv = await readFile(join(outCli, "ulcer_wound-planimetry.csv"), "utf8");
     assert.match(csv, /calibrated,true/);
     assert.match(csv, /scale_pixels_per_mm,10\.0000/);
+
+    // Reject malformed seed components (never coerce "" to 0)
+    await assert.rejects(() => measureFile({ input: pngPath, outputDir: join(work, "bad-seed"), seed: ",10" }), /X,Y/);
+    await assert.rejects(() => measureFile({ input: pngPath, outputDir: join(work, "bad-seed2"), seed: "" }), /X,Y/);
+
+    // Existing lock file rejected without deleting it
+    const lockedDir = join(work, "locked");
+    await mkdir(lockedDir);
+    const lockPath = join(lockedDir, ".wound-planimetry.lock");
+    await writeFile(lockPath, '{"pid":99999}\n');
+    await assert.rejects(() => measureFile({ input: pngPath, outputDir: lockedDir, overwrite: true }), /locked/);
+    await stat(lockPath);
+
+    // Newly created output directory removed on failure
+    const badOut = join(work, "failed-out");
+    await assert.rejects(() => measureFile({ input: join(work, "missing.png"), outputDir: badOut }));
+    await assert.rejects(() => stat(badOut), { code: "ENOENT" });
   } finally {
     await rm(work, { recursive: true, force: true });
   }
 });
 
-test("CLI --help and self-check exit 0", () => {
+test("CLI --help, self-check, per-subcommand checks, and empty/malformed flag rejection", () => {
   const help = spawnSync(process.execPath, [BIN, "--help"], { encoding: "utf8" });
   assert.equal(help.status, 0);
   assert.match(help.stdout, /Usage: wound-planimetry INPUT OUTPUT_DIR/);
@@ -118,4 +143,22 @@ test("CLI --help and self-check exit 0", () => {
   const selfCheck = spawnSync(process.execPath, [BIN, "self-check"], { encoding: "utf8" });
   assert.equal(selfCheck.status, 0, selfCheck.stderr);
   assert.equal(JSON.parse(selfCheck.stdout).ok, true);
+
+  const badSelf = spawnSync(process.execPath, [BIN, "self-check", "--sensitivity=0.1"], { encoding: "utf8" });
+  assert.notEqual(badSelf.status, 0);
+  assert.match(badSelf.stderr, /--sensitivity is not valid with self-check/);
+
+  const badRuler = spawnSync(process.execPath, [BIN, "a.png", "out", "--scale-mm=10", "--ruler=,0,100,0"], {
+    encoding: "utf8",
+  });
+  assert.notEqual(badRuler.status, 0);
+  assert.match(badRuler.stderr, /X1,Y1,X2,Y2/);
+
+  const badSeed = spawnSync(process.execPath, [BIN, "a.png", "out", "--seed=,10"], { encoding: "utf8" });
+  assert.notEqual(badSeed.status, 0);
+  assert.match(badSeed.stderr, /X,Y/);
+
+  const emptyPpm = spawnSync(process.execPath, [BIN, "a.png", "out", "--pixels-per-mm="], { encoding: "utf8" });
+  assert.notEqual(emptyPpm.status, 0);
+  assert.match(emptyPpm.stderr, /--pixels-per-mm requires a non-empty value/);
 });

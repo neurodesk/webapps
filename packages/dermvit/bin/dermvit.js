@@ -3,8 +3,8 @@ import { parseArgs } from "node:util";
 import { checkInstallation, classifyFile, downloadModels } from "../src/node.js";
 
 const HELP = `Usage: dermvit INPUT OUTPUT_DIR [options]
-       dermvit download-models [--cache-dir DIR]
-       dermvit self-check
+       dermvit download-models [--cache-dir DIR] [--offline]
+       dermvit self-check [--cache-dir DIR]
 
 Classify a dermoscopic JPEG or PNG lesion image across the 7 HAM10000 classes
 locally on the CPU using the pinned quantized ViT-Base-Patch16-224 ONNX model
@@ -24,6 +24,21 @@ Writes <stem>_dermvit-predictions.csv, <stem>_dermvit-provenance.json, and
 (with --saliency) <stem>_dermvit-saliency.png into OUTPUT_DIR.
 Research and educational use only — uncalibrated softmax scores are not a
 clinical diagnosis.`;
+
+const STRING_OPTIONS = ["threads", "cache-dir"];
+
+function validateOptions(values, allowed, context) {
+  const allowedSet = new Set(allowed);
+  for (const [key, value] of Object.entries(values)) {
+    if (value === undefined) continue;
+    if (!allowedSet.has(key)) {
+      throw new Error(`--${key} is not valid with ${context}.`);
+    }
+    if (STRING_OPTIONS.includes(key) && String(value).trim() === "") {
+      throw new Error(`--${key} requires a non-empty value.`);
+    }
+  }
+}
 
 const reportProgress = () => {
   let previous;
@@ -51,9 +66,11 @@ try {
   if (values.help) {
     console.log(HELP);
   } else if (command === "self-check") {
-    if (positionals.length !== 1) throw new Error("self-check does not accept arguments.");
-    console.log(JSON.stringify(await checkInstallation()));
+    validateOptions(values, ["cache-dir", "offline"], "self-check");
+    if (positionals.length !== 1) throw new Error("self-check does not accept positional arguments.");
+    console.log(JSON.stringify(await checkInstallation({ cacheDir: values["cache-dir"] })));
   } else if (command === "download-models") {
+    validateOptions(values, ["cache-dir", "offline"], "download-models");
     if (positionals.length !== 1) throw new Error("download-models does not accept positional arguments.");
     const onProgress = reportProgress();
     const models = await downloadModels({
@@ -63,6 +80,11 @@ try {
     });
     console.log(`${models.count} model file(s) verified in ${models.directory}`);
   } else {
+    validateOptions(
+      values,
+      ["color-constancy", "saliency", "threads", "cache-dir", "offline", "overwrite"],
+      "dermvit",
+    );
     if (positionals.length !== 2) {
       throw new Error("Provide an input image (JPEG/PNG) and an output directory. Use --help for options.");
     }
