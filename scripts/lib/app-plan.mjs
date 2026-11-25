@@ -374,6 +374,8 @@ export function ciImpact({ before, after }) {
 }
 
 const EXACT_PACKAGE_NAME = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/;
+const MAX_PACKAGE_NAME_LENGTH = 214;
+const MAX_SEMVER_LENGTH = 256;
 const SEMVER_NUM = '(?:0|[1-9]\\d*)';
 const SEMVER_PRE = '(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)';
 // Strict SemVer 2.0.0 without build metadata (+build), which pnpm normalizes
@@ -381,6 +383,29 @@ const SEMVER_PRE = '(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)';
 const EXACT_SEMVER = new RegExp(`^${SEMVER_NUM}\\.${SEMVER_NUM}\\.${SEMVER_NUM}(?:-${SEMVER_PRE}(?:\\.${SEMVER_PRE})*)?$`);
 // Plain scalars interpreted differently across YAML 1.1 (js-yaml) and YAML 1.2.
 const AMBIGUOUS_PLAIN_YAML = /^(?:y|yes|n|no|true|false|on|off|~|null|0[0-7]+|[+-]?0[0-7]+)$/i;
+
+function isPlainJsonValue(value) {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (Array.isArray(value)) return value.every(isPlainJsonValue);
+  if (typeof value !== 'object') return false;
+  if (Object.getPrototypeOf(value) !== Object.prototype) return false;
+  return Object.values(value).every(isPlainJsonValue);
+}
+
+function isExactPnpmSemver(version) {
+  if (version.length > MAX_SEMVER_LENGTH || !EXACT_SEMVER.test(version)) return false;
+  const dash = version.indexOf('-');
+  const core = dash < 0 ? version : version.slice(0, dash);
+  const pre = dash < 0 ? undefined : version.slice(dash + 1);
+  if (!core.split('.').every((part) => part.length <= 16 && Number.isSafeInteger(Number(part)))) return false;
+  if (pre !== undefined) {
+    for (const part of pre.split('.')) {
+      if (/^\d+$/.test(part) && (part.length > 16 || !Number.isSafeInteger(Number(part)))) return false;
+    }
+  }
+  return true;
+}
 
 function unsafeYamlReason(node) {
   if (!node || typeof node !== 'object') return null;
@@ -419,16 +444,27 @@ function unsafeYamlReason(node) {
 }
 
 function parseSafeWorkspaceYaml(text) {
-  const doc = parseDocument(text, { uniqueKeys: true });
-  if (doc.errors.length) return { error: `it does not parse (${doc.errors[0].message.split('\n')[0]})` };
-  if (doc.warnings.length) return { error: `it has YAML warnings (${doc.warnings[0].message.split('\n')[0]})` };
-  if (doc.directives.yaml.explicit || Object.keys(doc.directives.tags).some((tag) => tag !== '!!')) {
+  const doc12 = parseDocument(text, { schema: 'core', uniqueKeys: true });
+  if (doc12.errors.length) return { error: `it does not parse (${doc12.errors[0].message.split('\n')[0]})` };
+  if (doc12.warnings.length) return { error: `it has YAML warnings (${doc12.warnings[0].message.split('\n')[0]})` };
+  if (doc12.directives.yaml.explicit || Object.keys(doc12.directives.tags).some((tag) => tag !== '!!')) {
     return { error: 'it uses explicit YAML directives' };
   }
-  if (!isMap(doc.contents)) return { error: 'it is not a YAML mapping' };
-  const unsafe = unsafeYamlReason(doc.contents);
+  if (!isMap(doc12.contents)) return { error: 'it is not a YAML mapping' };
+  const unsafe = unsafeYamlReason(doc12.contents);
   if (unsafe) return { error: unsafe };
-  return { value: doc.toJS() };
+  // Parse under YAML 1.1 as well (matching js-yaml / pnpm) and reject any scalar
+  // that resolves to a non-JSON type (such as an unquoted ISO Date) or differs
+  // between YAML 1.1 and YAML 1.2.
+  const doc11 = parseDocument(text, { schema: 'yaml-1.1', uniqueKeys: true });
+  if (doc11.errors.length || doc11.warnings.length || !isMap(doc11.contents)) {
+    return { error: 'it does not parse identically under YAML 1.1 and 1.2' };
+  }
+  const [val12, val11] = [doc12.toJS(), doc11.toJS()];
+  if (!isPlainJsonValue(val12) || !isPlainJsonValue(val11) || !same(val12, val11)) {
+    return { error: 'it contains YAML scalars whose meaning differs between YAML 1.1 and 1.2' };
+  }
+  return { value: val12 };
 }
 
 function parseReleaseAgeExclusions(value) {
@@ -441,10 +477,10 @@ function parseReleaseAgeExclusions(value) {
     const at = entry.indexOf('@', 1);
     if (at < 0) return null;
     const name = entry.slice(0, at);
-    if (!EXACT_PACKAGE_NAME.test(name) || seenNames.has(name)) return null;
+    if (name.length > MAX_PACKAGE_NAME_LENGTH || !EXACT_PACKAGE_NAME.test(name) || seenNames.has(name)) return null;
     seenNames.add(name);
     const versions = entry.slice(at + 1).split('||').map((part) => part.trim());
-    if (!versions.length || !versions.every((version) => EXACT_SEMVER.test(version))) return null;
+    if (!versions.length || !versions.every(isExactPnpmSemver)) return null;
     for (const version of versions) specs.add(`${name}@${version}`);
   }
   return specs;

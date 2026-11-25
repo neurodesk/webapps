@@ -123,6 +123,7 @@ async function* textFiles(dir) {
 }
 
 const AST_SKIP = new Set(['loc', 'range', 'start', 'end', 'tokens', 'comments', 'parent']);
+const DYNAMIC_LOADER_MODULES = new Set(['module', 'node:module', 'vm', 'node:vm']);
 
 function packageNameOf(specifier) {
   const parts = specifier.split('/');
@@ -136,8 +137,8 @@ function isFile(path) {
 // Workspace packages loaded by a script's JS/TS module syntax (static imports,
 // re-exports, side-effect imports, dynamic import(), require()). Returns a Set
 // of resolved workspace package dirs (or specific files), or ALL_SCRIPT_IMPORTS
-// when parsing fails or a dynamic loader (non-literal import/require or
-// createRequire) is used.
+// when parsing fails or a dynamic loader (non-literal import/require,
+// node:module / createRequire, vm, eval, Function) is used.
 async function extractScriptImports(source, file, { root, nodeSet, nodeByPackageName }) {
   let ast;
   try {
@@ -153,6 +154,10 @@ async function extractScriptImports(source, file, { root, nodeSet, nodeByPackage
       for (const item of node) walk(item);
       return;
     }
+    if (node.type === 'Identifier' && node.name === 'createRequire') {
+      dynamic = true;
+      return;
+    }
     if ((node.type === 'ImportDeclaration' || node.type === 'ExportNamedDeclaration' || node.type === 'ExportAllDeclaration') && node.source) {
       if (node.source.type === 'Literal' && typeof node.source.value === 'string') specifiers.push(node.source.value);
       else dynamic = true;
@@ -162,22 +167,24 @@ async function extractScriptImports(source, file, { root, nodeSet, nodeByPackage
     } else if (node.type === 'CallExpression') {
       const callee = node.callee;
       const isRequire = callee?.type === 'Identifier' && callee.name === 'require';
+      const isEval = callee?.type === 'Identifier' && (callee.name === 'eval' || callee.name === 'Function');
       const isMemberRequire = callee?.type === 'MemberExpression' && !callee.computed && callee.property?.type === 'Identifier' && (callee.property.name === 'require' || callee.property.name === 'createRequire');
-      const isCreateRequire = callee?.type === 'Identifier' && callee.name === 'createRequire';
-      if (isCreateRequire || isMemberRequire) {
+      if (isEval || isMemberRequire) {
         dynamic = true;
       } else if (isRequire) {
         const arg = node.arguments?.[0];
         if (arg?.type === 'Literal' && typeof arg.value === 'string') specifiers.push(arg.value);
         else dynamic = true;
       }
+    } else if (node.type === 'NewExpression' && node.callee?.type === 'Identifier' && node.callee.name === 'Function') {
+      dynamic = true;
     }
     for (const key of Object.keys(node)) {
       if (!AST_SKIP.has(key)) walk(node[key]);
     }
   };
   walk(ast);
-  if (dynamic) return ALL_SCRIPT_IMPORTS;
+  if (dynamic || specifiers.some((specifier) => DYNAMIC_LOADER_MODULES.has(specifier))) return ALL_SCRIPT_IMPORTS;
   const imported = new Set();
   for (const specifier of specifiers) {
     if (specifier.startsWith('.')) {

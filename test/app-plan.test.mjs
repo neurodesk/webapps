@@ -2733,6 +2733,7 @@ test('pnpm-workspace.yaml narrows only for valid exact-version minimumReleaseAge
     ['non-exact latest tag', (doc) => ({ ...doc, minimumReleaseAgeExclude: [...doc.minimumReleaseAgeExclude, 'foo@latest'] })],
     ['leading-zero semver', (doc) => ({ ...doc, minimumReleaseAgeExclude: [...doc.minimumReleaseAgeExclude, 'foo@01.0.0'] })],
     ['leading-zero prerelease', (doc) => ({ ...doc, minimumReleaseAgeExclude: [...doc.minimumReleaseAgeExclude, 'foo@1.0.0-01'] })],
+    ['overflowing semver', (doc) => ({ ...doc, minimumReleaseAgeExclude: [...doc.minimumReleaseAgeExclude, 'foo@99999999999999999999.1.0'] })],
     ['build metadata semver', (doc) => ({ ...doc, minimumReleaseAgeExclude: [...doc.minimumReleaseAgeExclude, '@brainchop/core@1.0.0+build'] })],
     ['semver range', (doc) => ({ ...doc, minimumReleaseAgeExclude: [...doc.minimumReleaseAgeExclude, 'foo@^1.0.0'] })],
     ['duplicate package name', (doc) => ({ ...doc, minimumReleaseAgeExclude: [...doc.minimumReleaseAgeExclude, 'foo@1.0.0', 'foo@2.0.0'] })],
@@ -2752,6 +2753,11 @@ test('pnpm-workspace.yaml narrows only for valid exact-version minimumReleaseAge
     before: 'packages:\n  - apps/*\nminimumReleaseAge: 60\n',
     after: 'packages:\n  - apps/*\nminimumReleaseAge: 074\n',
   }).shared, /ambiguous numeric|setting changed/);
+  // Unquoted ISO dates parse as Date objects under YAML 1.1 (js-yaml / pnpm) and strings under YAML 1.2.
+  assert.match(workspaceConfigImpact({
+    before: "packages:\n  - apps/*\noverrides:\n  foo: '2026-01-01'\n",
+    after: 'packages:\n  - apps/*\noverrides:\n  foo: 2026-01-01\n',
+  }).shared, /YAML 1\.1 and 1\.2/);
   const withAnchor = 'packages:\n  - apps/*\nminimumReleaseAgeExclude:\n  - &pkg foo@1.0.0\n';
   assert.match(workspaceConfigImpact({ before, after: withAnchor }).shared, /anchors/);
   assert.match(workspaceConfigImpact({ before, after: 'packages:\n  - !!str apps/*\n' }).shared, /tags/);
@@ -2875,6 +2881,24 @@ test('per-app CI traversal keeps real package loads (require, dynamic import, si
   assert.equal(reached.has('scripts/from-dyn-pkg.mjs'), true, 'dynamic import("@nd/dyn-pkg")');
   assert.equal(reached.has('scripts/from-side-pkg.mjs'), true, 'side-effect import "@nd/side-pkg"');
   assert.equal(reached.has('scripts/from-incidental.mjs'), false, 'incidental exes/incidental string');
+
+  // Aliased createRequire from node:module fails closed and preserves all package edges of that script.
+  const aliasRoot = await mkdtemp(join(tmpdir(), 'neurodesk-catalog-alias-'));
+  t.after(() => rm(aliasRoot, { recursive: true, force: true }));
+  const aliasFiles = {
+    'package.json': JSON.stringify({ name: 'root', scripts: {} }),
+    '.github/workflows/ci.yml': files['.github/workflows/ci.yml'],
+    'scripts/cli.mjs': "const { createRequire: makeRequire } = await import('node:module');\nmakeRequire(import.meta.url)('../packages/bridge');\n",
+    'packages/bridge/package.json': JSON.stringify({ name: '@nd/bridge' }),
+    'packages/bridge/index.js': "import '../../scripts/from-bridge.mjs';\n",
+    'scripts/from-bridge.mjs': '',
+  };
+  for (const [path, text] of Object.entries(aliasFiles)) {
+    await mkdir(dirname(join(aliasRoot, path)), { recursive: true });
+    await writeFile(join(aliasRoot, path), text);
+  }
+  const aliasGraph = await loadConservativeWorkspaceGraph(aliasRoot);
+  assert.equal(catalogReachable(aliasGraph).has('scripts/from-bridge.mjs'), true, 'aliased createRequire preserves bridge');
 });
 
 test('lint runner and scripts/quality files select no apps and no site build', async () => {
