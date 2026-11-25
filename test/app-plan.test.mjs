@@ -5908,6 +5908,39 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       (plan) => assert.equal(plan.allApps, true),
     ],
     [
+      'local composite action ignores job defaults.run.working-directory and runs at workspace root',
+      {
+        'package.json': JSON.stringify({ name: 'root', scripts: { 'verify:data': 'echo v2' } }),
+        'apps/n4/package.json': JSON.stringify({ name: '@nd/n4', scripts: {} }),
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': {
+              defaults: { run: { 'working-directory': 'apps/n4' } },
+              steps: [{ uses: './.github/actions/verify' }],
+            },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        '.github/actions/verify/action.yml': stringify({
+          runs: {
+            using: 'composite',
+            steps: [{ shell: 'bash', run: 'pnpm run verify:data' }],
+          },
+        }),
+      },
+      'package.json',
+      new Map([[
+        'package.json',
+        {
+          before: JSON.stringify({ name: 'root', scripts: { 'verify:data': 'echo v1' } }),
+          after: JSON.stringify({ name: 'root', scripts: { 'verify:data': 'echo v2' } }),
+        },
+      ]]),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
       'node --help with NODE_OPTIONS preload falls back to all apps on provisioner edit',
       {
         '.github/workflows/ci.yml': stringify({

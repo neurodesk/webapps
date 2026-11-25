@@ -2416,16 +2416,16 @@ export async function loadConservativeWorkspaceGraph(root) {
   const workflowWorkingDir = ci?.defaults?.run?.['working-directory'] ?? null;
   const workflowShell = ci?.defaults?.run?.shell ?? null;
   const workflowEnv = ci?.env && typeof ci.env === 'object' ? ci.env : {};
-  const loadLocalCompositeSteps = async (usesSpec, parentEnv, parentWorkingDir, parentShell, visitedActions = new Set()) => {
+  const loadLocalCompositeSteps = async (usesSpec, parentEnv, visitedActions = new Set()) => {
     if (typeof usesSpec !== 'string' || !usesSpec.startsWith('./')) return [];
     const relDir = usesSpec.slice(2).replace(/\/+$/, '');
     if (!relDir || /[$`*?[{]|\$\{\{/.test(relDir)) {
-      return [{ cmd: '', workingDir: parentWorkingDir, shell: parentShell, env: parentEnv, opaqueAction: true }];
+      return [{ cmd: '', workingDir: null, shell: null, env: parentEnv, opaqueAction: true }];
     }
     const actionDir = resolve(root, relDir);
     const normalizedRel = relative(root, actionDir).split(sep).join('/');
     if (normalizedRel.startsWith('..') || visitedActions.has(normalizedRel)) {
-      return [{ cmd: '', workingDir: parentWorkingDir, shell: parentShell, env: parentEnv, opaqueAction: true }];
+      return [{ cmd: '', workingDir: null, shell: null, env: parentEnv, opaqueAction: true }];
     }
     let actionDoc = null;
     for (const filename of ['action.yml', 'action.yaml']) {
@@ -2440,16 +2440,17 @@ export async function loadConservativeWorkspaceGraph(root) {
       }
     }
     if (!actionDoc || actionDoc?.runs?.using !== 'composite' || !Array.isArray(actionDoc?.runs?.steps)) {
-      return [{ cmd: '', workingDir: parentWorkingDir, shell: parentShell, env: parentEnv, opaqueAction: true }];
+      return [{ cmd: '', workingDir: null, shell: null, env: parentEnv, opaqueAction: true }];
     }
     const nextVisited = new Set([...visitedActions, normalizedRel]);
     const expanded = [];
     for (const subStep of actionDoc.runs.steps) {
       const subEnv = subStep?.env && typeof subStep.env === 'object' ? { ...parentEnv, ...subStep.env } : parentEnv;
-      const subWorkingDir = subStep?.['working-directory'] ?? parentWorkingDir ?? null;
-      const subShell = subStep?.shell ?? parentShell ?? null;
+      // GitHub Actions composite run steps do not inherit workflow/job `defaults.run`.
+      const subWorkingDir = subStep?.['working-directory'] ?? null;
+      const subShell = subStep?.shell ?? null;
       if (typeof subStep?.uses === 'string' && subStep.uses.startsWith('./')) {
-        expanded.push(...await loadLocalCompositeSteps(subStep.uses, subEnv, subWorkingDir, subShell, nextVisited));
+        expanded.push(...await loadLocalCompositeSteps(subStep.uses, subEnv, nextVisited));
       } else {
         expanded.push({ cmd: String(subStep?.run ?? ''), workingDir: subWorkingDir, shell: subShell, env: subEnv });
       }
@@ -2463,12 +2464,15 @@ export async function loadConservativeWorkspaceGraph(root) {
     const jobEnv = job?.env && typeof job.env === 'object' ? { ...workflowEnv, ...job.env } : workflowEnv;
     for (const step of Array.isArray(job?.steps) ? job.steps : []) {
       const stepEnv = step?.env && typeof step.env === 'object' ? { ...jobEnv, ...step.env } : jobEnv;
-      const stepWorkingDir = step?.['working-directory'] ?? jobWorkingDir ?? null;
-      const stepShell = step?.shell ?? jobShell ?? null;
       if (typeof step?.uses === 'string' && step.uses.startsWith('./')) {
-        out.push(...await loadLocalCompositeSteps(step.uses, stepEnv, stepWorkingDir, stepShell));
+        out.push(...await loadLocalCompositeSteps(step.uses, stepEnv));
       } else {
-        out.push({ cmd: String(step?.run ?? ''), workingDir: stepWorkingDir, shell: stepShell, env: stepEnv });
+        out.push({
+          cmd: String(step?.run ?? ''),
+          workingDir: step?.['working-directory'] ?? jobWorkingDir ?? null,
+          shell: step?.shell ?? jobShell ?? null,
+          env: stepEnv,
+        });
       }
     }
     return out;
