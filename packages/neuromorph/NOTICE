@@ -1,0 +1,8 @@
+NeuroMorph (@neurodesk/neuromorph)
+Copyright 2026 Neurodesk Contributors
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Morphometric definitions follow NeuroM 4 (Blue Brain Project, EPFL):
+- Palacios J et al. NeuroM: a Python toolkit for the analysis and processing of neuron morphologies.
+- Cannon RC et al. An on-line archive of reconstructed hippocampal neurons. J Neurosci Methods 1998;84:49-54 (SWC format).
+- Sholl DA. Dendritic organization in the neurons of the visual and motor cortices of the cat. J Anat 1953;87:387-406.

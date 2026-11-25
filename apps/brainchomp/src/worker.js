@@ -1,12 +1,16 @@
-import { readVolume, writeVolume } from '@neurodesk/synthsr';
+import {
+  applyBrainMask,
+  BRAINCHOMP_LIB_REVISION,
+  DEFAULT_OPENING_RADIUS,
+  prepareModelInput,
+  readNifti3dAsync,
+} from '@neurodesk/brainchomp';
 import { chooseBackend } from '@neurodesk/runtime-support/mindgrab/backend';
 import * as brainchomp from '../vendor/brainchomp/index.js';
-import { applyWorldRemap, INPUT_WORLD_REMAP } from './orient.js';
-import { BRAINCHOMP_LIB_REVISION, DEFAULT_OPENING_RADIUS } from './config.js';
 
 async function resolveBackend(requested, onLog) {
   if (requested && requested !== 'auto') return requested;
-  const webgpu = await brainchomp.checkSupport().catch(error => ({ supported: false, reasons: [error.message] }));
+  const webgpu = await brainchomp.checkSupport().catch((error) => ({ supported: false, reasons: [error.message] }));
   const adapter = webgpu.supported
     ? await navigator.gpu?.requestAdapter({ powerPreference: 'high-performance' })
     : null;
@@ -47,15 +51,11 @@ async function resolveBackend(requested, onLog) {
 
 self.onmessage = async ({ data: job }) => {
   const onProgress = (value, message) => self.postMessage({ type: 'progress', value, message });
-  const onLog = message => self.postMessage({ type: 'log', message: String(message) });
+  const onLog = (message) => self.postMessage({ type: 'log', message: String(message) });
   try {
     onProgress(0.05, 'Reading rodent MRI volume…');
-    const volume = readVolume(await job.file.arrayBuffer());
-    const remappedAffine = applyWorldRemap(volume.affine, INPUT_WORLD_REMAP);
-    const modelInput = writeVolume(
-      { data: volume.data, dims: volume.dims, affine: remappedAffine },
-      'Brainchomp model input',
-    );
+    const volume = await readNifti3dAsync(await job.file.arrayBuffer());
+    const modelInput = prepareModelInput(volume);
     const backend = await resolveBackend(job.backend ?? 'auto', onLog);
     const opening = Number.isInteger(job.opening) ? job.opening : DEFAULT_OPENING_RADIUS;
     onProgress(0.15, `Extracting rodent brain (${backend})…`);
@@ -69,23 +69,8 @@ self.onmessage = async ({ data: job }) => {
       onLog,
     });
     onProgress(0.9, 'Writing brain image and mask on input grid…');
-    const maskVolume = readVolume(result.mask);
-    const nvox = volume.data.length;
-    if (maskVolume.data.length < nvox) {
-      throw new Error(`The returned mask has ${maskVolume.data.length} voxels; expected ${nvox}.`);
-    }
-    const maskData = new Uint8Array(nvox);
-    const brainData = new Float32Array(nvox);
-    let maskVoxels = 0;
-    for (let i = 0; i < nvox; i += 1) {
-      if (maskVolume.data[i] > 0) {
-        maskData[i] = 1;
-        brainData[i] = volume.data[i];
-        maskVoxels += 1;
-      }
-    }
-    const brain = writeVolume({ data: brainData, dims: volume.dims, affine: volume.affine }, 'Brainchomp skull-stripped brain');
-    const mask = writeVolume({ data: maskData, dims: volume.dims, affine: volume.affine }, 'Brainchomp brain mask');
+    const maskVolume = await readNifti3dAsync(result.mask);
+    const { brain, mask, maskVoxels } = applyBrainMask(volume, maskVolume);
     onProgress(1, 'Brain image and mask ready');
     self.postMessage({
       type: 'result',

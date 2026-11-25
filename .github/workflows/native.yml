@@ -22,14 +22,15 @@ on:
       - 'package.json'
       - 'packages/components/**'
       - 'packages/components/package.json'
+      - 'packages/components/src/fft/**'
       - 'packages/components/src/file-io/**'
       - 'packages/components/src/volume/**'
-      - 'packages/components/src/worker/**'
       - 'packages/node-drivers/package.json'
       - 'packages/node-drivers/src/dcm2niix.js'
       - 'packages/node-drivers/src/mindgrab-worker.js'
       - 'packages/node-drivers/src/mindgrab.js'
       - 'packages/node-drivers/src/niimath.js'
+      - 'packages/node-drivers/src/output-dir.js'
       - 'packages/runtime-support/**'
       - 'packages/runtime-support/package.json'
       - 'packages/runtime-support/src/mindgrab/**'
@@ -64,7 +65,10 @@ jobs:
         bison-native
         brain-extraction-native
         brain2print-native
+        brainchomp-native
+        brainchop-native
         browserqc-native
+        calcium-imaging-native
         calmar-native
         carotid-flow-native
         cellpose-native
@@ -82,9 +86,12 @@ jobs:
         easy-mp2rage-native
         edgereg-native
         elastix-native
+        histo2mri-native
         hmc-native
         hmc-registration
         lcmodel-native
+        lightsheet-atlas-native
+        microscope-qc-native
         mri2vid-native
         musclemap-native
         musclemap-parity
@@ -94,18 +101,15 @@ jobs:
         node-drivers
         omezarr-convert-native
         sdc-native
-        seedseg-native
-        skin-chromophore-native
-        spinalcordtoolbox-native
-        spot-detection-native
-        stardist-native
-        structure-tensor-native
       sweeps: >-
         ants-native
         bison-native
         brain-extraction-native
         brain2print-native
+        brainchomp-native
+        brainchop-native
         browserqc-native
+        calcium-imaging-native
         calmar-native
         carotid-flow-native
         cellpose-native
@@ -123,9 +127,12 @@ jobs:
         easy-mp2rage-native
         edgereg-native
         elastix-native
+        histo2mri-native
         hmc-native
         hmc-registration
         lcmodel-native
+        lightsheet-atlas-native
+        microscope-qc-native
         mri2vid-native
         musclemap-native
         musclemap-parity
@@ -135,12 +142,6 @@ jobs:
         node-drivers
         omezarr-convert-native
         sdc-native
-        seedseg-native
-        skin-chromophore-native
-        spinalcordtoolbox-native
-        spot-detection-native
-        stardist-native
-        structure-tensor-native
 
   # Fails where ci withholds the full plan too: every call was skipped.
   full-plan-withheld:
@@ -198,10 +199,43 @@ jobs:
       pull-requests: read
     secrets: inherit
 
+  brainchomp-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"brainchomp-native"')) }}
+    uses: ./.github/workflows/brainchomp-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  brainchop-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"brainchop-native"')) }}
+    uses: ./.github/workflows/brainchop-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
   browserqc-native:
     needs: gate
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"browserqc-native"')) }}
     uses: ./.github/workflows/browserqc-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  calcium-imaging-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"calcium-imaging-native"')) }}
+    uses: ./.github/workflows/calcium-imaging-native.yml
     permissions:
       actions: read
       contents: write
@@ -394,6 +428,17 @@ jobs:
       pull-requests: read
     secrets: inherit
 
+  histo2mri-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"histo2mri-native"')) }}
+    uses: ./.github/workflows/histo2mri-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
   hmc-native:
     needs: gate
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"hmc-native"')) }}
@@ -419,6 +464,28 @@ jobs:
     needs: gate
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"lcmodel-native"')) }}
     uses: ./.github/workflows/lcmodel-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  lightsheet-atlas-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"lightsheet-atlas-native"')) }}
+    uses: ./.github/workflows/lightsheet-atlas-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  microscope-qc-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"microscope-qc-native"')) }}
+    uses: ./.github/workflows/microscope-qc-native.yml
     permissions:
       actions: read
       contents: write
@@ -516,72 +583,6 @@ jobs:
     needs: gate
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"sdc-native"')) }}
     uses: ./.github/workflows/sdc-native.yml
-    permissions:
-      actions: read
-      contents: write
-      id-token: write
-      pull-requests: read
-    secrets: inherit
-
-  seedseg-native:
-    needs: gate
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"seedseg-native"')) }}
-    uses: ./.github/workflows/seedseg-native.yml
-    permissions:
-      actions: read
-      contents: write
-      id-token: write
-      pull-requests: read
-    secrets: inherit
-
-  skin-chromophore-native:
-    needs: gate
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"skin-chromophore-native"')) }}
-    uses: ./.github/workflows/skin-chromophore-native.yml
-    permissions:
-      actions: read
-      contents: write
-      id-token: write
-      pull-requests: read
-    secrets: inherit
-
-  spinalcordtoolbox-native:
-    needs: gate
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"spinalcordtoolbox-native"')) }}
-    uses: ./.github/workflows/spinalcordtoolbox-native.yml
-    permissions:
-      actions: read
-      contents: write
-      id-token: write
-      pull-requests: read
-    secrets: inherit
-
-  spot-detection-native:
-    needs: gate
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"spot-detection-native"')) }}
-    uses: ./.github/workflows/spot-detection-native.yml
-    permissions:
-      actions: read
-      contents: write
-      id-token: write
-      pull-requests: read
-    secrets: inherit
-
-  stardist-native:
-    needs: gate
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"stardist-native"')) }}
-    uses: ./.github/workflows/stardist-native.yml
-    permissions:
-      actions: read
-      contents: write
-      id-token: write
-      pull-requests: read
-    secrets: inherit
-
-  structure-tensor-native:
-    needs: gate
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"structure-tensor-native"')) }}
-    uses: ./.github/workflows/structure-tensor-native.yml
     permissions:
       actions: read
       contents: write

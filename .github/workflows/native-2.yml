@@ -21,12 +21,14 @@ on:
       - 'scripts/lib/workflow-gate.mjs'
       - 'packages/components/package.json'
       - 'packages/components/src/automation/**'
+      - 'packages/components/src/fft/**'
       - 'packages/components/src/file-io/**'
       - 'packages/components/src/volume/**'
       - 'packages/components/src/worker/**'
       - 'packages/node-drivers/package.json'
       - 'packages/node-drivers/src/mindgrab-worker.js'
       - 'packages/node-drivers/src/mindgrab.js'
+      - 'packages/node-drivers/src/output-dir.js'
   schedule:
     - cron: '10 13 * * *'
 
@@ -51,17 +53,33 @@ jobs:
       workflow: native-2
       # The workflows the gate may name in `skips`: all of them for a draft.
       calls: >-
+        seedseg-native
+        skin-chromophore-native
+        spinalcordtoolbox-native
+        spot-detection-native
+        stardist-native
+        stitching-native
+        structure-tensor-native
         syncro-native
         synthseg-native
         synthseg-portable
         totalsegmentator-native
+        tumour-report-native
         vesselboost-native
         white-matter-lesions-native
         wound-planimetry-native
       sweeps: >-
+        seedseg-native
+        skin-chromophore-native
+        spinalcordtoolbox-native
+        spot-detection-native
+        stardist-native
+        stitching-native
+        structure-tensor-native
         syncro-native
         synthseg-portable
         totalsegmentator-native
+        tumour-report-native
         vesselboost-native
         white-matter-lesions-native
         wound-planimetry-native
@@ -77,6 +95,83 @@ jobs:
         run: |
           echo "::error title=Full plan withheld::This ready pull request already used its full-plan ci runs, so native-2.yml ran none of the workflows it calls. Add the full-ci label, then re-run all jobs of ci and of native-2."
           exit 1
+
+  seedseg-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"seedseg-native"')) }}
+    uses: ./.github/workflows/seedseg-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  skin-chromophore-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"skin-chromophore-native"')) }}
+    uses: ./.github/workflows/skin-chromophore-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  spinalcordtoolbox-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"spinalcordtoolbox-native"')) }}
+    uses: ./.github/workflows/spinalcordtoolbox-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  spot-detection-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"spot-detection-native"')) }}
+    uses: ./.github/workflows/spot-detection-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  stardist-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"stardist-native"')) }}
+    uses: ./.github/workflows/stardist-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  stitching-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"stitching-native"')) }}
+    uses: ./.github/workflows/stitching-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  structure-tensor-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"structure-tensor-native"')) }}
+    uses: ./.github/workflows/structure-tensor-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
 
   syncro-native:
     needs: gate
@@ -114,6 +209,17 @@ jobs:
     needs: gate
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"totalsegmentator-native"')) }}
     uses: ./.github/workflows/totalsegmentator-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  tumour-report-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"tumour-report-native"')) }}
+    uses: ./.github/workflows/tumour-report-native.yml
     permissions:
       actions: read
       contents: write

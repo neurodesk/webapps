@@ -10,17 +10,8 @@
   "me-ica": "its meica CLI is released from niivue/meica-rs; no release is tagged yet",
   "ants-denoise": "ANTs ships DenoiseImage as its own command line: the Standalone dialog lists the Neurodesk ANTs container, whose DenoiseImage gives the app's voxels with one thread and the same options",
   "brainqcnet": "the authors publish BrainQCNet as a BIDS app container: the Standalone dialog lists garciaml/brainqcnetcpu 1.0.1, whose tables the app reproduces byte for byte (packages/brainqcnet/validation)",
-  "brainchop": "upstream neuroneural/brainchop-core publishes its own native and Python command line (pip install brainchop); no separate Neurodesk command line is packaged",
-  "calcium-imaging": "no command-line package yet: v1 runs its pipeline (src/core) in browser workers only; CaImAn and Suite2p are the established command-line tools for batch work",
   "gliomoda": "the Neurocontainers gliomoda 0.0.4 image is the command-line reference: the Standalone dialog lists it, and packages/gliomoda/validation holds the app's labels to its outputs on the example",
-  "neuromorph": "NeuroM, whose definitions the app follows, is the command-line route for batch morphometrics (pip install neurom); NeuroMorph has no packaged command line of its own yet",
-  "stitching": "no command-line package yet: v1 runs its pipeline (src/core) in browser workers only; Fiji's Grid/Collection stitching and BigStitcher are the established command-line tools for batch work",
   "microsam": "micro-sam (pip or conda install micro_sam) is the Python reference the app reproduces mask for mask on the example; interactive prompting has no separate command line",
-  "microscope-qc": "no command-line package yet: v1 runs its numerics (src/core) in a browser worker only; MetroloJ_QC in Fiji is the established desktop tool for batch QC",
   "cryo-em": "RELION is the command line: the app sends each step to RELION 5.1.1 in the Neurodesk relion container, run on the user's cluster by the neurodesk-compute server, whose Slurm-capable release follows ADR-0004; the app adds no command line of its own",
-  "lightsheet-atlas": "the pipeline (apps/lightsheet-atlas/src) already runs in Node for its validation; a packaged command line is future work, and BrainGlobe's brainreg and cellfinder are the native tools for batch work",
-  "histo2mri": "no command-line package yet: v1 runs its pipeline (src/core) in a browser worker only; its Greedy affine and warp downloads run in the Greedy command line (greedy-rs) for batch reslicing",
-  "tumour-report": "the pinned dbouget/raidionics-rads:v1.3.2-py39-cpu container is the upstream command-line reference, and packages/tumour-report/validation holds voxel-exact native mask parity to it; a packaged Node CLI can follow via exes/node-cli",
-  "medsam2": "MedSAM2 (bowang-lab/MedSAM2 in Python) is the upstream reference; interactive slice prompting has no separate command line",
-  "brainchomp": "browser-only v1 using vendored brainchomp-lib WebGPU/WebGL2/CPU WASM modules; no separate command-line package is released yet"
+  "medsam2": "MedSAM2 (bowang-lab/MedSAM2 in Python) is the upstream reference; interactive slice prompting has no separate command line"
 }

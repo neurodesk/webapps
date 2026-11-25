@@ -1,0 +1,10 @@
+Microscope QC (@neurodesk/microscope-qc)
+Copyright (c) 2026 Neurodesk Contributors
+Licensed under the MIT License (see LICENSE).
+
+Definitions implemented from published literature:
+- MetroloJ_QC (bead PSF FWHM and field illumination uniformity):
+  Faklaris O et al. Quality assessment in light microscopy for routine use through simple tools
+  and standardized protocols. J Cell Biol. 2022;221(11):e202107093.
+- Multiphoton theoretical resolution:
+  Zipfel WR, Williams RM, Webb WW. Nat Biotechnol. 2003;21:1369-1377.

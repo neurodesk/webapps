@@ -17,9 +17,8 @@ import {
 } from "@neurodesk/webapp-components/ui";
 import { createElement } from "@neurodesk/webapp-components/core";
 import { downloadFile } from "@neurodesk/webapp-components/file-io";
-import { describeNiftiFile } from "@neurodesk/webapp-components/file-io/nifti";
+import { readNiftiVolumeAsync } from "@neurodesk/webapp-components/file-io/nifti-volume";
 import { readImageFiles, runDcm2niix } from "@neurodesk/runtime-support/dcm2niix-client";
-import { readVolume } from "@neurodesk/synthsr";
 import { createNiivueAdapter, registerAppAutomation, runAbortable } from "@neurodesk/webapp-components/automation";
 import { caseName } from "@neurodesk/tumour-report/results";
 import {
@@ -529,14 +528,23 @@ async function readSingle3dImage(files, label, signal) {
   }
   const [file] = images;
   if (!file.size) throw new Error(`${file.name} is empty.`);
-  const description = await describeNiftiFile(file);
-  if (description.dimensionality !== 3 || description.frames !== 1) {
-    throw new Error(`${file.name} must be a single 3D volume.`);
+  let volume;
+  try {
+    volume = await readNiftiVolumeAsync(await file.arrayBuffer());
+  } catch (error) {
+    if (/single 3D/i.test(error?.message || "")) {
+      throw new Error(`${file.name} must be a single 3D volume.`, { cause: error });
+    }
+    throw error;
   }
-  const volume = readVolume(await file.arrayBuffer());
   signal?.throwIfAborted();
-  const fullDescription = { ...description, dims: volume.dims, affine: volume.affine };
-  const summary = `${file.name} · ${description.dims.join(" × ")} · ${description.spacingMm.map((mm) => mm.toFixed(2)).join(" × ")} mm`;
+  const spacingMm = [0, 1, 2].map((axis) => Math.hypot(
+    volume.affine[0][axis],
+    volume.affine[1][axis],
+    volume.affine[2][axis],
+  ));
+  const fullDescription = { dims: volume.dims, affine: volume.affine, spacingMm };
+  const summary = `${file.name} · ${volume.dims.join(" × ")} · ${spacingMm.map((mm) => mm.toFixed(2)).join(" × ")} mm`;
   return { file, description: fullDescription, summary };
 }
 

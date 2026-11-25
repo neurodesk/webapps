@@ -12,6 +12,7 @@
     "lint": "node ../../scripts/lint.mjs --workspace"
   },
   "dependencies": {
+    "@neurodesk/brainchomp": "workspace:*",
     "@neurodesk/runtime-support": "workspace:*",
     "@neurodesk/synthsr": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",

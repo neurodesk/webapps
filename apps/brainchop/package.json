@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@brainchop/core": "1.0.0",
+    "@neurodesk/brainchop": "workspace:*",
     "@neurodesk/runtime-support": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
     "@niivue/niivue": "1.0.0-rc.26"

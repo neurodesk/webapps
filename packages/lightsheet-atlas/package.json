@@ -1,0 +1,48 @@
+{
+  "name": "@neurodesk/lightsheet-atlas",
+  "version": "0.1.20261124",
+  "description": "Light-sheet mouse brain Allen CCFv3 atlas registration and cell candidate detection core and portable command line",
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@neurodesk/greedy": "workspace:*",
+    "@neurodesk/webapp-components": "workspace:*"
+  },
+  "bin": {
+    "lightsheet-atlas": "./bin/lightsheet-atlas.js"
+  },
+  "exports": {
+    ".": "./src/pipeline.js",
+    "./config": "./src/config.js",
+    "./detect": "./src/detect.js",
+    "./models": "./src/models.js",
+    "./node": "./src/node.js",
+    "./outputs": "./src/outputs.js",
+    "./pipeline": "./src/pipeline.js",
+    "./regions": "./src/regions.js",
+    "./registration": "./src/registration.js",
+    "./space": "./src/space.js",
+    "./manifest": "./model.manifest.json"
+  },
+  "files": [
+    "bin",
+    "src",
+    "model.manifest.json",
+    "LICENSE",
+    "LICENSE-cellfinder",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check bin/lightsheet-atlas.js && node --check src/node.js && node --check src/models.js && node --check src/config.js && node --check src/pipeline.js && node --check src/outputs.js && node --check src/detect.js && node --check src/regions.js && node --check src/registration.js && node --check src/space.js && node --check validation/cli-check.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/lightsheet-atlas"
+  }
+}

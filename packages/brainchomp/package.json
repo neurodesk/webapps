@@ -1,0 +1,39 @@
+{
+  "name": "@neurodesk/brainchomp",
+  "version": "0.1.20261124",
+  "description": "Rodent MRI brain extraction (brainchomp-lib) for browsers and portable command lines",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "brainchomp": "./bin/brainchomp.js"
+  },
+  "exports": {
+    ".": "./src/pipeline.js",
+    "./orient": "./src/orient.js",
+    "./node": "./src/node.js"
+  },
+  "files": [
+    "src",
+    "bin",
+    "wasm",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/orient.js && node --check src/pipeline.js && node --check src/brainchomp-worker.js && node --check src/node.js && node --check bin/brainchomp.js && node --check validation/cli-check.mjs"
+  },
+  "dependencies": {
+    "@neurodesk/node-drivers": "workspace:*",
+    "@neurodesk/webapp-components": "workspace:*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/brainchomp"
+  }
+}
