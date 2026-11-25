@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>brainchop — NeuroDesk</title>
+    <title>Brainchop | Neurodesk</title>
   </head>
   <body>
     <header id="controls">
@@ -11,21 +11,35 @@
         <summary class="nd-section-title">Input image</summary>
         <div class="nd-section-content">
           <div id="exampleControl"></div>
-          <label class="nd-file" id="dropZone">
-            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose NIfTI or DICOM files" />
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            <span>Drop NIfTI or DICOM files or folder</span>
-          </label>
+          <div id="filePicker"></div>
           <p id="fileInfo" class="nd-file-info" hidden></p>
         </div>
       </details>
       <details class="nd-sidebar-section" id="taskSection" open>
-        <summary class="nd-section-title">Processing</summary>
+        <summary class="nd-section-title">Segmentation</summary>
         <div class="nd-section-content">
           <div class="nd-field">
-            <label for="method">Method</label>
+            <label for="method">Model</label>
             <select id="method"></select>
+            <p id="methodHint" class="nd-hint"></p>
           </div>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <div class="nd-field">
+                <label for="backend">Processing</label>
+                <select id="backend">
+                  <option value="auto">Automatic</option>
+                  <option value="cpu">CPU</option>
+                </select>
+                <p class="nd-hint">Choose CPU if graphics processing is slow or unavailable.</p>
+              </div>
+              <div class="nd-field">
+                <label class="nd-check"><input id="saveConform" type="checkbox" /> Keep conformed 256³ 1 mm grid</label>
+                <p class="nd-hint">By default, outputs are resliced back to the input image grid.</p>
+              </div>
+            </div>
+          </details>
           <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Run segmentation</button>
         </div>
       </details>
@@ -43,6 +57,7 @@
       <div class="nd-viewer-canvas-wrapper">
         <canvas id="gl1" aria-label="Image viewer"></canvas>
         <p id="emptyState" class="nd-viewer-empty">Drop an image anywhere, or choose an example.</p>
+        <p id="viewerNotice" class="nd-viewer-notice" hidden></p>
       </div>
       <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
     </main>
@@ -55,7 +70,7 @@
       <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel processing" aria-label="Cancel processing" hidden>×</button>
     </footer>
 
-    <template id="aboutContent"><p>Segment T1-weighted brain MRI into tissues or anatomical regions using Brainchop. Outputs use the conformed 256³, 1 mm grid. Research use only.</p></template>
+    <template id="aboutContent"><p>Segment T1-weighted brain MRI into subcortical and cortical regions or continuous GM, WM and CSF partial-volume fraction maps with Brainchop v4.0 MeshNet models. Outputs return on the input image grid unless conformed output is enabled. Research use only.</p></template>
     <template id="privacyContent"><p>Images are processed locally in this browser and are never uploaded.</p></template>
 
     <script type="module" src="/src/main.js"></script>

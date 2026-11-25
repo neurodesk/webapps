@@ -8,7 +8,7 @@ has one home catalogue and can also be served by others.
 | `webapps.neurodesk.org` | `neuro` | GitHub Pages | every app whose home is not listed below; a copy of Histology to MRI |
 | `mskapps.sciget.org` | `msk` | Cloudflare Worker, assets only | MuscleMap, SeedSeg, Carotid Flow; copies of dcm2niix, DICOM View, dicompare, MRI2vid, niimath, ANTs Denoise and elastix |
 | `microscopyapps.sciget.org` | `microscopy` | Cloudflare Worker, assets only | StarDist, micro-sam, Calcium imaging, Spot detection, Histology to MRI, Microscope QC, Deconvolution, Denoise, NeuroMorph, OME-Zarr Converter, Stitching, Structure Tensor, Light-sheet atlas, ZARRo, Cryo-EM; copies of elastix, niimath and MRI2vid |
-| `preclinicalapps.sciget.org` | `preclinical` | Cloudflare Worker, assets only | copies only: dcm2niix, DICOM View, dicompare, MRI2vid, niimath, Degibbs, ANTs Denoise, dwidenoise, Denoise, elastix, QSMbly, ZARRo, Stitching, Structure Tensor, Calcium imaging, NeuroMorph |
+| `preclinicalapps.sciget.org` | `preclinical` | Cloudflare Worker, assets only | Brainchomp; copies of dcm2niix, DICOM View, dicompare, MRI2vid, niimath, Degibbs, ANTs Denoise, dwidenoise, Denoise, elastix, QSMbly, ZARRo, Stitching, Structure Tensor, Calcium imaging, NeuroMorph |
 | `webapps.sciget.org` | hub | Cloudflare Worker, assets only | none: one card per catalogue |
 
 `neurodesk.org` DNS is on AWS Route 53, so the neuro catalogue stays on GitHub

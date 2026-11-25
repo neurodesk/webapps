@@ -21,6 +21,10 @@ export const exclusions = {
   'packages/hmc-registration/wasm/hmc-registration.mjs': 'Generated Emscripten glue, rebuilt by scripts/build.sh in that package.',
   'packages/registration/wasm/syncro-registration.mjs': 'Generated Emscripten glue.',
   'packages/vesselboost/preprocessing/preprocessing.js': 'Generated wasm-bindgen glue.',
+  'apps/brainchomp/public/brainchomp/brainchomp.js': 'Generated Emscripten glue from neuroneural/brainchomp-lib.',
+  'apps/brainchomp/public/brainchomp/brainchomp-gl.js': 'Generated Emscripten glue from neuroneural/brainchomp-lib.',
+  'apps/brainchomp/public/brainchomp/brainchomp-gpu.js': 'Generated Emscripten glue from neuroneural/brainchomp-lib.',
+  'apps/brainchomp/vendor/brainchomp/index.js': 'Vendored third-party brainchomp-lib bundle, upstream-owned.',
 };
 
 export function sourceInventory(cwd) {

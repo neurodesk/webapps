@@ -318,6 +318,7 @@
           "sha256": "f4b2311d08c4fd9470346fa035ce74a50d90d7bf4e95c3ec168223a30925d00b",
           "consumers": [
             "brain2print",
+            "brainchop",
             "browserqc",
             "fastprep",
             "lcmodel"
@@ -330,6 +331,7 @@
           "sha256": "cbd52434f79ab833ee73e452e3bba9b696f98651e202bd0fe3314886ad2a8ae6",
           "consumers": [
             "brain2print",
+            "brainchop",
             "browserqc",
             "fastprep",
             "lcmodel"
@@ -342,6 +344,7 @@
           "sha256": "56a2656040991faf953668c9c89894a5b0999287e25d6f7fa91305a7f34b3678",
           "consumers": [
             "brain2print",
+            "brainchop",
             "browserqc"
           ]
         },
@@ -352,6 +355,7 @@
           "sha256": "ab09834d25ea75c76f8c3f05607196261e1d3172d0a1060b25592645692e43de",
           "consumers": [
             "brain2print",
+            "brainchop",
             "browserqc"
           ]
         },
@@ -362,6 +366,7 @@
           "sha256": "516f6151beb8099d1e0247d9de708c0ac343bf311676e1062dc119a8900c51e7",
           "consumers": [
             "brain2print",
+            "brainchop",
             "browserqc"
           ]
         },
@@ -372,6 +377,7 @@
           "sha256": "41dd9570a9dbcecdc0c86cf3622e5ae2da0c0c5d6e7d8b492f61265f1ac3d032",
           "consumers": [
             "brain2print",
+            "brainchop",
             "browserqc"
           ]
         },
@@ -410,7 +416,7 @@
       "version": "0.38.0",
       "target": "ngff-codecs/0.38.0",
       "deduplicate": true,
-      "consumers": ["brainchop", "elastix", "lightsheet-atlas", "omezarr-convert", "stitching", "surfannotate"],
+      "consumers": ["elastix", "lightsheet-atlas", "omezarr-convert", "stitching", "surfannotate"],
       "match_by": "sha256",
       "reason": "Identical Blosc and Zstd codec chunks shared by microscopy apps; embedded WASM stays with its loader.",
       "files": [

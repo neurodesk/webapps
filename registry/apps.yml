@@ -1439,15 +1439,15 @@ apps:
     path: brainchop
     catalog: neuro
     title: Brainchop
-    description: Whole brain MRI tissue and atlas segmentation.
+    description: Segment brain tissues, subcortical regions and DK atlas.
     categories: [segmentation]
-    keywords: [brain, segmentation, brainchop]
+    keywords: [brain, segmentation, parcellation, Desikan-Killiany, MindMap, MindSnap, tissue fractions, Brainchop]
     anatomy: [brain]
     modalities: [mri]
     inputs: [dicom, nifti]
-    hardware: webgl-required
+    hardware: webgpu-optional
     legacy_domain: null
-    runtime: react-vite
+    runtime: vite-webgpu
     model_manifest: null
     asset_manifest_schema: null
     source: neurodesk/webapps@local
@@ -1459,7 +1459,6 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      hardware_gpu: true
       release: false
   - id: stardist
     path: stardist
@@ -1939,7 +1938,6 @@ apps:
       shared_runtime: false
       browser_test: true
       release: false
-
   - id: medsam2
     path: medsam2
     catalog: neuro
@@ -1962,6 +1960,31 @@ apps:
     support_status: experimental
     shell: imaging-workspace
     app_scoped_runtime_families: [ort-web-asyncify]
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false
+  - id: brainchomp
+    path: brainchomp
+    catalog: preclinical
+    title: Brainchomp
+    description: Extract rodent brains and masks from mouse and rat MRI.
+    categories: [segmentation, preprocessing]
+    keywords: [rodent, mouse, rat, preclinical, brain extraction, skull stripping, brain mask, Brainchomp]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: webgpu-optional
+    legacy_domain: null
+    runtime: vite-webgpu
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: MIT
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
     ci:
       toolchains: [node]
       shared_runtime: false

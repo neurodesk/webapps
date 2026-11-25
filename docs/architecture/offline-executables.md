@@ -30,6 +30,7 @@ Paths in this table are relative to the repository root. Existing implementation
 
 | App | Useful batch operation | Existing code and next work |
 | --- | --- | --- |
+| `brainchomp` | Rodent MRI brain extraction (`brainchomp-lib`) | Browser-only v1 using vendored `brainchomp-lib` WebGPU/WebGL2/CPU WASM modules; no separate command-line package is released yet. |
 | `cellpose` | 2D and 3D cell and nucleus segmentation (Cellpose 3 `cyto3` and `nuclei`) | No command line is packaged: Python Cellpose 3.1.1.1 (`cellpose` on PyPI) is the command-line reference the app reproduces on the examples (`apps/cellpose/validation`). |
 | `tumour-report` | Contrast-enhancing brain tumour segmentation (Raidionics v1.3), native morphometry and MNI RADS report | The pipeline is pure JavaScript in `packages/tumour-report/src`, validated against `dbouget/raidionics-rads:v1.3.2-py39-cpu` (`packages/tumour-report/validation`); a packaged Node CLI can reuse it via `exes/node-cli`. |
 | `denoise` | Self-supervised denoising of 2D/3D microscopy stacks (`Aydin FGR`, `ZS-N2N`, `VST-NLM`) | Packaged portable Node CLI in `packages/denoise` (`bin/denoise.js`, `release.json`, `validation/cli-check.mjs`) built through `exes/node-cli` and `.github/workflows/denoise-native.yml`. |

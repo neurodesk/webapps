@@ -1,30 +1,52 @@
-import { brainChopOpts } from '../vendor/brainchop/brainchop-parameters.js';
-import { MODEL_ROOT } from './models.js';
+import { mindgrab } from '@neurodesk/runtime-support/mindgrab';
+import { findModel, stemFor, TISSUE_STAGES } from './models.js';
 
-export function infer(volume, model, { signal, onProgress }) {
-  signal.throwIfAborted();
-  return new Promise((resolve, reject) => {
-    const worker = new Worker(new URL('../vendor/brainchop/brainchop-webworker.js', import.meta.url), { type: 'module' });
-    const finish = (error, result) => {
-      worker.terminate();
-      signal.removeEventListener('abort', cancel);
-      if (error) reject(error);
-      else resolve(result);
+function assetBaseUrl() {
+  return new URL('brainchop/', new URL(import.meta.env.BASE_URL, location.href)).href;
+}
+
+export async function runModel(sourceFile, modelId, { backend = 'auto', saveConform = false, signal, onLog = () => {} } = {}) {
+  const model = findModel(modelId);
+  if (!model) throw new Error('Unknown segmentation model.');
+  signal?.throwIfAborted();
+  const input = await sourceFile.arrayBuffer();
+  signal?.throwIfAborted();
+  const assetPath = assetBaseUrl();
+  const stem = stemFor(sourceFile.name);
+  const options = {
+    model: model.coreModel,
+    backend,
+    saveConform,
+    gzipOutput: false,
+    assetPath,
+    signal,
+    onLog,
+  };
+  if (model.kind === 'tissues') {
+    const result = await mindgrab.segmentTissues(input, options);
+    const files = Object.fromEntries(
+      TISSUE_STAGES.map(stage => [
+        stage.id,
+        new File([result.tissues[stage.id]], `${stem}_${stage.suffix}.nii`, { type: 'application/x-nifti' }),
+      ]),
+    );
+    return {
+      kind: 'tissues',
+      model,
+      files,
+      backend: result.backend,
+      elapsedMs: result.elapsedMs,
+      coreVersion: mindgrab.version,
     };
-    const cancel = () => finish(signal.reason);
-    signal.addEventListener('abort', cancel, { once: true });
-    worker.onerror = event => finish(new Error(event.message || 'Segmentation worker failed.'));
-    worker.onmessageerror = () => finish(new Error('Unreadable segmentation result.'));
-    worker.onmessage = ({ data }) => {
-      if (data.cmd === 'img') finish(null, new Uint8Array(data.img));
-      else if (data.modalMessage) finish(new Error(data.modalMessage));
-      else onProgress(data.message, data.progressFrac);
-    };
-    worker.postMessage({
-      opts: { ...brainChopOpts, rootURL: MODEL_ROOT, telemetryFlag: false },
-      modelEntry: model.entry,
-      niftiHeader: { datatypeCode: volume.hdr.datatypeCode, dims: volume.hdr.dims },
-      niftiImage: volume.img,
-    });
-  });
+  }
+  const result = await mindgrab.segment(input, options);
+  const file = new File([result.image], `${stem}_${model.id}.nii`, { type: 'application/x-nifti' });
+  return {
+    kind: 'labels',
+    model,
+    file,
+    backend: result.backend,
+    elapsedMs: result.elapsedMs,
+    coreVersion: mindgrab.version,
+  };
 }
