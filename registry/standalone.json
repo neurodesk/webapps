@@ -2447,7 +2447,7 @@
     },
     "calcium-imaging": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
       "downloads": [],
       "containers": []
@@ -2477,14 +2477,14 @@
     },
     "neuromorph": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
       "downloads": [],
       "containers": []
     },
     "stitching": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
       "downloads": [],
       "containers": []
@@ -2505,7 +2505,7 @@
     },
     "microscope-qc": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
       "downloads": [],
       "containers": []
@@ -2541,7 +2541,7 @@
     },
     "lightsheet-atlas": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
       "downloads": [],
       "containers": []
@@ -2555,7 +2555,7 @@
     },
     "histo2mri": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
       "downloads": [],
       "containers": []

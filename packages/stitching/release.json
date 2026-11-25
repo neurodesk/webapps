@@ -1,0 +1,38 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "stitching-v",
+  "displayName": "Tile stitching",
+  "app": "stitching",
+  "bundleModels": false,
+  "run": "tiles/ results",
+  "readme": {
+    "run": "Stitch a grid or collection of microscopy TIFF tiles into a blended mosaic",
+    "notes": [
+      "Input is a folder of TIFF tiles (and optional TileConfiguration.txt) or 2+ TIFF files.",
+      "Choose --layout grid, file, or stage (auto-detected by default). Add --help for options.",
+      "Writes <stem>_stitched.tif, TileConfiguration.registered.txt, pairs CSV and provenance JSON.",
+      "",
+      "No network connection is required and no external model files are downloaded.",
+      "For OME-Zarr (.ozx) conversion, use the web app or omezarr-convert.",
+      "Please cite Preibisch, Saalfeld & Tomancak 2009 (Bioinformatics 25(11):1463-1465)."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "stitching"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "stitching.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "stitching"
+    }
+  }
+}

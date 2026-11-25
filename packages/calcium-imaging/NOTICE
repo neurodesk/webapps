@@ -1,0 +1,8 @@
+Calcium Imaging (@neurodesk/calcium-imaging)
+Copyright (c) 2026 Neurodesk Contributors
+Licensed under the MIT License (see LICENSE).
+
+Methods implemented from published literature:
+- Sub-pixel rigid and piecewise-rigid registration: Guizar-Sicairos M, Thurman ST, Fienup JR. Optics Letters 2008;33(2):156-158; Pnevmatikakis EA, Giovannucci A (NoRMCorre). J Neurosci Methods 2017;291:83-94.
+- Neuropil correction and baseline ΔF/F: Pachitariu M et al. (Suite2p). bioRxiv 2017;061507.
+- Fast nonnegative AR(1) deconvolution (OASIS): Friedrich J, Zhou P, Paninski L. PLOS Comput Biol 2017;13(3):e1005423.

@@ -140,37 +140,26 @@ export function ngffLevels(multiscale) {
 }
 
 /**
- * Open an OME-Zarr image from the files of its folder (picked or dropped, with relative paths).
+ * Open an OME-Zarr image from any zarrita-compatible async store (`{ get(key) }`).
  * Non-spatial axes (t, c) must have length 1, or `channel` picks one channel.
  */
-export async function openOmeZarrStack(files, { channel, maxPlaneBytes = PLANE_LIMIT_BYTES, maxSlabBytes = SLAB_LIMIT_BYTES } = {}) {
-  const list = [...files];
-  const paths = list.map(fileName);
-  const marker = paths.map((path) => /(^|\/)(\.zattrs|zarr\.json)$/.exec(path) && path).filter(Boolean)
-    .sort((a, b) => a.split('/').length - b.split('/').length)[0];
-  if (!marker) throw new Error('Choose the OME-Zarr folder (it holds .zattrs or zarr.json).');
-  const root = marker.slice(0, marker.lastIndexOf('/') + 1);
-  const entries = new Map();
-  list.forEach((file, i) => {
-    if (paths[i].startsWith(root)) entries.set(paths[i].slice(root.length), file);
-  });
+export async function openOmeZarrStore(store, { name = 'OME-Zarr', channel, maxPlaneBytes = PLANE_LIMIT_BYTES, maxSlabBytes = SLAB_LIMIT_BYTES } = {}) {
   const zarr = await import('zarrita');
-  const store = new FileMapStore(entries);
   const group = await zarr.open(zarr.root(store), { kind: 'group' });
   const multiscale = ngffMultiscales(group.attrs);
   const levels = ngffLevels(multiscale);
   const arrays = await Promise.all(levels.map((level) => zarr.open(group.resolve(level.path), { kind: 'array' })));
   const axes = levels[0].axes;
-  const index = (name) => axes.indexOf(name);
+  const index = (axisName) => axes.indexOf(axisName);
   const described = levels.map((level, i) => {
     const shape = arrays[i].shape;
-    return { ...level, shape: ['z', 'y', 'x'].map((name) => shape[index(name)]) };
+    return { ...level, shape: ['z', 'y', 'x'].map((axisName) => shape[index(axisName)]) };
   });
-  for (const name of axes.filter((a) => !['z', 'y', 'x'].includes(a))) {
-    const length = arrays[0].shape[index(name)];
-    if (name !== 'c' && length !== 1) throw new Error(`The OME-Zarr image has ${length} ${name} points; export one.`);
-    if (name === 'c' && length > 1 && channel === undefined) throw new Error(`The OME-Zarr image has ${length} channels; select a channel explicitly or export one.`);
-    if (name === 'c' && channel !== undefined && (!Number.isInteger(channel) || channel < 0 || channel >= length)) throw new Error(`Channel ${channel} is outside 0-${length - 1}.`);
+  for (const axisName of axes.filter((a) => !['z', 'y', 'x'].includes(a))) {
+    const length = arrays[0].shape[index(axisName)];
+    if (axisName !== 'c' && length !== 1) throw new Error(`The OME-Zarr image has ${length} ${axisName} points; export one.`);
+    if (axisName === 'c' && length > 1 && channel === undefined) throw new Error(`The OME-Zarr image has ${length} channels; select a channel explicitly or export one.`);
+    if (axisName === 'c' && channel !== undefined && (!Number.isInteger(channel) || channel < 0 || channel >= length)) throw new Error(`Channel ${channel} is outside 0-${length - 1}.`);
   }
   channel ??= 0;
   const dtype = String(arrays[0].dtype);
@@ -180,7 +169,7 @@ export async function openOmeZarrStack(files, { channel, maxPlaneBytes = PLANE_L
   let slab = null;
   return {
     kind: 'ome-zarr',
-    name: root.replace(/\/$/, '') || list[0]?.name || 'OME-Zarr',
+    name,
     shape: described[0].shape,
     dtype,
     voxelSizeUm: described[0].voxelSizeUm,
@@ -197,18 +186,38 @@ export async function openOmeZarrStack(files, { channel, maxPlaneBytes = PLANE_L
       if (!cached) {
         const fits = (z1 - z0) * lh * lw * bytes <= maxSlabBytes;
         const [from, to] = fits ? [z0, z1] : [z, z + 1];
-        const selection = axes.map((name) => (name === 'z' ? zarr.slice(from, to) : name === 'c' ? channel : ['y', 'x'].includes(name) ? null : 0));
+        const selection = axes.map((axisName) => (axisName === 'z' ? zarr.slice(from, to) : axisName === 'c' ? channel : ['y', 'x'].includes(axisName) ? null : 0));
         slab = { level, z0: from, z1: to, chunk: await zarr.get(arrays[level], selection) };
       }
       const { chunk } = slab;
-      const kept = axes.filter((name) => ['z', 'y', 'x'].includes(name));
-      const stride = Object.fromEntries(kept.map((name, i) => [name, chunk.stride[i]]));
+      const kept = axes.filter((axisName) => ['z', 'y', 'x'].includes(axisName));
+      const stride = Object.fromEntries(kept.map((axisName, i) => [axisName, chunk.stride[i]]));
       const base = (z - slab.z0) * stride.z;
       const out = new chunk.data.constructor(lh * lw);
       for (let y = 0; y < lh; y++) for (let x = 0; x < lw; x++) out[y * lw + x] = chunk.data[base + y * stride.y + x * stride.x];
       return out;
     },
   };
+}
+
+/**
+ * Open an OME-Zarr image from the files of its folder (picked or dropped, with relative paths).
+ * Non-spatial axes (t, c) must have length 1, or `channel` picks one channel.
+ */
+export async function openOmeZarrStack(files, { channel, maxPlaneBytes = PLANE_LIMIT_BYTES, maxSlabBytes = SLAB_LIMIT_BYTES } = {}) {
+  const list = [...files];
+  const paths = list.map(fileName);
+  const marker = paths.map((path) => /(^|\/)(\.zattrs|zarr\.json)$/.exec(path) && path).filter(Boolean)
+    .sort((a, b) => a.split('/').length - b.split('/').length)[0];
+  if (!marker) throw new Error('Choose the OME-Zarr folder (it holds .zattrs or zarr.json).');
+  const root = marker.slice(0, marker.lastIndexOf('/') + 1);
+  const entries = new Map();
+  list.forEach((file, i) => {
+    if (paths[i].startsWith(root)) entries.set(paths[i].slice(root.length), file);
+  });
+  const store = new FileMapStore(entries);
+  const name = root.replace(/\/$/, '') || list[0]?.name || 'OME-Zarr';
+  return openOmeZarrStore(store, { name, channel, maxPlaneBytes, maxSlabBytes });
 }
 
 /** Open a TIFF stack or an OME-Zarr folder from picked or dropped files. */

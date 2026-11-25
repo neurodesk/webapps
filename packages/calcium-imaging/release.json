@@ -1,0 +1,38 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "calcium-imaging-v",
+  "displayName": "Calcium imaging",
+  "app": "calcium-imaging",
+  "bundleModels": false,
+  "run": "movie.tif results",
+  "readme": {
+    "run": "Motion-correct a two-photon calcium movie and extract ROIs, dF/F traces and spikes",
+    "notes": [
+      "Input is a single-plane, single-channel TIFF or OME-TIFF movie (>= 20 frames).",
+      "Pass --frame-rate N if the TIFF metadata does not record the frame interval.",
+      "Choose --motion rigid (default), piecewise, or none. Add --help for every option.",
+      "",
+      "No network connection is required and no external model files are downloaded.",
+      "Please cite Guizar-Sicairos et al. 2008, Pnevmatikakis & Giovannucci 2017 (NoRMCorre),",
+      "Pachitariu et al. 2017 (Suite2p), and Friedrich et al. 2017 (OASIS)."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "calcium-imaging"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "calcium-imaging.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "calcium-imaging"
+    }
+  }
+}

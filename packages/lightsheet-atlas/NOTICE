@@ -1,0 +1,28 @@
+Light-sheet atlas
+Copyright 2026 Neurodesk contributors. Apache-2.0 (the web application) AND BSD-3-Clause
+(the cell detection port).
+
+src/detect.js ports the classical cell candidate detection of cellfinder 1.10.1
+(cellfinder/core/detect: plane filters, tile walker, ball filter, structure detection and
+structure splitting; https://github.com/brainglobe/cellfinder),
+Copyright (c) 2020, Adam Tyson, University College London, under the BSD 3-Clause licence
+(LICENSE-cellfinder).
+
+The orientation notation and the registration outputs follow brainreg
+(https://github.com/brainglobe/brainreg, BSD-3-Clause); no brainreg code is included.
+
+Registration runs Greedy through @neurodesk/greedy (Apache-2.0; see packages/greedy/NOTICE).
+
+The Allen Mouse Brain Common Coordinate Framework v3, (c) 2015-2017 Allen Institute for Brain
+Science, is not part of this source. The web app downloads it at run time from the Neurodesk
+dataset on Hugging Face, and the offline (Standalone) bundles include it in their asset
+inventories. It is redistributed for research and noncommercial use only, under the Allen
+Institute terms of use (https://alleninstitute.org/terms-of-use/). Commercial use, including
+commercial redistribution of an offline bundle that contains it, needs the Allen Institute's
+prior written permission.
+
+Cite the atlas as:
+Allen Institute for Brain Science (2017). Allen Mouse Brain Common Coordinate Framework,
+version 3 [dataset]. Available from atlas.brain-map.org.
+Wang Q, Ding SL, Li Y, et al. The Allen Mouse Brain Common Coordinate Framework: a 3D reference
+atlas. Cell. 2020;181(4):936-953.e20. doi:10.1016/j.cell.2020.04.007
