@@ -148,15 +148,31 @@ async function extractScriptImports(source, file, { root, nodeSet, nodeByPackage
   }
   const specifiers = [];
   let dynamic = false;
-  const walk = (node) => {
+  const DYNAMIC_IDENTIFIERS = new Set(['createRequire', 'eval', 'Function', 'getBuiltinModule', 'dlopen', 'mainModule']);
+  const DYNAMIC_CONTAINERS = new Set(['globalThis', 'global', 'process', 'module']);
+  const walk = (node, parent = null) => {
     if (dynamic || !node || typeof node !== 'object') return;
     if (Array.isArray(node)) {
-      for (const item of node) walk(item);
+      for (const item of node) walk(item, parent);
       return;
     }
-    if (node.type === 'Identifier' && node.name === 'createRequire') {
-      dynamic = true;
-      return;
+    if (node.type === 'Identifier') {
+      const isPlainPropKey = parent?.type === 'Property' && !parent.computed && parent.key === node;
+      if (!isPlainPropKey && DYNAMIC_IDENTIFIERS.has(node.name)) {
+        dynamic = true;
+        return;
+      }
+      if (!isPlainPropKey && DYNAMIC_CONTAINERS.has(node.name) && parent?.type === 'MemberExpression' && parent.computed && parent.object === node) {
+        dynamic = true;
+        return;
+      }
+      if (!isPlainPropKey && node.name === 'require') {
+        const isDirectRequireCall = parent?.type === 'CallExpression' && parent.callee === node;
+        if (!isDirectRequireCall) {
+          dynamic = true;
+          return;
+        }
+      }
     }
     if ((node.type === 'ImportDeclaration' || node.type === 'ExportNamedDeclaration' || node.type === 'ExportAllDeclaration') && node.source) {
       if (node.source.type === 'Literal' && typeof node.source.value === 'string') specifiers.push(node.source.value);
@@ -167,20 +183,17 @@ async function extractScriptImports(source, file, { root, nodeSet, nodeByPackage
     } else if (node.type === 'CallExpression') {
       const callee = node.callee;
       const isRequire = callee?.type === 'Identifier' && callee.name === 'require';
-      const isEval = callee?.type === 'Identifier' && (callee.name === 'eval' || callee.name === 'Function');
       const isMemberRequire = callee?.type === 'MemberExpression' && !callee.computed && callee.property?.type === 'Identifier' && (callee.property.name === 'require' || callee.property.name === 'createRequire');
-      if (isEval || isMemberRequire) {
+      if (isMemberRequire) {
         dynamic = true;
       } else if (isRequire) {
         const arg = node.arguments?.[0];
         if (arg?.type === 'Literal' && typeof arg.value === 'string') specifiers.push(arg.value);
         else dynamic = true;
       }
-    } else if (node.type === 'NewExpression' && node.callee?.type === 'Identifier' && node.callee.name === 'Function') {
-      dynamic = true;
     }
     for (const key of Object.keys(node)) {
-      if (!AST_SKIP.has(key)) walk(node[key]);
+      if (!AST_SKIP.has(key)) walk(node[key], node);
     }
   };
   walk(ast);

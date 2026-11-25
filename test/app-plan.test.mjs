@@ -2702,10 +2702,11 @@ test('pnpm-workspace.yaml narrows only for valid exact-version minimumReleaseAge
   const workspace = await graph;
   const before = await readFile(new URL('../pnpm-workspace.yaml', import.meta.url), 'utf8');
   const parsed = parse(before);
-  const withExclusion = stringify({
-    ...parsed,
-    minimumReleaseAgeExclude: [...(parsed.minimumReleaseAgeExclude ?? []), '@example/fresh@1.2.3'],
-  });
+  const withExclusion = before.replace(
+    "  - '@niivue/nv-mcp@1.0.0-rc.7'\n",
+    "  - '@niivue/nv-mcp@1.0.0-rc.7'\n  - '@example/fresh@1.2.3'\n",
+  );
+  assert.notEqual(withExclusion, before);
   const narrowed = createAppPlan(registry, ['pnpm-workspace.yaml'], workspace, new Map([['pnpm-workspace.yaml', { before, after: withExclusion }]]));
   assert.deepEqual(narrowed.selected, []);
   assert.equal(narrowed.site, false);
@@ -2713,10 +2714,8 @@ test('pnpm-workspace.yaml narrows only for valid exact-version minimumReleaseAge
 
   // Removing an exclusion whose package@version is still resolved in pnpm-lock.yaml
   // (or without a head lockfile) falls back because frozen install rechecks release age.
-  const withoutBrainchop = stringify({
-    ...parsed,
-    minimumReleaseAgeExclude: parsed.minimumReleaseAgeExclude.filter((entry) => !entry.startsWith('@brainchop/core@')),
-  });
+  const withoutBrainchop = before.replace("  - '@brainchop/core@1.0.0'\n", '');
+  assert.notEqual(withoutBrainchop, before);
   assert.match(workspaceConfigImpact({ before, after: withoutBrainchop }).shared, /without a head lockfile/);
   const lockWithBrainchop = stringify({ lockfileVersion: '9.0', packages: { '@brainchop/core@1.0.0': {} } });
   assert.match(workspaceConfigImpact({ before, after: withoutBrainchop, lockAfter: lockWithBrainchop }).shared, /still resolved by pnpm-lock\.yaml/);
@@ -2734,6 +2733,7 @@ test('pnpm-workspace.yaml narrows only for valid exact-version minimumReleaseAge
     ['leading-zero semver', (doc) => ({ ...doc, minimumReleaseAgeExclude: [...doc.minimumReleaseAgeExclude, 'foo@01.0.0'] })],
     ['leading-zero prerelease', (doc) => ({ ...doc, minimumReleaseAgeExclude: [...doc.minimumReleaseAgeExclude, 'foo@1.0.0-01'] })],
     ['overflowing semver', (doc) => ({ ...doc, minimumReleaseAgeExclude: [...doc.minimumReleaseAgeExclude, 'foo@99999999999999999999.1.0'] })],
+    ['overlong padded semver', (doc) => ({ ...doc, minimumReleaseAgeExclude: [...doc.minimumReleaseAgeExclude, `foo@${' '.repeat(257)}1.0.0`] })],
     ['build metadata semver', (doc) => ({ ...doc, minimumReleaseAgeExclude: [...doc.minimumReleaseAgeExclude, '@brainchop/core@1.0.0+build'] })],
     ['semver range', (doc) => ({ ...doc, minimumReleaseAgeExclude: [...doc.minimumReleaseAgeExclude, 'foo@^1.0.0'] })],
     ['duplicate package name', (doc) => ({ ...doc, minimumReleaseAgeExclude: [...doc.minimumReleaseAgeExclude, 'foo@1.0.0', 'foo@2.0.0'] })],
@@ -2743,6 +2743,26 @@ test('pnpm-workspace.yaml narrows only for valid exact-version minimumReleaseAge
     assert.equal(fallback.allApps, true, label);
     assert.match(fallback.reasons.fallback, /^pnpm-workspace\.yaml:/, label);
   }
+  // Overlong whitespace-padded version segment inside an otherwise in-place edit falls back.
+  const paddedAfter = before.replace(
+    "  - '@niivue/nv-mcp@1.0.0-rc.7'\n",
+    `  - '@niivue/nv-mcp@1.0.0-rc.7'\n  - 'foo@${' '.repeat(257)}1.0.0'\n`,
+  );
+  assert.match(workspaceConfigImpact({ before, after: paddedAfter }).shared, /minimumReleaseAgeExclude/);
+  // Reformatting or changing bytes outside minimumReleaseAgeExclude (including control characters
+  // or quote changes that parsers handle differently) falls back.
+  assert.match(workspaceConfigImpact({
+    before: 'packages:\n  - apps/*\noverrides:\n  foo: "\\x01"\n',
+    after: 'packages:\n  - apps/*\noverrides:\n  foo: "\x01"\n',
+  }).shared, /control-character|control or non-ASCII/);
+  assert.match(workspaceConfigImpact({
+    before: 'packages:\n  - apps/*\noverrides:\n  foo: "a"\n',
+    after: 'packages:\n  - apps/*\noverrides:\n  foo: "\x01"\n',
+  }).shared, /control or non-ASCII/);
+  assert.match(workspaceConfigImpact({
+    before: "packages:\n  - apps/*\noverrides:\n  foo: '1.0.0'\n",
+    after: 'packages:\n  - apps/*\noverrides:\n  foo: "1.0.0"\n',
+  }).shared, /outside minimumReleaseAgeExclude/);
   const quotedMerge = 'packages:\n  - apps/*\n"<<":\n  recursiveInstall: false\n';
   const unquotedMerge = 'packages:\n  - apps/*\n<<:\n  recursiveInstall: false\n';
   assert.match(workspaceConfigImpact({ before: quotedMerge, after: unquotedMerge }).shared, /merge/);
@@ -2762,7 +2782,7 @@ test('pnpm-workspace.yaml narrows only for valid exact-version minimumReleaseAge
   assert.match(workspaceConfigImpact({ before, after: withAnchor }).shared, /anchors/);
   assert.match(workspaceConfigImpact({ before, after: 'packages:\n  - !!str apps/*\n' }).shared, /tags/);
   assert.match(workspaceConfigImpact({ before, after: ': bad: [yaml' }).shared, /does not parse/);
-  assert.match(workspaceConfigImpact({ before, after: '- list\n' }).shared, /not a YAML mapping/);
+  assert.match(workspaceConfigImpact({ before, after: '- list\n' }).shared, /not a block YAML mapping/);
   // Without before/after texts, pnpm-workspace.yaml falls back conservatively.
   assert.equal(createAppPlan(registry, ['pnpm-workspace.yaml'], workspace).allApps, true);
 });
@@ -2882,23 +2902,29 @@ test('per-app CI traversal keeps real package loads (require, dynamic import, si
   assert.equal(reached.has('scripts/from-side-pkg.mjs'), true, 'side-effect import "@nd/side-pkg"');
   assert.equal(reached.has('scripts/from-incidental.mjs'), false, 'incidental exes/incidental string');
 
-  // Aliased createRequire from node:module fails closed and preserves all package edges of that script.
-  const aliasRoot = await mkdtemp(join(tmpdir(), 'neurodesk-catalog-alias-'));
-  t.after(() => rm(aliasRoot, { recursive: true, force: true }));
-  const aliasFiles = {
-    'package.json': JSON.stringify({ name: 'root', scripts: {} }),
-    '.github/workflows/ci.yml': files['.github/workflows/ci.yml'],
-    'scripts/cli.mjs': "const { createRequire: makeRequire } = await import('node:module');\nmakeRequire(import.meta.url)('../packages/bridge');\n",
-    'packages/bridge/package.json': JSON.stringify({ name: '@nd/bridge' }),
-    'packages/bridge/index.js': "import '../../scripts/from-bridge.mjs';\n",
-    'scripts/from-bridge.mjs': '',
-  };
-  for (const [path, text] of Object.entries(aliasFiles)) {
-    await mkdir(dirname(join(aliasRoot, path)), { recursive: true });
-    await writeFile(join(aliasRoot, path), text);
+  // Aliased loaders (createRequire, require, getBuiltinModule) fail closed and preserve all package edges.
+  for (const [label, scriptSource] of [
+    ['aliased createRequire', "const { createRequire: makeRequire } = await import('node:module');\nmakeRequire(import.meta.url)('../packages/bridge');\n"],
+    ['aliased CommonJS require', "const load = require;\nload('../packages/bridge');\n"],
+    ['process.getBuiltinModule', "const mod = process.getBuiltinModule('node:module');\nmod['create' + 'Require'](import.meta.url)('../packages/bridge');\n"],
+  ]) {
+    const aliasRoot = await mkdtemp(join(tmpdir(), 'neurodesk-catalog-alias-'));
+    t.after(() => rm(aliasRoot, { recursive: true, force: true }));
+    const aliasFiles = {
+      'package.json': JSON.stringify({ name: 'root', scripts: {} }),
+      '.github/workflows/ci.yml': files['.github/workflows/ci.yml'],
+      'scripts/cli.mjs': scriptSource,
+      'packages/bridge/package.json': JSON.stringify({ name: '@nd/bridge' }),
+      'packages/bridge/index.js': "import '../../scripts/from-bridge.mjs';\n",
+      'scripts/from-bridge.mjs': '',
+    };
+    for (const [path, text] of Object.entries(aliasFiles)) {
+      await mkdir(dirname(join(aliasRoot, path)), { recursive: true });
+      await writeFile(join(aliasRoot, path), text);
+    }
+    const aliasGraph = await loadConservativeWorkspaceGraph(aliasRoot);
+    assert.equal(catalogReachable(aliasGraph).has('scripts/from-bridge.mjs'), true, `${label} preserves bridge`);
   }
-  const aliasGraph = await loadConservativeWorkspaceGraph(aliasRoot);
-  assert.equal(catalogReachable(aliasGraph).has('scripts/from-bridge.mjs'), true, 'aliased createRequire preserves bridge');
 });
 
 test('lint runner and scripts/quality files select no apps and no site build', async () => {

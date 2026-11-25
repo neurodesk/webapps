@@ -384,8 +384,14 @@ const EXACT_SEMVER = new RegExp(`^${SEMVER_NUM}\\.${SEMVER_NUM}\\.${SEMVER_NUM}(
 // Plain scalars interpreted differently across YAML 1.1 (js-yaml) and YAML 1.2.
 const AMBIGUOUS_PLAIN_YAML = /^(?:y|yes|n|no|true|false|on|off|~|null|0[0-7]+|[+-]?0[0-7]+)$/i;
 
+// Printable ASCII plus tab/CR/LF: excludes control chars (e.g. U+0001), BOM,
+// and non-ASCII line breaks that YAML parsers (yaml vs js-yaml/pnpm) disagree on.
+const SAFE_YAML_TEXT = /^[\t\n\r\x20-\x7E]*$/;
+const SAFE_YAML_STRING = /^[\x20-\x7E]*$/;
+
 function isPlainJsonValue(value) {
-  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
+  if (value === null || typeof value === 'boolean') return true;
+  if (typeof value === 'string') return SAFE_YAML_STRING.test(value);
   if (typeof value === 'number') return Number.isFinite(value);
   if (Array.isArray(value)) return value.every(isPlainJsonValue);
   if (typeof value !== 'object') return false;
@@ -444,13 +450,16 @@ function unsafeYamlReason(node) {
 }
 
 function parseSafeWorkspaceYaml(text) {
+  if (typeof text !== 'string' || !SAFE_YAML_TEXT.test(text)) {
+    return { error: 'it contains control or non-ASCII characters that YAML parsers handle differently' };
+  }
   const doc12 = parseDocument(text, { schema: 'core', uniqueKeys: true });
   if (doc12.errors.length) return { error: `it does not parse (${doc12.errors[0].message.split('\n')[0]})` };
   if (doc12.warnings.length) return { error: `it has YAML warnings (${doc12.warnings[0].message.split('\n')[0]})` };
   if (doc12.directives.yaml.explicit || Object.keys(doc12.directives.tags).some((tag) => tag !== '!!')) {
     return { error: 'it uses explicit YAML directives' };
   }
-  if (!isMap(doc12.contents)) return { error: 'it is not a YAML mapping' };
+  if (!isMap(doc12.contents) || doc12.contents.flow) return { error: 'it is not a block YAML mapping' };
   const unsafe = unsafeYamlReason(doc12.contents);
   if (unsafe) return { error: unsafe };
   // Parse under YAML 1.1 as well (matching js-yaml / pnpm) and reject any scalar
@@ -461,10 +470,51 @@ function parseSafeWorkspaceYaml(text) {
     return { error: 'it does not parse identically under YAML 1.1 and 1.2' };
   }
   const [val12, val11] = [doc12.toJS(), doc11.toJS()];
-  if (!isPlainJsonValue(val12) || !isPlainJsonValue(val11) || !same(val12, val11)) {
+  if (!same(val12, val11)) {
     return { error: 'it contains YAML scalars whose meaning differs between YAML 1.1 and 1.2' };
   }
-  return { value: val12 };
+  if (!isPlainJsonValue(val12) || !isPlainJsonValue(val11)) {
+    return { error: 'it contains non-plain or control-character YAML scalars' };
+  }
+  return { doc: doc12, value: val12 };
+}
+
+const RELEASE_AGE_HEADER = /^minimumReleaseAgeExclude: *(?:#[^\r\n]*)?$/;
+const RELEASE_AGE_EMPTY = /^minimumReleaseAgeExclude: *\[\] *(?:#[^\r\n]*)?$/;
+const RELEASE_AGE_BLANK = /^ *(?:#[^\r\n]*)?$/;
+const RELEASE_AGE_ITEM = /^( *)- +(?:[A-Za-z0-9][A-Za-z0-9@._/| -]*|'[A-Za-z0-9@._/| -]+'|"[A-Za-z0-9@._/| -]+") *(?:#[^\r\n]*)?$/;
+const SIMPLE_SCALAR_TYPES = new Set(['PLAIN', 'QUOTE_SINGLE', 'QUOTE_DOUBLE']);
+
+function stripReleaseAgeSection(text, doc) {
+  const pair = doc.contents.items.find((item) => isScalar(item.key) && item.key.value === 'minimumReleaseAgeExclude');
+  if (!pair) return { outside: text, section: null, pair: null };
+  if (!pair.key.range || !pair.value?.range) return { error: 'its minimumReleaseAgeExclude range cannot be determined' };
+  const [start] = pair.key.range;
+  const end = pair.value.range[2];
+  if ((start > 0 && text[start - 1] !== '\n') || (end < text.length && text[end - 1] !== '\n')) {
+    return { error: 'its minimumReleaseAgeExclude section is not on clean line boundaries' };
+  }
+  return { outside: text.slice(0, start) + text.slice(end), section: text.slice(start, end), pair };
+}
+
+function isSafeReleaseAgeSection(section, pair) {
+  if (section === null) return true;
+  if (!isSeq(pair.value)) return false;
+  const lines = section.replace(/\r?\n$/, '').split(/\r?\n/);
+  if (lines.length === 1) {
+    return pair.value.items.length === 0 && RELEASE_AGE_EMPTY.test(lines[0]);
+  }
+  if (pair.value.flow || !RELEASE_AGE_HEADER.test(lines[0])) return false;
+  if (!pair.value.items.every((item) => isScalar(item) && SIMPLE_SCALAR_TYPES.has(item.type))) return false;
+  let indent = null;
+  for (const line of lines.slice(1)) {
+    if (RELEASE_AGE_BLANK.test(line)) continue;
+    const match = line.match(RELEASE_AGE_ITEM);
+    if (!match) return false;
+    if (indent === null) indent = match[1].length;
+    else if (match[1].length !== indent) return false;
+  }
+  return true;
 }
 
 function parseReleaseAgeExclusions(value) {
@@ -473,15 +523,17 @@ function parseReleaseAgeExclusions(value) {
   const seenNames = new Set();
   const specs = new Set();
   for (const entry of value) {
-    if (typeof entry !== 'string') return null;
+    if (typeof entry !== 'string' || entry.length > MAX_SEMVER_LENGTH || entry !== entry.trim()) return null;
     const at = entry.indexOf('@', 1);
     if (at < 0) return null;
     const name = entry.slice(0, at);
     if (name.length > MAX_PACKAGE_NAME_LENGTH || !EXACT_PACKAGE_NAME.test(name) || seenNames.has(name)) return null;
     seenNames.add(name);
-    const versions = entry.slice(at + 1).split('||').map((part) => part.trim());
-    if (!versions.length || !versions.every(isExactPnpmSemver)) return null;
-    for (const version of versions) specs.add(`${name}@${version}`);
+    const rawVersionSpec = entry.slice(at + 1);
+    if (!rawVersionSpec || /^\s/.test(rawVersionSpec) || rawVersionSpec.length > MAX_SEMVER_LENGTH) return null;
+    const rawParts = rawVersionSpec.split('||');
+    if (!rawParts.length || !rawParts.every((part) => part.length <= MAX_SEMVER_LENGTH && isExactPnpmSemver(part.trim()))) return null;
+    for (const part of rawParts) specs.add(`${name}@${part.trim()}`);
   }
   return specs;
 }
@@ -502,6 +554,13 @@ export function workspaceConfigImpact({ before, after, lockAfter }) {
     if (key) return { shared: `its ${key} setting changed` };
   } catch (error) {
     return { shared: `its settings cannot be compared (${error.message.split('\n')[0]})` };
+  }
+  const [oldSection, nowSection] = [stripReleaseAgeSection(before, oldDoc.doc), stripReleaseAgeSection(after, nowDoc.doc)];
+  if (oldSection.error) return { shared: oldSection.error };
+  if (nowSection.error) return { shared: nowSection.error };
+  if (oldSection.outside !== nowSection.outside) return { shared: 'raw YAML outside minimumReleaseAgeExclude changed' };
+  if (!isSafeReleaseAgeSection(nowSection.section, nowSection.pair)) {
+    return { shared: 'its minimumReleaseAgeExclude section uses non-standard YAML syntax' };
   }
   const [oldSpecs, nowSpecs] = [parseReleaseAgeExclusions(old.minimumReleaseAgeExclude), parseReleaseAgeExclusions(now.minimumReleaseAgeExclude)];
   if (!oldSpecs || !nowSpecs) return { shared: 'its minimumReleaseAgeExclude entries must be unique exact package@version specs' };
