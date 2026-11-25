@@ -5,6 +5,10 @@ import { analyzeSurfaces } from '../../../packages/topofit/src/surface-analysis.
 import { readVolume } from '../../../packages/topofit/src/volume.js';
 import { REGIONS } from '../../../packages/topofit/src/cortex-regions.js';
 
+// Software WebGL can keep controls disabled while the viewer redraws a scene.
+test.describe.configure({ timeout: 90_000 });
+const expectReady = expect.configure({ timeout: 30_000 });
+
 async function patchPixels(page, clip) {
   const screenshot = await page.screenshot({ clip });
   return page.evaluate(async (base64) => {
@@ -106,7 +110,7 @@ async function deliverSurfaces(page, analysisResult = { files: [], analysis: nul
   });
   await page.goto('/');
   await page.locator('#imageInput').setInputFiles(scan());
-  await expect(page.locator('#runButton')).toBeEnabled();
+  await expectReady(page.locator('#runButton')).toBeEnabled();
   await page.locator('#runButton').click();
   await expect(page.locator('#outputSection')).toHaveAttribute('open', '');
   await expect(page.locator('#imageLabel')).toContainText(analyses[0].analysis ? 'PATCHES' : 'TOPOFIT QC', { timeout: 30_000 });
@@ -120,7 +124,7 @@ test('anatomical surfaces remain multiplanar, registration outputs are hidden, a
   for (const label of ['Left white surface', 'Left pial surface', 'Right white surface', 'Right pial surface']) {
     const row = page.locator('.nd-volume-toggle').filter({ hasText: label });
     await row.getByRole('checkbox').check();
-    await expect(row.getByRole('checkbox')).toBeEnabled({ timeout: 30_000 });
+    await expectReady(row.getByRole('checkbox')).toBeEnabled();
     await expect(page.locator('#imageLabel')).toContainText(label.includes('white') ? 'WHITE' : 'PIAL');
     await expect(page.locator('#viewerError')).toBeHidden();
     await expect(page.getByRole('radio', { name: 'Multi+Render', exact: true })).toHaveAttribute('data-state', 'on');
@@ -131,7 +135,7 @@ test('anatomical surfaces remain multiplanar, registration outputs are hidden, a
 async function expectCorticalOverlay(page, label = 'Left white surface') {
   const row = page.locator('.nd-volume-toggle').filter({ hasText: label });
   await row.getByRole('button', { name: 'View', exact: true }).click();
-  await expect(row.getByRole('checkbox')).toBeEnabled({ timeout: 30_000 });
+  await expectReady(row.getByRole('checkbox')).toBeEnabled();
   await page.getByRole('radio', { name: 'Multi+Render', exact: true }).click();
   await expect(page.locator('#viewerError')).toBeHidden();
   const canvas = await page.locator('#gl1').boundingBox();
@@ -144,7 +148,7 @@ async function expectCorticalOverlay(page, label = 'Left white surface') {
   const visible = [];
   for (const clip of slices) visible.push(await page.screenshot({ clip }));
   await row.getByRole('checkbox').uncheck();
-  await expect(row.getByRole('checkbox')).toBeEnabled({ timeout: 30_000 });
+  await expectReady(row.getByRole('checkbox')).toBeEnabled();
   for (const [index, clip] of slices.entries()) {
     const hidden = await page.screenshot({ clip });
     const fraction = await page.evaluate(async (screenshots) => {
@@ -166,7 +170,7 @@ async function expectCorticalOverlay(page, label = 'Left white surface') {
     expect(fraction, `Surface boundary must leave the anatomy on slice ${index} exposed`).toBeLessThan(0.15);
   }
   await row.getByRole('checkbox').check();
-  await expect(row.getByRole('checkbox')).toBeEnabled({ timeout: 30_000 });
+  await expectReady(row.getByRole('checkbox')).toBeEnabled();
 }
 
 test('cortical surface boundaries appear on all three slices in 3-Plane', async ({ page }, testInfo) => {
@@ -185,7 +189,7 @@ test('surface scenes hide 3D anatomy by default and honor FreeBrowse visibility 
   for (const label of ['Left white surface', 'Right pial surface', 'Left mid-surface']) {
     const row = page.locator('.nd-volume-toggle').filter({ hasText: label });
     await row.getByRole('button', { name: 'View', exact: true }).click();
-    await expect(row.getByRole('checkbox')).toBeEnabled();
+    await expectReady(row.getByRole('checkbox')).toBeEnabled();
     await expect(row.getByRole('checkbox')).toBeChecked();
     await expect(page.getByRole('radio', { name: 'Render view', exact: true })).toHaveAttribute('data-state', 'on');
     await expect(page.locator('#imageLabel')).toContainText(label.toUpperCase());
@@ -209,7 +213,7 @@ test('surface scenes hide 3D anatomy by default and honor FreeBrowse visibility 
     message: 'Explicitly showing anatomy in FreeBrowse must reveal it in 3D',
   }).toBe(false);
   await page.locator('.nd-volume-toggle').filter({ hasText: 'Right mid-surface' }).getByRole('button', { name: 'View', exact: true }).click();
-  await expect(page.getByRole('checkbox', { name: 'Show Right mid-surface', exact: true })).toBeEnabled();
+  await expectReady(page.getByRole('checkbox', { name: 'Show Right mid-surface', exact: true })).toBeEnabled();
   const anatomyAfterSelection = await canvas.screenshot();
   await page.getByRole('button', { name: 'Toggle visibility', exact: true }).click();
   await expect.poll(async () => anatomyAfterSelection.equals(await canvas.screenshot()), {
@@ -220,21 +224,19 @@ test('surface scenes hide 3D anatomy by default and honor FreeBrowse visibility 
 });
 
 test('surface selection preserves ACS and the other selected layouts', async ({ page }, testInfo) => {
-  // Six layouts and the desktop and phone captures can exceed the default on software WebGL.
-  test.setTimeout(90_000);
   await deliverSurfaces(page);
   for (const mode of ['Multi view', 'Axial view', 'Coronal view', 'Sagittal view', 'Multi+Render', 'Render view']) {
     await page.locator('.nd-volume-toggle').filter({ hasText: 'Source-grid QC overlay' }).getByRole('button', { name: 'View', exact: true }).click();
-    await expect(page.locator('#runButton')).toBeEnabled({ timeout: 30_000 });
+    await expectReady(page.locator('#runButton')).toBeEnabled();
     const layout = page.getByRole('radio', { name: mode, exact: true });
     await layout.click();
     const left = page.getByRole('checkbox', { name: 'Show Left mid-surface', exact: true });
     await left.check();
-    await expect(left).toBeEnabled({ timeout: 30_000 });
+    await expectReady(left).toBeEnabled();
     await expect(layout).toHaveAttribute('data-state', 'on');
     const row = page.locator('.nd-volume-toggle').filter({ hasText: 'Right mid-surface' });
     await row.getByRole('button', { name: 'View', exact: true }).click();
-    await expect(row.getByRole('checkbox')).toBeEnabled({ timeout: 30_000 });
+    await expectReady(row.getByRole('checkbox')).toBeEnabled();
     await expect(layout).toHaveAttribute('data-state', 'on');
     await expect(row.getByRole('checkbox')).toBeChecked();
     await expect(left).toBeChecked();
@@ -246,7 +248,7 @@ test('surface selection preserves ACS and the other selected layouts', async ({ 
       await page.setViewportSize({ width: 1280, height: 720 });
       const withBoundary = await page.locator('#gl1').screenshot();
       await row.getByRole('checkbox').uncheck();
-      await expect(row.getByRole('checkbox')).toBeEnabled({ timeout: 30_000 });
+      await expectReady(row.getByRole('checkbox')).toBeEnabled();
       expect(withBoundary.equals(await page.locator('#gl1').screenshot())).toBe(false);
       await expect(layout).toHaveAttribute('data-state', 'on');
     }
@@ -283,7 +285,7 @@ test('normal arrows follow mid-surfaces with adjustable spacing and length', asy
   await deliverSurfaces(page);
   const mid = page.locator('.nd-volume-toggle').filter({ hasText: 'Left mid-surface' });
   await mid.getByRole('button', { name: 'View', exact: true }).click();
-  await expect(mid.getByRole('checkbox')).toBeEnabled();
+  await expectReady(mid.getByRole('checkbox')).toBeEnabled();
   await page.getByRole('radio', { name: 'Render view', exact: true }).click();
   await page.locator('#normalArrowSettings summary').click();
   const before = await page.locator('#gl1').screenshot();
@@ -313,7 +315,7 @@ test('normal arrows follow mid-surfaces with adjustable spacing and length', asy
   for (const label of ['Left mid-surface', 'Right mid-surface']) {
     const visible = page.locator('.nd-volume-toggle').filter({ hasText: label }).getByRole('checkbox');
     await expect(visible).toBeChecked();
-    await expect(visible).toBeEnabled();
+    await expectReady(visible).toBeEnabled();
   }
   await expect(page.locator('#normalArrowStatus')).toHaveText('2 outward arrows · 12 mm spacing · 6 mm length');
   await page.getByRole('radio', { name: 'Multi view', exact: true }).click();
@@ -544,7 +546,7 @@ test('a named search region lists atlas groups, reaches the worker and shows its
   const leftPial = page.getByRole('checkbox', { name: 'Show Left pial surface', exact: true });
   await page.getByRole('radio', { name: 'Render view', exact: true }).click();
   await leftPial.check();
-  await expect(leftPial).toBeEnabled();
+  await expectReady(leftPial).toBeEnabled();
   await parcellation.getByRole('button', { name: 'View', exact: true }).click();
   await expect(page.locator('#imageLabel')).toContainText('Left Wang 2015 visual topography parcellation · V1 in full colour · patches white');
   await expect(leftPial).not.toBeChecked();
@@ -559,11 +561,11 @@ test('a named search region lists atlas groups, reaches the worker and shows its
   // A surface or the source image takes over from the parcellation.
   const leftMid = page.getByRole('checkbox', { name: 'Show Left mid-surface', exact: true });
   await leftMid.check();
-  await expect(leftMid).toBeEnabled();
+  await expectReady(leftMid).toBeEnabled();
   await expect.poll(() => meshOpacity(page, 'lh.wang2015.annot')).toBe(0);
   await expect.poll(() => atlasRedPixels(page)).toBeLessThan(50);
   await leftMid.uncheck();
-  await expect(leftMid).toBeEnabled();
+  await expectReady(leftMid).toBeEnabled();
   await parcellation.getByRole('button', { name: 'View', exact: true }).click();
   await expect.poll(() => atlasRedPixels(page)).toBeGreaterThan(2000);
   await expect.poll(() => meshOpacity(page, 'lh.wang2015.annot')).toBe(1);
@@ -706,7 +708,7 @@ test('invalid patch settings and a missing ROI are revealed before reconstructio
   await expect(page.locator('#patchRoi')).toBeAttached();
   await expect(page.locator('#estimateNormals')).toBeVisible();
   await expect(page.locator('#patchQuality')).toHaveAttribute('open', '');
-  await expect(page.locator('#runButton')).toBeEnabled();
+  await expectReady(page.locator('#runButton')).toBeEnabled();
   expect(await page.evaluate(() => window.lastTopofitJob.patches)).toBeNull();
 });
 
@@ -778,7 +780,7 @@ test('real reconstructed cortex displays patch QC and clearly named patches', as
   }, { files, analysis });
   await page.goto('/');
   await page.locator('#imageInput').setInputFiles(join(root, 'source.nii.gz'));
-  await expect(page.locator('#runButton')).toBeEnabled({ timeout: 30_000 });
+  await expectReady(page.locator('#runButton')).toBeEnabled();
   await page.locator('#runButton').click();
   await expect(page.locator('#imageLabel')).toContainText('PATCHES', { timeout: 60_000 });
   await expect(page.locator('#viewerError')).toBeHidden();
@@ -829,7 +831,7 @@ test('real reconstructed cortex displays patch QC and clearly named patches', as
   for (const label of ['Left white surface', 'Right pial surface']) {
     const row = page.locator('.nd-volume-toggle').filter({ hasText: label });
     await row.getByRole('checkbox').check();
-    await expect(row.getByRole('checkbox')).toBeEnabled({ timeout: 30_000 });
+    await expectReady(row.getByRole('checkbox')).toBeEnabled();
     await expect(page.locator('#imageLabel')).toContainText(label.includes('white') ? 'WHITE' : 'PIAL');
     await expect(page.locator('#viewerError')).toBeHidden();
   }
@@ -837,7 +839,7 @@ test('real reconstructed cortex displays patch QC and clearly named patches', as
   await page.locator('.nd-volume-toggle').filter({ hasText: 'Right flat patch 1' }).getByRole('button', { name: 'View', exact: true }).click();
   await expectCorticalOverlay(page, 'Left mid-surface');
   await page.getByRole('checkbox', { name: 'Show Right mid-surface', exact: true }).check();
-  await expect(page.getByRole('checkbox', { name: 'Show Right mid-surface', exact: true })).toBeEnabled({ timeout: 30_000 });
+  await expectReady(page.getByRole('checkbox', { name: 'Show Right mid-surface', exact: true })).toBeEnabled();
   await expect(page.locator('#imageLabel')).toContainText('RIGHT MID-SURFACE');
   await expect(page.locator('#viewerError')).toBeHidden();
   await page.screenshot({ path: testInfo.outputPath('real-mid-surfaces.png') });
@@ -846,7 +848,7 @@ test('real reconstructed cortex displays patch QC and clearly named patches', as
   for (const label of ['Left white surface', 'Left pial surface', 'Left mid-surface', 'Right mid-surface']) {
     const row = page.locator('.nd-volume-toggle').filter({ hasText: label });
     await row.getByRole('button', { name: 'View', exact: true }).click();
-    await expect(row.getByRole('checkbox')).toBeEnabled({ timeout: 30_000 });
+    await expectReady(row.getByRole('checkbox')).toBeEnabled();
     await expect(row.getByRole('checkbox')).toBeChecked();
     await page.screenshot({ path: testInfo.outputPath(`${label.replaceAll(' ', '-')}-3d.png`) });
   }
@@ -871,8 +873,8 @@ test('analysis runs in its own worker and can be repeated or cancelled without r
   await deliverSurfaces(page);
   const leftWhite = page.getByRole('checkbox', { name: 'Show Left white surface', exact: true });
   await leftWhite.check();
-  await expect(leftWhite).toBeEnabled();
-  await expect(page.locator('#analyzeButton')).toBeEnabled();
+  await expectReady(leftWhite).toBeEnabled();
+  await expectReady(page.locator('#analyzeButton')).toBeEnabled();
   await page.locator('#analyzeButton').click();
   await expect(page.locator('#estimateNormals')).toBeVisible();
   await page.locator('#estimateNormals').check();
@@ -894,7 +896,7 @@ test('analysis runs in its own worker and can be repeated or cancelled without r
   await page.locator('#cancelButton').click();
   await expect(page.locator('#statusText')).toContainText('Surface analysis cancelled');
   await expect(page.getByText('Left mid-surface normals', { exact: true })).toBeVisible();
-  await expect(page.locator('#analyzeButton')).toBeEnabled();
+  await expectReady(page.locator('#analyzeButton')).toBeEnabled();
   await page.context().unroute('**/fsaverage-cortex.bin');
   await page.context().route('**/fsaverage-cortex.bin', (route) => route.fulfill({ body: '' }));
   await page.locator('#analyzeButton').click();
@@ -959,10 +961,10 @@ test('STL export serializes processing and cancellation rejects late results', a
   await expect(page.locator('#imageInput')).toBeDisabled();
   await expect(page.locator('#runButton')).toBeDisabled();
   await page.locator('#cancelButton').click();
-  await expect(page.locator('#stlButton')).toBeEnabled();
+  await expectReady(page.locator('#stlButton')).toBeEnabled();
   await expect(page.locator('#statusText')).toContainText('STL export cancelled');
   await page.locator('#imageInput').setInputFiles({ ...scan(), name: 'replacement.nii' });
-  await expect(page.locator('#runButton')).toBeEnabled();
+  await expectReady(page.locator('#runButton')).toBeEnabled();
   await page.evaluate(() => window.finishStl());
   await expect(page.locator('#statusText')).not.toContainText('Saved');
   expect(downloads).toEqual([]);
@@ -1008,9 +1010,9 @@ test('FreeBrowse surface controls stay synchronized with TopoFit results', async
   const left = page.getByRole('checkbox', { name: 'Show Left mid-surface', exact: true });
   const right = page.getByRole('checkbox', { name: 'Show Right mid-surface', exact: true });
   await left.check();
-  await expect(left).toBeEnabled();
+  await expectReady(left).toBeEnabled();
   await right.check();
-  await expect(right).toBeEnabled();
+  await expectReady(right).toBeEnabled();
   await page.getByTitle('Show sidebar', { exact: true }).click();
   await page.getByRole('tab', { name: 'Surfaces', exact: true }).click();
   const leftSurface = page.locator('.freebrowse-root p').filter({ hasText: /^lh\.mid\.white$/ }).locator('../..');
@@ -1018,9 +1020,9 @@ test('FreeBrowse surface controls stay synchronized with TopoFit results', async
   await leftSurface.getByRole('button', { name: 'Toggle visibility', exact: true }).click();
   await expect(left).not.toBeChecked();
   await left.check();
-  await expect(left).toBeEnabled();
+  await expectReady(left).toBeEnabled();
   await page.locator('.nd-volume-toggle').filter({ hasText: 'Source-grid QC overlay' }).getByRole('button', { name: 'View', exact: true }).click();
-  await expect(left).toBeEnabled();
+  await expectReady(left).toBeEnabled();
   await expect(left).toBeChecked();
   await expect(right).toBeChecked();
   for (const file of files.filter((file) => !file.id.endsWith('-registration'))) {
@@ -1030,16 +1032,16 @@ test('FreeBrowse surface controls stay synchronized with TopoFit results', async
   await expect(left).not.toBeChecked();
   await expect(leftSurface).toBeVisible();
   await left.check();
-  await expect(left).toBeEnabled();
+  await expectReady(left).toBeEnabled();
   await leftSurface.getByTitle('Delete surface', { exact: true }).click();
   await page.getByRole('button', { name: 'Remove', exact: true }).click();
   await expect(left).not.toBeChecked();
   await right.uncheck();
-  await expect(right).toBeEnabled();
+  await expectReady(right).toBeEnabled();
   await right.check();
-  await expect(right).toBeEnabled();
+  await expectReady(right).toBeEnabled();
   await left.check();
-  await expect(left).toBeEnabled();
+  await expectReady(left).toBeEnabled();
   await expect(leftSurface).toBeVisible();
   await expect(page.locator('.freebrowse-root p').filter({ hasText: /^rh\.mid\.white$/ })).toBeVisible();
   await page.getByRole('radio', { name: 'Axial view', exact: true }).click();
@@ -1050,14 +1052,14 @@ test('FreeBrowse surface controls stay synchronized with TopoFit results', async
   await page.getByTitle('Delete volume', { exact: true }).click();
   await page.getByRole('button', { name: 'Remove', exact: true }).click();
   await left.uncheck();
-  await expect(left).toBeEnabled();
+  await expectReady(left).toBeEnabled();
   await expect(left).not.toBeChecked();
   await expect(right).toBeChecked();
   await expect(page.locator('#imageLabel')).toHaveText('RIGHT MID-SURFACE');
   await left.check();
-  await expect(left).toBeEnabled();
+  await expectReady(left).toBeEnabled();
   await right.check();
-  await expect(right).toBeEnabled();
+  await expectReady(right).toBeEnabled();
   await page.getByRole('tab', { name: 'Surfaces', exact: true }).click();
 
   await page.getByTitle('Hide sidebar', { exact: true }).click();
