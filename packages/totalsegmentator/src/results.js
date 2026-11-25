@@ -1,5 +1,5 @@
 // Per-structure statistics (volume + intensity), TSV formatting, NIfTI serialization and Dice evaluation.
-import { writeVolume } from '@neurodesk/synthsr';
+import { writeNiftiUint8 } from './nifti.js';
 import { GROUP_LABELS, labelsForTask } from './labels.js';
 
 export function voxelVolumeMl(affine) {
@@ -82,7 +82,7 @@ export function outputNames(stem, task) {
   };
 }
 
-export function segmentationResults({ labels, imageData, dims, affine, task, modality = 'ct' }, fileName) {
+export function segmentationResults({ labels, imageData, dims, affine, header = null, task, modality = 'ct' }, fileName) {
   const stem = caseStem(fileName);
   const names = outputNames(stem, task);
   const rows = structureStatistics({ labels, imageData, dims, affine, task });
@@ -90,7 +90,7 @@ export function segmentationResults({ labels, imageData, dims, affine, task, mod
   return {
     segmentation: {
       name: names.segmentation,
-      bytes: writeVolume({ data: labels, dims, affine }, description),
+      bytes: writeNiftiUint8({ data: labels, dims, affine, header }, description),
     },
     table: {
       name: names.table,

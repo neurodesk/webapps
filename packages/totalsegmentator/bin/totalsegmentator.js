@@ -7,8 +7,8 @@ process.env.ORT_DISABLE_TELEMETRY ??= '1';
 const { checkInstallation, downloadModels, segment } = await import('../src/node.js');
 
 const HELP = `Usage: totalsegmentator INPUT.nii[.gz] OUTPUT_DIR [options]
-       totalsegmentator download-models [--task NAME] [--resolution MODE] [--subset GROUP] [--cache-dir DIR]
-       totalsegmentator self-check
+       totalsegmentator download-models [--task NAME] [--resolution MODE] [--subset GROUP] [--cache-dir DIR] [--offline]
+       totalsegmentator self-check [--cache-dir DIR]
 
 Segments anatomical structures in 3D CT and MRI NIfTI scans using openly licensed
 Apache-2.0 TotalSegmentator v2 (nnU-Net v2) models on the CPU.
@@ -40,6 +40,14 @@ const reportProgress = () => {
   };
 };
 
+function rejectDisallowedOptions(subcommand, values, allowed) {
+  const disallowed = Object.keys(values).filter((key) => values[key] !== undefined && !allowed.includes(key));
+  if (disallowed.length) {
+    const flags = disallowed.map((key) => `--${key}`).join(', ');
+    throw new Error(`${subcommand} does not accept option${disallowed.length > 1 ? 's' : ''}: ${flags}.`);
+  }
+}
+
 try {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
@@ -57,10 +65,12 @@ try {
   if (values.help) {
     console.log(HELP);
   } else if (command === 'self-check') {
-    if (positionals.length !== 1) throw new Error('self-check does not accept arguments.');
-    console.log(JSON.stringify(await checkInstallation()));
+    if (positionals.length !== 1) throw new Error('self-check does not accept positional arguments.');
+    rejectDisallowedOptions('self-check', values, ['cache-dir']);
+    console.log(JSON.stringify(await checkInstallation({ cacheDir: values['cache-dir'] })));
   } else if (command === 'download-models') {
     if (positionals.length !== 1) throw new Error('download-models does not accept positional arguments.');
+    rejectDisallowedOptions('download-models', values, ['task', 'resolution', 'subset', 'cache-dir', 'offline']);
     const onProgress = reportProgress();
     const models = await downloadModels({
       task: values.task ?? null,

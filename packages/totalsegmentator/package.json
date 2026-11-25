@@ -14,6 +14,7 @@
     ".": "./src/pipeline.js",
     "./models": "./src/models.js",
     "./labels": "./src/labels.js",
+    "./nifti": "./src/nifti.js",
     "./results": "./src/results.js",
     "./node": "./src/node.js",
     "./manifest": "./model.manifest.json"
