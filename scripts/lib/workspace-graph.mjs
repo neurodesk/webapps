@@ -84,7 +84,7 @@ function namedByCommands(commands, rootScripts, root = null) {
     const current = pending.pop();
     for (const match of current.cmd.matchAll(ROOT_NAMED)) if (match[1]) named.add(match[1]);
     for (const [, rootFile] of current.cmd.matchAll(ROOT_PATH)) named.add(rootFile);
-    const nonRootWorkingDir = Boolean(current.workingDir && current.workingDir.trim() && !/^\.\/?$/.test(current.workingDir.trim()));
+    const nonRootWorkingDir = isStaticNonRootDir(current.workingDir, root);
     for (const script of extractPnpmRootScripts(current.cmd, { requireRootFlag: nonRootWorkingDir, baseDir: current.workingDir ?? '.', root })) {
       if (!expanded.has(script)) {
         expanded.add(script);
@@ -474,6 +474,14 @@ function findMatchingParen(text, openIndex) {
       continue;
     }
     if (ch === '\\') {
+      if (text[i + 1] === '\n') {
+        i++;
+        continue;
+      }
+      if (text[i + 1] === '\r' && text[i + 2] === '\n') {
+        i += 2;
+        continue;
+      }
       i++;
       atWordStart = false;
       continue;
@@ -550,6 +558,10 @@ function splitShellCommands(script) {
     if (ch === '\\') {
       if (next === '\n') {
         i++;
+        continue;
+      }
+      if (next === '\r' && script[i + 2] === '\n') {
+        i += 2;
         continue;
       }
       if (next !== undefined) {
@@ -651,13 +663,19 @@ function lintTargetsInCommands(commands, context) {
     const baseDir = typeof entry === 'string' ? '.' : entry.baseDir ?? workingDir ?? '.';
     if (INDEPENDENT_LINT_SCRIPT.test(rawCmd.trim())) continue;
     if (!/\blint\b/.test(rawCmd)) continue;
-    const nonRootWorkingDir = Boolean(workingDir && workingDir.trim() && !/^\.\/?$/.test(workingDir.trim()));
+    const trimmedWorkingDir = typeof workingDir === 'string' ? workingDir.trim() : '';
+    const workingDirIsUncertain = Boolean(trimmedWorkingDir) && isUncertainCdTarget(trimmedWorkingDir);
+    const resolvedWorkingDir = trimmedWorkingDir && !workingDirIsUncertain
+      ? (relative(root, resolve(root, trimmedWorkingDir)).split(sep).join('/').replace(/\/+$/, '') || '.')
+      : '';
+    const nonRootWorkingDir = workingDirIsUncertain || Boolean(resolvedWorkingDir && resolvedWorkingDir !== '.');
     // Possible directories tracked conservatively across segments: `cwdDirs`
     // keeps `.` and all reached directories so returning to the repository root
     // (`cd ../..`) resolves subsequent relative `cd` calls; `activeDirs` tracks
     // non-root directories entered via `working-directory` or `cd`.
-    let cwdDirs = new Set([nonRootWorkingDir ? workingDir.trim() : baseDir]);
-    let activeDirs = new Set(nonRootWorkingDir ? [workingDir.trim()] : []);
+    const initialWorkingDir = workingDirIsUncertain ? AMBIGUOUS_DIR : resolvedWorkingDir;
+    let cwdDirs = new Set([nonRootWorkingDir ? initialWorkingDir : baseDir]);
+    let activeDirs = new Set(nonRootWorkingDir ? [initialWorkingDir] : []);
     const dirStack = [];
     for (const token of splitShellCommands(rawCmd)) {
       if (token === '(') {
@@ -772,6 +790,14 @@ function tokenizeShellWords(segment) {
       continue;
     }
     if (ch === '\\' && next !== undefined) {
+      if (next === '\n') {
+        i++;
+        continue;
+      }
+      if (next === '\r' && segment[i + 2] === '\n') {
+        i += 2;
+        continue;
+      }
       current += next;
       hasToken = true;
       i++;
@@ -808,6 +834,17 @@ const PNPM_BIN = /(?:^|\/)pnpm(?:\.(?:cjs|mjs|js|cmd|exe))?$/;
 
 function isUncertainCdTarget(dir) {
   return dir === '-' || dir === '~' || dir.startsWith('~/') || dir.includes('$') || dir.includes('*') || dir.includes('`');
+}
+
+// Whether a CI `working-directory` statically resolves to a directory other
+// than the repository root. Unresolved/dynamic paths (such as
+// `${{ github.workspace }}`) and normalized root paths (`././`) return false so
+// root-script discovery remains conservative.
+function isStaticNonRootDir(workingDir, root) {
+  const trimmed = typeof workingDir === 'string' ? workingDir.trim() : '';
+  if (!trimmed || !root || isUncertainCdTarget(trimmed)) return false;
+  const rel = relative(root, resolve(root, trimmed)).split(sep).join('/').replace(/\/+$/, '');
+  return Boolean(rel && rel !== '.');
 }
 
 // Extract destination arguments from `cd` / `pushd` invocations in a shell
@@ -849,6 +886,14 @@ function extractCommandSubstitutions(segment) {
       continue;
     }
     if (ch === '\\') {
+      if (segment[i + 1] === '\n') {
+        i++;
+        continue;
+      }
+      if (segment[i + 1] === '\r' && segment[i + 2] === '\n') {
+        i += 2;
+        continue;
+      }
       i++;
       atWordStart = false;
       continue;
@@ -1044,7 +1089,7 @@ function expandedCommandTexts(commands, rootScripts, root = null) {
   while (pending.length) {
     const current = pending.pop();
     entries.push(current);
-    const nonRootWorkingDir = Boolean(current.workingDir && current.workingDir.trim() && !/^\.\/?$/.test(current.workingDir.trim()));
+    const nonRootWorkingDir = isStaticNonRootDir(current.workingDir, root);
     for (const script of extractPnpmRootScripts(current.cmd, { requireRootFlag: nonRootWorkingDir, baseDir: current.workingDir ?? '.', root })) {
       if (!expanded.has(script)) {
         expanded.add(script);
