@@ -3030,6 +3030,7 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
       "const innerPath = JSON.parse(readFileSync('exes/chain/outer.json', 'utf8')); const leaf = JSON.parse(readFileSync(innerPath, 'utf8')); readFileSync(leaf);",
       "const propCfg = JSON.parse(readFileSync('exes/prop-derived/config.json', 'utf8')); readFileSync(propCfg.path + '.gz');",
       "function returnedCfg() { return JSON.parse(readFileSync('exes/returned-cfg/input.json', 'utf8')); } readFileSync(returnedCfg().path + '.gz');",
+      "const revivedCfg = JSON.parse(readFileSync('exes/revived-cfg/input.json', 'utf8'), (k, v) => (k === 'path' ? v + '.gz' : v)); readFileSync(revivedCfg.path);",
     ].join('\n'),
     'exes/config/path.json': '"scripts/runtime-input.mjs"',
     'scripts/runtime-input.mjs': 'export const ok = true;\n',
@@ -3042,6 +3043,9 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
     'exes/returned-cfg/input.json': JSON.stringify({ path: 'exes/returned-leaf/reference.json' }),
     'exes/returned-leaf/reference.json': '{}',
     'exes/returned-leaf/reference.json.gz': 'returned-leaf-gz',
+    'exes/revived-cfg/input.json': JSON.stringify({ path: 'exes/revived-leaf/reference.json' }),
+    'exes/revived-leaf/reference.json': '{}',
+    'exes/revived-leaf/reference.json.gz': 'revived-leaf-gz',
     'scripts/quality/check-indirect.mjs': 'export const chained = true;\n',
     'scripts/quality/unrelated-sibling.mjs': 'export const unrelated = true;\n',
     'exes/data/reference.json': '{}',
@@ -3103,6 +3107,7 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
   assert.equal(createAppPlan(registry, ['scripts/quality/unrelated-sibling.mjs'], prefixGraph).selected.length, 0, 'exact chained JSON target does not pull unrelated sibling into CATALOG');
   assert.equal(createAppPlan(registry, ['exes/leaf/reference.json.gz'], prefixGraph).allApps, true, 'path derived from JSON property (propCfg.path + .gz) preserves destination directory edge');
   assert.equal(createAppPlan(registry, ['exes/returned-leaf/reference.json.gz'], prefixGraph).allApps, true, 'returned parsed JSON preserves destination directory edge');
+  assert.equal(createAppPlan(registry, ['exes/revived-leaf/reference.json.gz'], prefixGraph).allApps, true, 'JSON.parse reviver preserves destination directory edge');
 });
 
 test('lint runner and scripts/quality files select nothing when unreached, and honor confirmed CI or app reachability', async (t) => {
@@ -3588,6 +3593,44 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
         assert.equal(plan.site, true);
         assert.deepEqual(plan.selected.map((app) => app.id), ['n4']);
       },
+    ],
+    [
+      'CI step working-directory preserves caller dir across pipeline cd',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ 'working-directory': 'apps/n4', run: 'cd ../sdc | cat; pnpm lint' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/quality/n4-helper.mjs': 'export const n = 1;\n',
+        'apps/n4/package.json': JSON.stringify({ name: '@nd/n4', scripts: { lint: 'node ../../scripts/quality/n4-helper.mjs' } }),
+        'apps/sdc/package.json': JSON.stringify({ name: '@nd/sdc', scripts: { lint: 'echo sdc' } }),
+      },
+      'scripts/quality/n4-helper.mjs',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'CI step working-directory preserves caller dir across skipped cd',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ 'working-directory': 'apps/n4', run: 'false && cd ../sdc; pnpm lint' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/quality/n4-helper.mjs': 'export const n = 1;\n',
+        'apps/n4/package.json': JSON.stringify({ name: '@nd/n4', scripts: { lint: 'node ../../scripts/quality/n4-helper.mjs' } }),
+        'apps/sdc/package.json': JSON.stringify({ name: '@nd/sdc', scripts: { lint: 'echo sdc' } }),
+      },
+      'scripts/quality/n4-helper.mjs',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
     ],
     [
       'CI step cd into workspace with pnpm run lint keeps standalone lint edge',

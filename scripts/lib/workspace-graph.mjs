@@ -168,6 +168,15 @@ function isJsonParseCall(node) {
   );
 }
 
+function isPlainJsonParseCall(node) {
+  return (
+    isJsonParseCall(node) &&
+    Array.isArray(node.arguments) &&
+    node.arguments.length === 1 &&
+    node.arguments[0]?.type !== 'SpreadElement'
+  );
+}
+
 // Classify a literal in a whitelisted standalone path context:
 // (1) static/dynamic import/export source, (2) direct file-reader or final
 // `join`/`resolve` argument consumed by a file reader (`readFile`/`readFileSync`/
@@ -254,7 +263,12 @@ function classifyPathLiteral(node, ancestors, referencedIdentifiers, readerArgId
         else if (!PATH_JOIN_CALLS.has(name) || ancestor.arguments[ancestor.arguments.length - 1] !== child) return nope;
       } else if (isJsonLiteral && FILE_READER_CALLS.has(name)) {
         continue;
-      } else if (!isJsonParseCall(ancestor)) {
+      } else if (isJsonParseCall(ancestor)) {
+        if (!isPlainJsonParseCall(ancestor)) {
+          if (isJsonLiteral) derivedJson = true;
+          else return nope;
+        }
+      } else {
         return nope;
       }
       continue;
@@ -267,30 +281,31 @@ function classifyPathLiteral(node, ancestors, referencedIdentifiers, readerArgId
 // Inspect one reference to an identifier and classify whether it is used purely
 // as a direct file-reader argument (possibly chained to another binding) or
 // participates in path/data derivation (concatenation, joins, aliasing, etc.).
-function classifyIdentifierUse(idName, ancestors, derivedIdentifiers, readerDepEdges) {
+function classifyIdentifierUse(idNode, ancestors, derivedIdentifiers, readerDepEdges) {
+  const idName = idNode.name;
   let idx = ancestors.length - 1;
-  let child = null;
+  let expr = idNode;
   while (idx >= 0) {
     const cur = ancestors[idx];
-    if (cur.type === 'MemberExpression' && (child === null || cur.object === child)) {
-      child = cur;
+    if (cur.type === 'MemberExpression' && cur.object === expr) {
+      expr = cur;
       idx--;
       continue;
     }
     if (cur.type === 'ChainExpression' || cur.type === 'TSAsExpression' || cur.type === 'TSNonNullExpression') {
-      child = cur;
+      expr = cur;
       idx--;
       continue;
     }
     break;
   }
   const useNode = idx >= 0 ? ancestors[idx] : null;
-  if (!useNode || useNode.type !== 'CallExpression') {
+  if (!useNode || useNode.type !== 'CallExpression' || !Array.isArray(useNode.arguments) || !useNode.arguments.includes(expr)) {
     derivedIdentifiers.add(idName);
     return;
   }
   const callee = calleeNameOf(useNode);
-  if (!FILE_READER_CALLS.has(callee) && !isJsonParseCall(useNode)) {
+  if (!FILE_READER_CALLS.has(callee) && !isPlainJsonParseCall(useNode)) {
     derivedIdentifiers.add(idName);
     return;
   }
@@ -301,7 +316,7 @@ function classifyIdentifierUse(idName, ancestors, derivedIdentifiers, readerDepE
     if (ancestor.type === 'ExpressionStatement') return;
     if (ancestor.type === 'AwaitExpression' && ancestor.argument === prev) continue;
     if (ancestor.type === 'CallExpression' && Array.isArray(ancestor.arguments) && ancestor.arguments.includes(prev)) {
-      if (FILE_READER_CALLS.has(calleeNameOf(ancestor)) || isJsonParseCall(ancestor)) continue;
+      if (FILE_READER_CALLS.has(calleeNameOf(ancestor)) || isPlainJsonParseCall(ancestor)) continue;
       derivedIdentifiers.add(idName);
       return;
     }
@@ -357,7 +372,7 @@ function collectScriptStringLiterals(text, file) {
         ) {
           readerArgIdentifiers.add(node.name);
         }
-        classifyIdentifierUse(node.name, ancestors, derivedIdentifiers, readerDepEdges);
+        classifyIdentifierUse(node, ancestors, derivedIdentifiers, readerDepEdges);
       }
     }
     const isStringLiteral = node.type === 'Literal' && typeof node.value === 'string';
@@ -443,7 +458,6 @@ function resolveWorkspaceTarget(raw, baseDir, { root, nodeByPackageName, nodeSet
 }
 
 const AMBIGUOUS_DIR = Symbol('ambiguous-dir');
-const SHELL_CONTROL_FLOW = /\b(?:if|then|else|elif|fi|for|while|until|case)\b/;
 const AMBIGUOUS_LINT_EXEC = /\b(?:eval|xargs)\b|\b(?:ba|da|z|k)?sh\b[^\n]*-[a-zA-Z]*c\b|\$\(|`/;
 
 // Split a shell script into simple command tokens and subshell parens `(`, `)`,
@@ -545,9 +559,10 @@ function lintTargetsInCommands(commands, context) {
     if (INDEPENDENT_LINT_SCRIPT.test(rawCmd.trim())) continue;
     if (!/\blint\b/.test(rawCmd)) continue;
     const nonRootWorkingDir = Boolean(workingDir && workingDir.trim() && !/^\.\/?$/.test(workingDir.trim()));
-    const hasControlFlow = SHELL_CONTROL_FLOW.test(rawCmd);
-    // Active directories tracked across segments; empty means root (for CI steps)
-    // or the owning workspace itself (already handled by manifestScanText).
+    // Possible directories tracked conservatively across segments: a `cd` in a
+    // pipeline, short-circuited `&&`/`||`, background job, or branch never drops
+    // the caller's existing directories. Empty means root (for CI steps) or the
+    // owning workspace itself (already handled by manifestScanText).
     let activeDirs = new Set(nonRootWorkingDir ? [workingDir.trim()] : []);
     const dirStack = [];
     for (const token of splitShellCommands(rawCmd)) {
@@ -564,7 +579,7 @@ function lintTargetsInCommands(commands, context) {
       }
       const cdMatches = [...token.matchAll(SHELL_CD_TARGET)].map(([, dir]) => dir);
       if (cdMatches.length > 0) {
-        const nextDirs = hasControlFlow ? new Set(activeDirs) : new Set();
+        const nextDirs = new Set(activeDirs);
         const bases = activeDirs.size > 0 ? [...activeDirs] : [baseDir];
         for (const dir of cdMatches) {
           for (const from of bases) {
