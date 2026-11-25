@@ -304,9 +304,6 @@ test('CI entry points expand root scripts once, ignoring filtered workspace scri
 test('reachability follows edges transitively from any node and stops at cycles', () => {
   assert.deepEqual([...reachableFrom(graph, 'apps/beta')].sort(), ['apps/beta', 'packages/core', 'packages/util']);
   assert.deepEqual([...reachableFrom(graph, CATALOG)].sort(), [CATALOG, 'packages/util', 'scripts/loop-b.mjs', 'scripts/loop.mjs', 'test-utils/gpu.mjs', 'test-utils/shared.mjs', 'test/catalog.test.mjs']);
-  // test-utils/shared.mjs has both `import { value } from '@nd/util'` and side-effect `import '@nd/core'`.
-  assert.deepEqual([...(graph.scriptImports.get('test-utils/shared.mjs') ?? [])].sort(), ['packages/core', 'packages/util']);
-  assert.equal(graph.scriptImports.has('scripts/lib/other.js'), false);
   assert.ok(reachableFrom(graph, 'apps/alpha').has('scripts/lib/helper.mjs'));
   assert.ok(reachableFrom(graph, 'apps/alpha').has('vite.config.mjs'));
   assert.deepEqual([...reachableFrom(graph, 'unknown')], ['unknown']);

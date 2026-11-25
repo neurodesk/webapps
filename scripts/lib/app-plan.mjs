@@ -4,7 +4,7 @@ import { isAlias, isMap, isScalar, isSeq, parse, parseDocument } from 'yaml';
 import { LockfileAnalysisError, lockfileImpact } from './lockfile-impact.mjs';
 import { onlyAddsExports } from './module-closure.mjs';
 import { EMBEDDED_VERSION_FILES, releaseBookkeeping } from './release-bookkeeping.mjs';
-import { ALL_SCRIPT_IMPORTS, CATALOG, INDEPENDENT_CONFIG, SITE, reachableFrom } from './workspace-graph.mjs';
+import { CATALOG, INDEPENDENT_CONFIG, SITE, reachableFrom } from './workspace-graph.mjs';
 import { handoffCatalogEntry, validateAppInformation } from './app-information.mjs';
 import { appCatalogIds, parseAppsRegistry } from './apps-registry.mjs';
 import { validateStandalone } from './standalone.mjs';
@@ -36,7 +36,6 @@ const NON_CODE_FILES = new Set(['README.md', 'LICENSES.md']);
 const LOCKFILE = 'pnpm-lock.yaml';
 const WORKSPACE_CONFIG = 'pnpm-workspace.yaml';
 const E2E_TEST_DATA = 'scripts/lib/e2e-test-data.mjs';
-const WORKSPACE_PACKAGE_DIR = /^(?:packages|exes)\/[^/]+$/;
 const REGISTRY = 'registry/apps.yml';
 const STANDALONE = 'registry/standalone.json';
 const APP_INFORMATION = 'registry/app-information.yml';
@@ -767,33 +766,6 @@ export function e2eTestDataImpact({ before, after }) {
   return { changed: ids.filter((id) => old.provisioners.get(id) !== now.provisioners.get(id)) };
 }
 
-// Files ci.yml's per-app jobs run directly or import. Per-app scripts such as
-// scripts/lib/e2e-test-data.mjs name packages/* and exes/* directories as CLI
-// or data paths for individual apps (not JS/TS imports). Traversal stops at
-// those incidental package-directory edges so unrelated root helpers are not
-// pulled into CATALOG, while still following every JS/TS module import recorded
-// in `graph.scriptImports` (including bare imports, dynamic import(), require(),
-// and relative directory imports) and traversing normally inside imported packages.
-export function catalogReachable(graph) {
-  const seen = new Set([CATALOG]);
-  const pending = [CATALOG];
-  while (pending.length) {
-    const current = pending.pop();
-    const isScript = current !== CATALOG && !WORKSPACE_PACKAGE_DIR.test(current);
-    const directImports = graph.scriptImports?.get(current);
-    const candidates = directImports && directImports !== ALL_SCRIPT_IMPORTS
-      ? new Set([...(graph.edges.get(current) ?? []), ...directImports])
-      : (graph.edges.get(current) ?? []);
-    for (const next of candidates) {
-      if (seen.has(next)) continue;
-      if (isScript && WORKSPACE_PACKAGE_DIR.test(next) && directImports !== ALL_SCRIPT_IMPORTS && !directImports?.has(next)) continue;
-      seen.add(next);
-      pending.push(next);
-    }
-  }
-  return seen;
-}
-
 // The workspace graph nodes a changed file belongs to. A package's tests
 // reach only those that read them and a document only those that read that
 // file; any other file reaches its package's users and, if a root file names
@@ -897,7 +869,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
 
   const appIds = new Set(registry.apps.map((app) => app.id));
   const reach = graph && new Map(registry.apps.map((app) => [app.id, reachableFrom(graph, `apps/${app.id}`)]));
-  const catalog = graph && catalogReachable(graph);
+  const catalog = graph && reachableFrom(graph, CATALOG);
   const site = graph && reachableFrom(graph, SITE);
   const appReasons = new Map();
   const siteReasons = [];

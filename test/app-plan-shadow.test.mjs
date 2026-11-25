@@ -156,10 +156,9 @@ test('the shadow report names the rule families it cannot check', () => {
   assert.deepEqual(
     uncheckedRules({
       plan,
-      changedPaths: ['pnpm-workspace.yaml', 'scripts/lib/e2e-test-data.mjs', 'scripts/quality/lint-inventory.mjs', 'scripts/lib/mindgrab-asset-path-plugin.mjs'],
+      changedPaths: ['pnpm-workspace.yaml', 'scripts/lib/e2e-test-data.mjs', 'scripts/quality/lint-inventory.mjs'],
       manifests: new Map(),
-      catalogExcluded: new Set(['scripts/lib/mindgrab-asset-path-plugin.mjs']),
     }),
-    ['pnpm-workspace.yaml', 'e2e-test-data provisioners', 'lint tooling', 'catalogue traversal'],
+    ['pnpm-workspace.yaml', 'e2e-test-data provisioners', 'lint tooling'],
   );
 });

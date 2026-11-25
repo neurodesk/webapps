@@ -7,7 +7,7 @@ import { dirname, join, relative as relativePath, resolve as resolvePath } from 
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { parse, stringify } from 'yaml';
-import { AUTOMATION_CATALOG_READERS, catalogReachable, changedManifests, changedPathsFromGit, CI_JOB_SCOPES, CLASSIFIED_ENTRY_FIELDS, createAppPlan, e2eTestDataImpact, EASTER_EGG_INPUTS, EASTER_EGG_JOB, EASTER_EGG_OUTPUT, EASTER_EGG_PACKAGES, easterEggCannotRead, HANDOFF_CATALOG_READERS, WORKSPACE_MANIFESTS, INDEPENDENT_ROOT_DEV_DEPENDENCIES, packageTestsCanSkipOnDraft, RUNTIME_MANIFEST_READERS, UnreadableDiffError, SITE_DATA_KEYS, SITE_KEY_READERS, SITE_ONLY_FILES, SITE_THEME_CONSUMERS, SITE_THEME_FILES, workspaceConfigImpact } from '../scripts/lib/app-plan.mjs';
+import { AUTOMATION_CATALOG_READERS, changedManifests, changedPathsFromGit, CI_JOB_SCOPES, CLASSIFIED_ENTRY_FIELDS, createAppPlan, e2eTestDataImpact, EASTER_EGG_INPUTS, EASTER_EGG_JOB, EASTER_EGG_OUTPUT, EASTER_EGG_PACKAGES, easterEggCannotRead, HANDOFF_CATALOG_READERS, WORKSPACE_MANIFESTS, INDEPENDENT_ROOT_DEV_DEPENDENCIES, packageTestsCanSkipOnDraft, RUNTIME_MANIFEST_READERS, UnreadableDiffError, SITE_DATA_KEYS, SITE_KEY_READERS, SITE_ONLY_FILES, SITE_THEME_CONSUMERS, SITE_THEME_FILES, workspaceConfigImpact } from '../scripts/lib/app-plan.mjs';
 import { siteCheckApps, smokeApps } from '../scripts/lib/smoke-apps.mjs';
 import { loadAppInformation } from '../scripts/lib/app-information.mjs';
 import { hostedThemeOptions } from '../scripts/lib/catalog-sites.mjs';
@@ -2841,11 +2841,12 @@ test('scripts/lib/e2e-test-data.mjs narrows to apps whose pure provisioner entri
   assert.match(e2eTestDataImpact({ before: tdzBefore, after: tdzAfter }).shared, /cannot be isolated safely/);
 });
 
-test('per-app CI traversal keeps real package loads (require, dynamic import, side-effect import) while excluding incidental directory references', async (t) => {
+test('per-app CI scripts resolve exact .json data paths without dragging in whole workspace directories, while preserving package directory loads', async (t) => {
   const registry = await loadAppsRegistry();
   const workspace = await graph;
-  // scripts/lib/e2e-test-data.mjs names exes/dwi as a data path (not a JS import),
-  // which reaches packages/sdc -> mindgrab-asset-path-plugin.mjs; that must not poison CATALOG.
+  // scripts/lib/e2e-test-data.mjs reads exes/dwi/dmipy/validation/reference.manifest.json;
+  // SCRIPT_REFERENCE must resolve that exact .json file (not truncate .json to .js and fall
+  // back to the whole exes/dwi directory, which would pull mindgrab-asset-path-plugin.mjs into CATALOG).
   const pluginPlan = createAppPlan(registry, ['scripts/lib/mindgrab-asset-path-plugin.mjs'], workspace);
   assert.equal(pluginPlan.reasons.fallback, null);
   assert.equal(pluginPlan.allApps, false);
@@ -2859,8 +2860,9 @@ test('per-app CI traversal keeps real package loads (require, dynamic import, si
     assert.equal(createAppPlan(registry, [path], workspace).allApps, true, path);
   }
 
-  // Real workspace graph fixture verifying require('../packages/...'), bare import(),
-  // side-effect import, and incidental data paths.
+  // Real workspace graph fixture verifying exact .json data paths stay isolated while
+  // package directory references (require, destructured module.require, subprocess exec)
+  // still traverse into the package and its root helpers.
   const root = await mkdtemp(join(tmpdir(), 'neurodesk-catalog-imports-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const files = {
@@ -2874,57 +2876,31 @@ test('per-app CI traversal keeps real package loads (require, dynamic import, si
       },
     }),
     'scripts/cli.mjs': [
-      "const a = require('../packages/rel-req');",
-      "await import('@nd/dyn-pkg');",
-      "import '@nd/side-pkg';",
-      "const dataPath = 'exes/incidental/manifest.json';",
+      "const { require: load } = module;",
+      "load.call(module, '../packages/rel-req');",
+      "execFileSync(process.execPath, ['packages/subproc']);",
+      "const dataPath = 'exes/data-only/nested/reference.manifest.json';",
     ].join('\n'),
     'packages/rel-req/package.json': JSON.stringify({ name: '@nd/rel-req' }),
     'packages/rel-req/index.js': "import '../../scripts/from-rel-req.mjs';\n",
-    'packages/dyn-pkg/package.json': JSON.stringify({ name: '@nd/dyn-pkg' }),
-    'packages/dyn-pkg/index.js': "import '../../scripts/from-dyn-pkg.mjs';\n",
-    'packages/side-pkg/package.json': JSON.stringify({ name: '@nd/side-pkg' }),
-    'packages/side-pkg/index.js': "import '../../scripts/from-side-pkg.mjs';\n",
-    'exes/incidental/tool.js': "import '../../scripts/from-incidental.mjs';\n",
+    'packages/subproc/package.json': JSON.stringify({ name: '@nd/subproc' }),
+    'packages/subproc/index.js': "import '../../scripts/from-subproc.mjs';\n",
+    'exes/data-only/nested/reference.manifest.json': '{}',
+    'exes/data-only/tool.js': "import '../../scripts/from-data-only.mjs';\n",
     'scripts/from-rel-req.mjs': '',
-    'scripts/from-dyn-pkg.mjs': '',
-    'scripts/from-side-pkg.mjs': '',
-    'scripts/from-incidental.mjs': '',
+    'scripts/from-subproc.mjs': '',
+    'scripts/from-data-only.mjs': '',
   };
   for (const [path, text] of Object.entries(files)) {
     await mkdir(dirname(join(root, path)), { recursive: true });
     await writeFile(join(root, path), text);
   }
   const fixtureGraph = await loadConservativeWorkspaceGraph(root);
-  const reached = catalogReachable(fixtureGraph);
-  assert.equal(reached.has('scripts/from-rel-req.mjs'), true, 'require("../packages/rel-req")');
-  assert.equal(reached.has('scripts/from-dyn-pkg.mjs'), true, 'dynamic import("@nd/dyn-pkg")');
-  assert.equal(reached.has('scripts/from-side-pkg.mjs'), true, 'side-effect import "@nd/side-pkg"');
-  assert.equal(reached.has('scripts/from-incidental.mjs'), false, 'incidental exes/incidental string');
-
-  // Aliased loaders (createRequire, require, getBuiltinModule) fail closed and preserve all package edges.
-  for (const [label, scriptSource] of [
-    ['aliased createRequire', "const { createRequire: makeRequire } = await import('node:module');\nmakeRequire(import.meta.url)('../packages/bridge');\n"],
-    ['aliased CommonJS require', "const load = require;\nload('../packages/bridge');\n"],
-    ['process.getBuiltinModule', "const mod = process.getBuiltinModule('node:module');\nmod['create' + 'Require'](import.meta.url)('../packages/bridge');\n"],
-  ]) {
-    const aliasRoot = await mkdtemp(join(tmpdir(), 'neurodesk-catalog-alias-'));
-    t.after(() => rm(aliasRoot, { recursive: true, force: true }));
-    const aliasFiles = {
-      'package.json': JSON.stringify({ name: 'root', scripts: {} }),
-      '.github/workflows/ci.yml': files['.github/workflows/ci.yml'],
-      'scripts/cli.mjs': scriptSource,
-      'packages/bridge/package.json': JSON.stringify({ name: '@nd/bridge' }),
-      'packages/bridge/index.js': "import '../../scripts/from-bridge.mjs';\n",
-      'scripts/from-bridge.mjs': '',
-    };
-    for (const [path, text] of Object.entries(aliasFiles)) {
-      await mkdir(dirname(join(aliasRoot, path)), { recursive: true });
-      await writeFile(join(aliasRoot, path), text);
-    }
-    const aliasGraph = await loadConservativeWorkspaceGraph(aliasRoot);
-    assert.equal(catalogReachable(aliasGraph).has('scripts/from-bridge.mjs'), true, `${label} preserves bridge`);
-  }
+  const reached = reachableFrom(fixtureGraph, CATALOG);
+  assert.equal(reached.has('scripts/from-rel-req.mjs'), true, 'destructured module.require("../packages/rel-req")');
+  assert.equal(reached.has('scripts/from-subproc.mjs'), true, 'subprocess exec packages/subproc');
+  assert.equal(reached.has('exes/data-only/nested/reference.manifest.json'), true, 'exact .json manifest edge');
+  assert.equal(reached.has('scripts/from-data-only.mjs'), false, 'exact .json reference does not pull in exes/data-only code');
 });
 
 test('lint runner and scripts/quality files select no apps and no site build', async () => {
