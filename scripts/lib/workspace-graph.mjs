@@ -140,20 +140,26 @@ async function isRegularUnlinkedFile(root, target) {
 
 // Whether a SCRIPT_REFERENCE file match ends at a real path boundary: when the
 // path is opened by a quote (or uses the comma-separated join form), require the
-// exact same closing quote immediately after the filename so `'ref.json archive'`
-// does not narrow to `ref.json`.
+// exact same closing quote immediately after the filename and reject computed
+// path expressions (`'ref.json' + '.gz'`, `'ref.json'.concat(...)`, `${a}/ref.json`).
 function isCompleteScriptFile(text, match) {
-  const after = text[match.index + match[0].length];
+  const end = match.index + match[0].length;
+  const after = text[end];
   if (after && !/[\s'"`),;:\]}]/.test(after)) return false;
+  const nextToken = after ? text.slice(end + 1).match(/^\s*(.)/)?.[1] : null;
+  const isComputedAfter = nextToken === '+' || nextToken === '.' || nextToken === '[';
   const sepStart = match.index + match[1].length;
   if (text[sepStart] !== '/') {
     const secondQuote = match[0].slice(match[1].length + 1).match(/['"`]/)?.[0];
-    return Boolean(secondQuote && after === secondQuote);
+    return Boolean(secondQuote && after === secondQuote && !isComputedAfter);
   }
   let i = match.index - 1;
   while (i >= 0 && /[\w./-]/.test(text[i])) i--;
+  if (i >= 0 && text[i] === '}') return false;
   if (i >= 0 && (text[i] === "'" || text[i] === '"' || text[i] === '`') && (i === 0 || text[i - 1] !== '\\')) {
-    return after === text[i];
+    if (after !== text[i] || isComputedAfter) return false;
+    const prevToken = text.slice(0, i).match(/(.)\s*$/)?.[1];
+    return prevToken !== '+';
   }
   return true;
 }

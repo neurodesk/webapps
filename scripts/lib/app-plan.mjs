@@ -1159,7 +1159,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     shared(graph ? `${path}: no rule classifies it` : `${path}: there is no workspace graph to find its users`);
   }
 
-  if (fallback) return { ...everything(fallback), bookkeeping };
+  if (fallback) return { ...everything(fallback), editedApps, bookkeeping };
   for (const [id, jobs] of carried) {
     if (appIds.has(id)) select(id, `failed in the base run (${jobs.join(', ')})`);
   }

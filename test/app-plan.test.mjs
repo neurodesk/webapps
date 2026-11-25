@@ -2810,12 +2810,29 @@ test('scripts/lib/e2e-test-data.mjs narrows to apps whose pure provisioner entri
   assert.equal(denoisePlan.reasons.fallback, null);
   assert.equal(denoisePlan.browserApps.include.every(({ heavy_tests: run }) => run), true, 'scoped provisioner edit runs @heavy tests');
 
-  // Changing NODDI's reference provisioner selects noddi with heavy_tests: true so @heavy reference.spec.js runs.
+  // Changing NODDI's reference provisioner selects noddi with heavy_tests: true so @heavy reference.spec.js runs,
+  // including when combined with a shared fallback change in the same diff.
   const editNoddi = before.replace("NODDI_BROWSER_REFERENCE: 'check'", "NODDI_BROWSER_REFERENCE: 'write'");
   assert.notEqual(editNoddi, before);
   const noddiPlan = createAppPlan(registry, ['scripts/lib/e2e-test-data.mjs'], workspace, new Map([['scripts/lib/e2e-test-data.mjs', { before, after: editNoddi }]]));
   assert.deepEqual(noddiPlan.selected.map((app) => app.id), ['noddi']);
   assert.equal(noddiPlan.browserApps.include.every(({ heavy_tests: run }) => run), true, 'noddi provisioner edit runs @heavy browser reference');
+  const wsBefore = await readFile(new URL('../pnpm-workspace.yaml', import.meta.url), 'utf8');
+  const combinedFallback = createAppPlan(
+    registry,
+    ['scripts/lib/e2e-test-data.mjs', 'pnpm-workspace.yaml'],
+    workspace,
+    new Map([
+      ['scripts/lib/e2e-test-data.mjs', { before, after: editNoddi }],
+      ['pnpm-workspace.yaml', { before: wsBefore, after: `${wsBefore}minimumReleaseAge: 2880\n` }],
+    ]),
+  );
+  assert.equal(combinedFallback.allApps, true);
+  assert.equal(
+    combinedFallback.browserApps.include.filter(({ app }) => app === 'noddi').every(({ heavy_tests: run }) => run),
+    true,
+    'noddi keeps heavy_tests: true even when another file triggers full-catalog fallback',
+  );
 
   // Removing a provisioner entry selects only that app.
   const removeDenoise = before.replace('  denoise: { env: [], provision: async () => ({}) },\n', '');
@@ -2933,6 +2950,7 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
     'scripts/site.mjs': [
       "const archive = 'exes/data/reference.json.gz';",
       "const spaced = 'exes/spaced/reference.json archive';",
+      "const computed = 'exes/computed/reference.json' + '.gz';",
       "const linked = 'exes/linked/fixture.json';",
     ].join('\n'),
     'scripts/app-ci.mjs': "const mod = require('../packages/pkg/fixture.json');\n",
@@ -2940,6 +2958,8 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
     'exes/data/reference.json.gz': 'compressed',
     'exes/spaced/reference.json': '{}',
     'exes/spaced/reference.json archive': 'actual',
+    'exes/computed/reference.json': '{}',
+    'exes/computed/reference.json.gz': 'computed',
     'exes/linked/target.json': '{"real":true}',
     'packages/pkg/package.json': JSON.stringify({ name: '@nd/pkg' }),
     'packages/pkg/fixture.json/index.js': "import '../../../scripts/from-dir-json.mjs';\n",
@@ -2953,6 +2973,7 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
   const prefixGraph = await loadConservativeWorkspaceGraph(prefixRoot);
   assert.equal(createAppPlan(registry, ['exes/data/reference.json.gz'], prefixGraph).site, true, '.json.gz keeps exes/data edge');
   assert.equal(createAppPlan(registry, ['exes/spaced/reference.json archive'], prefixGraph).site, true, 'quoted filename with space keeps exes/spaced edge');
+  assert.equal(createAppPlan(registry, ['exes/computed/reference.json.gz'], prefixGraph).site, true, 'computed path concatenation keeps exes/computed edge');
   assert.equal(createAppPlan(registry, ['exes/linked/target.json'], prefixGraph).site, true, 'symlink keeps exes/linked edge');
   assert.equal(reachableFrom(prefixGraph, CATALOG).has('scripts/from-dir-json.mjs'), true, 'directory named fixture.json keeps packages/pkg edge');
 });
