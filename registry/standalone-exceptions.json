@@ -20,7 +20,6 @@
   "omezarr-convert": "no command line is packaged yet: @neurodesk/omezarr-convert runs in Node (validation/check-example.mjs), and bioformats2raw is the established native converter for batch work",
   "deconvolution": "no command line yet: the Rust core in exes/deconvolution and the committed WebAssembly module in packages/deconvolution are ready to package through exes/node-cli in a later release",
   "tumour-report": "the pinned dbouget/raidionics-rads:v1.3.2-py39-cpu container is the upstream command-line reference, and packages/tumour-report/validation holds voxel-exact native mask parity to it; a packaged Node CLI can follow via exes/node-cli",
-  "totalsegmentator": "upstream TotalSegmentator (wasserth/TotalSegmentator) ships the native Python CLI and Neurodesk packages it as totalsegmentator 2.18.0: the Standalone dialog lists the Neurodesk container (Docker and Apptainer), and packages/totalsegmentator/validation/validate.mjs verifies the JS pipeline against upstream reference outputs",
   "cellpose": "Python Cellpose (pip install cellpose) is the command-line reference the app reproduces on the 2D and 3D examples; no separate command line is packaged",
   "medsam2": "MedSAM2 (bowang-lab/MedSAM2 in Python) is the upstream reference; interactive slice prompting has no separate command line",
   "brainchomp": "browser-only v1 using vendored brainchomp-lib WebGPU/WebGL2/CPU WASM modules; no separate command-line package is released yet",

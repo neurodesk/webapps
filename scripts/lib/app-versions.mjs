@@ -58,6 +58,7 @@ export const LINKED_PACKAGES = Object.freeze({
   '@neurodesk/qsmbly': 'qsmbly',
   '@neurodesk/syncro': 'syncro',
   '@neurodesk/topofit': 'topofit',
+  '@neurodesk/totalsegmentator': 'totalsegmentator',
   '@neurodesk/vesselboost': 'vesselboost',
   '@neurodesk/white-matter-lesions': 'white-matter-lesions',
 });

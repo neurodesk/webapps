@@ -1,0 +1,72 @@
+name: native-2
+
+# Written by scripts/native-workflow.mjs from every workflow whose gate job
+# lists shared_paths. Edit those workflows, then run `node scripts/native-workflow.mjs`.
+#
+# A pull request that changes a shared path starts this one workflow, not
+# every workflow that builds on the path. Its gate decides for all of them
+# (pr-gate.yml with `workflow: native`, scripts/lib/workflow-gate.mjs) and
+# it calls the ones the change reaches, on the pull request's own event and
+# commit. A workflow GitHub certainly started itself for its own paths is
+# skipped here. A call runs unless the gate names it in its skip list
+# (callCondition in scripts/lib/native-workflow.mjs). The nightly schedule
+# is the sweep of every called workflow that a push to main also starts.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+    paths:
+      - '.github/workflows/native-2.yml'
+      - '.github/workflows/pr-gate.yml'
+      - 'scripts/workflow-gate.mjs'
+      - 'scripts/lib/workflow-gate.mjs'
+      - 'packages/components/package.json'
+  schedule:
+    - cron: '10 13 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-2-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Decides which workflows to skip (scripts/lib/native-decision.mjs). Whatever
+  # goes wrong in it runs them: each call skips only when the gate names it.
+  gate:
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft'))
+    uses: ./.github/workflows/pr-gate.yml
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    with:
+      workflow: native-2
+      # The workflows the gate may name in `skips`: all of them for a draft.
+      calls: >-
+        white-matter-lesions-native
+      sweeps: >-
+        white-matter-lesions-native
+
+  # Fails where ci withholds the full plan too: every call was skipped.
+  full-plan-withheld:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fail the withheld run
+        run: |
+          echo "::error title=Full plan withheld::This ready pull request already used its full-plan ci runs, so native-2.yml ran none of the workflows it calls. Add the full-ci label, then re-run all jobs of ci and of native-2."
+          exit 1
+
+  white-matter-lesions-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"white-matter-lesions-native"')) }}
+    uses: ./.github/workflows/white-matter-lesions-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
