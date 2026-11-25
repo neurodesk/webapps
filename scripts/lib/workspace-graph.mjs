@@ -146,8 +146,9 @@ const FILE_READER_CALLS = new Set(['readFile', 'readFileSync', 'require']);
 const PATH_JOIN_CALLS = new Set(['join', 'resolve']);
 const EXEC_ARRAY_CALLS = new Set(['run', 'execFile', 'execFileSync', 'spawn', 'spawnSync']);
 const INDEPENDENT_LINT_SCRIPT = /^node\s+(?:\.\.\/)+scripts\/lint\.mjs(?:\s+--workspace)?$/;
-const FILTER_ARG = /(?:^|[\s;|&(])(--filter-prod|--filter|-F|--dir|-C|--prefix|--cwd)(?:=|\s+)['"]?([^\s'"]+)['"]?/g;
-const CROSS_WORKSPACE_FLAG = /(?:^|[\s;|&(])(?:--filter-prod|--filter|-F|--dir|-C|--prefix|--cwd|-r|--recursive|--workspace|-w|--workspaces)(?:=|\s|$)/;
+const FILTER_ARG = /(?:^|[\s;|&(])(--filter-prod|--filter|-F|--workspace|--dir|-C|--prefix|--cwd)(?:=|\s+)['"]?([^\s'"]+)['"]?/g;
+const NPM_SHORT_WORKSPACE_ARG = /(?:^|[\s;|&(])(-w)(?:=|\s+)['"]?([^\s'"]+)['"]?/g;
+const CROSS_WORKSPACE_FLAG = /(?:^|[\s;|&(])(?:--filter-prod|--filter|-F|--dir|-C|--prefix|--cwd|-r|--recursive|--workspace|-w|-ws|--workspaces)(?:=|\s|$)/;
 
 function calleeNameOf(callNode) {
   const callee = callNode?.callee;
@@ -442,13 +443,14 @@ function matchScriptLiteral(text, match, literals) {
 
 function resolveWorkspaceTarget(raw, baseDir, { root, nodeByPackageName, nodeSet }) {
   if (nodeByPackageName.has(raw)) return nodeByPackageName.get(raw);
-  if (raw.includes('$') || raw.includes('*')) return null;
-  const normalized = raw.replace(/^\.\//, '').replace(/\/+$/, '');
+  const unwrapped = raw.startsWith('{') && raw.endsWith('}') ? raw.slice(1, -1) : raw;
+  if (unwrapped.includes('$') || unwrapped.includes('*')) return null;
+  const normalized = unwrapped.replace(/^\.\//, '').replace(/\/+$/, '');
   if (nodeSet.has(normalized)) return normalized;
   const prefixNode = normalized.match(/^(?:apps|packages|exes)\/[^/]+/)?.[0];
   if (prefixNode && nodeSet.has(prefixNode)) return prefixNode;
   if (baseDir && !baseDir.includes('$')) {
-    const rel = relative(root, resolve(root, baseDir, raw)).split(sep).join('/').replace(/\/+$/, '');
+    const rel = relative(root, resolve(root, baseDir, unwrapped)).split(sep).join('/').replace(/\/+$/, '');
     if (nodeSet.has(rel)) return rel;
     const relPrefix = rel.match(/^(?:apps|packages|exes)\/[^/]+/)?.[0];
     if (relPrefix && nodeSet.has(relPrefix)) return relPrefix;
@@ -719,30 +721,34 @@ function lintTargetsInCommands(commands, context) {
         continue;
       }
       if (!/\b(?:pnpm|npm|yarn)\b/.test(token)) continue;
-      const hasRootFlag = /(?:^|\s)(?:-w|--workspace-root)(?:\s|$)/.test(token);
+      const isPnpm = /(?:^|[\s;|&(/])pnpm(?:\.(?:cjs|mjs|js|cmd|exe))?(?:$|[\s;|&)])/.test(token);
+      // `-w` means `--workspace-root` in pnpm, but `--workspace <pkg>` in npm.
+      const hasRootFlag = /(?:^|\s)--workspace-root(?:\s|$)/.test(token) || (isPnpm && /(?:^|\s)-w(?:\s|$)/.test(token));
       const hasCrossFlag = CROSS_WORKSPACE_FLAG.test(token);
       // `-w` / `--workspace-root` overrides `--dir` / `-C` / `--prefix` / `--cwd`
       // in pnpm; only explicit filter/recursive/workspace-list flags still target
       // workspace members alongside `-w`.
-      const hasWorkspaceSelectorFlag = /(?:^|[\s;|&(])(?:--filter-prod|--filter|-F|-r|--recursive|--workspace(?:=|\s)|--workspaces)/.test(token);
+      const hasWorkspaceSelectorFlag = /(?:^|[\s;|&(])(?:--filter-prod|--filter|-F|-r|--recursive|--workspace(?:=|\s)|-ws|--workspaces)/.test(token);
       if (!hasCrossFlag && activeDirs.size === 0) continue;
       if (hasRootFlag && !hasWorkspaceSelectorFlag) continue;
       const recursive = /(?:^|\s)(?:-r|--recursive)(?:\s|$)/.test(token);
-      const filters = [...token.matchAll(FILTER_ARG)]
-        .map(([, flag, target]) => ({ flag, target }))
-        .filter(({ flag }) => !hasRootFlag || flag === '--filter-prod' || flag === '--filter' || flag === '-F');
+      const rawFilters = [
+        ...[...token.matchAll(FILTER_ARG)].map(([, flag, target]) => ({ flag, target })),
+        ...(!isPnpm ? [...token.matchAll(NPM_SHORT_WORKSPACE_ARG)].map(([, flag, target]) => ({ flag, target })) : []),
+      ];
+      const filters = rawFilters.filter(({ flag }) => !hasRootFlag || flag === '--filter-prod' || flag === '--filter' || flag === '-F');
       if (!recursive && filters.length > 0) {
         let allResolved = true;
         const resolveBases = new Set([...(baseDir !== '.' ? [baseDir] : []), ...(activeDirs.size > 0 ? activeDirs : cwdDirs)]);
-        const stringBases = new Set([...resolveBases].filter((from) => from !== AMBIGUOUS_DIR));
         for (const { flag, target: filter } of filters) {
           const isFilterFlag = flag === '--filter-prod' || flag === '--filter' || flag === '-F';
-          const isExactRootFilter =
+          const isExactRootName =
             isFilterFlag &&
-            !filter.includes('*') &&
-            !/^\.{2,3}\^?|\^?\.{2,3}$/.test(filter) &&
-            filterTargetsRoot(filter, stringBases, root, context.rootPackageName ?? null);
-          if (isExactRootFilter) continue;
+            Boolean(context.rootPackageName) &&
+            filter === context.rootPackageName;
+          if (isExactRootName) continue;
+          const unwrapped = filter.startsWith('{') && filter.endsWith('}') ? filter.slice(1, -1) : filter;
+          const hasGraphOrGlob = filter.includes('*') || /^\.{2,3}\^?|\^?\.{2,3}$/.test(filter);
           let resolvedAny = false;
           for (const from of resolveBases) {
             if (from === AMBIGUOUS_DIR) {
@@ -753,8 +759,8 @@ function lintTargetsInCommands(commands, context) {
             if (workspaceNode) {
               targets.add(workspaceNode);
               resolvedAny = true;
-            } else if (!isFilterFlag && !isUncertainCdTarget(filter)) {
-              const rel = relative(root, resolve(root, from, filter)).split(sep).join('/').replace(/\/+$/, '');
+            } else if (!hasGraphOrGlob && !isUncertainCdTarget(unwrapped)) {
+              const rel = relative(root, resolve(root, from, unwrapped)).split(sep).join('/').replace(/\/+$/, '');
               if (!rel || rel === '.') resolvedAny = true;
               else allResolved = false;
             } else {
@@ -969,10 +975,9 @@ function filterTargetsRoot(filterVal, cwdDirs, root, rootPackageName) {
   if (!core) return false;
   if (rootPackageName && core === rootPackageName) return true;
   const pathCandidate = core.startsWith('{') && core.endsWith('}') ? core.slice(1, -1) : core;
-  if (pathCandidate === '.' || pathCandidate === './') return true;
   if (root && !isUncertainCdTarget(pathCandidate) && (core.startsWith('{') || pathCandidate.startsWith('.') || pathCandidate.includes('/'))) {
     for (const from of cwdDirs) {
-      if (from.includes('$')) continue;
+      if (from.includes('$')) return true;
       const rel = relative(root, resolve(root, from, pathCandidate)).split(sep).join('/').replace(/\/+$/, '');
       if (!rel || rel === '.') return true;
     }
