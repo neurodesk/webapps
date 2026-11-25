@@ -53,6 +53,9 @@ const RELATIVE_PATH = /(['"`])((?:\.\.\/)+[^'"`\s$]*)\1/g;
 export const INDEPENDENT_CONFIG = /^(?:eslint|knip|stryker)\.config\.m?js$/;
 export const CATALOG = '(catalog)';
 export const SITE = '(site)';
+// Sentinel in `graph.scriptImports` when a script uses dynamic or unparseable
+// imports, so catalog traversal keeps every package-directory edge of that file.
+export const ALL_SCRIPT_IMPORTS = Symbol('all script imports');
 // The ci.yml jobs that run once per selected app.
 export const CATALOG_JOBS = ['app-tests', 'browser-e2e', 'browser-e2e-gpu'];
 
@@ -117,6 +120,80 @@ async function* textFiles(dir) {
       yield join(dir, entry.name);
     }
   }
+}
+
+const AST_SKIP = new Set(['loc', 'range', 'start', 'end', 'tokens', 'comments', 'parent']);
+
+function packageNameOf(specifier) {
+  const parts = specifier.split('/');
+  return specifier.startsWith('@') ? (parts.length >= 2 ? `${parts[0]}/${parts[1]}` : null) : parts[0] || null;
+}
+
+function isFile(path) {
+  return stat(path).then((entry) => entry.isFile(), () => false);
+}
+
+// Workspace packages loaded by a script's JS/TS module syntax (static imports,
+// re-exports, side-effect imports, dynamic import(), require()). Returns a Set
+// of resolved workspace package dirs (or specific files), or ALL_SCRIPT_IMPORTS
+// when parsing fails or a dynamic loader (non-literal import/require or
+// createRequire) is used.
+async function extractScriptImports(source, file, { root, nodeSet, nodeByPackageName }) {
+  let ast;
+  try {
+    ast = sourceParser.parse(source, { filePath: file, sourceType: 'module' });
+  } catch {
+    return ALL_SCRIPT_IMPORTS;
+  }
+  const specifiers = [];
+  let dynamic = false;
+  const walk = (node) => {
+    if (dynamic || !node || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item);
+      return;
+    }
+    if ((node.type === 'ImportDeclaration' || node.type === 'ExportNamedDeclaration' || node.type === 'ExportAllDeclaration') && node.source) {
+      if (node.source.type === 'Literal' && typeof node.source.value === 'string') specifiers.push(node.source.value);
+      else dynamic = true;
+    } else if (node.type === 'ImportExpression') {
+      if (node.source?.type === 'Literal' && typeof node.source.value === 'string') specifiers.push(node.source.value);
+      else dynamic = true;
+    } else if (node.type === 'CallExpression') {
+      const callee = node.callee;
+      const isRequire = callee?.type === 'Identifier' && callee.name === 'require';
+      const isMemberRequire = callee?.type === 'MemberExpression' && !callee.computed && callee.property?.type === 'Identifier' && (callee.property.name === 'require' || callee.property.name === 'createRequire');
+      const isCreateRequire = callee?.type === 'Identifier' && callee.name === 'createRequire';
+      if (isCreateRequire || isMemberRequire) {
+        dynamic = true;
+      } else if (isRequire) {
+        const arg = node.arguments?.[0];
+        if (arg?.type === 'Literal' && typeof arg.value === 'string') specifiers.push(arg.value);
+        else dynamic = true;
+      }
+    }
+    for (const key of Object.keys(node)) {
+      if (!AST_SKIP.has(key)) walk(node[key]);
+    }
+  };
+  walk(ast);
+  if (dynamic) return ALL_SCRIPT_IMPORTS;
+  const imported = new Set();
+  for (const specifier of specifiers) {
+    if (specifier.startsWith('.')) {
+      const target = relative(root, resolve(root, dirname(file), specifier)).split(sep).join('/');
+      const match = target.match(/^(packages|exes)\/([^/]+)(?:\/|$)/);
+      if (!match) continue;
+      const pkgDir = `${match[1]}/${match[2]}`;
+      if (!nodeSet.has(pkgDir)) continue;
+      if (await isFile(join(root, target))) imported.add(target);
+      else imported.add(pkgDir);
+    } else {
+      const pkgName = packageNameOf(specifier);
+      if (pkgName && nodeByPackageName.has(pkgName)) imported.add(nodeByPackageName.get(pkgName));
+    }
+  }
+  return imported;
 }
 
 function exists(path) {
@@ -233,15 +310,11 @@ export async function loadConservativeWorkspaceGraph(root) {
         uses.add(`${top}/${name}`);
       }
     }
-    const directImports = new Set();
     for (const [, name] of text.matchAll(BARE_IMPORT)) {
-      if (nodeByPackageName.has(name)) {
-        const target = nodeByPackageName.get(name);
-        uses.add(target);
-        directImports.add(target);
-      }
+      if (nodeByPackageName.has(name)) uses.add(nodeByPackageName.get(name));
     }
-    if (directImports.size) scriptImports.set(file, directImports);
+    const directImports = await extractScriptImports(source, file, { root, nodeSet, nodeByPackageName });
+    if (directImports === ALL_SCRIPT_IMPORTS || directImports.size) scriptImports.set(file, directImports);
     const imports = [...text.matchAll(ROOT_IMPORT)].map(([, path]) => relative(root, resolve(root, dirname(file), path)).split(sep).join('/'));
     const named = [...text.matchAll(ROOT_NAMED)].map(([, path, dir, name]) => path ?? `${dir}/${name}`);
     for (const [, directory] of text.matchAll(ROOT_GLOB)) {

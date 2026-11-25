@@ -4,7 +4,7 @@ import { isAlias, isMap, isScalar, isSeq, parse, parseDocument } from 'yaml';
 import { LockfileAnalysisError, lockfileImpact } from './lockfile-impact.mjs';
 import { onlyAddsExports } from './module-closure.mjs';
 import { EMBEDDED_VERSION_FILES, releaseBookkeeping } from './release-bookkeeping.mjs';
-import { CATALOG, INDEPENDENT_CONFIG, SITE, reachableFrom } from './workspace-graph.mjs';
+import { ALL_SCRIPT_IMPORTS, CATALOG, INDEPENDENT_CONFIG, SITE, reachableFrom } from './workspace-graph.mjs';
 import { handoffCatalogEntry, validateAppInformation } from './app-information.mjs';
 import { appCatalogIds, parseAppsRegistry } from './apps-registry.mjs';
 import { validateStandalone } from './standalone.mjs';
@@ -374,29 +374,60 @@ export function ciImpact({ before, after }) {
 }
 
 const EXACT_PACKAGE_NAME = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/;
-const EXACT_SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+const SEMVER_NUM = '(?:0|[1-9]\\d*)';
+const SEMVER_PRE = '(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)';
+// Strict SemVer 2.0.0 without build metadata (+build), which pnpm normalizes
+// away when matching minimumReleaseAgeExclude against locked versions.
+const EXACT_SEMVER = new RegExp(`^${SEMVER_NUM}\\.${SEMVER_NUM}\\.${SEMVER_NUM}(?:-${SEMVER_PRE}(?:\\.${SEMVER_PRE})*)?$`);
+// Plain scalars interpreted differently across YAML 1.1 (js-yaml) and YAML 1.2.
+const AMBIGUOUS_PLAIN_YAML = /^(?:y|yes|n|no|true|false|on|off|~|null|0[0-7]+|[+-]?0[0-7]+)$/i;
 
-function hasUnsafeYamlNode(node) {
-  if (!node || typeof node !== 'object') return false;
-  if (isAlias(node) || Boolean(node.anchor)) return true;
+function unsafeYamlReason(node) {
+  if (!node || typeof node !== 'object') return null;
+  if (isAlias(node) || Boolean(node.anchor)) return 'it uses YAML anchors or aliases';
+  if (node.tag) return 'it uses explicit YAML tags';
   if (isMap(node)) {
     for (const pair of node.items) {
-      if (!isScalar(pair.key) || typeof pair.key.value !== 'string') return true;
-      if (pair.key.value === '<<' || pair.key.value === '__proto__') return true;
-      if (hasUnsafeYamlNode(pair.value)) return true;
+      if (!isScalar(pair.key) || typeof pair.key.value !== 'string') return 'it uses non-string YAML keys';
+      if (pair.key.tag || pair.key.anchor) return 'it uses tagged or anchored YAML keys';
+      if (pair.key.value === '<<' || pair.key.value === '__proto__') return 'it uses YAML merge or prototype keys';
+      const nested = unsafeYamlReason(pair.value);
+      if (nested) return nested;
     }
-    return false;
+    return null;
   }
-  if (isSeq(node)) return node.items.some(hasUnsafeYamlNode);
-  return false;
+  if (isSeq(node)) {
+    for (const item of node.items) {
+      const nested = unsafeYamlReason(item);
+      if (nested) return nested;
+    }
+    return null;
+  }
+  if (isScalar(node)) {
+    const src = typeof node.source === 'string' ? node.source : null;
+    if (typeof node.value === 'number' && src !== null && (/^[+-]?0\d/.test(src) || /[_:]/.test(src))) {
+      return 'it uses ambiguous numeric YAML literals';
+    }
+    if (typeof node.value === 'boolean' && src !== null && src !== 'true' && src !== 'false') {
+      return 'it uses non-canonical YAML boolean literals';
+    }
+    if (typeof node.value === 'string' && node.type === 'PLAIN' && AMBIGUOUS_PLAIN_YAML.test(node.value)) {
+      return 'it uses YAML 1.1-ambiguous plain scalars';
+    }
+  }
+  return null;
 }
 
 function parseSafeWorkspaceYaml(text) {
   const doc = parseDocument(text, { uniqueKeys: true });
   if (doc.errors.length) return { error: `it does not parse (${doc.errors[0].message.split('\n')[0]})` };
   if (doc.warnings.length) return { error: `it has YAML warnings (${doc.warnings[0].message.split('\n')[0]})` };
+  if (doc.directives.yaml.explicit || Object.keys(doc.directives.tags).some((tag) => tag !== '!!')) {
+    return { error: 'it uses explicit YAML directives' };
+  }
   if (!isMap(doc.contents)) return { error: 'it is not a YAML mapping' };
-  if (hasUnsafeYamlNode(doc.contents)) return { error: 'it uses YAML anchors, aliases, merge keys, or non-string keys' };
+  const unsafe = unsafeYamlReason(doc.contents);
+  if (unsafe) return { error: unsafe };
   return { value: doc.toJS() };
 }
 
@@ -549,22 +580,35 @@ function isPureProvisionerEntry(node, context) {
   return isPureProvisionerObject(node, { allowCpu: true, topLevelFunctions: context.topLevelFunctions });
 }
 
+function checkNodeEsmSyntax(source) {
+  execFileSync(process.execPath, ['--input-type=module', '--check'], {
+    input: source,
+    stdio: ['pipe', 'ignore', 'pipe'],
+  });
+}
+
 function parseE2eTables(source) {
   const ast = sourceParser.parse(source, { filePath: E2E_TEST_DATA, sourceType: 'module' });
   const tables = new Map();
-  const topLevelFunctions = new Set();
+  // Function declarations are hoisted; const bindings are only initialized if
+  // declared strictly before `export const provisioners` (no TDZ hazard).
+  const hoistedFunctions = new Set();
+  const initializedConsts = new Set();
+  let seenProvisioners = false;
   let hasPureFlag = false;
   for (const statement of ast.body) {
     if (statement.type === 'FunctionDeclaration' && statement.id?.type === 'Identifier') {
-      topLevelFunctions.add(statement.id.name);
+      hoistedFunctions.add(statement.id.name);
       continue;
     }
     if (statement.type === 'VariableDeclaration' && statement.kind === 'const') {
-      for (const declarator of statement.declarations) {
-        if (declarator.id?.type !== 'Identifier') continue;
-        if (declarator.id.name === 'flag' && isPureFlagHelper(declarator)) hasPureFlag = true;
-        if (declarator.init?.type === 'ArrowFunctionExpression' || declarator.init?.type === 'FunctionExpression') {
-          topLevelFunctions.add(declarator.id.name);
+      if (!seenProvisioners) {
+        for (const declarator of statement.declarations) {
+          if (declarator.id?.type !== 'Identifier') continue;
+          if (declarator.id.name === 'flag' && isPureFlagHelper(declarator)) hasPureFlag = true;
+          if (declarator.init?.type === 'ArrowFunctionExpression' || declarator.init?.type === 'FunctionExpression') {
+            initializedConsts.add(declarator.id.name);
+          }
         }
       }
       continue;
@@ -574,10 +618,11 @@ function parseE2eTables(source) {
       if (declarator.id?.type !== 'Identifier' || !TABLE_NAMES.has(declarator.id.name)) continue;
       if (tables.has(declarator.id.name) || declarator.init?.type !== 'ObjectExpression') return null;
       tables.set(declarator.id.name, declarator.init);
+      if (declarator.id.name === 'provisioners') seenProvisioners = true;
     }
   }
   if (!tables.has('provisioners')) return null;
-  const context = { hasPureFlag, topLevelFunctions };
+  const context = { hasPureFlag, topLevelFunctions: new Set([...hoistedFunctions, ...initializedConsts]) };
   const entries = new Map();
   for (const [tableName, objectNode] of tables) {
     const map = new Map();
@@ -601,8 +646,8 @@ function parseE2eTables(source) {
 // or why the change reaches every app. Edits confined to reviewed pure-at-load
 // entries of `provisioners` (or plain string entries of `unpublished`, checked
 // by workspace-contracts) affect only those apps; any change to imports, shared
-// helpers, `provisionTestData`, side-effectful initializers, prototype keys, or
-// syntax/structure falls back to the complete catalog.
+// helpers, `provisionTestData`, side-effectful initializers, prototype keys,
+// TDZ-unsafe bindings, or Node ESM syntax errors falls back to the complete catalog.
 export function e2eTestDataImpact({ before, after }) {
   let old;
   let now;
@@ -614,6 +659,15 @@ export function e2eTestDataImpact({ before, after }) {
   }
   if (!old || !now) return { shared: 'its provisioners table cannot be isolated safely' };
   if (old.skeleton !== now.skeleton) return { shared: 'shared code outside provisioners and unpublished changed' };
+  // Validate the head module with Node's own V8 ESM parser so strict-mode early
+  // errors accepted by @typescript-eslint/parser (such as duplicate parameters)
+  // cannot silently break the shared module for unselected apps.
+  try {
+    checkNodeEsmSyntax(after);
+  } catch (error) {
+    const detail = String(error.stderr || error.message).trim().split('\n').find((line) => /SyntaxError/.test(line)) ?? 'Node rejected ESM syntax';
+    return { shared: `it fails Node ESM syntax validation (${detail})` };
+  }
   const ids = [...new Set([...old.provisioners.keys(), ...now.provisioners.keys()])];
   return { changed: ids.filter((id) => old.provisioners.get(id) !== now.provisioners.get(id)) };
 }
@@ -622,8 +676,9 @@ export function e2eTestDataImpact({ before, after }) {
 // scripts/lib/e2e-test-data.mjs name packages/* and exes/* directories as CLI
 // or data paths for individual apps (not JS/TS imports). Traversal stops at
 // those incidental package-directory edges so unrelated root helpers are not
-// pulled into CATALOG, while still following real bare package imports recorded
-// in `graph.scriptImports` (and traversing normally inside imported packages).
+// pulled into CATALOG, while still following every JS/TS module import recorded
+// in `graph.scriptImports` (including bare imports, dynamic import(), require(),
+// and relative directory imports) and traversing normally inside imported packages.
 export function catalogReachable(graph) {
   const seen = new Set([CATALOG]);
   const pending = [CATALOG];
@@ -631,9 +686,12 @@ export function catalogReachable(graph) {
     const current = pending.pop();
     const isScript = current !== CATALOG && !WORKSPACE_PACKAGE_DIR.test(current);
     const directImports = graph.scriptImports?.get(current);
-    for (const next of graph.edges.get(current) ?? []) {
+    const candidates = directImports && directImports !== ALL_SCRIPT_IMPORTS
+      ? new Set([...(graph.edges.get(current) ?? []), ...directImports])
+      : (graph.edges.get(current) ?? []);
+    for (const next of candidates) {
       if (seen.has(next)) continue;
-      if (isScript && WORKSPACE_PACKAGE_DIR.test(next) && !directImports?.has(next)) continue;
+      if (isScript && WORKSPACE_PACKAGE_DIR.test(next) && directImports !== ALL_SCRIPT_IMPORTS && !directImports?.has(next)) continue;
       seen.add(next);
       pending.push(next);
     }

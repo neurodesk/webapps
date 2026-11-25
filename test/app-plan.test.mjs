@@ -2731,6 +2731,9 @@ test('pnpm-workspace.yaml narrows only for valid exact-version minimumReleaseAge
     ['unknown key', (doc) => ({ ...doc, hoist: false })],
     ['non-string exclusion', (doc) => ({ ...doc, minimumReleaseAgeExclude: [123] })],
     ['non-exact latest tag', (doc) => ({ ...doc, minimumReleaseAgeExclude: [...doc.minimumReleaseAgeExclude, 'foo@latest'] })],
+    ['leading-zero semver', (doc) => ({ ...doc, minimumReleaseAgeExclude: [...doc.minimumReleaseAgeExclude, 'foo@01.0.0'] })],
+    ['leading-zero prerelease', (doc) => ({ ...doc, minimumReleaseAgeExclude: [...doc.minimumReleaseAgeExclude, 'foo@1.0.0-01'] })],
+    ['build metadata semver', (doc) => ({ ...doc, minimumReleaseAgeExclude: [...doc.minimumReleaseAgeExclude, '@brainchop/core@1.0.0+build'] })],
     ['semver range', (doc) => ({ ...doc, minimumReleaseAgeExclude: [...doc.minimumReleaseAgeExclude, 'foo@^1.0.0'] })],
     ['duplicate package name', (doc) => ({ ...doc, minimumReleaseAgeExclude: [...doc.minimumReleaseAgeExclude, 'foo@1.0.0', 'foo@2.0.0'] })],
   ]) {
@@ -2741,9 +2744,17 @@ test('pnpm-workspace.yaml narrows only for valid exact-version minimumReleaseAge
   }
   const quotedMerge = 'packages:\n  - apps/*\n"<<":\n  recursiveInstall: false\n';
   const unquotedMerge = 'packages:\n  - apps/*\n<<:\n  recursiveInstall: false\n';
-  assert.match(workspaceConfigImpact({ before: quotedMerge, after: unquotedMerge }).shared, /merge keys/);
+  assert.match(workspaceConfigImpact({ before: quotedMerge, after: unquotedMerge }).shared, /merge/);
+  const yaml11OctalBefore = '%YAML 1.1\n---\npackages:\n  - apps/*\nminimumReleaseAge: 60\n';
+  const yaml11OctalAfter = '%YAML 1.1\n---\npackages:\n  - apps/*\nminimumReleaseAge: 074\n';
+  assert.match(workspaceConfigImpact({ before: yaml11OctalBefore, after: yaml11OctalAfter }).shared, /directives/);
+  assert.match(workspaceConfigImpact({
+    before: 'packages:\n  - apps/*\nminimumReleaseAge: 60\n',
+    after: 'packages:\n  - apps/*\nminimumReleaseAge: 074\n',
+  }).shared, /ambiguous numeric|setting changed/);
   const withAnchor = 'packages:\n  - apps/*\nminimumReleaseAgeExclude:\n  - &pkg foo@1.0.0\n';
   assert.match(workspaceConfigImpact({ before, after: withAnchor }).shared, /anchors/);
+  assert.match(workspaceConfigImpact({ before, after: 'packages:\n  - !!str apps/*\n' }).shared, /tags/);
   assert.match(workspaceConfigImpact({ before, after: ': bad: [yaml' }).shared, /does not parse/);
   assert.match(workspaceConfigImpact({ before, after: '- list\n' }).shared, /not a YAML mapping/);
   // Without before/after texts, pnpm-workspace.yaml falls back conservatively.
@@ -2779,9 +2790,10 @@ test('scripts/lib/e2e-test-data.mjs narrows to apps whose pure provisioner entri
   assert.deepEqual(unpublishedPlan.selected, []);
   assert.equal(unpublishedPlan.site, false);
 
-  // Shared helper edits, load-time side effects, prototype setters, structural hazards, self-references, and syntax errors fall back.
+  // Shared helper edits, load-time side effects, TDZ hazards, strict ESM errors, prototype setters, and syntax errors fall back.
   for (const [label, after] of [
     ['shared helper', before.replace('const flag = (name) => ({ env: [name], provision: async () => ({ [name]: \'1\' }) });', 'const flag = (name) => ({ env: [name], provision: async () => ({ [name]: \'2\' }) });')],
+    ['strict ESM duplicate params', before.replace('denoise: { env: [], provision: async () => ({}) },', 'denoise: { env: [], provision: (x, x) => x },')],
     ['side-effectful provisioner initializer', before.replace('denoise: { env: [], provision: async () => ({}) },', 'denoise: (globalThis.fetch = undefined, { env: [], provision: async () => ({}) }),')],
     ['side-effectful unpublished value', before.replace("TOPOFIT_SURFACE_REPLAY: 'OpenRecon validation surfaces, not licensed for release',", "TOPOFIT_SURFACE_REPLAY: (globalThis.fetch = undefined, 'reason'),")],
     ['prototype setter in provisioners', before.replace('denoise: { env: [], provision: async () => ({}) },', 'denoise: { env: [], provision: async () => ({}) },\n  __proto__: { env: [], provision: async () => ({}) },')],
@@ -2797,9 +2809,13 @@ test('scripts/lib/e2e-test-data.mjs narrows to apps whose pure provisioner entri
     assert.equal(fallback.allApps, true, label);
     assert.match(fallback.reasons.fallback, /^scripts\/lib\/e2e-test-data\.mjs:/, label);
   }
+  // A const function declared after `export const provisioners` is a TDZ ReferenceError at import time.
+  const tdzBefore = 'export const provisioners = { denoise: { env: [], provision: async () => ({}) } };\nconst laterFn = async () => ({});\n';
+  const tdzAfter = 'export const provisioners = { denoise: { env: [], provision: laterFn } };\nconst laterFn = async () => ({});\n';
+  assert.match(e2eTestDataImpact({ before: tdzBefore, after: tdzAfter }).shared, /cannot be isolated safely/);
 });
 
-test('per-app CI traversal keeps bare package imports while excluding incidental package-directory references', async () => {
+test('per-app CI traversal keeps real package loads (require, dynamic import, side-effect import) while excluding incidental directory references', async (t) => {
   const registry = await loadAppsRegistry();
   const workspace = await graph;
   // scripts/lib/e2e-test-data.mjs names exes/dwi as a data path (not a JS import),
@@ -2817,23 +2833,48 @@ test('per-app CI traversal keeps bare package imports while excluding incidental
     assert.equal(createAppPlan(registry, [path], workspace).allApps, true, path);
   }
 
-  // A real bare import of a workspace package from a per-app CI script is still traversed.
-  const syntheticGraph = {
-    edges: new Map([
-      [CATALOG, new Set(['scripts/e2e-test-data.mjs'])],
-      ['scripts/e2e-test-data.mjs', new Set(['exes/dwi', 'packages/shared-cli'])],
-      ['exes/dwi', new Set(['scripts/incidental-only.mjs'])],
-      ['packages/shared-cli', new Set(['scripts/fixture-core.mjs'])],
-      ['scripts/incidental-only.mjs', new Set()],
-      ['scripts/fixture-core.mjs', new Set()],
-    ]),
-    scriptImports: new Map([['scripts/e2e-test-data.mjs', new Set(['packages/shared-cli'])]]),
+  // Real workspace graph fixture verifying require('../packages/...'), bare import(),
+  // side-effect import, and incidental data paths.
+  const root = await mkdtemp(join(tmpdir(), 'neurodesk-catalog-imports-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const files = {
+    'package.json': JSON.stringify({ name: 'root', scripts: {} }),
+    '.github/workflows/ci.yml': stringify({
+      jobs: {
+        'composite-site': { steps: [{ run: 'echo site' }] },
+        'app-tests': { steps: [{ run: 'node scripts/cli.mjs' }] },
+        'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+        'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+      },
+    }),
+    'scripts/cli.mjs': [
+      "const a = require('../packages/rel-req');",
+      "await import('@nd/dyn-pkg');",
+      "import '@nd/side-pkg';",
+      "const dataPath = 'exes/incidental/manifest.json';",
+    ].join('\n'),
+    'packages/rel-req/package.json': JSON.stringify({ name: '@nd/rel-req' }),
+    'packages/rel-req/index.js': "import '../../scripts/from-rel-req.mjs';\n",
+    'packages/dyn-pkg/package.json': JSON.stringify({ name: '@nd/dyn-pkg' }),
+    'packages/dyn-pkg/index.js': "import '../../scripts/from-dyn-pkg.mjs';\n",
+    'packages/side-pkg/package.json': JSON.stringify({ name: '@nd/side-pkg' }),
+    'packages/side-pkg/index.js': "import '../../scripts/from-side-pkg.mjs';\n",
+    'exes/incidental/tool.js': "import '../../scripts/from-incidental.mjs';\n",
+    'scripts/from-rel-req.mjs': '',
+    'scripts/from-dyn-pkg.mjs': '',
+    'scripts/from-side-pkg.mjs': '',
+    'scripts/from-incidental.mjs': '',
   };
-  const reached = catalogReachable(syntheticGraph);
-  assert.equal(reached.has('packages/shared-cli'), true);
-  assert.equal(reached.has('scripts/fixture-core.mjs'), true);
-  assert.equal(reached.has('exes/dwi'), false);
-  assert.equal(reached.has('scripts/incidental-only.mjs'), false);
+  for (const [path, text] of Object.entries(files)) {
+    await mkdir(dirname(join(root, path)), { recursive: true });
+    await writeFile(join(root, path), text);
+  }
+  const fixtureGraph = await loadConservativeWorkspaceGraph(root);
+  const reached = catalogReachable(fixtureGraph);
+  assert.equal(reached.has('scripts/from-rel-req.mjs'), true, 'require("../packages/rel-req")');
+  assert.equal(reached.has('scripts/from-dyn-pkg.mjs'), true, 'dynamic import("@nd/dyn-pkg")');
+  assert.equal(reached.has('scripts/from-side-pkg.mjs'), true, 'side-effect import "@nd/side-pkg"');
+  assert.equal(reached.has('scripts/from-incidental.mjs'), false, 'incidental exes/incidental string');
 });
 
 test('lint runner and scripts/quality files select no apps and no site build', async () => {
