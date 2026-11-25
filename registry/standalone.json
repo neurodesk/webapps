@@ -2765,7 +2765,41 @@
       "desktop": true,
       "profile": "batch",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/skin-chromophore-v0.1.20261124/skin-chromophore-0.1.20261124-linux-x64.tar.gz",
+          "sha256": "6023bb2c24225b9efafdc48ebf580dafc69ace6e9dca008829939ac3588e7db4",
+          "bytes": 47884757,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/skin-chromophore-v0.1.20261124/skin-chromophore-0.1.20261124-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": false,
+          "command": "tar -xzf skin-chromophore-0.1.20261124-linux-x64.tar.gz\n./skin-chromophore-0.1.20261124-linux-x64/skin-chromophore skin.jpg out"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/skin-chromophore-v0.1.20261124/skin-chromophore-0.1.20261124-macos-arm64.pkg",
+          "sha256": "6ecd20cdc80b053ae29353709ea6e6cb15e1236f42bf2a3c23e7fe0af5657c9a",
+          "bytes": 41582412,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/skin-chromophore-v0.1.20261124/skin-chromophore-0.1.20261124-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": false,
+          "command": "sudo installer -pkg skin-chromophore-0.1.20261124-macos-arm64.pkg -target /\nskin-chromophore self-check\nskin-chromophore skin.jpg out"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/skin-chromophore-v0.1.20261124/skin-chromophore-0.1.20261124-windows-x64.zip",
+          "sha256": "ff1177483b483deeb7de3c206ce730ff3199e557b2ab23457db229ed21a92330",
+          "bytes": 38721550,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/skin-chromophore-v0.1.20261124/skin-chromophore-0.1.20261124-windows-x64.zip.validation.txt",
+          "modelsIncluded": false,
+          "command": "Expand-Archive -Path .\\skin-chromophore-0.1.20261124-windows-x64.zip -DestinationPath .\n.\\skin-chromophore-0.1.20261124-windows-x64\\skin-chromophore.exe skin.jpg out"
+        }
+      ],
       "containers": []
     },
     "wound-planimetry": {
