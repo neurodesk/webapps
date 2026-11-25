@@ -10,7 +10,7 @@ import {
   computeAnalysisDimensions,
   readSettings,
 } from "../src/config.js";
-import { analyzeSkinImage } from "../src/core/analyze.js";
+import { analyzeSkinImage } from "@neurodesk/skin-chromophore/core/analyze";
 
 const examples = JSON.parse(readFileSync(new URL("../examples.json", import.meta.url), "utf8"));
 const automation = JSON.parse(readFileSync(new URL("../automation.json", import.meta.url), "utf8"));

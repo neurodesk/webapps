@@ -1485,7 +1485,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: stardist
     path: stardist
     catalog: microscopy
@@ -1512,7 +1512,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: lightsheet-atlas
     catalog: microscopy
     path: lightsheet-atlas
@@ -1538,7 +1538,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: calcium-imaging
     path: calcium-imaging
     catalog: microscopy
@@ -1565,7 +1565,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: spot-detection
     path: spot-detection
     catalog: microscopy
@@ -1591,7 +1591,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: gliomoda
     path: gliomoda
     catalog: neuro
@@ -1645,7 +1645,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
 
   - id: stitching
     catalog: microscopy
@@ -1673,7 +1673,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: structure-tensor
     path: structure-tensor
     catalog: microscopy
@@ -1699,7 +1699,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: microscope-qc
     path: microscope-qc
     catalog: microscopy
@@ -1725,7 +1725,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: microsam
     path: microsam
     catalog: microscopy
@@ -1805,7 +1805,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: omezarr-convert
     path: omezarr-convert
     catalog: microscopy
@@ -1830,7 +1830,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: histo2mri
     path: histo2mri
     catalog: microscopy
@@ -1856,7 +1856,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: tumour-report
     path: tumour-report
     catalog: neuro
@@ -1963,7 +1963,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: medsam2
     path: medsam2
     catalog: neuro
@@ -2015,7 +2015,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: dermoscope
     path: dermoscope
     catalog: dermatology
@@ -2041,7 +2041,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: skin-chromophore
     path: skin-chromophore
     catalog: dermatology
@@ -2067,7 +2067,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: wound-planimetry
     path: wound-planimetry
     catalog: dermatology
@@ -2093,7 +2093,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: derm-compare
     path: derm-compare
     catalog: dermatology
@@ -2119,7 +2119,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: dermvit
     path: dermvit
     catalog: dermatology
@@ -2146,4 +2146,4 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true

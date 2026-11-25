@@ -2465,8 +2465,8 @@ test('removing lint reason edges preserves the diffusion and Node driver consume
     ['packages/ants-denoise/src/index.js', ['ants-denoise', ...diffusion]],
     ['packages/node-drivers/src/niimath.js', [
       ...diffusion,
-      'brain-extraction', 'brain2print', 'browserqc', 'dcm2niix', 'deface',
-      'dicomview', 'edgereg', 'lcmodel', 'mri2vid', 'niimath', 'syncro',
+      'brain-extraction', 'brain2print', 'brainchomp', 'brainchop', 'browserqc', 'dcm2niix', 'deface',
+      'dicomview', 'edgereg', 'lcmodel', 'mri2vid', 'niimath', 'syncro', 'tumour-report',
     ]],
   ];
   for (const [path, consumers] of cases) {

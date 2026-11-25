@@ -1,0 +1,37 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "cellpose-v",
+  "displayName": "Cellpose",
+  "app": "cellpose",
+  "bundleModels": true,
+  "run": "image.tif results",
+  "readme": {
+    "run": "Segment cells and nuclei in 2D and 3D microscopy (Cellpose 3)",
+    "notes": [
+      "Both Cellpose 3 ONNX models (cyto3 and nuclei) are included and SHA-256 verified locally.",
+      "No network connection or previously populated cache is required.",
+      "Add --help for options: --model, --channel, --nuclear-channel, --diameter, --do-3d, --anisotropy.",
+      "",
+      "Cellpose is research software. Please cite Stringer et al. 2021 (Nature Methods) and",
+      "Stringer & Pachitariu 2025 (Cellpose3, Nature Methods)."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "cellpose"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "cellpose.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "cellpose"
+    }
+  }
+}

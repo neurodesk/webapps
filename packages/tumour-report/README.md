@@ -57,6 +57,25 @@ LPS, defaced skull-intact multifocal metastases).
 | RADS on container MNI mask | Left 100%, Frontal 66.19%, Parietal 31.73%, Resect 0.8807 | Left 100%, Frontal 66.19%, Parietal 31.73%, Resect 0.8807 | **Exact match** |
 | End-to-end MNI mask (Greedy affine vs ANTs SyN) | 18,224 vox; Frontal 64.10%, Parietal 34.13% | 17,339 vox; Frontal 66.19%, Parietal 31.73% | **Dice 0.90414** (lobes within 2.4 pp) |
 
+## Command line
+
+Portable archives (Linux x64, Windows x64, macOS Apple silicon) bundle Node.js,
+`onnxruntime-node`, Greedy single-thread WebAssembly, both pinned Raidionics v1.3
+ONNX models, and all MNI ICBM152 2009a atlases so they run completely offline:
+
+```bash
+tumour-report self-check
+tumour-report t1c.nii.gz results --tumour-type glioblastoma
+tumour-report t1c.nii.gz results --mask tumour_mask.nii.gz --no-mni
+tumour-report download-models --cache-dir ./models
+```
+
+Environment variables:
+
+- `NEURODESK_TUMOUR_REPORT_MODEL_DIR`: override the local model and atlas directory.
+- `NEURODESK_OFFLINE=1`: refuse network downloads and require verified local assets.
+- `ORT_DISABLE_TELEMETRY=1`: set automatically so ONNX Runtime writes nothing to `~/.cache`.
+
 ## Tests
 
 ```bash

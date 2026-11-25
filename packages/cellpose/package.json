@@ -1,0 +1,44 @@
+{
+  "name": "@neurodesk/cellpose",
+  "version": "0.2.20261124",
+  "description": "Cellpose 3 2D and 3D generalist cell and nucleus segmentation core and portable command line",
+  "type": "module",
+  "license": "BSD-3-Clause",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@neurodesk/webapp-components": "workspace:*",
+    "fast-png": "8.0.0",
+    "onnxruntime-node": "1.29.0"
+  },
+  "bin": {
+    "cellpose": "./bin/cellpose.js"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./models": "./src/models.js",
+    "./settings": "./src/settings.js",
+    "./cellpose": "./src/cellpose.js",
+    "./image-io": "./src/image-io.js",
+    "./manifest": "./model.manifest.json",
+    "./node": "./src/node.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "model.manifest.json",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check bin/cellpose.js && node --check src/index.js && node --check src/models.js && node --check src/settings.js && node --check src/cellpose.js && node --check src/image-io.js && node --check src/node.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/cellpose"
+  }
+}

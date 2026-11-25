@@ -1,0 +1,44 @@
+{
+  "name": "@neurodesk/calcium-imaging",
+  "version": "0.1.20261124",
+  "description": "Two-photon calcium imaging motion correction, ROI extraction, ΔF/F traces and OASIS deconvolution core and portable command line",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@neurodesk/webapp-components": "workspace:*"
+  },
+  "bin": {
+    "calcium-imaging": "./bin/calcium-imaging.js"
+  },
+  "exports": {
+    ".": "./src/core/pipeline.js",
+    "./core/images": "./src/core/images.js",
+    "./core/oasis": "./src/core/oasis.js",
+    "./core/pipeline": "./src/core/pipeline.js",
+    "./core/registration": "./src/core/registration.js",
+    "./core/rois": "./src/core/rois.js",
+    "./core/traces": "./src/core/traces.js",
+    "./config": "./src/config.js",
+    "./outputs": "./src/outputs.js",
+    "./node": "./src/node.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check bin/calcium-imaging.js && node --check src/node.js && node --check src/config.js && node --check src/outputs.js && node --check src/core/images.js && node --check src/core/oasis.js && node --check src/core/pipeline.js && node --check src/core/registration.js && node --check src/core/rois.js && node --check src/core/traces.js && node --check validation/cli-check.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/calcium-imaging"
+  }
+}

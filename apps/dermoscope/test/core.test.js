@@ -9,15 +9,15 @@ import {
   rgbToLab,
   rgbaToLabPlanes,
   rgbaToLuminance,
-} from "../src/core/color.js";
+} from "@neurodesk/dermoscope/core/color";
 import {
   detectVignetteMask,
   dullRazorRemoveHair,
   resizeToWorkingResolution,
-} from "../src/core/preprocess.js";
-import { extractBoundaryContour, segmentLesion } from "../src/core/segment.js";
-import * as abcdModule from "../src/core/abcd.js";
-import { runDermoscopyPipeline } from "../src/core/pipeline.js";
+} from "@neurodesk/dermoscope/core/preprocess";
+import { extractBoundaryContour, segmentLesion } from "@neurodesk/dermoscope/core/segment";
+import * as abcdModule from "@neurodesk/dermoscope/core/abcd";
+import { runDermoscopyPipeline } from "@neurodesk/dermoscope/core/pipeline";
 import { buildColorMapPixels, buildOverlayPixels } from "../src/display.js";
 import { buildOutputFiles, metricsCsv, outputStem, provenanceRecord } from "../src/outputs.js";
 

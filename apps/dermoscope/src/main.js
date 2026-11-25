@@ -17,7 +17,7 @@ import { decodeRasterImage } from "@neurodesk/webapp-components/file-io/raster-i
 import { registerAppAutomation } from "@neurodesk/webapp-components/automation";
 import workerUrl from "./worker.js?worker&url";
 import { APP, SettingsError, readSettings } from "./config.js";
-import { DERMOSCOPIC_COLORS } from "./core/color.js";
+import { DERMOSCOPIC_COLORS } from "@neurodesk/dermoscope/core/color";
 import {
   buildColorMapPixels,
   buildOverlayPixels,

@@ -37,6 +37,7 @@
       "types": "./src/file-io/NiftiUtils.d.ts",
       "default": "./src/file-io/NiftiUtils.js"
     },
+    "./file-io/nifti-volume": "./src/file-io/nifti-volume.js",
     "./file-io/bids": {
       "types": "./src/file-io/bids-diffusion.d.ts",
       "default": "./src/file-io/bids-diffusion.js"

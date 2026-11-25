@@ -1,7 +1,7 @@
 // Web Worker executing uniform pair downscaling, preprocessing, multi-scale NCC registration,
 // CIEDE2000 analysis, and PNG artifact encoding off the main thread.
 import { LIMITS } from "./config.js";
-import { runComparison } from "./core/pipeline.js";
+import { runComparison } from "@neurodesk/derm-compare/core/pipeline";
 import { buildChangeMapRgba } from "./display.js";
 import { encodeRgbaPng } from "./outputs.js";
 

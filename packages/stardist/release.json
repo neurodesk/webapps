@@ -1,0 +1,38 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "stardist-v",
+  "displayName": "StarDist",
+  "app": "stardist",
+  "bundleModels": true,
+  "run": "image.tif results",
+  "readme": {
+    "run": "Segment cell nuclei in 2D fluorescence, 2D H&E or 3D microscopy",
+    "notes": [
+      "All four StarDist ONNX models (2D_versatile_fluo, 2D_versatile_he, 2D_paper_dsb2018,",
+      "3D_demo) are included and SHA-256 verified locally on every load.",
+      "No network connection or previously populated cache is required.",
+      "Add --help for options: --model, --channel, --prob-thresh, --nms-thresh, --tiles, --threads.",
+      "",
+      "StarDist is research software. Please cite Schmidt et al. 2018 (MICCAI) and",
+      "Weigert et al. 2020 (WACV)."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "stardist"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "stardist.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "stardist"
+    }
+  }
+}

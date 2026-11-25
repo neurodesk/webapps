@@ -10,7 +10,7 @@ import test from 'node:test';
 import { parse } from 'yaml';
 import {
   checkRecords, ciPullRequestTier, cancelledMinutes, DEPLOY_WORKFLOW, fixedJobShare, idleRuns, jobRole, measuresMarkdown, mergeToLive,
-  minutesByRole, minutesPerMergedPullRequest, READY_ONLY_CI_JOBS, readyToGreen, summarizeMeasures, TARGETS, WORKFLOWS,
+  minutesByRole, minutesPerMergedPullRequest, READY_ONLY_CI_JOBS, readyToGreen, summarizeMeasures, TARGETS, workflowRole, WORKFLOWS,
 } from '../scripts/lib/ci-measures.mjs';
 import { LARGE_RUN_JOBS } from '../scripts/lib/ci-usage.mjs';
 
@@ -32,13 +32,17 @@ function apiJobNames(workflow, id) {
 test('every workflow and every ci job has a role under the name the API lists it by', () => {
   for (const workflow of workflows) {
     if (Object.keys(workflow.on).every((event) => event === 'workflow_call')) continue;
-    assert.ok(Object.hasOwn(WORKFLOWS, workflow.name), `${workflow.file}: name "${workflow.name}" in WORKFLOWS (scripts/lib/ci-measures.mjs)`);
-    if (WORKFLOWS[workflow.name] !== 'test') continue;
+    const role = workflowRole(workflow.name);
+    assert.ok(role !== undefined, `${workflow.file}: name "${workflow.name}" in WORKFLOWS or dispatcher (scripts/lib/ci-measures.mjs)`);
+    if (role !== 'test') continue;
     for (const [id, job] of Object.entries(workflow.jobs)) {
       if (job.uses !== './.github/workflows/pr-gate.yml') continue;
       for (const name of apiJobNames(workflow, id)) assert.equal(jobRole(workflow.name, name), 'plan', `${workflow.file}: the gate's job "${name}" plans`);
     }
   }
+  assert.equal(jobRole('native-4', 'gate / decide'), 'plan');
+  assert.equal(jobRole('native-10', 'bison-native / portable / linux-x64'), 'test');
+  assert.equal(jobRole('native-1', 'gate / decide'), 'unclassified');
   const ci = workflows.find((workflow) => workflow.file === 'ci.yml');
   const ciNames = Object.keys(ci.jobs).flatMap((id) => apiJobNames(ci, id));
   assert.deepEqual(ciNames.filter((name) => jobRole('ci', name) === 'unclassified'), [], 'ci.yml jobs missing from CI_JOBS');

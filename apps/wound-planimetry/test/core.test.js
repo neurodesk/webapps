@@ -5,10 +5,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { decode } from "fast-png";
-import { rgbToHue, rgbToHsv, rgbToLab, rgbaToColorArrays } from "../src/core/color.js";
-import { erode3x3, fillHoles, morphClose3x3, morphOpen3x3, segmentWound } from "../src/core/segment.js";
-import { calibrationFromRuler, measurePlanimetry, traceContourPerimeter } from "../src/core/planimetry.js";
-import { classifyRyb } from "../src/core/ryb.js";
+import { rgbToHue, rgbToHsv, rgbToLab, rgbaToColorArrays } from "@neurodesk/wound-planimetry/core/color";
+import { erode3x3, fillHoles, morphClose3x3, morphOpen3x3, segmentWound } from "@neurodesk/wound-planimetry/core/segment";
+import { calibrationFromRuler, measurePlanimetry, traceContourPerimeter } from "@neurodesk/wound-planimetry/core/planimetry";
+import { classifyRyb } from "@neurodesk/wound-planimetry/core/ryb";
 import { buildProvenance, encodeMaskPng, encodeRybOverlayPng, planimetryCsv, rybStackedBarSvg } from "../src/outputs.js";
 
 function parseCsvMap(csvText) {

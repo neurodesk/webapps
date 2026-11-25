@@ -14,7 +14,7 @@ import {
   linearToSrgb,
   srgbToLab,
   srgbToLinear,
-} from "../src/core/colorimetry.js";
+} from "@neurodesk/skin-chromophore/core/colorimetry";
 import {
   TSUMURA_INVERSE,
   TSUMURA_MATRIX,
@@ -23,9 +23,9 @@ import {
   erythemaIndex,
   melaninIndex,
   separateChromophores,
-} from "../src/core/chromophores.js";
-import { otsuThreshold } from "../src/core/roi.js";
-import { analyzeSkinImage, evaluateRois } from "../src/core/analyze.js";
+} from "@neurodesk/skin-chromophore/core/chromophores";
+import { otsuThreshold } from "@neurodesk/skin-chromophore/core/roi";
+import { analyzeSkinImage, evaluateRois } from "@neurodesk/skin-chromophore/core/analyze";
 import { ITA_UNAVAILABLE_RGB, renderMapRgba } from "../src/display.js";
 import { colorimetryCsv, encodeMapPng, itaDiagramSvg } from "../src/outputs.js";
 

@@ -16,12 +16,12 @@ import {
   bindInfoTooltips,
   ProgressManager,
 } from "@neurodesk/webapp-components/ui";
-import { createFloat32Nifti, downloadFile } from "@neurodesk/webapp-components/file-io";
+import { downloadFile } from "@neurodesk/webapp-components/file-io";
 import { gzipFile } from "@neurodesk/webapp-components/file-io/bids-derivatives";
 import { registerAppAutomation } from "@neurodesk/webapp-components/automation";
 import { autoPsfSize, checkSampling, memoryPlan, normaliseSum, opticsSettings, prepareImage, prepareMeasuredPsf, runSettings, MAX_PSF_SIDE, METHODS } from "@neurodesk/deconvolution";
 import workerUrl from "@neurodesk/deconvolution/worker?worker&url";
-import { APP, DEFAULT_OPTICS, EXAMPLE_OPTICS, checkPsfSpacing, outputNames, provenance, setNiftiSpacing, spacingComplete, stackNifti, stackTiff } from "./config.js";
+import { APP, DEFAULT_OPTICS, EXAMPLE_OPTICS, checkPsfSpacing, deconvolvedNifti, outputNames, provenance, spacingComplete, stackNifti, stackTiff } from "./config.js";
 import { readVolume } from "./input.js";
 import examples from "../examples.json";
 
@@ -370,10 +370,14 @@ async function deconvolve(signal, settings = formSettings()) {
     const seconds = (performance.now() - started) / 1000;
     const names = outputNames(input.name);
     const tiff = new File([stackTiff(estimate, input.dims, spacingUm)], names.tiff, { type: "image/tiff" });
-    // A NIfTI input keeps its orientation and origin, with the voxel size the run used.
-    const niftiBytes = input.format === "nifti"
-      ? setNiftiSpacing(createFloat32Nifti(estimate, input.niftiHeader), spacingUm)
-      : stackNifti(estimate, input.dims, spacingUm);
+    // A NIfTI-1 or NIfTI-2 input keeps its orientation and origin verbatim unless spacing was edited.
+    const spacingOverridden = !(
+      input.spacingUm &&
+      spacingUm.x === input.spacingUm.x &&
+      spacingUm.y === input.spacingUm.y &&
+      spacingUm.z === input.spacingUm.z
+    );
+    const niftiBytes = deconvolvedNifti(estimate, input, spacingUm, { spacingOverridden });
     const nifti = await gzipFile(niftiBytes, names.nifti, current);
     const psfVolume = { dims: psf.dims, spacingUm, data: Float32Array.from(psf.data) };
     const psfTiff = new File([stackTiff(psfVolume.data, psf.dims, spacingUm)], names.psfTiff, { type: "image/tiff" });

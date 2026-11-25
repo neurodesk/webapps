@@ -1,0 +1,12 @@
+Histo2MRI (@neurodesk/histo2mri)
+Copyright (c) 2026 Neurodesk Contributors
+Licensed under the MIT License (see LICENSE).
+
+Registration runs Greedy through @neurodesk/greedy (Apache-2.0; see packages/greedy/NOTICE).
+Methods implemented from published literature:
+- Greedy registration (NMI rigid, affine and stationary velocity field deformable):
+  Yushkevich PA et al. Fast automatic segmentation of hippocampal subfields and medial
+  temporal lobe subregions in 3 Tesla and 7 Tesla T2-weighted MRI. Alzheimers Dement. 2016.
+- Colour deconvolution (H&E, DAB):
+  Ruifrok AC, Johnston DA. Quantification of histochemical staining by color deconvolution.
+  Anal Quant Cytol Histol. 2001;23(4):291-299.

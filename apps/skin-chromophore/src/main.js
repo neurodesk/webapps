@@ -28,7 +28,7 @@ import {
   computeAnalysisDimensions,
   readSettings,
 } from "./config.js";
-import { ITA_UNAVAILABLE_LABEL, classifyIta } from "./core/colorimetry.js";
+import { ITA_UNAVAILABLE_LABEL, classifyIta } from "@neurodesk/skin-chromophore/core/colorimetry";
 import { renderMapRgba, renderRoiContoursRgba } from "./display.js";
 import { colorimetryCsv, itaDiagramSvg, outputStem, provenanceJson } from "./outputs.js";
 import examples from "../examples.json";

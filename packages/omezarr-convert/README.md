@@ -13,6 +13,16 @@ await writeOmeZarr(source, { set: (key, bytes) => store.set(key, bytes) }, { ver
 const archive = await zipStore(store, "0.5");          // a Blob: RFC-9 .ozx; 0.4 gives a stored .zip
 ```
 
+## Command line
+
+`bin/omezarr-convert.js` converts TIFF, OME-TIFF, PNG/JPEG sequences or NIfTI files from the command line, and is packaged as a standalone executable via `exes/node-cli` (`release.json`):
+
+```sh
+omezarr-convert input.tif results
+omezarr-convert slice1.png slice2.png results --version 0.4 --method nearest --format dir
+omezarr-convert self-check
+```
+
 ## What it writes
 
 - A 5D image, axes `t, c, z, y, x` (as bioformats2raw writes them), at the store root.

@@ -1,0 +1,38 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "dermvit-v",
+  "displayName": "DermViT",
+  "app": "dermvit",
+  "bundleModels": true,
+  "run": "lesion.jpg out",
+  "readme": {
+    "run": "Classify a dermoscopic lesion image across the 7 HAM10000 classes",
+    "notes": [
+      "Input is a JPEG or PNG dermoscopic photograph.",
+      "Pass --color-constancy for Shades of Gray (p=6) normalization before 224x224 resize.",
+      "Pass --saliency to also compute a 5x5 occlusion sensitivity PNG overlay.",
+      "Add --help for every option: thread count, cache directory, offline mode and overwrite.",
+      "",
+      "The quantized HAM10000 ViT-Base ONNX model is bundled and verified by SHA-256; no network is required.",
+      "Research and educational use only — uncalibrated softmax scores are not a medical device or clinical diagnosis."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "dermvit"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "dermvit.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "dermvit"
+    }
+  }
+}

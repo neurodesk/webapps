@@ -1,0 +1,38 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "brainchomp-v",
+  "displayName": "Brainchomp",
+  "app": "brainchomp",
+  "run": "rodent.nii.gz results",
+  "readme": {
+    "run": "Extract a skull-stripped rodent brain image and binary brain mask",
+    "notes": [
+      "Model weights are compiled into the bundled brainchomp-lib CPU WebAssembly module.",
+      "No network connection or previously populated cache is required.",
+      "Input headers must carry real rodent voxel sizes (e.g. 0.1 mm, not x10 human-scaled).",
+      "Add --opening R (0..64, default 4) to tune morphological opening, --no-fill-holes to keep",
+      "internal cavities, --threads N for CPU threads, or --help for all options.",
+      "Interactive quadruped reorientation, DICOM import and mask editing use the web app.",
+      "",
+      "Brainchomp is research software; inspect extracted masks before quantitative analysis."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "brainchomp"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "brainchomp.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "brainchomp"
+    }
+  }
+}

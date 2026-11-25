@@ -1,0 +1,8 @@
+Tile stitching (@neurodesk/stitching)
+Copyright (c) 2026 Neurodesk Contributors
+Licensed under the MIT License (see LICENSE).
+
+Methods implemented from published literature:
+- Pairwise phase correlation, global translation optimisation and linear-blending fusion:
+  Preibisch S, Saalfeld S, Tomancak P. Globally optimal stitching of tiled 3D microscopic
+  image acquisitions. Bioinformatics. 2009;25(11):1463-1465.

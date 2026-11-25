@@ -1,0 +1,38 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "neuromorph-v",
+  "displayName": "NeuroMorph",
+  "app": "neuromorph",
+  "bundleModels": false,
+  "run": "cell.swc results",
+  "readme": {
+    "run": "Measure neuron morphometrics and Sholl intersections from SWC reconstructions",
+    "notes": [
+      "Input is one or more .swc files or a folder containing .swc files.",
+      "Pass --sholl-step N (default 10 um) or --no-repair. Add --help for every option.",
+      "Writes morphometrics, Sholl and bifurcation CSV tables, repaired SWCs, and provenance JSON.",
+      "",
+      "No network connection is required and no external model files are downloaded.",
+      "Morphometric definitions follow NeuroM 4 (Blue Brain Project, EPFL).",
+      "Please cite Cannon et al. 1998 (SWC), Sholl 1953, and NeuroM."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "neuromorph"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "neuromorph.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "neuromorph"
+    }
+  }
+}
