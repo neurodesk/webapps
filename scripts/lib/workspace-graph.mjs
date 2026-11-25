@@ -147,6 +147,7 @@ const EXEC_ARRAY_CALLS = new Set(['run', 'execFile', 'execFileSync', 'spawn', 's
 const INDEPENDENT_LINT_SCRIPT = /^node\s+(?:\.\.\/)+scripts\/lint\.mjs(?:\s+--workspace)?$/;
 const FILTER_ARG = /(?:^|[\s;|&(])(?:--filter|-F|--dir|-C|--prefix|--cwd)(?:=|\s+)['"]?([^\s'"]+)['"]?/g;
 const CROSS_WORKSPACE_FLAG = /(?:^|[\s;|&(])(?:--filter|-F|--dir|-C|--prefix|--cwd|-r|--recursive|--workspace|-w|--workspaces)(?:=|\s|$)/;
+const SHELL_CD_TARGET = /(?:^|[\s;|&(])(?:cd|pushd)\s+['"]?([^\s'"&;|()]+)['"]?/g;
 
 function calleeNameOf(callNode) {
   const callee = callNode?.callee;
@@ -155,33 +156,48 @@ function calleeNameOf(callNode) {
   return null;
 }
 
-// Whether a string literal sits in a whitelisted standalone path context:
+function isJsonParseCall(node) {
+  return (
+    node?.type === 'CallExpression' &&
+    calleeNameOf(node) === 'parse' &&
+    node.callee?.type === 'MemberExpression' &&
+    !node.callee.computed &&
+    node.callee.object?.type === 'Identifier' &&
+    node.callee.object.name === 'JSON'
+  );
+}
+
+// Classify a literal in a whitelisted standalone path context:
 // (1) static/dynamic import/export source, (2) direct file-reader or final
 // `join`/`resolve` argument consumed by a file reader (`readFile`/`readFileSync`/
 // `require`), (3) element of an ArrayExpression passed directly to a subprocess
 // runner (`run`/`execFile`/`execFileSync`/`spawn`/`spawnSync`), or (4) direct
 // VariableDeclarator initializer whose binding is never referenced elsewhere.
-function isStandalonePathLiteral(node, ancestors, referencedIdentifiers, readerArgIdentifiers, pathDerivedIdentifiers) {
-  if (node.type !== 'Literal' || typeof node.value !== 'string') return false;
+// Returns `{ standalone, derivedJson }`: for `.json` reads, `derivedJson` is true
+// whenever the parsed JSON value (or any property/chain from it) is used outside
+// direct file-reader pass-through, so the JSON scanner preserves target directories.
+function classifyPathLiteral(node, ancestors, referencedIdentifiers, readerArgIdentifiers, derivedIdentifiers) {
+  const nope = { standalone: false, derivedJson: false };
+  if (node.type !== 'Literal' || typeof node.value !== 'string') return nope;
   const isJsonLiteral = node.value.endsWith('.json');
   const parent = ancestors[ancestors.length - 1];
-  if (!parent) return false;
-  if (DIRECT_MODULE_PARENTS.has(parent.type) && parent.source === node) return true;
+  if (!parent) return nope;
+  if (DIRECT_MODULE_PARENTS.has(parent.type) && parent.source === node) return { standalone: true, derivedJson: isJsonLiteral };
   if (parent.type === 'VariableDeclarator' && parent.init === node && parent.id?.type === 'Identifier') {
     const grandParent = ancestors[ancestors.length - 2];
     const greatGrandParent = ancestors[ancestors.length - 3];
-    return (
+    const standalone =
       grandParent?.type === 'VariableDeclaration' &&
       greatGrandParent?.type !== 'ExportNamedDeclaration' &&
-      !referencedIdentifiers.has(parent.id.name)
-    );
+      !referencedIdentifiers.has(parent.id.name);
+    return { standalone, derivedJson: false };
   }
   let callIndex = -1;
   let consumedByReader = false;
   if (parent.type === 'CallExpression' && Array.isArray(parent.arguments) && parent.arguments.includes(node)) {
     const name = calleeNameOf(parent);
     if (FILE_READER_CALLS.has(name)) consumedByReader = true;
-    else if (!PATH_JOIN_CALLS.has(name) || parent.arguments[parent.arguments.length - 1] !== node) return false;
+    else if (!PATH_JOIN_CALLS.has(name) || parent.arguments[parent.arguments.length - 1] !== node) return nope;
     callIndex = ancestors.length - 1;
   } else if (parent.type === 'ArrayExpression') {
     const grandParent = ancestors[ancestors.length - 2];
@@ -195,18 +211,26 @@ function isStandalonePathLiteral(node, ancestors, referencedIdentifiers, readerA
       consumedByReader = true;
     }
   }
-  if (callIndex < 0) return false;
+  if (callIndex < 0) return nope;
+  let derivedJson = false;
   for (let i = callIndex - 1; i >= 0; i--) {
     const ancestor = ancestors[i];
     const child = ancestors[i + 1];
-    if (STATEMENT_BOUNDARY.has(ancestor.type)) return consumedByReader;
+    if (STATEMENT_BOUNDARY.has(ancestor.type)) return { standalone: consumedByReader, derivedJson: isJsonLiteral && derivedJson };
     if (ancestor.type === 'AwaitExpression' && ancestor.argument === child) continue;
     if (ancestor.type === 'VariableDeclarator' && ancestor.init === child) {
       const exported = ancestors[i - 1]?.type === 'VariableDeclaration' && ancestors[i - 2]?.type === 'ExportNamedDeclaration';
-      if (exported) return false;
+      if (exported) return nope;
       if (ancestor.id?.type === 'Identifier') {
-        if (pathDerivedIdentifiers.has(ancestor.id.name)) return false;
-        if (!isJsonLiteral && readerArgIdentifiers.has(ancestor.id.name)) return false;
+        if (isJsonLiteral) {
+          if (derivedIdentifiers.has(ancestor.id.name)) derivedJson = true;
+        } else if (readerArgIdentifiers.has(ancestor.id.name)) {
+          return nope;
+        }
+      } else if (isJsonLiteral) {
+        derivedJson = true;
+      } else {
+        return nope;
       }
       if (consumedByReader) continue;
       if (
@@ -217,29 +241,79 @@ function isStandalonePathLiteral(node, ancestors, referencedIdentifiers, readerA
         consumedByReader = true;
         continue;
       }
-      return false;
+      return nope;
     }
     if (ancestor.type === 'CallExpression' && Array.isArray(ancestor.arguments) && ancestor.arguments.includes(child)) {
       const name = calleeNameOf(ancestor);
       if (!consumedByReader) {
         if (FILE_READER_CALLS.has(name)) consumedByReader = true;
-        else if (!PATH_JOIN_CALLS.has(name) || ancestor.arguments[ancestor.arguments.length - 1] !== child) return false;
+        else if (!PATH_JOIN_CALLS.has(name) || ancestor.arguments[ancestor.arguments.length - 1] !== child) return nope;
       } else if (isJsonLiteral && FILE_READER_CALLS.has(name)) {
         continue;
-      } else if (
-        name !== 'parse' ||
-        ancestor.callee?.type !== 'MemberExpression' ||
-        ancestor.callee.computed ||
-        ancestor.callee.object?.type !== 'Identifier' ||
-        ancestor.callee.object.name !== 'JSON'
-      ) {
-        return false;
+      } else if (!isJsonParseCall(ancestor)) {
+        return nope;
       }
       continue;
     }
-    return false;
+    return nope;
   }
-  return consumedByReader;
+  return { standalone: consumedByReader, derivedJson: isJsonLiteral && derivedJson };
+}
+
+// Inspect one reference to an identifier and classify whether it is used purely
+// as a direct file-reader argument (possibly chained to another binding) or
+// participates in path/data derivation (concatenation, joins, aliasing, etc.).
+function classifyIdentifierUse(idName, ancestors, derivedIdentifiers, readerDepEdges) {
+  let idx = ancestors.length - 1;
+  let child = null;
+  while (idx >= 0) {
+    const cur = ancestors[idx];
+    if (cur.type === 'MemberExpression' && (child === null || cur.object === child)) {
+      child = cur;
+      idx--;
+      continue;
+    }
+    if (cur.type === 'ChainExpression' || cur.type === 'TSAsExpression' || cur.type === 'TSNonNullExpression') {
+      child = cur;
+      idx--;
+      continue;
+    }
+    break;
+  }
+  const useNode = idx >= 0 ? ancestors[idx] : null;
+  if (!useNode || useNode.type !== 'CallExpression') {
+    derivedIdentifiers.add(idName);
+    return;
+  }
+  const callee = calleeNameOf(useNode);
+  if (!FILE_READER_CALLS.has(callee) && !isJsonParseCall(useNode)) {
+    derivedIdentifiers.add(idName);
+    return;
+  }
+  // Check what consumes the result of `readFileSync(id)` / `JSON.parse(id)`.
+  for (let i = idx - 1; i >= 0; i--) {
+    const ancestor = ancestors[i];
+    const prev = ancestors[i + 1];
+    if (ancestor.type === 'ExpressionStatement') return;
+    if (ancestor.type === 'AwaitExpression' && ancestor.argument === prev) continue;
+    if (ancestor.type === 'CallExpression' && Array.isArray(ancestor.arguments) && ancestor.arguments.includes(prev)) {
+      if (FILE_READER_CALLS.has(calleeNameOf(ancestor)) || isJsonParseCall(ancestor)) continue;
+      derivedIdentifiers.add(idName);
+      return;
+    }
+    if (ancestor.type === 'VariableDeclarator' && ancestor.init === prev) {
+      const exported = ancestors[i - 1]?.type === 'VariableDeclaration' && ancestors[i - 2]?.type === 'ExportNamedDeclaration';
+      if (!exported && ancestor.id?.type === 'Identifier') {
+        readerDepEdges.push([idName, ancestor.id.name]);
+        return;
+      }
+      derivedIdentifiers.add(idName);
+      return;
+    }
+    derivedIdentifiers.add(idName);
+    return;
+  }
+  derivedIdentifiers.add(idName);
 }
 
 // Collect string and template literal ranges in a script so SCRIPT_REFERENCE can
@@ -253,7 +327,8 @@ function collectScriptStringLiterals(text, file) {
   }
   const referencedIdentifiers = new Set();
   const readerArgIdentifiers = new Set();
-  const pathDerivedIdentifiers = new Set();
+  const derivedIdentifiers = new Set();
+  const readerDepEdges = [];
   const candidates = [];
   const ancestors = [];
   const walk = (node) => {
@@ -265,24 +340,20 @@ function collectScriptStringLiterals(text, file) {
     if (node.type === 'Identifier') {
       const parent = ancestors[ancestors.length - 1];
       const isDeclId = parent?.type === 'VariableDeclarator' && parent.id === node;
-      if (!isDeclId) {
+      const isNonComputedProp =
+        (parent?.type === 'MemberExpression' && !parent.computed && parent.property === node) ||
+        (parent?.type === 'Property' && !parent.computed && parent.key === node);
+      if (!isDeclId && !isNonComputedProp) {
         referencedIdentifiers.add(node.name);
-        if (parent?.type === 'BinaryExpression' || parent?.type === 'TemplateLiteral') {
-          pathDerivedIdentifiers.add(node.name);
-        }
         if (
           parent?.type === 'CallExpression' &&
           Array.isArray(parent.arguments) &&
-          parent.arguments.includes(node)
+          parent.arguments.includes(node) &&
+          (FILE_READER_CALLS.has(calleeNameOf(parent)) || PATH_JOIN_CALLS.has(calleeNameOf(parent)) || EXEC_ARRAY_CALLS.has(calleeNameOf(parent)))
         ) {
-          const callee = calleeNameOf(parent);
-          if (PATH_JOIN_CALLS.has(callee) || EXEC_ARRAY_CALLS.has(callee)) {
-            pathDerivedIdentifiers.add(node.name);
-            readerArgIdentifiers.add(node.name);
-          } else if (FILE_READER_CALLS.has(callee)) {
-            readerArgIdentifiers.add(node.name);
-          }
+          readerArgIdentifiers.add(node.name);
         }
+        classifyIdentifierUse(node.name, ancestors, derivedIdentifiers, readerDepEdges);
       }
     }
     const isStringLiteral = node.type === 'Literal' && typeof node.value === 'string';
@@ -297,6 +368,15 @@ function collectScriptStringLiterals(text, file) {
     ancestors.pop();
   };
   walk(ast);
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const [src, dst] of readerDepEdges) {
+      if (derivedIdentifiers.has(dst) && !derivedIdentifiers.has(src)) {
+        derivedIdentifiers.add(src);
+        changed = true;
+      }
+    }
+  }
   return candidates.map(({ node, ancestors: chain }) => {
     const isStringLiteral = node.type === 'Literal' && typeof node.value === 'string';
     const isTemplate = node.type === 'TemplateLiteral';
@@ -304,65 +384,97 @@ function collectScriptStringLiterals(text, file) {
       (isStringLiteral || (isTemplate && node.expressions.length === 0)) &&
       chain[chain.length - 1]?.type === 'VariableDeclarator' &&
       /(?:^|\n)[ \t]*\/\//.test(text.slice(node.range[0] + 1, node.range[1] - 1));
-    const standalone = isStandalonePathLiteral(node, chain, referencedIdentifiers, readerArgIdentifiers, pathDerivedIdentifiers) || commentLine;
-    return { start: node.range[0], end: node.range[1], standalone };
+    const classified = classifyPathLiteral(node, chain, referencedIdentifiers, readerArgIdentifiers, derivedIdentifiers);
+    return { start: node.range[0], end: node.range[1], standalone: classified.standalone || commentLine, derivedJson: classified.derivedJson };
   });
 }
 
 // Whether a SCRIPT_REFERENCE file match ends at a real path boundary and, when
 // inside a JS string/template literal, spans a complete whitelisted literal.
-function isCompleteScriptFile(text, match, literals) {
+function matchScriptLiteral(text, match, literals) {
   const start = match.index;
   const end = match.index + match[0].length;
   const after = text[end];
-  if (after && !/[\s'"`),;:\]}]/.test(after)) return false;
+  if (after && !/[\s'"`),;:\]}]/.test(after)) return { complete: false, derivedJson: true };
   if (literals !== null) {
     const litAtEnd = literals.find((lit) => lit.start < end && end <= lit.end);
     if (litAtEnd) {
-      if (!litAtEnd.standalone) return false;
+      if (!litAtEnd.standalone) return { complete: false, derivedJson: true };
       const tail = text.slice(end, litAtEnd.end - 1);
-      if (tail.length > 0 && !(tail === '\n' && text.slice(litAtEnd.start + 1, start).includes('//'))) return false;
+      if (tail.length > 0 && !(tail === '\n' && text.slice(litAtEnd.start + 1, start).includes('//'))) return { complete: false, derivedJson: true };
       const litAtStart = literals.find((lit) => lit.start <= start && start < lit.end);
-      if (litAtStart && litAtStart !== litAtEnd && !litAtStart.standalone) return false;
-      return true;
+      if (litAtStart && litAtStart !== litAtEnd && !litAtStart.standalone) return { complete: false, derivedJson: true };
+      return { complete: true, derivedJson: litAtEnd.derivedJson };
     }
-    return true;
+    return { complete: true, derivedJson: false };
   }
   const sepStart = start + match[1].length;
   if (text[sepStart] !== '/') {
     const secondQuote = match[0].slice(match[1].length + 1).match(/['"`]/)?.[0];
-    return Boolean(secondQuote && after === secondQuote);
+    const complete = Boolean(secondQuote && after === secondQuote);
+    return { complete, derivedJson: true };
   }
   let i = start - 1;
   while (i >= 0 && /[\w./-]/.test(text[i])) i--;
   if (i >= 0 && (text[i] === "'" || text[i] === '"' || text[i] === '`') && (i === 0 || text[i - 1] !== '\\')) {
-    return after === text[i];
+    return { complete: after === text[i], derivedJson: true };
   }
-  return true;
+  return { complete: true, derivedJson: true };
+}
+
+function resolveWorkspaceTarget(raw, baseDir, { root, nodeByPackageName, nodeSet }) {
+  if (nodeByPackageName.has(raw)) return nodeByPackageName.get(raw);
+  if (raw.includes('$') || raw.includes('*')) return null;
+  const normalized = raw.replace(/^\.\//, '').replace(/\/+$/, '');
+  if (nodeSet.has(normalized)) return normalized;
+  const prefixNode = normalized.match(/^(?:apps|packages|exes)\/[^/]+/)?.[0];
+  if (prefixNode && nodeSet.has(prefixNode)) return prefixNode;
+  if (baseDir && !baseDir.includes('$')) {
+    const rel = relative(root, resolve(root, baseDir, raw)).split(sep).join('/').replace(/\/+$/, '');
+    if (nodeSet.has(rel)) return rel;
+    const relPrefix = rel.match(/^(?:apps|packages|exes)\/[^/]+/)?.[0];
+    if (relPrefix && nodeSet.has(relPrefix)) return relPrefix;
+  }
+  return null;
 }
 
 // Workspace nodes whose `lint` script may be executed by any cross-workspace
-// lint invocation (`pnpm --filter <pkg> lint`, `--filter=<pkg>`, `-r lint`).
-function lintTargetsInCommands(commands, { nodeByPackageName, nodeSet, manifests }) {
+// lint invocation (`pnpm --filter <pkg> lint`, `--filter=<pkg>`, `-r lint`,
+// `--dir`, a CI step's `working-directory`, or `cd <dir> && pnpm lint`).
+function lintTargetsInCommands(commands, context) {
+  const { manifests } = context;
   const targets = new Set();
   const allLintNodes = () => [...manifests.entries()].filter(([, manifest]) => typeof manifest?.scripts?.lint === 'string').map(([node]) => node);
-  for (const cmd of commands) {
+  for (const entry of commands) {
+    const cmd = typeof entry === 'string' ? entry : entry.cmd;
+    const workingDir = typeof entry === 'string' ? null : entry.workingDir ?? null;
+    const baseDir = typeof entry === 'string' ? '.' : entry.baseDir ?? workingDir ?? '.';
     if (INDEPENDENT_LINT_SCRIPT.test(cmd.trim())) continue;
-    if (!/\b(?:pnpm|npm|yarn)\b/.test(cmd) || !/\blint\b/.test(cmd) || !CROSS_WORKSPACE_FLAG.test(cmd)) continue;
+    if (!/\b(?:pnpm|npm|yarn)\b/.test(cmd) || !/\blint\b/.test(cmd)) continue;
+    const hasRootFlag = /(?:^|\s)(?:-w|--workspace-root)(?:\s|$)/.test(cmd);
+    const hasCrossFlag = CROSS_WORKSPACE_FLAG.test(cmd);
+    const hasNonRootCrossFlag = /(?:^|[\s;|&(])(?:--filter|-F|--dir|-C|--prefix|--cwd|-r|--recursive|--workspace(?:=|\s)|--workspaces)/.test(cmd);
+    const nonRootWorkingDir = Boolean(workingDir && workingDir.trim() && !/^\.\/?$/.test(workingDir.trim()));
+    const cdTargets = [...cmd.matchAll(SHELL_CD_TARGET)].map(([, dir]) => dir).filter((dir) => !/^\.\/?$/.test(dir));
+    if (!hasCrossFlag && !nonRootWorkingDir && cdTargets.length === 0) continue;
     // `pnpm -w run lint` / `pnpm --workspace-root run lint` runs the root lint
     // script (handled by ROOT_SCRIPT_CALL), not every workspace member.
-    if (/(?:^|\s)(?:-w|--workspace-root)(?:\s|$)/.test(cmd) && !/(?:^|[\s;|&(])(?:--filter|-F|--dir|-C|--prefix|--cwd|-r|--recursive|--workspace(?:=|\s)|--workspaces)/.test(cmd)) continue;
+    if (hasRootFlag && !hasNonRootCrossFlag) continue;
     const recursive = /(?:^|\s)(?:-r|--recursive)(?:\s|$)/.test(cmd);
     const filters = [...cmd.matchAll(FILTER_ARG)].map(([, target]) => target);
     if (!recursive && filters.length > 0) {
       let allResolved = true;
       for (const filter of filters) {
-        const normalized = filter.replace(/^\.\//, '').replace(/\/+$/, '');
-        const prefixNode = normalized.match(/^(?:apps|packages|exes)\/[^/]+/)?.[0];
-        const workspaceNode =
-          nodeByPackageName.get(filter) ??
-          (nodeSet.has(normalized) ? normalized : null) ??
-          (prefixNode && nodeSet.has(prefixNode) ? prefixNode : null);
+        const workspaceNode = resolveWorkspaceTarget(filter, baseDir, context);
+        if (workspaceNode) targets.add(workspaceNode);
+        else allResolved = false;
+      }
+      if (!allResolved) for (const node of allLintNodes()) targets.add(node);
+    } else if (!hasCrossFlag && (nonRootWorkingDir || cdTargets.length > 0)) {
+      const dirs = cdTargets.length > 0 ? cdTargets : [workingDir.trim()];
+      let allResolved = true;
+      for (const dir of dirs) {
+        const workspaceNode = resolveWorkspaceTarget(dir, cdTargets.length > 0 ? baseDir : '.', context);
         if (workspaceNode) targets.add(workspaceNode);
         else allResolved = false;
       }
@@ -378,20 +490,20 @@ function lintTargetsInCommands(commands, { nodeByPackageName, nodeSet, manifests
 // `pnpm --filter`, so workspace script invocations (such as `--filter @nd/n4 lint`)
 // remain visible before deciding whether standalone lint scripts can be omitted.
 function expandedCommandTexts(commands, rootScripts) {
-  const texts = [];
-  const pending = [...commands];
+  const entries = [];
+  const pending = commands.map((entry) => (typeof entry === 'string' ? { cmd: entry, workingDir: null } : entry));
   const expanded = new Set();
   while (pending.length) {
-    const command = pending.pop();
-    texts.push(command);
-    for (const [, script] of command.matchAll(ROOT_SCRIPT_CALL)) {
+    const current = pending.pop();
+    entries.push(current);
+    for (const [, script] of current.cmd.matchAll(ROOT_SCRIPT_CALL)) {
       if (!expanded.has(script)) {
         expanded.add(script);
-        if (rootScripts[script]) pending.push(rootScripts[script]);
+        if (rootScripts[script]) pending.push({ cmd: rootScripts[script], workingDir: null });
       }
     }
   }
-  return texts;
+  return entries;
 }
 
 const WORKSPACE_ROOT_SCRIPT_CALL = /\bpnpm\s+(?:-w|--workspace-root)\s+(?:run\s+)?['"]?([A-Za-z0-9_@][\w.:/@-]*)['"]?/g;
@@ -461,12 +573,18 @@ export async function loadConservativeWorkspaceGraph(root) {
 
   const ci = parse(await readFile(join(root, '.github/workflows/ci.yml'), 'utf8'));
   const rootScripts = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).scripts;
+  const workflowWorkingDir = ci?.defaults?.run?.['working-directory'] ?? null;
   const rawRuns = (names) => names.flatMap((name) => {
-    const steps = ci?.jobs?.[name]?.steps;
+    const job = ci?.jobs?.[name];
+    const steps = job?.steps;
     if (!Array.isArray(steps) || steps.length === 0) {
       throw new WorkspaceGraphConfigurationError(`ci.yml job ${name} has no step list; update the workspace graph's CI entry points`);
     }
-    return steps.map((step) => step.run ?? '');
+    const jobWorkingDir = job?.defaults?.run?.['working-directory'] ?? workflowWorkingDir;
+    return steps.map((step) => ({
+      cmd: String(step?.run ?? ''),
+      workingDir: step?.['working-directory'] ?? jobWorkingDir ?? null,
+    }));
   });
   const rawEntries = [
     [SITE, rawRuns(siteJobNames(ci))],
@@ -479,10 +597,11 @@ export async function loadConservativeWorkspaceGraph(root) {
   }));
   const workspaceRootScripts = new Map([...workspaceRootScriptInfo].map(([node, { names }]) => [node, names]));
   const workspaceExpandedScripts = new Map(nodes.map((node) => {
-    const allScripts = Object.values(manifests.get(node)?.scripts ?? {}).map(String);
-    return [node, [...allScripts, ...(workspaceRootScriptInfo.get(node)?.texts ?? [])]];
+    const allScripts = Object.values(manifests.get(node)?.scripts ?? {}).map((cmd) => ({ cmd: String(cmd), baseDir: node }));
+    const rootExpanded = (workspaceRootScriptInfo.get(node)?.texts ?? []).map((cmd) => ({ cmd, baseDir: '.' }));
+    return [node, [...allScripts, ...rootExpanded]];
   }));
-  const lintTargetContext = { nodeByPackageName, nodeSet, manifests };
+  const lintTargetContext = { root, nodeByPackageName, nodeSet, manifests };
   const lintInvokedNodes = new Set();
   for (const [, cmds] of expandedByEntry) {
     for (const target of lintTargetsInCommands(cmds, lintTargetContext)) lintInvokedNodes.add(target);
@@ -493,6 +612,8 @@ export async function loadConservativeWorkspaceGraph(root) {
 
   const edges = new Map();
   const pendingRootFiles = [];
+  const derivedJsonFiles = new Set();
+  const scannedDerivedJson = new Set();
   // App id -> the paths in other app directories its code names.
   const appReads = new Map();
   for (const node of nodes) {
@@ -557,7 +678,7 @@ export async function loadConservativeWorkspaceGraph(root) {
     edges.set(node, uses);
   }
 
-  const entries = rawEntries.map(([node, raw]) => [node, raw.map((run) => run.replace(/pnpm --filter \S+ (?:run )?\S+/g, ''))]);
+  const entries = rawEntries.map(([node, raw]) => [node, raw.map(({ cmd }) => cmd.replace(/pnpm --filter \S+ (?:run )?\S+/g, ''))]);
   // Root tool configs (e2e.config.ts, tsconfig.agentic.json) are read implicitly
   // by the site jobs' commands, so the site build follows them too.
   const rootConfigs = (await readdir(root)).filter((name) => /^(?:[\w-]+\.config\.[cm]?[jt]s|tsconfig[\w.-]*\.json)$/.test(name) && !INDEPENDENT_CONFIG.test(name));
@@ -565,7 +686,7 @@ export async function loadConservativeWorkspaceGraph(root) {
   for (const [node, commands] of entries) {
     const { named, expanded } = namedByCommands(commands, rootScripts);
     if (node === SITE) for (const config of rootConfigs) named.add(config);
-    for (const lintTarget of lintTargetsInCommands(expandedByEntry.get(node) ?? [], { nodeByPackageName, nodeSet, manifests })) {
+    for (const lintTarget of lintTargetsInCommands(expandedByEntry.get(node) ?? [], lintTargetContext)) {
       named.add(lintTarget);
     }
     edges.set(node, named);
@@ -575,10 +696,13 @@ export async function loadConservativeWorkspaceGraph(root) {
 
   while (pendingRootFiles.length) {
     const file = pendingRootFiles.pop();
-    if (edges.has(file)) continue;
-    const uses = new Set();
+    const isJsonFile = /^(?:packages|exes)\/.*\.json$/.test(file);
+    const derived = isJsonFile && derivedJsonFiles.has(file);
+    if (edges.has(file) && (!derived || scannedDerivedJson.has(file))) continue;
+    const uses = edges.get(file) ?? new Set();
     edges.set(file, uses);
-    if (/^(?:packages|exes)\/.*\.json$/.test(file)) {
+    if (isJsonFile) {
+      if (derived) scannedDerivedJson.add(file);
       const jsonText = await readFile(join(root, file), 'utf8').catch(() => null);
       if (jsonText !== null) {
         for (const match of jsonText.matchAll(SCRIPT_REFERENCE)) {
@@ -590,6 +714,10 @@ export async function loadConservativeWorkspaceGraph(root) {
           const target = inner && completeJsonString && `${top}/${name}${inner}`;
           if (target && await isRegularUnlinkedFile(root, target)) {
             uses.add(target);
+            if (derived) {
+              uses.add(`${top}/${name}`);
+              derivedJsonFiles.add(target);
+            }
             pendingRootFiles.push(target);
           } else {
             uses.add(`${top}/${name}`);
@@ -613,15 +741,18 @@ export async function loadConservativeWorkspaceGraph(root) {
     for (const match of text.matchAll(SCRIPT_REFERENCE)) {
       const [, top, name, inner] = match;
       if (!nodeSet.has(`${top}/${name}`)) continue;
-      const target = inner && isCompleteScriptFile(text, match, literals) && `${top}/${name}${inner}`;
+      const literalMatch = inner ? matchScriptLiteral(text, match, literals) : { complete: false, derivedJson: true };
+      const target = literalMatch.complete && `${top}/${name}${inner}`;
       if (target && await isRegularUnlinkedFile(root, target)) {
         uses.add(target);
+        if (literalMatch.derivedJson && target.endsWith('.json')) derivedJsonFiles.add(target);
         pendingRootFiles.push(target);
       } else {
         uses.add(`${top}/${name}`);
         const exactJson = inner?.endsWith('.json') && `${top}/${name}${inner}`;
         if (exactJson && await isRegularUnlinkedFile(root, exactJson)) {
           uses.add(exactJson);
+          derivedJsonFiles.add(exactJson);
           pendingRootFiles.push(exactJson);
         }
       }

@@ -3028,12 +3028,16 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
       "const mod = require('../packages/pkg/fixture.json');",
       "const rootTarget = JSON.parse(readFileSync('exes/config/path.json', 'utf8')); readFileSync(rootTarget);",
       "const innerPath = JSON.parse(readFileSync('exes/chain/outer.json', 'utf8')); const leaf = JSON.parse(readFileSync(innerPath, 'utf8')); readFileSync(leaf);",
+      "const propCfg = JSON.parse(readFileSync('exes/prop-derived/config.json', 'utf8')); readFileSync(propCfg.path + '.gz');",
     ].join('\n'),
     'exes/config/path.json': '"scripts/runtime-input.mjs"',
     'scripts/runtime-input.mjs': 'export const ok = true;\n',
     'exes/chain/outer.json': '"exes/chain-target/inner.json"',
     'exes/chain-target/inner.json': '"scripts/quality/check-indirect.mjs"',
     'exes/chain-target/unrelated.mjs': "import '../../scripts/quality/unrelated-sibling.mjs';\n",
+    'exes/prop-derived/config.json': JSON.stringify({ path: 'exes/leaf/reference.json' }),
+    'exes/leaf/reference.json': '{}',
+    'exes/leaf/reference.json.gz': 'leaf-gz',
     'scripts/quality/check-indirect.mjs': 'export const chained = true;\n',
     'scripts/quality/unrelated-sibling.mjs': 'export const unrelated = true;\n',
     'exes/data/reference.json': '{}',
@@ -3093,6 +3097,7 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
   assert.equal(createAppPlan(registry, ['scripts/runtime-input.mjs'], prefixGraph).allApps, true, 'split JSON read targeting scripts/runtime-input.mjs reaches CATALOG');
   assert.equal(createAppPlan(registry, ['scripts/quality/check-indirect.mjs'], prefixGraph).allApps, true, 'chained JSON reads outer.json -> inner.json -> check-indirect.mjs reach CATALOG');
   assert.equal(createAppPlan(registry, ['scripts/quality/unrelated-sibling.mjs'], prefixGraph).selected.length, 0, 'exact chained JSON target does not pull unrelated sibling into CATALOG');
+  assert.equal(createAppPlan(registry, ['exes/leaf/reference.json.gz'], prefixGraph).allApps, true, 'path derived from JSON property (propCfg.path + .gz) preserves destination directory edge');
 });
 
 test('lint runner and scripts/quality files select nothing when unreached, and honor confirmed CI or app reachability', async (t) => {
@@ -3513,6 +3518,63 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
         }),
         'scripts/lint.mjs': 'export const lint = 1;\n',
         'apps/niimath/package.json': JSON.stringify({ name: '@nd/niimath', scripts: { lint: 'node ../../scripts/lint.mjs --workspace' } }),
+      },
+      'scripts/lint.mjs',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'CI step working-directory with pnpm run lint keeps standalone lint edge',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ 'working-directory': 'apps/n4', run: 'pnpm run lint' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/lint.mjs': 'export const lint = 1;\n',
+        'apps/n4/package.json': JSON.stringify({ name: '@nd/n4', scripts: { lint: 'node ../../scripts/lint.mjs --workspace' } }),
+      },
+      'scripts/lint.mjs',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'CI job defaults working-directory with pnpm run lint keeps standalone lint edge',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { defaults: { run: { 'working-directory': 'apps/n4' } }, steps: [{ run: 'pnpm run lint' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/lint.mjs': 'export const lint = 1;\n',
+        'apps/n4/package.json': JSON.stringify({ name: '@nd/n4', scripts: { lint: 'node ../../scripts/lint.mjs --workspace' } }),
+      },
+      'scripts/lint.mjs',
+      new Map(),
+      (plan) => {
+        assert.equal(plan.site, true);
+        assert.deepEqual(plan.selected.map((app) => app.id), ['n4']);
+      },
+    ],
+    [
+      'CI step cd into workspace with pnpm run lint keeps standalone lint edge',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'cd apps/n4 && pnpm run lint' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/lint.mjs': 'export const lint = 1;\n',
+        'apps/n4/package.json': JSON.stringify({ name: '@nd/n4', scripts: { lint: 'node ../../scripts/lint.mjs --workspace' } }),
       },
       'scripts/lint.mjs',
       new Map(),
