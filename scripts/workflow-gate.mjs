@@ -85,9 +85,15 @@ function dispatcherHistory() {
     let anyLoaded = false;
     let firstError = null;
     for (const dispatcher of dispatchers) {
-      let listed;
+      let shardRuns;
       try {
-        ({ workflow_runs: listed } = await github().request(`/actions/workflows/${dispatcher}.yml/runs?branch=main&event=schedule&status=completed&per_page=100`));
+        const response = await github().request(`/actions/workflows/${dispatcher}.yml/runs?branch=main&event=schedule&status=completed&per_page=100`);
+        if (!Array.isArray(response?.workflow_runs)) {
+          throw new Error('GitHub API response missing workflow_runs array');
+        }
+        shardRuns = response.workflow_runs
+          .filter((each) => each?.event === 'schedule')
+          .map((each) => ({ ...each, _dispatcher: dispatcher }));
         anyLoaded = true;
       } catch (error) {
         if (error.status === 404 && dispatcher !== DISPATCHER) continue;
@@ -95,7 +101,6 @@ function dispatcherHistory() {
         console.warn(`${dispatcher}: failed to list scheduled runs (${error.message})`);
         continue;
       }
-      const shardRuns = listed.filter((each) => each.event === 'schedule').map((each) => ({ ...each, _dispatcher: dispatcher }));
       runs.push(...shardRuns);
       for (const run of shardRuns.filter((each) => each.conclusion !== 'success').slice(0, JOB_READS)) {
         try {
