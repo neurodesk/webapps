@@ -4665,12 +4665,12 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
           jobs: {
             'composite-site': { steps: [{ run: 'echo site' }] },
             'app-tests': { steps: [{ run: 'echo tests' }] },
-            'browser-e2e': { steps: [{ run: 'node scripts/e2e-test-data.mjs n4' }] },
+            'browser-e2e': { steps: [{ env: { APP: '${{ matrix.app }}' }, run: 'node scripts/e2e-test-data.mjs "$APP"' }] },
             'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
           },
         }),
-        'scripts/e2e-test-data.mjs': "import '../packages/demo/src/shared.mjs';\nimport './lib/e2e-test-data.mjs';\n",
-        'scripts/lib/e2e-test-data.mjs': "export const provisioners = { n4: { provision: () => readFileSync('packages/lazy/manifest.json') } };\n",
+        'scripts/e2e-test-data.mjs': "import '../packages/demo/src/shared.mjs';\nimport { provisionTestData } from './lib/e2e-test-data.mjs';\nconst [app] = process.argv.slice(2);\nawait provisionTestData(app, '.');\n",
+        'scripts/lib/e2e-test-data.mjs': "export const provisioners = { n4: { provision: () => readFileSync('packages/lazy/manifest.json') } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
         'packages/demo/package.json': JSON.stringify({ name: '@nd/demo' }),
         'packages/demo/src/shared.mjs': 'export const shared = 1;\n',
         'packages/lazy/package.json': JSON.stringify({ name: '@nd/lazy' }),
@@ -5146,6 +5146,122 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
         'scripts/e2e-test-data.mjs': "import './lib/e2e-test-data.mjs';\n",
         'scripts/lib/e2e-test-data.mjs': "import { helper } from './boot-lib.mjs';\nexport const provisioners = { n4: { provision: () => helper() } };\n",
         'scripts/lib/boot-lib.mjs': "import { resolve } from 'node:path';\nimport { fileURLToPath, pathToFileURL } from 'node:url';\nexport function helper() { return 1; }\nfunction loadBoot() { return readFileSync('packages/demo/boot.json'); }\nif (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {} else { process.argv[1] = fileURLToPath(import.meta.url); }\nif (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) loadBoot();\n",
+        'packages/demo/package.json': JSON.stringify({ name: '@nd/demo' }),
+        'packages/demo/boot.json': '{}',
+      },
+      'packages/demo/boot.json',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'caller hardcoding provisionTestData("n4") falls back to all apps on direct provisioner edit',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ env: { APP: '${{ matrix.app }}' }, run: 'node scripts/e2e-test-data.mjs "$APP"' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/e2e-test-data.mjs': "import { provisionTestData } from './lib/e2e-test-data.mjs';\nawait provisionTestData('n4', '.');\n",
+        'scripts/lib/e2e-test-data.mjs': "export const provisioners = { n4: { env: ['A'], provision: async () => ({ A: '2' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+      },
+      'scripts/lib/e2e-test-data.mjs',
+      new Map([[
+        'scripts/lib/e2e-test-data.mjs',
+        {
+          before: "export const provisioners = { n4: { env: ['A'], provision: async () => ({ A: '1' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+          after: "export const provisioners = { n4: { env: ['A'], provision: async () => ({ A: '2' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+        },
+      ]]),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'dispatcher falling back to provisioners.n4 keeps fallback fixture in shared CI coverage',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ env: { APP: '${{ matrix.app }}' }, run: 'node scripts/e2e-test-data.mjs "$APP"' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/e2e-test-data.mjs': "import { provisionTestData } from './lib/e2e-test-data.mjs';\nconst [app] = process.argv.slice(2);\nawait provisionTestData(app, '.');\n",
+        'scripts/lib/e2e-test-data.mjs': "export const provisioners = { n4: { provision: () => readFileSync('packages/demo/boot.json') } };\nexport async function provisionTestData(app, cache) { return (provisioners[app] ?? provisioners.n4).provision(cache); }\n",
+        'packages/demo/package.json': JSON.stringify({ name: '@nd/demo' }),
+        'packages/demo/boot.json': '{}',
+      },
+      'packages/demo/boot.json',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'quoted named import of provisioners triggers full-catalog fallback on direct edit',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ env: { APP: '${{ matrix.app }}' }, run: 'node scripts/e2e-test-data.mjs "$APP"' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/e2e-test-data.mjs': "import { \"provisioners\" as entries } from './lib/e2e-test-data.mjs';\nawait entries.n4.provision();\n",
+        'scripts/lib/e2e-test-data.mjs': "export const provisioners = { n4: { env: ['A'], provision: async () => ({ A: '2' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+      },
+      'scripts/lib/e2e-test-data.mjs',
+      new Map([[
+        'scripts/lib/e2e-test-data.mjs',
+        {
+          before: "export const provisioners = { n4: { env: ['A'], provision: async () => ({ A: '1' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+          after: "export const provisioners = { n4: { env: ['A'], provision: async () => ({ A: '2' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+        },
+      ]]),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'bash += env append before pnpm dispatch expands the appended root script',
+      {
+        'package.json': JSON.stringify({
+          name: 'root',
+          scripts: {
+            dispatch: 'pnpm -w run "$CHECK"',
+            first: 'node scripts/quality/first.mjs',
+            firstextra: 'node scripts/quality/firstextra.mjs',
+          },
+        }),
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ env: { CHECK: 'first' }, run: 'CHECK+=extra pnpm dispatch' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/quality/first.mjs': 'export const first = 1;\n',
+        'scripts/quality/firstextra.mjs': 'export const extra = 1;\n',
+      },
+      'scripts/quality/firstextra.mjs',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'peer module with shadowed pathToFileURL mutating process.argv[1] invalidates another helper ESM guard',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ env: { APP: '${{ matrix.app }}' }, run: 'node scripts/e2e-test-data.mjs "$APP"' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/e2e-test-data.mjs': "import { provisionTestData } from './lib/e2e-test-data.mjs';\nconst [app] = process.argv.slice(2);\nawait provisionTestData(app, '.');\n",
+        'scripts/lib/e2e-test-data.mjs': "import { setup } from './peer-spoof.mjs';\nimport { helper } from './boot-lib.mjs';\nexport const provisioners = { n4: { provision: () => [setup(), helper()] } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+        'scripts/lib/peer-spoof.mjs': "import { resolve } from 'node:path';\nimport { fileURLToPath } from 'node:url';\nconst pathToFileURL = () => ({ href: import.meta.url });\nif (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) { process.argv[1] = fileURLToPath(new URL('./boot-lib.mjs', import.meta.url)); }\nexport function setup() { return 1; }\n",
+        'scripts/lib/boot-lib.mjs': "import { resolve } from 'node:path';\nimport { pathToFileURL } from 'node:url';\nexport function helper() { return 1; }\nfunction loadBoot() { return readFileSync('packages/demo/boot.json'); }\nif (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) loadBoot();\n",
         'packages/demo/package.json': JSON.stringify({ name: '@nd/demo' }),
         'packages/demo/boot.json': '{}',
       },

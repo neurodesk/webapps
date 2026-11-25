@@ -350,6 +350,14 @@ const isFunctionNode = (node) => Boolean(node && (
   || node.type === 'ArrowFunctionExpression'
 ));
 
+const moduleExportName = (node) => (
+  node?.type === 'Identifier'
+    ? node.name
+    : node?.type === 'Literal' && typeof node.value === 'string'
+      ? node.value
+      : null
+);
+
 function isImportMetaUrlNode(node) {
   return Boolean(
     node?.type === 'MemberExpression'
@@ -419,10 +427,63 @@ function isSafeProcessUse(idNode, ancestors) {
   return false;
 }
 
-// Whether an AST may mutate `process` or `process.argv` (outside a strict ESM
-// main guard's own condition/body).
+// Verify that `pathToFileURL` comes from `node:url`, `resolve` from `node:path`,
+// and neither those bindings nor `process` are shadowed or reassigned in `ast`.
+function esmGuardBindingAuth(ast) {
+  let pathToFileUrlImported = false;
+  let resolveImported = false;
+  let shadowedPathToFileUrl = false;
+  let shadowedResolve = false;
+  let processShadowed = false;
+  for (const stmt of ast?.body ?? []) {
+    if (stmt.type === 'ImportDeclaration' && stmt.source?.type === 'Literal') {
+      const src = stmt.source.value;
+      for (const spec of stmt.specifiers ?? []) {
+        const local = spec.local?.name;
+        const imported = spec.type === 'ImportSpecifier' ? moduleExportName(spec.imported) : null;
+        if (local === 'process') processShadowed = true;
+        if (local === 'pathToFileURL') {
+          if (imported === 'pathToFileURL' && (src === 'node:url' || src === 'url')) pathToFileUrlImported = true;
+          else shadowedPathToFileUrl = true;
+        }
+        if (local === 'resolve') {
+          if (imported === 'resolve' && (src === 'node:path' || src === 'path')) resolveImported = true;
+          else shadowedResolve = true;
+        }
+      }
+    }
+  }
+  const checkDeclName = (name) => {
+    if (name === 'pathToFileURL') shadowedPathToFileUrl = true;
+    if (name === 'resolve') shadowedResolve = true;
+    if (name === 'process') processShadowed = true;
+  };
+  const scan = (node) => {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      for (const item of node) scan(item);
+      return;
+    }
+    if ((node.type === 'FunctionDeclaration' || node.type === 'ClassDeclaration') && node.id?.name) checkDeclName(node.id.name);
+    if (node.type === 'VariableDeclarator' && node.id?.type === 'Identifier') checkDeclName(node.id.name);
+    if (node.type === 'AssignmentExpression' && node.left?.type === 'Identifier') checkDeclName(node.left.name);
+    for (const key of Object.keys(node)) {
+      if (!AST_SKIP.has(key)) scan(node[key]);
+    }
+  };
+  scan(ast);
+  return {
+    hasAuthenticPathToFileUrl: pathToFileUrlImported && !shadowedPathToFileUrl,
+    hasAuthenticResolve: resolveImported && !shadowedResolve,
+    processShadowed,
+  };
+}
+
+// Whether an AST may mutate `process` or `process.argv` (outside an authenticated
+// strict ESM main guard's consequent; `else` branches are always scanned).
 function astMayMutateProcessArgv(ast, allowGuardIf = false) {
   if (!ast) return true;
+  const bindingAuth = allowGuardIf ? esmGuardBindingAuth(ast) : null;
   let unsafe = false;
   const scan = (node, ancestors = []) => {
     if (unsafe || !node || typeof node !== 'object') return;
@@ -430,7 +491,7 @@ function astMayMutateProcessArgv(ast, allowGuardIf = false) {
       for (const item of node) scan(item, ancestors);
       return;
     }
-    if (allowGuardIf && node.type === 'IfStatement' && isStrictEsmMainGuardSyntax(node)) {
+    if (allowGuardIf && node.type === 'IfStatement' && isStrictEsmMainGuard(node, bindingAuth)) {
       if (node.alternate) scan(node.alternate, [...ancestors, node]);
       return;
     }
@@ -482,70 +543,13 @@ function astMayMutateProcessArgv(ast, allowGuardIf = false) {
   return unsafe;
 }
 
-function isStrictEsmMainGuardSyntax(ifNode) {
-  if (ifNode?.type !== 'IfStatement') return false;
-  let eq = ifNode.test;
-  if (eq?.type === 'LogicalExpression' && eq.operator === '&&' && isProcessArgv1Node(eq.left)) eq = eq.right;
-  if (eq?.type !== 'BinaryExpression' || eq.operator !== '===') return false;
-  const isHref = (node) => {
-    if (node?.type !== 'MemberExpression' || node.computed || node.property?.type !== 'Identifier' || node.property.name !== 'href') return false;
-    const call = node.object;
-    if (call?.type !== 'CallExpression' || call.callee?.type !== 'Identifier' || call.callee.name !== 'pathToFileURL' || call.arguments?.length !== 1) return false;
-    const arg = call.arguments[0];
-    if (isProcessArgv1Node(arg)) return true;
-    return Boolean(arg?.type === 'CallExpression' && arg.callee?.type === 'Identifier' && arg.callee.name === 'resolve' && arg.arguments?.length === 1 && isProcessArgv1Node(arg.arguments[0]));
-  };
-  return (isImportMetaUrlNode(eq.left) && isHref(eq.right)) || (isImportMetaUrlNode(eq.right) && isHref(eq.left));
-}
-
 // Verify that `pathToFileURL` comes from `node:url`, `resolve` from `node:path`,
 // and neither those bindings nor `process`/`process.argv` are shadowed or mutated.
 function esmGuardImportAuth(ast, anyModuleMutatesArgv = false) {
-  let pathToFileUrlImported = false;
-  let resolveImported = false;
-  let shadowedPathToFileUrl = false;
-  let shadowedResolve = false;
-  let processShadowed = anyModuleMutatesArgv || astMayMutateProcessArgv(ast, true);
-  for (const stmt of ast?.body ?? []) {
-    if (stmt.type === 'ImportDeclaration' && stmt.source?.type === 'Literal') {
-      const src = stmt.source.value;
-      for (const spec of stmt.specifiers ?? []) {
-        const local = spec.local?.name;
-        if (local === 'process') processShadowed = true;
-        if (local === 'pathToFileURL') {
-          if (spec.type === 'ImportSpecifier' && spec.imported?.name === 'pathToFileURL' && (src === 'node:url' || src === 'url')) pathToFileUrlImported = true;
-          else shadowedPathToFileUrl = true;
-        }
-        if (local === 'resolve') {
-          if (spec.type === 'ImportSpecifier' && spec.imported?.name === 'resolve' && (src === 'node:path' || src === 'path')) resolveImported = true;
-          else shadowedResolve = true;
-        }
-      }
-    }
-  }
-  const checkDeclName = (name) => {
-    if (name === 'pathToFileURL') shadowedPathToFileUrl = true;
-    if (name === 'resolve') shadowedResolve = true;
-    if (name === 'process') processShadowed = true;
-  };
-  const scan = (node) => {
-    if (!node || typeof node !== 'object') return;
-    if (Array.isArray(node)) {
-      for (const item of node) scan(item);
-      return;
-    }
-    if ((node.type === 'FunctionDeclaration' || node.type === 'ClassDeclaration') && node.id?.name) checkDeclName(node.id.name);
-    if (node.type === 'VariableDeclarator' && node.id?.type === 'Identifier') checkDeclName(node.id.name);
-    if (node.type === 'AssignmentExpression' && node.left?.type === 'Identifier') checkDeclName(node.left.name);
-    for (const key of Object.keys(node)) {
-      if (!AST_SKIP.has(key)) scan(node[key]);
-    }
-  };
-  scan(ast);
+  const auth = esmGuardBindingAuth(ast);
   return {
-    hasAuthenticPathToFileUrl: pathToFileUrlImported && !shadowedPathToFileUrl,
-    hasAuthenticResolve: resolveImported && !shadowedResolve,
-    processShadowed,
+    ...auth,
+    processShadowed: auth.processShadowed || anyModuleMutatesArgv || astMayMutateProcessArgv(ast, true),
   };
 }
 
@@ -627,6 +631,96 @@ function collectTopLevelBindings(ast) {
   return { bindings, exportedNames };
 }
 
+function isProcessArgvNode(node) {
+  return Boolean(
+    node?.type === 'MemberExpression'
+    && !node.computed
+    && node.object?.type === 'Identifier'
+    && node.object.name === 'process'
+    && node.property?.type === 'Identifier'
+    && node.property.name === 'argv',
+  );
+}
+
+function isArgvSlice2Expr(node) {
+  if (node?.type !== 'CallExpression' || node.callee?.type !== 'MemberExpression' || node.callee.computed) return false;
+  const method = node.callee.property?.type === 'Identifier' ? node.callee.property.name : null;
+  if (method === 'slice' && isProcessArgvNode(node.callee.object)) {
+    return node.arguments?.length === 1 && node.arguments[0]?.type === 'Literal' && node.arguments[0].value === 2;
+  }
+  if (method === 'filter') return isArgvSlice2Expr(node.callee.object);
+  return false;
+}
+
+// Whether a caller module passes only the CLI's argv[2] app argument to its
+// imported `provisionTestData` binding (never a literal app id or fallback).
+function callerPreservesAppIdentity(ast, localFnName) {
+  if (!ast || !localFnName || astMayMutateProcessArgv(ast, false)) return false;
+  const argvAppVars = new Set();
+  for (const stmt of ast.body ?? []) {
+    if (stmt.type !== 'VariableDeclaration' || stmt.kind !== 'const') continue;
+    for (const decl of stmt.declarations ?? []) {
+      if (
+        decl.id?.type === 'Identifier'
+        && decl.init?.type === 'MemberExpression'
+        && decl.init.computed
+        && isProcessArgvNode(decl.init.object)
+        && decl.init.property?.type === 'Literal'
+        && decl.init.property.value === 2
+      ) {
+        argvAppVars.add(decl.id.name);
+      } else if (
+        decl.id?.type === 'ArrayPattern'
+        && decl.id.elements?.[0]?.type === 'Identifier'
+        && isArgvSlice2Expr(decl.init)
+      ) {
+        argvAppVars.add(decl.id.elements[0].name);
+      }
+    }
+  }
+  let valid = true;
+  walkAstIdentifiers(ast, (idNode, ancestors) => {
+    if (!valid || idNode.name !== localFnName) return;
+    const parent = ancestors[ancestors.length - 1];
+    const okCall = Boolean(
+      parent?.type === 'CallExpression'
+      && parent.callee === idNode
+      && parent.arguments?.length >= 1
+      && parent.arguments[0]?.type === 'Identifier'
+      && argvAppVars.has(parent.arguments[0].name),
+    );
+    if (!okCall) valid = false;
+  });
+  return valid;
+}
+
+// Whether every CATALOG CI invocation of `entryFile` passes `${{ matrix.app }}`
+// (directly or via an unmodified single-step env var) as its first CLI argument.
+function ciCommandsPreserveMatrixApp(catalogCmds, entryFile) {
+  for (const entry of catalogCmds ?? []) {
+    const cmd = typeof entry === 'string' ? entry : entry.cmd;
+    const stepEnv = typeof entry === 'string' ? null : entry.env ?? null;
+    if (!cmd.includes(entryFile)) continue;
+    const segments = splitShellCommands(cmd);
+    for (let segIdx = 0; segIdx < segments.length; segIdx++) {
+      const seg = segments[segIdx];
+      if (!seg.includes(entryFile)) continue;
+      if (segIdx !== 0 || /`|\$\(/.test(seg)) return false;
+      const words = tokenizeShellWords(seg);
+      const entryIdx = words.findIndex((w) => w === entryFile || w === `./${entryFile}`);
+      if (entryIdx < 0 || entryIdx + 1 >= words.length) return false;
+      if (words.slice(0, entryIdx).some((w) => w.includes('=') || w === 'env')) return false;
+      const arg = words[entryIdx + 1];
+      if (arg === '${{ matrix.app }}') continue;
+      const varMatch = arg.match(/^\$(?:([A-Za-z_]\w*)|\{([A-Za-z_]\w*)\})$/);
+      if (!varMatch || !stepEnv) return false;
+      const varName = varMatch[1] ?? varMatch[2];
+      if (!Object.hasOwn(stepEnv, varName) || String(stepEnv[varName]).trim() !== '${{ matrix.app }}') return false;
+    }
+  }
+  return true;
+}
+
 // Return AST ranges and owning app ids in `scripts/lib/e2e-test-data.mjs`
 // provably belonging only to individual app provisioners: direct
 // `provisioners.<app>[.cpu].provision` function bodies and private (non-exported)
@@ -640,7 +734,8 @@ function computeProvisionerOnlyRanges(ast) {
   for (const stmt of ast.body ?? []) {
     if (stmt.type === 'ExportNamedDeclaration') {
       for (const spec of stmt.specifiers ?? []) {
-        if (spec.local?.name === 'provisioners' && spec.exported?.name !== 'provisioners') return { ok: false, entries: [] };
+        const exported = moduleExportName(spec.exported);
+        if (spec.local?.name === 'provisioners' && exported !== 'provisioners') return { ok: false, entries: [] };
       }
     } else if (stmt.type === 'ExportDefaultDeclaration' && stmt.declaration?.type === 'Identifier' && stmt.declaration.name === 'provisioners') {
       return { ok: false, entries: [] };
@@ -676,6 +771,7 @@ function computeProvisionerOnlyRanges(ast) {
   const provisionTestDataFn = exportedNames.has('provisionTestData') && isFunctionNode(bindings.get('provisionTestData'))
     ? bindings.get('provisionTestData')
     : null;
+  const appParamName = provisionTestDataFn?.params?.[0]?.type === 'Identifier' ? provisionTestDataFn.params[0].name : null;
   const nonProvisionerReferenced = new Set();
   const privateFnDeps = new Map([...privateFns.keys()].map((name) => [name, new Set()]));
   const privateFnApps = new Map([...privateFns.keys()].map((name) => [name, new Set()]));
@@ -686,8 +782,29 @@ function computeProvisionerOnlyRanges(ast) {
       provisionersUsedAtStartup = true;
       return;
     }
-    if (idNode.name === 'provisioners' && (!provisionTestDataFn || !ancestors.includes(provisionTestDataFn))) {
-      provisionersUsedAtStartup = true;
+    if (appParamName && idNode.name === appParamName && provisionTestDataFn && ancestors.includes(provisionTestDataFn)) {
+      const parent = ancestors[ancestors.length - 1];
+      if ((parent?.type === 'AssignmentExpression' && parent.left === idNode) || (parent?.type === 'UpdateExpression' && parent.argument === idNode)) {
+        provisionersUsedAtStartup = true;
+        return;
+      }
+    }
+    if (idNode.name === 'provisioners') {
+      const parent = ancestors[ancestors.length - 1];
+      const safeDispatchLookup = Boolean(
+        provisionTestDataFn
+        && appParamName
+        && ancestors.includes(provisionTestDataFn)
+        && parent?.type === 'MemberExpression'
+        && parent.object === idNode
+        && parent.computed
+        && parent.property?.type === 'Identifier'
+        && parent.property.name === appParamName,
+      );
+      if (!safeDispatchLookup) {
+        provisionersUsedAtStartup = true;
+        return;
+      }
       return;
     }
     if (provisionIdentApps.has(idNode)) {
@@ -757,7 +874,8 @@ function computeUnreachableExportRanges(ast, importedNames, anyModuleMutatesArgv
   for (const stmt of ast.body ?? []) {
     if (stmt.type === 'ExportNamedDeclaration') {
       for (const spec of stmt.specifiers ?? []) {
-        if (spec.exported?.name && spec.local?.name && importedNames.has(spec.exported.name)) {
+        const exported = moduleExportName(spec.exported);
+        if (exported && spec.local?.name && importedNames.has(exported)) {
           reachable.add(spec.local.name);
         }
       }
@@ -835,7 +953,8 @@ function analyzeScriptFile(text, file) {
         value: node.source.value,
         range: node.source.range ?? node.range ?? [0, 0],
         kind: node.specifiers.length === 0 ? 'side-effect' : 'import',
-        namedImports: namedOnly ? node.specifiers.map((s) => s.imported?.name).filter(Boolean) : null,
+        namedImports: namedOnly ? node.specifiers.map((s) => moduleExportName(s.imported)).filter(Boolean) : null,
+        localBindings: namedOnly ? node.specifiers.map((s) => ({ imported: moduleExportName(s.imported), local: s.local?.name })).filter((b) => b.imported && b.local) : null,
       });
     } else if ((node.type === 'ExportNamedDeclaration' || node.type === 'ExportAllDeclaration') && node.source?.type === 'Literal' && typeof node.source.value === 'string') {
       specifiers.push({
@@ -1665,15 +1784,15 @@ function effectiveChildEnv(words, runnerIdx, command, stepEnv) {
   const merged = { ...stepEnv };
   for (let i = 0; i < runnerIdx; i++) {
     const word = words[i];
-    const assign = word.match(/^([A-Za-z_]\w*)=(.*)$/);
+    const assign = word.match(/^([A-Za-z_]\w*)(\+?=)(.*)$/);
     if (assign) {
-      const [, name, val] = assign;
+      const [, name, op, val] = assign;
       if (/[$`*]/.test(val) || val.includes('${{')) return null;
-      merged[name] = val;
+      merged[name] = op === '+=' ? `${merged[name] ?? ''}${val}` : val;
       continue;
     }
-    // Wrappers like `env`, `command`, `timeout`, `if`, etc. can alter env.
-    if (word === 'env' || word === 'export' || word === 'unset') return null;
+    // Wrappers like `env`, `export`, `unset`, or non-plain assignments can alter env.
+    if (word === 'env' || word === 'export' || word === 'unset' || word.includes('=')) return null;
   }
   return merged;
 }
@@ -1994,10 +2113,13 @@ export async function loadConservativeWorkspaceGraph(root) {
   const externalImporterDeps = new Map();
   const analyzedRootFiles = new Map();
   const rootFileImportModes = new Map();
-  const recordImportMode = (target, namedImports) => {
-    const entry = rootFileImportModes.get(target) ?? { allExports: false, names: new Set() };
+  const recordImportMode = (target, namedImports, importerFile = null, localBindings = null) => {
+    const entry = rootFileImportModes.get(target) ?? { allExports: false, names: new Set(), importers: [] };
     if (!namedImports) entry.allExports = true;
-    else for (const name of namedImports) entry.names.add(name);
+    else {
+      for (const name of namedImports) entry.names.add(name);
+      if (importerFile) entry.importers.push({ file: importerFile, bindings: localBindings ?? [] });
+    }
     rootFileImportModes.set(target, entry);
   };
   const pendingRootFiles = [];
@@ -2180,7 +2302,7 @@ export async function loadConservativeWorkspaceGraph(root) {
         if (spec.value.startsWith('.') || spec.value.startsWith('/')) {
           const resolvedTarget = relative(root, resolve(root, dirname(file), spec.value)).split(sep).join('/');
           if ((ROOT_DIRS.some((dir) => resolvedTarget.startsWith(dir)) || ROOT_CONFIG.test(resolvedTarget)) && resolvedTarget !== file) {
-            recordImportMode(resolvedTarget, spec.namedImports);
+            recordImportMode(resolvedTarget, spec.namedImports, file, spec.localBindings);
           }
           continue;
         }
@@ -2251,7 +2373,15 @@ export async function loadConservativeWorkspaceGraph(root) {
   for (const [file, { ast, workspaceRefs }] of analyzedRootFiles) {
     if (file === 'scripts/lib/e2e-test-data.mjs') {
       const mode = rootFileImportModes.get(file);
-      const callerSafe = !catalogDirect.has(file) && Boolean(mode) && !mode.allExports && !mode.names.has('provisioners');
+      const callersPreserveIdentity = Boolean(mode) && mode.importers.every(({ file: importerFile, bindings: impBindings }) => {
+        const dispatchBindings = impBindings.filter((b) => b.imported === 'provisionTestData');
+        if (dispatchBindings.length === 0) return true;
+        if (!catalogDirect.has(importerFile)) return false;
+        const callerAst = analyzedRootFiles.get(importerFile)?.ast;
+        if (!ciCommandsPreserveMatrixApp(expandedByEntry.get(CATALOG), importerFile)) return false;
+        return dispatchBindings.every((b) => callerPreservesAppIdentity(callerAst, b.local));
+      });
+      const callerSafe = !catalogDirect.has(file) && Boolean(mode) && !mode.allExports && !mode.names.has('provisioners') && callersPreserveIdentity;
       const prov = callerSafe ? computeProvisionerOnlyRanges(ast) : { ok: false, entries: [] };
       e2eProvisionersNarrowable = prov.ok;
       if (!prov.ok || workspaceRefs.length === 0) continue;
