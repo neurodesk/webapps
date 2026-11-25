@@ -9,8 +9,8 @@ import YAML from 'yaml';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { commandLineClosure, moduleClosure, onlyAddsExports, onlyBumpsVersion } from '../scripts/lib/module-closure.mjs';
 import { testedBase } from '../scripts/lib/tested-base.mjs';
-import { NOT_DRAFT_CONDITION, callCondition, callerPermissions, dispatchedWorkflows, renderNativeWorkflow } from '../scripts/lib/native-workflow.mjs';
-import { DISPATCHER, budgetedDecision, calledWorkflows, certainOwnStart, decideWorkflow, dispatchDecision, dispatched, dispatchedRuns, isSharedFilter, mainWorkflow, ownedPackages, pathGlob, pullRequestFilters, pushWorkflow, sharedPaths, swept, sweepWorkflow, workflowApps, workflowScripts } from '../scripts/lib/workflow-gate.mjs';
+import { MAX_CALLS_PER_DISPATCHER, NOT_DRAFT_CONDITION, callCondition, callerPermissions, dispatchedWorkflows, renderNativeWorkflows, shardWorkflows } from '../scripts/lib/native-workflow.mjs';
+import { DISPATCHER, budgetedDecision, calledWorkflows, certainOwnStart, decideWorkflow, dispatchDecision, dispatched, dispatchedRuns, isDispatcher, isSharedFilter, mainWorkflow, ownedPackages, pathGlob, pullRequestFilters, pushWorkflow, sharedPaths, swept, sweepWorkflow, workflowApps, workflowScripts } from '../scripts/lib/workflow-gate.mjs';
 import { loadConservativeWorkspaceGraph } from '../scripts/lib/workspace-graph.mjs';
 import { syncDriverPathsInSource } from '../scripts/sync-native-driver-paths.mjs';
 
@@ -296,35 +296,59 @@ const nativeCalls = await dispatchedWorkflows(repoRoot);
 
 test('native.yml calls every workflow with shared paths, granting what its jobs ask for', async () => {
   assert.ok(nativeCalls.length > 25);
-  const text = await readFile(new URL(`../.github/workflows/${DISPATCHER}.yml`, import.meta.url), 'utf8');
-  assert.equal(text, renderNativeWorkflow(nativeCalls), 'native.yml is out of date: run node scripts/native-workflow.mjs');
-  const native = YAML.parse(text);
-  assert.deepEqual(Object.keys(native.on), ['pull_request', 'schedule']);
-  assert.equal(native.on.schedule.length, 1);
-  // The gate may name in its skip list only the workflows native.yml lists here.
-  const lists = { calls: nativeCalls.map(([name]) => name).join(' '), sweeps: nativeCalls.filter(([, flow]) => swept(flow)).map(([name]) => name).join(' ') };
-  assert.deepEqual(native.jobs.gate, { if: NOT_DRAFT_CONDITION, uses: './.github/workflows/pr-gate.yml', permissions: { contents: 'read', actions: 'read', 'pull-requests': 'read' }, with: { workflow: DISPATCHER, ...lists } });
-  // A pull request that changes any workflow's shared path starts native.yml.
-  const starts = native.on.pull_request.paths.map(pathGlob);
-  for (const [name, flow] of nativeCalls) {
-    for (const filter of sharedPaths(flow)) assert.ok(starts.some((glob) => glob.test(filter.replace(/\*\*$/, 'any/file.js'))), `${name}: ${filter} starts native.yml`);
-    // native.yml tells whether GitHub started the workflow itself by matching these filters, without exclusions.
-    assert.deepEqual(pullRequestFilters(flow).filter((filter) => filter.startsWith('!')), [], `${name} excludes no path`);
-    const call = native.jobs[name];
-    assert.equal(call.uses, `./.github/workflows/${name}.yml`);
-    assert.equal(call.needs, 'gate');
-    // Running is the default; the gate must prove a skip (test/native-decision.test.mjs).
-    assert.equal(call.if, callCondition(name, { sweep: swept(flow) }));
-    assert.equal(call.secrets, 'inherit');
-    assert.deepEqual(call.permissions, callerPermissions(flow));
-    // A called workflow reads native.yml's name in github.workflow, so its concurrency group names itself.
-    assert.ok(String(flow.concurrency?.group).startsWith(`${name}-`), `${name}: its concurrency group is its own`);
-    assert.doesNotMatch(JSON.stringify(flow), /github\.workflow\b(?!_)/, `${name} would read native in github.workflow`);
+  const expectedShards = renderNativeWorkflows(nativeCalls);
+  const shardGroups = new Map(shardWorkflows(nativeCalls));
+  const diskDispatchers = (await workflowFiles()).map((file) => file.slice(0, -'.yml'.length)).filter(isDispatcher).sort();
+  assert.deepEqual(diskDispatchers, [...expectedShards.keys()].sort(), 'dispatcher shards on disk must match renderNativeWorkflows: run node scripts/native-workflow.mjs');
+
+  for (const [shardName, expectedText] of expectedShards) {
+    const text = await readFile(new URL(`../.github/workflows/${shardName}.yml`, import.meta.url), 'utf8');
+    assert.equal(text, expectedText, `${shardName}.yml is out of date: run node scripts/native-workflow.mjs`);
+    const native = YAML.parse(text);
+    const shardCalls = shardGroups.get(shardName);
+    assert.deepEqual(Object.keys(native.on), ['pull_request', 'schedule']);
+    assert.equal(native.on.schedule.length, 1);
+    // The gate may name in its skip list only the workflows this dispatcher shard lists here.
+    const lists = { calls: shardCalls.map(([name]) => name).join(' '), sweeps: shardCalls.filter(([, flow]) => swept(flow)).map(([name]) => name).join(' ') };
+    assert.deepEqual(native.jobs.gate, { if: NOT_DRAFT_CONDITION, uses: './.github/workflows/pr-gate.yml', permissions: { contents: 'read', actions: 'read', 'pull-requests': 'read' }, with: { workflow: shardName, ...lists } });
+    // A pull request that changes any workflow's shared path starts its dispatcher shard.
+    const starts = native.on.pull_request.paths.map(pathGlob);
+    for (const [name, flow] of shardCalls) {
+      for (const filter of sharedPaths(flow)) assert.ok(starts.some((glob) => glob.test(filter.replace(/\*\*$/, 'any/file.js'))), `${name}: ${filter} starts ${shardName}.yml`);
+      // The dispatcher tells whether GitHub started the workflow itself by matching these filters, without exclusions.
+      assert.deepEqual(pullRequestFilters(flow).filter((filter) => filter.startsWith('!')), [], `${name} excludes no path`);
+      const call = native.jobs[name];
+      assert.equal(call.uses, `./.github/workflows/${name}.yml`);
+      assert.equal(call.needs, 'gate');
+      // Running is the default; the gate must prove a skip (test/native-decision.test.mjs).
+      assert.equal(call.if, callCondition(name, { sweep: swept(flow) }));
+      assert.equal(call.secrets, 'inherit');
+      assert.deepEqual(call.permissions, callerPermissions(flow));
+      // A called workflow reads the dispatcher's name in github.workflow, so its concurrency group names itself.
+      assert.ok(String(flow.concurrency?.group).startsWith(`${name}-`), `${name}: its concurrency group is its own`);
+      assert.doesNotMatch(JSON.stringify(flow), /github\.workflow\b(?!_)/, `${name} would read ${shardName} in github.workflow`);
+    }
+    // Each call's condition is test/native-decision.test.mjs's; full-plan-withheld fails a withheld run.
+    assert.deepEqual(Object.keys(native.jobs).sort(), ['full-plan-withheld', 'gate', ...shardCalls.map(([name]) => name)].sort());
   }
-  // Each call's condition is test/native-decision.test.mjs's; full-plan-withheld fails a withheld run.
-  assert.deepEqual(Object.keys(native.jobs).sort(), ['full-plan-withheld', 'gate', ...nativeCalls.map(([name]) => name)].sort());
   assert.deepEqual(callerPermissions({ permissions: { contents: 'read' }, jobs: { a: { permissions: { contents: 'write', 'id-token': 'write' } }, b: { permissions: { actions: 'read', contents: 'read' } }, c: {} } }), { actions: 'read', contents: 'write', 'id-token': 'write' });
   assert.throws(() => callerPermissions({ permissions: 'write-all', jobs: {} }), /not a map/);
+
+  // Sharding splits workflows beyond MAX_CALLS_PER_DISPATCHER cleanly into native and native-2.
+  const synthetic = Array.from({ length: MAX_CALLS_PER_DISPATCHER + 5 }, (_, i) => [
+    `tool-${String(i).padStart(2, '0')}-native`,
+    { on: { push: { paths: [`packages/tool-${i}/**`] }, pull_request: { paths: [`packages/tool-${i}/**`] } }, permissions: { contents: 'read' }, jobs: { gate: { with: { shared_paths: 'pnpm-lock.yaml' } } } },
+  ]);
+  const sharded = renderNativeWorkflows(synthetic);
+  assert.deepEqual([...sharded.keys()], ['native', 'native-2']);
+  const shard1 = YAML.parse(sharded.get('native'));
+  const shard2 = YAML.parse(sharded.get('native-2'));
+  assert.equal(shard1.jobs.gate.with.workflow, 'native');
+  assert.equal(shard2.jobs.gate.with.workflow, 'native-2');
+  assert.equal(shard1.on.schedule[0].cron, '5 13 * * *');
+  assert.equal(shard2.on.schedule[0].cron, '10 13 * * *');
+  assert.equal(Object.keys(shard1.jobs).length, MAX_CALLS_PER_DISPATCHER + 2);
+  assert.equal(Object.keys(shard2.jobs).length, 5 + 2);
 });
 
 // What GitHub and the gate did when a workflow filtered pull requests on its
@@ -425,8 +449,10 @@ test('no workflow calls more than 50 unique reusable workflows or nests more tha
     assert.ok(seen.size <= 50, `${name} reaches ${seen.size} reusable workflows; split native.yml before it reaches GitHub's limit of 50`);
     assert.ok(depth <= 10, `${name} nests ${depth} levels`);
   }
-  const { seen } = tree(DISPATCHER);
-  assert.equal(seen.size, nativeCalls.length + 2, 'the called workflows, node-cli-portable and pr-gate');
+  for (const [shardName, shardCalls] of shardWorkflows(nativeCalls)) {
+    const { seen } = tree(shardName);
+    assert.ok(seen.size >= shardCalls.length + 1 && seen.size <= shardCalls.length + 2, `${shardName} reaches ${seen.size} reusable workflows for ${shardCalls.length} calls`);
+  }
 });
 
 // native.yml runs the workflows it calls in one workflow run, where an
@@ -465,12 +491,14 @@ test('a push to main starts a workflow only for its own paths, and native.yml sw
     assert.match(String(flow.concurrency['cancel-in-progress']), /github\.event_name == 'pull_request'/, `${name}: a push must not cancel a running sweep`);
   }
   assert.ok(sweeps > 20);
-  const native = await parsed(`${DISPATCHER}.yml`);
-  assert.equal(native.concurrency['cancel-in-progress'], "${{ github.event_name == 'pull_request' }}", 'a newer pull request run replaces the last; a sweep is never cancelled');
+  for (const [shardName] of shardWorkflows(nativeCalls)) {
+    const native = await parsed(`${shardName}.yml`);
+    assert.equal(native.concurrency['cancel-in-progress'], "${{ github.event_name == 'pull_request' }}", 'a newer pull request run replaces the last; a sweep is never cancelled');
+  }
   // A gated workflow without shared paths keeps its own schedule: a plain nightly run, not a sweep.
   for (const file of await workflowFiles()) {
     const flow = await parsed(file);
-    if (flow.on?.schedule && flow.jobs?.gate && file !== `${DISPATCHER}.yml`) assert.equal(dispatched(flow), false, file);
+    if (flow.on?.schedule && flow.jobs?.gate && !isDispatcher(file.slice(0, -'.yml'.length))) assert.equal(dispatched(flow), false, file);
   }
 });
 
@@ -567,8 +595,8 @@ test('the gate answers drafts, dispatches and calls from native.yml without a ch
   assert.match(decideStep.run, /node scripts\/workflow-gate\.mjs --workflow "\$WORKFLOW" --base "\$BASE_SHA" --head "\$HEAD_SHA"/);
   assert.match(decideStep.run, /"\$EVENT_NAME" = schedule \]; then\n\s+node scripts\/workflow-gate\.mjs --workflow "\$WORKFLOW" --sweep --head "\$HEAD_SHA"/);
   assert.match(decideStep.run, /"\$EVENT_NAME" = push \]; then\n\s+node scripts\/workflow-gate\.mjs --workflow "\$WORKFLOW" --push --head "\$HEAD_SHA"/);
-  assert.match(decideStep.run, /if \[ "\$WORKFLOW" = native \]; then\n\s+if \[ "\$EVENT_NAME" = schedule \]; then\n\s+eligible=\$SWEEPS\n\s+set -- --sweep\n\s+else\n\s+eligible=\$CALLS\n\s+set -- --base "\$BASE_SHA"\n\s+fi/);
-  assert.match(decideStep.run, /NATIVE_ELIGIBLE="\$eligible" NATIVE_SKIPS="\$answer" node scripts\/workflow-gate\.mjs --native "\$@" --head "\$HEAD_SHA" \|\| status=\$\?/);
+  assert.match(decideStep.run, /if is_dispatcher "\$WORKFLOW"; then\n\s+if \[ "\$EVENT_NAME" = schedule \]; then\n\s+eligible=\$SWEEPS\n\s+set -- --sweep\n\s+else\n\s+eligible=\$CALLS\n\s+set -- --base "\$BASE_SHA"\n\s+fi/);
+  assert.match(decideStep.run, /NATIVE_ELIGIBLE="\$eligible" NATIVE_SKIPS="\$answer" node scripts\/workflow-gate\.mjs --native --workflow "\$WORKFLOW" "\$@" --head "\$HEAD_SHA" \|\| status=\$\?/);
   assert.equal(job.outputs.withheld, '${{ steps.decide.outputs.withheld }}');
   assert.equal(flow.on.workflow_call.outputs.withheld.value, '${{ jobs.decide.outputs.withheld }}');
   assert.equal(event.env.TOP_WORKFLOW, '${{ github.workflow_ref }}');
@@ -585,13 +613,17 @@ test('the gate answers drafts, dispatches and calls from native.yml without a ch
   for (const name of ['push', 'schedule']) assert.equal(answer(name, ''), '', name);
   assert.equal(answer('pull_request', 'true'), 'run=false');
   assert.equal(answer('pull_request', 'false'), '');
-  // native.yml decides before it calls a workflow, so that workflow's own gate answers at once.
-  const called = 'neurodesk/webapps/.github/workflows/native.yml@refs/pull/1/merge';
-  for (const name of ['pull_request', 'schedule']) assert.equal(answer(name, 'false', 'bison-native', called), 'run=true', name);
-  // A draft skips every workflow native.yml lists, by name (test/native-decision.test.mjs).
-  assert.equal(answer('pull_request', 'true', 'native', called), 'run=false\nskips=[]');
-  for (const name of ['pull_request', 'schedule']) assert.equal(answer(name, 'false', 'native', called), '', name);
-  assert.equal(answer('pull_request', 'false', 'bison-native', 'neurodesk/webapps/.github/workflows/not-native.yml@refs/pull/1/merge'), '');
+  // native.yml (and native-2.yml when sharded) decides before it calls a workflow, so that workflow's own gate answers at once.
+  for (const dispatcher of ['native', 'native-2']) {
+    const called = `neurodesk/webapps/.github/workflows/${dispatcher}.yml@refs/pull/1/merge`;
+    for (const name of ['pull_request', 'schedule']) assert.equal(answer(name, 'false', 'bison-native', called), 'run=true', `${dispatcher}/${name}`);
+    // A draft skips every workflow the dispatcher lists, by name (test/native-decision.test.mjs).
+    assert.equal(answer('pull_request', 'true', dispatcher, called), 'run=false\nskips=[]');
+    for (const name of ['pull_request', 'schedule']) assert.equal(answer(name, 'false', dispatcher, called), '', `${dispatcher}/${name}`);
+  }
+  for (const rejected of ['not-native', 'native-0', 'native-1']) {
+    assert.equal(answer('pull_request', 'false', 'bison-native', `neurodesk/webapps/.github/workflows/${rejected}.yml@refs/pull/1/merge`), '', rejected);
+  }
 });
 
 // What a release leaves in a workflow's own package and app: version-only manifests and changelogs.

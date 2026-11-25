@@ -102,6 +102,8 @@ export const WORKFLOWS = Object.freeze({
   'n4-native': TEST,
   'n4-wasm-source': TEST,
   native: TEST,
+  'native-2': TEST,
+  'native-3': TEST,
   'native-nifti': TEST,
   'native-publish': TEST,
   'nesvor-real-validation': TEST,

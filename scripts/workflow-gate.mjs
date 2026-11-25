@@ -32,7 +32,7 @@ import { eventPullRequest, fullPlanBudget } from './lib/full-plan-budget.mjs';
 import { publishNative, pullRequestSelection, sweepSelection } from './lib/native-decision.mjs';
 import { createGitHubClient } from './lib/nightly-failures.mjs';
 import { gitAncestry, testedBase } from './lib/tested-base.mjs';
-import { DISPATCHER, budgetedDecision, calledWorkflows, decideWorkflow, dispatchDecision, dispatched, dispatchedRuns, mainWorkflow, readChangedPaths, swept } from './lib/workflow-gate.mjs';
+import { DISPATCHER, budgetedDecision, calledWorkflows, decideWorkflow, dispatchDecision, dispatched, dispatchedRuns, isDispatcher, mainWorkflow, readChangedPaths, swept } from './lib/workflow-gate.mjs';
 import { loadConservativeWorkspaceGraph } from './lib/workspace-graph.mjs';
 
 function option(name) {
@@ -41,7 +41,7 @@ function option(name) {
 }
 
 const native = process.argv.includes('--native');
-const name = native ? DISPATCHER : option('--workflow');
+const name = option('--workflow') || (native ? DISPATCHER : undefined);
 if (!name || !/^[\w-]+$/.test(name)) throw new Error('Usage: workflow-gate.mjs (--workflow <name> | --native) (--base <sha> | --push | --sweep) --head <sha>');
 const head = option('--head') || 'HEAD';
 const event = process.argv.includes('--sweep') ? 'schedule' : process.argv.includes('--push') ? 'push' : 'pull_request';
@@ -66,30 +66,49 @@ const github = () => {
   return client;
 };
 
-// native.yml's newest finished scheduled runs on main (only the newest few
-// that did not finish green have their jobs read: an older one is left out,
-// which can only move a base back and run more), with what each needs to be
-// read as a run of one workflow it called (dispatchedRuns).
+// native.yml (and native-2.yml, ... when sharded) newest finished scheduled runs
+// on main (only the newest few that did not finish green have their jobs read: an
+// older one is left out, which can only move a base back and run more), with what
+// each needs to be read as a run of one workflow it called (dispatchedRuns).
 const JOB_READS = 10;
 let history;
 function dispatcherHistory() {
   history ??= (async () => {
-    const { workflow_runs: listed } = await github().request(`/actions/workflows/${DISPATCHER}.yml/runs?branch=main&event=schedule&status=completed&per_page=100`);
-    const runs = listed.filter((run) => run.event === 'schedule');
+    const dispatchers = (await readdir(workflowsDirectory))
+      .filter((file) => file.endsWith('.yml') && isDispatcher(file.slice(0, -'.yml'.length)))
+      .map((file) => file.slice(0, -'.yml'.length))
+      .sort();
+    if (!dispatchers.includes(DISPATCHER)) dispatchers.unshift(DISPATCHER);
+    const runs = [];
+    for (const dispatcher of dispatchers) {
+      let listed;
+      try {
+        ({ workflow_runs: listed } = await github().request(`/actions/workflows/${dispatcher}.yml/runs?branch=main&event=schedule&status=completed&per_page=100`));
+      } catch (error) {
+        if (error.status === 404 && dispatcher !== DISPATCHER) continue;
+        throw error;
+      }
+      for (const run of listed.filter((each) => each.event === 'schedule')) {
+        runs.push({ ...run, _dispatcher: dispatcher });
+      }
+    }
+    runs.sort((a, b) => Date.parse(b.created_at ?? 0) - Date.parse(a.created_at ?? 0));
     const jobs = new Map();
     for (const run of runs.filter((each) => each.conclusion !== 'success').slice(0, JOB_READS)) {
       jobs.set(run.id, await github().list(`/actions/runs/${run.id}/attempts/${run.run_attempt ?? 1}/jobs`, 'jobs'));
     }
     const called = new Map();
     const calls = (workflow) => (run) => {
-      if (!called.has(run.head_sha)) {
+      const dispatcher = run._dispatcher || DISPATCHER;
+      const cacheKey = `${run.head_sha}:${dispatcher}`;
+      if (!called.has(cacheKey)) {
         try {
-          called.set(run.head_sha, Object.keys(parse(execFileSync('git', ['show', `${run.head_sha}:.github/workflows/${DISPATCHER}.yml`], { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })).jobs ?? {}));
+          called.set(cacheKey, Object.keys(parse(execFileSync('git', ['show', `${run.head_sha}:.github/workflows/${dispatcher}.yml`], { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })).jobs ?? {}));
         } catch {
-          called.set(run.head_sha, []);
+          called.set(cacheKey, []);
         }
       }
-      return called.get(run.head_sha).includes(workflow);
+      return called.get(cacheKey).includes(workflow);
     };
     return { runs, calls, jobs: (run) => jobs.get(run.id) ?? null };
   })();

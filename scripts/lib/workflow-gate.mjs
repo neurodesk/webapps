@@ -61,8 +61,11 @@ export function pathGlob(pattern) {
   return new RegExp(`^${source}$`);
 }
 
-// The workflow native.yml is, and the gate job in it that decides for the workflows it calls.
+// The workflow native.yml (and native-2.yml, ... when sharded) is, and the gate
+// job in it that decides for the workflows it calls.
 export const DISPATCHER = 'native';
+export const dispatcherName = (index) => (index === 0 ? DISPATCHER : `${DISPATCHER}-${index + 1}`);
+export const isDispatcher = (name) => name === DISPATCHER || /^native-[2-9]\d*$/.test(name);
 const DISPATCHER_GATE = 'gate / decide';
 
 // The shared filters a workflow's gate job lists, one per line.
