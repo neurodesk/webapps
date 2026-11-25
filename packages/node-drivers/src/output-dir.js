@@ -35,16 +35,29 @@ function lstatExistsSync(filePath) {
   }
 }
 
-function collectMissingDirsSync(leafDir) {
-  const missing = [];
+function createMissingDirsSync(leafDir, createdDirs) {
+  const toCreate = [];
   let current = resolve(leafDir);
   while (!lstatExistsSync(current)) {
-    missing.push(current);
+    toCreate.push(current);
     const parent = dirname(current);
     if (parent === current) break;
     current = parent;
   }
-  return missing;
+  for (let i = toCreate.length - 1; i >= 0; i -= 1) {
+    const dir = toCreate[i];
+    try {
+      mkdirSync(dir);
+      createdDirs.unshift(dir);
+    } catch (error) {
+      if (error.code === 'EEXIST') {
+        const info = lstatSync(dir);
+        if (!info.isDirectory()) throw error;
+        continue;
+      }
+      throw error;
+    }
+  }
 }
 
 async function removeCreatedDirs(dirs) {
@@ -98,7 +111,7 @@ export async function claimOutputDir(
     throw new Error(`Output path exists and is not a directory: ${outputDir}`);
   }
 
-  let createdDirs = [];
+  const createdDirs = [];
   const lockName = LOCK_FILENAME;
   const lockPath = join(resolvedDir, lockName);
 
@@ -298,8 +311,7 @@ export async function claimOutputDir(
 
   try {
     if (!existingStat) {
-      createdDirs = collectMissingDirsSync(resolvedDir);
-      mkdirSync(resolvedDir, { recursive: true });
+      createMissingDirsSync(resolvedDir, createdDirs);
     }
 
     const payload = JSON.stringify({
