@@ -1,9 +1,10 @@
 // Pinned Allen CCFv3 50 um atlas asset management for Node: SHA-256 verified downloads,
 // atomic staging, bounded gunzip decompression, and offline mode.
 import { createHash, randomUUID } from "node:crypto";
+import { realpathSync, statSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { readNiftiImageData } from "@neurodesk/webapp-components/file-io/nifti";
 import manifest from "../model.manifest.json" with { type: "json" };
@@ -24,15 +25,38 @@ export const offlineByDefault = () => process.env.NEURODESK_OFFLINE === "1";
  *   - Stay offline if no `--cache-dir` was provided, or `--cache-dir` resolves to the bundled dir itself.
  *   - Allow online recovery ONLY when a bundled model directory exists AND `--cache-dir` points elsewhere.
  */
+function canonicalPath(targetPath) {
+  const abs = resolve(targetPath);
+  const tail = [];
+  let cur = abs;
+  while (true) {
+    try {
+      const real = realpathSync(cur);
+      return tail.length > 0 ? join(real, ...tail.reverse()) : real;
+    } catch (error) {
+      if (error.code !== "ENOENT") return abs;
+      const parent = dirname(cur);
+      if (parent === cur) return abs;
+      tail.push(basename(cur));
+      cur = parent;
+    }
+  }
+}
+
 export function resolveDownloadOffline({ explicitCacheDir, offlineFlag, env = process.env } = {}) {
   if (offlineFlag === true) return true;
   if (env.NEURODESK_OFFLINE !== "1") return false;
-  const bundledDir = env.NEURODESK_LIGHTSHEET_ATLAS_MODEL_DIR
-    ? resolve(env.NEURODESK_LIGHTSHEET_ATLAS_MODEL_DIR)
-    : null;
-  if (!bundledDir) return true;
+  if (!env.NEURODESK_LIGHTSHEET_ATLAS_MODEL_DIR) return true;
+  let bundledReal;
+  try {
+    const info = statSync(env.NEURODESK_LIGHTSHEET_ATLAS_MODEL_DIR);
+    if (!info.isDirectory()) return true;
+    bundledReal = realpathSync(env.NEURODESK_LIGHTSHEET_ATLAS_MODEL_DIR);
+  } catch {
+    return true;
+  }
   if (!explicitCacheDir) return true;
-  if (resolve(explicitCacheDir) === bundledDir) return true;
+  if (canonicalPath(explicitCacheDir) === bundledReal) return true;
   return false;
 }
 

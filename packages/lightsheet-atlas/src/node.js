@@ -2,8 +2,8 @@
 // Runs the exact same Allen CCFv3 registration + cellfinder candidate detection pipeline
 // as the Light-sheet atlas web application, using @neurodesk/greedy single-threaded WASM.
 import { randomUUID } from "node:crypto";
-import { closeSync, constants as fsConstants, copyFileSync, lstatSync, mkdirSync, openSync, readdirSync, renameSync, rmdirSync, unlinkSync, writeFileSync } from "node:fs";
-import { link, lstat, open, readFile, readdir, rename, rm, rmdir, stat, unlink, writeFile } from "node:fs/promises";
+import { closeSync, linkSync, lstatSync, mkdirSync, openSync, readdirSync, renameSync, rmdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { lstat, open, readFile, readdir, rm, rmdir, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, join, relative, resolve, sep } from "node:path";
 import { gzipSync } from "node:zlib";
 import { loadGreedySingleThread } from "@neurodesk/greedy/single";
@@ -337,7 +337,7 @@ export async function claimOutputDirectory(outputDir) {
 export async function writeStagedOutputs(
   directory,
   files,
-  { claim = null, linkFn = link, renameFn = rename, writeFileFn = writeFile } = {},
+  { claim = null, linkFn = linkSync, writeFileFn = writeFile } = {},
 ) {
   const runId = randomUUID().slice(0, 8);
   const pub = {
@@ -370,34 +370,35 @@ export async function writeStagedOutputs(
       item.dev = stagedInfo.dev;
       item.ino = stagedInfo.ino;
     }
+    const useSyncLink = linkFn === linkSync;
     for (const item of pub.staged) {
       pub.pendingRename = { finalPath: item.finalPath, dev: item.dev, ino: item.ino };
       try {
-        await linkFn(item.partialPath, item.finalPath);
-        pub.published.push({ finalPath: item.finalPath, dev: item.dev, ino: item.ino });
-        pub.pendingRename = null;
-        await unlink(item.partialPath);
-      } catch (error) {
-        if (error.code === "EEXIST") {
+        if (useSyncLink) {
+          // Synchronous hard link + unlink eliminates any async libuv window where
+          // SIGTERM rollback could race with an in-flight link(2) syscall.
+          linkSync(item.partialPath, item.finalPath);
+          pub.published.push({ finalPath: item.finalPath, dev: item.dev, ino: item.ino });
           pub.pendingRename = null;
+          unlinkSync(item.partialPath);
+        } else {
+          await linkFn(item.partialPath, item.finalPath);
+          pub.published.push({ finalPath: item.finalPath, dev: item.dev, ino: item.ino });
+          pub.pendingRename = null;
+          await unlink(item.partialPath);
+        }
+      } catch (error) {
+        pub.pendingRename = null;
+        if (error.code === "EEXIST") {
           throw new Error(`Refusing to overwrite existing output '${item.name}'.`, { cause: error });
         }
-        if (!LINK_FALLBACK_CODES.has(error.code)) {
-          throw error;
+        if (LINK_FALLBACK_CODES.has(error.code)) {
+          throw new Error(
+            `Atomic non-overwrite output publication requires hard-link support on '${directory}' (${error.code}).`,
+            { cause: error },
+          );
         }
-        try {
-          copyFileSync(item.partialPath, item.finalPath, fsConstants.COPYFILE_EXCL);
-        } catch (copyError) {
-          pub.pendingRename = null;
-          if (copyError.code === "EEXIST") {
-            throw new Error(`Refusing to overwrite existing output '${item.name}'.`, { cause: copyError });
-          }
-          throw copyError;
-        }
-        const copiedInfo = lstatSync(item.finalPath);
-        pub.published.push({ finalPath: item.finalPath, dev: copiedInfo.dev, ino: copiedInfo.ino });
-        pub.pendingRename = null;
-        await unlink(item.partialPath);
+        throw error;
       }
     }
     pub.committed = true;
@@ -548,7 +549,7 @@ export async function runLightsheetAtlas({
   options = {},
   onProgress = () => {},
   onLog = () => {},
-  renameFn = rename,
+  linkFn = linkSync,
   writeFileFn = writeFile,
 } = {}) {
   if (typeof input !== "string" || !input.trim()) {
@@ -642,7 +643,7 @@ export async function runLightsheetAtlas({
     };
     outputs.push({ name: names.provenance, bytes: encoder.encode(`${JSON.stringify(provenance, null, 2)}\n`) });
 
-    const written = await writeStagedOutputs(claim.directory, outputs, { claim, renameFn, writeFileFn });
+    const written = await writeStagedOutputs(claim.directory, outputs, { claim, linkFn, writeFileFn });
     succeeded = true;
     return {
       outputDir: claim.directory,

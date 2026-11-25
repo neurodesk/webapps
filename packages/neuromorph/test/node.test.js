@@ -160,6 +160,20 @@ test("writeStagedOutputs enforces atomic non-overwrite, cleans failed .partial, 
     assert.equal(await readFile(racingDest, "utf8"), "keep-me");
     await rm(racingDest);
 
+    await assert.rejects(
+      writeStagedOutputs(
+        work,
+        [{ name: "enotsup.csv", bytes: new Uint8Array([1, 2, 3]) }],
+        {
+          linkFn: () => {
+            throw Object.assign(new Error("operation not supported"), { code: "ENOTSUP" });
+          },
+        },
+      ),
+      /requires hard-link support/,
+    );
+    assert.deepEqual(await readdir(work), []);
+
     let calls = 0;
     await assert.rejects(
       writeStagedOutputs(

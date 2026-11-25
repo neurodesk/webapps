@@ -140,6 +140,19 @@ test("downloadModels enforces offline mode for NEURODESK_OFFLINE=1 without bundl
     assert.equal(resolveDownloadOffline({ explicitCacheDir: otherDir, env: envBundled }), false);
     assert.equal(resolveDownloadOffline({ explicitCacheDir: otherDir, offlineFlag: true, env: envBundled }), true);
 
+    // Symlink pointing to bundled dir and missing bundled dir must both stay offline under NEURODESK_OFFLINE=1
+    const bundledSymlink = join(work, "bundled-link");
+    await symlink(work, bundledSymlink);
+    assert.equal(resolveDownloadOffline({ explicitCacheDir: bundledSymlink, env: envBundled }), true);
+    const missingBundled = join(work, "does-not-exist-bundle");
+    assert.equal(
+      resolveDownloadOffline({
+        explicitCacheDir: otherDir,
+        env: { NEURODESK_OFFLINE: "1", NEURODESK_LIGHTSHEET_ATLAS_MODEL_DIR: missingBundled },
+      }),
+      true,
+    );
+
     // CLI subprocess with NEURODESK_OFFLINE=1 + bundled dir and no --cache-dir prints recovery instructions
     const bundledRun = runCli(["download-models"], {
       ...process.env,
