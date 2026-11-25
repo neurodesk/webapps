@@ -148,6 +148,12 @@ test('contract tests, tooling, docs and other workflows select no apps and no si
   const registry = await loadAppsRegistry();
   const plan = createAppPlan(registry, [
     'AGENTS.md',
+    'apps/elastix/AGENTS.md',
+    'apps/calmar/CLAUDE.md',
+    'apps/vesselboost/AGENT.md',
+    'packages/node-drivers/AGENTS.md',
+    'packages/components/src/webmcp/AGENTS.md',
+    'exes/AGENTS.md',
     'packages/components/CHANGELOG.md',
     'test/app-plan.test.mjs',
     'test/standalone-links.test.mjs',
@@ -158,6 +164,7 @@ test('contract tests, tooling, docs and other workflows select no apps and no si
     'scripts/check-standalone-links.mjs',
     '.github/workflows/lcmodel-native.yml',
     '.github/workflows/standalone-links.yml',
+    '.github/aw/actions-lock.json',
     'scripts/quality/package.json',
     'eslint.config.js',
     'config/dependency-baseline.json',
@@ -1317,7 +1324,7 @@ test('a draft pull request skips package-tests only when every changed path lies
   const registry = await loadAppsRegistry();
   const workspace = await graph;
   const pkgs = (paths, options) => createAppPlan(registry, paths, workspace, new Map(), options).packageTests;
-  for (const path of ['docs/quality/ci-development-tiers.md', '.changeset/brave-owls.md', 'README.md', 'site/easter-eggs/vessel-surfer/src/main.js']) {
+  for (const path of ['docs/quality/ci-development-tiers.md', '.changeset/brave-owls.md', 'README.md', 'AGENTS.md', 'apps/elastix/AGENTS.md', 'packages/components/src/webmcp/AGENTS.md', 'exes/AGENTS.md', 'site/easter-eggs/vessel-surfer/src/main.js']) {
     assert.equal(packageTestsCanSkipOnDraft(path), true, path);
     assert.deepEqual(pkgs([path], { draft: true }), [], path);
   }

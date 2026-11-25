@@ -21,6 +21,7 @@ const INDEPENDENT_CHECK_PATHS = [
   /^[^/]+\.md$/,
   /^\.gitignore$/,
   /^\.github\/workflows\/(?!ci\.yml$)[^/]+$/,
+  /^\.github\/aw\//,
   INDEPENDENT_CONFIG,
   /^config\/dependency-/,
   /^templates\//,
@@ -50,6 +51,9 @@ export const RUNTIME_MANIFEST_READERS = ['scripts/fetch-app-runtime.mjs'];
 // An app that reaches one also tests a change to any app's contract.
 export const AUTOMATION_CATALOG_READERS = ['scripts/lib/neuroflow-bundle.mjs'];
 const AUTOMATION_CONTRACT = /^apps\/[^/]+\/automation\.json$/;
+// App-scoped agent instruction documents; no browser build or app test loads
+// them (workspace-contracts checks any contract test that reads them).
+const APP_AGENT_DOC = /^apps\/[^/]+\/(?:AGENTS|AGENT|CLAUDE)\.md$/;
 // site/ files only the composite build copies: the landing page, its
 // analytics settings, the Pages 404 page and the dicompare route shim.
 // test/app-plan.test.mjs fails when anything else names them.
@@ -507,6 +511,12 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     }
     const appId = path.match(/^apps\/([^/]+)\//)?.[1] ?? path.match(MODEL_MANIFEST)?.[1];
     if (appIds.has(appId)) {
+      if (APP_AGENT_DOC.test(path)) {
+        for (const reader of graph?.appReaders?.(path) ?? []) {
+          if (appIds.has(reader)) select(reader, `${path}: ${reader}'s code reads it`);
+        }
+        continue;
+      }
       select(appId, path);
       for (const reader of graph?.appReaders?.(path) ?? []) {
         if (appIds.has(reader)) select(reader, `${path}: ${reader}'s code reads it`);
@@ -772,7 +782,7 @@ export function selectEasterEgg(changedPaths) {
 // packages/*/test/* checks cross-contract parity against app files (models.json,
 // automation.json, fixtures). Ready pull requests, pushes and nightlies always
 // run `package-tests`.
-const PACKAGE_TEST_DRAFT_SKIP_TREE = /^(?:docs|\.changeset|site\/easter-eggs)\/|^(?:[^/]+\.md)$/;
+const PACKAGE_TEST_DRAFT_SKIP_TREE = /^(?:docs|\.changeset|site\/easter-eggs)\/|^(?:[^/]+\.md)$|^(?:apps|packages|exes)\/(?:.+\/)?(?:AGENTS|AGENT|CLAUDE)\.md$/;
 export function packageTestsCanSkipOnDraft(path) {
   if (WORKSPACE_MANIFESTS.includes(path.slice(path.lastIndexOf('/') + 1))) return false;
   return PACKAGE_TEST_DRAFT_SKIP_TREE.test(path);
