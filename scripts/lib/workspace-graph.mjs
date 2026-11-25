@@ -138,30 +138,87 @@ async function isRegularUnlinkedFile(root, target) {
   }
 }
 
-// Whether a SCRIPT_REFERENCE file match ends at a real path boundary: when the
-// path is opened by a quote (or uses the comma-separated join form), require the
-// exact same closing quote immediately after the filename and reject computed
-// path expressions (`'ref.json' + '.gz'`, `'ref.json'.concat(...)`, `${a}/ref.json`).
-function isCompleteScriptFile(text, match) {
+const AST_SKIP = new Set(['loc', 'range', 'start', 'end', 'tokens', 'comments', 'parent']);
+const INDEPENDENT_LINT_SCRIPT = /^node\s+(?:\.\.\/)+scripts\/lint\.mjs(?:\s+--workspace)?$/;
+
+// Collect string and template literal ranges in a script so SCRIPT_REFERENCE can
+// verify whether a file path match is a complete, non-computed literal expression
+// (even across inline comments like `'reference.json' /* suffix */ + '.gz'`).
+function collectScriptStringLiterals(text, file) {
+  let ast;
+  try {
+    ast = sourceParser.parse(text, { filePath: file, sourceType: 'module' });
+  } catch {
+    return null;
+  }
+  const literals = [];
+  const walk = (node, parent = null, grandParent = null) => {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item, parent, grandParent);
+      return;
+    }
+    const isStringLiteral = node.type === 'Literal' && typeof node.value === 'string';
+    const isTemplate = node.type === 'TemplateLiteral';
+    if ((isStringLiteral || isTemplate) && Array.isArray(node.range)) {
+      const computed =
+        (isTemplate && node.expressions.length > 0) ||
+        parent?.type === 'BinaryExpression' ||
+        parent?.type === 'MemberExpression' ||
+        parent?.type === 'TaggedTemplateExpression' ||
+        (parent?.type === 'ArrayExpression' && grandParent?.type === 'MemberExpression');
+      literals.push({ start: node.range[0], end: node.range[1], computed });
+    }
+    for (const key of Object.keys(node)) {
+      if (!AST_SKIP.has(key)) walk(node[key], node, parent);
+    }
+  };
+  walk(ast);
+  return literals;
+}
+
+// Whether a SCRIPT_REFERENCE file match ends at a real path boundary and, when
+// inside a JS string/template literal, spans the complete non-computed literal.
+function isCompleteScriptFile(text, match, literals) {
+  const start = match.index;
   const end = match.index + match[0].length;
   const after = text[end];
   if (after && !/[\s'"`),;:\]}]/.test(after)) return false;
-  const nextToken = after ? text.slice(end + 1).match(/^\s*(.)/)?.[1] : null;
-  const isComputedAfter = nextToken === '+' || nextToken === '.' || nextToken === '[';
-  const sepStart = match.index + match[1].length;
+  if (literals !== null) {
+    const litAtEnd = literals.find((lit) => lit.start < end && end <= lit.end);
+    if (litAtEnd) {
+      if (litAtEnd.computed) return false;
+      const tail = text.slice(end, litAtEnd.end - 1);
+      if (tail.length > 0 && !(tail === '\n' && text.slice(litAtEnd.start + 1, start).includes('//'))) return false;
+      const litAtStart = literals.find((lit) => lit.start <= start && start < lit.end);
+      if (litAtStart && litAtStart !== litAtEnd && litAtStart.computed) return false;
+      return true;
+    }
+    return true;
+  }
+  const sepStart = start + match[1].length;
   if (text[sepStart] !== '/') {
     const secondQuote = match[0].slice(match[1].length + 1).match(/['"`]/)?.[0];
-    return Boolean(secondQuote && after === secondQuote && !isComputedAfter);
+    return Boolean(secondQuote && after === secondQuote);
   }
-  let i = match.index - 1;
+  let i = start - 1;
   while (i >= 0 && /[\w./-]/.test(text[i])) i--;
-  if (i >= 0 && text[i] === '}') return false;
   if (i >= 0 && (text[i] === "'" || text[i] === '"' || text[i] === '`') && (i === 0 || text[i - 1] !== '\\')) {
-    if (after !== text[i] || isComputedAfter) return false;
-    const prevToken = text.slice(0, i).match(/(.)\s*$/)?.[1];
-    return prevToken !== '+';
+    return after === text[i];
   }
   return true;
+}
+
+// Omit a workspace package.json's standalone `lint` script (`node ../../scripts/lint.mjs`)
+// before scanning text references, as long as no other script in the manifest calls `lint`.
+// Direct imports/references in code or build scripts remain untouched.
+function manifestScanText(text, manifest) {
+  const lintCmd = manifest?.scripts?.lint;
+  if (typeof lintCmd !== 'string' || !INDEPENDENT_LINT_SCRIPT.test(lintCmd.trim())) return text;
+  if (Object.entries(manifest.scripts).some(([name, cmd]) => name !== 'lint' && /\blint\b/.test(String(cmd)))) return text;
+  const scripts = { ...manifest.scripts };
+  delete scripts.lint;
+  return JSON.stringify({ ...manifest, scripts }, null, 2);
 }
 
 async function readPackageJson(dir) {
@@ -202,9 +259,11 @@ export async function loadConservativeWorkspaceGraph(root) {
         }
       }
     }
+    const manifestPath = join(root, node, 'package.json');
     for await (const file of textFiles(join(root, node))) {
       if ((await stat(file)).size > MAX_TEXT_BYTES) continue;
-      const text = await readFile(file, 'utf8');
+      const rawText = await readFile(file, 'utf8');
+      const text = file === manifestPath ? manifestScanText(rawText, manifest) : rawText;
       for (const [, top, name] of text.matchAll(REFERENCE)) {
         if (nodeSet.has(`${top}/${name}`)) uses.add(`${top}/${name}`);
       }
@@ -260,10 +319,11 @@ export async function loadConservativeWorkspaceGraph(root) {
     const source = await readFile(join(root, file), 'utf8').catch(() => null);
     if (source === null) continue;
     const text = withoutLineComments(source, file);
+    const literals = collectScriptStringLiterals(text, file);
     for (const match of text.matchAll(SCRIPT_REFERENCE)) {
       const [, top, name, inner] = match;
       if (!nodeSet.has(`${top}/${name}`)) continue;
-      const target = inner && isCompleteScriptFile(text, match) && `${top}/${name}${inner}`;
+      const target = inner && isCompleteScriptFile(text, match, literals) && `${top}/${name}${inner}`;
       if (target && await isRegularUnlinkedFile(root, target)) {
         uses.add(target);
         pendingRootFiles.push(target);

@@ -25,11 +25,6 @@ const INDEPENDENT_CHECK_PATHS = [
   /^config\/dependency-/,
   /^templates\//,
 ];
-// Lint and quality tooling run in workspace-contracts or quality.yml rather
-// than app builds; exempt them only when the workspace graph confirms neither
-// CATALOG, SITE nor any app (outside the lint runner itself) reaches them.
-const LINT_RUNNER = /^scripts\/lint\.mjs$/;
-const LINT_TOOLING_PATHS = [LINT_RUNNER, /^scripts\/quality\//];
 // Root files the workspace graph follows. Without a graph they count as shared.
 const ROOT_FILE = /^(?:scripts|test-utils|registry|test)\//;
 // An app's model manifest belongs to that app alone.
@@ -891,19 +886,6 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     siteReasons.push(reason);
   };
   const siteData = (reason) => siteReasons.push(reason);
-  const reachableWithout = (node, excludedPattern) => {
-    const seen = new Set([node]);
-    const pending = [node];
-    while (pending.length) {
-      for (const next of graph.edges.get(pending.pop()) ?? []) {
-        if (excludedPattern.test(next) || seen.has(next)) continue;
-        seen.add(next);
-        pending.push(next);
-      }
-    }
-    return seen;
-  };
-
   // Selects whatever reaches `node` or a file below it.
   const selectReaching = (node, reason) => {
     const within = (candidate) => candidate === node || candidate.startsWith(`${node}/`);
@@ -911,16 +893,6 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     if ([...site].some(within)) siteBuild(reason);
     for (const candidate of registry.apps) {
       if ([...reach.get(candidate.id)].some(within)) select(candidate.id, reason);
-    }
-  };
-  const selectLintTooling = (node, reason) => {
-    const within = (candidate) => candidate === node || candidate.startsWith(`${node}/`);
-    if ([...catalog].some(within)) shared(`${reason}; ci.yml's per-app jobs run ${node}`);
-    if ([...site].some(within)) siteBuild(reason);
-    if (!LINT_RUNNER.test(node)) {
-      for (const candidate of registry.apps) {
-        if ([...reachableWithout(`apps/${candidate.id}`, LINT_RUNNER)].some(within)) select(candidate.id, reason);
-      }
     }
   };
 
@@ -949,11 +921,6 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     ) {
       continue;
     }
-    if (LINT_TOOLING_PATHS.some((pattern) => pattern.test(path))) {
-      if (!graph) shared(`${path}: there is no workspace graph to confirm lint tooling is unreached`);
-      else selectLintTooling(path, path);
-      continue;
-    }
     if (path === LOCKFILE) {
       const impact = manifests.get(path) ? analyseLockfile(manifests.get(path)) : { shared: 'the base or head lockfile is unavailable' };
       if (impact.shared) {
@@ -967,7 +934,6 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
         else if (SELF_CONTAINED_PREFIXES.some((prefix) => `${importer}/`.startsWith(prefix))) continue;
         else if (INDEPENDENT_CHECK_PATHS.some((pattern) => pattern.test(`${importer}/`))) continue;
         else if (!graph) shared(`${path}: ${reason}, and there is no workspace graph to find its users`);
-        else if (LINT_TOOLING_PATHS.some((pattern) => pattern.test(`${importer}/`))) selectLintTooling(importer, `${path}: ${reason}`);
         else selectReaching(importer, `${path}: ${reason}`);
       }
       continue;

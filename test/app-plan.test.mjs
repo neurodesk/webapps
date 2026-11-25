@@ -2951,6 +2951,7 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
       "const archive = 'exes/data/reference.json.gz';",
       "const spaced = 'exes/spaced/reference.json archive';",
       "const computed = 'exes/computed/reference.json' + '.gz';",
+      "const commented = 'exes/commented/reference.json' /* archive suffix */ + '.gz';",
       "const linked = 'exes/linked/fixture.json';",
     ].join('\n'),
     'scripts/app-ci.mjs': "const mod = require('../packages/pkg/fixture.json');\n",
@@ -2960,6 +2961,8 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
     'exes/spaced/reference.json archive': 'actual',
     'exes/computed/reference.json': '{}',
     'exes/computed/reference.json.gz': 'computed',
+    'exes/commented/reference.json': '{}',
+    'exes/commented/reference.json.gz': 'commented',
     'exes/linked/target.json': '{"real":true}',
     'packages/pkg/package.json': JSON.stringify({ name: '@nd/pkg' }),
     'packages/pkg/fixture.json/index.js': "import '../../../scripts/from-dir-json.mjs';\n",
@@ -2974,6 +2977,7 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
   assert.equal(createAppPlan(registry, ['exes/data/reference.json.gz'], prefixGraph).site, true, '.json.gz keeps exes/data edge');
   assert.equal(createAppPlan(registry, ['exes/spaced/reference.json archive'], prefixGraph).site, true, 'quoted filename with space keeps exes/spaced edge');
   assert.equal(createAppPlan(registry, ['exes/computed/reference.json.gz'], prefixGraph).site, true, 'computed path concatenation keeps exes/computed edge');
+  assert.equal(createAppPlan(registry, ['exes/commented/reference.json.gz'], prefixGraph).site, true, 'commented path concatenation keeps exes/commented edge');
   assert.equal(createAppPlan(registry, ['exes/linked/target.json'], prefixGraph).site, true, 'symlink keeps exes/linked edge');
   assert.equal(reachableFrom(prefixGraph, CATALOG).has('scripts/from-dir-json.mjs'), true, 'directory named fixture.json keeps packages/pkg edge');
 });
@@ -3011,7 +3015,11 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
     'scripts/quality/catalog-helper.mjs': 'export const a = 1;\n',
     'scripts/quality/site-helper.mjs': 'export const b = 2;\n',
     'scripts/quality/app-helper.mjs': 'export const c = 3;\n',
+    'scripts/lint.mjs': 'export const lint = 1;\n',
     'apps/niimath/main.js': "import '../../scripts/quality/app-helper.mjs';\n",
+    'apps/denoise/main.js': "import '../../scripts/lint.mjs';\n",
+    'apps/n4/package.json': JSON.stringify({ name: '@nd/n4', scripts: { build: 'vite build', lint: 'node ../../scripts/lint.mjs --workspace' } }),
+    'apps/sdc/package.json': JSON.stringify({ name: '@nd/sdc', scripts: { build: 'pnpm lint && vite build', lint: 'node ../../scripts/lint.mjs --workspace' } }),
   };
   for (const [path, text] of Object.entries(files)) {
     await mkdir(dirname(join(root, path)), { recursive: true });
@@ -3023,7 +3031,12 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
   assert.deepEqual(
     createAppPlan(registry, ['scripts/quality/app-helper.mjs'], fixtureGraph).selected.map((app) => app.id),
     ['niimath'],
-    'direct app reachability',
+    'direct app reachability to scripts/quality',
+  );
+  assert.deepEqual(
+    createAppPlan(registry, ['scripts/lint.mjs'], fixtureGraph).selected.map((app) => app.id).sort(),
+    ['denoise', 'sdc'],
+    'direct app import and build-invoked lint select their apps while standalone lint script stays exempt',
   );
 });
 
