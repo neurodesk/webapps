@@ -17,7 +17,7 @@ import { decodeRasterImage } from "@neurodesk/webapp-components/file-io/raster-i
 import { registerAppAutomation } from "@neurodesk/webapp-components/automation";
 import workerUrl from "./worker.js?worker&url";
 import { APP, MAX_IMAGE_BYTES, PARAMETER_BOUNDS, SettingsError, readReferenceMm, readSettings } from "./config.js";
-import { calibrationFromRuler } from "./core/planimetry.js";
+import { calibrationFromRuler } from "@neurodesk/wound-planimetry/core/planimetry";
 import { RYB_CLASS_NAMES, imagePixel, overlayLayerRgba } from "./display.js";
 import {
   RYB_CHART_SERIES,

@@ -8,6 +8,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   closeSync,
+  linkSync,
   lstatSync,
   mkdirSync,
   openSync,
@@ -436,9 +437,35 @@ export async function claimOutputDir(
           }
         }
         if (useSyncRename) {
-          renameSync(item.partial, item.dest);
-          activePartials.delete(item.partial);
-          published.push(item);
+          if (!overwrite) {
+            try {
+              // Atomic hard link refuses any destination created since lstat (no TOCTOU overwrite).
+              linkSync(item.partial, item.dest);
+              published.push(item);
+              try {
+                unlinkSync(item.partial);
+                activePartials.delete(item.partial);
+              } catch (unlinkErr) {
+                if (unlinkErr.code !== 'ENOENT') throw unlinkErr;
+                activePartials.delete(item.partial);
+              }
+            } catch (linkErr) {
+              if (linkErr.code === 'EEXIST') {
+                throw new Error(`Refusing to overwrite existing output: ${item.dest}`);
+              }
+              if (linkErr.code === 'EXDEV' || linkErr.code === 'EPERM' || linkErr.code === 'ENOTSUP' || linkErr.code === 'ENOSYS') {
+                renameSync(item.partial, item.dest);
+                activePartials.delete(item.partial);
+                published.push(item);
+              } else {
+                throw linkErr;
+              }
+            }
+          } else {
+            renameSync(item.partial, item.dest);
+            activePartials.delete(item.partial);
+            published.push(item);
+          }
         } else {
           publishState.pendingRename = item;
           await renameFn(item.partial, item.dest);

@@ -1,0 +1,38 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "wound-planimetry-v",
+  "displayName": "Wound Planimetry",
+  "app": "wound-planimetry",
+  "bundleModels": false,
+  "run": "wound.jpg out",
+  "readme": {
+    "run": "Segment a wound photograph and compute planimetry and RYB tissue fractions",
+    "notes": [
+      "Input is a JPEG or PNG clinical wound photograph.",
+      "Calibrate to mm/cm^2 with --mm-per-pixel N, --pixels-per-mm N, or --ruler X1,Y1,X2,Y2 --scale-mm N.",
+      "Pass --seed X,Y to select a specific wound component, or omit for automatic Otsu segmentation.",
+      "Add --help for every option: --sensitivity, --eschar-l, --granulation-a, --slough-b, and --overwrite.",
+      "",
+      "No network connection is required and no external model weights are downloaded.",
+      "Research and educational use only — heuristic color-based RYB estimates are not a clinical diagnosis."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "wound-planimetry"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "wound-planimetry.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "wound-planimetry"
+    }
+  }
+}

@@ -27,6 +27,9 @@ export const LINKED_PACKAGES = Object.freeze({
   '@neurodesk/deface': 'deface',
   '@neurodesk/degibbs': 'degibbs',
   '@neurodesk/denoise': 'denoise',
+  '@neurodesk/derm-compare': 'derm-compare',
+  '@neurodesk/dermoscope': 'dermoscope',
+  '@neurodesk/dermvit': 'dermvit',
   '@neurodesk/dicompare': 'dicompare',
   '@neurodesk/nii2tvx': 'disconnectome',
   '@neurodesk/mri2vid': 'mri2vid',
@@ -47,6 +50,7 @@ export const LINKED_PACKAGES = Object.freeze({
   '@neurodesk/sdc': 'sdc',
   '@neurodesk/noddi': 'noddi',
   '@neurodesk/seedseg': 'seedseg',
+  '@neurodesk/skin-chromophore': 'skin-chromophore',
   '@neurodesk/spinalcordtoolbox': 'spinalcordtoolbox',
   '@neurodesk/synthseg': 'synthseg',
   '@neurodesk/synthsr': 'synthsr',
@@ -58,6 +62,7 @@ export const LINKED_PACKAGES = Object.freeze({
   '@neurodesk/tumour-report': 'tumour-report',
   '@neurodesk/vesselboost': 'vesselboost',
   '@neurodesk/white-matter-lesions': 'white-matter-lesions',
+  '@neurodesk/wound-planimetry': 'wound-planimetry',
 });
 
 export function releaseDate(now = new Date()) {

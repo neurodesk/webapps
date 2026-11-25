@@ -25,10 +25,5 @@
   "histo2mri": "no command-line package yet: v1 runs its pipeline (src/core) in a browser worker only; its Greedy affine and warp downloads run in the Greedy command line (greedy-rs) for batch reslicing",
   "deconvolution": "no command line yet: the Rust core in exes/deconvolution and the committed WebAssembly module in packages/deconvolution are ready to package through exes/node-cli in a later release",
   "cellpose": "Python Cellpose (pip install cellpose) is the command-line reference the app reproduces on the 2D and 3D examples; no separate command line is packaged",
-  "medsam2": "MedSAM2 (bowang-lab/MedSAM2 in Python) is the upstream reference; interactive slice prompting has no separate command line",
-  "dermoscope": "browser-only v1: DullRazor hair removal, Shades of Gray color constancy, Otsu segmentation and ABCD morphometry run in pure JS (apps/dermoscope/src/core) and are Node-tested; no command-line package is released yet",
-  "skin-chromophore": "browser-only v1: CIELAB, ITA typology, Erythema/Melanin indices, Tsumura chromophore separation and CIEDE2000 run in pure JS (apps/skin-chromophore/src/core) and are Node-tested; no command-line package is released yet",
-  "wound-planimetry": "browser-only v1: calibrated wound planimetry and RYB tissue classification run in pure JS (apps/wound-planimetry/src/core) with interactive ruler calibration; no command-line package is released yet",
-  "derm-compare": "browser-only v1: sequential dermoscopy alignment, flicker/curtain comparison and CIEDE2000 change mapping run in pure JS (apps/derm-compare/src/core); no command-line package is released yet",
-  "dermvit": "browser-only v1: HAM10000 ViT-Base quantized ONNX inference runs via ONNX Runtime Web in a browser worker (apps/dermvit/src/worker.js); no command-line package is released yet"
+  "medsam2": "MedSAM2 (bowang-lab/MedSAM2 in Python) is the upstream reference; interactive slice prompting has no separate command line"
 }

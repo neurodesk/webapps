@@ -1,0 +1,47 @@
+{
+  "name": "@neurodesk/wound-planimetry",
+  "version": "0.1.20261124",
+  "description": "Calibrated wound and ulcer digital planimetry and color-based Red-Yellow-Black (RYB) tissue estimation core and portable command line",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "wound-planimetry": "./bin/wound-planimetry.js"
+  },
+  "exports": {
+    ".": "./src/core/planimetry.js",
+    "./core/color": "./src/core/color.js",
+    "./core/planimetry": "./src/core/planimetry.js",
+    "./core/ryb": "./src/core/ryb.js",
+    "./core/segment": "./src/core/segment.js",
+    "./config": "./src/config.js",
+    "./display": "./src/display.js",
+    "./outputs": "./src/outputs.js",
+    "./raster": "./src/raster.js",
+    "./node": "./src/node.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check bin/wound-planimetry.js && node --check src/node.js && node --check src/raster.js && node --check src/config.js && node --check src/display.js && node --check src/outputs.js && node --check src/core/color.js && node --check src/core/planimetry.js && node --check src/core/ryb.js && node --check src/core/segment.js"
+  },
+  "dependencies": {
+    "@neurodesk/webapp-components": "workspace:*",
+    "fast-png": "8.0.0",
+    "jpeg-js": "0.4.4",
+    "pngjs": "7.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/wound-planimetry"
+  }
+}
