@@ -24,7 +24,6 @@
   "omezarr-convert": "no command line is packaged yet: @neurodesk/omezarr-convert runs in Node (validation/check-example.mjs), and bioformats2raw is the established native converter for batch work",
   "histo2mri": "no command-line package yet: v1 runs its pipeline (src/core) in a browser worker only; its Greedy affine and warp downloads run in the Greedy command line (greedy-rs) for batch reslicing",
   "deconvolution": "no command line yet: the Rust core in exes/deconvolution and the committed WebAssembly module in packages/deconvolution are ready to package through exes/node-cli in a later release",
-  "totalsegmentator": "upstream TotalSegmentator (wasserth/TotalSegmentator) ships the native Python CLI and Neurodesk packages it as totalsegmentator 2.18.0: the Standalone dialog lists the Neurodesk container (Docker and Apptainer), and packages/totalsegmentator/validation/validate.mjs verifies the JS pipeline against upstream reference outputs",
   "cellpose": "Python Cellpose (pip install cellpose) is the command-line reference the app reproduces on the 2D and 3D examples; no separate command line is packaged",
   "medsam2": "MedSAM2 (bowang-lab/MedSAM2 in Python) is the upstream reference; interactive slice prompting has no separate command line",
   "dermoscope": "browser-only v1: DullRazor hair removal, Shades of Gray color constancy, Otsu segmentation and ABCD morphometry run in pure JS (apps/dermoscope/src/core) and are Node-tested; no command-line package is released yet",

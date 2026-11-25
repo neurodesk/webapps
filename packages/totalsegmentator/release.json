@@ -1,0 +1,40 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "totalsegmentator-v",
+  "displayName": "TotalSegmentator",
+  "app": "totalsegmentator",
+  "run": "scan.nii.gz out",
+  "readme": {
+    "run": "Segment organs, bones, vertebrae and muscles in a 3D CT or MRI scan",
+    "notes": [
+      "All 12 openly licensed Apache-2.0 TotalSegmentator v2 ONNX models are included and verified locally.",
+      "No network connection, Python, PyTorch or previously populated cache is required.",
+      "Use --task total (default), total_mr, vertebrae_mr or abdominal_muscles.",
+      "Use --resolution fast (3 mm, default) or full (1.5 mm) with optional --subset filtering.",
+      "Add --help for all options. DICOM import and mask editing use the web app.",
+      "",
+      "TotalSegmentator is research software, not a clinical diagnosis. Please cite:",
+      "Wasserthal J, Breit HC, Meyer MT, et al. TotalSegmentator: Robust Segmentation of 104 Anatomic",
+      "Structures in CT Images. Radiology: Artificial Intelligence. 2023;5(5):e230024.",
+      "D'Antonoli TA, Berger LK, Indrakanti AK, et al. TotalSegmentator MRI. Radiology. 2025;314(2):e241613."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "totalsegmentator"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "totalsegmentator.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "totalsegmentator"
+    }
+  }
+}
