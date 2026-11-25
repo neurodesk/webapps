@@ -146,8 +146,8 @@ const FILE_READER_CALLS = new Set(['readFile', 'readFileSync', 'require']);
 const PATH_JOIN_CALLS = new Set(['join', 'resolve']);
 const EXEC_ARRAY_CALLS = new Set(['run', 'execFile', 'execFileSync', 'spawn', 'spawnSync']);
 const INDEPENDENT_LINT_SCRIPT = /^node\s+(?:\.\.\/)+scripts\/lint\.mjs(?:\s+--workspace)?$/;
-const FILTER_ARG = /(?:^|[\s;|&(])(?:--filter|-F|--dir|-C|--prefix|--cwd)(?:=|\s+)['"]?([^\s'"]+)['"]?/g;
-const CROSS_WORKSPACE_FLAG = /(?:^|[\s;|&(])(?:--filter|-F|--dir|-C|--prefix|--cwd|-r|--recursive|--workspace|-w|--workspaces)(?:=|\s|$)/;
+const FILTER_ARG = /(?:^|[\s;|&(])(--filter-prod|--filter|-F|--dir|-C|--prefix|--cwd)(?:=|\s+)['"]?([^\s'"]+)['"]?/g;
+const CROSS_WORKSPACE_FLAG = /(?:^|[\s;|&(])(?:--filter-prod|--filter|-F|--dir|-C|--prefix|--cwd|-r|--recursive|--workspace|-w|--workspaces)(?:=|\s|$)/;
 
 function calleeNameOf(callNode) {
   const callee = callNode?.callee;
@@ -721,17 +721,28 @@ function lintTargetsInCommands(commands, context) {
       if (!/\b(?:pnpm|npm|yarn)\b/.test(token)) continue;
       const hasRootFlag = /(?:^|\s)(?:-w|--workspace-root)(?:\s|$)/.test(token);
       const hasCrossFlag = CROSS_WORKSPACE_FLAG.test(token);
-      const hasNonRootCrossFlag = /(?:^|[\s;|&(])(?:--filter|-F|--dir|-C|--prefix|--cwd|-r|--recursive|--workspace(?:=|\s)|--workspaces)/.test(token);
+      // `-w` / `--workspace-root` overrides `--dir` / `-C` / `--prefix` / `--cwd`
+      // in pnpm; only explicit filter/recursive/workspace-list flags still target
+      // workspace members alongside `-w`.
+      const hasWorkspaceSelectorFlag = /(?:^|[\s;|&(])(?:--filter-prod|--filter|-F|-r|--recursive|--workspace(?:=|\s)|--workspaces)/.test(token);
       if (!hasCrossFlag && activeDirs.size === 0) continue;
-      // `pnpm -w run lint` / `pnpm --workspace-root run lint` runs the root lint
-      // script (handled by extractPnpmRootScripts), not every workspace member.
-      if (hasRootFlag && !hasNonRootCrossFlag) continue;
+      if (hasRootFlag && !hasWorkspaceSelectorFlag) continue;
       const recursive = /(?:^|\s)(?:-r|--recursive)(?:\s|$)/.test(token);
-      const filters = [...token.matchAll(FILTER_ARG)].map(([, target]) => target);
+      const filters = [...token.matchAll(FILTER_ARG)]
+        .map(([, flag, target]) => ({ flag, target }))
+        .filter(({ flag }) => !hasRootFlag || flag === '--filter-prod' || flag === '--filter' || flag === '-F');
       if (!recursive && filters.length > 0) {
         let allResolved = true;
         const resolveBases = new Set([...(baseDir !== '.' ? [baseDir] : []), ...(activeDirs.size > 0 ? activeDirs : cwdDirs)]);
-        for (const filter of filters) {
+        const stringBases = new Set([...resolveBases].filter((from) => from !== AMBIGUOUS_DIR));
+        for (const { flag, target: filter } of filters) {
+          const isFilterFlag = flag === '--filter-prod' || flag === '--filter' || flag === '-F';
+          const isExactRootFilter =
+            isFilterFlag &&
+            !filter.includes('*') &&
+            !/^\.{2,3}\^?|\^?\.{2,3}$/.test(filter) &&
+            filterTargetsRoot(filter, stringBases, root, context.rootPackageName ?? null);
+          if (isExactRootFilter) continue;
           let resolvedAny = false;
           for (const from of resolveBases) {
             if (from === AMBIGUOUS_DIR) {
@@ -742,6 +753,10 @@ function lintTargetsInCommands(commands, context) {
             if (workspaceNode) {
               targets.add(workspaceNode);
               resolvedAny = true;
+            } else if (!isFilterFlag && !isUncertainCdTarget(filter)) {
+              const rel = relative(root, resolve(root, from, filter)).split(sep).join('/').replace(/\/+$/, '');
+              if (!rel || rel === '.') resolvedAny = true;
+              else allResolved = false;
             } else {
               allResolved = false;
             }
@@ -772,7 +787,8 @@ function lintTargetsInCommands(commands, context) {
 const PNPM_VALUE_OPTIONS = new Set([
   '--reporter', '--loglevel', '--config', '--store-dir', '--virtual-store-dir', '--modules-dir',
   '--color', '--workspace-concurrency', '--network-concurrency', '--fetch-retries',
-  '--child-concurrency', '--filter', '-F', '--dir', '-C', '--prefix', '--cwd', '--stream-prefix',
+  '--child-concurrency', '--filter', '--filter-prod', '-F', '--dir', '-C', '--prefix', '--cwd',
+  '--stream-prefix', '--test-pattern', '--changed-files-ignore-pattern',
 ]);
 
 function tokenizeShellWords(segment) {
@@ -1055,7 +1071,10 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
           hasRootFlag = true;
           continue;
         }
-        if (word === '--filter' || word === '-F' || word.startsWith('--filter=') || word.startsWith('-F=')) {
+        if (
+          word === '--filter' || word === '--filter-prod' || word === '-F' ||
+          word.startsWith('--filter=') || word.startsWith('--filter-prod=') || word.startsWith('-F=')
+        ) {
           const filterVal = word.includes('=') ? word.slice(word.indexOf('=') + 1) : words[++idx];
           if (filterTargetsRoot(filterVal, cwdDirs, root, rootPackageName)) hasRootFlag = true;
           else hasNonRootFilter = true;
@@ -1221,7 +1240,7 @@ export async function loadConservativeWorkspaceGraph(root) {
     const rootExpanded = (workspaceRootScriptInfo.get(node)?.texts ?? []).map((cmd) => ({ cmd, baseDir: '.' }));
     return [node, [...allScripts, ...rootExpanded]];
   }));
-  const lintTargetContext = { root, nodeByPackageName, nodeSet, manifests };
+  const lintTargetContext = { root, rootPackageName, nodeByPackageName, nodeSet, manifests };
   const lintInvokedNodes = new Set();
   for (const [, cmds] of expandedByEntry) {
     for (const target of lintTargetsInCommands(cmds, lintTargetContext)) lintInvokedNodes.add(target);
