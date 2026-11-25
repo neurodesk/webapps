@@ -6233,6 +6233,75 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       (plan) => assert.equal(plan.allApps, true),
     ],
     [
+      'pnpm install --frozen-lockfile expands root prepare lifecycle hook into CI graph',
+      {
+        'package.json': JSON.stringify({
+          name: 'root',
+          scripts: { prepare: 'node scripts/quality/helper.mjs' },
+        }),
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'pnpm install --frozen-lockfile' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+      },
+      'scripts/quality/helper.mjs',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'pnpm install --frozen-lockfile tracks root prepare script edits in package.json',
+      {
+        'package.json': JSON.stringify({
+          name: 'root',
+          scripts: { prepare: 'node scripts/quality/helper.mjs' },
+        }),
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'pnpm install --frozen-lockfile' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+      },
+      'package.json',
+      new Map([
+        ['package.json', {
+          before: JSON.stringify({ name: 'root', scripts: {} }),
+          after: JSON.stringify({ name: 'root', scripts: { prepare: 'node scripts/quality/helper.mjs' } }),
+        }],
+        ['pnpm-lock.yaml', { before: 'lockfileVersion: "9.0"\n', after: 'lockfileVersion: "9.0"\n' }],
+      ]),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'npm rum verify alias expands root preverify hook into CI graph',
+      {
+        'package.json': JSON.stringify({
+          name: 'root',
+          scripts: {
+            preverify: 'node scripts/quality/helper.mjs',
+            verify: 'echo ok',
+          },
+        }),
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'npm rum verify' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+      },
+      'scripts/quality/helper.mjs',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
       'dynamic script name in CI preserves chained workspace lint runner edge',
       {
         '.github/workflows/ci.yml': stringify({

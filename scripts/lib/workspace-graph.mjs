@@ -1994,7 +1994,7 @@ function parseLintCommandFlags(token, scriptOpts = {}) {
         if (PNPM_VALUE_OPTIONS.has(word) && i + 1 < words.length) i++;
         continue;
       }
-      if (!seenRun && (word === 'run' || word === 'run-script')) {
+      if (!seenRun && (word === 'run' || word === 'run-script' || (kind === 'npm' && (word === 'rum' || word === 'urn')))) {
         seenRun = true;
         continue;
       }
@@ -2303,30 +2303,37 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
           if (PNPM_VALUE_OPTIONS.has(word) && idx + 1 < words.length) idx++;
           continue;
         }
-        if (!seenRun && (word === 'run' || word === 'run-script')) {
+        if (!seenRun && (word === 'run' || word === 'run-script' || (kind === 'npm' && (word === 'rum' || word === 'urn')))) {
           seenRun = true;
           continue;
         }
         if (hasRootFlag || (!hasNonRootFilter && !hasNonRootDir && mayRunAtRoot)) {
+          const installCommands = new Set(['install', 'i', 'ci', 'clean-install', 'in', 'ins', 'inst', 'insta', 'instal', 'isnt', 'isnta', 'isntal', 'isntall']);
+          const installHooks = ['preinstall', 'install', 'postinstall', 'preprepare', 'prepare', 'postprepare', 'pnpm:devPreinstall'];
           const pushScriptWithHooks = (name, env) => {
             scripts.push({ script: name, env });
             if (!rootScripts) return;
-            for (const hook of [
+            const hooks = [
               `pre${name}`,
               `post${name}`,
+              ...(name === 'install' ? installHooks : []),
               ...(name === 'restart' ? ['prestop', 'stop', 'poststop', 'prestart', 'start', 'poststart'] : []),
-            ]) {
-              if (Object.hasOwn(rootScripts, hook)) scripts.push({ script: hook, env });
+            ];
+            for (const hook of new Set(hooks)) {
+              if (hook !== name && Object.hasOwn(rootScripts, hook)) scripts.push({ script: hook, env });
             }
           };
+          const canonicalName = (raw) => {
+            if (!seenRun && (raw === 't' || raw === 'tst')) return 'test';
+            if (!seenRun && installCommands.has(raw)) return 'install';
+            return raw;
+          };
           if (/^[A-Za-z0-9_@][\w.:/@-]*$/.test(word)) {
-            const canonical = !seenRun && (word === 't' || word === 'tst') ? 'test' : word;
-            pushScriptWithHooks(canonical, childEnv);
+            pushScriptWithHooks(canonicalName(word), childEnv);
           } else if (/[$`*]|\$\{\{/.test(word)) {
             const val = resolveSingleCommandEnvVar(word, command, stepEnv);
             if (val !== null && /^[A-Za-z0-9_@][\w.:/@-]*$/.test(val)) {
-              const canonical = !seenRun && (val === 't' || val === 'tst') ? 'test' : val;
-              pushScriptWithHooks(canonical, childEnv);
+              pushScriptWithHooks(canonicalName(val), childEnv);
             } else {
               scripts.push({ script: ANY_ROOT_SCRIPT, env: null });
               if (rootScripts) {
