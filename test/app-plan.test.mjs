@@ -16,7 +16,7 @@ import { assertParity, parityPeers, segmentationsToRun } from '../test-utils/sha
 import { APP_JOBS, carriedApps, NIGHTLY_JOBS, RERUN_JOBS, SITE_JOBS, testedBase } from '../scripts/lib/tested-base.mjs';
 import { lockfileImpact } from '../scripts/lib/lockfile-impact.mjs';
 import { loadAppsRegistry, parseAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
-import { CATALOG, CATALOG_JOBS, loadConservativeWorkspaceGraph, reachableFrom, siteJobNames, WorkspaceGraphConfigurationError } from '../scripts/lib/workspace-graph.mjs';
+import { CATALOG, CATALOG_JOBS, loadConservativeWorkspaceGraph, reachableFrom, SITE, siteJobNames, WorkspaceGraphConfigurationError } from '../scripts/lib/workspace-graph.mjs';
 
 const graph = loadConservativeWorkspaceGraph(repoRoot);
 
@@ -405,8 +405,14 @@ test('ESLint stays out of every app build, unit test and browser test', async ()
     if (path.startsWith('test/') && !catalog.has(path)) continue;
     assert.doesNotMatch(await readFile(join(repoRoot, path), 'utf8'), imports, `${path} loads ESLint; revisit INDEPENDENT_ROOT_DEV_DEPENDENCIES`);
   }
-  // The per-app jobs run each app's build, test:e2e and release test script.
-  for (const path of loaders) assert.ok(!catalog.has(path), `ci.yml's per-app jobs run ${path}`);
+  // The per-app and site jobs never load ESLint, its runner, or scripts/quality/.
+  const siteNodes = reachableFrom(workspace, SITE);
+  for (const path of loaders) {
+    assert.ok(!catalog.has(path), `ci.yml's per-app jobs run ${path}`);
+    assert.ok(!siteNodes.has(path), `ci.yml's site jobs run ${path}`);
+  }
+  assert.ok(![...catalog].some((node) => node.startsWith('scripts/quality/')), "ci.yml's per-app jobs reach scripts/quality/");
+  assert.ok(![...siteNodes].some((node) => node.startsWith('scripts/quality/')), "ci.yml's site jobs reach scripts/quality/");
   const ci = parse(await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8'));
   for (const name of [...CATALOG_JOBS, ...siteJobNames(ci)]) {
     for (const step of ci.jobs[name].steps) assert.doesNotMatch(step.run ?? '', /\blint\b|eslint/, `${name} runs lint`);
@@ -2901,9 +2907,39 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
   assert.equal(reached.has('scripts/from-subproc.mjs'), true, 'subprocess exec packages/subproc');
   assert.equal(reached.has('exes/data-only/nested/reference.manifest.json'), true, 'exact .json manifest edge');
   assert.equal(reached.has('scripts/from-data-only.mjs'), false, 'exact .json reference does not pull in exes/data-only code');
+
+  // Prefix collisions (.json.gz alongside .json) and directories named *.json must
+  // retain the whole workspace-directory edge rather than narrowing to a misleading prefix.
+  const prefixRoot = await mkdtemp(join(tmpdir(), 'neurodesk-json-prefix-'));
+  t.after(() => rm(prefixRoot, { recursive: true, force: true }));
+  const prefixFiles = {
+    'package.json': JSON.stringify({ name: 'root', scripts: {} }),
+    '.github/workflows/ci.yml': stringify({
+      jobs: {
+        'composite-site': { steps: [{ run: 'node scripts/site.mjs' }] },
+        'app-tests': { steps: [{ run: 'node scripts/app-ci.mjs' }] },
+        'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+        'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+      },
+    }),
+    'scripts/site.mjs': "const archive = 'exes/data/reference.json.gz';\n",
+    'scripts/app-ci.mjs': "const mod = require('../packages/pkg/fixture.json');\n",
+    'exes/data/reference.json': '{}',
+    'exes/data/reference.json.gz': 'compressed',
+    'packages/pkg/package.json': JSON.stringify({ name: '@nd/pkg' }),
+    'packages/pkg/fixture.json/index.js': "import '../../../scripts/from-dir-json.mjs';\n",
+    'scripts/from-dir-json.mjs': '',
+  };
+  for (const [path, text] of Object.entries(prefixFiles)) {
+    await mkdir(dirname(join(prefixRoot, path)), { recursive: true });
+    await writeFile(join(prefixRoot, path), text);
+  }
+  const prefixGraph = await loadConservativeWorkspaceGraph(prefixRoot);
+  assert.equal(createAppPlan(registry, ['exes/data/reference.json.gz'], prefixGraph).site, true, '.json.gz keeps exes/data edge');
+  assert.equal(reachableFrom(prefixGraph, CATALOG).has('scripts/from-dir-json.mjs'), true, 'directory named fixture.json keeps packages/pkg edge');
 });
 
-test('lint runner and scripts/quality files select no apps and no site build', async () => {
+test('lint runner and scripts/quality files select nothing when unreached, and honor confirmed CI or app reachability', async (t) => {
   const registry = await loadAppsRegistry();
   const workspace = await graph;
   const plan = createAppPlan(registry, [
@@ -2915,6 +2951,41 @@ test('lint runner and scripts/quality files select no apps and no site build', a
   assert.deepEqual(plan.selected, []);
   assert.equal(plan.site, false);
   assert.equal(plan.reasons.fallback, null);
+  // Without a workspace graph, lint tooling cannot be proven unreached and falls back.
+  assert.equal(createAppPlan(registry, ['scripts/quality/lint-inventory.mjs']).allApps, true);
+
+  // If a CI job or an app directly reaches scripts/quality/*, the plan honors that edge.
+  const root = await mkdtemp(join(tmpdir(), 'neurodesk-quality-reach-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const files = {
+    'package.json': JSON.stringify({ name: 'root', scripts: {} }),
+    '.github/workflows/ci.yml': stringify({
+      jobs: {
+        'composite-site': { steps: [{ run: 'node scripts/site.mjs' }] },
+        'app-tests': { steps: [{ run: 'node scripts/ci.mjs' }] },
+        'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+        'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+      },
+    }),
+    'scripts/ci.mjs': "import './quality/catalog-helper.mjs';\n",
+    'scripts/site.mjs': "import './quality/site-helper.mjs';\n",
+    'scripts/quality/catalog-helper.mjs': 'export const a = 1;\n',
+    'scripts/quality/site-helper.mjs': 'export const b = 2;\n',
+    'scripts/quality/app-helper.mjs': 'export const c = 3;\n',
+    'apps/niimath/main.js': "import '../../scripts/quality/app-helper.mjs';\n",
+  };
+  for (const [path, text] of Object.entries(files)) {
+    await mkdir(dirname(join(root, path)), { recursive: true });
+    await writeFile(join(root, path), text);
+  }
+  const fixtureGraph = await loadConservativeWorkspaceGraph(root);
+  assert.equal(createAppPlan(registry, ['scripts/quality/catalog-helper.mjs'], fixtureGraph).allApps, true, 'CATALOG reachability');
+  assert.equal(createAppPlan(registry, ['scripts/quality/site-helper.mjs'], fixtureGraph).site, true, 'SITE reachability');
+  assert.deepEqual(
+    createAppPlan(registry, ['scripts/quality/app-helper.mjs'], fixtureGraph).selected.map((app) => app.id),
+    ['niimath'],
+    'direct app reachability',
+  );
 });
 
 test('changedManifests loads pnpm-workspace.yaml, pnpm-lock.yaml, and scripts/lib/e2e-test-data.mjs from git', async (t) => {

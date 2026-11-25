@@ -25,9 +25,10 @@ const MAX_TEXT_BYTES = 1024 * 1024;
 // joined onto a computed repository root.
 const REFERENCE = /(?:(?:\.\.\/)+|['"`])(packages|exes)\/([\w.-]+)/g;
 // Scripts address packages from the repository root, in either form, and
-// sometimes a single file in one. Put `json` before `[cm]?[jt]s` with `\b` so
-// `.json` paths do not match `.js` and fall back to the whole package directory.
-const SCRIPT_REFERENCE = /\b(packages|exes)(?:\/|['"],\s*['"])([\w.-]+)((?:\/[\w.-]+)*\/[\w.-]+\.(?:json|[cm]?[jt]s|md)\b)?/g;
+// sometimes a single file in one. Put `json` before `[cm]?[jt]s` and require a
+// complete path boundary so `.json` does not truncate to `.js` and `.json.gz`
+// does not truncate to `.json`.
+const SCRIPT_REFERENCE = /\b(packages|exes)(?:\/|['"],\s*['"])([\w.-]+)((?:\/[\w.-]+)*\/[\w.-]+\.(?:json|[cm]?[jt]s|md)(?=[\s'"`),;:\]}]|$))?/g;
 // Documentation counts only where code reads that exact file.
 const DOCUMENT_REFERENCE = /\b((?:packages|exes)\/[\w.-]+\/(?:[\w.-]+\/)*[\w.-]+\.md)\b/g;
 // A package's own tests change no app unless an app reads from them.
@@ -122,6 +123,10 @@ async function* textFiles(dir) {
 
 function exists(path) {
   return stat(path).then(() => true, () => false);
+}
+
+function isFile(path) {
+  return stat(path).then((entry) => entry.isFile(), () => false);
 }
 
 async function readPackageJson(dir) {
@@ -223,7 +228,7 @@ export async function loadConservativeWorkspaceGraph(root) {
     for (const [, top, name, inner] of text.matchAll(SCRIPT_REFERENCE)) {
       if (!nodeSet.has(`${top}/${name}`)) continue;
       const target = inner && `${top}/${name}${inner}`;
-      if (target && await exists(join(root, target))) {
+      if (target && await isFile(join(root, target))) {
         uses.add(target);
         pendingRootFiles.push(target);
       } else {
