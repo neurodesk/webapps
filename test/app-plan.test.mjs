@@ -4616,6 +4616,116 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       },
     ],
     [
+      'CI pnpm -w exec npm --prefix apps/n4 run lint keeps wrapped npm prefix target',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'pnpm -w exec npm --prefix apps/n4 run lint' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/lint.mjs': 'export const lint = 1;\n',
+        'apps/n4/package.json': JSON.stringify({ name: '@nd/n4', scripts: { lint: 'node ../../scripts/lint.mjs --workspace' } }),
+      },
+      'scripts/lint.mjs',
+      new Map(),
+      (plan) => {
+        assert.equal(plan.site, true);
+        assert.deepEqual(plan.selected.map((app) => app.id), ['n4']);
+      },
+    ],
+    [
+      'eager top-level workspace import in scripts/e2e-test-data.mjs stays in shared CI coverage',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ run: 'node scripts/e2e-test-data.mjs n4' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/e2e-test-data.mjs': "import '../packages/demo/src/shared.mjs';\nimport './lib/e2e-test-data.mjs';\n",
+        'scripts/lib/e2e-test-data.mjs': "export const provisioners = { n4: { provision: () => readFileSync('packages/lazy/manifest.json') } };\n",
+        'packages/demo/package.json': JSON.stringify({ name: '@nd/demo' }),
+        'packages/demo/src/shared.mjs': 'export const shared = 1;\n',
+        'packages/lazy/package.json': JSON.stringify({ name: '@nd/lazy' }),
+        'packages/lazy/manifest.json': '{}',
+      },
+      'packages/demo/src/shared.mjs',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'lazy per-app provisioner workspace reference in scripts/lib/e2e-test-data.mjs stays narrowed',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ run: 'node scripts/e2e-test-data.mjs n4' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/e2e-test-data.mjs': "import '../packages/demo/src/shared.mjs';\nimport './lib/e2e-test-data.mjs';\n",
+        'scripts/lib/e2e-test-data.mjs': "export const provisioners = { n4: { provision: () => readFileSync('packages/lazy/manifest.json') } };\n",
+        'packages/demo/package.json': JSON.stringify({ name: '@nd/demo' }),
+        'packages/demo/src/shared.mjs': 'export const shared = 1;\n',
+        'packages/lazy/package.json': JSON.stringify({ name: '@nd/lazy' }),
+        'packages/lazy/manifest.json': '{}',
+      },
+      'packages/lazy/manifest.json',
+      new Map(),
+      (plan) => assert.deepEqual(plan.selected, []),
+    ],
+    [
+      'top-level called helper in scripts/lib/e2e-test-data.mjs stays in shared CI coverage',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ run: 'node scripts/e2e-test-data.mjs n4' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/e2e-test-data.mjs': "import './lib/e2e-test-data.mjs';\n",
+        'scripts/lib/e2e-test-data.mjs': "function loadBoot() { return readFileSync('packages/demo/boot.json'); }\nconst BOOT = loadBoot();\nexport const provisioners = { n4: { provision: () => BOOT } };\n",
+        'packages/demo/package.json': JSON.stringify({ name: '@nd/demo' }),
+        'packages/demo/boot.json': '{}',
+      },
+      'packages/demo/boot.json',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'manifest or external lockfile change for eager workspace import in scripts/e2e-test-data.mjs selects all apps',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ run: 'node scripts/e2e-test-data.mjs n4' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/e2e-test-data.mjs': "import '../packages/demo/src/shared.mjs';\n",
+        'packages/demo/package.json': JSON.stringify({ name: '@nd/demo', type: 'module' }),
+        'packages/demo/src/shared.mjs': "import { parse } from 'yaml';\nexport const shared = parse;\n",
+      },
+      'pnpm-lock.yaml',
+      new Map([[
+        'pnpm-lock.yaml',
+        {
+          before: stringify({ lockfileVersion: '9.0', importers: { 'packages/demo': { dependencies: { yaml: { specifier: '2.0.0', version: '2.0.0' } } } }, packages: { 'yaml@2.0.0': {} }, snapshots: { 'yaml@2.0.0': {} } }),
+          after: stringify({ lockfileVersion: '9.0', importers: { 'packages/demo': { dependencies: { yaml: { specifier: '2.1.0', version: '2.1.0' } } } }, packages: { 'yaml@2.1.0': {} }, snapshots: { 'yaml@2.1.0': {} } }),
+        },
+      ]]),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
       'CI step cd into workspace with pnpm run lint keeps standalone lint edge',
       {
         '.github/workflows/ci.yml': stringify({
@@ -4632,6 +4742,23 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       'scripts/lint.mjs',
       new Map(),
       (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'uninvoked chained lint script omits only the standalone lint runner segment',
+      {
+        'scripts/lint.mjs': 'export const lint = 1;\n',
+        'packages/demo/package.json': JSON.stringify({
+          name: '@nd/demo',
+          scripts: { lint: 'node ../../scripts/lint.mjs --workspace && node --check bin/demo.js' },
+        }),
+        'apps/n4/package.json': JSON.stringify({
+          name: '@nd/n4',
+          dependencies: { '@nd/demo': 'workspace:*' },
+        }),
+      },
+      'scripts/lint.mjs',
+      new Map(),
+      (plan) => assert.deepEqual(plan.selected, []),
     ],
     [
       'one explicit CI lint target does not restore unrelated apps standalone lint edges',

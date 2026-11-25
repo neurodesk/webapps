@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { lstat, readdir, readFile, realpath, stat } from 'node:fs/promises';
+import { isBuiltin } from 'node:module';
 import { parse } from 'yaml';
 import { sharedModuleUsers } from './shared-module-users.mjs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
@@ -332,9 +333,65 @@ function classifyIdentifierUse(idNode, ancestors, derivedIdentifiers, readerDepE
   derivedIdentifiers.add(idName);
 }
 
-// Collect string and template literal ranges in a script so SCRIPT_REFERENCE can
-// narrow to an exact file only for whitelisted standalone path literals.
-function collectScriptStringLiterals(text, file) {
+const isFunctionNode = (node) => Boolean(node && (
+  node.type === 'FunctionDeclaration'
+  || node.type === 'FunctionExpression'
+  || node.type === 'ArrowFunctionExpression'
+));
+
+function functionNameOf(node, ancestors) {
+  if (node.type === 'FunctionDeclaration' && node.id?.type === 'Identifier') return node.id.name;
+  const parent = ancestors[ancestors.length - 1];
+  if (parent?.type === 'VariableDeclarator' && parent.init === node && parent.id?.type === 'Identifier') return parent.id.name;
+  return null;
+}
+
+function isDirectIife(node, ancestors) {
+  const parent = ancestors[ancestors.length - 1];
+  if (parent?.type === 'CallExpression' && parent.callee === node) return true;
+  const grandparent = ancestors[ancestors.length - 2];
+  return (
+    parent?.type === 'MemberExpression'
+    && parent.object === node
+    && grandparent?.type === 'CallExpression'
+    && grandparent.callee === parent
+  );
+}
+
+function containsImportMetaUrl(node) {
+  if (!node || typeof node !== 'object') return false;
+  if (
+    node.type === 'MemberExpression'
+    && !node.computed
+    && node.object?.type === 'MetaProperty'
+    && node.object.meta?.name === 'import'
+    && node.object.property?.name === 'meta'
+    && node.property?.type === 'Identifier'
+    && node.property.name === 'url'
+  ) return true;
+  for (const key of Object.keys(node)) {
+    if (AST_SKIP.has(key)) continue;
+    const val = node[key];
+    if (Array.isArray(val) ? val.some(containsImportMetaUrl) : containsImportMetaUrl(val)) return true;
+  }
+  return false;
+}
+
+function inMainGuardConsequent(chain, targetNode) {
+  for (let i = 0; i < chain.length; i += 1) {
+    const ancestor = chain[i];
+    if (ancestor?.type === 'IfStatement' && containsImportMetaUrl(ancestor.test)) {
+      const next = i + 1 < chain.length ? chain[i + 1] : targetNode;
+      if (next === ancestor.consequent) return true;
+    }
+  }
+  return false;
+}
+
+// Collect string/template literal ranges and module specifiers in a script so
+// SCRIPT_REFERENCE can narrow to an exact file and catalogShared can keep eager
+// top-level workspace imports while skipping lazy per-app provisioner refs.
+function analyzeScriptFile(text, file, { isEntry = false } = {}) {
   let ast;
   try {
     ast = sourceParser.parse(text, { filePath: file, sourceType: 'module' });
@@ -346,12 +403,31 @@ function collectScriptStringLiterals(text, file) {
   const derivedIdentifiers = new Set();
   const readerDepEdges = [];
   const candidates = [];
+  const fnNames = new Map();
+  const directIifeFunctions = new Set();
+  const eagerFunctionNames = new Set();
+  const callEdges = [];
   const ancestors = [];
   const walk = (node) => {
     if (!node || typeof node !== 'object') return;
     if (Array.isArray(node)) {
       for (const item of node) walk(item);
       return;
+    }
+    if (isFunctionNode(node)) {
+      const name = functionNameOf(node, ancestors);
+      if (name) fnNames.set(node, name);
+      if (isDirectIife(node, ancestors)) directIifeFunctions.add(node);
+    }
+    if (node.type === 'CallExpression' && node.callee?.type === 'Identifier') {
+      const callee = node.callee.name;
+      const enclosing = [...ancestors].reverse().find((a) => isFunctionNode(a) && !directIifeFunctions.has(a));
+      if (!enclosing) {
+        if (isEntry || !inMainGuardConsequent(ancestors, node)) eagerFunctionNames.add(callee);
+      } else {
+        const caller = fnNames.get(enclosing);
+        if (caller) callEdges.push([caller, callee]);
+      }
     }
     if (node.type === 'Identifier') {
       const parent = ancestors[ancestors.length - 1];
@@ -392,7 +468,14 @@ function collectScriptStringLiterals(text, file) {
         changed = true;
       }
     }
+    for (const [caller, callee] of callEdges) {
+      if (eagerFunctionNames.has(caller) && !eagerFunctionNames.has(callee)) {
+        eagerFunctionNames.add(callee);
+        changed = true;
+      }
+    }
   }
+  const isLazyChain = (chain) => chain.some((a) => isFunctionNode(a) && !directIifeFunctions.has(a) && !eagerFunctionNames.has(fnNames.get(a)));
   return candidates.map(({ node, ancestors: chain }) => {
     const isStringLiteral = node.type === 'Literal' && typeof node.value === 'string';
     const isTemplate = node.type === 'TemplateLiteral';
@@ -401,7 +484,7 @@ function collectScriptStringLiterals(text, file) {
       chain[chain.length - 1]?.type === 'VariableDeclarator' &&
       /(?:^|\n)[ \t]*\/\//.test(text.slice(node.range[0] + 1, node.range[1] - 1));
     const classified = classifyPathLiteral(node, chain, referencedIdentifiers, readerArgIdentifiers, derivedIdentifiers);
-    return { start: node.range[0], end: node.range[1], standalone: classified.standalone || commentLine, derivedJson: classified.derivedJson };
+    return { start: node.range[0], end: node.range[1], standalone: classified.standalone || commentLine, derivedJson: classified.derivedJson, inFunction: isLazyChain(chain) };
   });
 }
 
@@ -928,8 +1011,12 @@ function parseLintCommandFlags(token) {
       }
     }
     // `-w` / `--workspace-root` overrides `--dir` / `-C` / `--prefix` / `--cwd`
-    // on the same pnpm invocation.
-    if (!runnerRootFlag) filters.push(...runnerDirFilters);
+    // on the same pnpm invocation, but not on a separate wrapped invocation
+    // (such as `pnpm -w exec npm --prefix apps/n4 run lint`).
+    if (!runnerRootFlag && runnerDirFilters.length > 0) {
+      hasWorkspaceSelector = true;
+      filters.push(...runnerDirFilters);
+    }
   }
   return { hasRunner, hasRootFlag, hasCrossFlag, hasWorkspaceSelector, recursive, filters };
 }
@@ -1259,16 +1346,21 @@ function expandedRootScriptsFromWorkspace(commands, rootScripts, { baseDir = '.'
   return { texts, names };
 }
 
-// Omit a workspace package.json's standalone `lint` script (`node ../../scripts/lint.mjs`)
+// Omit an uninvoked workspace package.json's `node ../../scripts/lint.mjs`
+// command segment from `scripts.lint` (including when chained with `&& node --check ...`)
 // before scanning text references, as long as neither CI nor any other script calls `lint`.
 // Direct imports/references in code or build scripts remain untouched.
 function manifestScanText(text, manifest, stripStandaloneLint) {
   if (!stripStandaloneLint) return text;
   const lintCmd = manifest?.scripts?.lint;
-  if (typeof lintCmd !== 'string' || !INDEPENDENT_LINT_SCRIPT.test(lintCmd.trim())) return text;
+  if (typeof lintCmd !== 'string') return text;
   if (Object.entries(manifest.scripts).some(([name, cmd]) => name !== 'lint' && /\blint\b/.test(String(cmd)))) return text;
+  const segments = splitShellCommands(lintCmd);
+  const kept = segments.filter((segment) => !INDEPENDENT_LINT_SCRIPT.test(segment.trim()));
+  if (kept.length === segments.length) return text;
   const scripts = { ...manifest.scripts };
-  delete scripts.lint;
+  if (kept.length === 0) delete scripts.lint;
+  else scripts.lint = kept.join(' && ');
   return JSON.stringify({ ...manifest, scripts }, null, 2);
 }
 
@@ -1335,6 +1427,8 @@ export async function loadConservativeWorkspaceGraph(root) {
   }
 
   const edges = new Map();
+  const lazyWorkspaceEdges = new Map();
+  const externalImporterDeps = new Map();
   const pendingRootFiles = [];
   const derivedJsonFiles = new Set();
   const scannedDerivedJson = new Set();
@@ -1465,29 +1559,54 @@ export async function loadConservativeWorkspaceGraph(root) {
     const source = await readFile(join(root, file), 'utf8').catch(() => null);
     if (source === null) continue;
     const text = withoutLineComments(source, file);
-    const literals = collectScriptStringLiterals(text, file);
+    const literals = analyzeScriptFile(text, file, { isEntry: Boolean(edges.get(CATALOG)?.has(file)) });
+    const allWorkspaceTargets = new Set();
+    const eagerWorkspaceTargets = new Set();
+    const recordWorkspaceTarget = (wsTarget, isLazy) => {
+      allWorkspaceTargets.add(wsTarget);
+      if (!isLazy) eagerWorkspaceTargets.add(wsTarget);
+    };
     for (const match of text.matchAll(SCRIPT_REFERENCE)) {
       const [, top, name, inner] = match;
       if (!nodeSet.has(`${top}/${name}`)) continue;
+      const matchEnd = match.index + match[0].length;
+      const lit = literals?.find((entry) => entry.start < matchEnd && matchEnd <= entry.end);
+      const isLazy = Boolean(lit?.inFunction);
       const literalMatch = inner ? matchScriptLiteral(text, match, literals) : { complete: false, derivedJson: true };
       const target = literalMatch.complete && `${top}/${name}${inner}`;
       if (target && await isRegularUnlinkedFile(root, target)) {
         uses.add(target);
+        recordWorkspaceTarget(target, isLazy);
         if (literalMatch.derivedJson && target.endsWith('.json')) derivedJsonFiles.add(target);
         pendingRootFiles.push(target);
       } else {
         uses.add(`${top}/${name}`);
+        recordWorkspaceTarget(`${top}/${name}`, isLazy);
         const exactJson = inner?.endsWith('.json') && `${top}/${name}${inner}`;
         if (exactJson && await isRegularUnlinkedFile(root, exactJson)) {
           uses.add(exactJson);
+          recordWorkspaceTarget(exactJson, isLazy);
           derivedJsonFiles.add(exactJson);
           pendingRootFiles.push(exactJson);
         }
       }
     }
-    for (const [, name] of text.matchAll(BARE_IMPORT)) {
-      if (nodeByPackageName.has(name)) uses.add(nodeByPackageName.get(name));
+    const fileOwner = file.match(/^(?:packages|exes)\/[^/]+(?=\/)/)?.[0] ?? null;
+    for (const match of text.matchAll(BARE_IMPORT)) {
+      const name = match[1];
+      const matchEnd = match.index + match[0].length;
+      const lit = literals?.find((entry) => entry.start < matchEnd && matchEnd <= entry.end);
+      const isLazy = Boolean(lit?.inFunction);
+      if (nodeByPackageName.has(name)) {
+        const wsNode = nodeByPackageName.get(name);
+        uses.add(wsNode);
+        recordWorkspaceTarget(wsNode, isLazy);
+      } else if (fileOwner && !name.startsWith('.') && !isBuiltin(name)) {
+        externalImporterDeps.set(file, fileOwner);
+      }
     }
+    const lazyTargets = new Set([...allWorkspaceTargets].filter((wsTarget) => !eagerWorkspaceTargets.has(wsTarget)));
+    if (lazyTargets.size > 0) lazyWorkspaceEdges.set(file, lazyTargets);
     const imports = [...text.matchAll(ROOT_IMPORT)].map(([, path]) => relative(root, resolve(root, dirname(file), path)).split(sep).join('/'));
     const named = [...text.matchAll(ROOT_NAMED)].map(([, path, dir, name]) => path ?? `${dir}/${name}`);
     for (const [, directory] of text.matchAll(ROOT_GLOB)) {
@@ -1525,6 +1644,8 @@ export async function loadConservativeWorkspaceGraph(root) {
   const graph = {
     nodes: Object.freeze(nodes),
     edges,
+    lazyWorkspaceEdges,
+    externalImporterDeps,
     rootScriptsRun,
     jobScripts,
     workspaceRootScripts,

@@ -859,14 +859,26 @@ export function e2eTestDataImpact({ before, after }) {
 // it, that file's.
 const E2E_DATA_SCRIPTS = new Set(['scripts/e2e-test-data.mjs', E2E_TEST_DATA]);
 
-function reachableWithout(graph, start, excluded) {
+// Nodes reached by per-app CI jobs, keeping eager/top-level workspace imports
+// of e2e-test-data scripts while skipping only lazy (inside-function) workspace
+// references attributable to individual app provisioners.
+function catalogSharedNodes(graph) {
   const seen = new Set();
-  const stack = [start];
+  const seenDirect = new Set();
+  const seenProvisioner = new Set();
+  const stack = [[CATALOG, false]];
   while (stack.length) {
-    const node = stack.pop();
-    if (seen.has(node) || excluded.has(node)) continue;
+    const [node, inProvisioner] = stack.pop();
+    const visited = inProvisioner ? seenProvisioner : seenDirect;
+    if (visited.has(node)) continue;
+    visited.add(node);
     seen.add(node);
-    for (const next of graph.edges.get(node) ?? []) stack.push(next);
+    const nextInProvisioner = inProvisioner || E2E_DATA_SCRIPTS.has(node);
+    const lazy = nextInProvisioner && ROOT_FILE.test(node) ? graph.lazyWorkspaceEdges?.get(node) : null;
+    for (const next of graph.edges.get(node) ?? []) {
+      if (lazy?.has(next)) continue;
+      stack.push([next, nextInProvisioner]);
+    }
   }
   return seen;
 }
@@ -972,10 +984,10 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
   const appIds = new Set(registry.apps.map((app) => app.id));
   const reach = graph && new Map(registry.apps.map((app) => [app.id, reachableFrom(graph, `apps/${app.id}`)]));
   const catalog = graph && reachableFrom(graph, CATALOG);
-  // Everything per-app CI jobs reach outside the per-app data provisioner
-  // (scripts/e2e-test-data.mjs), which names packages only to provision
-  // individual apps' test fixtures.
-  const catalogShared = graph && reachableWithout(graph, CATALOG, E2E_DATA_SCRIPTS);
+  // Everything per-app CI jobs reach, keeping eager/top-level workspace imports
+  // of scripts/e2e-test-data.mjs while skipping only lazy per-app provisioner
+  // workspace references.
+  const catalogShared = graph && catalogSharedNodes(graph);
   const site = graph && reachableFrom(graph, SITE);
   const appReasons = new Map();
   const editedApps = new Set();
@@ -998,7 +1010,11 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
   // Selects whatever reaches `node` or a file below it.
   const selectReaching = (node, reason) => {
     const within = (candidate) => candidate === node || candidate.startsWith(`${node}/`);
-    if ((ROOT_FILE.test(`${node}/`) && [...catalog].some(within)) || [...catalogShared].some(within)) {
+    if (
+      (ROOT_FILE.test(`${node}/`) && [...catalog].some(within))
+      || catalogShared.has(node)
+      || [...catalogShared].some((candidate) => graph.externalImporterDeps?.get(candidate) === node)
+    ) {
       shared(`${reason}; ci.yml's per-app jobs run ${node}`);
     }
     if ([...site].some(within)) siteBuild(reason);
@@ -1233,7 +1249,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     // A module of the shared component package reaches the apps that load it.
     const loadedBy = graph?.moduleUsers?.(path);
     if (loadedBy) {
-      if (loadedBy.some((user) => catalogShared.has(user))) {
+      if (catalogShared.has(path) || loadedBy.some((user) => catalogShared.has(user) && !graph.lazyWorkspaceEdges?.get(user)?.has(path))) {
         shared(`${path}: ci.yml's per-app jobs run it`);
         continue;
       }
@@ -1249,7 +1265,11 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
       // Per-app jobs reach packages through e2e-test-data.mjs only to provision
       // an individual app's data; any root file or any node reached outside the
       // data provisioner runs for every app.
-      if ((ROOT_FILE.test(path) && catalog.has(path)) || nodes.some((node) => catalogShared.has(node))) {
+      if (
+        (ROOT_FILE.test(path) && catalog.has(path))
+        || nodes.some((node) => catalogShared.has(node))
+        || (/^(?:packages|exes)\/[^/]+\/package\.json$/.test(path) && [...catalogShared].some((node) => node.startsWith(`${nodes[0]}/`)))
+      ) {
         shared(`${path}: ci.yml's per-app jobs run it`);
         continue;
       }
