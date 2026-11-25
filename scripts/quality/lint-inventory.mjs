@@ -25,6 +25,7 @@ export const exclusions = {
   'apps/brainchomp/public/brainchomp/brainchomp-gl.js': 'Generated Emscripten glue from neuroneural/brainchomp-lib.',
   'apps/brainchomp/public/brainchomp/brainchomp-gpu.js': 'Generated Emscripten glue from neuroneural/brainchomp-lib.',
   'apps/brainchomp/vendor/brainchomp/index.js': 'Vendored third-party brainchomp-lib bundle, upstream-owned.',
+  'packages/brainchomp/wasm/brainchomp.js': 'Generated Emscripten glue from neuroneural/brainchomp-lib.',
 };
 
 export function sourceInventory(cwd) {

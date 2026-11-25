@@ -12,8 +12,8 @@ import {
   ProgressManager,
 } from '@neurodesk/webapp-components/ui';
 import { downloadBlob, downloadFile } from '@neurodesk/webapp-components/file-io';
+import { readNiftiVolumeAsync, writeNiftiVolume } from '@neurodesk/webapp-components/file-io/nifti-volume';
 import { readImageFiles, runDcm2niix } from '@neurodesk/runtime-support/dcm2niix-client';
-import { readVolume, writeVolume } from '@neurodesk/synthsr';
 import { createNiivueAdapter, createRunState, registerAppAutomation } from '@neurodesk/webapp-components/automation';
 import examples from '../examples.json';
 import { APP, DEFAULT_OPENING_RADIUS } from './config.js';
@@ -292,7 +292,7 @@ async function importImages(filesSource, signal) {
     const images = await readImageFiles(files, { signal: job.run.signal });
     job.run.signal.throwIfAborted();
     if (images.length !== 1) throw new Error('Choose one NIfTI image or one DICOM series at a time.');
-    const volume = readVolume(await images[0].arrayBuffer());
+    const volume = await readNiftiVolumeAsync(await images[0].arrayBuffer());
     job.run.signal.throwIfAborted();
     if (!job.run.current) return false;
     source = images[0];
@@ -371,8 +371,14 @@ async function applyReorient(picks) {
     return;
   }
   const nextAffine = applyWorldRemap(sourceVolume.affine, remap);
-  const nextVolume = { ...sourceVolume, affine: nextAffine };
-  const bytes = writeVolume(nextVolume, 'Reoriented with Brainchomp');
+  const nextVolume = {
+    data: sourceVolume.data,
+    dims: sourceVolume.dims,
+    affine: nextAffine,
+    version: sourceVolume.version,
+    transforms: null,
+  };
+  const bytes = writeNiftiVolume(nextVolume, 'Reoriented with Brainchomp');
   const names = outputNames(source.name);
   source = new File([bytes], names.reoriented, { type: 'application/x-nifti' });
   sourceVolume = nextVolume;

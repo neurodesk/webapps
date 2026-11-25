@@ -31,6 +31,7 @@ on:
       - 'packages/node-drivers/src/mindgrab-worker.js'
       - 'packages/node-drivers/src/mindgrab.js'
       - 'packages/node-drivers/src/niimath.js'
+      - 'packages/node-drivers/src/output-dir.js'
       - 'packages/runtime-support/**'
       - 'packages/runtime-support/package.json'
       - 'packages/runtime-support/src/mindgrab/**'
@@ -65,6 +66,8 @@ jobs:
         bison-native
         brain-extraction-native
         brain2print-native
+        brainchomp-native
+        brainchop-native
         browserqc-native
         calmar-native
         carotid-flow-native
@@ -99,13 +102,13 @@ jobs:
         synthseg-native
         synthseg-portable
         totalsegmentator-native
-        vesselboost-native
-        white-matter-lesions-native
       sweeps: >-
         ants-native
         bison-native
         brain-extraction-native
         brain2print-native
+        brainchomp-native
+        brainchop-native
         browserqc-native
         calmar-native
         carotid-flow-native
@@ -139,8 +142,6 @@ jobs:
         syncro-native
         synthseg-portable
         totalsegmentator-native
-        vesselboost-native
-        white-matter-lesions-native
 
   # Fails where ci withholds the full plan too: every call was skipped.
   full-plan-withheld:
@@ -191,6 +192,28 @@ jobs:
     needs: gate
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"brain2print-native"')) }}
     uses: ./.github/workflows/brain2print-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  brainchomp-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"brainchomp-native"')) }}
+    uses: ./.github/workflows/brainchomp-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  brainchop-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"brainchop-native"')) }}
+    uses: ./.github/workflows/brainchop-native.yml
     permissions:
       actions: read
       contents: write
@@ -559,28 +582,6 @@ jobs:
     needs: gate
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"totalsegmentator-native"')) }}
     uses: ./.github/workflows/totalsegmentator-native.yml
-    permissions:
-      actions: read
-      contents: write
-      id-token: write
-      pull-requests: read
-    secrets: inherit
-
-  vesselboost-native:
-    needs: gate
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"vesselboost-native"')) }}
-    uses: ./.github/workflows/vesselboost-native.yml
-    permissions:
-      actions: read
-      contents: write
-      id-token: write
-      pull-requests: read
-    secrets: inherit
-
-  white-matter-lesions-native:
-    needs: gate
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"white-matter-lesions-native"')) }}
-    uses: ./.github/workflows/white-matter-lesions-native.yml
     permissions:
       actions: read
       contents: write

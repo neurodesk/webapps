@@ -1,0 +1,20 @@
+@neurodesk/brainchomp incorporates the pinned CPU WebAssembly module from
+neuroneural/brainchomp-lib (commit 95c8b9bd186f0fcffabb797e1fe770c26659750e, MIT License)
+for rodent MRI brain extraction, matching the Brainchomp web application
+(neuroneural/brainchomp commit 51a90203f497cea6b3cf01e34bd113f8c2a6292c).
+
+Third-party components embedded in brainchomp.wasm:
+
+1. MeshNet inference engine
+   MIT License, Copyright (c) 2024-2026 spikedoanz, Sergey Plis.
+
+2. NIfTI I/O (nifti_io.c / nifti_io.h)
+   Public-domain NIfTI I/O consolidation based on work by Robert W. Cox,
+   Mark Jenkinson, Rick Reynolds, and Chris Rorden.
+
+3. Niivue robust intensity scaling algorithm (conform.c)
+   Reimplemented from Niivue (BSD-2-Clause, https://github.com/niivue/niivue)
+   and FastSurfer conform.py (Apache-2.0).
+
+4. WGSL convolution structure (TensorFlow.js)
+   Copyright 2023 Google LLC, Apache License 2.0.

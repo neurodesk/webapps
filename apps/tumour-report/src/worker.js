@@ -11,7 +11,7 @@ import wasmURL from "onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm?url";
 import wasmModuleURL from "onnxruntime-web/ort-wasm-simd-threaded.asyncify.mjs?url";
 import initGreedy, * as greedyApi from "@neurodesk/greedy/wasm-single";
 import { gunzip } from "@neurodesk/greedy";
-import { readVolume } from "@neurodesk/synthsr";
+import { readNiftiVolumeAsync } from "@neurodesk/webapp-components/file-io/nifti-volume";
 import { fetchModel } from "@neurodesk/webapp-components/worker";
 import {
   extractBrainMask,
@@ -193,13 +193,13 @@ async function fetchRadsAtlases(tumourType) {
     atlasMeta.push({ id: asset.id, file: asset.filename, sha256: asset.sha256 });
   }
   const toArrayBuffer = (u8) => u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
-  const lateralisation = readVolume(toArrayBuffer(fetched["mni-lateralisation"])).data;
-  const lobes = readVolume(toArrayBuffer(fetched["mni-lobes"])).data;
-  const schaefer7 = readVolume(toArrayBuffer(fetched["schaefer7"])).data;
-  const schaefer17 = readVolume(toArrayBuffer(fetched["schaefer17"])).data;
+  const lateralisation = (await readNiftiVolumeAsync(toArrayBuffer(fetched["mni-lateralisation"]))).data;
+  const lobes = (await readNiftiVolumeAsync(toArrayBuffer(fetched["mni-lobes"]))).data;
+  const schaefer7 = (await readNiftiVolumeAsync(toArrayBuffer(fetched["schaefer7"]))).data;
+  const schaefer17 = (await readNiftiVolumeAsync(toArrayBuffer(fetched["schaefer17"]))).data;
   const bcbTracts = parseBcbTractsPack(await gunzip(fetched["bcb-tracts"]));
-  const resectLeft = fetched["resect-left"] ? readVolume(toArrayBuffer(fetched["resect-left"])).data : null;
-  const resectRight = fetched["resect-right"] ? readVolume(toArrayBuffer(fetched["resect-right"])).data : null;
+  const resectLeft = fetched["resect-left"] ? (await readNiftiVolumeAsync(toArrayBuffer(fetched["resect-left"]))).data : null;
+  const resectRight = fetched["resect-right"] ? (await readNiftiVolumeAsync(toArrayBuffer(fetched["resect-right"]))).data : null;
   return {
     mniTemplateBytes: fetched["mni-icbm152-t1-brain"],
     atlases: { lateralisation, lobes, schaefer7, schaefer17, bcbTracts, resectLeft, resectRight },
@@ -211,7 +211,7 @@ self.onmessage = async ({ data: job }) => {
   try {
     const started = performance.now();
     progress(0, "Reading T1c scan…");
-    const volume = readVolume(await job.t1cFile.arrayBuffer());
+    const volume = await readNiftiVolumeAsync(await job.t1cFile.arrayBuffer());
     validateVolume(volume, "T1c");
     log(`Loaded T1c ${job.t1cFile.name} (${volume.dims.join(" × ")})`);
 
@@ -225,7 +225,7 @@ self.onmessage = async ({ data: job }) => {
 
     if (job.maskFile) {
       progress(0.05, "Reading supplied tumour mask…");
-      const maskVol = readVolume(await job.maskFile.arrayBuffer());
+      const maskVol = await readNiftiVolumeAsync(await job.maskFile.arrayBuffer());
       validateVolume(maskVol, "Tumour mask");
       if (!gridsMatch(volume, maskVol)) {
         throw new Error(`Supplied tumour mask (${maskVol.dims.join(" × ")}) is not aligned to the T1c voxel-to-RAS grid (${volume.dims.join(" × ")}).`);
@@ -341,6 +341,8 @@ self.onmessage = async ({ data: job }) => {
       tumourType: job.tumourType,
       dims: volume.dims,
       affine: volume.affine,
+      transforms: volume.transforms,
+      niftiVersion: volume.version,
       brainMask,
       tumourMask,
       mniMask,

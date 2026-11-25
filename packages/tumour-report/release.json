@@ -1,0 +1,39 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "tumour-report-v",
+  "displayName": "Brain Tumour Report",
+  "app": "tumour-report",
+  "run": "t1c.nii.gz results",
+  "readme": {
+    "run": "Segment contrast-enhancing brain tumours and compute MNI RADS reports",
+    "notes": [
+      "Both pinned Raidionics v1.3 ONNX models (MRI_Brain and MRI_TumorCore/t1c) and all",
+      "MNI ICBM152 2009a atlases, BCB white-matter tracts and resectability maps are included.",
+      "No network connection or previously populated cache is required.",
+      "Add --skull-stripped for skull-stripped T1c inputs, --no-mni for native morphometry only,",
+      "--mask PATH to characterize an existing binary tumour mask, or --help for all options.",
+      "DICOM import and interactive 3D slice inspection use the web app.",
+      "",
+      "Research software only; not for clinical diagnosis or surgical planning.",
+      "Please cite Bouget et al. (Raidionics v1.3 / RADS) and Kommers et al. (2021) for GBM resectability."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "tumour-report"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "tumour-report.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "tumour-report"
+    }
+  }
+}
