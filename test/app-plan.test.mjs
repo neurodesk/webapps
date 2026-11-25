@@ -2870,6 +2870,16 @@ test('scripts/lib/e2e-test-data.mjs narrows to apps whose pure provisioner entri
   const tdzBefore = 'export const provisioners = { denoise: { env: [], provision: async () => ({}) } };\nconst laterFn = async () => ({});\n';
   const tdzAfter = 'export const provisioners = { denoise: { env: [], provision: laterFn } };\nconst laterFn = async () => ({});\n';
   assert.match(e2eTestDataImpact({ before: tdzBefore, after: tdzAfter }).shared, /cannot be isolated safely/);
+  // A named provisioner helper that reads another app's table entry hides a cross-app dependency and falls back.
+  const crossHelperBefore = [
+    'async function runBeta() { return { X: provisioners.alpha.env[0] }; }',
+    'export const provisioners = {',
+    "  alpha: { env: ['A'], provision: async () => ({ A: '1' }) },",
+    '  beta: { env: [\'X\'], provision: runBeta },',
+    '};',
+  ].join('\n');
+  const crossHelperAfter = crossHelperBefore.replace("env: ['A']", "env: ['B']");
+  assert.match(e2eTestDataImpact({ before: crossHelperBefore, after: crossHelperAfter }).shared, /cannot be isolated safely/);
 });
 
 test('per-app CI scripts resolve exact .json data paths without dragging in whole workspace directories, while preserving package directory loads', async (t) => {
@@ -2954,6 +2964,7 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
       "const commented = 'exes/commented/reference.json' /* archive suffix */ + '.gz';",
       "const conditional = (process.env.ALT ? 'exes/conditional/alternate.json' : 'exes/conditional/reference.json') + '.gz';",
       "const viaObj = ({ file: 'exes/objprop/reference.json' }).file + '.gz';",
+      "const storedBase = resolve('exes/stored/reference.json'); readFileSync(storedBase + '.gz');",
       "const linked = 'exes/linked/fixture.json';",
     ].join('\n'),
     'scripts/app-ci.mjs': "const mod = require('../packages/pkg/fixture.json');\n",
@@ -2970,6 +2981,8 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
     'exes/conditional/reference.json.gz': 'conditional',
     'exes/objprop/reference.json': '{}',
     'exes/objprop/reference.json.gz': 'objprop',
+    'exes/stored/reference.json': '{}',
+    'exes/stored/reference.json.gz': 'stored',
     'exes/linked/target.json': '{"real":true}',
     'packages/pkg/package.json': JSON.stringify({ name: '@nd/pkg' }),
     'packages/pkg/fixture.json/index.js': "import '../../../scripts/from-dir-json.mjs';\n",
@@ -2987,6 +3000,7 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
   assert.equal(createAppPlan(registry, ['exes/commented/reference.json.gz'], prefixGraph).site, true, 'commented path concatenation keeps exes/commented edge');
   assert.equal(createAppPlan(registry, ['exes/conditional/reference.json.gz'], prefixGraph).site, true, 'conditional inside computed path keeps exes/conditional edge');
   assert.equal(createAppPlan(registry, ['exes/objprop/reference.json.gz'], prefixGraph).site, true, 'object-property computed path keeps exes/objprop edge');
+  assert.equal(createAppPlan(registry, ['exes/stored/reference.json.gz'], prefixGraph).site, true, 'stored resolve() result concatenated later keeps exes/stored edge');
   assert.equal(createAppPlan(registry, ['exes/linked/target.json'], prefixGraph).site, true, 'symlink keeps exes/linked edge');
   assert.equal(reachableFrom(prefixGraph, CATALOG).has('scripts/from-dir-json.mjs'), true, 'directory named fixture.json keeps packages/pkg edge');
 });
@@ -3076,13 +3090,14 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
 
   // Cross-workspace lint from an app build, recursive CI lint (`pnpm -r run lint`), and equals-form
   // `--filter=@nd/lint-target run lint` all propagate edges to their calling apps / CI jobs.
-  for (const [label, patch, check] of [
+  for (const [label, patch, changedPath, check] of [
     [
       'app cross-workspace lint',
       {
         'apps/sdc/package.json': JSON.stringify({ name: '@nd/sdc', scripts: { build: 'pnpm --filter @nd/lint-target lint' } }),
         'packages/lint-target/package.json': JSON.stringify({ name: '@nd/lint-target', scripts: { lint: 'node ../../scripts/quality/helper.mjs' } }),
       },
+      'scripts/quality/helper.mjs',
       (plan) => assert.deepEqual(plan.selected.map((app) => app.id), ['sdc']),
     ],
     [
@@ -3098,6 +3113,7 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
         }),
         'packages/lint-target/package.json': JSON.stringify({ name: '@nd/lint-target', scripts: { lint: 'node ../../scripts/quality/helper.mjs' } }),
       },
+      'scripts/quality/helper.mjs',
       (plan) => assert.equal(plan.site, true),
     ],
     [
@@ -3113,7 +3129,59 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
         }),
         'packages/lint-target/package.json': JSON.stringify({ name: '@nd/lint-target', scripts: { lint: 'node ../../scripts/quality/helper.mjs' } }),
       },
+      'scripts/quality/helper.mjs',
       (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'explicitly linted workspace package internal file in app-tests',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'pnpm --filter @nd/second lint' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'packages/second/package.json': JSON.stringify({ name: '@nd/second', scripts: { lint: 'node lint.mjs' } }),
+        'packages/second/lint.mjs': 'console.log(1);\n',
+      },
+      'packages/second/lint.mjs',
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'chained lint-to-lint cross-workspace call in app-tests',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'pnpm --filter @nd/first lint' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'packages/first/package.json': JSON.stringify({ name: '@nd/first', scripts: { lint: 'pnpm --filter @nd/second run lint' } }),
+        'packages/second/package.json': JSON.stringify({ name: '@nd/second', scripts: { lint: 'node ../../scripts/quality/helper.mjs' } }),
+      },
+      'scripts/quality/helper.mjs',
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'pnpm -w run lint in composite-site',
+      {
+        'package.json': JSON.stringify({ name: 'root', scripts: { lint: 'node scripts/quality/root.mjs' } }),
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'pnpm -w run lint' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/quality/root.mjs': 'console.log(1);\n',
+      },
+      'scripts/quality/root.mjs',
+      (plan) => assert.equal(plan.site, true),
     ],
   ]) {
     const caseRoot = await mkdtemp(join(tmpdir(), 'neurodesk-cross-lint-'));
@@ -3136,7 +3204,7 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       await writeFile(join(caseRoot, path), text);
     }
     const caseGraph = await loadConservativeWorkspaceGraph(caseRoot);
-    check(createAppPlan(registry, ['scripts/quality/helper.mjs'], caseGraph), label);
+    check(createAppPlan(registry, [changedPath], caseGraph), label);
   }
 });
 

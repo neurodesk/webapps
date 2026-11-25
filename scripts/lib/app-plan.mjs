@@ -689,10 +689,12 @@ function parseE2eTables(source) {
   let hasPureFlag = false;
   for (const statement of ast.body) {
     if (statement.type === 'FunctionDeclaration' && statement.id?.type === 'Identifier') {
+      if (referencesTable(statement)) return null;
       hoistedFunctions.add(statement.id.name);
       continue;
     }
     if (statement.type === 'VariableDeclaration' && statement.kind === 'const') {
+      if (referencesTable(statement)) return null;
       if (!seenProvisioners) {
         for (const declarator of statement.declarations) {
           if (declarator.id?.type !== 'Identifier') continue;
@@ -704,13 +706,27 @@ function parseE2eTables(source) {
       }
       continue;
     }
-    if (statement.type !== 'ExportNamedDeclaration' || statement.declaration?.type !== 'VariableDeclaration' || statement.declaration.kind !== 'const') continue;
+    const isProvisionTestData =
+      statement.type === 'ExportNamedDeclaration' &&
+      statement.declaration?.type === 'FunctionDeclaration' &&
+      statement.declaration.id?.name === 'provisionTestData';
+    if (isProvisionTestData) continue;
+    if (statement.type !== 'ExportNamedDeclaration' || statement.declaration?.type !== 'VariableDeclaration' || statement.declaration.kind !== 'const') {
+      if (referencesTable(statement)) return null;
+      continue;
+    }
+    let matchedTable = false;
     for (const declarator of statement.declaration.declarations) {
-      if (declarator.id?.type !== 'Identifier' || !TABLE_NAMES.has(declarator.id.name)) continue;
+      if (declarator.id?.type !== 'Identifier' || !TABLE_NAMES.has(declarator.id.name)) {
+        if (referencesTable(declarator)) return null;
+        continue;
+      }
       if (tables.has(declarator.id.name) || declarator.init?.type !== 'ObjectExpression') return null;
       tables.set(declarator.id.name, declarator.init);
       if (declarator.id.name === 'provisioners') seenProvisioners = true;
+      matchedTable = true;
     }
+    if (!matchedTable && referencesTable(statement)) return null;
   }
   if (!tables.has('provisioners')) return null;
   const context = { hasPureFlag, topLevelFunctions: new Set([...hoistedFunctions, ...initializedConsts]) };
@@ -867,6 +883,14 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
   const appIds = new Set(registry.apps.map((app) => app.id));
   const reach = graph && new Map(registry.apps.map((app) => [app.id, reachableFrom(graph, `apps/${app.id}`)]));
   const catalog = graph && reachableFrom(graph, CATALOG);
+  // Workspace packages explicitly targeted by a per-app CI command (such as
+  // `pnpm --filter @nd/pkg lint`), as opposed to packages reached only through
+  // per-app data provisioning scripts.
+  const catalogWorkspace = graph && new Set(
+    [...(graph.edges.get(CATALOG) ?? [])]
+      .filter((node) => /^(?:apps|packages|exes)\//.test(node))
+      .flatMap((node) => [...reachableFrom(graph, node)]),
+  );
   const site = graph && reachableFrom(graph, SITE);
   const appReasons = new Map();
   const editedApps = new Set();
@@ -1110,8 +1134,9 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     }
     const nodes = graphNodes(path, graph);
     if (graph && nodes.length) {
-      // Per-app jobs name packages only to provision their own app's data.
-      if (ROOT_FILE.test(path) && catalog.has(path)) {
+      // Per-app jobs name packages only to provision their own app's data,
+      // unless a per-app CI command explicitly targets a workspace package.
+      if ((ROOT_FILE.test(path) && catalog.has(path)) || nodes.some((node) => catalogWorkspace.has(node))) {
         shared(`${path}: ci.yml's per-app jobs run it`);
         continue;
       }

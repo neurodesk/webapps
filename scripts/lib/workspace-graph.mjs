@@ -46,7 +46,7 @@ const SOURCE_FILE = /\.[cm]?[jt]s$/;
 // A whole line that is a `//` comment. Triple-slash lines stay: TypeScript's
 // `/// <reference path>` directives are compiler inputs.
 const LINE_COMMENT = /^[ \t]*\/\/(?!\/).*$/gm;
-const ROOT_SCRIPT_CALL = /\bpnpm (?:run )?([\w:-]+)/g;
+const ROOT_SCRIPT_CALL = /\bpnpm (?:-w |--workspace-root )?(?:run )?([\w:-]+)/g;
 // An app's code names a file of another app by a relative path: a kit its build
 // stages, a fixture its tests read.
 const APP_CODE = /\.[cm]?[jt]sx?$/;
@@ -141,16 +141,27 @@ async function isRegularUnlinkedFile(root, target) {
 const AST_SKIP = new Set(['loc', 'range', 'start', 'end', 'tokens', 'comments', 'parent']);
 const DIRECT_MODULE_PARENTS = new Set(['ImportDeclaration', 'ExportNamedDeclaration', 'ExportAllDeclaration', 'ImportExpression']);
 const STATEMENT_BOUNDARY = new Set(['ExpressionStatement', 'VariableDeclaration', 'ReturnStatement', 'BlockStatement', 'Program']);
+const FILE_READER_CALLS = new Set(['readFile', 'readFileSync', 'require']);
+const PATH_JOIN_CALLS = new Set(['join', 'resolve']);
 const INDEPENDENT_LINT_SCRIPT = /^node\s+(?:\.\.\/)+scripts\/lint\.mjs(?:\s+--workspace)?$/;
 const FILTER_ARG = /(?:--filter|-F)(?:=|\s+)['"]?([^\s'"]+)['"]?/g;
-const CROSS_WORKSPACE_FLAG = /(?:--filter|-F|-r|--recursive|--workspace|-w)(?:=|\s|$)/;
+const CROSS_WORKSPACE_FLAG = /(?:--filter|-F|-r|--recursive|--workspace|-w|--workspaces)(?:=|\s|$)/;
+
+function calleeNameOf(callNode) {
+  const callee = callNode?.callee;
+  if (callee?.type === 'Identifier') return callee.name;
+  if (callee?.type === 'MemberExpression' && !callee.computed && callee.property?.type === 'Identifier') return callee.property.name;
+  return null;
+}
 
 // Whether a string literal sits in a whitelisted standalone path context:
 // (1) static/dynamic import/export source, (2) direct CallExpression argument,
 // (3) element of an ArrayExpression passed directly to a CallExpression, or
 // (4) direct VariableDeclarator initializer whose binding is never referenced
-// elsewhere in the script, with only CallExpression/AwaitExpression/VariableDeclarator
-// wrappers up to the enclosing statement.
+// elsewhere in the script. A CallExpression stored in a referenced variable is
+// accepted only if a file-reading call (`readFile`/`readFileSync`/`require`)
+// already consumed the path before the assignment (preventing `const base =
+// resolve('ref.json'); readFileSync(base + '.gz')` from narrowing to `ref.json`).
 function isStandalonePathLiteral(node, ancestors, referencedIdentifiers) {
   if (node.type !== 'Literal' || typeof node.value !== 'string') return false;
   const parent = ancestors[ancestors.length - 1];
@@ -162,6 +173,8 @@ function isStandalonePathLiteral(node, ancestors, referencedIdentifiers) {
   }
   let callIndex = -1;
   if (parent.type === 'CallExpression' && Array.isArray(parent.arguments) && parent.arguments.includes(node)) {
+    const name = calleeNameOf(parent);
+    if (PATH_JOIN_CALLS.has(name) && parent.arguments[parent.arguments.length - 1] !== node) return false;
     callIndex = ancestors.length - 1;
   } else if (parent.type === 'ArrayExpression') {
     const grandParent = ancestors[ancestors.length - 2];
@@ -170,13 +183,21 @@ function isStandalonePathLiteral(node, ancestors, referencedIdentifiers) {
     }
   }
   if (callIndex < 0) return false;
+  let consumedByReader = FILE_READER_CALLS.has(calleeNameOf(ancestors[callIndex]));
   for (let i = callIndex - 1; i >= 0; i--) {
     const ancestor = ancestors[i];
     const child = ancestors[i + 1];
     if (STATEMENT_BOUNDARY.has(ancestor.type)) return true;
     if (ancestor.type === 'AwaitExpression' && ancestor.argument === child) continue;
-    if (ancestor.type === 'VariableDeclarator' && ancestor.init === child) continue;
-    if (ancestor.type === 'CallExpression' && Array.isArray(ancestor.arguments) && ancestor.arguments.includes(child)) continue;
+    if (ancestor.type === 'VariableDeclarator' && ancestor.init === child) {
+      if (consumedByReader) continue;
+      if (ancestor.id?.type === 'Identifier' && !referencedIdentifiers.has(ancestor.id.name)) continue;
+      return false;
+    }
+    if (ancestor.type === 'CallExpression' && Array.isArray(ancestor.arguments) && ancestor.arguments.includes(child)) {
+      if (FILE_READER_CALLS.has(calleeNameOf(ancestor))) consumedByReader = true;
+      continue;
+    }
     return false;
   }
   return true;
@@ -267,7 +288,11 @@ function lintTargetsInCommands(commands, { nodeByPackageName, nodeSet, manifests
   const targets = new Set();
   const allLintNodes = () => [...manifests.entries()].filter(([, manifest]) => typeof manifest?.scripts?.lint === 'string').map(([node]) => node);
   for (const cmd of commands) {
-    if (!/\blint\b/.test(cmd) || !CROSS_WORKSPACE_FLAG.test(cmd)) continue;
+    if (INDEPENDENT_LINT_SCRIPT.test(cmd.trim())) continue;
+    if (!/\b(?:pnpm|npm|yarn)\b/.test(cmd) || !/\blint\b/.test(cmd) || !CROSS_WORKSPACE_FLAG.test(cmd)) continue;
+    // `pnpm -w run lint` / `pnpm --workspace-root run lint` runs the root lint
+    // script (handled by ROOT_SCRIPT_CALL), not every workspace member.
+    if (/(?:^|\s)(?:-w|--workspace-root)(?:\s|$)/.test(cmd) && !/(?:--filter|-F|-r|--recursive|--workspace(?:=|\s)|--workspaces)/.test(cmd)) continue;
     const recursive = /(?:^|\s)(?:-r|--recursive)(?:\s|$)/.test(cmd);
     const filters = [...cmd.matchAll(FILTER_ARG)].map(([, target]) => target);
     if (!recursive && filters.length > 0) {
@@ -355,7 +380,10 @@ export async function loadConservativeWorkspaceGraph(root) {
   const expandedByEntry = new Map(rawEntries.map(([node, raw]) => [node, expandedCommandTexts(raw, rootScripts)]));
   const ciInvokesLint = [...expandedByEntry.values()].flat().some((cmd) => /\blint\b/.test(cmd));
   const workspaceCrossInvokesLint = [...manifests.values()].some((manifest) =>
-    Object.entries(manifest?.scripts ?? {}).some(([name, cmd]) => name !== 'lint' && /\blint\b/.test(String(cmd)) && CROSS_WORKSPACE_FLAG.test(String(cmd))),
+    Object.values(manifest?.scripts ?? {}).some((cmd) => {
+      const value = String(cmd);
+      return !INDEPENDENT_LINT_SCRIPT.test(value.trim()) && /\b(?:pnpm|npm|yarn)\b/.test(value) && /\blint\b/.test(value) && CROSS_WORKSPACE_FLAG.test(value);
+    }),
   );
   const stripStandaloneLint = !ciInvokesLint && !workspaceCrossInvokesLint;
 
@@ -376,8 +404,8 @@ export async function loadConservativeWorkspaceGraph(root) {
         }
       }
     }
-    const nonLintScripts = Object.entries(manifest?.scripts ?? {}).filter(([name]) => name !== 'lint').map(([, cmd]) => String(cmd));
-    for (const lintTarget of lintTargetsInCommands(nonLintScripts, { nodeByPackageName, nodeSet, manifests })) {
+    const allScripts = Object.values(manifest?.scripts ?? {}).map(String);
+    for (const lintTarget of lintTargetsInCommands(allScripts, { nodeByPackageName, nodeSet, manifests })) {
       uses.add(lintTarget);
     }
     const manifestPath = join(root, node, 'package.json');
