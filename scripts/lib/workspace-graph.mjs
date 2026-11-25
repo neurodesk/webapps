@@ -38,7 +38,7 @@ const ROOT_FILE = String.raw`[\w./-]+\.(?:[cm]?[jt]s|json|ya?ml)`;
 const ROOT_PATH = new RegExp(String.raw`(?:\.\.\/)+((?:scripts|test-utils|registry|test)\/${ROOT_FILE})\b`, 'g');
 // Root files name each other relative to themselves or from the repository root.
 const ROOT_IMPORT = new RegExp(String.raw`['"\`](\.\.?\/${ROOT_FILE})['"\`]`, 'g');
-const ROOT_NAMED = new RegExp(String.raw`(?:^|[\s'"\`(=])((?:scripts|test-utils|registry|test)\/${ROOT_FILE})\b|['"](registry|test-utils)['"],\s*['"](${ROOT_FILE})['"]`, 'gm');
+const ROOT_NAMED = new RegExp(String.raw`(?:^|[\s'"\`(=])(?:\.\/)?((?:scripts|test-utils|registry|test)\/${ROOT_FILE})\b|['"](registry|test-utils)['"],\s*['"](${ROOT_FILE})['"]`, 'gm');
 const ROOT_GLOB = /['"`]((?:scripts|test-utils|test)\/[\w/-]+)\/[^'"`]*\*[^'"`]*['"`]/g;
 const ROOT_DIRS = ['scripts/', 'test-utils/', 'registry/', 'test/', 'packages/', 'exes/'];
 const ROOT_CONFIG = /^[\w.-]+\.(?:[cm]?[jt]s|json)$/;
@@ -46,7 +46,7 @@ const SOURCE_FILE = /\.[cm]?[jt]s$/;
 // A whole line that is a `//` comment. Triple-slash lines stay: TypeScript's
 // `/// <reference path>` directives are compiler inputs.
 const LINE_COMMENT = /^[ \t]*\/\/(?!\/).*$/gm;
-const ROOT_SCRIPT_CALL = /\bpnpm (?:-w |--workspace-root )?(?:run )?['"]?([A-Za-z0-9_@][\w.:/@-]*)['"]?/g;
+const ROOT_SCRIPT_CALL = /\bpnpm\s+(?:(?:-w|--workspace-root)\s+)?(?:run\s+)?['"]?([A-Za-z0-9_@][\w.:/@-]*)['"]?/g;
 // An app's code names a file of another app by a relative path: a kit its build
 // stages, a fixture its tests read.
 const APP_CODE = /\.[cm]?[jt]sx?$/;
@@ -374,7 +374,8 @@ function expandedCommandTexts(commands, rootScripts) {
   return texts;
 }
 
-const WORKSPACE_ROOT_SCRIPT_CALL = /\bpnpm (?:-w|--workspace-root) (?:run )?['"]?([A-Za-z0-9_@][\w.:/@-]*)['"]?/g;
+const WORKSPACE_ROOT_SCRIPT_CALL = /\bpnpm\s+(?:-w|--workspace-root)\s+(?:run\s+)?['"]?([A-Za-z0-9_@][\w.:/@-]*)['"]?/g;
+const COMMAND_PACKAGE_TESTS = /(?:^|[\s'"`(=])(?:\.\/)?(packages\/[\w.-]+\/tests?)(?:\/|$)/gm;
 
 // Expand root package.json scripts explicitly invoked from a workspace manifest
 // via `pnpm -w [run] <script>` or `pnpm --workspace-root [run] <script>`,
@@ -498,8 +499,16 @@ export async function loadConservativeWorkspaceGraph(root) {
           pendingRootFiles.push(match[1]);
         }
       }
-      for (const [, top, name] of cmd.matchAll(SCRIPT_REFERENCE)) {
-        if (nodeSet.has(`${top}/${name}`)) uses.add(`${top}/${name}`);
+      for (const [, tests] of cmd.matchAll(COMMAND_PACKAGE_TESTS)) uses.add(tests);
+      for (const [, document] of cmd.matchAll(DOCUMENT_REFERENCE)) uses.add(document);
+      for (const [, top, name, inner] of cmd.matchAll(SCRIPT_REFERENCE)) {
+        if (!nodeSet.has(`${top}/${name}`)) continue;
+        uses.add(`${top}/${name}`);
+        const target = inner && `${top}/${name}${inner}`;
+        if (target && await isRegularUnlinkedFile(root, target)) {
+          uses.add(target);
+          pendingRootFiles.push(target);
+        }
       }
     }
     const manifestPath = join(root, node, 'package.json');
@@ -552,8 +561,14 @@ export async function loadConservativeWorkspaceGraph(root) {
     if (/^(?:packages|exes)\/.*\.json$/.test(file)) {
       const jsonText = await readFile(join(root, file), 'utf8').catch(() => null);
       if (jsonText !== null) {
-        for (const [, top, name] of jsonText.matchAll(SCRIPT_REFERENCE)) {
-          if (nodeSet.has(`${top}/${name}`)) uses.add(`${top}/${name}`);
+        for (const [, top, name, inner] of jsonText.matchAll(SCRIPT_REFERENCE)) {
+          if (!nodeSet.has(`${top}/${name}`)) continue;
+          uses.add(`${top}/${name}`);
+          const target = inner && `${top}/${name}${inner}`;
+          if (target && await isRegularUnlinkedFile(root, target)) {
+            uses.add(target);
+            pendingRootFiles.push(target);
+          }
         }
         for (const [, path, dir, name] of jsonText.matchAll(ROOT_NAMED)) {
           const target = path ?? `${dir}/${name}`;

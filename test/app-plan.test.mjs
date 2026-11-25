@@ -3026,9 +3026,13 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
     'scripts/app-ci.mjs': [
       "const mod = require('../packages/pkg/fixture.json');",
       "const rootTarget = JSON.parse(readFileSync('exes/config/path.json', 'utf8')); readFileSync(rootTarget);",
+      "const innerPath = JSON.parse(readFileSync('exes/chain/outer.json', 'utf8')); const leaf = JSON.parse(readFileSync(innerPath, 'utf8')); readFileSync(leaf);",
     ].join('\n'),
     'exes/config/path.json': '"scripts/runtime-input.mjs"',
     'scripts/runtime-input.mjs': 'export const ok = true;\n',
+    'exes/chain/outer.json': '"exes/chain/inner.json"',
+    'exes/chain/inner.json': '"scripts/quality/check-indirect.mjs"',
+    'scripts/quality/check-indirect.mjs': 'export const chained = true;\n',
     'exes/data/reference.json': '{}',
     'exes/data/reference.json.gz': 'compressed',
     'exes/spaced/reference.json': '{}',
@@ -3080,6 +3084,7 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
   assert.equal(createAppPlan(registry, ['exes/linked/target.json'], prefixGraph).site, true, 'symlink keeps exes/linked edge');
   assert.equal(reachableFrom(prefixGraph, CATALOG).has('scripts/from-dir-json.mjs'), true, 'directory named fixture.json keeps packages/pkg edge');
   assert.equal(createAppPlan(registry, ['scripts/runtime-input.mjs'], prefixGraph).allApps, true, 'split JSON read targeting scripts/runtime-input.mjs reaches CATALOG');
+  assert.equal(createAppPlan(registry, ['scripts/quality/check-indirect.mjs'], prefixGraph).allApps, true, 'chained JSON reads outer.json -> inner.json -> check-indirect.mjs reach CATALOG');
 });
 
 test('lint runner and scripts/quality files select nothing when unreached, and honor confirmed CI or app reachability', async (t) => {
@@ -3391,6 +3396,48 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
         'exes/check/style.mjs': 'console.log(1);\n',
       },
       'exes/check/style.mjs',
+      new Map(),
+      (plan) => assert.deepEqual(plan.selected.map((app) => app.id), ['niimath']),
+    ],
+    [
+      'editing a quoted dotted root script with extra shell whitespace selects that app',
+      {
+        'package.json': JSON.stringify({ name: 'root', scripts: { 'verify.extra': 'node scripts/ok.mjs' } }),
+        'apps/niimath/package.json': JSON.stringify({ name: '@nd/niimath', scripts: { build: "pnpm -w  run 'verify.extra'" } }),
+      },
+      'package.json',
+      new Map([
+        ['package.json', {
+          before: JSON.stringify({ name: 'root', scripts: { 'verify.extra': 'node scripts/ok.mjs' } }),
+          after: JSON.stringify({ name: 'root', scripts: { 'verify.extra': 'node scripts/fail.mjs' } }),
+        }],
+        ['pnpm-lock.yaml', {
+          before: stringify({ lockfileVersion: '9.0', importers: { '.': {} }, packages: {}, snapshots: {} }),
+          after: stringify({ lockfileVersion: '9.0', importers: { '.': {} }, packages: {}, snapshots: {} }),
+        }],
+      ]),
+      (plan) => assert.deepEqual(plan.selected.map((app) => app.id), ['niimath']),
+    ],
+    [
+      'editing a ./scripts/ file invoked by an expanded root script selects the calling app',
+      {
+        'package.json': JSON.stringify({ name: 'root', scripts: { 'verify.style': 'node ./scripts/quality/check-root.mjs' } }),
+        'apps/niimath/package.json': JSON.stringify({ name: '@nd/niimath', scripts: { build: 'pnpm -w run verify.style' } }),
+        'scripts/quality/check-root.mjs': 'console.log(1);\n',
+      },
+      'scripts/quality/check-root.mjs',
+      new Map(),
+      (plan) => assert.deepEqual(plan.selected.map((app) => app.id), ['niimath']),
+    ],
+    [
+      'editing a packages/*/test/ script invoked by an expanded root script selects the calling app',
+      {
+        'package.json': JSON.stringify({ name: 'root', scripts: { 'verify.style': 'node packages/check/test/check.mjs' } }),
+        'apps/niimath/package.json': JSON.stringify({ name: '@nd/niimath', scripts: { build: 'pnpm -w run verify.style' } }),
+        'packages/check/package.json': JSON.stringify({ name: '@nd/check' }),
+        'packages/check/test/check.mjs': 'console.log(1);\n',
+      },
+      'packages/check/test/check.mjs',
       new Map(),
       (plan) => assert.deepEqual(plan.selected.map((app) => app.id), ['niimath']),
     ],
