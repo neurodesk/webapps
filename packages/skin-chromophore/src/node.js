@@ -2,7 +2,7 @@
 // Runs the exact same CIE L*a*b*, ITA°, CIEDE2000, RGB EI/MI, fixed-basis melanin/hemoglobin
 // OD proxies, ROI analysis, and PNG/CSV/JSON serializers as the Skin Chromophore web app.
 import { randomUUID } from "node:crypto";
-import { mkdir, open, readdir, rename, rm, rmdir, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, open, readdir, rename, rm, rmdir, stat, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import packageJson from "../package.json" with { type: "json" };
 import {
@@ -31,6 +31,8 @@ function parseStrictInteger(raw, label) {
   return value;
 }
 
+export const SHARED_OUTPUT_LOCK = ".neurodesk-cli.lock";
+
 export async function reserveOutputDir(outputDir, { overwrite = false, tool = "skin-chromophore" } = {}) {
   const dir = resolve(outputDir);
   let createdDir = false;
@@ -45,7 +47,7 @@ export async function reserveOutputDir(outputDir, { overwrite = false, tool = "s
     createdDir = true;
   }
 
-  const lockName = `.${tool}.lock`;
+  const lockName = SHARED_OUTPUT_LOCK;
   const lockPath = join(dir, lockName);
   let handle;
   try {
@@ -56,7 +58,7 @@ export async function reserveOutputDir(outputDir, { overwrite = false, tool = "s
     }
     if (error.code === "EEXIST") {
       throw new Error(
-        `Output directory ${dir} is locked by another ${tool} run (${lockName}). Wait for it to finish or remove a stale lock file.`,
+        `Output directory ${dir} is locked by another Neurodesk CLI run (${lockName}). Wait for it to finish or remove a stale lock file.`,
       );
     }
     throw error;
@@ -95,7 +97,11 @@ export async function reserveOutputDir(outputDir, { overwrite = false, tool = "s
   return { dir, lockPath, createdDir, release };
 }
 
-export async function publishOutputs(dir, files, { overwrite = false } = {}) {
+export async function publishOutputs(
+  dir,
+  files,
+  { overwrite = false, writeFileImpl = writeFile, renameImpl = rename } = {},
+) {
   const token = randomUUID();
   const staged = [];
   const backups = [];
@@ -105,14 +111,15 @@ export async function publishOutputs(dir, files, { overwrite = false } = {}) {
     for (const { name, bytes } of files) {
       const target = join(dir, name);
       const partial = join(dir, `.${name}.${token}.partial`);
-      await writeFile(partial, bytes, { flag: "wx" });
-      staged.push({ name, target, partial, moved: false });
+      const item = { name, target, partial, moved: false };
+      staged.push(item);
+      await writeFileImpl(partial, bytes, { flag: "wx" });
     }
 
     for (const item of staged) {
       let existingInfo = null;
       try {
-        existingInfo = await stat(item.target);
+        existingInfo = await lstat(item.target);
       } catch (error) {
         if (error.code !== "ENOENT") throw error;
       }
@@ -124,10 +131,10 @@ export async function publishOutputs(dir, files, { overwrite = false } = {}) {
           throw new Error(`Output file ${item.target} already exists. Pass --overwrite to replace it.`);
         }
         const backup = join(dir, `.${item.name}.${token}.backup`);
-        await rename(item.target, backup);
+        await renameImpl(item.target, backup);
         backups.push({ target: item.target, backup });
       }
-      await rename(item.partial, item.target);
+      await renameImpl(item.partial, item.target);
       item.moved = true;
       committed.push(item.target);
     }
@@ -144,7 +151,7 @@ export async function publishOutputs(dir, files, { overwrite = false } = {}) {
       }
     }
     for (const { target, backup } of [...backups].reverse()) {
-      await rename(backup, target).catch(() => {});
+      await renameImpl(backup, target).catch(() => {});
     }
     for (const item of staged) {
       if (!item.moved) {
@@ -155,7 +162,7 @@ export async function publishOutputs(dir, files, { overwrite = false } = {}) {
   }
 }
 
-/** Exact fractional area-weighted downsampling of an RGBA image to (outWidth x outHeight). */
+/** Exact fractional premultiplied-alpha area-weighted downsampling of an RGBA image. */
 export function downsampleRgbaBilinear(rgba, width, height, outWidth, outHeight) {
   if (width === outWidth && height === outHeight) return rgba;
   const out = new Uint8ClampedArray(outWidth * outHeight * 4);
@@ -171,11 +178,11 @@ export function downsampleRgbaBilinear(rgba, width, height, outWidth, outHeight)
       const x1 = (x + 1) * scaleX;
       const sx0 = Math.floor(x0);
       const sx1 = Math.min(width, Math.ceil(x1));
-      let r = 0;
-      let g = 0;
-      let b = 0;
-      let a = 0;
-      let totalWeight = 0;
+      let sumR = 0;
+      let sumG = 0;
+      let sumB = 0;
+      let sumA = 0;
+      let sumW = 0;
       for (let sy = sy0; sy < sy1; sy += 1) {
         const wy = Math.min(y1, sy + 1) - Math.max(y0, sy);
         if (wy <= 0) continue;
@@ -185,19 +192,27 @@ export function downsampleRgbaBilinear(rgba, width, height, outWidth, outHeight)
           if (wx <= 0) continue;
           const w = wx * wy;
           const p = (row + sx) * 4;
-          r += rgba[p] * w;
-          g += rgba[p + 1] * w;
-          b += rgba[p + 2] * w;
-          a += rgba[p + 3] * w;
-          totalWeight += w;
+          const alpha = rgba[p + 3];
+          const aw = alpha * w;
+          sumR += rgba[p] * aw;
+          sumG += rgba[p + 1] * aw;
+          sumB += rgba[p + 2] * aw;
+          sumA += aw;
+          sumW += w;
         }
       }
       const dst = (y * outWidth + x) * 4;
-      const inv = totalWeight > 0 ? 1 / totalWeight : 0;
-      out[dst] = Math.round(r * inv);
-      out[dst + 1] = Math.round(g * inv);
-      out[dst + 2] = Math.round(b * inv);
-      out[dst + 3] = Math.round(a * inv);
+      if (sumA > 0) {
+        out[dst] = Math.round(sumR / sumA);
+        out[dst + 1] = Math.round(sumG / sumA);
+        out[dst + 2] = Math.round(sumB / sumA);
+        out[dst + 3] = Math.round(sumA / sumW);
+      } else {
+        out[dst] = 0;
+        out[dst + 1] = 0;
+        out[dst + 2] = 0;
+        out[dst + 3] = 0;
+      }
     }
   }
   return out;

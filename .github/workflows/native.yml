@@ -98,6 +98,7 @@ jobs:
         syncro-native
         synthseg-native
         synthseg-portable
+        totalsegmentator-native
         vesselboost-native
         white-matter-lesions-native
         wound-planimetry-native
@@ -138,6 +139,7 @@ jobs:
         spinalcordtoolbox-native
         syncro-native
         synthseg-portable
+        totalsegmentator-native
         vesselboost-native
         white-matter-lesions-native
         wound-planimetry-native
@@ -548,6 +550,17 @@ jobs:
     needs: gate
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"synthseg-portable"')) }}
     uses: ./.github/workflows/synthseg-portable.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  totalsegmentator-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"totalsegmentator-native"')) }}
+    uses: ./.github/workflows/totalsegmentator-native.yml
     permissions:
       actions: read
       contents: write

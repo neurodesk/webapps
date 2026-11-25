@@ -75,12 +75,15 @@ test("CLI runs end-to-end on PNG and JPEG inputs with calibration, locking, and 
     assert.notEqual(retry.status, 0);
     assert.match(retry.stderr, /not empty/);
 
-    // Existing lock file rejected without deleting it
+    // Existing shared lock file rejected without deleting it
     const lockedDir = join(work, "locked");
     await mkdir(lockedDir);
-    const lockPath = join(lockedDir, ".dermoscope.lock");
-    await writeFile(lockPath, '{"pid":99999}\n');
-    await assert.rejects(() => analyzeFile({ input: pngPath, outputDir: lockedDir, overwrite: true }), /locked/);
+    const lockPath = join(lockedDir, ".neurodesk-cli.lock");
+    await writeFile(lockPath, '{"pid":99999,"tool":"skin-chromophore"}\n');
+    await assert.rejects(
+      () => analyzeFile({ input: pngPath, outputDir: lockedDir, overwrite: true }),
+      /\.neurodesk-cli\.lock/,
+    );
     await stat(lockPath);
 
     // Newly created output directory removed if processing fails

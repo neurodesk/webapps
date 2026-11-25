@@ -121,14 +121,14 @@ test("CLI aligns synthetic shifted pair and EXIF-rotated JPEG cleanly and enforc
     assert.equal(cli.status, 0, cli.stderr);
     assert.match(cli.stdout.trim(), /t0_vs_t1_metrics\.csv$/);
 
-    // Existing lock file rejected without deleting it
+    // Existing shared lock file rejected without deleting it
     const lockedDir = join(work, "locked");
     await mkdir(lockedDir);
-    const lockPath = join(lockedDir, ".derm-compare.lock");
-    await writeFile(lockPath, '{"pid":99999}\n');
+    const lockPath = join(lockedDir, ".neurodesk-cli.lock");
+    await writeFile(lockPath, '{"pid":99999,"tool":"dermoscope"}\n');
     await assert.rejects(
       () => compareFiles({ baseline: basePath, followup: follPath, outputDir: lockedDir, overwrite: true }),
-      /locked/,
+      /\.neurodesk-cli\.lock/,
     );
     await stat(lockPath);
 

@@ -2832,7 +2832,9 @@ importers:
       '@neurodesk/synthsr':
         specifier: workspace:*
         version: link:../synthsr
-    devDependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
       onnxruntime-node:
         specifier: 1.29.0
         version: 1.29.0

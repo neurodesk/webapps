@@ -36,14 +36,71 @@ test("checkInstallation passes offline and reports private runtime metadata", as
   assert.equal(report.node, process.version);
 });
 
-test("downsampleRgbaBilinear uses exact fractional area weights", () => {
-  // 3x1 gradient [0, 120, 240] downsampled to 2x1:
+test("downsampleRgbaBilinear uses exact premultiplied-alpha fractional area weights", async () => {
+  // 1. Opaque 3x1 gradient [0, 120, 240] downsampled to 2x1:
   // x=0 covers [0, 1.5] => (1.0*0 + 0.5*120) / 1.5 = 40
   // x=1 covers [1.5, 3.0] => (0.5*120 + 1.0*240) / 1.5 = 200
   const src = new Uint8ClampedArray([0, 0, 0, 255, 120, 120, 120, 255, 240, 240, 240, 255]);
   const dst = downsampleRgbaBilinear(src, 3, 1, 2, 1);
   assert.equal(dst[0], 40);
   assert.equal(dst[4], 200);
+
+  // 2. Visually identical transparent PNGs differing only in RGB where alpha===0 must produce identical
+  //    downsampled RGB, L*, and ITA° (transparent background RGB must never bleed into opaque edges).
+  const makeTransparentScene = (bgRgb) => {
+    const w = 96;
+    const h = 96;
+    const rgba = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y += 1) {
+      for (let x = 0; x < w; x += 1) {
+        const o = (y * w + x) * 4;
+        const dx = x - 48;
+        const dy = y - 48;
+        const r2 = dx * dx + dy * dy;
+        if (r2 <= 16 * 16) {
+          // Dark opaque lesion target
+          rgba[o] = 72;
+          rgba[o + 1] = 44;
+          rgba[o + 2] = 36;
+          rgba[o + 3] = 255;
+        } else if (r2 <= 34 * 34) {
+          // Opaque surrounding skin reference
+          rgba[o] = 216;
+          rgba[o + 1] = 178;
+          rgba[o + 2] = 148;
+          rgba[o + 3] = 255;
+        } else {
+          // Fully transparent border with arbitrary hidden RGB
+          rgba[o] = bgRgb[0];
+          rgba[o + 1] = bgRgb[1];
+          rgba[o + 2] = bgRgb[2];
+          rgba[o + 3] = 0;
+        }
+      }
+    }
+    return rgba;
+  };
+  const blackHidden = makeTransparentScene([0, 0, 0]);
+  const whiteHidden = makeTransparentScene([255, 255, 255]);
+  const dsBlack = downsampleRgbaBilinear(blackHidden, 96, 96, 48, 48);
+  const dsWhite = downsampleRgbaBilinear(whiteHidden, 96, 96, 48, 48);
+  assert.deepEqual(Array.from(dsBlack), Array.from(dsWhite));
+
+  const work = await mkdtemp(join(tmpdir(), "skin-chromophore-alpha-"));
+  try {
+    const p1 = join(work, "hidden-black.png");
+    const p2 = join(work, "hidden-white.png");
+    await writeFile(p1, encodePng({ width: 96, height: 96, channels: 4, depth: 8, data: blackHidden }));
+    await writeFile(p2, encodePng({ width: 96, height: 96, channels: 4, depth: 8, data: whiteHidden }));
+    const r1 = await analyzeFile({ input: p1, outputDir: join(work, "out1"), maxSide: 48 });
+    const r2 = await analyzeFile({ input: p2, outputDir: join(work, "out2"), maxSide: 48 });
+    assert.equal(r1.analysis.roi.target.meanL, r2.analysis.roi.target.meanL);
+    assert.equal(r1.analysis.roi.target.meanIta, r2.analysis.roi.target.meanIta);
+    assert.equal(r1.analysis.roi.reference.meanL, r2.analysis.roi.reference.meanL);
+    assert.equal(r1.analysis.roi.comparison.deltaE2000, r2.analysis.roi.comparison.deltaE2000);
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
 });
 
 test("CLI writes hemoglobin, melanin, ITA PNGs, colorimetry CSV, and honest Node provenance JSON", async () => {
@@ -77,12 +134,15 @@ test("CLI writes hemoglobin, melanin, ITA PNGs, colorimetry CSV, and honest Node
     assert.equal(prov.settings.roiMode, "central");
     assert.match(prov.input.colorSpace, /Node JPEG decode/);
 
-    // Existing lock file rejected without deleting it
+    // Existing shared lock file rejected without deleting it
     const lockedDir = join(work, "locked");
     await mkdir(lockedDir);
-    const lockPath = join(lockedDir, ".skin-chromophore.lock");
-    await writeFile(lockPath, '{"pid":99999}\n');
-    await assert.rejects(() => analyzeFile({ input: pngPath, outputDir: lockedDir, overwrite: true }), /locked/);
+    const lockPath = join(lockedDir, ".neurodesk-cli.lock");
+    await writeFile(lockPath, '{"pid":99999,"tool":"dermoscope"}\n');
+    await assert.rejects(
+      () => analyzeFile({ input: pngPath, outputDir: lockedDir, overwrite: true }),
+      /\.neurodesk-cli\.lock/,
+    );
     await stat(lockPath);
 
     // Newly created output directory removed if processing fails

@@ -118,12 +118,15 @@ test("CLI runs end-to-end on PNG and JPEG inputs with ruler, mm-per-pixel calibr
     await assert.rejects(() => measureFile({ input: pngPath, outputDir: join(work, "bad-seed"), seed: ",10" }), /X,Y/);
     await assert.rejects(() => measureFile({ input: pngPath, outputDir: join(work, "bad-seed2"), seed: "" }), /X,Y/);
 
-    // Existing lock file rejected without deleting it
+    // Existing shared lock file rejected without deleting it
     const lockedDir = join(work, "locked");
     await mkdir(lockedDir);
-    const lockPath = join(lockedDir, ".wound-planimetry.lock");
-    await writeFile(lockPath, '{"pid":99999}\n');
-    await assert.rejects(() => measureFile({ input: pngPath, outputDir: lockedDir, overwrite: true }), /locked/);
+    const lockPath = join(lockedDir, ".neurodesk-cli.lock");
+    await writeFile(lockPath, '{"pid":99999,"tool":"dermoscope"}\n');
+    await assert.rejects(
+      () => measureFile({ input: pngPath, outputDir: lockedDir, overwrite: true }),
+      /\.neurodesk-cli\.lock/,
+    );
     await stat(lockPath);
 
     // Newly created output directory removed on failure

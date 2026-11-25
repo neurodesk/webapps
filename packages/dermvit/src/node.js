@@ -3,7 +3,7 @@
 // optional 5x5 occlusion sensitivity, and output serializers as the DermViT web app.
 import "./ort-env.js";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, open, readFile, readdir, rename, rm, rmdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, lstat, open, readFile, readdir, rename, rm, rmdir, stat, writeFile } from "node:fs/promises";
 import { availableParallelism, homedir } from "node:os";
 import { join, resolve } from "node:path";
 import * as ort from "onnxruntime-node";
@@ -68,6 +68,8 @@ async function writeAtomically(filePath, bytes) {
   }
 }
 
+export const SHARED_OUTPUT_LOCK = ".neurodesk-cli.lock";
+
 export async function reserveOutputDir(outputDir, { overwrite = false, tool = "dermvit" } = {}) {
   const dir = resolve(outputDir);
   let createdDir = false;
@@ -82,7 +84,7 @@ export async function reserveOutputDir(outputDir, { overwrite = false, tool = "d
     createdDir = true;
   }
 
-  const lockName = `.${tool}.lock`;
+  const lockName = SHARED_OUTPUT_LOCK;
   const lockPath = join(dir, lockName);
   let handle;
   try {
@@ -93,7 +95,7 @@ export async function reserveOutputDir(outputDir, { overwrite = false, tool = "d
     }
     if (error.code === "EEXIST") {
       throw new Error(
-        `Output directory ${dir} is locked by another ${tool} run (${lockName}). Wait for it to finish or remove a stale lock file.`,
+        `Output directory ${dir} is locked by another Neurodesk CLI run (${lockName}). Wait for it to finish or remove a stale lock file.`,
       );
     }
     throw error;
@@ -132,7 +134,11 @@ export async function reserveOutputDir(outputDir, { overwrite = false, tool = "d
   return { dir, lockPath, createdDir, release };
 }
 
-export async function publishOutputs(dir, files, { overwrite = false } = {}) {
+export async function publishOutputs(
+  dir,
+  files,
+  { overwrite = false, writeFileImpl = writeFile, renameImpl = rename } = {},
+) {
   const token = randomUUID();
   const staged = [];
   const backups = [];
@@ -142,14 +148,15 @@ export async function publishOutputs(dir, files, { overwrite = false } = {}) {
     for (const { name, bytes } of files) {
       const target = join(dir, name);
       const partial = join(dir, `.${name}.${token}.partial`);
-      await writeFile(partial, bytes, { flag: "wx" });
-      staged.push({ name, target, partial, moved: false });
+      const item = { name, target, partial, moved: false };
+      staged.push(item);
+      await writeFileImpl(partial, bytes, { flag: "wx" });
     }
 
     for (const item of staged) {
       let existingInfo = null;
       try {
-        existingInfo = await stat(item.target);
+        existingInfo = await lstat(item.target);
       } catch (error) {
         if (error.code !== "ENOENT") throw error;
       }
@@ -161,10 +168,10 @@ export async function publishOutputs(dir, files, { overwrite = false } = {}) {
           throw new Error(`Output file ${item.target} already exists. Pass --overwrite to replace it.`);
         }
         const backup = join(dir, `.${item.name}.${token}.backup`);
-        await rename(item.target, backup);
+        await renameImpl(item.target, backup);
         backups.push({ target: item.target, backup });
       }
-      await rename(item.partial, item.target);
+      await renameImpl(item.partial, item.target);
       item.moved = true;
       committed.push(item.target);
     }
@@ -181,7 +188,7 @@ export async function publishOutputs(dir, files, { overwrite = false } = {}) {
       }
     }
     for (const { target, backup } of [...backups].reverse()) {
-      await rename(backup, target).catch(() => {});
+      await renameImpl(backup, target).catch(() => {});
     }
     for (const item of staged) {
       if (!item.moved) {

@@ -88,6 +88,7 @@ let baseline = null; // { file, width, height, originalWidth, originalHeight, rg
 let followup = null; // { file, width, height, originalWidth, originalHeight, rgba }
 let comparison = null; // worker result + artifacts + provenance
 let lastFailure = null; // explicit registration failure message for report display
+let settingsChanged = false;
 let outputs = {};
 let loading = null;
 let running = null;
@@ -249,10 +250,10 @@ function syncFlicker() {
 function updatePlaybackControls() {
   const busy = Boolean(loading || running);
   const flickerBtn = $("flickerToggle");
-  const canToggleFlicker = !busy && Boolean(comparison) && activeView === "flicker";
-  flickerBtn.disabled = !canToggleFlicker;
-  flickerBtn.setAttribute("aria-pressed", String(flickerPaused));
-  flickerBtn.textContent = flickerPaused ? "Resume flicker" : "Pause flicker";
+  const inFlicker = Boolean(comparison) && activeView === "flicker";
+  flickerBtn.disabled = busy || !comparison;
+  flickerBtn.textContent = !inFlicker ? "Play flicker" : flickerPaused ? "Resume flicker" : "Pause flicker";
+  $("flickerHelp").hidden = Boolean(comparison);
 
   const curtainSlider = $("curtainSplit");
   const pct = Math.round(splitRatio * 100);
@@ -272,7 +273,7 @@ function updateViewHint() {
       return;
     }
     $("viewHint").textContent = baseline && followup
-      ? "Preview · click Align & compare"
+      ? "Unaligned preview"
       : (baseline ? "Baseline loaded · add follow-up" : "Follow-up loaded · add baseline");
     return;
   }
@@ -509,6 +510,11 @@ $("flickerInterval").addEventListener("change", () => {
 });
 
 $("flickerToggle").addEventListener("click", () => {
+  if (activeView !== "flicker") {
+    flickerPaused = false;
+    setView("flicker");
+    return;
+  }
   flickerPaused = !flickerPaused;
   syncFlicker();
   draw();
@@ -753,13 +759,19 @@ const results = createResultList({
   onDownload: (_stage, result) => downloadFile(result.file),
 });
 
+function updateRunButton() {
+  const runButton = $("runButton");
+  runButton.disabled = Boolean(loading || running) || !baseline || !followup;
+  runButton.textContent = settingsChanged ? "Rerun Align & compare" : "Align & compare";
+}
+
 function setBusy(busy) {
   results.inert = busy;
   if (pair) pair.disabled = busy;
   for (const id of ["normalizeColor", "suppressHair", "allowScale", "maxAngle"]) {
     $(id).disabled = busy;
   }
-  $("runButton").disabled = busy || !baseline || !followup;
+  updateRunButton();
   updatePlaybackControls();
 }
 
@@ -926,6 +938,7 @@ pair = createImagePair({
     else status(message, false, "technical");
   },
   onChange: ({ slot, fixed, moving }) => {
+    settingsChanged = false;
     clearOutputs();
     $("emptyState").hidden = Boolean(baseline || followup);
     draw();
@@ -950,8 +963,12 @@ $("imagePair").replaceWith(pair);
 // Invalidate stale comparison outputs whenever processing settings change.
 function invalidateForSettingsChange() {
   if (!comparison && !lastFailure) return;
+  settingsChanged = true;
   clearOutputs();
-  if (baseline && followup) status("Settings changed · click Align & compare");
+  updateRunButton();
+  const message = "Settings changed · rerun Align & compare";
+  progress.reset(message);
+  log.log(message, "info", "analysis");
 }
 
 for (const id of ["normalizeColor", "suppressHair", "allowScale", "maxAngle"]) {
@@ -1114,6 +1131,7 @@ async function executeComparisonLocked(current, settings, onAutomationProgress) 
       ? `post-align area diff ${fmtSigned(result.metrics.areaChangePct, 1)}% (scale-fitted)`
       : `area ${fmtSigned(result.metrics.areaChangePct, 1)}%`;
   const summary = `Aligned (NCC ${fmt(result.registration.initialNcc, 3)} → ${fmt(result.registration.alignedNcc, 3)}, ${areaSummary}, mean ΔE2000 ${fmt(result.metrics.lesionMeanDeltaE, 2)})`;
+  settingsChanged = false;
   progress.end(summary);
   status(summary);
   log.log(`Transform: dx=${fmt(result.registration.dx, 3)} px, dy=${fmt(result.registration.dy, 3)} px, angle=${fmt(result.registration.angleDeg, 3)}°, scale=${fmt(result.registration.scale, 4)}×, overlap=${fmt(result.registration.overlapPct, 2)}% (${result.elapsedSeconds.toFixed(2)} s)`, "info", "technical");

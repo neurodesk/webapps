@@ -129,6 +129,7 @@ export const WORKFLOWS = Object.freeze({
   'synthseg-portable': TEST,
   'synthsr-native': TEST,
   'topofit-native': TEST,
+  'totalsegmentator-native': TEST,
   'unused-code': TEST,
   'vesselboost-native': TEST,
   'white-matter-lesions-native': TEST,

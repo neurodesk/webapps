@@ -24,19 +24,21 @@
           </div>
           <div class="nd-row">
             <div class="nd-field">
-              <label for="flickerInterval">Flicker <small>ms</small>
+              <label for="flickerInterval">Flicker interval <small>ms</small>
                 <span class="nd-info-icon" tabindex="0" aria-label="About flicker interval">i<span class="nd-info-tooltip">Time between baseline and aligned follow-up frames in Flicker view (150 to 3000 ms).</span></span>
               </label>
               <input id="flickerInterval" type="number" min="150" max="3000" step="50" value="600" inputmode="numeric" />
             </div>
             <div class="nd-field">
-              <label for="flickerToggle">Playback</label>
-              <button id="flickerToggle" class="nd-btn nd-btn-secondary nd-btn-sm" type="button" aria-pressed="false" disabled>Pause flicker</button>
+              <span class="nd-label">Playback</span>
+              <button id="flickerToggle" class="nd-btn nd-btn-secondary nd-btn-sm" type="button" disabled>Play flicker</button>
             </div>
           </div>
-          <details class="nd-sidebar-section" id="advancedSettings">
-            <summary class="nd-section-title">Advanced settings</summary>
+          <p id="flickerHelp" class="nd-hint">Flicker is available after alignment.</p>
+          <details class="nd-sidebar-section" id="advancedSettings" aria-describedby="alignmentSettingsHelp">
+            <summary class="nd-section-title">Alignment settings</summary>
             <div class="nd-section-content">
+              <p id="alignmentSettingsHelp" class="nd-hint">Run Align &amp; compare to apply these settings.</p>
               <label class="nd-check">
                 <input id="normalizeColor" type="checkbox" checked />
                 Color constancy

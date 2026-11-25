@@ -1,7 +1,7 @@
 // Offline tests for @neurodesk/dermvit CLI, raster decoding, locking, self-check, and manifest sync.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, readdir, readlink, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -10,6 +10,7 @@ import { deflateSync } from "node:zlib";
 import { encode as encodePng } from "fast-png";
 import jpeg from "jpeg-js";
 import {
+  SHARED_OUTPUT_LOCK,
   checkInstallation,
   classifyFile,
   downloadModels,
@@ -70,20 +71,60 @@ function buildCustomPng(ihdrParams, extraChunks, rawScanlines) {
   ]);
 }
 
-function makeFakeIccProfile(description, colorSpace = "RGB ") {
+const SRGB_PRIMARIES = {
+  rXYZ: [0.4361, 0.2225, 0.0139],
+  gXYZ: [0.3851, 0.7169, 0.0971],
+  bXYZ: [0.1431, 0.0606, 0.7141],
+};
+
+const ADOBE_RGB_PRIMARIES = {
+  rXYZ: [0.6097, 0.3111, 0.0195],
+  gXYZ: [0.2053, 0.6257, 0.0609],
+  bXYZ: [0.1492, 0.0632, 0.7446],
+};
+
+function makeXyzTag([x, y, z]) {
+  const buf = Buffer.alloc(20, 0);
+  Buffer.from("XYZ ", "ascii").copy(buf, 0);
+  buf.writeInt32BE(Math.round(x * 65536), 8);
+  buf.writeInt32BE(Math.round(y * 65536), 12);
+  buf.writeInt32BE(Math.round(z * 65536), 16);
+  return buf;
+}
+
+function makeFakeIccProfile(description, { colorSpace = "RGB ", primaries = SRGB_PRIMARIES } = {}) {
   const header = Buffer.alloc(128, 0);
   Buffer.from(colorSpace, "ascii").copy(header, 16);
+  Buffer.from("acsp", "ascii").copy(header, 36);
+
   const descAscii = Buffer.from(`${description}\0`, "ascii");
   const descTag = Buffer.alloc(12 + descAscii.length, 0);
   Buffer.from("desc", "ascii").copy(descTag, 0);
   descTag.writeUInt32BE(descAscii.length, 8);
   descAscii.copy(descTag, 12);
-  const tagTable = Buffer.alloc(4 + 12);
-  tagTable.writeUInt32BE(1, 0);
-  Buffer.from("desc", "ascii").copy(tagTable, 4);
-  tagTable.writeUInt32BE(128 + tagTable.length, 8);
-  tagTable.writeUInt32BE(descTag.length, 12);
-  const profile = Buffer.concat([header, tagTable, descTag]);
+
+  const tagEntries = [["desc", descTag]];
+  if (primaries) {
+    tagEntries.push(["rXYZ", makeXyzTag(primaries.rXYZ)]);
+    tagEntries.push(["gXYZ", makeXyzTag(primaries.gXYZ)]);
+    tagEntries.push(["bXYZ", makeXyzTag(primaries.bXYZ)]);
+  }
+
+  const tagTable = Buffer.alloc(4 + tagEntries.length * 12);
+  tagTable.writeUInt32BE(tagEntries.length, 0);
+  let offset = 128 + tagTable.length;
+  const tagBuffers = [];
+  for (let i = 0; i < tagEntries.length; i += 1) {
+    const [sig, buf] = tagEntries[i];
+    const row = 4 + i * 12;
+    Buffer.from(sig, "ascii").copy(tagTable, row);
+    tagTable.writeUInt32BE(offset, row + 4);
+    tagTable.writeUInt32BE(buf.length, row + 8);
+    tagBuffers.push(buf);
+    offset += buf.length;
+  }
+
+  const profile = Buffer.concat([header, tagTable, ...tagBuffers]);
   profile.writeUInt32BE(profile.length, 0);
   return profile;
 }
@@ -231,7 +272,7 @@ test("decodeRasterBytes handles indexed+tRNS, RGB+tRNS, gray+tRNS, 1-bit Adam7 P
   assert.throws(() => decodeRasterBytes(corrupt, { name: "corrupt-crc.png" }), /CRC|crc/i);
 });
 
-test("decodeRasterBytes converts PNG linear gAMA to sRGB, rejects non-sRGB ICC, and applies JPEG EXIF orientation", () => {
+test("decodeRasterBytes converts PNG gAMA (linear and 45455) to sRGB, validates ICC/cHRM strictly, and applies JPEG EXIF", () => {
   // 1. Linear gAMA (1.0 = 100000) without sRGB/iCCP raises mid-grey 128 (~0.502) to sRGB ~188
   const gamaData = Buffer.alloc(4);
   gamaData.writeUInt32BE(100000, 0);
@@ -245,8 +286,35 @@ test("decodeRasterBytes converts PNG linear gAMA to sRGB, rejects non-sRGB ICC, 
   assert.ok(decLin.rgba[0] >= 186 && decLin.rgba[0] <= 190, `expected ~188, got ${decLin.rgba[0]}`);
   assert.equal(decLin.rgba[3], 200);
 
-  // 2. Non-sRGB PNG iCCP (Display P3) rejected; sRGB iCCP accepted
-  const p3Profile = makeFakeIccProfile("Display P3");
+  // 1b. gAMA = 45455 (pure 1/2.2 gamma without sRGB/iCCP) must STILL convert dark tones: sample 16 -> 7
+  const gama45455 = Buffer.alloc(4);
+  gama45455.writeUInt32BE(45455, 0);
+  const darkGammaPng = buildCustomPng(
+    { width: 1, height: 1, depth: 8, colorType: 6 },
+    [pngChunk("gAMA", gama45455)],
+    Buffer.from([0, 16, 16, 16, 255]),
+  );
+  const decDarkGamma = decodeRasterBytes(darkGammaPng, { name: "gamma45455.png" });
+  assert.equal(decDarkGamma.gammaApplied, 0.45455);
+  assert.equal(decDarkGamma.rgba[0], 7);
+  assert.equal(decDarkGamma.rgba[3], 255);
+
+  // 2. Non-sRGB PNG iCCP rejected even when disguised under iCCP keyword "sRGB" (Adobe RGB primaries)
+  const disguisedAdobeProfile = makeFakeIccProfile("sRGB", { primaries: ADOBE_RGB_PRIMARIES });
+  const disguisedIccp = Buffer.concat([
+    Buffer.from("sRGB\0", "ascii"),
+    Buffer.from([0]),
+    deflateSync(disguisedAdobeProfile),
+  ]);
+  const disguisedPng = buildCustomPng(
+    { width: 1, height: 1, depth: 8, colorType: 2 },
+    [pngChunk("iCCP", disguisedIccp)],
+    Buffer.from([0, 100, 100, 100]),
+  );
+  assert.throws(() => decodeRasterBytes(disguisedPng, { name: "disguised-adobe.png" }), /non-sRGB ICC/);
+
+  // 2b. Display P3 iCCP rejected; genuine sRGB ICC (matching sRGB D50 primaries) accepted
+  const p3Profile = makeFakeIccProfile("Display P3", { primaries: ADOBE_RGB_PRIMARIES });
   const p3Iccp = Buffer.concat([Buffer.from("Display P3\0", "ascii"), Buffer.from([0]), deflateSync(p3Profile)]);
   const p3Png = buildCustomPng(
     { width: 1, height: 1, depth: 8, colorType: 2 },
@@ -255,7 +323,7 @@ test("decodeRasterBytes converts PNG linear gAMA to sRGB, rejects non-sRGB ICC, 
   );
   assert.throws(() => decodeRasterBytes(p3Png, { name: "p3.png" }), /non-sRGB ICC/);
 
-  const srgbProfile = makeFakeIccProfile("sRGB IEC61966-2.1");
+  const srgbProfile = makeFakeIccProfile("sRGB IEC61966-2.1", { primaries: SRGB_PRIMARIES });
   const srgbIccp = Buffer.concat([Buffer.from("sRGB\0", "ascii"), Buffer.from([0]), deflateSync(srgbProfile)]);
   const srgbPng = buildCustomPng(
     { width: 1, height: 1, depth: 8, colorType: 2 },
@@ -265,13 +333,33 @@ test("decodeRasterBytes converts PNG linear gAMA to sRGB, rejects non-sRGB ICC, 
   const decSrgb = decodeRasterBytes(srgbPng, { name: "srgb.png" });
   assert.equal(decSrgb.rgba[0], 100);
 
+  // 2c. SMPTE-C cHRM rejected (outside 0.005 tolerance); sRGB cHRM accepted
+  const makeChrm = (vals) => {
+    const buf = Buffer.alloc(32);
+    vals.forEach((v, i) => buf.writeUInt32BE(Math.round(v * 100000), i * 4));
+    return buf;
+  };
+  const smpteCPng = buildCustomPng(
+    { width: 1, height: 1, depth: 8, colorType: 2 },
+    [pngChunk("cHRM", makeChrm([0.3127, 0.329, 0.63, 0.34, 0.31, 0.595, 0.155, 0.07]))],
+    Buffer.from([0, 100, 100, 100]),
+  );
+  assert.throws(() => decodeRasterBytes(smpteCPng, { name: "smpte-c.png" }), /non-sRGB chromaticities/);
+
+  const srgbChrmPng = buildCustomPng(
+    { width: 1, height: 1, depth: 8, colorType: 2 },
+    [pngChunk("cHRM", makeChrm([0.3127, 0.329, 0.64, 0.33, 0.3, 0.6, 0.15, 0.06]))],
+    Buffer.from([0, 100, 100, 100]),
+  );
+  assert.equal(decodeRasterBytes(srgbChrmPng, { name: "srgb-chrm.png" }).rgba[0], 100);
+
   // 3. JPEG with non-sRGB APP2 ICC_PROFILE rejected
   const baseJpg = jpeg.encode({ width: 16, height: 8, data: Buffer.alloc(16 * 8 * 4, 180) }, 95).data;
   const app2P3 = Buffer.concat([Buffer.from("ICC_PROFILE\0", "ascii"), Buffer.from([1, 1]), p3Profile]);
   const p3Jpg = injectJpegSegment(baseJpg, 0xe2, app2P3);
   assert.throws(() => decodeRasterBytes(p3Jpg, { name: "p3.jpg" }), /non-sRGB ICC/);
 
-  // 4. JPEG with EXIF Orientation 6 (90° CW): landscape 16x8 with bright red top-left 8x8 -> portrait 8x16 with bright red top-right
+  // 4. JPEG with EXIF Orientation 6 (90° CW): landscape 16x8 with bright red left half -> portrait 8x16 with bright red top half
   const landRgba = Buffer.alloc(16 * 8 * 4);
   for (let y = 0; y < 8; y += 1) {
     for (let x = 0; x < 16; x += 1) {
@@ -289,21 +377,21 @@ test("decodeRasterBytes converts PNG linear gAMA to sRGB, rejects non-sRGB ICC, 
   assert.equal(decRot.exifOrientation, 6);
   assert.equal(decRot.width, 8);
   assert.equal(decRot.height, 16);
-  // Top half (y=2, x=4) came from original left half (red); bottom half (y=13, x=4) came from original right half (blue).
   const topPx = (2 * 8 + 4) * 4;
   const botPx = (13 * 8 + 4) * 4;
   assert.ok(decRot.rgba[topPx] > 180 && decRot.rgba[topPx + 2] < 80, "top half should be red after 90° CW rotation");
   assert.ok(decRot.rgba[botPx + 2] > 180 && decRot.rgba[botPx] < 80, "bottom half should be blue after 90° CW rotation");
 });
 
-test("reserveOutputDir enforces O_EXCL locking and publishOutputs rolls back on mid-commit failure", async () => {
+test("reserveOutputDir uses shared .neurodesk-cli.lock and publishOutputs cleans partials and preserves dangling symlinks", async () => {
   const work = await mkdtemp(join(tmpdir(), "dermvit-lock-"));
   try {
     const outDir = join(work, "fresh-out");
     const first = await reserveOutputDir(outDir, { overwrite: false, tool: "dermvit" });
+    assert.equal(first.lockPath, join(outDir, SHARED_OUTPUT_LOCK));
     await assert.rejects(
-      () => reserveOutputDir(outDir, { overwrite: true, tool: "dermvit" }),
-      /locked by another dermvit run/,
+      () => reserveOutputDir(outDir, { overwrite: true, tool: "dermoscope" }),
+      /\.neurodesk-cli\.lock/,
     );
     // Lock file must still exist after rejected second contender
     await stat(first.lockPath);
@@ -311,27 +399,58 @@ test("reserveOutputDir enforces O_EXCL locking and publishOutputs rolls back on 
     // Newly created empty dir should be cleaned up on abort
     await assert.rejects(() => stat(outDir), { code: "ENOENT" });
 
-    // Rollback test: existing file is preserved and newly created file is removed if a later rename fails
-    const txDir = join(work, "tx");
-    await mkdir(txDir);
-    await writeFile(join(txDir, "a.txt"), "original-a");
-    // Create a directory at target "b.txt" so renaming a file onto it fails with EISDIR/EPERM
-    await mkdir(join(txDir, "b.txt"));
+    // Failed writeFile cleanup: partial created before EFBIG must be deleted
+    const stageDir = join(work, "stage-fail");
+    await mkdir(stageDir);
+    let callCount = 0;
     await assert.rejects(
       () =>
         publishOutputs(
-          txDir,
+          stageDir,
           [
-            { name: "a.txt", bytes: Buffer.from("new-a") },
-            { name: "c.txt", bytes: Buffer.from("new-c") },
-            { name: "b.txt", bytes: Buffer.from("new-b") },
+            { name: "first.txt", bytes: Buffer.from("ok") },
+            { name: "second.txt", bytes: Buffer.from("boom") },
           ],
-          { overwrite: true },
+          {
+            overwrite: true,
+            writeFileImpl: async (p, data, opts) => {
+              callCount += 1;
+              await writeFile(p, data, opts);
+              if (callCount === 2) {
+                const err = new Error("simulated EFBIG during write");
+                err.code = "EFBIG";
+                throw err;
+              }
+            },
+          },
         ),
+      /EFBIG/,
+    );
+    assert.deepEqual(await readdir(stageDir), []);
+
+    // Rollback test: existing file AND pre-existing dangling symlink are both preserved on mid-commit failure
+    const txDir = join(work, "tx");
+    await mkdir(txDir);
+    await writeFile(join(txDir, "a.txt"), "original-a");
+    await symlink("/nonexistent-neurodesk-target", join(txDir, "dangling.txt"));
+    await mkdir(join(txDir, "b.txt"));
+    await assert.rejects(() =>
+      publishOutputs(
+        txDir,
+        [
+          { name: "a.txt", bytes: Buffer.from("new-a") },
+          { name: "dangling.txt", bytes: Buffer.from("new-dangling") },
+          { name: "c.txt", bytes: Buffer.from("new-c") },
+          { name: "b.txt", bytes: Buffer.from("new-b") },
+        ],
+        { overwrite: true },
+      ),
     );
     assert.equal(await readFile(join(txDir, "a.txt"), "utf8"), "original-a");
+    assert.equal((await lstat(join(txDir, "dangling.txt"))).isSymbolicLink(), true);
+    assert.equal(await readlink(join(txDir, "dangling.txt")), "/nonexistent-neurodesk-target");
     const entries = await readdir(txDir);
-    assert.deepEqual(entries.sort(), ["a.txt", "b.txt"]);
+    assert.deepEqual(entries.sort(), ["a.txt", "b.txt", "dangling.txt"]);
   } finally {
     await rm(work, { recursive: true, force: true });
   }
