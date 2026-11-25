@@ -1,0 +1,73 @@
+name: brainchomp-native
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+    paths:
+      - '.github/workflows/brainchomp-native.yml'
+      - 'packages/brainchomp/**'
+      - 'apps/brainchomp/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/brainchomp-native.yml'
+      - '.github/workflows/node-cli-portable.yml'
+      - 'exes/node-cli/**'
+      - 'packages/brainchomp/**'
+      - 'apps/brainchomp/**'
+  # A pull request that changes only paths in the gate's shared_paths starts native.yml instead,
+  # which calls this workflow when the change reaches it; its nightly run is this workflow's sweep.
+  workflow_call:
+  workflow_dispatch:
+    inputs:
+      sign_release:
+        description: Sign and notarize the macOS installer, then attach every verified package to the existing Brainchomp release
+        type: boolean
+        default: false
+
+concurrency:
+  group: brainchomp-native-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # Release bookkeeping (changelogs, version bumps) runs this workflow neither
+  # for a pull request nor for a push to main (scripts/lib/workflow-gate.mjs).
+  gate:
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft'))
+    uses: ./.github/workflows/pr-gate.yml
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    with:
+      workflow: brainchomp-native
+      shared_paths: |
+        packages/components/package.json
+        packages/components/src/file-io/**
+
+  portable:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    uses: ./.github/workflows/node-cli-portable.yml
+    permissions:
+      contents: write
+      id-token: write
+    with:
+      package: packages/brainchomp
+      targets: >-
+        [{"os": "ubuntu-22.04", "platform": "linux-x64"},
+         {"os": "windows-latest", "platform": "windows-x64"},
+         {"os": "macos-15", "platform": "macos-arm64"}]
+      publish_release: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}
+      sign_release: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}
+    secrets:
+      APPLEID: ${{ secrets.APPLEID }}
+      APPLEIDPASS: ${{ secrets.APPLEIDPASS }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      CSC_LINK: ${{ secrets.CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      CSC_INSTALLER_LINK: ${{ secrets.CSC_INSTALLER_LINK }}
+      CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.CSC_INSTALLER_KEY_PASSWORD }}

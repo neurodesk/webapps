@@ -18,6 +18,8 @@ export const LINKED_PACKAGES = Object.freeze({
   '@neurodesk/bison': 'bison',
   '@neurodesk/brain-extraction': 'brain-extraction',
   '@neurodesk/brain2print': 'brain2print',
+  '@neurodesk/brainchomp': 'brainchomp',
+  '@neurodesk/brainchop': 'brainchop',
   '@neurodesk/browserqc': 'browserqc',
   '@neurodesk/brainqcnet': 'brainqcnet',
   '@neurodesk/calmar': 'calmar',
@@ -52,6 +54,7 @@ export const LINKED_PACKAGES = Object.freeze({
   '@neurodesk/qsmbly': 'qsmbly',
   '@neurodesk/syncro': 'syncro',
   '@neurodesk/topofit': 'topofit',
+  '@neurodesk/tumour-report': 'tumour-report',
   '@neurodesk/vesselboost': 'vesselboost',
   '@neurodesk/white-matter-lesions': 'white-matter-lesions',
 });

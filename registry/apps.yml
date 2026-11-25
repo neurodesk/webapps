@@ -1485,7 +1485,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: stardist
     path: stardist
     catalog: microscopy
@@ -2015,7 +2015,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: dermoscope
     path: dermoscope
     catalog: dermatology

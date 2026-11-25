@@ -65,6 +65,8 @@ jobs:
         bison-native
         brain-extraction-native
         brain2print-native
+        brainchomp-native
+        brainchop-native
         browserqc-native
         calmar-native
         carotid-flow-native
@@ -101,6 +103,8 @@ jobs:
         bison-native
         brain-extraction-native
         brain2print-native
+        brainchomp-native
+        brainchop-native
         browserqc-native
         calmar-native
         carotid-flow-native
@@ -181,6 +185,28 @@ jobs:
     needs: gate
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"brain2print-native"')) }}
     uses: ./.github/workflows/brain2print-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  brainchomp-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"brainchomp-native"')) }}
+    uses: ./.github/workflows/brainchomp-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  brainchop-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"brainchop-native"')) }}
+    uses: ./.github/workflows/brainchop-native.yml
     permissions:
       actions: read
       contents: write

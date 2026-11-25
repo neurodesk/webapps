@@ -1,0 +1,38 @@
+{
+  "name": "@neurodesk/brainchop",
+  "version": "0.1.20261124",
+  "description": "Whole-brain T1 MRI segmentation and tissue fraction maps (@brainchop/core) for browsers and portable command lines",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "brainchop": "./bin/brainchop.js"
+  },
+  "exports": {
+    ".": "./src/models.js",
+    "./node": "./src/node.js"
+  },
+  "files": [
+    "src",
+    "bin",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/models.js && node --check src/node.js && node --check bin/brainchop.js && node --check validation/cli-check.mjs"
+  },
+  "dependencies": {
+    "@brainchop/core": "1.0.0",
+    "@neurodesk/node-drivers": "workspace:*",
+    "@neurodesk/webapp-components": "workspace:*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/brainchop"
+  }
+}

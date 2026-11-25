@@ -245,6 +245,9 @@ importers:
 
   apps/brainchomp:
     dependencies:
+      '@neurodesk/brainchomp':
+        specifier: workspace:*
+        version: link:../../packages/brainchomp
       '@neurodesk/runtime-support':
         specifier: workspace:*
         version: link:../../packages/runtime-support
@@ -270,6 +273,9 @@ importers:
       '@brainchop/core':
         specifier: 1.0.0
         version: 1.0.0
+      '@neurodesk/brainchop':
+        specifier: workspace:*
+        version: link:../../packages/brainchop
       '@neurodesk/runtime-support':
         specifier: workspace:*
         version: link:../../packages/runtime-support
@@ -2111,6 +2117,24 @@ importers:
         specifier: ^6.3.2
         version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.0)
 
+  packages/brainchomp:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+
+  packages/brainchop:
+    dependencies:
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
+      '@neurodesk/node-drivers':
+        specifier: workspace:*
+        version: link:../node-drivers
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+
   packages/brainqcnet:
     dependencies:
       '@neurodesk/webapp-components':
@@ -2767,7 +2791,6 @@ importers:
       '@neurodesk/synthsr':
         specifier: workspace:*
         version: link:../synthsr
-    devDependencies:
       onnxruntime-node:
         specifier: 1.29.0
         version: 1.29.0
