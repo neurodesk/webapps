@@ -4105,6 +4105,100 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       },
     ],
     [
+      'CI command substitution with escaped space before # resolves root script helper',
+      {
+        'package.json': JSON.stringify({ name: 'root', scripts: { 'quality:check': 'node scripts/quality/check.mjs' } }),
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ 'working-directory': 'apps/n4', run: 'echo "$(cd ../..; pnpm run quality:check; printf %s x\\ #)"' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'apps/n4/package.json': JSON.stringify({ name: '@nd/n4' }),
+        'scripts/quality/check.mjs': 'export const c = 1;\n',
+      },
+      'scripts/quality/check.mjs',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'CI command substitution with escaped space before # selects all apps on root script edit',
+      {
+        'package.json': JSON.stringify({ name: 'root', scripts: { 'quality:check': 'node scripts/quality/check.mjs' } }),
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ 'working-directory': 'apps/n4', run: 'echo "$(cd ../..; pnpm run quality:check; printf %s x\\ #)"' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'apps/n4/package.json': JSON.stringify({ name: '@nd/n4' }),
+        'scripts/quality/check.mjs': 'export const c = 1;\n',
+      },
+      'package.json',
+      new Map([
+        ['package.json', {
+          before: JSON.stringify({ name: 'root', scripts: { 'quality:check': 'node scripts/quality/check.mjs' } }),
+          after: JSON.stringify({ name: 'root', scripts: { 'quality:check': 'node scripts/quality/check.mjs --strict' } }),
+        }],
+        ['pnpm-lock.yaml', manifest(baseLock, baseLock)],
+      ]),
+      (plan) => {
+        assert.equal(plan.allApps, true);
+        assert.match(plan.reasons.fallback, /^package\.json: ci\.yml's app-tests job runs root script quality:check$/);
+      },
+    ],
+    [
+      'CI pnpm --dir with variable from working-directory resolves root script helper',
+      {
+        'package.json': JSON.stringify({ name: 'root', scripts: { 'quality:check': 'node scripts/quality/check.mjs' } }),
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ 'working-directory': 'apps/n4', run: 'pnpm --dir "$GITHUB_WORKSPACE" run quality:check' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'apps/n4/package.json': JSON.stringify({ name: '@nd/n4' }),
+        'scripts/quality/check.mjs': 'export const c = 1;\n',
+      },
+      'scripts/quality/check.mjs',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'CI pnpm --dir with variable from working-directory selects all apps on root script edit',
+      {
+        'package.json': JSON.stringify({ name: 'root', scripts: { 'quality:check': 'node scripts/quality/check.mjs' } }),
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ 'working-directory': 'apps/n4', run: 'pnpm --dir "$GITHUB_WORKSPACE" run quality:check' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'apps/n4/package.json': JSON.stringify({ name: '@nd/n4' }),
+        'scripts/quality/check.mjs': 'export const c = 1;\n',
+      },
+      'package.json',
+      new Map([
+        ['package.json', {
+          before: JSON.stringify({ name: 'root', scripts: { 'quality:check': 'node scripts/quality/check.mjs' } }),
+          after: JSON.stringify({ name: 'root', scripts: { 'quality:check': 'node scripts/quality/check.mjs --strict' } }),
+        }],
+        ['pnpm-lock.yaml', manifest(baseLock, baseLock)],
+      ]),
+      (plan) => {
+        assert.equal(plan.allApps, true);
+        assert.match(plan.reasons.fallback, /^package\.json: ci\.yml's app-tests job runs root script quality:check$/);
+      },
+    ],
+    [
       'CI step cd into workspace with pnpm run lint keeps standalone lint edge',
       {
         '.github/workflows/ci.yml': stringify({

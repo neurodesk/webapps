@@ -465,14 +465,17 @@ function findMatchingParen(text, openIndex) {
   let depth = 1;
   let quote = null;
   let inBacktick = false;
+  let atWordStart = true;
   for (let i = openIndex + 1; i < text.length; i++) {
     const ch = text[i];
     if (quote === "'") {
       if (ch === "'") quote = null;
+      atWordStart = false;
       continue;
     }
     if (ch === '\\') {
       i++;
+      atWordStart = false;
       continue;
     }
     if (quote === '"') {
@@ -480,31 +483,42 @@ function findMatchingParen(text, openIndex) {
         const close = findMatchingParen(text, i + 1);
         if (close < 0) return -1;
         i = close;
+        atWordStart = false;
         continue;
       }
       if (ch === '"') quote = null;
+      atWordStart = false;
       continue;
     }
     if (inBacktick) {
       if (ch === '`') inBacktick = false;
+      atWordStart = false;
       continue;
     }
     if (ch === '`') {
       inBacktick = true;
+      atWordStart = false;
       continue;
     }
     if (ch === "'" || ch === '"') {
       quote = ch;
+      atWordStart = false;
       continue;
     }
-    if (ch === '#' && (i === openIndex + 1 || /[\s;|&(]/.test(text[i - 1]))) {
+    if (ch === '#' && atWordStart) {
       while (i < text.length && text[i] !== '\n') i++;
+      atWordStart = true;
       continue;
     }
-    if (ch === '(') depth++;
-    else if (ch === ')') {
+    if (ch === '(') {
+      depth++;
+      atWordStart = true;
+    } else if (ch === ')') {
       depth--;
       if (depth === 0) return i;
+      atWordStart = true;
+    } else {
+      atWordStart = /[\s;|&]/.test(ch);
     }
   }
   return -1;
@@ -517,10 +531,12 @@ function splitShellCommands(script) {
   let current = '';
   let quote = null;
   let inBacktick = false;
+  let atWordStart = true;
   const flush = () => {
     const trimmed = current.trim();
     if (trimmed) tokens.push(trimmed);
     current = '';
+    atWordStart = true;
   };
   for (let i = 0; i < script.length; i++) {
     const ch = script[i];
@@ -528,6 +544,7 @@ function splitShellCommands(script) {
     if (quote === "'") {
       current += ch;
       if (ch === "'") quote = null;
+      atWordStart = false;
       continue;
     }
     if (ch === '\\') {
@@ -538,6 +555,7 @@ function splitShellCommands(script) {
       if (next !== undefined) {
         current += ch + next;
         i++;
+        atWordStart = false;
         continue;
       }
     }
@@ -547,29 +565,34 @@ function splitShellCommands(script) {
         if (close >= 0) {
           current += script.slice(i, close + 1);
           i = close;
+          atWordStart = false;
           continue;
         }
       }
       current += ch;
       if (ch === '"') quote = null;
+      atWordStart = false;
       continue;
     }
     if (inBacktick) {
       current += ch;
       if (ch === '`') inBacktick = false;
+      atWordStart = false;
       continue;
     }
     if (ch === '`') {
       inBacktick = true;
       current += ch;
+      atWordStart = false;
       continue;
     }
     if (ch === "'" || ch === '"') {
       quote = ch;
       current += ch;
+      atWordStart = false;
       continue;
     }
-    if (ch === '#' && (current.length === 0 || /\s/.test(current[current.length - 1]))) {
+    if (ch === '#' && atWordStart) {
       while (i < script.length && script[i] !== '\n') i++;
       flush();
       continue;
@@ -579,10 +602,12 @@ function splitShellCommands(script) {
       if (close >= 0) {
         current += script.slice(i, close + 1);
         i = close;
+        atWordStart = false;
         continue;
       }
       current += '$(';
       i++;
+      atWordStart = false;
       continue;
     }
     if (ch === '\n' || ch === ';') {
@@ -604,6 +629,7 @@ function splitShellCommands(script) {
       continue;
     }
     current += ch;
+    atWordStart = /\s/.test(ch);
   }
   flush();
   return tokens;
@@ -814,26 +840,32 @@ function extractCommandSubstitutions(segment) {
   const inner = [];
   let inSingle = false;
   let inDouble = false;
+  let atWordStart = true;
   for (let i = 0; i < segment.length; i++) {
     const ch = segment[i];
     if (inSingle) {
       if (ch === "'") inSingle = false;
+      atWordStart = false;
       continue;
     }
     if (ch === '\\') {
       i++;
+      atWordStart = false;
       continue;
     }
     if (ch === '"') {
       inDouble = !inDouble;
+      atWordStart = false;
       continue;
     }
     if (ch === "'" && !inDouble) {
       inSingle = true;
+      atWordStart = false;
       continue;
     }
-    if (!inDouble && ch === '#' && (i === 0 || /[\s;|&(]/.test(segment[i - 1]))) {
+    if (!inDouble && ch === '#' && atWordStart) {
       while (i < segment.length && segment[i] !== '\n') i++;
+      atWordStart = true;
       continue;
     }
     if (ch === '$' && segment[i + 1] === '(') {
@@ -842,6 +874,7 @@ function extractCommandSubstitutions(segment) {
         inner.push(segment.slice(i + 2, close));
         i = close;
       }
+      atWordStart = false;
     } else if (ch === '`') {
       const start = i + 1;
       let end = -1;
@@ -859,6 +892,9 @@ function extractCommandSubstitutions(segment) {
         inner.push(segment.slice(start, end));
         i = end;
       }
+      atWordStart = false;
+    } else if (!inDouble) {
+      atWordStart = /[\s;|&(]/.test(ch);
     }
   }
   return inner;
@@ -955,19 +991,27 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
           if ((word === '--filter' || word === '-F') && idx + 1 < words.length) idx++;
           continue;
         }
-        if (word === '--dir' || word === '-C' || word.startsWith('--dir=') || word.startsWith('-C=')) {
+        if (
+          word === '--dir' || word === '-C' || word === '--prefix' ||
+          word.startsWith('--dir=') || word.startsWith('-C=') || word.startsWith('--prefix=')
+        ) {
           const dirVal = word.includes('=') ? word.slice(word.indexOf('=') + 1) : words[++idx];
-          if (dirVal && root && !dirVal.includes('$')) {
+          if (!dirVal || !root || isUncertainCdTarget(dirVal)) {
+            // A dynamic directory (such as `--dir "$GITHUB_WORKSPACE"`) may target
+            // the repository root, so retain the root script conservatively.
+            hasRootFlag = true;
+          } else {
             let hitsRoot = false;
             for (const from of cwdDirs) {
-              if (from.includes('$')) continue;
+              if (from.includes('$')) {
+                hitsRoot = true;
+                continue;
+              }
               const rel = relative(root, resolve(root, from, dirVal)).split(sep).join('/').replace(/\/+$/, '');
               if (!rel || rel === '.') hitsRoot = true;
             }
             if (hitsRoot) hasRootFlag = true;
             else hasNonRootTarget = true;
-          } else {
-            hasNonRootTarget = true;
           }
           continue;
         }
