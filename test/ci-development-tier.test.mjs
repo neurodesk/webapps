@@ -7,18 +7,18 @@ import test from 'node:test';
 import YAML from 'yaml';
 import { createAppPlan } from '../scripts/lib/app-plan.mjs';
 import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
-import { isSharedFilter, pathGlob } from '../scripts/lib/workflow-gate.mjs';
+import { isDispatcher, isSharedFilter, pathGlob } from '../scripts/lib/workflow-gate.mjs';
 import { NOT_DRAFT_CONDITION } from '../scripts/lib/native-workflow.mjs';
 
 const workflow = async (name) => YAML.parse(await readFile(new URL(`../.github/workflows/${name}`, import.meta.url), 'utf8'));
 // What pr-gate.yml answers without a checkout: false for a draft, true for
 // every event other than pull_request. A ready pull request is decided by
 // scripts/lib/workflow-gate.mjs; `reached` stands for its answer.
-// native.yml's gate names every workflow it may call in its skip list for a draft.
+// Each native dispatcher's gate names every workflow it may call in its skip list for a draft.
 const nativeCalls = JSON.stringify(YAML.parse(readFileSync(new URL('../.github/workflows/native.yml', import.meta.url), 'utf8')).jobs.gate.with.calls.split(' '));
-const gate = (github, reached = true) => {
+const gate = (github, reached = true, callsList = nativeCalls) => {
   const run = github.event_name !== 'pull_request' || (!github.event?.pull_request?.draft && reached);
-  return { gate: { result: 'success', outputs: { run: String(run), skips: run ? undefined : nativeCalls } } };
+  return { gate: { result: 'success', outputs: { run: String(run), skips: run ? undefined : callsList } } };
 };
 // GitHub's contains() and fromJSON(), as native.yml's calls use them.
 const text = (value) => (value === undefined || value === null ? '' : String(value)).toLowerCase();
@@ -56,6 +56,8 @@ test('ready and updated PRs run deferred native jobs; pushes and dispatches keep
       assert.deepEqual({ ...flow.jobs.gate, with: inputs }, { if: NOT_DRAFT_CONDITION, uses: './.github/workflows/pr-gate.yml', permissions: { contents: 'read', actions: 'read', 'pull-requests': 'read' }, with: { workflow: file.slice(0, -'.yml'.length) } }, file);
       for (const list of [shared, calls, sweeps]) assert.ok(list === undefined || typeof list === 'string', `${file}: the gate's lists are strings`);
     }
+    const dispatcher = isDispatcher(file.slice(0, -'.yml'.length));
+    const dispatcherCalls = dispatcher ? JSON.stringify(flow.jobs.gate.with.calls.split(' ').filter(Boolean)) : nativeCalls;
     if (file !== 'ci.yml' && flow.on?.pull_request?.types?.includes('ready_for_review')) {
       for (const [id, job] of Object.entries(flow.jobs)) {
         if (id === 'gate' || (job.needs && job.needs !== 'gate')) continue;
@@ -63,7 +65,7 @@ test('ready and updated PRs run deferred native jobs; pushes and dispatches keep
         if (file === 'quality.yml' && (id === 'correctness' || id === 'dependencies')) continue;
         assert.equal(evaluate(job.if ?? 'true', {
           event_name: 'pull_request', event: { pull_request: { draft: true } },
-        }), false, `${file}: entry job ${id} must defer drafts or be restricted to non-PR events`);
+        }, {}, gate({ event_name: 'pull_request', event: { pull_request: { draft: true } } }, true, dispatcherCalls)), false, `${file}: entry job ${id} must defer drafts or be restricted to non-PR events`);
       }
     }
     for (const [id, job] of Object.entries(flow.jobs)) {
@@ -71,13 +73,13 @@ test('ready and updated PRs run deferred native jobs; pushes and dispatches keep
       const waits = String(job.if).includes('needs.gate.outputs.run');
       if (!deferred && !waits) continue;
       if (file === 'ci.yml') continue;
-      if (file === 'native.yml' && id === 'full-plan-withheld') continue;
+      if (dispatcher && id === 'full-plan-withheld') continue;
       guarded++;
       if (waits) {
         assert.equal(job.needs, 'gate', `${file}: ${id} reads the gate it waits for`);
         assert.doesNotMatch(job.if, /always\(|cancelled\(|failure\(/, `${file}: ${id} respects a failed gate`);
         const ready = { event_name: 'pull_request', event: { pull_request: { draft: false } } };
-        assert.equal(evaluate(job.if, ready, {}, gate(ready, false)), false, `${file}: ${id} skips a pull request that does not reach it`);
+        assert.equal(evaluate(job.if, ready, {}, gate(ready, false, dispatcherCalls)), false, `${file}: ${id} skips a pull request that does not reach it`);
       }
       if (file === 'quality.yml') {
         for (const action of ['opened', 'synchronize', 'reopened', 'ready_for_review', 'converted_to_draft']) assert.ok(flow.on.pull_request.types.includes(action), `${file} ${action}`);
@@ -88,12 +90,12 @@ test('ready and updated PRs run deferred native jobs; pushes and dispatches keep
       }
       for (const action of ['opened', 'synchronize', 'reopened', 'ready_for_review', 'converted_to_draft']) assert.ok(flow.on.pull_request.types.includes(action), `${file} ${action}`);
       for (const draft of [true, false]) {
-        assert.equal(evaluate(job.if, { event_name: 'pull_request', event: { pull_request: { draft } } }), !draft, `${file}: ${id}`);
+        assert.equal(evaluate(job.if, { event_name: 'pull_request', event: { pull_request: { draft } } }, {}, gate({ event_name: 'pull_request', event: { pull_request: { draft } } }, true, dispatcherCalls)), !draft, `${file}: ${id}`);
       }
-      const sweeps = file === 'native.yml' ? flow.jobs.gate.with.sweeps.split(' ') : null;
+      const sweeps = dispatcher ? flow.jobs.gate.with.sweeps.split(' ').filter(Boolean) : null;
       for (const event_name of ['push', 'schedule', 'workflow_dispatch']) {
-        const expected = file === 'native.yml' && id !== 'gate' && event_name === 'schedule' ? sweeps.includes(id) : true;
-        assert.equal(evaluate(job.if, { event_name, event: {} }), expected, `${file}: ${id} (${event_name})`);
+        const expected = dispatcher && id !== 'gate' && event_name === 'schedule' ? sweeps.includes(id) : true;
+        assert.equal(evaluate(job.if, { event_name, event: {} }, {}, gate({ event_name, event: {} }, true, dispatcherCalls)), expected, `${file}: ${id} (${event_name})`);
       }
     }
   }
