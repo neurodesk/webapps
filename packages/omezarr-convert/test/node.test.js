@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { lstat, mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { lstat, mkdir, mkdtemp, readdir, readFile, rename, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -540,6 +541,8 @@ test("Sol r2: signal-safe lock/overwrite rollback, atomic non-overwrite, empty-d
   new Uint8Array(badOff1, 344, 4).set([0x6e, 0x2b, 0x31, 0x00]);
   dv1.setFloat32(108, 348, true);
   assert.throws(() => niftiAffine(badOff1), /vox_offset/);
+  dv1.setFloat32(108, 0, true);
+  assert.throws(() => niftiAffine(badOff1), /vox_offset/);
 
   const badOff2 = new ArrayBuffer(544);
   const dv2 = new DataView(badOff2);
@@ -547,12 +550,32 @@ test("Sol r2: signal-safe lock/overwrite rollback, atomic non-overwrite, empty-d
   new Uint8Array(badOff2, 4, 8).set([0x6e, 0x2b, 0x32, 0x00, 0x0d, 0x0a, 0x1a, 0x0a]);
   dv2.setBigInt64(168, 540n, true);
   assert.throws(() => niftiAffine(badOff2), /vox_offset/);
+  dv2.setBigInt64(168, 0n, true);
+  assert.throws(() => niftiAffine(badOff2), /vox_offset/);
+
+  // NiBabel 5.3.3 quat2mat normalization: NIfTI-1 b = Math.fround(1 - 2^-23) => exact [1, 0, 0] first column
+  const q1Buf = new ArrayBuffer(352);
+  const q1 = new DataView(q1Buf);
+  q1.setInt32(0, 348, true);
+  new Uint8Array(q1Buf, 344, 4).set([0x6e, 0x2b, 0x31, 0x00]);
+  q1.setFloat32(108, 352, true);
+  q1.setFloat32(76, 1, true);
+  q1.setFloat32(80, 1, true);
+  q1.setFloat32(84, 1, true);
+  q1.setFloat32(88, 1, true);
+  q1.setInt16(252, 1, true);
+  q1.setFloat32(256, Math.fround(1 - 2 ** -23), true);
+  const aff1 = niftiAffine(q1Buf);
+  assert.equal(aff1[0][0], 1);
+  assert.equal(aff1[1][1], -1);
+  assert.equal(aff1[2][2], -1);
 
   // NiBabel 5.3.3 NIfTI-2 near-180° quaternion
   const q2Buf = new ArrayBuffer(544);
   const q2 = new DataView(q2Buf);
   q2.setInt32(0, 540, true);
   new Uint8Array(q2Buf, 4, 8).set([0x6e, 0x2b, 0x32, 0x00, 0x0d, 0x0a, 0x1a, 0x0a]);
+  q2.setBigInt64(168, 544n, true);
   q2.setFloat64(104, 1, true);
   q2.setFloat64(112, 1, true);
   q2.setFloat64(120, 1, true);
@@ -565,4 +588,115 @@ test("Sol r2: signal-safe lock/overwrite rollback, atomic non-overwrite, empty-d
   q2.setFloat64(352, 1 + 2 * Number.EPSILON, true);
   q2.setFloat64(360, 0, true);
   assert.throws(() => niftiAffine(q2Buf), /Invalid NIfTI quaternion/);
+
+  // 7. Sol r3: non-enumerable & symbol option keys, failed unlink rollback, missing backup lock retention,
+  //    !overwrite never using renameFn, and raced symlink during --overwrite
+  const nonEnum = {};
+  Object.defineProperty(nonEnum, "hidden", { value: undefined, enumerable: false });
+  assert.throws(() => parseCliOptions(nonEnum), /Unknown option/);
+  assert.throws(() => parseCliOptions({ [Symbol("s")]: undefined }), /Unknown option/);
+
+  const unlinkDir = join(work, "sol-r3-unlink");
+  const claimU = await claimOutputDir(unlinkDir, { overwrite: false });
+  await assert.rejects(
+    () => commitOutputs(
+      unlinkDir,
+      [{ kind: "file", name: "a.bin", data: Buffer.from("x") }],
+      {
+        overwrite: false,
+        claim: claimU,
+        unlinkFn: () => {
+          const err = new Error("unlink denied");
+          err.code = "EACCES";
+          throw err;
+        },
+      },
+    ),
+    /unlink denied/,
+  );
+  assert.equal(existsSync(join(unlinkDir, "a.bin")), false);
+  await claimU.release({ removeCreated: true });
+
+  const missingBkDir = join(work, "sol-r3-missing-bk");
+  const claimBk = await claimOutputDir(missingBkDir, { overwrite: true });
+  await writeFile(join(missingBkDir, "a.bin"), "orig");
+  let bkPath = null;
+  await assert.rejects(
+    () => commitOutputs(
+      missingBkDir,
+      [
+        { kind: "file", name: "a.bin", data: Buffer.from("new-a") },
+        { kind: "file", name: "b.bin", data: Buffer.from("new-b") },
+      ],
+      {
+        overwrite: true,
+        claim: claimBk,
+        renameFn: async (src, dst) => {
+          if (dst.endsWith(".backup")) {
+            bkPath = dst;
+            await rename(src, dst);
+            return;
+          }
+          if (bkPath && existsSync(bkPath)) await unlink(bkPath);
+          throw new Error("publish fail");
+        },
+      },
+    ),
+    /publish fail/,
+  );
+  await claimBk.release();
+  assert.equal(existsSync(join(missingBkDir, LOCK_NAME)), true);
+
+  const noOvDir = join(work, "sol-r3-no-ov");
+  const claimNoOv = await claimOutputDir(noOvDir, { overwrite: false });
+  let renameCalled = false;
+  await assert.rejects(
+    () => commitOutputs(
+      noOvDir,
+      [{ kind: "file", name: "a.bin", data: Buffer.from("new") }],
+      {
+        overwrite: false,
+        claim: claimNoOv,
+        writeFileFn: async (p, data) => {
+          await writeFile(p, data);
+          await writeFile(join(noOvDir, "a.bin"), "raced");
+        },
+        renameFn: async (src, dst) => {
+          renameCalled = true;
+          await rename(src, dst);
+        },
+      },
+    ),
+    /already exists/,
+  );
+  assert.equal(renameCalled, false);
+  assert.equal(await readFile(join(noOvDir, "a.bin"), "utf8"), "raced");
+  await claimNoOv.release();
+
+  const racedSymDir = join(work, "sol-r3-sym");
+  const claimSym = await claimOutputDir(racedSymDir, { overwrite: true });
+  const precious = join(work, "precious.txt");
+  await writeFile(precious, "keep");
+  await writeFile(join(racedSymDir, "a.bin"), "old");
+  await assert.rejects(
+    () => commitOutputs(
+      racedSymDir,
+      [{ kind: "file", name: "a.bin", data: Buffer.from("new") }],
+      {
+        overwrite: true,
+        claim: claimSym,
+        renameFn: async (src, dst) => {
+          if (dst.endsWith(".backup")) {
+            await unlink(src);
+            await symlink(precious, src);
+          }
+          await rename(src, dst);
+        },
+      },
+    ),
+    /symbolic link/,
+  );
+  assert.equal((await lstat(join(racedSymDir, "a.bin"))).isSymbolicLink(), true);
+  assert.equal(await readFile(precious, "utf8"), "keep");
+  await claimSym.release();
 });

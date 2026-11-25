@@ -109,15 +109,51 @@ function quaternionToAffine(quatern, qoffset, pixDims, isNifti2) {
   } else {
     a = Math.sqrt(w2);
   }
-  const r00 = a * a + b * b - c * c - d * d;
-  const r01 = 2 * (b * c - a * d);
-  const r02 = 2 * (b * d + a * c);
-  const r10 = 2 * (b * c + a * d);
-  const r11 = a * a + c * c - b * b - d * d;
-  const r12 = 2 * (c * d - a * b);
-  const r20 = 2 * (b * d - a * c);
-  const r21 = 2 * (c * d + a * b);
-  const r22 = a * a + d * d - b * b - c * c;
+  // NiBabel 5.3.3 quat2mat([a, b, c, d]) normalization by nq = a^2 + b^2 + c^2 + d^2.
+  const nq = a * a + b * b + c * c + d * d;
+  let r00;
+  let r01;
+  let r02;
+  let r10;
+  let r11;
+  let r12;
+  let r20;
+  let r21;
+  let r22;
+  if (nq < Number.EPSILON) {
+    r00 = 1;
+    r01 = 0;
+    r02 = 0;
+    r10 = 0;
+    r11 = 1;
+    r12 = 0;
+    r20 = 0;
+    r21 = 0;
+    r22 = 1;
+  } else {
+    const s = 2.0 / nq;
+    const x = b * s;
+    const y = c * s;
+    const z = d * s;
+    const wx = a * x;
+    const wy = a * y;
+    const wz = a * z;
+    const xx = b * x;
+    const xy = b * y;
+    const xz = b * z;
+    const yy = c * y;
+    const yz = c * z;
+    const zz = d * z;
+    r00 = 1.0 - (yy + zz);
+    r01 = xy - wz;
+    r02 = xz + wy;
+    r10 = xy + wz;
+    r11 = 1.0 - (xx + zz);
+    r12 = yz - wx;
+    r20 = xz - wy;
+    r21 = yz + wx;
+    r22 = 1.0 - (xx + yy);
+  }
   const qfac = pixDims[0] < 0 ? -1 : 1;
   const sx = Math.abs(pixDims[1]) || 1;
   const sy = Math.abs(pixDims[2]) || 1;
@@ -179,10 +215,10 @@ export function parseNiftiAnyHeader(headerBuffer) {
     datatype = view.getInt16(70, littleEndian);
     pixDims = Array.from({ length: 8 }, (_, i) => view.getFloat32(76 + i * 4, littleEndian));
     const rawOffset = view.getFloat32(108, littleEndian);
-    if (!Number.isFinite(rawOffset) || rawOffset < 0 || (rawOffset !== 0 && rawOffset < 352)) {
+    if (!Number.isFinite(rawOffset) || rawOffset < 352) {
       throw new Error(`Invalid NIfTI-1 vox_offset (${rawOffset}): single-file NIfTI-1 requires vox_offset >= 352.`);
     }
-    voxOffset = rawOffset === 0 ? 352 : Math.ceil(rawOffset);
+    voxOffset = Math.ceil(rawOffset);
     rawSlope = view.getFloat32(112, littleEndian);
     rawInter = view.getFloat32(116, littleEndian);
     xyztUnits = view.getUint8(123);
@@ -206,10 +242,10 @@ export function parseNiftiAnyHeader(headerBuffer) {
     });
     pixDims = Array.from({ length: 8 }, (_, i) => view.getFloat64(104 + i * 8, littleEndian));
     const rawOffset = Number(view.getBigInt64(168, littleEndian));
-    if (!Number.isSafeInteger(rawOffset) || rawOffset < 0 || (rawOffset !== 0 && rawOffset < 544)) {
+    if (!Number.isSafeInteger(rawOffset) || rawOffset < 544) {
       throw new Error(`Invalid NIfTI-2 vox_offset (${rawOffset}): single-file NIfTI-2 requires vox_offset >= 544.`);
     }
-    voxOffset = rawOffset === 0 ? 544 : rawOffset;
+    voxOffset = rawOffset;
     rawSlope = view.getFloat64(176, littleEndian);
     rawInter = view.getFloat64(184, littleEndian);
     qformCode = view.getInt32(344, littleEndian);

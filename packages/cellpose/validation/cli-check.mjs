@@ -134,6 +134,133 @@ function matchLabels(truth, pred, thresh = 0.9) {
   return { tp, nTrue, nPred, f1: (2 * tp) / (nTrue + nPred), meanMatchedIou: tp ? iouSum / tp : 0 };
 }
 
+function measureLabels2D(labels, width, height) {
+  const stats = new Map();
+  for (let y = 0; y < height; y += 1) {
+    const rowOff = y * width;
+    for (let x = 0; x < width; x += 1) {
+      const id = labels[rowOff + x];
+      if (id <= 0) continue;
+      let entry = stats.get(id);
+      if (!entry) {
+        entry = { area: 0, sumX: 0, sumY: 0 };
+        stats.set(id, entry);
+      }
+      entry.area += 1;
+      entry.sumX += x;
+      entry.sumY += y;
+    }
+  }
+  const out = new Map();
+  for (const [id, s] of stats) {
+    out.set(id, { area: s.area, x: s.sumX / s.area, y: s.sumY / s.area });
+  }
+  return out;
+}
+
+function measureLabels3D(labels, width, height, depth) {
+  const stats = new Map();
+  const plane = width * height;
+  for (let z = 0; z < depth; z += 1) {
+    const zOff = z * plane;
+    for (let y = 0; y < height; y += 1) {
+      const rowOff = zOff + y * width;
+      for (let x = 0; x < width; x += 1) {
+        const id = labels[rowOff + x];
+        if (id <= 0) continue;
+        let entry = stats.get(id);
+        if (!entry) {
+          entry = { volume: 0, sumX: 0, sumY: 0, sumZ: 0 };
+          stats.set(id, entry);
+        }
+        entry.volume += 1;
+        entry.sumX += x;
+        entry.sumY += y;
+        entry.sumZ += z;
+      }
+    }
+  }
+  const out = new Map();
+  for (const [id, s] of stats) {
+    out.set(id, { volume: s.volume, x: s.sumX / s.volume, y: s.sumY / s.volume, z: s.sumZ / s.volume });
+  }
+  return out;
+}
+
+function checkCsvAgainstMask2D(csvText, mask, label) {
+  const expected = measureLabels2D(mask.labels, mask.width, mask.height);
+  const rows = csvText.trim().split("\n");
+  const headerOk = rows[0] === "id,centroid_x,centroid_y,area_px,mean_intensity";
+  const countOk = rows.length - 1 === expected.size;
+  const seen = new Set();
+  let allMatch = headerOk && countOk;
+  let maxCentroidErr = 0;
+  if (allMatch) {
+    for (let i = 1; i < rows.length; i += 1) {
+      const cols = rows[i].split(",").map(Number);
+      if (cols.length !== 5 || cols.some((v) => !Number.isFinite(v))) {
+        allMatch = false;
+        break;
+      }
+      const [id, x, y, area, mean] = cols;
+      const want = expected.get(id);
+      if (!want || seen.has(id) || area !== want.area || mean < 0) {
+        allMatch = false;
+        break;
+      }
+      seen.add(id);
+      const err = Math.max(Math.abs(x - want.x), Math.abs(y - want.y));
+      maxCentroidErr = Math.max(maxCentroidErr, err);
+      if (err >= 1e-3) {
+        allMatch = false;
+        break;
+      }
+    }
+    if (seen.size !== expected.size) allMatch = false;
+  }
+  check(
+    allMatch,
+    `${label}: every 2D CSV row matches verified label mask (${rows.length - 1}/${expected.size} cells, max centroid err ${maxCentroidErr.toExponential(2)})`,
+  );
+}
+
+function checkCsvAgainstMask3D(csvText, mask, label) {
+  const expected = measureLabels3D(mask.labels, mask.width, mask.height, mask.depth);
+  const rows = csvText.trim().split("\n");
+  const headerOk = rows[0] === "id,centroid_x,centroid_y,centroid_z,volume_vox,mean_intensity";
+  const countOk = rows.length - 1 === expected.size;
+  const seen = new Set();
+  let allMatch = headerOk && countOk;
+  let maxCentroidErr = 0;
+  if (allMatch) {
+    for (let i = 1; i < rows.length; i += 1) {
+      const cols = rows[i].split(",").map(Number);
+      if (cols.length !== 6 || cols.some((v) => !Number.isFinite(v))) {
+        allMatch = false;
+        break;
+      }
+      const [id, x, y, z, vol, mean] = cols;
+      const want = expected.get(id);
+      if (!want || seen.has(id) || vol !== want.volume || mean < 0) {
+        allMatch = false;
+        break;
+      }
+      seen.add(id);
+      const err = Math.max(Math.abs(x - want.x), Math.abs(y - want.y), Math.abs(z - want.z));
+      maxCentroidErr = Math.max(maxCentroidErr, err);
+      if (err >= 1e-3) {
+        allMatch = false;
+        break;
+      }
+    }
+    if (seen.size !== expected.size) allMatch = false;
+  }
+  check(
+    allMatch,
+    `${label}: every 3D CSV row matches verified label mask (${rows.length - 1}/${expected.size} cells, max centroid err ${maxCentroidErr.toExponential(2)})`,
+  );
+}
+
 function checkCellsCsv2D(csvText, wantCells, label) {
   const rows = csvText.trim().split("\n");
   const headerOk = rows[0] === "id,centroid_x,centroid_y,area_px,mean_intensity";
@@ -239,7 +366,9 @@ try {
     score2d.nPred === want2d.count && score2d.f1 === 1 && score2d.meanMatchedIou > 0.99,
     `cyto3-2d: matches Python Cellpose 3.1.1.1 (${score2d.nPred}/${score2d.nTrue} cells, F1=${score2d.f1.toFixed(4)}, meanIoU=${score2d.meanMatchedIou.toFixed(4)})`,
   );
-  checkCellsCsv2D(await readFile(join(out2d, "allen-cells-2d_cellpose_cells.csv"), "utf8"), want2d.cells, "cyto3-2d");
+  const csv2d = await readFile(join(out2d, "allen-cells-2d_cellpose_cells.csv"), "utf8");
+  checkCellsCsv2D(csv2d, want2d.cells, "cyto3-2d");
+  checkCsvAgainstMask2D(csv2d, lbl2d, "cyto3-2d");
 
   // 3. 2D nuclei on channel 2 (diameter 40 vs Python Cellpose 3.1.1.1)
   const wantNuc = reference.cases.nuclei_2d;
@@ -260,7 +389,9 @@ try {
     scoreNuc.nPred === wantNuc.count && scoreNuc.f1 === 1 && scoreNuc.meanMatchedIou > 0.99,
     `nuclei-2d: matches Python Cellpose 3.1.1.1 (${scoreNuc.nPred}/${scoreNuc.nTrue} nuclei, F1=${scoreNuc.f1.toFixed(4)}, meanIoU=${scoreNuc.meanMatchedIou.toFixed(4)})`,
   );
-  checkCellsCsv2D(await readFile(join(outNuc, "allen-cells-2d_cellpose_cells.csv"), "utf8"), wantNuc.cells, "nuclei-2d");
+  const csvNuc = await readFile(join(outNuc, "allen-cells-2d_cellpose_cells.csv"), "utf8");
+  checkCellsCsv2D(csvNuc, wantNuc.cells, "nuclei-2d");
+  checkCsvAgainstMask2D(csvNuc, lblNuc, "nuclei-2d");
 
   // 4. 3D cyto3 (allen-cells-3d vs Python Cellpose 3.1.1.1)
   const want3d = reference.cases.cyto3_3d;
@@ -287,7 +418,8 @@ try {
     score3d.nPred === want3d.count && score3d.f1 === 1 && score3d.meanMatchedIou > 0.99,
     `cyto3-3d: matches Python Cellpose 3.1.1.1 (${score3d.nPred}/${score3d.nTrue} 3D cells, F1=${score3d.f1.toFixed(4)}, meanIoU=${score3d.meanMatchedIou.toFixed(4)})`,
   );
-  const rows3d = (await readFile(join(out3d, "allen-cells-3d_cellpose_cells.csv"), "utf8")).trim().split("\n");
+  const csv3d = await readFile(join(out3d, "allen-cells-3d_cellpose_cells.csv"), "utf8");
+  const rows3d = csv3d.trim().split("\n");
   const totalVol = rows3d.slice(1).reduce((sum, row) => sum + Number(row.split(",")[4]), 0);
   check(
     rows3d[0] === "id,centroid_x,centroid_y,centroid_z,volume_vox,mean_intensity"
@@ -295,6 +427,7 @@ try {
       && Math.abs(totalVol - want3d.nonzero_voxels) <= 5,
     `cyto3-3d: 3D CSV matches Python reference (${rows3d.length - 1}/${want3d.count} cells, totalVol=${totalVol} vs ${want3d.nonzero_voxels})`,
   );
+  checkCsvAgainstMask3D(csv3d, lbl3d, "cyto3-3d");
 } finally {
   await rm(work, { recursive: true, force: true });
 }

@@ -103,6 +103,133 @@ function readLabelTiff(buf) {
   return { width, height, depth, labels };
 }
 
+function measureLabels2D(labels, width, height) {
+  const stats = new Map();
+  for (let y = 0; y < height; y += 1) {
+    const rowOff = y * width;
+    for (let x = 0; x < width; x += 1) {
+      const id = labels[rowOff + x];
+      if (id <= 0) continue;
+      let entry = stats.get(id);
+      if (!entry) {
+        entry = { area: 0, sumX: 0, sumY: 0 };
+        stats.set(id, entry);
+      }
+      entry.area += 1;
+      entry.sumX += x;
+      entry.sumY += y;
+    }
+  }
+  const out = new Map();
+  for (const [id, s] of stats) {
+    out.set(id, { area: s.area, x: s.sumX / s.area, y: s.sumY / s.area });
+  }
+  return out;
+}
+
+function measureLabels3D(labels, width, height, depth) {
+  const stats = new Map();
+  const plane = width * height;
+  for (let z = 0; z < depth; z += 1) {
+    const zOff = z * plane;
+    for (let y = 0; y < height; y += 1) {
+      const rowOff = zOff + y * width;
+      for (let x = 0; x < width; x += 1) {
+        const id = labels[rowOff + x];
+        if (id <= 0) continue;
+        let entry = stats.get(id);
+        if (!entry) {
+          entry = { volume: 0, sumX: 0, sumY: 0, sumZ: 0 };
+          stats.set(id, entry);
+        }
+        entry.volume += 1;
+        entry.sumX += x;
+        entry.sumY += y;
+        entry.sumZ += z;
+      }
+    }
+  }
+  const out = new Map();
+  for (const [id, s] of stats) {
+    out.set(id, { volume: s.volume, x: s.sumX / s.volume, y: s.sumY / s.volume, z: s.sumZ / s.volume });
+  }
+  return out;
+}
+
+function checkCsvAgainstMask2D(csvText, mask, label) {
+  const expected = measureLabels2D(mask.labels, mask.width, mask.height);
+  const rows = csvText.trim().split("\n");
+  const headerOk = rows[0] === "id,centroid_x,centroid_y,area_px,mean_intensity,probability";
+  const countOk = rows.length - 1 === expected.size;
+  const seen = new Set();
+  let allMatch = headerOk && countOk;
+  let maxCentroidErr = 0;
+  if (allMatch) {
+    for (let i = 1; i < rows.length; i += 1) {
+      const cols = rows[i].split(",").map(Number);
+      if (cols.length !== 6 || cols.some((v) => !Number.isFinite(v))) {
+        allMatch = false;
+        break;
+      }
+      const [id, x, y, area, mean, prob] = cols;
+      const want = expected.get(id);
+      if (!want || seen.has(id) || area !== want.area || mean < 0 || prob <= 0 || prob > 1) {
+        allMatch = false;
+        break;
+      }
+      seen.add(id);
+      const err = Math.max(Math.abs(x - want.x), Math.abs(y - want.y));
+      maxCentroidErr = Math.max(maxCentroidErr, err);
+      if (err >= 1e-3) {
+        allMatch = false;
+        break;
+      }
+    }
+    if (seen.size !== expected.size) allMatch = false;
+  }
+  check(
+    allMatch,
+    `${label}: every 2D CSV row matches verified label mask (${rows.length - 1}/${expected.size} nuclei, max centroid err ${maxCentroidErr.toExponential(2)})`,
+  );
+}
+
+function checkCsvAgainstMask3D(csvText, mask, label) {
+  const expected = measureLabels3D(mask.labels, mask.width, mask.height, mask.depth);
+  const rows = csvText.trim().split("\n");
+  const headerOk = rows[0] === "id,centroid_x,centroid_y,centroid_z,volume_vox,mean_intensity,probability";
+  const countOk = rows.length - 1 === expected.size;
+  const seen = new Set();
+  let allMatch = headerOk && countOk;
+  let maxCentroidErr = 0;
+  if (allMatch) {
+    for (let i = 1; i < rows.length; i += 1) {
+      const cols = rows[i].split(",").map(Number);
+      if (cols.length !== 7 || cols.some((v) => !Number.isFinite(v))) {
+        allMatch = false;
+        break;
+      }
+      const [id, x, y, z, vol, mean, prob] = cols;
+      const want = expected.get(id);
+      if (!want || seen.has(id) || vol !== want.volume || mean < 0 || prob <= 0 || prob > 1) {
+        allMatch = false;
+        break;
+      }
+      seen.add(id);
+      const err = Math.max(Math.abs(x - want.x), Math.abs(y - want.y), Math.abs(z - want.z));
+      maxCentroidErr = Math.max(maxCentroidErr, err);
+      if (err >= 1e-3) {
+        allMatch = false;
+        break;
+      }
+    }
+    if (seen.size !== expected.size) allMatch = false;
+  }
+  check(
+    allMatch,
+    `${label}: every 3D CSV row matches verified label mask (${rows.length - 1}/${expected.size} nuclei, max centroid err ${maxCentroidErr.toExponential(2)})`,
+  );
+}
+
 function checkNucleiCsv2D(csvText, wantNuclei, label, { centroidTol = 5e-4, meanRelTol = 1e-6 } = {}) {
   const rows = csvText.trim().split("\n");
   const headerOk = rows[0] === "id,centroid_x,centroid_y,area_px,mean_intensity,probability";
@@ -223,11 +350,13 @@ try {
     fluoHash === reference.example["1x1"].labels_sha256,
     `2D_versatile_fluo: label mask SHA-256 matches Python StarDist 0.9.1 (${fluoHash.slice(0, 12)})`,
   );
+  const fluoCsv = await readFile(join(outFluo, "dsb2018-nuclei-2d_stardist_nuclei.csv"), "utf8");
   checkNucleiCsv2D(
-    await readFile(join(outFluo, "dsb2018-nuclei-2d_stardist_nuclei.csv"), "utf8"),
+    fluoCsv,
     reference.example["1x1"].nuclei,
     "2D_versatile_fluo",
   );
+  checkCsvAgainstMask2D(fluoCsv, fluo, "2D_versatile_fluo");
 
   // 3. 2D_versatile_he (skin-he-nuclei, byte-exact match to Python StarDist 0.9.1)
   const outHe = join(work, "he");
@@ -243,12 +372,14 @@ try {
     heHash === reference.he.labels_sha256,
     `2D_versatile_he: label mask SHA-256 matches Python StarDist 0.9.1 (${heHash.slice(0, 12)})`,
   );
+  const heCsv = await readFile(join(outHe, "skin-he-nuclei-2d_stardist_nuclei.csv"), "utf8");
   checkNucleiCsv2D(
-    await readFile(join(outHe, "skin-he-nuclei-2d_stardist_nuclei.csv"), "utf8"),
+    heCsv,
     reference.he.nuclei,
     "2D_versatile_he",
     { centroidTol: 6e-4, meanRelTol: 1e-5 },
   );
+  checkCsvAgainstMask2D(heCsv, he, "2D_versatile_he");
 
   // 4. 2D_paper_dsb2018 (dsb2018-nuclei, byte-exact match to Python StarDist 0.9.1)
   const outPaper = join(work, "paper");
@@ -256,11 +387,13 @@ try {
   check(runPaper.status === 0, `2D_paper_dsb2018: CLI exits 0${runPaper.status ? ` (${runPaper.stderr.trim()})` : ""}`);
   const paper = readLabelTiff(await readFile(join(outPaper, "dsb2018-nuclei-2d_stardist_labels.tif")));
   const paperHash = labelHash(paper.labels);
-  const paperRows = (await readFile(join(outPaper, "dsb2018-nuclei-2d_stardist_nuclei.csv"), "utf8")).trim().split("\n");
+  const paperCsv = await readFile(join(outPaper, "dsb2018-nuclei-2d_stardist_nuclei.csv"), "utf8");
+  const paperRows = paperCsv.trim().split("\n");
   check(
     paperHash === reference.paper_dsb2018.labels_sha256 && paperRows.length - 1 === reference.paper_dsb2018.count,
     `2D_paper_dsb2018: label mask SHA-256 (${paperHash.slice(0, 12)}) and count (${paperRows.length - 1}) match Python StarDist 0.9.1`,
   );
+  checkCsvAgainstMask2D(paperCsv, paper, "2D_paper_dsb2018");
 
   // 5. 3D_demo (stardist-3d-demo, byte-exact match to Python StarDist3D 0.9.1)
   const out3d = join(work, "demo3d");
@@ -277,11 +410,13 @@ try {
     d3Hash === d3Want.labels_sha256,
     `3D_demo: label mask SHA-256 matches Python StarDist3D 0.9.1 (${d3Hash.slice(0, 12)})`,
   );
+  const d3Csv = await readFile(join(out3d, "stardist-demo-nuclei-3d_stardist_nuclei.csv"), "utf8");
   checkNucleiCsv3D(
-    await readFile(join(out3d, "stardist-demo-nuclei-3d_stardist_nuclei.csv"), "utf8"),
+    d3Csv,
     d3Want.nuclei,
     "3D_demo",
   );
+  checkCsvAgainstMask3D(d3Csv, d3, "3D_demo");
 } finally {
   await rm(work, { recursive: true, force: true });
 }

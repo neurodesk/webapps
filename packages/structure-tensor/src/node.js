@@ -167,9 +167,9 @@ function assertPlainOptions(options, allowedKeys, context = "Options") {
   if (proto !== Object.prototype && proto !== null) {
     throw new Error(`${context} must be a plain object.`);
   }
-  for (const key of Object.keys(options)) {
+  for (const key of Reflect.ownKeys(options)) {
     if (!allowedKeys.has(key)) {
-      throw new Error(`Unknown option '${key}'.`);
+      throw new Error(`Unknown option '${String(key)}'.`);
     }
   }
   return options;
@@ -284,15 +284,51 @@ function quaternionToAffine(quatern, qoffset, pixDims, isNifti2) {
   } else {
     a = Math.sqrt(w2);
   }
-  const r00 = a * a + b * b - c * c - d * d;
-  const r01 = 2 * (b * c - a * d);
-  const r02 = 2 * (b * d + a * c);
-  const r10 = 2 * (b * c + a * d);
-  const r11 = a * a + c * c - b * b - d * d;
-  const r12 = 2 * (c * d - a * b);
-  const r20 = 2 * (b * d - a * c);
-  const r21 = 2 * (c * d + a * b);
-  const r22 = a * a + d * d - b * b - c * c;
+  // NiBabel 5.3.3 quat2mat([a, b, c, d]) normalization by nq = a^2 + b^2 + c^2 + d^2.
+  const nq = a * a + b * b + c * c + d * d;
+  let r00;
+  let r01;
+  let r02;
+  let r10;
+  let r11;
+  let r12;
+  let r20;
+  let r21;
+  let r22;
+  if (nq < Number.EPSILON) {
+    r00 = 1;
+    r01 = 0;
+    r02 = 0;
+    r10 = 0;
+    r11 = 1;
+    r12 = 0;
+    r20 = 0;
+    r21 = 0;
+    r22 = 1;
+  } else {
+    const s = 2.0 / nq;
+    const x = b * s;
+    const y = c * s;
+    const z = d * s;
+    const wx = a * x;
+    const wy = a * y;
+    const wz = a * z;
+    const xx = b * x;
+    const xy = b * y;
+    const xz = b * z;
+    const yy = c * y;
+    const yz = c * z;
+    const zz = d * z;
+    r00 = 1.0 - (yy + zz);
+    r01 = xy - wz;
+    r02 = xz + wy;
+    r10 = xy + wz;
+    r11 = 1.0 - (xx + zz);
+    r12 = yz - wx;
+    r20 = xz - wy;
+    r21 = yz + wx;
+    r22 = 1.0 - (xx + yy);
+  }
   const qfac = pixDims[0] < 0 ? -1 : 1;
   const dx = Math.abs(pixDims[1]) || 1;
   const dy = Math.abs(pixDims[2]) || 1;
@@ -354,10 +390,10 @@ export function parseNiftiAnyHeader(bufferLike) {
     datatype = view.getInt16(70, littleEndian);
     pixDims = Array.from({ length: 8 }, (_, i) => view.getFloat32(76 + i * 4, littleEndian));
     const rawOffset = view.getFloat32(108, littleEndian);
-    if (!Number.isFinite(rawOffset) || rawOffset < 0 || (rawOffset !== 0 && rawOffset < 352)) {
+    if (!Number.isFinite(rawOffset) || rawOffset < 352) {
       throw new Error(`Invalid NIfTI-1 vox_offset (${rawOffset}): single-file NIfTI-1 requires vox_offset >= 352.`);
     }
-    voxOffset = rawOffset === 0 ? 352 : Math.ceil(rawOffset);
+    voxOffset = Math.ceil(rawOffset);
     rawSlope = view.getFloat32(112, littleEndian);
     rawInter = view.getFloat32(116, littleEndian);
     xyztUnits = view.getUint8(123);
@@ -381,10 +417,10 @@ export function parseNiftiAnyHeader(bufferLike) {
     });
     pixDims = Array.from({ length: 8 }, (_, i) => view.getFloat64(104 + i * 8, littleEndian));
     const rawOffset = Number(view.getBigInt64(168, littleEndian));
-    if (!Number.isSafeInteger(rawOffset) || rawOffset < 0 || (rawOffset !== 0 && rawOffset < 544)) {
+    if (!Number.isSafeInteger(rawOffset) || rawOffset < 544) {
       throw new Error(`Invalid NIfTI-2 vox_offset (${rawOffset}): single-file NIfTI-2 requires vox_offset >= 544.`);
     }
-    voxOffset = rawOffset === 0 ? 544 : rawOffset;
+    voxOffset = rawOffset;
     rawSlope = view.getFloat64(176, littleEndian);
     rawInter = view.getFloat64(184, littleEndian);
     qformCode = view.getInt32(344, littleEndian);
@@ -648,7 +684,7 @@ function isValidSrgbTrc(profile, tagOffset, tagSize) {
   return false;
 }
 
-function parseIccTags(profile) {
+function parseIccTags(profile, kind) {
   const tags = {
     description: "",
     rXYZ: null,
@@ -659,15 +695,22 @@ function parseIccTags(profile) {
     bTRC: null,
     kTRC: null,
   };
-  if (profile.length < 132) return tags;
-  const tagCount = Math.min(readUint32BE(profile, 128), 256);
+  if (profile.length < 132) {
+    throw new Error(`Embedded ICC profile in ${kind} is truncated or invalid.`);
+  }
+  const tagCount = readUint32BE(profile, 128);
+  if (tagCount > 1024 || 132 + tagCount * 12 > profile.length) {
+    throw new Error(`Embedded ICC profile in ${kind} has a truncated or invalid tag table.`);
+  }
   for (let i = 0; i < tagCount; i += 1) {
     const entryOffset = 132 + i * 12;
-    if (entryOffset + 12 > profile.length) break;
     const sig = ascii(profile, entryOffset, 4);
     const tagOffset = readUint32BE(profile, entryOffset + 4);
     const tagSize = readUint32BE(profile, entryOffset + 8);
-    if (tagOffset + 12 > profile.length || tagSize < 12) continue;
+    if (tagOffset < 128 || tagSize < 4 || tagOffset + tagSize > profile.length) {
+      throw new Error(`Embedded ICC profile in ${kind} has a truncated or out-of-bounds tag '${sig}'.`);
+    }
+    if (tagSize < 12) continue;
 
     if (sig === "desc") {
       const type = ascii(profile, tagOffset, 4);
@@ -721,8 +764,14 @@ function validateIccProfile(iccBytes, profileName, kind) {
   if (profile.length < 132 || ascii(profile, 36, 4) !== "acsp") {
     throw new Error(`Embedded ICC profile in ${kind} is truncated or invalid.`);
   }
+  const declaredSize = readUint32BE(profile, 0);
+  if (declaredSize < 132 || declaredSize > profile.length) {
+    throw new Error(
+      `Embedded ICC profile in ${kind} is truncated (header declares ${declaredSize} bytes, got ${profile.length}).`,
+    );
+  }
   const colorSpace = ascii(profile, 16, 4).trim();
-  const tags = parseIccTags(profile);
+  const tags = parseIccTags(profile, kind);
   const label = tags.description || profileName || colorSpace || "unnamed";
 
   if (colorSpace !== "RGB" && colorSpace !== "GRAY") {
@@ -800,6 +849,7 @@ function inspectPngChunks(bytes) {
   let hasIend = false;
   let hasSrgb = false;
   let hasCicpSrgb = false;
+  let rawGama = null;
   let gama = null;
   let chrm = null;
   let iccp = null;
@@ -825,11 +875,14 @@ function inspectPngChunks(bytes) {
       if (tooLarge) throw new Error(tooLarge);
     } else if (type === "sRGB") {
       hasSrgb = true;
-    } else if (type === "gAMA" && length === 4) {
+    } else if (type === "gAMA") {
+      if (length !== 4) throw new Error(`Invalid PNG gAMA chunk length (${length}; expected 4).`);
       const raw = view.getUint32(dataStart, false);
       if (raw === 0) throw new Error("Invalid PNG gAMA value 0.");
+      rawGama = raw;
       gama = raw / 100000;
-    } else if (type === "cHRM" && length === 32) {
+    } else if (type === "cHRM") {
+      if (length !== 32) throw new Error(`Invalid PNG cHRM chunk length (${length}; expected 32).`);
       chrm = Array.from({ length: 8 }, (_, k) => view.getUint32(dataStart + k * 4, false));
     } else if (type === "cICP") {
       if (length !== 4) {
@@ -846,15 +899,23 @@ function inspectPngChunks(bytes) {
         );
       }
       hasCicpSrgb = true;
-    } else if (type === "iCCP" && length > 2) {
+    } else if (type === "iCCP") {
+      if (length < 3) throw new Error("Invalid PNG iCCP chunk (truncated).");
       let nul = dataStart;
       while (nul < chunkEnd && bytes[nul] !== 0) nul += 1;
-      if (nul + 2 > chunkEnd) throw new Error("Invalid PNG iCCP chunk.");
+      if (nul === dataStart || nul - dataStart > 79 || nul + 2 >= chunkEnd) {
+        throw new Error("Invalid PNG iCCP chunk.");
+      }
       const profileName = ascii(bytes, dataStart, nul - dataStart);
       const method = bytes[nul + 1];
       if (method !== 0) throw new Error(`Unsupported PNG iCCP compression method ${method}.`);
       const compressed = bytes.subarray(nul + 2, chunkEnd);
-      const inflated = inflateSync(compressed, { maxOutputLength: MAX_ICC_BYTES });
+      let inflated;
+      try {
+        inflated = inflateSync(compressed, { maxOutputLength: MAX_ICC_BYTES });
+      } catch (error) {
+        throw new Error(`Invalid PNG iCCP compressed profile: ${error.message}`, { cause: error });
+      }
       iccp = { profileName, bytes: inflated };
     } else if (type === "IEND") {
       hasIend = true;
@@ -875,7 +936,11 @@ function inspectPngChunks(bytes) {
     }
   }
   const hasExplicitSrgb = hasCicpSrgb || hasSrgb || Boolean(iccp);
-  return { width, height, bitDepth, hasSrgb: hasExplicitSrgb, gama: hasExplicitSrgb ? null : gama };
+  // Chromium/Blink PNGImageDecoder treats standalone gAMA within ±5% of 1/2.2 (43182..47727)
+  // without cHRM as standard sRGB identity (0/256 diffs across all 8-bit levels).
+  const isChromiumSrgbGama = !chrm && rawGama !== null && rawGama >= 43182 && rawGama <= 47727;
+  const effectiveGama = hasExplicitSrgb || isChromiumSrgbGama ? null : gama;
+  return { width, height, bitDepth, hasSrgb: hasExplicitSrgb || isChromiumSrgbGama, gama: effectiveGama };
 }
 
 /**
@@ -922,6 +987,10 @@ export function decodePngGreyscale(bytes) {
   return { data: out, dims: [width, height, 1], spacing: [1, 1, 1], unit: "pixel" };
 }
 
+function clampByte(v) {
+  return v < 0 ? 0 : v > 255 ? 255 : v;
+}
+
 function inspectJpegIcc(bytes) {
   if (bytes.byteLength < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
     throw new Error("Invalid JPEG signature.");
@@ -929,6 +998,8 @@ function inspectJpegIcc(bytes) {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const iccChunks = new Map();
   let totalIccChunks = 0;
+  let components = [];
+  let adobeTransform = null;
   let pos = 2;
   while (pos + 4 <= bytes.byteLength) {
     if (bytes[pos] !== 0xff) break;
@@ -945,18 +1016,45 @@ function inspectJpegIcc(bytes) {
     const segLen = view.getUint16(markerPos + 1, false);
     const segDataStart = markerPos + 3;
     const segEnd = markerPos + 1 + segLen;
-    if (segEnd > bytes.byteLength) break;
-    if (marker === 0xe2 && segLen >= 16 && ascii(bytes, segDataStart, 12) === "ICC_PROFILE\0") {
+    if (segLen < 2 || segEnd > bytes.byteLength) break;
+    if (marker === 0xe2 && segLen >= 14 && ascii(bytes, segDataStart, 12) === "ICC_PROFILE\0") {
+      if (segLen < 16) {
+        throw new Error("Invalid JPEG APP2 ICC_PROFILE segment (truncated header).");
+      }
       const seqNo = bytes[segDataStart + 12];
       const count = bytes[segDataStart + 13];
-      if (seqNo >= 1 && count >= 1 && seqNo <= count) {
-        totalIccChunks = Math.max(totalIccChunks, count);
-        iccChunks.set(seqNo, bytes.subarray(segDataStart + 14, segEnd));
+      if (seqNo < 1 || count < 1 || seqNo > count) {
+        throw new Error(`Invalid JPEG APP2 ICC_PROFILE segment sequence (${seqNo}/${count}).`);
+      }
+      if (totalIccChunks !== 0 && count !== totalIccChunks) {
+        throw new Error(`Inconsistent JPEG APP2 ICC_PROFILE segment count (${count} vs ${totalIccChunks}).`);
+      }
+      if (iccChunks.has(seqNo)) {
+        throw new Error(`Duplicate JPEG APP2 ICC_PROFILE segment ${seqNo}/${count}.`);
+      }
+      totalIccChunks = count;
+      iccChunks.set(seqNo, bytes.subarray(segDataStart + 14, segEnd));
+    } else if (marker === 0xee && segLen >= 14 && ascii(bytes, segDataStart, 5) === "Adobe") {
+      adobeTransform = bytes[segDataStart + 11];
+    } else if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc && components.length === 0) {
+      if (segLen >= 8) {
+        const nComp = bytes[segDataStart + 5];
+        if (segDataStart + 6 + nComp * 3 <= segEnd) {
+          components = [];
+          for (let c = 0; c < nComp; c += 1) {
+            const id = bytes[segDataStart + 6 + c * 3];
+            const hv = bytes[segDataStart + 7 + c * 3];
+            components.push({ id, h: hv >> 4, v: hv & 0x0f });
+          }
+        }
       }
     }
     pos = segEnd;
   }
-  if (totalIccChunks > 0 && iccChunks.size > 0) {
+  if (totalIccChunks > 0) {
+    if (iccChunks.size !== totalIccChunks) {
+      throw new Error(`Incomplete JPEG APP2 ICC_PROFILE segments (${iccChunks.size}/${totalIccChunks}).`);
+    }
     const parts = [];
     let totalBytes = 0;
     for (let i = 1; i <= totalIccChunks; i += 1) {
@@ -973,16 +1071,100 @@ function inspectJpegIcc(bytes) {
     const assembled = Buffer.concat(parts);
     validateIccProfile(assembled, null, "JPEG");
   }
+  return { components, adobeTransform };
+}
+
+function upsampleFancy2D(sub, cw, ch, x, y, subX, subY) {
+  if (subX && subY) {
+    const cx = x >> 1;
+    const cy = y >> 1;
+    const cxN = (x & 1) === 0 ? Math.max(0, cx - 1) : Math.min(cw - 1, cx + 1);
+    const cyN = (y & 1) === 0 ? Math.max(0, cy - 1) : Math.min(ch - 1, cy + 1);
+    const s00 = sub[cy * cw + cx];
+    const s01 = sub[cy * cw + cxN];
+    const s10 = sub[cyN * cw + cx];
+    const s11 = sub[cyN * cw + cxN];
+    return (9 * s00 + 3 * s01 + 3 * s10 + s11 + 8) >> 4;
+  }
+  if (subX) {
+    const cx = x >> 1;
+    const cxN = (x & 1) === 0 ? Math.max(0, cx - 1) : Math.min(cw - 1, cx + 1);
+    return (3 * sub[y * cw + cx] + sub[y * cw + cxN] + 2) >> 2;
+  }
+  const cy = y >> 1;
+  const cyN = (y & 1) === 0 ? Math.max(0, cy - 1) : Math.min(ch - 1, cy + 1);
+  return (3 * sub[cy * cw + x] + sub[cyN * cw + x] + 2) >> 2;
 }
 
 function decodeJpegGreyscale(bytes) {
-  inspectJpegIcc(bytes);
+  const meta = inspectJpegIcc(bytes);
+  const isRawRgb = meta.components.length === 3
+    && ((meta.adobeTransform === 0)
+      || (meta.adobeTransform === null
+        && meta.components[0].id === 0x52
+        && meta.components[1].id === 0x47
+        && meta.components[2].id === 0x42));
+  const useRoundedYcbcr = meta.components.length === 3 && meta.adobeTransform === null && !isRawRgb;
   // jpeg-js decodes stored grid order, ignoring EXIF orientation (matching ImageJ & apps/structure-tensor/src/io.js).
-  const decoded = jpeg.decode(bytes, { useTArray: true, formatAsRGBA: true, maxResolutionInMP: 16, maxMemoryUsageInMB: 256 });
+  // For standard 3-component YCbCr JPEGs, decode raw Y/Cb/Cr and apply libjpeg-turbo fancy chroma upsampling
+  // + rounded 16-bit fixed-point YCbCr->RGB (avoiding jpeg-js's float-to-Uint8 truncation bias).
+  const decoded = jpeg.decode(bytes, {
+    useTArray: true,
+    formatAsRGBA: true,
+    ...(useRoundedYcbcr || isRawRgb ? { colorTransform: false } : {}),
+    maxResolutionInMP: 16,
+    maxMemoryUsageInMB: 256,
+  });
   const { width, height, data: rgba } = decoded;
   const tooLarge = voxelRefusal([width, height, 1]);
   if (tooLarge) throw new Error(tooLarge);
   const out = new Float64Array(width * height);
+
+  if (useRoundedYcbcr) {
+    const [c0, c1, c2] = meta.components;
+    const subX = c0.h === 2 && c1.h === 1 && c2.h === 1;
+    const subY = c0.v === 2 && c1.v === 1 && c2.v === 1;
+    if (subX || subY) {
+      const cw = subX ? Math.ceil(width / 2) : width;
+      const ch = subY ? Math.ceil(height / 2) : height;
+      const stepX = subX ? 2 : 1;
+      const stepY = subY ? 2 : 1;
+      const cbSub = new Uint8Array(cw * ch);
+      const crSub = new Uint8Array(cw * ch);
+      for (let cy = 0; cy < ch; cy += 1) {
+        const sy = cy * stepY;
+        for (let cx = 0; cx < cw; cx += 1) {
+          const idx = (sy * width + cx * stepX) * 4;
+          cbSub[cy * cw + cx] = rgba[idx + 1];
+          crSub[cy * cw + cx] = rgba[idx + 2];
+        }
+      }
+      for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
+          const i = y * width + x;
+          const Y = rgba[4 * i];
+          const Cb = upsampleFancy2D(cbSub, cw, ch, x, y, subX, subY) - 128;
+          const Cr = upsampleFancy2D(crSub, cw, ch, x, y, subX, subY) - 128;
+          const r = clampByte(Y + ((91881 * Cr + 32768) >> 16));
+          const g = clampByte(Y + ((-22554 * Cb - 46802 * Cr + 32768) >> 16));
+          const b = clampByte(Y + ((116130 * Cb + 32768) >> 16));
+          out[i] = (r + g + b) / 3;
+        }
+      }
+    } else {
+      for (let i = 0; i < out.length; i += 1) {
+        const Y = rgba[4 * i];
+        const Cb = rgba[4 * i + 1] - 128;
+        const Cr = rgba[4 * i + 2] - 128;
+        const r = clampByte(Y + ((91881 * Cr + 32768) >> 16));
+        const g = clampByte(Y + ((-22554 * Cb - 46802 * Cr + 32768) >> 16));
+        const b = clampByte(Y + ((116130 * Cb + 32768) >> 16));
+        out[i] = (r + g + b) / 3;
+      }
+    }
+    return { data: out, dims: [width, height, 1], spacing: [1, 1, 1], unit: "pixel" };
+  }
+
   for (let i = 0; i < out.length; i += 1) {
     out[i] = (rgba[4 * i] + rgba[4 * i + 1] + rgba[4 * i + 2]) / 3;
   }
@@ -1230,18 +1412,29 @@ function rollbackPublishSync(pubState) {
     pubState.pendingBackup = null;
   }
 
+  const remainingBackups = [];
   while (pubState.backups.length > 0) {
-    const entry = pubState.backups[pubState.backups.length - 1];
+    const entry = pubState.backups.pop();
     try {
-      renameRollback(entry.backup, entry.target);
-      pubState.backups.pop();
-    } catch (error) {
-      if (error.code === "ENOENT") pubState.backups.pop();
-      else {
-        ok = false;
-        break;
+      let targetInfo = null;
+      try {
+        targetInfo = lstatSync(entry.target);
+      } catch (statError) {
+        if (statError.code !== "ENOENT") throw statError;
       }
+      if (targetInfo && (targetInfo.isSymbolicLink() || targetInfo.isDirectory())) {
+        ok = false;
+        remainingBackups.push(entry);
+        continue;
+      }
+      renameRollback(entry.backup, entry.target);
+    } catch {
+      ok = false;
+      remainingBackups.push(entry);
     }
+  }
+  for (let i = remainingBackups.length - 1; i >= 0; i -= 1) {
+    pubState.backups.push(remainingBackups[i]);
   }
 
   for (const item of pubState.staged) {
@@ -1419,8 +1612,9 @@ export async function claimOutputDir(outputDir, options) {
   };
 }
 
-function publishFileNonOverwriteSync(partialPath, finalPath, { linkFn }) {
+function publishFileNonOverwriteSync(partialPath, finalPath, pubState, { linkFn, unlinkFn }) {
   const doLink = linkFn ?? linkSync;
+  const doUnlink = unlinkFn ?? unlinkSync;
   try {
     doLink(partialPath, finalPath);
   } catch (error) {
@@ -1435,8 +1629,35 @@ function publishFileNonOverwriteSync(partialPath, finalPath, { linkFn }) {
     }
     throw error;
   }
+  pubState.published.push({ target: finalPath, hadBackup: false, kind: "file" });
   try {
-    unlinkSync(partialPath);
+    doUnlink(partialPath);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+}
+
+function assertBackupNotSpecialSync(backupPath, finalPath, pubState) {
+  const movedInfo = lstatSync(backupPath);
+  if (movedInfo.isSymbolicLink() || movedInfo.isDirectory()) {
+    const kindLabel = movedInfo.isSymbolicLink() ? "symbolic link" : "existing directory";
+    try {
+      renameSync(backupPath, finalPath);
+    } catch {
+      pubState.backups.push({ target: finalPath, backup: backupPath });
+      pubState.pendingBackup = null;
+      throw new Error(`Cannot overwrite ${kindLabel} '${finalPath}'.`);
+    }
+    pubState.pendingBackup = null;
+    throw new Error(`Cannot overwrite ${kindLabel} '${finalPath}'.`);
+  }
+}
+
+function assertTargetNotSpecialSync(finalPath) {
+  try {
+    const info = lstatSync(finalPath);
+    if (info.isDirectory()) throw new Error(`Cannot overwrite existing directory '${finalPath}'.`);
+    if (info.isSymbolicLink()) throw new Error(`Cannot overwrite symbolic link '${finalPath}'.`);
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
   }
@@ -1447,7 +1668,7 @@ const COMMIT_OPTION_KEYS = new Set([
   "renameFn",
   "writeFileFn",
   "linkFn",
-  "copyFileFn",
+  "unlinkFn",
   "trackPartial",
   "untrackPartial",
   "claim",
@@ -1460,7 +1681,7 @@ export async function commitOutputs(dir, files, options) {
   const renameFn = opts.renameFn ?? rename;
   const writeFileFn = opts.writeFileFn ?? writeFile;
   const linkFn = opts.linkFn;
-  const copyFileFn = opts.copyFileFn;
+  const unlinkFn = opts.unlinkFn;
   const claim = opts.claim;
   const trackPartial = opts.trackPartial ?? claim?.trackPartial;
   const untrackPartial = opts.untrackPartial ?? claim?.untrackPartial;
@@ -1517,6 +1738,7 @@ export async function commitOutputs(dir, files, options) {
           } else {
             renameSync(entry.finalPath, backupPath);
           }
+          assertBackupNotSpecialSync(backupPath, entry.finalPath, pubState);
           pubState.backups.push({ target: entry.finalPath, backup: backupPath });
           backedUpSet.add(entry.finalPath);
           pubState.pendingBackup = null;
@@ -1525,18 +1747,56 @@ export async function commitOutputs(dir, files, options) {
     }
 
     for (const entry of pubState.staged) {
-      const hadBackup = backedUpSet.has(entry.finalPath);
-      if (!overwrite && !hasCustomRename) {
-        publishFileNonOverwriteSync(entry.partialPath, entry.finalPath, { linkFn, copyFileFn });
-        pubState.published.push({ target: entry.finalPath, hadBackup: false, kind: "file" });
+      let hadBackup = backedUpSet.has(entry.finalPath);
+      if (!overwrite) {
+        publishFileNonOverwriteSync(entry.partialPath, entry.finalPath, pubState, { linkFn, unlinkFn });
         untrackPartial?.(entry.partialPath);
-      } else {
-        pubState.pendingPublish = { target: entry.finalPath, partialPath: entry.partialPath, hadBackup, kind: "file" };
-        if (hasCustomRename) {
-          await renameFn(entry.partialPath, entry.finalPath);
-        } else {
-          renameSync(entry.partialPath, entry.finalPath);
+      } else if (!hasCustomRename) {
+        const doLink = linkFn ?? linkSync;
+        const doUnlink = unlinkFn ?? unlinkSync;
+        let linked = false;
+        try {
+          doLink(entry.partialPath, entry.finalPath);
+          linked = true;
+        } catch (error) {
+          if (error.code === "EEXIST") {
+            if (!hadBackup) {
+              const backupPath = join(dir, `.${entry.name}.${token}.backup`);
+              pubState.pendingBackup = { target: entry.finalPath, backup: backupPath };
+              renameSync(entry.finalPath, backupPath);
+              assertBackupNotSpecialSync(backupPath, entry.finalPath, pubState);
+              pubState.backups.push({ target: entry.finalPath, backup: backupPath });
+              backedUpSet.add(entry.finalPath);
+              hadBackup = true;
+              pubState.pendingBackup = null;
+            } else {
+              assertTargetNotSpecialSync(entry.finalPath);
+            }
+          } else if (LINK_FALLBACK_CODES.has(error.code)) {
+            assertTargetNotSpecialSync(entry.finalPath);
+          } else {
+            throw error;
+          }
         }
+        if (linked) {
+          pubState.published.push({ target: entry.finalPath, hadBackup, kind: "file" });
+          try {
+            doUnlink(entry.partialPath);
+          } catch (error) {
+            if (error.code !== "ENOENT") throw error;
+          }
+          untrackPartial?.(entry.partialPath);
+        } else {
+          pubState.pendingPublish = { target: entry.finalPath, partialPath: entry.partialPath, hadBackup, kind: "file" };
+          renameSync(entry.partialPath, entry.finalPath);
+          pubState.published.push({ target: entry.finalPath, hadBackup, kind: "file" });
+          pubState.pendingPublish = null;
+          untrackPartial?.(entry.partialPath);
+        }
+      } else {
+        assertTargetNotSpecialSync(entry.finalPath);
+        pubState.pendingPublish = { target: entry.finalPath, partialPath: entry.partialPath, hadBackup, kind: "file" };
+        await renameFn(entry.partialPath, entry.finalPath);
         pubState.published.push({ target: entry.finalPath, hadBackup, kind: "file" });
         pubState.pendingPublish = null;
         untrackPartial?.(entry.partialPath);
@@ -1572,7 +1832,7 @@ const ANALYSE_ARG_KEYS = new Set([
   "readdirFn",
   "openFn",
   "linkFn",
-  "copyFileFn",
+  "unlinkFn",
 ]);
 
 export async function analyseStructureTensorFile(arg) {
@@ -1587,7 +1847,7 @@ export async function analyseStructureTensorFile(arg) {
     readdirFn = readdir,
     openFn,
     linkFn,
-    copyFileFn,
+    unlinkFn,
   } = validated;
   if (onProgress !== undefined && typeof onProgress !== "function") {
     throw new Error("onProgress must be a function.");
@@ -1687,7 +1947,7 @@ export async function analyseStructureTensorFile(arg) {
       overwrite: parsed.overwrite,
       renameFn,
       ...(linkFn ? { linkFn } : {}),
-      ...(copyFileFn ? { copyFileFn } : {}),
+      ...(unlinkFn ? { unlinkFn } : {}),
       claim: reservation,
     });
     committed = true;

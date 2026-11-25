@@ -188,9 +188,9 @@ function assertPlainOptions(options, allowedKeys, context = "Options") {
   if (proto !== Object.prototype && proto !== null) {
     throw new Error(`${context} must be a plain object.`);
   }
-  for (const key of Object.keys(options)) {
+  for (const key of Reflect.ownKeys(options)) {
     if (!allowedKeys.has(key)) {
-      throw new Error(`Unknown option '${key}'.`);
+      throw new Error(`Unknown option '${String(key)}'.`);
     }
   }
   return options;
@@ -445,18 +445,29 @@ function rollbackPublishSync(pubState) {
     pubState.pendingBackup = null;
   }
 
+  const remainingBackups = [];
   while (pubState.backups.length > 0) {
-    const entry = pubState.backups[pubState.backups.length - 1];
+    const entry = pubState.backups.pop();
     try {
-      renameRollback(entry.backup, entry.target);
-      pubState.backups.pop();
-    } catch (error) {
-      if (error.code === "ENOENT") pubState.backups.pop();
-      else {
-        ok = false;
-        break;
+      let targetInfo = null;
+      try {
+        targetInfo = lstatSync(entry.target);
+      } catch (statError) {
+        if (statError.code !== "ENOENT") throw statError;
       }
+      if (targetInfo && (targetInfo.isSymbolicLink() || targetInfo.isDirectory())) {
+        ok = false;
+        remainingBackups.push(entry);
+        continue;
+      }
+      renameRollback(entry.backup, entry.target);
+    } catch {
+      ok = false;
+      remainingBackups.push(entry);
     }
+  }
+  for (let i = remainingBackups.length - 1; i >= 0; i -= 1) {
+    pubState.backups.push(remainingBackups[i]);
   }
 
   for (const item of pubState.staged) {
@@ -634,8 +645,9 @@ export async function claimOutputDir(outputDir, options) {
   };
 }
 
-function publishFileNonOverwriteSync(partialPath, finalPath, { linkFn }) {
+function publishFileNonOverwriteSync(partialPath, finalPath, pubState, { linkFn, unlinkFn }) {
   const doLink = linkFn ?? linkSync;
+  const doUnlink = unlinkFn ?? unlinkSync;
   try {
     doLink(partialPath, finalPath);
   } catch (error) {
@@ -650,8 +662,35 @@ function publishFileNonOverwriteSync(partialPath, finalPath, { linkFn }) {
     }
     throw error;
   }
+  pubState.published.push({ target: finalPath, hadBackup: false, kind: "file" });
   try {
-    unlinkSync(partialPath);
+    doUnlink(partialPath);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+}
+
+function assertBackupNotSpecialSync(backupPath, finalPath, pubState) {
+  const movedInfo = lstatSync(backupPath);
+  if (movedInfo.isSymbolicLink() || movedInfo.isDirectory()) {
+    const kindLabel = movedInfo.isSymbolicLink() ? "symbolic link" : "existing directory";
+    try {
+      renameSync(backupPath, finalPath);
+    } catch {
+      pubState.backups.push({ target: finalPath, backup: backupPath });
+      pubState.pendingBackup = null;
+      throw new Error(`Cannot overwrite ${kindLabel} '${finalPath}'.`);
+    }
+    pubState.pendingBackup = null;
+    throw new Error(`Cannot overwrite ${kindLabel} '${finalPath}'.`);
+  }
+}
+
+function assertTargetNotSpecialSync(finalPath) {
+  try {
+    const info = lstatSync(finalPath);
+    if (info.isDirectory()) throw new Error(`Cannot overwrite existing directory '${finalPath}'.`);
+    if (info.isSymbolicLink()) throw new Error(`Cannot overwrite symbolic link '${finalPath}'.`);
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
   }
@@ -662,7 +701,7 @@ const COMMIT_OPTION_KEYS = new Set([
   "renameFn",
   "writeFileFn",
   "linkFn",
-  "copyFileFn",
+  "unlinkFn",
   "trackPartial",
   "untrackPartial",
   "claim",
@@ -675,7 +714,7 @@ export async function commitOutputs(dir, files, options) {
   const renameFn = opts.renameFn ?? rename;
   const writeFileFn = opts.writeFileFn ?? writeFile;
   const linkFn = opts.linkFn;
-  const copyFileFn = opts.copyFileFn;
+  const unlinkFn = opts.unlinkFn;
   const claim = opts.claim;
   const trackPartial = opts.trackPartial ?? claim?.trackPartial;
   const untrackPartial = opts.untrackPartial ?? claim?.untrackPartial;
@@ -732,6 +771,7 @@ export async function commitOutputs(dir, files, options) {
           } else {
             renameSync(entry.finalPath, backupPath);
           }
+          assertBackupNotSpecialSync(backupPath, entry.finalPath, pubState);
           pubState.backups.push({ target: entry.finalPath, backup: backupPath });
           backedUpSet.add(entry.finalPath);
           pubState.pendingBackup = null;
@@ -740,18 +780,56 @@ export async function commitOutputs(dir, files, options) {
     }
 
     for (const entry of pubState.staged) {
-      const hadBackup = backedUpSet.has(entry.finalPath);
-      if (!overwrite && !hasCustomRename) {
-        publishFileNonOverwriteSync(entry.partialPath, entry.finalPath, { linkFn, copyFileFn });
-        pubState.published.push({ target: entry.finalPath, hadBackup: false, kind: "file" });
+      let hadBackup = backedUpSet.has(entry.finalPath);
+      if (!overwrite) {
+        publishFileNonOverwriteSync(entry.partialPath, entry.finalPath, pubState, { linkFn, unlinkFn });
         untrackPartial?.(entry.partialPath);
-      } else {
-        pubState.pendingPublish = { target: entry.finalPath, partialPath: entry.partialPath, hadBackup, kind: "file" };
-        if (hasCustomRename) {
-          await renameFn(entry.partialPath, entry.finalPath);
-        } else {
-          renameSync(entry.partialPath, entry.finalPath);
+      } else if (!hasCustomRename) {
+        const doLink = linkFn ?? linkSync;
+        const doUnlink = unlinkFn ?? unlinkSync;
+        let linked = false;
+        try {
+          doLink(entry.partialPath, entry.finalPath);
+          linked = true;
+        } catch (error) {
+          if (error.code === "EEXIST") {
+            if (!hadBackup) {
+              const backupPath = join(dir, `.${entry.name}.${token}.backup`);
+              pubState.pendingBackup = { target: entry.finalPath, backup: backupPath };
+              renameSync(entry.finalPath, backupPath);
+              assertBackupNotSpecialSync(backupPath, entry.finalPath, pubState);
+              pubState.backups.push({ target: entry.finalPath, backup: backupPath });
+              backedUpSet.add(entry.finalPath);
+              hadBackup = true;
+              pubState.pendingBackup = null;
+            } else {
+              assertTargetNotSpecialSync(entry.finalPath);
+            }
+          } else if (LINK_FALLBACK_CODES.has(error.code)) {
+            assertTargetNotSpecialSync(entry.finalPath);
+          } else {
+            throw error;
+          }
         }
+        if (linked) {
+          pubState.published.push({ target: entry.finalPath, hadBackup, kind: "file" });
+          try {
+            doUnlink(entry.partialPath);
+          } catch (error) {
+            if (error.code !== "ENOENT") throw error;
+          }
+          untrackPartial?.(entry.partialPath);
+        } else {
+          pubState.pendingPublish = { target: entry.finalPath, partialPath: entry.partialPath, hadBackup, kind: "file" };
+          renameSync(entry.partialPath, entry.finalPath);
+          pubState.published.push({ target: entry.finalPath, hadBackup, kind: "file" });
+          pubState.pendingPublish = null;
+          untrackPartial?.(entry.partialPath);
+        }
+      } else {
+        assertTargetNotSpecialSync(entry.finalPath);
+        pubState.pendingPublish = { target: entry.finalPath, partialPath: entry.partialPath, hadBackup, kind: "file" };
+        await renameFn(entry.partialPath, entry.finalPath);
         pubState.published.push({ target: entry.finalPath, hadBackup, kind: "file" });
         pubState.pendingPublish = null;
         untrackPartial?.(entry.partialPath);
@@ -832,7 +910,7 @@ const SEGMENT_ARG_KEYS = new Set([
   "readdirFn",
   "openFn",
   "linkFn",
-  "copyFileFn",
+  "unlinkFn",
 ]);
 
 export async function segmentFile(arg) {
@@ -847,7 +925,7 @@ export async function segmentFile(arg) {
     readdirFn = readdir,
     openFn,
     linkFn,
-    copyFileFn,
+    unlinkFn,
   } = validated;
   if (onProgress !== undefined && typeof onProgress !== "function") {
     throw new Error("onProgress must be a function.");
@@ -983,7 +1061,7 @@ export async function segmentFile(arg) {
         overwrite: parsed.overwrite,
         renameFn,
         ...(linkFn ? { linkFn } : {}),
-        ...(copyFileFn ? { copyFileFn } : {}),
+        ...(unlinkFn ? { unlinkFn } : {}),
         claim: reservation,
       },
     );

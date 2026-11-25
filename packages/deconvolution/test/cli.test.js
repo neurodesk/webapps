@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { lstat, mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { lstat, mkdir, mkdtemp, readdir, readFile, rename, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -358,17 +359,39 @@ test("strict Node API validation and failed-write .partial cleanup", async (t) =
   new Uint8Array(badOff1, 344, 4).set([0x6e, 0x2b, 0x31, 0x00]);
   new DataView(badOff1).setFloat32(108, 348, true);
   assert.throws(() => niftiAffine(badOff1), /vox_offset/);
+  new DataView(badOff1).setFloat32(108, 0, true);
+  assert.throws(() => niftiAffine(badOff1), /vox_offset/);
 
   const badOff2 = new ArrayBuffer(544);
   new DataView(badOff2).setInt32(0, 540, true);
   new Uint8Array(badOff2, 4, 8).set([0x6e, 0x2b, 0x32, 0x00, 0x0d, 0x0a, 0x1a, 0x0a]);
   new DataView(badOff2).setBigInt64(168, 540n, true);
   assert.throws(() => niftiAffine(badOff2), /vox_offset/);
+  new DataView(badOff2).setBigInt64(168, 0n, true);
+  assert.throws(() => niftiAffine(badOff2), /vox_offset/);
+
+  // NiBabel 5.3.3 quat2mat normalization: NIfTI-1 b = Math.fround(1 - 2^-23) => exact [1, 0, 0] first column
+  const q1Buf = new ArrayBuffer(352);
+  const q1 = new DataView(q1Buf);
+  q1.setInt32(0, 348, true);
+  new Uint8Array(q1Buf, 344, 4).set([0x6e, 0x2b, 0x31, 0x00]);
+  q1.setFloat32(108, 352, true);
+  q1.setFloat32(76, 1, true);
+  q1.setFloat32(80, 1, true);
+  q1.setFloat32(84, 1, true);
+  q1.setFloat32(88, 1, true);
+  q1.setInt16(252, 1, true);
+  q1.setFloat32(256, Math.fround(1 - 2 ** -23), true);
+  const aff1 = niftiAffine(q1Buf);
+  assert.equal(aff1[0][0], 1);
+  assert.equal(aff1[1][1], -1);
+  assert.equal(aff1[2][2], -1);
 
   const q2Buf = new ArrayBuffer(544);
   const q2 = new DataView(q2Buf);
   q2.setInt32(0, 540, true);
   new Uint8Array(q2Buf, 4, 8).set([0x6e, 0x2b, 0x32, 0x00, 0x0d, 0x0a, 0x1a, 0x0a]);
+  q2.setBigInt64(168, 544n, true);
   q2.setFloat64(104, 1, true);
   q2.setFloat64(112, 1, true);
   q2.setFloat64(120, 1, true);
@@ -382,6 +405,56 @@ test("strict Node API validation and failed-write .partial cleanup", async (t) =
   q2.setFloat64(360, 0, true);
   assert.throws(() => niftiAffine(q2Buf), /Invalid NIfTI quaternion/);
 
+  // Sol r3: non-enumerable & symbol keys, failed unlink rollback, missing backup lock retention, !overwrite never using renameFn, raced symlink
+  const nonEnum = {};
+  Object.defineProperty(nonEnum, "hidden", { value: undefined, enumerable: false });
+  assert.throws(() => parseCliOptions(nonEnum), /Unknown option/);
+  assert.throws(() => parseCliOptions({ [Symbol("s")]: undefined }), /Unknown option/);
+
+  const unlinkDir = join(work, "unlink-fail");
+  const claimU = await claimOutputDir(unlinkDir, { overwrite: false });
+  await assert.rejects(
+    () => commitOutputs(unlinkDir, [{ name: "a.tif", data: Buffer.from("x") }], {
+      overwrite: false,
+      claim: claimU,
+      unlinkFn: () => {
+        const err = new Error("unlink denied");
+        err.code = "EACCES";
+        throw err;
+      },
+    }),
+    /unlink denied/,
+  );
+  assert.equal(existsSync(join(unlinkDir, "a.tif")), false);
+  await claimU.release({ removeCreated: true });
+
+  const missingBkDir = join(work, "missing-bk");
+  const claimBk = await claimOutputDir(missingBkDir, { overwrite: true });
+  await writeFile(join(missingBkDir, "a.tif"), "orig");
+  let bkPath = null;
+  await assert.rejects(
+    () => commitOutputs(
+      missingBkDir,
+      [{ name: "a.tif", data: Buffer.from("n1") }, { name: "b.tif", data: Buffer.from("n2") }],
+      {
+        overwrite: true,
+        claim: claimBk,
+        renameFn: async (src, dst) => {
+          if (dst.endsWith(".backup")) {
+            bkPath = dst;
+            await rename(src, dst);
+            return;
+          }
+          if (bkPath && existsSync(bkPath)) await unlink(bkPath);
+          throw new Error("publish fail");
+        },
+      },
+    ),
+    /publish fail/,
+  );
+  await claimBk.release();
+  assert.equal(existsSync(join(missingBkDir, ".neurodesk-cli.lock")), true);
+
   // Symlink overwrite refusal and non-overwrite TOCTOU
   const { symlink } = await import("node:fs/promises");
   await writeFile(join(work, "target.tif"), "precious");
@@ -392,8 +465,30 @@ test("strict Node API validation and failed-write .partial cleanup", async (t) =
   );
   assert.equal(await readFile(join(work, "target.tif"), "utf8"), "precious");
 
+  const racedSymDir = join(work, "raced-sym");
+  const claimSym = await claimOutputDir(racedSymDir, { overwrite: true });
+  await writeFile(join(racedSymDir, "a.tif"), "orig");
+  await assert.rejects(
+    () => commitOutputs(racedSymDir, [{ name: "a.tif", data: Buffer.from("new") }], {
+      overwrite: true,
+      claim: claimSym,
+      renameFn: async (src, dst) => {
+        if (dst.endsWith(".backup")) {
+          await unlink(src);
+          await symlink(join(work, "target.tif"), src);
+        }
+        await rename(src, dst);
+      },
+    }),
+    /symbolic link/,
+  );
+  assert.equal((await lstat(join(racedSymDir, "a.tif"))).isSymbolicLink(), true);
+  assert.equal(await readFile(join(work, "target.tif"), "utf8"), "precious");
+  await claimSym.release();
+
   const raceDir = join(work, "race");
   await mkdir(raceDir);
+  let renameCalled = false;
   await assert.rejects(
     () => commitOutputs(raceDir, [{ name: "out.tif", data: Buffer.from("new") }], {
       overwrite: false,
@@ -401,8 +496,13 @@ test("strict Node API validation and failed-write .partial cleanup", async (t) =
         await writeFile(p, data, opts);
         await writeFile(join(raceDir, "out.tif"), "winner");
       },
+      renameFn: async (src, dst) => {
+        renameCalled = true;
+        await rename(src, dst);
+      },
     }),
     /already exists/,
   );
+  assert.equal(renameCalled, false);
   assert.equal(await readFile(join(raceDir, "out.tif"), "utf8"), "winner");
 });

@@ -274,6 +274,8 @@ test("strict Node API validation, cross-CLI shared lock, and failed-write .parti
 
     const raceDir = join(work, "race");
     mdSync(raceDir);
+    const { rename: renameAsync } = await import("node:fs/promises");
+    let renameCalled = false;
     await assert.rejects(
       () => commitOutputs(raceDir, [{ name: "out.csv", data: Buffer.from("new") }], {
         overwrite: false,
@@ -281,10 +283,83 @@ test("strict Node API validation, cross-CLI shared lock, and failed-write .parti
           writeFileSync(p, data);
           writeFileSync(join(raceDir, "out.csv"), "winner");
         },
+        renameFn: async (src, dst) => {
+          renameCalled = true;
+          await renameAsync(src, dst);
+        },
       }),
       /already exists/,
     );
+    assert.equal(renameCalled, false);
     assert.equal(rfSync(join(raceDir, "out.csv"), "utf8"), "winner");
+
+    // Sol r3: non-enumerable & symbol keys, failed unlink rollback, missing backup lock retention, raced symlink
+    const { existsSync: exSync, lstatSync: lsSync, unlinkSync: ulSync } = await import("node:fs");
+    const nonEnum = {};
+    Object.defineProperty(nonEnum, "hidden", { value: undefined, enumerable: false });
+    assert.throws(() => parseCliOptions(nonEnum), /Unknown option/);
+    assert.throws(() => parseCliOptions({ [Symbol("s")]: undefined }), /Unknown option/);
+
+    const unlinkDir = join(work, "unlink-fail");
+    const claimU = await claimOutputDir(unlinkDir, { overwrite: false });
+    await assert.rejects(
+      () => commitOutputs(unlinkDir, [{ name: "a.csv", data: Buffer.from("x") }], {
+        overwrite: false,
+        claim: claimU,
+        unlinkFn: () => {
+          const err = new Error("unlink denied");
+          err.code = "EACCES";
+          throw err;
+        },
+      }),
+      /unlink denied/,
+    );
+    assert.equal(exSync(join(unlinkDir, "a.csv")), false);
+    await claimU.release({ removeCreated: true });
+
+    const missingBkDir = join(work, "missing-bk");
+    const claimBk = await claimOutputDir(missingBkDir, { overwrite: true });
+    writeFileSync(join(missingBkDir, "a.csv"), "orig");
+    let bkPath = null;
+    await assert.rejects(
+      () => commitOutputs(missingBkDir, [{ name: "a.csv", data: Buffer.from("n1") }, { name: "b.csv", data: Buffer.from("n2") }], {
+        overwrite: true,
+        claim: claimBk,
+        renameFn: async (src, dst) => {
+          if (dst.endsWith(".backup")) {
+            bkPath = dst;
+            await renameAsync(src, dst);
+            return;
+          }
+          if (bkPath && exSync(bkPath)) ulSync(bkPath);
+          throw new Error("publish fail");
+        },
+      }),
+      /publish fail/,
+    );
+    await claimBk.release();
+    assert.equal(exSync(join(missingBkDir, LOCK_NAME)), true);
+
+    const racedSymDir = join(work, "raced-sym");
+    const claimSym = await claimOutputDir(racedSymDir, { overwrite: true });
+    writeFileSync(join(racedSymDir, "a.csv"), "orig");
+    await assert.rejects(
+      () => commitOutputs(racedSymDir, [{ name: "a.csv", data: Buffer.from("new") }], {
+        overwrite: true,
+        claim: claimSym,
+        renameFn: async (src, dst) => {
+          if (dst.endsWith(".backup")) {
+            ulSync(src);
+            symlinkSync(join(work, "target.csv"), src);
+          }
+          await renameAsync(src, dst);
+        },
+      }),
+      /symbolic link/,
+    );
+    assert.equal(lsSync(join(racedSymDir, "a.csv")).isSymbolicLink(), true);
+    assert.equal(rfSync(join(work, "target.csv"), "utf8"), "precious");
+    await claimSym.release();
   } finally {
     rmSync(work, { recursive: true, force: true });
   }

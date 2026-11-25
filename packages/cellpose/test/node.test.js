@@ -258,6 +258,7 @@ test("strict Node API validation and failed-write .partial cleanup", async (t) =
 
   const raceDir = join(work, "race");
   await mkdir(raceDir);
+  let renameCalled = false;
   await assert.rejects(
     () => commitOutputs(raceDir, [{ name: "out.tif", data: Buffer.from("new") }], {
       overwrite: false,
@@ -265,8 +266,82 @@ test("strict Node API validation and failed-write .partial cleanup", async (t) =
         await writeFile(p, data, opts);
         await writeFile(join(raceDir, "out.tif"), "winner");
       },
+      renameFn: async (src, dst) => {
+        renameCalled = true;
+        await rename(src, dst);
+      },
     }),
     /already exists/,
   );
+  assert.equal(renameCalled, false);
   assert.equal(await readFile(join(raceDir, "out.tif"), "utf8"), "winner");
+
+  // Sol r3: non-enumerable & symbol keys, failed unlink rollback, missing backup lock retention, raced symlink
+  const { existsSync } = await import("node:fs");
+  const { lstat, unlink } = await import("node:fs/promises");
+  const nonEnum = {};
+  Object.defineProperty(nonEnum, "hidden", { value: undefined, enumerable: false });
+  assert.throws(() => parseCliOptions(nonEnum), /Unknown option/);
+  assert.throws(() => parseCliOptions({ [Symbol("s")]: undefined }), /Unknown option/);
+
+  const unlinkDir = join(work, "unlink-fail");
+  const claimU = await claimOutputDir(unlinkDir, { overwrite: false });
+  await assert.rejects(
+    () => commitOutputs(unlinkDir, [{ name: "a.tif", data: Buffer.from("x") }], {
+      overwrite: false,
+      claim: claimU,
+      unlinkFn: () => {
+        const err = new Error("unlink denied");
+        err.code = "EACCES";
+        throw err;
+      },
+    }),
+    /unlink denied/,
+  );
+  assert.equal(existsSync(join(unlinkDir, "a.tif")), false);
+  await claimU.release({ removeCreated: true });
+
+  const missingBkDir = join(work, "missing-bk");
+  const claimBk = await claimOutputDir(missingBkDir, { overwrite: true });
+  await writeFile(join(missingBkDir, "a.tif"), "orig");
+  let bkPath = null;
+  await assert.rejects(
+    () => commitOutputs(missingBkDir, [{ name: "a.tif", data: Buffer.from("n1") }, { name: "b.tif", data: Buffer.from("n2") }], {
+      overwrite: true,
+      claim: claimBk,
+      renameFn: async (src, dst) => {
+        if (dst.endsWith(".backup")) {
+          bkPath = dst;
+          await rename(src, dst);
+          return;
+        }
+        if (bkPath && existsSync(bkPath)) await unlink(bkPath);
+        throw new Error("publish fail");
+      },
+    }),
+    /publish fail/,
+  );
+  await claimBk.release();
+  assert.equal(existsSync(join(missingBkDir, ".neurodesk-cli.lock")), true);
+
+  const racedSymDir = join(work, "raced-sym");
+  const claimSym = await claimOutputDir(racedSymDir, { overwrite: true });
+  await writeFile(join(racedSymDir, "a.tif"), "orig");
+  await assert.rejects(
+    () => commitOutputs(racedSymDir, [{ name: "a.tif", data: Buffer.from("new") }], {
+      overwrite: true,
+      claim: claimSym,
+      renameFn: async (src, dst) => {
+        if (dst.endsWith(".backup")) {
+          await unlink(src);
+          await symlink(join(work, "target.tif"), src);
+        }
+        await rename(src, dst);
+      },
+    }),
+    /symbolic link/,
+  );
+  assert.equal((await lstat(join(racedSymDir, "a.tif"))).isSymbolicLink(), true);
+  assert.equal(await readFile(join(work, "target.tif"), "utf8"), "precious");
+  await claimSym.release();
 });

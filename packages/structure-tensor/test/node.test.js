@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { rename } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
@@ -8,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { crc32, deflateSync, gunzipSync, gzipSync } from "node:zlib";
 import { createNiftiFromData, createNiftiHeaderFromVolume } from "@neurodesk/webapp-components/file-io";
 import { decode as decodePng, encode as encodePng } from "fast-png";
+import jpeg from "jpeg-js";
 import {
   analyseStructureTensorFile,
   boundedGunzip,
@@ -18,6 +20,7 @@ import {
   extractNibabelAffine,
   LOCK_NAME,
   parseCliOptions,
+  readImageFile,
   toCheckedFloat32,
 } from "../src/node.js";
 
@@ -79,6 +82,7 @@ test("extractNibabelAffine follows sform > qform > LAS-centered fallback precede
   dv.setFloat32(80, 2, true);
   dv.setFloat32(84, 3, true);
   dv.setFloat32(88, 4, true);
+  dv.setFloat32(108, 352, true);
   const fallback = extractNibabelAffine(baseHdr);
   assert.deepEqual(fallback, [
     [-2, 0, 0, 9],
@@ -356,17 +360,36 @@ test("PNG decoding parity: 3x2 1-bit, 1-bit Adam7, tRNS, invalid IDAT CRC, trans
 
   const gama45455 = Buffer.alloc(4);
   gama45455.writeUInt32BE(45455, 0);
+  // Standalone gAMA=45455 without cHRM matches Chromium Blink PNGImageDecoder (exact identity across all 256 values)
+  const all256Scanline = Buffer.alloc(1 + 256);
+  all256Scanline[0] = 0;
+  for (let i = 0; i < 256; i += 1) all256Scanline[1 + i] = i;
   const png45455 = buildCustomPng({
+    width: 256,
+    height: 1,
+    bitDepth: 8,
+    colorType: 0,
+    rawScanlines: all256Scanline,
+    extraChunks: [pngChunk("gAMA", gama45455)],
+  });
+  const dec45455 = decodePngGreyscale(png45455);
+  for (let i = 0; i < 256; i += 1) {
+    assert.equal(dec45455.data[i], i, `standalone gAMA=45455 mismatch at level ${i}`);
+  }
+
+  // gAMA=45455 paired with sRGB cHRM DOES apply gamma 1/2.2 -> sRGB transfer (matching Chromium)
+  const srgbChrmBuf = Buffer.alloc(32);
+  [31270, 32900, 64000, 33000, 30000, 60000, 15000, 6000].forEach((val, idx) => srgbChrmBuf.writeUInt32BE(val, idx * 4));
+  const png45455WithChrm = buildCustomPng({
     width: 2,
     height: 1,
     bitDepth: 8,
     colorType: 0,
     rawScanlines: [0, 20, 128],
-    extraChunks: [pngChunk("gAMA", gama45455)],
+    extraChunks: [pngChunk("cHRM", srgbChrmBuf), pngChunk("gAMA", gama45455)],
   });
-  const dec45455 = decodePngGreyscale(png45455);
-  // 20/255 with gamma 1/2.2 -> linear = (20/255)^(1/0.45455) ≈ 0.003703 -> sRGB OETF ≈ 0.0472 * 255 ≈ 12 (NOT 20!)
-  assert.ok(dec45455.data[0] >= 10 && dec45455.data[0] <= 14, `expected ~12 for gAMA=45455 toe, got ${dec45455.data[0]}`);
+  const dec45455WithChrm = decodePngGreyscale(png45455WithChrm);
+  assert.ok(dec45455WithChrm.data[0] >= 10 && dec45455WithChrm.data[0] <= 14, `expected ~12 for cHRM+gAMA=45455 toe, got ${dec45455WithChrm.data[0]}`);
 
   // 7. Non-sRGB cHRM rejected cleanly
   const badChrm = Buffer.alloc(32);
@@ -383,6 +406,7 @@ test("PNG decoding parity: 3x2 1-bit, 1-bit Adam7, tRNS, invalid IDAT CRC, trans
 
   // 8. Non-sRGB iCCP rejected cleanly
   const fakeIcc = Buffer.alloc(132);
+  fakeIcc.writeUInt32BE(132, 0);
   Buffer.from("RGB ").copy(fakeIcc, 16);
   Buffer.from("acsp").copy(fakeIcc, 36);
   const iccpPayload = Buffer.concat([Buffer.from("Display P3\0"), Buffer.from([0]), deflateSync(fakeIcc)]);
@@ -395,6 +419,55 @@ test("PNG decoding parity: 3x2 1-bit, 1-bit Adam7, tRNS, invalid IDAT CRC, trans
     extraChunks: [pngChunk("iCCP", iccpPayload)],
   });
   assert.throws(() => decodePngGreyscale(pngBadIccp), /non-sRGB ICC profile/);
+
+  // 8b. Truncated / malformed PNG iCCP chunks rejected (length <= 2, missing NUL, < 132 bytes, header profileSize > length, tag OOB)
+  for (const badPayload of [
+    Buffer.from([0x61]),
+    Buffer.from([0x61, 0x00]),
+    Buffer.from("NoNulTerminator"),
+    Buffer.concat([Buffer.from("short\0"), Buffer.from([0]), deflateSync(Buffer.alloc(64))]),
+  ]) {
+    const pngBad = buildCustomPng({
+      width: 2,
+      height: 1,
+      bitDepth: 8,
+      colorType: 0,
+      rawScanlines: [0, 100, 200],
+      extraChunks: [pngChunk("iCCP", badPayload)],
+    });
+    assert.throws(() => decodePngGreyscale(pngBad), /iCCP|ICC profile/);
+  }
+  const bigHeaderIcc = Buffer.alloc(132);
+  bigHeaderIcc.writeUInt32BE(512, 0); // declares 512 bytes but only 132 present
+  Buffer.from("RGB ").copy(bigHeaderIcc, 16);
+  Buffer.from("acsp").copy(bigHeaderIcc, 36);
+  const pngTruncSize = buildCustomPng({
+    width: 2,
+    height: 1,
+    bitDepth: 8,
+    colorType: 0,
+    rawScanlines: [0, 100, 200],
+    extraChunks: [pngChunk("iCCP", Buffer.concat([Buffer.from("sRGB\0"), Buffer.from([0]), deflateSync(bigHeaderIcc)]))],
+  });
+  assert.throws(() => decodePngGreyscale(pngTruncSize), /truncated/i);
+
+  const oobTagIcc = Buffer.alloc(144);
+  oobTagIcc.writeUInt32BE(144, 0);
+  Buffer.from("RGB ").copy(oobTagIcc, 16);
+  Buffer.from("acsp").copy(oobTagIcc, 36);
+  oobTagIcc.writeUInt32BE(1, 128);
+  Buffer.from("desc").copy(oobTagIcc, 132);
+  oobTagIcc.writeUInt32BE(140, 136);
+  oobTagIcc.writeUInt32BE(32, 140); // 140 + 32 > 144
+  const pngOobTag = buildCustomPng({
+    width: 2,
+    height: 1,
+    bitDepth: 8,
+    colorType: 0,
+    rawScanlines: [0, 100, 200],
+    extraChunks: [pngChunk("iCCP", Buffer.concat([Buffer.from("sRGB\0"), Buffer.from([0]), deflateSync(oobTagIcc)]))],
+  });
+  assert.throws(() => decodePngGreyscale(pngOobTag), /out-of-bounds tag/i);
 
   // 9. 16-bit linear PNG (gAMA=100000): sample16=200 strips high byte -> 0 (matching Chromium OffscreenCanvas), 256 -> 13
   const gamaLin = Buffer.alloc(4);
@@ -650,6 +723,9 @@ test("NIfTI-2 3D analysis preserves qform and sform in NIfTI-2 outputs and stric
     const badOffset2 = buf.slice(0);
     new DataView(badOffset2).setBigInt64(168, 540n, true);
     assert.throws(() => extractNibabelAffine(badOffset2), /vox_offset/);
+    const zeroOffset2 = buf.slice(0);
+    new DataView(zeroOffset2).setBigInt64(168, 0n, true);
+    assert.throws(() => extractNibabelAffine(zeroOffset2), /vox_offset/);
 
     const badOffset1 = new ArrayBuffer(352);
     const dv1 = new DataView(badOffset1);
@@ -657,19 +733,25 @@ test("NIfTI-2 3D analysis preserves qform and sform in NIfTI-2 outputs and stric
     new Uint8Array(badOffset1, 344, 4).set([0x6e, 0x2b, 0x31, 0x00]);
     dv1.setFloat32(108, 348, true);
     assert.throws(() => extractNibabelAffine(badOffset1), /vox_offset/);
+    dv1.setFloat32(108, 0, true);
+    assert.throws(() => extractNibabelAffine(badOffset1), /vox_offset/);
 
-    // NIfTI-1 near-180° quaternion (b = 1 - 2^-24 => |w^2| < 3*f32_eps => w = 0)
+    // NIfTI-1 near-180° quaternion (b = Math.fround(1 - 2^-23) => |w^2| < 3*f32_eps => w = 0, exact quat2mat unit scale!)
     const q1Buf = new ArrayBuffer(352);
     const q1 = new DataView(q1Buf);
     q1.setInt32(0, 348, true);
     new Uint8Array(q1Buf, 344, 4).set([0x6e, 0x2b, 0x31, 0x00]);
+    q1.setFloat32(108, 352, true);
     q1.setFloat32(76, 1, true);
     q1.setFloat32(80, 1, true);
     q1.setFloat32(84, 1, true);
     q1.setFloat32(88, 1, true);
     q1.setInt16(252, 1, true);
-    q1.setFloat32(256, 1 - 2 ** -24, true);
+    q1.setFloat32(256, Math.fround(1 - 2 ** -23), true);
     const aff1 = extractNibabelAffine(q1Buf);
+    assert.equal(aff1[0][0], 1, "quat2mat normalizes by nq so first column is exact [1, 0, 0]");
+    assert.equal(aff1[1][1], -1);
+    assert.equal(aff1[2][2], -1);
     assert.equal(aff1[1][2], 0, "w=0 when |w^2| < 3*f32_eps");
 
     // NIfTI-2 Sol case: b = 1 + eps, c = sqrt(0.875*eps) => exact w^2 = -2.875*eps => w = 0
@@ -686,13 +768,198 @@ test("NIfTI-2 3D analysis preserves qform and sform in NIfTI-2 outputs and stric
     q2.setFloat64(360, 0, true);
     assert.throws(() => extractNibabelAffine(q2Buf), /Invalid NIfTI quaternion/);
 
-    // Strict plain-object, unknown undefined key, inherited prototype, and null alias validation
+    // Strict plain-object, non-enumerable & symbol unknown keys, inherited prototype, and null alias validation
     assert.throws(() => parseCliOptions(new Date()), /plain object/);
     assert.throws(() => parseCliOptions(Object.create({ overwrite: true })), /plain object/);
     assert.throws(() => parseCliOptions({ unknownKey: undefined }), /Unknown option/);
+    const nonEnumOpt = {};
+    Object.defineProperty(nonEnumOpt, "hidden", { value: undefined, enumerable: false });
+    assert.throws(() => parseCliOptions(nonEnumOpt), /Unknown option/);
+    assert.throws(() => parseCliOptions({ [Symbol("extra")]: undefined }), /Unknown option/);
     assert.throws(() => parseCliOptions({ "min-coherency": null }), /finite number/);
     await assert.rejects(() => checkInstallation(new Date()), /plain object/);
     await assert.rejects(() => checkInstallation({ extra: undefined }), /Unknown option/);
+    await assert.rejects(() => checkInstallation({ [Symbol("extra")]: 1 }), /Unknown option/);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+});
+
+test("Sol r3: JPEG APP2 ICC_PROFILE validation, RGB JPEG rounding parity, and atomic output safety", async () => {
+  const work = mkdtempSync(join(tmpdir(), "st-sol-r3-"));
+  try {
+    // 1. RGB JPEG rounded YCbCr parity: solid [200, 100, 50] decodes to exact (200+100+50)/3 = 116.6667 (matching Chromium)
+    const solidRgba = new Uint8Array(16 * 16 * 4);
+    for (let i = 0; i < 256; i += 1) {
+      solidRgba[4 * i] = 200;
+      solidRgba[4 * i + 1] = 100;
+      solidRgba[4 * i + 2] = 50;
+      solidRgba[4 * i + 3] = 255;
+    }
+    const baseJpg = Buffer.from(jpeg.encode({ data: solidRgba, width: 16, height: 16 }, 95).data);
+    const solidPath = join(work, "solid.jpg");
+    writeFileSync(solidPath, baseJpg);
+    const solidDecoded = await readImageFile(solidPath);
+    assert.ok(
+      Math.abs(solidDecoded.image.data[0] - (200 + 100 + 50) / 3) < 1e-6,
+      `expected exact 116.6667, got ${solidDecoded.image.data[0]}`,
+    );
+
+    // 2. JPEG APP2 ICC_PROFILE invalid sequences rejected (seq=0, count=0, seq>count, mismatched count, duplicate seq, missing segment)
+    const makeApp2 = (seqNo, count, body = Buffer.alloc(8)) => {
+      const payload = Buffer.concat([Buffer.from("ICC_PROFILE\0"), Buffer.from([seqNo, count]), body]);
+      const seg = Buffer.alloc(4 + payload.length);
+      seg[0] = 0xff;
+      seg[1] = 0xe2;
+      seg.writeUInt16BE(2 + payload.length, 2);
+      payload.copy(seg, 4);
+      return seg;
+    };
+    const injectApp2 = (...segs) => Buffer.concat([baseJpg.subarray(0, 2), ...segs, baseJpg.subarray(2)]);
+    for (const [name, buf] of [
+      ["seq0.jpg", injectApp2(makeApp2(0, 1))],
+      ["count0.jpg", injectApp2(makeApp2(1, 0))],
+      ["seqgt.jpg", injectApp2(makeApp2(2, 1))],
+      ["mismatch.jpg", injectApp2(makeApp2(1, 2), makeApp2(2, 3))],
+      ["dup.jpg", injectApp2(makeApp2(1, 2), makeApp2(1, 2))],
+      ["missing.jpg", injectApp2(makeApp2(1, 2))],
+    ]) {
+      const p = join(work, name);
+      writeFileSync(p, buf);
+      await assert.rejects(() => readImageFile(p), /ICC_PROFILE/);
+    }
+
+    // 3. Failed unlinkSync(partialPath) after linkSync rolls back already-linked finalPath
+    const unlinkDir = join(work, "unlink-fail");
+    const claimUnlink = await claimOutputDir(unlinkDir, { overwrite: false });
+    await assert.rejects(
+      () => commitOutputs(
+        unlinkDir,
+        [{ name: "a.tif", data: Buffer.from("payload") }],
+        {
+          overwrite: false,
+          claim: claimUnlink,
+          unlinkFn: () => {
+            const err = new Error("unlink denied");
+            err.code = "EACCES";
+            throw err;
+          },
+        },
+      ),
+      /unlink denied/,
+    );
+    assert.equal(existsSync(join(unlinkDir, "a.tif")), false, "finalPath must be rolled back when unlink(partial) fails");
+    await claimUnlink.release({ removeCreated: true });
+
+    // 4. Missing .backup during rollback marks rollback failed and retains .neurodesk-cli.lock
+    const missingBkDir = join(work, "missing-backup");
+    const claimBk = await claimOutputDir(missingBkDir, { overwrite: true });
+    writeFileSync(join(missingBkDir, "a.tif"), "orig-a");
+    let bkPath = null;
+    await assert.rejects(
+      () => commitOutputs(
+        missingBkDir,
+        [
+          { name: "a.tif", data: Buffer.from("new-a") },
+          { name: "b.tif", data: Buffer.from("new-b") },
+        ],
+        {
+          overwrite: true,
+          claim: claimBk,
+          renameFn: async (src, dst) => {
+            if (dst.endsWith(".backup")) {
+              bkPath = dst;
+              await rename(src, dst);
+              return;
+            }
+            // Delete backup before failing publish so rollback gets ENOENT on restore
+            if (bkPath && existsSync(bkPath)) unlinkSync(bkPath);
+            throw new Error("publish boom");
+          },
+        },
+      ),
+      /publish boom/,
+    );
+    await claimBk.release();
+    assert.equal(existsSync(join(missingBkDir, LOCK_NAME)), true, "lock must stay on disk when backup is missing during rollback");
+
+    // 5. !overwrite NEVER routes through renameFn even when a custom renameFn is supplied
+    const noOvDir = join(work, "no-overwrite-custom-rename");
+    const claimNoOv = await claimOutputDir(noOvDir, { overwrite: false });
+    let renameCalled = false;
+    await assert.rejects(
+      () => commitOutputs(
+        noOvDir,
+        [{ name: "a.tif", data: Buffer.from("new") }],
+        {
+          overwrite: false,
+          claim: claimNoOv,
+          writeFileFn: async (p, data) => {
+            writeFileSync(p, data);
+            writeFileSync(join(noOvDir, "a.tif"), "raced-winner");
+          },
+          renameFn: async (src, dst) => {
+            renameCalled = true;
+            await rename(src, dst);
+          },
+        },
+      ),
+      /already exists/,
+    );
+    assert.equal(renameCalled, false, "renameFn must never be called when overwrite is false");
+    assert.equal(readFileSync(join(noOvDir, "a.tif"), "utf8"), "raced-winner");
+    await claimNoOv.release();
+
+    // 6. Raced symlink during --overwrite backup is detected, restored intact, and never overwritten
+    const symDir = join(work, "raced-sym");
+    const claimSym = await claimOutputDir(symDir, { overwrite: true });
+    const precious = join(work, "precious.txt");
+    writeFileSync(precious, "keep-me");
+    writeFileSync(join(symDir, "a.tif"), "regular-before-race");
+    await assert.rejects(
+      () => commitOutputs(
+        symDir,
+        [{ name: "a.tif", data: Buffer.from("attacker") }],
+        {
+          overwrite: true,
+          claim: claimSym,
+          renameFn: async (src, dst) => {
+            if (dst.endsWith(".backup")) {
+              // Simulate TOCTOU: another process replaces a.tif with a symlink just before backup rename
+              unlinkSync(src);
+              symlinkSync(precious, src);
+            }
+            await rename(src, dst);
+          },
+        },
+      ),
+      /symbolic link/,
+    );
+    assert.equal(lstatSync(join(symDir, "a.tif")).isSymbolicLink(), true, "raced symlink must be restored intact");
+    assert.equal(readFileSync(precious, "utf8"), "keep-me");
+    await claimSym.release();
+
+    // 7. Raced symlink during --overwrite publish (when target did not exist at backup time) is caught & restored
+    const symPubDir = join(work, "raced-sym-pub");
+    const claimSymPub = await claimOutputDir(symPubDir, { overwrite: true });
+    await assert.rejects(
+      () => commitOutputs(
+        symPubDir,
+        [{ name: "a.tif", data: Buffer.from("attacker") }],
+        {
+          overwrite: true,
+          claim: claimSymPub,
+          writeFileFn: async (p, data) => {
+            writeFileSync(p, data);
+            symlinkSync(precious, join(symPubDir, "a.tif"));
+          },
+        },
+      ),
+      /symbolic link/,
+    );
+    assert.equal(lstatSync(join(symPubDir, "a.tif")).isSymbolicLink(), true, "raced symlink must stay intact");
+    assert.equal(readFileSync(precious, "utf8"), "keep-me");
+    await claimSymPub.release();
   } finally {
     rmSync(work, { recursive: true, force: true });
   }
