@@ -92,8 +92,14 @@ function dispatcherHistory() {
           throw new Error('GitHub API response missing workflow_runs array');
         }
         shardRuns = response.workflow_runs
-          .filter((each) => each?.event === 'schedule')
-          .map((each) => ({ ...each, _dispatcher: dispatcher }));
+          .filter((each) => each && typeof each === 'object' && each.event === 'schedule')
+          .map((each) => {
+            const createdMs = each.created_at === undefined ? 0 : (typeof each.created_at === 'string' ? Date.parse(each.created_at) : Number.NaN);
+            if (!Number.isFinite(createdMs)) {
+              throw new Error('GitHub API scheduled run has invalid created_at');
+            }
+            return { ...each, _dispatcher: dispatcher, _createdMs: createdMs };
+          });
         anyLoaded = true;
       } catch (error) {
         if (error.status === 404 && dispatcher !== DISPATCHER) continue;
@@ -111,7 +117,7 @@ function dispatcherHistory() {
       }
     }
     if (!anyLoaded && firstError) throw firstError;
-    runs.sort((a, b) => Date.parse(b.created_at ?? 0) - Date.parse(a.created_at ?? 0));
+    runs.sort((a, b) => b._createdMs - a._createdMs);
     const called = new Map();
     const calls = (workflow) => (run) => {
       const dispatcher = run._dispatcher || DISPATCHER;
