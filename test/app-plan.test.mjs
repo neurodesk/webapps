@@ -4744,6 +4744,138 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       (plan) => assert.equal(plan.allApps, true),
     ],
     [
+      'top-level .map(loadBoot) in scripts/lib/e2e-test-data.mjs stays in shared CI coverage',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ run: 'node scripts/e2e-test-data.mjs n4' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/e2e-test-data.mjs': "import './lib/e2e-test-data.mjs';\n",
+        'scripts/lib/e2e-test-data.mjs': "function loadBoot() { return readFileSync('packages/demo/boot.json'); }\nconst BOOTS = [1].map(loadBoot);\nexport const provisioners = { n4: { provision: () => BOOTS } };\n",
+        'packages/demo/package.json': JSON.stringify({ name: '@nd/demo' }),
+        'packages/demo/boot.json': '{}',
+      },
+      'packages/demo/boot.json',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'exported helper imported and called by scripts/e2e-test-data.mjs stays in shared CI coverage',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ run: 'node scripts/e2e-test-data.mjs n4' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/e2e-test-data.mjs': "import { loadBoot } from './lib/e2e-test-data.mjs';\nloadBoot();\n",
+        'scripts/lib/e2e-test-data.mjs': "export function loadBoot() { return readFileSync('packages/demo/boot.json'); }\nexport const provisioners = { n4: { provision: () => ({}) } };\n",
+        'packages/demo/package.json': JSON.stringify({ name: '@nd/demo' }),
+        'packages/demo/boot.json': '{}',
+      },
+      'packages/demo/boot.json',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'if (import.meta.url) startup call in imported library stays in shared CI coverage',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ run: 'node scripts/e2e-test-data.mjs n4' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/e2e-test-data.mjs': "import './lib/e2e-test-data.mjs';\n",
+        'scripts/lib/e2e-test-data.mjs': "import { helper } from './boot-lib.mjs';\nexport const provisioners = { n4: { provision: () => helper() } };\n",
+        'scripts/lib/boot-lib.mjs': "export function helper() { return 1; }\nfunction loadBoot() { return readFileSync('packages/demo/boot.json'); }\nif (import.meta.url) loadBoot();\n",
+        'packages/demo/package.json': JSON.stringify({ name: '@nd/demo' }),
+        'packages/demo/boot.json': '{}',
+      },
+      'packages/demo/boot.json',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'side-effect external import in eager workspace file selects all apps on lockfile update',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ run: 'node scripts/e2e-test-data.mjs n4' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/e2e-test-data.mjs': "import '../packages/demo/src/shared.mjs';\n",
+        'packages/demo/package.json': JSON.stringify({ name: '@nd/demo', type: 'module' }),
+        'packages/demo/src/shared.mjs': "import 'startup-hook';\nexport const shared = 1;\n",
+      },
+      'pnpm-lock.yaml',
+      new Map([[
+        'pnpm-lock.yaml',
+        {
+          before: stringify({ lockfileVersion: '9.0', importers: { 'packages/demo': { dependencies: { 'startup-hook': { specifier: '1.0.0', version: '1.0.0' } } } }, packages: { 'startup-hook@1.0.0': {} }, snapshots: { 'startup-hook@1.0.0': {} } }),
+          after: stringify({ lockfileVersion: '9.0', importers: { 'packages/demo': { dependencies: { 'startup-hook': { specifier: '1.1.0', version: '1.1.0' } } } }, packages: { 'startup-hook@1.1.0': {} }, snapshots: { 'startup-hook@1.1.0': {} } }),
+        },
+      ]]),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'dynamic external import in eager workspace file selects all apps on lockfile update',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ run: 'node scripts/e2e-test-data.mjs n4' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/e2e-test-data.mjs': "import '../packages/demo/src/shared.mjs';\n",
+        'packages/demo/package.json': JSON.stringify({ name: '@nd/demo', type: 'module' }),
+        'packages/demo/src/shared.mjs': "await import('startup-hook');\nexport const shared = 1;\n",
+      },
+      'pnpm-lock.yaml',
+      new Map([[
+        'pnpm-lock.yaml',
+        {
+          before: stringify({ lockfileVersion: '9.0', importers: { 'packages/demo': { dependencies: { 'startup-hook': { specifier: '1.0.0', version: '1.0.0' } } } }, packages: { 'startup-hook@1.0.0': {} }, snapshots: { 'startup-hook@1.0.0': {} } }),
+          after: stringify({ lockfileVersion: '9.0', importers: { 'packages/demo': { dependencies: { 'startup-hook': { specifier: '1.1.0', version: '1.1.0' } } } }, packages: { 'startup-hook@1.1.0': {} }, snapshots: { 'startup-hook@1.1.0': {} } }),
+        },
+      ]]),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'dynamic script name in CI preserves chained workspace lint runner edge',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ env: { CHECK: 'lint' }, run: 'npm --prefix apps/n4 run "$CHECK"' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/lint.mjs': 'export const lint = 1;\n',
+        'apps/n4/package.json': JSON.stringify({
+          name: '@nd/n4',
+          scripts: { lint: 'node ../../scripts/lint.mjs --workspace && node --check index.js' },
+        }),
+      },
+      'scripts/lint.mjs',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
       'uninvoked chained lint script omits only the standalone lint runner segment',
       {
         'scripts/lint.mjs': 'export const lint = 1;\n',

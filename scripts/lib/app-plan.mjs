@@ -875,7 +875,7 @@ function catalogSharedNodes(graph) {
     seen.add(node);
     const nextInProvisioner = inProvisioner || E2E_DATA_SCRIPTS.has(node);
     const lazy = nextInProvisioner && ROOT_FILE.test(node) ? graph.lazyWorkspaceEdges?.get(node) : null;
-    for (const next of graph.edges.get(node) ?? []) {
+    for (const next of [...(graph.edges.get(node) ?? []), ...(graph.runtimeWorkspaceEdges?.get(node) ?? [])]) {
       if (lazy?.has(next)) continue;
       stack.push([next, nextInProvisioner]);
     }

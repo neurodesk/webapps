@@ -339,59 +339,253 @@ const isFunctionNode = (node) => Boolean(node && (
   || node.type === 'ArrowFunctionExpression'
 ));
 
-function functionNameOf(node, ancestors) {
-  if (node.type === 'FunctionDeclaration' && node.id?.type === 'Identifier') return node.id.name;
-  const parent = ancestors[ancestors.length - 1];
-  if (parent?.type === 'VariableDeclarator' && parent.init === node && parent.id?.type === 'Identifier') return parent.id.name;
-  return null;
-}
-
-function isDirectIife(node, ancestors) {
-  const parent = ancestors[ancestors.length - 1];
-  if (parent?.type === 'CallExpression' && parent.callee === node) return true;
-  const grandparent = ancestors[ancestors.length - 2];
-  return (
-    parent?.type === 'MemberExpression'
-    && parent.object === node
-    && grandparent?.type === 'CallExpression'
-    && grandparent.callee === parent
-  );
-}
-
-function containsImportMetaUrl(node) {
-  if (!node || typeof node !== 'object') return false;
-  if (
-    node.type === 'MemberExpression'
+function isImportMetaUrlNode(node) {
+  return Boolean(
+    node?.type === 'MemberExpression'
     && !node.computed
     && node.object?.type === 'MetaProperty'
     && node.object.meta?.name === 'import'
     && node.object.property?.name === 'meta'
     && node.property?.type === 'Identifier'
-    && node.property.name === 'url'
-  ) return true;
-  for (const key of Object.keys(node)) {
-    if (AST_SKIP.has(key)) continue;
-    const val = node[key];
-    if (Array.isArray(val) ? val.some(containsImportMetaUrl) : containsImportMetaUrl(val)) return true;
-  }
-  return false;
+    && node.property.name === 'url',
+  );
 }
 
-function inMainGuardConsequent(chain, targetNode) {
-  for (let i = 0; i < chain.length; i += 1) {
-    const ancestor = chain[i];
-    if (ancestor?.type === 'IfStatement' && containsImportMetaUrl(ancestor.test)) {
-      const next = i + 1 < chain.length ? chain[i + 1] : targetNode;
-      if (next === ancestor.consequent) return true;
+function isProcessArgv1Node(node) {
+  return Boolean(
+    node?.type === 'MemberExpression'
+    && node.computed
+    && node.object?.type === 'MemberExpression'
+    && !node.object.computed
+    && node.object.object?.type === 'Identifier'
+    && node.object.object.name === 'process'
+    && node.object.property?.type === 'Identifier'
+    && node.object.property.name === 'argv'
+    && node.property?.type === 'Literal'
+    && node.property.value === 1,
+  );
+}
+
+function isPathToFileUrlArgv1Href(node) {
+  if (node?.type !== 'MemberExpression' || node.computed || node.property?.type !== 'Identifier' || node.property.name !== 'href') return false;
+  const call = node.object;
+  if (call?.type !== 'CallExpression' || calleeNameOf(call) !== 'pathToFileURL' || call.arguments?.length !== 1) return false;
+  const arg = call.arguments[0];
+  if (isProcessArgv1Node(arg)) return true;
+  return Boolean(arg?.type === 'CallExpression' && calleeNameOf(arg) === 'resolve' && arg.arguments?.length === 1 && isProcessArgv1Node(arg.arguments[0]));
+}
+
+// Strict Node ESM CLI entry guard: `if (import.meta.url === pathToFileURL(resolve(process.argv[1])).href)`
+// (optionally guarded on the left with `process.argv[1] && ...`). Arbitrary truthy
+// checks like `if (import.meta.url)` do NOT match and stay eager.
+function isStrictEsmMainGuard(ifNode) {
+  if (ifNode?.type !== 'IfStatement') return false;
+  let eq = ifNode.test;
+  if (eq?.type === 'LogicalExpression' && eq.operator === '&&' && isProcessArgv1Node(eq.left)) eq = eq.right;
+  if (eq?.type !== 'BinaryExpression' || eq.operator !== '===') return false;
+  return (
+    (isImportMetaUrlNode(eq.left) && isPathToFileUrlArgv1Href(eq.right))
+    || (isImportMetaUrlNode(eq.right) && isPathToFileUrlArgv1Href(eq.left))
+  );
+}
+
+function walkAstIdentifiers(node, onIdent, ancestors = []) {
+  if (!node || typeof node !== 'object') return;
+  if (Array.isArray(node)) {
+    for (const item of node) walkAstIdentifiers(item, onIdent, ancestors);
+    return;
+  }
+  if (node.type === 'Identifier') {
+    const parent = ancestors[ancestors.length - 1];
+    const isDeclId =
+      (parent?.type === 'VariableDeclarator' && parent.id === node)
+      || (parent?.type === 'FunctionDeclaration' && parent.id === node)
+      || (parent?.type === 'FunctionExpression' && parent.id === node)
+      || (parent?.type === 'ClassDeclaration' && parent.id === node)
+      || (parent?.type === 'ImportSpecifier' && (parent.local === node || parent.imported === node))
+      || (parent?.type === 'ImportDefaultSpecifier' && parent.local === node)
+      || (parent?.type === 'ImportNamespaceSpecifier' && parent.local === node)
+      || (parent?.type === 'ExportSpecifier' && parent.exported === node);
+    const isParam = isFunctionNode(parent) && Array.isArray(parent.params) && parent.params.includes(node);
+    const isNonComputedProp =
+      (parent?.type === 'MemberExpression' && !parent.computed && parent.property === node)
+      || (parent?.type === 'Property' && !parent.computed && parent.key === node);
+    if (!isDeclId && !isParam && !isNonComputedProp) onIdent(node, ancestors);
+  }
+  ancestors.push(node);
+  for (const key of Object.keys(node)) {
+    if (!AST_SKIP.has(key)) walkAstIdentifiers(node[key], onIdent, ancestors);
+  }
+  ancestors.pop();
+}
+
+function collectTopLevelBindings(ast) {
+  const bindings = new Map();
+  const exportedNames = new Set();
+  for (const stmt of ast.body ?? []) {
+    if (stmt.type === 'ExportNamedDeclaration') {
+      if (stmt.declaration?.type === 'FunctionDeclaration' && stmt.declaration.id?.name) {
+        bindings.set(stmt.declaration.id.name, stmt.declaration);
+        exportedNames.add(stmt.declaration.id.name);
+      } else if (stmt.declaration?.type === 'VariableDeclaration') {
+        for (const decl of stmt.declaration.declarations ?? []) {
+          if (decl.id?.type === 'Identifier' && decl.init) {
+            bindings.set(decl.id.name, decl.init);
+            exportedNames.add(decl.id.name);
+          }
+        }
+      }
+      for (const spec of stmt.specifiers ?? []) {
+        if (spec.local?.name) exportedNames.add(spec.local.name);
+      }
+    } else if (stmt.type === 'ExportDefaultDeclaration') {
+      if (stmt.declaration?.type === 'Identifier') exportedNames.add(stmt.declaration.name);
+      else if (stmt.declaration?.id?.name) exportedNames.add(stmt.declaration.id.name);
+    } else if (stmt.type === 'FunctionDeclaration' && stmt.id?.name) {
+      bindings.set(stmt.id.name, stmt);
+    } else if (stmt.type === 'VariableDeclaration') {
+      for (const decl of stmt.declarations ?? []) {
+        if (decl.id?.type === 'Identifier' && decl.init) bindings.set(decl.id.name, decl.init);
+      }
     }
   }
-  return false;
+  return { bindings, exportedNames };
 }
 
-// Collect string/template literal ranges and module specifiers in a script so
-// SCRIPT_REFERENCE can narrow to an exact file and catalogShared can keep eager
-// top-level workspace imports while skipping lazy per-app provisioner refs.
-function analyzeScriptFile(text, file, { isEntry = false } = {}) {
+// Return AST ranges in `scripts/lib/e2e-test-data.mjs` provably belonging only
+// to individual app provisioners: direct `provisioners.<app>[.cpu].provision`
+// function bodies and private (non-exported) top-level functions referenced
+// exclusively from inside those provision bodies.
+function computeProvisionerOnlyRanges(ast) {
+  if (!ast) return [];
+  const { bindings, exportedNames } = collectTopLevelBindings(ast);
+  const provisionersObj = bindings.get('provisioners');
+  if (provisionersObj?.type !== 'ObjectExpression') return [];
+  const provisionFnNodes = new Set();
+  const provisionIdentRefNodes = new Set();
+  const recordProvisionProp = (obj) => {
+    if (obj?.type !== 'ObjectExpression') return;
+    for (const prop of obj.properties ?? []) {
+      if (prop.type !== 'Property' || prop.computed) continue;
+      const key = prop.key?.type === 'Identifier' ? prop.key.name : prop.key?.type === 'Literal' ? String(prop.key.value) : null;
+      if (key === 'provision') {
+        if (prop.value?.type === 'FunctionExpression' || prop.value?.type === 'ArrowFunctionExpression') provisionFnNodes.add(prop.value);
+        else if (prop.value?.type === 'Identifier') provisionIdentRefNodes.add(prop.value);
+      } else if (key === 'cpu') {
+        recordProvisionProp(prop.value);
+      }
+    }
+  };
+  for (const prop of provisionersObj.properties ?? []) {
+    if (prop.type === 'Property') recordProvisionProp(prop.value);
+  }
+  if (provisionFnNodes.size === 0 && provisionIdentRefNodes.size === 0) return [];
+
+  const privateFns = new Map();
+  for (const [name, node] of bindings) {
+    if (!exportedNames.has(name) && isFunctionNode(node)) privateFns.set(name, node);
+  }
+  const privateFnToName = new Map([...privateFns].map(([name, node]) => [node, name]));
+  const nonProvisionerReferenced = new Set();
+  const privateFnDeps = new Map([...privateFns.keys()].map((name) => [name, new Set()]));
+
+  walkAstIdentifiers(ast, (idNode, ancestors) => {
+    if (provisionIdentRefNodes.has(idNode)) return;
+    if (ancestors.some((a) => provisionFnNodes.has(a))) return;
+    const enclosingPrivate = ancestors.find((a) => privateFnToName.has(a));
+    if (enclosingPrivate) {
+      privateFnDeps.get(privateFnToName.get(enclosingPrivate)).add(idNode.name);
+      return;
+    }
+    nonProvisionerReferenced.add(idNode.name);
+  });
+
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const name of [...nonProvisionerReferenced]) {
+      for (const dep of privateFnDeps.get(name) ?? []) {
+        if (!nonProvisionerReferenced.has(dep)) {
+          nonProvisionerReferenced.add(dep);
+          changed = true;
+        }
+      }
+    }
+  }
+
+  const ranges = [];
+  for (const fn of provisionFnNodes) {
+    if (Array.isArray(fn.range)) ranges.push(fn.range);
+  }
+  for (const [name, fn] of privateFns) {
+    if (!nonProvisionerReferenced.has(name) && Array.isArray(fn.range)) ranges.push(fn.range);
+  }
+  return ranges;
+}
+
+// Return AST ranges of top-level functions in an imported root library module
+// that are unreachable from both module-load execution (excluding strict Node
+// ESM main-entry guards) and the set of export names actually imported.
+function computeUnreachableExportRanges(ast, importedNames) {
+  if (!ast || !importedNames?.size) return [];
+  const { bindings } = collectTopLevelBindings(ast);
+  const fnBindings = new Map([...bindings].filter(([, node]) => isFunctionNode(node)));
+  const fnNodeToName = new Map([...fnBindings].map(([name, node]) => [node, name]));
+  const reachable = new Set(importedNames);
+  for (const stmt of ast.body ?? []) {
+    if (stmt.type === 'ExportNamedDeclaration') {
+      for (const spec of stmt.specifiers ?? []) {
+        if (spec.exported?.name && spec.local?.name && importedNames.has(spec.exported.name)) {
+          reachable.add(spec.local.name);
+        }
+      }
+    }
+  }
+  const fnDeps = new Map([...fnBindings.keys()].map((name) => [name, new Set()]));
+
+  const isInStrictMainGuard = (ancestors, node) => {
+    for (let i = 0; i < ancestors.length; i += 1) {
+      const ancestor = ancestors[i];
+      if (isStrictEsmMainGuard(ancestor)) {
+        const next = i + 1 < ancestors.length ? ancestors[i + 1] : node;
+        if (next === ancestor.consequent) return true;
+      }
+    }
+    return false;
+  };
+
+  walkAstIdentifiers(ast, (idNode, ancestors) => {
+    const enclosingFn = ancestors.find((a) => fnNodeToName.has(a));
+    if (enclosingFn) {
+      fnDeps.get(fnNodeToName.get(enclosingFn)).add(idNode.name);
+      return;
+    }
+    if (isInStrictMainGuard(ancestors, idNode)) return;
+    reachable.add(idNode.name);
+  });
+
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const name of [...reachable]) {
+      for (const dep of fnDeps.get(name) ?? []) {
+        if (!reachable.has(dep)) {
+          reachable.add(dep);
+          changed = true;
+        }
+      }
+    }
+  }
+
+  const ranges = [];
+  for (const [name, fn] of fnBindings) {
+    if (!reachable.has(name) && Array.isArray(fn.range)) ranges.push(fn.range);
+  }
+  return ranges;
+}
+
+// Collect string/template literal ranges, AST, and module specifiers in a script
+// so SCRIPT_REFERENCE can narrow exact files, externalImporterDeps covers all
+// import forms, and catalogShared narrows only proven provisioner-only refs.
+function analyzeScriptFile(text, file) {
   let ast;
   try {
     ast = sourceParser.parse(text, { filePath: file, sourceType: 'module' });
@@ -403,10 +597,7 @@ function analyzeScriptFile(text, file, { isEntry = false } = {}) {
   const derivedIdentifiers = new Set();
   const readerDepEdges = [];
   const candidates = [];
-  const fnNames = new Map();
-  const directIifeFunctions = new Set();
-  const eagerFunctionNames = new Set();
-  const callEdges = [];
+  const specifiers = [];
   const ancestors = [];
   const walk = (node) => {
     if (!node || typeof node !== 'object') return;
@@ -414,20 +605,54 @@ function analyzeScriptFile(text, file, { isEntry = false } = {}) {
       for (const item of node) walk(item);
       return;
     }
-    if (isFunctionNode(node)) {
-      const name = functionNameOf(node, ancestors);
-      if (name) fnNames.set(node, name);
-      if (isDirectIife(node, ancestors)) directIifeFunctions.add(node);
-    }
-    if (node.type === 'CallExpression' && node.callee?.type === 'Identifier') {
-      const callee = node.callee.name;
-      const enclosing = [...ancestors].reverse().find((a) => isFunctionNode(a) && !directIifeFunctions.has(a));
-      if (!enclosing) {
-        if (isEntry || !inMainGuardConsequent(ancestors, node)) eagerFunctionNames.add(callee);
-      } else {
-        const caller = fnNames.get(enclosing);
-        if (caller) callEdges.push([caller, callee]);
-      }
+    if (node.type === 'ImportDeclaration' && node.source?.type === 'Literal' && typeof node.source.value === 'string') {
+      const namedOnly = node.specifiers.length > 0 && node.specifiers.every((s) => s.type === 'ImportSpecifier');
+      specifiers.push({
+        value: node.source.value,
+        range: node.source.range ?? node.range ?? [0, 0],
+        kind: node.specifiers.length === 0 ? 'side-effect' : 'import',
+        namedImports: namedOnly ? node.specifiers.map((s) => s.imported?.name).filter(Boolean) : null,
+      });
+    } else if ((node.type === 'ExportNamedDeclaration' || node.type === 'ExportAllDeclaration') && node.source?.type === 'Literal' && typeof node.source.value === 'string') {
+      specifiers.push({
+        value: node.source.value,
+        range: node.source.range ?? node.range ?? [0, 0],
+        kind: 'export',
+        namedImports: null,
+      });
+    } else if (node.type === 'ImportExpression') {
+      const val = node.source?.type === 'Literal' && typeof node.source.value === 'string' ? node.source.value : null;
+      specifiers.push({
+        value: val,
+        range: node.source?.range ?? node.range ?? [0, 0],
+        kind: 'dynamic',
+        namedImports: null,
+      });
+    } else if (
+      node.type === 'CallExpression'
+      && node.arguments?.length > 0
+      && (
+        calleeNameOf(node) === 'require'
+        || (
+          node.callee?.type === 'MemberExpression'
+          && !node.callee.computed
+          && node.callee.property?.type === 'Identifier'
+          && node.callee.property.name === 'resolve'
+          && (
+            (node.callee.object?.type === 'Identifier' && node.callee.object.name === 'require')
+            || (node.callee.object?.type === 'MetaProperty' && node.callee.object.meta?.name === 'import' && node.callee.object.property?.name === 'meta')
+          )
+        )
+      )
+    ) {
+      const arg = node.arguments[0];
+      const val = arg?.type === 'Literal' && typeof arg.value === 'string' ? arg.value : null;
+      specifiers.push({
+        value: val,
+        range: arg?.range ?? node.range ?? [0, 0],
+        kind: 'require',
+        namedImports: null,
+      });
     }
     if (node.type === 'Identifier') {
       const parent = ancestors[ancestors.length - 1];
@@ -468,15 +693,8 @@ function analyzeScriptFile(text, file, { isEntry = false } = {}) {
         changed = true;
       }
     }
-    for (const [caller, callee] of callEdges) {
-      if (eagerFunctionNames.has(caller) && !eagerFunctionNames.has(callee)) {
-        eagerFunctionNames.add(callee);
-        changed = true;
-      }
-    }
   }
-  const isLazyChain = (chain) => chain.some((a) => isFunctionNode(a) && !directIifeFunctions.has(a) && !eagerFunctionNames.has(fnNames.get(a)));
-  return candidates.map(({ node, ancestors: chain }) => {
+  const literals = candidates.map(({ node, ancestors: chain }) => {
     const isStringLiteral = node.type === 'Literal' && typeof node.value === 'string';
     const isTemplate = node.type === 'TemplateLiteral';
     const commentLine =
@@ -484,8 +702,9 @@ function analyzeScriptFile(text, file, { isEntry = false } = {}) {
       chain[chain.length - 1]?.type === 'VariableDeclarator' &&
       /(?:^|\n)[ \t]*\/\//.test(text.slice(node.range[0] + 1, node.range[1] - 1));
     const classified = classifyPathLiteral(node, chain, referencedIdentifiers, readerArgIdentifiers, derivedIdentifiers);
-    return { start: node.range[0], end: node.range[1], standalone: classified.standalone || commentLine, derivedJson: classified.derivedJson, inFunction: isLazyChain(chain) };
+    return { start: node.range[0], end: node.range[1], standalone: classified.standalone || commentLine, derivedJson: classified.derivedJson };
   });
+  return { ast, literals, specifiers };
 }
 
 // Whether a SCRIPT_REFERENCE file match ends at a real path boundary and, when
@@ -743,8 +962,9 @@ function lintTargetsInCommands(commands, context) {
     const rawCmd = typeof entry === 'string' ? entry : entry.cmd;
     const workingDir = typeof entry === 'string' ? null : entry.workingDir ?? null;
     const baseDir = typeof entry === 'string' ? '.' : entry.baseDir ?? workingDir ?? '.';
+    const stepEnv = typeof entry === 'string' ? null : entry.env ?? null;
     if (INDEPENDENT_LINT_SCRIPT.test(rawCmd.trim())) continue;
-    if (!/\blint\b/.test(rawCmd)) continue;
+    if (!/\blint\b/.test(rawCmd) && !/[$`*]|\$\{\{/.test(rawCmd)) continue;
     const trimmedWorkingDir = typeof workingDir === 'string' ? workingDir.trim() : '';
     const workingDirIsUncertain = Boolean(trimmedWorkingDir) && isUncertainCdTarget(trimmedWorkingDir);
     const resolvedWorkingDir = trimmedWorkingDir && !workingDirIsUncertain
@@ -795,12 +1015,23 @@ function lintTargetsInCommands(commands, context) {
         cwdDirs = nextCwd;
         activeDirs = nextActive;
       }
-      if (!/\blint\b/.test(token)) continue;
-      if (AMBIGUOUS_LINT_EXEC.test(token)) {
+      const hasLiteralLint = /\blint\b/.test(token);
+      if (!hasLiteralLint && !/[$`*]|\$\{\{/.test(token)) continue;
+      if (hasLiteralLint && AMBIGUOUS_LINT_EXEC.test(token)) {
         addAll();
         continue;
       }
-      const parsed = parseLintCommandFlags(token);
+      const parsed = parseLintCommandFlags(token, { stepEnv, rawCmd, releaseTestScripts: context.releaseTestScripts });
+      if (!hasLiteralLint && !parsed.hasLintScript) {
+        const words = tokenizeShellWords(token);
+        if (
+          (words[0] === 'eval' && words.slice(1).some((w) => /[$`*]|\$\{\{/.test(w)))
+          || (SHELL_BIN.test(words[0] ?? '') && words.includes('-c') && words.slice(words.indexOf('-c') + 1).some((w) => /[$`*]|\$\{\{/.test(w)))
+        ) {
+          addAll();
+        }
+        continue;
+      }
       if (!parsed.hasRunner) continue;
       if (!parsed.hasCrossFlag && activeDirs.size === 0) continue;
       if (parsed.hasRootFlag && !parsed.hasWorkspaceSelector) continue;
@@ -891,6 +1122,15 @@ function tokenizeShellWords(segment) {
       i++;
       continue;
     }
+    if (quote !== "'" && segment.startsWith('${{', i)) {
+      const close = segment.indexOf('}}', i + 3);
+      if (close !== -1) {
+        current += segment.slice(i, close + 2);
+        hasToken = true;
+        i = close + 1;
+        continue;
+      }
+    }
     if (quote === '"') {
       if (ch === '"') quote = null;
       else current += ch;
@@ -922,16 +1162,38 @@ const PNPM_BIN = /(?:^|\/)pnpm(?:\.(?:cjs|mjs|js|cmd|exe))?$/;
 const NPM_BIN = /(?:^|\/)npm(?:\.(?:cjs|mjs|js|cmd|exe))?$/;
 const YARN_BIN = /(?:^|\/)yarn(?:\.(?:cjs|mjs|js|cmd|exe))?$/;
 
+function scriptMayInvokeLint(scriptWord, { stepEnv = null, rawCmd = '', releaseTestScripts = null } = {}) {
+  if (!scriptWord) return false;
+  if (scriptWord === 'lint') return true;
+  if (!/[$`*]/.test(scriptWord) && !scriptWord.includes('${{')) return false;
+  const varMatch = scriptWord.match(/^\$(?:([A-Za-z_]\w*)|\{([A-Za-z_]\w*)\})$/);
+  if (varMatch && stepEnv) {
+    const varName = varMatch[1] ?? varMatch[2];
+    const reassigned = new RegExp(String.raw`(?:^|[\s;&|()])(?:(?:export|declare|local|typeset|readonly)\s+(?:-[A-Za-z]+\s+)*)?${varName}\+?=|\bread\b[^;&|]*\b${varName}\b|\beval\b`).test(rawCmd);
+    if (!reassigned && Object.hasOwn(stepEnv, varName)) {
+      const val = String(stepEnv[varName]).trim();
+      if (val === '${{ matrix.release_test }}') {
+        return !releaseTestScripts || releaseTestScripts.has('lint');
+      }
+      if (!/[$`*]/.test(val) && !val.includes('${{')) {
+        return val === 'lint';
+      }
+    }
+  }
+  return true;
+}
+
 // Parse package-manager flags in one shell command segment, attributing `-w`
 // and workspace/directory selectors to the specific `pnpm`, `npm`, or `yarn`
 // invocation that receives them (so e.g. `pnpm exec npm -w @nd/n4 run lint`
 // treats `-w` as npm's `--workspace` rather than pnpm's `--workspace-root`).
-function parseLintCommandFlags(token) {
+function parseLintCommandFlags(token, scriptOpts = {}) {
   const words = tokenizeShellWords(token);
   let hasRunner = false;
   let hasRootFlag = false;
   let hasCrossFlag = false;
   let hasWorkspaceSelector = false;
+  let hasLintScript = false;
   let recursive = false;
   const filters = [];
   for (let i = 0; i < words.length; i++) {
@@ -939,6 +1201,8 @@ function parseLintCommandFlags(token) {
     if (!kind) continue;
     hasRunner = true;
     let runnerRootFlag = false;
+    let seenRun = false;
+    let runnerScriptWord = null;
     const runnerDirFilters = [];
     for (i++; i < words.length; i++) {
       const word = words[i];
@@ -1009,7 +1273,16 @@ function parseLintCommandFlags(token) {
         if (PNPM_VALUE_OPTIONS.has(word) && i + 1 < words.length) i++;
         continue;
       }
+      if (!seenRun && (word === 'run' || word === 'run-script')) {
+        seenRun = true;
+        continue;
+      }
+      if (runnerScriptWord === null) {
+        runnerScriptWord = word;
+        break;
+      }
     }
+    if (scriptMayInvokeLint(runnerScriptWord, scriptOpts)) hasLintScript = true;
     // `-w` / `--workspace-root` overrides `--dir` / `-C` / `--prefix` / `--cwd`
     // on the same pnpm invocation, but not on a separate wrapped invocation
     // (such as `pnpm -w exec npm --prefix apps/n4 run lint`).
@@ -1018,7 +1291,7 @@ function parseLintCommandFlags(token) {
       filters.push(...runnerDirFilters);
     }
   }
-  return { hasRunner, hasRootFlag, hasCrossFlag, hasWorkspaceSelector, recursive, filters };
+  return { hasRunner, hasRootFlag, hasCrossFlag, hasWorkspaceSelector, hasLintScript, recursive, filters };
 }
 
 function isUncertainCdTarget(dir) {
@@ -1300,7 +1573,7 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
 // remain visible before deciding whether standalone lint scripts can be omitted.
 function expandedCommandTexts(commands, rootScripts, root = null, rootPackageName = null) {
   const entries = [];
-  const pending = commands.map((entry) => (typeof entry === 'string' ? { cmd: entry, workingDir: null } : entry));
+  const pending = commands.map((entry) => (typeof entry === 'string' ? { cmd: entry, workingDir: null, env: null } : entry));
   const expanded = new Set();
   while (pending.length) {
     const current = pending.pop();
@@ -1309,7 +1582,7 @@ function expandedCommandTexts(commands, rootScripts, root = null, rootPackageNam
     for (const script of extractPnpmRootScripts(current.cmd, { requireRootFlag: nonRootWorkingDir, baseDir: current.workingDir ?? '.', root, rootPackageName })) {
       if (!expanded.has(script)) {
         expanded.add(script);
-        if (rootScripts[script]) pending.push({ cmd: rootScripts[script], workingDir: null });
+        if (rootScripts[script]) pending.push({ cmd: rootScripts[script], workingDir: null, env: current.env ?? null });
       }
     }
   }
@@ -1354,7 +1627,12 @@ function manifestScanText(text, manifest, stripStandaloneLint) {
   if (!stripStandaloneLint) return text;
   const lintCmd = manifest?.scripts?.lint;
   if (typeof lintCmd !== 'string') return text;
-  if (Object.entries(manifest.scripts).some(([name, cmd]) => name !== 'lint' && /\blint\b/.test(String(cmd)))) return text;
+  if (Object.entries(manifest.scripts).some(([name, cmd]) => {
+    if (name === 'lint') return false;
+    const str = String(cmd);
+    if (/\blint\b/.test(str)) return true;
+    return /[$`*]|\$\{\{/.test(str) && splitShellCommands(str).some((seg) => parseLintCommandFlags(seg).hasLintScript);
+  })) return text;
   const segments = splitShellCommands(lintCmd);
   const kept = segments.filter((segment) => !INDEPENDENT_LINT_SCRIPT.test(segment.trim()));
   if (kept.length === segments.length) return text;
@@ -1386,10 +1664,20 @@ export async function loadConservativeWorkspaceGraph(root) {
   const nodeByPackageName = new Map([...manifests].filter(([, manifest]) => manifest?.name).map(([node, manifest]) => [manifest.name, node]));
 
   const ci = parse(await readFile(join(root, '.github/workflows/ci.yml'), 'utf8'));
+  let releaseTestScripts = null;
+  try {
+    const registryData = parse(await readFile(join(root, 'registry/apps.yml'), 'utf8'));
+    if (Array.isArray(registryData?.apps)) {
+      releaseTestScripts = new Set(['test', ...registryData.apps.map((app) => app?.ci?.release_test).filter((v) => typeof v === 'string')]);
+    }
+  } catch {
+    releaseTestScripts = null;
+  }
   const rootManifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
   const rootScripts = rootManifest.scripts ?? {};
   const rootPackageName = typeof rootManifest.name === 'string' ? rootManifest.name : null;
   const workflowWorkingDir = ci?.defaults?.run?.['working-directory'] ?? null;
+  const workflowEnv = ci?.env && typeof ci.env === 'object' ? ci.env : {};
   const rawRuns = (names) => names.flatMap((name) => {
     const job = ci?.jobs?.[name];
     const steps = job?.steps;
@@ -1397,9 +1685,11 @@ export async function loadConservativeWorkspaceGraph(root) {
       throw new WorkspaceGraphConfigurationError(`ci.yml job ${name} has no step list; update the workspace graph's CI entry points`);
     }
     const jobWorkingDir = job?.defaults?.run?.['working-directory'] ?? workflowWorkingDir;
+    const jobEnv = job?.env && typeof job.env === 'object' ? { ...workflowEnv, ...job.env } : workflowEnv;
     return steps.map((step) => ({
       cmd: String(step?.run ?? ''),
       workingDir: step?.['working-directory'] ?? jobWorkingDir ?? null,
+      env: step?.env && typeof step.env === 'object' ? { ...jobEnv, ...step.env } : jobEnv,
     }));
   });
   const rawEntries = [
@@ -1417,7 +1707,7 @@ export async function loadConservativeWorkspaceGraph(root) {
     const rootExpanded = (workspaceRootScriptInfo.get(node)?.texts ?? []).map((cmd) => ({ cmd, baseDir: '.' }));
     return [node, [...allScripts, ...rootExpanded]];
   }));
-  const lintTargetContext = { root, rootPackageName, nodeByPackageName, nodeSet, manifests };
+  const lintTargetContext = { root, rootPackageName, nodeByPackageName, nodeSet, manifests, releaseTestScripts };
   const lintInvokedNodes = new Set();
   for (const [, cmds] of expandedByEntry) {
     for (const target of lintTargetsInCommands(cmds, lintTargetContext)) lintInvokedNodes.add(target);
@@ -1428,7 +1718,16 @@ export async function loadConservativeWorkspaceGraph(root) {
 
   const edges = new Map();
   const lazyWorkspaceEdges = new Map();
+  const runtimeWorkspaceEdges = new Map();
   const externalImporterDeps = new Map();
+  const analyzedRootFiles = new Map();
+  const rootFileImportModes = new Map();
+  const recordImportMode = (target, namedImports) => {
+    const entry = rootFileImportModes.get(target) ?? { allExports: false, names: new Set() };
+    if (!namedImports) entry.allExports = true;
+    else for (const name of namedImports) entry.names.add(name);
+    rootFileImportModes.set(target, entry);
+  };
   const pendingRootFiles = [];
   const derivedJsonFiles = new Set();
   const scannedDerivedJson = new Set();
@@ -1559,33 +1858,30 @@ export async function loadConservativeWorkspaceGraph(root) {
     const source = await readFile(join(root, file), 'utf8').catch(() => null);
     if (source === null) continue;
     const text = withoutLineComments(source, file);
-    const literals = analyzeScriptFile(text, file, { isEntry: Boolean(edges.get(CATALOG)?.has(file)) });
-    const allWorkspaceTargets = new Set();
-    const eagerWorkspaceTargets = new Set();
-    const recordWorkspaceTarget = (wsTarget, isLazy) => {
-      allWorkspaceTargets.add(wsTarget);
-      if (!isLazy) eagerWorkspaceTargets.add(wsTarget);
-    };
+    const analysis = analyzeScriptFile(text, file);
+    const literals = analysis?.literals ?? null;
+    const workspaceRefs = [];
+    const recordWorkspaceRef = (wsTarget, range) => workspaceRefs.push({ target: wsTarget, range });
     for (const match of text.matchAll(SCRIPT_REFERENCE)) {
       const [, top, name, inner] = match;
       if (!nodeSet.has(`${top}/${name}`)) continue;
+      const matchStart = match.index;
       const matchEnd = match.index + match[0].length;
-      const lit = literals?.find((entry) => entry.start < matchEnd && matchEnd <= entry.end);
-      const isLazy = Boolean(lit?.inFunction);
+      const range = [matchStart, matchEnd];
       const literalMatch = inner ? matchScriptLiteral(text, match, literals) : { complete: false, derivedJson: true };
       const target = literalMatch.complete && `${top}/${name}${inner}`;
       if (target && await isRegularUnlinkedFile(root, target)) {
         uses.add(target);
-        recordWorkspaceTarget(target, isLazy);
+        recordWorkspaceRef(target, range);
         if (literalMatch.derivedJson && target.endsWith('.json')) derivedJsonFiles.add(target);
         pendingRootFiles.push(target);
       } else {
         uses.add(`${top}/${name}`);
-        recordWorkspaceTarget(`${top}/${name}`, isLazy);
+        recordWorkspaceRef(`${top}/${name}`, range);
         const exactJson = inner?.endsWith('.json') && `${top}/${name}${inner}`;
         if (exactJson && await isRegularUnlinkedFile(root, exactJson)) {
           uses.add(exactJson);
-          recordWorkspaceTarget(exactJson, isLazy);
+          recordWorkspaceRef(exactJson, range);
           derivedJsonFiles.add(exactJson);
           pendingRootFiles.push(exactJson);
         }
@@ -1594,24 +1890,55 @@ export async function loadConservativeWorkspaceGraph(root) {
     const fileOwner = file.match(/^(?:packages|exes)\/[^/]+(?=\/)/)?.[0] ?? null;
     for (const match of text.matchAll(BARE_IMPORT)) {
       const name = match[1];
-      const matchEnd = match.index + match[0].length;
-      const lit = literals?.find((entry) => entry.start < matchEnd && matchEnd <= entry.end);
-      const isLazy = Boolean(lit?.inFunction);
       if (nodeByPackageName.has(name)) {
         const wsNode = nodeByPackageName.get(name);
         uses.add(wsNode);
-        recordWorkspaceTarget(wsNode, isLazy);
+        recordWorkspaceRef(wsNode, [match.index, match.index + match[0].length]);
       } else if (fileOwner && !name.startsWith('.') && !isBuiltin(name)) {
         externalImporterDeps.set(file, fileOwner);
       }
     }
-    const lazyTargets = new Set([...allWorkspaceTargets].filter((wsTarget) => !eagerWorkspaceTargets.has(wsTarget)));
-    if (lazyTargets.size > 0) lazyWorkspaceEdges.set(file, lazyTargets);
+    const runtimeTargets = new Set();
+    if (analysis) {
+      for (const spec of analysis.specifiers) {
+        if (spec.value === null) {
+          if (fileOwner) externalImporterDeps.set(file, fileOwner);
+          continue;
+        }
+        if (spec.value.startsWith('.') || spec.value.startsWith('/')) {
+          const resolvedTarget = relative(root, resolve(root, dirname(file), spec.value)).split(sep).join('/');
+          if ((ROOT_DIRS.some((dir) => resolvedTarget.startsWith(dir)) || ROOT_CONFIG.test(resolvedTarget)) && resolvedTarget !== file) {
+            recordImportMode(resolvedTarget, spec.namedImports);
+          }
+          continue;
+        }
+        if (isBuiltin(spec.value)) continue;
+        const pkgName = spec.value.startsWith('@') ? spec.value.split('/').slice(0, 2).join('/') : spec.value.split('/')[0];
+        if (nodeByPackageName.has(pkgName)) {
+          const wsNode = nodeByPackageName.get(pkgName);
+          runtimeTargets.add(wsNode);
+          recordWorkspaceRef(wsNode, spec.range);
+        } else if (fileOwner) {
+          externalImporterDeps.set(file, fileOwner);
+        }
+      }
+      analyzedRootFiles.set(file, { ast: analysis.ast, workspaceRefs });
+    } else if (fileOwner) {
+      for (const [, name] of text.matchAll(/(?:\bimport\s*(?:\(\s*)?|\brequire\s*\(\s*)['"]((?:@[\w.-]+\/)?[A-Za-z0-9_][\w.-]*)/g)) {
+        if (!isBuiltin(name) && !nodeByPackageName.has(name)) externalImporterDeps.set(file, fileOwner);
+      }
+    }
+    if (runtimeTargets.size > 0) runtimeWorkspaceEdges.set(file, runtimeTargets);
     const imports = [...text.matchAll(ROOT_IMPORT)].map(([, path]) => relative(root, resolve(root, dirname(file), path)).split(sep).join('/'));
     const named = [...text.matchAll(ROOT_NAMED)].map(([, path, dir, name]) => path ?? `${dir}/${name}`);
     for (const [, directory] of text.matchAll(ROOT_GLOB)) {
       if (!await exists(join(root, directory))) continue;
       for await (const path of textFiles(join(root, directory))) named.push(relative(root, path).split(sep).join('/'));
+    }
+    for (const target of named) {
+      if ((ROOT_DIRS.some((dir) => target.startsWith(dir)) || ROOT_CONFIG.test(target)) && target !== file) {
+        recordImportMode(target, null);
+      }
     }
     for (const target of [...imports, ...named]) {
       if ((ROOT_DIRS.some((dir) => target.startsWith(dir)) || ROOT_CONFIG.test(target)) && target !== file) {
@@ -1619,6 +1946,29 @@ export async function loadConservativeWorkspaceGraph(root) {
         pendingRootFiles.push(target);
       }
     }
+  }
+  const catalogDirect = edges.get(CATALOG) ?? new Set();
+  const rangeContains = (outer, inner) => outer[0] <= inner[0] && inner[1] <= outer[1];
+  for (const [file, { ast, workspaceRefs }] of analyzedRootFiles) {
+    if (workspaceRefs.length === 0) continue;
+    let skipRanges = [];
+    if (file === 'scripts/lib/e2e-test-data.mjs') {
+      skipRanges = computeProvisionerOnlyRanges(ast);
+    } else if (!catalogDirect.has(file) && /^(?:scripts|test-utils|registry|test)\//.test(file)) {
+      const mode = rootFileImportModes.get(file);
+      if (mode && !mode.allExports && mode.names.size > 0) {
+        skipRanges = computeUnreachableExportRanges(ast, mode.names);
+      }
+    }
+    if (skipRanges.length === 0) continue;
+    const allTargets = new Set();
+    const eagerTargets = new Set();
+    for (const { target, range } of workspaceRefs) {
+      allTargets.add(target);
+      if (!skipRanges.some((outer) => rangeContains(outer, range))) eagerTargets.add(target);
+    }
+    const lazyTargets = new Set([...allTargets].filter((target) => !eagerTargets.has(target)));
+    if (lazyTargets.size > 0) lazyWorkspaceEdges.set(file, lazyTargets);
   }
   // `moduleUsers(path)`: the nodes that load one module of the shared component
   // package, or null for a file the planner ties to the whole package.
@@ -1645,6 +1995,7 @@ export async function loadConservativeWorkspaceGraph(root) {
     nodes: Object.freeze(nodes),
     edges,
     lazyWorkspaceEdges,
+    runtimeWorkspaceEdges,
     externalImporterDeps,
     rootScriptsRun,
     jobScripts,
