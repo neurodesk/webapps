@@ -3104,7 +3104,7 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
   assert.equal(reachableFrom(prefixGraph, CATALOG).has('scripts/from-dir-json.mjs'), true, 'directory named fixture.json keeps packages/pkg edge');
   assert.equal(createAppPlan(registry, ['scripts/runtime-input.mjs'], prefixGraph).allApps, true, 'split JSON read targeting scripts/runtime-input.mjs reaches CATALOG');
   assert.equal(createAppPlan(registry, ['scripts/quality/check-indirect.mjs'], prefixGraph).allApps, true, 'chained JSON reads outer.json -> inner.json -> check-indirect.mjs reach CATALOG');
-  assert.equal(createAppPlan(registry, ['scripts/quality/unrelated-sibling.mjs'], prefixGraph).selected.length, 0, 'exact chained JSON target does not pull unrelated sibling into CATALOG');
+  assert.equal(createAppPlan(registry, ['scripts/quality/unrelated-sibling.mjs'], prefixGraph).allApps, true, 'chained JSON referencing another workspace fails closed to that workspace directory');
   assert.equal(createAppPlan(registry, ['exes/leaf/reference.json.gz'], prefixGraph).allApps, true, 'path derived from JSON property (propCfg.path + .gz) preserves destination directory edge');
   assert.equal(createAppPlan(registry, ['exes/returned-leaf/reference.json.gz'], prefixGraph).allApps, true, 'returned parsed JSON preserves destination directory edge');
   assert.equal(createAppPlan(registry, ['exes/revived-leaf/reference.json.gz'], prefixGraph).allApps, true, 'JSON.parse reviver preserves destination directory edge');
@@ -4473,7 +4473,7 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       },
     ],
     [
-      'CI root-only pnpm --filter neurodesk-webapps run lint does not restore unused workspace lint edges',
+      'CI root-only pnpm --filter neurodesk-webapps run lint fails closed and keeps workspace lint edges',
       {
         'package.json': JSON.stringify({ name: 'neurodesk-webapps', scripts: { lint: 'echo root-lint' } }),
         '.github/workflows/ci.yml': stringify({
@@ -4489,13 +4489,10 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       },
       'scripts/lint.mjs',
       new Map(),
-      (plan) => {
-        assert.deepEqual(plan.selected, []);
-        assert.equal(plan.site, false);
-      },
+      (plan) => assert.equal(plan.allApps, true),
     ],
     [
-      'CI root-only pnpm --dir apps/n4 --workspace-root run lint does not restore unused workspace lint edges',
+      'CI root-only pnpm --dir apps/n4 --workspace-root run lint fails closed and keeps workspace lint edges',
       {
         'package.json': JSON.stringify({ name: 'neurodesk-webapps', scripts: { lint: 'echo root-lint' } }),
         '.github/workflows/ci.yml': stringify({
@@ -4511,10 +4508,7 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       },
       'scripts/lint.mjs',
       new Map(),
-      (plan) => {
-        assert.deepEqual(plan.selected, []);
-        assert.equal(plan.site, false);
-      },
+      (plan) => assert.equal(plan.allApps, true),
     ],
     [
       'CI working-directory apps/n4 with pnpm --filter . run lint keeps n4 lint edge',
@@ -4669,8 +4663,8 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
             'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
           },
         }),
-        'scripts/e2e-test-data.mjs': "import '../packages/demo/src/shared.mjs';\nimport { provisionTestData } from './lib/e2e-test-data.mjs';\nconst [app] = process.argv.slice(2);\nawait provisionTestData(app, '.');\n",
-        'scripts/lib/e2e-test-data.mjs': "export const provisioners = { n4: { provision: () => readFileSync('packages/lazy/manifest.json') } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+        'scripts/e2e-test-data.mjs': "import { provisionTestData } from './lib/e2e-test-data.mjs';\nconst [app] = process.argv.slice(2);\nawait provisionTestData(app, '.');\n",
+        'scripts/lib/e2e-test-data.mjs': "import '../../packages/demo/src/shared.mjs';\nexport const provisioners = { n4: { provision: () => readFileSync('packages/lazy/manifest.json') } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
         'packages/demo/package.json': JSON.stringify({ name: '@nd/demo' }),
         'packages/demo/src/shared.mjs': 'export const shared = 1;\n',
         'packages/lazy/package.json': JSON.stringify({ name: '@nd/lazy' }),
@@ -4682,6 +4676,28 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
         assert.deepEqual(plan.selected.map((app) => app.id), ['n4']);
         assert.equal(plan.allApps, false);
       },
+    ],
+    [
+      'non-builtin side-effect import in scripts/e2e-test-data.mjs fails closed to all apps',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ env: { APP: '${{ matrix.app }}' }, run: 'node scripts/e2e-test-data.mjs "$APP"' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/e2e-test-data.mjs': "import '../packages/demo/src/shared.mjs';\nimport { provisionTestData } from './lib/e2e-test-data.mjs';\nconst [app] = process.argv.slice(2);\nawait provisionTestData(app, '.');\n",
+        'scripts/lib/e2e-test-data.mjs': "export const provisioners = { n4: { provision: () => readFileSync('packages/lazy/manifest.json') } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+        'packages/demo/package.json': JSON.stringify({ name: '@nd/demo' }),
+        'packages/demo/src/shared.mjs': 'export const shared = 1;\n',
+        'packages/lazy/package.json': JSON.stringify({ name: '@nd/lazy' }),
+        'packages/lazy/manifest.json': '{}',
+      },
+      'packages/lazy/manifest.json',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
     ],
     [
       'top-level called helper in scripts/lib/e2e-test-data.mjs stays in shared CI coverage',
@@ -6511,7 +6527,7 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       (plan) => assert.deepEqual(plan.selected, []),
     ],
     [
-      'one explicit CI lint target does not restore unrelated apps standalone lint edges',
+      'explicit CI lint target fails closed and keeps standalone lint edges across apps',
       {
         '.github/workflows/ci.yml': stringify({
           jobs: {
@@ -6529,7 +6545,7 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       new Map(),
       (plan) => {
         assert.equal(plan.site, true);
-        assert.deepEqual(plan.selected.map((app) => app.id), ['sdc']);
+        assert.deepEqual(plan.selected.map((app) => app.id).sort(), ['n4', 'sdc']);
       },
     ],
     [

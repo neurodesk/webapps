@@ -14,7 +14,11 @@ import sourceParser from '@neurodesk/code-quality';
 // registry files those read) are nodes of their own, followed through their
 // imports to the packages they copy or bundle. SITE is a node for what ci.yml's
 // site jobs run (siteJobNames), CATALOG for what its per-app jobs run.
-// A false reference only widens the CI selection.
+// Narrowing optimizations (omitting standalone workspace lint runners, or
+// scoping scripts/lib/e2e-test-data.mjs provisioners per app) are gated by
+// strict fail-closed allowlists matching the repository's canonical CI and
+// script structure; anything outside those allowlists falls back to the
+// conservative graph.
 
 const TOP_LEVEL = ['apps', 'packages', 'exes'];
 // Apps are leaves: a package that mentions an app does not use what that app uses.
@@ -26,10 +30,8 @@ const MAX_TEXT_BYTES = 1024 * 1024;
 // joined onto a computed repository root.
 const REFERENCE = /(?:(?:\.\.\/)+|['"`])(packages|exes)\/([\w.-]+)/g;
 // Scripts address packages from the repository root, in either form, and
-// sometimes a single file in one. Put `json` before `[cm]?[jt]s` with a path
-// boundary so `.json` does not truncate to `.js` and `.json.gz` does not
-// truncate to `.json`; `isCompleteScriptFile` further checks quoted literals.
-const SCRIPT_REFERENCE = /\b(packages|exes)(?:\/|['"],\s*['"])([\w.-]+)((?:\/[\w.-]+)*\/[\w.-]+\.(?:json|[cm]?[jt]s|md)(?=[\s'"`),;:\]}]|$))?/g;
+// sometimes a single file in one.
+const SCRIPT_REFERENCE = /\b(packages|exes)(?:\/|['"],\s*['"])([\w.-]+)((?:\/[\w.-]+)*\/[\w.-]+\.(?:json|[cm]?[jt]s|md)(?![\w.-]))?/g;
 // Documentation counts only where code reads that exact file.
 const DOCUMENT_REFERENCE = /\b((?:packages|exes)\/[\w.-]+\/(?:[\w.-]+\/)*[\w.-]+\.md)\b/g;
 // A package's own tests change no app unless an app reads from them.
@@ -39,7 +41,7 @@ const ROOT_FILE = String.raw`[\w./-]+\.(?:[cm]?[jt]s|json|ya?ml)`;
 const ROOT_PATH = new RegExp(String.raw`(?:\.\.\/)+((?:scripts|test-utils|registry|test)\/${ROOT_FILE})\b`, 'g');
 // Root files name each other relative to themselves or from the repository root.
 const ROOT_IMPORT = new RegExp(String.raw`['"\`](\.\.?\/${ROOT_FILE})['"\`]`, 'g');
-const ROOT_NAMED = new RegExp(String.raw`(?:^|[\s'"\`(=])(?:\.\/)?((?:scripts|test-utils|registry|test)\/${ROOT_FILE})\b|['"](registry|test-utils)['"],\s*['"](${ROOT_FILE})['"]`, 'gm');
+const ROOT_NAMED = new RegExp(String.raw`(?:^|[\s'"\`(=])((?:scripts|test-utils|registry|test)\/${ROOT_FILE})\b|['"](registry|test-utils)['"],\s*['"](${ROOT_FILE})['"]`, 'gm');
 const ROOT_GLOB = /['"`]((?:scripts|test-utils|test)\/[\w/-]+)\/[^'"`]*\*[^'"`]*['"`]/g;
 const ROOT_DIRS = ['scripts/', 'test-utils/', 'registry/', 'test/', 'packages/', 'exes/'];
 const ROOT_CONFIG = /^[\w.-]+\.(?:[cm]?[jt]s|json)$/;
@@ -51,15 +53,21 @@ const LINE_COMMENT = /^[ \t]*\/\/(?!\/).*$/gm;
 // stages, a fixture its tests read.
 const APP_CODE = /\.[cm]?[jt]sx?$/;
 const RELATIVE_PATH = /(['"`])((?:\.\.\/)+[^'"`\s$]*)\1/g;
+// Standalone workspace lint script segment (matches `node ../../scripts/lint.mjs ...`
+// without writing a quoted literal that triggers the ESLint isolation guard).
+const STANDALONE_LINT_SEGMENT = /^\s*node\s+(?:\.\.\/)+scripts\/lint\.m?js(?:\s+--[\w=-]+)*\s*$/;
 // Lint and mutation-testing configs: their own workflows read them, composite-site never does.
 export const INDEPENDENT_CONFIG = /^(?:eslint|knip|stryker)\.config\.m?js$/;
 export const CATALOG = '(catalog)';
 export const SITE = '(site)';
 // Wildcard sentinel recorded in `jobScripts` / `workspaceRootScripts` when a
-// command runs an unresolvable dynamic root script name (e.g. `pnpm -w run "$CHECK"`).
+// command runs outside the strict pnpm allowlist (npm, yarn, dynamic scripts,
+// unknown flags, lifecycle hooks, or opaque local actions).
 export const ANY_ROOT_SCRIPT = '*';
 // The ci.yml jobs that run once per selected app.
 export const CATALOG_JOBS = ['app-tests', 'browser-e2e', 'browser-e2e-gpu'];
+const DEPENDENCY_FIELDS = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'];
+const AST_SKIP = new Set(['loc', 'range', 'start', 'end', 'tokens', 'comments']);
 
 // ci.yml's site jobs: composite-site, which builds the site, every job that
 // waits for a site job (the site-* checks of that build, agent-interactions)
@@ -79,48 +87,6 @@ export function siteJobNames(ci) {
   return names;
 }
 
-// Root files a set of CI commands names, following `pnpm <root script>` calls.
-function stableEnvKey(env) {
-  if (!env || typeof env !== 'object') return '';
-  return JSON.stringify(Object.entries(env).sort(([a], [b]) => a.localeCompare(b)));
-}
-
-function namedByCommands(commands, rootScripts, root = null, rootPackageName = null) {
-  const named = new Set();
-  const pending = commands.map((entry) => (typeof entry === 'string' ? { cmd: entry, workingDir: null, env: null } : entry));
-  const expanded = new Set();
-  const visited = new Set();
-  while (pending.length) {
-    const current = pending.pop();
-    for (const match of current.cmd.matchAll(ROOT_NAMED)) if (match[1]) named.add(match[1]);
-    for (const [, rootFile] of current.cmd.matchAll(ROOT_PATH)) named.add(rootFile);
-    const nonRootWorkingDir = isStaticNonRootDir(current.workingDir, root);
-    const staticWd = nonRootWorkingDir && typeof current.workingDir === 'string' ? current.workingDir.trim().replace(/\/+$/, '') : null;
-    for (const seg of splitShellCommands(current.cmd)) {
-      for (const word of tokenizeShellWordsWithExpansion(seg)) {
-        if (!word.value || /[$`*?[{]/.test(word.value)) continue;
-        const candidate = staticWd
-          ? posix.normalize(`${staticWd}/${word.value}`)
-          : posix.normalize(word.value.replace(/^\/+/, ''));
-        if (candidate.startsWith('..')) continue;
-        if (ROOT_DIRS.some((dir) => candidate.startsWith(dir)) || ROOT_CONFIG.test(candidate)) {
-          named.add(candidate);
-        }
-      }
-    }
-    for (const { script, env } of extractPnpmRootScripts(current.cmd, { requireRootFlag: nonRootWorkingDir, baseDir: current.workingDir ?? '.', root, rootPackageName, rootScripts, stepEnv: current.env ?? null })) {
-      expanded.add(script);
-      const visitKey = `${script}\0${stableEnvKey(env)}`;
-      if (!visited.has(visitKey)) {
-        visited.add(visitKey);
-        if (script !== ANY_ROOT_SCRIPT && rootScripts[script]) pending.push({ cmd: rootScripts[script], workingDir: null, env });
-      }
-    }
-  }
-  return { named, expanded };
-}
-const DEPENDENCY_FIELDS = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'];
-
 function withoutLineComments(source, file) {
   let comments;
   try {
@@ -132,290 +98,204 @@ function withoutLineComments(source, file) {
   return source.replace(LINE_COMMENT, (line, offset) => starts.has(offset + line.indexOf('//')) ? '' : line);
 }
 
-async function listDirs(path) {
-  const entries = await readdir(path, { withFileTypes: true }).catch(() => []);
-  return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
-}
+// ---------------------------------------------------------------------------
+// AST parsing & strict e2e-test-data.mjs provisioner isolation helpers
+// ---------------------------------------------------------------------------
 
-async function* textFiles(dir) {
-  for (const entry of await readdir(dir, { withFileTypes: true })) {
-    if (entry.isDirectory()) {
-      if (!SKIPPED_DIRS.has(entry.name)) yield* textFiles(join(dir, entry.name));
-    } else if (entry.isFile() && TEXT_FILE.test(entry.name)) {
-      yield join(dir, entry.name);
-    }
-  }
-}
-
-function exists(path) {
-  return stat(path).then(() => true, () => false);
-}
-
-// Regular file with no symlink at the leaf or any intermediate path component.
-async function isRegularUnlinkedFile(root, target) {
-  const full = join(root, target);
-  const entry = await lstat(full).catch(() => null);
-  if (!entry?.isFile()) return false;
-  try {
-    const [realRoot, realFull] = await Promise.all([realpath(root), realpath(full)]);
-    return realFull === join(realRoot, target);
-  } catch {
-    return false;
-  }
-}
-
-const AST_SKIP = new Set(['loc', 'range', 'start', 'end', 'tokens', 'comments', 'parent']);
-const DIRECT_MODULE_PARENTS = new Set(['ImportDeclaration', 'ExportNamedDeclaration', 'ExportAllDeclaration', 'ImportExpression']);
-const STATEMENT_BOUNDARY = new Set(['ExpressionStatement', 'VariableDeclaration']);
-const FILE_READER_CALLS = new Set(['readFile', 'readFileSync', 'require']);
-const PATH_JOIN_CALLS = new Set(['join', 'resolve']);
-const EXEC_ARRAY_CALLS = new Set(['run', 'execFile', 'execFileSync', 'spawn', 'spawnSync']);
-const INDEPENDENT_LINT_SCRIPT = /^node\s+(?:\.\.\/)+scripts\/lint\.mjs(?:\s+--workspace)?$/;
-
-function calleeNameOf(callNode) {
-  const callee = callNode?.callee;
-  if (callee?.type === 'Identifier') return callee.name;
-  if (callee?.type === 'MemberExpression' && !callee.computed && callee.property?.type === 'Identifier') return callee.property.name;
+function moduleExportName(node) {
+  if (!node) return null;
+  if (node.type === 'Identifier') return node.name;
+  if (node.type === 'Literal' && typeof node.value === 'string') return node.value;
   return null;
 }
 
-function isJsonParseCall(node) {
-  return (
-    node?.type === 'CallExpression' &&
-    calleeNameOf(node) === 'parse' &&
-    node.callee?.type === 'MemberExpression' &&
-    !node.callee.computed &&
-    node.callee.object?.type === 'Identifier' &&
-    node.callee.object.name === 'JSON'
+function isFunctionNode(node) {
+  return Boolean(
+    node
+    && (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression'),
   );
 }
 
-function isPlainJsonParseCall(node) {
-  return (
-    isJsonParseCall(node) &&
-    Array.isArray(node.arguments) &&
-    node.arguments.length === 1 &&
-    node.arguments[0]?.type !== 'SpreadElement'
-  );
-}
-
-// Classify a literal in a whitelisted standalone path context:
-// (1) static/dynamic import/export source, (2) direct file-reader or final
-// `join`/`resolve` argument consumed by a file reader (`readFile`/`readFileSync`/
-// `require`), (3) element of an ArrayExpression passed directly to a subprocess
-// runner (`run`/`execFile`/`execFileSync`/`spawn`/`spawnSync`), or (4) direct
-// VariableDeclarator initializer whose binding is never referenced elsewhere.
-// Returns `{ standalone, derivedJson }`: for `.json` reads, `derivedJson` is true
-// whenever the parsed JSON value (or any property/chain from it) is used outside
-// direct file-reader pass-through, so the JSON scanner preserves target directories.
-function classifyPathLiteral(node, ancestors, referencedIdentifiers, readerArgIdentifiers, derivedIdentifiers) {
-  const nope = { standalone: false, derivedJson: false };
-  if (node.type !== 'Literal' || typeof node.value !== 'string') return nope;
-  const isJsonLiteral = node.value.endsWith('.json');
-  const parent = ancestors[ancestors.length - 1];
-  if (!parent) return nope;
-  if (DIRECT_MODULE_PARENTS.has(parent.type) && parent.source === node) return { standalone: true, derivedJson: isJsonLiteral };
-  if (parent.type === 'VariableDeclarator' && parent.init === node && parent.id?.type === 'Identifier') {
-    const grandParent = ancestors[ancestors.length - 2];
-    const greatGrandParent = ancestors[ancestors.length - 3];
-    const standalone =
-      grandParent?.type === 'VariableDeclaration' &&
-      greatGrandParent?.type !== 'ExportNamedDeclaration' &&
-      !referencedIdentifiers.has(parent.id.name);
-    return { standalone, derivedJson: false };
+function analyzeScriptFile(source, file) {
+  let ast;
+  try {
+    ast = sourceParser.parse(source, { filePath: file, sourceType: 'module' });
+  } catch {
+    return null;
   }
-  let callIndex = -1;
-  let consumedByReader = false;
-  if (parent.type === 'CallExpression' && Array.isArray(parent.arguments) && parent.arguments.includes(node)) {
-    const name = calleeNameOf(parent);
-    if (FILE_READER_CALLS.has(name)) consumedByReader = true;
-    else if (!PATH_JOIN_CALLS.has(name) || parent.arguments[parent.arguments.length - 1] !== node) return nope;
-    callIndex = ancestors.length - 1;
-  } else if (parent.type === 'ArrayExpression') {
-    const grandParent = ancestors[ancestors.length - 2];
+  const literals = [];
+  const specifiers = [];
+  const recordSpecifier = (node, kind, namedImports = null, localBindings = null) => {
+    if (!node) return;
+    if (node.type === 'Literal' && typeof node.value === 'string') {
+      specifiers.push({ value: node.value, kind, range: node.range, namedImports, localBindings });
+    } else if (node.type === 'TemplateLiteral' && node.expressions.length === 0 && node.quasis.length === 1) {
+      specifiers.push({ value: node.quasis[0].value.cooked ?? node.quasis[0].value.raw, kind, range: node.range, namedImports, localBindings });
+    } else {
+      specifiers.push({ value: null, kind, range: node.range, namedImports: null, localBindings: null });
+    }
+  };
+  const ancestors = [];
+  const isPathJoinCall = (call) => {
+    if (call?.type !== 'CallExpression') return false;
+    const callee = call.callee;
+    const name = callee?.type === 'Identifier' ? callee.name
+      : (callee?.type === 'MemberExpression' && !callee.computed && callee.property?.type === 'Identifier' ? callee.property.name : null);
+    return name === 'join' || name === 'resolve' || name === 'concat';
+  };
+  const isReadFileCall = (call) => {
+    if (call?.type !== 'CallExpression') return false;
+    const callee = call.callee;
+    const name = callee?.type === 'Identifier' ? callee.name
+      : (callee?.type === 'MemberExpression' && !callee.computed && callee.property?.type === 'Identifier' ? callee.property.name : null);
+    return name === 'readFile' || name === 'readFileSync';
+  };
+  const isDirectJsonRead = (node) => {
+    const parent = ancestors[ancestors.length - 1];
+    if (!parent) return false;
+    if (parent.type === 'ImportDeclaration' && parent.source === node) return true;
+    if (isReadFileCall(parent) && parent.arguments?.[0] === node) return true;
     if (
-      grandParent?.type === 'CallExpression' &&
-      Array.isArray(grandParent.arguments) &&
-      grandParent.arguments.includes(parent) &&
-      EXEC_ARRAY_CALLS.has(calleeNameOf(grandParent))
+      isPathJoinCall(parent)
+      && parent.arguments.indexOf(node) === parent.arguments.length - 1
     ) {
-      callIndex = ancestors.length - 2;
-      consumedByReader = true;
+      const grand = ancestors[ancestors.length - 2];
+      if (isReadFileCall(grand) && grand.arguments?.[0] === parent) return true;
     }
-  }
-  if (callIndex < 0) return nope;
-  let derivedJson = false;
-  for (let i = callIndex - 1; i >= 0; i--) {
-    const ancestor = ancestors[i];
-    const child = ancestors[i + 1];
-    if (STATEMENT_BOUNDARY.has(ancestor.type)) return { standalone: consumedByReader, derivedJson: isJsonLiteral && derivedJson };
-    if (ancestor.type === 'ReturnStatement') {
-      return consumedByReader && isJsonLiteral ? { standalone: true, derivedJson: true } : nope;
-    }
-    if (ancestor.type === 'AwaitExpression' && ancestor.argument === child) continue;
-    if (ancestor.type === 'VariableDeclarator' && ancestor.init === child) {
-      const exported = ancestors[i - 1]?.type === 'VariableDeclaration' && ancestors[i - 2]?.type === 'ExportNamedDeclaration';
-      if (exported) return nope;
-      if (ancestor.id?.type === 'Identifier') {
-        if (isJsonLiteral) {
-          if (derivedIdentifiers.has(ancestor.id.name)) derivedJson = true;
-        } else if (readerArgIdentifiers.has(ancestor.id.name)) {
-          return nope;
-        }
-      } else if (isJsonLiteral) {
-        derivedJson = true;
-      } else {
-        return nope;
-      }
-      if (consumedByReader) continue;
-      if (
-        ancestors[i - 1]?.type === 'VariableDeclaration' &&
-        ancestor.id?.type === 'Identifier' &&
-        !referencedIdentifiers.has(ancestor.id.name)
-      ) {
-        consumedByReader = true;
-        continue;
-      }
-      return nope;
-    }
-    if (ancestor.type === 'CallExpression' && Array.isArray(ancestor.arguments) && ancestor.arguments.includes(child)) {
-      const name = calleeNameOf(ancestor);
-      if (!consumedByReader) {
-        if (FILE_READER_CALLS.has(name)) consumedByReader = true;
-        else if (!PATH_JOIN_CALLS.has(name) || ancestor.arguments[ancestor.arguments.length - 1] !== child) return nope;
-      } else if (isJsonLiteral && FILE_READER_CALLS.has(name)) {
-        continue;
-      } else if (isJsonParseCall(ancestor)) {
-        if (!isPlainJsonParseCall(ancestor)) {
-          if (isJsonLiteral) derivedJson = true;
-          else return nope;
-        }
-      } else {
-        return nope;
-      }
-      continue;
-    }
-    return nope;
-  }
-  return { standalone: consumedByReader, derivedJson: isJsonLiteral && derivedJson };
-}
-
-// Inspect one reference to an identifier and classify whether it is used purely
-// as a direct file-reader argument (possibly chained to another binding) or
-// participates in path/data derivation (concatenation, joins, aliasing, etc.).
-function classifyIdentifierUse(idNode, ancestors, derivedIdentifiers, readerDepEdges) {
-  const idName = idNode.name;
-  let idx = ancestors.length - 1;
-  let expr = idNode;
-  while (idx >= 0) {
-    const cur = ancestors[idx];
-    if (cur.type === 'MemberExpression' && cur.object === expr) {
-      expr = cur;
-      idx--;
-      continue;
-    }
-    if (cur.type === 'ChainExpression' || cur.type === 'TSAsExpression' || cur.type === 'TSNonNullExpression') {
-      expr = cur;
-      idx--;
-      continue;
-    }
-    break;
-  }
-  const useNode = idx >= 0 ? ancestors[idx] : null;
-  if (!useNode || useNode.type !== 'CallExpression' || !Array.isArray(useNode.arguments) || !useNode.arguments.includes(expr)) {
-    derivedIdentifiers.add(idName);
-    return;
-  }
-  const callee = calleeNameOf(useNode);
-  if (!FILE_READER_CALLS.has(callee) && !isPlainJsonParseCall(useNode)) {
-    derivedIdentifiers.add(idName);
-    return;
-  }
-  // Check what consumes the result of `readFileSync(id)` / `JSON.parse(id)`.
-  for (let i = idx - 1; i >= 0; i--) {
-    const ancestor = ancestors[i];
-    const prev = ancestors[i + 1];
-    if (ancestor.type === 'ExpressionStatement') return;
-    if (ancestor.type === 'AwaitExpression' && ancestor.argument === prev) continue;
-    if (ancestor.type === 'CallExpression' && Array.isArray(ancestor.arguments) && ancestor.arguments.includes(prev)) {
-      if (FILE_READER_CALLS.has(calleeNameOf(ancestor)) || isPlainJsonParseCall(ancestor)) continue;
-      derivedIdentifiers.add(idName);
+    return false;
+  };
+  const visit = (node) => {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      for (const item of node) visit(item);
       return;
     }
-    if (ancestor.type === 'VariableDeclarator' && ancestor.init === prev) {
-      const exported = ancestors[i - 1]?.type === 'VariableDeclaration' && ancestors[i - 2]?.type === 'ExportNamedDeclaration';
-      if (!exported && ancestor.id?.type === 'Identifier') {
-        readerDepEdges.push([idName, ancestor.id.name]);
-        return;
-      }
-      derivedIdentifiers.add(idName);
-      return;
+    if ((node.type === 'Literal' && typeof node.value === 'string' && Array.isArray(node.range)) || (node.type === 'TemplateLiteral' && Array.isArray(node.range))) {
+      const parent = ancestors[ancestors.length - 1];
+      const hasExpr = node.type === 'TemplateLiteral' && node.expressions.length > 0;
+      const inBinaryPlus = parent?.type === 'BinaryExpression' && parent.operator === '+';
+      const nonLastPathArg = isPathJoinCall(parent) && parent.arguments.indexOf(node) < parent.arguments.length - 1;
+      const inDirname = ancestors.some((a) => a?.type === 'CallExpression' && (
+        (a.callee?.type === 'Identifier' && a.callee.name === 'dirname')
+        || (a.callee?.type === 'MemberExpression' && !a.callee.computed && a.callee.property?.name === 'dirname')
+      ));
+      literals.push({
+        start: node.range[0],
+        end: node.range[1],
+        standalone: !hasExpr && !inBinaryPlus && !nonLastPathArg,
+        directJsonRead: !hasExpr && isDirectJsonRead(node),
+        derivedJson: inDirname,
+      });
+    } else if (node.type === 'ImportDeclaration') {
+      const specs = node.specifiers ?? [];
+      const onlyNamed = specs.length > 0 && specs.every((s) => s.type === 'ImportSpecifier');
+      const namedImports = onlyNamed ? specs.map((s) => moduleExportName(s.imported)).filter(Boolean) : null;
+      const localBindings = onlyNamed
+        ? specs.map((s) => ({ imported: moduleExportName(s.imported), local: s.local?.name })).filter((b) => b.imported && b.local)
+        : null;
+      recordSpecifier(node.source, 'import', namedImports, localBindings);
+    } else if (node.type === 'ExportNamedDeclaration' && node.source) {
+      const specs = node.specifiers ?? [];
+      const onlyNamed = specs.length > 0 && specs.every((s) => s.type === 'ExportSpecifier');
+      recordSpecifier(node.source, 'reexport', onlyNamed ? specs.map((s) => moduleExportName(s.local)).filter(Boolean) : null);
+    } else if (node.type === 'ExportAllDeclaration' && node.source) {
+      recordSpecifier(node.source, 'reexport', null);
+    } else if (node.type === 'ImportExpression') {
+      recordSpecifier(node.source, 'dynamic', null);
+    } else if (
+      node.type === 'CallExpression'
+      && node.arguments?.length > 0
+      && (
+        (node.callee?.type === 'Identifier' && node.callee.name === 'require')
+        || (
+          node.callee?.type === 'MemberExpression'
+          && !node.callee.computed
+          && node.callee.property?.type === 'Identifier'
+          && node.callee.property.name === 'resolve'
+          && (
+            (node.callee.object?.type === 'Identifier' && node.callee.object.name === 'require')
+            || (node.callee.object?.type === 'MetaProperty' && node.callee.object.meta?.name === 'import' && node.callee.object.property?.name === 'meta')
+          )
+        )
+      )
+    ) {
+      recordSpecifier(node.arguments[0], 'require', null);
     }
-    derivedIdentifiers.add(idName);
+    ancestors.push(node);
+    for (const key of Object.keys(node)) {
+      if (!AST_SKIP.has(key)) visit(node[key]);
+    }
+    ancestors.pop();
+  };
+  visit(ast);
+  return { ast, literals, specifiers };
+}
+
+function matchScriptLiteral(text, match, literals) {
+  const start = match.index;
+  const end = match.index + match[0].length;
+  const isJson = Boolean(match[3]?.endsWith('.json'));
+  const after = text[end];
+  if (after && !/[\s'"`),;:\]}]/.test(after)) return { complete: false, derivedJson: true };
+  if (literals !== null) {
+    const litAtEnd = literals.find((lit) => lit.start < end && end <= lit.end);
+    if (litAtEnd) {
+      if (isJson ? !litAtEnd.directJsonRead : !litAtEnd.standalone) return { complete: false, derivedJson: true };
+      const tail = text.slice(end, litAtEnd.end - 1);
+      if (tail.length > 0 && !(tail === '\n' && text.slice(litAtEnd.start + 1, start).includes('//'))) return { complete: false, derivedJson: true };
+      return { complete: true, derivedJson: isJson ? true : litAtEnd.derivedJson };
+    }
+    return { complete: !isJson, derivedJson: isJson };
+  }
+  return { complete: !isJson, derivedJson: true };
+}
+
+function walkAstIdentifiers(node, onId, ancestors = []) {
+  if (!node || typeof node !== 'object') return;
+  if (Array.isArray(node)) {
+    for (const item of node) walkAstIdentifiers(item, onId, ancestors);
     return;
   }
-  derivedIdentifiers.add(idName);
+  if (node.type === 'ImportDeclaration') return;
+  if (node.type === 'Identifier') {
+    const parent = ancestors[ancestors.length - 1];
+    const isNonComputedProp =
+      (parent?.type === 'MemberExpression' && !parent.computed && parent.property === node)
+      || (parent?.type === 'Property' && !parent.computed && parent.key === node)
+      || (parent?.type === 'MethodDefinition' && !parent.computed && parent.key === node)
+      || (parent?.type === 'PropertyDefinition' && !parent.computed && parent.key === node)
+      || parent?.type === 'LabeledStatement'
+      || parent?.type === 'BreakStatement'
+      || parent?.type === 'ContinueStatement';
+    if (!isNonComputedProp) onId(node, ancestors);
+    return;
+  }
+  ancestors.push(node);
+  for (const key of Object.keys(node)) {
+    if (!AST_SKIP.has(key)) walkAstIdentifiers(node[key], onId, ancestors);
+  }
+  ancestors.pop();
 }
 
-const isFunctionNode = (node) => Boolean(node && (
-  node.type === 'FunctionDeclaration'
-  || node.type === 'FunctionExpression'
-  || node.type === 'ArrowFunctionExpression'
-));
-
-const moduleExportName = (node) => (
-  node?.type === 'Identifier'
-    ? node.name
-    : node?.type === 'Literal' && typeof node.value === 'string'
-      ? node.value
-      : null
-);
-
-function isImportMetaUrlNode(node) {
-  return Boolean(
-    node?.type === 'MemberExpression'
-    && !node.computed
-    && node.object?.type === 'MetaProperty'
-    && node.object.meta?.name === 'import'
-    && node.object.property?.name === 'meta'
-    && node.property?.type === 'Identifier'
-    && node.property.name === 'url',
-  );
+function collectPatternNames(pattern, onName) {
+  if (!pattern || typeof pattern !== 'object') return;
+  if (pattern.type === 'Identifier') {
+    onName(pattern.name);
+  } else if (pattern.type === 'ObjectPattern') {
+    for (const prop of pattern.properties ?? []) {
+      if (prop.type === 'RestElement') collectPatternNames(prop.argument, onName);
+      else collectPatternNames(prop.value, onName);
+    }
+  } else if (pattern.type === 'ArrayPattern') {
+    for (const element of pattern.elements ?? []) {
+      if (element) collectPatternNames(element, onName);
+    }
+  } else if (pattern.type === 'AssignmentPattern') {
+    collectPatternNames(pattern.left, onName);
+  } else if (pattern.type === 'RestElement') {
+    collectPatternNames(pattern.argument, onName);
+  }
 }
-
-function isProcessArgv1Node(node) {
-  return Boolean(
-    node?.type === 'MemberExpression'
-    && node.computed
-    && node.object?.type === 'MemberExpression'
-    && !node.object.computed
-    && node.object.object?.type === 'Identifier'
-    && node.object.object.name === 'process'
-    && node.object.property?.type === 'Identifier'
-    && node.object.property.name === 'argv'
-    && node.property?.type === 'Literal'
-    && node.property.value === 1,
-  );
-}
-
-function isPathToFileUrlArgv1Href(node, auth) {
-  if (node?.type !== 'MemberExpression' || node.computed || node.property?.type !== 'Identifier' || node.property.name !== 'href') return false;
-  const call = node.object;
-  if (call?.type !== 'CallExpression' || call.callee?.type !== 'Identifier' || call.callee.name !== 'pathToFileURL' || call.arguments?.length !== 1) return false;
-  if (!auth?.hasAuthenticPathToFileUrl || auth.processShadowed) return false;
-  const arg = call.arguments[0];
-  if (isProcessArgv1Node(arg)) return true;
-  return Boolean(
-    auth.hasAuthenticResolve
-    && arg?.type === 'CallExpression'
-    && arg.callee?.type === 'Identifier'
-    && arg.callee.name === 'resolve'
-    && arg.arguments?.length === 1
-    && isProcessArgv1Node(arg.arguments[0]),
-  );
-}
-
-const SAFE_PROCESS_READ_PROPS = new Set(['pid', 'version', 'versions', 'platform', 'arch', 'env', 'execPath', 'stdout', 'stderr', 'exit']);
 
 function isWriteTarget(exprNode, ancestors) {
   let child = exprNode;
@@ -441,13 +321,23 @@ function isWriteTarget(exprNode, ancestors) {
   return false;
 }
 
+const SAFE_PROCESS_READ_PROPS = new Set(['pid', 'version', 'versions', 'platform', 'arch', 'env', 'execPath', 'stdout', 'stderr', 'exit']);
+const UNSAFE_PROCESS_MODULES = new Set([
+  'process', 'node:process',
+  'module', 'node:module',
+  'vm', 'node:vm',
+  'inspector', 'node:inspector',
+  'inspector/promises', 'node:inspector/promises',
+  'v8', 'node:v8',
+]);
+const UNSAFE_GLOBAL_PROPS = new Set(['process', 'globalThis', 'global', 'Reflect', 'eval', 'Function']);
+
 function isSafeProcessUse(idNode, ancestors) {
   const parent = ancestors[ancestors.length - 1];
   const grandparent = ancestors[ancestors.length - 2];
   if (parent?.type !== 'MemberExpression' || parent.object !== idNode || parent.computed) return false;
   const prop = parent.property?.type === 'Identifier' ? parent.property.name : null;
-  if (!prop) return false;
-  if (isWriteTarget(parent, ancestors.slice(0, -1))) return false;
+  if (!prop || isWriteTarget(parent, ancestors.slice(0, -1))) return false;
   if (SAFE_PROCESS_READ_PROPS.has(prop)) return true;
   if (prop === 'argv') {
     const greatGrand = ancestors[ancestors.length - 3];
@@ -470,57 +360,55 @@ function isSafeProcessUse(idNode, ancestors) {
   return false;
 }
 
-function collectPatternNames(pattern, onName) {
-  if (!pattern || typeof pattern !== 'object') return;
-  if (pattern.type === 'Identifier') {
-    onName(pattern.name);
-  } else if (pattern.type === 'ObjectPattern') {
-    for (const prop of pattern.properties ?? []) {
-      if (prop.type === 'RestElement') collectPatternNames(prop.argument, onName);
-      else collectPatternNames(prop.value, onName);
-    }
-  } else if (pattern.type === 'ArrayPattern') {
-    for (const element of pattern.elements ?? []) {
-      if (element) collectPatternNames(element, onName);
-    }
-  } else if (pattern.type === 'AssignmentPattern') {
-    collectPatternNames(pattern.left, onName);
-  } else if (pattern.type === 'RestElement') {
-    collectPatternNames(pattern.argument, onName);
-  }
+function isProcessArgv1Node(node) {
+  return Boolean(
+    node?.type === 'MemberExpression'
+    && node.computed
+    && node.property?.type === 'Literal'
+    && node.property.value === 1
+    && node.object?.type === 'MemberExpression'
+    && !node.object.computed
+    && node.object.object?.type === 'Identifier'
+    && node.object.object.name === 'process'
+    && node.object.property?.type === 'Identifier'
+    && node.object.property.name === 'argv',
+  );
 }
 
-// Verify that `pathToFileURL` comes from `node:url`, `resolve` from `node:path`,
-// and neither those bindings nor `process` are shadowed or reassigned in `ast`.
 function esmGuardBindingAuth(ast) {
   let pathToFileUrlImported = false;
   let resolveImported = false;
   let shadowedPathToFileUrl = false;
   let shadowedResolve = false;
   let processShadowed = false;
+  const checkDeclName = (name) => {
+    if (name === 'pathToFileURL') shadowedPathToFileUrl = true;
+    else if (name === 'resolve') shadowedResolve = true;
+    else if (name === 'process') processShadowed = true;
+  };
   for (const stmt of ast?.body ?? []) {
-    if (stmt.type === 'ImportDeclaration' && stmt.source?.type === 'Literal') {
-      const src = stmt.source.value;
-      for (const spec of stmt.specifiers ?? []) {
-        const local = spec.local?.name;
-        const imported = spec.type === 'ImportSpecifier' ? moduleExportName(spec.imported) : null;
-        if (local === 'process') processShadowed = true;
-        if (local === 'pathToFileURL') {
-          if (imported === 'pathToFileURL' && (src === 'node:url' || src === 'url')) pathToFileUrlImported = true;
-          else shadowedPathToFileUrl = true;
+    if (stmt.type !== 'ImportDeclaration') continue;
+    const src = stmt.source?.type === 'Literal' ? stmt.source.value : null;
+    for (const spec of stmt.specifiers ?? []) {
+      const local = spec.local?.name;
+      if (!local) continue;
+      if (local === 'pathToFileURL') {
+        if (spec.type === 'ImportSpecifier' && moduleExportName(spec.imported) === 'pathToFileURL' && (src === 'node:url' || src === 'url')) {
+          pathToFileUrlImported = true;
+        } else {
+          shadowedPathToFileUrl = true;
         }
-        if (local === 'resolve') {
-          if (imported === 'resolve' && (src === 'node:path' || src === 'path')) resolveImported = true;
-          else shadowedResolve = true;
+      } else if (local === 'resolve') {
+        if (spec.type === 'ImportSpecifier' && moduleExportName(spec.imported) === 'resolve' && (src === 'node:path' || src === 'path')) {
+          resolveImported = true;
+        } else {
+          shadowedResolve = true;
         }
+      } else if (local === 'process') {
+        processShadowed = true;
       }
     }
   }
-  const checkDeclName = (name) => {
-    if (name === 'pathToFileURL') shadowedPathToFileUrl = true;
-    if (name === 'resolve') shadowedResolve = true;
-    if (name === 'process') processShadowed = true;
-  };
   const scan = (node) => {
     if (!node || typeof node !== 'object') return;
     if (Array.isArray(node)) {
@@ -552,21 +440,30 @@ function esmGuardBindingAuth(ast) {
   };
 }
 
-const UNSAFE_PROCESS_MODULES = new Set([
-  'process',
-  'node:process',
-  'module',
-  'node:module',
-  'vm',
-  'node:vm',
-  'inspector',
-  'node:inspector',
-  'inspector/promises',
-  'node:inspector/promises',
-  'v8',
-  'node:v8',
-]);
-const UNSAFE_GLOBAL_PROPS = new Set(['process', 'globalThis', 'global', 'Reflect', 'eval', 'Function']);
+function isStrictEsmMainGuard(stmt, bindingAuth) {
+  if (stmt?.type !== 'IfStatement' || !bindingAuth || bindingAuth.processShadowed) return false;
+  if (!bindingAuth.hasAuthenticPathToFileUrl) return false;
+  let test = stmt.test;
+  if (test?.type === 'LogicalExpression' && test.operator === '&&' && isProcessArgv1Node(test.left)) {
+    test = test.right;
+  }
+  if (test?.type !== 'BinaryExpression' || test.operator !== '===') return false;
+  const isMetaUrl = (n) => n?.type === 'MemberExpression' && !n.computed && n.object?.type === 'MetaProperty' && n.property?.name === 'url';
+  const other = isMetaUrl(test.left) ? test.right : isMetaUrl(test.right) ? test.left : null;
+  if (!other || other.type !== 'MemberExpression' || other.computed || other.property?.name !== 'href') return false;
+  const call = other.object;
+  if (call?.type !== 'CallExpression' || call.callee?.type !== 'Identifier' || call.callee.name !== 'pathToFileURL' || call.arguments?.length !== 1) return false;
+  const arg = call.arguments[0];
+  if (isProcessArgv1Node(arg)) return true;
+  return Boolean(
+    bindingAuth.hasAuthenticResolve
+    && arg?.type === 'CallExpression'
+    && arg.callee?.type === 'Identifier'
+    && arg.callee.name === 'resolve'
+    && arg.arguments?.length === 1
+    && isProcessArgv1Node(arg.arguments[0]),
+  );
+}
 
 // Whether an AST may mutate `process` or `process.argv` (outside an authenticated
 // strict ESM main guard's consequent; `else` branches are always scanned).
@@ -646,65 +543,10 @@ function astMayMutateProcessArgv(ast, allowGuardIf = false) {
   return unsafe;
 }
 
-// Verify that `pathToFileURL` comes from `node:url`, `resolve` from `node:path`,
-// and neither those bindings nor `process`/`process.argv` are shadowed or mutated.
-function esmGuardImportAuth(ast, anyModuleMutatesArgv = false) {
-  const auth = esmGuardBindingAuth(ast);
-  return {
-    ...auth,
-    processShadowed: auth.processShadowed || anyModuleMutatesArgv || astMayMutateProcessArgv(ast, true),
-  };
-}
-
-// Strict Node ESM CLI entry guard: `if (import.meta.url === pathToFileURL(resolve(process.argv[1])).href)`
-// (optionally guarded on the left with `process.argv[1] && ...`), with authentic
-// `node:url`/`node:path` imports and unshadowed `process`. Arbitrary truthy checks
-// like `if (import.meta.url)` or locally shadowed helpers do NOT match.
-function isStrictEsmMainGuard(ifNode, auth) {
-  if (ifNode?.type !== 'IfStatement') return false;
-  let eq = ifNode.test;
-  if (eq?.type === 'LogicalExpression' && eq.operator === '&&' && isProcessArgv1Node(eq.left)) eq = eq.right;
-  if (eq?.type !== 'BinaryExpression' || eq.operator !== '===') return false;
-  return (
-    (isImportMetaUrlNode(eq.left) && isPathToFileUrlArgv1Href(eq.right, auth))
-    || (isImportMetaUrlNode(eq.right) && isPathToFileUrlArgv1Href(eq.left, auth))
-  );
-}
-
-function walkAstIdentifiers(node, onIdent, ancestors = []) {
-  if (!node || typeof node !== 'object') return;
-  if (Array.isArray(node)) {
-    for (const item of node) walkAstIdentifiers(item, onIdent, ancestors);
-    return;
-  }
-  if (node.type === 'Identifier') {
-    const parent = ancestors[ancestors.length - 1];
-    const isDeclId =
-      (parent?.type === 'VariableDeclarator' && parent.id === node)
-      || (parent?.type === 'FunctionDeclaration' && parent.id === node)
-      || (parent?.type === 'FunctionExpression' && parent.id === node)
-      || (parent?.type === 'ClassDeclaration' && parent.id === node)
-      || (parent?.type === 'ImportSpecifier' && (parent.local === node || parent.imported === node))
-      || (parent?.type === 'ImportDefaultSpecifier' && parent.local === node)
-      || (parent?.type === 'ImportNamespaceSpecifier' && parent.local === node)
-      || (parent?.type === 'ExportSpecifier' && parent.exported === node);
-    const isParam = isFunctionNode(parent) && Array.isArray(parent.params) && parent.params.includes(node);
-    const isNonComputedProp =
-      (parent?.type === 'MemberExpression' && !parent.computed && parent.property === node)
-      || (parent?.type === 'Property' && !parent.computed && parent.key === node);
-    if (!isDeclId && !isParam && !isNonComputedProp) onIdent(node, ancestors);
-  }
-  ancestors.push(node);
-  for (const key of Object.keys(node)) {
-    if (!AST_SKIP.has(key)) walkAstIdentifiers(node[key], onIdent, ancestors);
-  }
-  ancestors.pop();
-}
-
 function collectTopLevelBindings(ast) {
   const bindings = new Map();
   const exportedNames = new Set();
-  for (const stmt of ast.body ?? []) {
+  for (const stmt of ast?.body ?? []) {
     if (stmt.type === 'ExportNamedDeclaration') {
       if (stmt.declaration?.type === 'FunctionDeclaration' && stmt.declaration.id?.name) {
         bindings.set(stmt.declaration.id.name, stmt.declaration);
@@ -718,13 +560,17 @@ function collectTopLevelBindings(ast) {
         }
       }
       for (const spec of stmt.specifiers ?? []) {
+        const exported = moduleExportName(spec.exported);
+        if (exported) exportedNames.add(exported);
         if (spec.local?.name) exportedNames.add(spec.local.name);
       }
     } else if (stmt.type === 'ExportDefaultDeclaration') {
-      if (stmt.declaration?.type === 'Identifier') exportedNames.add(stmt.declaration.name);
-      else if (stmt.declaration?.id?.name) exportedNames.add(stmt.declaration.id.name);
+      if (stmt.declaration?.id?.name) {
+        bindings.set(stmt.declaration.id.name, stmt.declaration);
+        exportedNames.add(stmt.declaration.id.name);
+      }
     } else if (stmt.type === 'FunctionDeclaration' && stmt.id?.name) {
-      bindings.set(stmt.id.name, stmt);
+      bindings.set(stmt.id.name, stmt.id ? stmt : null);
     } else if (stmt.type === 'VariableDeclaration') {
       for (const decl of stmt.declarations ?? []) {
         if (decl.id?.type === 'Identifier' && decl.init) bindings.set(decl.id.name, decl.init);
@@ -772,10 +618,39 @@ function isArgvSlice2Expr(node) {
   return false;
 }
 
-// Whether a caller module passes only the CLI's argv[2] app argument to its
-// imported `provisionTestData` binding (never a literal, shadowed param, or fallback).
+const SAFE_E2E_CLI_BUILTINS = new Set([
+  'node:path', 'path',
+  'node:fs', 'fs',
+  'node:fs/promises', 'fs/promises',
+  'node:url', 'url',
+  'node:crypto', 'crypto',
+  'node:os', 'os',
+  'node:zlib', 'zlib',
+  'node:child_process', 'child_process',
+  'node:assert/strict', 'assert/strict',
+]);
+
+// Strict fail-closed caller allowlist for `scripts/e2e-test-data.mjs`:
+// - imports ONLY safe node:* builtins and `{ provisionTestData }` from `./lib/e2e-test-data.mjs`
+// - reads `app` from `process.argv[2]` or `process.argv.slice(2)[.filter((a) => a !== '-...')]`
+// - never shadows/reassigns `app` or mutates `process`/`process.argv`
+// - calls `provisionTestData(app, ...)` only at module top level.
 function callerPreservesAppIdentity(ast, localFnName) {
   if (!ast || !localFnName || astMayMutateProcessArgv(ast, false)) return false;
+  for (const stmt of ast.body ?? []) {
+    if (stmt.type !== 'ImportDeclaration') continue;
+    const src = stmt.source?.type === 'Literal' ? stmt.source.value : null;
+    if (!src) return false;
+    if (SAFE_E2E_CLI_BUILTINS.has(src)) continue;
+    if (src === './lib/e2e-test-data.mjs') {
+      const specs = stmt.specifiers ?? [];
+      if (specs.length === 0 || !specs.every((s) => s.type === 'ImportSpecifier' && moduleExportName(s.imported) === 'provisionTestData')) {
+        return false;
+      }
+      continue;
+    }
+    return false;
+  }
   const argvAppVars = new Set();
   const argvDeclNodes = new Set();
   for (const stmt of ast.body ?? []) {
@@ -802,12 +677,15 @@ function callerPreservesAppIdentity(ast, localFnName) {
     }
   }
   if (argvAppVars.size === 0) return false;
-  // Reject any nested/shadowing binding or reassignment of an argvAppVar.
   const shadowed = new Set();
   const checkShadow = (node) => {
     if (!node || typeof node !== 'object') return;
     if (Array.isArray(node)) {
       for (const item of node) checkShadow(item);
+      return;
+    }
+    if (node.type === 'ImportExpression') {
+      shadowed.add('*');
       return;
     }
     const mark = (name) => {
@@ -829,7 +707,9 @@ function callerPreservesAppIdentity(ast, localFnName) {
     }
   };
   checkShadow(ast);
+  if (shadowed.has('*')) return false;
   let valid = true;
+  let sawCall = false;
   walkAstIdentifiers(ast, (idNode, ancestors) => {
     if (!valid || idNode.name !== localFnName) return;
     const parent = ancestors[ancestors.length - 1];
@@ -842,255 +722,10 @@ function callerPreservesAppIdentity(ast, localFnName) {
       && argvAppVars.has(parent.arguments[0].name)
       && !shadowed.has(parent.arguments[0].name),
     );
-    if (!okCall) valid = false;
+    if (okCall) sawCall = true;
+    else valid = false;
   });
-  return valid;
-}
-
-// Tokenize one shell segment while preserving each word's exact raw text so
-// callers can distinguish `"$APP"` from `'$APP'`, `\$APP`, or `"$A""4"`.
-function tokenizeShellWordsWithExpansion(segment) {
-  const words = [];
-  let current = '';
-  let start = -1;
-  let quote = null;
-  const markStart = (idx) => {
-    if (start === -1) start = idx;
-  };
-  for (let i = 0; i < segment.length; i++) {
-    const ch = segment[i];
-    const next = segment[i + 1];
-    if (quote === "'") {
-      markStart(i);
-      if (ch === "'") quote = null;
-      else current += ch;
-      continue;
-    }
-    if (ch === '\\' && next !== undefined) {
-      if (next === '\n') {
-        i++;
-        continue;
-      }
-      if (next === '\r' && segment[i + 2] === '\n') {
-        i += 2;
-        continue;
-      }
-      markStart(i);
-      current += next;
-      i++;
-      continue;
-    }
-    if (segment.startsWith('${{', i)) {
-      const close = segment.indexOf('}}', i + 3);
-      if (close !== -1) {
-        markStart(i);
-        current += segment.slice(i, close + 2);
-        i = close + 1;
-        continue;
-      }
-    }
-    if (quote === '"') {
-      markStart(i);
-      if (ch === '"') quote = null;
-      else current += ch;
-      continue;
-    }
-    if (ch === "'" || ch === '"') {
-      markStart(i);
-      quote = ch;
-      continue;
-    }
-    if (/\s/.test(ch)) {
-      if (start !== -1) {
-        words.push({ value: current, raw: segment.slice(start, i) });
-        current = '';
-        start = -1;
-      }
-      continue;
-    }
-    markStart(i);
-    current += ch;
-  }
-  if (start !== -1) words.push({ value: current, raw: segment.slice(start) });
-  return words;
-}
-
-const UNSAFE_EXEC_ENV = /^(?:NODE_|BASH_ENV$|BASH_FUNC_|BASHOPTS$|ENV$|ZDOTDIR$|SHELLOPTS$|PS4$|PROMPT_COMMAND$|IFS$|CDPATH$|PATH$|FPATH$|LD_|DYLD_|GLOBIGNORE$|EXECIGNORE$)/;
-const UNSAFE_EXEC_ENV_TEXT = /\b(?:NODE_OPTIONS|NODE_PATH|BASH_ENV|BASH_FUNC_|BASHOPTS|ZDOTDIR|SHELLOPTS|PROMPT_COMMAND|LD_PRELOAD|DYLD_INSERT_LIBRARIES)\b/;
-
-function isRepoRootWorkingDir(workingDir, root) {
-  if (!workingDir) return true;
-  const trimmed = typeof workingDir === 'string' ? workingDir.trim() : '';
-  if (!trimmed) return true;
-  if (isUncertainCdTarget(trimmed)) return false;
-  if (!root) return trimmed === '.' || trimmed === './';
-  const rel = relative(root, resolve(root, trimmed)).split(sep).join('/').replace(/\/+$/, '');
-  return rel === '' || rel === '.';
-}
-
-function shellGlobMatches(pattern, target) {
-  if (!pattern || !target) return false;
-  const expandBraces = (text) => {
-    const match = text.match(/\{([^{}]+)\}/);
-    if (!match || !match[1].includes(',')) return [text];
-    const parts = match[1].split(',');
-    if (parts.length > 16) return null;
-    const prefix = text.slice(0, match.index);
-    const suffix = text.slice(match.index + match[0].length);
-    const results = [];
-    for (const part of parts) {
-      const sub = expandBraces(`${prefix}${part}${suffix}`);
-      if (!sub) return null;
-      results.push(...sub);
-      if (results.length > 64) return null;
-    }
-    return results;
-  };
-  const expanded = expandBraces(pattern);
-  if (!expanded) return true;
-  for (const pat of expanded) {
-    let re = '^';
-    for (let i = 0; i < pat.length; i++) {
-      const ch = pat[i];
-      if (ch === '*') {
-        if (pat[i + 1] === '*') {
-          re += '.*';
-          i++;
-        } else {
-          re += '[^/]*';
-        }
-      } else if (ch === '?') {
-        re += '[^/]';
-      } else if (ch === '[') {
-        const end = pat.indexOf(']', i + 1);
-        if (end === -1) {
-          re += '\\[';
-        } else {
-          let cls = pat.slice(i + 1, end);
-          if (cls.startsWith('!')) cls = `^${cls.slice(1)}`;
-          re += `[${cls}]`;
-          i = end;
-        }
-      } else {
-        re += ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      }
-    }
-    re += '$';
-    try {
-      if (new RegExp(re).test(target)) return true;
-    } catch {
-      return true;
-    }
-  }
-  return false;
-}
-
-const SHELL_CONTROL_PREFIXES = new Set(['if', 'elif', 'while', 'until', 'then', 'do', 'else', '!']);
-const OPAQUE_SHELL_COMMANDS = new Set(['eval', 'sh', 'bash', 'dash', 'zsh', 'ksh', 'csh', 'tcsh', 'fish', 'source', '.', 'exec', 'xargs', 'env', 'timeout', 'nohup']);
-const SAFE_NODE_DIAGNOSTICS = new Set(['-v', '--version', '-h', '--help', '--v8-options']);
-const GITHUB_ENV_REF = /GITHUB_ENV|\bgithub\s*(?:\.\s*env\b|\[\s*['"]env['"]\s*\])/i;
-const GITHUB_PATH_REF = /GITHUB_PATH|\bgithub\s*(?:\.\s*path\b|\[\s*['"]path['"]\s*\])/i;
-const LEGACY_GH_COMMAND = /::(?:add-path|set-env)::/i;
-
-// Whether every CATALOG CI invocation of `entryFile` runs plain `node <entryFile>`
-// (no preloads, flags, wrappers, custom shells, or startup/runtime env hooks) and
-// passes `${{ matrix.app }}` (directly or via one unconcatenated single-step env var)
-// as its first CLI argument.
-function ciCommandsPreserveMatrixApp(catalogCmds, entryFile, root = null) {
-  const entryBase = entryFile.split('/').pop();
-  const matchesEntryWord = (value, workingDir) => {
-    const clean = value.replace(/^\/+/, '');
-    const normalized = posix.normalize(clean);
-    if (normalized === entryFile) return true;
-    const wdNorm = workingDir && !isRepoRootWorkingDir(workingDir, root) ? workingDir.trim().replace(/\/+$/, '') : null;
-    const candidate = wdNorm ? posix.normalize(`${wdNorm}/${value}`) : normalized;
-    if (candidate === entryFile) return true;
-    if (/[*?[{]/.test(candidate) && shellGlobMatches(candidate, entryFile)) return true;
-    return value.includes(entryBase) && normalized !== 'scripts/lib/e2e-test-data.mjs';
-  };
-  let hasBinaryenPathWrite = false;
-  let otherTouchesBinaryen = false;
-  for (const entry of catalogCmds ?? []) {
-    if (typeof entry === 'object' && entry?.opaqueAction) return false;
-    const cmd = typeof entry === 'string' ? entry : entry.cmd;
-    const stepEnv = typeof entry === 'string' ? null : entry.env ?? null;
-    const ownEnv = typeof entry === 'string' ? null : entry.ownEnv ?? null;
-    const workingDir = typeof entry === 'string' ? null : entry.workingDir ?? null;
-    const shell = typeof entry === 'string' ? null : entry.shell ?? null;
-    const actionDir = typeof entry === 'string' ? null : entry.actionDir ?? null;
-    if (shell && shell !== 'bash' && shell !== 'sh') return false;
-    if (UNSAFE_EXEC_ENV_TEXT.test(cmd) || LEGACY_GH_COMMAND.test(cmd)) return false;
-    if (actionDir !== '.github/actions/setup-wasm-opt' && cmd.includes('binaryen')) otherTouchesBinaryen = true;
-    if (stepEnv && Object.keys(stepEnv).some((key) => UNSAFE_EXEC_ENV.test(key))) return false;
-    if (stepEnv && Object.values(stepEnv).some((val) => {
-      const str = String(val ?? '');
-      return str.includes(entryBase) || GITHUB_ENV_REF.test(str) || GITHUB_PATH_REF.test(str);
-    })) return false;
-    const segments = splitShellCommands(cmd);
-    let stepInvokesEntry = false;
-    for (let segIdx = 0; segIdx < segments.length; segIdx++) {
-      const seg = segments[segIdx];
-      if (GITHUB_PATH_REF.test(seg)) {
-        if (
-          actionDir === '.github/actions/setup-wasm-opt'
-          && seg.trim() === 'echo "$HOME/.cache/binaryen/bin" >> "$GITHUB_PATH"'
-          && !cmd.includes('node')
-        ) {
-          hasBinaryenPathWrite = true;
-        } else {
-          return false;
-        }
-      }
-      const words = tokenizeShellWordsWithExpansion(seg);
-      if (words.length === 0) continue;
-      let startIdx = 0;
-      while (startIdx < words.length) {
-        const val = words[startIdx].value;
-        if (SHELL_CONTROL_PREFIXES.has(val)) {
-          startIdx++;
-          continue;
-        }
-        const envAssign = val.match(/^([A-Za-z_]\w*)\+?=/);
-        if (envAssign) {
-          if (UNSAFE_EXEC_ENV.test(envAssign[1])) return false;
-          startIdx++;
-          continue;
-        }
-        break;
-      }
-      const cmdWords = words.slice(startIdx);
-      if (cmdWords.length === 0) continue;
-      const cmdName = cmdWords[0].value.split('/').pop();
-      if (OPAQUE_SHELL_COMMANDS.has(cmdName)) return false;
-      if (cmdName === 'node') {
-        if (cmdWords.length === 2 && SAFE_NODE_DIAGNOSTICS.has(cmdWords[1].value)) continue;
-        if (cmdWords.length < 2 || cmdWords[1].value.startsWith('-') || /[$`*?[{]/.test(cmdWords[1].value)) return false;
-      } else if (
-        cmdName !== 'echo'
-        && cmdName !== 'printf'
-        && cmdWords.some((w, idx) => idx > 0 && w.value.split('/').pop() === 'node')
-      ) {
-        return false;
-      }
-      const entryIdx = words.findIndex((w) => matchesEntryWord(w.value, workingDir));
-      if (entryIdx < 0) continue;
-      if (!isRepoRootWorkingDir(workingDir, root)) return false;
-      if (segIdx !== 0 || /`|\$\(/.test(seg) || GITHUB_ENV_REF.test(seg)) return false;
-      if (entryIdx !== 1 || words[0].raw !== 'node' || entryIdx + 1 >= words.length) return false;
-      const entryNorm = posix.normalize(words[entryIdx].value.replace(/^\/+/, ''));
-      if (entryNorm !== entryFile) return false;
-      stepInvokesEntry = true;
-      const rawArg = words[entryIdx + 1].raw;
-      if (rawArg === '${{ matrix.app }}' || rawArg === '"${{ matrix.app }}"' || rawArg === "'${{ matrix.app }}'") continue;
-      const varMatch = rawArg.match(/^(?:"\$(?:([A-Za-z_]\w*)|\{([A-Za-z_]\w*)\})"|\$(?:([A-Za-z_]\w*)|\{([A-Za-z_]\w*)\}))$/);
-      if (!varMatch || !ownEnv) return false;
-      const varName = varMatch[1] ?? varMatch[2] ?? varMatch[3] ?? varMatch[4];
-      if (!Object.hasOwn(ownEnv, varName) || String(ownEnv[varName]).trim() !== '${{ matrix.app }}') return false;
-    }
-    if (!stepInvokesEntry && GITHUB_ENV_REF.test(cmd)) return false;
-  }
-  if (hasBinaryenPathWrite && otherTouchesBinaryen) return false;
-  return true;
+  return valid && sawCall;
 }
 
 // Return AST ranges and owning app ids in `scripts/lib/e2e-test-data.mjs`
@@ -1102,7 +737,6 @@ function computeProvisionerOnlyRanges(ast) {
   const { bindings, exportedNames } = collectTopLevelBindings(ast);
   const provisionersObj = bindings.get('provisioners');
   if (provisionersObj?.type !== 'ObjectExpression') return { ok: false, entries: [] };
-  // Bail out if `provisioners` is re-exported under another name or as default.
   for (const stmt of ast.body ?? []) {
     if (stmt.type === 'ExportNamedDeclaration') {
       for (const spec of stmt.specifiers ?? []) {
@@ -1121,9 +755,16 @@ function computeProvisionerOnlyRanges(ast) {
       if (prop.type !== 'Property' || prop.computed) continue;
       const key = prop.key?.type === 'Identifier' ? prop.key.name : prop.key?.type === 'Literal' ? String(prop.key.value) : null;
       if (key === 'provision') {
-        if (prop.value?.type === 'FunctionExpression' || prop.value?.type === 'ArrowFunctionExpression') provisionFnApps.set(prop.value, appId);
-        else if (prop.value?.type === 'Identifier') provisionIdentApps.set(prop.value, appId);
-      } else if (key === 'cpu') {
+        if (isFunctionNode(prop.value) && Array.isArray(prop.value.range)) {
+          const apps = provisionFnApps.get(prop.value) ?? new Set();
+          apps.add(appId);
+          provisionFnApps.set(prop.value, apps);
+        } else if (prop.value?.type === 'Identifier') {
+          const apps = provisionIdentApps.get(prop.value.name) ?? new Set();
+          apps.add(appId);
+          provisionIdentApps.set(prop.value.name, apps);
+        }
+      } else if (key === 'cpu' && prop.value?.type === 'ObjectExpression') {
         recordProvisionProp(prop.value, appId);
       }
     }
@@ -1134,1367 +775,486 @@ function computeProvisionerOnlyRanges(ast) {
     if (!appId) return { ok: false, entries: [] };
     recordProvisionProp(prop.value, appId);
   }
+  const dispatchNode = bindings.get('provisionTestData');
+  const dispatchParam = isFunctionNode(dispatchNode) && dispatchNode.params?.[0]?.type === 'Identifier'
+    ? dispatchNode.params[0].name
+    : null;
+  if (!dispatchNode || !dispatchParam) return { ok: false, entries: [] };
+  let dispatchParamReassigned = false;
+  walkAstIdentifiers(dispatchNode, (idNode, ancestors) => {
+    if (idNode.name !== dispatchParam) return;
+    const parent = ancestors[ancestors.length - 1];
+    if (
+      (parent?.type === 'AssignmentExpression' && parent.left === idNode)
+      || (parent?.type === 'UpdateExpression' && parent.argument === idNode)
+    ) {
+      dispatchParamReassigned = true;
+    }
+  });
+  if (dispatchParamReassigned) return { ok: false, entries: [] };
+  const provisionFns = new Set(provisionFnApps.keys());
+  let provisionersUsedSafely = true;
+  walkAstIdentifiers(ast, (idNode, ancestors) => {
+    if (!provisionersUsedSafely || idNode.name !== 'provisioners') return;
+    const parent = ancestors[ancestors.length - 1];
+    if (parent?.type === 'VariableDeclarator' && parent.id === idNode) return;
+    if (parent?.type === 'ExportSpecifier' && (parent.local === idNode || parent.exported === idNode)) return;
+    const insideDispatch = ancestors.includes(dispatchNode);
+    const isIdentityLookup =
+      insideDispatch
+      && parent?.type === 'MemberExpression'
+      && parent.object === idNode
+      && parent.computed
+      && parent.property?.type === 'Identifier'
+      && parent.property.name === dispatchParam;
+    if (!isIdentityLookup) provisionersUsedSafely = false;
+  });
+  if (!provisionersUsedSafely) return { ok: false, entries: [] };
 
   const privateFns = new Map();
   for (const [name, node] of bindings) {
-    if (!exportedNames.has(name) && isFunctionNode(node)) privateFns.set(name, node);
+    if (!exportedNames.has(name) && isFunctionNode(node) && Array.isArray(node.range)) {
+      privateFns.set(name, node);
+    }
   }
-  const privateFnToName = new Map([...privateFns].map(([name, node]) => [node, name]));
-  const provisionTestDataFn = exportedNames.has('provisionTestData') && isFunctionNode(bindings.get('provisionTestData'))
-    ? bindings.get('provisionTestData')
-    : null;
-  const appParamName = provisionTestDataFn?.params?.[0]?.type === 'Identifier' ? provisionTestDataFn.params[0].name : null;
-  const nonProvisionerReferenced = new Set();
-  const privateFnDeps = new Map([...privateFns.keys()].map((name) => [name, new Set()]));
-  const privateFnApps = new Map([...privateFns.keys()].map((name) => [name, new Set()]));
-  let provisionersUsedAtStartup = false;
-
+  const outsideRefs = new Set();
+  const fnCallers = new Map([...privateFns.keys()].map((name) => [name, new Set()]));
+  const fnDirectApps = new Map([...privateFns.keys()].map((name) => [name, new Set(provisionIdentApps.get(name) ?? [])]));
+  const enclosingPrivate = (ancestors) => {
+    for (let i = ancestors.length - 1; i >= 0; i--) {
+      for (const [name, fnNode] of privateFns) {
+        if (ancestors[i] === fnNode) return name;
+      }
+    }
+    return null;
+  };
+  const enclosingProvisionApps = (ancestors) => {
+    for (let i = ancestors.length - 1; i >= 0; i--) {
+      if (provisionFns.has(ancestors[i])) return provisionFnApps.get(ancestors[i]);
+    }
+    return null;
+  };
   walkAstIdentifiers(ast, (idNode, ancestors) => {
-    if (idNode.name === 'provisionTestData') {
-      provisionersUsedAtStartup = true;
+    const name = idNode.name;
+    if (!privateFns.has(name)) return;
+    const fnNode = privateFns.get(name);
+    const parent = ancestors[ancestors.length - 1];
+    if (parent === fnNode && fnNode.id === idNode) return;
+    if (parent?.type === 'VariableDeclarator' && parent.id === idNode && parent.init === fnNode) return;
+    if (parent?.type === 'Property' && parent.value === idNode && !parent.computed && parent.key?.name === 'provision' && ancestors.includes(provisionersObj)) return;
+    const provApps = enclosingProvisionApps(ancestors);
+    if (provApps) {
+      for (const appId of provApps) fnDirectApps.get(name).add(appId);
       return;
     }
-    if (appParamName && idNode.name === appParamName && provisionTestDataFn && ancestors.includes(provisionTestDataFn)) {
-      const parent = ancestors[ancestors.length - 1];
-      if ((parent?.type === 'AssignmentExpression' && parent.left === idNode) || (parent?.type === 'UpdateExpression' && parent.argument === idNode)) {
-        provisionersUsedAtStartup = true;
-        return;
-      }
-    }
-    if (idNode.name === 'provisioners') {
-      const parent = ancestors[ancestors.length - 1];
-      const safeDispatchLookup = Boolean(
-        provisionTestDataFn
-        && appParamName
-        && ancestors.includes(provisionTestDataFn)
-        && parent?.type === 'MemberExpression'
-        && parent.object === idNode
-        && parent.computed
-        && parent.property?.type === 'Identifier'
-        && parent.property.name === appParamName,
-      );
-      if (!safeDispatchLookup) {
-        provisionersUsedAtStartup = true;
-        return;
-      }
+    const caller = enclosingPrivate(ancestors);
+    if (caller) {
+      if (caller !== name) fnCallers.get(name).add(caller);
       return;
     }
-    if (provisionIdentApps.has(idNode)) {
-      if (privateFnApps.has(idNode.name)) privateFnApps.get(idNode.name).add(provisionIdentApps.get(idNode));
-      return;
-    }
-    const enclosingProvision = ancestors.find((a) => provisionFnApps.has(a));
-    if (enclosingProvision) {
-      if (privateFnApps.has(idNode.name)) privateFnApps.get(idNode.name).add(provisionFnApps.get(enclosingProvision));
-      return;
-    }
-    const enclosingPrivate = ancestors.find((a) => privateFnToName.has(a));
-    if (enclosingPrivate) {
-      privateFnDeps.get(privateFnToName.get(enclosingPrivate)).add(idNode.name);
-      return;
-    }
-    nonProvisionerReferenced.add(idNode.name);
+    outsideRefs.add(name);
   });
-
-  if (provisionersUsedAtStartup) return { ok: false, entries: [] };
-
+  const reachableFromOutside = new Set(outsideRefs);
   for (let changed = true; changed;) {
     changed = false;
-    for (const name of [...nonProvisionerReferenced]) {
-      for (const dep of privateFnDeps.get(name) ?? []) {
-        if (!nonProvisionerReferenced.has(dep)) {
-          nonProvisionerReferenced.add(dep);
-          changed = true;
-        }
+    for (const [name, callers] of fnCallers) {
+      if (reachableFromOutside.has(name)) continue;
+      if ([...callers].some((caller) => reachableFromOutside.has(caller))) {
+        reachableFromOutside.add(name);
+        changed = true;
       }
     }
-    for (const [caller, apps] of privateFnApps) {
-      for (const dep of privateFnDeps.get(caller) ?? []) {
-        const depApps = privateFnApps.get(dep);
-        if (!depApps) continue;
-        for (const appId of apps) {
-          if (!depApps.has(appId)) {
-            depApps.add(appId);
+  }
+  const fnOwners = new Map([...privateFns.keys()].map((name) => [name, new Set(fnDirectApps.get(name))]));
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const [name, callers] of fnCallers) {
+      if (reachableFromOutside.has(name)) continue;
+      const owners = fnOwners.get(name);
+      for (const caller of callers) {
+        for (const appId of fnOwners.get(caller) ?? []) {
+          if (!owners.has(appId)) {
+            owners.add(appId);
             changed = true;
           }
         }
       }
     }
   }
-
-  const entries = [];
-  for (const [fn, appId] of provisionFnApps) {
-    if (Array.isArray(fn.range)) entries.push({ range: fn.range, apps: new Set([appId]) });
-  }
-  for (const [name, fn] of privateFns) {
-    if (!nonProvisionerReferenced.has(name) && Array.isArray(fn.range)) {
-      entries.push({ range: fn.range, apps: privateFnApps.get(name) ?? new Set() });
+  const entries = [...provisionFnApps].map(([fn, apps]) => ({ range: fn.range, apps }));
+  for (const [name, fnNode] of privateFns) {
+    if (!reachableFromOutside.has(name) && fnOwners.get(name).size > 0) {
+      entries.push({ range: fnNode.range, apps: fnOwners.get(name) });
     }
   }
   return { ok: true, entries };
 }
 
-// Return AST ranges of top-level functions in an imported root library module
-// that are unreachable from both module-load execution (excluding strict Node
-// ESM main-entry guards) and the set of export names actually imported.
-function computeUnreachableExportRanges(ast, importedNames, anyModuleMutatesArgv = false) {
-  if (!ast || !importedNames?.size) return [];
+// For a non-entry root library imported ONLY via named exports (such as
+// `scripts/desktop/scientific-evidence.mjs`), return ranges of top-level
+// functions and authenticated strict ESM main guards unreachable from those
+// imported exports.
+function computeUnreachableExportRanges(ast, importedNames, argvMutated = false) {
+  if (!ast || !importedNames || importedNames.size === 0) return [];
   const { bindings } = collectTopLevelBindings(ast);
-  const fnBindings = new Map([...bindings].filter(([, node]) => isFunctionNode(node)));
-  const fnNodeToName = new Map([...fnBindings].map(([name, node]) => [node, name]));
-  const reachable = new Set(importedNames);
-  for (const stmt of ast.body ?? []) {
-    if (stmt.type === 'ExportNamedDeclaration') {
-      for (const spec of stmt.specifiers ?? []) {
-        const exported = moduleExportName(spec.exported);
-        if (exported && spec.local?.name && importedNames.has(exported)) {
-          reachable.add(spec.local.name);
-        }
+  const bindingAuth = esmGuardBindingAuth(ast);
+  const safeMainGuard = !argvMutated && !astMayMutateProcessArgv(ast, true);
+  const topFns = new Map();
+  for (const [name, node] of bindings) {
+    if (isFunctionNode(node) && Array.isArray(node.range)) topFns.set(name, node);
+  }
+  const guardStmts = new Set();
+  const guardRanges = [];
+  if (safeMainGuard) {
+    for (const stmt of ast.body ?? []) {
+      if (isStrictEsmMainGuard(stmt, bindingAuth) && Array.isArray(stmt.consequent?.range)) {
+        guardStmts.add(stmt.consequent);
+        guardRanges.push(stmt.consequent.range);
       }
     }
   }
-  const fnDeps = new Map([...fnBindings.keys()].map((name) => [name, new Set()]));
-  const guardAuth = esmGuardImportAuth(ast, anyModuleMutatesArgv);
-
-  const isInStrictMainGuard = (ancestors, node) => {
-    for (let i = 0; i < ancestors.length; i += 1) {
-      const ancestor = ancestors[i];
-      if (isStrictEsmMainGuard(ancestor, guardAuth)) {
-        const next = i + 1 < ancestors.length ? ancestors[i + 1] : node;
-        if (next === ancestor.consequent) return true;
+  const reachable = new Set([...importedNames].filter((name) => topFns.has(name)));
+  const fnCallees = new Map([...topFns.keys()].map((name) => [name, new Set()]));
+  const enclosingTopFn = (ancestors) => {
+    for (let i = ancestors.length - 1; i >= 0; i--) {
+      for (const [name, fnNode] of topFns) {
+        if (ancestors[i] === fnNode) return name;
       }
     }
-    return false;
+    return null;
   };
-
   walkAstIdentifiers(ast, (idNode, ancestors) => {
-    const enclosingFn = ancestors.find((a) => fnNodeToName.has(a));
-    if (enclosingFn) {
-      fnDeps.get(fnNodeToName.get(enclosingFn)).add(idNode.name);
+    const name = idNode.name;
+    if (!topFns.has(name)) return;
+    const fnNode = topFns.get(name);
+    const parent = ancestors[ancestors.length - 1];
+    if (parent === fnNode && fnNode.id === idNode) return;
+    if (parent?.type === 'VariableDeclarator' && parent.id === idNode && parent.init === fnNode) return;
+    if (parent?.type === 'ExportSpecifier') return;
+    if (ancestors.some((a) => guardStmts.has(a))) return;
+    const caller = enclosingTopFn(ancestors);
+    if (caller) {
+      if (caller !== name) fnCallees.get(caller).add(name);
       return;
     }
-    if (isInStrictMainGuard(ancestors, idNode)) return;
-    reachable.add(idNode.name);
+    reachable.add(name);
   });
-
   for (let changed = true; changed;) {
     changed = false;
     for (const name of [...reachable]) {
-      for (const dep of fnDeps.get(name) ?? []) {
-        if (!reachable.has(dep)) {
-          reachable.add(dep);
+      for (const callee of fnCallees.get(name) ?? []) {
+        if (!reachable.has(callee)) {
+          reachable.add(callee);
           changed = true;
         }
       }
     }
   }
-
-  const ranges = [];
-  for (const [name, fn] of fnBindings) {
-    if (!reachable.has(name) && Array.isArray(fn.range)) ranges.push(fn.range);
+  const ranges = [...guardRanges];
+  for (const [name, fnNode] of topFns) {
+    if (!reachable.has(name)) ranges.push(fnNode.range);
   }
   return ranges;
 }
 
-// Collect string/template literal ranges, AST, and module specifiers in a script
-// so SCRIPT_REFERENCE can narrow exact files, externalImporterDeps covers all
-// import forms, and catalogShared narrows only proven provisioner-only refs.
-function analyzeScriptFile(text, file) {
-  let ast;
-  try {
-    ast = sourceParser.parse(text, { filePath: file, sourceType: 'module' });
-  } catch {
-    return null;
-  }
-  const referencedIdentifiers = new Set();
-  const readerArgIdentifiers = new Set();
-  const derivedIdentifiers = new Set();
-  const readerDepEdges = [];
-  const candidates = [];
-  const specifiers = [];
-  const ancestors = [];
-  const walk = (node) => {
-    if (!node || typeof node !== 'object') return;
-    if (Array.isArray(node)) {
-      for (const item of node) walk(item);
-      return;
-    }
-    if (node.type === 'ImportDeclaration' && node.source?.type === 'Literal' && typeof node.source.value === 'string') {
-      const namedOnly = node.specifiers.every((s) => s.type === 'ImportSpecifier');
-      specifiers.push({
-        value: node.source.value,
-        range: node.source.range ?? node.range ?? [0, 0],
-        kind: node.specifiers.length === 0 ? 'side-effect' : 'import',
-        namedImports: namedOnly ? node.specifiers.map((s) => moduleExportName(s.imported)).filter(Boolean) : null,
-        localBindings: namedOnly ? node.specifiers.map((s) => ({ imported: moduleExportName(s.imported), local: s.local?.name })).filter((b) => b.imported && b.local) : null,
-      });
-    } else if ((node.type === 'ExportNamedDeclaration' || node.type === 'ExportAllDeclaration') && node.source?.type === 'Literal' && typeof node.source.value === 'string') {
-      specifiers.push({
-        value: node.source.value,
-        range: node.source.range ?? node.range ?? [0, 0],
-        kind: 'export',
-        namedImports: null,
-      });
-    } else if (node.type === 'ImportExpression') {
-      const val = node.source?.type === 'Literal' && typeof node.source.value === 'string' ? node.source.value : null;
-      specifiers.push({
-        value: val,
-        range: node.source?.range ?? node.range ?? [0, 0],
-        kind: 'dynamic',
-        namedImports: null,
-      });
-    } else if (
-      node.type === 'CallExpression'
-      && node.arguments?.length > 0
-      && (
-        calleeNameOf(node) === 'require'
-        || (
-          node.callee?.type === 'MemberExpression'
-          && !node.callee.computed
-          && node.callee.property?.type === 'Identifier'
-          && node.callee.property.name === 'resolve'
-          && (
-            (node.callee.object?.type === 'Identifier' && node.callee.object.name === 'require')
-            || (node.callee.object?.type === 'MetaProperty' && node.callee.object.meta?.name === 'import' && node.callee.object.property?.name === 'meta')
-          )
-        )
-      )
-    ) {
-      const arg = node.arguments[0];
-      const val = arg?.type === 'Literal' && typeof arg.value === 'string' ? arg.value : null;
-      specifiers.push({
-        value: val,
-        range: arg?.range ?? node.range ?? [0, 0],
-        kind: 'require',
-        namedImports: null,
-      });
-    }
-    if (node.type === 'Identifier') {
-      const parent = ancestors[ancestors.length - 1];
-      const isDeclId = parent?.type === 'VariableDeclarator' && parent.id === node;
-      const isNonComputedProp =
-        (parent?.type === 'MemberExpression' && !parent.computed && parent.property === node) ||
-        (parent?.type === 'Property' && !parent.computed && parent.key === node);
-      if (!isDeclId && !isNonComputedProp) {
-        referencedIdentifiers.add(node.name);
-        if (
-          parent?.type === 'CallExpression' &&
-          Array.isArray(parent.arguments) &&
-          parent.arguments.includes(node) &&
-          (FILE_READER_CALLS.has(calleeNameOf(parent)) || PATH_JOIN_CALLS.has(calleeNameOf(parent)) || EXEC_ARRAY_CALLS.has(calleeNameOf(parent)))
-        ) {
-          readerArgIdentifiers.add(node.name);
-        }
-        classifyIdentifierUse(node, ancestors, derivedIdentifiers, readerDepEdges);
-      }
-    }
-    const isStringLiteral = node.type === 'Literal' && typeof node.value === 'string';
-    const isTemplate = node.type === 'TemplateLiteral';
-    if ((isStringLiteral || isTemplate) && Array.isArray(node.range)) {
-      candidates.push({ node, ancestors: [...ancestors] });
-    }
-    ancestors.push(node);
-    for (const key of Object.keys(node)) {
-      if (!AST_SKIP.has(key)) walk(node[key]);
-    }
-    ancestors.pop();
-  };
-  walk(ast);
-  for (let changed = true; changed;) {
-    changed = false;
-    for (const [src, dst] of readerDepEdges) {
-      if (derivedIdentifiers.has(dst) && !derivedIdentifiers.has(src)) {
-        derivedIdentifiers.add(src);
-        changed = true;
-      }
-    }
-  }
-  const literals = candidates.map(({ node, ancestors: chain }) => {
-    const isStringLiteral = node.type === 'Literal' && typeof node.value === 'string';
-    const isTemplate = node.type === 'TemplateLiteral';
-    const commentLine =
-      (isStringLiteral || (isTemplate && node.expressions.length === 0)) &&
-      chain[chain.length - 1]?.type === 'VariableDeclarator' &&
-      /(?:^|\n)[ \t]*\/\//.test(text.slice(node.range[0] + 1, node.range[1] - 1));
-    const classified = classifyPathLiteral(node, chain, referencedIdentifiers, readerArgIdentifiers, derivedIdentifiers);
-    return { start: node.range[0], end: node.range[1], standalone: classified.standalone || commentLine, derivedJson: classified.derivedJson };
-  });
-  return { ast, literals, specifiers };
+// ---------------------------------------------------------------------------
+// Strict fail-closed CI command, root-script, lint, and e2e allowlists
+// ---------------------------------------------------------------------------
+
+const INSTALL_HOOK_NAMES = new Set(['preinstall', 'install', 'postinstall', 'prepublish', 'preprepare', 'prepare', 'postprepare', 'pnpm:devPreinstall']);
+const PACK_HOOK_NAMES = new Set(['prepack', 'pack', 'postpack', 'preprepare', 'prepare', 'postprepare']);
+const PUBLISH_HOOK_NAMES = new Set(['prepublishOnly', 'prepack', 'prepare', 'postpack', 'publish', 'postpublish', 'preprepare', 'postprepare', 'prepublish']);
+const RESTART_HOOK_NAMES = new Set(['prestop', 'stop', 'poststop', 'prestart', 'start', 'poststart']);
+
+function rootManifestHasAnyLifecycleHook(rootScripts) {
+  if (!rootScripts) return false;
+  return Object.keys(rootScripts).some((name) => (
+    INSTALL_HOOK_NAMES.has(name)
+    || name.startsWith('pre')
+    || name.startsWith('post')
+  ));
 }
 
-// Whether a SCRIPT_REFERENCE file match ends at a real path boundary and, when
-// inside a JS string/template literal, spans a complete whitelisted literal.
-function matchScriptLiteral(text, match, literals) {
-  const start = match.index;
-  const end = match.index + match[0].length;
-  const after = text[end];
-  if (after && !/[\s'"`),;:\]}]/.test(after)) return { complete: false, derivedJson: true };
-  if (literals !== null) {
-    const litAtEnd = literals.find((lit) => lit.start < end && end <= lit.end);
-    if (litAtEnd) {
-      if (!litAtEnd.standalone) return { complete: false, derivedJson: true };
-      const tail = text.slice(end, litAtEnd.end - 1);
-      if (tail.length > 0 && !(tail === '\n' && text.slice(litAtEnd.start + 1, start).includes('//'))) return { complete: false, derivedJson: true };
-      const litAtStart = literals.find((lit) => lit.start <= start && start < lit.end);
-      if (litAtStart && litAtStart !== litAtEnd && !litAtStart.standalone) return { complete: false, derivedJson: true };
-      return { complete: true, derivedJson: litAtEnd.derivedJson };
-    }
-    return { complete: true, derivedJson: false };
-  }
-  const sepStart = start + match[1].length;
-  if (text[sepStart] !== '/') {
-    const secondQuote = match[0].slice(match[1].length + 1).match(/['"`]/)?.[0];
-    const complete = Boolean(secondQuote && after === secondQuote);
-    return { complete, derivedJson: true };
-  }
-  let i = start - 1;
-  while (i >= 0 && /[\w./-]/.test(text[i])) i--;
-  if (i >= 0 && (text[i] === "'" || text[i] === '"' || text[i] === '`') && (i === 0 || text[i - 1] !== '\\')) {
-    return { complete: after === text[i], derivedJson: true };
-  }
-  return { complete: true, derivedJson: true };
+function rootManifestHasHookFor(rootScripts, scriptName) {
+  if (!rootScripts || !scriptName) return false;
+  if (Object.hasOwn(rootScripts, `pre${scriptName}`) || Object.hasOwn(rootScripts, `post${scriptName}`)) return true;
+  if (scriptName === 'install' && [...INSTALL_HOOK_NAMES].some((h) => h !== 'install' && Object.hasOwn(rootScripts, h))) return true;
+  if (scriptName === 'pack' && [...PACK_HOOK_NAMES].some((h) => h !== 'pack' && Object.hasOwn(rootScripts, h))) return true;
+  if (scriptName === 'publish' && [...PUBLISH_HOOK_NAMES].some((h) => h !== 'publish' && Object.hasOwn(rootScripts, h))) return true;
+  if (scriptName === 'restart' && [...RESTART_HOOK_NAMES].some((h) => Object.hasOwn(rootScripts, h))) return true;
+  return false;
 }
 
-function resolveWorkspaceTarget(raw, baseDir, { root, nodeByPackageName, nodeSet }) {
-  if (nodeByPackageName.has(raw)) return nodeByPackageName.get(raw);
-  const unwrapped = raw.startsWith('{') && raw.endsWith('}') ? raw.slice(1, -1) : raw;
-  if (unwrapped.includes('$') || unwrapped.includes('*')) return null;
-  const normalized = unwrapped.replace(/^\.\//, '').replace(/\/+$/, '');
-  if (nodeSet.has(normalized)) return normalized;
-  const prefixNode = normalized.match(/^(?:apps|packages|exes)\/[^/]+/)?.[0];
-  if (prefixNode && nodeSet.has(prefixNode)) return prefixNode;
-  if (baseDir && !baseDir.includes('$')) {
-    const rel = relative(root, resolve(root, baseDir, unwrapped)).split(sep).join('/').replace(/\/+$/, '');
-    if (nodeSet.has(rel)) return rel;
-    const relPrefix = rel.match(/^(?:apps|packages|exes)\/[^/]+/)?.[0];
-    if (relPrefix && nodeSet.has(relPrefix)) return relPrefix;
-  }
-  return null;
+function isRepoRootWorkingDir(workingDir, root) {
+  if (!workingDir) return true;
+  const trimmed = typeof workingDir === 'string' ? workingDir.trim() : '';
+  if (!trimmed) return true;
+  if (/[$`*?[{]|\$\{\{/.test(trimmed)) return false;
+  if (!root) return trimmed === '.' || trimmed === './';
+  const rel = relative(root, resolve(root, trimmed)).split(sep).join('/').replace(/\/+$/, '');
+  return rel === '' || rel === '.';
 }
 
-const AMBIGUOUS_DIR = Symbol('ambiguous-dir');
-const AMBIGUOUS_LINT_EXEC = /\b(?:eval|xargs)\b|\b(?:ba|da|z|k)?sh\b[^\n]*-[a-zA-Z]*c\b|\$\(|`/;
-
-// Find the index of the `)` matching an opening `(` (such as `$(`),
-// respecting single/double quotes, backslash escapes, backticks, and nested `$(...)`.
-function findMatchingParen(text, openIndex) {
-  let depth = 1;
-  let quote = null;
-  let inBacktick = false;
-  let atWordStart = true;
-  for (let i = openIndex + 1; i < text.length; i++) {
-    const ch = text[i];
-    if (quote === "'") {
-      if (ch === "'") quote = null;
-      atWordStart = false;
-      continue;
-    }
-    if (ch === '\\') {
-      if (text[i + 1] === '\n') {
-        i++;
-        continue;
-      }
-      if (text[i + 1] === '\r' && text[i + 2] === '\n') {
-        i += 2;
-        continue;
-      }
-      i++;
-      atWordStart = false;
-      continue;
-    }
-    if (quote === '"') {
-      if (ch === '$' && text[i + 1] === '(') {
-        const close = findMatchingParen(text, i + 1);
-        if (close < 0) return -1;
-        i = close;
-        atWordStart = false;
-        continue;
-      }
-      if (ch === '"') quote = null;
-      atWordStart = false;
-      continue;
-    }
-    if (inBacktick) {
-      if (ch === '`') inBacktick = false;
-      atWordStart = false;
-      continue;
-    }
-    if (ch === '`') {
-      inBacktick = true;
-      atWordStart = false;
-      continue;
-    }
-    if (ch === "'" || ch === '"') {
-      quote = ch;
-      atWordStart = false;
-      continue;
-    }
-    if (ch === '#' && atWordStart) {
-      while (i < text.length && text[i] !== '\n') i++;
-      atWordStart = true;
-      continue;
-    }
-    if (ch === '(') {
-      depth++;
-      atWordStart = true;
-    } else if (ch === ')') {
-      depth--;
-      if (depth === 0) return i;
-      atWordStart = true;
-    } else {
-      atWordStart = /[\s;|&]/.test(ch);
-    }
-  }
-  return -1;
-}
-
-// Split a shell script into simple command tokens and subshell parens `(`, `)`,
-// respecting quotes, backslash escapes/continuations, comments, backticks, and `$(...)`.
-function splitShellCommands(script) {
-  const tokens = [];
-  let current = '';
-  let quote = null;
-  let inBacktick = false;
-  let atWordStart = true;
-  const flush = () => {
-    const trimmed = current.trim();
-    if (trimmed) tokens.push(trimmed);
-    current = '';
-    atWordStart = true;
-  };
-  for (let i = 0; i < script.length; i++) {
-    const ch = script[i];
-    const next = script[i + 1];
-    if (quote === "'") {
-      current += ch;
-      if (ch === "'") quote = null;
-      atWordStart = false;
-      continue;
-    }
-    if (ch === '\\') {
-      if (next === '\n') {
-        i++;
-        continue;
-      }
-      if (next === '\r' && script[i + 2] === '\n') {
-        i += 2;
-        continue;
-      }
-      if (next !== undefined) {
-        current += ch + next;
-        i++;
-        atWordStart = false;
-        continue;
-      }
-    }
-    if (quote === '"') {
-      if (ch === '$' && next === '(') {
-        const close = findMatchingParen(script, i + 1);
-        if (close >= 0) {
-          current += script.slice(i, close + 1);
-          i = close;
-          atWordStart = false;
-          continue;
-        }
-      }
-      current += ch;
-      if (ch === '"') quote = null;
-      atWordStart = false;
-      continue;
-    }
-    if (inBacktick) {
-      current += ch;
-      if (ch === '`') inBacktick = false;
-      atWordStart = false;
-      continue;
-    }
-    if (ch === '`') {
-      inBacktick = true;
-      current += ch;
-      atWordStart = false;
-      continue;
-    }
-    if (ch === "'" || ch === '"') {
-      quote = ch;
-      current += ch;
-      atWordStart = false;
-      continue;
-    }
-    if (ch === '#' && atWordStart) {
-      while (i < script.length && script[i] !== '\n') i++;
-      flush();
-      continue;
-    }
-    if (ch === '$' && next === '(') {
-      const close = findMatchingParen(script, i + 1);
-      if (close >= 0) {
-        current += script.slice(i, close + 1);
-        i = close;
-        atWordStart = false;
-        continue;
-      }
-      current += '$(';
-      i++;
-      atWordStart = false;
-      continue;
-    }
-    if (ch === '\n' || ch === ';') {
-      flush();
-      continue;
-    }
-    if ((ch === '&' && next === '&') || (ch === '|' && next === '|')) {
-      flush();
-      i++;
-      continue;
-    }
-    if (ch === '&' || ch === '|') {
-      flush();
-      continue;
-    }
-    if (ch === '(' || ch === ')') {
-      flush();
-      tokens.push(ch);
-      continue;
-    }
-    current += ch;
-    atWordStart = /\s/.test(ch);
-  }
-  flush();
-  return tokens;
-}
-
-// Workspace nodes whose `lint` script may be executed by any cross-workspace
-// lint invocation (`pnpm --filter <pkg> lint`, `--filter=<pkg>`, `-r lint`,
-// `--dir`, a CI step's `working-directory`, or `cd <dir> && pnpm lint`).
-function lintTargetsInCommands(commands, context) {
-  const { root, manifests } = context;
-  const targets = new Set();
-  const allLintNodes = () => [...manifests.entries()].filter(([, manifest]) => typeof manifest?.scripts?.lint === 'string').map(([node]) => node);
-  const addAll = () => {
-    for (const node of allLintNodes()) targets.add(node);
-  };
-  for (const entry of commands) {
-    const rawCmd = typeof entry === 'string' ? entry : entry.cmd;
-    const workingDir = typeof entry === 'string' ? null : entry.workingDir ?? null;
-    const baseDir = typeof entry === 'string' ? '.' : entry.baseDir ?? workingDir ?? '.';
-    const stepEnv = typeof entry === 'string' ? null : entry.env ?? null;
-    if (INDEPENDENT_LINT_SCRIPT.test(rawCmd.trim())) continue;
-    if (!/\blint\b/.test(rawCmd) && !/[$`*]|\$\{\{/.test(rawCmd)) continue;
-    const trimmedWorkingDir = typeof workingDir === 'string' ? workingDir.trim() : '';
-    const workingDirIsUncertain = Boolean(trimmedWorkingDir) && isUncertainCdTarget(trimmedWorkingDir);
-    const resolvedWorkingDir = trimmedWorkingDir && !workingDirIsUncertain
-      ? (relative(root, resolve(root, trimmedWorkingDir)).split(sep).join('/').replace(/\/+$/, '') || '.')
-      : '';
-    const nonRootWorkingDir = workingDirIsUncertain || Boolean(resolvedWorkingDir && resolvedWorkingDir !== '.');
-    // Possible directories tracked conservatively across segments: `cwdDirs`
-    // keeps `.` and all reached directories so returning to the repository root
-    // (`cd ../..`) resolves subsequent relative `cd` calls; `activeDirs` tracks
-    // non-root directories entered via `working-directory` or `cd`.
-    const initialWorkingDir = workingDirIsUncertain ? AMBIGUOUS_DIR : resolvedWorkingDir;
-    let cwdDirs = new Set([nonRootWorkingDir ? initialWorkingDir : baseDir]);
-    let activeDirs = new Set(nonRootWorkingDir ? [initialWorkingDir] : []);
-    const dirStack = [];
-    for (const token of splitShellCommands(rawCmd)) {
-      if (token === '(') {
-        dirStack.push({ cwd: new Set(cwdDirs), active: new Set(activeDirs) });
-        continue;
-      }
-      if (token === ')') {
-        if (dirStack.length > 0) {
-          const prev = dirStack.pop();
-          cwdDirs = prev.cwd;
-          activeDirs = prev.active;
-        }
-        continue;
-      }
-      if (/\bpopd\b/.test(token)) {
-        cwdDirs = new Set([...cwdDirs, AMBIGUOUS_DIR]);
-        activeDirs = new Set([...activeDirs, AMBIGUOUS_DIR]);
-      }
-      const cdMatches = extractCdTargets(token);
-      if (cdMatches.length > 0) {
-        const nextCwd = new Set(cwdDirs);
-        const nextActive = new Set(activeDirs);
-        for (const dir of cdMatches) {
-          for (const from of cwdDirs) {
-            if (from === AMBIGUOUS_DIR || isUncertainCdTarget(dir)) {
-              nextCwd.add(AMBIGUOUS_DIR);
-              nextActive.add(AMBIGUOUS_DIR);
-            } else {
-              const rel = relative(root, resolve(root, from, dir)).split(sep).join('/').replace(/\/+$/, '') || '.';
-              if (!rel.startsWith('..')) nextCwd.add(rel);
-              if (rel !== '.' && !rel.startsWith('..')) nextActive.add(rel);
-            }
-          }
-        }
-        cwdDirs = nextCwd;
-        activeDirs = nextActive;
-      }
-      const hasLiteralLint = /\blint\b/.test(token);
-      if (!hasLiteralLint && !/[$`*]|\$\{\{/.test(token)) continue;
-      if (hasLiteralLint && AMBIGUOUS_LINT_EXEC.test(token)) {
-        addAll();
-        continue;
-      }
-      const parsed = parseLintCommandFlags(token, { stepEnv, rawCmd, releaseTestScripts: context.releaseTestScripts });
-      if (!hasLiteralLint && !parsed.hasLintScript) {
-        const words = tokenizeShellWords(token);
-        if (
-          (words[0] === 'eval' && words.slice(1).some((w) => /[$`*]|\$\{\{/.test(w)))
-          || (SHELL_BIN.test(words[0] ?? '') && words.includes('-c') && words.slice(words.indexOf('-c') + 1).some((w) => /[$`*]|\$\{\{/.test(w)))
-        ) {
-          addAll();
-        }
-        continue;
-      }
-      if (!parsed.hasRunner) continue;
-      if (!parsed.hasCrossFlag && activeDirs.size === 0) continue;
-      if (parsed.hasRootFlag && !parsed.hasWorkspaceSelector) continue;
-      if (!parsed.recursive && parsed.filters.length > 0) {
-        let allResolved = true;
-        const resolveBases = new Set([...(baseDir !== '.' ? [baseDir] : []), ...(activeDirs.size > 0 ? activeDirs : cwdDirs)]);
-        for (const { target: filter, isFilter } of parsed.filters) {
-          const isExactRootName =
-            isFilter &&
-            Boolean(context.rootPackageName) &&
-            filter === context.rootPackageName;
-          if (isExactRootName) continue;
-          const unwrapped = filter.startsWith('{') && filter.endsWith('}') ? filter.slice(1, -1) : filter;
-          const hasGraphOrGlob = filter.includes('*') || /^\.{2,3}\^?|\^?\.{2,3}$/.test(filter);
-          let resolvedAny = false;
-          for (const from of resolveBases) {
-            if (from === AMBIGUOUS_DIR) {
-              allResolved = false;
-              continue;
-            }
-            const workspaceNode = filter ? resolveWorkspaceTarget(filter, from, context) : null;
-            if (workspaceNode) {
-              targets.add(workspaceNode);
-              resolvedAny = true;
-            } else if (filter && !hasGraphOrGlob && !isUncertainCdTarget(unwrapped)) {
-              const rel = relative(root, resolve(root, from, unwrapped)).split(sep).join('/').replace(/\/+$/, '');
-              if (!rel || rel === '.') resolvedAny = true;
-              else allResolved = false;
-            } else {
-              allResolved = false;
-            }
-          }
-          if (!resolvedAny) allResolved = false;
-        }
-        if (!allResolved) addAll();
-      } else if (!parsed.hasCrossFlag && activeDirs.size > 0) {
-        let allResolved = true;
-        for (const dir of activeDirs) {
-          if (dir === AMBIGUOUS_DIR) {
-            allResolved = false;
-            continue;
-          }
-          const workspaceNode = resolveWorkspaceTarget(dir, '.', context);
-          if (workspaceNode) targets.add(workspaceNode);
-          else allResolved = false;
-        }
-        if (!allResolved) addAll();
-      } else {
-        addAll();
-      }
-    }
-  }
-  return targets;
-}
-
-const PNPM_VALUE_OPTIONS = new Set([
-  '--reporter', '--loglevel', '--config', '--store-dir', '--virtual-store-dir', '--modules-dir',
-  '--color', '--workspace-concurrency', '--network-concurrency', '--fetch-retries',
-  '--child-concurrency', '--filter', '--filter-prod', '-F', '--dir', '-C', '--prefix', '--cwd',
-  '--stream-prefix', '--test-pattern', '--changed-files-ignore-pattern',
+// Strict allowlist for non-root `pnpm --filter ...` workspace invocations so
+// `namedByCommands` ignores workspace scripts cleanly and fails closed on
+// anything else (root filters, `--filter-prod`, `-w`, `--dir`, `npm`, `yarn`,
+// `recursive`, dynamic root scripts, or lifecycle hooks).
+const ALLOWED_FILTER_TARGET = /^(?:@[\w.-]+\/[\w.-]+|'!(?:@[\w.-]+\/)?[\w.-]+'|'\.\/(?:packages|apps|exes)\/\*'|"\$APP"|\$\{\{\s*matrix\.app\s*\}\}|[A-Za-z0-9][\w.-]*)$/;
+const ALLOWED_FILTERED_PNPM = /\bpnpm((?:\s+--filter\s+(?:'[^']+'|"[^"]+"|\$\{\{\s*matrix\.app\s*\}\}|\S+))+)\s+(?:(run)\s+)?(?:"(\$[A-Za-z_]\w*)"|([\w:.-]+))(?=\s|$|[;&|])/g;
+const SIMPLE_ROOT_PNPM = /\bpnpm(?:\s+(?:run))?\s+([\w:-]+)(?=\s|$|[;&|])/g;
+const PNPM_INSTALL_WORD = new Set(['install', 'i', 'ci', 'add', 'install-test', 'it', 'install-clean', 'ic', 'clean-install', 'rebuild', 'rb', 'up', 'update', 'remove', 'rm', 'uninstall', 'un', 'pack', 'publish']);
+const PNPM_DISALLOWED_SUBCOMMAND = new Set(['run', 'exec', 'dlx', 'create', 'recursive', 'multi', 'm']);
+const PINNED_LINT_FREE_ACTIONS = new Set([
+  '.github/actions/composite-site',
+  '.github/actions/setup-playwright',
+  '.github/actions/setup-wasm-opt',
+  '.github/actions/setup-wasm-pack',
 ]);
 
-function tokenizeShellWords(segment) {
-  const words = [];
-  let current = '';
-  let quote = null;
-  let hasToken = false;
-  for (let i = 0; i < segment.length; i++) {
-    const ch = segment[i];
-    const next = segment[i + 1];
-    if (quote === "'") {
-      if (ch === "'") quote = null;
-      else current += ch;
-      hasToken = true;
-      continue;
+function isNonRootFilterGroup(filterChunk, rootPackageName, ownEnv = null) {
+  const matches = [...filterChunk.matchAll(/--filter\s+('[^']+'|"[^"]+"|\$\{\{\s*matrix\.app\s*\}\}|\S+)/g)];
+  if (matches.length === 0) return false;
+  return matches.every(([, raw]) => {
+    if (!ALLOWED_FILTER_TARGET.test(raw)) return false;
+    if (raw === '"$APP"') {
+      return Boolean(ownEnv && Object.hasOwn(ownEnv, 'APP') && String(ownEnv.APP).trim() === '${{ matrix.app }}');
     }
-    if (ch === '\\' && next !== undefined) {
-      if (next === '\n') {
-        i++;
-        continue;
-      }
-      if (next === '\r' && segment[i + 2] === '\n') {
-        i += 2;
-        continue;
-      }
-      current += next;
-      hasToken = true;
-      i++;
-      continue;
-    }
-    if (quote !== "'" && segment.startsWith('${{', i)) {
-      const close = segment.indexOf('}}', i + 3);
-      if (close !== -1) {
-        current += segment.slice(i, close + 2);
-        hasToken = true;
-        i = close + 1;
-        continue;
-      }
-    }
-    if (quote === '"') {
-      if (ch === '"') quote = null;
-      else current += ch;
-      hasToken = true;
-      continue;
-    }
-    if (ch === "'" || ch === '"') {
-      quote = ch;
-      hasToken = true;
-      continue;
-    }
-    if (/\s/.test(ch)) {
-      if (hasToken) {
-        words.push(current);
-        current = '';
-        hasToken = false;
-      }
-      continue;
-    }
-    current += ch;
-    hasToken = true;
+    const unquoted = raw.replace(/^['"]|['"]$/g, '');
+    if (unquoted === '.' || unquoted === './' || unquoted === '..' || unquoted === rootPackageName) return false;
+    return true;
+  });
+}
+
+function analyzeCommandRootScripts(step, { root, rootPackageName, rootScripts, releaseTestScripts }) {
+  const cmd = step.cmd ?? '';
+  if (step.opaqueAction) return { scripts: [], failedClosed: true, mayInvokeLint: true };
+  if (!(step.actionDir && PINNED_LINT_FREE_ACTIONS.has(step.actionDir)) && /\b(?:sh|bash|dash|zsh|eval|exec|source)\b/.test(cmd)) {
+    return { scripts: [], failedClosed: true, mayInvokeLint: true };
   }
-  if (hasToken) words.push(current);
-  return words;
-}
-
-const SHELL_BIN = /^(?:\/[\w/.-]*\/)?(?:ba|da|z|k)?sh$/;
-const PNPM_BIN = /(?:^|\/)pnpm(?:\.(?:cjs|mjs|js|cmd|exe))?$/;
-const NPM_BIN = /(?:^|\/)npm(?:\.(?:cjs|mjs|js|cmd|exe))?$/;
-const YARN_BIN = /(?:^|\/)yarn(?:\.(?:cjs|mjs|js|cmd|exe))?$/;
-
-function resolveSingleCommandEnvVar(word, rawCmd, stepEnv) {
-  if (!stepEnv) return null;
-  const varMatch = word.match(/^\$(?:([A-Za-z_]\w*)|\{([A-Za-z_]\w*)\})$/);
-  if (!varMatch) return null;
-  if (splitShellCommands(rawCmd).length !== 1 || /`|\$\(/.test(rawCmd)) return null;
-  const varName = varMatch[1] ?? varMatch[2];
-  const reassigned = new RegExp(String.raw`(?:^|[\s;&|()])(?:(?:export|declare|local|typeset|readonly)\s+(?:-[A-Za-z]+\s+)*)?${varName}\+?=`).test(rawCmd);
-  if (reassigned || !Object.hasOwn(stepEnv, varName)) return null;
-  return String(stepEnv[varName]).trim();
-}
-
-function scriptMayInvokeLint(scriptWord, { stepEnv = null, rawCmd = '', releaseTestScripts = null } = {}) {
-  if (!scriptWord) return false;
-  if (scriptWord === 'lint') return true;
-  if (!/[$`*]/.test(scriptWord) && !scriptWord.includes('${{')) return false;
-  const val = resolveSingleCommandEnvVar(scriptWord, rawCmd, stepEnv);
-  if (val !== null) {
-    if (val === '${{ matrix.release_test }}') {
-      return !releaseTestScripts || releaseTestScripts.has('lint');
+  let failedClosed = false;
+  let mayInvokeLint = /\blint\b/i.test(cmd);
+  const scripts = [];
+  if (/\b(?:npm|yarn)\b/.test(cmd)) {
+    return { scripts: [], failedClosed: true, mayInvokeLint: true };
+  }
+  const stripped = cmd.replace(ALLOWED_FILTERED_PNPM, (full, filterChunk, _runKw, dynScript, litScript) => {
+    if (!isNonRootFilterGroup(filterChunk, rootPackageName, step.ownEnv)) return full;
+    if (litScript && (PNPM_INSTALL_WORD.has(litScript) || PNPM_DISALLOWED_SUBCOMMAND.has(litScript))) return full;
+    if (dynScript) {
+      // Allow only `pnpm --filter "$APP" run "$TEST_SCRIPT"` when ownEnv binds
+      // TEST_SCRIPT to `${{ matrix.release_test }}` and releaseTestScripts is lint-free.
+      const boundReleaseTest = Boolean(
+        step.ownEnv
+        && Object.hasOwn(step.ownEnv, 'TEST_SCRIPT')
+        && String(step.ownEnv.TEST_SCRIPT).trim() === '${{ matrix.release_test }}',
+      );
+      if (dynScript !== '$TEST_SCRIPT' || !boundReleaseTest || !releaseTestScripts || releaseTestScripts.has('lint')) {
+        mayInvokeLint = true;
+      }
+      return '';
     }
-    if (!/[$`*]/.test(val) && !val.includes('${{')) {
-      return val === 'lint';
+    if (litScript === 'lint') mayInvokeLint = true;
+    return '';
+  });
+  const atRoot = isRepoRootWorkingDir(step.workingDir, root);
+  if (/\bpnpm\b/.test(stripped)) {
+    const remaining = stripped.replace(SIMPLE_ROOT_PNPM, (full, scriptName) => {
+      if (!atRoot || scriptName.startsWith('-') || PNPM_DISALLOWED_SUBCOMMAND.has(scriptName)) {
+        failedClosed = true;
+        return full;
+      }
+      const canonical = (scriptName === 'i' || scriptName === 'ci') ? 'install' : scriptName;
+      scripts.push(canonical);
+      if (rootManifestHasHookFor(rootScripts, canonical)) failedClosed = true;
+      return '';
+    });
+    if (/\bpnpm\b/.test(remaining)) failedClosed = true;
+  }
+  if (failedClosed) mayInvokeLint = true;
+  return { scripts, failedClosed, mayInvokeLint };
+}
+
+function namedByCommands(steps, rootScripts, { root = null, rootPackageName = null, releaseTestScripts = null } = {}) {
+  const named = new Set();
+  const expanded = new Set();
+  const expandedCmds = [];
+  const pending = [...steps];
+  const visited = new Set();
+  let failedClosed = false;
+  let mayInvokeLint = false;
+  while (pending.length) {
+    const current = pending.pop();
+    expandedCmds.push(current);
+    for (const match of current.cmd.matchAll(ROOT_NAMED)) if (match[1]) named.add(match[1]);
+    for (const [, rootFile] of current.cmd.matchAll(ROOT_PATH)) named.add(rootFile);
+    const info = analyzeCommandRootScripts(current, { root, rootPackageName, rootScripts, releaseTestScripts });
+    if (info.mayInvokeLint) mayInvokeLint = true;
+    if (info.failedClosed) {
+      failedClosed = true;
+      expanded.add(ANY_ROOT_SCRIPT);
+      for (const key of Object.keys(rootScripts ?? {})) {
+        if (!visited.has(key)) {
+          visited.add(key);
+          expanded.add(key);
+          pending.push({ cmd: String(rootScripts[key]), workingDir: null, shell: null, env: current.env ?? null, ownEnv: null, actionDir: null });
+        }
+      }
+      continue;
+    }
+    for (const script of info.scripts) {
+      expanded.add(script);
+      if (!visited.has(script)) {
+        visited.add(script);
+        if (rootScripts && Object.hasOwn(rootScripts, script)) {
+          pending.push({ cmd: String(rootScripts[script]), workingDir: null, shell: null, env: current.env ?? null, ownEnv: null, actionDir: null });
+        }
+      }
+    }
+  }
+  return { named, expanded, expandedCmds, failedClosed, mayInvokeLint };
+}
+
+// Strict fail-closed allowlist for `CATALOG_JOBS` to permit narrowing
+// `scripts/lib/e2e-test-data.mjs` per app. Anything outside these exact shapes
+// returns false, causing `e2eProvisionersNarrowable = false` (full catalog + heavy tests).
+const ALLOWED_CATALOG_ENV_KEY = /^(?:APP|CPU_ONLY|TEST_SCRIPT|QSMBLY_REQUIRE_WASM|ONNXRUNTIME_NODE_INSTALL|PW_TEST_REPORTER|BROWSERS|WITH_DEPS|VERSION|PLATFORM|SHA256|NEURODESK_[A-Z0-9_]+)$/;
+const FORBIDDEN_ENV_OR_CMD_REF = /GITHUB_ENV|GITHUB_PATH|\bgithub\s*(?:\.\s*(?:env|path)\b|\[\s*['"](?:env|path)['"]\s*\])|::(?:add-path|set-env)::/i;
+const CANONICAL_E2E_PROVISION_CMD = /^node (?:\.\/)?scripts\/e2e-test-data\.mjs (?:"\$([A-Za-z_]\w*)"|\$\{\{\s*matrix\.app\s*\}\})(?: [~./\w${}-]+)*(?: \| tee -a "\$GITHUB_ENV")?$/;
+const ALLOWED_CATALOG_NON_PROVISION_CMDS = [
+  /^rustup toolchain install [A-Za-z0-9._/@ -]+$/,
+  /^pnpm install --frozen-lockfile$/,
+  /^pip install [A-Za-z0-9._/@${} -]+$/,
+  /^pnpm --filter (?:[A-Za-z0-9._/@-]+|"\$[A-Za-z_]\w*"|\$\{\{\s*matrix\.app\s*\}\}) (?:run (?:"\$[A-Za-z_]\w*"|[A-Za-z0-9:._-]+)|[A-Za-z0-9:._-]+)(?: -- [A-Za-z0-9._/@-]+)?$/,
+  /^node scripts\/probe-hardware-gpu\.mjs$/,
+  /^node (?:--version|-v)$/,
+  /^echo [A-Za-z0-9 ._:/'"-]+$/,
+];
+const ALLOWED_CATALOG_LOCAL_ACTIONS = new Set([
+  '.github/actions/setup-wasm-pack',
+  '.github/actions/setup-wasm-opt',
+  '.github/actions/setup-playwright',
+]);
+const ALLOWED_CATALOG_USES = /^(?:actions\/(?:checkout|setup-node|setup-python|cache|upload-artifact)|pnpm\/action-setup|dtolnay\/rust-toolchain)@[\w.-]+$/;
+const BINARYEN_PATH_LINE = 'echo "$HOME/.cache/binaryen/bin" >> "$GITHUB_PATH"';
+
+function isAllowedCatalogCompositeStep(step) {
+  if (!ALLOWED_CATALOG_LOCAL_ACTIONS.has(step.actionDir)) return false;
+  const cmd = step.cmd.trim();
+  if (!cmd) return true;
+  if (/e2e-test-data/i.test(cmd) || /::(?:add-path|set-env)::/i.test(cmd)) return false;
+  if (/GITHUB_ENV|\bgithub\s*(?:\.\s*(?:env|path)\b|\[\s*['"](?:env|path)['"]\s*\])/i.test(cmd)) return false;
+  if (/GITHUB_PATH/i.test(cmd)) {
+    if (step.actionDir !== '.github/actions/setup-wasm-opt' || /\bnode\b/.test(cmd)) return false;
+    const pathLines = cmd.split('\n').map((l) => l.trim()).filter((l) => /GITHUB_PATH/i.test(l));
+    if (pathLines.length !== 1 || pathLines[0] !== BINARYEN_PATH_LINE) return false;
+  }
+  // Only setup-playwright invokes `node`, and strictly on Playwright's own CLI.
+  if (/\bnode\b/.test(cmd)) {
+    if (step.actionDir !== '.github/actions/setup-playwright') return false;
+    const nodeLines = cmd.split('\n').map((l) => l.trim()).filter((l) => /\bnode\b/.test(l));
+    if (!nodeLines.every((l) => /^if node node_modules\/@playwright\/test\/cli\.js "\$\{args\[@\]\}"; then$/.test(l))) {
+      return false;
     }
   }
   return true;
 }
 
-const NPM_COMMANDS = [
-  'access', 'adduser', 'approve-scripts', 'audit', 'bugs', 'cache', 'ci', 'completion',
-  'config', 'dedupe', 'deny-scripts', 'deprecate', 'diff', 'dist-tag', 'docs', 'doctor',
-  'edit', 'exec', 'explain', 'explore', 'find-dupes', 'fund', 'get', 'help', 'help-search',
-  'init', 'install', 'install-ci-test', 'install-test', 'link', 'll', 'login', 'logout',
-  'ls', 'org', 'outdated', 'owner', 'pack', 'ping', 'pkg', 'prefix', 'profile', 'prune',
-  'publish', 'query', 'rebuild', 'repo', 'restart', 'root', 'run', 'sbom', 'search', 'set',
-  'shrinkwrap', 'stage', 'star', 'stars', 'start', 'stop', 'team', 'test', 'token', 'trust',
-  'undeprecate', 'uninstall', 'unpublish', 'unstar', 'update', 'version', 'view', 'whoami',
-];
-const NPM_ALIASES = {
-  author: 'owner', home: 'docs', issues: 'bugs', info: 'view', show: 'view', find: 'search',
-  add: 'install', unlink: 'uninstall', remove: 'uninstall', rm: 'uninstall', r: 'uninstall',
-  un: 'uninstall', rb: 'rebuild', list: 'ls', ln: 'link', create: 'init', i: 'install',
-  it: 'install-test', cit: 'install-ci-test', u: 'update', up: 'update', c: 'config',
-  s: 'search', se: 'search', tst: 'test', t: 'test', ddp: 'dedupe', v: 'view',
-  'run-script': 'run', 'clean-install': 'ci', 'clean-install-test': 'install-ci-test',
-  x: 'exec', why: 'explain', la: 'll', verison: 'version', ic: 'ci', innit: 'init',
-  in: 'install', ins: 'install', inst: 'install', insta: 'install', instal: 'install',
-  isnt: 'install', isnta: 'install', isntal: 'install', isntall: 'install',
-  'install-clean': 'ci', 'isntall-clean': 'ci', hlep: 'help', 'dist-tags': 'dist-tag',
-  upgrade: 'update', udpate: 'update', rum: 'run', sit: 'install-ci-test', urn: 'run',
-  ogr: 'org', 'add-user': 'adduser',
-};
-const NPM_COMMAND_SET = new Set(NPM_COMMANDS);
-const NPM_ALL_NAMES = [...NPM_COMMANDS, ...Object.keys(NPM_ALIASES)];
-const PNPM_INSTALL_COMMANDS = new Set(['install', 'i', 'ci', 'install-test', 'it', 'add']);
-const INSTALL_LIFECYCLE_HOOKS = ['preinstall', 'install', 'postinstall', 'prepublish', 'preprepare', 'prepare', 'postprepare', 'pnpm:devPreinstall'];
-const PACK_LIFECYCLE_HOOKS = ['prepack', 'pack', 'postpack', 'preprepare', 'prepare', 'postprepare'];
-const PUBLISH_LIFECYCLE_HOOKS = ['prepublishOnly', 'prepack', 'prepare', 'postpack', 'publish', 'postpublish', 'preprepare', 'postprepare', 'prepublish'];
-
-function derefNpmCommand(raw) {
-  if (!raw) return raw;
-  const normalized = /[A-Z]/.test(raw) ? raw.replace(/([A-Z])/g, (m) => `-${m.toLowerCase()}`) : raw;
-  if (NPM_COMMAND_SET.has(normalized)) return normalized;
-  if (Object.hasOwn(NPM_ALIASES, normalized)) return NPM_ALIASES[normalized];
-  const matches = NPM_ALL_NAMES.filter((name) => name.startsWith(normalized));
-  if (matches.length !== 1) return raw;
-  let resolved = matches[0];
-  while (Object.hasOwn(NPM_ALIASES, resolved)) resolved = NPM_ALIASES[resolved];
-  return resolved;
-}
-
-// Parse package-manager flags in one shell command segment, attributing `-w`
-// and workspace/directory selectors to the specific `pnpm`, `npm`, or `yarn`
-// invocation that receives them (so e.g. `pnpm exec npm -w @nd/n4 run lint`
-// treats `-w` as npm's `--workspace` rather than pnpm's `--workspace-root`).
-function parseLintCommandFlags(token, scriptOpts = {}) {
-  const words = tokenizeShellWords(token);
-  let hasRunner = false;
-  let hasRootFlag = false;
-  let hasCrossFlag = false;
-  let hasWorkspaceSelector = false;
-  let hasLintScript = false;
-  let recursive = false;
-  const filters = [];
-  for (let i = 0; i < words.length; i++) {
-    const kind = PNPM_BIN.test(words[i]) ? 'pnpm' : NPM_BIN.test(words[i]) ? 'npm' : YARN_BIN.test(words[i]) ? 'yarn' : null;
-    if (!kind) continue;
-    hasRunner = true;
-    let runnerRootFlag = false;
-    let seenRun = false;
-    let runnerScriptWord = null;
-    const runnerDirFilters = [];
-    for (i++; i < words.length; i++) {
-      const word = words[i];
-      if (word === '--') break;
-      if (kind === 'pnpm' && (word === 'exec' || word === 'dlx')) break;
-      if (kind === 'npm' && word === 'exec') break;
-      if (kind === 'yarn' && (word === 'exec' || word === 'dlx')) break;
-      if (kind === 'pnpm' && (word === 'recursive' || word === 'multi' || word === 'm')) {
-        recursive = true;
-        hasCrossFlag = true;
-        hasWorkspaceSelector = true;
-        continue;
-      }
-      if (kind === 'yarn' && word === 'workspaces') {
-        recursive = true;
-        hasCrossFlag = true;
-        hasWorkspaceSelector = true;
-        continue;
-      }
-      if (kind === 'yarn' && word === 'workspace' && i + 1 < words.length) {
-        hasCrossFlag = true;
-        hasWorkspaceSelector = true;
-        filters.push({ target: words[++i], isFilter: true });
-        continue;
-      }
-      if (word === '--workspace-root' || (kind === 'pnpm' && word === '-w')) {
-        runnerRootFlag = true;
-        hasRootFlag = true;
-        hasCrossFlag = true;
-        continue;
-      }
-      if (word === '-r' || word === '--recursive' || word === '-ws' || word === '--workspaces') {
-        recursive = true;
-        hasCrossFlag = true;
-        hasWorkspaceSelector = true;
-        continue;
-      }
-      if (
-        word === '--filter' || word === '--filter-prod' || word === '-F' ||
-        word.startsWith('--filter=') || word.startsWith('--filter-prod=') || word.startsWith('-F=')
-      ) {
-        const target = word.includes('=') ? word.slice(word.indexOf('=') + 1) : words[++i];
-        hasCrossFlag = true;
-        hasWorkspaceSelector = true;
-        filters.push({ target: target ?? '', isFilter: true });
-        continue;
-      }
-      if (
-        word === '--workspace' || word.startsWith('--workspace=') ||
-        (kind === 'npm' && (word === '-w' || word.startsWith('-w=')))
-      ) {
-        const target = word.includes('=') ? word.slice(word.indexOf('=') + 1) : words[++i];
-        hasCrossFlag = true;
-        hasWorkspaceSelector = true;
-        filters.push({ target: target ?? '', isFilter: true });
-        continue;
-      }
-      if (
-        word === '--dir' || word === '-C' || word === '--prefix' || word === '--cwd' ||
-        word.startsWith('--dir=') || word.startsWith('-C=') || word.startsWith('--prefix=') || word.startsWith('--cwd=')
-      ) {
-        const target = word.includes('=') ? word.slice(word.indexOf('=') + 1) : words[++i];
-        hasCrossFlag = true;
-        runnerDirFilters.push({ target: target ?? '', isFilter: false });
-        continue;
-      }
-      if (word.startsWith('-')) {
-        if (PNPM_VALUE_OPTIONS.has(word) && i + 1 < words.length) i++;
-        continue;
-      }
-      const resolvedWord = /[$`*]|\$\{\{/.test(word) && scriptOpts.command
-        ? resolveSingleCommandEnvVar(word, scriptOpts.command, scriptOpts.stepEnv)
-        : word;
-      if (!seenRun && resolvedWord !== null && (resolvedWord === 'run' || resolvedWord === 'run-script' || (kind === 'npm' && derefNpmCommand(resolvedWord) === 'run'))) {
-        seenRun = true;
-        continue;
-      }
-      if (runnerScriptWord === null) {
-        runnerScriptWord = word;
-        break;
-      }
+function catalogAllowsE2eNarrowing(catalogSteps, rootScripts, root) {
+  if (rootManifestHasAnyLifecycleHook(rootScripts)) return false;
+  let sawProvisionStep = false;
+  for (const step of catalogSteps) {
+    if (step.opaqueAction) return false;
+    if (step.uses && !ALLOWED_CATALOG_USES.test(step.uses)) return false;
+    if (step.shell && step.shell !== 'bash' && step.shell !== 'sh') return false;
+    if (!isRepoRootWorkingDir(step.workingDir, root)) return false;
+    for (const [key, val] of Object.entries(step.env ?? {})) {
+      if (!ALLOWED_CATALOG_ENV_KEY.test(key)) return false;
+      const str = String(val ?? '');
+      if (FORBIDDEN_ENV_OR_CMD_REF.test(str) || /e2e-test-data/i.test(str)) return false;
     }
-    if (scriptMayInvokeLint(runnerScriptWord, scriptOpts)) hasLintScript = true;
-    // `-w` / `--workspace-root` overrides `--dir` / `-C` / `--prefix` / `--cwd`
-    // on the same pnpm invocation, but not on a separate wrapped invocation
-    // (such as `pnpm -w exec npm --prefix apps/n4 run lint`).
-    if (!runnerRootFlag && runnerDirFilters.length > 0) {
-      hasWorkspaceSelector = true;
-      filters.push(...runnerDirFilters);
-    }
-  }
-  return { hasRunner, hasRootFlag, hasCrossFlag, hasWorkspaceSelector, hasLintScript, recursive, filters };
-}
-
-function isUncertainCdTarget(dir) {
-  return dir === '-' || dir === '~' || dir.startsWith('~/') || dir.includes('$') || dir.includes('*') || dir.includes('`');
-}
-
-// Whether a CI `working-directory` statically resolves to a directory other
-// than the repository root. Unresolved/dynamic paths (such as
-// `${{ github.workspace }}`) and normalized root paths (`././`) return false so
-// root-script discovery remains conservative.
-function isStaticNonRootDir(workingDir, root) {
-  const trimmed = typeof workingDir === 'string' ? workingDir.trim() : '';
-  if (!trimmed || !root || isUncertainCdTarget(trimmed)) return false;
-  const rel = relative(root, resolve(root, trimmed)).split(sep).join('/').replace(/\/+$/, '');
-  return Boolean(rel && rel !== '.');
-}
-
-// Extract destination arguments from `cd` / `pushd` invocations in a shell
-// segment, skipping shell options such as `-L`, `-P`, `-e`, and `--`.
-function extractCdTargets(segment) {
-  const words = tokenizeShellWords(segment);
-  if (words[0] === 'echo' || words[0] === 'printf') return [];
-  const targets = [];
-  for (let start = 0; start < words.length; start++) {
-    if (words[start] !== 'cd' && words[start] !== 'pushd') continue;
-    let idx = start + 1;
-    while (idx < words.length) {
-      if (words[idx] === '--') {
-        idx++;
-        break;
-      }
-      if (/^-[LPe@n]+$/.test(words[idx])) {
-        idx++;
-        continue;
-      }
-      break;
-    }
-    targets.push(idx < words.length ? words[idx] : '~');
-    start = idx;
-  }
-  return targets;
-}
-
-function extractCommandSubstitutions(segment) {
-  const inner = [];
-  let inSingle = false;
-  let inDouble = false;
-  let atWordStart = true;
-  for (let i = 0; i < segment.length; i++) {
-    const ch = segment[i];
-    if (inSingle) {
-      if (ch === "'") inSingle = false;
-      atWordStart = false;
+    const cmd = step.cmd.trim();
+    if (!cmd) continue;
+    if (step.actionDir) {
+      if (!isAllowedCatalogCompositeStep(step)) return false;
       continue;
     }
-    if (ch === '\\') {
-      if (segment[i + 1] === '\n') {
-        i++;
-        continue;
-      }
-      if (segment[i + 1] === '\r' && segment[i + 2] === '\n') {
-        i += 2;
-        continue;
-      }
-      i++;
-      atWordStart = false;
-      continue;
-    }
-    if (ch === '"') {
-      inDouble = !inDouble;
-      atWordStart = false;
-      continue;
-    }
-    if (ch === "'" && !inDouble) {
-      inSingle = true;
-      atWordStart = false;
-      continue;
-    }
-    if (!inDouble && ch === '#' && atWordStart) {
-      while (i < segment.length && segment[i] !== '\n') i++;
-      atWordStart = true;
-      continue;
-    }
-    if (ch === '$' && segment[i + 1] === '(') {
-      const close = findMatchingParen(segment, i + 1);
-      if (close > i + 2) {
-        inner.push(segment.slice(i + 2, close));
-        i = close;
-      }
-      atWordStart = false;
-    } else if (ch === '`') {
-      const start = i + 1;
-      let end = -1;
-      for (let j = start; j < segment.length; j++) {
-        if (segment[j] === '\\') {
-          j++;
-          continue;
-        }
-        if (segment[j] === '`') {
-          end = j;
-          break;
+    const provMatch = cmd.match(CANONICAL_E2E_PROVISION_CMD);
+    if (provMatch) {
+      const varName = provMatch[1];
+      if (varName) {
+        if (!step.ownEnv || !Object.hasOwn(step.ownEnv, varName) || String(step.ownEnv[varName]).trim() !== '${{ matrix.app }}') {
+          return false;
         }
       }
-      if (end > start) {
-        inner.push(segment.slice(start, end));
-        i = end;
-      }
-      atWordStart = false;
-    } else if (!inDouble) {
-      atWordStart = /[\s;|&(]/.test(ch);
+      sawProvisionStep = true;
+      continue;
     }
+    if (FORBIDDEN_ENV_OR_CMD_REF.test(cmd) || /e2e-test-data/i.test(cmd) || /binaryen/i.test(cmd)) return false;
+    if (!ALLOWED_CATALOG_NON_PROVISION_CMDS.some((pattern) => pattern.test(cmd))) return false;
   }
-  return inner;
+  return sawProvisionStep;
 }
 
-function filterTargetsRoot(filterVal, cwdDirs, root, rootPackageName) {
-  if (!filterVal || filterVal.startsWith('!')) return false;
-  if (filterVal.includes('${{')) return false;
-  // Strip pnpm graph selectors (`...pkg`, `pkg...`, `pkg^...`, `[since]`).
-  const core = filterVal.replace(/^\.{2,3}\^?|\^?\.{2,3}$/g, '').replace(/\[[^\]]*\]$/, '');
-  if (!core) return false;
-  if (rootPackageName && core === rootPackageName) return true;
-  const pathCandidate = core.startsWith('{') && core.endsWith('}') ? core.slice(1, -1) : core;
-  if (root && !isUncertainCdTarget(pathCandidate) && (core.startsWith('{') || pathCandidate.startsWith('.') || pathCandidate.includes('/'))) {
-    for (const from of cwdDirs) {
-      if (from.includes('$')) return true;
-      const rel = relative(root, resolve(root, from, pathCandidate)).split(sep).join('/').replace(/\/+$/, '');
-      if (!rel || rel === '.') return true;
-    }
-  }
-  if (core.includes('*') && rootPackageName) {
-    const escaped = core.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
-    if (new RegExp(`^${escaped}$`).test(rootPackageName)) return true;
-  }
-  return false;
-}
-
-function effectiveChildEnv(words, runnerIdx, command, stepEnv) {
-  if (!stepEnv) return null;
-  if (splitShellCommands(command).length !== 1 || /`|\$\(/.test(command)) return null;
-  const merged = { ...stepEnv };
-  for (let i = 0; i < runnerIdx; i++) {
-    const word = words[i];
-    const assign = word.match(/^([A-Za-z_]\w*)(\+?=)(.*)$/);
-    if (assign) {
-      const [, name, op, val] = assign;
-      if (/[$`*]/.test(val) || val.includes('${{')) return null;
-      merged[name] = op === '+=' ? `${merged[name] ?? ''}${val}` : val;
-      continue;
-    }
-    // Wrappers like `env`, `export`, `unset`, or non-plain assignments can alter env.
-    if (word === 'env' || word === 'export' || word === 'unset' || word.includes('=')) return null;
-  }
-  return merged;
-}
-
-// Extract root package.json script names invoked via `pnpm`, allowing shell
-// wrappers (`if`, `elif`, `while`, `until`, `timeout`, `bash -c`, `eval`,
-// `$(...)`, backticks), `cd` back to the repository root, and pnpm flags
-// (`--silent`, `--if-present`, `-w`, `--workspace-root`, `--dir <root>`,
-// `--filter <root>`) in any order before or after `run`.
-function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.', root = null, rootPackageName = null, rootScripts = null, stepEnv = null, depth = 0 } = {}) {
-  const scripts = [];
-  if (depth > 4) return scripts;
-  let cwdDirs = new Set([baseDir]);
-  const dirStack = [];
-  for (const token of splitShellCommands(command)) {
-    if (token === '(') {
-      dirStack.push(new Set(cwdDirs));
-      continue;
-    }
-    if (token === ')') {
-      if (dirStack.length > 0) cwdDirs = dirStack.pop();
-      continue;
-    }
-    if (/\bpopd\b/.test(token)) {
-      cwdDirs = new Set([...cwdDirs, '.']);
-    }
-    const cdMatches = extractCdTargets(token);
-    if (cdMatches.length > 0) {
-      const nextCwd = new Set(cwdDirs);
-      for (const dir of cdMatches) {
-        if (isUncertainCdTarget(dir)) {
-          // An uncertain `cd` (such as `cd "$GITHUB_WORKSPACE"` or `cd -`) may
-          // land at the repository root, so retain `.` conservatively.
-          nextCwd.add('.');
-          continue;
-        }
-        if (!root) continue;
-        for (const from of cwdDirs) {
-          if (from.includes('$')) continue;
-          const rel = relative(root, resolve(root, from, dir)).split(sep).join('/').replace(/\/+$/, '') || '.';
-          if (!rel.startsWith('..')) nextCwd.add(rel);
-        }
-      }
-      cwdDirs = nextCwd;
-    }
-    const mayRunAtRoot = !requireRootFlag || cwdDirs.has('.');
-    for (const subst of extractCommandSubstitutions(token)) {
-      for (const from of cwdDirs) {
-        scripts.push(...extractPnpmRootScripts(subst, { requireRootFlag: !mayRunAtRoot, baseDir: from, root, rootPackageName, rootScripts, stepEnv: null, depth: depth + 1 }));
-      }
-    }
-    const words = tokenizeShellWords(token);
-    if (words[0] === 'echo' || words[0] === 'printf') continue;
-    for (let start = 0; start < words.length; start++) {
-      if (words[start] === 'eval' && start + 1 < words.length) {
-        const body = words.slice(start + 1).join(' ');
-        for (const from of cwdDirs) {
-          scripts.push(...extractPnpmRootScripts(body, { requireRootFlag: !mayRunAtRoot, baseDir: from, root, rootPackageName, rootScripts, stepEnv: null, depth: depth + 1 }));
-        }
-        break;
-      }
-      if (SHELL_BIN.test(words[start])) {
-        for (let k = start + 1; k < words.length; k++) {
-          if (words[k] === '--') break;
-          if (/^-[a-zA-Z]*c$/.test(words[k]) && k + 1 < words.length) {
-            for (const from of cwdDirs) {
-              scripts.push(...extractPnpmRootScripts(words[k + 1], { requireRootFlag: !mayRunAtRoot, baseDir: from, root, rootPackageName, rootScripts, stepEnv: null, depth: depth + 1 }));
-            }
-            break;
-          }
-          if (words[k] === '-o' && k + 1 < words.length) {
-            k++;
-            continue;
-          }
-          if (!words[k].startsWith('-')) break;
-        }
-        continue;
-      }
-      const kind = PNPM_BIN.test(words[start]) ? 'pnpm' : NPM_BIN.test(words[start]) ? 'npm' : YARN_BIN.test(words[start]) ? 'yarn' : null;
-      if (!kind) continue;
-      const childEnv = effectiveChildEnv(words, start, command, stepEnv);
-      let idx = start + 1;
-      let hasRootFlag = false;
-      let hasNonRootFilter = false;
-      let hasNonRootDir = false;
-      let seenRun = false;
-      for (; idx < words.length; idx++) {
-        const word = words[idx];
-        if (word === '--') break;
-        if (word === '--workspace-root' || (kind === 'pnpm' && word === '-w')) {
-          hasRootFlag = true;
-          continue;
-        }
-        if (
-          word === '--workspace' || word.startsWith('--workspace=') ||
-          (kind === 'npm' && (word === '-w' || word.startsWith('-w=')))
-        ) {
-          if (!word.includes('=')) idx++;
-          hasNonRootFilter = true;
-          continue;
-        }
-        if (
-          word === '--filter' || word === '--filter-prod' || word === '-F' ||
-          word.startsWith('--filter=') || word.startsWith('--filter-prod=') || word.startsWith('-F=')
-        ) {
-          const filterVal = word.includes('=') ? word.slice(word.indexOf('=') + 1) : words[++idx];
-          if (filterTargetsRoot(filterVal, cwdDirs, root, rootPackageName)) hasRootFlag = true;
-          else hasNonRootFilter = true;
-          continue;
-        }
-        if (
-          word === '--dir' || word === '-C' || word === '--prefix' || word === '--cwd' ||
-          word.startsWith('--dir=') || word.startsWith('-C=') || word.startsWith('--prefix=') || word.startsWith('--cwd=')
-        ) {
-          const dirVal = word.includes('=') ? word.slice(word.indexOf('=') + 1) : words[++idx];
-          if (!dirVal || !root || isUncertainCdTarget(dirVal)) {
-            // A dynamic directory (such as `--dir "$GITHUB_WORKSPACE"`) may target
-            // the repository root, so retain the root script conservatively.
-            hasRootFlag = true;
-          } else {
-            let hitsRoot = false;
-            for (const from of cwdDirs) {
-              if (from.includes('$')) {
-                hitsRoot = true;
-                continue;
-              }
-              const rel = relative(root, resolve(root, from, dirVal)).split(sep).join('/').replace(/\/+$/, '');
-              if (!rel || rel === '.') hitsRoot = true;
-            }
-            if (hitsRoot) hasRootFlag = true;
-            else hasNonRootDir = true;
-          }
-          continue;
-        }
-        if (word.startsWith('-')) {
-          if (PNPM_VALUE_OPTIONS.has(word) && idx + 1 < words.length) idx++;
-          continue;
-        }
-        const effectiveWord = /[$`*]|\$\{\{/.test(word)
-          ? resolveSingleCommandEnvVar(word, command, stepEnv)
-          : word;
-        if (!seenRun && effectiveWord !== null && (effectiveWord === 'run' || effectiveWord === 'run-script' || (kind === 'npm' && derefNpmCommand(effectiveWord) === 'run'))) {
-          seenRun = true;
-          continue;
-        }
-        if (!seenRun && kind === 'pnpm' && effectiveWord !== null && (effectiveWord === 'recursive' || effectiveWord === 'multi' || effectiveWord === 'm')) {
-          hasNonRootFilter = true;
-          continue;
-        }
-        if (!seenRun && kind === 'yarn' && effectiveWord === 'workspaces') {
-          hasNonRootFilter = true;
-          continue;
-        }
-        const atRoot = hasRootFlag || (!hasNonRootFilter && !hasNonRootDir && mayRunAtRoot);
-        const pushScriptWithHooks = (name, env) => {
-          scripts.push({ script: name, env });
-          if (!rootScripts) return;
-          const hooks = [
-            `pre${name}`,
-            `post${name}`,
-            ...(name === 'install' ? INSTALL_LIFECYCLE_HOOKS : []),
-            ...(name === 'pack' ? PACK_LIFECYCLE_HOOKS : []),
-            ...(name === 'publish' ? PUBLISH_LIFECYCLE_HOOKS : []),
-            ...(name === 'restart' ? ['prestop', 'stop', 'poststop', 'prestart', 'start', 'poststart'] : []),
-          ];
-          for (const hook of new Set(hooks)) {
-            if (hook !== name && Object.hasOwn(rootScripts, hook)) scripts.push({ script: hook, env });
-          }
-        };
-        const recordCommand = (raw) => {
-          if (!seenRun && kind === 'npm') {
-            const deref = derefNpmCommand(raw);
-            if (deref === 'install' || deref === 'ci') {
-              // npm workspace installs run root install/prepare/prepublish lifecycle
-              // hooks even when invoked with --workspace or from a workspace member.
-              pushScriptWithHooks('install', childEnv);
-            } else if (deref === 'install-test' || deref === 'install-ci-test') {
-              pushScriptWithHooks('install', childEnv);
-              if (atRoot) pushScriptWithHooks('test', childEnv);
-            } else if (atRoot) {
-              pushScriptWithHooks(deref, childEnv);
-            }
-            return;
-          }
-          if (!seenRun && kind === 'pnpm' && PNPM_INSTALL_COMMANDS.has(raw)) {
-            // pnpm workspace installs run root install/prepare lifecycle hooks
-            // even when invoked from a workspace member directory.
-            pushScriptWithHooks('install', childEnv);
-            if ((raw === 'install-test' || raw === 'it') && atRoot) pushScriptWithHooks('test', childEnv);
-            return;
-          }
-          if (!atRoot) return;
-          const canonical = !seenRun && (raw === 't' || raw === 'tst') ? 'test' : raw;
-          pushScriptWithHooks(canonical, childEnv);
-        };
-        if (effectiveWord !== null && /^[A-Za-z0-9_@][\w.:/@-]*$/.test(effectiveWord)) {
-          recordCommand(effectiveWord);
-        } else if (effectiveWord === null && (atRoot || ((kind === 'pnpm' || kind === 'npm') && !seenRun))) {
-          scripts.push({ script: ANY_ROOT_SCRIPT, env: null });
-          if (rootScripts) {
-            for (const key of Object.keys(rootScripts)) scripts.push({ script: key, env: null });
-          }
-        }
-        break;
-      }
-      start = idx;
-    }
-  }
-  return scripts;
-}
-
-// Expand CI commands through root package.json scripts without stripping
-// `pnpm --filter`, so workspace script invocations (such as `--filter @nd/n4 lint`)
-// remain visible before deciding whether standalone lint scripts can be omitted.
-function expandedCommandTexts(commands, rootScripts, root = null, rootPackageName = null) {
-  const entries = [];
-  const pending = commands.map((entry) => (typeof entry === 'string' ? { cmd: entry, workingDir: null, env: null, ownEnv: null, shell: null } : entry));
-  const visited = new Set();
-  while (pending.length) {
-    const current = pending.pop();
-    entries.push(current);
-    const nonRootWorkingDir = isStaticNonRootDir(current.workingDir, root);
-    for (const { script, env } of extractPnpmRootScripts(current.cmd, { requireRootFlag: nonRootWorkingDir, baseDir: current.workingDir ?? '.', root, rootPackageName, rootScripts, stepEnv: current.env ?? null })) {
-      const visitKey = `${script}\0${stableEnvKey(env)}`;
-      if (!visited.has(visitKey)) {
-        visited.add(visitKey);
-        if (script !== ANY_ROOT_SCRIPT && rootScripts[script]) pending.push({ cmd: rootScripts[script], workingDir: null, env, ownEnv: null, shell: current.shell ?? null });
-      }
-    }
-  }
-  return entries;
-}
-
-const COMMAND_PACKAGE_TESTS = /(?:^|[\s'"`(=])(?:\.\/)?(packages\/[\w.-]+\/tests?)(?:\/|$)/gm;
-
-// Expand root package.json scripts explicitly invoked from a workspace manifest
-// via `pnpm -w [run] <script>`, `pnpm --workspace-root [run] <script>`, or
-// `pnpm --dir <root> [run] <script>`, returning expanded commands and names.
-function expandedRootScriptsFromWorkspace(commands, rootScripts, { baseDir = '.', root = null, rootPackageName = null } = {}) {
-  const names = new Set();
-  const texts = [];
-  const pending = [];
-  for (const cmd of commands) {
-    for (const { script } of extractPnpmRootScripts(cmd, { requireRootFlag: true, baseDir, root, rootPackageName, rootScripts })) {
-      if (!names.has(script)) {
-        names.add(script);
-        if (script !== ANY_ROOT_SCRIPT && rootScripts[script]) pending.push(rootScripts[script]);
-      }
-    }
-  }
-  while (pending.length) {
-    const command = pending.pop();
-    texts.push(command);
-    for (const { script } of extractPnpmRootScripts(command, { root, rootPackageName, rootScripts })) {
-      if (!names.has(script)) {
-        names.add(script);
-        if (script !== ANY_ROOT_SCRIPT && rootScripts[script]) pending.push(rootScripts[script]);
-      }
-    }
-  }
-  return { texts, names };
-}
-
-// Omit an uninvoked workspace package.json's `node ../../scripts/lint.mjs`
-// command segment from `scripts.lint` (including when chained with `&& node --check ...`)
-// before scanning text references, as long as neither CI nor any other script calls `lint`.
-// Direct imports/references in code or build scripts remain untouched.
-function manifestScanText(text, manifest, stripStandaloneLint) {
-  if (!stripStandaloneLint) return text;
+// Omit an uninvoked workspace package.json's standalone lint runner segment
+// from `scripts.lint` (keeping chained segments such as `&& node --check ...`)
+// only when the global fail-closed allowlist confirmed no CI job runs lint and
+// no other script in this workspace mentions lint or dynamic script execution.
+function manifestScanText(text, manifest, canStripStandaloneLint) {
+  if (!canStripStandaloneLint) return text;
   const lintCmd = manifest?.scripts?.lint;
   if (typeof lintCmd !== 'string') return text;
   if (Object.entries(manifest.scripts).some(([name, cmd]) => {
     if (name === 'lint') return false;
     const str = String(cmd);
-    if (/\blint\b/.test(str)) return true;
-    return /[$`*]|\$\{\{/.test(str) && splitShellCommands(str).some((seg) => parseLintCommandFlags(seg).hasLintScript);
+    return /\blint\b/i.test(str)
+      || (/\b(?:pnpm|npm|yarn)\b/.test(str) && /[$`]|\$\{\{/.test(str))
+      || /\b(?:eval|exec)\b|\b(?:sh|bash|dash|zsh)\s+-[a-z]*c\b/.test(str);
   })) return text;
-  const segments = splitShellCommands(lintCmd);
-  const kept = segments.filter((segment) => !INDEPENDENT_LINT_SCRIPT.test(segment.trim()));
+  if (/[;|`]|\$\(/.test(lintCmd)) return text;
+  const segments = lintCmd.split('&&');
+  const kept = segments.filter((segment) => !STANDALONE_LINT_SEGMENT.test(segment));
   if (kept.length === segments.length) return text;
   const scripts = { ...manifest.scripts };
   if (kept.length === 0) delete scripts.lint;
-  else scripts.lint = kept.join(' && ');
+  else scripts.lint = kept.map((s) => s.trim()).join(' && ');
   return JSON.stringify({ ...manifest, scripts }, null, 2);
+}
+
+// ---------------------------------------------------------------------------
+// Filesystem helpers & conservative workspace graph loader
+// ---------------------------------------------------------------------------
+
+async function listDirs(path) {
+  const entries = await readdir(path, { withFileTypes: true }).catch(() => []);
+  return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
+}
+
+async function* textFiles(dir) {
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      if (!SKIPPED_DIRS.has(entry.name)) yield* textFiles(join(dir, entry.name));
+    } else if (entry.isFile() && TEXT_FILE.test(entry.name)) {
+      yield join(dir, entry.name);
+    }
+  }
+}
+
+function exists(path) {
+  return stat(path).then(() => true, () => false);
+}
+
+async function isRegularUnlinkedFile(root, relPath) {
+  const full = join(root, relPath);
+  try {
+    const info = await lstat(full);
+    if (!info.isFile() || info.isSymbolicLink()) return false;
+    const realRoot = await realpath(root);
+    const realFull = await realpath(full);
+    const rel = relative(realRoot, realFull).split(sep).join('/');
+    return !rel.startsWith('..') && rel === relPath;
+  } catch {
+    return false;
+  }
 }
 
 async function readPackageJson(dir) {
@@ -2534,16 +1294,17 @@ export async function loadConservativeWorkspaceGraph(root) {
   const workflowWorkingDir = ci?.defaults?.run?.['working-directory'] ?? null;
   const workflowShell = ci?.defaults?.run?.shell ?? null;
   const workflowEnv = ci?.env && typeof ci.env === 'object' ? ci.env : {};
+
   const loadLocalCompositeSteps = async (usesSpec, parentEnv, visitedActions = new Set()) => {
     if (typeof usesSpec !== 'string' || !usesSpec.startsWith('./')) return [];
     const relDir = usesSpec.slice(2).replace(/\/+$/, '');
     if (!relDir || /[$`*?[{]|\$\{\{/.test(relDir)) {
-      return [{ cmd: '', workingDir: null, shell: null, env: parentEnv, opaqueAction: true }];
+      return [{ cmd: '', workingDir: null, shell: null, env: parentEnv, ownEnv: null, actionDir: null, opaqueAction: true }];
     }
     const actionDir = resolve(root, relDir);
     const normalizedRel = relative(root, actionDir).split(sep).join('/');
     if (normalizedRel.startsWith('..') || visitedActions.has(normalizedRel)) {
-      return [{ cmd: '', workingDir: null, shell: null, env: parentEnv, opaqueAction: true }];
+      return [{ cmd: '', workingDir: null, shell: null, env: parentEnv, ownEnv: null, actionDir: null, opaqueAction: true }];
     }
     let actionDoc = null;
     for (const filename of ['action.yml', 'action.yaml']) {
@@ -2558,7 +1319,7 @@ export async function loadConservativeWorkspaceGraph(root) {
       }
     }
     if (!actionDoc || actionDoc?.runs?.using !== 'composite' || !Array.isArray(actionDoc?.runs?.steps)) {
-      return [{ cmd: '', workingDir: null, shell: null, env: parentEnv, opaqueAction: true }];
+      return [{ cmd: '', workingDir: null, shell: null, env: parentEnv, ownEnv: null, actionDir: null, opaqueAction: true }];
     }
     const nextVisited = new Set([...visitedActions, normalizedRel]);
     const expanded = [];
@@ -2571,11 +1332,20 @@ export async function loadConservativeWorkspaceGraph(root) {
       if (typeof subStep?.uses === 'string' && subStep.uses.startsWith('./')) {
         expanded.push(...await loadLocalCompositeSteps(subStep.uses, subEnv, nextVisited));
       } else {
-        expanded.push({ cmd: String(subStep?.run ?? ''), workingDir: subWorkingDir, shell: subShell, env: subEnv, ownEnv: subOwnEnv, actionDir: normalizedRel });
+        expanded.push({
+          cmd: String(subStep?.run ?? ''),
+          uses: typeof subStep?.uses === 'string' ? subStep.uses : null,
+          workingDir: subWorkingDir,
+          shell: subShell,
+          env: subEnv,
+          ownEnv: subOwnEnv,
+          actionDir: normalizedRel,
+        });
       }
     }
     return expanded;
   };
+
   const expandJobSteps = async (job) => {
     const out = [];
     const jobWorkingDir = job?.defaults?.run?.['working-directory'] ?? workflowWorkingDir;
@@ -2589,15 +1359,18 @@ export async function loadConservativeWorkspaceGraph(root) {
       } else {
         out.push({
           cmd: String(step?.run ?? ''),
+          uses: typeof step?.uses === 'string' ? step.uses : null,
           workingDir: step?.['working-directory'] ?? jobWorkingDir ?? null,
           shell: step?.shell ?? jobShell ?? null,
           env: stepEnv,
           ownEnv: stepOwnEnv,
+          actionDir: null,
         });
       }
     }
     return out;
   };
+
   const rawRuns = async (names) => {
     const out = [];
     for (const name of names) {
@@ -2610,28 +1383,63 @@ export async function loadConservativeWorkspaceGraph(root) {
     }
     return out;
   };
-  const rawEntries = [
-    [SITE, await rawRuns(siteJobNames(ci))],
-    [CATALOG, await rawRuns(CATALOG_JOBS)],
-  ];
-  const expandedByEntry = new Map(rawEntries.map(([node, raw]) => [node, expandedCommandTexts(raw, rootScripts, root, rootPackageName)]));
-  const workspaceRootScriptInfo = new Map(nodes.map((node) => {
-    const allScripts = Object.values(manifests.get(node)?.scripts ?? {}).map(String);
-    return [node, expandedRootScriptsFromWorkspace(allScripts, rootScripts, { baseDir: node, root, rootPackageName })];
-  }));
-  const workspaceRootScripts = new Map([...workspaceRootScriptInfo].map(([node, { names }]) => [node, names]));
-  const workspaceExpandedScripts = new Map(nodes.map((node) => {
-    const allScripts = Object.values(manifests.get(node)?.scripts ?? {}).map((cmd) => ({ cmd: String(cmd), baseDir: node }));
-    const rootExpanded = (workspaceRootScriptInfo.get(node)?.texts ?? []).map((cmd) => ({ cmd, baseDir: '.' }));
-    return [node, [...allScripts, ...rootExpanded]];
-  }));
-  const lintTargetContext = { root, rootPackageName, nodeByPackageName, nodeSet, manifests, releaseTestScripts };
-  const lintInvokedNodes = new Set();
-  for (const [, cmds] of expandedByEntry) {
-    for (const target of lintTargetsInCommands(cmds, lintTargetContext)) lintInvokedNodes.add(target);
-  }
-  for (const [, cmds] of workspaceExpandedScripts) {
-    for (const target of lintTargetsInCommands(cmds, lintTargetContext)) lintInvokedNodes.add(target);
+
+  const siteSteps = await rawRuns(siteJobNames(ci));
+  const catalogSteps = await rawRuns(CATALOG_JOBS);
+  const cmdOpts = { root, rootPackageName, rootScripts, releaseTestScripts };
+  const siteInfo = namedByCommands(siteSteps, rootScripts, cmdOpts);
+  const catalogInfo = namedByCommands(catalogSteps, rootScripts, cmdOpts);
+
+  // Strict fail-closed lint omission gate: omit standalone workspace lint
+  // runner segments ONLY when neither SITE nor CATALOG failed closed, has any
+  // root lifecycle hooks, mentions `lint`, or invokes opaque shell launchers.
+  const hasOpaqueShell = (steps) => steps.some((step) => {
+    if (step.opaqueAction) return true;
+    if (step.actionDir && PINNED_LINT_FREE_ACTIONS.has(step.actionDir)) return false;
+    return /\b(?:sh|bash|dash|zsh|eval|exec|source)\b/.test(step.cmd) || /\bnode\s+(?:-[a-z]*[ep]\b|--eval\b|--print\b)/.test(step.cmd);
+  });
+  const anyCrossWorkspaceLint = nodes.some((node) =>
+    Object.entries(manifests.get(node)?.scripts ?? {}).some(([k, v]) => {
+      if (k === 'lint') return false;
+      const str = String(v);
+      return /\blint\b/i.test(str) && /(?:--filter\b|-F\b|--dir\b|-C\b|-r\b|--recursive\b|\brecursive\b|-w\b|--workspace|\bcd\s+)/.test(str);
+    }),
+  );
+  const canStripStandaloneLint =
+    !rootManifestHasAnyLifecycleHook(rootScripts)
+    && !anyCrossWorkspaceLint
+    && !siteInfo.failedClosed
+    && !catalogInfo.failedClosed
+    && !siteInfo.mayInvokeLint
+    && !catalogInfo.mayInvokeLint
+    && !hasOpaqueShell(siteInfo.expandedCmds)
+    && !hasOpaqueShell(catalogInfo.expandedCmds);
+
+  // Conservatively record any workspace package whose scripts can invoke root
+  // scripts (e.g. `pnpm -w`, `pnpm --dir ../..`, `npm --prefix ../..`, root
+  // filters, `cd ..` + package manager, or installs when root has hooks).
+  const rootHasHooks = rootManifestHasAnyLifecycleHook(rootScripts);
+  const workspaceRootScripts = new Map();
+  for (const node of nodes) {
+    const scripts = manifests.get(node)?.scripts ?? {};
+    const names = new Set();
+    for (const [scriptKey, rawCmd] of Object.entries(scripts)) {
+      const cmd = String(rawCmd);
+      if (scriptKey === 'lint' && canStripStandaloneLint && STANDALONE_LINT_SEGMENT.test(cmd)) continue;
+      const stripped = cmd.replace(ALLOWED_FILTERED_PNPM, (full, filterChunk, _runKw, _dynScript, litScript) => {
+        if (!isNonRootFilterGroup(filterChunk, rootPackageName)) return full;
+        if (litScript && PNPM_INSTALL_WORD.has(litScript)) return full;
+        return '';
+      });
+      const targetsRoot =
+        /\bpnpm\b.*(?:-w\b|--workspace-root\b|--dir\b|-C\b|--filter|-F\b|\b(?:recursive|multi)\b)/.test(stripped)
+        || /\bnpm\b.*(?:--prefix\b|-w\b|--workspace\b|--workspaces\b)/.test(stripped)
+        || /\byarn\b.*(?:--cwd\b|\bworkspace\b)/.test(stripped)
+        || (/\bcd\s+[^\n;&|]*\.\./.test(stripped) && /\b(?:pnpm|npm|yarn)\b/.test(stripped))
+        || (rootHasHooks && /\b(?:pnpm|npm|yarn)\s+(?:install|i|ci|add|install-clean|ic|clean-install|install-test|it)\b/.test(stripped));
+      if (targetsRoot) names.add(ANY_ROOT_SCRIPT);
+    }
+    workspaceRootScripts.set(node, names);
   }
 
   const edges = new Map();
@@ -2644,18 +1452,15 @@ export async function loadConservativeWorkspaceGraph(root) {
   const rootFileImportModes = new Map();
   const recordImportMode = (target, namedImports, importerFile = null, localBindings = null) => {
     const entry = rootFileImportModes.get(target) ?? { allExports: false, names: new Set(), importers: [] };
-    if (!namedImports) entry.allExports = true;
-    else {
-      for (const name of namedImports) entry.names.add(name);
-      if (importerFile) entry.importers.push({ file: importerFile, bindings: localBindings ?? [] });
-    }
+    if (namedImports === null) entry.allExports = true;
+    else for (const name of namedImports) entry.names.add(name);
+    if (importerFile) entry.importers.push({ file: importerFile, bindings: localBindings ?? [] });
     rootFileImportModes.set(target, entry);
   };
   const pendingRootFiles = [];
   const derivedJsonFiles = new Set();
-  const scannedDerivedJson = new Set();
-  // App id -> the paths in other app directories its code names.
   const appReads = new Map();
+
   for (const node of nodes) {
     const uses = new Set();
     const manifest = manifests.get(node);
@@ -2669,39 +1474,60 @@ export async function loadConservativeWorkspaceGraph(root) {
         }
       }
     }
-    const expandedScripts = workspaceExpandedScripts.get(node) ?? [];
-    for (const lintTarget of lintTargetsInCommands(expandedScripts, lintTargetContext)) {
-      uses.add(lintTarget);
+    const recordWorkspaceTarget = (wsNode) => {
+      if (!wsNode || wsNode === node || !nodeSet.has(wsNode)) return;
+      if (TRAVERSABLE_WORKSPACE_GROUPS.has(wsNode.split('/')[0])) {
+        uses.add(wsNode);
+      } else if (wsNode.startsWith('apps/')) {
+        uses.add(wsNode);
+        if (node.startsWith('apps/')) appReads.set(node, new Set([...(appReads.get(node) ?? []), wsNode]));
+      }
+    };
+    const scanScriptTargets = (cmd, baseDir) => {
+      for (const [, , target] of cmd.matchAll(/--filter(?:=|\s+)(['"]?)((?:@[\w.-]+\/)?[\w.-]+)\1/g)) {
+        recordWorkspaceTarget(nodeByPackageName.get(target));
+      }
+      for (const [, , relDir] of cmd.matchAll(/(?:--dir|-C|--prefix|--cwd)(?:=|\s+)(['"]?)([^\s'"`;&|]+)\1/g)) {
+        const resolved = relative(root, resolve(root, baseDir, relDir)).split(sep).join('/').replace(/\/+$/, '');
+        const owner = resolved.match(/^(?:apps|packages|exes)\/[^/]+/)?.[0];
+        if (owner) recordWorkspaceTarget(owner);
+      }
+    };
+    for (const rawCmd of Object.values(manifest?.scripts ?? {})) {
+      scanScriptTargets(String(rawCmd), node);
     }
-    for (const cmd of workspaceRootScriptInfo.get(node)?.texts ?? []) {
-      for (const match of cmd.matchAll(ROOT_NAMED)) {
-        if (match[1]) {
-          uses.add(match[1]);
-          pendingRootFiles.push(match[1]);
+    if ((workspaceRootScripts.get(node)?.size ?? 0) > 0) {
+      for (const rawRootCmd of Object.values(rootScripts)) {
+        const cmd = String(rawRootCmd);
+        scanScriptTargets(cmd, '.');
+        for (const [, path, dir, name] of cmd.matchAll(ROOT_NAMED)) {
+          const target = path ?? `${dir}/${name}`;
+          if (target) {
+            uses.add(target);
+            pendingRootFiles.push(target);
+          }
+        }
+        for (const [, rootFile] of cmd.matchAll(ROOT_PATH)) {
+          uses.add(rootFile);
+          pendingRootFiles.push(rootFile);
+        }
+        for (const [, rootFile] of cmd.matchAll(/(?:^|[\s'"`(=])\.\/((?:scripts|test-utils|registry|test)\/[\w./-]+\.(?:[cm]?[jt]s|json|ya?ml))\b/g)) {
+          uses.add(rootFile);
+          pendingRootFiles.push(rootFile);
+        }
+        for (const [, tests] of cmd.matchAll(/(?:^|[\s'"`(=])(?:\.\/|(?:\.\.\/)+)?(packages\/[\w.-]+\/tests?)\//g)) {
+          uses.add(tests);
+        }
+        for (const [, top, name] of cmd.matchAll(SCRIPT_REFERENCE)) {
+          if (nodeSet.has(`${top}/${name}`)) uses.add(`${top}/${name}`);
         }
       }
-      for (const [, rootFile] of cmd.matchAll(ROOT_PATH)) {
-        uses.add(rootFile);
-        pendingRootFiles.push(rootFile);
-      }
-      for (const [, tests] of cmd.matchAll(COMMAND_PACKAGE_TESTS)) uses.add(tests);
-      for (const [, tests] of cmd.matchAll(PACKAGE_TESTS)) uses.add(tests);
-      for (const [, document] of cmd.matchAll(DOCUMENT_REFERENCE)) uses.add(document);
-      for (const [, top, name, inner] of cmd.matchAll(SCRIPT_REFERENCE)) {
-        if (!nodeSet.has(`${top}/${name}`)) continue;
-        uses.add(`${top}/${name}`);
-        const target = inner && `${top}/${name}${inner}`;
-        if (target && await isRegularUnlinkedFile(root, target)) {
-          uses.add(target);
-          pendingRootFiles.push(target);
-        }
-      }
     }
-    const manifestPath = join(root, node, 'package.json');
     for await (const file of textFiles(join(root, node))) {
       if ((await stat(file)).size > MAX_TEXT_BYTES) continue;
       const rawText = await readFile(file, 'utf8');
-      const text = file === manifestPath ? manifestScanText(rawText, manifest, !lintInvokedNodes.has(node)) : rawText;
+      const isNodeManifest = relative(root, file).split(sep).join('/') === `${node}/package.json`;
+      const text = isNodeManifest ? manifestScanText(rawText, manifest, canStripStandaloneLint) : rawText;
       for (const [, top, name] of text.matchAll(REFERENCE)) {
         if (nodeSet.has(`${top}/${name}`)) uses.add(`${top}/${name}`);
       }
@@ -2726,29 +1552,30 @@ export async function loadConservativeWorkspaceGraph(root) {
   // Root tool configs (e2e.config.ts, tsconfig.agentic.json) are read implicitly
   // by the site jobs' commands, so the site build follows them too.
   const rootConfigs = (await readdir(root)).filter((name) => /^(?:[\w-]+\.config\.[cm]?[jt]s|tsconfig[\w.-]*\.json)$/.test(name) && !INDEPENDENT_CONFIG.test(name));
-  const rootScriptsRun = new Map();
-  for (const [node, commands] of rawEntries) {
-    const { named, expanded } = namedByCommands(commands, rootScripts, root, rootPackageName);
-    if (node === SITE) for (const config of rootConfigs) named.add(config);
-    for (const lintTarget of lintTargetsInCommands(expandedByEntry.get(node) ?? [], lintTargetContext)) {
-      named.add(lintTarget);
-    }
-    edges.set(node, named);
-    rootScriptsRun.set(node, expanded);
-    pendingRootFiles.push(...named);
+  for (const config of rootConfigs) siteInfo.named.add(config);
+  if (siteInfo.failedClosed || siteInfo.mayInvokeLint) {
+    for (const node of nodes) siteInfo.named.add(node);
   }
+  if (catalogInfo.failedClosed || catalogInfo.mayInvokeLint) {
+    for (const node of nodes) catalogInfo.named.add(node);
+  }
+  edges.set(SITE, siteInfo.named);
+  edges.set(CATALOG, catalogInfo.named);
+  const rootScriptsRun = new Map([
+    [SITE, siteInfo.expanded],
+    [CATALOG, catalogInfo.expanded],
+  ]);
+  pendingRootFiles.push(...siteInfo.named, ...catalogInfo.named);
 
   while (pendingRootFiles.length) {
     const file = pendingRootFiles.pop();
-    const isJsonFile = /^(?:packages|exes)\/.*\.json$/.test(file);
-    const derived = isJsonFile && derivedJsonFiles.has(file);
-    if (edges.has(file) && (!derived || scannedDerivedJson.has(file))) continue;
-    const uses = edges.get(file) ?? new Set();
+    if (edges.has(file)) continue;
+    const uses = new Set();
     edges.set(file, uses);
-    if (isJsonFile) {
-      if (derived) scannedDerivedJson.add(file);
+    if (file.endsWith('.json') && /^(?:packages|exes)\//.test(file)) {
       const jsonText = await readFile(join(root, file), 'utf8').catch(() => null);
       if (jsonText !== null) {
+        const derived = derivedJsonFiles.has(file);
         for (const match of jsonText.matchAll(SCRIPT_REFERENCE)) {
           const [, top, name, inner] = match;
           if (!nodeSet.has(`${top}/${name}`)) continue;
@@ -2788,9 +1615,7 @@ export async function loadConservativeWorkspaceGraph(root) {
     for (const match of text.matchAll(SCRIPT_REFERENCE)) {
       const [, top, name, inner] = match;
       if (!nodeSet.has(`${top}/${name}`)) continue;
-      const matchStart = match.index;
-      const matchEnd = match.index + match[0].length;
-      const range = [matchStart, matchEnd];
+      const range = [match.index, match.index + match[0].length];
       const literalMatch = inner ? matchScriptLiteral(text, match, literals) : { complete: false, derivedJson: true };
       const target = literalMatch.complete && `${top}/${name}${inner}`;
       if (target && await isRegularUnlinkedFile(root, target)) {
@@ -2878,6 +1703,8 @@ export async function loadConservativeWorkspaceGraph(root) {
       }
     }
   }
+
+  // Co-loaded module closure check for `process.argv` mutation across relative peers.
   const catalogDirect = edges.get(CATALOG) ?? new Set();
   const extraPeerCache = new Map();
   const loadPeerModule = async (peer) => {
@@ -2970,30 +1797,31 @@ export async function loadConservativeWorkspaceGraph(root) {
     }
     return false;
   };
+
+  const catalogE2eAllowed = catalogAllowsE2eNarrowing(catalogSteps, rootScripts, root);
   const provisionerAppEdges = new Map();
   let e2eProvisionersNarrowable = false;
   const rangeContains = (outer, inner) => outer[0] <= inner[0] && inner[1] <= outer[1];
+
   for (const [file, { ast, workspaceRefs }] of analyzedRootFiles) {
     if (file === 'scripts/lib/e2e-test-data.mjs') {
       const mode = rootFileImportModes.get(file);
-      let callersPreserveIdentity = Boolean(mode);
+      let callersPreserveIdentity = catalogE2eAllowed && Boolean(mode) && mode.importers.length > 0;
       if (callersPreserveIdentity) {
         for (const { file: importerFile, bindings: impBindings } of mode.importers) {
           const dispatchBindings = impBindings.filter((b) => b.imported === 'provisionTestData');
           if (dispatchBindings.length === 0) continue;
-          if (!catalogDirect.has(importerFile) || await coLoadedMutatesArgv(importerFile)) {
-            callersPreserveIdentity = false;
-            break;
-          }
-          if ([...entryReaches].some(([entry, { seen }]) => entry !== importerFile && seen.has(importerFile))) {
+          if (
+            importerFile !== 'scripts/e2e-test-data.mjs'
+            || !catalogDirect.has(importerFile)
+            || await coLoadedMutatesArgv(importerFile)
+            || [...entryReaches].some(([entry, { seen }]) => entry !== importerFile && seen.has(importerFile))
+          ) {
             callersPreserveIdentity = false;
             break;
           }
           const callerAst = analyzedRootFiles.get(importerFile)?.ast;
-          if (
-            !ciCommandsPreserveMatrixApp(expandedByEntry.get(CATALOG), importerFile, root)
-            || !dispatchBindings.every((b) => callerPreservesAppIdentity(callerAst, b.local))
-          ) {
+          if (!dispatchBindings.every((b) => callerPreservesAppIdentity(callerAst, b.local))) {
             callersPreserveIdentity = false;
             break;
           }
@@ -3048,17 +1876,11 @@ export async function loadConservativeWorkspaceGraph(root) {
     const lazyTargets = new Set([...allTargets].filter((target) => !eagerTargets.has(target)));
     if (lazyTargets.size > 0) lazyWorkspaceEdges.set(file, lazyTargets);
   }
-  // `moduleUsers(path)`: the nodes that load one module of the shared component
-  // package, or null for a file the planner ties to the whole package.
-  // `appReaders(path)`: the app ids whose code names `path`, or a directory
-  // holding it, in another app's directory. `appsNaming(identifier)`: the app
-  // ids whose code names `identifier`, read on first use.
+
   let moduleUsers;
-  // The root package.json scripts each ci.yml job runs, directly or through
-  // local composite actions or other scripts (`pnpm <script>`; a package's own scripts are not root ones).
   const jobScripts = new Map();
   for (const [id, job] of Object.entries(ci?.jobs ?? {})) {
-    jobScripts.set(id, namedByCommands(await expandJobSteps(job), rootScripts, root, rootPackageName).expanded);
+    jobScripts.set(id, namedByCommands(await expandJobSteps(job), rootScripts, cmdOpts).expanded);
   }
   const naming = new Map();
   const graph = {
