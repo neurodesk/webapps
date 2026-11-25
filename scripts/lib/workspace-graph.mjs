@@ -46,7 +46,7 @@ const SOURCE_FILE = /\.[cm]?[jt]s$/;
 // A whole line that is a `//` comment. Triple-slash lines stay: TypeScript's
 // `/// <reference path>` directives are compiler inputs.
 const LINE_COMMENT = /^[ \t]*\/\/(?!\/).*$/gm;
-const ROOT_SCRIPT_CALL = /\bpnpm (?:-w |--workspace-root )?(?:run )?([\w:-]+)/g;
+const ROOT_SCRIPT_CALL = /\bpnpm (?:-w |--workspace-root )?(?:run )?([A-Za-z0-9_@][\w.:/@-]*)/g;
 // An app's code names a file of another app by a relative path: a kit its build
 // stages, a fixture its tests read.
 const APP_CODE = /\.[cm]?[jt]sx?$/;
@@ -161,7 +161,7 @@ function calleeNameOf(callNode) {
 // `require`), (3) element of an ArrayExpression passed directly to a subprocess
 // runner (`run`/`execFile`/`execFileSync`/`spawn`/`spawnSync`), or (4) direct
 // VariableDeclarator initializer whose binding is never referenced elsewhere.
-function isStandalonePathLiteral(node, ancestors, referencedIdentifiers) {
+function isStandalonePathLiteral(node, ancestors, referencedIdentifiers, readerArgIdentifiers) {
   if (node.type !== 'Literal' || typeof node.value !== 'string') return false;
   const parent = ancestors[ancestors.length - 1];
   if (!parent) return false;
@@ -201,10 +201,12 @@ function isStandalonePathLiteral(node, ancestors, referencedIdentifiers) {
     if (STATEMENT_BOUNDARY.has(ancestor.type)) return consumedByReader;
     if (ancestor.type === 'AwaitExpression' && ancestor.argument === child) continue;
     if (ancestor.type === 'VariableDeclarator' && ancestor.init === child) {
+      const exported = ancestors[i - 1]?.type === 'VariableDeclaration' && ancestors[i - 2]?.type === 'ExportNamedDeclaration';
+      if (exported) return false;
+      if (ancestor.id?.type === 'Identifier' && readerArgIdentifiers.has(ancestor.id.name)) return false;
       if (consumedByReader) continue;
       if (
         ancestors[i - 1]?.type === 'VariableDeclaration' &&
-        ancestors[i - 2]?.type !== 'ExportNamedDeclaration' &&
         ancestor.id?.type === 'Identifier' &&
         !referencedIdentifiers.has(ancestor.id.name)
       ) {
@@ -244,6 +246,7 @@ function collectScriptStringLiterals(text, file) {
     return null;
   }
   const referencedIdentifiers = new Set();
+  const readerArgIdentifiers = new Set();
   const candidates = [];
   const ancestors = [];
   const walk = (node) => {
@@ -255,7 +258,17 @@ function collectScriptStringLiterals(text, file) {
     if (node.type === 'Identifier') {
       const parent = ancestors[ancestors.length - 1];
       const isDeclId = parent?.type === 'VariableDeclarator' && parent.id === node;
-      if (!isDeclId) referencedIdentifiers.add(node.name);
+      if (!isDeclId) {
+        referencedIdentifiers.add(node.name);
+        if (
+          parent?.type === 'CallExpression' &&
+          Array.isArray(parent.arguments) &&
+          parent.arguments.includes(node) &&
+          (FILE_READER_CALLS.has(calleeNameOf(parent)) || PATH_JOIN_CALLS.has(calleeNameOf(parent)) || EXEC_ARRAY_CALLS.has(calleeNameOf(parent)))
+        ) {
+          readerArgIdentifiers.add(node.name);
+        }
+      }
     }
     const isStringLiteral = node.type === 'Literal' && typeof node.value === 'string';
     const isTemplate = node.type === 'TemplateLiteral';
@@ -276,7 +289,7 @@ function collectScriptStringLiterals(text, file) {
       (isStringLiteral || (isTemplate && node.expressions.length === 0)) &&
       chain[chain.length - 1]?.type === 'VariableDeclarator' &&
       /(?:^|\n)[ \t]*\/\//.test(text.slice(node.range[0] + 1, node.range[1] - 1));
-    const standalone = isStandalonePathLiteral(node, chain, referencedIdentifiers) || commentLine;
+    const standalone = isStandalonePathLiteral(node, chain, referencedIdentifiers, readerArgIdentifiers) || commentLine;
     return { start: node.range[0], end: node.range[1], standalone };
   });
 }
@@ -361,7 +374,7 @@ function expandedCommandTexts(commands, rootScripts) {
   return texts;
 }
 
-const WORKSPACE_ROOT_SCRIPT_CALL = /\bpnpm (?:-w|--workspace-root) (?:run )?([\w:-]+)/g;
+const WORKSPACE_ROOT_SCRIPT_CALL = /\bpnpm (?:-w|--workspace-root) (?:run )?([A-Za-z0-9_@][\w.:/@-]*)/g;
 
 // Expand root package.json scripts explicitly invoked from a workspace manifest
 // via `pnpm -w [run] <script>` or `pnpm --workspace-root [run] <script>`,
@@ -533,6 +546,22 @@ export async function loadConservativeWorkspaceGraph(root) {
     if (edges.has(file)) continue;
     const uses = new Set();
     edges.set(file, uses);
+    if (/^(?:packages|exes)\/.*\.json$/.test(file)) {
+      const jsonText = await readFile(join(root, file), 'utf8').catch(() => null);
+      if (jsonText !== null) {
+        for (const [, top, name] of jsonText.matchAll(SCRIPT_REFERENCE)) {
+          if (nodeSet.has(`${top}/${name}`)) uses.add(`${top}/${name}`);
+        }
+        for (const [, path, dir, name] of jsonText.matchAll(ROOT_NAMED)) {
+          const target = path ?? `${dir}/${name}`;
+          if ((ROOT_DIRS.some((rootDir) => target.startsWith(rootDir)) || ROOT_CONFIG.test(target)) && target !== file) {
+            uses.add(target);
+            pendingRootFiles.push(target);
+          }
+        }
+      }
+      continue;
+    }
     if (!SOURCE_FILE.test(file)) continue;
     const source = await readFile(join(root, file), 'utf8').catch(() => null);
     if (source === null) continue;

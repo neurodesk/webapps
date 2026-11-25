@@ -3019,6 +3019,7 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
       "function anchor() { return resolve('exes/returned/anchor.json'); } readFileSync(join(anchor(), '..', 'actual.json'));",
       "import { exportedAnchor } from './exported-anchor.mjs'; readFileSync(join(exportedAnchor, '..', 'actual.json'));",
       "readFileSync(JSON.parse(readFileSync('exes/indirect/path.json', 'utf8')));",
+      "const splitPath = JSON.parse(readFileSync('exes/split-indirect/path.json', 'utf8')); readFileSync(splitPath);",
       "const linked = 'exes/linked/fixture.json';",
     ].join('\n'),
     'scripts/exported-anchor.mjs': "export const exportedAnchor = resolve('exes/exported/anchor.json');\n",
@@ -3046,6 +3047,8 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
     'exes/exported/actual.json': '{"exported":true}',
     'exes/indirect/path.json': '"exes/indirect/actual.json"',
     'exes/indirect/actual.json': '{"indirect":true}',
+    'exes/split-indirect/path.json': '"exes/split-indirect/actual.json"',
+    'exes/split-indirect/actual.json': '{"split":true}',
     'exes/linked/target.json': '{"real":true}',
     'packages/pkg/package.json': JSON.stringify({ name: '@nd/pkg' }),
     'packages/pkg/fixture.json/index.js': "import '../../../scripts/from-dir-json.mjs';\n",
@@ -3068,6 +3071,7 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
   assert.equal(createAppPlan(registry, ['exes/returned/actual.json'], prefixGraph).site, true, 'returned resolve(anchor.json) keeps exes/returned edge');
   assert.equal(createAppPlan(registry, ['exes/exported/actual.json'], prefixGraph).site, true, 'exported resolve(anchor.json) keeps exes/exported edge');
   assert.equal(createAppPlan(registry, ['exes/indirect/actual.json'], prefixGraph).site, true, 'nested readFileSync(JSON.parse(readFileSync(path.json))) keeps exes/indirect edge');
+  assert.equal(createAppPlan(registry, ['exes/split-indirect/actual.json'], prefixGraph).site, true, 'split-statement JSON indirect read keeps exes/split-indirect edge');
   assert.equal(createAppPlan(registry, ['exes/linked/target.json'], prefixGraph).site, true, 'symlink keeps exes/linked edge');
   assert.equal(reachableFrom(prefixGraph, CATALOG).has('scripts/from-dir-json.mjs'), true, 'directory named fixture.json keeps packages/pkg edge');
 });
@@ -3327,6 +3331,25 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
         ['package.json', {
           before: JSON.stringify({ name: 'root', scripts: { 'verify-style': 'node scripts/ok.mjs' } }),
           after: JSON.stringify({ name: 'root', scripts: { 'verify-style': 'node scripts/fail.mjs' } }),
+        }],
+        ['pnpm-lock.yaml', {
+          before: stringify({ lockfileVersion: '9.0', importers: { '.': {} }, packages: {}, snapshots: {} }),
+          after: stringify({ lockfileVersion: '9.0', importers: { '.': {} }, packages: {}, snapshots: {} }),
+        }],
+      ]),
+      (plan) => assert.deepEqual(plan.selected.map((app) => app.id), ['niimath']),
+    ],
+    [
+      'editing a dotted root script invoked by an app selects that app',
+      {
+        'package.json': JSON.stringify({ name: 'root', scripts: { 'verify.style': 'node scripts/ok.mjs' } }),
+        'apps/niimath/package.json': JSON.stringify({ name: '@nd/niimath', scripts: { build: 'pnpm -w run verify.style' } }),
+      },
+      'package.json',
+      new Map([
+        ['package.json', {
+          before: JSON.stringify({ name: 'root', scripts: { 'verify.style': 'node scripts/ok.mjs' } }),
+          after: JSON.stringify({ name: 'root', scripts: { 'verify.style': 'node scripts/fail.mjs' } }),
         }],
         ['pnpm-lock.yaml', {
           before: stringify({ lockfileVersion: '9.0', importers: { '.': {} }, packages: {}, snapshots: {} }),
