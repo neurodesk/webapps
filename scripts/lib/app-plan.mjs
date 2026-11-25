@@ -1270,13 +1270,17 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
         // one only the site jobs run selects the site build, a per-app CI job
         // selects every app, and a workspace invocation selects whatever reaches
         // that workspace; a script nothing runs selects nothing.
-        const installHooks = new Set(['preinstall', 'install', 'postinstall', 'preprepare', 'prepare', 'postprepare', 'pnpm:devPreinstall']);
+        const installHooks = new Set(['preinstall', 'install', 'postinstall', 'prepublish', 'preprepare', 'prepare', 'postprepare', 'pnpm:devPreinstall']);
+        const packHooks = new Set(['prepack', 'pack', 'postpack', 'preprepare', 'prepare', 'postprepare']);
+        const publishHooks = new Set(['prepublishOnly', 'prepack', 'prepare', 'postpack', 'publish', 'postpublish', 'preprepare', 'postprepare', 'prepublish']);
         for (const name of scripts) {
           const lifecycleBase = name.match(/^(?:pre|post)(.+)$/)?.[1] ?? null;
           const runsScript = (run) => run.has(name)
             || run.has(ANY_ROOT_SCRIPT)
             || (lifecycleBase !== null && run.has(lifecycleBase))
             || (installHooks.has(name) && run.has('install'))
+            || (packHooks.has(name) && run.has('pack'))
+            || (publishHooks.has(name) && run.has('publish'))
             || ((name === 'stop' || name === 'start' || lifecycleBase === 'stop' || lifecycleBase === 'start') && run.has('restart'));
           const jobs = [...graph.jobScripts].filter(([, run]) => runsScript(run)).map(([id]) => id);
           if (jobs.length) {

@@ -6370,6 +6370,109 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       (plan) => assert.equal(plan.allApps, true),
     ],
     [
+      'npm install-clean expands root prepublish hook into CI graph',
+      {
+        'package.json': JSON.stringify({
+          name: 'root',
+          scripts: { prepublish: 'node scripts/quality/helper.mjs' },
+        }),
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'npm install-clean --offline --foreground-scripts' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+      },
+      'scripts/quality/helper.mjs',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'npm workspace install-clean expands root prepare hook even with --workspace',
+      {
+        'package.json': JSON.stringify({
+          name: 'root',
+          workspaces: ['apps/*'],
+          scripts: { prepare: 'node scripts/quality/helper.mjs' },
+        }),
+        'apps/n4/package.json': JSON.stringify({ name: 'n4', scripts: {} }),
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'npm --workspace n4 install-clean --offline --foreground-scripts' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+      },
+      'scripts/quality/helper.mjs',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'pnpm recursive install from workspace member expands root prepare hook',
+      {
+        'package.json': JSON.stringify({
+          name: 'root',
+          scripts: { prepare: 'node scripts/quality/helper.mjs' },
+        }),
+        'apps/n4/package.json': JSON.stringify({ name: '@nd/n4', scripts: {} }),
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ 'working-directory': 'apps/n4', run: 'pnpm recursive install --offline --no-frozen-lockfile' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+      },
+      'scripts/quality/helper.mjs',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'resolved env var npm "$NPM_CMD" review expands root review script',
+      {
+        'package.json': JSON.stringify({
+          name: 'root',
+          scripts: { review: 'node scripts/quality/helper.mjs' },
+        }),
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ env: { NPM_CMD: 'run' }, run: 'npm "$NPM_CMD" review' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+      },
+      'scripts/quality/helper.mjs',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'pnpm pack expands root prepare hook into CI graph',
+      {
+        'package.json': JSON.stringify({
+          name: 'root',
+          scripts: { prepare: 'node scripts/quality/helper.mjs' },
+        }),
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'pnpm pack --dry-run' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+      },
+      'scripts/quality/helper.mjs',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
       'dynamic script name in CI preserves chained workspace lint runner edge',
       {
         '.github/workflows/ci.yml': stringify({

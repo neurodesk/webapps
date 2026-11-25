@@ -1931,7 +1931,9 @@ const NPM_ALIASES = {
 const NPM_COMMAND_SET = new Set(NPM_COMMANDS);
 const NPM_ALL_NAMES = [...NPM_COMMANDS, ...Object.keys(NPM_ALIASES)];
 const PNPM_INSTALL_COMMANDS = new Set(['install', 'i', 'ci', 'install-test', 'it', 'add']);
-const INSTALL_LIFECYCLE_HOOKS = ['preinstall', 'install', 'postinstall', 'preprepare', 'prepare', 'postprepare', 'pnpm:devPreinstall'];
+const INSTALL_LIFECYCLE_HOOKS = ['preinstall', 'install', 'postinstall', 'prepublish', 'preprepare', 'prepare', 'postprepare', 'pnpm:devPreinstall'];
+const PACK_LIFECYCLE_HOOKS = ['prepack', 'pack', 'postpack', 'preprepare', 'prepare', 'postprepare'];
+const PUBLISH_LIFECYCLE_HOOKS = ['prepublishOnly', 'prepack', 'prepare', 'postpack', 'publish', 'postpublish', 'preprepare', 'postprepare', 'prepublish'];
 
 function derefNpmCommand(raw) {
   if (!raw) return raw;
@@ -2035,7 +2037,10 @@ function parseLintCommandFlags(token, scriptOpts = {}) {
         if (PNPM_VALUE_OPTIONS.has(word) && i + 1 < words.length) i++;
         continue;
       }
-      if (!seenRun && (word === 'run' || word === 'run-script' || (kind === 'npm' && derefNpmCommand(word) === 'run'))) {
+      const resolvedWord = /[$`*]|\$\{\{/.test(word) && scriptOpts.command
+        ? resolveSingleCommandEnvVar(word, scriptOpts.command, scriptOpts.stepEnv)
+        : word;
+      if (!seenRun && resolvedWord !== null && (resolvedWord === 'run' || resolvedWord === 'run-script' || (kind === 'npm' && derefNpmCommand(resolvedWord) === 'run'))) {
         seenRun = true;
         continue;
       }
@@ -2344,8 +2349,19 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
           if (PNPM_VALUE_OPTIONS.has(word) && idx + 1 < words.length) idx++;
           continue;
         }
-        if (!seenRun && (word === 'run' || word === 'run-script' || (kind === 'npm' && derefNpmCommand(word) === 'run'))) {
+        const effectiveWord = /[$`*]|\$\{\{/.test(word)
+          ? resolveSingleCommandEnvVar(word, command, stepEnv)
+          : word;
+        if (!seenRun && effectiveWord !== null && (effectiveWord === 'run' || effectiveWord === 'run-script' || (kind === 'npm' && derefNpmCommand(effectiveWord) === 'run'))) {
           seenRun = true;
+          continue;
+        }
+        if (!seenRun && kind === 'pnpm' && effectiveWord !== null && (effectiveWord === 'recursive' || effectiveWord === 'multi' || effectiveWord === 'm')) {
+          hasNonRootFilter = true;
+          continue;
+        }
+        if (!seenRun && kind === 'yarn' && effectiveWord === 'workspaces') {
+          hasNonRootFilter = true;
           continue;
         }
         const atRoot = hasRootFlag || (!hasNonRootFilter && !hasNonRootDir && mayRunAtRoot);
@@ -2356,6 +2372,8 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
             `pre${name}`,
             `post${name}`,
             ...(name === 'install' ? INSTALL_LIFECYCLE_HOOKS : []),
+            ...(name === 'pack' ? PACK_LIFECYCLE_HOOKS : []),
+            ...(name === 'publish' ? PUBLISH_LIFECYCLE_HOOKS : []),
             ...(name === 'restart' ? ['prestop', 'stop', 'poststop', 'prestart', 'start', 'poststart'] : []),
           ];
           for (const hook of new Set(hooks)) {
@@ -2365,13 +2383,14 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
         const recordCommand = (raw) => {
           if (!seenRun && kind === 'npm') {
             const deref = derefNpmCommand(raw);
-            if (!atRoot) return;
             if (deref === 'install' || deref === 'ci') {
+              // npm workspace installs run root install/prepare/prepublish lifecycle
+              // hooks even when invoked with --workspace or from a workspace member.
               pushScriptWithHooks('install', childEnv);
             } else if (deref === 'install-test' || deref === 'install-ci-test') {
               pushScriptWithHooks('install', childEnv);
-              pushScriptWithHooks('test', childEnv);
-            } else {
+              if (atRoot) pushScriptWithHooks('test', childEnv);
+            } else if (atRoot) {
               pushScriptWithHooks(deref, childEnv);
             }
             return;
@@ -2387,17 +2406,12 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
           const canonical = !seenRun && (raw === 't' || raw === 'tst') ? 'test' : raw;
           pushScriptWithHooks(canonical, childEnv);
         };
-        if (/^[A-Za-z0-9_@][\w.:/@-]*$/.test(word)) {
-          recordCommand(word);
-        } else if (/[$`*]|\$\{\{/.test(word)) {
-          const val = resolveSingleCommandEnvVar(word, command, stepEnv);
-          if (val !== null && /^[A-Za-z0-9_@][\w.:/@-]*$/.test(val)) {
-            recordCommand(val);
-          } else if (atRoot || (kind === 'pnpm' && !seenRun)) {
-            scripts.push({ script: ANY_ROOT_SCRIPT, env: null });
-            if (rootScripts) {
-              for (const key of Object.keys(rootScripts)) scripts.push({ script: key, env: null });
-            }
+        if (effectiveWord !== null && /^[A-Za-z0-9_@][\w.:/@-]*$/.test(effectiveWord)) {
+          recordCommand(effectiveWord);
+        } else if (effectiveWord === null && (atRoot || ((kind === 'pnpm' || kind === 'npm') && !seenRun))) {
+          scripts.push({ script: ANY_ROOT_SCRIPT, env: null });
+          if (rootScripts) {
+            for (const key of Object.keys(rootScripts)) scripts.push({ script: key, env: null });
           }
         }
         break;
