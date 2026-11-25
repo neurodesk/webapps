@@ -6302,6 +6302,74 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       (plan) => assert.equal(plan.allApps, true),
     ],
     [
+      'pnpm install from workspace member working-directory expands root prepare hook',
+      {
+        'package.json': JSON.stringify({
+          name: 'root',
+          scripts: { prepare: 'node scripts/quality/helper.mjs' },
+        }),
+        'apps/n4/package.json': JSON.stringify({ name: '@nd/n4', scripts: {} }),
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ 'working-directory': 'apps/n4', run: 'pnpm install --frozen-lockfile' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+      },
+      'scripts/quality/helper.mjs',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'pnpm install from workspace member working-directory tracks root prepare edits in package.json',
+      {
+        'package.json': JSON.stringify({
+          name: 'root',
+          scripts: { prepare: 'node scripts/quality/helper.mjs' },
+        }),
+        'apps/n4/package.json': JSON.stringify({ name: '@nd/n4', scripts: {} }),
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ 'working-directory': 'apps/n4', run: 'pnpm install --frozen-lockfile' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+      },
+      'package.json',
+      new Map([
+        ['package.json', {
+          before: JSON.stringify({ name: 'root', scripts: {} }),
+          after: JSON.stringify({ name: 'root', scripts: { prepare: 'node scripts/quality/helper.mjs' } }),
+        }],
+        ['pnpm-lock.yaml', { before: 'lockfileVersion: "9.0"\n', after: 'lockfileVersion: "9.0"\n' }],
+      ]),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'npm install-clean alias expands root prepare hook into CI graph',
+      {
+        'package.json': JSON.stringify({
+          name: 'root',
+          scripts: { prepare: 'node scripts/quality/helper.mjs' },
+        }),
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'npm install-clean --offline --foreground-scripts' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+      },
+      'scripts/quality/helper.mjs',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
       'dynamic script name in CI preserves chained workspace lint runner edge',
       {
         '.github/workflows/ci.yml': stringify({

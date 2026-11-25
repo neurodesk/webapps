@@ -1904,6 +1904,47 @@ function scriptMayInvokeLint(scriptWord, { stepEnv = null, rawCmd = '', releaseT
   return true;
 }
 
+const NPM_COMMANDS = [
+  'access', 'adduser', 'approve-scripts', 'audit', 'bugs', 'cache', 'ci', 'completion',
+  'config', 'dedupe', 'deny-scripts', 'deprecate', 'diff', 'dist-tag', 'docs', 'doctor',
+  'edit', 'exec', 'explain', 'explore', 'find-dupes', 'fund', 'get', 'help', 'help-search',
+  'init', 'install', 'install-ci-test', 'install-test', 'link', 'll', 'login', 'logout',
+  'ls', 'org', 'outdated', 'owner', 'pack', 'ping', 'pkg', 'prefix', 'profile', 'prune',
+  'publish', 'query', 'rebuild', 'repo', 'restart', 'root', 'run', 'sbom', 'search', 'set',
+  'shrinkwrap', 'stage', 'star', 'stars', 'start', 'stop', 'team', 'test', 'token', 'trust',
+  'undeprecate', 'uninstall', 'unpublish', 'unstar', 'update', 'version', 'view', 'whoami',
+];
+const NPM_ALIASES = {
+  author: 'owner', home: 'docs', issues: 'bugs', info: 'view', show: 'view', find: 'search',
+  add: 'install', unlink: 'uninstall', remove: 'uninstall', rm: 'uninstall', r: 'uninstall',
+  un: 'uninstall', rb: 'rebuild', list: 'ls', ln: 'link', create: 'init', i: 'install',
+  it: 'install-test', cit: 'install-ci-test', u: 'update', up: 'update', c: 'config',
+  s: 'search', se: 'search', tst: 'test', t: 'test', ddp: 'dedupe', v: 'view',
+  'run-script': 'run', 'clean-install': 'ci', 'clean-install-test': 'install-ci-test',
+  x: 'exec', why: 'explain', la: 'll', verison: 'version', ic: 'ci', innit: 'init',
+  in: 'install', ins: 'install', inst: 'install', insta: 'install', instal: 'install',
+  isnt: 'install', isnta: 'install', isntal: 'install', isntall: 'install',
+  'install-clean': 'ci', 'isntall-clean': 'ci', hlep: 'help', 'dist-tags': 'dist-tag',
+  upgrade: 'update', udpate: 'update', rum: 'run', sit: 'install-ci-test', urn: 'run',
+  ogr: 'org', 'add-user': 'adduser',
+};
+const NPM_COMMAND_SET = new Set(NPM_COMMANDS);
+const NPM_ALL_NAMES = [...NPM_COMMANDS, ...Object.keys(NPM_ALIASES)];
+const PNPM_INSTALL_COMMANDS = new Set(['install', 'i', 'ci', 'install-test', 'it', 'add']);
+const INSTALL_LIFECYCLE_HOOKS = ['preinstall', 'install', 'postinstall', 'preprepare', 'prepare', 'postprepare', 'pnpm:devPreinstall'];
+
+function derefNpmCommand(raw) {
+  if (!raw) return raw;
+  const normalized = /[A-Z]/.test(raw) ? raw.replace(/([A-Z])/g, (m) => `-${m.toLowerCase()}`) : raw;
+  if (NPM_COMMAND_SET.has(normalized)) return normalized;
+  if (Object.hasOwn(NPM_ALIASES, normalized)) return NPM_ALIASES[normalized];
+  const matches = NPM_ALL_NAMES.filter((name) => name.startsWith(normalized));
+  if (matches.length !== 1) return raw;
+  let resolved = matches[0];
+  while (Object.hasOwn(NPM_ALIASES, resolved)) resolved = NPM_ALIASES[resolved];
+  return resolved;
+}
+
 // Parse package-manager flags in one shell command segment, attributing `-w`
 // and workspace/directory selectors to the specific `pnpm`, `npm`, or `yarn`
 // invocation that receives them (so e.g. `pnpm exec npm -w @nd/n4 run lint`
@@ -1994,7 +2035,7 @@ function parseLintCommandFlags(token, scriptOpts = {}) {
         if (PNPM_VALUE_OPTIONS.has(word) && i + 1 < words.length) i++;
         continue;
       }
-      if (!seenRun && (word === 'run' || word === 'run-script' || (kind === 'npm' && (word === 'rum' || word === 'urn')))) {
+      if (!seenRun && (word === 'run' || word === 'run-script' || (kind === 'npm' && derefNpmCommand(word) === 'run'))) {
         seenRun = true;
         continue;
       }
@@ -2303,42 +2344,59 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
           if (PNPM_VALUE_OPTIONS.has(word) && idx + 1 < words.length) idx++;
           continue;
         }
-        if (!seenRun && (word === 'run' || word === 'run-script' || (kind === 'npm' && (word === 'rum' || word === 'urn')))) {
+        if (!seenRun && (word === 'run' || word === 'run-script' || (kind === 'npm' && derefNpmCommand(word) === 'run'))) {
           seenRun = true;
           continue;
         }
-        if (hasRootFlag || (!hasNonRootFilter && !hasNonRootDir && mayRunAtRoot)) {
-          const installCommands = new Set(['install', 'i', 'ci', 'clean-install', 'in', 'ins', 'inst', 'insta', 'instal', 'isnt', 'isnta', 'isntal', 'isntall']);
-          const installHooks = ['preinstall', 'install', 'postinstall', 'preprepare', 'prepare', 'postprepare', 'pnpm:devPreinstall'];
-          const pushScriptWithHooks = (name, env) => {
-            scripts.push({ script: name, env });
-            if (!rootScripts) return;
-            const hooks = [
-              `pre${name}`,
-              `post${name}`,
-              ...(name === 'install' ? installHooks : []),
-              ...(name === 'restart' ? ['prestop', 'stop', 'poststop', 'prestart', 'start', 'poststart'] : []),
-            ];
-            for (const hook of new Set(hooks)) {
-              if (hook !== name && Object.hasOwn(rootScripts, hook)) scripts.push({ script: hook, env });
-            }
-          };
-          const canonicalName = (raw) => {
-            if (!seenRun && (raw === 't' || raw === 'tst')) return 'test';
-            if (!seenRun && installCommands.has(raw)) return 'install';
-            return raw;
-          };
-          if (/^[A-Za-z0-9_@][\w.:/@-]*$/.test(word)) {
-            pushScriptWithHooks(canonicalName(word), childEnv);
-          } else if (/[$`*]|\$\{\{/.test(word)) {
-            const val = resolveSingleCommandEnvVar(word, command, stepEnv);
-            if (val !== null && /^[A-Za-z0-9_@][\w.:/@-]*$/.test(val)) {
-              pushScriptWithHooks(canonicalName(val), childEnv);
+        const atRoot = hasRootFlag || (!hasNonRootFilter && !hasNonRootDir && mayRunAtRoot);
+        const pushScriptWithHooks = (name, env) => {
+          scripts.push({ script: name, env });
+          if (!rootScripts) return;
+          const hooks = [
+            `pre${name}`,
+            `post${name}`,
+            ...(name === 'install' ? INSTALL_LIFECYCLE_HOOKS : []),
+            ...(name === 'restart' ? ['prestop', 'stop', 'poststop', 'prestart', 'start', 'poststart'] : []),
+          ];
+          for (const hook of new Set(hooks)) {
+            if (hook !== name && Object.hasOwn(rootScripts, hook)) scripts.push({ script: hook, env });
+          }
+        };
+        const recordCommand = (raw) => {
+          if (!seenRun && kind === 'npm') {
+            const deref = derefNpmCommand(raw);
+            if (!atRoot) return;
+            if (deref === 'install' || deref === 'ci') {
+              pushScriptWithHooks('install', childEnv);
+            } else if (deref === 'install-test' || deref === 'install-ci-test') {
+              pushScriptWithHooks('install', childEnv);
+              pushScriptWithHooks('test', childEnv);
             } else {
-              scripts.push({ script: ANY_ROOT_SCRIPT, env: null });
-              if (rootScripts) {
-                for (const key of Object.keys(rootScripts)) scripts.push({ script: key, env: null });
-              }
+              pushScriptWithHooks(deref, childEnv);
+            }
+            return;
+          }
+          if (!seenRun && kind === 'pnpm' && PNPM_INSTALL_COMMANDS.has(raw)) {
+            // pnpm workspace installs run root install/prepare lifecycle hooks
+            // even when invoked from a workspace member directory.
+            pushScriptWithHooks('install', childEnv);
+            if ((raw === 'install-test' || raw === 'it') && atRoot) pushScriptWithHooks('test', childEnv);
+            return;
+          }
+          if (!atRoot) return;
+          const canonical = !seenRun && (raw === 't' || raw === 'tst') ? 'test' : raw;
+          pushScriptWithHooks(canonical, childEnv);
+        };
+        if (/^[A-Za-z0-9_@][\w.:/@-]*$/.test(word)) {
+          recordCommand(word);
+        } else if (/[$`*]|\$\{\{/.test(word)) {
+          const val = resolveSingleCommandEnvVar(word, command, stepEnv);
+          if (val !== null && /^[A-Za-z0-9_@][\w.:/@-]*$/.test(val)) {
+            recordCommand(val);
+          } else if (atRoot || (kind === 'pnpm' && !seenRun)) {
+            scripts.push({ script: ANY_ROOT_SCRIPT, env: null });
+            if (rootScripts) {
+              for (const key of Object.keys(rootScripts)) scripts.push({ script: key, env: null });
             }
           }
         }
