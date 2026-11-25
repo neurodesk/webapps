@@ -369,12 +369,14 @@ test("decodeRasterBytes converts PNG gAMA (linear and 45455) to sRGB, validates 
   assert.equal(decLin16.rgba[3], 255);
 
   // 2. Non-sRGB PNG iCCP rejected even when disguised under iCCP keyword "sRGB" (Adobe RGB primaries)
-  const makeIccpPng = (keyword, profile) =>
+  const makeIccpPng = (keyword, profile, { colorType = 2, scanline = Buffer.from([0, 100, 100, 100]) } = {}) =>
     buildCustomPng(
-      { width: 1, height: 1, depth: 8, colorType: 2 },
+      { width: 1, height: 1, depth: 8, colorType },
       [pngChunk("iCCP", Buffer.concat([Buffer.from(`${keyword}\0`, "ascii"), Buffer.from([0]), deflateSync(profile)]))],
-      Buffer.from([0, 100, 100, 100]),
+      scanline,
     );
+  const makeGrayIccpPng = (keyword, profile) =>
+    makeIccpPng(keyword, profile, { colorType: 0, scanline: Buffer.from([0, 100]) });
 
   const disguisedAdobeProfile = makeFakeIccProfile("sRGB", { primaries: ADOBE_RGB_PRIMARIES });
   assert.throws(() => decodeRasterBytes(makeIccpPng("sRGB", disguisedAdobeProfile), { name: "disguised-adobe.png" }), /non-sRGB ICC/);
@@ -411,13 +413,14 @@ test("decodeRasterBytes converts PNG gAMA (linear and 45455) to sRGB, validates 
     primaries: null,
     trcTag: linear2CurvTag,
   });
-  assert.throws(() => decodeRasterBytes(makeIccpPng("sRGB", linear2GrayProfile), { name: "linear2-gray.png" }), /non-sRGB ICC/);
+  assert.throws(() => decodeRasterBytes(makeGrayIccpPng("sRGB", linear2GrayProfile), { name: "linear2-gray.png" }), /non-sRGB ICC/);
   const srgbGrayProfile = makeFakeIccProfile("sRGB Gray", {
     colorSpace: "GRAY",
     primaries: null,
     trcTag: makeSrgbParaType3Tag(),
   });
-  assert.equal(decodeRasterBytes(makeIccpPng("sRGB", srgbGrayProfile), { name: "srgb-gray.png" }).rgba[0], 100);
+  const decSrgbGray = decodeRasterBytes(makeGrayIccpPng("sRGB", srgbGrayProfile), { name: "srgb-gray.png" });
+  assert.deepEqual([...decSrgbGray.rgba], [100, 100, 100, 255]);
 
   // 2c. Display P3 iCCP rejected; genuine sRGB ICC with para type 3 AND curv LUT both accepted
   const p3Profile = makeFakeIccProfile("Display P3", { primaries: ADOBE_RGB_PRIMARIES });

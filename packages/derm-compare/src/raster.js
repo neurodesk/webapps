@@ -114,7 +114,7 @@ function isValidSrgbTrc(profile, tagOffset, tagSize) {
     const needed = 12 + count * 2;
     if (needed > tagSize || tagOffset + needed > profile.length) return false;
     const denom = count - 1;
-    // Validate both stored entries and the linearly interpolated curve (ICC.1:2022 §10.5)
+    // Validate both stored entries and the linearly interpolated curve (ICC.1:2022 §10.6)
     // so sparse linear LUTs such as 2-entry [0, 65535] are rejected.
     for (let i = 0; i < count; i += 1) {
       const u = i / denom;
