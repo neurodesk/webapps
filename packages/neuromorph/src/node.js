@@ -2,8 +2,8 @@
 // Reads SWC reconstructions (single file, multiple files, or a directory), repairs & validates them,
 // computes NeuroM-compatible morphometrics, Sholl intersections, and bifurcation tables.
 import { randomUUID } from "node:crypto";
-import { rmdirSync, unlinkSync } from "node:fs";
-import { lstat, mkdir, open, readFile, readdir, rename, rm, rmdir, stat, unlink, writeFile } from "node:fs/promises";
+import { closeSync, lstatSync, mkdirSync, openSync, readdirSync, renameSync, rmdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { link, lstat, readFile, readdir, rename, rm, rmdir, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, join, relative, resolve } from "node:path";
 import packageJson from "../package.json" with { type: "json" };
 import { analyse, buildMorphology } from "./morph/morphometrics.js";
@@ -12,6 +12,7 @@ import { readSwc, writeSwc } from "./morph/swc.js";
 import { repairedName, stem } from "./names.js";
 
 export const OUTPUT_LOCK_FILE = ".neurodesk-cli.lock";
+const LINK_FALLBACK_CODES = new Set(["ENOTSUP", "EOPNOTSUPP", "EPERM", "ENOSYS", "EXDEV"]);
 const MAX_SWC_FILE_BYTES = 128 * 1024 * 1024;
 const collator = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
 const ALLOWED_OPTION_KEYS = new Set(["sholl-step", "no-repair", "offline"]);
@@ -19,6 +20,10 @@ const ALLOWED_OPTION_KEYS = new Set(["sholl-step", "no-repair", "offline"]);
 /** Validates CLI flags before touching input files or output directories. */
 export function parseCliOptions(values = {}) {
   if (values === null || typeof values !== "object" || Array.isArray(values)) {
+    throw new TypeError("Options must be a plain object.");
+  }
+  const proto = Object.getPrototypeOf(values);
+  if (proto !== Object.prototype && proto !== null) {
     throw new TypeError("Options must be a plain object.");
   }
   for (const key of Object.keys(values)) {
@@ -48,56 +53,66 @@ export function parseCliOptions(values = {}) {
   return { shollStep, repair };
 }
 
+function rollbackPublishSync(pub) {
+  let clean = true;
+  if (pub.pendingRename) {
+    const { finalPath, dev, ino } = pub.pendingRename;
+    try {
+      const info = lstatSync(finalPath);
+      if (info.isFile() && !info.isSymbolicLink() && info.dev === dev && info.ino === ino) {
+        unlinkSync(finalPath);
+      }
+    } catch (error) {
+      if (error.code !== "ENOENT") clean = false;
+    }
+  }
+  for (const item of [...pub.published].reverse()) {
+    try {
+      const info = lstatSync(item.finalPath);
+      if (info.isFile() && !info.isSymbolicLink() && info.dev === item.dev && info.ino === item.ino) {
+        unlinkSync(item.finalPath);
+      }
+    } catch (error) {
+      if (error.code !== "ENOENT") clean = false;
+    }
+  }
+  for (const backup of [...pub.backups].reverse()) {
+    try {
+      renameSync(backup.backupPath, backup.targetPath);
+    } catch (error) {
+      if (error.code !== "ENOENT") clean = false;
+    }
+  }
+  for (const item of pub.staged) {
+    try {
+      const info = lstatSync(item.partialPath);
+      if (info.isFile() && !info.isSymbolicLink()) {
+        unlinkSync(item.partialPath);
+      }
+    } catch (error) {
+      if (error.code !== "ENOENT") clean = false;
+    }
+  }
+  return clean;
+}
+
 /**
  * Exclusively claims `outputDir` with the shared `.neurodesk-cli.lock` O_EXCL lock file,
- * rejecting directory symlinks, registering SIGINT/SIGTERM cleanup handlers while held, and
- * cleaning up the lock and any newly created directory on error or release.
+ * registering SIGINT/SIGTERM handlers BEFORE creating the directory/lock, using synchronous
+ * lock acquisition (zero async window), rolling back mid-publication on signal, and keeping
+ * `.neurodesk-cli.lock` on disk if rollback fails.
  */
 export async function claimOutputDirectory(outputDir) {
   if (typeof outputDir !== "string" || !outputDir.trim()) {
     throw new Error("Output directory must be a non-empty path.");
   }
   const directory = resolve(outputDir);
-  let createdDir = false;
-  try {
-    const info = await lstat(directory);
-    if (info.isSymbolicLink()) {
-      throw new Error(`Output path '${directory}' must not be a symbolic link.`);
-    }
-    if (!info.isDirectory()) {
-      throw new Error(`Output path '${directory}' exists and is not a directory.`);
-    }
-  } catch (error) {
-    if (error.code !== "ENOENT") throw error;
-    await mkdir(directory, { recursive: true });
-    createdDir = true;
-    const createdInfo = await lstat(directory);
-    if (createdInfo.isSymbolicLink() || !createdInfo.isDirectory()) {
-      throw new Error(`Output path '${directory}' is not a regular directory.`);
-    }
-  }
-
   const lockPath = join(directory, OUTPUT_LOCK_FILE);
-  let handle = null;
-  let lockActive = false;
+  let createdDir = false;
+  let lockOwned = false;
   let signalsRegistered = false;
-
-  const cleanupSync = () => {
-    if (!lockActive) return;
-    lockActive = false;
-    try {
-      unlinkSync(lockPath);
-    } catch {
-      // ignore
-    }
-    if (createdDir) {
-      try {
-        rmdirSync(directory);
-      } catch {
-        // leave non-empty dir intact
-      }
-    }
-  };
+  let activePublish = null;
+  let rollbackFailed = false;
 
   const unregisterSignals = () => {
     if (!signalsRegistered) return;
@@ -108,7 +123,35 @@ export async function claimOutputDirectory(outputDir) {
 
   const handleSignal = (signal) => {
     unregisterSignals();
-    cleanupSync();
+    let canReleaseLock = !rollbackFailed;
+    if (activePublish) {
+      if (!activePublish.committed) {
+        canReleaseLock = rollbackPublishSync(activePublish) && canReleaseLock;
+      } else {
+        for (const backup of activePublish.backups) {
+          try {
+            unlinkSync(backup.backupPath);
+          } catch {
+            // ignore
+          }
+        }
+      }
+    }
+    if (canReleaseLock && lockOwned) {
+      lockOwned = false;
+      try {
+        unlinkSync(lockPath);
+      } catch {
+        // ignore
+      }
+      if (createdDir && (!activePublish || !activePublish.committed)) {
+        try {
+          rmdirSync(directory);
+        } catch {
+          // leave non-empty dir intact
+        }
+      }
+    }
     if (process.platform === "win32") {
       process.exit(signal === "SIGINT" ? 130 : 143);
     }
@@ -117,30 +160,63 @@ export async function claimOutputDirectory(outputDir) {
   const onSigInt = () => handleSignal("SIGINT");
   const onSigTerm = () => handleSignal("SIGTERM");
 
+  process.on("SIGINT", onSigInt);
+  process.on("SIGTERM", onSigTerm);
+  signalsRegistered = true;
+
+  let fd = null;
   try {
-    handle = await open(lockPath, "wx");
-    lockActive = true;
-    process.on("SIGINT", onSigInt);
-    process.on("SIGTERM", onSigTerm);
-    signalsRegistered = true;
+    try {
+      const info = lstatSync(directory);
+      if (info.isSymbolicLink()) {
+        throw new Error(`Output path '${directory}' must not be a symbolic link.`);
+      }
+      if (!info.isDirectory()) {
+        throw new Error(`Output path '${directory}' exists and is not a directory.`);
+      }
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+      mkdirSync(directory, { recursive: true });
+      createdDir = true;
+      const createdInfo = lstatSync(directory);
+      if (createdInfo.isSymbolicLink() || !createdInfo.isDirectory()) {
+        throw new Error(`Output path '${directory}' is not a regular directory.`);
+      }
+    }
 
-    await handle.writeFile(`${process.pid}\n${new Date().toISOString()}\n`);
-    await handle.close();
-    handle = null;
+    fd = openSync(lockPath, "wx");
+    lockOwned = true;
+    writeFileSync(fd, `${process.pid}\n${new Date().toISOString()}\n`);
+    closeSync(fd);
+    fd = null;
 
-    const entries = await readdir(directory);
+    const entries = readdirSync(directory);
     if (entries.length !== 1 || entries[0] !== OUTPUT_LOCK_FILE) {
       throw new Error(`Output directory ${directory} is not empty. Choose a new or empty directory.`);
     }
   } catch (error) {
+    if (fd !== null) {
+      try {
+        closeSync(fd);
+      } catch {
+        // ignore
+      }
+    }
     unregisterSignals();
-    await handle?.close().catch(() => {});
-    if (lockActive) {
-      lockActive = false;
-      await rm(lockPath, { force: true }).catch(() => {});
+    if (lockOwned) {
+      lockOwned = false;
+      try {
+        unlinkSync(lockPath);
+      } catch {
+        // ignore
+      }
     }
     if (createdDir) {
-      await rmdir(directory).catch(() => {});
+      try {
+        rmdirSync(directory);
+      } catch {
+        // ignore
+      }
     }
     if (error.code === "EEXIST") {
       throw new Error(`Output directory ${directory} is already in use by another run or not empty. Choose a new or empty directory.`);
@@ -151,10 +227,20 @@ export async function claimOutputDirectory(outputDir) {
   return {
     directory,
     createdDir,
+    attachPublish(state) {
+      activePublish = state;
+    },
+    detachPublish() {
+      activePublish = null;
+    },
+    markRollbackFailed() {
+      rollbackFailed = true;
+    },
     async release({ removeDirIfEmpty = false } = {}) {
       unregisterSignals();
-      if (lockActive) {
-        lockActive = false;
+      if (rollbackFailed) return;
+      if (lockOwned) {
+        lockOwned = false;
         await rm(lockPath, { force: true }).catch(() => {});
       }
       if (removeDirIfEmpty && createdDir) {
@@ -166,14 +252,27 @@ export async function claimOutputDirectory(outputDir) {
 
 /**
  * Stages every output file to a `.partial` path first (registering each path BEFORE `writeFile`),
- * then renames all files into place. On error, unlinks `.partial` files and rolls back ONLY
- * final outputs this run created (verified by lstat + dev/ino).
+ * then atomically publishes via hard link (`link` + `unlink`, failing with `EEXIST` without
+ * overwriting if a destination already exists, falling back to `lstat`+`rename` only when the
+ * filesystem does not support hard links). Rolls back ONLY files this run created (verified by
+ * `lstat` + `dev`/`ino`), and marks the lock on incomplete rollback.
  */
-export async function writeStagedOutputs(directory, files, { renameFn = rename, writeFileFn = writeFile } = {}) {
+export async function writeStagedOutputs(
+  directory,
+  files,
+  { claim = null, linkFn = link, renameFn = rename, writeFileFn = writeFile } = {},
+) {
   const runId = randomUUID().slice(0, 8);
-  const staged = [];
-  const renamed = [];
+  const pub = {
+    staged: [],
+    published: [],
+    backups: [],
+    pendingBackup: null,
+    pendingRename: null,
+    committed: false,
+  };
   const seenNames = new Set();
+  claim?.attachPublish?.(pub);
   try {
     for (const { name, bytes } of files) {
       if (typeof name !== "string" || !name || name.includes("/") || name.includes("\\") || name === "." || name === "..") {
@@ -187,37 +286,54 @@ export async function writeStagedOutputs(directory, files, { renameFn = rename, 
 
       const partialPath = join(directory, `.${name}.${runId}.partial`);
       const finalPath = join(directory, name);
-      const item = { name, partialPath, finalPath };
-      staged.push(item);
+      const item = { name, partialPath, finalPath, dev: null, ino: null };
+      pub.staged.push(item);
       await writeFileFn(partialPath, bytes, { flag: "wx" });
+      const stagedInfo = await lstat(partialPath);
+      item.dev = stagedInfo.dev;
+      item.ino = stagedInfo.ino;
     }
-    for (const item of staged) {
-      const existing = await lstat(item.finalPath).catch((error) => {
-        if (error.code === "ENOENT") return null;
-        throw error;
-      });
-      if (existing) {
-        throw new Error(`Refusing to overwrite existing output '${item.name}'.`);
+    for (const item of pub.staged) {
+      pub.pendingRename = { finalPath: item.finalPath, dev: item.dev, ino: item.ino };
+      try {
+        await linkFn(item.partialPath, item.finalPath);
+        pub.published.push({ finalPath: item.finalPath, dev: item.dev, ino: item.ino });
+        pub.pendingRename = null;
+        await unlink(item.partialPath);
+      } catch (error) {
+        if (error.code === "EEXIST") {
+          pub.pendingRename = null;
+          throw new Error(`Refusing to overwrite existing output '${item.name}'.`, { cause: error });
+        }
+        if (!LINK_FALLBACK_CODES.has(error.code)) {
+          throw error;
+        }
+        const existing = await lstat(item.finalPath).catch((err) => {
+          if (err.code === "ENOENT") return null;
+          throw err;
+        });
+        if (existing) {
+          pub.pendingRename = null;
+          throw new Error(`Refusing to overwrite existing output '${item.name}'.`);
+        }
+        await renameFn(item.partialPath, item.finalPath);
+        pub.published.push({ finalPath: item.finalPath, dev: item.dev, ino: item.ino });
+        pub.pendingRename = null;
       }
-      const stagedInfo = await lstat(item.partialPath);
-      await renameFn(item.partialPath, item.finalPath);
-      renamed.push({ finalPath: item.finalPath, dev: stagedInfo.dev, ino: stagedInfo.ino });
     }
-    return staged.map((item) => item.name);
+    pub.committed = true;
+    for (const backup of pub.backups) {
+      await unlink(backup.backupPath).catch(() => {});
+    }
+    return pub.staged.map((item) => item.name);
   } catch (error) {
-    for (const item of staged) {
-      const info = await lstat(item.partialPath).catch(() => null);
-      if (info && info.isFile() && !info.isSymbolicLink()) {
-        await unlink(item.partialPath).catch(() => {});
-      }
-    }
-    for (const { finalPath, dev, ino } of renamed) {
-      const info = await lstat(finalPath).catch(() => null);
-      if (info && info.isFile() && !info.isSymbolicLink() && info.dev === dev && info.ino === ino) {
-        await unlink(finalPath).catch(() => {});
-      }
+    const rollbackClean = rollbackPublishSync(pub);
+    if (!rollbackClean) {
+      claim?.markRollbackFailed?.();
     }
     throw error;
+  } finally {
+    claim?.detachPublish?.();
   }
 }
 
@@ -342,7 +458,7 @@ export async function runNeuromorph({
     };
     outputs.push({ name: `${prefix}_provenance.json`, bytes: encoder.encode(`${JSON.stringify(provenance, null, 2)}\n`) });
 
-    const written = await writeStagedOutputs(claim.directory, outputs, { renameFn });
+    const written = await writeStagedOutputs(claim.directory, outputs, { claim, renameFn });
     succeeded = true;
     return {
       outputDir: claim.directory,

@@ -15,6 +15,27 @@ export const MAX_ATLAS_DECOMPRESSED_BYTES = 128 * 1024 * 1024;
 export const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 export const offlineByDefault = () => process.env.NEURODESK_OFFLINE === "1";
 
+/**
+ * Decides whether `download-models` must stay offline:
+ * - Always offline when `--offline` is explicitly set.
+ * - Online when `NEURODESK_OFFLINE !== "1"`.
+ * - When `NEURODESK_OFFLINE === "1"`:
+ *   - Stay offline if no bundled model directory (`NEURODESK_LIGHTSHEET_ATLAS_MODEL_DIR`) exists.
+ *   - Stay offline if no `--cache-dir` was provided, or `--cache-dir` resolves to the bundled dir itself.
+ *   - Allow online recovery ONLY when a bundled model directory exists AND `--cache-dir` points elsewhere.
+ */
+export function resolveDownloadOffline({ explicitCacheDir, offlineFlag, env = process.env } = {}) {
+  if (offlineFlag === true) return true;
+  if (env.NEURODESK_OFFLINE !== "1") return false;
+  const bundledDir = env.NEURODESK_LIGHTSHEET_ATLAS_MODEL_DIR
+    ? resolve(env.NEURODESK_LIGHTSHEET_ATLAS_MODEL_DIR)
+    : null;
+  if (!bundledDir) return true;
+  if (!explicitCacheDir) return true;
+  if (resolve(explicitCacheDir) === bundledDir) return true;
+  return false;
+}
+
 export function defaultCacheDir() {
   if (process.env.NEURODESK_LIGHTSHEET_ATLAS_MODEL_DIR) {
     return process.env.NEURODESK_LIGHTSHEET_ATLAS_MODEL_DIR;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtemp, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { link, mkdtemp, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -48,6 +48,10 @@ test("CLI rejects empty string flags, invalid ranges, and disallowed subcommand 
 
 test("parseCliOptions validates unknown keys, types, enums and numeric bounds before I/O", () => {
   assert.throws(() => parseCliOptions({ colums: "4" }), /Unknown option/);
+  assert.throws(() => parseCliOptions(Object.create({ layout: "grid" })), /plain object/);
+  assert.throws(() => parseCliOptions({ "grid-start": null }), /Option --grid-start/);
+  assert.throws(() => parseCliOptions({ "grid-type": null }), /Option --grid-type/);
+  assert.throws(() => parseCliOptions({ layout: null }), /Option --layout must be one of/);
   assert.throws(() => parseCliOptions({ layout: "constructor" }), /Option --layout must be one of/);
   assert.throws(() => parseCliOptions({ layout: "invalid" }), /Option --layout must be one of/);
   assert.throws(() => parseCliOptions({ "grid-type": "toString" }), /Option --grid-type/);
@@ -126,7 +130,7 @@ test("claimOutputDirectory uses shared .neurodesk-cli.lock, rejects symlinks, an
   }
 });
 
-test("writeStagedOutputs cleans up failed writeFile .partial and preserves unrelated replacements during rollback", async () => {
+test("writeStagedOutputs enforces atomic non-overwrite, cleans failed .partial, and rolls back on mid-publication SIGTERM", async () => {
   const work = await mkdtemp(join(tmpdir(), "stitching-stage-"));
   try {
     await assert.rejects(
@@ -144,6 +148,26 @@ test("writeStagedOutputs cleans up failed writeFile .partial and preserves unrel
     );
     assert.deepEqual(await readdir(work), []);
 
+    const racingDest = join(work, "race.tif");
+    await assert.rejects(
+      writeStagedOutputs(
+        work,
+        [
+          { name: "race.tif", bytes: new Uint8Array([9]) },
+          { name: "two.txt", bytes: new Uint8Array([2]) },
+        ],
+        {
+          linkFn: async (src, dst) => {
+            await writeFile(racingDest, "keep-me");
+            return link(src, dst);
+          },
+        },
+      ),
+      /Refusing to overwrite/,
+    );
+    assert.equal(await readFile(racingDest, "utf8"), "keep-me");
+    await rm(racingDest);
+
     let calls = 0;
     await assert.rejects(
       writeStagedOutputs(
@@ -153,22 +177,56 @@ test("writeStagedOutputs cleans up failed writeFile .partial and preserves unrel
           { name: "two.txt", bytes: new Uint8Array([2]) },
         ],
         {
-          renameFn: async (src, dst) => {
+          linkFn: async (src, dst) => {
             calls += 1;
             if (calls === 1) {
-              await rename(src, dst);
+              await link(src, dst);
               await rm(dst);
               await writeFile(dst, "external");
               return;
             }
-            throw new Error("rename failure");
+            throw new Error("link failure");
           },
         },
       ),
-      /rename failure/,
+      /link failure/,
     );
     assert.equal(await readFile(join(work, "one.tif"), "utf8"), "external");
     assert.deepEqual(await readdir(work), ["one.tif"]);
+
+    const sigPubDir = join(work, "sigterm-mid-pub");
+    const child = spawn(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `import { link } from "node:fs/promises";
+         import { claimOutputDirectory, writeStagedOutputs } from ${JSON.stringify(NODE_MODULE_URL)};
+         const claim = await claimOutputDirectory(${JSON.stringify(sigPubDir)});
+         let n = 0;
+         await writeStagedOutputs(
+           claim.directory,
+           [
+             { name: "one.tif", bytes: new Uint8Array([1]) },
+             { name: "two.txt", bytes: new Uint8Array([2]) },
+           ],
+           {
+             claim,
+             linkFn: async (src, dst) => {
+               n += 1;
+               if (n === 1) return link(src, dst);
+               setInterval(() => {}, 1000);
+               process.kill(process.pid, "SIGTERM");
+               await new Promise(() => {});
+             },
+           },
+         );`,
+      ],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    const exitSignal = await new Promise((resolveExit) => child.on("exit", (_code, signal) => resolveExit(signal)));
+    assert.equal(exitSignal, "SIGTERM");
+    await assert.rejects(stat(sigPubDir), { code: "ENOENT" });
   } finally {
     await rm(work, { recursive: true, force: true });
   }

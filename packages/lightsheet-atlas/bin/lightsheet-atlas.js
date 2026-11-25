@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util";
-import { checkInstallation, downloadModels, runLightsheetAtlas } from "../src/node.js";
+import { checkInstallation, downloadModels, resolveDownloadOffline, runLightsheetAtlas } from "../src/node.js";
 
 const HELP = `Usage: lightsheet-atlas INPUT OUTPUT_DIR [options]
        lightsheet-atlas download-models [--cache-dir DIR] [--offline]
@@ -91,8 +91,11 @@ try {
       if (positionals.length !== 1) throw new Error("download-models does not accept positional arguments.");
       rejectDisallowedOptions("download-models", values, ["cache-dir", "offline"]);
       const explicitCacheDir = values["cache-dir"];
-      const bundledReadOnly = !explicitCacheDir && process.env.NEURODESK_OFFLINE === "1" && Boolean(process.env.NEURODESK_LIGHTSHEET_ATLAS_MODEL_DIR);
-      const offline = values.offline === true ? true : bundledReadOnly;
+      const offline = resolveDownloadOffline({
+        explicitCacheDir,
+        offlineFlag: values.offline,
+        env: process.env,
+      });
       const result = await downloadModels({
         cacheDir: explicitCacheDir,
         offline,

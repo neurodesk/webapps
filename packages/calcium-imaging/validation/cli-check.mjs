@@ -86,7 +86,7 @@ try {
     for (let i = 0; i < shifts.length; i++) {
       maxErr = Math.max(maxErr, Math.abs(shifts[i][0] - refShifts[i][0] - meanDy), Math.abs(shifts[i][1] - refShifts[i][1] - meanDx));
     }
-    check(maxErr < 0.6, `rigid shifts agree with CaImAn reference within 0.6 px (max diff ${maxErr.toFixed(3)} px)`);
+    check(maxErr <= 0.6, `rigid shifts agree with CaImAn reference within 0.6 px (max diff ${maxErr.toFixed(3)} px)`);
   }
 
   const roisLines = (await readFile(join(outDir, `${stem}_rois.csv`), "utf8")).trim().split("\n");

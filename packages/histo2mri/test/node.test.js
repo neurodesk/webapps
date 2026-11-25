@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtemp, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { link, mkdtemp, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -153,6 +153,9 @@ test("parseCliOptions validates unknown keys, types, enums, axis aliases, and sc
   assert.equal(opts.contrast, "haematoxylin");
   assert.equal(opts.orientation, "3");
   assert.throws(() => parseCliOptions({ unknownFlag: "1" }), /Unknown option/);
+  assert.throws(() => parseCliOptions(Object.create({ axis: "1" })), /plain object/);
+  assert.throws(() => parseCliOptions({ axis: null }), /axis/);
+  assert.throws(() => parseCliOptions({ contrast: null }), /contrast/);
   assert.throws(() => parseCliOptions({ slice: true }), /finite number/);
   assert.throws(() => parseCliOptions({ "no-deformable": "yes" }), /boolean/);
   assert.throws(() => parseCliOptions({ axis: "toString" }), /axis/);
@@ -165,22 +168,29 @@ test("parseCliOptions validates unknown keys, types, enums, axis aliases, and sc
 });
 
 test("parseStrictNiftiHeader and readStrictNiftiVolume strictly validate magic, bitpix, vox_offset, and dims", () => {
-  // Reject missing magic, ni1, ni2
+  // Reject missing magic, ni1, ni2, and corrupted NIfTI-2 trailing magic bytes 4..7
   assert.throws(() => parseStrictNiftiHeader(buildNifti1({ magic: "\0\0\0\0" })), /Invalid NIfTI-1 magic/);
   assert.throws(() => parseStrictNiftiHeader(buildNifti1({ magic: "ni1\0" })), /Two-file NIfTI-1/);
   assert.throws(
     () => parseStrictNiftiHeader(buildNifti2({ magic: [0x6e, 0x69, 0x32, 0x00, 0, 0, 0, 0] })),
     /Two-file NIfTI-2/,
   );
+  assert.throws(
+    () => parseStrictNiftiHeader(buildNifti2({ magic: [0x6e, 0x2b, 0x32, 0x00, 0x00, 0x00, 0x00, 0x00] })),
+    /Invalid NIfTI-2 magic/,
+  );
 
-  // Reject bitpix mismatch
+  // Reject unknown datatype right in header parser and reject bitpix mismatch
+  assert.throws(() => parseStrictNiftiHeader(buildNifti1({ datatype: 999, bitpix: 32 })), /Unsupported NIfTI datatype/);
   assert.throws(() => parseStrictNiftiHeader(buildNifti1({ datatype: 16, bitpix: 16 })), /bitpix/);
 
-  // Reject NaN, negative, fractional, and < minHeaderSize vox_offset
+  // Reject NaN, negative, fractional, and < 352 (NIfTI-1) / < 544 (NIfTI-2) vox_offset
   assert.throws(() => parseStrictNiftiHeader(buildNifti1({ voxOffset: Number.NaN })), /vox_offset/);
   assert.throws(() => parseStrictNiftiHeader(buildNifti1({ voxOffset: -352 })), /vox_offset/);
   assert.throws(() => parseStrictNiftiHeader(buildNifti1({ voxOffset: 352.5 })), /vox_offset/);
+  assert.throws(() => parseStrictNiftiHeader(buildNifti1({ voxOffset: 348 })), /vox_offset/);
   assert.throws(() => parseStrictNiftiHeader(buildNifti1({ voxOffset: 100 })), /vox_offset/);
+  assert.throws(() => parseStrictNiftiHeader(buildNifti2({ voxOffset: 540 })), /vox_offset/);
 
   // Reject invalid dims
   const badDim = buildNifti1();
@@ -375,7 +385,7 @@ test("claimOutputDirectory uses shared .neurodesk-cli.lock, rejects symlinks, an
   }
 });
 
-test("writeStagedOutputs cleans up failed writeFile .partial and preserves unrelated replacements during rollback", async () => {
+test("writeStagedOutputs enforces atomic non-overwrite, cleans failed .partial, and rolls back on mid-publication SIGTERM", async () => {
   const work = await mkdtemp(join(tmpdir(), "histo2mri-stage-"));
   try {
     // 1. Failed writeFile cleans up .partial file
@@ -394,7 +404,29 @@ test("writeStagedOutputs cleans up failed writeFile .partial and preserves unrel
     );
     assert.deepEqual(await readdir(work), []);
 
-    // 2. Rollback removes only files with matching dev/ino (never an unrelated replacement file)
+    // 2. Atomic non-overwrite: a file created at destination right before publish fails with EEXIST without being touched
+    const racingDest = join(work, "race.nii.gz");
+    await assert.rejects(
+      writeStagedOutputs(
+        work,
+        [
+          { name: "race.nii.gz", bytes: new Uint8Array([9, 9, 9]) },
+          { name: "b.mat", bytes: new Uint8Array([2]) },
+        ],
+        {
+          linkFn: async (src, dst) => {
+            await writeFile(racingDest, "preexisting-data");
+            return link(src, dst);
+          },
+        },
+      ),
+      /Refusing to overwrite/,
+    );
+    assert.equal(await readFile(racingDest, "utf8"), "preexisting-data");
+    assert.deepEqual(await readdir(work), ["race.nii.gz"]);
+    await rm(racingDest);
+
+    // 3. Rollback removes only files with matching dev/ino (never an unrelated replacement file)
     let calls = 0;
     const replacementContent = "external-replacement";
     await assert.rejects(
@@ -405,23 +437,57 @@ test("writeStagedOutputs cleans up failed writeFile .partial and preserves unrel
           { name: "b.mat", bytes: new Uint8Array([2]) },
         ],
         {
-          renameFn: async (src, dst) => {
+          linkFn: async (src, dst) => {
             calls += 1;
             if (calls === 1) {
-              await rename(src, dst);
-              // Simulate an external process unlinking and replacing a.nii.gz with a new inode
+              await link(src, dst);
               await rm(dst);
               await writeFile(dst, replacementContent);
               return;
             }
-            throw new Error("rename fail");
+            throw new Error("link fail");
           },
         },
       ),
-      /rename fail/,
+      /link fail/,
     );
     assert.equal(await readFile(join(work, "a.nii.gz"), "utf8"), replacementContent);
     assert.deepEqual(await readdir(work), ["a.nii.gz"]);
+
+    // 4. Mid-publication SIGTERM rolls back first published file, removes remaining .partial and lock, and cleans newly created dir
+    const sigPubDir = join(work, "sigterm-mid-pub");
+    const child = spawn(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `import { link } from "node:fs/promises";
+         import { claimOutputDirectory, writeStagedOutputs } from ${JSON.stringify(NODE_MODULE_URL)};
+         const claim = await claimOutputDirectory(${JSON.stringify(sigPubDir)});
+         let n = 0;
+         await writeStagedOutputs(
+           claim.directory,
+           [
+             { name: "first.mat", bytes: new Uint8Array([1, 2]) },
+             { name: "second.mat", bytes: new Uint8Array([3, 4]) },
+           ],
+           {
+             claim,
+             linkFn: async (src, dst) => {
+               n += 1;
+               if (n === 1) return link(src, dst);
+               setInterval(() => {}, 1000);
+               process.kill(process.pid, "SIGTERM");
+               await new Promise(() => {});
+             },
+           },
+         );`,
+      ],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    const exitSignal = await new Promise((resolveExit) => child.on("exit", (_code, signal) => resolveExit(signal)));
+    assert.equal(exitSignal, "SIGTERM");
+    await assert.rejects(stat(sigPubDir), { code: "ENOENT" });
   } finally {
     await rm(work, { recursive: true, force: true });
   }

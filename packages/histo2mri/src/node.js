@@ -2,8 +2,8 @@
 // Registers 2D histology sections (TIFF, PNG, JPEG) to a 3D MRI volume (NIfTI) using the exact
 // same Greedy NMI rigid, affine, plane search and deformable SVF pipeline as the Histo2MRI web app.
 import { randomUUID } from "node:crypto";
-import { rmdirSync, unlinkSync } from "node:fs";
-import { lstat, mkdir, open, readFile, readdir, rename, rm, rmdir, stat, unlink, writeFile } from "node:fs/promises";
+import { closeSync, lstatSync, mkdirSync, openSync, readdirSync, renameSync, rmdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { link, lstat, readFile, rename, rm, rmdir, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { gzipSync } from "node:zlib";
 import { loadGreedySingleThread } from "@neurodesk/greedy/single";
@@ -20,6 +20,7 @@ import { DEFAULTS, preflightSection, registerSection } from "./core/register.js"
 import { readStrictNiftiVolume } from "./nifti-io.js";
 
 export const OUTPUT_LOCK_FILE = ".neurodesk-cli.lock";
+const LINK_FALLBACK_CODES = new Set(["ENOTSUP", "EOPNOTSUPP", "EPERM", "ENOSYS", "EXDEV"]);
 const MAX_MRI_FILE_BYTES = 512 * 1024 * 1024;
 const MAX_SECTION_FILE_BYTES = 256 * 1024 * 1024;
 const MAX_SECTION_DECODED_BYTES = 256 * 1024 * 1024;
@@ -65,6 +66,10 @@ function crc32(bytes) {
 
 function assertPlainOptions(values) {
   if (values === null || typeof values !== "object" || Array.isArray(values)) {
+    throw new TypeError("Options must be a plain object.");
+  }
+  const proto = Object.getPrototypeOf(values);
+  if (proto !== Object.prototype && proto !== null) {
     throw new TypeError("Options must be a plain object.");
   }
   for (const key of Object.keys(values)) {
@@ -122,14 +127,14 @@ export function parseCliOptions(values = {}) {
   const axis = AXIS_MAP[axisRaw];
 
   const sliceIndex = parseFiniteOpt(values.slice, "slice", { min: 0 });
-  const step = parseFiniteOpt(values.step, "step", { min: -10000, max: 10000 }) ?? 1;
-  const tiltA = parseFiniteOpt(values["tilt-a"], "tilt-a", { min: -30, max: 30 }) ?? 0;
-  const tiltB = parseFiniteOpt(values["tilt-b"], "tilt-b", { min: -30, max: 30 }) ?? 0;
+  const step = values.step === undefined ? 1 : parseFiniteOpt(values.step, "step", { min: -10000, max: 10000 });
+  const tiltA = values["tilt-a"] === undefined ? 0 : parseFiniteOpt(values["tilt-a"], "tilt-a", { min: -30, max: 30 });
+  const tiltB = values["tilt-b"] === undefined ? 0 : parseFiniteOpt(values["tilt-b"], "tilt-b", { min: -30, max: 30 });
   const pixelSize = parseFiniteOpt(values["pixel-size"], "pixel-size", { min: 0, exclusiveMin: true });
-  const searchOffset = parseFiniteOpt(values["search-offset"], "search-offset", { min: 0, max: 10 }) ?? DEFAULTS.searchOffset;
-  const searchTilt = parseFiniteOpt(values["search-tilt"], "search-tilt", { min: 0, max: 10 }) ?? DEFAULTS.searchTilt;
+  const searchOffset = values["search-offset"] === undefined ? DEFAULTS.searchOffset : parseFiniteOpt(values["search-offset"], "search-offset", { min: 0, max: 10 });
+  const searchTilt = values["search-tilt"] === undefined ? DEFAULTS.searchTilt : parseFiniteOpt(values["search-tilt"], "search-tilt", { min: 0, max: 10 });
 
-  const contrast = parseStringOpt(values.contrast, "contrast") ?? DEFAULTS.contrast;
+  const contrast = values.contrast === undefined ? DEFAULTS.contrast : parseStringOpt(values.contrast, "contrast");
   if (!CONTRAST_SET.has(contrast)) {
     throw new Error(`Option --contrast must be one of auto, haematoxylin, eosin, dab, got '${contrast}'.`);
   }
@@ -146,11 +151,15 @@ export function parseCliOptions(values = {}) {
     orientation = rawOrientation;
   }
 
-  const linearIterations = parseStringOpt(values["linear-iterations"], "linear-iterations") ?? DEFAULTS.linearIterations;
+  const linearIterations = values["linear-iterations"] === undefined
+    ? DEFAULTS.linearIterations
+    : parseStringOpt(values["linear-iterations"], "linear-iterations");
   if (!ITERATIONS_RE.test(linearIterations)) {
     throw new Error(`Option --linear-iterations must be three x-separated integers (e.g. 100x50x10), got '${linearIterations}'.`);
   }
-  const deformableIterations = parseStringOpt(values["deformable-iterations"], "deformable-iterations") ?? DEFAULTS.deformableIterations;
+  const deformableIterations = values["deformable-iterations"] === undefined
+    ? DEFAULTS.deformableIterations
+    : parseStringOpt(values["deformable-iterations"], "deformable-iterations");
   if (!ITERATIONS_RE.test(deformableIterations)) {
     throw new Error(`Option --deformable-iterations must be three x-separated integers (e.g. 0x0x200), got '${deformableIterations}'.`);
   }
@@ -202,56 +211,66 @@ export function allocateUniqueOutputNames(sectionNames) {
   return allocated;
 }
 
+function rollbackPublishSync(pub) {
+  let clean = true;
+  if (pub.pendingRename) {
+    const { finalPath, dev, ino } = pub.pendingRename;
+    try {
+      const info = lstatSync(finalPath);
+      if (info.isFile() && !info.isSymbolicLink() && info.dev === dev && info.ino === ino) {
+        unlinkSync(finalPath);
+      }
+    } catch (error) {
+      if (error.code !== "ENOENT") clean = false;
+    }
+  }
+  for (const item of [...pub.published].reverse()) {
+    try {
+      const info = lstatSync(item.finalPath);
+      if (info.isFile() && !info.isSymbolicLink() && info.dev === item.dev && info.ino === item.ino) {
+        unlinkSync(item.finalPath);
+      }
+    } catch (error) {
+      if (error.code !== "ENOENT") clean = false;
+    }
+  }
+  for (const backup of [...pub.backups].reverse()) {
+    try {
+      renameSync(backup.backupPath, backup.targetPath);
+    } catch (error) {
+      if (error.code !== "ENOENT") clean = false;
+    }
+  }
+  for (const item of pub.staged) {
+    try {
+      const info = lstatSync(item.partialPath);
+      if (info.isFile() && !info.isSymbolicLink()) {
+        unlinkSync(item.partialPath);
+      }
+    } catch (error) {
+      if (error.code !== "ENOENT") clean = false;
+    }
+  }
+  return clean;
+}
+
 /**
  * Exclusively claims `outputDir` with the shared `.neurodesk-cli.lock` O_EXCL lock file,
- * rejecting directory symlinks, registering SIGINT/SIGTERM cleanup handlers while held, and
- * cleaning up the lock and any newly created directory on error or release.
+ * registering SIGINT/SIGTERM handlers BEFORE creating the directory/lock, using synchronous
+ * lock acquisition (zero async window), rolling back mid-publication on signal, and keeping
+ * `.neurodesk-cli.lock` on disk if rollback fails.
  */
 export async function claimOutputDirectory(outputDir) {
   if (typeof outputDir !== "string" || !outputDir.trim()) {
     throw new Error("Output directory must be a non-empty path.");
   }
   const directory = resolve(outputDir);
-  let createdDir = false;
-  try {
-    const info = await lstat(directory);
-    if (info.isSymbolicLink()) {
-      throw new Error(`Output path '${directory}' must not be a symbolic link.`);
-    }
-    if (!info.isDirectory()) {
-      throw new Error(`Output path '${directory}' exists and is not a directory.`);
-    }
-  } catch (error) {
-    if (error.code !== "ENOENT") throw error;
-    await mkdir(directory, { recursive: true });
-    createdDir = true;
-    const createdInfo = await lstat(directory);
-    if (createdInfo.isSymbolicLink() || !createdInfo.isDirectory()) {
-      throw new Error(`Output path '${directory}' is not a regular directory.`);
-    }
-  }
-
   const lockPath = join(directory, OUTPUT_LOCK_FILE);
-  let handle = null;
-  let lockActive = false;
+  let createdDir = false;
+  let lockOwned = false;
   let signalsRegistered = false;
-
-  const cleanupSync = () => {
-    if (!lockActive) return;
-    lockActive = false;
-    try {
-      unlinkSync(lockPath);
-    } catch {
-      // ignore already-removed lock
-    }
-    if (createdDir) {
-      try {
-        rmdirSync(directory);
-      } catch {
-        // leave directory intact if non-empty
-      }
-    }
-  };
+  let activePublish = null;
+  let rollbackFailed = false;
 
   const unregisterSignals = () => {
     if (!signalsRegistered) return;
@@ -262,7 +281,35 @@ export async function claimOutputDirectory(outputDir) {
 
   const handleSignal = (signal) => {
     unregisterSignals();
-    cleanupSync();
+    let canReleaseLock = !rollbackFailed;
+    if (activePublish) {
+      if (!activePublish.committed) {
+        canReleaseLock = rollbackPublishSync(activePublish) && canReleaseLock;
+      } else {
+        for (const backup of activePublish.backups) {
+          try {
+            unlinkSync(backup.backupPath);
+          } catch {
+            // ignore
+          }
+        }
+      }
+    }
+    if (canReleaseLock && lockOwned) {
+      lockOwned = false;
+      try {
+        unlinkSync(lockPath);
+      } catch {
+        // ignore
+      }
+      if (createdDir && (!activePublish || !activePublish.committed)) {
+        try {
+          rmdirSync(directory);
+        } catch {
+          // leave non-empty dir intact
+        }
+      }
+    }
     if (process.platform === "win32") {
       process.exit(signal === "SIGINT" ? 130 : 143);
     }
@@ -271,30 +318,63 @@ export async function claimOutputDirectory(outputDir) {
   const onSigInt = () => handleSignal("SIGINT");
   const onSigTerm = () => handleSignal("SIGTERM");
 
+  process.on("SIGINT", onSigInt);
+  process.on("SIGTERM", onSigTerm);
+  signalsRegistered = true;
+
+  let fd = null;
   try {
-    handle = await open(lockPath, "wx");
-    lockActive = true;
-    process.on("SIGINT", onSigInt);
-    process.on("SIGTERM", onSigTerm);
-    signalsRegistered = true;
+    try {
+      const info = lstatSync(directory);
+      if (info.isSymbolicLink()) {
+        throw new Error(`Output path '${directory}' must not be a symbolic link.`);
+      }
+      if (!info.isDirectory()) {
+        throw new Error(`Output path '${directory}' exists and is not a directory.`);
+      }
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+      mkdirSync(directory, { recursive: true });
+      createdDir = true;
+      const createdInfo = lstatSync(directory);
+      if (createdInfo.isSymbolicLink() || !createdInfo.isDirectory()) {
+        throw new Error(`Output path '${directory}' is not a regular directory.`);
+      }
+    }
 
-    await handle.writeFile(`${process.pid}\n${new Date().toISOString()}\n`);
-    await handle.close();
-    handle = null;
+    fd = openSync(lockPath, "wx");
+    lockOwned = true;
+    writeFileSync(fd, `${process.pid}\n${new Date().toISOString()}\n`);
+    closeSync(fd);
+    fd = null;
 
-    const entries = await readdir(directory);
+    const entries = readdirSync(directory);
     if (entries.length !== 1 || entries[0] !== OUTPUT_LOCK_FILE) {
       throw new Error(`Output directory ${directory} is not empty. Choose a new or empty directory.`);
     }
   } catch (error) {
+    if (fd !== null) {
+      try {
+        closeSync(fd);
+      } catch {
+        // ignore
+      }
+    }
     unregisterSignals();
-    await handle?.close().catch(() => {});
-    if (lockActive) {
-      lockActive = false;
-      await rm(lockPath, { force: true }).catch(() => {});
+    if (lockOwned) {
+      lockOwned = false;
+      try {
+        unlinkSync(lockPath);
+      } catch {
+        // ignore
+      }
     }
     if (createdDir) {
-      await rmdir(directory).catch(() => {});
+      try {
+        rmdirSync(directory);
+      } catch {
+        // ignore
+      }
     }
     if (error.code === "EEXIST") {
       throw new Error(`Output directory ${directory} is already in use by another run or not empty. Choose a new or empty directory.`);
@@ -305,10 +385,20 @@ export async function claimOutputDirectory(outputDir) {
   return {
     directory,
     createdDir,
+    attachPublish(state) {
+      activePublish = state;
+    },
+    detachPublish() {
+      activePublish = null;
+    },
+    markRollbackFailed() {
+      rollbackFailed = true;
+    },
     async release({ removeDirIfEmpty = false } = {}) {
       unregisterSignals();
-      if (lockActive) {
-        lockActive = false;
+      if (rollbackFailed) return;
+      if (lockOwned) {
+        lockOwned = false;
         await rm(lockPath, { force: true }).catch(() => {});
       }
       if (removeDirIfEmpty && createdDir) {
@@ -319,16 +409,28 @@ export async function claimOutputDirectory(outputDir) {
 }
 
 /**
- * Stages every output file to a `.partial` path first (recording each `.partial` BEFORE calling
- * `writeFile` so failed/short writes are always cleaned up), then renames all files into place.
- * On error, rolls back ONLY files this run created (verified via lstat + dev/ino, never deleting
- * directories, symlinks, or unrelated replacements).
+ * Stages every output file to a `.partial` path first (registering each path BEFORE `writeFile`),
+ * then atomically publishes via hard link (`link` + `unlink`, failing with `EEXIST` without
+ * overwriting if a destination already exists, falling back to `lstat`+`rename` only when the
+ * filesystem does not support hard links). Rolls back ONLY files this run created (verified by
+ * `lstat` + `dev`/`ino`), and marks the lock on incomplete rollback.
  */
-export async function writeStagedOutputs(directory, files, { renameFn = rename, writeFileFn = writeFile } = {}) {
+export async function writeStagedOutputs(
+  directory,
+  files,
+  { claim = null, linkFn = link, renameFn = rename, writeFileFn = writeFile } = {},
+) {
   const runId = randomUUID().slice(0, 8);
-  const staged = [];
-  const renamed = [];
+  const pub = {
+    staged: [],
+    published: [],
+    backups: [],
+    pendingBackup: null,
+    pendingRename: null,
+    committed: false,
+  };
   const seenNames = new Set();
+  claim?.attachPublish?.(pub);
   try {
     for (const { name, bytes } of files) {
       if (typeof name !== "string" || !name || name.includes("/") || name.includes("\\") || name === "." || name === "..") {
@@ -342,38 +444,54 @@ export async function writeStagedOutputs(directory, files, { renameFn = rename, 
 
       const partialPath = join(directory, `.${name}.${runId}.partial`);
       const finalPath = join(directory, name);
-      const item = { name, partialPath, finalPath };
-      // Register BEFORE writeFile so partial/failed writes (e.g. EFBIG/ENOSPC) are cleaned up.
-      staged.push(item);
+      const item = { name, partialPath, finalPath, dev: null, ino: null };
+      pub.staged.push(item);
       await writeFileFn(partialPath, bytes, { flag: "wx" });
+      const stagedInfo = await lstat(partialPath);
+      item.dev = stagedInfo.dev;
+      item.ino = stagedInfo.ino;
     }
-    for (const item of staged) {
-      const existing = await lstat(item.finalPath).catch((error) => {
-        if (error.code === "ENOENT") return null;
-        throw error;
-      });
-      if (existing) {
-        throw new Error(`Refusing to overwrite existing output '${item.name}'.`);
+    for (const item of pub.staged) {
+      pub.pendingRename = { finalPath: item.finalPath, dev: item.dev, ino: item.ino };
+      try {
+        await linkFn(item.partialPath, item.finalPath);
+        pub.published.push({ finalPath: item.finalPath, dev: item.dev, ino: item.ino });
+        pub.pendingRename = null;
+        await unlink(item.partialPath);
+      } catch (error) {
+        if (error.code === "EEXIST") {
+          pub.pendingRename = null;
+          throw new Error(`Refusing to overwrite existing output '${item.name}'.`, { cause: error });
+        }
+        if (!LINK_FALLBACK_CODES.has(error.code)) {
+          throw error;
+        }
+        const existing = await lstat(item.finalPath).catch((err) => {
+          if (err.code === "ENOENT") return null;
+          throw err;
+        });
+        if (existing) {
+          pub.pendingRename = null;
+          throw new Error(`Refusing to overwrite existing output '${item.name}'.`);
+        }
+        await renameFn(item.partialPath, item.finalPath);
+        pub.published.push({ finalPath: item.finalPath, dev: item.dev, ino: item.ino });
+        pub.pendingRename = null;
       }
-      const stagedInfo = await lstat(item.partialPath);
-      await renameFn(item.partialPath, item.finalPath);
-      renamed.push({ finalPath: item.finalPath, dev: stagedInfo.dev, ino: stagedInfo.ino });
     }
-    return staged.map((item) => item.name);
+    pub.committed = true;
+    for (const backup of pub.backups) {
+      await unlink(backup.backupPath).catch(() => {});
+    }
+    return pub.staged.map((item) => item.name);
   } catch (error) {
-    for (const item of staged) {
-      const info = await lstat(item.partialPath).catch(() => null);
-      if (info && info.isFile() && !info.isSymbolicLink()) {
-        await unlink(item.partialPath).catch(() => {});
-      }
-    }
-    for (const { finalPath, dev, ino } of renamed) {
-      const info = await lstat(finalPath).catch(() => null);
-      if (info && info.isFile() && !info.isSymbolicLink() && info.dev === dev && info.ino === ino) {
-        await unlink(finalPath).catch(() => {});
-      }
+    const rollbackClean = rollbackPublishSync(pub);
+    if (!rollbackClean) {
+      claim?.markRollbackFailed?.();
     }
     throw error;
+  } finally {
+    claim?.detachPublish?.();
   }
 }
 
@@ -667,7 +785,7 @@ export async function runHisto2Mri({
       outputs.push({ name: "sections_in_mri.nii.gz", bytes: new Uint8Array(gzipSync(bytes)) });
     }
 
-    const written = await writeStagedOutputs(claim.directory, outputs, { renameFn, writeFileFn });
+    const written = await writeStagedOutputs(claim.directory, outputs, { claim, renameFn, writeFileFn });
     succeeded = true;
     return {
       outputDir: claim.directory,

@@ -7,6 +7,8 @@ import { gunzipSync } from "node:zlib";
 export const DEFAULT_MAX_DECOMPRESSED_BYTES = 512 * 1024 * 1024;
 export const DEFAULT_MAX_VOXELS = 128 * 1024 * 1024;
 
+const NIFTI2_MAGIC = [0x6e, 0x2b, 0x32, 0x00, 0x0d, 0x0a, 0x1a, 0x0a];
+
 const DATATYPES = Object.freeze({
   2: { bytes: 1, read: (v, o) => v.getUint8(o) },
   4: { bytes: 2, read: (v, o, le) => v.getInt16(o, le) },
@@ -18,6 +20,20 @@ const DATATYPES = Object.freeze({
   768: { bytes: 4, read: (v, o, le) => v.getUint32(o, le) },
   1024: { bytes: 8, read: (v, o, le) => Number(v.getBigInt64(o, le)) },
   1280: { bytes: 8, read: (v, o, le) => Number(v.getBigUint64(o, le)) },
+});
+
+const HEADER_DATATYPE_BITPIX = Object.freeze({
+  2: 8,
+  4: 16,
+  8: 32,
+  16: 32,
+  64: 64,
+  256: 8,
+  512: 16,
+  768: 32,
+  1024: 64,
+  1280: 64,
+  2304: 32,
 });
 
 function toUint8Array(input) {
@@ -76,7 +92,7 @@ function quaternionToAffine([b, c, d], [qx, qy, qz], pixdim) {
 }
 
 function detectHeaderFormat(bytes, view) {
-  if (bytes.byteLength < 348) throw new Error("NIfTI file is too small to contain a valid header.");
+  if (bytes.byteLength < 352) throw new Error("NIfTI file is too small to contain a valid header and extender.");
   const le = view.getInt32(0, true);
   const be = view.getInt32(0, false);
   if (le === 348 || be === 348) {
@@ -87,18 +103,22 @@ function detectHeaderFormat(bytes, view) {
     if (magic !== "n+1\0") {
       throw new Error("Invalid NIfTI-1 magic bytes: expected single-file 'n+1\\0'.");
     }
-    return { version: 1, littleEndian: le === 348, minHeaderSize: 348 };
+    // Single-file NIfTI-1 requires 348-byte header + 4-byte extender (vox_offset >= 352)
+    return { version: 1, littleEndian: le === 348, minVoxOffset: 352 };
   }
   if (le === 540 || be === 540) {
-    if (bytes.byteLength < 540) throw new Error("NIfTI-2 file is too small to contain a valid header.");
-    const magic = readAscii(bytes, 4, 4);
-    if (magic === "ni2\0") {
+    if (bytes.byteLength < 544) throw new Error("NIfTI-2 file is too small to contain a valid header and extender.");
+    const magic4 = readAscii(bytes, 4, 4);
+    if (magic4 === "ni2\0") {
       throw new Error("Two-file NIfTI-2 (.hdr/.img) pairs with magic 'ni2' are not supported; provide a single-file .nii or .nii.gz.");
     }
-    if (magic !== "n+2\0") {
-      throw new Error("Invalid NIfTI-2 magic bytes: expected single-file 'n+2\\0'.");
+    for (let i = 0; i < NIFTI2_MAGIC.length; i++) {
+      if (bytes[4 + i] !== NIFTI2_MAGIC[i]) {
+        throw new Error("Invalid NIfTI-2 magic bytes: expected full 8-byte 'n+2\\0\\r\\n\\x1a\\n'.");
+      }
     }
-    return { version: 2, littleEndian: le === 540, minHeaderSize: 540 };
+    // Single-file NIfTI-2 requires 540-byte header + 4-byte extender (vox_offset >= 544)
+    return { version: 2, littleEndian: le === 540, minVoxOffset: 544 };
   }
   throw new Error("Input is not a valid NIfTI-1 or NIfTI-2 file.");
 }
@@ -112,7 +132,7 @@ function detectHeaderFormat(bytes, view) {
 export function parseStrictNiftiHeader(input) {
   const bytes = toUint8Array(input);
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const { version, littleEndian, minHeaderSize } = detectHeaderFormat(bytes, view);
+  const { version, littleEndian, minVoxOffset } = detectHeaderFormat(bytes, view);
 
   let dim;
   let pixdim;
@@ -171,9 +191,9 @@ export function parseStrictNiftiHeader(input) {
     xyztUnits = view.getInt32(500, littleEndian);
   }
 
-  // Strict vox_offset check: finite integer >= minHeaderSize (rejects NaN, negative, fractional, or < header size)
-  if (!Number.isFinite(rawVoxOffset) || !Number.isInteger(rawVoxOffset) || rawVoxOffset < minHeaderSize) {
-    throw new Error(`Invalid NIfTI vox_offset (${rawVoxOffset}): must be a finite integer >= ${minHeaderSize}.`);
+  // Strict vox_offset check: finite integer >= minVoxOffset (352 for NIfTI-1, 544 for NIfTI-2)
+  if (!Number.isFinite(rawVoxOffset) || !Number.isInteger(rawVoxOffset) || rawVoxOffset < minVoxOffset) {
+    throw new Error(`Invalid NIfTI vox_offset (${rawVoxOffset}): must be a finite integer >= ${minVoxOffset}.`);
   }
 
   // Validate ndim and active dimensions
@@ -187,16 +207,13 @@ export function parseStrictNiftiHeader(input) {
     }
   }
 
-  // Strict datatype + bitpix agreement check
-  if (Object.hasOwn(DATATYPES, datatype)) {
-    const expectedBitpix = DATATYPES[datatype].bytes * 8;
-    if (bitpix !== expectedBitpix) {
-      throw new Error(`NIfTI header bitpix (${bitpix}) does not match datatype ${datatype} (expected ${expectedBitpix}).`);
-    }
-  } else if (datatype === 2304) {
-    if (bitpix !== 32) {
-      throw new Error(`NIfTI header bitpix (${bitpix}) does not match RGBA32 datatype 2304 (expected 32).`);
-    }
+  // Strict datatype + bitpix check right in header parser
+  if (!Object.hasOwn(HEADER_DATATYPE_BITPIX, datatype)) {
+    throw new Error(`Unsupported NIfTI datatype code ${datatype}.`);
+  }
+  const expectedBitpix = HEADER_DATATYPE_BITPIX[datatype];
+  if (bitpix !== expectedBitpix) {
+    throw new Error(`NIfTI header bitpix (${bitpix}) does not match datatype ${datatype} (expected ${expectedBitpix}).`);
   }
 
   const qformAffine = qformCode > 0 ? quaternionToAffine(quatern, qoffset, pixdim) : null;
@@ -265,9 +282,6 @@ export function readStrictNiftiVolume(
     throw new Error(`Unsupported NIfTI datatype code ${header.datatype}.`);
   }
   const type = DATATYPES[header.datatype];
-  if (header.bitpix !== type.bytes * 8) {
-    throw new Error(`NIfTI header bitpix (${header.bitpix}) does not match datatype ${header.datatype} (expected ${type.bytes * 8}).`);
-  }
   const ndim = header.dims[0];
   if (ndim < 3) {
     throw new Error(`Expected a 3D MRI volume, but found ${ndim}D NIfTI header.`);

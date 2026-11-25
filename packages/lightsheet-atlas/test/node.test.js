@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { link, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,6 +13,7 @@ import {
   downloadModels,
   openInputStack,
   parseCliOptions,
+  resolveDownloadOffline,
   runLightsheetAtlas,
   writeStagedOutputs,
 } from "../src/node.js";
@@ -58,6 +59,8 @@ test("CLI rejects empty string flags and disallowed subcommand options", () => {
 
 test("parseCliOptions validates unknown keys, types, numeric ranges and flags before I/O", () => {
   assert.throws(() => parseCliOptions({ unknownKey: "1" }), /Unknown option/);
+  assert.throws(() => parseCliOptions(Object.create({ orientation: "psl" })), /plain object/);
+  assert.throws(() => parseCliOptions({ orientation: null }), /orientation/);
   assert.throws(() => parseCliOptions({ detect: "yes" }), /boolean/);
   assert.throws(() => parseCliOptions({ "voxel-z": true }), /positive finite number/);
   assert.throws(() => parseCliOptions({ "no-register": true }), /Choose atlas registration/);
@@ -103,15 +106,41 @@ test("self-check honors --cache-dir and exercises Greedy WASM offline", async ()
   }
 });
 
-test("downloadModels refuses missing assets offline and gives clear recovery instructions on bundled install", async () => {
+test("downloadModels enforces offline mode for NEURODESK_OFFLINE=1 without bundled dir and when --cache-dir equals bundled dir", async () => {
   const work = await mkdtemp(join(tmpdir(), "lightsheet-offline-"));
+  const otherDir = join(work, "other-writable");
   try {
+    let fetchCalls = 0;
+    const stubFetch = async () => {
+      fetchCalls += 1;
+      throw new Error("fetch must not be called in offline mode");
+    };
+
+    // Case 1: NEURODESK_OFFLINE=1 WITHOUT bundled model dir -> stays offline even with --cache-dir
+    const envOfflineNoBundle = { NEURODESK_OFFLINE: "1" };
+    const off1 = resolveDownloadOffline({ explicitCacheDir: otherDir, env: envOfflineNoBundle });
+    assert.equal(off1, true);
     await assert.rejects(
-      downloadModels({ cacheDir: work, offline: true }),
+      downloadModels({ cacheDir: otherDir, offline: off1, fetchImpl: stubFetch }),
       /Offline mode: required Allen atlas asset/,
     );
+    assert.equal(fetchCalls, 0);
 
-    // Bundled portable launcher sets NEURODESK_OFFLINE=1 + NEURODESK_LIGHTSHEET_ATLAS_MODEL_DIR
+    // Case 2: NEURODESK_OFFLINE=1 WITH bundled dir, --cache-dir pointing to bundled dir itself -> stays offline
+    const envBundled = { NEURODESK_OFFLINE: "1", NEURODESK_LIGHTSHEET_ATLAS_MODEL_DIR: work };
+    const off2 = resolveDownloadOffline({ explicitCacheDir: join(work, "."), env: envBundled });
+    assert.equal(off2, true);
+    await assert.rejects(
+      downloadModels({ cacheDir: join(work, "."), offline: off2, fetchImpl: stubFetch }),
+      /Offline mode:/,
+    );
+    assert.equal(fetchCalls, 0);
+
+    // Case 3: NEURODESK_OFFLINE=1 WITH bundled dir, --cache-dir pointing to a DIFFERENT dir -> allows online recovery
+    assert.equal(resolveDownloadOffline({ explicitCacheDir: otherDir, env: envBundled }), false);
+    assert.equal(resolveDownloadOffline({ explicitCacheDir: otherDir, offlineFlag: true, env: envBundled }), true);
+
+    // CLI subprocess with NEURODESK_OFFLINE=1 + bundled dir and no --cache-dir prints recovery instructions
     const bundledRun = runCli(["download-models"], {
       ...process.env,
       NEURODESK_OFFLINE: "1",
@@ -120,6 +149,13 @@ test("downloadModels refuses missing assets offline and gives clear recovery ins
     assert.notEqual(bundledRun.status, 0);
     assert.match(bundledRun.stderr, /Reinstall the portable archive/);
     assert.match(bundledRun.stderr, /--cache-dir/);
+
+    // CLI subprocess with NEURODESK_OFFLINE=1 and NO bundled dir + --cache-dir stays offline
+    const envNoBundle = { ...process.env, NEURODESK_OFFLINE: "1" };
+    delete envNoBundle.NEURODESK_LIGHTSHEET_ATLAS_MODEL_DIR;
+    const offlineNoBundleRun = runCli(["download-models", "--cache-dir", otherDir], envNoBundle);
+    assert.notEqual(offlineNoBundleRun.status, 0);
+    assert.match(offlineNoBundleRun.stderr, /Offline mode:/);
   } finally {
     await rm(work, { recursive: true, force: true });
   }
@@ -247,7 +283,7 @@ test("claimOutputDirectory uses shared .neurodesk-cli.lock, rejects symlinks, an
   }
 });
 
-test("writeStagedOutputs cleans up failed writeFile .partial and preserves unrelated replacements during rollback", async () => {
+test("writeStagedOutputs enforces atomic non-overwrite, cleans failed .partial, and rolls back on mid-publication SIGTERM", async () => {
   const work = await mkdtemp(join(tmpdir(), "lightsheet-stage-"));
   try {
     await assert.rejects(
@@ -265,6 +301,27 @@ test("writeStagedOutputs cleans up failed writeFile .partial and preserves unrel
     );
     assert.deepEqual(await readdir(work), []);
 
+    // Atomic non-overwrite: pre-existing file created right before publish causes EEXIST without being touched
+    const racingDest = join(work, "race.csv");
+    await assert.rejects(
+      writeStagedOutputs(
+        work,
+        [
+          { name: "race.csv", bytes: new Uint8Array([9]) },
+          { name: "b.csv", bytes: new Uint8Array([66]) },
+        ],
+        {
+          linkFn: async (src, dst) => {
+            await writeFile(racingDest, "keep-me");
+            return link(src, dst);
+          },
+        },
+      ),
+      /Refusing to overwrite/,
+    );
+    assert.equal(await readFile(racingDest, "utf8"), "keep-me");
+    await rm(racingDest);
+
     let calls = 0;
     await assert.rejects(
       writeStagedOutputs(
@@ -274,22 +331,57 @@ test("writeStagedOutputs cleans up failed writeFile .partial and preserves unrel
           { name: "b.csv", bytes: new Uint8Array([66]) },
         ],
         {
-          renameFn: async (src, dst) => {
+          linkFn: async (src, dst) => {
             calls += 1;
             if (calls === 1) {
-              await rename(src, dst);
+              await link(src, dst);
               await rm(dst);
               await writeFile(dst, "unrelated");
               return;
             }
-            throw new Error("simulated rename failure");
+            throw new Error("simulated link failure");
           },
         },
       ),
-      /simulated rename failure/,
+      /simulated link failure/,
     );
     assert.equal(await readFile(join(work, "a.csv"), "utf8"), "unrelated");
     assert.deepEqual(await readdir(work), ["a.csv"]);
+
+    // Mid-publication SIGTERM rolls back first published file, .partial, lock, and newly created dir
+    const sigPubDir = join(work, "sigterm-mid-pub");
+    const child = spawn(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `import { link } from "node:fs/promises";
+         import { claimOutputDirectory, writeStagedOutputs } from ${JSON.stringify(NODE_MODULE_URL)};
+         const claim = await claimOutputDirectory(${JSON.stringify(sigPubDir)});
+         let n = 0;
+         await writeStagedOutputs(
+           claim.directory,
+           [
+             { name: "first.csv", bytes: new Uint8Array([65]) },
+             { name: "second.csv", bytes: new Uint8Array([66]) },
+           ],
+           {
+             claim,
+             linkFn: async (src, dst) => {
+               n += 1;
+               if (n === 1) return link(src, dst);
+               setInterval(() => {}, 1000);
+               process.kill(process.pid, "SIGTERM");
+               await new Promise(() => {});
+             },
+           },
+         );`,
+      ],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    const exitSignal = await new Promise((resolveExit) => child.on("exit", (_code, signal) => resolveExit(signal)));
+    assert.equal(exitSignal, "SIGTERM");
+    await assert.rejects(stat(sigPubDir), { code: "ENOENT" });
   } finally {
     await rm(work, { recursive: true, force: true });
   }
