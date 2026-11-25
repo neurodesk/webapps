@@ -467,6 +467,7 @@ function splitShellCommands(script) {
   let current = '';
   let quote = null;
   let substDepth = 0;
+  let inBacktick = false;
   const flush = () => {
     const trimmed = current.trim();
     if (trimmed) tokens.push(trimmed);
@@ -494,6 +495,16 @@ function splitShellCommands(script) {
     if (quote === '"') {
       current += ch;
       if (ch === '"') quote = null;
+      continue;
+    }
+    if (inBacktick) {
+      current += ch;
+      if (ch === '`') inBacktick = false;
+      continue;
+    }
+    if (ch === '`') {
+      inBacktick = true;
+      current += ch;
       continue;
     }
     if (ch === "'" || ch === '"') {
@@ -710,10 +721,31 @@ function tokenizeShellWords(segment) {
   return words;
 }
 
+const SHELL_BIN = /^(?:\/[\w/.-]*\/)?(?:ba|da|z|k)?sh$/;
+
 function extractCommandSubstitutions(segment) {
   const inner = [];
+  let inSingle = false;
+  let inDouble = false;
   for (let i = 0; i < segment.length; i++) {
-    if (segment[i] === '$' && segment[i + 1] === '(') {
+    const ch = segment[i];
+    if (inSingle) {
+      if (ch === "'") inSingle = false;
+      continue;
+    }
+    if (ch === '\\') {
+      i++;
+      continue;
+    }
+    if (ch === '"') {
+      inDouble = !inDouble;
+      continue;
+    }
+    if (ch === "'" && !inDouble) {
+      inSingle = true;
+      continue;
+    }
+    if (ch === '$' && segment[i + 1] === '(') {
       let depth = 1;
       const start = i + 2;
       for (i = start; i < segment.length && depth > 0; i++) {
@@ -722,7 +754,7 @@ function extractCommandSubstitutions(segment) {
       }
       if (depth === 0) inner.push(segment.slice(start, i - 1));
       i--;
-    } else if (segment[i] === '`') {
+    } else if (ch === '`') {
       const start = i + 1;
       const end = segment.indexOf('`', start);
       if (end > start) {
@@ -735,11 +767,13 @@ function extractCommandSubstitutions(segment) {
 }
 
 // Extract root package.json script names invoked via `pnpm`, allowing shell
-// wrappers (`if`, `elif`, `while`, `until`, `timeout`, `$(...)`), `cd` back to
-// the repository root, and pnpm flags (`--silent`, `--if-present`, `-w`,
-// `--workspace-root`, `--dir <root>`) in any order before or after `run`.
-function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.', root = null } = {}) {
+// wrappers (`if`, `elif`, `while`, `until`, `timeout`, `bash -c`, `eval`,
+// `$(...)`, backticks), `cd` back to the repository root, and pnpm flags
+// (`--silent`, `--if-present`, `-w`, `--workspace-root`, `--dir <root>`)
+// in any order before or after `run`.
+function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.', root = null, depth = 0 } = {}) {
   const scripts = [];
+  if (depth > 4) return scripts;
   let cwdDirs = new Set([baseDir]);
   const dirStack = [];
   for (const token of splitShellCommands(command)) {
@@ -767,12 +801,36 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
     const mayRunAtRoot = !requireRootFlag || cwdDirs.has('.');
     for (const subst of extractCommandSubstitutions(token)) {
       for (const from of cwdDirs) {
-        scripts.push(...extractPnpmRootScripts(subst, { requireRootFlag: !mayRunAtRoot, baseDir: from, root }));
+        scripts.push(...extractPnpmRootScripts(subst, { requireRootFlag: !mayRunAtRoot, baseDir: from, root, depth: depth + 1 }));
       }
     }
     const words = tokenizeShellWords(token);
     if (words[0] === 'echo' || words[0] === 'printf') continue;
     for (let start = 0; start < words.length; start++) {
+      if (words[start] === 'eval' && start + 1 < words.length) {
+        const body = words.slice(start + 1).join(' ');
+        for (const from of cwdDirs) {
+          scripts.push(...extractPnpmRootScripts(body, { requireRootFlag: !mayRunAtRoot, baseDir: from, root, depth: depth + 1 }));
+        }
+        break;
+      }
+      if (SHELL_BIN.test(words[start])) {
+        for (let k = start + 1; k < words.length; k++) {
+          if (words[k] === '--') break;
+          if (/^-[a-zA-Z]*c$/.test(words[k]) && k + 1 < words.length) {
+            for (const from of cwdDirs) {
+              scripts.push(...extractPnpmRootScripts(words[k + 1], { requireRootFlag: !mayRunAtRoot, baseDir: from, root, depth: depth + 1 }));
+            }
+            break;
+          }
+          if (words[k] === '-o' && k + 1 < words.length) {
+            k++;
+            continue;
+          }
+          if (!words[k].startsWith('-')) break;
+        }
+        continue;
+      }
       if (words[start] !== 'pnpm') continue;
       let idx = start + 1;
       let hasRootFlag = false;
