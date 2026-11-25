@@ -43,6 +43,7 @@ function option(name) {
 const native = process.argv.includes('--native');
 const name = option('--workflow') || (native ? DISPATCHER : undefined);
 if (!name || !/^[\w-]+$/.test(name)) throw new Error('Usage: workflow-gate.mjs (--workflow <name> | --native) (--base <sha> | --push | --sweep) --head <sha>');
+if (native && !isDispatcher(name)) throw new Error(`--native requires a dispatcher workflow name, got "${name}"`);
 const head = option('--head') || 'HEAD';
 const event = process.argv.includes('--sweep') ? 'schedule' : process.argv.includes('--push') ? 'push' : 'pull_request';
 const env = process.env;
@@ -80,23 +81,32 @@ function dispatcherHistory() {
       .sort();
     if (!dispatchers.includes(DISPATCHER)) dispatchers.unshift(DISPATCHER);
     const runs = [];
+    const jobs = new Map();
+    let anyLoaded = false;
+    let firstError = null;
     for (const dispatcher of dispatchers) {
       let listed;
       try {
         ({ workflow_runs: listed } = await github().request(`/actions/workflows/${dispatcher}.yml/runs?branch=main&event=schedule&status=completed&per_page=100`));
+        anyLoaded = true;
       } catch (error) {
         if (error.status === 404 && dispatcher !== DISPATCHER) continue;
-        throw error;
+        firstError ??= error;
+        console.warn(`${dispatcher}: failed to list scheduled runs (${error.message})`);
+        continue;
       }
-      for (const run of listed.filter((each) => each.event === 'schedule')) {
-        runs.push({ ...run, _dispatcher: dispatcher });
+      const shardRuns = listed.filter((each) => each.event === 'schedule').map((each) => ({ ...each, _dispatcher: dispatcher }));
+      runs.push(...shardRuns);
+      for (const run of shardRuns.filter((each) => each.conclusion !== 'success').slice(0, JOB_READS)) {
+        try {
+          jobs.set(run.id, await github().list(`/actions/runs/${run.id}/attempts/${run.run_attempt ?? 1}/jobs`, 'jobs'));
+        } catch (error) {
+          console.warn(`${dispatcher}: failed to list jobs for run ${run.id} (${error.message})`);
+        }
       }
     }
+    if (!anyLoaded && firstError) throw firstError;
     runs.sort((a, b) => Date.parse(b.created_at ?? 0) - Date.parse(a.created_at ?? 0));
-    const jobs = new Map();
-    for (const run of runs.filter((each) => each.conclusion !== 'success').slice(0, JOB_READS)) {
-      jobs.set(run.id, await github().list(`/actions/runs/${run.id}/attempts/${run.run_attempt ?? 1}/jobs`, 'jobs'));
-    }
     const called = new Map();
     const calls = (workflow) => (run) => {
       const dispatcher = run._dispatcher || DISPATCHER;
@@ -176,10 +186,17 @@ async function decideOne() {
   return verdict.withheld ? { run: false, withheld: true, reason: verdict.reason } : decision;
 }
 
-// The workflows native.yml may call for this event.
+// The workflows this dispatcher shard may call for this event.
 async function eligibleWorkflows() {
-  const listed = env.NATIVE_ELIGIBLE?.split(/\s+/).filter(Boolean);
-  if (listed?.length) return listed;
+  if (env.NATIVE_ELIGIBLE !== undefined) {
+    return env.NATIVE_ELIGIBLE.split(/\s+/).filter(Boolean);
+  }
+  const dispatcherFlow = await read(name).catch(() => null);
+  const key = event === 'schedule' ? 'sweeps' : 'calls';
+  const configured = dispatcherFlow?.jobs?.gate?.with?.[key];
+  if (typeof configured === 'string') {
+    return configured.split(/\s+/).filter(Boolean);
+  }
   const files = (await readdir(workflowsDirectory)).filter((file) => file.endsWith('.yml')).map((file) => file.slice(0, -'.yml'.length)).sort();
   const flows = await Promise.all(files.map(async (file) => [file, await read(file)]));
   return flows.filter(([, flow]) => (event === 'schedule' ? swept(flow) : dispatched(flow))).map(([file]) => file);

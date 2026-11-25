@@ -81,8 +81,8 @@ jobs:
           TOP_WORKFLOW: ${{ github.workflow_ref }}
           CALLS: ${{ inputs.calls }}
         run: |
-          is_dispatcher() { [ "$1" = native ] || [[ "$1" =~ ^native-[2-9][0-9]*$ ]]; }
-          if ! is_dispatcher "$WORKFLOW" && [[ "$TOP_WORKFLOW" =~ /\.github/workflows/native(-[2-9][0-9]*)?\.yml@ ]]; then
+          is_dispatcher() { [ "$1" = native ] || [[ "$1" =~ ^native-([2-9]|[1-9][0-9]+)$ ]]; }
+          if ! is_dispatcher "$WORKFLOW" && [[ "$TOP_WORKFLOW" =~ /\.github/workflows/native(-([2-9]|[1-9][0-9]+))?\.yml@ ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           elif [ "$EVENT_NAME" = pull_request ]; then
             if [ "$DRAFT" = true ]; then
@@ -125,7 +125,7 @@ jobs:
           CALLS: ${{ inputs.calls }}
           SWEEPS: ${{ inputs.sweeps }}
         run: |
-          is_dispatcher() { [ "$1" = native ] || [[ "$1" =~ ^native-[2-9][0-9]*$ ]]; }
+          is_dispatcher() { [ "$1" = native ] || [[ "$1" =~ ^native-([2-9]|[1-9][0-9]+)$ ]]; }
           if is_dispatcher "$WORKFLOW"; then
             if [ "$EVENT_NAME" = schedule ]; then
               eligible=$SWEEPS

@@ -9,6 +9,7 @@
 // entry for every workflow file and every job of ci.yml.
 import { percentile } from './ci-minutes.mjs';
 import { LARGE_RUN_JOBS, ofPullRequest } from './ci-usage.mjs';
+import { isDispatcher } from './workflow-gate.mjs';
 
 // What a job spends its runner on.
 //   plan: decides what to run (planner, gate, plan marker); tests nothing
@@ -102,8 +103,6 @@ export const WORKFLOWS = Object.freeze({
   'n4-native': TEST,
   'n4-wasm-source': TEST,
   native: TEST,
-  'native-2': TEST,
-  'native-3': TEST,
   'native-nifti': TEST,
   'native-publish': TEST,
   'nesvor-real-validation': TEST,
@@ -150,8 +149,14 @@ const GATE_JOB = /(?:^| \/ )gate( \/ |$)/;
 // A job's name without its matrix values: `app-tests (calmar, calmar)` is `app-tests`.
 const jobKind = (name) => name.replace(/ \(.*$/, '');
 
+export function workflowRole(workflow) {
+  if (Object.hasOwn(WORKFLOWS, workflow)) return WORKFLOWS[workflow];
+  if (isDispatcher(workflow)) return TEST;
+  return undefined;
+}
+
 export function jobRole(workflow, jobName) {
-  const entry = Object.hasOwn(WORKFLOWS, workflow) ? WORKFLOWS[workflow] : undefined;
+  const entry = workflowRole(workflow);
   if (entry === undefined) return 'unclassified';
   if (typeof entry === 'object') return Object.hasOwn(entry, jobKind(jobName)) ? entry[jobKind(jobName)] : 'unclassified';
   if (entry === TEST && GATE_JOB.test(jobName)) return 'plan';
@@ -295,12 +300,13 @@ export function minutesByRole(runs, jobs, now) {
   const unclassified = new Map();
   for (const run of runs) {
     // A workflow the table does not name shows even when it started no job.
-    if (!Object.hasOwn(WORKFLOWS, run.name)) unclassified.set(run.name, unclassified.get(run.name) ?? 0);
+    const known = workflowRole(run.name) !== undefined;
+    if (!known) unclassified.set(run.name, unclassified.get(run.name) ?? 0);
     for (const job of ran(jobs.get(run.id))) {
       const role = jobRole(run.name, job.name);
       roles[role] += jobMinutes(job, now);
       if (role !== 'unclassified') continue;
-      const key = Object.hasOwn(WORKFLOWS, run.name) ? `${run.name}: ${jobKind(job.name)}` : run.name;
+      const key = known ? `${run.name}: ${jobKind(job.name)}` : run.name;
       unclassified.set(key, (unclassified.get(key) ?? 0) + jobMinutes(job, now));
     }
   }

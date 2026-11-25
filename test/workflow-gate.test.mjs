@@ -257,8 +257,8 @@ test('every workflow with shared paths, or a released tree under its push filter
   let gated = 0;
   let released = 0;
   for (const file of await workflowFiles()) {
-    // native.yml is the one workflow every shared path starts.
-    if (file === `${DISPATCHER}.yml`) continue;
+    // native.yml (and native-2.yml, ... when sharded) is the dispatcher every shared path starts.
+    if (isDispatcher(file.slice(0, -'.yml'.length))) continue;
     const flow = await parsed(file);
     // A shared filter on pull requests would start the workflow for every change to the tree.
     assert.deepEqual((flow.on?.pull_request?.paths ?? []).filter(isSharedFilter), [], `${file}: shared paths belong in the gate's shared_paths`);
@@ -334,8 +334,9 @@ test('native.yml calls every workflow with shared paths, granting what its jobs 
   assert.deepEqual(callerPermissions({ permissions: { contents: 'read' }, jobs: { a: { permissions: { contents: 'write', 'id-token': 'write' } }, b: { permissions: { actions: 'read', contents: 'read' } }, c: {} } }), { actions: 'read', contents: 'write', 'id-token': 'write' });
   assert.throws(() => callerPermissions({ permissions: 'write-all', jobs: {} }), /not a map/);
 
-  // Sharding splits workflows beyond MAX_CALLS_PER_DISPATCHER cleanly into native and native-2.
-  const synthetic = Array.from({ length: MAX_CALLS_PER_DISPATCHER + 5 }, (_, i) => [
+  // Sharding splits workflows beyond MAX_CALLS_PER_DISPATCHER cleanly into native and native-2
+  // (and handles 10+ shards such as native-10 without dropping them from isDispatcher).
+  const synthetic = Array.from({ length: MAX_CALLS_PER_DISPATCHER + 1 }, (_, i) => [
     `tool-${String(i).padStart(2, '0')}-native`,
     { on: { push: { paths: [`packages/tool-${i}/**`] }, pull_request: { paths: [`packages/tool-${i}/**`] } }, permissions: { contents: 'read' }, jobs: { gate: { with: { shared_paths: 'pnpm-lock.yaml' } } } },
   ]);
@@ -348,7 +349,11 @@ test('native.yml calls every workflow with shared paths, granting what its jobs 
   assert.equal(shard1.on.schedule[0].cron, '5 13 * * *');
   assert.equal(shard2.on.schedule[0].cron, '10 13 * * *');
   assert.equal(Object.keys(shard1.jobs).length, MAX_CALLS_PER_DISPATCHER + 2);
-  assert.equal(Object.keys(shard2.jobs).length, 5 + 2);
+  assert.equal(Object.keys(shard2.jobs).length, 1 + 2);
+  // 10 shards -> native .. native-10 all pass isDispatcher.
+  const tenShards = renderNativeWorkflows(Array.from({ length: MAX_CALLS_PER_DISPATCHER * 9 + 1 }, (_, i) => synthetic[i % synthetic.length]));
+  assert.equal(tenShards.size, 10);
+  for (const shardName of tenShards.keys()) assert.equal(isDispatcher(shardName), true, shardName);
 });
 
 // What GitHub and the gate did when a workflow filtered pull requests on its
@@ -613,15 +618,17 @@ test('the gate answers drafts, dispatches and calls from native.yml without a ch
   for (const name of ['push', 'schedule']) assert.equal(answer(name, ''), '', name);
   assert.equal(answer('pull_request', 'true'), 'run=false');
   assert.equal(answer('pull_request', 'false'), '');
-  // native.yml (and native-2.yml when sharded) decides before it calls a workflow, so that workflow's own gate answers at once.
-  for (const dispatcher of ['native', 'native-2']) {
+  // native.yml (and native-2.yml, native-10.yml, ... when sharded) decides before it calls a workflow, so that workflow's own gate answers at once.
+  for (const dispatcher of ['native', 'native-2', 'native-10', 'native-19']) {
+    assert.equal(isDispatcher(dispatcher), true, dispatcher);
     const called = `neurodesk/webapps/.github/workflows/${dispatcher}.yml@refs/pull/1/merge`;
     for (const name of ['pull_request', 'schedule']) assert.equal(answer(name, 'false', 'bison-native', called), 'run=true', `${dispatcher}/${name}`);
     // A draft skips every workflow the dispatcher lists, by name (test/native-decision.test.mjs).
     assert.equal(answer('pull_request', 'true', dispatcher, called), 'run=false\nskips=[]');
     for (const name of ['pull_request', 'schedule']) assert.equal(answer(name, 'false', dispatcher, called), '', `${dispatcher}/${name}`);
   }
-  for (const rejected of ['not-native', 'native-0', 'native-1']) {
+  for (const rejected of ['not-native', 'native-0', 'native-1', 'native-02']) {
+    assert.equal(isDispatcher(rejected), false, rejected);
     assert.equal(answer('pull_request', 'false', 'bison-native', `neurodesk/webapps/.github/workflows/${rejected}.yml@refs/pull/1/merge`), '', rejected);
   }
 });

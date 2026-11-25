@@ -65,7 +65,7 @@ export function pathGlob(pattern) {
 // job in it that decides for the workflows it calls.
 export const DISPATCHER = 'native';
 export const dispatcherName = (index) => (index === 0 ? DISPATCHER : `${DISPATCHER}-${index + 1}`);
-export const isDispatcher = (name) => name === DISPATCHER || /^native-[2-9]\d*$/.test(name);
+export const isDispatcher = (name) => name === DISPATCHER || /^native-(?:[2-9]|[1-9]\d+)$/.test(name);
 const DISPATCHER_GATE = 'gate / decide';
 
 // The shared filters a workflow's gate job lists, one per line.
