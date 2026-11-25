@@ -988,6 +988,9 @@ function shellGlobMatches(pattern, target) {
 const SHELL_CONTROL_PREFIXES = new Set(['if', 'elif', 'while', 'until', 'then', 'do', 'else', '!']);
 const OPAQUE_SHELL_COMMANDS = new Set(['eval', 'sh', 'bash', 'dash', 'zsh', 'ksh', 'csh', 'tcsh', 'fish', 'source', '.', 'exec', 'xargs', 'env', 'timeout', 'nohup']);
 const SAFE_NODE_DIAGNOSTICS = new Set(['-v', '--version', '-h', '--help', '--v8-options']);
+const GITHUB_ENV_REF = /GITHUB_ENV|\bgithub\s*(?:\.\s*env\b|\[\s*['"]env['"]\s*\])/i;
+const GITHUB_PATH_REF = /GITHUB_PATH|\bgithub\s*(?:\.\s*path\b|\[\s*['"]path['"]\s*\])/i;
+const LEGACY_GH_COMMAND = /::(?:add-path|set-env)::/i;
 
 // Whether every CATALOG CI invocation of `entryFile` runs plain `node <entryFile>`
 // (no preloads, flags, wrappers, custom shells, or startup/runtime env hooks) and
@@ -1016,15 +1019,18 @@ function ciCommandsPreserveMatrixApp(catalogCmds, entryFile, root = null) {
     const shell = typeof entry === 'string' ? null : entry.shell ?? null;
     const actionDir = typeof entry === 'string' ? null : entry.actionDir ?? null;
     if (shell && shell !== 'bash' && shell !== 'sh') return false;
-    if (UNSAFE_EXEC_ENV_TEXT.test(cmd) || cmd.includes('::add-path::') || cmd.includes('::set-env::')) return false;
+    if (UNSAFE_EXEC_ENV_TEXT.test(cmd) || LEGACY_GH_COMMAND.test(cmd)) return false;
     if (actionDir !== '.github/actions/setup-wasm-opt' && cmd.includes('binaryen')) otherTouchesBinaryen = true;
     if (stepEnv && Object.keys(stepEnv).some((key) => UNSAFE_EXEC_ENV.test(key))) return false;
-    if (stepEnv && Object.values(stepEnv).some((val) => String(val ?? '').includes(entryBase))) return false;
+    if (stepEnv && Object.values(stepEnv).some((val) => {
+      const str = String(val ?? '');
+      return str.includes(entryBase) || GITHUB_ENV_REF.test(str) || GITHUB_PATH_REF.test(str);
+    })) return false;
     const segments = splitShellCommands(cmd);
     let stepInvokesEntry = false;
     for (let segIdx = 0; segIdx < segments.length; segIdx++) {
       const seg = segments[segIdx];
-      if (seg.includes('GITHUB_PATH')) {
+      if (GITHUB_PATH_REF.test(seg)) {
         if (
           actionDir === '.github/actions/setup-wasm-opt'
           && seg.trim() === 'echo "$HOME/.cache/binaryen/bin" >> "$GITHUB_PATH"'
@@ -1069,7 +1075,7 @@ function ciCommandsPreserveMatrixApp(catalogCmds, entryFile, root = null) {
       const entryIdx = words.findIndex((w) => matchesEntryWord(w.value, workingDir));
       if (entryIdx < 0) continue;
       if (!isRepoRootWorkingDir(workingDir, root)) return false;
-      if (segIdx !== 0 || /`|\$\(/.test(seg) || seg.includes('GITHUB_ENV')) return false;
+      if (segIdx !== 0 || /`|\$\(/.test(seg) || GITHUB_ENV_REF.test(seg)) return false;
       if (entryIdx !== 1 || words[0].raw !== 'node' || entryIdx + 1 >= words.length) return false;
       const entryNorm = posix.normalize(words[entryIdx].value.replace(/^\/+/, ''));
       if (entryNorm !== entryFile) return false;
@@ -1081,7 +1087,7 @@ function ciCommandsPreserveMatrixApp(catalogCmds, entryFile, root = null) {
       const varName = varMatch[1] ?? varMatch[2] ?? varMatch[3] ?? varMatch[4];
       if (!Object.hasOwn(ownEnv, varName) || String(ownEnv[varName]).trim() !== '${{ matrix.app }}') return false;
     }
-    if (!stepInvokesEntry && cmd.includes('GITHUB_ENV')) return false;
+    if (!stepInvokesEntry && GITHUB_ENV_REF.test(cmd)) return false;
   }
   if (hasBinaryenPathWrite && otherTouchesBinaryen) return false;
   return true;

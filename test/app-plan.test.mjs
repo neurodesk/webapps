@@ -6104,6 +6104,76 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       },
     ],
     [
+      'earlier step writing ${{ github.path }} falls back to all apps with heavy_tests preserved',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': {
+              steps: [
+                { run: 'echo "$GITHUB_WORKSPACE/ci-bin" >> "${{ github.path }}"' },
+                { env: { APP: '${{ matrix.app }}' }, run: 'node scripts/e2e-test-data.mjs "$APP"' },
+              ],
+            },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/e2e-test-data.mjs': "import { provisionTestData } from './lib/e2e-test-data.mjs';\nconst [app] = process.argv.slice(2);\nawait provisionTestData(app, '.');\n",
+        'scripts/lib/e2e-test-data.mjs': "export const provisioners = { noddi: { env: ['NODDI_BROWSER_REFERENCE'], provision: async () => ({ NODDI_BROWSER_REFERENCE: 'write' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+      },
+      'scripts/lib/e2e-test-data.mjs',
+      new Map([[
+        'scripts/lib/e2e-test-data.mjs',
+        {
+          before: "export const provisioners = { noddi: { env: ['NODDI_BROWSER_REFERENCE'], provision: async () => ({ NODDI_BROWSER_REFERENCE: 'check' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+          after: "export const provisioners = { noddi: { env: ['NODDI_BROWSER_REFERENCE'], provision: async () => ({ NODDI_BROWSER_REFERENCE: 'write' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+        },
+      ]]),
+      (plan) => {
+        assert.equal(plan.allApps, true);
+        assert.equal(
+          plan.browserApps.include.filter(({ app }) => app === 'noddi').every(({ heavy_tests: run }) => run),
+          true,
+        );
+      },
+    ],
+    [
+      'earlier step aliasing ${{ github.path }} via env falls back to all apps',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': {
+              steps: [
+                { env: { OUT: '${{ github.path }}' }, run: 'echo "$GITHUB_WORKSPACE/ci-bin" >> "$OUT"' },
+                { env: { APP: '${{ matrix.app }}' }, run: 'node scripts/e2e-test-data.mjs "$APP"' },
+              ],
+            },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/e2e-test-data.mjs': "import { provisionTestData } from './lib/e2e-test-data.mjs';\nconst [app] = process.argv.slice(2);\nawait provisionTestData(app, '.');\n",
+        'scripts/lib/e2e-test-data.mjs': "export const provisioners = { noddi: { env: ['NODDI_BROWSER_REFERENCE'], provision: async () => ({ NODDI_BROWSER_REFERENCE: 'write' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+      },
+      'scripts/lib/e2e-test-data.mjs',
+      new Map([[
+        'scripts/lib/e2e-test-data.mjs',
+        {
+          before: "export const provisioners = { noddi: { env: ['NODDI_BROWSER_REFERENCE'], provision: async () => ({ NODDI_BROWSER_REFERENCE: 'check' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+          after: "export const provisioners = { noddi: { env: ['NODDI_BROWSER_REFERENCE'], provision: async () => ({ NODDI_BROWSER_REFERENCE: 'write' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+        },
+      ]]),
+      (plan) => {
+        assert.equal(plan.allApps, true);
+        assert.equal(
+          plan.browserApps.include.filter(({ app }) => app === 'noddi').every(({ heavy_tests: run }) => run),
+          true,
+        );
+      },
+    ],
+    [
       'dynamic script name in CI preserves chained workspace lint runner edge',
       {
         '.github/workflows/ci.yml': stringify({
