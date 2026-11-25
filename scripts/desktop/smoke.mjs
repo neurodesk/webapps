@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { prepareWorkflow, verifyWorkflow } from './workflows.mjs';
 import { diagnosticLines, failureSnapshot } from './smoke-diagnostics.mjs';
+import { isTransientDesktopFailure, resolveAppTimeoutMs } from './smoke-timeouts.mjs';
 import { observePageDiagnostics } from './page-diagnostics.mjs';
 import { verifyBundle } from '../../packages/desktop/src/bundle.js';
 
@@ -21,15 +22,15 @@ delete environment.ELECTRON_RUN_AS_NODE;
 const remoteModels = new Set(Object.values(bundle.assets).filter(asset => asset.remote && asset.kind === 'model').map(asset => asset.sha256));
 const results = [];
 let modelDownloadTested = false;
-const appTimeoutMs = Number(process.env.NEURODESK_APP_TIMEOUT_MS) || (process.env.NEURODESK_WORKFLOWS ? 12 * 60 * 1000 : 3 * 60 * 1000);
 const maxAppAttempts = process.env.CI ? 2 : 1;
 
-function isTransientDesktopFailure(error) {
-  const message = String(error?.message || error || '');
-  return /timed out|Target page, context or browser has been closed|electron\.launch|browser has been closed|EPIPE|ECONNRESET|net::ERR_/i.test(message);
-}
-
 async function runSingleApp(app) {
+  const workflows = Boolean(process.env.NEURODESK_WORKFLOWS);
+  const appTimeoutMs = resolveAppTimeoutMs(app.id, {
+    workflows,
+    envTimeoutMs: process.env.NEURODESK_APP_TIMEOUT_MS,
+    syncroTimeoutMs: process.env.SYNCRO_AUTOMATION_TIMEOUT_MS,
+  });
   const userData = await mkdtemp(join(tmpdir(), `neurodesk-${app.id}-`));
   const errors = [];
   const missing = [];
@@ -134,7 +135,7 @@ async function runSingleApp(app) {
       console.error(JSON.stringify({ time: new Date().toISOString(), event: server ? 'failure-snapshot' : 'failure-snapshot-unavailable', ...(server ? { server } : {}) }));
     }
     errors.push(error.message);
-    return { app: app.id, passed: false, errors, missing, diagnostics, transient: isTransientDesktopFailure(error) };
+    return { app: app.id, passed: false, errors, missing, diagnostics, transient: isTransientDesktopFailure(error, { timedOut, workflows, timeoutMs: appTimeoutMs }) };
   } finally {
     clearTimeout(deadlineTimer);
     clearInterval(progress);
