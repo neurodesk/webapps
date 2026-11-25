@@ -460,13 +460,59 @@ function resolveWorkspaceTarget(raw, baseDir, { root, nodeByPackageName, nodeSet
 const AMBIGUOUS_DIR = Symbol('ambiguous-dir');
 const AMBIGUOUS_LINT_EXEC = /\b(?:eval|xargs)\b|\b(?:ba|da|z|k)?sh\b[^\n]*-[a-zA-Z]*c\b|\$\(|`/;
 
+// Find the index of the `)` matching an opening `(` (such as `$(`),
+// respecting single/double quotes, backslash escapes, backticks, and nested `$(...)`.
+function findMatchingParen(text, openIndex) {
+  let depth = 1;
+  let quote = null;
+  let inBacktick = false;
+  for (let i = openIndex + 1; i < text.length; i++) {
+    const ch = text[i];
+    if (quote === "'") {
+      if (ch === "'") quote = null;
+      continue;
+    }
+    if (ch === '\\') {
+      i++;
+      continue;
+    }
+    if (quote === '"') {
+      if (ch === '$' && text[i + 1] === '(') {
+        const close = findMatchingParen(text, i + 1);
+        if (close < 0) return -1;
+        i = close;
+        continue;
+      }
+      if (ch === '"') quote = null;
+      continue;
+    }
+    if (inBacktick) {
+      if (ch === '`') inBacktick = false;
+      continue;
+    }
+    if (ch === '`') {
+      inBacktick = true;
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      continue;
+    }
+    if (ch === '(') depth++;
+    else if (ch === ')') {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
 // Split a shell script into simple command tokens and subshell parens `(`, `)`,
-// respecting quotes, backslash escapes/continuations, comments, and `$(...)`.
+// respecting quotes, backslash escapes/continuations, comments, backticks, and `$(...)`.
 function splitShellCommands(script) {
   const tokens = [];
   let current = '';
   let quote = null;
-  let substDepth = 0;
   let inBacktick = false;
   const flush = () => {
     const trimmed = current.trim();
@@ -493,6 +539,14 @@ function splitShellCommands(script) {
       }
     }
     if (quote === '"') {
+      if (ch === '$' && next === '(') {
+        const close = findMatchingParen(script, i + 1);
+        if (close >= 0) {
+          current += script.slice(i, close + 1);
+          i = close;
+          continue;
+        }
+      }
       current += ch;
       if (ch === '"') quote = null;
       continue;
@@ -518,15 +572,14 @@ function splitShellCommands(script) {
       continue;
     }
     if (ch === '$' && next === '(') {
-      substDepth++;
+      const close = findMatchingParen(script, i + 1);
+      if (close >= 0) {
+        current += script.slice(i, close + 1);
+        i = close;
+        continue;
+      }
       current += '$(';
       i++;
-      continue;
-    }
-    if (substDepth > 0) {
-      if (ch === '(') substDepth++;
-      else if (ch === ')') substDepth--;
-      current += ch;
       continue;
     }
     if (ch === '\n' || ch === ';') {
@@ -722,6 +775,7 @@ function tokenizeShellWords(segment) {
 }
 
 const SHELL_BIN = /^(?:\/[\w/.-]*\/)?(?:ba|da|z|k)?sh$/;
+const PNPM_BIN = /(?:^|\/)pnpm(?:\.(?:cjs|mjs|js|cmd|exe))?$/;
 
 function extractCommandSubstitutions(segment) {
   const inner = [];
@@ -746,17 +800,24 @@ function extractCommandSubstitutions(segment) {
       continue;
     }
     if (ch === '$' && segment[i + 1] === '(') {
-      let depth = 1;
-      const start = i + 2;
-      for (i = start; i < segment.length && depth > 0; i++) {
-        if (segment[i] === '(') depth++;
-        else if (segment[i] === ')') depth--;
+      const close = findMatchingParen(segment, i + 1);
+      if (close > i + 2) {
+        inner.push(segment.slice(i + 2, close));
+        i = close;
       }
-      if (depth === 0) inner.push(segment.slice(start, i - 1));
-      i--;
     } else if (ch === '`') {
       const start = i + 1;
-      const end = segment.indexOf('`', start);
+      let end = -1;
+      for (let j = start; j < segment.length; j++) {
+        if (segment[j] === '\\') {
+          j++;
+          continue;
+        }
+        if (segment[j] === '`') {
+          end = j;
+          break;
+        }
+      }
       if (end > start) {
         inner.push(segment.slice(start, end));
         i = end;
@@ -831,7 +892,7 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
         }
         continue;
       }
-      if (words[start] !== 'pnpm') continue;
+      if (!PNPM_BIN.test(words[start])) continue;
       let idx = start + 1;
       let hasRootFlag = false;
       let hasNonRootTarget = false;
