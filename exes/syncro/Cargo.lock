@@ -303,7 +303,7 @@ dependencies = [
 
 [[package]]
 name = "syncro"
-version = "0.8.20261119"
+version = "0.9.20261124"
 dependencies = [
  "neurodesk-pipeline-host",
  "serde_json",
@@ -313,7 +313,7 @@ dependencies = [
 
 [[package]]
 name = "syncro-core"
-version = "0.8.20261119"
+version = "0.9.20261124"
 dependencies = [
  "flate2",
  "neurodesk-nifti",
@@ -324,7 +324,7 @@ dependencies = [
 
 [[package]]
 name = "syncro-wasm"
-version = "0.8.20261119"
+version = "0.9.20261124"
 dependencies = [
  "js-sys",
  "neurodesk-pipeline-host",
