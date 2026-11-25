@@ -1121,17 +1121,22 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     if (path === E2E_TEST_DATA && manifests.get(path)) {
       if (graph?.e2eProvisionersNarrowable === false) {
         shared(`${path}: callers import provisioners directly or bypass provisionTestData`);
+        for (const id of appIds) editedApps.add(id);
         continue;
       }
       const impact = e2eTestDataImpact(manifests.get(path));
       if (impact.shared) {
         shared(`${path}: ${impact.shared}`);
+        for (const id of appIds) editedApps.add(id);
         continue;
       }
       if (graph) {
         if (site.has(path)) siteBuild(path);
         for (const candidate of registry.apps) {
-          if (reach.get(candidate.id).has(path)) select(candidate.id, `${path}: ${candidate.id} loads ${path}`);
+          if (reach.get(candidate.id).has(path)) {
+            select(candidate.id, `${path}: ${candidate.id} loads ${path}`);
+            editedApps.add(candidate.id);
+          }
         }
       }
       for (const id of impact.changed) {
@@ -1310,6 +1315,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
         || (/^(?:packages|exes)\/[^/]+\/package\.json$/.test(path) && [...catalogShared].some((node) => node.startsWith(`${nodes[0]}/`)))
       ) {
         shared(`${path}: ci.yml's per-app jobs run it`);
+        if (path === E2E_TEST_DATA) for (const id of appIds) editedApps.add(id);
         continue;
       }
       if (nodes.some((node) => site.has(node))) siteBuild(path);
