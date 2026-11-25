@@ -381,7 +381,7 @@ test("Sol r2: signal-safe lock/overwrite rollback, atomic non-overwrite, empty-d
   );
   assert.equal(await readFile(join(work, "target.txt"), "utf8"), "precious");
 
-  // 3. Atomic non-overwrite TOCTOU: concurrent file created after lstat is untouched (both linkSync & ENOTSUP->COPYFILE_EXCL)
+  // 3. Atomic non-overwrite TOCTOU: concurrent file created after lstat is untouched (linkSync EEXIST & ENOTSUP refusal)
   const raceDir = join(work, "race-out");
   await mkdir(raceDir);
   await assert.rejects(
@@ -410,7 +410,7 @@ test("Sol r2: signal-safe lock/overwrite rollback, atomic non-overwrite, empty-d
         throw Object.assign(new Error("ENOTSUP"), { code: "ENOTSUP" });
       },
     }),
-    /already exists/,
+    /requires hard-link support/,
   );
   assert.equal(await readFile(join(enotsupDir, "race2.bin"), "utf8"), "concurrent-winner-2");
   assert.deepEqual(await readdir(enotsupDir), ["race2.bin"]);

@@ -4,7 +4,6 @@ import { randomBytes } from "node:crypto";
 import {
   closeSync,
   constants as fsConstants,
-  copyFileSync,
   existsSync,
   linkSync,
   lstatSync,
@@ -637,9 +636,8 @@ async function assertTargetsWritable(dir, items, overwrite) {
   }
 }
 
-function publishFileNonOverwriteSync(partialPath, finalPath, { linkFn, copyFileFn }) {
+function publishFileNonOverwriteSync(partialPath, finalPath, { linkFn }) {
   const doLink = linkFn ?? linkSync;
-  const doCopy = copyFileFn ?? ((src, dst) => copyFileSync(src, dst, fsConstants.COPYFILE_EXCL));
   try {
     doLink(partialPath, finalPath);
   } catch (error) {
@@ -647,17 +645,12 @@ function publishFileNonOverwriteSync(partialPath, finalPath, { linkFn, copyFileF
       throw new Error(`Output '${finalPath}' already exists. Choose a new directory or pass --overwrite.`);
     }
     if (LINK_FALLBACK_CODES.has(error.code)) {
-      try {
-        doCopy(partialPath, finalPath);
-      } catch (copyError) {
-        if (copyError.code === "EEXIST") {
-          throw new Error(`Output '${finalPath}' already exists. Choose a new directory or pass --overwrite.`);
-        }
-        throw copyError;
-      }
-    } else {
-      throw error;
+      throw new Error(
+        `Atomic non-overwrite output publication requires hard-link support for '${finalPath}' (${error.code}).`,
+        { cause: error },
+      );
     }
+    throw error;
   }
   try {
     unlinkSync(partialPath);
