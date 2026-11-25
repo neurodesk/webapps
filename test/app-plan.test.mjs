@@ -6174,6 +6174,65 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       },
     ],
     [
+      'npm run verify expands root preverify lifecycle hook before pruning workspace lint edges',
+      {
+        'package.json': JSON.stringify({
+          name: 'root',
+          scripts: {
+            preverify: 'npm --prefix apps/n4 run lint',
+            verify: 'echo ok',
+          },
+        }),
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'npm run verify' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/lint.mjs': 'export const lint = 1;\n',
+        'apps/n4/package.json': JSON.stringify({
+          name: '@nd/n4',
+          scripts: { lint: 'node ../../scripts/lint.mjs --workspace' },
+        }),
+      },
+      'scripts/lint.mjs',
+      new Map(),
+      (plan) => {
+        assert.ok(plan.selected.some((app) => app.id === 'n4'), 'n4 must remain selected when preverify invokes its lint script');
+      },
+    ],
+    [
+      'npm run verify tracks root postverify lifecycle hook in jobScripts',
+      {
+        'package.json': JSON.stringify({
+          name: 'root',
+          scripts: {
+            verify: 'echo ok',
+            postverify: 'echo v2',
+          },
+        }),
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'npm run verify' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+      },
+      'package.json',
+      new Map([[
+        'package.json',
+        {
+          before: JSON.stringify({ name: 'root', scripts: { verify: 'echo ok', postverify: 'echo v1' } }),
+          after: JSON.stringify({ name: 'root', scripts: { verify: 'echo ok', postverify: 'echo v2' } }),
+        },
+      ]]),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
       'dynamic script name in CI preserves chained workspace lint runner edge',
       {
         '.github/workflows/ci.yml': stringify({

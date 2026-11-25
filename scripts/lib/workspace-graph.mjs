@@ -2308,12 +2308,25 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
           continue;
         }
         if (hasRootFlag || (!hasNonRootFilter && !hasNonRootDir && mayRunAtRoot)) {
+          const pushScriptWithHooks = (name, env) => {
+            scripts.push({ script: name, env });
+            if (!rootScripts) return;
+            for (const hook of [
+              `pre${name}`,
+              `post${name}`,
+              ...(name === 'restart' ? ['prestop', 'stop', 'poststop', 'prestart', 'start', 'poststart'] : []),
+            ]) {
+              if (Object.hasOwn(rootScripts, hook)) scripts.push({ script: hook, env });
+            }
+          };
           if (/^[A-Za-z0-9_@][\w.:/@-]*$/.test(word)) {
-            scripts.push({ script: word, env: childEnv });
+            const canonical = !seenRun && (word === 't' || word === 'tst') ? 'test' : word;
+            pushScriptWithHooks(canonical, childEnv);
           } else if (/[$`*]|\$\{\{/.test(word)) {
             const val = resolveSingleCommandEnvVar(word, command, stepEnv);
             if (val !== null && /^[A-Za-z0-9_@][\w.:/@-]*$/.test(val)) {
-              scripts.push({ script: val, env: childEnv });
+              const canonical = !seenRun && (val === 't' || val === 'tst') ? 'test' : val;
+              pushScriptWithHooks(canonical, childEnv);
             } else {
               scripts.push({ script: ANY_ROOT_SCRIPT, env: null });
               if (rootScripts) {

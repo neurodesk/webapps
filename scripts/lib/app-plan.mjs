@@ -1271,13 +1271,18 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
         // selects every app, and a workspace invocation selects whatever reaches
         // that workspace; a script nothing runs selects nothing.
         for (const name of scripts) {
-          const jobs = [...graph.jobScripts].filter(([, run]) => run.has(name) || run.has(ANY_ROOT_SCRIPT)).map(([id]) => id);
+          const lifecycleBase = name.match(/^(?:pre|post)(.+)$/)?.[1] ?? null;
+          const runsScript = (run) => run.has(name)
+            || run.has(ANY_ROOT_SCRIPT)
+            || (lifecycleBase !== null && run.has(lifecycleBase))
+            || ((name === 'stop' || name === 'start' || lifecycleBase === 'stop' || lifecycleBase === 'start') && run.has('restart'));
+          const jobs = [...graph.jobScripts].filter(([, run]) => runsScript(run)).map(([id]) => id);
           if (jobs.length) {
             if (jobs.every((id) => CI_JOB_SCOPES[id] === 'site')) siteBuild(`${path}: the site CI jobs run root script ${name}`);
             else shared(`${path}: ci.yml's ${jobs.join(', ')} ${jobs.length === 1 ? 'job runs' : 'jobs run'} root script ${name}`);
           }
           for (const [workspaceNode, rootNames] of graph.workspaceRootScripts ?? []) {
-            if (rootNames.has(name) || rootNames.has(ANY_ROOT_SCRIPT)) selectReaching(workspaceNode, `${path}: ${workspaceNode} runs root script ${name}`);
+            if (runsScript(rootNames)) selectReaching(workspaceNode, `${path}: ${workspaceNode} runs root script ${name}`);
           }
         }
         continue;
