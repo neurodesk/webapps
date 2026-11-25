@@ -189,7 +189,7 @@ test("CLI rejects invalid fMRS flag combinations and unsupported inputs", async 
   assert.match(onRaw.stderr, /multi-transient/);
 });
 
-test("readInputs preserves parent folder paths when individual CLI file arguments span different folders", async (t) => {
+test("readInputs preserves folder paths across directories while keeping basenames for loose files", async (t) => {
   const directory = await scratch(t);
   const sub1 = join(directory, "sub-01");
   const sub2 = join(directory, "sub-02");
@@ -202,13 +202,25 @@ test("readInputs preserves parent folder paths when individual CLI file argument
   await writeFile(f2, "water-other-subject");
   await writeFile(f3, "water-same-subject");
 
-  // Individual files from different folders preserve relative paths from their common ancestor
-  const cross = await readInputs([f1, f2]);
-  assert.deepEqual(cross.map((f) => f.name), ["sub-01/svs_steam.dat", "sub-02/svs_steam_onlyrfoff.dat"]);
+  // Multiple directories preserve relative paths from their common ancestor
+  const crossDirs = await readInputs([sub1, sub2]);
+  assert.deepEqual(
+    crossDirs.map((f) => f.name),
+    ["sub-01/svs_steam.dat", "sub-01/svs_steam_w.dat", "sub-02/svs_steam_onlyrfoff.dat"],
+  );
+
+  // Loose files (including content-addressed cache paths from different directories) keep basenames so SDAT/SPAR pairs match
+  const looseAcrossDirs = await readInputs([f1, f2]);
+  assert.deepEqual(looseAcrossDirs.map((f) => f.name), ["svs_steam.dat", "svs_steam_onlyrfoff.dat"]);
 
   // Individual files from the same folder keep plain basenames
   const same = await readInputs([f1, f3]);
   assert.deepEqual(same.map((f) => f.name), ["svs_steam.dat", "svs_steam_w.dat"]);
+
+  // Duplicate loose basenames still direct the caller to pass folders
+  const dup = join(sub2, "svs_steam.dat");
+  await writeFile(dup, "duplicate-name");
+  await assert.rejects(readInputs([f1, dup]), /Two inputs are named svs_steam\.dat; give the folders that hold them instead/);
 
   // Pass 9 High-1: Mixed directory + loose file arguments share one common-ancestor root
   const sub1Sess = join(sub1, "session");

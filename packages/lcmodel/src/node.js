@@ -212,12 +212,12 @@ function commonAncestor(dirs) {
 }
 
 /**
- * Files as the app receives them: a file by its name when all individual files
- * share one folder, a single folder's files relative to that folder's parent
- * (matching the folder picker's webkitRelativePath), or — whenever multiple
- * folders or mixed file/folder arguments are passed — every file relative to
- * one shared common ancestor directory so files from different folders never
- * collide or pair across folders.
+ * Files as the app receives them: a loose file by its name (matching the file
+ * picker and content-addressed file paths), a single folder's files relative to
+ * that folder's parent (matching the folder picker's webkitRelativePath), or —
+ * whenever multiple folders or mixed file/folder arguments are passed — every
+ * file relative to one shared common ancestor directory so files from different
+ * folders never collide or pair across folders.
  */
 export async function readInputs(paths) {
   const dirEntries = [];
@@ -247,7 +247,7 @@ export async function readInputs(paths) {
     for (const entry of dirEntries) {
       files.push({ name: [basename(root), ...relative(root, entry.path).split(sep)].join("/"), path: entry.path });
     }
-  } else if (dirRoots.length === 0 && new Set(loose.map((p) => dirname(p))).size <= 1) {
+  } else if (dirRoots.length === 0) {
     for (const file of loose) files.push({ name: basename(file), path: file });
   } else if (allFilePaths.length) {
     const ancestor = commonAncestor(allFilePaths.map((p) => dirname(p)));
