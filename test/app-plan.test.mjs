@@ -5593,6 +5593,85 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       },
     ],
     [
+      'BASH_ENV startup script in step env falls back to all apps on provisioner edit',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ env: { APP: '${{ matrix.app }}', BASH_ENV: './scripts/lib/shell-env.sh' }, run: 'node scripts/e2e-test-data.mjs "$APP"' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/lib/shell-env.sh': "export NODE_OPTIONS='--import ./scripts/lib/prime.mjs'\n",
+        'scripts/lib/prime.mjs': "process.argv[2] = 'n4';\n",
+        'scripts/e2e-test-data.mjs': "import { provisionTestData } from './lib/e2e-test-data.mjs';\nconst [app] = process.argv.slice(2);\nawait provisionTestData(app, '.');\n",
+        'scripts/lib/e2e-test-data.mjs': "export const provisioners = { n4: { env: ['A'], provision: async () => ({ A: '2' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+      },
+      'scripts/lib/e2e-test-data.mjs',
+      new Map([[
+        'scripts/lib/e2e-test-data.mjs',
+        {
+          before: "export const provisioners = { n4: { env: ['A'], provision: async () => ({ A: '1' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+          after: "export const provisioners = { n4: { env: ['A'], provision: async () => ({ A: '2' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+        },
+      ]]),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'quoted entry path node scripts/"e2e-test-data.mjs" n4 falls back to all apps on provisioner edit',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': {
+              steps: [
+                { env: { APP: '${{ matrix.app }}' }, run: 'node scripts/e2e-test-data.mjs "$APP"' },
+                { run: 'node scripts/"e2e-test-data.mjs" n4' },
+              ],
+            },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/e2e-test-data.mjs': "import { provisionTestData } from './lib/e2e-test-data.mjs';\nconst [app] = process.argv.slice(2);\nawait provisionTestData(app, '.');\n",
+        'scripts/lib/e2e-test-data.mjs': "export const provisioners = { n4: { env: ['A'], provision: async () => ({ A: '2' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+      },
+      'scripts/lib/e2e-test-data.mjs',
+      new Map([[
+        'scripts/lib/e2e-test-data.mjs',
+        {
+          before: "export const provisioners = { n4: { env: ['A'], provision: async () => ({ A: '1' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+          after: "export const provisioners = { n4: { env: ['A'], provision: async () => ({ A: '2' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+        },
+      ]]),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'node:process default import alias mutating argv falls back to all apps on provisioner edit',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ env: { APP: '${{ matrix.app }}' }, run: 'node scripts/e2e-test-data.mjs "$APP"' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/e2e-test-data.mjs': "import proc from 'node:process';\nimport { provisionTestData } from './lib/e2e-test-data.mjs';\nproc['argv'][2] = 'n4';\nconst [app] = process.argv.slice(2);\nawait provisionTestData(app, '.');\n",
+        'scripts/lib/e2e-test-data.mjs': "export const provisioners = { n4: { env: ['A'], provision: async () => ({ A: '2' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+      },
+      'scripts/lib/e2e-test-data.mjs',
+      new Map([[
+        'scripts/lib/e2e-test-data.mjs',
+        {
+          before: "export const provisioners = { n4: { env: ['A'], provision: async () => ({ A: '1' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+          after: "export const provisioners = { n4: { env: ['A'], provision: async () => ({ A: '2' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+        },
+      ]]),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
       'dynamic script name in CI preserves chained workspace lint runner edge',
       {
         '.github/workflows/ci.yml': stringify({

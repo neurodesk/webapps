@@ -3,7 +3,7 @@ import { lstat, readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { isBuiltin } from 'node:module';
 import { parse } from 'yaml';
 import { sharedModuleUsers } from './shared-module-users.mjs';
-import { dirname, join, relative, resolve, sep } from 'node:path';
+import { dirname, join, posix, relative, resolve, sep } from 'node:path';
 import sourceParser from '@neurodesk/code-quality';
 
 // Which apps/, packages/ and exes/ directories each workspace directory uses.
@@ -539,6 +539,22 @@ function esmGuardBindingAuth(ast) {
   };
 }
 
+const UNSAFE_PROCESS_MODULES = new Set([
+  'process',
+  'node:process',
+  'module',
+  'node:module',
+  'vm',
+  'node:vm',
+  'inspector',
+  'node:inspector',
+  'inspector/promises',
+  'node:inspector/promises',
+  'v8',
+  'node:v8',
+]);
+const UNSAFE_GLOBAL_PROPS = new Set(['process', 'globalThis', 'global', 'Reflect', 'eval', 'Function']);
+
 // Whether an AST may mutate `process` or `process.argv` (outside an authenticated
 // strict ESM main guard's consequent; `else` branches are always scanned).
 function astMayMutateProcessArgv(ast, allowGuardIf = false) {
@@ -551,6 +567,22 @@ function astMayMutateProcessArgv(ast, allowGuardIf = false) {
       for (const item of node) scan(item, ancestors);
       return;
     }
+    if (
+      (node.type === 'ImportDeclaration' || node.type === 'ExportNamedDeclaration' || node.type === 'ExportAllDeclaration')
+      && node.source?.type === 'Literal'
+      && UNSAFE_PROCESS_MODULES.has(node.source.value)
+    ) {
+      unsafe = true;
+      return;
+    }
+    if (node.type === 'ImportExpression' && (node.source?.type !== 'Literal' || UNSAFE_PROCESS_MODULES.has(node.source.value))) {
+      unsafe = true;
+      return;
+    }
+    if (node.type === 'CallExpression' && node.callee?.type === 'Identifier' && node.callee.name === 'require') {
+      unsafe = true;
+      return;
+    }
     if (allowGuardIf && node.type === 'IfStatement' && isStrictEsmMainGuard(node, bindingAuth)) {
       if (node.alternate) scan(node.alternate, [...ancestors, node]);
       return;
@@ -561,20 +593,18 @@ function astMayMutateProcessArgv(ast, allowGuardIf = false) {
         (parent?.type === 'MemberExpression' && !parent.computed && parent.property === node)
         || (parent?.type === 'Property' && !parent.computed && parent.key === node);
       if (!isNonComputedProp) {
-        if (node.name === 'Reflect') {
+        if (node.name === 'Reflect' || node.name === 'eval' || node.name === 'Function') {
           unsafe = true;
           return;
         }
         if (node.name === 'globalThis' || node.name === 'global') {
-          const grandparent = ancestors[ancestors.length - 2];
           const isSafeGlobalRead =
             parent?.type === 'MemberExpression'
             && parent.object === node
             && !parent.computed
             && parent.property?.type === 'Identifier'
-            && parent.property.name !== 'process'
-            && !(grandparent?.type === 'AssignmentExpression' && grandparent.left === parent)
-            && !(grandparent?.type === 'UpdateExpression' && grandparent.argument === parent);
+            && !UNSAFE_GLOBAL_PROPS.has(parent.property.name)
+            && !isWriteTarget(parent, ancestors.slice(0, -1));
           if (!isSafeGlobalRead) {
             unsafe = true;
             return;
@@ -872,23 +902,45 @@ function tokenizeShellWordsWithExpansion(segment) {
   return words;
 }
 
+const UNSAFE_EXEC_ENV = /^(?:NODE_|BASH_ENV$|BASH_FUNC_|BASHOPTS$|ENV$|ZDOTDIR$|SHELLOPTS$|PS4$|PROMPT_COMMAND$|IFS$|CDPATH$|PATH$|FPATH$|LD_|DYLD_|GLOBIGNORE$|EXECIGNORE$)/;
+const UNSAFE_EXEC_ENV_TEXT = /\b(?:NODE_OPTIONS|NODE_PATH|BASH_ENV|BASH_FUNC_|BASHOPTS|ZDOTDIR|SHELLOPTS|PROMPT_COMMAND|LD_PRELOAD|DYLD_INSERT_LIBRARIES)\b/;
+
 // Whether every CATALOG CI invocation of `entryFile` runs plain `node <entryFile>`
-// (no preloads, flags, wrappers, or NODE_OPTIONS) and passes `${{ matrix.app }}`
-// (directly or via one unconcatenated single-step env var) as its first CLI argument.
+// (no preloads, flags, wrappers, custom shells, or startup/runtime env hooks) and
+// passes `${{ matrix.app }}` (directly or via one unconcatenated single-step env var)
+// as its first CLI argument.
 function ciCommandsPreserveMatrixApp(catalogCmds, entryFile) {
+  const entryBase = entryFile.split('/').pop();
+  const matchesEntryWord = (value, workingDir) => {
+    const clean = value.replace(/^\/+/, '');
+    const normalized = posix.normalize(clean);
+    if (normalized === entryFile) return true;
+    if (workingDir) {
+      const joined = posix.normalize(`${workingDir}/${value}`);
+      if (joined === entryFile) return true;
+    }
+    return value.includes(entryBase) && normalized !== 'scripts/lib/e2e-test-data.mjs';
+  };
   for (const entry of catalogCmds ?? []) {
     const cmd = typeof entry === 'string' ? entry : entry.cmd;
     const stepEnv = typeof entry === 'string' ? null : entry.env ?? null;
-    if (!cmd.includes(entryFile)) continue;
-    if (stepEnv && Object.hasOwn(stepEnv, 'NODE_OPTIONS')) return false;
+    const workingDir = typeof entry === 'string' ? null : entry.workingDir ?? null;
+    const shell = typeof entry === 'string' ? null : entry.shell ?? null;
+    if (UNSAFE_EXEC_ENV_TEXT.test(cmd)) return false;
+    if (stepEnv && Object.values(stepEnv).some((val) => String(val ?? '').includes(entryBase))) return false;
     const segments = splitShellCommands(cmd);
     for (let segIdx = 0; segIdx < segments.length; segIdx++) {
       const seg = segments[segIdx];
-      if (!seg.includes(entryFile)) continue;
-      if (segIdx !== 0 || /`|\$\(/.test(seg)) return false;
       const words = tokenizeShellWordsWithExpansion(seg);
-      const entryIdx = words.findIndex((w) => w.value === entryFile || w.value === `./${entryFile}`);
+      const entryIdx = words.findIndex((w) => matchesEntryWord(w.value, workingDir));
+      if (entryIdx < 0) continue;
+      if (shell && shell !== 'bash' && shell !== 'sh') return false;
+      if (workingDir) return false;
+      if (stepEnv && Object.keys(stepEnv).some((key) => UNSAFE_EXEC_ENV.test(key))) return false;
+      if (segIdx !== 0 || /`|\$\(/.test(seg)) return false;
       if (entryIdx !== 1 || words[0].raw !== 'node' || entryIdx + 1 >= words.length) return false;
+      const entryNorm = posix.normalize(words[entryIdx].value.replace(/^\/+/, ''));
+      if (entryNorm !== entryFile) return false;
       const rawArg = words[entryIdx + 1].raw;
       if (rawArg === '${{ matrix.app }}' || rawArg === '"${{ matrix.app }}"' || rawArg === "'${{ matrix.app }}'") continue;
       const varMatch = rawArg.match(/^(?:"\$(?:([A-Za-z_]\w*)|\{([A-Za-z_]\w*)\})"|\$(?:([A-Za-z_]\w*)|\{([A-Za-z_]\w*)\}))$/);
@@ -2142,7 +2194,7 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
 // remain visible before deciding whether standalone lint scripts can be omitted.
 function expandedCommandTexts(commands, rootScripts, root = null, rootPackageName = null) {
   const entries = [];
-  const pending = commands.map((entry) => (typeof entry === 'string' ? { cmd: entry, workingDir: null, env: null } : entry));
+  const pending = commands.map((entry) => (typeof entry === 'string' ? { cmd: entry, workingDir: null, env: null, shell: null } : entry));
   const visited = new Set();
   while (pending.length) {
     const current = pending.pop();
@@ -2152,7 +2204,7 @@ function expandedCommandTexts(commands, rootScripts, root = null, rootPackageNam
       const visitKey = `${script}\0${stableEnvKey(env)}`;
       if (!visited.has(visitKey)) {
         visited.add(visitKey);
-        if (script !== ANY_ROOT_SCRIPT && rootScripts[script]) pending.push({ cmd: rootScripts[script], workingDir: null, env });
+        if (script !== ANY_ROOT_SCRIPT && rootScripts[script]) pending.push({ cmd: rootScripts[script], workingDir: null, env, shell: current.shell ?? null });
       }
     }
   }
@@ -2247,6 +2299,7 @@ export async function loadConservativeWorkspaceGraph(root) {
   const rootScripts = rootManifest.scripts ?? {};
   const rootPackageName = typeof rootManifest.name === 'string' ? rootManifest.name : null;
   const workflowWorkingDir = ci?.defaults?.run?.['working-directory'] ?? null;
+  const workflowShell = ci?.defaults?.run?.shell ?? null;
   const workflowEnv = ci?.env && typeof ci.env === 'object' ? ci.env : {};
   const rawRuns = (names) => names.flatMap((name) => {
     const job = ci?.jobs?.[name];
@@ -2255,10 +2308,12 @@ export async function loadConservativeWorkspaceGraph(root) {
       throw new WorkspaceGraphConfigurationError(`ci.yml job ${name} has no step list; update the workspace graph's CI entry points`);
     }
     const jobWorkingDir = job?.defaults?.run?.['working-directory'] ?? workflowWorkingDir;
+    const jobShell = job?.defaults?.run?.shell ?? workflowShell;
     const jobEnv = job?.env && typeof job.env === 'object' ? { ...workflowEnv, ...job.env } : workflowEnv;
     return steps.map((step) => ({
       cmd: String(step?.run ?? ''),
       workingDir: step?.['working-directory'] ?? jobWorkingDir ?? null,
+      shell: step?.shell ?? jobShell ?? null,
       env: step?.env && typeof step.env === 'object' ? { ...jobEnv, ...step.env } : jobEnv,
     }));
   });
