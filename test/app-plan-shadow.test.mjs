@@ -48,9 +48,9 @@ test('a dependency dropped at head still counts through the merge base', () => {
 });
 
 test('package tests and documents are exempt, not expected', () => {
-  const { expected, exempt } = expectedApps({ apps, changedPaths: ['packages/core/test/a.test.js', 'packages/core/README.md'], workspace });
+  const { expected, exempt } = expectedApps({ apps, changedPaths: ['packages/core/test/a.test.js', 'packages/core/README.md', 'apps/alpha/AGENTS.md', 'apps/beta/CLAUDE.md', 'apps/gamma/AGENT.md'], workspace });
   assert.equal(expected.size, 0);
-  assert.deepEqual(exempt.map((entry) => entry.path), ['packages/core/test/a.test.js', 'packages/core/README.md']);
+  assert.deepEqual(exempt.map((entry) => entry.path), ['packages/core/test/a.test.js', 'packages/core/README.md', 'apps/alpha/AGENTS.md', 'apps/beta/CLAUDE.md', 'apps/gamma/AGENT.md']);
 });
 
 test('own files and model manifests select their app', () => {

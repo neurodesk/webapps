@@ -61,4 +61,4 @@ mirrors the shared WebGPU executor in
 `exes/synthseg/src/metal.rs` mirrors that same executor including its `Concat`
 and `Softmax` kernels and the padded classifier head.
 
-See also [exes/compute-server/AGENTS.md](../exes/compute-server/AGENTS.md) and [exes/nii2tvx/AGENTS.md](../exes/nii2tvx/AGENTS.md).
+See also [exes/compute-server/AGENTS.md](compute-server/AGENTS.md), [exes/nii2tvx/AGENTS.md](nii2tvx/AGENTS.md), [exes/lcmodel/AGENTS.md](lcmodel/AGENTS.md), [exes/fida/AGENTS.md](fida/AGENTS.md), and any `apps/<id>/AGENTS.md` for app-paired Rust/WASM crates (`deconvolution`, `samsrf`, `fastprep`).

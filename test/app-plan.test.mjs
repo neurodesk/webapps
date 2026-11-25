@@ -2698,8 +2698,34 @@ test('an app runs its @heavy browser tests only when the change edits it, a fail
   // Release bookkeeping in the app's own directory is not an edit, and a diff of only bookkeeping is no full run.
   const changelog = heavy(createAppPlan(registry, ['packages/components/src/styles/imaging-workspace.css', 'apps/sdc/CHANGELOG.md'], workspace));
   assert.equal(changelog.sdc, false);
+  // Scoped agent guides do not trigger draft app selection or @heavy tests on mixed diffs.
+  const guideMixed = ['packages/components/src/styles/imaging-workspace.css', 'apps/bison/AGENTS.md', 'packages/bison/AGENTS.md'];
+  const guideDraft = createAppPlan(registry, guideMixed, workspace, new Map(), { draft: true });
+  assert.deepEqual(guideDraft.selected, []);
+  const guideReady = createAppPlan(registry, guideMixed, workspace);
+  assert.equal(heavy(guideReady).bison, false);
+  // A cross-app reader of an app's agent guide is still selected when graph.appReaders reports it.
+  const readerGraph = {
+    ...workspace,
+    appReaders: (path) => (path === 'apps/bison/AGENTS.md' ? ['elastix'] : workspace.appReaders(path)),
+  };
+  const withReader = createAppPlan(registry, ['apps/bison/AGENTS.md'], readerGraph);
+  assert.deepEqual(withReader.selected.map((app) => app.id), ['elastix']);
   const onlyBookkeeping = createAppPlan(registry, ['apps/sdc/CHANGELOG.md'], workspace, new Map(), { carried: new Map([['synthseg', ['browser-e2e (synthseg)']]]) });
   assert.deepEqual(heavy(onlyBookkeeping), { synthseg: true });
   // The tag is measured in the CPU job; the macOS GPU job runs every test.
   assert.ok(createAppPlan(registry, ['apps/sdc/src/main.js'], workspace).gpuApps.include.every((entry) => !('heavy_tests' in entry)));
+});
+
+test('no app build, package source or ci.yml job reads .github/aw/ or app-scoped AGENTS.md files', async () => {
+  const ciText = await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8');
+  assert.doesNotMatch(ciText, /\.github\/aw\//);
+  const workspace = await graph;
+  for (const [node, targets] of workspace.edges) {
+    if (!node.startsWith('apps/') && !node.startsWith('packages/')) continue;
+    for (const target of targets) {
+      assert.ok(!target.startsWith('.github/aw/'), `${node} reaches ${target}`);
+      assert.ok(!/^apps\/[^/]+\/(?:AGENTS|AGENT|CLAUDE)\.md$/.test(target), `${node} reaches ${target}`);
+    }
+  }
 });
