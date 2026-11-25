@@ -679,27 +679,15 @@ function checkNodeEsmSyntax(source) {
 }
 
 // Whether `export async function provisionTestData(app, ...)` only indexes
-// `provisioners` by its first parameter `app` (never reading another app's
-// entry such as `provisioners.denoise`, never reading `unpublished`, and never
-// reassigning, destructuring into, or shadowing `app`).
+// `provisioners` by its first parameter `app` (whitelisting every occurrence of
+// `app` and `provisioners`, rejecting shadowing via class/function/var/pattern
+// bindings, `with`, `eval`, or lookups of any other app or `unpublished`).
 function isDirectProvisionDispatcher(statement) {
   if (statement?.type !== 'ExportNamedDeclaration') return false;
   const fn = statement.declaration;
   if (fn?.type !== 'FunctionDeclaration' || fn.id?.name !== 'provisionTestData') return false;
   const appParam = fn.params?.[0]?.type === 'Identifier' ? fn.params[0].name : null;
   if (!appParam) return false;
-  const isBindingPosition = (ancestors, node) => {
-    for (let i = ancestors.length - 1; i >= 0; i--) {
-      const ancestor = ancestors[i];
-      const child = i === ancestors.length - 1 ? node : ancestors[i + 1];
-      if ((ancestor.type === 'AssignmentExpression' || ancestor.type === 'ForInStatement' || ancestor.type === 'ForOfStatement') && ancestor.left === child) return true;
-      if (ancestor.type === 'UpdateExpression' && ancestor.argument === child) return true;
-      if (ancestor.type === 'VariableDeclarator' && ancestor.id === child) return true;
-      if (ancestor.type === 'CatchClause' && ancestor.param === child) return true;
-      if ((ancestor.type === 'FunctionDeclaration' || ancestor.type === 'FunctionExpression' || ancestor.type === 'ArrowFunctionExpression') && Array.isArray(ancestor.params) && ancestor.params.includes(child)) return true;
-    }
-    return false;
-  };
   let safe = true;
   const ancestors = [];
   const walk = (node) => {
@@ -708,17 +696,33 @@ function isDirectProvisionDispatcher(statement) {
       for (const item of node) walk(item);
       return;
     }
+    if (node.type === 'WithStatement') {
+      safe = false;
+      return;
+    }
     const parent = ancestors[ancestors.length - 1] ?? null;
+    const grandParent = ancestors[ancestors.length - 2] ?? null;
+    if (node.type === 'Identifier' && node.name === 'eval') {
+      safe = false;
+      return;
+    }
     if (node.type === 'Identifier' && node.name === appParam) {
-      const isNonComputedObjectKey = parent?.type === 'Property' && !parent.computed && parent.key === node && ancestors[ancestors.length - 2]?.type === 'ObjectExpression';
-      const isNonComputedMemberProp = parent?.type === 'MemberExpression' && !parent.computed && parent.property === node;
-      if (!isNonComputedObjectKey && !isNonComputedMemberProp && isBindingPosition(ancestors, node)) {
+      const isPlainObjectKey = parent?.type === 'Property' && !parent.computed && parent.key === node && grandParent?.type === 'ObjectExpression';
+      const isPlainMemberProp = parent?.type === 'MemberExpression' && !parent.computed && parent.property === node;
+      const isProvisionerIndex =
+        parent?.type === 'MemberExpression' &&
+        parent.computed &&
+        parent.property === node &&
+        parent.object?.type === 'Identifier' &&
+        parent.object.name === 'provisioners';
+      const isTemplateRead = parent?.type === 'TemplateLiteral' && Array.isArray(parent.expressions) && parent.expressions.includes(node);
+      if (!isPlainObjectKey && !isPlainMemberProp && !isProvisionerIndex && !isTemplateRead) {
         safe = false;
         return;
       }
     }
     if (node.type === 'Identifier' && TABLE_NAMES.has(node.name)) {
-      const isPropKey = parent?.type === 'Property' && !parent.computed && parent.key === node && ancestors[ancestors.length - 2]?.type === 'ObjectExpression';
+      const isPropKey = parent?.type === 'Property' && !parent.computed && parent.key === node && grandParent?.type === 'ObjectExpression';
       if (!isPropKey) {
         const isAppLookup =
           node.name === 'provisioners' &&

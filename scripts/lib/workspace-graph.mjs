@@ -168,7 +168,12 @@ function isStandalonePathLiteral(node, ancestors, referencedIdentifiers) {
   if (DIRECT_MODULE_PARENTS.has(parent.type) && parent.source === node) return true;
   if (parent.type === 'VariableDeclarator' && parent.init === node && parent.id?.type === 'Identifier') {
     const grandParent = ancestors[ancestors.length - 2];
-    return grandParent?.type === 'VariableDeclaration' && !referencedIdentifiers.has(parent.id.name);
+    const greatGrandParent = ancestors[ancestors.length - 3];
+    return (
+      grandParent?.type === 'VariableDeclaration' &&
+      greatGrandParent?.type !== 'ExportNamedDeclaration' &&
+      !referencedIdentifiers.has(parent.id.name)
+    );
   }
   let callIndex = -1;
   let consumedByReader = false;
@@ -197,7 +202,12 @@ function isStandalonePathLiteral(node, ancestors, referencedIdentifiers) {
     if (ancestor.type === 'AwaitExpression' && ancestor.argument === child) continue;
     if (ancestor.type === 'VariableDeclarator' && ancestor.init === child) {
       if (consumedByReader) continue;
-      if (ancestor.id?.type === 'Identifier' && !referencedIdentifiers.has(ancestor.id.name)) {
+      if (
+        ancestors[i - 1]?.type === 'VariableDeclaration' &&
+        ancestors[i - 2]?.type !== 'ExportNamedDeclaration' &&
+        ancestor.id?.type === 'Identifier' &&
+        !referencedIdentifiers.has(ancestor.id.name)
+      ) {
         consumedByReader = true;
         continue;
       }
@@ -343,6 +353,20 @@ function expandedCommandTexts(commands, rootScripts) {
   return texts;
 }
 
+const WORKSPACE_ROOT_SCRIPT_CALL = /\bpnpm (?:-w|--workspace-root) (?:run )?([\w:-]+)/g;
+
+// Expand root package.json scripts explicitly invoked from a workspace manifest
+// via `pnpm -w [run] <script>` or `pnpm --workspace-root [run] <script>`.
+function expandedRootScriptsFromWorkspace(commands, rootScripts) {
+  const roots = [];
+  for (const cmd of commands) {
+    for (const [, script] of cmd.matchAll(WORKSPACE_ROOT_SCRIPT_CALL)) {
+      if (rootScripts[script]) roots.push(rootScripts[script]);
+    }
+  }
+  return roots.length ? expandedCommandTexts(roots, rootScripts) : [];
+}
+
 // Omit a workspace package.json's standalone `lint` script (`node ../../scripts/lint.mjs`)
 // before scanning text references, as long as neither CI nor any other script calls `lint`.
 // Direct imports/references in code or build scripts remain untouched.
@@ -391,14 +415,18 @@ export async function loadConservativeWorkspaceGraph(root) {
     [CATALOG, rawRuns(CATALOG_JOBS)],
   ];
   const expandedByEntry = new Map(rawEntries.map(([node, raw]) => [node, expandedCommandTexts(raw, rootScripts)]));
-  const ciInvokesLint = [...expandedByEntry.values()].flat().some((cmd) => /\blint\b/.test(cmd));
-  const workspaceCrossInvokesLint = [...manifests.values()].some((manifest) =>
-    Object.values(manifest?.scripts ?? {}).some((cmd) => {
-      const value = String(cmd);
-      return !INDEPENDENT_LINT_SCRIPT.test(value.trim()) && /\b(?:pnpm|npm|yarn)\b/.test(value) && /\blint\b/.test(value) && CROSS_WORKSPACE_FLAG.test(value);
-    }),
-  );
-  const stripStandaloneLint = !ciInvokesLint && !workspaceCrossInvokesLint;
+  const workspaceExpandedScripts = new Map(nodes.map((node) => {
+    const allScripts = Object.values(manifests.get(node)?.scripts ?? {}).map(String);
+    return [node, [...allScripts, ...expandedRootScriptsFromWorkspace(allScripts, rootScripts)]];
+  }));
+  const lintTargetContext = { nodeByPackageName, nodeSet, manifests };
+  const lintInvokedNodes = new Set();
+  for (const [, cmds] of expandedByEntry) {
+    for (const target of lintTargetsInCommands(cmds, lintTargetContext)) lintInvokedNodes.add(target);
+  }
+  for (const [, cmds] of workspaceExpandedScripts) {
+    for (const target of lintTargetsInCommands(cmds, lintTargetContext)) lintInvokedNodes.add(target);
+  }
 
   const edges = new Map();
   const pendingRootFiles = [];
@@ -417,15 +445,23 @@ export async function loadConservativeWorkspaceGraph(root) {
         }
       }
     }
-    const allScripts = Object.values(manifest?.scripts ?? {}).map(String);
-    for (const lintTarget of lintTargetsInCommands(allScripts, { nodeByPackageName, nodeSet, manifests })) {
+    const expandedScripts = workspaceExpandedScripts.get(node) ?? [];
+    for (const lintTarget of lintTargetsInCommands(expandedScripts, lintTargetContext)) {
       uses.add(lintTarget);
+    }
+    for (const cmd of expandedRootScriptsFromWorkspace(Object.values(manifest?.scripts ?? {}).map(String), rootScripts)) {
+      for (const match of cmd.matchAll(ROOT_NAMED)) {
+        if (match[1]) {
+          uses.add(match[1]);
+          pendingRootFiles.push(match[1]);
+        }
+      }
     }
     const manifestPath = join(root, node, 'package.json');
     for await (const file of textFiles(join(root, node))) {
       if ((await stat(file)).size > MAX_TEXT_BYTES) continue;
       const rawText = await readFile(file, 'utf8');
-      const text = file === manifestPath ? manifestScanText(rawText, manifest, stripStandaloneLint) : rawText;
+      const text = file === manifestPath ? manifestScanText(rawText, manifest, !lintInvokedNodes.has(node)) : rawText;
       for (const [, top, name] of text.matchAll(REFERENCE)) {
         if (nodeSet.has(`${top}/${name}`)) uses.add(`${top}/${name}`);
       }
