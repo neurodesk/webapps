@@ -5754,6 +5754,102 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       },
     ],
     [
+      'combined shell flags sh -ec running globbed provisioner falls back to all apps',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': {
+              steps: [
+                { env: { APP: '${{ matrix.app }}' }, run: 'node scripts/e2e-test-data.mjs "$APP"' },
+                { run: "sh -ec 'node scripts/e2e-test-data*.mjs n4'" },
+              ],
+            },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/e2e-test-data.mjs': "import { provisionTestData } from './lib/e2e-test-data.mjs';\nconst [app] = process.argv.slice(2);\nawait provisionTestData(app, '.');\n",
+        'scripts/lib/e2e-test-data.mjs': "export const provisioners = { n4: { env: ['A'], provision: async () => ({ A: '2' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+      },
+      'scripts/lib/e2e-test-data.mjs',
+      new Map([[
+        'scripts/lib/e2e-test-data.mjs',
+        {
+          before: "export const provisioners = { n4: { env: ['A'], provision: async () => ({ A: '1' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+          after: "export const provisioners = { n4: { env: ['A'], provision: async () => ({ A: '2' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+        },
+      ]]),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'local composite action invoking e2e-test-data.mjs n4 falls back to all apps',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': {
+              steps: [
+                { env: { APP: '${{ matrix.app }}' }, run: 'node scripts/e2e-test-data.mjs "$APP"' },
+                { uses: './.github/actions/provision' },
+              ],
+            },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        '.github/actions/provision/action.yml': stringify({
+          runs: {
+            using: 'composite',
+            steps: [{ shell: 'bash', run: 'node scripts/e2e-test-data.mjs n4' }],
+          },
+        }),
+        'scripts/e2e-test-data.mjs': "import { provisionTestData } from './lib/e2e-test-data.mjs';\nconst [app] = process.argv.slice(2);\nawait provisionTestData(app, '.');\n",
+        'scripts/lib/e2e-test-data.mjs': "export const provisioners = { n4: { env: ['A'], provision: async () => ({ A: '2' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+      },
+      'scripts/lib/e2e-test-data.mjs',
+      new Map([[
+        'scripts/lib/e2e-test-data.mjs',
+        {
+          before: "export const provisioners = { n4: { env: ['A'], provision: async () => ({ A: '1' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+          after: "export const provisioners = { n4: { env: ['A'], provision: async () => ({ A: '2' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+        },
+      ]]),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'diagnostic node --version step preserves provisioner narrowing',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': {
+              steps: [
+                { run: 'node --version' },
+                { env: { APP: '${{ matrix.app }}' }, run: 'node scripts/e2e-test-data.mjs "$APP"' },
+              ],
+            },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/e2e-test-data.mjs': "import { provisionTestData } from './lib/e2e-test-data.mjs';\nconst [app] = process.argv.slice(2);\nawait provisionTestData(app, '.');\n",
+        'scripts/lib/e2e-test-data.mjs': "export const provisioners = { n4: { env: ['A'], provision: async () => ({ A: '2' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+      },
+      'scripts/lib/e2e-test-data.mjs',
+      new Map([[
+        'scripts/lib/e2e-test-data.mjs',
+        {
+          before: "export const provisioners = { n4: { env: ['A'], provision: async () => ({ A: '1' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+          after: "export const provisioners = { n4: { env: ['A'], provision: async () => ({ A: '2' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+        },
+      ]]),
+      (plan) => {
+        assert.deepEqual(plan.selected.map((app) => app.id), ['n4']);
+        assert.equal(plan.allApps, false);
+      },
+    ],
+    [
       'dynamic script name in CI preserves chained workspace lint runner edge',
       {
         '.github/workflows/ci.yml': stringify({

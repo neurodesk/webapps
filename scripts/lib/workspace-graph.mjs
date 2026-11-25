@@ -985,6 +985,10 @@ function shellGlobMatches(pattern, target) {
   return false;
 }
 
+const SHELL_CONTROL_PREFIXES = new Set(['if', 'elif', 'while', 'until', 'then', 'do', 'else', '!']);
+const OPAQUE_SHELL_COMMANDS = new Set(['eval', 'sh', 'bash', 'dash', 'zsh', 'ksh', 'csh', 'tcsh', 'fish', 'source', '.', 'exec', 'xargs', 'env', 'timeout', 'nohup']);
+const SAFE_NODE_DIAGNOSTICS = new Set(['-v', '--version', '-h', '--help', '--v8-options']);
+
 // Whether every CATALOG CI invocation of `entryFile` runs plain `node <entryFile>`
 // (no preloads, flags, wrappers, custom shells, or startup/runtime env hooks) and
 // passes `${{ matrix.app }}` (directly or via one unconcatenated single-step env var)
@@ -1002,6 +1006,7 @@ function ciCommandsPreserveMatrixApp(catalogCmds, entryFile, root = null) {
     return value.includes(entryBase) && normalized !== 'scripts/lib/e2e-test-data.mjs';
   };
   for (const entry of catalogCmds ?? []) {
+    if (typeof entry === 'object' && entry?.opaqueAction) return false;
     const cmd = typeof entry === 'string' ? entry : entry.cmd;
     const stepEnv = typeof entry === 'string' ? null : entry.env ?? null;
     const workingDir = typeof entry === 'string' ? null : entry.workingDir ?? null;
@@ -1013,14 +1018,19 @@ function ciCommandsPreserveMatrixApp(catalogCmds, entryFile, root = null) {
       const seg = segments[segIdx];
       const words = tokenizeShellWordsWithExpansion(seg);
       if (words.length === 0) continue;
-      if (words[0].value === 'eval') return false;
-      if ((words[0].value === 'bash' || words[0].value === 'sh') && words.some((w) => w.value === '-c')) return false;
-      if (words[0].value === 'node') {
-        if (words.length < 2 || words[1].value.startsWith('-') || /[$`*?[{]/.test(words[1].value)) return false;
+      let startIdx = 0;
+      while (startIdx < words.length && SHELL_CONTROL_PREFIXES.has(words[startIdx].value)) startIdx++;
+      const cmdWords = words.slice(startIdx);
+      if (cmdWords.length === 0) continue;
+      const cmdName = cmdWords[0].value.split('/').pop();
+      if (OPAQUE_SHELL_COMMANDS.has(cmdName)) return false;
+      if (cmdName === 'node') {
+        if (cmdWords.length === 2 && SAFE_NODE_DIAGNOSTICS.has(cmdWords[1].value)) continue;
+        if (cmdWords.length < 2 || cmdWords[1].value.startsWith('-') || /[$`*?[{]/.test(cmdWords[1].value)) return false;
       } else if (
-        words[0].value !== 'echo'
-        && words[0].value !== 'printf'
-        && words.some((w, idx) => idx > 0 && w.value === 'node')
+        cmdName !== 'echo'
+        && cmdName !== 'printf'
+        && cmdWords.some((w, idx) => idx > 0 && w.value.split('/').pop() === 'node')
       ) {
         return false;
       }
@@ -2393,25 +2403,73 @@ export async function loadConservativeWorkspaceGraph(root) {
   const workflowWorkingDir = ci?.defaults?.run?.['working-directory'] ?? null;
   const workflowShell = ci?.defaults?.run?.shell ?? null;
   const workflowEnv = ci?.env && typeof ci.env === 'object' ? ci.env : {};
-  const rawRuns = (names) => names.flatMap((name) => {
-    const job = ci?.jobs?.[name];
-    const steps = job?.steps;
-    if (!Array.isArray(steps) || steps.length === 0) {
-      throw new WorkspaceGraphConfigurationError(`ci.yml job ${name} has no step list; update the workspace graph's CI entry points`);
+  const loadLocalCompositeSteps = async (usesSpec, parentEnv, parentWorkingDir, parentShell, visitedActions = new Set()) => {
+    if (typeof usesSpec !== 'string' || !usesSpec.startsWith('./')) return [];
+    const relDir = usesSpec.slice(2).replace(/\/+$/, '');
+    if (!relDir || /[$`*?[{]|\$\{\{/.test(relDir)) {
+      return [{ cmd: '', workingDir: parentWorkingDir, shell: parentShell, env: parentEnv, opaqueAction: true }];
     }
-    const jobWorkingDir = job?.defaults?.run?.['working-directory'] ?? workflowWorkingDir;
-    const jobShell = job?.defaults?.run?.shell ?? workflowShell;
-    const jobEnv = job?.env && typeof job.env === 'object' ? { ...workflowEnv, ...job.env } : workflowEnv;
-    return steps.map((step) => ({
-      cmd: String(step?.run ?? ''),
-      workingDir: step?.['working-directory'] ?? jobWorkingDir ?? null,
-      shell: step?.shell ?? jobShell ?? null,
-      env: step?.env && typeof step.env === 'object' ? { ...jobEnv, ...step.env } : jobEnv,
-    }));
-  });
+    const actionDir = resolve(root, relDir);
+    const normalizedRel = relative(root, actionDir).split(sep).join('/');
+    if (normalizedRel.startsWith('..') || visitedActions.has(normalizedRel)) {
+      return [{ cmd: '', workingDir: parentWorkingDir, shell: parentShell, env: parentEnv, opaqueAction: true }];
+    }
+    let actionDoc = null;
+    for (const filename of ['action.yml', 'action.yaml']) {
+      const text = await readFile(join(actionDir, filename), 'utf8').catch(() => null);
+      if (text !== null) {
+        try {
+          actionDoc = parse(text);
+        } catch {
+          actionDoc = null;
+        }
+        break;
+      }
+    }
+    if (!actionDoc || actionDoc?.runs?.using !== 'composite' || !Array.isArray(actionDoc?.runs?.steps)) {
+      return [{ cmd: '', workingDir: parentWorkingDir, shell: parentShell, env: parentEnv, opaqueAction: true }];
+    }
+    const nextVisited = new Set([...visitedActions, normalizedRel]);
+    const expanded = [];
+    for (const subStep of actionDoc.runs.steps) {
+      const subEnv = subStep?.env && typeof subStep.env === 'object' ? { ...parentEnv, ...subStep.env } : parentEnv;
+      const subWorkingDir = subStep?.['working-directory'] ?? parentWorkingDir ?? null;
+      const subShell = subStep?.shell ?? parentShell ?? null;
+      if (typeof subStep?.uses === 'string' && subStep.uses.startsWith('./')) {
+        expanded.push(...await loadLocalCompositeSteps(subStep.uses, subEnv, subWorkingDir, subShell, nextVisited));
+      } else {
+        expanded.push({ cmd: String(subStep?.run ?? ''), workingDir: subWorkingDir, shell: subShell, env: subEnv });
+      }
+    }
+    return expanded;
+  };
+  const rawRuns = async (names) => {
+    const out = [];
+    for (const name of names) {
+      const job = ci?.jobs?.[name];
+      const steps = job?.steps;
+      if (!Array.isArray(steps) || steps.length === 0) {
+        throw new WorkspaceGraphConfigurationError(`ci.yml job ${name} has no step list; update the workspace graph's CI entry points`);
+      }
+      const jobWorkingDir = job?.defaults?.run?.['working-directory'] ?? workflowWorkingDir;
+      const jobShell = job?.defaults?.run?.shell ?? workflowShell;
+      const jobEnv = job?.env && typeof job.env === 'object' ? { ...workflowEnv, ...job.env } : workflowEnv;
+      for (const step of steps) {
+        const stepEnv = step?.env && typeof step.env === 'object' ? { ...jobEnv, ...step.env } : jobEnv;
+        const stepWorkingDir = step?.['working-directory'] ?? jobWorkingDir ?? null;
+        const stepShell = step?.shell ?? jobShell ?? null;
+        if (typeof step?.uses === 'string' && step.uses.startsWith('./')) {
+          out.push(...await loadLocalCompositeSteps(step.uses, stepEnv, stepWorkingDir, stepShell));
+        } else {
+          out.push({ cmd: String(step?.run ?? ''), workingDir: stepWorkingDir, shell: stepShell, env: stepEnv });
+        }
+      }
+    }
+    return out;
+  };
   const rawEntries = [
-    [SITE, rawRuns(siteJobNames(ci))],
-    [CATALOG, rawRuns(CATALOG_JOBS)],
+    [SITE, await rawRuns(siteJobNames(ci))],
+    [CATALOG, await rawRuns(CATALOG_JOBS)],
   ];
   const expandedByEntry = new Map(rawEntries.map(([node, raw]) => [node, expandedCommandTexts(raw, rootScripts, root, rootPackageName)]));
   const workspaceRootScriptInfo = new Map(nodes.map((node) => {
