@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { decode as decodePng } from "fast-png";
-import { detectValidFov, shadesOfGray, suppressHairs } from "../src/core/preprocess.js";
+import { detectValidFov, shadesOfGray, suppressHairs } from "@neurodesk/derm-compare/core/preprocess";
 import {
   LOW_CORRELATION_FAILURE_REASON,
   MIN_ALIGNED_NCC,
@@ -12,9 +12,9 @@ import {
   isBetterCandidate,
   registerImages,
   warpRgba,
-} from "../src/core/register.js";
-import { analyzeChange, ciede2000, rgbToLab } from "../src/core/change.js";
-import { computeSharedWorkingScale, runComparison } from "../src/core/pipeline.js";
+} from "@neurodesk/derm-compare/core/register";
+import { analyzeChange, ciede2000, rgbToLab } from "@neurodesk/derm-compare/core/change";
+import { computeSharedWorkingScale, runComparison } from "@neurodesk/derm-compare/core/pipeline";
 import { buildChangeMapRgba, buildCheckerRgba } from "../src/display.js";
 import { encodeRgbaPng } from "../src/outputs.js";
 

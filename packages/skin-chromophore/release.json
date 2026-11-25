@@ -1,0 +1,38 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "skin-chromophore-v",
+  "displayName": "Skin Chromophore",
+  "app": "skin-chromophore",
+  "bundleModels": false,
+  "run": "skin.jpg out",
+  "readme": {
+    "run": "Compute melanin, hemoglobin, ITA° maps and CIEDE2000 skin colorimetry",
+    "notes": [
+      "Input is a JPEG or PNG dermatology or dermoscopy image.",
+      "Pass --white-balance for Shades of Gray (p=6) linear-RGB white balance.",
+      "Pass --roi-mode auto|central to select automatic lesion ROI or fixed central 25% disk.",
+      "Add --help for every option: --no-mask-vignette, --max-side, and --overwrite.",
+      "",
+      "No network connection is required and no external model weights are downloaded.",
+      "EI, MI, melanin OD and hemoglobin OD are uncalibrated fixed-basis RGB optical-density proxies (not calibrated spectrophotometry)."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "skin-chromophore"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "skin-chromophore.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "skin-chromophore"
+    }
+  }
+}

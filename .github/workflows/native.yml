@@ -72,6 +72,9 @@ jobs:
         deface-native
         degibbs-native
         denoise-native
+        derm-compare-native
+        dermoscope-native
+        dermvit-native
         dwi-native
         dwi2trx-native
         dwidenoise-native
@@ -90,6 +93,7 @@ jobs:
         node-drivers
         sdc-native
         seedseg-native
+        skin-chromophore-native
         spinalcordtoolbox-native
         syncro-native
         synthseg-native
@@ -109,6 +113,9 @@ jobs:
         deface-native
         degibbs-native
         denoise-native
+        derm-compare-native
+        dermoscope-native
+        dermvit-native
         dwi-native
         dwi2trx-native
         dwidenoise-native
@@ -127,6 +134,7 @@ jobs:
         node-drivers
         sdc-native
         seedseg-native
+        skin-chromophore-native
         spinalcordtoolbox-native
         syncro-native
         synthseg-portable
@@ -259,6 +267,39 @@ jobs:
     needs: gate
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"denoise-native"')) }}
     uses: ./.github/workflows/denoise-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  derm-compare-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"derm-compare-native"')) }}
+    uses: ./.github/workflows/derm-compare-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  dermoscope-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"dermoscope-native"')) }}
+    uses: ./.github/workflows/dermoscope-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  dermvit-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"dermvit-native"')) }}
+    uses: ./.github/workflows/dermvit-native.yml
     permissions:
       actions: read
       contents: write
@@ -453,6 +494,17 @@ jobs:
     needs: gate
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"seedseg-native"')) }}
     uses: ./.github/workflows/seedseg-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  skin-chromophore-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"skin-chromophore-native"')) }}
+    uses: ./.github/workflows/skin-chromophore-native.yml
     permissions:
       actions: read
       contents: write

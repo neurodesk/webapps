@@ -1,5 +1,5 @@
 // Module Web Worker executing the deterministic Dermoscope ABCD pipeline off the main thread.
-import { runDermoscopyPipeline } from "./core/pipeline.js";
+import { runDermoscopyPipeline } from "@neurodesk/dermoscope/core/pipeline";
 
 self.onmessage = ({ data }) => {
   const { id, rgba, width, height, settings } = data;
