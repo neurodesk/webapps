@@ -1005,6 +1005,8 @@ function ciCommandsPreserveMatrixApp(catalogCmds, entryFile, root = null) {
     if (/[*?[{]/.test(candidate) && shellGlobMatches(candidate, entryFile)) return true;
     return value.includes(entryBase) && normalized !== 'scripts/lib/e2e-test-data.mjs';
   };
+  let hasBinaryenPathWrite = false;
+  let otherTouchesBinaryen = false;
   for (const entry of catalogCmds ?? []) {
     if (typeof entry === 'object' && entry?.opaqueAction) return false;
     const cmd = typeof entry === 'string' ? entry : entry.cmd;
@@ -1012,14 +1014,27 @@ function ciCommandsPreserveMatrixApp(catalogCmds, entryFile, root = null) {
     const ownEnv = typeof entry === 'string' ? null : entry.ownEnv ?? null;
     const workingDir = typeof entry === 'string' ? null : entry.workingDir ?? null;
     const shell = typeof entry === 'string' ? null : entry.shell ?? null;
+    const actionDir = typeof entry === 'string' ? null : entry.actionDir ?? null;
     if (shell && shell !== 'bash' && shell !== 'sh') return false;
-    if (UNSAFE_EXEC_ENV_TEXT.test(cmd)) return false;
+    if (UNSAFE_EXEC_ENV_TEXT.test(cmd) || cmd.includes('::add-path::') || cmd.includes('::set-env::')) return false;
+    if (actionDir !== '.github/actions/setup-wasm-opt' && cmd.includes('binaryen')) otherTouchesBinaryen = true;
     if (stepEnv && Object.keys(stepEnv).some((key) => UNSAFE_EXEC_ENV.test(key))) return false;
     if (stepEnv && Object.values(stepEnv).some((val) => String(val ?? '').includes(entryBase))) return false;
     const segments = splitShellCommands(cmd);
     let stepInvokesEntry = false;
     for (let segIdx = 0; segIdx < segments.length; segIdx++) {
       const seg = segments[segIdx];
+      if (seg.includes('GITHUB_PATH')) {
+        if (
+          actionDir === '.github/actions/setup-wasm-opt'
+          && seg.trim() === 'echo "$HOME/.cache/binaryen/bin" >> "$GITHUB_PATH"'
+          && !cmd.includes('node')
+        ) {
+          hasBinaryenPathWrite = true;
+        } else {
+          return false;
+        }
+      }
       const words = tokenizeShellWordsWithExpansion(seg);
       if (words.length === 0) continue;
       let startIdx = 0;
@@ -1068,6 +1083,7 @@ function ciCommandsPreserveMatrixApp(catalogCmds, entryFile, root = null) {
     }
     if (!stepInvokesEntry && cmd.includes('GITHUB_ENV')) return false;
   }
+  if (hasBinaryenPathWrite && otherTouchesBinaryen) return false;
   return true;
 }
 
@@ -2457,7 +2473,7 @@ export async function loadConservativeWorkspaceGraph(root) {
       if (typeof subStep?.uses === 'string' && subStep.uses.startsWith('./')) {
         expanded.push(...await loadLocalCompositeSteps(subStep.uses, subEnv, nextVisited));
       } else {
-        expanded.push({ cmd: String(subStep?.run ?? ''), workingDir: subWorkingDir, shell: subShell, env: subEnv, ownEnv: subOwnEnv });
+        expanded.push({ cmd: String(subStep?.run ?? ''), workingDir: subWorkingDir, shell: subShell, env: subEnv, ownEnv: subOwnEnv, actionDir: normalizedRel });
       }
     }
     return expanded;
