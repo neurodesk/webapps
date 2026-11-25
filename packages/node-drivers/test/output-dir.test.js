@@ -267,3 +267,91 @@ test('publish stages all files and rolls back already-renamed outputs on partial
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('SIGTERM during lock acquisition cleans up .neurodesk-cli.lock and created directory', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'output-dir-sigterm-lock-'));
+  try {
+    const outDir = join(root, 'nested', 'sigterm-out');
+    const script = `
+      import { open } from 'node:fs/promises';
+      import { claimOutputDir } from ${JSON.stringify(OUTPUT_DIR_MODULE_URL)};
+      await claimOutputDir(${JSON.stringify(outDir)}, {
+        tool: 'brainchomp',
+        openFn: async (lockPath, flags) => {
+          const handle = await open(lockPath, flags);
+          process.kill(process.pid, 'SIGTERM');
+          await new Promise((r) => setTimeout(r, 50));
+          return handle;
+        },
+      });
+    `;
+    const child = spawn(process.execPath, ['--input-type=module', '-e', script], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const result = await new Promise((resolvePromise, rejectPromise) => {
+      let stderr = '';
+      child.stderr.on('data', (chunk) => {
+        stderr += chunk.toString('utf8');
+      });
+      child.on('error', rejectPromise);
+      child.on('exit', (code, signal) => resolvePromise({ code, signal, stderr }));
+    });
+    assert.equal(result.signal, 'SIGTERM', `expected SIGTERM, got code=${result.code} stderr=${result.stderr}`);
+    await assert.rejects(access(join(outDir, LOCK_FILENAME)), { code: 'ENOENT' });
+    await assert.rejects(access(join(root, 'nested')), { code: 'ENOENT' });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('SIGINT mid-overwrite publication restores backups, cleans partials, and removes lock', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'output-dir-sigint-overwrite-'));
+  try {
+    for (const interruptStep of [1, 2]) {
+      const outDir = join(root, `existing-step-${interruptStep}`);
+      await mkdir(outDir);
+      await writeFile(join(outDir, 'report.json'), 'ORIGINAL_REPORT');
+      await writeFile(join(outDir, 'mask.nii'), 'ORIGINAL_MASK');
+      const script = `
+        import { rename } from 'node:fs/promises';
+        import { claimOutputDir } from ${JSON.stringify(OUTPUT_DIR_MODULE_URL)};
+        const claim = await claimOutputDir(${JSON.stringify(outDir)}, { tool: 'tumour-report', overwrite: true });
+        let step = 0;
+        await claim.publish(
+          [
+            { name: 'report.json', data: Buffer.from('NEW_REPORT') },
+            { name: 'mask.nii', data: Buffer.from('NEW_MASK') },
+          ],
+          {
+            renameFn: async (src, dst) => {
+              step += 1;
+              await rename(src, dst);
+              // step 1: after backing up report.json; step 2: after publishing report.json
+              if (step === ${interruptStep}) {
+                process.kill(process.pid, 'SIGINT');
+                await new Promise((r) => setTimeout(r, 10_000));
+              }
+            },
+          },
+        );
+      `;
+      const child = spawn(process.execPath, ['--input-type=module', '-e', script], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      const result = await new Promise((resolvePromise, rejectPromise) => {
+        let stderr = '';
+        child.stderr.on('data', (chunk) => {
+          stderr += chunk.toString('utf8');
+        });
+        child.on('error', rejectPromise);
+        child.on('exit', (code, signal) => resolvePromise({ code, signal, stderr }));
+      });
+      assert.equal(result.signal, 'SIGINT', `step ${interruptStep}: expected SIGINT, got code=${result.code} stderr=${result.stderr}`);
+      assert.equal(await readFile(join(outDir, 'report.json'), 'utf8'), 'ORIGINAL_REPORT');
+      assert.equal(await readFile(join(outDir, 'mask.nii'), 'utf8'), 'ORIGINAL_MASK');
+      assert.deepEqual((await readdir(outDir)).sort(), ['mask.nii', 'report.json']);
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

@@ -87,12 +87,21 @@ export function computeQformAffine({
   const b = quaternB;
   const c = quaternC;
   const d = quaternD;
-  const w2Thresh = version === 2 ? NIFTI2_QUATERNION_THRESHOLD : NIFTI1_QUATERNION_THRESHOLD;
+  const w2Thresh = Math.abs(
+    version === 2 ? NIFTI2_QUATERNION_THRESHOLD : NIFTI1_QUATERNION_THRESHOLD,
+  );
   const w2 = 1.0 - (b * b + c * c + d * d);
-  if (!Number.isFinite(w2) || w2 < w2Thresh) {
+  if (!Number.isFinite(w2)) {
     throw new Error('Invalid NIfTI quaternion in qform.');
   }
-  const a = w2 < 0 ? 0 : Math.sqrt(w2);
+  let a;
+  if (Math.abs(w2) < w2Thresh) {
+    a = 0;
+  } else if (w2 < 0) {
+    throw new Error('Invalid NIfTI quaternion in qform.');
+  } else {
+    a = Math.sqrt(w2);
+  }
 
   // Exact nibabel.quaternions.quat2mat([a, b, c, d]) without mutating (b, c, d).
   const nq = a * a + b * b + c * c + d * d;
