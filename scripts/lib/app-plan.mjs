@@ -681,30 +681,44 @@ function checkNodeEsmSyntax(source) {
 // Whether `export async function provisionTestData(app, ...)` only indexes
 // `provisioners` by its first parameter `app` (never reading another app's
 // entry such as `provisioners.denoise`, never reading `unpublished`, and never
-// reassigning `app`).
+// reassigning, destructuring into, or shadowing `app`).
 function isDirectProvisionDispatcher(statement) {
   if (statement?.type !== 'ExportNamedDeclaration') return false;
   const fn = statement.declaration;
   if (fn?.type !== 'FunctionDeclaration' || fn.id?.name !== 'provisionTestData') return false;
   const appParam = fn.params?.[0]?.type === 'Identifier' ? fn.params[0].name : null;
   if (!appParam) return false;
+  const isBindingPosition = (ancestors, node) => {
+    for (let i = ancestors.length - 1; i >= 0; i--) {
+      const ancestor = ancestors[i];
+      const child = i === ancestors.length - 1 ? node : ancestors[i + 1];
+      if ((ancestor.type === 'AssignmentExpression' || ancestor.type === 'ForInStatement' || ancestor.type === 'ForOfStatement') && ancestor.left === child) return true;
+      if (ancestor.type === 'UpdateExpression' && ancestor.argument === child) return true;
+      if (ancestor.type === 'VariableDeclarator' && ancestor.id === child) return true;
+      if (ancestor.type === 'CatchClause' && ancestor.param === child) return true;
+      if ((ancestor.type === 'FunctionDeclaration' || ancestor.type === 'FunctionExpression' || ancestor.type === 'ArrowFunctionExpression') && Array.isArray(ancestor.params) && ancestor.params.includes(child)) return true;
+    }
+    return false;
+  };
   let safe = true;
-  const walk = (node, parent = null) => {
+  const ancestors = [];
+  const walk = (node) => {
     if (!safe || !node || typeof node !== 'object') return;
     if (Array.isArray(node)) {
-      for (const item of node) walk(item, parent);
+      for (const item of node) walk(item);
       return;
     }
-    if (node.type === 'AssignmentExpression' && node.left?.type === 'Identifier' && node.left.name === appParam) {
-      safe = false;
-      return;
-    }
-    if (node.type === 'UpdateExpression' && node.argument?.type === 'Identifier' && node.argument.name === appParam) {
-      safe = false;
-      return;
+    const parent = ancestors[ancestors.length - 1] ?? null;
+    if (node.type === 'Identifier' && node.name === appParam) {
+      const isNonComputedObjectKey = parent?.type === 'Property' && !parent.computed && parent.key === node && ancestors[ancestors.length - 2]?.type === 'ObjectExpression';
+      const isNonComputedMemberProp = parent?.type === 'MemberExpression' && !parent.computed && parent.property === node;
+      if (!isNonComputedObjectKey && !isNonComputedMemberProp && isBindingPosition(ancestors, node)) {
+        safe = false;
+        return;
+      }
     }
     if (node.type === 'Identifier' && TABLE_NAMES.has(node.name)) {
-      const isPropKey = parent?.type === 'Property' && !parent.computed && parent.key === node;
+      const isPropKey = parent?.type === 'Property' && !parent.computed && parent.key === node && ancestors[ancestors.length - 2]?.type === 'ObjectExpression';
       if (!isPropKey) {
         const isAppLookup =
           node.name === 'provisioners' &&
@@ -719,10 +733,13 @@ function isDirectProvisionDispatcher(statement) {
         }
       }
     }
+    ancestors.push(node);
     for (const key of Object.keys(node)) {
-      if (!AST_META.has(key)) walk(node[key], node);
+      if (!AST_META.has(key)) walk(node[key]);
     }
+    ancestors.pop();
   };
+  walk(fn.params.slice(1));
   walk(fn.body);
   return safe;
 }
@@ -987,6 +1004,14 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
         continue;
       }
       select(appId, path);
+      if (graph) {
+        if (site.has(`apps/${appId}`)) siteBuild(`${path}: the composite site reaches apps/${appId}`);
+        for (const candidate of registry.apps) {
+          if (candidate.id !== appId && reach.get(candidate.id).has(`apps/${appId}`)) {
+            select(candidate.id, `${path}: ${candidate.id} reaches apps/${appId}`);
+          }
+        }
+      }
       for (const reader of graph?.appReaders?.(path) ?? []) {
         if (appIds.has(reader)) select(reader, `${path}: ${reader}'s code reads it`);
       }
@@ -1013,6 +1038,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
         const importerApp = importer.match(/^apps\/([^/]+)$/)?.[1];
         if (appIds.has(importerApp)) {
           if (catalogWorkspace?.has(importer)) shared(`${path}: ${reason}; ci.yml's per-app jobs run ${importer}`);
+          else if (graph) selectReaching(importer, `${path}: ${reason}`);
           else select(importerApp, `${path}: ${reason}`);
         } else if (importer === '.') shared(`${path}: ${reason}; the root's dependencies resolve for every workspace member`);
         else if (SELF_CONTAINED_PREFIXES.some((prefix) => `${importer}/`.startsWith(prefix))) continue;

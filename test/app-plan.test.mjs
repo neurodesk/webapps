@@ -2892,6 +2892,19 @@ test('scripts/lib/e2e-test-data.mjs narrows to apps whose pure provisioner entri
   ].join('\n');
   const crossDispatchAfter = crossDispatchBefore.replace("A: '1'", "A: '2'");
   assert.match(e2eTestDataImpact({ before: crossDispatchBefore, after: crossDispatchAfter }).shared, /cannot be isolated safely/);
+  // Destructuring assignment redirecting `app` inside provisionTestData also falls back.
+  const destructDispatchBefore = [
+    'export const provisioners = {',
+    "  denoise: { env: ['A'], provision: async () => ({ A: '1' }) },",
+    '};',
+    'export async function provisionTestData(app, cache) {',
+    "  [app] = ['denoise'];",
+    '  const provisioner = provisioners[app];',
+    '  return provisioner ? provisioner.provision(cache) : {};',
+    '}',
+  ].join('\n');
+  const destructDispatchAfter = destructDispatchBefore.replace("A: '1'", "A: '2'");
+  assert.match(e2eTestDataImpact({ before: destructDispatchBefore, after: destructDispatchAfter }).shared, /cannot be isolated safely/);
 });
 
 test('per-app CI scripts resolve exact .json data paths without dragging in whole workspace directories, while preserving package directory loads', async (t) => {
@@ -2978,6 +2991,7 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
       "const viaObj = ({ file: 'exes/objprop/reference.json' }).file + '.gz';",
       "const storedBase = resolve('exes/stored/reference.json'); readFileSync(storedBase + '.gz');",
       "readFileSync(join(resolve('exes/nested/anchor.json'), '..', 'actual.json'));",
+      "function anchor() { return resolve('exes/returned/anchor.json'); } readFileSync(join(anchor(), '..', 'actual.json'));",
       "const linked = 'exes/linked/fixture.json';",
     ].join('\n'),
     'scripts/app-ci.mjs': "const mod = require('../packages/pkg/fixture.json');\n",
@@ -2998,6 +3012,8 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
     'exes/stored/reference.json.gz': 'stored',
     'exes/nested/anchor.json': '{}',
     'exes/nested/actual.json': '{"actual":true}',
+    'exes/returned/anchor.json': '{}',
+    'exes/returned/actual.json': '{"returned":true}',
     'exes/linked/target.json': '{"real":true}',
     'packages/pkg/package.json': JSON.stringify({ name: '@nd/pkg' }),
     'packages/pkg/fixture.json/index.js': "import '../../../scripts/from-dir-json.mjs';\n",
@@ -3017,6 +3033,7 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
   assert.equal(createAppPlan(registry, ['exes/objprop/reference.json.gz'], prefixGraph).site, true, 'object-property computed path keeps exes/objprop edge');
   assert.equal(createAppPlan(registry, ['exes/stored/reference.json.gz'], prefixGraph).site, true, 'stored resolve() result concatenated later keeps exes/stored edge');
   assert.equal(createAppPlan(registry, ['exes/nested/actual.json'], prefixGraph).site, true, 'nested join(resolve(anchor.json), .., actual.json) keeps exes/nested edge');
+  assert.equal(createAppPlan(registry, ['exes/returned/actual.json'], prefixGraph).site, true, 'returned resolve(anchor.json) keeps exes/returned edge');
   assert.equal(createAppPlan(registry, ['exes/linked/target.json'], prefixGraph).site, true, 'symlink keeps exes/linked edge');
   assert.equal(reachableFrom(prefixGraph, CATALOG).has('scripts/from-dir-json.mjs'), true, 'directory named fixture.json keeps packages/pkg edge');
 });
@@ -3228,6 +3245,17 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
         },
       ]]),
       (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'app build invokes another app lint script',
+      {
+        'apps/niimath/package.json': JSON.stringify({ name: '@nd/niimath', scripts: { build: 'pnpm --filter @nd/sdc lint' } }),
+        'apps/sdc/package.json': JSON.stringify({ name: '@nd/sdc', scripts: { lint: 'node lint.mjs' } }),
+        'apps/sdc/lint.mjs': 'console.log(1);\n',
+      },
+      'apps/sdc/lint.mjs',
+      new Map(),
+      (plan) => assert.deepEqual(plan.selected.map((app) => app.id).sort(), ['niimath', 'sdc']),
     ],
     [
       'pnpm -w run lint in composite-site',

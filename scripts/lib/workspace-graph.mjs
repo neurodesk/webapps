@@ -193,11 +193,14 @@ function isStandalonePathLiteral(node, ancestors, referencedIdentifiers) {
   for (let i = callIndex - 1; i >= 0; i--) {
     const ancestor = ancestors[i];
     const child = ancestors[i + 1];
-    if (STATEMENT_BOUNDARY.has(ancestor.type)) return true;
+    if (STATEMENT_BOUNDARY.has(ancestor.type)) return consumedByReader;
     if (ancestor.type === 'AwaitExpression' && ancestor.argument === child) continue;
     if (ancestor.type === 'VariableDeclarator' && ancestor.init === child) {
       if (consumedByReader) continue;
-      if (ancestor.id?.type === 'Identifier' && !referencedIdentifiers.has(ancestor.id.name)) continue;
+      if (ancestor.id?.type === 'Identifier' && !referencedIdentifiers.has(ancestor.id.name)) {
+        consumedByReader = true;
+        continue;
+      }
       return false;
     }
     if (ancestor.type === 'CallExpression' && Array.isArray(ancestor.arguments) && ancestor.arguments.includes(child)) {
@@ -210,7 +213,7 @@ function isStandalonePathLiteral(node, ancestors, referencedIdentifiers) {
     }
     return false;
   }
-  return true;
+  return consumedByReader;
 }
 
 // Collect string and template literal ranges in a script so SCRIPT_REFERENCE can
