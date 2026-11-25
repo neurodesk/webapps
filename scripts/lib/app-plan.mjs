@@ -1128,7 +1128,12 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
         shared(`${path}: ${impact.shared}`);
         continue;
       }
-      if (graph && site.has(path)) siteBuild(path);
+      if (graph) {
+        if (site.has(path)) siteBuild(path);
+        for (const candidate of registry.apps) {
+          if (reach.get(candidate.id).has(path)) select(candidate.id, `${path}: ${candidate.id} loads ${path}`);
+        }
+      }
       for (const id of impact.changed) {
         if (appIds.has(id)) {
           select(id, `${path}: the ${id} provisioner changed`);

@@ -404,14 +404,37 @@ function isPathToFileUrlArgv1Href(node, auth) {
 
 const SAFE_PROCESS_READ_PROPS = new Set(['pid', 'version', 'versions', 'platform', 'arch', 'env', 'execPath', 'stdout', 'stderr', 'exit']);
 
+function isWriteTarget(exprNode, ancestors) {
+  let child = exprNode;
+  for (let i = ancestors.length - 1; i >= 0; i--) {
+    const parent = ancestors[i];
+    if (!parent) break;
+    if (parent.type === 'AssignmentExpression' && parent.left === child) return true;
+    if (parent.type === 'UpdateExpression' && parent.argument === child) return true;
+    if (parent.type === 'UnaryExpression' && parent.operator === 'delete' && parent.argument === child) return true;
+    if ((parent.type === 'ForInStatement' || parent.type === 'ForOfStatement') && parent.left === child) return true;
+    if (
+      parent.type === 'ArrayPattern'
+      || parent.type === 'ObjectPattern'
+      || parent.type === 'RestElement'
+      || (parent.type === 'Property' && parent.value === child)
+      || (parent.type === 'AssignmentPattern' && parent.left === child)
+    ) {
+      child = parent;
+      continue;
+    }
+    break;
+  }
+  return false;
+}
+
 function isSafeProcessUse(idNode, ancestors) {
   const parent = ancestors[ancestors.length - 1];
   const grandparent = ancestors[ancestors.length - 2];
   if (parent?.type !== 'MemberExpression' || parent.object !== idNode || parent.computed) return false;
   const prop = parent.property?.type === 'Identifier' ? parent.property.name : null;
   if (!prop) return false;
-  if (grandparent?.type === 'AssignmentExpression' && grandparent.left === parent) return false;
-  if (grandparent?.type === 'UpdateExpression' && grandparent.argument === parent) return false;
+  if (isWriteTarget(parent, ancestors.slice(0, -1))) return false;
   if (SAFE_PROCESS_READ_PROPS.has(prop)) return true;
   if (prop === 'argv') {
     const greatGrand = ancestors[ancestors.length - 3];
@@ -428,9 +451,7 @@ function isSafeProcessUse(idNode, ancestors) {
       && grandparent.computed
       && grandparent.property?.type === 'Literal'
       && typeof grandparent.property.value === 'number'
-      && !(greatGrand?.type === 'AssignmentExpression' && greatGrand.left === grandparent)
-      && !(greatGrand?.type === 'UpdateExpression' && greatGrand.argument === grandparent)
-      && !(greatGrand?.type === 'UnaryExpression' && greatGrand.operator === 'delete' && greatGrand.argument === grandparent);
+      && !isWriteTarget(grandparent, ancestors.slice(0, -2));
     return Boolean(isSafeMethod || isReadOnlyIndex);
   }
   return false;
@@ -783,24 +804,23 @@ function callerPreservesAppIdentity(ast, localFnName) {
   return valid;
 }
 
-// Tokenize one shell segment while noting whether any `$` in a word was
-// suppressed by single quotes or backslash escapes (e.g. `'$APP'` or `\$APP`).
+// Tokenize one shell segment while preserving each word's exact raw text so
+// callers can distinguish `"$APP"` from `'$APP'`, `\$APP`, or `"$A""4"`.
 function tokenizeShellWordsWithExpansion(segment) {
   const words = [];
   let current = '';
-  let hasToken = false;
-  let literalDollar = false;
+  let start = -1;
   let quote = null;
+  const markStart = (idx) => {
+    if (start === -1) start = idx;
+  };
   for (let i = 0; i < segment.length; i++) {
     const ch = segment[i];
     const next = segment[i + 1];
     if (quote === "'") {
+      markStart(i);
       if (ch === "'") quote = null;
-      else {
-        if (ch === '$') literalDollar = true;
-        current += ch;
-      }
-      hasToken = true;
+      else current += ch;
       continue;
     }
     if (ch === '\\' && next !== undefined) {
@@ -812,55 +832,55 @@ function tokenizeShellWordsWithExpansion(segment) {
         i += 2;
         continue;
       }
-      if (next === '$') literalDollar = true;
+      markStart(i);
       current += next;
-      hasToken = true;
       i++;
       continue;
     }
     if (segment.startsWith('${{', i)) {
       const close = segment.indexOf('}}', i + 3);
       if (close !== -1) {
+        markStart(i);
         current += segment.slice(i, close + 2);
-        hasToken = true;
         i = close + 1;
         continue;
       }
     }
     if (quote === '"') {
+      markStart(i);
       if (ch === '"') quote = null;
       else current += ch;
-      hasToken = true;
       continue;
     }
     if (ch === "'" || ch === '"') {
+      markStart(i);
       quote = ch;
-      hasToken = true;
       continue;
     }
     if (/\s/.test(ch)) {
-      if (hasToken) {
-        words.push({ value: current, literalDollar });
+      if (start !== -1) {
+        words.push({ value: current, raw: segment.slice(start, i) });
         current = '';
-        hasToken = false;
-        literalDollar = false;
+        start = -1;
       }
       continue;
     }
+    markStart(i);
     current += ch;
-    hasToken = true;
   }
-  if (hasToken) words.push({ value: current, literalDollar });
+  if (start !== -1) words.push({ value: current, raw: segment.slice(start) });
   return words;
 }
 
-// Whether every CATALOG CI invocation of `entryFile` passes `${{ matrix.app }}`
-// (directly or via an expanded, unmodified single-step env var) as its first CLI argument.
+// Whether every CATALOG CI invocation of `entryFile` runs plain `node <entryFile>`
+// (no preloads, flags, wrappers, or NODE_OPTIONS) and passes `${{ matrix.app }}`
+// (directly or via one unconcatenated single-step env var) as its first CLI argument.
 function ciCommandsPreserveMatrixApp(catalogCmds, entryFile) {
   for (const entry of catalogCmds ?? []) {
     const cmd = typeof entry === 'string' ? entry : entry.cmd;
     const stepEnv = typeof entry === 'string' ? null : entry.env ?? null;
     if (!cmd.includes(entryFile)) continue;
+    if (stepEnv && Object.hasOwn(stepEnv, 'NODE_OPTIONS')) return false;
     const segments = splitShellCommands(cmd);
     for (let segIdx = 0; segIdx < segments.length; segIdx++) {
       const seg = segments[segIdx];
@@ -868,14 +888,12 @@ function ciCommandsPreserveMatrixApp(catalogCmds, entryFile) {
       if (segIdx !== 0 || /`|\$\(/.test(seg)) return false;
       const words = tokenizeShellWordsWithExpansion(seg);
       const entryIdx = words.findIndex((w) => w.value === entryFile || w.value === `./${entryFile}`);
-      if (entryIdx < 0 || entryIdx + 1 >= words.length) return false;
-      if (words.slice(0, entryIdx).some((w) => w.value.includes('=') || w.value === 'env')) return false;
-      const argToken = words[entryIdx + 1];
-      if (argToken.value === '${{ matrix.app }}') continue;
-      if (argToken.literalDollar) return false;
-      const varMatch = argToken.value.match(/^\$(?:([A-Za-z_]\w*)|\{([A-Za-z_]\w*)\})$/);
+      if (entryIdx !== 1 || words[0].raw !== 'node' || entryIdx + 1 >= words.length) return false;
+      const rawArg = words[entryIdx + 1].raw;
+      if (rawArg === '${{ matrix.app }}' || rawArg === '"${{ matrix.app }}"' || rawArg === "'${{ matrix.app }}'") continue;
+      const varMatch = rawArg.match(/^(?:"\$(?:([A-Za-z_]\w*)|\{([A-Za-z_]\w*)\})"|\$(?:([A-Za-z_]\w*)|\{([A-Za-z_]\w*)\}))$/);
       if (!varMatch || !stepEnv) return false;
-      const varName = varMatch[1] ?? varMatch[2];
+      const varName = varMatch[1] ?? varMatch[2] ?? varMatch[3] ?? varMatch[4];
       if (!Object.hasOwn(stepEnv, varName) || String(stepEnv[varName]).trim() !== '${{ matrix.app }}') return false;
     }
   }
@@ -2616,6 +2634,10 @@ export async function loadConservativeWorkspaceGraph(root) {
           const dispatchBindings = impBindings.filter((b) => b.imported === 'provisionTestData');
           if (dispatchBindings.length === 0) continue;
           if (!catalogDirect.has(importerFile) || await coLoadedMutatesArgv(importerFile)) {
+            callersPreserveIdentity = false;
+            break;
+          }
+          if ([...entryReaches].some(([entry, { seen }]) => entry !== importerFile && seen.has(importerFile))) {
             callersPreserveIdentity = false;
             break;
           }
