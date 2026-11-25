@@ -164,6 +164,49 @@ describe('NIfTI-1 and NIfTI-2 reader/writer (NiBabel parity)', () => {
     assert.equal(outHdr.pixdim[0], -1);
   });
 
+  it('uses NiBabel LAS centered fallback affine when both qform_code and sform_code are 0', () => {
+    const src = makeNifti1({
+      dims: [5, 7, 9],
+      pixdim: [1, 2, 3, 4, 0, 0, 0, 0],
+      qformCode: 0,
+      sformCode: 0,
+    });
+    const vol = readNiftiVolume(src);
+    assert.deepEqual(vol.affine, [
+      [-2, 0, 0, 4],
+      [0, 3, 0, -9],
+      [0, 0, 4, -16],
+      [0, 0, 0, 1],
+    ]);
+  });
+
+  it('rejects FLOAT64 voxels that overflow to Infinity in Float32Array', () => {
+    const buf = new ArrayBuffer(352 + 8 * 8);
+    const v = new DataView(buf);
+    v.setInt32(0, 348, true);
+    v.setInt16(40, 3, true);
+    v.setInt16(42, 2, true);
+    v.setInt16(44, 2, true);
+    v.setInt16(46, 2, true);
+    for (let i = 3; i < 7; i++) v.setInt16(42 + i * 2, 1, true);
+    v.setInt16(70, 64, true);
+    v.setInt16(72, 64, true);
+    v.setFloat32(76, 1, true);
+    v.setFloat32(80, 1, true);
+    v.setFloat32(84, 1, true);
+    v.setFloat32(88, 1, true);
+    v.setFloat32(108, 352, true);
+    v.setFloat32(112, 1, true);
+    v.setUint8(123, 2);
+    v.setInt16(254, 1, true);
+    v.setFloat32(280, 1, true);
+    v.setFloat32(300, 1, true);
+    v.setFloat32(320, 1, true);
+    new Uint8Array(buf, 344, 4).set([110, 43, 49, 0]);
+    v.setFloat64(352, 1e100, true);
+    assert.throws(() => readNiftiVolume(buf), /non-finite intensities/);
+  });
+
   it('round-trips oversized NIfTI-2 dimensions (> 32767) without signed int16 overflow', () => {
     const dims = [32768, 2, 2];
     const src = makeNifti2({
@@ -336,10 +379,18 @@ describe('TotalSegmentator Node API and CLI (offline)', () => {
         () => execFileSync(process.execPath, [BIN, 'self-check', '--task', 'total'], { encoding: 'utf8', env, stdio: 'pipe' }),
         (err) => err.status === 1 && /does not accept option: --task/.test(err.stderr),
       );
-      // download-models rejects --resolution/--subset without --task and rejects --threads.
+      // download-models rejects --resolution/--subset without --task, empty options, and --threads.
       assert.throws(
         () => execFileSync(process.execPath, [BIN, 'download-models', '--resolution', 'typo', '--subset', 'typo'], { encoding: 'utf8', env, stdio: 'pipe' }),
         (err) => err.status === 1 && /require --task/.test(err.stderr),
+      );
+      assert.throws(
+        () => execFileSync(process.execPath, [BIN, 'download-models', '--task='], { encoding: 'utf8', env, stdio: 'pipe' }),
+        (err) => err.status === 1 && /requires a non-empty value/.test(err.stderr),
+      );
+      assert.throws(
+        () => execFileSync(process.execPath, [BIN, 'self-check', '--cache-dir='], { encoding: 'utf8', env, stdio: 'pipe' }),
+        (err) => err.status === 1 && /requires a non-empty value/.test(err.stderr),
       );
       assert.throws(
         () => execFileSync(process.execPath, [BIN, 'download-models', '--threads', '4'], { encoding: 'utf8', env, stdio: 'pipe' }),

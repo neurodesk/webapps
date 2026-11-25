@@ -48,6 +48,14 @@ function rejectDisallowedOptions(subcommand, values, allowed) {
   }
 }
 
+function rejectEmptyStringOptions(values) {
+  for (const [key, value] of Object.entries(values)) {
+    if (typeof value === 'string' && !value.trim()) {
+      throw new Error(`Option --${key} requires a non-empty value.`);
+    }
+  }
+}
+
 try {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
@@ -64,37 +72,40 @@ try {
   const [command] = positionals;
   if (values.help) {
     console.log(HELP);
-  } else if (command === 'self-check') {
-    if (positionals.length !== 1) throw new Error('self-check does not accept positional arguments.');
-    rejectDisallowedOptions('self-check', values, ['cache-dir']);
-    console.log(JSON.stringify(await checkInstallation({ cacheDir: values['cache-dir'] })));
-  } else if (command === 'download-models') {
-    if (positionals.length !== 1) throw new Error('download-models does not accept positional arguments.');
-    rejectDisallowedOptions('download-models', values, ['task', 'resolution', 'subset', 'cache-dir', 'offline']);
-    const onProgress = reportProgress();
-    const models = await downloadModels({
-      task: values.task ?? null,
-      resolution: values.resolution,
-      subset: values.subset,
-      cacheDir: values['cache-dir'],
-      offline: values.offline,
-      onProgress: (message) => onProgress(undefined, message),
-    });
-    console.log(`${models.count} model files verified in ${models.directory}`);
   } else {
-    if (positionals.length !== 2) throw new Error('Provide an input image and a new output directory. Use --help for options.');
-    const result = await segment({
-      input: positionals[0],
-      output: positionals[1],
-      task: values.task,
-      resolution: values.resolution,
-      subset: values.subset,
-      threads: values.threads,
-      cacheDir: values['cache-dir'],
-      offline: values.offline,
-      onProgress: reportProgress(),
-    });
-    console.log(JSON.stringify(result));
+    rejectEmptyStringOptions(values);
+    if (command === 'self-check') {
+      if (positionals.length !== 1) throw new Error('self-check does not accept positional arguments.');
+      rejectDisallowedOptions('self-check', values, ['cache-dir']);
+      console.log(JSON.stringify(await checkInstallation({ cacheDir: values['cache-dir'] })));
+    } else if (command === 'download-models') {
+      if (positionals.length !== 1) throw new Error('download-models does not accept positional arguments.');
+      rejectDisallowedOptions('download-models', values, ['task', 'resolution', 'subset', 'cache-dir', 'offline']);
+      const onProgress = reportProgress();
+      const models = await downloadModels({
+        task: values.task ?? null,
+        resolution: values.resolution,
+        subset: values.subset,
+        cacheDir: values['cache-dir'],
+        offline: values.offline,
+        onProgress: (message) => onProgress(undefined, message),
+      });
+      console.log(`${models.count} model files verified in ${models.directory}`);
+    } else {
+      if (positionals.length !== 2) throw new Error('Provide an input image and a new output directory. Use --help for options.');
+      const result = await segment({
+        input: positionals[0],
+        output: positionals[1],
+        task: values.task,
+        resolution: values.resolution,
+        subset: values.subset,
+        threads: values.threads,
+        cacheDir: values['cache-dir'],
+        offline: values.offline,
+        onProgress: reportProgress(),
+      });
+      console.log(JSON.stringify(result));
+    }
   }
 } catch (error) {
   console.error(error.message);

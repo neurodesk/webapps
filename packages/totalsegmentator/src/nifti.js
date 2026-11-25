@@ -162,17 +162,23 @@ export function parseNiftiHeader(input) {
     xyztUnits = view.getInt32(500, littleEndian);
   }
 
-  // Exact NiBabel affine precedence: sform_code > 0 wins over qform_code > 0, else pixdim fallback.
+  // Exact NiBabel affine precedence: sform_code > 0 wins over qform_code > 0, else LAS centered fallback.
   let rawAffine;
   if (sformCode > 0) {
     rawAffine = [srow[0].slice(), srow[1].slice(), srow[2].slice(), [0, 0, 0, 1]];
   } else if (qformCode > 0) {
     rawAffine = quaternionToAffine(quatern, qoffset, pixdim);
   } else {
+    const sx = Math.abs(pixdim[1]);
+    const sy = Math.abs(pixdim[2]);
+    const sz = Math.abs(pixdim[3]);
+    const cx = (dim[1] - 1) / 2;
+    const cy = (dim[2] - 1) / 2;
+    const cz = (dim[3] - 1) / 2;
     rawAffine = [
-      [pixdim[1], 0, 0, 0],
-      [0, pixdim[2], 0, 0],
-      [0, 0, pixdim[3], 0],
+      [-sx, 0, 0, sx * cx],
+      [0, sy, 0, -sy * cy],
+      [0, 0, sz, -sz * cz],
       [0, 0, 0, 1],
     ];
   }
@@ -244,10 +250,10 @@ export function readNiftiVolume(input, { maxVoxels = 128 * 1024 * 1024 } = {}) {
 
   for (let i = 0; i < totalVoxels; i++) {
     const value = type.read(view, i * type.bytes, header.littleEndian) * slope + intercept;
-    if (!Number.isFinite(value)) {
+    data[i] = value;
+    if (!Number.isFinite(data[i])) {
       throw new Error('The image contains non-finite intensities. Clean NaN/Infinity values before segmentation.');
     }
-    data[i] = value;
   }
 
   return {

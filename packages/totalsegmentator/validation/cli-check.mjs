@@ -88,6 +88,7 @@ async function runCase({
   minStructures,
   meanColumn,
   checkStructure,
+  requiredGroups = [],
 }) {
   const cliArgs = [...command.slice(1), input, output, ...args, '--offline'];
   const runner = isolateNetwork ? ['unshare', '-rn', command[0], ...cliArgs] : [command[0], ...cliArgs];
@@ -99,7 +100,7 @@ async function runCase({
   if (run.error) throw run.error;
   if (run.status !== 0) throw new Error(`${runner.join(' ')} exited with ${run.status}:\n${run.stderr}`);
   const report = JSON.parse(run.stdout);
-  console.log(`INFO ${label} (${args.join(' ')}, offline${isolateNetwork ? ', network-isolated' : ''})`);
+  console.log(`INFO ${label} (${args.join(' ')}, offline${isolateNetwork ? ', network-isolated' : ', unshare unavailable'})`);
   check(
     report.provenance.executionProvider === 'cpu',
     `${label}: executionProvider ${report.provenance.executionProvider}, ${report.provenance.threads} threads, ONNX Runtime ${report.provenance.onnxruntime}, ${report.provenance.seconds} s`,
@@ -134,6 +135,7 @@ async function runCase({
   const rows = tsv.trim().split('\n').map((line) => line.split('\t'));
   const headers = rows[0] || [];
   const volumeIdx = headers.indexOf('volume_ml');
+  const groupIdx = headers.indexOf('group');
   check(headers.includes(meanColumn) && volumeIdx >= 0, `${label}: TSV includes ${meanColumn} and volume_ml columns`);
   if (checkStructure) {
     const row = rows.find((cols) => cols[1] === checkStructure.slug);
@@ -142,6 +144,10 @@ async function runCase({
       Number.isFinite(ml) && ml >= checkStructure.minMl && ml <= checkStructure.maxMl,
       `${label}: ${checkStructure.slug} detected (${ml.toFixed(1)} mL, expected ${checkStructure.minMl}-${checkStructure.maxMl} mL)`,
     );
+  }
+  for (const group of requiredGroups) {
+    const count = rows.slice(1).filter((cols) => cols[groupIdx] === group && Number(cols[volumeIdx]) > 0).length;
+    check(count > 0, `${label}: model group "${group}" contributed ${count} structure(s)`);
   }
 }
 
@@ -172,11 +178,12 @@ function buildCroppedDualTransformCt(srcBuf) {
   v.setFloat32(108, 352, true);
   v.setFloat32(112, 1, true);
   v.setUint8(123, src.xyztUnits);
-  // Stamp qform_code=2 (distinct dummy offset) alongside sform_code=1 (true shifted CT srow).
+  // Stamp qform_code=2 with a conflicting 180-deg Y flip (quatern_c=1) alongside sform_code=1
+  // (true shifted CT srow) so inference must pick sform over qform to segment upright trunk anatomy.
   v.setInt16(252, 2, true);
   v.setInt16(254, 1, true);
   v.setFloat32(256, 0, true);
-  v.setFloat32(260, 0, true);
+  v.setFloat32(260, 1, true);
   v.setFloat32(264, 0, true);
   v.setFloat32(268, 11, true);
   v.setFloat32(272, 22, true);
@@ -254,6 +261,7 @@ try {
     minStructures: 20,
     meanColumn: 'mean_intensity',
     checkStructure: { slug: 'liver', minMl: 400, maxMl: 4000 },
+    requiredGroups: ['organs', 'muscles'],
   });
 
   await runCase({
@@ -263,7 +271,7 @@ try {
     args: ['--task', 'abdominal_muscles'],
     expectedModelIds: ['body-ct-6mm', 'abdominal-muscles-ct'],
     expectedFiles: ['ct_trunk_crop_totalseg_abdominal_muscles.nii.gz', 'ct_trunk_crop_totalseg_abdominal_muscles_stats.tsv'],
-    minStructures: 3,
+    minStructures: 8,
     meanColumn: 'mean_hu',
   });
 } finally {

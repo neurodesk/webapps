@@ -92,8 +92,11 @@ export async function downloadModels({
   offline = offlineByDefault(),
   onProgress = () => {},
 } = {}) {
+  if (typeof cacheDir !== 'string' || !cacheDir.trim()) {
+    throw new Error('cacheDir must be a non-empty path.');
+  }
   let selected = MODEL_ASSETS;
-  if (task) {
+  if (task !== null && task !== undefined) {
     const plan = resolveTaskPlan({ task, resolution, subset });
     selected = plan.cropModel ? [plan.cropModel, ...plan.models] : [...plan.models];
   } else if (resolution !== undefined || subset !== undefined) {
@@ -104,6 +107,9 @@ export async function downloadModels({
 }
 
 export async function checkInstallation({ cacheDir } = {}) {
+  if (cacheDir !== undefined && (typeof cacheDir !== 'string' || !cacheDir.trim())) {
+    throw new Error('cacheDir must be a non-empty path.');
+  }
   const session = await ort.InferenceSession.create(IDENTITY_MODEL, { executionProviders: ['cpu'] });
   const { y } = await session.run({ x: new ort.Tensor('float32', Float32Array.of(42), [1]) });
   await session.release();
@@ -158,22 +164,30 @@ async function claimOutputDirectory(directory) {
 
   const lockPath = join(directory, OUTPUT_LOCK_FILE);
   let handle;
+  let lockAcquired = false;
   try {
     handle = await open(lockPath, 'wx');
+    lockAcquired = true;
     await handle.writeFile(`${process.pid}\n${new Date().toISOString()}\n`);
+    await handle.close();
+    handle = null;
+
+    const entries = await readdir(directory);
+    if (entries.length !== 1 || entries[0] !== OUTPUT_LOCK_FILE) {
+      throw new Error(`Output directory ${directory} is not empty. Choose a new or empty directory.`);
+    }
   } catch (error) {
+    await handle?.close().catch(() => {});
+    if (lockAcquired) {
+      await rm(lockPath, { force: true }).catch(() => {});
+    }
+    if (createdDir) {
+      await rmdir(directory).catch(() => {});
+    }
     if (error.code === 'EEXIST') {
       throw new Error(`Output directory ${directory} is already in use by another run or not empty. Choose a new or empty directory.`);
     }
     throw error;
-  } finally {
-    await handle?.close();
-  }
-
-  const entries = await readdir(directory);
-  if (entries.length !== 1 || entries[0] !== OUTPUT_LOCK_FILE) {
-    await rm(lockPath, { force: true });
-    throw new Error(`Output directory ${directory} is not empty. Choose a new or empty directory.`);
   }
 
   return {
