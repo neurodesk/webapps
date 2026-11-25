@@ -153,9 +153,13 @@ function makeFakeIccProfile(
     tagEntries.push(["bXYZ", makeXyzTag(primaries.bXYZ)]);
   }
   if (trcTag) {
-    tagEntries.push(["rTRC", trcTag]);
-    tagEntries.push(["gTRC", trcTag]);
-    tagEntries.push(["bTRC", trcTag]);
+    if (colorSpace === "GRAY") {
+      tagEntries.push(["kTRC", trcTag]);
+    } else {
+      tagEntries.push(["rTRC", trcTag]);
+      tagEntries.push(["gTRC", trcTag]);
+      tagEntries.push(["bTRC", trcTag]);
+    }
   }
 
   const tagTable = Buffer.alloc(4 + tagEntries.length * 12);
@@ -390,6 +394,30 @@ test("decodeRasterBytes converts PNG gAMA (linear and 45455) to sRGB, validates 
     trcTag: makePureGammaParaType0Tag(2.2),
   });
   assert.throws(() => decodeRasterBytes(makeIccpPng("sRGB", pureParaProfile), { name: "pure-para.png" }), /transfer curve/);
+
+  // 2-entry [0, 65535] curv LUT interpolates linearly (0.5 -> 0.5, not sRGB 0.214) and must be rejected.
+  const linear2CurvTag = Buffer.alloc(16);
+  linear2CurvTag.write("curv", 0, "ascii");
+  linear2CurvTag.writeUInt32BE(2, 8);
+  linear2CurvTag.writeUInt16BE(0, 12);
+  linear2CurvTag.writeUInt16BE(65535, 14);
+  const linear2RgbProfile = makeFakeIccProfile("sRGB IEC61966-2.1", {
+    primaries: SRGB_PRIMARIES,
+    trcTag: linear2CurvTag,
+  });
+  assert.throws(() => decodeRasterBytes(makeIccpPng("sRGB", linear2RgbProfile), { name: "linear2-rgb.png" }), /transfer curve/);
+  const linear2GrayProfile = makeFakeIccProfile("sRGB Gray", {
+    colorSpace: "GRAY",
+    primaries: null,
+    trcTag: linear2CurvTag,
+  });
+  assert.throws(() => decodeRasterBytes(makeIccpPng("sRGB", linear2GrayProfile), { name: "linear2-gray.png" }), /non-sRGB ICC/);
+  const srgbGrayProfile = makeFakeIccProfile("sRGB Gray", {
+    colorSpace: "GRAY",
+    primaries: null,
+    trcTag: makeSrgbParaType3Tag(),
+  });
+  assert.equal(decodeRasterBytes(makeIccpPng("sRGB", srgbGrayProfile), { name: "srgb-gray.png" }).rgba[0], 100);
 
   // 2c. Display P3 iCCP rejected; genuine sRGB ICC with para type 3 AND curv LUT both accepted
   const p3Profile = makeFakeIccProfile("Display P3", { primaries: ADOBE_RGB_PRIMARIES });

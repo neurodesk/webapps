@@ -114,9 +114,23 @@ function isValidSrgbTrc(profile, tagOffset, tagSize) {
     const needed = 12 + count * 2;
     if (needed > tagSize || tagOffset + needed > profile.length) return false;
     const denom = count - 1;
+    // Validate both stored entries and the linearly interpolated curve (ICC.1:2022 §10.5)
+    // so sparse linear LUTs such as 2-entry [0, 65535] are rejected.
     for (let i = 0; i < count; i += 1) {
       const u = i / denom;
       const val = readUint16BE(profile, tagOffset + 12 + i * 2) / 65535;
+      if (Math.abs(val - srgbToLinear(u)) > ICC_TRC_LINEAR_TOLERANCE) return false;
+      if (Math.abs(linearToSrgb(val) - u) > ICC_TRC_SRGB_TOLERANCE) return false;
+    }
+    for (let k = 0; k <= 255; k += 1) {
+      const u = k / 255;
+      const pos = u * denom;
+      const lo = Math.floor(pos);
+      const hi = Math.min(denom, lo + 1);
+      const frac = pos - lo;
+      const v0 = readUint16BE(profile, tagOffset + 12 + lo * 2) / 65535;
+      const v1 = readUint16BE(profile, tagOffset + 12 + hi * 2) / 65535;
+      const val = v0 + (v1 - v0) * frac;
       if (Math.abs(val - srgbToLinear(u)) > ICC_TRC_LINEAR_TOLERANCE) return false;
       if (Math.abs(linearToSrgb(val) - u) > ICC_TRC_SRGB_TOLERANCE) return false;
     }
