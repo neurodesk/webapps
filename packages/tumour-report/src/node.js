@@ -42,6 +42,34 @@ function requireNonEmptyString(value, label) {
   return value;
 }
 
+const VALID_PARAMETER_KEYS = new Set(['tumourType', 'computeMniReport', 'deformableMni', 'skullStripped']);
+const VALID_DOWNLOAD_KEYS = new Set(['cacheDir', 'offline', 'onProgress', 'signal']);
+const VALID_CHECK_KEYS = new Set(['cacheDir']);
+const VALID_ANALYZE_KEYS = new Set([
+  'input',
+  'output',
+  'mask',
+  'parameters',
+  'threads',
+  'cacheDir',
+  'offline',
+  'overwrite',
+  'signal',
+  'onProgress',
+  'onLog',
+]);
+
+function assertAllowedKeys(options, allowed, label) {
+  if (options === null || typeof options !== 'object' || Array.isArray(options)) {
+    throw new Error(`${label} must be an object`);
+  }
+  for (const key of Object.keys(options)) {
+    if (!allowed.has(key)) {
+      throw new Error(`Unknown option in ${label}: ${key}`);
+    }
+  }
+}
+
 export function defaultCacheDir() {
   const envDir = process.env.NEURODESK_TUMOUR_REPORT_MODEL_DIR;
   if (envDir !== undefined) {
@@ -105,12 +133,14 @@ async function ensureAsset(asset, { cacheDir, offline, onProgress, signal }) {
   return path;
 }
 
-export async function downloadModels({
-  cacheDir,
-  offline = offlineDefault(),
-  onProgress = () => {},
-  signal,
-} = {}) {
+export async function downloadModels(options = {}) {
+  assertAllowedKeys(options, VALID_DOWNLOAD_KEYS, 'downloadModels options');
+  const {
+    cacheDir,
+    offline = offlineDefault(),
+    onProgress = () => {},
+    signal,
+  } = options;
   const resolvedCache = cacheDir === undefined
     ? defaultCacheDir()
     : requireNonEmptyString(cacheDir, 'cacheDir');
@@ -129,22 +159,20 @@ export async function downloadModels({
 }
 
 export function validateParameters(parameters = {}) {
-  if (parameters === null || typeof parameters !== 'object') {
-    throw new Error('parameters must be an object');
-  }
+  assertAllowedKeys(parameters, VALID_PARAMETER_KEYS, 'parameters');
   const tumourType = parameters.tumourType === undefined ? 'glioblastoma' : parameters.tumourType;
   if (typeof tumourType !== 'string' || !VALID_TUMOUR_TYPES.has(tumourType)) {
     throw new Error(`tumourType must be one of: ${[...VALID_TUMOUR_TYPES].join(', ')}`);
   }
-  const computeMniReport = parameters.computeMniReport ?? true;
+  const computeMniReport = parameters.computeMniReport === undefined ? true : parameters.computeMniReport;
   if (typeof computeMniReport !== 'boolean') {
     throw new Error('computeMniReport must be a boolean');
   }
-  const deformableMni = parameters.deformableMni ?? false;
+  const deformableMni = parameters.deformableMni === undefined ? false : parameters.deformableMni;
   if (typeof deformableMni !== 'boolean') {
     throw new Error('deformableMni must be a boolean');
   }
-  const skullStripped = parameters.skullStripped ?? false;
+  const skullStripped = parameters.skullStripped === undefined ? false : parameters.skullStripped;
   if (typeof skullStripped !== 'boolean') {
     throw new Error('skullStripped must be a boolean');
   }
@@ -189,7 +217,9 @@ async function runSingleOnnxSession(modelPath, threads, fn) {
   }
 }
 
-export async function checkInstallation({ cacheDir } = {}) {
+export async function checkInstallation(options = {}) {
+  assertAllowedKeys(options, VALID_CHECK_KEYS, 'checkInstallation options');
+  const { cacheDir } = options;
   if (cacheDir !== undefined) {
     requireNonEmptyString(cacheDir, 'cacheDir');
   }
@@ -248,21 +278,23 @@ export async function checkInstallation({ cacheDir } = {}) {
   };
 }
 
-export async function analyze({
-  input,
-  output,
-  mask,
-  parameters = {},
-  threads = Math.min(4, availableParallelism()),
-  cacheDir,
-  offline = offlineDefault(),
-  overwrite = false,
-  signal,
-  onProgress = () => {},
-  onLog = () => {},
-} = {}) {
+export async function analyze(options = {}) {
   const started = performance.now();
   // Validate all inputs and options BEFORE touching the output directory or models.
+  assertAllowedKeys(options, VALID_ANALYZE_KEYS, 'analyze options');
+  const {
+    input,
+    output,
+    mask,
+    parameters = {},
+    threads = Math.min(4, availableParallelism()),
+    cacheDir,
+    offline = offlineDefault(),
+    overwrite = false,
+    signal,
+    onProgress = () => {},
+    onLog = () => {},
+  } = options;
   requireNonEmptyString(input, 'input');
   requireNonEmptyString(output, 'output');
   if (mask !== undefined && mask !== null) {

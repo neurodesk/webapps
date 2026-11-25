@@ -1,11 +1,16 @@
 // Exclusive output-directory lock and atomic paired-file publication for Node CLIs.
-// - Acquires an O_EXCL ('wx') lock file BEFORE processing so concurrent runs cannot collide.
-// - Cleans up the lock file and any newly created empty directories on every error path.
-// - Stages ALL output files to unique `.partial` paths before renaming ANY of them.
-// - Rolls back already-renamed outputs (and restores backups if overwriting) on rename failure.
+// - Acquires ONE shared O_EXCL ('wx') lock file (.neurodesk-cli.lock) BEFORE processing
+//   so concurrent runs of the same or different CLIs cannot collide.
+// - Registers synchronous SIGINT/SIGTERM cleanup handlers while a lock is held.
+// - Tracks `.partial` paths before writing so disk-full/EFBIG failures clean up cleanly.
+// - Checks destinations with lstat (preserving dangling symlinks, refusing directories).
+// - Rolls back already-renamed outputs (and restores backups if overwriting) on failure.
 import { randomUUID } from 'node:crypto';
+import { rmSync, rmdirSync } from 'node:fs';
 import { lstat, mkdir, open, readdir, rename, rm, rmdir, unlink, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
+
+export const LOCK_FILENAME = '.neurodesk-cli.lock';
 
 async function removeEmptyDirsUpTo(leafDir, topCreatedDir) {
   if (!topCreatedDir) return;
@@ -14,6 +19,23 @@ async function removeEmptyDirsUpTo(leafDir, topCreatedDir) {
   while (true) {
     try {
       await rmdir(current);
+    } catch {
+      break;
+    }
+    if (current === stop) break;
+    const parent = dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+}
+
+function removeEmptyDirsUpToSync(leafDir, topCreatedDir) {
+  if (!topCreatedDir) return;
+  const stop = resolve(topCreatedDir);
+  let current = resolve(leafDir);
+  while (true) {
+    try {
+      rmdirSync(current);
     } catch {
       break;
     }
@@ -56,17 +78,52 @@ export async function claimOutputDir(
   }
 
   const firstCreated = existingStat ? null : await mkdir(resolvedDir, { recursive: true });
-  const lockName = `.${tool}.lock`;
+  const lockName = LOCK_FILENAME;
   const lockPath = join(resolvedDir, lockName);
 
   let lockHandle = null;
   let lockOwned = false;
   let committed = false;
   let released = false;
+  let signalRegistered = false;
+  const activePartials = new Set();
+
+  const unregisterSignals = () => {
+    if (!signalRegistered) return;
+    signalRegistered = false;
+    process.off('SIGINT', onSignal);
+    process.off('SIGTERM', onSignal);
+  };
+
+  function onSignal(signal) {
+    unregisterSignals();
+    for (const partial of activePartials) {
+      try {
+        rmSync(partial, { force: true });
+      } catch {
+        // Best-effort cleanup during termination.
+      }
+    }
+    activePartials.clear();
+    if (lockOwned) {
+      lockOwned = false;
+      try {
+        rmSync(lockPath, { force: true });
+      } catch {
+        // Best-effort cleanup during termination.
+      }
+    }
+    if (!committed && firstCreated) {
+      removeEmptyDirsUpToSync(resolvedDir, firstCreated);
+    }
+    released = true;
+    process.kill(process.pid, signal);
+  }
 
   const release = async () => {
     if (released) return;
     released = true;
+    unregisterSignals();
     if (lockHandle) {
       const h = lockHandle;
       lockHandle = null;
@@ -85,6 +142,9 @@ export async function claimOutputDir(
     try {
       lockHandle = await openFn(lockPath, 'wx');
       lockOwned = true;
+      signalRegistered = true;
+      process.on('SIGINT', onSignal);
+      process.on('SIGTERM', onSignal);
     } catch (error) {
       if (error.code === 'EEXIST') {
         throw new Error(`Output directory is locked by another process: ${resolvedDir}`);
@@ -133,36 +193,56 @@ export async function claimOutputDir(
     const runId = randomUUID();
     const staged = [];
 
-    // Phase 1: Stage EVERY output file completely to a unique .partial path before any rename.
+    // Phase 1: Track every .partial path BEFORE writing so failed/partial writes are cleaned up.
     try {
       for (const entry of entries) {
         const partial = join(resolvedDir, `.${entry.name}.${runId}.partial`);
-        await writeFileFn(partial, entry.data, { flag: 'wx' });
-        staged.push({
+        const item = {
           name: entry.name,
           partial,
           dest: join(resolvedDir, entry.name),
           backup: null,
-        });
+        };
+        staged.push(item);
+        activePartials.add(partial);
+        await writeFileFn(partial, entry.data, { flag: 'wx' });
       }
     } catch (error) {
       for (const item of staged) {
         await rm(item.partial, { force: true }).catch(() => {});
+        activePartials.delete(item.partial);
       }
       throw error;
     }
 
-    // Phase 2: Move existing files aside (when overwrite=true) and rename all staged files.
+    // Phase 2: Inspect every destination via lstat (never following symlinks), refuse directories,
+    // back up existing files/symlinks when overwrite=true, and rename all staged files.
     // Roll back every renamed file and restore backups if ANY rename fails.
     const published = [];
     const backups = [];
     try {
+      for (const item of staged) {
+        const destStat = await lstat(item.dest).catch((error) => {
+          if (error.code === 'ENOENT') return null;
+          throw error;
+        });
+        if (destStat?.isDirectory()) {
+          throw new Error(`Refusing to overwrite directory: ${item.dest}`);
+        }
+        if (!overwrite && destStat) {
+          throw new Error(`Refusing to overwrite existing output: ${item.dest}`);
+        }
+      }
+
       for (const item of staged) {
         if (overwrite) {
           const destStat = await lstat(item.dest).catch((error) => {
             if (error.code === 'ENOENT') return null;
             throw error;
           });
+          if (destStat?.isDirectory()) {
+            throw new Error(`Refusing to overwrite directory: ${item.dest}`);
+          }
           if (destStat) {
             const backupPath = join(resolvedDir, `.${basename(item.dest)}.${runId}.backup`);
             await renameFn(item.dest, backupPath);
@@ -171,6 +251,7 @@ export async function claimOutputDir(
           }
         }
         await renameFn(item.partial, item.dest);
+        activePartials.delete(item.partial);
         published.push(item);
       }
       committed = true;
@@ -192,6 +273,7 @@ export async function claimOutputDir(
       }
       for (const item of staged) {
         await rm(item.partial, { force: true }).catch(() => {});
+        activePartials.delete(item.partial);
       }
       throw error;
     }

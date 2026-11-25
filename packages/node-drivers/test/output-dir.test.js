@@ -1,18 +1,26 @@
 import assert from 'node:assert/strict';
-import { access, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { access, lstat, mkdir, mkdtemp, readFile, readdir, readlink, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { claimOutputDir } from '../src/output-dir.js';
+import { LOCK_FILENAME, claimOutputDir } from '../src/output-dir.js';
 
-test('claimOutputDir acquires an exclusive O_EXCL lock and rejects concurrent claims', async () => {
+const OUTPUT_DIR_MODULE_URL = new URL('../src/output-dir.js', import.meta.url).href;
+
+test('claimOutputDir acquires a shared O_EXCL lock and rejects concurrent claims across CLIs', async () => {
   const root = await mkdtemp(join(tmpdir(), 'output-dir-lock-'));
   try {
     const outDir = join(root, 'results');
-    const first = await claimOutputDir(outDir, { tool: 'demo' });
+    const first = await claimOutputDir(outDir, { tool: 'brainchomp', overwrite: true });
     try {
+      assert.equal(first.lockPath, join(outDir, LOCK_FILENAME));
       await assert.rejects(
-        claimOutputDir(outDir, { tool: 'demo' }),
+        claimOutputDir(outDir, { tool: 'brainchomp', overwrite: true }),
+        /Output directory is locked by another process/,
+      );
+      await assert.rejects(
+        claimOutputDir(outDir, { tool: 'brainchop', overwrite: true }),
         /Output directory is locked by another process/,
       );
     } finally {
@@ -53,6 +61,144 @@ test('claimOutputDir cleans up lock and newly created directory on metadata writ
       /simulated readdir failure/,
     );
     await assert.rejects(access(dirB), { code: 'ENOENT' });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('publish cleans up .partial files on failed writeFile (e.g. EFBIG/ENOSPC)', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'output-dir-partial-fail-'));
+  try {
+    const outDir = await mkdtemp(join(root, 'existing-'));
+    const claim = await claimOutputDir(outDir, { tool: 'demo' });
+    let writes = 0;
+    try {
+      await assert.rejects(
+        claim.publish(
+          [
+            { name: 'a.nii', data: Buffer.from('AAA') },
+            { name: 'b.nii', data: Buffer.from('BBB') },
+          ],
+          {
+            writeFileFn: async (partialPath, data, opts) => {
+              writes += 1;
+              if (writes === 2) {
+                // Simulate a truncated partial file written before EFBIG/ENOSPC.
+                await writeFile(partialPath, Buffer.from('PARTIAL'), opts);
+                const err = new Error('File too large');
+                err.code = 'EFBIG';
+                throw err;
+              }
+              return writeFile(partialPath, data, opts);
+            },
+          },
+        ),
+        /File too large/,
+      );
+      // No .partial leftovers remain even before release().
+      assert.deepEqual(await readdir(outDir), [LOCK_FILENAME]);
+    } finally {
+      await claim.release();
+    }
+    assert.deepEqual(await readdir(outDir), []);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('claimOutputDir cleans up lock and newly created directory on SIGINT', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'output-dir-sigint-'));
+  try {
+    const outDir = join(root, 'nested', 'sigint-out');
+    const script = `
+      import { claimOutputDir } from ${JSON.stringify(OUTPUT_DIR_MODULE_URL)};
+      await claimOutputDir(${JSON.stringify(outDir)}, { tool: 'brainchomp' });
+      process.stdout.write('LOCKED\\n');
+      setInterval(() => {}, 10_000);
+    `;
+    const child = spawn(process.execPath, ['--input-type=module', '-e', script], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const result = await new Promise((resolvePromise, rejectPromise) => {
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (chunk) => {
+        stdout += chunk.toString('utf8');
+        if (stdout.includes('LOCKED')) {
+          child.kill('SIGINT');
+        }
+      });
+      child.stderr.on('data', (chunk) => {
+        stderr += chunk.toString('utf8');
+      });
+      child.on('error', rejectPromise);
+      child.on('exit', (code, signal) => resolvePromise({ code, signal, stderr }));
+    });
+    assert.equal(result.signal, 'SIGINT', `expected SIGINT termination, got code=${result.code} stderr=${result.stderr}`);
+    await assert.rejects(access(join(outDir, LOCK_FILENAME)), { code: 'ENOENT' });
+    await assert.rejects(access(join(root, 'nested')), { code: 'ENOENT' });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('publish refuses to overwrite a directory and preserves dangling symlinks on rollback', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'output-dir-guard-'));
+  try {
+    // 1. Refuse overwriting an existing directory even when overwrite=true.
+    const dirWithSubdir = await mkdtemp(join(root, 'with-dir-'));
+    const collidingDir = join(dirWithSubdir, 'mask.nii');
+    await mkdir(collidingDir);
+    await writeFile(join(collidingDir, 'keep.txt'), 'KEEP');
+    const claimA = await claimOutputDir(dirWithSubdir, { tool: 'demo', overwrite: true });
+    try {
+      await assert.rejects(
+        claimA.publish([
+          { name: 'brain.nii', data: Buffer.from('BRAIN') },
+          { name: 'mask.nii', data: Buffer.from('MASK') },
+        ]),
+        /Refusing to overwrite directory/,
+      );
+    } finally {
+      await claimA.release();
+    }
+    assert.equal((await lstat(collidingDir)).isDirectory(), true);
+    assert.equal(await readFile(join(collidingDir, 'keep.txt'), 'utf8'), 'KEEP');
+    assert.deepEqual(await readdir(dirWithSubdir), ['mask.nii']);
+
+    // 2. Dangling symlink at destination is detected via lstat and preserved on mid-commit rollback.
+    const dirWithSymlink = await mkdtemp(join(root, 'with-symlink-'));
+    const danglingTarget = join(root, 'does-not-exist-target.nii');
+    const symlinkPath = join(dirWithSymlink, 'a.nii');
+    await symlink(danglingTarget, symlinkPath);
+    await writeFile(join(dirWithSymlink, 'b.nii'), 'OLD_B');
+    const claimB = await claimOutputDir(dirWithSymlink, { tool: 'demo', overwrite: true });
+    let renameCount = 0;
+    try {
+      await assert.rejects(
+        claimB.publish(
+          [
+            { name: 'a.nii', data: Buffer.from('NEW_A') },
+            { name: 'b.nii', data: Buffer.from('NEW_B') },
+          ],
+          {
+            renameFn: async (src, dst) => {
+              renameCount += 1;
+              // 1: backup dangling symlink a.nii, 2: publish a.nii, 3: backup b.nii, 4: fail publish b.nii
+              if (renameCount === 4) throw new Error('simulated mid-commit rename failure');
+              return rename(src, dst);
+            },
+          },
+        ),
+        /simulated mid-commit rename failure/,
+      );
+    } finally {
+      await claimB.release();
+    }
+    assert.equal((await lstat(symlinkPath)).isSymbolicLink(), true);
+    assert.equal(await readlink(symlinkPath), danglingTarget);
+    assert.equal(await readFile(join(dirWithSymlink, 'b.nii'), 'utf8'), 'OLD_B');
+    assert.deepEqual((await readdir(dirWithSymlink)).sort(), ['a.nii', 'b.nii']);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

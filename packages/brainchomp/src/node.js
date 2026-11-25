@@ -39,6 +39,32 @@ function requireNonEmptyString(value, label) {
   return value;
 }
 
+const VALID_DOWNLOAD_KEYS = new Set(['cacheDir', 'offline']);
+const VALID_CHECK_KEYS = new Set(['cacheDir']);
+const VALID_EXTRACT_KEYS = new Set([
+  'input',
+  'output',
+  'opening',
+  'fillHoles',
+  'threads',
+  'overwrite',
+  'timeoutMs',
+  'signal',
+  'onProgress',
+  'onLog',
+]);
+
+function assertAllowedKeys(options, allowed, label) {
+  if (options === null || typeof options !== 'object' || Array.isArray(options)) {
+    throw new Error(`${label} must be an object`);
+  }
+  for (const key of Object.keys(options)) {
+    if (!allowed.has(key)) {
+      throw new Error(`Unknown option in ${label}: ${key}`);
+    }
+  }
+}
+
 function runWorker({ mode, args = [], input = null, outputs = [], threads, timeoutMs = CPU_TIMEOUT_MS, onLog, signal }) {
   const log = [];
   const worker = new Worker(WORKER_URL, {
@@ -91,7 +117,9 @@ function runWorker({ mode, args = [], input = null, outputs = [], threads, timeo
   });
 }
 
-export async function downloadModels({ cacheDir = '.', offline = false } = {}) {
+export async function downloadModels(options = {}) {
+  assertAllowedKeys(options, VALID_DOWNLOAD_KEYS, 'downloadModels options');
+  const { cacheDir = '.', offline = false } = options;
   requireNonEmptyString(cacheDir, 'cacheDir');
   if (typeof offline !== 'boolean') {
     throw new Error('offline must be a boolean');
@@ -104,7 +132,9 @@ export async function downloadModels({ cacheDir = '.', offline = false } = {}) {
   };
 }
 
-export async function checkInstallation({ cacheDir } = {}) {
+export async function checkInstallation(options = {}) {
+  assertAllowedKeys(options, VALID_CHECK_KEYS, 'checkInstallation options');
+  const { cacheDir } = options;
   if (cacheDir !== undefined) {
     const dir = requireNonEmptyString(cacheDir, 'cacheDir');
     const info = await stat(dir).catch(() => null);
@@ -132,19 +162,21 @@ export async function checkInstallation({ cacheDir } = {}) {
   };
 }
 
-export async function extract({
-  input,
-  output,
-  opening = DEFAULT_OPENING_RADIUS,
-  fillHoles = true,
-  threads = Math.min(4, availableParallelism()),
-  overwrite = false,
-  timeoutMs = CPU_TIMEOUT_MS,
-  signal,
-  onProgress = () => {},
-  onLog = () => {},
-} = {}) {
+export async function extract(options = {}) {
   // Validate all inputs and options BEFORE touching the output directory or WASM runtime.
+  assertAllowedKeys(options, VALID_EXTRACT_KEYS, 'extract options');
+  const {
+    input,
+    output,
+    opening = DEFAULT_OPENING_RADIUS,
+    fillHoles = true,
+    threads = Math.min(4, availableParallelism()),
+    overwrite = false,
+    timeoutMs = CPU_TIMEOUT_MS,
+    signal,
+    onProgress = () => {},
+    onLog = () => {},
+  } = options;
   requireNonEmptyString(input, 'input');
   requireNonEmptyString(output, 'output');
   const opts = validateOptions({ opening, fillHoles });

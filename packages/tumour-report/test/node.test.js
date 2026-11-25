@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
+import { LOCK_FILENAME } from '@neurodesk/node-drivers/output-dir';
 import {
   parseNiftiVolumeHeader,
   readNiftiVolume,
@@ -217,10 +218,10 @@ test('analyze preserves qform+sform, rejects 100mm sform-shifted mask, supports 
     assert.equal(v2OutVol.transforms.qformCode, 1);
     assert.equal(v2OutVol.transforms.sformCode, 0);
 
-    // Pre-existing exclusive lock file blocks concurrent runs.
+    // Pre-existing shared exclusive lock file blocks concurrent runs.
     const lockedDir = join(work, 'locked');
     await mkdir(lockedDir);
-    await writeFile(join(lockedDir, '.tumour-report.lock'), '{"pid":1}\n');
+    await writeFile(join(lockedDir, LOCK_FILENAME), '{"pid":1}\n');
     await assert.rejects(
       analyze({
         input: t1cPath,
@@ -232,12 +233,41 @@ test('analyze preserves qform+sform, rejects 100mm sform-shifted mask, supports 
       /locked by another process/,
     );
 
-    // Empty mask / cacheDir rejected BEFORE creating output directory.
+    // Empty mask / cacheDir, unknown options, and non-boolean flags rejected BEFORE creating output directory.
     const untouchedOut = join(work, 'should-not-exist');
     await assert.rejects(
       analyze({ input: t1cPath, output: untouchedOut, mask: '', offline: true }),
       /mask must be a non-empty string/,
     );
+    await assert.rejects(
+      analyze({ input: t1cPath, output: untouchedOut, computeMniReprot: false }),
+      /Unknown option in analyze options: computeMniReprot/,
+    );
+    await assert.rejects(
+      analyze({ input: t1cPath, output: untouchedOut, parameters: { computeMniReprot: false } }),
+      /Unknown option in parameters: computeMniReprot/,
+    );
+    await assert.rejects(
+      analyze({ input: t1cPath, output: untouchedOut, parameters: { computeMniReport: null } }),
+      /computeMniReport must be a boolean/,
+    );
+    await assert.rejects(
+      analyze({ input: t1cPath, output: untouchedOut, parameters: { computeMniReport: 'yes' } }),
+      /computeMniReport must be a boolean/,
+    );
+    await assert.rejects(
+      analyze({ input: t1cPath, output: untouchedOut, parameters: { deformableMni: null } }),
+      /deformableMni must be a boolean/,
+    );
+    await assert.rejects(
+      analyze({ input: t1cPath, output: untouchedOut, parameters: { skullStripped: null } }),
+      /skullStripped must be a boolean/,
+    );
+    assert.throws(() => validateParameters({ computeMniReprot: false }), /Unknown option/);
+    assert.throws(() => validateParameters({ computeMniReport: null }), /computeMniReport must be a boolean/);
+    assert.throws(() => validateParameters({ computeMniReport: 'yes' }), /computeMniReport must be a boolean/);
+    await assert.rejects(checkInstallation({ unknownOpt: true }), /Unknown option/);
+    await assert.rejects(downloadModels({ unknownOpt: true }), /Unknown option/);
     await assert.rejects(access(untouchedOut), { code: 'ENOENT' });
 
     // Bad gzip CRC rejected cleanly.

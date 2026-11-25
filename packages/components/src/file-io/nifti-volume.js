@@ -64,8 +64,13 @@ export function affineDeterminant3(affine) {
   return a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
 }
 
+const FLOAT32_EPS = 2 ** -23; // 1.1920928955078125e-7 (np.finfo(np.float32).eps)
+export const NIFTI1_QUATERNION_THRESHOLD = -3 * FLOAT32_EPS;
+export const NIFTI2_QUATERNION_THRESHOLD = -3 * Number.EPSILON;
+
 /**
- * Compute NiBabel-exact qform 4x4 affine from header fields.
+ * Compute NiBabel-exact qform 4x4 affine from header fields, matching
+ * nibabel 5.3.3 Nifti1Header / Nifti2Header fillpositive + quat2mat.
  */
 export function computeQformAffine({
   pixdim0,
@@ -76,33 +81,54 @@ export function computeQformAffine({
   qoffsetX,
   qoffsetY,
   qoffsetZ,
+  version = 1,
 }) {
   const qfac = pixdim0 < 0 ? -1 : 1;
-  let b = quaternB;
-  let c = quaternC;
-  let d = quaternD;
-  const a2 = 1 - (b * b + c * c + d * d);
-  let a;
-  if (a2 <= 1e-7) {
-    a = 0;
-    const norm = Math.hypot(b, c, d);
-    if (norm > 0) {
-      b /= norm;
-      c /= norm;
-      d /= norm;
-    }
-  } else {
-    a = Math.sqrt(a2);
+  const b = quaternB;
+  const c = quaternC;
+  const d = quaternD;
+  const w2Thresh = version === 2 ? NIFTI2_QUATERNION_THRESHOLD : NIFTI1_QUATERNION_THRESHOLD;
+  const w2 = 1.0 - (b * b + c * c + d * d);
+  if (!Number.isFinite(w2) || w2 < w2Thresh) {
+    throw new Error('Invalid NIfTI quaternion in qform.');
   }
-  const r00 = a * a + b * b - c * c - d * d;
-  const r01 = 2 * (b * c - a * d);
-  const r02 = 2 * (b * d + a * c);
-  const r10 = 2 * (b * c + a * d);
-  const r11 = a * a + c * c - b * b - d * d;
-  const r12 = 2 * (c * d - a * b);
-  const r20 = 2 * (b * d - a * c);
-  const r21 = 2 * (c * d + a * b);
-  const r22 = a * a + d * d - b * b - c * c;
+  const a = w2 < 0 ? 0 : Math.sqrt(w2);
+
+  // Exact nibabel.quaternions.quat2mat([a, b, c, d]) without mutating (b, c, d).
+  const nq = a * a + b * b + c * c + d * d;
+  let r00 = 1;
+  let r01 = 0;
+  let r02 = 0;
+  let r10 = 0;
+  let r11 = 1;
+  let r12 = 0;
+  let r20 = 0;
+  let r21 = 0;
+  let r22 = 1;
+  if (nq >= Number.EPSILON) {
+    const s = 2.0 / nq;
+    const x = b * s;
+    const y = c * s;
+    const zVal = d * s;
+    const ax = a * x;
+    const ay = a * y;
+    const az = a * zVal;
+    const bx = b * x;
+    const by = b * y;
+    const bz = b * zVal;
+    const cy = c * y;
+    const cz = c * zVal;
+    const dzVal = d * zVal;
+    r00 = 1.0 - (cy + dzVal);
+    r01 = by - az;
+    r02 = bz + ay;
+    r10 = by + az;
+    r11 = 1.0 - (bx + dzVal);
+    r12 = cz - ax;
+    r20 = bz - ay;
+    r21 = cz + ax;
+    r22 = 1.0 - (bx + cy);
+  }
 
   const dx = pixDims[0];
   const dy = pixDims[1];
@@ -271,7 +297,7 @@ export function parseNiftiVolumeHeader(bufferLike) {
     ];
     affineSource = 'sform';
   } else if (qformCode > 0) {
-    rawAffine = computeQformAffine(transforms);
+    rawAffine = computeQformAffine({ ...transforms, version });
     affineSource = 'qform';
   } else {
     rawAffine = computeFallbackAffine(dims.slice(1, 4), transforms.pixDims);
@@ -436,9 +462,10 @@ function isFloat32Finite(value) {
   return Number.isFinite(value) && Number.isFinite(Math.fround(value));
 }
 
-function affineNeedsNifti2(dims, affine, transforms) {
+function affineNeedsNifti2(dims, affine, transforms, colNorms) {
   if (dims.some((d) => d > 32767)) return true;
   if (affine.flat().some((v) => !isFloat32Finite(v))) return true;
+  if (colNorms.some((v) => !isFloat32Finite(v))) return true;
   if (transforms) {
     const fields = [
       transforms.pixdim0,
@@ -463,7 +490,7 @@ function affineNeedsNifti2(dims, affine, transforms) {
  * When `transforms` is supplied (from `readNiftiVolume`), BOTH qform and sform
  * transforms and xyzt_units are preserved verbatim.
  * When `version` is omitted/null, NIfTI-2 is chosen automatically if the source
- * was NIfTI-2, any dimension exceeds 32767, or affine/transform values overflow float32.
+ * was NIfTI-2, any dimension exceeds 32767, or affine/pixdim/transform values overflow float32.
  */
 export function writeNiftiVolume(
   { data, dims, affine, transforms = null, version = null },
@@ -483,18 +510,21 @@ export function writeNiftiVolume(
     throw new Error('Output NIfTI affine contains non-finite values.');
   }
 
-  const needsV2 = affineNeedsNifti2(dims, affine, transforms);
+  const colNorms = [0, 1, 2].map((col) =>
+    Math.hypot(affine[0][col], affine[1][col], affine[2][col]),
+  );
+  if (colNorms.some((v) => !Number.isFinite(v))) {
+    throw new Error('Output NIfTI voxel spacing norm is non-finite.');
+  }
+
+  const needsV2 = affineNeedsNifti2(dims, affine, transforms, colNorms);
   const chosenVersion = version ?? (needsV2 ? 2 : 1);
   if (chosenVersion === 1 && needsV2) {
-    throw new Error('Affine or dimensions exceed NIfTI-1 finite float32 / int16 limits.');
+    throw new Error('Affine, voxel spacing, or dimensions exceed NIfTI-1 finite float32 / int16 limits.');
   }
   if (chosenVersion !== 1 && chosenVersion !== 2) {
     throw new Error(`Unsupported NIfTI version: ${chosenVersion}`);
   }
-
-  const colNorms = [0, 1, 2].map((col) =>
-    Math.hypot(affine[0][col], affine[1][col], affine[2][col]),
-  );
   const tx = transforms
     ? {
         qformCode: transforms.qformCode,

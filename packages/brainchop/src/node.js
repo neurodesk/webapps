@@ -34,6 +34,34 @@ function requireNonEmptyString(value, label) {
   return value;
 }
 
+const VALID_DOWNLOAD_KEYS = new Set(['cacheDir', 'offline']);
+const VALID_CHECK_KEYS = new Set(['cacheDir']);
+const VALID_SEGMENT_KEYS = new Set([
+  'input',
+  'output',
+  'model',
+  'saveConform',
+  'noTurbo',
+  'legacyCleanup',
+  'threads',
+  'overwrite',
+  'timeoutMs',
+  'signal',
+  'onProgress',
+  'onLog',
+]);
+
+function assertAllowedKeys(options, allowed, label) {
+  if (options === null || typeof options !== 'object' || Array.isArray(options)) {
+    throw new Error(`${label} must be an object`);
+  }
+  for (const key of Object.keys(options)) {
+    if (!allowed.has(key)) {
+      throw new Error(`Unknown option in ${label}: ${key}`);
+    }
+  }
+}
+
 function probeCoreWasmHelp(moduleUrl) {
   const workerSource = `
     import { parentPort, workerData } from 'node:worker_threads';
@@ -69,7 +97,9 @@ function probeCoreWasmHelp(moduleUrl) {
   });
 }
 
-export async function downloadModels({ cacheDir = '.', offline = false } = {}) {
+export async function downloadModels(options = {}) {
+  assertAllowedKeys(options, VALID_DOWNLOAD_KEYS, 'downloadModels options');
+  const { cacheDir = '.', offline = false } = options;
   requireNonEmptyString(cacheDir, 'cacheDir');
   if (typeof offline !== 'boolean') {
     throw new Error('offline must be a boolean');
@@ -82,7 +112,9 @@ export async function downloadModels({ cacheDir = '.', offline = false } = {}) {
   };
 }
 
-export async function checkInstallation({ cacheDir } = {}) {
+export async function checkInstallation(options = {}) {
+  assertAllowedKeys(options, VALID_CHECK_KEYS, 'checkInstallation options');
+  const { cacheDir } = options;
   if (cacheDir !== undefined) {
     const dir = requireNonEmptyString(cacheDir, 'cacheDir');
     const info = await stat(dir).catch(() => null);
@@ -196,21 +228,23 @@ function preserveNativeGeometry(outputBuffer, inputVol, { labels = false, descri
   return { buffer: rewritten, volume: outVol };
 }
 
-export async function segment({
-  input,
-  output,
-  model = 'mindmap',
-  saveConform = false,
-  noTurbo = false,
-  legacyCleanup = false,
-  threads = Math.min(4, availableParallelism()),
-  overwrite = false,
-  timeoutMs,
-  signal,
-  onProgress = () => {},
-  onLog = () => {},
-} = {}) {
+export async function segment(options = {}) {
   // Validate all inputs and options BEFORE touching the output directory or WASM runtime.
+  assertAllowedKeys(options, VALID_SEGMENT_KEYS, 'segment options');
+  const {
+    input,
+    output,
+    model = 'mindmap',
+    saveConform = false,
+    noTurbo = false,
+    legacyCleanup = false,
+    threads = Math.min(4, availableParallelism()),
+    overwrite = false,
+    timeoutMs,
+    signal,
+    onProgress = () => {},
+    onLog = () => {},
+  } = options;
   requireNonEmptyString(input, 'input');
   requireNonEmptyString(output, 'output');
   requireNonEmptyString(model, 'model');

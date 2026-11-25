@@ -61,18 +61,30 @@ test('stemFor, outputNames, and validateOptions enforce model and flag contracts
 test('segment enforces exclusive lock, cleans up failed output dir, and validates gzip/overflow', async () => {
   const work = await mkdtemp(join(tmpdir(), 'brainchop-node-'));
   try {
-    // Empty model / input fails BEFORE creating output directory.
+    // Empty model / input, unknown options, and non-boolean flags fail BEFORE creating output directory.
     const untouched = join(work, 'untouched');
     await assert.rejects(
       segment({ input: 'in.nii', output: untouched, model: '' }),
       /model must be a non-empty string/,
     );
+    await assert.rejects(
+      segment({ input: 'in.nii', output: untouched, modle: 'mindmap' }),
+      /Unknown option in segment options: modle/,
+    );
+    await assert.rejects(
+      segment({ input: 'in.nii', output: untouched, saveConform: null }),
+      /saveConform must be a boolean/,
+    );
+    await assert.rejects(
+      segment({ input: 'in.nii', output: untouched, overwrite: null }),
+      /overwrite must be a boolean/,
+    );
     await assert.rejects(access(untouched), { code: 'ENOENT' });
 
-    // Exclusive lock rejects concurrent runs.
+    // Shared exclusive lock rejects concurrent runs.
     const lockedDir = join(work, 'locked');
     await mkdir(lockedDir);
-    await writeFile(join(lockedDir, '.brainchop.lock'), '{"pid":1}\n');
+    await writeFile(join(lockedDir, '.neurodesk-cli.lock'), '{"pid":1}\n');
     await assert.rejects(
       segment({ input: join(work, 'missing.nii'), output: lockedDir }),
       /locked by another process/,

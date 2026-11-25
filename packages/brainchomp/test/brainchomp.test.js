@@ -155,15 +155,18 @@ test('packaged CPU WASM files match apps/brainchomp/public/brainchomp byte-for-b
 test('extract enforces exclusive lock, cleans up failed output dir, and validates gzip/overflow', async () => {
   const work = await mkdtemp(join(tmpdir(), 'brainchomp-node-'));
   try {
-    // Invalid options fail BEFORE touching output directory.
+    // Invalid options and unknown keys fail BEFORE touching output directory.
     const untouched = join(work, 'untouched');
     await assert.rejects(extract({ input: '', output: untouched }), /input must be a non-empty string/);
+    await assert.rejects(extract({ input: 'in.nii', output: untouched, opennig: 4 }), /Unknown option in extract options: opennig/);
+    await assert.rejects(extract({ input: 'in.nii', output: untouched, fillHoles: null }), /fillHoles must be a boolean/);
+    await assert.rejects(extract({ input: 'in.nii', output: untouched, overwrite: null }), /overwrite must be a boolean/);
     await assert.rejects(access(untouched), { code: 'ENOENT' });
 
-    // Exclusive lock file rejects concurrent runs.
+    // Shared exclusive lock file rejects concurrent runs.
     const lockedDir = join(work, 'locked');
     await mkdir(lockedDir);
-    await writeFile(join(lockedDir, '.brainchomp.lock'), '{"pid":1}\n');
+    await writeFile(join(lockedDir, '.neurodesk-cli.lock'), '{"pid":1}\n');
     await assert.rejects(
       extract({ input: join(work, 'missing.nii'), output: lockedDir }),
       /locked by another process/,

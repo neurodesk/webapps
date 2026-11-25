@@ -248,4 +248,92 @@ test('FLOAT64 1e100 voxel overflow and float32 affine overflow are handled safel
   // Auto-selects NIfTI-2 when version is omitted.
   const autoV2 = writeNiftiVolume({ data: new Uint8Array(8), dims: [2, 2, 2], affine: hugeAffine });
   assert.equal(parseNiftiVolumeHeader(autoV2).version, 2);
+
+  // Every individual affine coefficient is float32-finite (2.5e38 < 3.4028e38),
+  // but column 0 norm hypot(2.5e38, 2.5e38, 0) ~ 3.5355e38 overflows float32 pixdim!
+  const normOverflowAffine = [
+    [2.5e38, 0, 0, 0],
+    [2.5e38, 1, 0, 0],
+    [0, 0, 1, 0],
+    [0, 0, 0, 1],
+  ];
+  assert.throws(
+    () => writeNiftiVolume({ data: new Uint8Array(8), dims: [2, 2, 2], affine: normOverflowAffine, version: 1 }),
+    /NIfTI-1 finite float32/,
+  );
+  const autoNormV2 = writeNiftiVolume({ data: new Uint8Array(8), dims: [2, 2, 2], affine: normOverflowAffine });
+  const normHeader = parseNiftiVolumeHeader(autoNormV2);
+  assert.equal(normHeader.version, 2);
+  assert.ok(Number.isFinite(normHeader.pixDims[1]));
+  assert.ok(Math.abs(normHeader.pixDims[1] - Math.hypot(2.5e38, 2.5e38)) / Math.hypot(2.5e38, 2.5e38) < 1e-12);
+});
+
+test('near-180 degree qform matches NiBabel 5.3.3 fillpositive thresholds for NIfTI-1 and NIfTI-2', () => {
+  // 1. NIfTI-1: small positive w2 (3.4e-8 < 1e-7) must keep a = sqrt(w2) > 0, NOT clamp to 0.
+  const bSmallPos = Math.fround(0.70710677);
+  const cSmallPos = Math.fround(0.70710677);
+  const rawPos = makeNifti1Raw({
+    qformCode: 1,
+    sformCode: 0,
+    pixDims: [1, 1, 1],
+    quatern: [bSmallPos, cSmallPos, 0],
+  });
+  const volPos = readNiftiVolume(rawPos);
+  const w2Pos = 1 - (bSmallPos * bSmallPos + cSmallPos * cSmallPos);
+  assert.ok(w2Pos > 0 && w2Pos < 1e-7, `expected 0 < w2 < 1e-7, got ${w2Pos}`);
+  const expectedA = Math.sqrt(w2Pos);
+  // Off-diagonal r20 = -2 * a * c (exact NiBabel quat2mat) must reflect non-zero a.
+  assert.ok(Math.abs(volPos.affine[2][0] - (-2 * expectedA * cSmallPos)) < 1e-12);
+
+  // 2. NIfTI-1: small negative w2 within -3 * float32_eps clamps a = 0 -> exact 180 deg around X.
+  const bSlightOver = Math.fround(1 + 2 ** -23); // w2 = 1 - (1 + 2^-23)^2 ≈ -2.384e-7 > -3.576e-7
+  const rawN1Clamp = makeNifti1Raw({
+    qformCode: 1,
+    sformCode: 0,
+    pixDims: [1, 1, 1],
+    quatern: [bSlightOver, 0, 0],
+  });
+  const volN1Clamp = readNiftiVolume(rawN1Clamp);
+  assert.deepEqual(volN1Clamp.affine, [
+    [1, 0, 0, 0],
+    [0, -1, 0, 0],
+    [0, 0, -1, 0],
+    [0, 0, 0, 1],
+  ]);
+
+  // 3. NIfTI-1: w2 below -3 * float32_eps throws Invalid NIfTI quaternion.
+  const rawN1Bad = makeNifti1Raw({
+    qformCode: 1,
+    sformCode: 0,
+    pixDims: [1, 1, 1],
+    quatern: [Math.fround(1.0001), 0, 0],
+  });
+  assert.throws(() => parseNiftiVolumeHeader(rawN1Bad), /Invalid NIfTI quaternion in qform/);
+
+  // 4. NIfTI-2: w2 = -2 * Number.EPSILON (within -3 * Number.EPSILON) succeeds with a = 0.
+  const bN2Clamp = 1 + Number.EPSILON; // w2 ≈ -2 * Number.EPSILON
+  const rawN2Clamp = makeNifti2Raw({
+    qformCode: 1,
+    sformCode: 0,
+    pixDims: [1, 1, 1],
+    quatern: [bN2Clamp, 0, 0],
+    qoffset: [0, 0, 0],
+  });
+  const volN2Clamp = readNiftiVolume(rawN2Clamp);
+  assert.deepEqual(volN2Clamp.affine, [
+    [1, 0, 0, 0],
+    [0, -1, 0, 0],
+    [0, 0, -1, 0],
+    [0, 0, 0, 1],
+  ]);
+
+  // 5. NIfTI-2: w2 = -1e-12 (would pass NIfTI-1 float32 threshold, fails NIfTI-2 float64 threshold).
+  const rawN2Bad = makeNifti2Raw({
+    qformCode: 1,
+    sformCode: 0,
+    pixDims: [1, 1, 1],
+    quatern: [Math.sqrt(1 + 1e-12), 0, 0],
+    qoffset: [0, 0, 0],
+  });
+  assert.throws(() => parseNiftiVolumeHeader(rawN2Bad), /Invalid NIfTI quaternion in qform/);
 });
