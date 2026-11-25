@@ -26,7 +26,7 @@ import {
   buildProvenance,
   readSettings,
 } from "./config.js";
-import { normalizeInputRgba } from "./core/vit.js";
+import { normalizeInputRgba } from "@neurodesk/dermvit/core/vit";
 import { saliencyOverlayRgba } from "./display.js";
 import {
   outputStem,

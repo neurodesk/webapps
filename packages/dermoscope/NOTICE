@@ -1,0 +1,13 @@
+Dermoscope ABCD command-line tool (@neurodesk/dermoscope)
+=========================================================
+
+This package is MIT-licensed (LICENSE). It implements deterministic dermoscopic
+image preprocessing and experimental automated ABCD morphometry in pure JavaScript:
+
+- DullRazor directional morphological hair removal (Lee et al., Comput Biol Med 1997)
+- Shades of Gray illuminant color constancy, Minkowski p=6 (Finlayson & Trezzi 2004; Barata et al., IEEE JBHI 2015)
+- CIE L*a*b* Otsu lesion border segmentation (Otsu, IEEE TSMC 1979)
+- Experimental automated A/B/C morphometry and optional clinician-entered D for Stolz TDS
+  (Nachbar & Stolz, J Am Acad Dermatol 1994; Kasmi & Mokrani, IET Image Process 2016)
+
+Experimental automated morphometry only — not a clinical diagnosis or medical device.

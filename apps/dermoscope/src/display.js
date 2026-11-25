@@ -1,5 +1,5 @@
 // Canvas layer builders and HTML report renderer for Dermoscope ABCD.
-import { DERMOSCOPIC_COLORS } from "./core/color.js";
+import { DERMOSCOPIC_COLORS } from "@neurodesk/dermoscope/core/color";
 
 /** Build RGBA pixels showing the lesion mask tint and crisp contour boundary. */
 export function buildOverlayPixels(mask, boundaryMask, width, height, opacity = 0.5) {

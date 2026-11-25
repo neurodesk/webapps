@@ -22,10 +22,5 @@
   "tumour-report": "the pinned dbouget/raidionics-rads:v1.3.2-py39-cpu container is the upstream command-line reference, and packages/tumour-report/validation holds voxel-exact native mask parity to it; a packaged Node CLI can follow via exes/node-cli",
   "cellpose": "Python Cellpose (pip install cellpose) is the command-line reference the app reproduces on the 2D and 3D examples; no separate command line is packaged",
   "medsam2": "MedSAM2 (bowang-lab/MedSAM2 in Python) is the upstream reference; interactive slice prompting has no separate command line",
-  "brainchomp": "browser-only v1 using vendored brainchomp-lib WebGPU/WebGL2/CPU WASM modules; no separate command-line package is released yet",
-  "dermoscope": "browser-only v1: DullRazor hair removal, Shades of Gray color constancy, Otsu segmentation and ABCD morphometry run in pure JS (apps/dermoscope/src/core) and are Node-tested; no command-line package is released yet",
-  "skin-chromophore": "browser-only v1: CIELAB, ITA typology, Erythema/Melanin indices, Tsumura chromophore separation and CIEDE2000 run in pure JS (apps/skin-chromophore/src/core) and are Node-tested; no command-line package is released yet",
-  "wound-planimetry": "browser-only v1: calibrated wound planimetry and RYB tissue classification run in pure JS (apps/wound-planimetry/src/core) with interactive ruler calibration; no command-line package is released yet",
-  "derm-compare": "browser-only v1: sequential dermoscopy alignment, flicker/curtain comparison and CIEDE2000 change mapping run in pure JS (apps/derm-compare/src/core); no command-line package is released yet",
-  "dermvit": "browser-only v1: HAM10000 ViT-Base quantized ONNX inference runs via ONNX Runtime Web in a browser worker (apps/dermvit/src/worker.js); no command-line package is released yet"
+  "brainchomp": "browser-only v1 using vendored brainchomp-lib WebGPU/WebGL2/CPU WASM modules; no separate command-line package is released yet"
 }

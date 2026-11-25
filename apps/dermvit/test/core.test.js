@@ -15,7 +15,7 @@ import {
   summarizePredictions,
   upsampleSaliency,
   validateLogits,
-} from "../src/core/vit.js";
+} from "@neurodesk/dermvit/core/vit";
 import { compositeSaliencyRgba, heatColor, saliencyOverlayRgba } from "../src/display.js";
 import {
   CSV_DISCLAIMER,

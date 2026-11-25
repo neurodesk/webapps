@@ -1,0 +1,38 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "dermoscope-v",
+  "displayName": "Dermoscope ABCD",
+  "app": "dermoscope",
+  "bundleModels": false,
+  "run": "lesion.jpg out",
+  "readme": {
+    "run": "Analyze a dermoscopic lesion image (DullRazor, Shades of Gray, Otsu, ABCD)",
+    "notes": [
+      "Input is a JPEG or PNG dermoscopic photograph.",
+      "Pass --pixels-per-mm N (or --mm-per-pixel N) for calibrated millimetre morphometry.",
+      "Pass --differential-structures 1..5 to also compute Stolz Total Dermoscopy Score (TDS).",
+      "Add --help for every option: --no-hair-removal, --no-color-constancy, --threshold-bias, and --overwrite.",
+      "",
+      "No network connection is required and no external model weights are downloaded.",
+      "Experimental automated morphometry only — not a clinical diagnosis."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "dermoscope"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "dermoscope.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "dermoscope"
+    }
+  }
+}

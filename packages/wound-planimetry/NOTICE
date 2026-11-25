@@ -1,0 +1,14 @@
+Wound Planimetry command-line tool (@neurodesk/wound-planimetry)
+================================================================
+
+This package is MIT-licensed (LICENSE). It implements calibrated digital wound
+planimetry and heuristic color-based Red-Yellow-Black (RYB) tissue estimation
+in pure JavaScript:
+
+- Otsu thresholding for automatic wound-bed segmentation (Otsu, IEEE TSMC 1979)
+- Kundin ellipsoid wound-area approximation (Thomas & Wysocki, Ostomy Wound Manage 1990)
+- Color-based Red (granulation), Yellow (slough/fibrin), Black (eschar/necrosis)
+  tissue estimation in CIE L*a*b* and HSV space (Mukherjee et al., BioMed Res Int 2014)
+
+Research and educational software — heuristic color-based RYB estimates are not a
+trained clinical classifier or medical device.

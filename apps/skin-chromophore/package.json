@@ -12,6 +12,7 @@
     "lint": "node ../../scripts/lint.mjs --workspace"
   },
   "dependencies": {
+    "@neurodesk/skin-chromophore": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
     "fast-png": "8.0.0"
   },
