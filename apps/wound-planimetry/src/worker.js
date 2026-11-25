@@ -1,9 +1,9 @@
 // Web Worker executing the pure DOM-free wound planimetry pipeline and PNG encoding.
 import { MAX_IMAGE_PIXELS } from "./config.js";
-import { rgbaToColorArrays } from "./core/color.js";
-import { segmentWound } from "./core/segment.js";
-import { measurePlanimetry } from "./core/planimetry.js";
-import { classifyRyb } from "./core/ryb.js";
+import { rgbaToColorArrays } from "@neurodesk/wound-planimetry/core/color";
+import { segmentWound } from "@neurodesk/wound-planimetry/core/segment";
+import { measurePlanimetry } from "@neurodesk/wound-planimetry/core/planimetry";
+import { classifyRyb } from "@neurodesk/wound-planimetry/core/ryb";
 import { encodeMaskPng, encodeRybOverlayPng } from "./outputs.js";
 
 function ownBytes(bytes) {

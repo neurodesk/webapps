@@ -1,6 +1,6 @@
 // Web Worker for skin chromophore and colorimetry analysis, PNG map encoding, and ROI recompute.
 // Pure module worker: no window/document access.
-import { analyzeSkinImage, evaluateRois } from "./core/analyze.js";
+import { analyzeSkinImage, evaluateRois } from "@neurodesk/skin-chromophore/core/analyze";
 import { encodeMapPng } from "./outputs.js";
 
 let activeState = null;

@@ -2654,35 +2654,35 @@
     },
     "dermoscope": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
       "downloads": [],
       "containers": []
     },
     "skin-chromophore": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
       "downloads": [],
       "containers": []
     },
     "wound-planimetry": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
       "downloads": [],
       "containers": []
     },
     "derm-compare": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
       "downloads": [],
       "containers": []
     },
     "dermvit": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
       "downloads": [],
       "containers": []

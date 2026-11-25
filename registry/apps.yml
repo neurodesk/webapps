@@ -2041,7 +2041,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: skin-chromophore
     path: skin-chromophore
     catalog: dermatology
@@ -2067,7 +2067,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: wound-planimetry
     path: wound-planimetry
     catalog: dermatology
@@ -2093,7 +2093,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: derm-compare
     path: derm-compare
     catalog: dermatology
@@ -2119,7 +2119,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: dermvit
     path: dermvit
     catalog: dermatology
@@ -2146,4 +2146,4 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true

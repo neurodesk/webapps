@@ -586,6 +586,9 @@ importers:
 
   apps/derm-compare:
     dependencies:
+      '@neurodesk/derm-compare':
+        specifier: workspace:*
+        version: link:../../packages/derm-compare
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
@@ -602,6 +605,9 @@ importers:
 
   apps/dermoscope:
     dependencies:
+      '@neurodesk/dermoscope':
+        specifier: workspace:*
+        version: link:../../packages/dermoscope
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
@@ -618,6 +624,9 @@ importers:
 
   apps/dermvit:
     dependencies:
+      '@neurodesk/dermvit':
+        specifier: workspace:*
+        version: link:../../packages/dermvit
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
@@ -1584,6 +1593,9 @@ importers:
 
   apps/skin-chromophore:
     dependencies:
+      '@neurodesk/skin-chromophore':
+        specifier: workspace:*
+        version: link:../../packages/skin-chromophore
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
@@ -1983,6 +1995,9 @@ importers:
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
+      '@neurodesk/wound-planimetry':
+        specifier: workspace:*
+        version: link:../../packages/wound-planimetry
       fast-png:
         specifier: 8.0.0
         version: 8.0.0
@@ -2255,6 +2270,54 @@ importers:
       enhanced-resolve:
         specifier: 5.26.0
         version: 5.26.0
+
+  packages/derm-compare:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      fast-png:
+        specifier: 8.0.0
+        version: 8.0.0
+      jpeg-js:
+        specifier: 0.4.4
+        version: 0.4.4
+      pngjs:
+        specifier: 7.0.0
+        version: 7.0.0
+
+  packages/dermoscope:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      fast-png:
+        specifier: 8.0.0
+        version: 8.0.0
+      jpeg-js:
+        specifier: 0.4.4
+        version: 0.4.4
+      pngjs:
+        specifier: 7.0.0
+        version: 7.0.0
+
+  packages/dermvit:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      fast-png:
+        specifier: 8.0.0
+        version: 8.0.0
+      jpeg-js:
+        specifier: 0.4.4
+        version: 0.4.4
+      onnxruntime-node:
+        specifier: 1.29.0
+        version: 1.29.0
+      pngjs:
+        specifier: 7.0.0
+        version: 7.0.0
 
   packages/desktop:
     dependencies:
@@ -2680,6 +2743,21 @@ importers:
 
   packages/shoreline: {}
 
+  packages/skin-chromophore:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      fast-png:
+        specifier: 8.0.0
+        version: 8.0.0
+      jpeg-js:
+        specifier: 0.4.4
+        version: 0.4.4
+      pngjs:
+        specifier: 7.0.0
+        version: 7.0.0
+
   packages/spinalcordtoolbox:
     dependencies:
       '@neurodesk/webapp-components':
@@ -2869,6 +2947,21 @@ importers:
       onnxruntime-web:
         specifier: 1.29.0
         version: 1.29.0
+
+  packages/wound-planimetry:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      fast-png:
+        specifier: 8.0.0
+        version: 8.0.0
+      jpeg-js:
+        specifier: 0.4.4
+        version: 0.4.4
+      pngjs:
+        specifier: 7.0.0
+        version: 7.0.0
 
   scripts/quality:
     dependencies:

@@ -1,0 +1,38 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "derm-compare-v",
+  "displayName": "DermCompare",
+  "app": "derm-compare",
+  "bundleModels": false,
+  "run": "t0.jpg t1.jpg out",
+  "readme": {
+    "run": "Align a follow-up dermoscopy image to baseline and map CIEDE2000 change",
+    "notes": [
+      "Inputs are two JPEG or PNG dermoscopy photographs: BASELINE first, FOLLOWUP second.",
+      "Pass --allow-scale for similarity scaling (0.85 to 1.15) in addition to rigid rotation/shift.",
+      "Pass --max-angle N (0 to 90, default 25) to adjust the coarse rotation search span.",
+      "Add --help for every option: --no-normalize-color, --no-suppress-hair, and --overwrite.",
+      "",
+      "No network connection is required and no external model weights are downloaded.",
+      "Interactive flicker and curtain inspection are available in the DermCompare web app."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "derm-compare"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "derm-compare.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "derm-compare"
+    }
+  }
+}

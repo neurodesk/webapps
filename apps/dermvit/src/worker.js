@@ -20,7 +20,7 @@ import {
   summarizePredictions,
   upsampleSaliency,
   validateLogits,
-} from "./core/vit.js";
+} from "@neurodesk/dermvit/core/vit";
 import { encodeSaliencyPng } from "./outputs.js";
 
 ort.env.wasm.wasmPaths = { wasm: wasmURL, mjs: wasmModuleURL };

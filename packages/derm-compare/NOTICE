@@ -1,0 +1,15 @@
+DermCompare command-line tool (@neurodesk/derm-compare)
+=======================================================
+
+This package is MIT-licensed (LICENSE). It implements sequential digital dermoscopy
+alignment and CIEDE2000 change quantification in pure JavaScript:
+
+- Sequential digital dermoscopy monitoring (Kittler et al., JAAD 2000; Arch Dermatol 2006;
+  Korotkov & Garcia, Artif Intell Med 2012)
+- CIEDE2000 color difference (Sharma, Wu & Dalal, Color Res Appl 2005)
+- DullRazor hair suppression (Lee et al., Comput Biol Med 1997)
+- Shades of Gray color constancy, p=6 (Finlayson & Trezzi, 2004)
+- Otsu lesion border segmentation (Otsu, IEEE TSMC 1979)
+
+Research and educational software — descriptive review thresholds are not standalone
+clinical diagnostic criteria.
