@@ -5971,6 +5971,66 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       (plan) => assert.equal(plan.allApps, true),
     ],
     [
+      'job-level APP env overwritten via GITHUB_ENV falls back to all apps on provisioner edit',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': {
+              env: { APP: '${{ matrix.app }}' },
+              steps: [
+                { run: 'echo "APP=n4" >> "$GITHUB_ENV"' },
+                { run: 'node scripts/e2e-test-data.mjs "$APP"' },
+              ],
+            },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/e2e-test-data.mjs': "import { provisionTestData } from './lib/e2e-test-data.mjs';\nconst [app] = process.argv.slice(2);\nawait provisionTestData(app, '.');\n",
+        'scripts/lib/e2e-test-data.mjs': "export const provisioners = { n4: { env: ['A'], provision: async () => ({ A: '2' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+      },
+      'scripts/lib/e2e-test-data.mjs',
+      new Map([[
+        'scripts/lib/e2e-test-data.mjs',
+        {
+          before: "export const provisioners = { n4: { env: ['A'], provision: async () => ({ A: '1' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+          after: "export const provisioners = { n4: { env: ['A'], provision: async () => ({ A: '2' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+        },
+      ]]),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'earlier step writing GITHUB_ENV falls back to all apps even with step-local APP',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': {
+              steps: [
+                { run: 'printf "%s=%s\\n" "NODE""_OPTIONS" "--require ./preload.cjs" >> "$GITHUB_ENV"' },
+                { env: { APP: '${{ matrix.app }}' }, run: 'node scripts/e2e-test-data.mjs "$APP"' },
+              ],
+            },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'preload.cjs': "process.argv[2] = 'n4';\n",
+        'scripts/e2e-test-data.mjs': "import { provisionTestData } from './lib/e2e-test-data.mjs';\nconst [app] = process.argv.slice(2);\nawait provisionTestData(app, '.');\n",
+        'scripts/lib/e2e-test-data.mjs': "export const provisioners = { n4: { env: ['A'], provision: async () => ({ A: '2' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+      },
+      'scripts/lib/e2e-test-data.mjs',
+      new Map([[
+        'scripts/lib/e2e-test-data.mjs',
+        {
+          before: "export const provisioners = { n4: { env: ['A'], provision: async () => ({ A: '1' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+          after: "export const provisioners = { n4: { env: ['A'], provision: async () => ({ A: '2' }) } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+        },
+      ]]),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
       'dynamic script name in CI preserves chained workspace lint runner edge',
       {
         '.github/workflows/ci.yml': stringify({

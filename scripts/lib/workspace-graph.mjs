@@ -1009,6 +1009,7 @@ function ciCommandsPreserveMatrixApp(catalogCmds, entryFile, root = null) {
     if (typeof entry === 'object' && entry?.opaqueAction) return false;
     const cmd = typeof entry === 'string' ? entry : entry.cmd;
     const stepEnv = typeof entry === 'string' ? null : entry.env ?? null;
+    const ownEnv = typeof entry === 'string' ? null : entry.ownEnv ?? null;
     const workingDir = typeof entry === 'string' ? null : entry.workingDir ?? null;
     const shell = typeof entry === 'string' ? null : entry.shell ?? null;
     if (shell && shell !== 'bash' && shell !== 'sh') return false;
@@ -1016,6 +1017,7 @@ function ciCommandsPreserveMatrixApp(catalogCmds, entryFile, root = null) {
     if (stepEnv && Object.keys(stepEnv).some((key) => UNSAFE_EXEC_ENV.test(key))) return false;
     if (stepEnv && Object.values(stepEnv).some((val) => String(val ?? '').includes(entryBase))) return false;
     const segments = splitShellCommands(cmd);
+    let stepInvokesEntry = false;
     for (let segIdx = 0; segIdx < segments.length; segIdx++) {
       const seg = segments[segIdx];
       const words = tokenizeShellWordsWithExpansion(seg);
@@ -1052,17 +1054,19 @@ function ciCommandsPreserveMatrixApp(catalogCmds, entryFile, root = null) {
       const entryIdx = words.findIndex((w) => matchesEntryWord(w.value, workingDir));
       if (entryIdx < 0) continue;
       if (!isRepoRootWorkingDir(workingDir, root)) return false;
-      if (segIdx !== 0 || /`|\$\(/.test(seg)) return false;
+      if (segIdx !== 0 || /`|\$\(/.test(seg) || seg.includes('GITHUB_ENV')) return false;
       if (entryIdx !== 1 || words[0].raw !== 'node' || entryIdx + 1 >= words.length) return false;
       const entryNorm = posix.normalize(words[entryIdx].value.replace(/^\/+/, ''));
       if (entryNorm !== entryFile) return false;
+      stepInvokesEntry = true;
       const rawArg = words[entryIdx + 1].raw;
       if (rawArg === '${{ matrix.app }}' || rawArg === '"${{ matrix.app }}"' || rawArg === "'${{ matrix.app }}'") continue;
       const varMatch = rawArg.match(/^(?:"\$(?:([A-Za-z_]\w*)|\{([A-Za-z_]\w*)\})"|\$(?:([A-Za-z_]\w*)|\{([A-Za-z_]\w*)\}))$/);
-      if (!varMatch || !stepEnv) return false;
+      if (!varMatch || !ownEnv) return false;
       const varName = varMatch[1] ?? varMatch[2] ?? varMatch[3] ?? varMatch[4];
-      if (!Object.hasOwn(stepEnv, varName) || String(stepEnv[varName]).trim() !== '${{ matrix.app }}') return false;
+      if (!Object.hasOwn(ownEnv, varName) || String(ownEnv[varName]).trim() !== '${{ matrix.app }}') return false;
     }
+    if (!stepInvokesEntry && cmd.includes('GITHUB_ENV')) return false;
   }
   return true;
 }
@@ -2309,7 +2313,7 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
 // remain visible before deciding whether standalone lint scripts can be omitted.
 function expandedCommandTexts(commands, rootScripts, root = null, rootPackageName = null) {
   const entries = [];
-  const pending = commands.map((entry) => (typeof entry === 'string' ? { cmd: entry, workingDir: null, env: null, shell: null } : entry));
+  const pending = commands.map((entry) => (typeof entry === 'string' ? { cmd: entry, workingDir: null, env: null, ownEnv: null, shell: null } : entry));
   const visited = new Set();
   while (pending.length) {
     const current = pending.pop();
@@ -2319,7 +2323,7 @@ function expandedCommandTexts(commands, rootScripts, root = null, rootPackageNam
       const visitKey = `${script}\0${stableEnvKey(env)}`;
       if (!visited.has(visitKey)) {
         visited.add(visitKey);
-        if (script !== ANY_ROOT_SCRIPT && rootScripts[script]) pending.push({ cmd: rootScripts[script], workingDir: null, env, shell: current.shell ?? null });
+        if (script !== ANY_ROOT_SCRIPT && rootScripts[script]) pending.push({ cmd: rootScripts[script], workingDir: null, env, ownEnv: null, shell: current.shell ?? null });
       }
     }
   }
@@ -2445,14 +2449,15 @@ export async function loadConservativeWorkspaceGraph(root) {
     const nextVisited = new Set([...visitedActions, normalizedRel]);
     const expanded = [];
     for (const subStep of actionDoc.runs.steps) {
-      const subEnv = subStep?.env && typeof subStep.env === 'object' ? { ...parentEnv, ...subStep.env } : parentEnv;
+      const subOwnEnv = subStep?.env && typeof subStep.env === 'object' ? subStep.env : null;
+      const subEnv = subOwnEnv ? { ...parentEnv, ...subOwnEnv } : parentEnv;
       // GitHub Actions composite run steps do not inherit workflow/job `defaults.run`.
       const subWorkingDir = subStep?.['working-directory'] ?? null;
       const subShell = subStep?.shell ?? null;
       if (typeof subStep?.uses === 'string' && subStep.uses.startsWith('./')) {
         expanded.push(...await loadLocalCompositeSteps(subStep.uses, subEnv, nextVisited));
       } else {
-        expanded.push({ cmd: String(subStep?.run ?? ''), workingDir: subWorkingDir, shell: subShell, env: subEnv });
+        expanded.push({ cmd: String(subStep?.run ?? ''), workingDir: subWorkingDir, shell: subShell, env: subEnv, ownEnv: subOwnEnv });
       }
     }
     return expanded;
@@ -2463,7 +2468,8 @@ export async function loadConservativeWorkspaceGraph(root) {
     const jobShell = job?.defaults?.run?.shell ?? workflowShell;
     const jobEnv = job?.env && typeof job.env === 'object' ? { ...workflowEnv, ...job.env } : workflowEnv;
     for (const step of Array.isArray(job?.steps) ? job.steps : []) {
-      const stepEnv = step?.env && typeof step.env === 'object' ? { ...jobEnv, ...step.env } : jobEnv;
+      const stepOwnEnv = step?.env && typeof step.env === 'object' ? step.env : null;
+      const stepEnv = stepOwnEnv ? { ...jobEnv, ...stepOwnEnv } : jobEnv;
       if (typeof step?.uses === 'string' && step.uses.startsWith('./')) {
         out.push(...await loadLocalCompositeSteps(step.uses, stepEnv));
       } else {
@@ -2472,6 +2478,7 @@ export async function loadConservativeWorkspaceGraph(root) {
           workingDir: step?.['working-directory'] ?? jobWorkingDir ?? null,
           shell: step?.shell ?? jobShell ?? null,
           env: stepEnv,
+          ownEnv: stepOwnEnv,
         });
       }
     }
