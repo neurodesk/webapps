@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
 import { access, lstat, mkdir, mkdtemp, readFile, readdir, readlink, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -351,6 +352,94 @@ test('SIGINT mid-overwrite publication restores backups, cleans partials, and re
       assert.equal(await readFile(join(outDir, 'mask.nii'), 'utf8'), 'ORIGINAL_MASK');
       assert.deepEqual((await readdir(outDir)).sort(), ['mask.nii', 'report.json']);
     }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('non-overwrite ENOTSUP link fallback refuses destination created after lstat without clobbering', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'output-dir-enotsup-'));
+  try {
+    const outDir = await mkdtemp(join(root, 'existing-'));
+    const claim = await claimOutputDir(outDir, { tool: 'demo', overwrite: false });
+    let linkCalled = false;
+    try {
+      await assert.rejects(
+        claim.publish(
+          [{ name: 'a.nii', data: Buffer.from('NEW_A') }],
+          {
+            linkFn: (_src, dest) => {
+              linkCalled = true;
+              // Simulate a concurrent process creating dest AFTER Phase 2's lstat
+              // check, on a filesystem where hard links are unsupported (ENOTSUP).
+              writeFileSync(dest, 'INDEPENDENT_CONTENT');
+              throw Object.assign(new Error('operation not supported'), { code: 'ENOTSUP' });
+            },
+          },
+        ),
+        /Refusing to overwrite existing output/,
+      );
+      assert.equal(linkCalled, true, 'expected ENOTSUP link fallback to be exercised');
+    } finally {
+      await claim.release();
+    }
+    assert.equal(await readFile(join(outDir, 'a.nii'), 'utf8'), 'INDEPENDENT_CONTENT');
+    assert.deepEqual(await readdir(outDir), ['a.nii']);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('SIGTERM during failure-triggered rollback restores backups before releasing lock', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'output-dir-sigterm-rollback-'));
+  try {
+    const outDir = join(root, 'existing');
+    await mkdir(outDir);
+    await writeFile(join(outDir, 'report.json'), 'ORIGINAL_REPORT');
+    await writeFile(join(outDir, 'mask.nii'), 'ORIGINAL_MASK');
+    const script = `
+      import { rename } from 'node:fs/promises';
+      import { claimOutputDir } from ${JSON.stringify(OUTPUT_DIR_MODULE_URL)};
+      const claim = await claimOutputDir(${JSON.stringify(outDir)}, { tool: 'tumour-report', overwrite: true });
+      let step = 0;
+      try {
+        await claim.publish(
+          [
+            { name: 'report.json', data: Buffer.from('NEW_REPORT') },
+            { name: 'mask.nii', data: Buffer.from('NEW_MASK') },
+          ],
+          {
+            renameFn: async (src, dst) => {
+              step += 1;
+              if (step === 3) {
+                // Fail right after report.json was backed up & published, while queuing SIGTERM
+                process.kill(process.pid, 'SIGTERM');
+                throw new Error('simulated failure on mask backup');
+              }
+              return rename(src, dst);
+            },
+          },
+        );
+      } finally {
+        await claim.release();
+        await new Promise((r) => setTimeout(r, 500));
+      }
+    `;
+    const child = spawn(process.execPath, ['--input-type=module', '-e', script], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const result = await new Promise((resolvePromise, rejectPromise) => {
+      let stderr = '';
+      child.stderr.on('data', (chunk) => {
+        stderr += chunk.toString('utf8');
+      });
+      child.on('error', rejectPromise);
+      child.on('exit', (code, signal) => resolvePromise({ code, signal, stderr }));
+    });
+    assert.ok(result.signal === 'SIGTERM' || result.code !== 0, `expected failure/SIGTERM, got ${JSON.stringify(result)}`);
+    assert.equal(await readFile(join(outDir, 'report.json'), 'utf8'), 'ORIGINAL_REPORT');
+    assert.equal(await readFile(join(outDir, 'mask.nii'), 'utf8'), 'ORIGINAL_MASK');
+    assert.deepEqual((await readdir(outDir)).sort(), ['mask.nii', 'report.json']);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

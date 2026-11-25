@@ -68,6 +68,60 @@ const FLOAT32_EPS = 2 ** -23; // 1.1920928955078125e-7 (np.finfo(np.float32).eps
 export const NIFTI1_QUATERNION_THRESHOLD = -3 * FLOAT32_EPS;
 export const NIFTI2_QUATERNION_THRESHOLD = -3 * Number.EPSILON;
 
+const VELTKAMP_SPLIT = 2 ** 27 + 1;
+
+function twoProd(a, b) {
+  const p = a * b;
+  const ca = VELTKAMP_SPLIT * a;
+  const aHi = ca - (ca - a);
+  const aLo = a - aHi;
+  const cb = VELTKAMP_SPLIT * b;
+  const bHi = cb - (cb - b);
+  const bLo = b - bHi;
+  const err = ((aHi * bHi - p) + aHi * bLo + aLo * bHi) + aLo * bLo;
+  return [p, err];
+}
+
+function twoSum(a, b) {
+  const s = a + b;
+  const v = s - a;
+  const err = (a - (s - v)) + (b - v);
+  return [s, err];
+}
+
+/**
+ * Compute 1.0 - (b*b + c*c + d*d) using exact Shewchuk/Dekker error-free
+ * transformations so near-180 deg NIfTI-2 boundaries match NiBabel's MAX_FLOAT
+ * (longdouble) fillpositive calculation without float64 cancellation error.
+ */
+function exactQuaternionW2(b, c, d) {
+  if (!Number.isFinite(b) || !Number.isFinite(c) || !Number.isFinite(d)) {
+    return Number.NaN;
+  }
+  if (Math.abs(b) > 2 || Math.abs(c) > 2 || Math.abs(d) > 2) {
+    return 1.0 - (b * b + c * c + d * d);
+  }
+  const terms = [1.0];
+  for (const x of [b, c, d]) {
+    if (x === 0) continue;
+    const [p, err] = twoProd(x, x);
+    terms.push(-p, -err);
+  }
+  let expansion = [0];
+  for (const term of terms) {
+    let q = term;
+    const next = [];
+    for (let i = 0; i < expansion.length; i += 1) {
+      const [hi, lo] = twoSum(q, expansion[i]);
+      if (lo !== 0) next.push(lo);
+      q = hi;
+    }
+    if (q !== 0 || next.length === 0) next.push(q);
+    expansion = next;
+  }
+  return expansion.reduce((acc, v) => acc + v, 0);
+}
+
 /**
  * Compute NiBabel-exact qform 4x4 affine from header fields, matching
  * nibabel 5.3.3 Nifti1Header / Nifti2Header fillpositive + quat2mat.
@@ -90,7 +144,7 @@ export function computeQformAffine({
   const w2Thresh = Math.abs(
     version === 2 ? NIFTI2_QUATERNION_THRESHOLD : NIFTI1_QUATERNION_THRESHOLD,
   );
-  const w2 = 1.0 - (b * b + c * c + d * d);
+  const w2 = exactQuaternionW2(b, c, d);
   if (!Number.isFinite(w2)) {
     throw new Error('Invalid NIfTI quaternion in qform.');
   }

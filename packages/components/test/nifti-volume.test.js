@@ -370,6 +370,21 @@ test('near-180 degree qform matches NiBabel 5.3.3 fillpositive thresholds for NI
     [0, 0, 0, 1],
   ]);
 
+  // 4d. NIfTI-2: exact double-double w2 matches NiBabel MAX_FLOAT where naive float64 rounds to -3 * eps.
+  const bN2MaxFloat = 1 + Number.EPSILON;
+  const cN2MaxFloat = Math.sqrt(0.875 * Number.EPSILON);
+  const rawN2MaxFloat = makeNifti2Raw({
+    qformCode: 1,
+    sformCode: 0,
+    pixDims: [1, 1, 1],
+    quatern: [bN2MaxFloat, cN2MaxFloat, 0],
+    qoffset: [0, 0, 0],
+  });
+  const volN2MaxFloat = readNiftiVolume(rawN2MaxFloat);
+  // With a = 0, r12 = cz - ax = 0 and r20 = bz - ay = 0 (exact 180 deg rotation around [b, c, 0]).
+  assert.equal(volN2MaxFloat.affine[1][2], 0);
+  assert.equal(volN2MaxFloat.affine[2][0], 0);
+
   // 5. NIfTI-2: w2 = -1e-12 (would pass NIfTI-1 float32 threshold, fails NIfTI-2 float64 threshold).
   const rawN2Bad = makeNifti2Raw({
     qformCode: 1,

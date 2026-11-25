@@ -8,6 +8,8 @@
 import { randomUUID } from 'node:crypto';
 import {
   closeSync,
+  constants as fsConstants,
+  copyFileSync,
   linkSync,
   lstatSync,
   mkdirSync,
@@ -105,6 +107,7 @@ export async function claimOutputDir(
   let lockHandle = null;
   let lockFd = null;
   let lockOwned = false;
+  let rollbackFailed = false;
   let acquiringLock = false;
   let deferredSignal = null;
   let committed = false;
@@ -120,69 +123,81 @@ export async function claimOutputDir(
     process.off('SIGTERM', onSignal);
   };
 
+  function rollbackPublishSync(state) {
+    let rollbackOk = true;
+    const { staged, published, backups, pendingBackup, pendingRename } = state;
+    if (pendingRename && !published.includes(pendingRename)) {
+      try {
+        if (!lstatExistsSync(pendingRename.partial) && lstatExistsSync(pendingRename.dest)) {
+          published.push(pendingRename);
+        }
+      } catch {
+        rollbackOk = false;
+      }
+    }
+    state.pendingRename = null;
+    if (pendingBackup && !pendingBackup.item.backup) {
+      try {
+        if (lstatExistsSync(pendingBackup.backupPath)) {
+          pendingBackup.item.backup = pendingBackup.backupPath;
+          backups.push(pendingBackup.item);
+        }
+      } catch {
+        rollbackOk = false;
+      }
+    }
+    state.pendingBackup = null;
+
+    while (published.length > 0) {
+      const item = published[published.length - 1];
+      try {
+        unlinkSync(item.dest);
+      } catch (error) {
+        if (error.code !== 'ENOENT') rollbackOk = false;
+      }
+      if (item.backup) {
+        try {
+          renameSync(item.backup, item.dest);
+          item.backup = null;
+        } catch {
+          rollbackOk = false;
+        }
+      }
+      published.pop();
+    }
+    while (backups.length > 0) {
+      const item = backups[backups.length - 1];
+      if (item.backup) {
+        try {
+          renameSync(item.backup, item.dest);
+          item.backup = null;
+        } catch {
+          rollbackOk = false;
+        }
+      }
+      backups.pop();
+    }
+    for (const item of staged) {
+      try {
+        rmSync(item.partial, { force: true });
+      } catch {
+        // Best-effort cleanup of staged partials during rollback.
+      }
+      activePartials.delete(item.partial);
+    }
+    if (!rollbackOk) rollbackFailed = true;
+    return rollbackOk;
+  }
+
   function cleanupAndTerminateSync(signal) {
     unregisterSignals();
-    let rollbackOk = true;
+    let rollbackOk = !rollbackFailed;
 
     if (activePublish) {
-      const { staged, published, backups, pendingBackup, pendingRename } = activePublish;
       if (!activePublish.committed) {
-        if (pendingRename && !published.includes(pendingRename)) {
-          try {
-            if (!lstatExistsSync(pendingRename.partial) && lstatExistsSync(pendingRename.dest)) {
-              published.push(pendingRename);
-            }
-          } catch {
-            rollbackOk = false;
-          }
-        }
-        if (pendingBackup && !pendingBackup.item.backup) {
-          try {
-            if (lstatExistsSync(pendingBackup.backupPath)) {
-              pendingBackup.item.backup = pendingBackup.backupPath;
-              backups.push(pendingBackup.item);
-            }
-          } catch {
-            rollbackOk = false;
-          }
-        }
-        for (let i = published.length - 1; i >= 0; i -= 1) {
-          const item = published[i];
-          try {
-            unlinkSync(item.dest);
-          } catch (error) {
-            if (error.code !== 'ENOENT') rollbackOk = false;
-          }
-          if (item.backup) {
-            try {
-              renameSync(item.backup, item.dest);
-              item.backup = null;
-            } catch {
-              rollbackOk = false;
-            }
-          }
-        }
-        for (let i = backups.length - 1; i >= 0; i -= 1) {
-          const item = backups[i];
-          if (item.backup) {
-            try {
-              renameSync(item.backup, item.dest);
-              item.backup = null;
-            } catch {
-              rollbackOk = false;
-            }
-          }
-        }
-        for (const item of staged) {
-          try {
-            rmSync(item.partial, { force: true });
-          } catch {
-            // Best-effort cleanup of staged partials during termination.
-          }
-          activePartials.delete(item.partial);
-        }
+        if (!rollbackPublishSync(activePublish)) rollbackOk = false;
       } else {
-        for (const item of backups) {
+        for (const item of activePublish.backups) {
           if (item.backup) {
             try {
               rmSync(item.backup, { force: true });
@@ -265,11 +280,11 @@ export async function claimOutputDir(
       lockHandle = null;
       await h.close().catch(() => {});
     }
-    if (lockOwned) {
+    if (lockOwned && !rollbackFailed) {
       lockOwned = false;
       await unlink(lockPath).catch(() => {});
     }
-    if (!committed && firstCreated) {
+    if (!committed && !rollbackFailed && firstCreated) {
       await removeEmptyDirsUpTo(resolvedDir, firstCreated);
     }
   };
@@ -345,7 +360,7 @@ export async function claimOutputDir(
     throw error;
   }
 
-  const publish = async (entries, { renameFn = rename, writeFileFn = writeFile } = {}) => {
+  const publish = async (entries, { renameFn = rename, writeFileFn = writeFile, linkFn = linkSync } = {}) => {
     if (!lockOwned || released) {
       throw new Error('Cannot publish outputs after the output directory lock was released.');
     }
@@ -440,7 +455,7 @@ export async function claimOutputDir(
           if (!overwrite) {
             try {
               // Atomic hard link refuses any destination created since lstat (no TOCTOU overwrite).
-              linkSync(item.partial, item.dest);
+              linkFn(item.partial, item.dest);
               published.push(item);
               try {
                 unlinkSync(item.partial);
@@ -454,9 +469,24 @@ export async function claimOutputDir(
                 throw new Error(`Refusing to overwrite existing output: ${item.dest}`);
               }
               if (linkErr.code === 'EXDEV' || linkErr.code === 'EPERM' || linkErr.code === 'ENOTSUP' || linkErr.code === 'ENOSYS') {
-                renameSync(item.partial, item.dest);
-                activePartials.delete(item.partial);
+                // Atomic O_CREAT|O_EXCL copy fallback when hard links are unsupported:
+                // still refuses any destination created after lstat without clobbering it.
+                try {
+                  copyFileSync(item.partial, item.dest, fsConstants.COPYFILE_EXCL);
+                } catch (copyErr) {
+                  if (copyErr.code === 'EEXIST') {
+                    throw new Error(`Refusing to overwrite existing output: ${item.dest}`);
+                  }
+                  throw copyErr;
+                }
                 published.push(item);
+                try {
+                  unlinkSync(item.partial);
+                  activePartials.delete(item.partial);
+                } catch (unlinkErr) {
+                  if (unlinkErr.code !== 'ENOENT') throw unlinkErr;
+                  activePartials.delete(item.partial);
+                }
               } else {
                 throw linkErr;
               }
@@ -477,27 +507,9 @@ export async function claimOutputDir(
       publishState.committed = true;
       committed = true;
     } catch (error) {
-      publishState.pendingBackup = null;
-      publishState.pendingRename = null;
-      while (published.length > 0) {
-        const item = published.pop();
-        await unlink(item.dest).catch(() => {});
-        if (item.backup) {
-          await rename(item.backup, item.dest).catch(() => {});
-          item.backup = null;
-        }
-      }
-      while (backups.length > 0) {
-        const item = backups.pop();
-        if (item.backup) {
-          await rename(item.backup, item.dest).catch(() => {});
-          item.backup = null;
-        }
-      }
-      for (const item of staged) {
-        await rm(item.partial, { force: true }).catch(() => {});
-        activePartials.delete(item.partial);
-      }
+      // Synchronous rollback closes the async window where SIGTERM could arrive
+      // after popping a backup and before its restoration completed.
+      rollbackPublishSync(publishState);
       activePublish = null;
       throw error;
     }
