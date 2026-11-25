@@ -1,0 +1,32 @@
+[
+  {
+    "id": "diabetic-heel-ulcer",
+    "label": "Diabetic neuropathic heel ulcer (CC BY 3.0)",
+    "description": "Clinical photograph of a diabetic neuropathic heel ulcer for digital planimetry and RYB tissue composition analysis.",
+    "expectedResult": "Segmented wound bed with planimetry metrics, RYB tissue overlay PNG, binary mask PNG, CSV table and JSON provenance.",
+    "files": [
+      {
+        "role": "image",
+        "name": "neuropathic_heel_ulcer_diabetic.jpg",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/neuropathic_heel_ulcer_diabetic.jpg",
+        "sha256": "436afc1f3ad6f0dadb45097856c9b4feb158d64ea8d40ee342e74ddf30a9170d",
+        "bytes": 40472
+      }
+    ]
+  },
+  {
+    "id": "venous-leg-ulcer",
+    "label": "Venous dorsal leg ulcer (CC BY 3.0)",
+    "description": "Clinical photograph of a venous dorsal leg ulcer with granulation and slough tissue regions.",
+    "expectedResult": "Segmented wound bed with planimetry metrics, RYB tissue overlay PNG, binary mask PNG, CSV table and JSON provenance.",
+    "files": [
+      {
+        "role": "image",
+        "name": "venous_ulcer_dorsal_leg.jpg",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/venous_ulcer_dorsal_leg.jpg",
+        "sha256": "4c2fd4073c0b5001e71c9dfbdd7ab34167f7ef03570ad727dbce9f623a5bcdff",
+        "bytes": 43410
+      }
+    ]
+  }
+]

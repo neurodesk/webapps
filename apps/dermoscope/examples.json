@@ -1,0 +1,47 @@
+[
+  {
+    "id": "isic-melanoma-in-situ",
+    "label": "Melanoma in situ with hairs (ISIC_0000022)",
+    "description": "Dermoscopic photograph of melanoma in situ occluded by dark hairs (ISIC Archive, CC0).",
+    "expectedResult": "DullRazor removes dark hairs before lesion segmentation and automated A/B/C morphometry.",
+    "files": [
+      {
+        "role": "image",
+        "name": "ISIC_0000022.jpg",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0000022.jpg",
+        "sha256": "98a87a2f694aab586dcfd9076a5f2377633cfb5c47d73478e047ba43e9f85c99",
+        "bytes": 104724
+      }
+    ]
+  },
+  {
+    "id": "isic-melanoma-multicolor",
+    "label": "Asymmetric multi-color melanoma (ISIC_0000002)",
+    "description": "Dermoscopic photograph of an asymmetric, multi-color melanoma (ISIC Archive, CC0).",
+    "expectedResult": "Segments the asymmetric lesion and reports automated A/B/C morphometry and multi-class CIE L*a*b* color coverage.",
+    "files": [
+      {
+        "role": "image",
+        "name": "ISIC_0000002.jpg",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0000002.jpg",
+        "sha256": "3ec774807849fcb5fa1a0f03bc8cdc639041d5735b2edfe167f8a75e3b6c30a8",
+        "bytes": 62351
+      }
+    ]
+  },
+  {
+    "id": "isic-benign-nevus",
+    "label": "Benign melanocytic nevus (ISIC_0000000)",
+    "description": "Dermoscopic photograph of a symmetric benign melanocytic nevus (ISIC Archive, CC0).",
+    "expectedResult": "Segments the regular nevus border and reports low automated asymmetry and A/B/C morphometry.",
+    "files": [
+      {
+        "role": "image",
+        "name": "ISIC_0000000.jpg",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0000000.jpg",
+        "sha256": "fc5880144d267ae257a8e2bf25315ea5291c958a452de98c920c71904c71326e",
+        "bytes": 54143
+      }
+    ]
+  }
+]

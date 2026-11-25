@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Wound Planimetry — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Input image</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose wound photo" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop a wound photo (PNG or JPEG)</span>
+          </label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Planimetry</summary>
+        <div class="nd-section-content">
+          <div class="nd-row">
+            <div class="nd-field">
+              <label for="pixelsPerMm">Scale <small>px/mm</small>
+                <span class="nd-info-icon" tabindex="0" aria-label="About scale calibration">i<span class="nd-info-tooltip">Pixels per millimetre. Leave at 0 for pixel units, or select Calibrate ruler and drag or click two points across a ruler in the photo.</span></span>
+              </label>
+              <input id="pixelsPerMm" type="number" min="0" max="1000" step="any" value="0" inputmode="decimal" />
+            </div>
+            <div class="nd-field">
+              <label for="referenceMm">Ruler <small>mm</small>
+                <span class="nd-info-icon" tabindex="0" aria-label="About ruler reference">i<span class="nd-info-tooltip">Known physical length in millimetres represented by the two points drawn with the Calibrate ruler tool.</span></span>
+              </label>
+              <input id="referenceMm" type="number" min="0.1" max="500" step="any" value="10" inputmode="decimal" />
+            </div>
+          </div>
+
+          <div class="nd-field">
+            <span class="nd-viewer-label" id="toolLabel">Canvas tool
+              <span class="nd-info-icon" tabindex="0" aria-label="About canvas tools">i<span class="nd-info-tooltip">Inspect reads pixel coordinates and tissue class. Calibrate ruler clicks or drags two points across a scale bar. Place seed centres segmentation on the wound bed.</span></span>
+            </span>
+            <div class="nd-tool-group" role="group" aria-labelledby="toolLabel">
+              <button id="inspectTool" class="nd-btn nd-btn-secondary nd-tool-btn" type="button" aria-pressed="true" disabled>Inspect</button>
+              <button id="rulerTool" class="nd-btn nd-btn-secondary nd-tool-btn" type="button" aria-pressed="false" disabled>Calibrate ruler</button>
+              <button id="seedTool" class="nd-btn nd-btn-secondary nd-tool-btn" type="button" aria-pressed="false" disabled>Place seed</button>
+            </div>
+          </div>
+
+          <button id="clearAnnotationsButton" class="nd-btn nd-btn-secondary" type="button" disabled>Clear ruler &amp; seed</button>
+
+          <details class="nd-sidebar-section" id="annotationCoordinates">
+            <summary class="nd-section-title">Seed &amp; ruler coordinates</summary>
+            <div class="nd-section-content">
+              <div class="nd-row">
+                <div class="nd-field">
+                  <label for="seedX">Seed X <small>px</small></label>
+                  <input id="seedX" type="number" min="0" step="1" value="" inputmode="numeric" disabled />
+                </div>
+                <div class="nd-field">
+                  <label for="seedY">Seed Y <small>px</small></label>
+                  <input id="seedY" type="number" min="0" step="1" value="" inputmode="numeric" disabled />
+                </div>
+              </div>
+              <button id="applySeedButton" class="nd-btn nd-btn-secondary" type="button" disabled>Apply seed</button>
+
+              <div class="nd-row">
+                <div class="nd-field">
+                  <label for="rulerX1">Ruler P1 X <small>px</small></label>
+                  <input id="rulerX1" type="number" min="0" step="any" value="" inputmode="decimal" disabled />
+                </div>
+                <div class="nd-field">
+                  <label for="rulerY1">Ruler P1 Y <small>px</small></label>
+                  <input id="rulerY1" type="number" min="0" step="any" value="" inputmode="decimal" disabled />
+                </div>
+              </div>
+              <div class="nd-row">
+                <div class="nd-field">
+                  <label for="rulerX2">Ruler P2 X <small>px</small></label>
+                  <input id="rulerX2" type="number" min="0" step="any" value="" inputmode="decimal" disabled />
+                </div>
+                <div class="nd-field">
+                  <label for="rulerY2">Ruler P2 Y <small>px</small></label>
+                  <input id="rulerY2" type="number" min="0" step="any" value="" inputmode="decimal" disabled />
+                </div>
+              </div>
+              <button id="applyRulerButton" class="nd-btn nd-btn-secondary" type="button" disabled>Apply ruler</button>
+            </div>
+          </details>
+
+          <div class="nd-field">
+            <label for="sensitivity">Sensitivity <small>−0.3 to +0.3</small>
+              <span class="nd-info-icon" tabindex="0" aria-label="About segmentation sensitivity">i<span class="nd-info-tooltip">Bias subtracted from the Otsu threshold (threshold = otsu − sensitivity). Positive values expand the wound mask; negative values tighten it.</span></span>
+            </label>
+            <input id="sensitivity" type="number" min="-0.3" max="0.3" step="0.05" value="0" inputmode="decimal" />
+            <p class="nd-hint">0 px/mm reports pixels; use Calibrate ruler for mm².</p>
+          </div>
+
+          <details class="nd-sidebar-section" id="rybSettings">
+            <summary class="nd-section-title">RYB thresholds</summary>
+            <div class="nd-section-content">
+              <div class="nd-field">
+                <label for="escharL">Eschar L* max
+                  <span class="nd-info-icon" tabindex="0" aria-label="About eschar threshold">i<span class="nd-info-tooltip">CIE L* lightness upper bound for black necrotic eschar tissue (low chroma pixels below this level).</span></span>
+                </label>
+                <input id="escharL" type="number" min="0" max="60" step="1" value="28" inputmode="decimal" />
+              </div>
+              <div class="nd-field">
+                <label for="granulationA">Granulation a* min
+                  <span class="nd-info-icon" tabindex="0" aria-label="About granulation threshold">i<span class="nd-info-tooltip">CIE a* redness lower bound for red granulation tissue inside the wound bed.</span></span>
+                </label>
+                <input id="granulationA" type="number" min="0" max="80" step="1" value="22" inputmode="decimal" />
+              </div>
+              <div class="nd-field">
+                <label for="sloughB">Slough b* min
+                  <span class="nd-info-icon" tabindex="0" aria-label="About slough threshold">i<span class="nd-info-tooltip">CIE b* yellowness lower bound for warm-yellow slough and fibrin tissue inside the wound bed.</span></span>
+                </label>
+                <input id="sloughB" type="number" min="0" max="80" step="1" value="18" inputmode="decimal" />
+              </div>
+            </div>
+          </details>
+
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Measure wound</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="canvas" class="wp-canvas" aria-label="Wound photo viewer. Select Calibrate ruler or Place seed to annotate."></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop a wound photo anywhere, or choose an example.</p>
+        <section id="report" class="nd-viewer-report" aria-label="Planimetry report" hidden></section>
+      </div>
+      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Processing progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel processing" aria-label="Cancel processing" hidden>×</button>
+    </footer>
+
+    <template id="aboutContent">
+      <p>Calibrated wound and ulcer digital planimetry with heuristic color-based Red–Yellow–Black (RYB) and Unclassified tissue estimation, executed locally in a Web Worker.</p>
+      <p><strong>Research use only.</strong> Planar photography does not correct for perspective tilt or curved surfaces, and color-based RYB estimates are not trained clinical tissue classification. Outputs are for research and educational use and are not validated for clinical diagnosis or treatment decisions.</p>
+    </template>
+    <template id="privacyContent">
+      <p>Wound photographs are decoded and analysed entirely inside your browser and are never uploaded. Only the bundled examples are fetched from the Neurodesk dataset on Hugging Face.</p>
+    </template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

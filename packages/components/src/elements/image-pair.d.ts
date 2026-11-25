@@ -65,6 +65,9 @@ export interface ImagePairConfig {
   templates?: TemplateEntry[];
   lockedFixed?: TemplateEntry;
   slotHelp?: Partial<Record<ImageSlot, string>>;
+  slotLabels?: Partial<Record<ImageSlot, string>>;
+  exampleRoles?: Partial<Record<ImageSlot, string>>;
+  showFolder?: boolean;
   read?: (files: File[], context: { slot: ImageSlot; signal?: AbortSignal }) => ImageCandidate[] | Promise<ImageCandidate[]>;
   open: (slot: ImageSlot, candidate: ImageCandidate, context: { signal?: AbortSignal }) => ImageDescription | Promise<ImageDescription>;
   clear?: (slot: ImageSlot) => void | Promise<void>;

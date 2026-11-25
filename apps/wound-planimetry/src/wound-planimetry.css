@@ -1,0 +1,14 @@
+/* Interactive canvas for ruler calibration and seed placement. */
+.wp-canvas[data-tool="ruler"],
+.wp-canvas[data-tool="seed"] {
+  touch-action: none;
+  cursor: crosshair;
+}
+.wp-disclaimer {
+  margin-top: var(--nd-space-md);
+  padding: var(--nd-space-sm) var(--nd-space-md);
+  border-left: 3px solid var(--nd-color-warning);
+  background: var(--nd-color-surface);
+  color: var(--nd-color-text-muted);
+  font-size: 0.75rem;
+}

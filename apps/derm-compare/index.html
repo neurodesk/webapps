@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DermCompare — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Input images</summary>
+        <div class="nd-section-content">
+          <div id="imagePair"></div>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Compare</summary>
+        <div class="nd-section-content">
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Align &amp; compare</button>
+          <div class="nd-field">
+            <label for="curtainSplit">Curtain split</label>
+            <input id="curtainSplit" type="range" min="0" max="100" value="50" disabled />
+          </div>
+          <div class="nd-row">
+            <div class="nd-field">
+              <label for="flickerInterval">Flicker <small>ms</small>
+                <span class="nd-info-icon" tabindex="0" aria-label="About flicker interval">i<span class="nd-info-tooltip">Time between baseline and aligned follow-up frames in Flicker view (150 to 3000 ms).</span></span>
+              </label>
+              <input id="flickerInterval" type="number" min="150" max="3000" step="50" value="600" inputmode="numeric" />
+            </div>
+            <div class="nd-field">
+              <label for="flickerToggle">Playback</label>
+              <button id="flickerToggle" class="nd-btn nd-btn-secondary nd-btn-sm" type="button" aria-pressed="false" disabled>Pause flicker</button>
+            </div>
+          </div>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <label class="nd-check">
+                <input id="normalizeColor" type="checkbox" checked />
+                Color constancy
+                <span class="nd-info-icon" tabindex="0" aria-label="About color constancy">i<span class="nd-info-tooltip">Shades of Gray (Minkowski p = 6) white-balance normalization before registration and CIEDE2000 calculation.</span></span>
+              </label>
+              <label class="nd-check">
+                <input id="suppressHair" type="checkbox" checked />
+                Suppress hairs
+                <span class="nd-info-icon" tabindex="0" aria-label="About hair suppression">i<span class="nd-info-tooltip">Anisotropic morphological closing detects elongated dark hairs for alignment and excludes them from ΔE2000 statistics while preserving pigment dots.</span></span>
+              </label>
+              <label class="nd-check">
+                <input id="allowScale" type="checkbox" />
+                Allow scale (0.85–1.15×)
+                <span class="nd-info-icon" tabindex="0" aria-label="About similarity scaling">i<span class="nd-info-tooltip">Enables similarity scaling when dermoscope magnification differs. Fitted scaling can absorb real lesion growth, so physical growth is marked indeterminate.</span></span>
+              </label>
+              <div class="nd-field">
+                <label for="maxAngle">Max rotation <small>±°</small>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About max rotation">i<span class="nd-info-tooltip">Coarse rotation search range in degrees around zero (step 2.5°), refined to 0.25° in the fine stage.</span></span>
+                </label>
+                <input id="maxAngle" type="number" min="0" max="90" step="5" value="25" inputmode="numeric" />
+              </div>
+            </div>
+          </details>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="canvas" class="derm-canvas" data-mode="preview" aria-label="Dermoscopy comparison viewer. Drag horizontally or use the Curtain split slider in Curtain view to wipe between baseline and aligned follow-up."></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop baseline and follow-up images, or choose an example.</p>
+        <section id="report" class="nd-viewer-report" aria-label="Comparison report" hidden></section>
+      </div>
+      <div class="nd-viewer-info">
+        <span id="location" class="nd-viewer-info-primary"></span>
+        <span id="viewHint" class="nd-viewer-info-label"></span>
+      </div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Processing progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel processing" aria-label="Cancel processing" hidden>×</button>
+    </footer>
+
+    <template id="aboutContent">
+      <p>Sequential digital dermoscopy alignment and change-detection comparator in the browser, following the clinical monitoring principles of Kittler et al. (2000, 2006) and Korotkov &amp; Garcia (2012). Everything runs locally in a Web Worker with no server upload.</p>
+      <p><strong>Preprocessing &amp; alignment.</strong> Optional Shades of Gray (Minkowski p = 6) color constancy reduces white-balance drift and anisotropic morphological closing detects elongated dark hairs for alignment while preserving isolated pigment dots. Follow-up captures are aligned onto the baseline frame at true unit pixel pitch (or optional 0.85–1.15× similarity scaling) via a two-stage normalized cross-correlation (NCC) search: a coarse rotation and translation sweep (~128 px wide) followed by coordinate-descent refinement (~256 px wide and full-resolution polish down to 0.25 px and 0.25°).</p>
+      <p><strong>Change quantification.</strong> Per-pixel CIEDE2000 (ΔE2000, Sharma et al. 2005) is computed across the mutually valid FOV and alpha overlap mask with detected hair pixels excluded from color-change statistics. Otsu thresholding on CIELAB skin-contrast scores segments baseline and aligned follow-up lesions inside the valid overlap to report area change, Dice and Jaccard overlap, centroid shift, and normalized and raw ΔE2000 distributions. Outputs are the aligned follow-up PNG, ΔE2000 change map PNG, comparison metrics CSV and JSON provenance.</p>
+      <p><strong>Limits.</strong> Rigid and similarity transforms do not model strong non-linear skin stretch, severe out-of-plane tilt or large occlusions. When similarity scaling is enabled, fitted magnification can absorb real lesion growth so physical growth is marked indeterminate. Automated metrics and descriptive thresholds assist visual side-by-side review and are for research and educational use, not standalone clinical diagnosis.</p>
+    </template>
+    <template id="privacyContent">
+      <p>Dermoscopy images are processed entirely locally in this browser and are never uploaded. Only the optional example pair is fetched from the Neurodesk dataset on Hugging Face.</p>
+    </template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

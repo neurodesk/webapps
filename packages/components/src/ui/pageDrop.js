@@ -13,7 +13,7 @@ const AUXILIARY = new Set([...AUXILIARY_KINDS.map(([kind]) => kind), 'metadata',
 const OWNED = '[data-drop-target], .nd-file, .file-upload-zone, .file-drop, .upload-zone';
 const UNDO_MS = 8000;
 const HIDE_MS = 150;
-const SCAN_FILE = /\.(nii(?:\.gz)?|mgz|mgh)$/i;
+const SCAN_FILE = /\.(nii(?:\.gz)?|mgz|mgh|png|jpe?g|webp|tiff?)$/i;
 // A dropped BIDS diffusion dataset is one input: its runs, gradients and sidecars stay together.
 // Other BIDS images (for example sub-01/anat/*_T1w and *_T2w) still fill the image slots in turn.
 const BIDS_DWI_IMAGE = /(^|\/)sub-[A-Za-z0-9]+\/(ses-[A-Za-z0-9]+\/)?dwi\/[^/]*_dwi\.nii(\.gz)?$/i;
@@ -50,12 +50,13 @@ export function routeFiles(files, inputs, primary, occupied = new Set()) {
     ? inputs.filter(input => input.dataset.neurodeskInput === 'image')
     : [];
   const empty = images.filter(input => !occupied.has(input) && !input.files?.length);
-  let replacement = 0;
+  const slots = [...empty, ...images.filter(input => !empty.includes(input))];
+  let slotIndex = 0;
   for (const file of files) {
     const kind = AUXILIARY_KINDS.find(([, pattern]) => pattern.test(file.name))?.[0];
     let input = (kind && inputs.find(candidate => candidate.dataset.neurodeskInput === kind)) || primary;
-    if (!kind && images.length > 1 && SCAN_FILE.test(file.name)) {
-      input = empty.shift() ?? images[replacement++ % images.length];
+    if (!kind && slots.length > 1 && SCAN_FILE.test(file.name)) {
+      input = slots[slotIndex++ % slots.length];
     }
     if (input) plan.set(input, [...(plan.get(input) ?? []), file]);
   }
@@ -175,9 +176,14 @@ export function bindPageDrop(doc = globalThis.document) {
     const inputs = [...doc.querySelectorAll('input[type="file"][data-neurodesk-input]')].filter(usable);
     filesFromDataTransferItems(event.dataTransfer.items).then(files => {
       if (current !== generation || !files.length || !primary.isConnected || !usable(primary)) return;
-      const plan = routeFiles(files, inputs.filter(input => input.isConnected && usable(input)), primary,
+      const activeInputs = inputs.filter(input => input.isConnected && usable(input));
+      const plan = routeFiles(files, activeInputs, primary,
         new Set(inputs.filter(input => occupied.has(input))));
-      const snapshot = plan.filter(([input]) => previous.has(input)).map(([input]) => [input, previous.get(input)]);
+      const hadLoaded = inputs.some(input => occupied.has(input));
+      const multiImage = activeInputs.filter(input => input.dataset.neurodeskInput === 'image').length > 1;
+      const snapshot = plan
+        .filter(([input]) => previous.has(input) || hadLoaded || multiImage)
+        .map(([input]) => [input, previous.get(input) ?? []]);
       for (const [input, group] of plan) replace(input, group);
       offerUndo(snapshot);
     }).catch(error => {
@@ -216,6 +222,14 @@ export function bindPageDrop(doc = globalThis.document) {
     if (event.detail.state === 'loading') previous = new WeakMap();
   }
 
+  function slotDrop(event) {
+    const input = event.target;
+    if (!(input instanceof view.HTMLInputElement) || input.type !== 'file' || !input.hasAttribute('data-neurodesk-input')) return;
+    const prev = event.detail?.previousFiles;
+    if (!Array.isArray(prev)) return;
+    offerUndo([[input, [...prev]]]);
+  }
+
   function startingDrop(event) {
     if (carriesFiles(event)) supersede();
   }
@@ -228,6 +242,7 @@ export function bindPageDrop(doc = globalThis.document) {
     [view, 'drop', drop, false],
     [doc, 'change', remember, true],
     [doc, 'nd-files', sync, false],
+    [doc, 'nd-slot-drop', slotDrop, false],
     [doc, 'nd-example-status', forget, false],
   ];
   for (const [target, type, listener, capture] of listeners) target.addEventListener(type, listener, capture);

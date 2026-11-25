@@ -310,7 +310,7 @@ test('a released desktop suite replaces its catalogue suite entry, never with an
   const first = { apps: {} };
   applyCatalogUpdate(first, [{ id: 'msk-webapps', version: '0.31.20261021', catalog: 'msk', suite: msk }]);
   assert.deepEqual(first.suites, { msk });
-  assert.deepEqual(registrySuiteReleases(await loadAppsRegistry()), new Map([['webapps', 'neuro'], ['msk-webapps', 'msk'], ['microscopy-webapps', 'microscopy'], ['preclinical-webapps', 'preclinical']]));
+  assert.deepEqual(registrySuiteReleases(await loadAppsRegistry()), new Map([['webapps', 'neuro'], ['msk-webapps', 'msk'], ['microscopy-webapps', 'microscopy'], ['preclinical-webapps', 'preclinical'], ['dermatology-webapps', 'dermatology']]));
 });
 
 test('a suite release is read for its own catalogue only', async () => {

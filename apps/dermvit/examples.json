@@ -1,0 +1,47 @@
+[
+  {
+    "id": "isic-nevus",
+    "label": "Benign melanocytic nevus (ISIC_0000000)",
+    "description": "ISIC Archive CC-0 dermoscopic image of a benign melanocytic nevus.",
+    "expectedResult": "Top predicted class is NV (Melanocytic nevi) with ranked 7-class uncalibrated softmax scores and downloadable CSV/JSON.",
+    "files": [
+      {
+        "role": "image",
+        "name": "ISIC_0000000.jpg",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0000000.jpg",
+        "sha256": "fc5880144d267ae257a8e2bf25315ea5291c958a452de98c920c71904c71326e",
+        "bytes": 54143
+      }
+    ]
+  },
+  {
+    "id": "isic-melanoma",
+    "label": "Invasive melanoma (ISIC_0000013)",
+    "description": "ISIC Archive CC-0 dermoscopic image of an invasive melanoma.",
+    "expectedResult": "7-class HAM10000 uncalibrated softmax scores with elevated melanoma score and downloadable CSV/JSON.",
+    "files": [
+      {
+        "role": "image",
+        "name": "ISIC_0000013.jpg",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0000013.jpg",
+        "sha256": "087a955305a31cf5c6d197c9aa8848bb23822201b656d47f89fe4020a4b78650",
+        "bytes": 38863
+      }
+    ]
+  },
+  {
+    "id": "isic-hemangioma",
+    "label": "Vascular hemangioma (ISIC_0001115)",
+    "description": "ISIC Archive CC-0 dermoscopic image of a vascular hemangioma.",
+    "expectedResult": "7-class HAM10000 uncalibrated softmax scores highlighting vascular lesion features and downloadable CSV/JSON.",
+    "files": [
+      {
+        "role": "image",
+        "name": "ISIC_0001115.jpg",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0001115.jpg",
+        "sha256": "73a9563f4fbdeaccb2be0f7b994d9f161835f1a0ad4a930577f136c221c8afbf",
+        "bytes": 272036
+      }
+    ]
+  }
+]

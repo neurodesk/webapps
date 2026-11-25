@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 2,
+  "app": "skin-chromophore",
+  "title": "Skin Chromophore",
+  "description": "Quantitative skin colorimetry (CIE L*a*b*, ITA° for b* > 1, CIEDE2000) and uncalibrated fixed-basis RGB optical-density chromophore proxies (RGB EI/MI and fixed-basis melanin/hemoglobin OD proxies inspired by Tsumura et al. 1999) for dermatology photography and dermoscopy.",
+  "defaultOperation": "analyze",
+  "operations": {
+    "analyze": {
+      "title": "Analyze skin chromophores",
+      "description": "Compute CIE L*a*b*, Individual Typology Angle (ITA°, restricted to b* > 1), uncalibrated RGB Erythema/Melanin Index proxies (EI, MI), fixed-basis melanin and hemoglobin optical-density proxy maps (not per-image ICA or calibrated spectrophotometry), and Target vs Perilesional Reference colorimetry with CIEDE2000.",
+      "mode": "batch",
+      "inputs": {
+        "image": {
+          "source": "files",
+          "type": "file:image",
+          "formats": [
+            "jpg",
+            "jpeg",
+            "png"
+          ],
+          "description": "One 2D dermatology or dermoscopy image (JPEG or PNG)",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "whiteBalance": {
+          "type": "boolean",
+          "default": false,
+          "description": "Apply Shades of Gray (p=6) linear-RGB white-balance normalization before colorimetry"
+        },
+        "maskVignette": {
+          "type": "boolean",
+          "default": true,
+          "description": "Exclude dark dermoscope vignette borders via edge-seeded peripheral flood-fill (luminance < 22); transparent pixels (alpha < 128) are always excluded"
+        },
+        "roiMode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "central"
+          ],
+          "default": "auto",
+          "description": "Automatic lesion ROI by Otsu Lab contrast against the perilesional ring (auto), or fixed central 25% disk (central)"
+        }
+      },
+      "artifacts": {
+        "hemoglobin": {
+          "type": "file:image",
+          "mediaType": "image/png",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "melanin": {
+          "type": "file:image",
+          "mediaType": "image/png",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "ita": {
+          "type": "file:image",
+          "mediaType": "image/png",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "colorimetry": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "provenance": {
+          "type": "neuro:provenance",
+          "mediaType": "application/json",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

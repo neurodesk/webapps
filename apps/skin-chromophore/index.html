@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Skin Chromophore — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Input image</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose dermatology photo" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop a dermatology photo (JPEG or PNG)</span>
+          </label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Colorimetry</summary>
+        <div class="nd-section-content">
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Analyze chromophores</button>
+          <div class="nd-field">
+            <span class="nd-viewer-label" id="roiToolLabel">Canvas tool
+              <span class="nd-info-icon" tabindex="0" aria-label="About canvas tools">i<span class="nd-info-tooltip">Inspect reads pixel L*, a*, b*, ITA° (for b* &gt; 1), and RGB EI/MI proxies under the pointer (drag to pan when zoomed). Target ROI and Reference ROI let you click-drag circular regions on the image.</span></span>
+            </span>
+            <div class="nd-tool-group" role="group" aria-labelledby="roiToolLabel">
+              <button id="inspectTool" class="nd-tool-btn" type="button" aria-pressed="true" disabled>Inspect</button>
+              <button id="targetRoiTool" class="nd-tool-btn" type="button" aria-pressed="false" disabled>Target ROI</button>
+              <button id="refRoiTool" class="nd-tool-btn" type="button" aria-pressed="false" disabled>Reference ROI</button>
+            </div>
+          </div>
+          <button id="resetRoiButton" class="nd-btn nd-btn-secondary" type="button" disabled>Reset to Auto</button>
+          <p id="roiInfo" class="nd-file-info" hidden></p>
+          <details class="nd-sidebar-section" id="manualRoiSection">
+            <summary class="nd-section-title">Manual ROI coordinates</summary>
+            <div class="nd-section-content">
+              <div class="nd-row">
+                <div class="nd-field">
+                  <label for="targetX">Target X (%)</label>
+                  <input id="targetX" type="number" min="0" max="100" step="0.5" placeholder="auto" disabled />
+                </div>
+                <div class="nd-field">
+                  <label for="targetY">Target Y (%)</label>
+                  <input id="targetY" type="number" min="0" max="100" step="0.5" placeholder="auto" disabled />
+                </div>
+                <div class="nd-field">
+                  <label for="targetR">Target R (%)</label>
+                  <input id="targetR" type="number" min="0.5" max="100" step="0.5" placeholder="auto" disabled />
+                </div>
+              </div>
+              <div class="nd-row">
+                <div class="nd-field">
+                  <label for="refX">Ref X (%)</label>
+                  <input id="refX" type="number" min="0" max="100" step="0.5" placeholder="auto" disabled />
+                </div>
+                <div class="nd-field">
+                  <label for="refY">Ref Y (%)</label>
+                  <input id="refY" type="number" min="0" max="100" step="0.5" placeholder="auto" disabled />
+                </div>
+                <div class="nd-field">
+                  <label for="refR">Ref R (%)</label>
+                  <input id="refR" type="number" min="0.5" max="100" step="0.5" placeholder="auto" disabled />
+                </div>
+              </div>
+              <button id="applyManualRoiButton" class="nd-btn nd-btn-secondary nd-btn-sm" type="button" disabled>Apply manual ROIs</button>
+            </div>
+          </details>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <div class="nd-field">
+                <label for="roiMode">Default ROI mode
+                  <span class="nd-info-icon" tabindex="0" aria-label="About ROI mode">i<span class="nd-info-tooltip">Auto segments a central lesion by Otsu Lab contrast and dilates a non-overlapping perilesional ring (falling back to a central 25% disk). Central always uses a fixed 25% disk.</span></span>
+                </label>
+                <select id="roiMode">
+                  <option value="auto" selected>Auto lesion &amp; ring</option>
+                  <option value="central">Central 25% disk</option>
+                </select>
+              </div>
+              <label class="nd-check"><input id="whiteBalance" type="checkbox" /> Shades of Gray white balance (p=6)</label>
+              <label class="nd-check"><input id="maskVignette" type="checkbox" checked /> Mask dark dermoscope vignette</label>
+            </div>
+          </details>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="canvas" class="chromophore-canvas" aria-label="Dermatology image and chromophore map viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop a dermatology photo anywhere, or choose an example.</p>
+        <section id="report" class="nd-viewer-report" aria-label="Colorimetry report" hidden></section>
+      </div>
+      <div class="nd-viewer-info">
+        <span id="location" class="nd-viewer-info-primary"></span>
+        <span id="scaleLegend" class="nd-viewer-info-label"></span>
+      </div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Processing progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel processing" aria-label="Cancel processing" hidden>×</button>
+    </footer>
+
+    <template id="aboutContent">
+      <p>Skin Chromophore computes local CIE L*a*b* (D65) colorimetry, Individual Typology Angle (ITA°, valid for b* &gt; 1), exact CIEDE2000 color difference, and uncalibrated fixed-basis RGB optical-density proxies for Erythema Index (EI), Melanin Index (MI), melanin OD, and hemoglobin OD (inspired by Tsumura et al. 1999, Diffey et al. 1984, and Takiwaki et al. 1994; not per-image ICA or calibrated spectrophotometry). Research and educational tool only.</p>
+    </template>
+    <template id="privacyContent"><p>Images are processed locally in this browser and are never uploaded. Only the selected examples are downloaded from the Neurodesk dataset on Hugging Face.</p></template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

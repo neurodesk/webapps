@@ -9,6 +9,7 @@ has one home catalogue and can also be served by others.
 | `mskapps.sciget.org` | `msk` | Cloudflare Worker, assets only | MuscleMap, SeedSeg, Carotid Flow; copies of dcm2niix, DICOM View, dicompare, MRI2vid, niimath, ANTs Denoise and elastix |
 | `microscopyapps.sciget.org` | `microscopy` | Cloudflare Worker, assets only | StarDist, micro-sam, Calcium imaging, Spot detection, Histology to MRI, Microscope QC, Deconvolution, Denoise, NeuroMorph, OME-Zarr Converter, Stitching, Structure Tensor, Light-sheet atlas, ZARRo, Cryo-EM; copies of elastix, niimath and MRI2vid |
 | `preclinicalapps.sciget.org` | `preclinical` | Cloudflare Worker, assets only | Brainchomp; copies of dcm2niix, DICOM View, dicompare, MRI2vid, niimath, Degibbs, ANTs Denoise, dwidenoise, Denoise, elastix, QSMbly, ZARRo, Stitching, Structure Tensor, Calcium imaging, NeuroMorph |
+| `dermatologyapps.sciget.org` | `dermatology` | Cloudflare Worker, assets only | Dermoscope ABCD, Skin Chromophore, Wound Planimetry, DermCompare, DermViT |
 | `webapps.sciget.org` | hub | Cloudflare Worker, assets only | none: one card per catalogue |
 
 `neurodesk.org` DNS is on AWS Route 53, so the neuro catalogue stays on GitHub
@@ -217,7 +218,7 @@ Its model pack is tested with every app it serves that reads a model.
 `.github/workflows/deploy-pages.yml` builds once, then:
 
 - uploads `dist-sites/neuro` to GitHub Pages;
-- deploys `dist-sites/msk`, `dist-sites/microscopy`, `dist-sites/preclinical` and `dist-sites/hub` with
+- deploys `dist-sites/msk`, `dist-sites/microscopy`, `dist-sites/preclinical`, `dist-sites/dermatology` and `dist-sites/hub` with
   `wrangler deploy --config dist-sites/<site>.wrangler.json`, using the
   `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets;
 - runs the deployed checks (`pnpm test:deployed`,

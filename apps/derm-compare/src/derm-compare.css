@@ -1,0 +1,5 @@
+/* Interactive curtain drag takes pointer gestures directly only in Curtain mode. */
+.derm-canvas[data-mode="curtain"] {
+  touch-action: none;
+  cursor: ew-resize;
+}

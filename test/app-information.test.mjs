@@ -88,6 +88,11 @@ const REQUIRED_METHODS = {
   denoise: ['proceedings.mlr.press/v97/batson19a.html', 'github.com/royerlab/aydin', '10.1109/CVPR52729.2023.01347', '10.1109/CVPR.2005.38', '10.1109/ISBI.2008.4541250', '10.1109/TIP.2012.2202675', '10.1109/TIP.2008.2001399', '10.1038/s41592-019-0612-7', '10.5281/zenodo.5101351', 'github.com/niivue/niivue'],
   totalsegmentator: ['10.1148/ryai.230024', '10.1148/radiol.241613', '10.1101/2025.01.13.25319967', '10.1038/s41592-020-01008-z', 'onnxruntime.ai', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   medsam2: ['10.48550/arXiv.2504.03600', '10.48550/arXiv.2408.00714', '10.1016/j.jneumeth.2016.03.001', 'onnxruntime.ai', 'github.com/niivue/niivue'],
+  dermoscope: ['10.1016/s0010-4825(97)00020-6', '10.2352/CIC.2004.12.1.art00008', '10.1109/JBHI.2014.2336473', '10.1109/TSMC.1979.4310076', '10.1016/s0190-9622(94)70061-3', '10.1049/iet-ipr.2015.0385', 'isic-archive.com'],
+  'skin-chromophore': ['10.1111/j.1467-2494.1991.tb00561.x', '10.1111/bjd.12529', '10.1111/j.1365-2133.1984.tb14149.x', '10.1159/000211297', '10.1364/josaa.16.002169', '10.2352/CIC.2004.12.1.art00008', '10.1002/col.20070', 'isic-archive.com'],
+  'wound-planimetry': ['pubmed.ncbi.nlm.nih.gov/2916597', '10.1109/TSMC.1979.4310076', '10.1155/2014/851582', 'File:Neuropathic_heel_ulcer_diabetic.jpg', 'File:Venous_ulcer_dorsal_leg.jpg'],
+  'derm-compare': ['10.1001/archderm.142.9.1113', '10.1067/mjd.2000.107504', '10.1016/j.artmed.2012.08.002', '10.1002/col.20070', '10.1016/s0010-4825(97)00020-6', '10.2352/CIC.2004.12.1.art00008', '10.1109/TSMC.1979.4310076', 'isic-archive.com'],
+  dermvit: ['10.48550/arXiv.2010.11929', '10.1038/sdata.2018.161', '10.2352/CIC.2004.12.1.art00008', '10.1007/978-3-319-10590-1_53', 'onnxruntime.ai', 'isic-archive.com'],
 };
 
 test('every registered app has app information with packages and cited methods', () => {
@@ -95,7 +100,7 @@ test('every registered app has app information with packages and cited methods',
     const info = information.apps[app.id];
     assert.ok(info, `${app.id} has an app-information entry`);
     assert.ok(info.packages.length >= 1, `${app.id} lists what runs under the hood`);
-    assert.ok(info.packages.some((item) => /niivue|zarrita|pyodide|rust|mp4-muxer|onnx runtime/i.test(item.name)), `${app.id} names its runtime`);
+    assert.ok(info.packages.some((item) => /niivue|zarrita|pyodide|rust|mp4-muxer|onnx runtime|canvas 2d|fast-png/i.test(item.name)), `${app.id} names its runtime`);
     const cited = info.citations.map((item) => `${item.doi ?? ''} ${item.url ?? ''} ${item.code ?? ''} ${item.title}`).join('\n');
     for (const method of REQUIRED_METHODS[app.id] ?? []) {
       assert.ok(cited.includes(method), `${app.id} must cite ${method}`);

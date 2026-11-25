@@ -5629,6 +5629,84 @@
       "contentType": "application/gzip",
       "kind": "example",
       "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0000022.jpg": {
+      "sha256": "98a87a2f694aab586dcfd9076a5f2377633cfb5c47d73478e047ba43e9f85c99",
+      "bytes": 104724,
+      "contentType": "image/jpeg",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0000002.jpg": {
+      "sha256": "3ec774807849fcb5fa1a0f03bc8cdc639041d5735b2edfe167f8a75e3b6c30a8",
+      "bytes": 62351,
+      "contentType": "image/jpeg",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0000000.jpg": {
+      "sha256": "fc5880144d267ae257a8e2bf25315ea5291c958a452de98c920c71904c71326e",
+      "bytes": 54143,
+      "contentType": "image/jpeg",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0001115.jpg": {
+      "sha256": "73a9563f4fbdeaccb2be0f7b994d9f161835f1a0ad4a930577f136c221c8afbf",
+      "bytes": 272036,
+      "contentType": "image/jpeg",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0000013.jpg": {
+      "sha256": "087a955305a31cf5c6d197c9aa8848bb23822201b656d47f89fe4020a4b78650",
+      "bytes": 38863,
+      "contentType": "image/jpeg",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0000004.jpg": {
+      "sha256": "0536889aef8dc35813d27d25bb00ffe903972417c73b0e8ed66dd7fea7c85751",
+      "bytes": 53851,
+      "contentType": "image/jpeg",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/neuropathic_heel_ulcer_diabetic.jpg": {
+      "sha256": "436afc1f3ad6f0dadb45097856c9b4feb158d64ea8d40ee342e74ddf30a9170d",
+      "bytes": 40472,
+      "contentType": "image/jpeg",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/venous_ulcer_dorsal_leg.jpg": {
+      "sha256": "4c2fd4073c0b5001e71c9dfbdd7ab34167f7ef03570ad727dbce9f623a5bcdff",
+      "bytes": 43410,
+      "contentType": "image/jpeg",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0011414_1024.jpg": {
+      "sha256": "519c6d516470221e837307532771c59644ef941adba09de8554bd3affcae4401",
+      "bytes": 145916,
+      "contentType": "image/jpeg",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0011415_1024.jpg": {
+      "sha256": "3b49df2fdd3b755a9a56ebae7f44f6a0d95f008083d279bd337df1b2d3aab77d",
+      "bytes": 196049,
+      "contentType": "image/jpeg",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/sazio/skin-mole-vit-onnx/resolve/25be9e61a71125de9502648c1f6adceb7a882637/onnx/model_quantized.onnx": {
+      "sha256": "85c5c07ec67e94d7b34c83624c36f6a729ef3c47747cf1465212c911db5badfa",
+      "bytes": 86993703,
+      "contentType": "application/octet-stream",
+      "kind": "model",
+      "license": "MIT",
+      "dependencies": []
     }
   },
   "apps": {
@@ -7054,6 +7132,30 @@
     "brainchomp": [
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0d854703518ea00290069555664208316e7f80aa/brainchomp/MA_F_15M_20_image.nii.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0d854703518ea00290069555664208316e7f80aa/brainchomp/camriMouse_sub-012_ses-1_t2w_image.nii.gz"
+    ],
+    "dermoscope": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0000022.jpg",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0000002.jpg",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0000000.jpg"
+    ],
+    "skin-chromophore": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0001115.jpg",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0000013.jpg",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0000004.jpg"
+    ],
+    "wound-planimetry": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/neuropathic_heel_ulcer_diabetic.jpg",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/venous_ulcer_dorsal_leg.jpg"
+    ],
+    "derm-compare": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0011414_1024.jpg",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0011415_1024.jpg"
+    ],
+    "dermvit": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0000000.jpg",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0000013.jpg",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0001115.jpg",
+      "https://huggingface.co/sazio/skin-mole-vit-onnx/resolve/25be9e61a71125de9502648c1f6adceb7a882637/onnx/model_quantized.onnx"
     ]
   }
 }
