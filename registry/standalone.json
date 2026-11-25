@@ -2656,7 +2656,41 @@
       "desktop": true,
       "profile": "batch",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.2.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/stitching-v0.2.20261124/stitching-0.2.20261124-linux-x64.tar.gz",
+          "sha256": "7e9d0a79eb7a42e565685ae45f4696ab2d5316d98d025e5715f7931f94488ecd",
+          "bytes": 47635333,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/stitching-v0.2.20261124/stitching-0.2.20261124-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": false,
+          "command": "tar -xzf stitching-0.2.20261124-linux-x64.tar.gz\n./stitching-0.2.20261124-linux-x64/stitching tiles/ results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.2.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/stitching-v0.2.20261124/stitching-0.2.20261124-macos-arm64.pkg",
+          "sha256": "d7b404b589d63982fe08deff93d3f7ed73f12b6963cb531b8e2be82b6277c89c",
+          "bytes": 41337709,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/stitching-v0.2.20261124/stitching-0.2.20261124-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": false,
+          "command": "sudo installer -pkg stitching-0.2.20261124-macos-arm64.pkg -target /\nstitching self-check\nstitching tiles/ results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.2.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/stitching-v0.2.20261124/stitching-0.2.20261124-windows-x64.zip",
+          "sha256": "6513301912657e10ccbed50509ee42223d2a686e31e0a7333ae90d7628bb3a74",
+          "bytes": 38402709,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/stitching-v0.2.20261124/stitching-0.2.20261124-windows-x64.zip.validation.txt",
+          "modelsIncluded": false,
+          "command": "Expand-Archive -Path .\\stitching-0.2.20261124-windows-x64.zip -DestinationPath .\n.\\stitching-0.2.20261124-windows-x64\\stitching.exe tiles/ results"
+        }
+      ],
       "containers": []
     },
     "structure-tensor": {
