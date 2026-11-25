@@ -579,6 +579,7 @@ export function workspaceConfigImpact({ before, after, lockAfter }) {
 
 const AST_META = new Set(['loc', 'range', 'start', 'end', 'tokens', 'comments', 'parent']);
 const TABLE_NAMES = new Set(['provisioners', 'unpublished']);
+const DISPATCH_IDENTIFIERS = new Set(['provisioners', 'unpublished', 'provisionTestData']);
 
 function stripAst(value, cleared) {
   if (value === null || value === undefined) return value;
@@ -601,7 +602,7 @@ function stripAst(value, cleared) {
 function referencesTable(value) {
   if (!value || typeof value !== 'object') return false;
   if (Array.isArray(value)) return value.some(referencesTable);
-  if (value.type === 'Identifier' && TABLE_NAMES.has(value.name)) return true;
+  if (value.type === 'Identifier' && DISPATCH_IDENTIFIERS.has(value.name)) return true;
   return Object.keys(value).some((key) => !AST_META.has(key) && referencesTable(value[key]));
 }
 
@@ -702,7 +703,7 @@ function isDirectProvisionDispatcher(statement) {
     }
     const parent = ancestors[ancestors.length - 1] ?? null;
     const grandParent = ancestors[ancestors.length - 2] ?? null;
-    if (node.type === 'Identifier' && node.name === 'eval') {
+    if (node.type === 'Identifier' && (node.name === 'eval' || node.name === 'provisionTestData')) {
       safe = false;
       return;
     }
@@ -1194,13 +1195,19 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
       }
       const scripts = changedRootScripts(manifest);
       if (scripts) {
-        // Every root script a ci.yml job runs is an input: one only the site jobs run
-        // selects the site build, any other every app; a script no job runs, nothing.
+        // Every root script a ci.yml job or workspace manifest runs is an input:
+        // one only the site jobs run selects the site build, a per-app CI job
+        // selects every app, and a workspace invocation selects whatever reaches
+        // that workspace; a script nothing runs selects nothing.
         for (const name of scripts) {
           const jobs = [...graph.jobScripts].filter(([, run]) => run.has(name)).map(([id]) => id);
-          if (!jobs.length) continue;
-          if (jobs.every((id) => CI_JOB_SCOPES[id] === 'site')) siteBuild(`${path}: the site CI jobs run root script ${name}`);
-          else shared(`${path}: ci.yml's ${jobs.join(', ')} ${jobs.length === 1 ? 'job runs' : 'jobs run'} root script ${name}`);
+          if (jobs.length) {
+            if (jobs.every((id) => CI_JOB_SCOPES[id] === 'site')) siteBuild(`${path}: the site CI jobs run root script ${name}`);
+            else shared(`${path}: ci.yml's ${jobs.join(', ')} ${jobs.length === 1 ? 'job runs' : 'jobs run'} root script ${name}`);
+          }
+          for (const [workspaceNode, rootNames] of graph.workspaceRootScripts ?? []) {
+            if (rootNames.has(name)) selectReaching(workspaceNode, `${path}: ${workspaceNode} runs root script ${name}`);
+          }
         }
         continue;
       }

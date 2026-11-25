@@ -2917,6 +2917,19 @@ test('scripts/lib/e2e-test-data.mjs narrows to apps whose pure provisioner entri
   ].join('\n');
   const classDispatchAfter = classDispatchBefore.replace("A: '1'", "A: '2'");
   assert.match(e2eTestDataImpact({ before: classDispatchBefore, after: classDispatchAfter }).shared, /cannot be isolated safely/);
+  // A provisioner delegating to another app via provisionTestData('denoise') falls back.
+  const delegateBefore = [
+    'export const provisioners = {',
+    "  denoise: { env: ['A'], provision: async () => ({ A: '1' }) },",
+    "  sdc: { env: ['A'], provision: async (cache) => provisionTestData('denoise', cache) },",
+    '};',
+    'export async function provisionTestData(app, cache) {',
+    '  const provisioner = provisioners[app];',
+    '  return provisioner ? provisioner.provision(cache) : {};',
+    '}',
+  ].join('\n');
+  const delegateAfter = delegateBefore.replace("A: '1'", "A: '2'");
+  assert.match(e2eTestDataImpact({ before: delegateBefore, after: delegateAfter }).shared, /cannot be isolated safely/);
 });
 
 test('per-app CI scripts resolve exact .json data paths without dragging in whole workspace directories, while preserving package directory loads', async (t) => {
@@ -3005,6 +3018,7 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
       "readFileSync(join(resolve('exes/nested/anchor.json'), '..', 'actual.json'));",
       "function anchor() { return resolve('exes/returned/anchor.json'); } readFileSync(join(anchor(), '..', 'actual.json'));",
       "import { exportedAnchor } from './exported-anchor.mjs'; readFileSync(join(exportedAnchor, '..', 'actual.json'));",
+      "readFileSync(JSON.parse(readFileSync('exes/indirect/path.json', 'utf8')));",
       "const linked = 'exes/linked/fixture.json';",
     ].join('\n'),
     'scripts/exported-anchor.mjs': "export const exportedAnchor = resolve('exes/exported/anchor.json');\n",
@@ -3030,6 +3044,8 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
     'exes/returned/actual.json': '{"returned":true}',
     'exes/exported/anchor.json': '{}',
     'exes/exported/actual.json': '{"exported":true}',
+    'exes/indirect/path.json': '"exes/indirect/actual.json"',
+    'exes/indirect/actual.json': '{"indirect":true}',
     'exes/linked/target.json': '{"real":true}',
     'packages/pkg/package.json': JSON.stringify({ name: '@nd/pkg' }),
     'packages/pkg/fixture.json/index.js': "import '../../../scripts/from-dir-json.mjs';\n",
@@ -3051,6 +3067,7 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
   assert.equal(createAppPlan(registry, ['exes/nested/actual.json'], prefixGraph).site, true, 'nested join(resolve(anchor.json), .., actual.json) keeps exes/nested edge');
   assert.equal(createAppPlan(registry, ['exes/returned/actual.json'], prefixGraph).site, true, 'returned resolve(anchor.json) keeps exes/returned edge');
   assert.equal(createAppPlan(registry, ['exes/exported/actual.json'], prefixGraph).site, true, 'exported resolve(anchor.json) keeps exes/exported edge');
+  assert.equal(createAppPlan(registry, ['exes/indirect/actual.json'], prefixGraph).site, true, 'nested readFileSync(JSON.parse(readFileSync(path.json))) keeps exes/indirect edge');
   assert.equal(createAppPlan(registry, ['exes/linked/target.json'], prefixGraph).site, true, 'symlink keeps exes/linked edge');
   assert.equal(reachableFrom(prefixGraph, CATALOG).has('scripts/from-dir-json.mjs'), true, 'directory named fixture.json keeps packages/pkg edge');
 });
@@ -3298,6 +3315,25 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       'apps/sdc/lint.mjs',
       new Map(),
       (plan) => assert.deepEqual(plan.selected.map((app) => app.id).sort(), ['niimath', 'sdc']),
+    ],
+    [
+      'editing a root script invoked by an app selects that app',
+      {
+        'package.json': JSON.stringify({ name: 'root', scripts: { 'verify-style': 'node scripts/ok.mjs' } }),
+        'apps/niimath/package.json': JSON.stringify({ name: '@nd/niimath', scripts: { build: 'pnpm -w run verify-style' } }),
+      },
+      'package.json',
+      new Map([
+        ['package.json', {
+          before: JSON.stringify({ name: 'root', scripts: { 'verify-style': 'node scripts/ok.mjs' } }),
+          after: JSON.stringify({ name: 'root', scripts: { 'verify-style': 'node scripts/fail.mjs' } }),
+        }],
+        ['pnpm-lock.yaml', {
+          before: stringify({ lockfileVersion: '9.0', importers: { '.': {} }, packages: {}, snapshots: {} }),
+          after: stringify({ lockfileVersion: '9.0', importers: { '.': {} }, packages: {}, snapshots: {} }),
+        }],
+      ]),
+      (plan) => assert.deepEqual(plan.selected.map((app) => app.id), ['niimath']),
     ],
     [
       'one explicit CI lint target does not restore unrelated apps standalone lint edges',

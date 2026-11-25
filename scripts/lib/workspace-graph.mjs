@@ -214,10 +214,18 @@ function isStandalonePathLiteral(node, ancestors, referencedIdentifiers) {
       return false;
     }
     if (ancestor.type === 'CallExpression' && Array.isArray(ancestor.arguments) && ancestor.arguments.includes(child)) {
+      const name = calleeNameOf(ancestor);
       if (!consumedByReader) {
-        const name = calleeNameOf(ancestor);
         if (FILE_READER_CALLS.has(name)) consumedByReader = true;
         else if (!PATH_JOIN_CALLS.has(name) || ancestor.arguments[ancestor.arguments.length - 1] !== child) return false;
+      } else if (
+        name !== 'parse' ||
+        ancestor.callee?.type !== 'MemberExpression' ||
+        ancestor.callee.computed ||
+        ancestor.callee.object?.type !== 'Identifier' ||
+        ancestor.callee.object.name !== 'JSON'
+      ) {
+        return false;
       }
       continue;
     }
@@ -356,15 +364,31 @@ function expandedCommandTexts(commands, rootScripts) {
 const WORKSPACE_ROOT_SCRIPT_CALL = /\bpnpm (?:-w|--workspace-root) (?:run )?([\w:-]+)/g;
 
 // Expand root package.json scripts explicitly invoked from a workspace manifest
-// via `pnpm -w [run] <script>` or `pnpm --workspace-root [run] <script>`.
+// via `pnpm -w [run] <script>` or `pnpm --workspace-root [run] <script>`,
+// returning both the expanded command texts and all invoked root script names.
 function expandedRootScriptsFromWorkspace(commands, rootScripts) {
-  const roots = [];
+  const names = new Set();
+  const texts = [];
+  const pending = [];
   for (const cmd of commands) {
     for (const [, script] of cmd.matchAll(WORKSPACE_ROOT_SCRIPT_CALL)) {
-      if (rootScripts[script]) roots.push(rootScripts[script]);
+      if (!names.has(script)) {
+        names.add(script);
+        if (rootScripts[script]) pending.push(rootScripts[script]);
+      }
     }
   }
-  return roots.length ? expandedCommandTexts(roots, rootScripts) : [];
+  while (pending.length) {
+    const command = pending.pop();
+    texts.push(command);
+    for (const [, script] of command.matchAll(ROOT_SCRIPT_CALL)) {
+      if (!names.has(script)) {
+        names.add(script);
+        if (rootScripts[script]) pending.push(rootScripts[script]);
+      }
+    }
+  }
+  return { texts, names };
 }
 
 // Omit a workspace package.json's standalone `lint` script (`node ../../scripts/lint.mjs`)
@@ -415,9 +439,14 @@ export async function loadConservativeWorkspaceGraph(root) {
     [CATALOG, rawRuns(CATALOG_JOBS)],
   ];
   const expandedByEntry = new Map(rawEntries.map(([node, raw]) => [node, expandedCommandTexts(raw, rootScripts)]));
+  const workspaceRootScriptInfo = new Map(nodes.map((node) => {
+    const allScripts = Object.values(manifests.get(node)?.scripts ?? {}).map(String);
+    return [node, expandedRootScriptsFromWorkspace(allScripts, rootScripts)];
+  }));
+  const workspaceRootScripts = new Map([...workspaceRootScriptInfo].map(([node, { names }]) => [node, names]));
   const workspaceExpandedScripts = new Map(nodes.map((node) => {
     const allScripts = Object.values(manifests.get(node)?.scripts ?? {}).map(String);
-    return [node, [...allScripts, ...expandedRootScriptsFromWorkspace(allScripts, rootScripts)]];
+    return [node, [...allScripts, ...(workspaceRootScriptInfo.get(node)?.texts ?? [])]];
   }));
   const lintTargetContext = { nodeByPackageName, nodeSet, manifests };
   const lintInvokedNodes = new Set();
@@ -449,7 +478,7 @@ export async function loadConservativeWorkspaceGraph(root) {
     for (const lintTarget of lintTargetsInCommands(expandedScripts, lintTargetContext)) {
       uses.add(lintTarget);
     }
-    for (const cmd of expandedRootScriptsFromWorkspace(Object.values(manifest?.scripts ?? {}).map(String), rootScripts)) {
+    for (const cmd of workspaceRootScriptInfo.get(node)?.texts ?? []) {
       for (const match of cmd.matchAll(ROOT_NAMED)) {
         if (match[1]) {
           uses.add(match[1]);
@@ -554,6 +583,7 @@ export async function loadConservativeWorkspaceGraph(root) {
     edges,
     rootScriptsRun,
     jobScripts,
+    workspaceRootScripts,
     moduleUsers: (path) => (moduleUsers ??= sharedModuleUsers(root, graph))(path),
     appReaders: (path) => [...appReads]
       .filter(([, targets]) => [...targets].some((target) => path === target || path.startsWith(`${target}/`)))
