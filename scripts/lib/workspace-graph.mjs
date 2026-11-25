@@ -148,7 +148,6 @@ const EXEC_ARRAY_CALLS = new Set(['run', 'execFile', 'execFileSync', 'spawn', 's
 const INDEPENDENT_LINT_SCRIPT = /^node\s+(?:\.\.\/)+scripts\/lint\.mjs(?:\s+--workspace)?$/;
 const FILTER_ARG = /(?:^|[\s;|&(])(?:--filter|-F|--dir|-C|--prefix|--cwd)(?:=|\s+)['"]?([^\s'"]+)['"]?/g;
 const CROSS_WORKSPACE_FLAG = /(?:^|[\s;|&(])(?:--filter|-F|--dir|-C|--prefix|--cwd|-r|--recursive|--workspace|-w|--workspaces)(?:=|\s|$)/;
-const SHELL_CD_TARGET = /(?:^|[\s;|&(])(?:cd|pushd)\s+['"]?([^\s'"&;|()]+)['"]?/g;
 
 function calleeNameOf(callNode) {
   const callee = callNode?.callee;
@@ -498,6 +497,10 @@ function findMatchingParen(text, openIndex) {
       quote = ch;
       continue;
     }
+    if (ch === '#' && (i === openIndex + 1 || /[\s;|&(]/.test(text[i - 1]))) {
+      while (i < text.length && text[i] !== '\n') i++;
+      continue;
+    }
     if (ch === '(') depth++;
     else if (ch === ')') {
       depth--;
@@ -647,13 +650,13 @@ function lintTargetsInCommands(commands, context) {
         cwdDirs = new Set([...cwdDirs, AMBIGUOUS_DIR]);
         activeDirs = new Set([...activeDirs, AMBIGUOUS_DIR]);
       }
-      const cdMatches = [...token.matchAll(SHELL_CD_TARGET)].map(([, dir]) => dir);
+      const cdMatches = extractCdTargets(token);
       if (cdMatches.length > 0) {
         const nextCwd = new Set(cwdDirs);
         const nextActive = new Set(activeDirs);
         for (const dir of cdMatches) {
           for (const from of cwdDirs) {
-            if (from === AMBIGUOUS_DIR || dir === '-' || dir.includes('$') || dir.includes('*')) {
+            if (from === AMBIGUOUS_DIR || isUncertainCdTarget(dir)) {
               nextCwd.add(AMBIGUOUS_DIR);
               nextActive.add(AMBIGUOUS_DIR);
             } else {
@@ -777,6 +780,36 @@ function tokenizeShellWords(segment) {
 const SHELL_BIN = /^(?:\/[\w/.-]*\/)?(?:ba|da|z|k)?sh$/;
 const PNPM_BIN = /(?:^|\/)pnpm(?:\.(?:cjs|mjs|js|cmd|exe))?$/;
 
+function isUncertainCdTarget(dir) {
+  return dir === '-' || dir === '~' || dir.startsWith('~/') || dir.includes('$') || dir.includes('*') || dir.includes('`');
+}
+
+// Extract destination arguments from `cd` / `pushd` invocations in a shell
+// segment, skipping shell options such as `-L`, `-P`, `-e`, and `--`.
+function extractCdTargets(segment) {
+  const words = tokenizeShellWords(segment);
+  if (words[0] === 'echo' || words[0] === 'printf') return [];
+  const targets = [];
+  for (let start = 0; start < words.length; start++) {
+    if (words[start] !== 'cd' && words[start] !== 'pushd') continue;
+    let idx = start + 1;
+    while (idx < words.length) {
+      if (words[idx] === '--') {
+        idx++;
+        break;
+      }
+      if (/^-[LPe@n]+$/.test(words[idx])) {
+        idx++;
+        continue;
+      }
+      break;
+    }
+    targets.push(idx < words.length ? words[idx] : '~');
+    start = idx;
+  }
+  return targets;
+}
+
 function extractCommandSubstitutions(segment) {
   const inner = [];
   let inSingle = false;
@@ -797,6 +830,10 @@ function extractCommandSubstitutions(segment) {
     }
     if (ch === "'" && !inDouble) {
       inSingle = true;
+      continue;
+    }
+    if (!inDouble && ch === '#' && (i === 0 || /[\s;|&(]/.test(segment[i - 1]))) {
+      while (i < segment.length && segment[i] !== '\n') i++;
       continue;
     }
     if (ch === '$' && segment[i + 1] === '(') {
@@ -846,11 +883,20 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
       if (dirStack.length > 0) cwdDirs = dirStack.pop();
       continue;
     }
-    const cdMatches = [...token.matchAll(SHELL_CD_TARGET)].map(([, dir]) => dir);
-    if (cdMatches.length > 0 && root) {
+    if (/\bpopd\b/.test(token)) {
+      cwdDirs = new Set([...cwdDirs, '.']);
+    }
+    const cdMatches = extractCdTargets(token);
+    if (cdMatches.length > 0) {
       const nextCwd = new Set(cwdDirs);
       for (const dir of cdMatches) {
-        if (dir === '-' || dir.includes('$') || dir.includes('*')) continue;
+        if (isUncertainCdTarget(dir)) {
+          // An uncertain `cd` (such as `cd "$GITHUB_WORKSPACE"` or `cd -`) may
+          // land at the repository root, so retain `.` conservatively.
+          nextCwd.add('.');
+          continue;
+        }
+        if (!root) continue;
         for (const from of cwdDirs) {
           if (from.includes('$')) continue;
           const rel = relative(root, resolve(root, from, dir)).split(sep).join('/').replace(/\/+$/, '') || '.';
