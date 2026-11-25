@@ -2952,6 +2952,7 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
       "const spaced = 'exes/spaced/reference.json archive';",
       "const computed = 'exes/computed/reference.json' + '.gz';",
       "const commented = 'exes/commented/reference.json' /* archive suffix */ + '.gz';",
+      "const conditional = (process.env.ALT ? 'exes/conditional/alternate.json' : 'exes/conditional/reference.json') + '.gz';",
       "const linked = 'exes/linked/fixture.json';",
     ].join('\n'),
     'scripts/app-ci.mjs': "const mod = require('../packages/pkg/fixture.json');\n",
@@ -2963,6 +2964,9 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
     'exes/computed/reference.json.gz': 'computed',
     'exes/commented/reference.json': '{}',
     'exes/commented/reference.json.gz': 'commented',
+    'exes/conditional/alternate.json': '{}',
+    'exes/conditional/reference.json': '{}',
+    'exes/conditional/reference.json.gz': 'conditional',
     'exes/linked/target.json': '{"real":true}',
     'packages/pkg/package.json': JSON.stringify({ name: '@nd/pkg' }),
     'packages/pkg/fixture.json/index.js': "import '../../../scripts/from-dir-json.mjs';\n",
@@ -2978,6 +2982,7 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
   assert.equal(createAppPlan(registry, ['exes/spaced/reference.json archive'], prefixGraph).site, true, 'quoted filename with space keeps exes/spaced edge');
   assert.equal(createAppPlan(registry, ['exes/computed/reference.json.gz'], prefixGraph).site, true, 'computed path concatenation keeps exes/computed edge');
   assert.equal(createAppPlan(registry, ['exes/commented/reference.json.gz'], prefixGraph).site, true, 'commented path concatenation keeps exes/commented edge');
+  assert.equal(createAppPlan(registry, ['exes/conditional/reference.json.gz'], prefixGraph).site, true, 'conditional inside computed path keeps exes/conditional edge');
   assert.equal(createAppPlan(registry, ['exes/linked/target.json'], prefixGraph).site, true, 'symlink keeps exes/linked edge');
   assert.equal(reachableFrom(prefixGraph, CATALOG).has('scripts/from-dir-json.mjs'), true, 'directory named fixture.json keeps packages/pkg edge');
 });
@@ -3038,6 +3043,32 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
     ['denoise', 'sdc'],
     'direct app import and build-invoked lint select their apps while standalone lint script stays exempt',
   );
+
+  // If a CI job invokes a workspace lint script via a root script (`pnpm --filter @nd/n4 lint`),
+  // that lint command is not stripped and reaches scripts/lint.mjs and scripts/quality/*.
+  const siteLintRoot = await mkdtemp(join(tmpdir(), 'neurodesk-site-lint-'));
+  t.after(() => rm(siteLintRoot, { recursive: true, force: true }));
+  const siteLintFiles = {
+    'package.json': JSON.stringify({ name: 'root', scripts: { 'build:site': 'pnpm --filter @nd/n4 lint' } }),
+    '.github/workflows/ci.yml': stringify({
+      jobs: {
+        'composite-site': { steps: [{ run: 'pnpm build:site' }] },
+        'app-tests': { steps: [{ run: 'echo tests' }] },
+        'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+        'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+      },
+    }),
+    'scripts/lint.mjs': "import './quality/helper.mjs';\n",
+    'scripts/quality/helper.mjs': 'export const h = 1;\n',
+    'apps/n4/package.json': JSON.stringify({ name: '@nd/n4', scripts: { lint: 'node ../../scripts/lint.mjs --workspace' } }),
+  };
+  for (const [path, text] of Object.entries(siteLintFiles)) {
+    await mkdir(dirname(join(siteLintRoot, path)), { recursive: true });
+    await writeFile(join(siteLintRoot, path), text);
+  }
+  const siteLintGraph = await loadConservativeWorkspaceGraph(siteLintRoot);
+  assert.equal(createAppPlan(registry, ['scripts/lint.mjs'], siteLintGraph).site, true, 'CI-invoked workspace lint selects site on runner change');
+  assert.equal(createAppPlan(registry, ['scripts/quality/helper.mjs'], siteLintGraph).site, true, 'CI-invoked workspace lint selects site on quality helper change');
 });
 
 test('changedManifests loads pnpm-workspace.yaml, pnpm-lock.yaml, and scripts/lib/e2e-test-data.mjs from git', async (t) => {

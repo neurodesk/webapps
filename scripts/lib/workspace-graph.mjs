@@ -139,11 +139,27 @@ async function isRegularUnlinkedFile(root, target) {
 }
 
 const AST_SKIP = new Set(['loc', 'range', 'start', 'end', 'tokens', 'comments', 'parent']);
+const VALUE_WRAPPERS = new Set(['ConditionalExpression', 'LogicalExpression', 'SequenceExpression', 'ArrayExpression']);
+const COMPUTED_PARENTS = new Set(['BinaryExpression', 'MemberExpression', 'TaggedTemplateExpression']);
 const INDEPENDENT_LINT_SCRIPT = /^node\s+(?:\.\.\/)+scripts\/lint\.mjs(?:\s+--workspace)?$/;
+const FILTERED_LINT_CALL = /pnpm\s+(?:--filter|-F)\s+['"]?([^\s'"]+)['"]?\s+(?:run\s+)?lint\b/g;
+
+function hasComputedPathAncestor(ancestors) {
+  for (let i = ancestors.length - 1; i >= 0; i--) {
+    const ancestor = ancestors[i];
+    if (ancestor.type === 'TemplateLiteral' && ancestor.expressions.length > 0) return true;
+  }
+  for (let i = ancestors.length - 1; i >= 0; i--) {
+    const type = ancestors[i].type;
+    if (VALUE_WRAPPERS.has(type)) continue;
+    return COMPUTED_PARENTS.has(type);
+  }
+  return false;
+}
 
 // Collect string and template literal ranges in a script so SCRIPT_REFERENCE can
 // verify whether a file path match is a complete, non-computed literal expression
-// (even across inline comments like `'reference.json' /* suffix */ + '.gz'`).
+// (including across inline comments and enclosing conditionals/logical/array wrappers).
 function collectScriptStringLiterals(text, file) {
   let ast;
   try {
@@ -152,26 +168,24 @@ function collectScriptStringLiterals(text, file) {
     return null;
   }
   const literals = [];
-  const walk = (node, parent = null, grandParent = null) => {
+  const ancestors = [];
+  const walk = (node) => {
     if (!node || typeof node !== 'object') return;
     if (Array.isArray(node)) {
-      for (const item of node) walk(item, parent, grandParent);
+      for (const item of node) walk(item);
       return;
     }
     const isStringLiteral = node.type === 'Literal' && typeof node.value === 'string';
     const isTemplate = node.type === 'TemplateLiteral';
     if ((isStringLiteral || isTemplate) && Array.isArray(node.range)) {
-      const computed =
-        (isTemplate && node.expressions.length > 0) ||
-        parent?.type === 'BinaryExpression' ||
-        parent?.type === 'MemberExpression' ||
-        parent?.type === 'TaggedTemplateExpression' ||
-        (parent?.type === 'ArrayExpression' && grandParent?.type === 'MemberExpression');
+      const computed = (isTemplate && node.expressions.length > 0) || hasComputedPathAncestor(ancestors);
       literals.push({ start: node.range[0], end: node.range[1], computed });
     }
+    ancestors.push(node);
     for (const key of Object.keys(node)) {
-      if (!AST_SKIP.has(key)) walk(node[key], node, parent);
+      if (!AST_SKIP.has(key)) walk(node[key]);
     }
+    ancestors.pop();
   };
   walk(ast);
   return literals;
@@ -209,10 +223,31 @@ function isCompleteScriptFile(text, match, literals) {
   return true;
 }
 
+// Expand CI commands through root package.json scripts without stripping
+// `pnpm --filter`, so workspace script invocations (such as `--filter @nd/n4 lint`)
+// remain visible before deciding whether standalone lint scripts can be omitted.
+function expandedCommandTexts(commands, rootScripts) {
+  const texts = [];
+  const pending = [...commands];
+  const expanded = new Set();
+  while (pending.length) {
+    const command = pending.pop();
+    texts.push(command);
+    for (const [, script] of command.matchAll(ROOT_SCRIPT_CALL)) {
+      if (!expanded.has(script)) {
+        expanded.add(script);
+        if (rootScripts[script]) pending.push(rootScripts[script]);
+      }
+    }
+  }
+  return texts;
+}
+
 // Omit a workspace package.json's standalone `lint` script (`node ../../scripts/lint.mjs`)
-// before scanning text references, as long as no other script in the manifest calls `lint`.
+// before scanning text references, as long as neither CI nor any other script calls `lint`.
 // Direct imports/references in code or build scripts remain untouched.
-function manifestScanText(text, manifest) {
+function manifestScanText(text, manifest, stripStandaloneLint) {
+  if (!stripStandaloneLint) return text;
   const lintCmd = manifest?.scripts?.lint;
   if (typeof lintCmd !== 'string' || !INDEPENDENT_LINT_SCRIPT.test(lintCmd.trim())) return text;
   if (Object.entries(manifest.scripts).some(([name, cmd]) => name !== 'lint' && /\blint\b/.test(String(cmd)))) return text;
@@ -242,6 +277,26 @@ export async function loadConservativeWorkspaceGraph(root) {
   const manifests = new Map(await Promise.all(nodes.map(async (node) => [node, await readPackageJson(join(root, node))])));
   const nodeByPackageName = new Map([...manifests].filter(([, manifest]) => manifest?.name).map(([node, manifest]) => [manifest.name, node]));
 
+  const ci = parse(await readFile(join(root, '.github/workflows/ci.yml'), 'utf8'));
+  const rootScripts = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).scripts;
+  const rawRuns = (names) => names.flatMap((name) => {
+    const steps = ci?.jobs?.[name]?.steps;
+    if (!Array.isArray(steps) || steps.length === 0) {
+      throw new WorkspaceGraphConfigurationError(`ci.yml job ${name} has no step list; update the workspace graph's CI entry points`);
+    }
+    return steps.map((step) => step.run ?? '');
+  });
+  const rawEntries = [
+    [SITE, rawRuns(siteJobNames(ci))],
+    [CATALOG, rawRuns(CATALOG_JOBS)],
+  ];
+  const expandedByEntry = new Map(rawEntries.map(([node, raw]) => [node, expandedCommandTexts(raw, rootScripts)]));
+  const ciInvokesLint = [...expandedByEntry.values()].flat().some((cmd) => /\blint\b/.test(cmd));
+  const workspaceCrossInvokesLint = [...manifests.values()].some((manifest) =>
+    Object.entries(manifest?.scripts ?? {}).some(([name, cmd]) => name !== 'lint' && /(?:--filter|-F|-r|--recursive)\b[^\n]*\blint\b/.test(String(cmd))),
+  );
+  const stripStandaloneLint = !ciInvokesLint && !workspaceCrossInvokesLint;
+
   const edges = new Map();
   const pendingRootFiles = [];
   // App id -> the paths in other app directories its code names.
@@ -263,7 +318,7 @@ export async function loadConservativeWorkspaceGraph(root) {
     for await (const file of textFiles(join(root, node))) {
       if ((await stat(file)).size > MAX_TEXT_BYTES) continue;
       const rawText = await readFile(file, 'utf8');
-      const text = file === manifestPath ? manifestScanText(rawText, manifest) : rawText;
+      const text = file === manifestPath ? manifestScanText(rawText, manifest, stripStandaloneLint) : rawText;
       for (const [, top, name] of text.matchAll(REFERENCE)) {
         if (nodeSet.has(`${top}/${name}`)) uses.add(`${top}/${name}`);
       }
@@ -285,19 +340,7 @@ export async function loadConservativeWorkspaceGraph(root) {
     edges.set(node, uses);
   }
 
-  const ci = parse(await readFile(join(root, '.github/workflows/ci.yml'), 'utf8'));
-  const rootScripts = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).scripts;
-  const runs = (names) => names.flatMap((name) => {
-    const steps = ci?.jobs?.[name]?.steps;
-    if (!Array.isArray(steps) || steps.length === 0) {
-      throw new WorkspaceGraphConfigurationError(`ci.yml job ${name} has no step list; update the workspace graph's CI entry points`);
-    }
-    return steps.map((step) => step.run ?? '');
-  }).map((run) => run.replace(/pnpm --filter \S+ (?:run )?\S+/g, ''));
-  const entries = [
-    [SITE, runs(siteJobNames(ci))],
-    [CATALOG, runs(CATALOG_JOBS)],
-  ];
+  const entries = rawEntries.map(([node, raw]) => [node, raw.map((run) => run.replace(/pnpm --filter \S+ (?:run )?\S+/g, ''))]);
   // Root tool configs (e2e.config.ts, tsconfig.agentic.json) are read implicitly
   // by the site jobs' commands, so the site build follows them too.
   const rootConfigs = (await readdir(root)).filter((name) => /^(?:[\w-]+\.config\.[cm]?[jt]s|tsconfig[\w.-]*\.json)$/.test(name) && !INDEPENDENT_CONFIG.test(name));
@@ -305,6 +348,12 @@ export async function loadConservativeWorkspaceGraph(root) {
   for (const [node, commands] of entries) {
     const { named, expanded } = namedByCommands(commands, rootScripts);
     if (node === SITE) for (const config of rootConfigs) named.add(config);
+    for (const cmd of expandedByEntry.get(node) ?? []) {
+      for (const [, filterTarget] of cmd.matchAll(FILTERED_LINT_CALL)) {
+        const workspaceNode = nodeByPackageName.get(filterTarget) ?? (nodeSet.has(filterTarget) ? filterTarget : null);
+        if (workspaceNode) named.add(workspaceNode);
+      }
+    }
     edges.set(node, named);
     rootScriptsRun.set(node, expanded);
     pendingRootFiles.push(...named);
