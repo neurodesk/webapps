@@ -2615,7 +2615,41 @@
       "desktop": true,
       "profile": "batch",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/neuromorph-v0.1.20261124/neuromorph-0.1.20261124-linux-x64.tar.gz",
+          "sha256": "b755360f1e97c548a9e828ef4e35a4bd73e8c950097d0a9da46c4372c9911af4",
+          "bytes": 43290020,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/neuromorph-v0.1.20261124/neuromorph-0.1.20261124-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": false,
+          "command": "tar -xzf neuromorph-0.1.20261124-linux-x64.tar.gz\n./neuromorph-0.1.20261124-linux-x64/neuromorph cell.swc results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/neuromorph-v0.1.20261124/neuromorph-0.1.20261124-macos-arm64.pkg",
+          "sha256": "2ffb277a37b53125467661aca6bbecc3a378fdc2876e83c73d8f004e0fa47925",
+          "bytes": 36737895,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/neuromorph-v0.1.20261124/neuromorph-0.1.20261124-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": false,
+          "command": "sudo installer -pkg neuromorph-0.1.20261124-macos-arm64.pkg -target /\nneuromorph self-check\nneuromorph cell.swc results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/neuromorph-v0.1.20261124/neuromorph-0.1.20261124-windows-x64.zip",
+          "sha256": "4cdec1dd2721e2d863beda8d7300babbbe7895ef974a04d664f6db178d833ee7",
+          "bytes": 32956475,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/neuromorph-v0.1.20261124/neuromorph-0.1.20261124-windows-x64.zip.validation.txt",
+          "modelsIncluded": false,
+          "command": "Expand-Archive -Path .\\neuromorph-0.1.20261124-windows-x64.zip -DestinationPath .\n.\\neuromorph-0.1.20261124-windows-x64\\neuromorph.exe cell.swc results"
+        }
+      ],
       "containers": []
     },
     "stitching": {
