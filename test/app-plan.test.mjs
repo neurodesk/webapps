@@ -4574,6 +4574,48 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       },
     ],
     [
+      'CI pnpm recursive run lint keeps workspace lint edge',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'pnpm recursive run lint' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/lint.mjs': 'export const lint = 1;\n',
+        'apps/n4/package.json': JSON.stringify({ name: '@nd/n4', scripts: { lint: 'node ../../scripts/lint.mjs --workspace' } }),
+      },
+      'scripts/lint.mjs',
+      new Map(),
+      (plan) => {
+        assert.equal(plan.site, true);
+        assert.deepEqual(plan.selected.map((app) => app.id), ['n4']);
+      },
+    ],
+    [
+      'CI pnpm exec npm -w @nd/n4 run lint attributes -w to npm',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'pnpm exec npm -w @nd/n4 run lint' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/lint.mjs': 'export const lint = 1;\n',
+        'apps/n4/package.json': JSON.stringify({ name: '@nd/n4', scripts: { lint: 'node ../../scripts/lint.mjs --workspace' } }),
+      },
+      'scripts/lint.mjs',
+      new Map(),
+      (plan) => {
+        assert.equal(plan.site, true);
+        assert.deepEqual(plan.selected.map((app) => app.id), ['n4']);
+      },
+    ],
+    [
       'CI step cd into workspace with pnpm run lint keeps standalone lint edge',
       {
         '.github/workflows/ci.yml': stringify({

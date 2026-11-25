@@ -146,9 +146,6 @@ const FILE_READER_CALLS = new Set(['readFile', 'readFileSync', 'require']);
 const PATH_JOIN_CALLS = new Set(['join', 'resolve']);
 const EXEC_ARRAY_CALLS = new Set(['run', 'execFile', 'execFileSync', 'spawn', 'spawnSync']);
 const INDEPENDENT_LINT_SCRIPT = /^node\s+(?:\.\.\/)+scripts\/lint\.mjs(?:\s+--workspace)?$/;
-const FILTER_ARG = /(?:^|[\s;|&(])(--filter-prod|--filter|-F|--workspace|--dir|-C|--prefix|--cwd)(?:=|\s+)['"]?([^\s'"]+)['"]?/g;
-const NPM_SHORT_WORKSPACE_ARG = /(?:^|[\s;|&(])(-w)(?:=|\s+)['"]?([^\s'"]+)['"]?/g;
-const CROSS_WORKSPACE_FLAG = /(?:^|[\s;|&(])(?:--filter-prod|--filter|-F|--dir|-C|--prefix|--cwd|-r|--recursive|--workspace|-w|-ws|--workspaces)(?:=|\s|$)/;
 
 function calleeNameOf(callNode) {
   const callee = callNode?.callee;
@@ -720,30 +717,16 @@ function lintTargetsInCommands(commands, context) {
         addAll();
         continue;
       }
-      if (!/\b(?:pnpm|npm|yarn)\b/.test(token)) continue;
-      const isPnpm = /(?:^|[\s;|&(/])pnpm(?:\.(?:cjs|mjs|js|cmd|exe))?(?:$|[\s;|&)])/.test(token);
-      // `-w` means `--workspace-root` in pnpm, but `--workspace <pkg>` in npm.
-      const hasRootFlag = /(?:^|\s)--workspace-root(?:\s|$)/.test(token) || (isPnpm && /(?:^|\s)-w(?:\s|$)/.test(token));
-      const hasCrossFlag = CROSS_WORKSPACE_FLAG.test(token);
-      // `-w` / `--workspace-root` overrides `--dir` / `-C` / `--prefix` / `--cwd`
-      // in pnpm; only explicit filter/recursive/workspace-list flags still target
-      // workspace members alongside `-w`.
-      const hasWorkspaceSelectorFlag = /(?:^|[\s;|&(])(?:--filter-prod|--filter|-F|-r|--recursive|--workspace(?:=|\s)|-ws|--workspaces)/.test(token);
-      if (!hasCrossFlag && activeDirs.size === 0) continue;
-      if (hasRootFlag && !hasWorkspaceSelectorFlag) continue;
-      const recursive = /(?:^|\s)(?:-r|--recursive)(?:\s|$)/.test(token);
-      const rawFilters = [
-        ...[...token.matchAll(FILTER_ARG)].map(([, flag, target]) => ({ flag, target })),
-        ...(!isPnpm ? [...token.matchAll(NPM_SHORT_WORKSPACE_ARG)].map(([, flag, target]) => ({ flag, target })) : []),
-      ];
-      const filters = rawFilters.filter(({ flag }) => !hasRootFlag || flag === '--filter-prod' || flag === '--filter' || flag === '-F');
-      if (!recursive && filters.length > 0) {
+      const parsed = parseLintCommandFlags(token);
+      if (!parsed.hasRunner) continue;
+      if (!parsed.hasCrossFlag && activeDirs.size === 0) continue;
+      if (parsed.hasRootFlag && !parsed.hasWorkspaceSelector) continue;
+      if (!parsed.recursive && parsed.filters.length > 0) {
         let allResolved = true;
         const resolveBases = new Set([...(baseDir !== '.' ? [baseDir] : []), ...(activeDirs.size > 0 ? activeDirs : cwdDirs)]);
-        for (const { flag, target: filter } of filters) {
-          const isFilterFlag = flag === '--filter-prod' || flag === '--filter' || flag === '-F';
+        for (const { target: filter, isFilter } of parsed.filters) {
           const isExactRootName =
-            isFilterFlag &&
+            isFilter &&
             Boolean(context.rootPackageName) &&
             filter === context.rootPackageName;
           if (isExactRootName) continue;
@@ -755,11 +738,11 @@ function lintTargetsInCommands(commands, context) {
               allResolved = false;
               continue;
             }
-            const workspaceNode = resolveWorkspaceTarget(filter, from, context);
+            const workspaceNode = filter ? resolveWorkspaceTarget(filter, from, context) : null;
             if (workspaceNode) {
               targets.add(workspaceNode);
               resolvedAny = true;
-            } else if (!hasGraphOrGlob && !isUncertainCdTarget(unwrapped)) {
+            } else if (filter && !hasGraphOrGlob && !isUncertainCdTarget(unwrapped)) {
               const rel = relative(root, resolve(root, from, unwrapped)).split(sep).join('/').replace(/\/+$/, '');
               if (!rel || rel === '.') resolvedAny = true;
               else allResolved = false;
@@ -770,7 +753,7 @@ function lintTargetsInCommands(commands, context) {
           if (!resolvedAny) allResolved = false;
         }
         if (!allResolved) addAll();
-      } else if (!hasCrossFlag && activeDirs.size > 0) {
+      } else if (!parsed.hasCrossFlag && activeDirs.size > 0) {
         let allResolved = true;
         for (const dir of activeDirs) {
           if (dir === AMBIGUOUS_DIR) {
@@ -853,6 +836,103 @@ function tokenizeShellWords(segment) {
 
 const SHELL_BIN = /^(?:\/[\w/.-]*\/)?(?:ba|da|z|k)?sh$/;
 const PNPM_BIN = /(?:^|\/)pnpm(?:\.(?:cjs|mjs|js|cmd|exe))?$/;
+const NPM_BIN = /(?:^|\/)npm(?:\.(?:cjs|mjs|js|cmd|exe))?$/;
+const YARN_BIN = /(?:^|\/)yarn(?:\.(?:cjs|mjs|js|cmd|exe))?$/;
+
+// Parse package-manager flags in one shell command segment, attributing `-w`
+// and workspace/directory selectors to the specific `pnpm`, `npm`, or `yarn`
+// invocation that receives them (so e.g. `pnpm exec npm -w @nd/n4 run lint`
+// treats `-w` as npm's `--workspace` rather than pnpm's `--workspace-root`).
+function parseLintCommandFlags(token) {
+  const words = tokenizeShellWords(token);
+  let hasRunner = false;
+  let hasRootFlag = false;
+  let hasCrossFlag = false;
+  let hasWorkspaceSelector = false;
+  let recursive = false;
+  const filters = [];
+  for (let i = 0; i < words.length; i++) {
+    const kind = PNPM_BIN.test(words[i]) ? 'pnpm' : NPM_BIN.test(words[i]) ? 'npm' : YARN_BIN.test(words[i]) ? 'yarn' : null;
+    if (!kind) continue;
+    hasRunner = true;
+    let runnerRootFlag = false;
+    const runnerDirFilters = [];
+    for (i++; i < words.length; i++) {
+      const word = words[i];
+      if (word === '--') break;
+      if (kind === 'pnpm' && (word === 'exec' || word === 'dlx')) break;
+      if (kind === 'npm' && word === 'exec') break;
+      if (kind === 'yarn' && (word === 'exec' || word === 'dlx')) break;
+      if (kind === 'pnpm' && (word === 'recursive' || word === 'multi' || word === 'm')) {
+        recursive = true;
+        hasCrossFlag = true;
+        hasWorkspaceSelector = true;
+        continue;
+      }
+      if (kind === 'yarn' && word === 'workspaces') {
+        recursive = true;
+        hasCrossFlag = true;
+        hasWorkspaceSelector = true;
+        continue;
+      }
+      if (kind === 'yarn' && word === 'workspace' && i + 1 < words.length) {
+        hasCrossFlag = true;
+        hasWorkspaceSelector = true;
+        filters.push({ target: words[++i], isFilter: true });
+        continue;
+      }
+      if (word === '--workspace-root' || (kind === 'pnpm' && word === '-w')) {
+        runnerRootFlag = true;
+        hasRootFlag = true;
+        hasCrossFlag = true;
+        continue;
+      }
+      if (word === '-r' || word === '--recursive' || word === '-ws' || word === '--workspaces') {
+        recursive = true;
+        hasCrossFlag = true;
+        hasWorkspaceSelector = true;
+        continue;
+      }
+      if (
+        word === '--filter' || word === '--filter-prod' || word === '-F' ||
+        word.startsWith('--filter=') || word.startsWith('--filter-prod=') || word.startsWith('-F=')
+      ) {
+        const target = word.includes('=') ? word.slice(word.indexOf('=') + 1) : words[++i];
+        hasCrossFlag = true;
+        hasWorkspaceSelector = true;
+        filters.push({ target: target ?? '', isFilter: true });
+        continue;
+      }
+      if (
+        word === '--workspace' || word.startsWith('--workspace=') ||
+        (kind === 'npm' && (word === '-w' || word.startsWith('-w=')))
+      ) {
+        const target = word.includes('=') ? word.slice(word.indexOf('=') + 1) : words[++i];
+        hasCrossFlag = true;
+        hasWorkspaceSelector = true;
+        filters.push({ target: target ?? '', isFilter: true });
+        continue;
+      }
+      if (
+        word === '--dir' || word === '-C' || word === '--prefix' || word === '--cwd' ||
+        word.startsWith('--dir=') || word.startsWith('-C=') || word.startsWith('--prefix=') || word.startsWith('--cwd=')
+      ) {
+        const target = word.includes('=') ? word.slice(word.indexOf('=') + 1) : words[++i];
+        hasCrossFlag = true;
+        runnerDirFilters.push({ target: target ?? '', isFilter: false });
+        continue;
+      }
+      if (word.startsWith('-')) {
+        if (PNPM_VALUE_OPTIONS.has(word) && i + 1 < words.length) i++;
+        continue;
+      }
+    }
+    // `-w` / `--workspace-root` overrides `--dir` / `-C` / `--prefix` / `--cwd`
+    // on the same pnpm invocation.
+    if (!runnerRootFlag) filters.push(...runnerDirFilters);
+  }
+  return { hasRunner, hasRootFlag, hasCrossFlag, hasWorkspaceSelector, recursive, filters };
+}
 
 function isUncertainCdTarget(dir) {
   return dir === '-' || dir === '~' || dir.startsWith('~/') || dir.includes('$') || dir.includes('*') || dir.includes('`');
