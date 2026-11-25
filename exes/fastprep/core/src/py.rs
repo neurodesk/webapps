@@ -105,16 +105,7 @@ pub fn escape(s: &str) -> String {
 }
 
 /// Python `shlex.quote`.
-pub fn quote(s: &str) -> String {
-    if !s.is_empty()
-        && s.chars()
-            .all(|c| c.is_ascii_alphanumeric() || "_@%+=:,./-".contains(c))
-    {
-        s.to_string()
-    } else {
-        format!("'{}'", s.replace('\'', "'\"'\"'"))
-    }
-}
+pub use neurodesk_pipeline_host::quote;
 
 /// Python `fnmatch.fnmatchcase`: `*`, `?`, `[seq]`, `[!seq]`.
 pub fn fnmatch(name: &str, pat: &str) -> bool {

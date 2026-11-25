@@ -1,0 +1,23 @@
+{
+  "name": "@neurodesk/pipeline-drivers",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The browser half of exes/pipeline-host: in-memory files, the JavaScript host a Rust pipeline core (fastprep, SYNcro) runs on, and drivers that run niimath, MindGrab, Greedy, SynthSR and ANTs command lines on their WebAssembly runtimes",
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    "./drivers": "./src/drivers.js",
+    "./files": "./src/files.js",
+    "./host": "./src/host.js"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "devDependencies": {
+    "@neurodesk/registration": "workspace:*",
+    "@niivue/niimath": "1.4.20261016"
+  }
+}

@@ -1777,6 +1777,9 @@ importers:
       '@neurodesk/greedy':
         specifier: workspace:*
         version: link:../../packages/greedy
+      '@neurodesk/pipeline-drivers':
+        specifier: workspace:*
+        version: link:../../packages/pipeline-drivers
       '@neurodesk/registration':
         specifier: workspace:*
         version: link:../../packages/registration
@@ -1789,12 +1792,12 @@ importers:
       '@neurodesk/synthsr':
         specifier: workspace:*
         version: link:../../packages/synthsr
-      '@neurodesk/synthstrip':
-        specifier: workspace:*
-        version: link:../../packages/synthstrip
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
+      '@niivue/niimath':
+        specifier: 1.4.20261016
+        version: 1.4.20261016
       '@niivue/niivue':
         specifier: 1.0.0-rc.26
         version: 1.0.0-rc.26
@@ -2486,6 +2489,9 @@ importers:
 
   packages/fastprep:
     dependencies:
+      '@neurodesk/pipeline-drivers':
+        specifier: workspace:*
+        version: link:../pipeline-drivers
       '@neurodesk/sdc':
         specifier: workspace:*
         version: link:../sdc
@@ -2732,6 +2738,15 @@ importers:
         specifier: 8.20.0
         version: 8.20.0
 
+  packages/pipeline-drivers:
+    devDependencies:
+      '@neurodesk/registration':
+        specifier: workspace:*
+        version: link:../registration
+      '@niivue/niimath':
+        specifier: 1.4.20261016
+        version: 1.4.20261016
+
   packages/qsmbly:
     devDependencies:
       '@neurodesk/webapp-components':
@@ -2893,41 +2908,16 @@ importers:
         version: 7.0.0
 
   packages/syncro:
-    dependencies:
-      '@brainchop/core':
-        specifier: 1.0.0
-        version: 1.0.0
-      '@neurodesk/node-drivers':
-        specifier: workspace:*
-        version: link:../node-drivers
-      nifti-reader-js:
-        specifier: 0.8.0
-        version: 0.8.0
-      onnxruntime-node:
-        specifier: 1.29.0
-        version: 1.29.0
     devDependencies:
-      '@neurodesk/brain-extraction':
-        specifier: workspace:*
-        version: link:../brain-extraction
-      '@neurodesk/greedy':
-        specifier: workspace:*
-        version: link:../greedy
       '@neurodesk/registration':
         specifier: workspace:*
         version: link:../registration
       '@neurodesk/synthsr':
         specifier: workspace:*
         version: link:../synthsr
-      '@neurodesk/synthstrip':
-        specifier: workspace:*
-        version: link:../synthstrip
       '@playwright/test':
         specifier: 1.64.0
         version: 1.64.0
-      esbuild:
-        specifier: ^0.25.0
-        version: 0.25.12
 
   packages/synthseg:
     dependencies:

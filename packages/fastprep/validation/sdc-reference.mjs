@@ -7,7 +7,7 @@ import createNiimath from '@niivue/niimath/niimath.js';
 import { loadSdc } from '@neurodesk/sdc';
 import { decodeNiftiBuffer, readNiftiFrames } from '@neurodesk/webapp-components/file-io/nifti';
 import { niimathDriver, sdcDriver } from '../src/drivers.js';
-import { Files } from '../src/files.js';
+import { Files } from '@neurodesk/pipeline-drivers/files';
 
 const cache = process.argv[2];
 if (!cache) throw new Error('usage: node sdc-reference.mjs CACHE_DIR');

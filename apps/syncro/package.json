@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "pnpm --filter @neurodesk/greedy build:wasm && node scripts/copy-runtime-assets.mjs && vite",
-    "build": "pnpm --filter @neurodesk/greedy build:wasm && node scripts/copy-runtime-assets.mjs && vite build && node ../../scripts/theme-app-dist.mjs --app syncro",
+    "dev": "pnpm --filter @neurodesk/greedy build:wasm && pnpm --filter @neurodesk/syncro build:wasm && node scripts/copy-runtime-assets.mjs && vite",
+    "build": "pnpm --filter @neurodesk/greedy build:wasm && pnpm --filter @neurodesk/syncro build:wasm && node scripts/copy-runtime-assets.mjs && vite build && node ../../scripts/theme-app-dist.mjs --app syncro",
     "preview": "vite preview",
-    "test": "pnpm --filter @neurodesk/greedy build:wasm && node --test test/*.test.js",
+    "test": "pnpm --filter @neurodesk/greedy build:wasm && pnpm --filter @neurodesk/syncro test:core && node --test test/*.test.js",
     "test:e2e": "playwright test",
     "lint": "node --check src/main.js && node --check src/worker.js"
   },
@@ -15,12 +15,13 @@
     "@brainchop/core": "1.0.0",
     "@neurodesk/brain-extraction": "workspace:*",
     "@neurodesk/greedy": "workspace:*",
+    "@neurodesk/pipeline-drivers": "workspace:*",
     "@neurodesk/registration": "workspace:*",
     "@neurodesk/runtime-support": "workspace:*",
     "@neurodesk/syncro": "workspace:*",
     "@neurodesk/synthsr": "workspace:*",
-    "@neurodesk/synthstrip": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
+    "@niivue/niimath": "1.4.20261016",
     "@niivue/niivue": "1.0.0-rc.26",
     "fflate": "^0.8.2",
     "onnxruntime-web": "1.29.0"

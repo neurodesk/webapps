@@ -1,0 +1,126 @@
+{
+  "comment": "Native tools bundled into the syncro archives (scripts/package-syncro.py), from the release checkout's locked Greedy source or exact release assets checked by SHA-256. `files` maps a path inside the asset (after extracting a zip, tar.gz or macOS pkg payload) to its place in the archive. ANTs is not bundled: the release check runs it from the pinned validation asset. A licence an asset lacks (the synthsr macOS installer ships none) is copied from `licenseSource` in this repository, which built that release.",
+  "tools": {
+    "synthsr": {
+      "version": "0.6.20261119",
+      "licenses": [
+        "LICENSE",
+        "NOTICE",
+        "THIRD_PARTY_NOTICES.md"
+      ],
+      "licenseSource": "exes/synthsr",
+      "assets": {
+        "linux-x64": {
+          "url": "https://github.com/neurodesk/webapps/releases/download/synthsr-v0.6.20261119/synthsr-0.6.20261119-linux-x64.tar.gz",
+          "sha256": "0d4288ce5287000ca09fa5f5b07ccf5ffc09e4c9339ea38d9d46cc833d646aa7",
+          "files": {
+            "synthsr": "bin/synthsr",
+            "libwebgpu_dawn.so": "bin/libwebgpu_dawn.so"
+          }
+        },
+        "windows-x64": {
+          "url": "https://github.com/neurodesk/webapps/releases/download/synthsr-v0.6.20261119/synthsr-0.6.20261119-windows-x64.zip",
+          "sha256": "3e636950977b7d44cff73503ea2a976dd976648c0f9d7584b40c0eb1ace90f5e",
+          "files": {
+            "synthsr.exe": "bin/synthsr.exe",
+            "webgpu_dawn.dll": "bin/webgpu_dawn.dll"
+          }
+        },
+        "macos-arm64": {
+          "url": "https://github.com/neurodesk/webapps/releases/download/synthsr-v0.6.20261119/synthsr-0.6.20261119-macos-arm64.pkg",
+          "sha256": "77a8f3142cb2eb97cd4635888335073f28a14d5d54494966de77b09802bc217f",
+          "files": {
+            "usr/local/bin/synthsr": "bin/synthsr",
+            "usr/local/lib/synthsr/libwebgpu_dawn.dylib": "bin/libwebgpu_dawn.dylib"
+          }
+        }
+      }
+    },
+    "greedy-rs": {
+      "source": "exes/greedy",
+      "licenses": [
+        "LICENSE",
+        "NOTICE",
+        "THIRD_PARTY_NOTICES.md"
+      ]
+    },
+    "niimath": {
+      "version": "v1.0.20261016",
+      "licenses": [
+        "LICENSE"
+      ],
+      "assets": {
+        "linux-x64": {
+          "url": "https://github.com/rordenlab/niimath/releases/download/v1.0.20261016/niimath_lnx.zip",
+          "sha256": "0e5c48c7c301490d259c3e83ea213bfac8f3b0a28acc6a2e842ce25b474cfdc0",
+          "files": {
+            "niimath": "bin/niimath"
+          }
+        },
+        "windows-x64": {
+          "url": "https://github.com/rordenlab/niimath/releases/download/v1.0.20261016/niimath_win.zip",
+          "sha256": "abe076ecf0f00490213976506f87baec204c1ed7673897ea808c0a8d42b675c8",
+          "files": {
+            "niimath.exe": "bin/niimath.exe"
+          }
+        },
+        "macos-arm64": {
+          "url": "https://github.com/rordenlab/niimath/releases/download/v1.0.20261016/niimath_macos.zip",
+          "sha256": "5851e3e8dd97480510564d1a6695367f34cb7dddeb79360cd214dd08273af56d",
+          "files": {
+            "niimath": "bin/niimath"
+          }
+        }
+      }
+    },
+    "brainchop-mindgrab": {
+      "version": "1.0.0",
+      "licenses": [
+        "LICENSE",
+        "THIRD_PARTY_NOTICES.md"
+      ],
+      "assets": {
+        "linux-x64": {
+          "url": "https://github.com/neuroneural/brainchop-core/releases/download/v1.0.0/brainchop-1.0.0-linux-x86_64.tar.gz",
+          "sha256": "ca1d830e7564c4731745299904f97bbbe411e5cb8fec2a3a512f1495b9ce3baf",
+          "files": {
+            "brainchop-1.0.0-linux-x86_64/brainchop-mindgrab": "bin/brainchop-mindgrab"
+          }
+        },
+        "windows-x64": {
+          "url": "https://github.com/neuroneural/brainchop-core/releases/download/v1.0.0/brainchop-1.0.0-windows-x86_64.zip",
+          "sha256": "50ca6976afe75f7f745742fb8621c08f3e3c0cc9aca2b5c6b3acb305e2a288fe",
+          "files": {
+            "brainchop-1.0.0-windows-x86_64/brainchop-mindgrab.exe": "bin/brainchop-mindgrab.exe"
+          }
+        },
+        "macos-arm64": {
+          "url": "https://github.com/neuroneural/brainchop-core/releases/download/v1.0.0/brainchop-1.0.0-macos-arm64.tar.gz",
+          "sha256": "34a493ff14af78ff85a356cff4d124a0eae147c593ba233e38fa96f8cd3ac151",
+          "files": {
+            "brainchop-1.0.0-macos-arm64/brainchop-mindgrab": "bin/brainchop-mindgrab"
+          }
+        }
+      }
+    }
+  },
+  "validation": {
+    "ants": {
+      "version": "2.6.5",
+      "assets": {
+        "linux-x64": {
+          "url": "https://github.com/ANTsX/ANTs/releases/download/v2.6.5/ants-2.6.5-ubuntu-22.04-X64-gcc.zip",
+          "sha256": "504b6ab94dc09fa414874fdb847f6fced03f143763501e60cd51d247344641cd"
+        },
+        "windows-x64": {
+          "url": "https://github.com/ANTsX/ANTs/releases/download/v2.6.5/ants-2.6.5-windows-2022-X64-VS2019.zip",
+          "sha256": "2cfb09f9bfd796720819054711f493abd750dd3245875caaa5d04000d3a98c3d"
+        },
+        "macos-arm64": {
+          "url": "https://github.com/ANTsX/ANTs/releases/download/v2.6.5/ants-2.6.5-macos-14-ARM64-clang.zip",
+          "sha256": "e9fe0a360076f500aeecafa5a61fb2990419fd1d92a023b4aa6c104ec09af37f"
+        }
+      }
+    }
+  }
+}

@@ -1,5 +1,10 @@
 # Real-data comparison with Neurodesk SYNcro
 
+> **Historical.** These comparisons ran the JavaScript pipeline and the Node command that the Rust core replaced
+> (`exes/syncro`); their scripts and commands work at commit 55199029d. SynthStrip is no longer part of SYNcro.
+> The current command's checks are `validation/package-check.mjs` and the tests under `exes/syncro`.
+
+
 The implementation was checked against the published Neurodesk container on **OpenNeuro ds000001/sub-01/anat/sub-01_T1w.nii.gz**, the real anatomical image used by Neurodesk's own SYNcro full test. The input has 160 × 192 × 192 voxels with approximately 1 × 1.333 × 1.333 mm spacing.
 
 These parity results cover SynthStrip and ANTs. Select both in the browser or pass `--brain-extractor synthstrip --normalization ants` to the standalone command. The browser and standalone command default to MindGrab and Greedy. The extraction benchmark compares both extractors in separate Chromium processes and samples Linux process-tree RSS every 100 ms. [Brain extraction benchmark](results/brain-extraction-benchmark.json)

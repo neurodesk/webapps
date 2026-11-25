@@ -1,0 +1,20 @@
+[package]
+name = "syncro-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[features]
+# Experimental enantiomorphic healing (`--heal`), native only.
+heal = []
+
+[dependencies]
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+neurodesk-nifti = { path = "../../nifti" }
+neurodesk-pipeline-host = { path = "../../pipeline-host" }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+sha2 = "0.10"
+
+[dev-dependencies]
+serde_json = "1"

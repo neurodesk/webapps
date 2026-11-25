@@ -34,8 +34,9 @@
     "directory": "packages/fastprep"
   },
   "dependencies": {
-    "@niivue/meica": "0.1.20261021",
+    "@neurodesk/pipeline-drivers": "workspace:*",
     "@neurodesk/sdc": "workspace:*",
-    "@neurodesk/webapp-components": "workspace:*"
+    "@neurodesk/webapp-components": "workspace:*",
+    "@niivue/meica": "0.1.20261021"
   }
 }

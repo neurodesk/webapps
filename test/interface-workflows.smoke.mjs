@@ -412,7 +412,7 @@ try {
     await expect(page.locator('#lesionDropZone')).toContainText('lesion.nii');
     await expect(page.locator('#pathologicalDropZone')).toContainText('pathological.nii');
     await page.getByRole('button',{name:'About',exact:true}).tap();
-    await expect(page.locator('#info')).toContainText('SynthStrip');
+    await expect(page.locator('#info')).toContainText('MindGrab brain extraction');
     await page.locator('#info').getByRole('button',{name:'Close',exact:true}).tap();
     await expect(page.locator('#info')).toBeHidden();
   });

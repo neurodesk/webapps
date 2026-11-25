@@ -26,7 +26,11 @@ export function readVolume(buffer, { maxVoxels = 128 * 1024 * 1024 } = {}) {
   }
   const unit = h.xyzt_units & 7;
   const scale = unit === 1 ? 1000 : unit === 3 ? 0.001 : 1;
-  const affine = h.affine.map((row, r) => row.map((v) => r < 3 ? v * scale : v));
+  // The NIfTI-2 reader exposes the srow fields even when the qform is selected.
+  const transform = h instanceof nifti.NIFTI2 && h.qform_code > 0 && h.qform_code > h.sform_code
+    ? h.getQformMat()
+    : h.affine;
+  const affine = transform.map((row, r) => row.map((v) => r < 3 ? v * scale : v));
   if (affine.flat().some((v) => !Number.isFinite(v))) throw new Error('Invalid NIfTI affine.');
   inverse3(affine);
   return { data, dims, affine };

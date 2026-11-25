@@ -334,16 +334,13 @@ test('every content-matched family names the apps that share it', async () => {
     const named = family.files.every(file => family.target.includes(family.version) || family.target.includes(file.sha256.slice(0, 8)));
     assert.ok(named, `${family.id}: the target must carry the version or a hash prefix, or a rebuild replaces bytes a cached worker still requests`);
   }
-  const bsd = manifest.families.find(({ id }) => id === 'niimath-wasm-bsd');
-  // The vendored build has no release version of its own, so its content names the path.
-  assert.ok(bsd.target.endsWith(`-${bsd.files[0].sha256.slice(0, 8)}`), 'niimath-wasm-bsd: the target must end with the binary hash prefix');
 });
 
 test('apps on the same niimath build load one binary from the shared store', async () => {
   const registry = await loadAppsRegistry();
   const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets/manifest.json'), 'utf8'));
   const families = manifest.families.filter(({ id }) => id.startsWith('niimath-wasm-'));
-  assert.equal(families.length, 4);
+  assert.equal(families.length, 3);
   for (const family of families) {
     assert.equal(family.deduplicate, true, family.id);
     assert.equal(family.match_by, 'sha256', `${family.id}: Vite names differ between apps, so the checksum identifies the build`);
