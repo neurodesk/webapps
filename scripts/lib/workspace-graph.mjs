@@ -78,16 +78,17 @@ export function siteJobNames(ci) {
 // Root files a set of CI commands names, following `pnpm <root script>` calls.
 function namedByCommands(commands, rootScripts, root = null) {
   const named = new Set();
-  const pending = [...commands];
+  const pending = commands.map((entry) => (typeof entry === 'string' ? { cmd: entry, workingDir: null } : entry));
   const expanded = new Set();
   while (pending.length) {
-    const command = pending.pop();
-    for (const match of command.matchAll(ROOT_NAMED)) if (match[1]) named.add(match[1]);
-    for (const [, rootFile] of command.matchAll(ROOT_PATH)) named.add(rootFile);
-    for (const script of extractPnpmRootScripts(command, { root })) {
+    const current = pending.pop();
+    for (const match of current.cmd.matchAll(ROOT_NAMED)) if (match[1]) named.add(match[1]);
+    for (const [, rootFile] of current.cmd.matchAll(ROOT_PATH)) named.add(rootFile);
+    const nonRootWorkingDir = Boolean(current.workingDir && current.workingDir.trim() && !/^\.\/?$/.test(current.workingDir.trim()));
+    for (const script of extractPnpmRootScripts(current.cmd, { requireRootFlag: nonRootWorkingDir, baseDir: current.workingDir ?? '.', root })) {
       if (!expanded.has(script)) {
         expanded.add(script);
-        if (rootScripts[script]) pending.push(rootScripts[script]);
+        if (rootScripts[script]) pending.push({ cmd: rootScripts[script], workingDir: null });
       }
     }
   }
@@ -709,56 +710,116 @@ function tokenizeShellWords(segment) {
   return words;
 }
 
-// Extract root package.json script names invoked via `pnpm`, allowing pnpm flags
-// (such as `--silent`, `--if-present`, `--reporter <v>`, `-w`, `--workspace-root`,
-// or `--dir <root>`) in any order before or after `run`.
+function extractCommandSubstitutions(segment) {
+  const inner = [];
+  for (let i = 0; i < segment.length; i++) {
+    if (segment[i] === '$' && segment[i + 1] === '(') {
+      let depth = 1;
+      const start = i + 2;
+      for (i = start; i < segment.length && depth > 0; i++) {
+        if (segment[i] === '(') depth++;
+        else if (segment[i] === ')') depth--;
+      }
+      if (depth === 0) inner.push(segment.slice(start, i - 1));
+      i--;
+    } else if (segment[i] === '`') {
+      const start = i + 1;
+      const end = segment.indexOf('`', start);
+      if (end > start) {
+        inner.push(segment.slice(start, end));
+        i = end;
+      }
+    }
+  }
+  return inner;
+}
+
+// Extract root package.json script names invoked via `pnpm`, allowing shell
+// wrappers (`if`, `elif`, `while`, `until`, `timeout`, `$(...)`), `cd` back to
+// the repository root, and pnpm flags (`--silent`, `--if-present`, `-w`,
+// `--workspace-root`, `--dir <root>`) in any order before or after `run`.
 function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.', root = null } = {}) {
   const scripts = [];
+  let cwdDirs = new Set([baseDir]);
+  const dirStack = [];
   for (const token of splitShellCommands(command)) {
-    if (token === '(' || token === ')') continue;
-    const words = tokenizeShellWords(token);
-    let idx = 0;
-    while (idx < words.length && (/^[A-Za-z_]\w*=/.test(words[idx]) || /^(?:then|else|do|time|env|!)$/.test(words[idx]))) idx++;
-    if (words[idx] !== 'pnpm') continue;
-    idx++;
-    let hasRootFlag = false;
-    let hasNonRootTarget = false;
-    let seenRun = false;
-    for (; idx < words.length; idx++) {
-      const word = words[idx];
-      if (word === '--') break;
-      if (word === '-w' || word === '--workspace-root') {
-        hasRootFlag = true;
-        continue;
-      }
-      if (word === '--filter' || word === '-F' || word.startsWith('--filter=') || word.startsWith('-F=')) {
-        hasNonRootTarget = true;
-        if ((word === '--filter' || word === '-F') && idx + 1 < words.length) idx++;
-        continue;
-      }
-      if (word === '--dir' || word === '-C' || word.startsWith('--dir=') || word.startsWith('-C=')) {
-        const dirVal = word.includes('=') ? word.slice(word.indexOf('=') + 1) : words[++idx];
-        if (dirVal && root && !dirVal.includes('$') && !baseDir.includes('$')) {
-          const rel = relative(root, resolve(root, baseDir, dirVal)).split(sep).join('/').replace(/\/+$/, '');
-          if (!rel || rel === '.') hasRootFlag = true;
-          else hasNonRootTarget = true;
-        } else {
-          hasNonRootTarget = true;
+    if (token === '(') {
+      dirStack.push(new Set(cwdDirs));
+      continue;
+    }
+    if (token === ')') {
+      if (dirStack.length > 0) cwdDirs = dirStack.pop();
+      continue;
+    }
+    const cdMatches = [...token.matchAll(SHELL_CD_TARGET)].map(([, dir]) => dir);
+    if (cdMatches.length > 0 && root) {
+      const nextCwd = new Set(cwdDirs);
+      for (const dir of cdMatches) {
+        if (dir === '-' || dir.includes('$') || dir.includes('*')) continue;
+        for (const from of cwdDirs) {
+          if (from.includes('$')) continue;
+          const rel = relative(root, resolve(root, from, dir)).split(sep).join('/').replace(/\/+$/, '') || '.';
+          if (!rel.startsWith('..')) nextCwd.add(rel);
         }
-        continue;
       }
-      if (word.startsWith('-')) {
-        if (PNPM_VALUE_OPTIONS.has(word) && idx + 1 < words.length) idx++;
-        continue;
+      cwdDirs = nextCwd;
+    }
+    const mayRunAtRoot = !requireRootFlag || cwdDirs.has('.');
+    for (const subst of extractCommandSubstitutions(token)) {
+      for (const from of cwdDirs) {
+        scripts.push(...extractPnpmRootScripts(subst, { requireRootFlag: !mayRunAtRoot, baseDir: from, root }));
       }
-      if (!seenRun && (word === 'run' || word === 'run-script')) {
-        seenRun = true;
-        continue;
+    }
+    const words = tokenizeShellWords(token);
+    if (words[0] === 'echo' || words[0] === 'printf') continue;
+    for (let start = 0; start < words.length; start++) {
+      if (words[start] !== 'pnpm') continue;
+      let idx = start + 1;
+      let hasRootFlag = false;
+      let hasNonRootTarget = false;
+      let seenRun = false;
+      for (; idx < words.length; idx++) {
+        const word = words[idx];
+        if (word === '--') break;
+        if (word === '-w' || word === '--workspace-root') {
+          hasRootFlag = true;
+          continue;
+        }
+        if (word === '--filter' || word === '-F' || word.startsWith('--filter=') || word.startsWith('-F=')) {
+          hasNonRootTarget = true;
+          if ((word === '--filter' || word === '-F') && idx + 1 < words.length) idx++;
+          continue;
+        }
+        if (word === '--dir' || word === '-C' || word.startsWith('--dir=') || word.startsWith('-C=')) {
+          const dirVal = word.includes('=') ? word.slice(word.indexOf('=') + 1) : words[++idx];
+          if (dirVal && root && !dirVal.includes('$')) {
+            let hitsRoot = false;
+            for (const from of cwdDirs) {
+              if (from.includes('$')) continue;
+              const rel = relative(root, resolve(root, from, dirVal)).split(sep).join('/').replace(/\/+$/, '');
+              if (!rel || rel === '.') hitsRoot = true;
+            }
+            if (hitsRoot) hasRootFlag = true;
+            else hasNonRootTarget = true;
+          } else {
+            hasNonRootTarget = true;
+          }
+          continue;
+        }
+        if (word.startsWith('-')) {
+          if (PNPM_VALUE_OPTIONS.has(word) && idx + 1 < words.length) idx++;
+          continue;
+        }
+        if (!seenRun && (word === 'run' || word === 'run-script')) {
+          seenRun = true;
+          continue;
+        }
+        if (!hasNonRootTarget && (mayRunAtRoot || hasRootFlag) && /^[A-Za-z0-9_@][\w.:/@-]*$/.test(word)) {
+          scripts.push(word);
+        }
+        break;
       }
-      if (!hasNonRootTarget && (!requireRootFlag || hasRootFlag) && /^[A-Za-z0-9_@][\w.:/@-]*$/.test(word)) {
-        scripts.push(word);
-      }
-      break;
+      start = idx;
     }
   }
   return scripts;
@@ -961,7 +1022,10 @@ export async function loadConservativeWorkspaceGraph(root) {
     edges.set(node, uses);
   }
 
-  const entries = rawEntries.map(([node, raw]) => [node, raw.map(({ cmd }) => cmd.replace(/pnpm --filter \S+ (?:run )?\S+/g, ''))]);
+  const entries = rawEntries.map(([node, raw]) => [
+    node,
+    raw.map(({ cmd, workingDir }) => ({ cmd: cmd.replace(/pnpm --filter \S+ (?:run )?\S+/g, ''), workingDir })),
+  ]);
   // Root tool configs (e2e.config.ts, tsconfig.agentic.json) are read implicitly
   // by the site jobs' commands, so the site build follows them too.
   const rootConfigs = (await readdir(root)).filter((name) => /^(?:[\w-]+\.config\.[cm]?[jt]s|tsconfig[\w.-]*\.json)$/.test(name) && !INDEPENDENT_CONFIG.test(name));
@@ -1064,11 +1128,17 @@ export async function loadConservativeWorkspaceGraph(root) {
   let moduleUsers;
   // The root package.json scripts each ci.yml job runs, directly or through
   // other scripts (`pnpm <script>`; a package's own scripts are not root ones).
-  const jobScripts = new Map(Object.entries(ci?.jobs ?? {}).map(([id, job]) => [id, namedByCommands(
-    (Array.isArray(job?.steps) ? job.steps : []).map((step) => String(step?.run ?? '').replace(/pnpm --filter \S+ (?:run )?\S+/g, '')),
-    rootScripts,
-    root,
-  ).expanded]));
+  const jobScripts = new Map(Object.entries(ci?.jobs ?? {}).map(([id, job]) => {
+    const jobWorkingDir = job?.defaults?.run?.['working-directory'] ?? workflowWorkingDir;
+    return [id, namedByCommands(
+      (Array.isArray(job?.steps) ? job.steps : []).map((step) => ({
+        cmd: String(step?.run ?? '').replace(/pnpm --filter \S+ (?:run )?\S+/g, ''),
+        workingDir: step?.['working-directory'] ?? jobWorkingDir ?? null,
+      })),
+      rootScripts,
+      root,
+    ).expanded];
+  }));
   const naming = new Map();
   const graph = {
     nodes: Object.freeze(nodes),
