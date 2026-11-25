@@ -140,6 +140,21 @@
       }
     },
     {
+      "id": "steam-7t-te6",
+      "label": "STEAM, 7 T, TE 6 ms",
+      "sequence": "STEAM",
+      "fieldT": 7.0,
+      "hzpppm": 298.039,
+      "teMs": 6,
+      "file": "basis/steam-7t-te6.basis.gz",
+      "simulation": {
+        "tm_ms": 32,
+        "points": 8192,
+        "bandwidth_Hz": 8000,
+        "linewidth_Hz": 2.0
+      }
+    },
+    {
       "id": "megapress-3t-te68-diff",
       "label": "MEGA-PRESS difference, 3 T, TE 68 ms",
       "sequence": "MEGA-PRESS",
@@ -608,6 +623,12 @@
       "filename": "basis/steam-7t-te8.basis.gz",
       "bytes": 934810,
       "sha256": "295cca5c7d7cf07611aa8834a26a2513fe592fcc21548ae32e2c1c2f4b47a408"
+    },
+    {
+      "filename": "basis/steam-7t-te6.basis.gz",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1339208f17bb790cb6aca26ffd3ca45c7f2d9ece/lcmodel/basis/steam-7t-te6.basis.gz",
+      "bytes": 934129,
+      "sha256": "432694768f8812a600bbe55b510fc0af2f3b2c6401e0a81af40ebb161596bdf1"
     },
     {
       "filename": "basis/megapress-3t-te68-diff.basis.gz",

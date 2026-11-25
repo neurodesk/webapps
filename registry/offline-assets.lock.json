@@ -2816,6 +2816,14 @@
       "license": "BSD-3-Clause",
       "dependencies": []
     },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1339208f17bb790cb6aca26ffd3ca45c7f2d9ece/lcmodel/basis/steam-7t-te6.basis.gz": {
+      "sha256": "432694768f8812a600bbe55b510fc0af2f3b2c6401e0a81af40ebb161596bdf1",
+      "bytes": 934129,
+      "contentType": "application/gzip",
+      "kind": "model",
+      "license": "BSD-3-Clause",
+      "dependencies": []
+    },
     "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/basis/megapress-3t-te68-diff.basis.gz": {
       "sha256": "e87c6c3d6aa461f7a4078d00909148b4f1d701102c6ac59548fb15dd47f06681",
       "bytes": 362382,
@@ -6314,6 +6322,7 @@
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/basis/press-1.5t-te30.basis.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/basis/slaser-7t-te28.basis.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/basis/steam-7t-te8.basis.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1339208f17bb790cb6aca26ffd3ca45c7f2d9ece/lcmodel/basis/steam-7t-te6.basis.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/basis/megapress-3t-te68-diff.basis.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/basis/press-1.5t-te35.basis.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/basis/press-1.5t-te144.basis.gz",

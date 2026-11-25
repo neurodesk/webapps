@@ -13,6 +13,9 @@
 .lcm-plot .lcm-background { stroke: var(--nd-color-text-muted); stroke-width: 1; stroke-dasharray: 4 3; }
 .lcm-plot .lcm-residual { stroke: var(--nd-color-text-muted); stroke-width: 0.8; }
 .lcm-plot .lcm-metabolite { stroke: var(--nd-color-primary); stroke-width: 1.2; }
+.lcm-plot .lcm-point-fit { fill: var(--nd-color-primary); }
+.lcm-plot .lcm-point-reference { fill: var(--nd-color-text-dim); }
+.lcm-plot .lcm-point-flag { fill: var(--nd-color-error); }
 .lcm-conc td { white-space: nowrap; }
 .lcm-conc td:first-child { white-space: normal; }
 .lcm-combination td:first-child { font-weight: 600; }

@@ -154,7 +154,7 @@ export function createTissuePanel(hooks) {
       throw new Error("The T1 image has incomplete voxel data.");
     }
     signal?.throwIfAborted();
-    return { name: images[0].name, buffer, header, dims: [header.nx, header.ny, header.nz], affine: header.affine.map((row) => Array.from(row)) };
+    return { name: images[0].name, buffer, header, dims: [header.nx, header.ny, header.nz], affine: header.affine.map((row) => Array.from(row)), sourceFiles: [...files] };
   }
 
   async function loadT1(files, signal) {
@@ -180,6 +180,7 @@ export function createTissuePanel(hooks) {
     $("t1Info").hidden = false;
     $("t1Info").textContent = `${t1.name}: ${t1.dims.join(" × ")} voxels, ${header.voxelSize.map((v) => fixed(v, 1)).join(" × ")} mm`;
     $("t1Drop").classList.add("has-files");
+    $("t1Input").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: [...(t1.sourceFiles ?? [])], restoreWithUndo: true } }));
     hooks.log.log(`T1 loaded: ${$("t1Info").textContent}; ${t1HeaderFacts(header)}`);
     refresh();
     hooks.onChange();
@@ -451,6 +452,7 @@ export function createTissuePanel(hooks) {
       hooks.progress.end("T1 loaded");
       hooks.status(dataset?.voxel ? "T1 loaded; segment it to measure the voxel." : "T1 loaded.");
     } catch (error) {
+      $("t1Input").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: [...(t1?.sourceFiles ?? [])], cancelPending: true } }));
       hooks.progress.end(error.message, { success: false });
       hooks.status(error.message, true);
     } finally {
@@ -458,10 +460,15 @@ export function createTissuePanel(hooks) {
     }
   }
 
+  $("t1Input").addEventListener("nd-replace", () => {
+    hooks.onT1Replace?.();
+  });
   $("t1Input").addEventListener("change", (event) => {
     const files = Array.from(event.target.files);
     event.target.value = "";
-    if (files.length) void importT1(files);
+    if (!files.length) return;
+    if (hooks.onT1Input?.(files)) return;
+    void importT1(files);
   });
   bindFileDrop($("t1Drop"), async (files) => importT1(await files));
   // Update as the user types: waiting for "change" would re-render the results
@@ -481,7 +488,7 @@ export function createTissuePanel(hooks) {
   $("measureButton").addEventListener("click", () => void runMeasure());
 
   /** Forget the T1 and the fractions (another subject's data). */
-  function reset() {
+  function reset({ notify = true } = {}) {
     cancel();
     hide();
     mapSelect.value = "anatomy";
@@ -496,6 +503,9 @@ export function createTissuePanel(hooks) {
     summary("");
     $("t1Info").hidden = true;
     $("t1Drop").classList.remove("has-files");
+    if (notify) {
+      $("t1Input").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: [], restoreWithUndo: true } }));
+    }
     refresh();
   }
 
@@ -515,6 +525,9 @@ export function createTissuePanel(hooks) {
     cancel,
     get hasT1() {
       return Boolean(t1);
+    },
+    get files() {
+      return [...(t1?.sourceFiles ?? [])];
     },
     get needsSegmentation() {
       return canMeasure() && !measured && !fractionsFromFields();

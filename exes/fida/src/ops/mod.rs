@@ -12,6 +12,7 @@ pub mod basic;
 pub mod coils;
 pub mod editing;
 pub mod ecc;
+pub mod fmrs;
 pub mod linalg;
 pub mod nlinfit;
 pub mod pipeline;

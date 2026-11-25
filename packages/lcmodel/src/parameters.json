@@ -13,6 +13,7 @@
       "press-1.5t-te30",
       "slaser-7t-te28",
       "steam-7t-te8",
+      "steam-7t-te6",
       "megapress-3t-te68-diff",
       "press-1.5t-te35",
       "press-1.5t-te144",
@@ -53,6 +54,17 @@
       "lcmodel"
     ],
     "default": "widened"
+  },
+  "simulateMacromolecules": {
+    "type": "boolean",
+    "description": "Include LCModel's built-in simulated macromolecule and lipid peaks for unedited fits. Set false (nsimul=0) when your custom .BASIS file already includes an empirically measured macromolecule spectrum.",
+    "default": true
+  },
+  "baselineStiffness": {
+    "type": "number",
+    "description": "LCModel spline baseline knot spacing (dkntmn, ppm). Larger values stiffen the baseline (useful at 7 T short TE and in fMRS); LCModel's default when absent.",
+    "minimum": 0.05,
+    "maximum": 10
   },
   "removeBadAverages": {
     "type": "boolean",

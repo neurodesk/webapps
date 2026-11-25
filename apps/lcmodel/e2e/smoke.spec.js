@@ -10,7 +10,7 @@ test("app boots on the workspace", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("#viewer")).toBeVisible();
   await expect(page.locator("#runButton")).toBeDisabled();
-  await expect(page.locator("#basisSelect option")).toHaveCount(25);
+  await expect(page.locator("#basisSelect option")).toHaveCount(26);
 });
 
 test("shared app bar owns information actions and theme", async ({ page }) => {

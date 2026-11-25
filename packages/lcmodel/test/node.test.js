@@ -5,7 +5,8 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PARAMETERS, downloadModels, fit, optionName, parseParameters } from "../src/node.js";
+import { PARAMETERS, downloadModels, fit, optionName, parseParameters, readInputs } from "../src/node.js";
+import { sortInputs } from "../src/inputs.js";
 
 const automation = JSON.parse(await readFile(new URL("../../../apps/lcmodel/automation.json", import.meta.url), "utf8"));
 const bin = fileURLToPath(new URL("../bin/lcmodel.js", import.meta.url));
@@ -156,4 +157,74 @@ test("RAW acquisition diagnostics retain known values when required values are m
     log: (text, level) => logs.push({ text, level }),
   }), /records no spectrometer frequency/);
   assert.deepEqual(logs, [{ text: "incomplete.raw: sequence PRESS, TE 35 ms", level: "info" }]);
+});
+
+test("CLI rejects invalid fMRS flag combinations and unsupported inputs", async (t) => {
+  const directory = await scratch(t);
+  const raw = join(native, "data.raw");
+  const eventsFile = join(directory, "events.tsv");
+  await writeFile(eventsFile, "onset\tduration\ttrial_type\n0\t16\tRest\n16\t16\tStim\n");
+
+  const withoutMode = run(raw, join(directory, "out1"), "--events", eventsFile);
+  assert.equal(withoutMode.status, 1);
+  assert.match(withoutMode.stderr, /require --fmrs-mode/);
+
+  const badMode = run(raw, join(directory, "out2"), "--fmrs-mode", "bogus");
+  assert.equal(badMode.status, 1);
+  assert.match(badMode.stderr, /--fmrs-mode must be one of/);
+
+  const badWin = run(raw, join(directory, "out3"), "--fmrs-mode", "sliding", "--fmrs-window", "0");
+  assert.equal(badWin.status, 1);
+  assert.match(badWin.stderr, /positive integer/);
+
+  const withFractions = run(
+    raw, join(directory, "out4"), "--fmrs-mode", "sliding",
+    "--fraction-gm", "0.4", "--fraction-wm", "0.5", "--fraction-csf", "0.1",
+  );
+  assert.equal(withFractions.status, 1);
+  assert.match(withFractions.stderr, /Tissue correction.*not supported with --fmrs-mode/);
+
+  const onRaw = run(raw, join(directory, "out5"), "--fmrs-mode", "sliding", "--frequency-mhz", "127.7", "--dwell-time-ms", "0.5");
+  assert.equal(onRaw.status, 1);
+  assert.match(onRaw.stderr, /multi-transient/);
+});
+
+test("readInputs preserves parent folder paths when individual CLI file arguments span different folders", async (t) => {
+  const directory = await scratch(t);
+  const sub1 = join(directory, "sub-01");
+  const sub2 = join(directory, "sub-02");
+  await mkdir(sub1);
+  await mkdir(sub2);
+  const f1 = join(sub1, "svs_steam.dat");
+  const f2 = join(sub2, "svs_steam_onlyrfoff.dat");
+  const f3 = join(sub1, "svs_steam_w.dat");
+  await writeFile(f1, "metab");
+  await writeFile(f2, "water-other-subject");
+  await writeFile(f3, "water-same-subject");
+
+  // Individual files from different folders preserve relative paths from their common ancestor
+  const cross = await readInputs([f1, f2]);
+  assert.deepEqual(cross.map((f) => f.name), ["sub-01/svs_steam.dat", "sub-02/svs_steam_onlyrfoff.dat"]);
+
+  // Individual files from the same folder keep plain basenames
+  const same = await readInputs([f1, f3]);
+  assert.deepEqual(same.map((f) => f.name), ["svs_steam.dat", "svs_steam_w.dat"]);
+
+  // Pass 9 High-1: Mixed directory + loose file arguments share one common-ancestor root
+  const sub1Sess = join(sub1, "session");
+  const topSess = join(directory, "session");
+  await mkdir(sub1Sess);
+  await mkdir(topSess);
+  const sdat = join(sub1Sess, "scan.sdat");
+  const spar = join(topSess, "scan.spar");
+  await writeFile(sdat, "sdat");
+  await writeFile(spar, "spar");
+  const mixed = await readInputs([sub1Sess, spar]);
+  assert.deepEqual(mixed.map((f) => f.name), ["sub-01/session/scan.sdat", "session/scan.spar"]);
+
+  // Pass 9 Medium-4: Parent folder names never misclassify a .RAW file as water
+  const rawHead = " $NMID\n $END\n 1.0 0.0\n";
+  const sorted = sortInputs([{ name: "scan-water-suppressed/data.raw", head: rawHead }]);
+  assert.equal(sorted.raw.length, 1);
+  assert.equal(sorted.water.length, 0);
 });
