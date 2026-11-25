@@ -28,6 +28,7 @@
     "lint": "node --check src/orient.js && node --check src/pipeline.js && node --check src/brainchomp-worker.js && node --check src/node.js && node --check bin/brainchomp.js && node --check validation/cli-check.mjs"
   },
   "dependencies": {
+    "@neurodesk/node-drivers": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*"
   },
   "repository": {

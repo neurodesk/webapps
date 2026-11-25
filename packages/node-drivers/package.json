@@ -14,7 +14,8 @@
   "exports": {
     "./niimath": "./src/niimath.js",
     "./mindgrab": "./src/mindgrab.js",
-    "./dcm2niix": "./src/dcm2niix.js"
+    "./dcm2niix": "./src/dcm2niix.js",
+    "./output-dir": "./src/output-dir.js"
   },
   "files": [
     "bin",

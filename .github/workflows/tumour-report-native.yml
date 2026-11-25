@@ -19,6 +19,9 @@ on:
       - 'apps/tumour-report/**'
       - 'packages/greedy/**'
       - 'packages/synthsr/**'
+  # A pull request that changes only paths in the gate's shared_paths starts native.yml instead,
+  # which calls this workflow when the change reaches it; its nightly run is this workflow's sweep.
+  workflow_call:
   workflow_dispatch:
     inputs:
       sign_release:
@@ -45,6 +48,11 @@ jobs:
       pull-requests: read
     with:
       workflow: tumour-report-native
+      shared_paths: |
+        packages/components/package.json
+        packages/components/src/file-io/**
+        packages/node-drivers/package.json
+        packages/node-drivers/src/output-dir.js
 
   portable:
     needs: gate

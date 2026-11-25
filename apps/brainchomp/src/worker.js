@@ -1,9 +1,9 @@
-import { readVolume } from '@neurodesk/synthsr';
 import {
   applyBrainMask,
   BRAINCHOMP_LIB_REVISION,
   DEFAULT_OPENING_RADIUS,
   prepareModelInput,
+  readNifti3dAsync,
 } from '@neurodesk/brainchomp';
 import { chooseBackend } from '@neurodesk/runtime-support/mindgrab/backend';
 import * as brainchomp from '../vendor/brainchomp/index.js';
@@ -54,7 +54,7 @@ self.onmessage = async ({ data: job }) => {
   const onLog = (message) => self.postMessage({ type: 'log', message: String(message) });
   try {
     onProgress(0.05, 'Reading rodent MRI volume…');
-    const volume = readVolume(await job.file.arrayBuffer());
+    const volume = await readNifti3dAsync(await job.file.arrayBuffer());
     const modelInput = prepareModelInput(volume);
     const backend = await resolveBackend(job.backend ?? 'auto', onLog);
     const opening = Number.isInteger(job.opening) ? job.opening : DEFAULT_OPENING_RADIUS;
@@ -69,7 +69,7 @@ self.onmessage = async ({ data: job }) => {
       onLog,
     });
     onProgress(0.9, 'Writing brain image and mask on input grid…');
-    const maskVolume = readVolume(result.mask);
+    const maskVolume = await readNifti3dAsync(result.mask);
     const { brain, mask, maskVoxels } = applyBrainMask(volume, maskVolume);
     onProgress(1, 'Brain image and mask ready');
     self.postMessage({

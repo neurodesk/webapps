@@ -47,6 +47,8 @@ jobs:
       shared_paths: |
         packages/components/package.json
         packages/components/src/file-io/**
+        packages/node-drivers/package.json
+        packages/node-drivers/src/output-dir.js
 
   portable:
     needs: gate

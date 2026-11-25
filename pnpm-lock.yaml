@@ -2119,6 +2119,9 @@ importers:
 
   packages/brainchomp:
     dependencies:
+      '@neurodesk/node-drivers':
+        specifier: workspace:*
+        version: link:../node-drivers
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../components
@@ -2788,9 +2791,15 @@ importers:
       '@neurodesk/greedy':
         specifier: workspace:*
         version: link:../greedy
+      '@neurodesk/node-drivers':
+        specifier: workspace:*
+        version: link:../node-drivers
       '@neurodesk/synthsr':
         specifier: workspace:*
         version: link:../synthsr
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
       onnxruntime-node:
         specifier: 1.29.0
         version: 1.29.0

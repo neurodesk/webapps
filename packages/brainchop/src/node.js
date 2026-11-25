@@ -1,14 +1,14 @@
 // Node.js execution driver for @neurodesk/brainchop.
 // Runs @brainchop/core's threaded CPU WebAssembly modules via @neurodesk/node-drivers/mindgrab,
 // sharing the exact model registry and output conventions with apps/brainchop.
-import { randomUUID } from 'node:crypto';
-import { access, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { access, readFile, stat } from 'node:fs/promises';
 import { availableParallelism } from 'node:os';
-import { basename, join, resolve } from 'node:path';
+import { basename, resolve } from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { gunzipSync } from 'node:zlib';
 import { loadMindgrabCpu } from '@neurodesk/node-drivers/mindgrab';
-import { parseNiftiVolume } from '@neurodesk/webapp-components/file-io/nifti';
+import { claimOutputDir } from '@neurodesk/node-drivers/output-dir';
+import { readNiftiVolume, writeNiftiVolume } from '@neurodesk/webapp-components/file-io/nifti-volume';
 import packageJson from '../package.json' with { type: 'json' };
 import { MODELS, TISSUE_STAGES, findModel, outputNames, stemFor, validateOptions } from './models.js';
 
@@ -16,6 +16,7 @@ export { MODELS, TISSUE_STAGES, findModel, outputNames, stemFor, validateOptions
 
 const CORE_PACKAGE_URL = import.meta.resolve('@brainchop/core/package.json');
 const CORE_WASM_MODELS = Object.freeze(['mindmap', 'mindmap-fast', 'mindsnap']);
+const MAX_DECOMPRESSED_NIFTI_BYTES = 512 * 1024 * 1024;
 
 let driverPromise = null;
 function getDriver() {
@@ -23,14 +24,14 @@ function getDriver() {
   return driverPromise;
 }
 
-async function writeFileAtomic(path, data) {
-  const partial = `${path}.${randomUUID()}.partial`;
-  try {
-    await writeFile(partial, data, { flag: 'wx' });
-    await rename(partial, path);
-  } finally {
-    await rm(partial, { force: true });
+const boundedGunzip = (bytes, { maxOutputLength = MAX_DECOMPRESSED_NIFTI_BYTES } = {}) =>
+  gunzipSync(bytes, { maxOutputLength });
+
+function requireNonEmptyString(value, label) {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(`${label} must be a non-empty string`);
   }
+  return value;
 }
 
 function probeCoreWasmHelp(moduleUrl) {
@@ -68,7 +69,11 @@ function probeCoreWasmHelp(moduleUrl) {
   });
 }
 
-export async function downloadModels({ cacheDir = '.' } = {}) {
+export async function downloadModels({ cacheDir = '.', offline = false } = {}) {
+  requireNonEmptyString(cacheDir, 'cacheDir');
+  if (typeof offline !== 'boolean') {
+    throw new Error('offline must be a boolean');
+  }
   return {
     directory: resolve(cacheDir),
     count: 0,
@@ -77,7 +82,14 @@ export async function downloadModels({ cacheDir = '.' } = {}) {
   };
 }
 
-export async function checkInstallation() {
+export async function checkInstallation({ cacheDir } = {}) {
+  if (cacheDir !== undefined) {
+    const dir = requireNonEmptyString(cacheDir, 'cacheDir');
+    const info = await stat(dir).catch(() => null);
+    if (!info || !info.isDirectory()) {
+      throw new Error(`Model directory does not exist or is not a directory: ${dir}`);
+    }
+  }
   const driver = await getDriver();
   for (const name of CORE_WASM_MODELS) {
     await access(new URL(`dist/brainchop-${name}.js`, CORE_PACKAGE_URL));
@@ -94,15 +106,15 @@ export async function checkInstallation() {
     coreVersion: driver.version,
     models: MODELS.map((m) => m.id),
     modelsEmbedded: true,
+    ...(cacheDir !== undefined ? { cacheDir: resolve(cacheDir) } : {}),
   };
 }
 
-function summarizeLabelVolume(buffer) {
-  const volume = parseNiftiVolume(buffer, { decompress: gunzipSync });
+function summarizeLabelVolume(volume) {
   const labels = new Set();
   let nonZeroVoxels = 0;
-  for (let i = 0; i < volume.imageData.length; i += 1) {
-    const value = Math.round(volume.imageData[i]);
+  for (let i = 0; i < volume.data.length; i += 1) {
+    const value = Math.round(volume.data[i]);
     if (value !== 0) {
       nonZeroVoxels += 1;
       labels.add(value);
@@ -115,13 +127,12 @@ function summarizeLabelVolume(buffer) {
   };
 }
 
-function summarizeFractionVolume(buffer) {
-  const volume = parseNiftiVolume(buffer, { decompress: gunzipSync, OutputCtor: Float32Array });
+function summarizeFractionVolume(volume) {
   let nonZeroVoxels = 0;
   let sum = 0;
   let max = -Infinity;
-  for (let i = 0; i < volume.imageData.length; i += 1) {
-    const value = volume.imageData[i];
+  for (let i = 0; i < volume.data.length; i += 1) {
+    const value = volume.data[i];
     if (value > 0) {
       nonZeroVoxels += 1;
       sum += value;
@@ -134,6 +145,55 @@ function summarizeFractionVolume(buffer) {
     meanNonZero: nonZeroVoxels ? Number((sum / nonZeroVoxels).toFixed(4)) : 0,
     max: Number((Number.isFinite(max) ? max : 0).toFixed(4)),
   };
+}
+
+/**
+ * Re-serialize a native-grid Brainchop output preserving both qform and sform
+ * transforms (and NIfTI-2 when the input was NIfTI-2) verbatim.
+ */
+function preserveNativeGeometry(outputBuffer, inputVol, { labels = false, description = '' }) {
+  const outVol = readNiftiVolume(outputBuffer, {
+    decompress: boundedGunzip,
+    maxDecompressedBytes: MAX_DECOMPRESSED_NIFTI_BYTES,
+  });
+  const sameShape = outVol.dims[0] === inputVol.dims[0]
+    && outVol.dims[1] === inputVol.dims[1]
+    && outVol.dims[2] === inputVol.dims[2];
+  if (!sameShape) {
+    return { buffer: outputBuffer, volume: outVol };
+  }
+  let voxelData = outVol.data;
+  if (labels) {
+    let maxVal = 0;
+    for (let i = 0; i < outVol.data.length; i += 1) {
+      const v = Math.round(outVol.data[i]);
+      if (v > maxVal) maxVal = v;
+    }
+    if (maxVal <= 255) {
+      const u8 = new Uint8Array(outVol.data.length);
+      for (let i = 0; i < outVol.data.length; i += 1) {
+        u8[i] = Math.max(0, Math.min(255, Math.round(outVol.data[i])));
+      }
+      voxelData = u8;
+    } else {
+      const i16 = new Int16Array(outVol.data.length);
+      for (let i = 0; i < outVol.data.length; i += 1) {
+        i16[i] = Math.round(outVol.data[i]);
+      }
+      voxelData = i16;
+    }
+  }
+  const rewritten = writeNiftiVolume(
+    {
+      data: voxelData,
+      dims: inputVol.dims,
+      affine: inputVol.affine,
+      transforms: inputVol.transforms,
+      version: inputVol.version,
+    },
+    description,
+  );
+  return { buffer: rewritten, volume: outVol };
 }
 
 export async function segment({
@@ -150,77 +210,143 @@ export async function segment({
   onProgress = () => {},
   onLog = () => {},
 } = {}) {
+  // Validate all inputs and options BEFORE touching the output directory or WASM runtime.
+  requireNonEmptyString(input, 'input');
+  requireNonEmptyString(output, 'output');
+  requireNonEmptyString(model, 'model');
   const opts = validateOptions({ model, saveConform, noTurbo, legacyCleanup });
   if (!Number.isSafeInteger(threads) || threads < 1 || threads > 64) {
     throw new Error('threads must be an integer between 1 and 64');
   }
-  if (!input || !output) {
-    throw new Error('Provide an input T1-weighted MRI NIfTI image and an output directory');
+  if (typeof overwrite !== 'boolean') {
+    throw new Error('overwrite must be a boolean');
   }
-  if (!overwrite) {
-    const existing = await readdir(output).catch((error) => {
-      if (error.code === 'ENOENT') return [];
-      throw error;
-    });
-    if (existing.length) {
-      throw new Error(`Output directory is not empty: ${output} (pass --overwrite to allow)`);
-    }
+  if (timeoutMs !== undefined && (!Number.isFinite(timeoutMs) || timeoutMs <= 0)) {
+    throw new Error('timeoutMs must be a positive number');
   }
 
   signal?.throwIfAborted();
-  onProgress('Reading input T1-weighted MRI volume');
-  const rawBytes = await readFile(input);
-  // Validate input NIfTI before allocating the CPU WebAssembly heap.
-  const inputVol = parseNiftiVolume(rawBytes, { decompress: gunzipSync });
-  if (inputVol.header.dims.slice(4, inputVol.header.dims[0] + 1).some((d) => d > 1)) {
-    throw new Error('Brainchop requires a single 3D NIfTI volume (got 4D or higher).');
-  }
+  const claim = await claimOutputDir(output, { overwrite, tool: 'brainchop' });
+  try {
+    signal?.throwIfAborted();
+    onProgress('Reading input T1-weighted MRI volume');
+    const rawBytes = await readFile(input);
+    // Validate gzip CRC, NIfTI-1/2 header, NiBabel affine, and float32 voxel finiteness.
+    const inputVol = readNiftiVolume(rawBytes, {
+      decompress: boundedGunzip,
+      maxDecompressedBytes: MAX_DECOMPRESSED_NIFTI_BYTES,
+    });
+    // Hand @brainchop/core a clean NIfTI-1 with the exact NiBabel-selected affine
+    // so NIfTI-2, qform-only, conflicting qform/sform, and LAS-fallback inputs are
+    // interpreted consistently.
+    const normalizedInput = new Uint8Array(
+      writeNiftiVolume(
+        { data: inputVol.data, dims: inputVol.dims, affine: inputVol.affine, version: 1 },
+        'Brainchop input',
+      ),
+    );
 
-  const driver = await getDriver();
-  const driverOptions = {
-    model: opts.model.coreModel,
-    backend: 'cpu',
-    saveConform: opts.saveConform,
-    noTurbo: opts.noTurbo,
-    legacyCleanup: opts.legacyCleanup,
-    gzipOutput: false,
-    threads,
-    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
-    signal,
-    onLog,
-  };
+    const driver = await getDriver();
+    const driverOptions = {
+      model: opts.model.coreModel,
+      backend: 'cpu',
+      saveConform: opts.saveConform,
+      noTurbo: opts.noTurbo,
+      legacyCleanup: opts.legacyCleanup,
+      gzipOutput: false,
+      threads,
+      ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+      signal,
+      onLog,
+    };
 
-  const names = outputNames(basename(input), opts.model.id);
-  await mkdir(output, { recursive: true });
+    const names = outputNames(basename(input), opts.model.id);
 
-  if (opts.model.kind === 'tissues') {
-    onProgress(`Computing GM/WM/CSF tissue fractions with ${opts.model.label} (CPU, ${threads} threads)`);
-    const result = await driver.segmentTissues(rawBytes, driverOptions);
-    const files = [];
-    const maps = {};
-    let dims = null;
-    for (const stage of TISSUE_STAGES) {
-      const buf = result.tissues[stage.id];
-      const fileName = names[stage.id];
-      await writeFileAtomic(join(output, fileName), Buffer.from(buf));
-      files.push(fileName);
-      const summary = summarizeFractionVolume(buf);
-      dims ??= summary.dims;
-      maps[stage.id] = {
-        file: fileName,
-        nonZeroVoxels: summary.nonZeroVoxels,
-        meanNonZero: summary.meanNonZero,
-        max: summary.max,
+    if (opts.model.kind === 'tissues') {
+      onProgress(`Computing GM/WM/CSF tissue fractions with ${opts.model.label} (CPU, ${threads} threads)`);
+      const result = await driver.segmentTissues(normalizedInput, driverOptions);
+      const artifacts = [];
+      const maps = {};
+      let dims = null;
+      for (const stage of TISSUE_STAGES) {
+        const rawOut = result.tissues[stage.id];
+        const fileName = names[stage.id];
+        const prepared = opts.saveConform
+          ? {
+              buffer: rawOut,
+              volume: readNiftiVolume(rawOut, {
+                decompress: boundedGunzip,
+                maxDecompressedBytes: MAX_DECOMPRESSED_NIFTI_BYTES,
+              }),
+            }
+          : preserveNativeGeometry(rawOut, inputVol, {
+              labels: false,
+              description: `Brainchop ${stage.id} fraction`,
+            });
+        artifacts.push({ name: fileName, data: Buffer.from(prepared.buffer) });
+        const summary = summarizeFractionVolume(prepared.volume);
+        dims ??= summary.dims;
+        maps[stage.id] = {
+          file: fileName,
+          nonZeroVoxels: summary.nonZeroVoxels,
+          meanNonZero: summary.meanNonZero,
+          max: summary.max,
+        };
+      }
+      const writtenFiles = await claim.publish(artifacts);
+      return {
+        input: basename(input),
+        output: claim.dir,
+        model: opts.model.id,
+        kind: 'tissues',
+        files: writtenFiles,
+        dims,
+        maps,
+        elapsedMs: Math.round(result.elapsedMs),
+        provenance: {
+          appVersion: packageJson.version,
+          corePackage: driver.packageName,
+          coreVersion: driver.version,
+          coreModel: opts.model.coreModel,
+          backend: result.backend,
+          threads,
+          saveConform: opts.saveConform,
+          noTurbo: opts.noTurbo,
+          modelsEmbedded: true,
+        },
       };
     }
+
+    onProgress(`Running ${opts.model.label} (CPU, ${threads} threads)`);
+    const result = await driver.segment(normalizedInput, driverOptions);
+    const fileName = names.segmentation;
+    const prepared = opts.saveConform
+      ? {
+          buffer: result.image,
+          volume: readNiftiVolume(result.image, {
+            decompress: boundedGunzip,
+            maxDecompressedBytes: MAX_DECOMPRESSED_NIFTI_BYTES,
+          }),
+        }
+      : preserveNativeGeometry(result.image, inputVol, {
+          labels: true,
+          description: `Brainchop ${opts.model.id} segmentation`,
+        });
+
+    const writtenFiles = await claim.publish([
+      { name: fileName, data: Buffer.from(prepared.buffer) },
+    ]);
+    const summary = summarizeLabelVolume(prepared.volume);
+
     return {
       input: basename(input),
-      output: resolve(output),
+      output: claim.dir,
       model: opts.model.id,
-      kind: 'tissues',
-      files,
-      dims,
-      maps,
+      kind: 'labels',
+      files: writtenFiles,
+      dims: summary.dims,
+      nonZeroVoxels: summary.nonZeroVoxels,
+      uniqueLabels: summary.uniqueLabels,
       elapsedMs: Math.round(result.elapsedMs),
       provenance: {
         appVersion: packageJson.version,
@@ -231,38 +357,11 @@ export async function segment({
         threads,
         saveConform: opts.saveConform,
         noTurbo: opts.noTurbo,
+        legacyCleanup: opts.legacyCleanup,
         modelsEmbedded: true,
       },
     };
+  } finally {
+    await claim.release();
   }
-
-  onProgress(`Running ${opts.model.label} (CPU, ${threads} threads)`);
-  const result = await driver.segment(rawBytes, driverOptions);
-  const fileName = names.segmentation;
-  await writeFileAtomic(join(output, fileName), Buffer.from(result.image));
-  const summary = summarizeLabelVolume(result.image);
-
-  return {
-    input: basename(input),
-    output: resolve(output),
-    model: opts.model.id,
-    kind: 'labels',
-    files: [fileName],
-    dims: summary.dims,
-    nonZeroVoxels: summary.nonZeroVoxels,
-    uniqueLabels: summary.uniqueLabels,
-    elapsedMs: Math.round(result.elapsedMs),
-    provenance: {
-      appVersion: packageJson.version,
-      corePackage: driver.packageName,
-      coreVersion: driver.version,
-      coreModel: opts.model.coreModel,
-      backend: result.backend,
-      threads,
-      saveConform: opts.saveConform,
-      noTurbo: opts.noTurbo,
-      legacyCleanup: opts.legacyCleanup,
-      modelsEmbedded: true,
-    },
-  };
 }

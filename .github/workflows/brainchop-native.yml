@@ -50,6 +50,7 @@ jobs:
         packages/node-drivers/package.json
         packages/node-drivers/src/mindgrab-worker.js
         packages/node-drivers/src/mindgrab.js
+        packages/node-drivers/src/output-dir.js
 
   portable:
     needs: gate

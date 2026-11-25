@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
 
-process.env.ORT_DISABLE_TELEMETRY ??= '1';
+// Always disable ONNX Runtime telemetry so an inherited ORT_DISABLE_TELEMETRY=0
+// cannot write device IDs under $HOME.
+process.env.ORT_DISABLE_TELEMETRY = '1';
 
 const HELP = `Usage: tumour-report INPUT.nii[.gz] OUTPUT_DIR [options]
        tumour-report download-models [--cache-dir PATH] [--offline]
-       tumour-report self-check
+       tumour-report self-check [--cache-dir PATH]
 
 Segment contrast-enhancing brain tumours on a native-space T1c MRI with
 Raidionics v1.3 and compute native morphometry and MNI ICBM152 RADS reports.
@@ -32,6 +34,34 @@ Options:
   -h, --help
       Show this help`;
 
+function assertAllowedOptions(values, allowed, commandName) {
+  const allowedSet = new Set(allowed);
+  for (const [key, val] of Object.entries(values)) {
+    if (val !== undefined && !allowedSet.has(key)) {
+      throw new Error(`Option --${key} is not valid for ${commandName}.`);
+    }
+  }
+}
+
+function requireNonEmptyOption(value, flag) {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(`--${flag} requires a non-empty value.`);
+  }
+  return value;
+}
+
+function parseStrictInt(raw, flag, min, max) {
+  const trimmed = requireNonEmptyOption(raw, flag).trim();
+  if (!/^-?\d+$/.test(trimmed)) {
+    throw new Error(`--${flag} must be an integer between ${min} and ${max}, got '${raw}'.`);
+  }
+  const num = Number(trimmed);
+  if (!Number.isSafeInteger(num) || num < min || num > max) {
+    throw new Error(`--${flag} must be an integer between ${min} and ${max}, got '${raw}'.`);
+  }
+  return num;
+}
+
 try {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
@@ -54,36 +84,81 @@ try {
     process.exit(0);
   }
 
-  const { analyze, checkInstallation, downloadModels } = await import('../src/node.js');
-  const common = {
-    ...(values['cache-dir'] ? { cacheDir: values['cache-dir'] } : {}),
-    ...(values.offline ? { offline: true } : {}),
-    onProgress: (text) => console.error(text),
-  };
-
+  const [command] = positionals;
   let report;
-  if (positionals.length === 1 && positionals[0] === 'self-check') {
-    report = await checkInstallation();
-  } else if (positionals.length === 1 && positionals[0] === 'download-models') {
-    report = await downloadModels(common);
+
+  if (command === 'self-check') {
+    if (positionals.length !== 1) {
+      throw new Error('self-check does not accept extra positional arguments.');
+    }
+    assertAllowedOptions(values, ['cache-dir'], 'self-check');
+    const cacheDir = values['cache-dir'] !== undefined
+      ? requireNonEmptyOption(values['cache-dir'], 'cache-dir')
+      : undefined;
+    const { checkInstallation } = await import('../src/node.js');
+    report = await checkInstallation({ cacheDir });
+  } else if (command === 'download-models') {
+    if (positionals.length !== 1) {
+      throw new Error('download-models does not accept extra positional arguments.');
+    }
+    assertAllowedOptions(values, ['cache-dir', 'offline'], 'download-models');
+    const cacheDir = values['cache-dir'] !== undefined
+      ? requireNonEmptyOption(values['cache-dir'], 'cache-dir')
+      : undefined;
+    const { downloadModels } = await import('../src/node.js');
+    report = await downloadModels({
+      ...(cacheDir !== undefined ? { cacheDir } : {}),
+      ...(values.offline ? { offline: true } : {}),
+      onProgress: (text) => console.error(text),
+    });
   } else {
     if (positionals.length !== 2) {
       throw new Error('Provide an input T1c NIfTI image and an output directory. Use --help for options.');
     }
-    const parameters = {
-      ...(values['tumour-type'] !== undefined ? { tumourType: values['tumour-type'] } : {}),
-      ...(values['skull-stripped'] ? { skullStripped: true } : {}),
-      ...(values['no-mni'] ? { computeMniReport: false } : {}),
-      ...(values['deformable-mni'] ? { deformableMni: true } : {}),
-    };
+    assertAllowedOptions(
+      values,
+      [
+        'tumour-type',
+        'mask',
+        'skull-stripped',
+        'no-mni',
+        'deformable-mni',
+        'threads',
+        'cache-dir',
+        'offline',
+        'overwrite',
+      ],
+      'tumour-report',
+    );
+    const input = requireNonEmptyOption(positionals[0], 'input');
+    const output = requireNonEmptyOption(positionals[1], 'output');
+    const mask = values.mask !== undefined ? requireNonEmptyOption(values.mask, 'mask') : undefined;
+    const cacheDir = values['cache-dir'] !== undefined
+      ? requireNonEmptyOption(values['cache-dir'], 'cache-dir')
+      : undefined;
+    const tumourType = values['tumour-type'] !== undefined
+      ? requireNonEmptyOption(values['tumour-type'], 'tumour-type')
+      : undefined;
+    const threads = values.threads !== undefined
+      ? parseStrictInt(values.threads, 'threads', 1, 64)
+      : undefined;
+
+    const { analyze } = await import('../src/node.js');
     report = await analyze({
-      ...common,
-      input: positionals[0],
-      output: positionals[1],
-      ...(values.mask ? { mask: values.mask } : {}),
+      input,
+      output,
+      ...(mask !== undefined ? { mask } : {}),
+      ...(cacheDir !== undefined ? { cacheDir } : {}),
+      ...(values.offline ? { offline: true } : {}),
       ...(values.overwrite ? { overwrite: true } : {}),
-      ...(values.threads !== undefined ? { threads: Number(values.threads) } : {}),
-      parameters,
+      ...(threads !== undefined ? { threads } : {}),
+      parameters: {
+        ...(tumourType !== undefined ? { tumourType } : {}),
+        ...(values['skull-stripped'] ? { skullStripped: true } : {}),
+        ...(values['no-mni'] ? { computeMniReport: false } : {}),
+        ...(values['deformable-mni'] ? { deformableMni: true } : {}),
+      },
+      onProgress: (text) => console.error(text),
     });
   }
 

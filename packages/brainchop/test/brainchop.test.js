@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
+import { writeNiftiVolume } from '@neurodesk/webapp-components/file-io/nifti-volume';
 import {
   findModel,
   labelColormap,
@@ -12,9 +17,13 @@ import {
   TISSUE_STAGES,
   validateOptions,
 } from '../src/models.js';
-import { checkInstallation, downloadModels } from '../src/node.js';
+import { checkInstallation, downloadModels, segment } from '../src/node.js';
 
 const BIN = fileURLToPath(new URL('../bin/brainchop.js', import.meta.url));
+
+function runBin(args) {
+  return spawnSync(process.execPath, [BIN, ...args], { encoding: 'utf8' });
+}
 
 test('MODELS catalog exposes all four v4.0 models with @brainchop/core colormaps', () => {
   assert.deepEqual(MODELS.map((m) => m.id), ['mindmap', 'mindmap-fast', 'mindsnap', 'tissue-fractions']);
@@ -49,25 +58,104 @@ test('stemFor, outputNames, and validateOptions enforce model and flag contracts
   );
 });
 
-test('checkInstallation, downloadModels, and CLI --help/self-check work offline', async () => {
-  const info = await checkInstallation();
-  assert.equal(info.ok, true);
-  assert.equal(info.executable, process.execPath);
-  assert.equal(info.node, process.version);
-  assert.equal(info.backend, 'cpu');
-  assert.equal(info.corePackage, '@brainchop/core');
-  assert.equal(info.modelsEmbedded, true);
+test('segment enforces exclusive lock, cleans up failed output dir, and validates gzip/overflow', async () => {
+  const work = await mkdtemp(join(tmpdir(), 'brainchop-node-'));
+  try {
+    // Empty model / input fails BEFORE creating output directory.
+    const untouched = join(work, 'untouched');
+    await assert.rejects(
+      segment({ input: 'in.nii', output: untouched, model: '' }),
+      /model must be a non-empty string/,
+    );
+    await assert.rejects(access(untouched), { code: 'ENOENT' });
 
-  const dl = await downloadModels({ cacheDir: '/tmp/unused' });
-  assert.equal(dl.count, 0);
-  assert.equal(dl.modelsEmbedded, true);
+    // Exclusive lock rejects concurrent runs.
+    const lockedDir = join(work, 'locked');
+    await mkdir(lockedDir);
+    await writeFile(join(lockedDir, '.brainchop.lock'), '{"pid":1}\n');
+    await assert.rejects(
+      segment({ input: join(work, 'missing.nii'), output: lockedDir }),
+      /locked by another process/,
+    );
 
-  const help = execFileSync(process.execPath, [BIN, '--help'], { encoding: 'utf8' });
-  assert.match(help, /Usage: brainchop/);
-  assert.match(help, /tissue-fractions/);
+    // Bad gzip CRC fails and cleans up newly created output dir.
+    const raw = Buffer.from(writeNiftiVolume({
+      data: new Float32Array(8).fill(1),
+      dims: [2, 2, 2],
+      affine: [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]],
+    }));
+    const badGz = Buffer.from(gzipSync(raw));
+    badGz[badGz.length - 5] ^= 0xff;
+    const badPath = join(work, 'corrupt.nii.gz');
+    const failedOut = join(work, 'failed-out');
+    await writeFile(badPath, badGz);
+    await assert.rejects(segment({ input: badPath, output: failedOut }));
+    await assert.rejects(access(failedOut), { code: 'ENOENT' });
 
-  const selfOut = execFileSync(process.execPath, [BIN, 'self-check'], { encoding: 'utf8' });
-  const parsed = JSON.parse(selfOut.trim());
-  assert.equal(parsed.ok, true);
-  assert.equal(parsed.executable, process.execPath);
+    // FLOAT64 1e100 voxel overflow fails cleanly and removes output dir.
+    const overflowData = new Float64Array(8).fill(1);
+    overflowData[2] = 1e100;
+    const overflowBuf = Buffer.from(writeNiftiVolume({
+      data: overflowData,
+      dims: [2, 2, 2],
+      affine: [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]],
+    }));
+    const overflowPath = join(work, 'overflow.nii');
+    const overflowOut = join(work, 'overflow-out');
+    await writeFile(overflowPath, overflowBuf);
+    await assert.rejects(
+      segment({ input: overflowPath, output: overflowOut }),
+      /non-finite or float32-overflowing intensities/,
+    );
+    await assert.rejects(access(overflowOut), { code: 'ENOENT' });
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
+});
+
+test('checkInstallation, downloadModels, and CLI enforce strict per-subcommand options', async () => {
+  const existingDir = await mkdtemp(join(tmpdir(), 'brainchop-cache-'));
+  try {
+    const info = await checkInstallation({ cacheDir: existingDir });
+    assert.equal(info.ok, true);
+    assert.equal(info.executable, process.execPath);
+    assert.equal(info.node, process.version);
+    assert.equal(info.backend, 'cpu');
+    assert.equal(info.corePackage, '@brainchop/core');
+    assert.equal(info.modelsEmbedded, true);
+
+    await assert.rejects(checkInstallation({ cacheDir: '' }), /non-empty/);
+    await assert.rejects(checkInstallation({ cacheDir: join(existingDir, 'missing') }), /does not exist/);
+
+    const dl = await downloadModels({ cacheDir: existingDir });
+    assert.equal(dl.count, 0);
+    assert.equal(dl.modelsEmbedded, true);
+    await assert.rejects(downloadModels({ cacheDir: '' }), /non-empty/);
+
+    const help = execFileSync(process.execPath, [BIN, '--help'], { encoding: 'utf8' });
+    assert.match(help, /Usage: brainchop/);
+
+    const selfOut = runBin(['self-check']);
+    assert.equal(selfOut.status, 0, selfOut.stderr);
+    assert.equal(JSON.parse(selfOut.stdout.trim()).ok, true);
+
+    const badCases = [
+      ['download-models', '--model=fake'],
+      ['download-models', '--cache-dir='],
+      ['download-models', '--threads=2'],
+      ['self-check', '--model=mindmap'],
+      ['self-check', '--cache-dir='],
+      ['self-check', '--save-conform'],
+      ['in.nii', 'out', '--cache-dir=/tmp'],
+      ['in.nii', 'out', '--model='],
+      ['in.nii', 'out', '--threads='],
+      ['in.nii', 'out', '--threads=1.5'],
+    ];
+    for (const args of badCases) {
+      const res = runBin(args);
+      assert.notEqual(res.status, 0, `Expected failure for args: ${args.join(' ')}`);
+    }
+  } finally {
+    await rm(existingDir, { recursive: true, force: true });
+  }
 });

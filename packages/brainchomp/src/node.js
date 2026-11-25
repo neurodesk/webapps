@@ -1,12 +1,12 @@
 // Node.js execution driver for @neurodesk/brainchomp.
 // Runs the pinned brainchomp-lib CPU WebAssembly module in an isolated worker thread
 // and applies the exact same world-remap and masking contract as the Brainchomp web app.
-import { randomUUID } from 'node:crypto';
-import { access, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { access, readFile, stat } from 'node:fs/promises';
 import { availableParallelism } from 'node:os';
-import { basename, join, resolve } from 'node:path';
+import { basename, resolve } from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { gunzipSync } from 'node:zlib';
+import { claimOutputDir } from '@neurodesk/node-drivers/output-dir';
 import packageJson from '../package.json' with { type: 'json' };
 import { outputNames } from './orient.js';
 import {
@@ -21,12 +21,23 @@ import {
 } from './pipeline.js';
 
 const CPU_TIMEOUT_MS = 900_000;
+const MAX_DECOMPRESSED_NIFTI_BYTES = 512 * 1024 * 1024;
 const WASM_JS_URL = new URL('../wasm/brainchomp.js', import.meta.url);
 const WASM_BIN_URL = new URL('../wasm/brainchomp.wasm', import.meta.url);
 const WORKER_URL = new URL('./brainchomp-worker.js', import.meta.url);
 
 // Serialize CPU WASM runs in-process so peak pthread memory stays bounded.
 let previousRun = Promise.resolve();
+
+const boundedGunzip = (bytes, { maxOutputLength = MAX_DECOMPRESSED_NIFTI_BYTES } = {}) =>
+  gunzipSync(bytes, { maxOutputLength });
+
+function requireNonEmptyString(value, label) {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(`${label} must be a non-empty string`);
+  }
+  return value;
+}
 
 function runWorker({ mode, args = [], input = null, outputs = [], threads, timeoutMs = CPU_TIMEOUT_MS, onLog, signal }) {
   const log = [];
@@ -80,17 +91,11 @@ function runWorker({ mode, args = [], input = null, outputs = [], threads, timeo
   });
 }
 
-async function writeFileAtomic(path, data) {
-  const partial = `${path}.${randomUUID()}.partial`;
-  try {
-    await writeFile(partial, data, { flag: 'wx' });
-    await rename(partial, path);
-  } finally {
-    await rm(partial, { force: true });
+export async function downloadModels({ cacheDir = '.', offline = false } = {}) {
+  requireNonEmptyString(cacheDir, 'cacheDir');
+  if (typeof offline !== 'boolean') {
+    throw new Error('offline must be a boolean');
   }
-}
-
-export async function downloadModels({ cacheDir = '.' } = {}) {
   return {
     directory: resolve(cacheDir),
     count: 0,
@@ -99,7 +104,14 @@ export async function downloadModels({ cacheDir = '.' } = {}) {
   };
 }
 
-export async function checkInstallation() {
+export async function checkInstallation({ cacheDir } = {}) {
+  if (cacheDir !== undefined) {
+    const dir = requireNonEmptyString(cacheDir, 'cacheDir');
+    const info = await stat(dir).catch(() => null);
+    if (!info || !info.isDirectory()) {
+      throw new Error(`Model directory does not exist or is not a directory: ${dir}`);
+    }
+  }
   await access(WASM_JS_URL);
   await access(WASM_BIN_URL);
   const probe = await runWorker({ mode: 'help', threads: 1, timeoutMs: 30_000 });
@@ -116,6 +128,7 @@ export async function checkInstallation() {
     libraryRevision: BRAINCHOMP_LIB_REVISION,
     upstreamRevision: UPSTREAM_REVISION,
     modelsEmbedded: true,
+    ...(cacheDir !== undefined ? { cacheDir: resolve(cacheDir) } : {}),
   };
 }
 
@@ -131,81 +144,91 @@ export async function extract({
   onProgress = () => {},
   onLog = () => {},
 } = {}) {
+  // Validate all inputs and options BEFORE touching the output directory or WASM runtime.
+  requireNonEmptyString(input, 'input');
+  requireNonEmptyString(output, 'output');
   const opts = validateOptions({ opening, fillHoles });
   if (!Number.isSafeInteger(threads) || threads < 1 || threads > 64) {
     throw new Error('threads must be an integer between 1 and 64');
   }
-  if (!input || !output) {
-    throw new Error('Provide an input rodent MRI NIfTI image and an output directory');
+  if (typeof overwrite !== 'boolean') {
+    throw new Error('overwrite must be a boolean');
   }
-  if (!overwrite) {
-    const existing = await readdir(output).catch((error) => {
-      if (error.code === 'ENOENT') return [];
-      throw error;
-    });
-    if (existing.length) {
-      throw new Error(`Output directory is not empty: ${output} (pass --overwrite to allow)`);
-    }
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new Error('timeoutMs must be a positive number');
   }
 
   signal?.throwIfAborted();
-  onProgress('Reading rodent MRI volume');
-  const rawBytes = await readFile(input);
-  const volume = readNifti3d(rawBytes, { decompress: gunzipSync });
-  const modelInput = new Uint8Array(prepareModelInput(volume));
+  const claim = await claimOutputDir(output, { overwrite, tool: 'brainchomp' });
+  try {
+    signal?.throwIfAborted();
+    onProgress('Reading rodent MRI volume');
+    const rawBytes = await readFile(input);
+    const volume = readNifti3d(rawBytes, {
+      decompress: boundedGunzip,
+      maxDecompressedBytes: MAX_DECOMPRESSED_NIFTI_BYTES,
+    });
+    const modelInput = new Uint8Array(prepareModelInput(volume));
 
-  const wasmArgs = ['--mask', '/mask.nii', '--opening', String(opts.opening)];
-  if (!opts.fillHoles) wasmArgs.push('--no-fill-holes');
+    const wasmArgs = ['--mask', '/mask.nii', '--opening', String(opts.opening)];
+    if (!opts.fillHoles) wasmArgs.push('--no-fill-holes');
 
-  onProgress(`Extracting rodent brain (CPU, ${threads} thread${threads === 1 ? '' : 's'})`);
-  const turn = previousRun.then(() =>
-    runWorker({
-      mode: 'segment',
-      args: wasmArgs,
-      input: modelInput,
-      outputs: ['/out.nii', '/mask.nii'],
-      threads,
-      timeoutMs,
-      onLog,
-      signal,
-    }),
-  );
-  previousRun = turn.then(() => {}, () => {});
-  const runResult = await turn;
+    onProgress(`Extracting rodent brain (CPU, ${threads} thread${threads === 1 ? '' : 's'})`);
+    const turn = previousRun.then(() =>
+      runWorker({
+        mode: 'segment',
+        args: wasmArgs,
+        input: modelInput,
+        outputs: ['/out.nii', '/mask.nii'],
+        threads,
+        timeoutMs,
+        onLog,
+        signal,
+      }),
+    );
+    previousRun = turn.then(() => {}, () => {});
+    const runResult = await turn;
 
-  const maskBytes = runResult.files['/mask.nii'];
-  if (!maskBytes) {
-    throw new Error('Brainchomp CPU module exited cleanly but wrote no brain mask.');
+    const maskBytes = runResult.files['/mask.nii'];
+    if (!maskBytes) {
+      throw new Error('Brainchomp CPU module exited cleanly but wrote no brain mask.');
+    }
+
+    onProgress('Writing brain image and mask on input grid');
+    const maskVolume = readNifti3d(maskBytes, {
+      decompress: boundedGunzip,
+      maxDecompressedBytes: MAX_DECOMPRESSED_NIFTI_BYTES,
+    });
+    const { brain, mask, maskVoxels } = applyBrainMask(volume, maskVolume);
+    const names = outputNames(basename(input));
+
+    const writtenFiles = await claim.publish([
+      { name: names.brain, data: Buffer.from(brain) },
+      { name: names.mask, data: Buffer.from(mask) },
+    ]);
+
+    const brainVolumeMm3 = Number((maskVoxels * voxelVolumeMm3(volume.affine)).toFixed(3));
+    return {
+      input: basename(input),
+      output: claim.dir,
+      files: writtenFiles,
+      dims: volume.dims,
+      maskVoxels,
+      brainVolumeMm3,
+      elapsedMs: Math.round(runResult.elapsedMs),
+      provenance: {
+        appVersion: packageJson.version,
+        method: 'Brainchomp',
+        library: 'brainchomp-lib',
+        libraryRevision: BRAINCHOMP_LIB_REVISION,
+        backend: 'cpu',
+        threads,
+        openingRadius: opts.opening,
+        fillHoles: opts.fillHoles,
+        modelsEmbedded: true,
+      },
+    };
+  } finally {
+    await claim.release();
   }
-
-  onProgress('Writing brain image and mask on input grid');
-  const maskVolume = readNifti3d(maskBytes, { decompress: gunzipSync });
-  const { brain, mask, maskVoxels } = applyBrainMask(volume, maskVolume);
-  const names = outputNames(basename(input));
-
-  await mkdir(output, { recursive: true });
-  await writeFileAtomic(join(output, names.brain), Buffer.from(brain));
-  await writeFileAtomic(join(output, names.mask), Buffer.from(mask));
-
-  const brainVolumeMm3 = Number((maskVoxels * voxelVolumeMm3(volume.affine)).toFixed(3));
-  return {
-    input: basename(input),
-    output: resolve(output),
-    files: [names.brain, names.mask],
-    dims: volume.dims,
-    maskVoxels,
-    brainVolumeMm3,
-    elapsedMs: Math.round(runResult.elapsedMs),
-    provenance: {
-      appVersion: packageJson.version,
-      method: 'Brainchomp',
-      library: 'brainchomp-lib',
-      libraryRevision: BRAINCHOMP_LIB_REVISION,
-      backend: 'cpu',
-      threads,
-      openingRadius: opts.opening,
-      fillHoles: opts.fillHoles,
-      modelsEmbedded: true,
-    },
-  };
 }
