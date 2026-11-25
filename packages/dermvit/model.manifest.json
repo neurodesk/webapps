@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "app": "dermvit",
+  "repository": "sazio/skin-mole-vit-onnx",
+  "revision": "25be9e61a71125de9502648c1f6adceb7a882637",
+  "base_url": "https://huggingface.co/sazio/skin-mole-vit-onnx/resolve/25be9e61a71125de9502648c1f6adceb7a882637/onnx/",
+  "license": "MIT",
+  "license_note": "Quantized ONNX export (sazio/skin-mole-vit-onnx, MIT) of Anwarkh1/Skin_Cancer-Image_Classification (Apache-2.0), a ViT-Base-Patch16-224 classifier fine-tuned on HAM10000 (7 classes). Research and educational use only; not a medical device.",
+  "model": {
+    "name": "skin-mole-vit-q8",
+    "architecture": "ViTForImageClassification (vit-base-patch16-224-in21k)",
+    "input": "pixel_values",
+    "output": "logits",
+    "image_size": 224,
+    "mean": [0.5, 0.5, 0.5],
+    "std": [0.5, 0.5, 0.5],
+    "classes": [
+      { "index": 0, "code": "BKL", "label": "Benign keratosis-like lesions" },
+      { "index": 1, "code": "BCC", "label": "Basal cell carcinoma" },
+      { "index": 2, "code": "AKIEC", "label": "Actinic keratoses" },
+      { "index": 3, "code": "VASC", "label": "Vascular lesions" },
+      { "index": 4, "code": "NV", "label": "Melanocytic nevi" },
+      { "index": 5, "code": "MEL", "label": "Melanoma" },
+      { "index": 6, "code": "DF", "label": "Dermatofibroma" }
+    ]
+  },
+  "assets": [
+    {
+      "filename": "model_quantized.onnx",
+      "bytes": 86993703,
+      "sha256": "85c5c07ec67e94d7b34c83624c36f6a729ef3c47747cf1465212c911db5badfa"
+    }
+  ]
+}

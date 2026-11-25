@@ -12,6 +12,7 @@
     "lint": "node ../../scripts/lint.mjs --workspace"
   },
   "dependencies": {
+    "@neurodesk/dermvit": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
     "fast-png": "8.0.0",
     "onnxruntime-web": "1.29.0"

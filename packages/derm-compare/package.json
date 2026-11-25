@@ -1,0 +1,46 @@
+{
+  "name": "@neurodesk/derm-compare",
+  "version": "0.1.20261124",
+  "description": "Sequential digital dermoscopy alignment and CIEDE2000 change quantification core and portable command line",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "derm-compare": "./bin/derm-compare.js"
+  },
+  "exports": {
+    ".": "./src/core/pipeline.js",
+    "./core/pipeline": "./src/core/pipeline.js",
+    "./core/change": "./src/core/change.js",
+    "./core/preprocess": "./src/core/preprocess.js",
+    "./core/register": "./src/core/register.js",
+    "./config": "./src/config.js",
+    "./display": "./src/display.js",
+    "./outputs": "./src/outputs.js",
+    "./raster": "./src/raster.js",
+    "./node": "./src/node.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check bin/derm-compare.js && node --check src/node.js && node --check src/raster.js && node --check src/config.js && node --check src/display.js && node --check src/outputs.js && node --check src/core/pipeline.js && node --check src/core/change.js && node --check src/core/preprocess.js && node --check src/core/register.js"
+  },
+  "dependencies": {
+    "@neurodesk/webapp-components": "workspace:*",
+    "fast-png": "8.0.0",
+    "jpeg-js": "0.4.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/derm-compare"
+  }
+}

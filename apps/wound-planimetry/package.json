@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@neurodesk/webapp-components": "workspace:*",
+    "@neurodesk/wound-planimetry": "workspace:*",
     "fast-png": "8.0.0"
   },
   "devDependencies": {

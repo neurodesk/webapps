@@ -1,0 +1,17 @@
+Skin Chromophore command-line tool (@neurodesk/skin-chromophore)
+================================================================
+
+This package is MIT-licensed (LICENSE). It computes quantitative skin colorimetry
+and uncalibrated fixed-basis RGB optical-density chromophore proxies in pure JavaScript:
+
+- CIE L*a*b* and Individual Typology Angle ITA° (Chardon et al., Int J Cosmet Sci 1991;
+  Del Bino & Bernerd, Br J Dermatol 2013)
+- CIEDE2000 color difference (Sharma, Wu & Dalal, Color Res Appl 2005)
+- RGB Erythema and Melanin Index proxies inspired by Diffey et al. (Br J Dermatol 1984)
+  and Takiwaki et al. (Skin Pharmacol 1994)
+- Fixed-basis melanin and hemoglobin optical-density proxies inspired by Tsumura et al.
+  (J Opt Soc Am A 1999)
+- Shades of Gray (Minkowski p=6) white balance (Finlayson & Trezzi, 2004)
+
+Research and educational software — uncalibrated RGB proxies are not calibrated spectrophotometry
+or a medical device.
