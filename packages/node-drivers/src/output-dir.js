@@ -35,37 +35,35 @@ function lstatExistsSync(filePath) {
   }
 }
 
-async function removeEmptyDirsUpTo(leafDir, topCreatedDir) {
-  if (!topCreatedDir) return;
-  const stop = resolve(topCreatedDir);
+function collectMissingDirsSync(leafDir) {
+  const missing = [];
   let current = resolve(leafDir);
-  while (true) {
-    try {
-      await rmdir(current);
-    } catch {
-      break;
-    }
-    if (current === stop) break;
+  while (!lstatExistsSync(current)) {
+    missing.push(current);
     const parent = dirname(current);
     if (parent === current) break;
     current = parent;
   }
+  return missing;
 }
 
-function removeEmptyDirsUpToSync(leafDir, topCreatedDir) {
-  if (!topCreatedDir) return;
-  const stop = resolve(topCreatedDir);
-  let current = resolve(leafDir);
-  while (true) {
+async function removeCreatedDirs(dirs) {
+  for (const dir of dirs) {
     try {
-      rmdirSync(current);
+      await rmdir(dir);
     } catch {
       break;
     }
-    if (current === stop) break;
-    const parent = dirname(current);
-    if (parent === current) break;
-    current = parent;
+  }
+}
+
+function removeCreatedDirsSync(dirs) {
+  for (const dir of dirs) {
+    try {
+      rmdirSync(dir);
+    } catch {
+      break;
+    }
   }
 }
 
@@ -100,7 +98,7 @@ export async function claimOutputDir(
     throw new Error(`Output path exists and is not a directory: ${outputDir}`);
   }
 
-  let firstCreated = null;
+  let createdDirs = [];
   const lockName = LOCK_FILENAME;
   const lockPath = join(resolvedDir, lockName);
 
@@ -247,10 +245,13 @@ export async function claimOutputDir(
         // Best-effort cleanup during termination.
       }
     }
-    if (!committed && rollbackOk && firstCreated) {
-      removeEmptyDirsUpToSync(resolvedDir, firstCreated);
+    if (!committed && rollbackOk && createdDirs.length > 0) {
+      removeCreatedDirsSync(createdDirs);
     }
     released = true;
+    if (process.platform === 'win32') {
+      process.exit(signal === 'SIGINT' ? 130 : 143);
+    }
     process.kill(process.pid, signal);
   }
 
@@ -284,8 +285,8 @@ export async function claimOutputDir(
       lockOwned = false;
       await unlink(lockPath).catch(() => {});
     }
-    if (!committed && !rollbackFailed && firstCreated) {
-      await removeEmptyDirsUpTo(resolvedDir, firstCreated);
+    if (!committed && !rollbackFailed && createdDirs.length > 0) {
+      await removeCreatedDirs(createdDirs);
     }
   };
 
@@ -297,7 +298,8 @@ export async function claimOutputDir(
 
   try {
     if (!existingStat) {
-      firstCreated = mkdirSync(resolvedDir, { recursive: true }) ?? null;
+      createdDirs = collectMissingDirsSync(resolvedDir);
+      mkdirSync(resolvedDir, { recursive: true });
     }
 
     const payload = JSON.stringify({

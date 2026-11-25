@@ -528,7 +528,15 @@ async function readSingle3dImage(files, label, signal) {
   }
   const [file] = images;
   if (!file.size) throw new Error(`${file.name} is empty.`);
-  const volume = await readNiftiVolumeAsync(await file.arrayBuffer());
+  let volume;
+  try {
+    volume = await readNiftiVolumeAsync(await file.arrayBuffer());
+  } catch (error) {
+    if (/single 3D/i.test(error?.message || "")) {
+      throw new Error(`${file.name} must be a single 3D volume.`, { cause: error });
+    }
+    throw error;
+  }
   signal?.throwIfAborted();
   const spacingMm = [0, 1, 2].map((axis) => Math.hypot(
     volume.affine[0][axis],

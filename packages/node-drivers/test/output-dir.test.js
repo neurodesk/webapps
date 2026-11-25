@@ -107,7 +107,11 @@ test('publish cleans up .partial files on failed writeFile (e.g. EFBIG/ENOSPC)',
   }
 });
 
-test('claimOutputDir cleans up lock and newly created directory on SIGINT', async () => {
+const POSIX_SIGNAL_SKIP = process.platform === 'win32'
+  ? 'Windows TerminateProcess cannot deliver catchable POSIX SIGINT/SIGTERM to subprocesses'
+  : false;
+
+test('claimOutputDir cleans up lock and newly created directory on SIGINT', { skip: POSIX_SIGNAL_SKIP }, async () => {
   const root = await mkdtemp(join(tmpdir(), 'output-dir-sigint-'));
   try {
     const outDir = join(root, 'nested', 'sigint-out');
@@ -269,7 +273,7 @@ test('publish stages all files and rolls back already-renamed outputs on partial
   }
 });
 
-test('SIGTERM during lock acquisition cleans up .neurodesk-cli.lock and created directory', async () => {
+test('SIGTERM during lock acquisition cleans up .neurodesk-cli.lock and created directory', { skip: POSIX_SIGNAL_SKIP }, async () => {
   const root = await mkdtemp(join(tmpdir(), 'output-dir-sigterm-lock-'));
   try {
     const outDir = join(root, 'nested', 'sigterm-out');
@@ -305,7 +309,7 @@ test('SIGTERM during lock acquisition cleans up .neurodesk-cli.lock and created 
   }
 });
 
-test('SIGINT mid-overwrite publication restores backups, cleans partials, and removes lock', async () => {
+test('SIGINT mid-overwrite publication restores backups, cleans partials, and removes lock', { skip: POSIX_SIGNAL_SKIP }, async () => {
   const root = await mkdtemp(join(tmpdir(), 'output-dir-sigint-overwrite-'));
   try {
     for (const interruptStep of [1, 2]) {
@@ -390,7 +394,7 @@ test('non-overwrite ENOTSUP link fallback refuses destination created after lsta
   }
 });
 
-test('SIGTERM during failure-triggered rollback restores backups before releasing lock', async () => {
+test('SIGTERM during failure-triggered rollback restores backups before releasing lock', { skip: POSIX_SIGNAL_SKIP }, async () => {
   const root = await mkdtemp(join(tmpdir(), 'output-dir-sigterm-rollback-'));
   try {
     const outDir = join(root, 'existing');
