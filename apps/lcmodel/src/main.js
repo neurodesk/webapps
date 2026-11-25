@@ -171,7 +171,11 @@ const tissue = createTissuePanel({
         queueMicrotask(() => {
           if (syncDroppedT1 === entry) syncDroppedT1 = null;
         });
+        return true;
       }
+      // Allow a new standalone T1 selection to supersede an in-flight T1 import
+      // (for example, while NiiVue is still finishing its first anatomy render).
+      if (tissue.isImportingT1) return false;
       return true;
     }
     return false;
@@ -662,6 +666,7 @@ async function loadFiles(request, signal) {
   if (given.length && request.inputs.t1?.length) throw new Error("Give either a T1 image or tissue fractions, not both.");
   if (busy) throw new Error("Files are still loading. Wait or cancel, then retry.");
   if (water && !input) throw new Error("Load a spectrum before adding its water reference.");
+  const hadResidentInput = Boolean(input || customBasis || tissue.hasT1);
   let committed = false;
   let replacedSpectra = false;
   const controller = new AbortController();
@@ -1072,7 +1077,7 @@ async function loadFiles(request, signal) {
       const residentEvents = fmrsEvents?.file ? [fmrsEvents.file] : [];
       const residentBasis = customBasis?.file ? [customBasis.file] : [];
       const residentT1 = tissue.files;
-      const keepUndo = !automation && committed;
+      const keepUndo = !automation && committed && hadResidentInput;
       const dataDetail = keepUndo
         ? { files: residentSpectra }
         : { files: residentSpectra, cancelPending: true };

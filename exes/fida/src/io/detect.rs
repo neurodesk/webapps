@@ -723,7 +723,7 @@ pub fn detect(files: &[NamedFile]) -> Detection {
                 let twix_voi_ok = fmt != Format::Twix || {
                     let mv = super::twix::parse_header(files[m.files[0]].bytes).ok().and_then(|h| geometry::twix(&h));
                     let wv = super::twix::parse_header(files[w.files[0]].bytes).ok().and_then(|h| geometry::twix(&h));
-                    mv.zip(wv).is_none_or(|(a, b)| a == b)
+                    mv.zip(wv).is_none_or(|(a, b)| same_twix_voxel(&a, &b))
                 };
                 if hit && twix_folder_ok && twix_voi_ok && !conflicting_dicom_identity(identities.get(&m.files[0]), identities.get(&w.files[0])) {
                     let shared = shared_dirs(mpath, wpath);
@@ -823,7 +823,7 @@ pub fn detect(files: &[NamedFile]) -> Detection {
         if (a.1 - b.1).abs() > a.1.abs().max(1.0) * 1e-6 {
             return false;
         }
-        a.2 == b.2
+        same_twix_voxel(&a.2, &b.2)
     };
     let twix_sources: Vec<(Dataset, String, Option<usize>)> = det
         .pairs
