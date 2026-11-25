@@ -143,6 +143,7 @@ const DIRECT_MODULE_PARENTS = new Set(['ImportDeclaration', 'ExportNamedDeclarat
 const STATEMENT_BOUNDARY = new Set(['ExpressionStatement', 'VariableDeclaration', 'ReturnStatement', 'BlockStatement', 'Program']);
 const FILE_READER_CALLS = new Set(['readFile', 'readFileSync', 'require']);
 const PATH_JOIN_CALLS = new Set(['join', 'resolve']);
+const EXEC_ARRAY_CALLS = new Set(['run', 'execFile', 'execFileSync', 'spawn', 'spawnSync']);
 const INDEPENDENT_LINT_SCRIPT = /^node\s+(?:\.\.\/)+scripts\/lint\.mjs(?:\s+--workspace)?$/;
 const FILTER_ARG = /(?:--filter|-F)(?:=|\s+)['"]?([^\s'"]+)['"]?/g;
 const CROSS_WORKSPACE_FLAG = /(?:--filter|-F|-r|--recursive|--workspace|-w|--workspaces)(?:=|\s|$)/;
@@ -155,13 +156,11 @@ function calleeNameOf(callNode) {
 }
 
 // Whether a string literal sits in a whitelisted standalone path context:
-// (1) static/dynamic import/export source, (2) direct CallExpression argument,
-// (3) element of an ArrayExpression passed directly to a CallExpression, or
-// (4) direct VariableDeclarator initializer whose binding is never referenced
-// elsewhere in the script. A CallExpression stored in a referenced variable is
-// accepted only if a file-reading call (`readFile`/`readFileSync`/`require`)
-// already consumed the path before the assignment (preventing `const base =
-// resolve('ref.json'); readFileSync(base + '.gz')` from narrowing to `ref.json`).
+// (1) static/dynamic import/export source, (2) direct file-reader or final
+// `join`/`resolve` argument consumed by a file reader (`readFile`/`readFileSync`/
+// `require`), (3) element of an ArrayExpression passed directly to a subprocess
+// runner (`run`/`execFile`/`execFileSync`/`spawn`/`spawnSync`), or (4) direct
+// VariableDeclarator initializer whose binding is never referenced elsewhere.
 function isStandalonePathLiteral(node, ancestors, referencedIdentifiers) {
   if (node.type !== 'Literal' || typeof node.value !== 'string') return false;
   const parent = ancestors[ancestors.length - 1];
@@ -172,18 +171,25 @@ function isStandalonePathLiteral(node, ancestors, referencedIdentifiers) {
     return grandParent?.type === 'VariableDeclaration' && !referencedIdentifiers.has(parent.id.name);
   }
   let callIndex = -1;
+  let consumedByReader = false;
   if (parent.type === 'CallExpression' && Array.isArray(parent.arguments) && parent.arguments.includes(node)) {
     const name = calleeNameOf(parent);
-    if (PATH_JOIN_CALLS.has(name) && parent.arguments[parent.arguments.length - 1] !== node) return false;
+    if (FILE_READER_CALLS.has(name)) consumedByReader = true;
+    else if (!PATH_JOIN_CALLS.has(name) || parent.arguments[parent.arguments.length - 1] !== node) return false;
     callIndex = ancestors.length - 1;
   } else if (parent.type === 'ArrayExpression') {
     const grandParent = ancestors[ancestors.length - 2];
-    if (grandParent?.type === 'CallExpression' && Array.isArray(grandParent.arguments) && grandParent.arguments.includes(parent)) {
+    if (
+      grandParent?.type === 'CallExpression' &&
+      Array.isArray(grandParent.arguments) &&
+      grandParent.arguments.includes(parent) &&
+      EXEC_ARRAY_CALLS.has(calleeNameOf(grandParent))
+    ) {
       callIndex = ancestors.length - 2;
+      consumedByReader = true;
     }
   }
   if (callIndex < 0) return false;
-  let consumedByReader = FILE_READER_CALLS.has(calleeNameOf(ancestors[callIndex]));
   for (let i = callIndex - 1; i >= 0; i--) {
     const ancestor = ancestors[i];
     const child = ancestors[i + 1];
@@ -195,7 +201,11 @@ function isStandalonePathLiteral(node, ancestors, referencedIdentifiers) {
       return false;
     }
     if (ancestor.type === 'CallExpression' && Array.isArray(ancestor.arguments) && ancestor.arguments.includes(child)) {
-      if (FILE_READER_CALLS.has(calleeNameOf(ancestor))) consumedByReader = true;
+      if (!consumedByReader) {
+        const name = calleeNameOf(ancestor);
+        if (FILE_READER_CALLS.has(name)) consumedByReader = true;
+        else if (!PATH_JOIN_CALLS.has(name) || ancestor.arguments[ancestor.arguments.length - 1] !== child) return false;
+      }
       continue;
     }
     return false;

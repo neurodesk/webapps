@@ -678,6 +678,55 @@ function checkNodeEsmSyntax(source) {
   });
 }
 
+// Whether `export async function provisionTestData(app, ...)` only indexes
+// `provisioners` by its first parameter `app` (never reading another app's
+// entry such as `provisioners.denoise`, never reading `unpublished`, and never
+// reassigning `app`).
+function isDirectProvisionDispatcher(statement) {
+  if (statement?.type !== 'ExportNamedDeclaration') return false;
+  const fn = statement.declaration;
+  if (fn?.type !== 'FunctionDeclaration' || fn.id?.name !== 'provisionTestData') return false;
+  const appParam = fn.params?.[0]?.type === 'Identifier' ? fn.params[0].name : null;
+  if (!appParam) return false;
+  let safe = true;
+  const walk = (node, parent = null) => {
+    if (!safe || !node || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item, parent);
+      return;
+    }
+    if (node.type === 'AssignmentExpression' && node.left?.type === 'Identifier' && node.left.name === appParam) {
+      safe = false;
+      return;
+    }
+    if (node.type === 'UpdateExpression' && node.argument?.type === 'Identifier' && node.argument.name === appParam) {
+      safe = false;
+      return;
+    }
+    if (node.type === 'Identifier' && TABLE_NAMES.has(node.name)) {
+      const isPropKey = parent?.type === 'Property' && !parent.computed && parent.key === node;
+      if (!isPropKey) {
+        const isAppLookup =
+          node.name === 'provisioners' &&
+          parent?.type === 'MemberExpression' &&
+          parent.object === node &&
+          parent.computed &&
+          parent.property?.type === 'Identifier' &&
+          parent.property.name === appParam;
+        if (!isAppLookup) {
+          safe = false;
+          return;
+        }
+      }
+    }
+    for (const key of Object.keys(node)) {
+      if (!AST_META.has(key)) walk(node[key], node);
+    }
+  };
+  walk(fn.body);
+  return safe;
+}
+
 function parseE2eTables(source) {
   const ast = sourceParser.parse(source, { filePath: E2E_TEST_DATA, sourceType: 'module' });
   const tables = new Map();
@@ -710,7 +759,10 @@ function parseE2eTables(source) {
       statement.type === 'ExportNamedDeclaration' &&
       statement.declaration?.type === 'FunctionDeclaration' &&
       statement.declaration.id?.name === 'provisionTestData';
-    if (isProvisionTestData) continue;
+    if (isProvisionTestData) {
+      if (!isDirectProvisionDispatcher(statement)) return null;
+      continue;
+    }
     if (statement.type !== 'ExportNamedDeclaration' || statement.declaration?.type !== 'VariableDeclaration' || statement.declaration.kind !== 'const') {
       if (referencesTable(statement)) return null;
       continue;
@@ -913,7 +965,9 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
   // Selects whatever reaches `node` or a file below it.
   const selectReaching = (node, reason) => {
     const within = (candidate) => candidate === node || candidate.startsWith(`${node}/`);
-    if (ROOT_FILE.test(`${node}/`) && [...catalog].some(within)) shared(`${reason}; ci.yml's per-app jobs run ${node}`);
+    if ((ROOT_FILE.test(`${node}/`) && [...catalog].some(within)) || [...catalogWorkspace].some(within)) {
+      shared(`${reason}; ci.yml's per-app jobs run ${node}`);
+    }
     if ([...site].some(within)) siteBuild(reason);
     for (const candidate of registry.apps) {
       if ([...reach.get(candidate.id)].some(within)) select(candidate.id, reason);
@@ -928,6 +982,10 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     }
     const appId = path.match(/^apps\/([^/]+)\//)?.[1] ?? path.match(MODEL_MANIFEST)?.[1];
     if (appIds.has(appId)) {
+      if (catalogWorkspace?.has(`apps/${appId}`)) {
+        shared(`${path}: ci.yml's per-app jobs run apps/${appId}`);
+        continue;
+      }
       select(appId, path);
       for (const reader of graph?.appReaders?.(path) ?? []) {
         if (appIds.has(reader)) select(reader, `${path}: ${reader}'s code reads it`);
@@ -953,8 +1011,10 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
       }
       for (const [importer, reason] of impact.importers) {
         const importerApp = importer.match(/^apps\/([^/]+)$/)?.[1];
-        if (appIds.has(importerApp)) select(importerApp, `${path}: ${reason}`);
-        else if (importer === '.') shared(`${path}: ${reason}; the root's dependencies resolve for every workspace member`);
+        if (appIds.has(importerApp)) {
+          if (catalogWorkspace?.has(importer)) shared(`${path}: ${reason}; ci.yml's per-app jobs run ${importer}`);
+          else select(importerApp, `${path}: ${reason}`);
+        } else if (importer === '.') shared(`${path}: ${reason}; the root's dependencies resolve for every workspace member`);
         else if (SELF_CONTAINED_PREFIXES.some((prefix) => `${importer}/`.startsWith(prefix))) continue;
         else if (INDEPENDENT_CHECK_PATHS.some((pattern) => pattern.test(`${importer}/`))) continue;
         else if (!graph) shared(`${path}: ${reason}, and there is no workspace graph to find its users`);
