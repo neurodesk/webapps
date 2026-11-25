@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import sourceParser from '@neurodesk/code-quality';
 import { parse } from 'yaml';
 import { LockfileAnalysisError, lockfileImpact } from './lockfile-impact.mjs';
 import { onlyAddsExports } from './module-closure.mjs';
@@ -23,6 +24,8 @@ const INDEPENDENT_CHECK_PATHS = [
   /^\.github\/workflows\/(?!ci\.yml$)[^/]+$/,
   INDEPENDENT_CONFIG,
   /^config\/dependency-/,
+  /^scripts\/lint\.mjs$/,
+  /^scripts\/quality\//,
   /^templates\//,
 ];
 // Root files the workspace graph follows. Without a graph they count as shared.
@@ -31,6 +34,9 @@ const ROOT_FILE = /^(?:scripts|test-utils|registry|test)\//;
 const MODEL_MANIFEST = /^models\/([^/]+)\.manifest\.json$/;
 const NON_CODE_FILES = new Set(['README.md', 'LICENSES.md']);
 const LOCKFILE = 'pnpm-lock.yaml';
+const WORKSPACE_CONFIG = 'pnpm-workspace.yaml';
+const E2E_TEST_DATA = 'scripts/lib/e2e-test-data.mjs';
+const WORKSPACE_PACKAGE_DIR = /^(?:packages|exes)\/[^/]+$/;
 const REGISTRY = 'registry/apps.yml';
 const STANDALONE = 'registry/standalone.json';
 const APP_INFORMATION = 'registry/app-information.yml';
@@ -367,6 +373,128 @@ export function ciImpact({ before, after }) {
   }
 }
 
+// Whether a pnpm-workspace.yaml change is confined to minimumReleaseAgeExclude,
+// which lets pnpm install a freshly published version whose exact resolution
+// pnpm-lock.yaml already pins and scopes per importer. Any other workspace
+// setting (packages, allowBuilds, overrides, patchedDependencies,
+// packageExtensions, or any unknown key) reaches every workspace member.
+export function workspaceConfigImpact({ before, after }) {
+  let old;
+  let now;
+  try {
+    [old, now] = [parse(before), parse(after)];
+  } catch (error) {
+    return { shared: `it does not parse (${error.message.split('\n')[0]})` };
+  }
+  const record = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+  if (!record(old) || !record(now)) return { shared: 'it is not a YAML mapping' };
+  try {
+    const key = [...new Set([...Object.keys(old), ...Object.keys(now)])].find((name) => name !== 'minimumReleaseAgeExclude' && !same(old[name], now[name]));
+    if (key) return { shared: `its ${key} setting changed` };
+  } catch (error) {
+    return { shared: `its settings cannot be compared (${error.message.split('\n')[0]})` };
+  }
+  const excluded = now.minimumReleaseAgeExclude;
+  if (excluded !== undefined && (!Array.isArray(excluded) || !excluded.every((entry) => typeof entry === 'string' && entry.trim() !== ''))) {
+    return { shared: 'its minimumReleaseAgeExclude setting is not a list of package specifiers' };
+  }
+  return { scoped: true };
+}
+
+const AST_META = new Set(['loc', 'range', 'start', 'end', 'tokens', 'comments', 'parent']);
+const TABLE_NAMES = new Set(['provisioners', 'unpublished']);
+
+function stripAst(value, cleared) {
+  if (value === null || value === undefined) return value;
+  if (typeof value === 'bigint') return `${value}n`;
+  if (value instanceof RegExp) return value.toString();
+  if (typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map((item) => stripAst(item, cleared));
+  const out = {};
+  for (const key of Object.keys(value)) {
+    if (AST_META.has(key)) continue;
+    if (key === 'properties' && cleared?.has(value)) {
+      out[key] = [];
+      continue;
+    }
+    out[key] = stripAst(value[key], cleared);
+  }
+  return out;
+}
+
+function referencesTable(value) {
+  if (!value || typeof value !== 'object') return false;
+  if (Array.isArray(value)) return value.some(referencesTable);
+  if (value.type === 'Identifier' && TABLE_NAMES.has(value.name)) return true;
+  return Object.keys(value).some((key) => !AST_META.has(key) && referencesTable(value[key]));
+}
+
+function parseE2eTables(source) {
+  const ast = sourceParser.parse(source, { filePath: E2E_TEST_DATA, sourceType: 'module' });
+  const tables = new Map();
+  for (const statement of ast.body) {
+    if (statement.type !== 'ExportNamedDeclaration' || statement.declaration?.type !== 'VariableDeclaration' || statement.declaration.kind !== 'const') continue;
+    for (const declarator of statement.declaration.declarations) {
+      if (declarator.id?.type !== 'Identifier' || !TABLE_NAMES.has(declarator.id.name)) continue;
+      if (tables.has(declarator.id.name) || declarator.init?.type !== 'ObjectExpression') return null;
+      tables.set(declarator.id.name, declarator.init);
+    }
+  }
+  if (!tables.has('provisioners')) return null;
+  const entries = new Map();
+  for (const [tableName, objectNode] of tables) {
+    const map = new Map();
+    for (const prop of objectNode.properties) {
+      if (prop.type !== 'Property' || prop.computed || prop.kind !== 'init') return null;
+      const key = prop.key?.type === 'Identifier' ? prop.key.name : prop.key?.type === 'Literal' && typeof prop.key.value === 'string' ? prop.key.value : null;
+      if (key === null || map.has(key)) return null;
+      if (tableName === 'provisioners' && referencesTable(prop.value)) return null;
+      map.set(key, JSON.stringify({ method: prop.method, value: stripAst(prop.value) }));
+    }
+    entries.set(tableName, map);
+  }
+  const cleared = new Set(tables.values());
+  return { skeleton: JSON.stringify(stripAst(ast.body, cleared)), provisioners: entries.get('provisioners') };
+}
+
+// The apps whose provisioner entries changed in scripts/lib/e2e-test-data.mjs,
+// or why the change reaches every app. Edits confined to individual entries of
+// `provisioners` (or `unpublished`, checked by workspace-contracts) affect only
+// those apps; any change to imports, shared helpers, `provisionTestData`, or
+// syntax/structure falls back to the complete catalog.
+export function e2eTestDataImpact({ before, after }) {
+  let old;
+  let now;
+  try {
+    old = parseE2eTables(before);
+    now = parseE2eTables(after);
+  } catch (error) {
+    return { shared: `it does not parse (${error.message.split('\n')[0]})` };
+  }
+  if (!old || !now) return { shared: 'its provisioners table cannot be isolated safely' };
+  if (old.skeleton !== now.skeleton) return { shared: 'shared code outside provisioners and unpublished changed' };
+  const ids = [...new Set([...old.provisioners.keys(), ...now.provisioners.keys()])];
+  return { changed: ids.filter((id) => old.provisioners.get(id) !== now.provisioners.get(id)) };
+}
+
+// Files ci.yml's per-app jobs run directly or import. Per-app jobs name
+// packages/* and exes/* directories only to provision an individual app's data
+// (such as scripts/lib/e2e-test-data.mjs naming exes/dwi or exes/synthsr), so
+// traversal stops at whole workspace package directories instead of pulling in
+// unrelated root files those packages happen to reference.
+function catalogReachable(graph) {
+  const seen = new Set([CATALOG]);
+  const pending = [CATALOG];
+  while (pending.length) {
+    for (const next of graph.edges.get(pending.pop()) ?? []) {
+      if (WORKSPACE_PACKAGE_DIR.test(next) || seen.has(next)) continue;
+      seen.add(next);
+      pending.push(next);
+    }
+  }
+  return seen;
+}
+
 // The workspace graph nodes a changed file belongs to. A package's tests
 // reach only those that read them and a document only those that read that
 // file; any other file reaches its package's users and, if a root file names
@@ -470,7 +598,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
 
   const appIds = new Set(registry.apps.map((app) => app.id));
   const reach = graph && new Map(registry.apps.map((app) => [app.id, reachableFrom(graph, `apps/${app.id}`)]));
-  const catalog = graph && reachableFrom(graph, CATALOG);
+  const catalog = graph && catalogReachable(graph);
   const site = graph && reachableFrom(graph, SITE);
   const appReasons = new Map();
   const siteReasons = [];
@@ -535,8 +663,26 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
         if (appIds.has(importerApp)) select(importerApp, `${path}: ${reason}`);
         else if (importer === '.') shared(`${path}: ${reason}; the root's dependencies resolve for every workspace member`);
         else if (SELF_CONTAINED_PREFIXES.some((prefix) => `${importer}/`.startsWith(prefix))) continue;
+        else if (INDEPENDENT_CHECK_PATHS.some((pattern) => pattern.test(`${importer}/`))) continue;
         else if (!graph) shared(`${path}: ${reason}, and there is no workspace graph to find its users`);
         else selectReaching(importer, `${path}: ${reason}`);
+      }
+      continue;
+    }
+    if (path === WORKSPACE_CONFIG) {
+      const impact = manifests.get(path) ? workspaceConfigImpact(manifests.get(path)) : { shared: 'the base or head workspace configuration is unavailable' };
+      if (impact.shared) shared(`${path}: ${impact.shared}`);
+      continue;
+    }
+    if (path === E2E_TEST_DATA && manifests.get(path)) {
+      const impact = e2eTestDataImpact(manifests.get(path));
+      if (impact.shared) {
+        shared(`${path}: ${impact.shared}`);
+        continue;
+      }
+      if (graph && site.has(path)) siteBuild(path);
+      for (const id of impact.changed) {
+        if (appIds.has(id)) select(id, `${path}: the ${id} provisioner changed`);
       }
       continue;
     }
@@ -857,7 +1003,7 @@ export function changedPathsFromGit({ base, head = 'HEAD', cwd }) {
   return [...paths];
 }
 
-const MANIFEST = /^(?:(?:packages|apps|exes)\/[^/]+\/)?package\.json$|^registry\/(?:offline-assets\.lock\.json|apps\.yml|app-information\.yml|standalone\.json)$|^pnpm-lock\.yaml$|^\.gitattributes$|^\.github\/workflows\/ci\.yml$/;
+const MANIFEST = /^(?:(?:packages|apps|exes)\/[^/]+\/)?package\.json$|^registry\/(?:offline-assets\.lock\.json|apps\.yml|app-information\.yml|standalone\.json)$|^pnpm-(?:lock\.yaml|workspace\.yaml)$|^\.gitattributes$|^\.github\/workflows\/ci\.yml$|^scripts\/lib\/e2e-test-data\.mjs$/;
 
 // The text of each changed manifest (ci.yml included) and the lockfile for
 // root manifest edits, at the merge base (changedPathsFromGit diffs from there)
