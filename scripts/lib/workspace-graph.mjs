@@ -84,6 +84,7 @@ function namedByCommands(commands, rootScripts) {
   while (pending.length) {
     const command = pending.pop();
     for (const match of command.matchAll(ROOT_NAMED)) if (match[1]) named.add(match[1]);
+    for (const [, rootFile] of command.matchAll(ROOT_PATH)) named.add(rootFile);
     for (const [, script] of command.matchAll(ROOT_SCRIPT_CALL)) {
       if (!expanded.has(script)) {
         expanded.add(script);
@@ -140,7 +141,7 @@ async function isRegularUnlinkedFile(root, target) {
 
 const AST_SKIP = new Set(['loc', 'range', 'start', 'end', 'tokens', 'comments', 'parent']);
 const DIRECT_MODULE_PARENTS = new Set(['ImportDeclaration', 'ExportNamedDeclaration', 'ExportAllDeclaration', 'ImportExpression']);
-const STATEMENT_BOUNDARY = new Set(['ExpressionStatement', 'VariableDeclaration', 'ReturnStatement', 'BlockStatement', 'Program']);
+const STATEMENT_BOUNDARY = new Set(['ExpressionStatement', 'VariableDeclaration']);
 const FILE_READER_CALLS = new Set(['readFile', 'readFileSync', 'require']);
 const PATH_JOIN_CALLS = new Set(['join', 'resolve']);
 const EXEC_ARRAY_CALLS = new Set(['run', 'execFile', 'execFileSync', 'spawn', 'spawnSync']);
@@ -217,6 +218,9 @@ function classifyPathLiteral(node, ancestors, referencedIdentifiers, readerArgId
     const ancestor = ancestors[i];
     const child = ancestors[i + 1];
     if (STATEMENT_BOUNDARY.has(ancestor.type)) return { standalone: consumedByReader, derivedJson: isJsonLiteral && derivedJson };
+    if (ancestor.type === 'ReturnStatement') {
+      return consumedByReader && isJsonLiteral ? { standalone: true, derivedJson: true } : nope;
+    }
     if (ancestor.type === 'AwaitExpression' && ancestor.argument === child) continue;
     if (ancestor.type === 'VariableDeclarator' && ancestor.init === child) {
       const exported = ancestors[i - 1]?.type === 'VariableDeclaration' && ancestors[i - 2]?.type === 'ExportNamedDeclaration';
@@ -438,49 +442,193 @@ function resolveWorkspaceTarget(raw, baseDir, { root, nodeByPackageName, nodeSet
   return null;
 }
 
+const AMBIGUOUS_DIR = Symbol('ambiguous-dir');
+const SHELL_CONTROL_FLOW = /\b(?:if|then|else|elif|fi|for|while|until|case)\b/;
+const AMBIGUOUS_LINT_EXEC = /\b(?:eval|xargs)\b|\b(?:ba|da|z|k)?sh\b[^\n]*-[a-zA-Z]*c\b|\$\(|`/;
+
+// Split a shell script into simple command tokens and subshell parens `(`, `)`,
+// respecting quotes, backslash escapes/continuations, comments, and `$(...)`.
+function splitShellCommands(script) {
+  const tokens = [];
+  let current = '';
+  let quote = null;
+  let substDepth = 0;
+  const flush = () => {
+    const trimmed = current.trim();
+    if (trimmed) tokens.push(trimmed);
+    current = '';
+  };
+  for (let i = 0; i < script.length; i++) {
+    const ch = script[i];
+    const next = script[i + 1];
+    if (quote === "'") {
+      current += ch;
+      if (ch === "'") quote = null;
+      continue;
+    }
+    if (ch === '\\') {
+      if (next === '\n') {
+        i++;
+        continue;
+      }
+      if (next !== undefined) {
+        current += ch + next;
+        i++;
+        continue;
+      }
+    }
+    if (quote === '"') {
+      current += ch;
+      if (ch === '"') quote = null;
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      current += ch;
+      continue;
+    }
+    if (ch === '#' && (current.length === 0 || /\s/.test(current[current.length - 1]))) {
+      while (i < script.length && script[i] !== '\n') i++;
+      flush();
+      continue;
+    }
+    if (ch === '$' && next === '(') {
+      substDepth++;
+      current += '$(';
+      i++;
+      continue;
+    }
+    if (substDepth > 0) {
+      if (ch === '(') substDepth++;
+      else if (ch === ')') substDepth--;
+      current += ch;
+      continue;
+    }
+    if (ch === '\n' || ch === ';') {
+      flush();
+      continue;
+    }
+    if ((ch === '&' && next === '&') || (ch === '|' && next === '|')) {
+      flush();
+      i++;
+      continue;
+    }
+    if (ch === '&' || ch === '|') {
+      flush();
+      continue;
+    }
+    if (ch === '(' || ch === ')') {
+      flush();
+      tokens.push(ch);
+      continue;
+    }
+    current += ch;
+  }
+  flush();
+  return tokens;
+}
+
 // Workspace nodes whose `lint` script may be executed by any cross-workspace
 // lint invocation (`pnpm --filter <pkg> lint`, `--filter=<pkg>`, `-r lint`,
 // `--dir`, a CI step's `working-directory`, or `cd <dir> && pnpm lint`).
 function lintTargetsInCommands(commands, context) {
-  const { manifests } = context;
+  const { root, manifests } = context;
   const targets = new Set();
   const allLintNodes = () => [...manifests.entries()].filter(([, manifest]) => typeof manifest?.scripts?.lint === 'string').map(([node]) => node);
+  const addAll = () => {
+    for (const node of allLintNodes()) targets.add(node);
+  };
   for (const entry of commands) {
-    const cmd = typeof entry === 'string' ? entry : entry.cmd;
+    const rawCmd = typeof entry === 'string' ? entry : entry.cmd;
     const workingDir = typeof entry === 'string' ? null : entry.workingDir ?? null;
     const baseDir = typeof entry === 'string' ? '.' : entry.baseDir ?? workingDir ?? '.';
-    if (INDEPENDENT_LINT_SCRIPT.test(cmd.trim())) continue;
-    if (!/\b(?:pnpm|npm|yarn)\b/.test(cmd) || !/\blint\b/.test(cmd)) continue;
-    const hasRootFlag = /(?:^|\s)(?:-w|--workspace-root)(?:\s|$)/.test(cmd);
-    const hasCrossFlag = CROSS_WORKSPACE_FLAG.test(cmd);
-    const hasNonRootCrossFlag = /(?:^|[\s;|&(])(?:--filter|-F|--dir|-C|--prefix|--cwd|-r|--recursive|--workspace(?:=|\s)|--workspaces)/.test(cmd);
+    if (INDEPENDENT_LINT_SCRIPT.test(rawCmd.trim())) continue;
+    if (!/\blint\b/.test(rawCmd)) continue;
     const nonRootWorkingDir = Boolean(workingDir && workingDir.trim() && !/^\.\/?$/.test(workingDir.trim()));
-    const cdTargets = [...cmd.matchAll(SHELL_CD_TARGET)].map(([, dir]) => dir).filter((dir) => !/^\.\/?$/.test(dir));
-    if (!hasCrossFlag && !nonRootWorkingDir && cdTargets.length === 0) continue;
-    // `pnpm -w run lint` / `pnpm --workspace-root run lint` runs the root lint
-    // script (handled by ROOT_SCRIPT_CALL), not every workspace member.
-    if (hasRootFlag && !hasNonRootCrossFlag) continue;
-    const recursive = /(?:^|\s)(?:-r|--recursive)(?:\s|$)/.test(cmd);
-    const filters = [...cmd.matchAll(FILTER_ARG)].map(([, target]) => target);
-    if (!recursive && filters.length > 0) {
-      let allResolved = true;
-      for (const filter of filters) {
-        const workspaceNode = resolveWorkspaceTarget(filter, baseDir, context);
-        if (workspaceNode) targets.add(workspaceNode);
-        else allResolved = false;
+    const hasControlFlow = SHELL_CONTROL_FLOW.test(rawCmd);
+    // Active directories tracked across segments; empty means root (for CI steps)
+    // or the owning workspace itself (already handled by manifestScanText).
+    let activeDirs = new Set(nonRootWorkingDir ? [workingDir.trim()] : []);
+    const dirStack = [];
+    for (const token of splitShellCommands(rawCmd)) {
+      if (token === '(') {
+        dirStack.push(new Set(activeDirs));
+        continue;
       }
-      if (!allResolved) for (const node of allLintNodes()) targets.add(node);
-    } else if (!hasCrossFlag && (nonRootWorkingDir || cdTargets.length > 0)) {
-      const dirs = cdTargets.length > 0 ? cdTargets : [workingDir.trim()];
-      let allResolved = true;
-      for (const dir of dirs) {
-        const workspaceNode = resolveWorkspaceTarget(dir, cdTargets.length > 0 ? baseDir : '.', context);
-        if (workspaceNode) targets.add(workspaceNode);
-        else allResolved = false;
+      if (token === ')') {
+        if (dirStack.length > 0) activeDirs = dirStack.pop();
+        continue;
       }
-      if (!allResolved) for (const node of allLintNodes()) targets.add(node);
-    } else {
-      for (const node of allLintNodes()) targets.add(node);
+      if (/\bpopd\b/.test(token)) {
+        activeDirs = new Set([...activeDirs, AMBIGUOUS_DIR]);
+      }
+      const cdMatches = [...token.matchAll(SHELL_CD_TARGET)].map(([, dir]) => dir);
+      if (cdMatches.length > 0) {
+        const nextDirs = hasControlFlow ? new Set(activeDirs) : new Set();
+        const bases = activeDirs.size > 0 ? [...activeDirs] : [baseDir];
+        for (const dir of cdMatches) {
+          for (const from of bases) {
+            if (from === AMBIGUOUS_DIR || dir === '-' || dir.includes('$') || dir.includes('*')) {
+              nextDirs.add(AMBIGUOUS_DIR);
+            } else {
+              const rel = relative(root, resolve(root, from, dir)).split(sep).join('/').replace(/\/+$/, '');
+              if (rel && rel !== '.') nextDirs.add(rel);
+            }
+          }
+        }
+        activeDirs = nextDirs;
+      }
+      if (!/\blint\b/.test(token)) continue;
+      if (AMBIGUOUS_LINT_EXEC.test(token)) {
+        addAll();
+        continue;
+      }
+      if (!/\b(?:pnpm|npm|yarn)\b/.test(token)) continue;
+      const hasRootFlag = /(?:^|\s)(?:-w|--workspace-root)(?:\s|$)/.test(token);
+      const hasCrossFlag = CROSS_WORKSPACE_FLAG.test(token);
+      const hasNonRootCrossFlag = /(?:^|[\s;|&(])(?:--filter|-F|--dir|-C|--prefix|--cwd|-r|--recursive|--workspace(?:=|\s)|--workspaces)/.test(token);
+      if (!hasCrossFlag && activeDirs.size === 0) continue;
+      // `pnpm -w run lint` / `pnpm --workspace-root run lint` runs the root lint
+      // script (handled by ROOT_SCRIPT_CALL), not every workspace member.
+      if (hasRootFlag && !hasNonRootCrossFlag) continue;
+      const recursive = /(?:^|\s)(?:-r|--recursive)(?:\s|$)/.test(token);
+      const filters = [...token.matchAll(FILTER_ARG)].map(([, target]) => target);
+      if (!recursive && filters.length > 0) {
+        let allResolved = true;
+        const resolveBases = activeDirs.size > 0 ? [...activeDirs] : [baseDir];
+        for (const filter of filters) {
+          let resolvedAny = false;
+          for (const from of resolveBases) {
+            if (from === AMBIGUOUS_DIR) {
+              allResolved = false;
+              continue;
+            }
+            const workspaceNode = resolveWorkspaceTarget(filter, from, context);
+            if (workspaceNode) {
+              targets.add(workspaceNode);
+              resolvedAny = true;
+            } else {
+              allResolved = false;
+            }
+          }
+          if (!resolvedAny) allResolved = false;
+        }
+        if (!allResolved) addAll();
+      } else if (!hasCrossFlag && activeDirs.size > 0) {
+        let allResolved = true;
+        for (const dir of activeDirs) {
+          if (dir === AMBIGUOUS_DIR) {
+            allResolved = false;
+            continue;
+          }
+          const workspaceNode = resolveWorkspaceTarget(dir, '.', context);
+          if (workspaceNode) targets.add(workspaceNode);
+          else allResolved = false;
+        }
+        if (!allResolved) addAll();
+      } else {
+        addAll();
+      }
     }
   }
   return targets;

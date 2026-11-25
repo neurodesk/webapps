@@ -3029,6 +3029,7 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
       "const rootTarget = JSON.parse(readFileSync('exes/config/path.json', 'utf8')); readFileSync(rootTarget);",
       "const innerPath = JSON.parse(readFileSync('exes/chain/outer.json', 'utf8')); const leaf = JSON.parse(readFileSync(innerPath, 'utf8')); readFileSync(leaf);",
       "const propCfg = JSON.parse(readFileSync('exes/prop-derived/config.json', 'utf8')); readFileSync(propCfg.path + '.gz');",
+      "function returnedCfg() { return JSON.parse(readFileSync('exes/returned-cfg/input.json', 'utf8')); } readFileSync(returnedCfg().path + '.gz');",
     ].join('\n'),
     'exes/config/path.json': '"scripts/runtime-input.mjs"',
     'scripts/runtime-input.mjs': 'export const ok = true;\n',
@@ -3038,6 +3039,9 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
     'exes/prop-derived/config.json': JSON.stringify({ path: 'exes/leaf/reference.json' }),
     'exes/leaf/reference.json': '{}',
     'exes/leaf/reference.json.gz': 'leaf-gz',
+    'exes/returned-cfg/input.json': JSON.stringify({ path: 'exes/returned-leaf/reference.json' }),
+    'exes/returned-leaf/reference.json': '{}',
+    'exes/returned-leaf/reference.json.gz': 'returned-leaf-gz',
     'scripts/quality/check-indirect.mjs': 'export const chained = true;\n',
     'scripts/quality/unrelated-sibling.mjs': 'export const unrelated = true;\n',
     'exes/data/reference.json': '{}',
@@ -3098,6 +3102,7 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
   assert.equal(createAppPlan(registry, ['scripts/quality/check-indirect.mjs'], prefixGraph).allApps, true, 'chained JSON reads outer.json -> inner.json -> check-indirect.mjs reach CATALOG');
   assert.equal(createAppPlan(registry, ['scripts/quality/unrelated-sibling.mjs'], prefixGraph).selected.length, 0, 'exact chained JSON target does not pull unrelated sibling into CATALOG');
   assert.equal(createAppPlan(registry, ['exes/leaf/reference.json.gz'], prefixGraph).allApps, true, 'path derived from JSON property (propCfg.path + .gz) preserves destination directory edge');
+  assert.equal(createAppPlan(registry, ['exes/returned-leaf/reference.json.gz'], prefixGraph).allApps, true, 'returned parsed JSON preserves destination directory edge');
 });
 
 test('lint runner and scripts/quality files select nothing when unreached, and honor confirmed CI or app reachability', async (t) => {
@@ -3556,6 +3561,28 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
         'apps/n4/package.json': JSON.stringify({ name: '@nd/n4', scripts: { lint: 'node ../../scripts/lint.mjs --workspace' } }),
       },
       'scripts/lint.mjs',
+      new Map(),
+      (plan) => {
+        assert.equal(plan.site, true);
+        assert.deepEqual(plan.selected.map((app) => app.id), ['n4']);
+      },
+    ],
+    [
+      'CI step working-directory with pnpm -w run check && pnpm lint keeps workspace lint edge',
+      {
+        'package.json': JSON.stringify({ name: 'root', scripts: { check: 'echo check' } }),
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ 'working-directory': 'apps/n4', run: 'pnpm -w run check && pnpm lint' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/lint.mjs': "import './quality/helper.mjs';\n",
+        'apps/n4/package.json': JSON.stringify({ name: '@nd/n4', scripts: { lint: 'node ../../scripts/lint.mjs --workspace' } }),
+      },
+      'scripts/quality/helper.mjs',
       new Map(),
       (plan) => {
         assert.equal(plan.site, true);
