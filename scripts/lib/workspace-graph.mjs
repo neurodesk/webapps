@@ -76,7 +76,7 @@ export function siteJobNames(ci) {
 }
 
 // Root files a set of CI commands names, following `pnpm <root script>` calls.
-function namedByCommands(commands, rootScripts, root = null) {
+function namedByCommands(commands, rootScripts, root = null, rootPackageName = null) {
   const named = new Set();
   const pending = commands.map((entry) => (typeof entry === 'string' ? { cmd: entry, workingDir: null } : entry));
   const expanded = new Set();
@@ -85,7 +85,7 @@ function namedByCommands(commands, rootScripts, root = null) {
     for (const match of current.cmd.matchAll(ROOT_NAMED)) if (match[1]) named.add(match[1]);
     for (const [, rootFile] of current.cmd.matchAll(ROOT_PATH)) named.add(rootFile);
     const nonRootWorkingDir = isStaticNonRootDir(current.workingDir, root);
-    for (const script of extractPnpmRootScripts(current.cmd, { requireRootFlag: nonRootWorkingDir, baseDir: current.workingDir ?? '.', root })) {
+    for (const script of extractPnpmRootScripts(current.cmd, { requireRootFlag: nonRootWorkingDir, baseDir: current.workingDir ?? '.', root, rootPackageName })) {
       if (!expanded.has(script)) {
         expanded.add(script);
         if (rootScripts[script]) pending.push({ cmd: rootScripts[script], workingDir: null });
@@ -945,12 +945,35 @@ function extractCommandSubstitutions(segment) {
   return inner;
 }
 
+function filterTargetsRoot(filterVal, cwdDirs, root, rootPackageName) {
+  if (!filterVal || filterVal.startsWith('!')) return false;
+  if (filterVal.includes('${{')) return false;
+  // Strip pnpm graph selectors (`...pkg`, `pkg...`, `pkg^...`, `[since]`).
+  const core = filterVal.replace(/^\.{2,3}\^?|\^?\.{2,3}$/g, '').replace(/\[[^\]]*\]$/, '');
+  if (!core) return false;
+  if (rootPackageName && core === rootPackageName) return true;
+  const pathCandidate = core.startsWith('{') && core.endsWith('}') ? core.slice(1, -1) : core;
+  if (pathCandidate === '.' || pathCandidate === './') return true;
+  if (root && !isUncertainCdTarget(pathCandidate) && (core.startsWith('{') || pathCandidate.startsWith('.') || pathCandidate.includes('/'))) {
+    for (const from of cwdDirs) {
+      if (from.includes('$')) continue;
+      const rel = relative(root, resolve(root, from, pathCandidate)).split(sep).join('/').replace(/\/+$/, '');
+      if (!rel || rel === '.') return true;
+    }
+  }
+  if (core.includes('*') && rootPackageName) {
+    const escaped = core.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+    if (new RegExp(`^${escaped}$`).test(rootPackageName)) return true;
+  }
+  return false;
+}
+
 // Extract root package.json script names invoked via `pnpm`, allowing shell
 // wrappers (`if`, `elif`, `while`, `until`, `timeout`, `bash -c`, `eval`,
 // `$(...)`, backticks), `cd` back to the repository root, and pnpm flags
-// (`--silent`, `--if-present`, `-w`, `--workspace-root`, `--dir <root>`)
-// in any order before or after `run`.
-function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.', root = null, depth = 0 } = {}) {
+// (`--silent`, `--if-present`, `-w`, `--workspace-root`, `--dir <root>`,
+// `--filter <root>`) in any order before or after `run`.
+function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.', root = null, rootPackageName = null, depth = 0 } = {}) {
   const scripts = [];
   if (depth > 4) return scripts;
   let cwdDirs = new Set([baseDir]);
@@ -989,7 +1012,7 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
     const mayRunAtRoot = !requireRootFlag || cwdDirs.has('.');
     for (const subst of extractCommandSubstitutions(token)) {
       for (const from of cwdDirs) {
-        scripts.push(...extractPnpmRootScripts(subst, { requireRootFlag: !mayRunAtRoot, baseDir: from, root, depth: depth + 1 }));
+        scripts.push(...extractPnpmRootScripts(subst, { requireRootFlag: !mayRunAtRoot, baseDir: from, root, rootPackageName, depth: depth + 1 }));
       }
     }
     const words = tokenizeShellWords(token);
@@ -998,7 +1021,7 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
       if (words[start] === 'eval' && start + 1 < words.length) {
         const body = words.slice(start + 1).join(' ');
         for (const from of cwdDirs) {
-          scripts.push(...extractPnpmRootScripts(body, { requireRootFlag: !mayRunAtRoot, baseDir: from, root, depth: depth + 1 }));
+          scripts.push(...extractPnpmRootScripts(body, { requireRootFlag: !mayRunAtRoot, baseDir: from, root, rootPackageName, depth: depth + 1 }));
         }
         break;
       }
@@ -1007,7 +1030,7 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
           if (words[k] === '--') break;
           if (/^-[a-zA-Z]*c$/.test(words[k]) && k + 1 < words.length) {
             for (const from of cwdDirs) {
-              scripts.push(...extractPnpmRootScripts(words[k + 1], { requireRootFlag: !mayRunAtRoot, baseDir: from, root, depth: depth + 1 }));
+              scripts.push(...extractPnpmRootScripts(words[k + 1], { requireRootFlag: !mayRunAtRoot, baseDir: from, root, rootPackageName, depth: depth + 1 }));
             }
             break;
           }
@@ -1022,7 +1045,8 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
       if (!PNPM_BIN.test(words[start])) continue;
       let idx = start + 1;
       let hasRootFlag = false;
-      let hasNonRootTarget = false;
+      let hasNonRootFilter = false;
+      let hasNonRootDir = false;
       let seenRun = false;
       for (; idx < words.length; idx++) {
         const word = words[idx];
@@ -1032,8 +1056,9 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
           continue;
         }
         if (word === '--filter' || word === '-F' || word.startsWith('--filter=') || word.startsWith('-F=')) {
-          hasNonRootTarget = true;
-          if ((word === '--filter' || word === '-F') && idx + 1 < words.length) idx++;
+          const filterVal = word.includes('=') ? word.slice(word.indexOf('=') + 1) : words[++idx];
+          if (filterTargetsRoot(filterVal, cwdDirs, root, rootPackageName)) hasRootFlag = true;
+          else hasNonRootFilter = true;
           continue;
         }
         if (
@@ -1056,7 +1081,7 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
               if (!rel || rel === '.') hitsRoot = true;
             }
             if (hitsRoot) hasRootFlag = true;
-            else hasNonRootTarget = true;
+            else hasNonRootDir = true;
           }
           continue;
         }
@@ -1068,7 +1093,7 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
           seenRun = true;
           continue;
         }
-        if (!hasNonRootTarget && (mayRunAtRoot || hasRootFlag) && /^[A-Za-z0-9_@][\w.:/@-]*$/.test(word)) {
+        if ((hasRootFlag || (!hasNonRootFilter && !hasNonRootDir && mayRunAtRoot)) && /^[A-Za-z0-9_@][\w.:/@-]*$/.test(word)) {
           scripts.push(word);
         }
         break;
@@ -1082,7 +1107,7 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
 // Expand CI commands through root package.json scripts without stripping
 // `pnpm --filter`, so workspace script invocations (such as `--filter @nd/n4 lint`)
 // remain visible before deciding whether standalone lint scripts can be omitted.
-function expandedCommandTexts(commands, rootScripts, root = null) {
+function expandedCommandTexts(commands, rootScripts, root = null, rootPackageName = null) {
   const entries = [];
   const pending = commands.map((entry) => (typeof entry === 'string' ? { cmd: entry, workingDir: null } : entry));
   const expanded = new Set();
@@ -1090,7 +1115,7 @@ function expandedCommandTexts(commands, rootScripts, root = null) {
     const current = pending.pop();
     entries.push(current);
     const nonRootWorkingDir = isStaticNonRootDir(current.workingDir, root);
-    for (const script of extractPnpmRootScripts(current.cmd, { requireRootFlag: nonRootWorkingDir, baseDir: current.workingDir ?? '.', root })) {
+    for (const script of extractPnpmRootScripts(current.cmd, { requireRootFlag: nonRootWorkingDir, baseDir: current.workingDir ?? '.', root, rootPackageName })) {
       if (!expanded.has(script)) {
         expanded.add(script);
         if (rootScripts[script]) pending.push({ cmd: rootScripts[script], workingDir: null });
@@ -1105,12 +1130,12 @@ const COMMAND_PACKAGE_TESTS = /(?:^|[\s'"`(=])(?:\.\/)?(packages\/[\w.-]+\/tests
 // Expand root package.json scripts explicitly invoked from a workspace manifest
 // via `pnpm -w [run] <script>`, `pnpm --workspace-root [run] <script>`, or
 // `pnpm --dir <root> [run] <script>`, returning expanded commands and names.
-function expandedRootScriptsFromWorkspace(commands, rootScripts, { baseDir = '.', root = null } = {}) {
+function expandedRootScriptsFromWorkspace(commands, rootScripts, { baseDir = '.', root = null, rootPackageName = null } = {}) {
   const names = new Set();
   const texts = [];
   const pending = [];
   for (const cmd of commands) {
-    for (const script of extractPnpmRootScripts(cmd, { requireRootFlag: true, baseDir, root })) {
+    for (const script of extractPnpmRootScripts(cmd, { requireRootFlag: true, baseDir, root, rootPackageName })) {
       if (!names.has(script)) {
         names.add(script);
         if (rootScripts[script]) pending.push(rootScripts[script]);
@@ -1120,7 +1145,7 @@ function expandedRootScriptsFromWorkspace(commands, rootScripts, { baseDir = '.'
   while (pending.length) {
     const command = pending.pop();
     texts.push(command);
-    for (const script of extractPnpmRootScripts(command, { root })) {
+    for (const script of extractPnpmRootScripts(command, { root, rootPackageName })) {
       if (!names.has(script)) {
         names.add(script);
         if (rootScripts[script]) pending.push(rootScripts[script]);
@@ -1165,7 +1190,9 @@ export async function loadConservativeWorkspaceGraph(root) {
   const nodeByPackageName = new Map([...manifests].filter(([, manifest]) => manifest?.name).map(([node, manifest]) => [manifest.name, node]));
 
   const ci = parse(await readFile(join(root, '.github/workflows/ci.yml'), 'utf8'));
-  const rootScripts = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).scripts;
+  const rootManifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+  const rootScripts = rootManifest.scripts ?? {};
+  const rootPackageName = typeof rootManifest.name === 'string' ? rootManifest.name : null;
   const workflowWorkingDir = ci?.defaults?.run?.['working-directory'] ?? null;
   const rawRuns = (names) => names.flatMap((name) => {
     const job = ci?.jobs?.[name];
@@ -1183,10 +1210,10 @@ export async function loadConservativeWorkspaceGraph(root) {
     [SITE, rawRuns(siteJobNames(ci))],
     [CATALOG, rawRuns(CATALOG_JOBS)],
   ];
-  const expandedByEntry = new Map(rawEntries.map(([node, raw]) => [node, expandedCommandTexts(raw, rootScripts, root)]));
+  const expandedByEntry = new Map(rawEntries.map(([node, raw]) => [node, expandedCommandTexts(raw, rootScripts, root, rootPackageName)]));
   const workspaceRootScriptInfo = new Map(nodes.map((node) => {
     const allScripts = Object.values(manifests.get(node)?.scripts ?? {}).map(String);
-    return [node, expandedRootScriptsFromWorkspace(allScripts, rootScripts, { baseDir: node, root })];
+    return [node, expandedRootScriptsFromWorkspace(allScripts, rootScripts, { baseDir: node, root, rootPackageName })];
   }));
   const workspaceRootScripts = new Map([...workspaceRootScriptInfo].map(([node, { names }]) => [node, names]));
   const workspaceExpandedScripts = new Map(nodes.map((node) => {
@@ -1276,16 +1303,12 @@ export async function loadConservativeWorkspaceGraph(root) {
     edges.set(node, uses);
   }
 
-  const entries = rawEntries.map(([node, raw]) => [
-    node,
-    raw.map(({ cmd, workingDir }) => ({ cmd: cmd.replace(/pnpm --filter \S+ (?:run )?\S+/g, ''), workingDir })),
-  ]);
   // Root tool configs (e2e.config.ts, tsconfig.agentic.json) are read implicitly
   // by the site jobs' commands, so the site build follows them too.
   const rootConfigs = (await readdir(root)).filter((name) => /^(?:[\w-]+\.config\.[cm]?[jt]s|tsconfig[\w.-]*\.json)$/.test(name) && !INDEPENDENT_CONFIG.test(name));
   const rootScriptsRun = new Map();
-  for (const [node, commands] of entries) {
-    const { named, expanded } = namedByCommands(commands, rootScripts, root);
+  for (const [node, commands] of rawEntries) {
+    const { named, expanded } = namedByCommands(commands, rootScripts, root, rootPackageName);
     if (node === SITE) for (const config of rootConfigs) named.add(config);
     for (const lintTarget of lintTargetsInCommands(expandedByEntry.get(node) ?? [], lintTargetContext)) {
       named.add(lintTarget);
@@ -1386,11 +1409,12 @@ export async function loadConservativeWorkspaceGraph(root) {
     const jobWorkingDir = job?.defaults?.run?.['working-directory'] ?? workflowWorkingDir;
     return [id, namedByCommands(
       (Array.isArray(job?.steps) ? job.steps : []).map((step) => ({
-        cmd: String(step?.run ?? '').replace(/pnpm --filter \S+ (?:run )?\S+/g, ''),
+        cmd: String(step?.run ?? ''),
         workingDir: step?.['working-directory'] ?? jobWorkingDir ?? null,
       })),
       rootScripts,
       root,
+      rootPackageName,
     ).expanded];
   }));
   const naming = new Map();
