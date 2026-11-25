@@ -6,9 +6,10 @@ const AUXILIARY_KINDS = [
   ['gradients', /(^|\.)(bvals?|bvecs?)$/i],
   ['model', /\.(onnx|basis)$/i],
   ['protocol', /\.(toml|txt)$/i],
+  ['metadata', /\.(tsv|csv)$/i],
 ];
 // A `mask` input takes a mask the user chooses for it; a drop never fills it and it never leads.
-const AUXILIARY = new Set([...AUXILIARY_KINDS.map(([kind]) => kind), 'metadata', 'mask']);
+const AUXILIARY = new Set([...AUXILIARY_KINDS.map(([kind]) => kind), 'mask']);
 // An app that handles drops itself marks the region; NiiVue canvases elsewhere are taken over.
 const OWNED = '[data-drop-target], .nd-file, .file-upload-zone, .file-drop, .upload-zone';
 const UNDO_MS = 8000;
@@ -43,6 +44,15 @@ export function primaryInput(scope) {
  * `mask` input, which only its own picker fills);
  * DICOM slices, a BIDS diffusion dataset and other files stay together at the primary input.
  */
+function acceptsExtension(input, name) {
+  const accept = (input.accept ?? input.getAttribute?.('accept') ?? '').trim();
+  if (!accept) return true;
+  const tokens = accept.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+  if (!tokens.length || !tokens.every(t => t.startsWith('.'))) return true;
+  const lower = name.toLowerCase();
+  return tokens.some(ext => lower.endsWith(ext));
+}
+
 export function routeFiles(files, inputs, primary, occupied = new Set()) {
   if (primary && files.some(inBidsDwiDataset)) return [[primary, [...files]]];
   const plan = new Map();
@@ -54,7 +64,7 @@ export function routeFiles(files, inputs, primary, occupied = new Set()) {
   let slotIndex = 0;
   for (const file of files) {
     const kind = AUXILIARY_KINDS.find(([, pattern]) => pattern.test(file.name))?.[0];
-    let input = (kind && inputs.find(candidate => candidate.dataset.neurodeskInput === kind)) || primary;
+    let input = (kind && inputs.find(candidate => candidate.dataset.neurodeskInput === kind && acceptsExtension(candidate, file.name))) || primary;
     if (!kind && slots.length > 1 && SCAN_FILE.test(file.name)) {
       input = slots[slotIndex++ % slots.length];
     }
@@ -100,6 +110,7 @@ export function bindPageDrop(doc = globalThis.document) {
   doc.body.append(overlay);
   let undoTimer;
   let hideTimer;
+  let undoSnapshot = null;
 
   const carriesFiles = event => event.dataTransfer?.types?.includes('Files');
   // NiiVue loads canvas drops itself, behind the app; capture takes those first. A viewer in a
@@ -140,6 +151,7 @@ export function bindPageDrop(doc = globalThis.document) {
   function withdrawUndo() {
     doc.querySelector('.nd-status-undo')?.remove();
     view.clearTimeout(undoTimer);
+    undoSnapshot = null;
   }
 
   function supersede() {
@@ -151,6 +163,7 @@ export function bindPageDrop(doc = globalThis.document) {
     withdrawUndo();
     const status = doc.querySelector('footer#status, #status');
     if (!status || !snapshot.length) return;
+    undoSnapshot = snapshot;
     const button = doc.createElement('button');
     button.type = 'button';
     button.className = 'nd-status-undo';
@@ -160,7 +173,10 @@ export function bindPageDrop(doc = globalThis.document) {
       for (const [input, files] of snapshot) replace(input, files);
     });
     status.append(button);
-    undoTimer = view.setTimeout(() => button.remove(), UNDO_MS);
+    undoTimer = view.setTimeout(() => {
+      button.remove();
+      if (undoSnapshot === snapshot) undoSnapshot = null;
+    }, UNDO_MS);
   }
 
   function drop(event) {
@@ -184,6 +200,7 @@ export function bindPageDrop(doc = globalThis.document) {
       const snapshot = plan
         .filter(([input]) => previous.has(input) || hadLoaded || multiImage)
         .map(([input]) => [input, previous.get(input) ?? []]);
+      undoSnapshot = snapshot;
       for (const [input, group] of plan) replace(input, group);
       offerUndo(snapshot);
     }).catch(error => {
@@ -203,14 +220,30 @@ export function bindPageDrop(doc = globalThis.document) {
     occupied.add(input);
   }
 
+  const sameFiles = (a, b) => a.length === b.length && a.every((file, idx) => file === b[idx]);
+
   // Native input owners report their loaded list; nd-file-field emits a different, promise-valued contract.
   function sync(event) {
     const input = event.target;
     if (!(input instanceof view.HTMLInputElement) || input.type !== 'file' || !input.hasAttribute('data-neurodesk-input')) return;
     const files = event.detail?.files;
     if (!files?.[Symbol.iterator]) return;
-    previous.set(input, [...files]);
-    if (previous.get(input).length) occupied.add(input);
+    const next = [...files];
+    const prior = previous.get(input) ?? [];
+    // When an app opts an input in with `restoreWithUndo: true`, record its prior files on the
+    // active Undo snapshot if the drop updated or cleared it via `nd-files`. Apps that do not
+    // handle same-turn auxiliary replay (e.g. N4's mask loader) stay unaffected.
+    if (
+      undoSnapshot?.length
+      && event.detail.restoreWithUndo === true
+      && event.detail.cancelPending !== true
+      && !undoSnapshot.some(([el]) => el === input)
+      && (prior.length > 0 || !sameFiles(prior, next))
+    ) {
+      undoSnapshot.push([input, prior]);
+    }
+    previous.set(input, next);
+    if (next.length) occupied.add(input);
     else occupied.delete(input);
     if (event.detail.cancelPending === true) supersede();
   }

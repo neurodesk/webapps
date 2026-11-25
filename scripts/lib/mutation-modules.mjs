@@ -83,7 +83,7 @@ export const modules = [
     // sums makes every run of the suite take seconds instead of 0.2 s.
     id: 'lcmodel-io',
     file: 'packages/lcmodel/src/lcmodel-io.js',
-    mutate: 'packages/lcmodel/src/lcmodel-io.js:1-324',
+    mutate: 'packages/lcmodel/src/lcmodel-io.js:1-337',
     files: [
       'packages/lcmodel/package.json',
       'packages/lcmodel/src/inputs.js',

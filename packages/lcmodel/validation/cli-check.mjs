@@ -84,7 +84,7 @@ async function libraryBasis(id) {
   const path = join(tmpdir(), "neurodesk-lcmodel-validation", asset.sha256, set.file.split("/").at(-1));
   let bytes = await readFile(path).catch(() => null);
   if (!bytes || sha256(bytes) !== asset.sha256) {
-    const response = await fetch(manifest.base_url + set.file);
+    const response = await fetch(asset.url ?? manifest.base_url + set.file);
     if (!response.ok) throw new Error(`${set.file}: HTTP ${response.status}`);
     bytes = Buffer.from(await response.arrayBuffer());
     if (sha256(bytes) !== asset.sha256) throw new Error(`${set.file}: SHA-256 differs from model.manifest.json`);

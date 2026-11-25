@@ -63,7 +63,8 @@ export function parseRaw(text) {
 
 /** True when `name` looks like the water half of a .RAW/.H2O pair. */
 function isWaterName(name) {
-  return /\.h2o$/i.test(name) || /(^|[_.-])(w|water|h2o|ref|unsup)([_.-]|$)/i.test(name.replace(/\.raw$/i, ""));
+  const base = name.split(/[\\/]/).pop() ?? name;
+  return /\.h2o$/i.test(base) || /(^|[_.-])(w|water|h2o|ref|unsup)([_.-]|$)/i.test(base.replace(/\.raw$/i, ""));
 }
 
 /**

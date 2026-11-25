@@ -7,12 +7,13 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { gunzipSync } from "node:zlib";
 import packageJson from "../package.json" with { type: "json" };
 import manifest from "../model.manifest.json" with { type: "json" };
 import PARAMETERS from "./parameters.json" with { type: "json" };
 import { STATUS, fileStem, groupCsvLong, groupCsvWide } from "./group.js";
+import { parseEventsText } from "./fmrs.js";
 import { parseControl, sortInputs, textHead } from "./inputs.js";
 import { lcmodelError } from "./lcmodel-io.js";
 import { basisLibrary } from "./library.js";
@@ -24,8 +25,10 @@ import {
   datasetLabel,
   failedEntry,
   fidaInput,
+  fitFmrsDataset,
   fitPlanned,
   fitSummary,
+  fmrsResultTexts,
   groupMeasurements,
   groupRecords,
   headerFor,
@@ -129,7 +132,7 @@ async function loadAsset(asset, { cacheDir, offline, onProgress }) {
     throw new Error(`${asset.filename} is missing from the offline model directory ${cacheDir}. Run "lcmodel download-models" while online, or reinstall the complete release.`);
   }
   onProgress(`Downloading ${asset.filename}…`);
-  const response = await fetch(manifest.base_url + asset.filename);
+  const response = await fetch(asset.url ?? manifest.base_url + asset.filename);
   if (!response.ok) throw new Error(`Failed to download ${asset.filename}: HTTP ${response.status}`);
   bytes = Buffer.from(await response.arrayBuffer());
   if (!verified(bytes)) throw new Error(`${asset.filename} download failed checksum verification.`);
@@ -167,6 +170,11 @@ async function createEngine(files, { basisOptions, onProgress }) {
       if (result.error) throw new Error(result.error);
       return result;
     },
+    async processFmrs(k, options) {
+      const result = lcm.processFmrs(k, options);
+      if (result.error) throw new Error(result.error);
+      return result;
+    },
     async fit({ control, files: inputs, basis, fdate }) {
       const text = basis.library ? await libraryBasisText(basis.library, basisOptions) : basis.text;
       onProgress("Fitting with LCModel", 0.35);
@@ -195,13 +203,26 @@ export async function checkInstallation() {
 // Inputs and outputs
 // ---------------------------------------------------------------------------
 
+function commonAncestor(dirs) {
+  const parts = dirs.map((d) => resolve(d).split(sep));
+  const minLen = Math.min(...parts.map((p) => p.length));
+  let i = 0;
+  while (i < minLen && parts.every((p) => p[i] === parts[0][i])) i += 1;
+  return i === 0 ? sep : parts[0].slice(0, i).join(sep) || sep;
+}
+
 /**
- * Files as the app receives them: a file by its name, a folder's files by
- * their path from the folder (the folder picker's webkitRelativePath), so
- * subjects with the same file names pair within their folders.
+ * Files as the app receives them: a loose file by its name (matching the file
+ * picker and content-addressed file paths), a single folder's files relative to
+ * that folder's parent (matching the folder picker's webkitRelativePath), or —
+ * whenever multiple folders or mixed file/folder arguments are passed — every
+ * file relative to one shared common ancestor directory so files from different
+ * folders never collide or pair across folders.
  */
-async function readInputs(paths) {
-  const files = [];
+export async function readInputs(paths) {
+  const dirEntries = [];
+  const loose = [];
+  const dirRoots = [];
   for (const path of paths) {
     let info;
     try {
@@ -211,11 +232,27 @@ async function readInputs(paths) {
     }
     if (info.isDirectory()) {
       const root = resolve(path);
+      dirRoots.push(root);
       const entries = await readdir(root, { recursive: true, withFileTypes: true });
       const inside = entries.filter((e) => e.isFile()).map((e) => join(e.parentPath, e.name)).sort();
-      for (const file of inside) files.push({ name: [basename(root), ...relative(root, file).split(sep)].join("/"), path: file });
+      for (const file of inside) dirEntries.push({ root, path: file });
     } else {
-      files.push({ name: basename(path), path });
+      loose.push(resolve(path));
+    }
+  }
+  const files = [];
+  const allFilePaths = [...dirEntries.map((e) => e.path), ...loose];
+  if (dirRoots.length === 1 && loose.length === 0) {
+    const root = dirRoots[0];
+    for (const entry of dirEntries) {
+      files.push({ name: [basename(root), ...relative(root, entry.path).split(sep)].join("/"), path: entry.path });
+    }
+  } else if (dirRoots.length === 0) {
+    for (const file of loose) files.push({ name: basename(file), path: file });
+  } else if (allFilePaths.length) {
+    const ancestor = commonAncestor(allFilePaths.map((p) => dirname(p)));
+    for (const file of allFilePaths) {
+      files.push({ name: relative(ancestor, file).split(sep).join("/"), path: file });
     }
   }
   const names = new Set();
@@ -282,6 +319,8 @@ export async function fit({
   output,
   basis,
   t1,
+  events: eventsPath,
+  fmrs,
   parameters: p = {},
   cacheDir = defaultCacheDir(),
   offline = offlineByDefault(),
@@ -291,6 +330,15 @@ export async function fit({
   if (t1 && FRACTIONS.some(key => p[key] !== undefined)) throw new Error("Give either a T1 image or tissue fractions, not both.");
   if (!inputs?.length || !output) throw new Error("Spectroscopy files and an output directory are required.");
   if (basis && p.basisSet && p.basisSet !== "auto") throw new Error("Give --basis or --basis-set, not both.");
+  if (eventsPath && !fmrs?.mode) throw new Error("--events requires --fmrs-mode (sliding, blocks, or conditions).");
+  if (fmrs?.mode) {
+    if (!["sliding", "blocks", "conditions"].includes(fmrs.mode)) {
+      throw new Error(`Unknown fMRS mode "${fmrs.mode}"; use sliding, blocks, or conditions.`);
+    }
+    if (t1 || FRACTIONS.some((key) => p[key] !== undefined)) {
+      throw new Error("Tissue correction (--t1 or tissue fractions) is not supported with --fmrs-mode.");
+    }
+  }
   const destination = resolve(output);
   await assertNewOutput(destination);
   const started = performance.now();
@@ -305,7 +353,7 @@ export async function fit({
   let engine;
   // The app fits the first .RAW of a drop; a command line given more must not quietly drop the rest.
   if (sorted.raw.length > 1 || sorted.water.length > 1) throw new Error("Give one LCModel .RAW (and one .H2O) per run; fit several with one run each.");
-  if (sorted.raw.length && sorted.other.length) throw new Error(`Give an LCModel .RAW or scanner files, not both: ${sorted.other.map((f) => f.name).join(", ")}.`);
+  if (sorted.raw.length && sorted.other.length) throw new Error(`Give an LCModel .RAW or scanner files, not both: ${sorted.other.map((f) => basename(f.name)).join(", ")}.`);
   if (sorted.raw.length) {
     const water = sorted.water[0];
     input = rawInput({ name: sorted.raw[0].name, text: decode(sorted.raw[0]), waterName: water?.name ?? null, water: water ? decode(water) : null, control });
@@ -347,9 +395,13 @@ export async function fit({
   const group = input.kind === "fida" && input.datasets.length > 1;
   // A WebAssembly trap may leave the module broken: the next dataset gets a fresh one.
   const recycle = () => createEngine(sorted.other, engineOptions);
-  const result = group
-    ? await fitGroup(engine, { input, p, settings, bases, versions, destination, onStep, log, recycle, segmentation })
-    : await fitOne(engine, { input, p, settings, bases, acquisition, versions, destination, onStep, log, segmentation });
+  const events = eventsPath ? parseEventsText(await readFile(eventsPath, "utf8")) : (fmrs?.events ?? []);
+  const fmrsConfig = fmrs?.mode ? { ...fmrs, events } : null;
+  const result = fmrsConfig
+    ? await fitFmrsNode(engine, { input, p, settings, bases, versions, destination, fmrs: fmrsConfig, onStep, onProgress: report, log })
+    : group
+      ? await fitGroup(engine, { input, p, settings, bases, versions, destination, onStep, log, recycle, segmentation })
+      : await fitOne(engine, { input, p, settings, bases, acquisition, versions, destination, onStep, log, segmentation });
   result.provenance = {
     app: APP,
     parameters: p,
@@ -431,6 +483,83 @@ async function fitGroup(engine, { input, p, settings, bases, versions, destinati
       macromoleculeModel: settings.mmModel,
       fitted: fitted.length,
       failed: entries.length - fitted.length,
+    },
+  };
+}
+
+async function fitFmrsNode(engine, { input, p, settings, bases, versions, destination, fmrs, onStep, onProgress, log }) {
+  if (input.kind !== "fida") {
+    throw new Error("Functional MRS requires multi-transient raw spectroscopy data (not an averaged .RAW file).");
+  }
+  if (input.datasets.length !== 1) {
+    throw new Error(`Functional MRS fits one multi-transient dataset at a time, not ${input.datasets.length} datasets.`);
+  }
+  const choice = chooseBasis(input, 0, { basisSet: p.basisSet ?? "auto", bases, acquisition: null });
+  const range = settings.range ?? null;
+  const fmrsResult = await fitFmrsDataset(engine, {
+    input,
+    index: 0,
+    choice,
+    range,
+    settings,
+    bases,
+    fmrs,
+    onStep,
+    onBinProgress: (fraction, message) => onProgress(fraction, message),
+    log,
+  });
+  if (!fmrsResult.windows.some((w) => w.status === STATUS.fitted)) {
+    const firstErr = fmrsResult.windows.find((w) => w.error)?.error ?? "all bins failed";
+    throw new Error(`No fMRS windows could be fitted: ${firstErr}`);
+  }
+  const texts = Object.values(fmrsResultTexts(fmrsResult, versions));
+  const written = await writeTexts(destination, texts);
+  return {
+    files: written,
+    measurements: {
+      mode: fmrsResult.mode,
+      windows: fmrsResult.windows.map((w) => ({
+        id: w.id,
+        label: w.label,
+        condition: w.condition,
+        midTimeS: w.midTimeS,
+        averagesKept: w.averagesKept,
+        status: w.status,
+        qcStatus: w.qc?.status ?? null,
+        fwhmPpm: w.fwhmPpm ?? null,
+        lwHz: w.lwHz ?? null,
+        broadeningAppliedHz: w.broadeningAppliedHz ?? 0,
+        linewidthMatchStatus: w.linewidthMatchStatus ?? "off",
+        snr: w.lcmSnr ?? null,
+        metabolites: Object.fromEntries((w.metabolites ?? []).map((m) => [m.name, { concentration: m.concentration, sdPercent: m.sdPercent, ratio: m.ratio }])),
+      })),
+      conditionSummary: fmrsResult.conditionSummary,
+      windowedStats: fmrsResult.windowedStats,
+      dynamicGlm: fmrsResult.dynamicGlm
+        ? {
+            aligned: fmrsResult.dynamicGlm.aligned,
+            alignmentRms: fmrsResult.dynamicGlm.alignmentRms ?? null,
+            error: fmrsResult.dynamicGlm.error ?? null,
+            seMethod: fmrsResult.dynamicGlm.seMethod ?? null,
+            transientsUsed: fmrsResult.dynamicGlm.transientsUsed,
+            degreesOfFreedom: fmrsResult.dynamicGlm.degreesOfFreedom,
+            baseline: fmrsResult.dynamicGlm.baseline,
+            metabolites: fmrsResult.dynamicGlm.metabolites,
+            boldLinewidth: fmrsResult.dynamicGlm.boldLinewidth?.contrasts ?? null,
+            freqShift: fmrsResult.dynamicGlm.freqShift?.contrasts ?? null,
+          }
+        : null,
+    },
+    provenance: {
+      basisSet: choice === CUSTOM ? bases.custom.name : choice,
+      timingModel: fmrsResult.timingModel ?? "fixed-tr",
+      trS: fmrsResult.trS ?? null,
+      mode: fmrsResult.mode,
+      matchLinewidth: fmrsResult.matchLinewidth,
+      targetLinewidthHz: fmrsResult.targetLinewidthHz,
+      lineBroadening: settings.lineBroadening,
+      simulateMacromolecules: settings.simulateMacromolecules,
+      baselineStiffness: settings.baselineStiffness,
     },
   };
 }

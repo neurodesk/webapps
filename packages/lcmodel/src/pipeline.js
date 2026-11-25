@@ -5,6 +5,17 @@
 // loaded in Node. Everything else here is pure.
 import packageJson from "../package.json" with { type: "json" };
 import { assessBasis, parseBasisHeader, recommendBasis, sequenceFamily } from "./basis-select.js";
+import {
+  analyzeFmrsWindows,
+  buildFmrsBins,
+  buildFmrsReport,
+  classifyWindowQc,
+  fitDynamicSpectralGlm,
+  fmrsStatsCsv,
+  fmrsTimeCourseCsvLong,
+  fmrsTimeCourseCsvWide,
+  fmrsTransientsCsv,
+} from "./fmrs.js";
 import { STATUS, fileStem, groupRecord, planBases, uniqueNames } from "./group.js";
 import { FILES, buildControl, concentrationsCsv, explainDiagnostic, fillGaps, parseCoord, parseTable, presentRows } from "./lcmodel-io.js";
 import { parseRaw } from "./inputs.js";
@@ -53,6 +64,8 @@ export function settingsFrom(p = {}) {
     range: p.ppmStart == null && p.ppmEnd == null ? null : [p.ppmStart ?? null, p.ppmEnd ?? null],
     mmModel: p.macromoleculeModel ?? "co-edited",
     lineBroadening: p.lineBroadening ?? "widened",
+    simulateMacromolecules: p.simulateMacromolecules ?? true,
+    baselineStiffness: p.baselineStiffness > 0 ? p.baselineStiffness : null,
   };
 }
 
@@ -368,6 +381,8 @@ export async function fitDataset(engine, { input, index: k, choice, range, setti
     sptype: lcm.edited ? "mega-press-3" : "",
     coEditedMM: mmModel === "co-edited",
     lineBroadening,
+    simulateMacromolecules: lcm.edited ? true : (settings.simulateMacromolecules ?? true),
+    baselineStiffness: lcm.edited ? null : (settings.baselineStiffness ?? null),
   });
   const files = { [FILES.raw]: lcm.raw };
   if (water) files[FILES.h2o] = lcm.h2o;
@@ -433,8 +448,11 @@ export function failedEntry(k, error, basisId) {
 export function reportHtml(entry, input, versions) {
   const f = entry.fit;
   const ds = input.kind === "fida" ? input.datasets[entry.index] : null;
+  const displayName = ds
+    ? (entry.windowLabel ? `${ds.label} — ${entry.windowLabel}` : ds.label)
+    : input.name;
   const dataset = ds
-    ? { name: ds.label, file: ds.path ?? ds.name, waterFile: ds.water ? (ds.waterPath ?? ds.water) : null, format: ds.format, header: ds.header, edited: Boolean(f.lcm.edited) }
+    ? { name: displayName, file: ds.path ?? ds.name, waterFile: ds.water ? (ds.waterPath ?? ds.water) : null, format: ds.format, header: ds.header, edited: Boolean(f.lcm.edited) }
     : { name: input.name, file: input.name, waterFile: input.waterName, format: "LCModel .RAW", header: { hzpppm: f.lcm.hzpppm, teMs: input.header.teMs, sequence: input.header.sequence, points: input.points }, edited: Boolean(f.lcm.edited) };
   const p = entry.processed;
   return buildReport({
@@ -456,7 +474,8 @@ export function reportHtml(entry, input, versions) {
  */
 export function resultTexts(entry, input, versions) {
   const { fit: f } = entry;
-  const stem = fileStem(datasetLabel(input, entry.index));
+  const baseLabel = datasetLabel(input, entry.index);
+  const stem = fileStem(entry.windowId ? `${baseLabel}_${entry.windowId}` : baseLabel);
   const text = (name, body, type = "text/plain") => ({ name, body, type });
   const entries = {
     concentrations: { description: "Concentrations (.csv)", ...text(`${stem}_concentrations.csv`, concentrationsCsv(f.rows, f.ratioTo), "text/csv"), viewable: false },
@@ -558,4 +577,375 @@ export function groupMeasurements(records) {
     tissueFractions: r.fractionSource ? { gm: r.fractionGM, wm: r.fractionWM, csf: r.fractionCSF, source: r.fractionSource } : null,
     metabolites: Object.fromEntries(r.metabolites.map((m) => [m.name, { concentration: m.concentration, sdPercent: m.sdPercent, ratio: m.ratio, tissueCorrected: m.tissueCorrected, alphaCorrected: m.alphaCorrected }])),
   }));
+}
+
+// ---------------------------------------------------------------------------
+// Functional MRS (fMRS) workflow
+// ---------------------------------------------------------------------------
+
+async function fitPreparedSpectrum(engine, { lcm, label, choice, range, settings, bases, generated, log }) {
+  const water = settings.scaleWater && Boolean(lcm.h2o);
+  const control = buildControl({
+    nunfil: lcm.nunfil,
+    deltat: lcm.deltat,
+    hzpppm: lcm.hzpppm,
+    teMs: lcm.teMs,
+    water,
+    ecc: settings.ecc,
+    ppmStart: range[0],
+    ppmEnd: range[1],
+    title: label,
+    sptype: "",
+    coEditedMM: false,
+    lineBroadening: settings.lineBroadening,
+    simulateMacromolecules: settings.simulateMacromolecules ?? true,
+    baselineStiffness: settings.baselineStiffness ?? null,
+  });
+  const files = { [FILES.raw]: lcm.raw };
+  if (water) files[FILES.h2o] = lcm.h2o;
+  const basis = await basisFor(choice, bases);
+  const out = await engine.fit({ control, files, basis: basis.job, fdate: generated.toString() });
+  const parsed = parseCoord(out.outputs[FILES.coord] ?? "");
+  const coord = { ...parsed, gaps: fillGaps(parsed, lcm.raw, lcm) };
+  const tableText = out.outputs[FILES.table] ?? "";
+  const table = parseTable(tableText);
+  const basisTeMs = choice === CUSTOM ? bases.custom?.header?.teMs : bases.library.find((b) => b.id === choice)?.teMs;
+  for (const d of coord.diagnostics) {
+    const text = explainDiagnostic(d, { dataTeMs: lcm.teMs, basisTeMs });
+    log(`LCModel, ${label}: ${text}`, /ERROR|FATAL|ILLOGICAL|warning/i.test(d) ? "warning" : "info");
+  }
+  return {
+    basis: basis.info,
+    fit: {
+      coord,
+      table: tableText,
+      outputs: out.outputs,
+      control,
+      lcm,
+      water,
+      rows: presentRows(table.rows.length ? table.rows : coord.rows),
+      ratioTo: table.ratioTo ?? coord.ratioTo,
+      unit: water ? "mM" : "a.u.",
+      range,
+      macromoleculeModel: null,
+      lineBroadening: settings.lineBroadening,
+    },
+  };
+}
+
+/**
+ * Run functional MRS preprocessing (transient-preserving coil combine, bad-
+ * average removal, drift correction, global phasing/referencing, binning,
+ * optional BOLD linewidth matching), fit each bin (and grand mean when 2D
+ * dynamic GLM is enabled) with LCModel, classify QC, and fit temporal GLMs.
+ */
+export async function fitFmrsDataset(engine, {
+  input,
+  index: k = 0,
+  choice,
+  range,
+  settings,
+  bases,
+  fmrs,
+  generated = new Date(),
+  signal,
+  onStep = () => {},
+  onPreprocessed = null,
+  onBinProgress = () => {},
+  log = () => {},
+}) {
+  if (input.kind !== "fida") {
+    throw new Error("Functional MRS requires multi-transient raw spectroscopy data (not an averaged .RAW file).");
+  }
+  const ds = input.datasets[k];
+  if (!ds) {
+    throw new Error(`Dataset index ${k} is out of range.`);
+  }
+  if (isEdited(input, k) || (ds.header?.subspectra ?? 1) > 1) {
+    throw new Error("Functional MRS binning currently supports unedited spectra only (not MEGA-PRESS or edited subspectra).");
+  }
+  const header = ds.header ?? {};
+  const keptAverages = header.averages ?? 1;
+  if (keptAverages < 2) {
+    throw new Error(`${ds.label} has only ${keptAverages} average; functional MRS requires unaveraged multi-transient data.`);
+  }
+  const rawAverages = header.rawTransientCount ?? keptAverages;
+  if (!Number.isFinite(header.trMs) || !(header.trMs > 0)) {
+    throw new Error(`${ds.label} records no valid repetition time (TR); functional MRS requires a positive TR.`);
+  }
+  const trS = header.trMs / 1000;
+  const totalDurationS = rawAverages * trS;
+  if (fmrs.events?.length) {
+    log(`${ds.label}: aligning ${fmrs.events.length} stimulus events on a fixed-TR timeline (TR = ${trS.toFixed(3)} s, ${rawAverages} transients = ${totalDurationS.toFixed(1)} s; assumes no mid-scan pauses).`);
+    const outOfRange = fmrs.events.filter((e) =>
+      e.onset >= totalDurationS || (e.duration > 0 ? e.onset + e.duration <= 0 : e.onset < 0),
+    );
+    if (outOfRange.length) {
+      log(`${ds.label}: ${outOfRange.length} stimulus event(s) fall outside the fixed-TR scan window [0, ${totalDurationS.toFixed(1)} s].`, "warning");
+    }
+  }
+  checkBasis(headerFor(input, k, null), choice, bases);
+  const binSpecs = buildFmrsBins({
+    mode: fmrs.mode ?? "sliding",
+    averages: rawAverages,
+    trS,
+    windowSize: fmrs.windowSize ?? 4,
+    stepSize: fmrs.stepSize ?? fmrs.windowSize ?? 4,
+    events: fmrs.events ?? [],
+    baselineLabel: fmrs.baselineLabel ?? "Rest",
+  });
+  const [defStart, defEnd] = defaultRangeText(input, k, choice, settings.mmModel, bases).map(Number);
+  const fitRange = [range?.[0] ?? defStart, range?.[1] ?? defEnd];
+
+  // Match Stage 1 LCModel's effective ECC setting: LCModel only runs DOECC when
+  // water scaling is enabled and a water reference is attached.
+  const effectiveEcc = Boolean(settings.scaleWater && settings.ecc && ds.water);
+  signal?.throwIfAborted();
+  onStep(`Preprocessing ${rawAverages} transients into ${binSpecs.length} fMRS bins…`);
+  const pre = await engine.processFmrs(k, {
+    ...preprocessingOptions(input, k, settings.preprocessing),
+    eddyCurrentCorrection: effectiveEcc,
+    bins: binSpecs,
+    matchLinewidth: Boolean(fmrs.matchLinewidth),
+    targetLinewidthHz: fmrs.targetLinewidthHz > 0 ? fmrs.targetLinewidthHz : undefined,
+    exportTransients: Boolean(fmrs.dynamicGlm),
+    dynamicPpmStart: fitRange[0],
+    dynamicPpmEnd: fitRange[1],
+  });
+  signal?.throwIfAborted();
+  for (const w of pre.report?.warnings ?? []) log(`${ds.label}: ${w}`, "warning");
+  log(
+    `FID-A fMRS, ${ds.label}: ${pre.report.averagesKept}/${pre.report.averagesRaw} transients kept, ${pre.bins.length} bins`
+      + (pre.report.matchLinewidth && pre.report.targetLinewidthHz ? `, BOLD target LW ${pre.report.targetLinewidthHz.toFixed(1)} Hz` : ""),
+  );
+  onPreprocessed?.(pre);
+
+  const attachWater = (lcm) => (lcm ? { ...lcm, h2o: lcm.h2o ?? pre.waterH2o ?? null } : null);
+  const isFatalError = (error) =>
+    error?.name === "AbortError" || Boolean(error?.trap) || error instanceof WebAssembly.RuntimeError;
+
+  const basisInfo = (await basisFor(choice, bases)).info;
+  signal?.throwIfAborted();
+  let grandEntry = null;
+  const totalSteps = pre.bins.length + (fmrs.dynamicGlm ? 1 : 0);
+  let stepDone = 0;
+
+  if (fmrs.dynamicGlm && pre.grandMean?.lcmodel) {
+    signal?.throwIfAborted();
+    onBinProgress(stepDone / totalSteps, "Fitting grand mean for dynamic spectral projection…");
+    try {
+      const fitted = await fitPreparedSpectrum(engine, {
+        lcm: attachWater(pre.grandMean.lcmodel),
+        label: `${ds.label} (grand mean)`,
+        choice,
+        range: fitRange,
+        settings,
+        bases,
+        generated,
+        log,
+      });
+      signal?.throwIfAborted();
+      grandEntry = {
+        index: k,
+        windowId: "grand_mean",
+        windowLabel: "grand mean",
+        status: STATUS.fitted,
+        generated,
+        basis: fitted.basis,
+        processed: { report: pre.report, spectrum: pre.grandMean.spectrum, unprocessed: pre.grandMean.unprocessed },
+        fit: fitted.fit,
+      };
+    } catch (error) {
+      if (isFatalError(error)) throw error;
+      log(`${ds.label} (grand mean): ${error.message}`, "warning");
+    }
+    stepDone += 1;
+  }
+
+  const windows = [];
+  for (let i = 0; i < pre.bins.length; i += 1) {
+    signal?.throwIfAborted();
+    const b = pre.bins[i];
+    onBinProgress(stepDone / totalSteps, `Fitting ${b.label} (${i + 1} of ${pre.bins.length})…`);
+    stepDone += 1;
+    if (!b.lcmodel) {
+      windows.push({
+        ...b,
+        index: i,
+        status: STATUS.failed,
+        error: b.emptyReason ?? "No kept transients in this bin.",
+        basis: basisInfo.id,
+        entry: null,
+        metabolites: [],
+      });
+      continue;
+    }
+    try {
+      const fitted = await fitPreparedSpectrum(engine, {
+        lcm: attachWater(b.lcmodel),
+        label: `${ds.label} — ${b.label}`,
+        choice,
+        range: fitRange,
+        settings,
+        bases,
+        generated,
+        log,
+      });
+      signal?.throwIfAborted();
+      const s = fitted.fit.coord.summary;
+      const entry = {
+        index: k,
+        windowIndex: i,
+        windowId: b.id,
+        windowLabel: b.label,
+        status: STATUS.fitted,
+        generated,
+        basis: fitted.basis,
+        processed: { report: pre.report, spectrum: b.spectrum, unprocessed: pre.grandMean?.unprocessed ?? null },
+        fit: fitted.fit,
+      };
+      windows.push({
+        ...b,
+        index: i,
+        status: STATUS.fitted,
+        error: null,
+        basis: fitted.basis.id,
+        unit: fitted.fit.unit,
+        ratioTo: fitted.fit.ratioTo,
+        fwhmPpm: s.fwhmPpm,
+        lcmSnr: s.snr,
+        shiftPpm: s.shiftPpm,
+        phase0Deg: s.phase0Deg,
+        phase1DegPerPpm: s.phase1DegPerPpm,
+        metabolites: fitted.fit.rows.map((r) => ({
+          name: r.name,
+          concentration: r.concentration,
+          sdPercent: r.sdPercent,
+          ratio: r.ratio ?? null,
+        })),
+        entry,
+      });
+    } catch (error) {
+      if (isFatalError(error)) throw error;
+      log(`${b.label}: ${error.message}`, "error");
+      windows.push({
+        ...b,
+        index: i,
+        status: STATUS.failed,
+        error: error.message,
+        basis: basisInfo.id,
+        entry: null,
+        metabolites: [],
+      });
+    }
+  }
+
+  signal?.throwIfAborted();
+  const fittedCount = windows.filter((w) => w.status === STATUS.fitted).length;
+  const qc = classifyWindowQc(windows, {
+    hzpppm: pre.header?.hzpppm ?? header.hzpppm,
+    baselineCondition: fmrs.baselineCondition ?? null,
+  });
+  const windowedStats = analyzeFmrsWindows(qc.windows, {
+    baselineCondition: qc.baselineCondition,
+    valueKey: "concentration",
+  });
+  const dynamicGlm = fmrs.dynamicGlm && grandEntry?.fit?.coord && pre.dynamic
+    ? fitDynamicSpectralGlm({
+        dynamic: pre.dynamic,
+        grandCoord: grandEntry.fit.coord,
+        events: fmrs.events ?? [],
+        trS: pre.report.trS ?? trS,
+        baselineCondition: qc.baselineCondition,
+      })
+    : null;
+  if (dynamicGlm?.aligned === false) {
+    log(`${ds.label}: ${dynamicGlm.error}`, "warning");
+  }
+
+  const grandProcessed = pre.grandMean
+    ? { report: pre.report, spectrum: pre.grandMean.spectrum, unprocessed: pre.grandMean.unprocessed ?? null }
+    : null;
+
+  return {
+    datasetIndex: k,
+    datasetName: ds.label,
+    generated,
+    basis: basisInfo,
+    header: pre.header ?? header,
+    report: pre.report,
+    transients: pre.report.transients ?? [],
+    events: fmrs.events ?? [],
+    mode: fmrs.mode ?? "sliding",
+    timingModel: "fixed-tr",
+    trS: pre.report.trS ?? trS,
+    matchLinewidth: Boolean(fmrs.matchLinewidth),
+    targetLinewidthHz: pre.report.targetLinewidthHz ?? null,
+    fittedCount,
+    grandProcessed,
+    grandEntry,
+    windows: qc.windows,
+    conditionSummary: qc.conditionSummary,
+    baselineCondition: qc.baselineCondition,
+    windowedStats,
+    dynamicGlm,
+  };
+}
+
+/** Downloadable files for a completed fMRS run. */
+export function fmrsResultTexts(fmrsResult, versions) {
+  const stem = fileStem(fmrsResult.datasetName);
+  const generated = `${fmrsResult.generated.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+  return {
+    fmrsReport: {
+      description: "fMRS QC & time-course report (.html)",
+      name: `${stem}_fmrs_report.html`,
+      type: "text/html",
+      make: () => buildFmrsReport({
+        datasetName: fmrsResult.datasetName,
+        generated,
+        versions,
+        basis: fmrsResult.basis,
+        mode: fmrsResult.mode,
+        trS: fmrsResult.trS ?? fmrsResult.report?.trS ?? null,
+        matchLinewidth: fmrsResult.matchLinewidth,
+        targetLinewidthHz: fmrsResult.targetLinewidthHz,
+        events: fmrsResult.events,
+        transients: fmrsResult.transients,
+        windows: fmrsResult.windows,
+        conditionSummary: fmrsResult.conditionSummary,
+        baselineCondition: fmrsResult.baselineCondition,
+        windowedStats: fmrsResult.windowedStats,
+        dynamicGlm: fmrsResult.dynamicGlm,
+      }),
+    },
+    fmrsTimeCourse: {
+      description: "fMRS time course, long (.csv)",
+      name: `${stem}_fmrs_timecourse.csv`,
+      type: "text/csv",
+      body: fmrsTimeCourseCsvLong(fmrsResult.windows),
+      viewable: false,
+    },
+    fmrsTimeCourseWide: {
+      description: "fMRS time course, wide (.csv)",
+      name: `${stem}_fmrs_timecourse_wide.csv`,
+      type: "text/csv",
+      body: fmrsTimeCourseCsvWide(fmrsResult.windows),
+      viewable: false,
+    },
+    fmrsTransients: {
+      description: "fMRS transient drift & QC (.csv)",
+      name: `${stem}_fmrs_transients.csv`,
+      type: "text/csv",
+      body: fmrsTransientsCsv(fmrsResult.transients, fmrsResult.events, fmrsResult.report?.trS ?? 1),
+      viewable: false,
+    },
+    fmrsStats: {
+      description: "fMRS condition contrasts & GLM (.csv)",
+      name: `${stem}_fmrs_stats.csv`,
+      type: "text/csv",
+      body: fmrsStatsCsv({ windowedStats: fmrsResult.windowedStats, dynamicGlm: fmrsResult.dynamicGlm }),
+      viewable: false,
+    },
+  };
 }

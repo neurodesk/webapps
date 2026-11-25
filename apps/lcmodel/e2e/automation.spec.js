@@ -104,3 +104,44 @@ test("fit takes tissue fractions as parameters and reports corrected concentrati
   expect(tissue.metabolites["NAA+NAAG"].corrected / metabolites["NAA+NAAG"].concentration).toBeCloseTo(25.7583426324 / 12, 6);
   expect(snapshot.report.artifacts.tissueConcentrations.sha256).toMatch(/^[0-9a-f]{64}$/);
 });
+
+test("fit-fmrs runs functional MRS end-to-end via automation and returns fMRS artifacts and measurements", async ({ page, request }) => {
+  test.setTimeout(300000);
+  const ge = examples.find((e) => e.id === "ge-press-phantom");
+  await page.goto("/");
+  await expect(page.locator("#neurodesk-input-transfer")).toHaveCount(1);
+  const spectra = [];
+  for (const file of ge.files) {
+    const response = await request.get(file.url);
+    expect(response.ok()).toBe(true);
+    spectra.push({ name: file.name, mimeType: "application/octet-stream", buffer: await response.body() });
+  }
+  const eventsTsv = "onset\tduration\ttrial_type\n0\t6\tRest\n6\t6\tStim\n12\t6\tRest\n18\t6\tStim\n";
+  await page.locator("#neurodesk-input-transfer").setInputFiles(spectra);
+  await dispatch(page, "adopt", { role: "spectra" });
+  await page.locator("#neurodesk-input-transfer").setInputFiles([{
+    name: "task-pilot_events.tsv",
+    mimeType: "text/tab-separated-values",
+    buffer: Buffer.from(eventsTsv, "utf8"),
+  }]);
+  await dispatch(page, "adopt", { role: "events" });
+  await dispatch(page, "start", {
+    operation: "fit-fmrs",
+    parameters: { fmrsMode: "sliding", fmrsWindow: 4, fmrsStep: 4, matchLinewidth: true, dynamicGlm: true },
+  });
+  await expect.poll(async () => (await dispatch(page, "snapshot")).state, { timeout: 280000 }).not.toBe("running");
+  const snapshot = await dispatch(page, "snapshot");
+  expect(snapshot.state, JSON.stringify(snapshot.error)).toBe("succeeded");
+  const { report } = snapshot;
+  expect(report.measurements.mode).toBe("sliding");
+  expect(report.measurements.windows).toHaveLength(4);
+  expect(report.measurements.dynamicGlm?.aligned).toBe(true);
+  expect(Object.keys(report.artifacts).sort()).toEqual([
+    "fmrsReport", "fmrsStats", "fmrsTimeCourse", "fmrsTimeCourseWide", "fmrsTransients",
+  ]);
+  const dl = page.waitForEvent("download");
+  await dispatch(page, "download", { artifactId: "fmrsStats" });
+  const bytes = await readFile(await (await dl).path());
+  expect(createHash("sha256").update(bytes).digest("hex")).toBe(report.artifacts.fmrsStats.sha256);
+  expect(bytes.toString()).toContain("dynamic_projection_glm");
+});

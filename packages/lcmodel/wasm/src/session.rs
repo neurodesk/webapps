@@ -7,7 +7,8 @@ use fida::io::lcm;
 use fida::ops::align::{op_align_averages, AlignTo};
 use fida::ops::averaging::op_averaging;
 use fida::ops::basic::op_complex_conj;
-use fida::ops::editing::{classify_mega, drop_empty_transients, split_alternate, to_fida_layout, EditCheck};
+use fida::ops::editing::{classify_mega, drop_empty_transients, drop_empty_transients_with_indices, split_alternate, to_fida_layout, EditCheck};
+use fida::ops::fmrs::{run_fmrs_preprocess, FmrsBinSpec, FmrsOptions};
 use fida::ops::pipeline::{run_megapressproc_auto, run_pressproc_auto, run_specialproc_auto, MegaOptions, PressOptions, SpecialOptions};
 use fida::ops::quality::{op_get_lw, op_get_snr};
 use fida::Spectra;
@@ -25,6 +26,11 @@ pub struct Dataset {
     /// Acquired on a GE scanner (a P-file, or NIfTI-MRS whose header says so):
     /// phased on the residual water, as run_pressproc_GEauto.
     pub ge: bool,
+    /// Original 0-based acquisition indices for each transient in `metab`
+    /// when empty rows were compacted during import (e.g. Philips SDAT padding).
+    pub transient_indices: Vec<usize>,
+    /// Original acquisition row count prior to any empty-row compaction.
+    pub raw_transient_count: usize,
 }
 
 /// A NIfTI-MRS file converted from GE data (spec2nii writes `Manufacturer`).
@@ -134,9 +140,16 @@ fn selected_detection(named: &[NamedFile], indices: &[usize]) -> detect::Detecti
     det
 }
 
-fn configured_detection(named: &[NamedFile], options: &Value) -> Result<(detect::Detection, Vec<String>), String> {
+type ConfiguredDetection = (
+    detect::Detection,
+    Vec<String>,
+    Vec<String>,
+    std::collections::HashMap<String, (detect::Dataset, bool)>,
+);
+
+fn configured_detection(named: &[NamedFile], options: &Value) -> Result<ConfiguredDetection, String> {
     let Some(requests) = options.get("water") else {
-        return Ok((detect::detect(named), Vec::new()));
+        return Ok((detect::detect(named), Vec::new(), Vec::new(), std::collections::HashMap::new()));
     };
     let requests = requests.as_array().ok_or("Water assignments must be an array.")?;
     let mut assignments = Vec::new();
@@ -172,7 +185,37 @@ fn configured_detection(named: &[NamedFile], options: &Value) -> Result<(detect:
     }
     let indices: Vec<_> = (0..named.len()).filter(|i| !sources.contains(i)).collect();
     let mut detection = selected_detection(named, &indices);
-    for (target, water) in assignments {
+    let mut resolved_targets = Vec::new();
+    let mut wildcard_targets = Vec::new();
+    let mut auto_water_fallbacks: std::collections::HashMap<String, (detect::Dataset, bool)> = std::collections::HashMap::new();
+    // Apply wildcard ("*") fallback assignments only to datasets without an
+    // explicit per-dataset override, so overrides win regardless of order and
+    // wildcard DICOM identity checks do not fail overridden datasets.
+    let (wildcards, specifics): (Vec<_>, Vec<_>) = assignments.into_iter().partition(|(t, _)| t == "*");
+    let specific_targets: std::collections::HashSet<&str> = specifics.iter().map(|(t, _)| t.as_str()).collect();
+    for (_, water) in wildcards {
+        if detection.pairs.is_empty() {
+            return Err("Load a spectrum before adding a shared water reference.".into());
+        }
+        let mut applied_here = 0usize;
+        for pair in &mut detection.pairs {
+            let name = named[pair.metabolite.files[0]].name.to_string();
+            if specific_targets.contains(name.as_str()) {
+                continue;
+            }
+            if let Some(existing) = pair.water.clone() {
+                auto_water_fallbacks.entry(name.clone()).or_insert((existing, pair.water_shared));
+            }
+            pair.water = Some(water.clone());
+            resolved_targets.push(name.clone());
+            wildcard_targets.push(name);
+            applied_here += 1;
+        }
+        if applied_here == 0 {
+            return Err("Every loaded dataset already has its own explicit water reference; replace individual references instead.".into());
+        }
+    }
+    for (target, water) in specifics {
         let candidates: Vec<_> = detection.pairs.iter_mut().filter(|p| named[p.metabolite.files[0]].name == target).collect();
         if candidates.len() != 1 {
             return Err(format!("Load the spectrum {target} before adding its water reference."));
@@ -185,14 +228,19 @@ fn configured_detection(named: &[NamedFile], options: &Value) -> Result<(detect:
             return Err("The water reference belongs to a different DICOM study or patient.".into());
         }
         pair.water = Some(water);
+        auto_water_fallbacks.remove(&target);
+        wildcard_targets.retain(|n| n != &target);
+        if !resolved_targets.contains(&target) {
+            resolved_targets.push(target);
+        }
     }
-    Ok((detection, targets))
+    Ok((detection, resolved_targets, wildcard_targets, auto_water_fallbacks))
 }
 
 /// Load with explicit water assignments keyed by original primary file paths.
 pub fn load_with_options(files: &[(String, &[u8])], options: &Value) -> (Vec<Dataset>, Value) {
     let named: Vec<NamedFile> = files.iter().map(|(n, b)| NamedFile { name: n.as_str(), bytes: b }).collect();
-    let (det, explicit) = match configured_detection(&named, options) {
+    let (det, explicit, wildcard, auto_water_fallbacks) = match configured_detection(&named, options) {
         Ok(detection) => detection,
         Err(error) => return (Vec::new(), json!({"error": error})),
     };
@@ -204,20 +252,26 @@ pub fn load_with_options(files: &[(String, &[u8])], options: &Value) -> (Vec<Dat
     let mut datasets = Vec::new();
     let mut summary = Vec::new();
     let mut errors = Vec::new();
+    let mut wildcard_attached = 0usize;
+    let mut first_wildcard_error: Option<String> = None;
     for (pair, (metab, water)) in det.pairs.iter().zip(loaded) {
-        let assigned = explicit.iter().any(|target| target == named[pair.metabolite.files[0]].name);
+        let primary_name = named[pair.metabolite.files[0]].name;
+        let assigned = explicit.iter().any(|target| target == primary_name);
+        let is_wildcard = wildcard.iter().any(|target| target == primary_name);
         let mut metab = match metab {
             Ok(m) => m,
             Err(e) => {
-                if assigned { return (Vec::new(), json!({"error": e})); }
+                if assigned && !is_wildcard { return (Vec::new(), json!({"error": e})); }
                 errors.push(json!({ "file": pair.metabolite.name, "error": e }));
                 continue;
             }
         };
         normalize_timing(&mut metab.out, pair.metabolite.format);
         let mut water_name = pair.water.as_ref().map(|w| w.name.clone());
+        let mut water_voxel = None;
         let mut water = match water {
             Some(Ok(mut w)) => {
+                water_voxel = w.voxel;
                 if let Some(source) = &pair.water {
                     normalize_timing(&mut w.out, source.format);
                     if assigned && (source.format == Format::GePfile) != (pair.metabolite.format == Format::GePfile) {
@@ -235,42 +289,107 @@ pub fn load_with_options(files: &[(String, &[u8])], options: &Value) -> (Vec<Dat
             }
             None => None,
         };
-        if assigned {
-            if let Some(w) = &mut water {
-                let dwell_tolerance = metab.out.dwelltime.abs() * 1e-6;
-                if w.n() != metab.out.n() || !w.dwelltime.is_finite() || w.dwelltime <= 0.0
-                    || (w.dwelltime - metab.out.dwelltime).abs() > dwell_tolerance {
-                    return (Vec::new(), json!({"error": "The water reference must have the same number of points and dwell time as the spectrum."}));
+        let mut water_source = pair.water.as_ref();
+        let mut water_shared = pair.water_shared;
+        let mut effective_assigned = assigned;
+        let mut wildcard_accepted = false;
+        if let Some(w) = &mut water {
+            let dwell_tolerance = metab.out.dwelltime.abs() * 1e-6;
+            let mismatch = if is_wildcard && water_source.is_some_and(|ws| detect::conflicting_dicom_identity(
+                detect::dicom_identity(&pair.metabolite, &named).as_ref(),
+                detect::dicom_identity(ws, &named).as_ref(),
+            )) {
+                Some("The water reference belongs to a different DICOM study or patient.")
+            } else if w.n() != metab.out.n() || !w.dwelltime.is_finite() || w.dwelltime <= 0.0
+                || (w.dwelltime - metab.out.dwelltime).abs() > dwell_tolerance {
+                Some("The water reference must have the same number of points and dwell time as the spectrum.")
+            } else if !w.txfrq.is_finite() || !metab.out.txfrq.is_finite()
+                || (w.txfrq - metab.out.txfrq).abs() > metab.out.txfrq.abs() * 0.001 {
+                Some("The water reference has a different spectrometer frequency.")
+            } else if size_of(w, w.dims.coils) != size_of(&metab.out, metab.out.dims.coils) {
+                Some("The water reference must have the same receive coils as the spectrum.")
+            } else if is_wildcard && metab.voxel.is_some() && water_voxel.is_some() && metab.voxel != water_voxel {
+                Some("The shared water reference has a different voxel position or size.")
+            } else {
+                None
+            };
+            if let Some(reason) = mismatch {
+                if assigned && !is_wildcard {
+                    return (Vec::new(), json!({"error": reason}));
                 }
-                if !w.txfrq.is_finite() || !metab.out.txfrq.is_finite()
-                    || (w.txfrq - metab.out.txfrq).abs() > metab.out.txfrq.abs() * 0.001 {
-                    return (Vec::new(), json!({"error": "The water reference has a different spectrometer frequency."}));
+                if is_wildcard && first_wildcard_error.is_none() {
+                    first_wildcard_error = Some(reason.to_string());
                 }
-                if size_of(w, w.dims.coils) != size_of(&metab.out, metab.out.dims.coils) {
-                    return (Vec::new(), json!({"error": "The water reference must have the same receive coils as the spectrum."}));
+                errors.push(json!({ "file": water_name.clone().unwrap_or_else(|| pair.metabolite.name.clone()), "error": reason }));
+                water = None;
+                water_name = None;
+                water_source = None;
+                effective_assigned = false;
+                // When a shared wildcard water reference is incompatible with this dataset,
+                // preserve its original automatically paired water reference if one existed.
+                if is_wildcard {
+                    if let Some((fb_ds, fb_shared)) = auto_water_fallbacks.get(primary_name) {
+                        if let Ok(mut fb) = detect::load_dataset(fb_ds, &named, &load_options) {
+                            normalize_timing(&mut fb.out, fb_ds.format);
+                            let fb_ok = fb.out.n() == metab.out.n()
+                                && fb.out.dwelltime.is_finite()
+                                && fb.out.dwelltime > 0.0
+                                && (fb.out.dwelltime - metab.out.dwelltime).abs() <= dwell_tolerance
+                                && fb.out.txfrq.is_finite()
+                                && metab.out.txfrq.is_finite()
+                                && (fb.out.txfrq - metab.out.txfrq).abs() <= metab.out.txfrq.abs() * 0.001
+                                && size_of(&fb.out, fb.out.dims.coils) == size_of(&metab.out, metab.out.dims.coils);
+                            if fb_ok {
+                                water = Some(fb.out);
+                                water_name = Some(fb_ds.name.clone());
+                                water_source = Some(fb_ds);
+                                water_shared = *fb_shared;
+                            }
+                        }
+                    }
                 }
+            } else if assigned {
                 // NIfTI-1 stores dwell time as f32, unlike the vendor headers.
                 w.dwelltime = metab.out.dwelltime;
                 w.spectralwidth = metab.out.spectralwidth;
                 for (i, t) in w.t.iter_mut().enumerate() { *t = i as f64 * w.dwelltime; }
+                if is_wildcard {
+                    wildcard_accepted = true;
+                }
             }
         }
         // A water reference stored in the metabolite file (twix, GE frames, Bruker).
-        let (water, water_name) = match (water, metab.embedded_water) {
-            (Some(w), _) => (Some(w), water_name),
-            (None, Some(w)) if w.n() > 0 => (Some(w), Some(format!("{} (water frames)", pair.metabolite.name))),
-            _ => (None, None),
+        // Explicit user overrides take precedence; an automatically paired TWIX or
+        // cross-run shared reference never overrides a scan's own embedded water.
+        let (water, water_name, used_external_water) = match (water, metab.embedded_water) {
+            (Some(_), Some(ew)) if !effective_assigned && (water_shared || pair.metabolite.format == Format::Twix) && ew.n() > 0 => {
+                (Some(ew), Some(format!("{} (water frames)", pair.metabolite.name)), false)
+            }
+            (Some(w), _) => (Some(w), water_name, true),
+            (None, Some(w)) if w.n() > 0 => {
+                (Some(w), Some(format!("{} (water frames)", pair.metabolite.name)), false)
+            }
+            _ => (None, None, false),
         };
+        if wildcard_accepted && used_external_water {
+            wildcard_attached += 1;
+        }
         let format = pair.metabolite.format;
         let voxel = metab.voxel;
         let voxel_note = metab.voxel_note;
-        let (metab, water) = if splits_editing(format) {
-            (drop_empty_transients(&metab.out), water.as_ref().map(drop_empty_transients))
+        let (metab, raw_transient_count, transient_indices, water) = if splits_editing(format) {
+            let (m, orig_count, kept_idx) = drop_empty_transients_with_indices(&metab.out);
+            (m, orig_count, kept_idx, water.as_ref().map(drop_empty_transients))
         } else {
-            (metab.out, water)
+            let count = size_of(&metab.out, metab.out.dims.averages);
+            (metab.out, count, (0..count).collect(), water)
         };
         let edit = if splits_editing(format) { detect_editing(&metab, water.as_ref()) } else { None };
         let mut h = header(&metab);
+        if raw_transient_count != transient_indices.len() {
+            h["rawTransientCount"] = json!(raw_transient_count);
+            h["transientIndices"] = json!(transient_indices);
+        }
         // The water scan's timing, for relaxation-corrected water scaling.
         if let Some(w) = &water {
             h["waterTeMs"] = json!(w.te);
@@ -294,13 +413,28 @@ pub fn load_with_options(files: &[(String, &[u8])], options: &Value) -> (Vec<Dat
             "index": datasets.len(),
             "name": pair.metabolite.name,
             "path": path_of(&pair.metabolite),
-            "waterPath": water_name.as_ref().and(pair.water.as_ref()).and_then(path_of),
+            "waterPath": if used_external_water { water_name.as_ref().and(water_source).and_then(path_of) } else { None },
             "format": format.label(),
             "water": water_name,
             "header": h,
         }));
         let ge = format == Format::GePfile || (format == Format::NiftiMrs && pair.metabolite.files.first().is_some_and(|&i| nifti_from_ge(files[i].1)));
-        datasets.push(Dataset { name: pair.metabolite.name.clone(), format, water_name, metab, water, edit, ge });
+        datasets.push(Dataset {
+            name: pair.metabolite.name.clone(),
+            format,
+            water_name,
+            metab,
+            water,
+            edit,
+            ge,
+            transient_indices,
+            raw_transient_count,
+        });
+    }
+    if !wildcard.is_empty() && wildcard_attached == 0 {
+        let reason = first_wildcard_error
+            .unwrap_or_else(|| "The shared water reference is not compatible with any loaded dataset.".to_string());
+        return (Vec::new(), json!({ "error": reason }));
     }
     let ignored: Vec<Value> = det.ignored.iter().map(|(n, why)| json!({ "file": n, "reason": why })).collect();
     let unpaired: Vec<Value> = det.unpaired_water.iter().map(|d| json!(d.name)).collect();
@@ -308,7 +442,11 @@ pub fn load_with_options(files: &[(String, &[u8])], options: &Value) -> (Vec<Dat
         "name": image.name,
         "files": image.files.iter().map(|&i| files[i].0.as_str()).collect::<Vec<_>>(),
     })).collect();
-    (datasets, json!({ "images": images, "datasets": summary, "errors": errors, "ignored": ignored, "unpairedWater": unpaired }))
+    let mut payload = json!({ "images": images, "datasets": summary, "errors": errors, "ignored": ignored, "unpairedWater": unpaired });
+    if !wildcard.is_empty() {
+        payload["wildcardWater"] = json!({ "attached": wildcard_attached, "total": datasets.len() });
+    }
+    (datasets, payload)
 }
 
 /// Preprocessing choices from the interface (FID-A defaults when absent).
@@ -533,6 +671,194 @@ pub fn lcmodel_inputs(p: &Processed) -> Result<Value, String> {
             None => Value::Null,
         },
         "warnings": warnings,
+    }))
+}
+
+fn lcmodel_inputs_without_h2o(metab: &Spectra) -> Result<Value, String> {
+    let (raw, warnings) = lcm::lcm_text_with_warnings(metab, metab.te)?;
+    Ok(json!({
+        "raw": raw,
+        "nunfil": metab.n(),
+        "deltat": metab.dwelltime,
+        "hzpppm": metab.txfrq / 1e6,
+        "teMs": metab.te,
+        "edited": false,
+        "editOff": Value::Null,
+        "warnings": warnings,
+    }))
+}
+
+/// Functional MRS preprocessing: coil combine, bad-average removal preserving
+/// original transient indices, drift correction, global grand-mean phasing and
+/// referencing, temporal/condition binning, optional BOLD linewidth matching,
+/// and optional complex per-transient export for 2D dynamic spectral projection.
+pub fn process_fmrs(
+    ds: &Dataset,
+    options: &Value,
+    progress: &mut dyn FnMut(&str, f32),
+    cancelled: &dyn Fn() -> bool,
+) -> Result<Value, String> {
+    // Reject edited datasets (explicit MEGA-PRESS/subspectra OR alternating
+    // GE/Philips edit-ON/OFF transients unless explicitly overridden false).
+    let fam = family(&ds.metab.seq);
+    let is_edited = fam == "MEGA-PRESS"
+        || (ds.metab.dims.sub_specs > 0 && ds.metab.size(ds.metab.dims.sub_specs) > 1)
+        || (splits_editing(ds.format)
+            && options["edited"].as_bool().unwrap_or(ds.edit.as_ref().is_some_and(EditCheck::edited)));
+    if is_edited {
+        return Err("Functional MRS binning currently supports unedited spectra only (not MEGA-PRESS or edited subspectra).".into());
+    }
+
+    let conj = ds.format == Format::GePfile;
+    let conj_metab;
+    let conj_water;
+    let (metab, water): (&Spectra, Option<&Spectra>) = if conj {
+        conj_metab = op_complex_conj(&ds.metab);
+        conj_water = ds.water.as_ref().map(op_complex_conj);
+        (&conj_metab, conj_water.as_ref())
+    } else {
+        (&ds.metab, ds.water.as_ref())
+    };
+    let n_avg = ds.raw_transient_count.max(if metab.dims.averages > 0 { metab.size(metab.dims.averages) } else { 1 });
+    let mut opts = FmrsOptions::default();
+    opts.original_indices = Some(ds.transient_indices.clone());
+    opts.original_count = Some(ds.raw_transient_count);
+    opts.rm_bad_averages.enabled = options["removeBadAverages"].as_bool().unwrap_or(true);
+    if let Some(sd) = options["badAverageSd"].as_f64() {
+        if sd > 0.0 {
+            opts.rm_bad_averages.nsd = sd;
+        }
+    }
+    opts.drift.enabled = options["driftCorrection"].as_bool().unwrap_or(true);
+    let phase_ref = options["phaseAndReference"].as_bool().unwrap_or(true);
+    opts.autophase = phase_ref;
+    opts.ppmref = phase_ref;
+    opts.ge_phasing = ds.ge;
+    opts.apply_ecc_to_dynamic = options["eddyCurrentCorrection"].as_bool().unwrap_or(true);
+    opts.match_linewidth = options["matchLinewidth"].as_bool().unwrap_or(false);
+    opts.target_linewidth_hz = options["targetLinewidthHz"].as_f64().filter(|v| v.is_finite() && *v > 0.0);
+    opts.export_transients = options["exportTransients"].as_bool().unwrap_or(false);
+    if let Some(v) = options["dynamicPpmStart"].as_f64().filter(|v| v.is_finite()) {
+        opts.dynamic_ppm_start = v;
+    }
+    if let Some(v) = options["dynamicPpmEnd"].as_f64().filter(|v| v.is_finite()) {
+        opts.dynamic_ppm_end = v;
+    }
+    let bins_arr = options["bins"].as_array().ok_or("fMRS processing requires a `bins` array.")?;
+    if bins_arr.is_empty() {
+        return Err("fMRS processing requires at least one bin.".into());
+    }
+    let mut bins = Vec::with_capacity(bins_arr.len());
+    for (k, b) in bins_arr.iter().enumerate() {
+        let raw_indices = b["indices"].as_array().ok_or("Each fMRS bin requires an `indices` array.")?;
+        if raw_indices.is_empty() {
+            return Err(format!("fMRS bin {} has an empty `indices` array.", k + 1));
+        }
+        let mut indices = Vec::with_capacity(raw_indices.len());
+        let mut seen = std::collections::HashSet::with_capacity(raw_indices.len());
+        for v in raw_indices {
+            let idx_u64 = v.as_u64().ok_or_else(|| format!("fMRS bin {} contains a non-integer or negative transient index.", k + 1))?;
+            let idx = usize::try_from(idx_u64).map_err(|_| format!("fMRS bin {} transient index out of range.", k + 1))?;
+            if idx >= n_avg {
+                return Err(format!("fMRS bin {} transient index {idx} is out of range (dataset has {n_avg} averages).", k + 1));
+            }
+            if !seen.insert(idx) {
+                return Err(format!("fMRS bin {} contains duplicate transient index {idx}.", k + 1));
+            }
+            indices.push(idx);
+        }
+        let start_time_s = b["startTimeS"].as_f64().ok_or_else(|| format!("fMRS bin {} needs a finite startTimeS.", k + 1))?;
+        let end_time_s = b["endTimeS"].as_f64().ok_or_else(|| format!("fMRS bin {} needs a finite endTimeS.", k + 1))?;
+        if !start_time_s.is_finite() || !end_time_s.is_finite() || end_time_s < start_time_s {
+            return Err(format!("fMRS bin {} has invalid time bounds ({start_time_s}..{end_time_s}).", k + 1));
+        }
+        bins.push(FmrsBinSpec {
+            id: b["id"].as_str().map(String::from).unwrap_or_else(|| format!("win_{}", k + 1)),
+            label: b["label"].as_str().map(String::from).unwrap_or_else(|| format!("Window {}", k + 1)),
+            condition: b["condition"].as_str().filter(|s| !s.is_empty()).map(String::from),
+            indices,
+            start_time_s,
+            end_time_s,
+        });
+    }
+    opts.bins = bins;
+    let out = run_fmrs_preprocess(metab, water, &opts, progress, cancelled)?;
+    let (h2o_text, water_warnings) = match out.water.as_ref() {
+        Some(w) => {
+            if w.n() != out.grand_mean.n() || (w.dwelltime - out.grand_mean.dwelltime).abs() > 1e-12 {
+                (None, vec!["The water reference has a different length or dwell time; it is not used.".to_string()])
+            } else {
+                let (t, warns) = lcm::lcm_text_with_warnings(w, w.te)?;
+                (Some(t), warns)
+            }
+        }
+        None => (None, Vec::new()),
+    };
+    let mut report = out.report_json();
+    report["conjugated"] = json!(conj);
+    if !water_warnings.is_empty() {
+        if let Some(w) = report["warnings"].as_array_mut() {
+            w.extend(water_warnings.into_iter().map(Value::from));
+        }
+    }
+    let grand_lcm = lcmodel_inputs_without_h2o(&out.grand_mean)?;
+    let mut bin_json = Vec::with_capacity(out.bins.len());
+    for b in &out.bins {
+        let (spectrum, lcm_in) = match b.spectrum.as_ref() {
+            Some(s) => (spectrum_trace(s, -0.5, 8.5), lcmodel_inputs_without_h2o(s)?),
+            None => (Value::Null, Value::Null),
+        };
+        bin_json.push(json!({
+            "id": b.id,
+            "label": b.label,
+            "condition": b.condition,
+            "startTimeS": b.start_time_s,
+            "endTimeS": b.end_time_s,
+            "midTimeS": b.mid_time_s,
+            "averagesTotal": b.averages_total,
+            "averagesKept": b.averages_kept,
+            "averagesRemoved": b.averages_removed,
+            "keptIndices": b.kept_indices,
+            "snrBefore": b.snr_before,
+            "snrAfter": b.snr_after,
+            "linewidthBeforeHz": b.linewidth_before_hz,
+            "linewidthAfterHz": b.linewidth_after_hz,
+            "broadeningAppliedHz": b.broadening_applied_hz,
+            "excludedFromLwTarget": b.excluded_from_lw_target,
+            "linewidthMatchStatus": b.linewidth_match_status,
+            "emptyReason": b.empty_reason,
+            "spectrum": spectrum,
+            "lcmodel": lcm_in,
+        }));
+    }
+    let dynamic_json = out.dynamic.as_ref().map(|d| {
+        json!({
+            "ppm": d.ppm.iter().map(|p| (*p * 1e4).round() / 1e4).collect::<Vec<_>>(),
+            "indices": d.indices,
+            "timesS": d.times_s,
+            "spectraRe": d.spectra_re,
+            "spectraIm": d.spectra_im,
+            "meanRe": d.mean_re,
+            "meanIm": d.mean_im,
+            "boldDerivRe": d.bold_deriv_re,
+            "boldDerivIm": d.bold_deriv_im,
+            "freqDerivRe": d.freq_deriv_re,
+            "freqDerivIm": d.freq_deriv_im,
+            "eccApplied": d.ecc_applied,
+        })
+    });
+    Ok(json!({
+        "report": report,
+        "header": header(&out.grand_mean),
+        "waterH2o": h2o_text,
+        "grandMean": {
+            "spectrum": spectrum_trace(&out.grand_mean, -0.5, 8.5),
+            "unprocessed": spectrum_trace(&out.grand_mean_unprocessed, -0.5, 8.5),
+            "lcmodel": grand_lcm,
+        },
+        "water": out.water.as_ref().map(|w| spectrum_trace(w, -0.5, 8.5)),
+        "bins": bin_json,
+        "dynamic": dynamic_json,
     }))
 }
 
@@ -876,5 +1202,336 @@ mod import_tests {
             let (_, result) = load_with_options(&files, &json!({"water": [{"targetPath": "metab/a.dcm", "files": ["water/b.dcm"]}]}));
             assert!(result["error"].as_str().unwrap().contains("study or patient"), "{result}");
         }
+    }
+
+    #[test]
+    fn wildcard_water_does_not_override_explicit_assignment_regardless_of_order() {
+        let data = vec![0x80, 0x40, 0, 0].repeat(128 * 2 * 2);
+        let metab_h = spar(30);
+        let shared_w = spar(10);
+        let specific_w = spar(20);
+        let files = vec![
+            ("a/scan.sdat".into(), data.as_slice()),
+            ("a/scan.spar".into(), metab_h.as_slice()),
+            ("b/scan.sdat".into(), data.as_slice()),
+            ("b/scan.spar".into(), metab_h.as_slice()),
+            ("shared_w.sdat".into(), data.as_slice()),
+            ("shared_w.spar".into(), shared_w.as_slice()),
+            ("specific_w.sdat".into(), data.as_slice()),
+            ("specific_w.spar".into(), specific_w.as_slice()),
+        ];
+        // Explicit BEFORE wildcard: explicit must still win for b/scan.sdat.
+        let options = json!({
+            "water": [
+                {"targetPath": "b/scan.sdat", "files": ["specific_w.sdat", "specific_w.spar"]},
+                {"targetPath": "*", "files": ["shared_w.sdat", "shared_w.spar"]},
+            ]
+        });
+        let (datasets, result) = load_with_options(&files, &options);
+        assert_eq!(datasets.len(), 2, "{result}");
+        assert_eq!(result["datasets"][0]["waterPath"], "shared_w.sdat");
+        assert_eq!(result["datasets"][0]["header"]["waterTeMs"], 10.0);
+        assert_eq!(result["datasets"][1]["waterPath"], "specific_w.sdat");
+        assert_eq!(result["datasets"][1]["header"]["waterTeMs"], 20.0);
+    }
+
+    #[test]
+    fn process_fmrs_rejects_edited_and_malformed_bins() {
+        let data = vec![0x80, 0x40, 0, 0].repeat(128 * 4 * 2);
+        let h = b"samples : 128\nrows : 4\nsynthesizer_frequency : 123250000\nsample_frequency : 2000\necho_time : 30\nrepetition_time : 2000\nscan_id : PRESS\n";
+        let files = vec![("scan.sdat".into(), data.as_slice()), ("scan.spar".into(), h.as_slice())];
+        let (mut datasets, result) = load_with_options(&files, &json!({}));
+        assert_eq!(datasets.len(), 1, "{result}");
+
+        // Rejects empty bins, duplicate indices, out-of-range indices, reversed times.
+        for bad in [
+            json!({"bins": []}),
+            json!({"bins": [{"id": "b1", "indices": [], "startTimeS": 0.0, "endTimeS": 4.0}]}),
+            json!({"bins": [{"id": "b1", "indices": [0, 0], "startTimeS": 0.0, "endTimeS": 4.0}]}),
+            json!({"bins": [{"id": "b1", "indices": [0, 4], "startTimeS": 0.0, "endTimeS": 4.0}]}),
+            json!({"bins": [{"id": "b1", "indices": [-1], "startTimeS": 0.0, "endTimeS": 4.0}]}),
+            json!({"bins": [{"id": "b1", "indices": [0, 1], "startTimeS": 4.0, "endTimeS": 2.0}]}),
+        ] {
+            let err = process_fmrs(&datasets[0], &bad, &mut |_, _| {}, &|| false).unwrap_err();
+            assert!(!err.is_empty());
+        }
+
+        // Rejects edited dataset (MEGA-PRESS sequence or edited override).
+        let valid_bin = json!({"bins": [{"id": "b1", "indices": [0, 1], "startTimeS": 0.0, "endTimeS": 4.0}]});
+        let err_override = process_fmrs(
+            &datasets[0],
+            &json!({"edited": true, "bins": [{"id": "b1", "indices": [0, 1], "startTimeS": 0.0, "endTimeS": 4.0}]}),
+            &mut |_, _| {},
+            &|| false,
+        )
+        .unwrap_err();
+        assert!(err_override.contains("unedited"), "{err_override}");
+
+        datasets[0].metab.seq = "MEGA-PRESS".into();
+        let err_mega = process_fmrs(&datasets[0], &valid_bin, &mut |_, _| {}, &|| false).unwrap_err();
+        assert!(err_mega.contains("unedited"), "{err_mega}");
+    }
+
+    #[test]
+    fn philips_empty_row_preserves_acquisition_timestamps_in_fmrs() {
+        let n = 128;
+        let row_bytes = n * 8;
+        let mut sdat = vec![0u8; 4 * row_bytes];
+        // Fill rows 0, 2, 3 with non-zero VAX floats; leave row 1 all zeros (empty).
+        for row in [0usize, 2, 3] {
+            let start = row * row_bytes;
+            for i in 0..(n * 2) {
+                sdat[start + i * 4] = 0x80;
+                sdat[start + i * 4 + 1] = 0x40;
+            }
+        }
+        let h = b"samples : 128\nrows : 4\nsynthesizer_frequency : 123250000\nsample_frequency : 2000\necho_time : 30\nrepetition_time : 2000\nscan_id : PRESS\n";
+        let files = vec![("scan.sdat".into(), sdat.as_slice()), ("scan.spar".into(), h.as_slice())];
+        let (datasets, summary) = load_with_options(&files, &json!({}));
+        assert_eq!(datasets.len(), 1, "{summary}");
+        assert_eq!(summary["datasets"][0]["header"]["rawTransientCount"], 4);
+        assert_eq!(summary["datasets"][0]["header"]["transientIndices"], json!([0, 2, 3]));
+        let res = process_fmrs(
+            &datasets[0],
+            &json!({
+                "removeBadAverages": false,
+                "driftCorrection": false,
+                "phaseAndReference": false,
+                "exportTransients": true,
+                "bins": [
+                    {"id": "w1", "label": "W1", "indices": [0, 1], "startTimeS": 0.0, "endTimeS": 4.0},
+                    {"id": "w2", "label": "W2", "indices": [2, 3], "startTimeS": 4.0, "endTimeS": 8.0},
+                ]
+            }),
+            &mut |_, _| {},
+            &|| false,
+        )
+        .unwrap();
+        assert_eq!(res["dynamic"]["indices"], json!([0, 2, 3]));
+        assert_eq!(res["dynamic"]["timesS"], json!([0.0, 4.0, 6.0]));
+        assert_eq!(res["bins"][0]["keptIndices"], json!([0]));
+        assert_eq!(res["bins"][1]["keptIndices"], json!([2, 3]));
+    }
+
+    #[test]
+    fn wildcard_water_skips_dicom_identity_check_for_overridden_dataset() {
+        let m_a = dicom("studyA", "patA");
+        let m_b = dicom("studyB", "patB");
+        let w_a = dicom("studyA", "patA");
+        let w_b = dicom("studyB", "patB");
+        let files: Vec<(String, &[u8])> = vec![
+            ("a/metab.dcm".into(), m_a.as_slice()),
+            ("b/metab.dcm".into(), m_b.as_slice()),
+            ("wa/water.dcm".into(), w_a.as_slice()),
+            ("wb/water.dcm".into(), w_b.as_slice()),
+        ];
+        // Both request orders must succeed: wildcard studyA does NOT reject b/metab.dcm because b has its own studyB override.
+        let named: Vec<NamedFile> = files.iter().map(|(n, b)| NamedFile { name: n.as_str(), bytes: b }).collect();
+        for order in [
+            json!({"water": [
+                {"targetPath": "*", "files": ["wa/water.dcm"]},
+                {"targetPath": "b/metab.dcm", "files": ["wb/water.dcm"]},
+            ]}),
+            json!({"water": [
+                {"targetPath": "b/metab.dcm", "files": ["wb/water.dcm"]},
+                {"targetPath": "*", "files": ["wa/water.dcm"]},
+            ]}),
+        ] {
+            let (det, _, _, _) = configured_detection(&named, &order).expect("wildcard + override must pass DICOM identity check");
+            let pair_a = det.pairs.iter().find(|p| named[p.metabolite.files[0]].name == "a/metab.dcm").unwrap();
+            let pair_b = det.pairs.iter().find(|p| named[p.metabolite.files[0]].name == "b/metab.dcm").unwrap();
+            assert_eq!(named[pair_a.water.as_ref().unwrap().files[0]].name, "wa/water.dcm");
+            assert_eq!(named[pair_b.water.as_ref().unwrap().files[0]].name, "wb/water.dcm");
+        }
+    }
+
+    #[test]
+    fn wildcard_water_rejects_zero_attach_and_reports_partial_attach() {
+        let n = 64usize;
+        let mut sdat = vec![0u8; n * 8];
+        for i in 0..(n * 2) {
+            sdat[i * 4] = 0x80;
+            sdat[i * 4 + 1] = 0x40;
+        }
+        let h_3t = b"samples : 64\nrows : 1\nsynthesizer_frequency : 123250000\nsample_frequency : 2000\necho_time : 30\nrepetition_time : 2000\nscan_id : PRESS\n";
+        let h_7t = b"samples : 64\nrows : 1\nsynthesizer_frequency : 298039000\nsample_frequency : 2000\necho_time : 30\nrepetition_time : 2000\nscan_id : PRESS\n";
+
+        // 0 of 2 compatible: must return an error so existing water references are not wiped.
+        let files_all_bad = vec![
+            ("a/scan.sdat".into(), sdat.as_slice()),
+            ("a/scan.spar".into(), h_3t.as_slice()),
+            ("b/scan.sdat".into(), sdat.as_slice()),
+            ("b/scan.spar".into(), h_3t.as_slice()),
+            ("water/w7t.sdat".into(), sdat.as_slice()),
+            ("water/w7t.spar".into(), h_7t.as_slice()),
+        ];
+        let (ds_bad, out_bad) = load_with_options(
+            &files_all_bad,
+            &json!({"water": [{"targetPath": "*", "files": ["water/w7t.sdat", "water/w7t.spar"]}]}),
+        );
+        assert!(ds_bad.is_empty());
+        assert!(out_bad["error"].as_str().unwrap_or("").contains("spectrometer frequency"), "{out_bad}");
+
+        // 1 of 2 compatible, where the incompatible 3 T dataset has an auto-paired 3 T ref:
+        // must preserve the 3 T dataset's auto-paired ref while attaching w7t to the 7 T dataset.
+        let files_partial = vec![
+            ("a/scan_act.sdat".into(), sdat.as_slice()),
+            ("a/scan_act.spar".into(), h_3t.as_slice()),
+            ("a/scan_ref.sdat".into(), sdat.as_slice()),
+            ("a/scan_ref.spar".into(), h_3t.as_slice()),
+            ("b/scan.sdat".into(), sdat.as_slice()),
+            ("b/scan.spar".into(), h_7t.as_slice()),
+            ("water/w7t.sdat".into(), sdat.as_slice()),
+            ("water/w7t.spar".into(), h_7t.as_slice()),
+        ];
+        let (ds_part, out_part) = load_with_options(
+            &files_partial,
+            &json!({"water": [{"targetPath": "*", "files": ["water/w7t.sdat", "water/w7t.spar"]}]}),
+        );
+        assert_eq!(ds_part.len(), 2, "{out_part}");
+        assert_eq!(out_part["wildcardWater"], json!({"attached": 1, "total": 2}));
+        let ds_3t = out_part["datasets"].as_array().unwrap().iter().find(|d| d["path"] == "a/scan_act.sdat").unwrap();
+        assert_eq!(ds_3t["waterPath"], json!("a/scan_ref.sdat"), "skipped 3 T dataset must preserve auto-paired ref: {ds_3t}");
+
+        // Every dataset already has an explicit per-dataset override: shared "*" attaches nowhere -> error.
+        let files_all_overridden = vec![
+            ("a/scan.sdat".into(), sdat.as_slice()),
+            ("a/scan.spar".into(), h_3t.as_slice()),
+            ("wa/ref_a.sdat".into(), sdat.as_slice()),
+            ("wa/ref_a.spar".into(), h_3t.as_slice()),
+            ("ws/shared.sdat".into(), sdat.as_slice()),
+            ("ws/shared.spar".into(), h_3t.as_slice()),
+        ];
+        let (ds_ov, out_ov) = load_with_options(
+            &files_all_overridden,
+            &json!({"water": [
+                {"targetPath": "a/scan.sdat", "files": ["wa/ref_a.sdat", "wa/ref_a.spar"]},
+                {"targetPath": "*", "files": ["ws/shared.sdat", "ws/shared.spar"]},
+            ]}),
+        );
+        assert!(ds_ov.is_empty());
+        assert!(out_ov["error"].as_str().unwrap_or("").contains("explicit water reference"), "{out_ov}");
+    }
+
+    #[test]
+    fn wildcard_water_succeeds_after_partial_spectrum_import() {
+        let n = 64usize;
+        let mut sdat = vec![0u8; n * 8];
+        for i in 0..(n * 2) {
+            sdat[i * 4] = 0x80;
+            sdat[i * 4 + 1] = 0x40;
+        }
+        let truncated = vec![0x80u8; 16];
+        let h = b"samples : 64\nrows : 1\nsynthesizer_frequency : 123250000\nsample_frequency : 2000\necho_time : 30\nrepetition_time : 2000\nscan_id : PRESS\n";
+        let files = vec![
+            ("a/scan.sdat".into(), sdat.as_slice()),
+            ("a/scan.spar".into(), h.as_slice()),
+            ("b/scan.sdat".into(), sdat.as_slice()),
+            ("b/scan.spar".into(), h.as_slice()),
+            ("broken/scan.sdat".into(), truncated.as_slice()),
+            ("broken/scan.spar".into(), h.as_slice()),
+            ("water/shared.sdat".into(), sdat.as_slice()),
+            ("water/shared.spar".into(), h.as_slice()),
+        ];
+        let (datasets, out) = load_with_options(
+            &files,
+            &json!({"water": [{"targetPath": "*", "files": ["water/shared.sdat", "water/shared.spar"]}]}),
+        );
+        assert_eq!(datasets.len(), 2, "{out}");
+        assert_eq!(out["wildcardWater"], json!({"attached": 2, "total": 2}), "{out}");
+        assert_eq!(out["errors"].as_array().map(|e| e.len()), Some(1), "{out}");
+        for ds in out["datasets"].as_array().unwrap() {
+            assert_eq!(ds["waterPath"], json!("water/shared.sdat"), "{ds}");
+        }
+    }
+
+    fn readable_dicom(study: &str, patient: &str, series: &str) -> Vec<u8> {
+        let mut bytes = vec![0; 128];
+        bytes.extend_from_slice(b"DICM");
+        for (group, element, text) in [(0x0020u16, 0x000du16, study), (0x0010, 0x0020, patient), (0x0020, 0x000e, series)] {
+            let mut text = text.as_bytes().to_vec();
+            if text.len() % 2 != 0 { text.push(b' '); }
+            bytes.extend_from_slice(&group.to_le_bytes());
+            bytes.extend_from_slice(&element.to_le_bytes());
+            bytes.extend_from_slice(b"LO");
+            bytes.extend_from_slice(&(text.len() as u16).to_le_bytes());
+            bytes.extend_from_slice(&text);
+        }
+        // Tag (5600,0020) OF: 64 complex f32 samples (512 bytes)
+        let mut fid = Vec::with_capacity(64 * 8);
+        for _ in 0..64 {
+            fid.extend_from_slice(&1.0f32.to_le_bytes());
+            fid.extend_from_slice(&0.0f32.to_le_bytes());
+        }
+        bytes.extend_from_slice(&0x5600u16.to_le_bytes());
+        bytes.extend_from_slice(&0x0020u16.to_le_bytes());
+        bytes.extend_from_slice(b"OF\0\0");
+        bytes.extend_from_slice(&(fid.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(&fid);
+        // Embedded Siemens Phoenix ASCCONV protocol in private element (0029,1010)
+        let mut proto = b"### ASCCONV BEGIN ###\nlVectorSize = 64\nalDwellTime[0] = 500000\nlFrequency = 123250000\nflNominalB0 = 2.89\nalTE[0] = 30000\nalTR[0] = 2000000\ntSequenceFileName = \"svs_se\"\n### ASCCONV END ###\n".to_vec();
+        if proto.len() % 2 != 0 { proto.push(b' '); }
+        bytes.extend_from_slice(&0x0029u16.to_le_bytes());
+        bytes.extend_from_slice(&0x1010u16.to_le_bytes());
+        bytes.extend_from_slice(b"UT\0\0");
+        bytes.extend_from_slice(&(proto.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(&proto);
+        bytes
+    }
+
+    #[test]
+    fn wildcard_water_skips_unreadable_dicom_from_another_study() {
+        let m_a1 = readable_dicom("study-a", "pat-a", "ser-1");
+        let m_a2 = readable_dicom("study-a", "pat-a", "ser-2");
+        let m_b_valid = readable_dicom("study-b", "pat-b", "ser-3");
+        let m_b_unreadable = dicom("study-b", "pat-b");
+        let w_a = readable_dicom("study-a", "pat-a", "ser-w");
+
+        // 1. Two valid Study A DICOMs + 1 unreadable Study B DICOM + Study A shared water:
+        // must attach to both valid Study A datasets without failing on the unreadable Study B file.
+        let files_unreadable = vec![
+            ("a1/metab.dcm".into(), m_a1.as_slice()),
+            ("a2/metab.dcm".into(), m_a2.as_slice()),
+            ("bad/unreadable.dcm".into(), m_b_unreadable.as_slice()),
+            ("water/ref.dcm".into(), w_a.as_slice()),
+        ];
+        let (ds1, out1) = load_with_options(
+            &files_unreadable,
+            &json!({"water": [{"targetPath": "*", "files": ["water/ref.dcm"]}]}),
+        );
+        assert_eq!(ds1.len(), 2, "{out1}");
+        assert_eq!(out1["wildcardWater"], json!({"attached": 2, "total": 2}), "{out1}");
+        assert_eq!(out1["errors"].as_array().map(|e| e.len()), Some(1), "{out1}");
+        for ds in out1["datasets"].as_array().unwrap() {
+            assert_eq!(ds["waterPath"], json!("water/ref.dcm"), "{ds}");
+        }
+
+        // 2. Two valid Study A DICOMs + 1 valid Study B DICOM + Study A shared water:
+        // attaches to both Study A datasets and skips Study B with a study/patient error.
+        let files_mixed = vec![
+            ("a1/metab.dcm".into(), m_a1.as_slice()),
+            ("a2/metab.dcm".into(), m_a2.as_slice()),
+            ("b1/metab.dcm".into(), m_b_valid.as_slice()),
+            ("water/ref.dcm".into(), w_a.as_slice()),
+        ];
+        let (ds2, out2) = load_with_options(
+            &files_mixed,
+            &json!({"water": [{"targetPath": "*", "files": ["water/ref.dcm"]}]}),
+        );
+        assert_eq!(ds2.len(), 3, "{out2}");
+        assert_eq!(out2["wildcardWater"], json!({"attached": 2, "total": 3}), "{out2}");
+        assert!(out2["errors"].as_array().unwrap().iter().any(|e| e["error"].as_str().unwrap_or("").contains("study or patient")), "{out2}");
+
+        // 3. Only Study B DICOMs + Study A shared water (0 compatible): must return error.
+        let files_none = vec![
+            ("b1/metab.dcm".into(), m_b_valid.as_slice()),
+            ("water/ref.dcm".into(), w_a.as_slice()),
+        ];
+        let (ds3, out3) = load_with_options(
+            &files_none,
+            &json!({"water": [{"targetPath": "*", "files": ["water/ref.dcm"]}]}),
+        );
+        assert!(ds3.is_empty(), "{out3}");
+        assert!(out3["error"].as_str().unwrap_or("").contains("study or patient"), "{out3}");
     }
 }

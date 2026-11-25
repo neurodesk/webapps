@@ -146,9 +146,10 @@ export function assessBasis(data, basis) {
 
 // Rank all basis sets; best first. Unusable ones stay in the list, last.
 export function rankBases(data, bases) {
+  const teDiff = (basis) => (data.teMs > 0 && basis.teMs > 0 ? Math.abs(data.teMs - basis.teMs) : Infinity);
   return bases
     .map((basis) => ({ basis, ...assessBasis(data, basis) }))
-    .sort((a, b) => (b.usable - a.usable) || (b.score - a.score) || a.basis.id.localeCompare(b.basis.id));
+    .sort((a, b) => (b.usable - a.usable) || (b.score - a.score) || (teDiff(a.basis) - teDiff(b.basis)) || a.basis.id.localeCompare(b.basis.id));
 }
 
 // The basis to preselect, or null when none is usable.
@@ -177,6 +178,11 @@ export function parseBasisHeader(text) {
     id: str("IDBASI"),
     metabolites,
   };
+}
+
+/** True when a basis header lists an empirically measured macromolecule component. */
+export function hasBasisMacromolecules(header) {
+  return Boolean(header?.metabolites?.some((m) => /^(MM|Mac|Macromol)/i.test(m)));
 }
 
 function fieldLabel(hzpppm) {

@@ -88,6 +88,9 @@ pub struct Dataset {
 pub struct Pairing {
     pub metabolite: Dataset,
     pub water: Option<Dataset>,
+    /// True when `water` was automatically shared from another run rather than
+    /// paired by name/stem or DICOM study series.
+    pub water_shared: bool,
 }
 
 /// An anatomical image or DICOM image series, using original file indices.
@@ -240,7 +243,7 @@ pub fn sniff(name: &str, bytes: &[u8]) -> Option<Format> {
     None
 }
 
-const WATER_SUFFIXES: [&str; 7] = ["_w", "_ref", "_wref", "_water", "_h2o", "_water_off", "_nows"];
+const WATER_SUFFIXES: [&str; 9] = ["_w", "_ref", "_wref", "_water", "_h2o", "_water_off", "_nows", "_onlyrfoff", "_rfoff"];
 const METABOLITE_SUFFIXES: [&str; 3] = ["_ws", "_act", "_metab"];
 
 fn water_base(stem: &str) -> Option<String> {
@@ -698,7 +701,8 @@ pub fn detect(files: &[NamedFile]) -> Detection {
                     continue;
                 }
                 let wname = w.name.to_ascii_lowercase();
-                let wdir = split_path(split_path(files[w.files[0]].name).0).1.to_ascii_lowercase();
+                let wpath = split_path(files[w.files[0]].name).0;
+                let wdir = split_path(wpath).1.to_ascii_lowercase();
                 let hit = match fmt {
                     Format::LcModelRaw => wname == mname || water_base(&wname).as_deref() == Some(&mname),
                     _ => {
@@ -708,8 +712,21 @@ pub fn detect(files: &[NamedFile]) -> Detection {
                             || (!mdir.is_empty() && water_base(&wdir).as_deref() == Some(&mdir))
                     }
                 };
-                if hit && !conflicting_dicom_identity(identities.get(&m.files[0]), identities.get(&w.files[0])) {
-                    let shared = shared_dirs(mpath, split_path(files[w.files[0]].name).0);
+                // TWIX files live either in the same folder or in a sibling water folder
+                // (e.g. `megapress/` + `megapress_w/` under the same parent); never pair
+                // across different subject folders (e.g. `sub-01/` and `sub-02/`).
+                let twix_folder_ok = fmt != Format::Twix
+                    || wpath == mpath
+                    || (!mdir.is_empty()
+                        && water_base(&wdir).as_deref() == Some(&mdir)
+                        && split_path(wpath).0 == split_path(mpath).0);
+                let twix_voi_ok = fmt != Format::Twix || {
+                    let mv = super::twix::parse_header(files[m.files[0]].bytes).ok().and_then(|h| geometry::twix(&h));
+                    let wv = super::twix::parse_header(files[w.files[0]].bytes).ok().and_then(|h| geometry::twix(&h));
+                    mv.zip(wv).is_none_or(|(a, b)| same_twix_voxel(&a, &b))
+                };
+                if hit && twix_folder_ok && twix_voi_ok && !conflicting_dicom_identity(identities.get(&m.files[0]), identities.get(&w.files[0])) {
+                    let shared = shared_dirs(mpath, wpath);
                     if best.is_none_or(|(_, s)| shared > s) {
                         best = Some((wi, shared));
                     }
@@ -717,7 +734,7 @@ pub fn detect(files: &[NamedFile]) -> Detection {
             }
         }
         let w = best.and_then(|(k, _)| water[k].take());
-        det.pairs.push(Pairing { metabolite: m, water: w });
+        det.pairs.push(Pairing { metabolite: m, water: w, water_shared: false });
     }
     // Siemens series names include different numbers and descriptions, so
     // unmatched series need a shared study identifier as well as one of each.
@@ -766,6 +783,80 @@ pub fn detect(files: &[NamedFile]) -> Detection {
         }).collect();
         for &k in &targets {
             det.pairs[k].water = Some(w.clone());
+            det.pairs[k].water_shared = true;
+        }
+        if let (Some(wi), false) = (unpaired, targets.is_empty()) {
+            water[*wi] = None;
+        }
+    }
+    // Siemens TWIX scans carry distinct MID/FID prefixes (e.g.
+    // meas_MID00116_FID179112_SV_Steam_OnlyRFoff.dat alongside a session's
+    // metabolite runs), so share an unambiguous single water TWIX scan within
+    // the same folder only when frequency, dwell time and recorded VOI geometry
+    // affirmatively agree.
+    let twix_meta = |ds: &Dataset| -> Option<(f64, f64, Voxel)> {
+        if ds.format != Format::Twix {
+            return None;
+        }
+        let hdr = super::twix::parse_header(files[ds.files[0]].bytes).ok()?;
+        let freq = hdr
+            .get("MeasYaps", "sTXSPEC.asNucleusInfo[0].lFrequency")
+            .and_then(|v| v.num())
+            .or_else(|| hdr.get("Config", "Frequency").and_then(|v| v.num()))
+            .or_else(|| hdr.get("Dicom", "lFrequency").and_then(|v| v.num()))
+            .or_else(|| hdr.get("Meas", "lFrequency").and_then(|v| v.num()))?;
+        let dwell = hdr
+            .get("MeasYaps", "sRXSPEC.alDwellTime[0]")
+            .and_then(|v| v.num())
+            .or_else(|| hdr.get("Config", "DwellTime").and_then(|v| v.num()))?;
+        if !(freq.is_finite() && freq > 0.0 && dwell.is_finite() && dwell > 0.0) {
+            return None;
+        }
+        // Require verified voxel geometry on both scans for automatic cross-run sharing.
+        let voxel = geometry::twix(&hdr)?;
+        Some((freq, dwell, voxel))
+    };
+    let twix_compatible = |a: &(f64, f64, Voxel), b: &(f64, f64, Voxel)| -> bool {
+        if (a.0 - b.0).abs() > a.0.abs() * 0.001 {
+            return false;
+        }
+        if (a.1 - b.1).abs() > a.1.abs().max(1.0) * 1e-6 {
+            return false;
+        }
+        same_twix_voxel(&a.2, &b.2)
+    };
+    let twix_sources: Vec<(Dataset, String, Option<usize>)> = det
+        .pairs
+        .iter()
+        .filter_map(|p| p.water.as_ref().filter(|w| w.format == Format::Twix).map(|w| (w.clone(), folder(w), None)))
+        .chain(
+            water
+                .iter()
+                .enumerate()
+                .filter_map(|(wi, w)| w.as_ref().filter(|w| w.format == Format::Twix).map(|w| (w.clone(), folder(w), Some(wi)))),
+        )
+        .collect();
+    for (w, wf, unpaired) in &twix_sources {
+        let wlow = w.name.to_ascii_lowercase();
+        let rf_off = wlow.ends_with("_onlyrfoff") || wlow.ends_with("_rfoff");
+        if !rf_off && twix_effective_water_protocol(w).is_some_and(|proto| scanner_twix_scopes.contains(&(wf.clone(), proto))) {
+            continue;
+        }
+        if twix_sources.iter().filter(|(_, other_dir, _)| other_dir == wf).count() != 1 {
+            continue;
+        }
+        let Some(wmeta) = twix_meta(w) else { continue };
+        let targets: Vec<usize> = (0..det.pairs.len())
+            .filter(|&k| {
+                det.pairs[k].water.is_none()
+                    && det.pairs[k].metabolite.format == Format::Twix
+                    && folder(&det.pairs[k].metabolite) == *wf
+                    && twix_meta(&det.pairs[k].metabolite).is_some_and(|mmeta| twix_compatible(&wmeta, &mmeta))
+            })
+            .collect();
+        for &k in &targets {
+            det.pairs[k].water = Some(w.clone());
+            det.pairs[k].water_shared = true;
         }
         if let (Some(wi), false) = (unpaired, targets.is_empty()) {
             water[*wi] = None;
@@ -1678,5 +1769,116 @@ mod tests {
         let dst = detect(&diff_study);
         assert!(dst.pairs[0].water.is_none(), "{dst:#?}");
         assert_eq!(dst.unpaired_water.len(), 1, "{dst:#?}");
+    }
+
+    fn twix_stub(freq: f64, dwell: f64, pos_sag: f64) -> Vec<u8> {
+        let cfg = format!(
+            "### ASCCONV BEGIN ###\nsTXSPEC.asNucleusInfo[0].lFrequency = {freq}\nsRXSPEC.alDwellTime[0] = {dwell}\nsSpecPara.sVoI.dThickness = 20.0\nsSpecPara.sVoI.dPhaseFOV = 20.0\nsSpecPara.sVoI.dReadoutFOV = 32.0\nsSpecPara.sVoI.sPosition.dSag = {pos_sag}\nsSpecPara.sVoI.sPosition.dCor = 0.0\nsSpecPara.sVoI.sPosition.dTra = 0.0\nsSpecPara.sVoI.sNormal.dSag = 0.0\nsSpecPara.sVoI.sNormal.dCor = 0.0\nsSpecPara.sVoI.sNormal.dTra = 1.0\nsSpecPara.sVoI.dInPlaneRot = 0.0\n### ASCCONV END ###\n"
+        );
+        let mut body = Vec::new();
+        body.extend_from_slice(&2u32.to_le_bytes());
+        for name in ["Config", "MeasYaps"] {
+            body.extend_from_slice(name.as_bytes());
+            body.push(0);
+            body.extend_from_slice(&(cfg.len() as u32).to_le_bytes());
+            body.extend_from_slice(cfg.as_bytes());
+        }
+        // VD/VE single-RAID wrapper: id=0, nscans=1, 152-byte entry with offset=256.
+        let offset = 256u64;
+        let hdr_len = (4 + body.len()) as u32;
+        let mut buf = vec![0u8; offset as usize];
+        buf[0..4].copy_from_slice(&0u32.to_le_bytes());
+        buf[4..8].copy_from_slice(&1u32.to_le_bytes());
+        buf[16..24].copy_from_slice(&offset.to_le_bytes());
+        buf[24..32].copy_from_slice(&(hdr_len as u64).to_le_bytes());
+        buf.extend_from_slice(&hdr_len.to_le_bytes());
+        buf.extend_from_slice(&body);
+        buf
+    }
+
+    #[test]
+    fn twix_onlyrfoff_is_water_and_shares_with_matching_folder_runs() {
+        let cap = twix_stub(297208001.0, 83300.0, -39.0);
+        let sal = twix_stub(297208001.0, 83300.0, -39.0);
+        let water = twix_stub(297208001.0, 83300.0, -39.0);
+        let other_voi = twix_stub(297208001.0, 83300.0, 12.0);
+        let files = [
+            nf("ses/meas_MID00115_FID179111_SV_Steam_Cap.dat", &cap),
+            nf("ses/meas_MID00117_FID179113_SV_Steam_Saline.dat", &sal),
+            nf("ses/meas_MID00118_FID179114_SV_Steam_OtherVOI.dat", &other_voi),
+            nf("ses/meas_MID00116_FID179112_SV_Steam_OnlyRFoff.dat", &water),
+        ];
+        let d = detect(&files);
+        assert_eq!(d.pairs.len(), 3, "{d:#?}");
+        assert!(d.unpaired_water.is_empty(), "{d:#?}");
+        assert_eq!(d.pairs[0].water.as_ref().unwrap().name, "meas_MID00116_FID179112_SV_Steam_OnlyRFoff");
+        assert_eq!(d.pairs[1].water.as_ref().unwrap().name, "meas_MID00116_FID179112_SV_Steam_OnlyRFoff");
+        assert!(d.pairs[2].water.is_none(), "different VOI must not share water");
+    }
+
+    #[test]
+    fn twix_water_is_not_shared_when_two_water_files_exist() {
+        let cap = twix_stub(297208001.0, 83300.0, -39.0);
+        let w1 = twix_stub(297208001.0, 83300.0, -39.0);
+        let w2 = twix_stub(297208001.0, 83300.0, -39.0);
+        let files = [
+            nf("ses/meas_MID00115_Cap.dat", &cap),
+            nf("ses/meas_MID00116_OnlyRFoff.dat", &w1),
+            nf("ses/meas_MID00119_rfoff.dat", &w2),
+        ];
+        let d = detect(&files);
+        assert_eq!(d.pairs.len(), 1);
+        assert!(d.pairs[0].water.is_none());
+        assert_eq!(d.unpaired_water.len(), 2);
+    }
+
+    #[test]
+    fn twix_water_is_not_shared_without_verified_voxel_geometry() {
+        let twix_no_voi = |freq: f64, dwell: f64| -> Vec<u8> {
+            let cfg = format!(
+                "### ASCCONV BEGIN ###\nsTXSPEC.asNucleusInfo[0].lFrequency = {freq}\nsRXSPEC.alDwellTime[0] = {dwell}\n### ASCCONV END ###\n"
+            );
+            let mut body = Vec::new();
+            body.extend_from_slice(&2u32.to_le_bytes());
+            for name in ["Config", "MeasYaps"] {
+                body.extend_from_slice(name.as_bytes());
+                body.push(0);
+                body.extend_from_slice(&(cfg.len() as u32).to_le_bytes());
+                body.extend_from_slice(cfg.as_bytes());
+            }
+            let offset = 256u64;
+            let hdr_len = (4 + body.len()) as u32;
+            let mut buf = vec![0u8; offset as usize];
+            buf[0..4].copy_from_slice(&0u32.to_le_bytes());
+            buf[4..8].copy_from_slice(&1u32.to_le_bytes());
+            buf[16..24].copy_from_slice(&offset.to_le_bytes());
+            buf[24..32].copy_from_slice(&(hdr_len as u64).to_le_bytes());
+            buf.extend_from_slice(&hdr_len.to_le_bytes());
+            buf.extend_from_slice(&body);
+            buf
+        };
+        let m1 = twix_no_voi(297208001.0, 83300.0);
+        let m2 = twix_no_voi(297208001.0, 83300.0);
+        let w = twix_no_voi(297208001.0, 83300.0);
+        let files = [
+            nf("ses/meas_MID00115_Cap.dat", &m1),
+            nf("ses/meas_MID00117_Saline.dat", &m2),
+            nf("ses/meas_MID00116_OnlyRFoff.dat", &w),
+        ];
+        let d = detect(&files);
+        assert_eq!(d.pairs.len(), 2);
+        assert!(d.pairs[0].water.is_none(), "must not share TWIX water when VOI geometry is absent");
+        assert!(d.pairs[1].water.is_none(), "must not share TWIX water when VOI geometry is absent");
+        assert_eq!(d.unpaired_water.len(), 1);
+
+        // Named _onlyrfoff water in another subject folder must NEVER pair across subjects
+        let cross_subject = [
+            nf("sub-01/svs_steam.dat", &m1),
+            nf("sub-02/svs_steam_onlyrfoff.dat", &w),
+        ];
+        let d_cross = detect(&cross_subject);
+        assert_eq!(d_cross.pairs.len(), 1);
+        assert!(d_cross.pairs[0].water.is_none(), "must not pair TWIX water across subject folders");
+        assert_eq!(d_cross.unpaired_water.len(), 1);
     }
 }

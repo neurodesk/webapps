@@ -1338,6 +1338,7 @@ apps:
       - Unedited fits widen LCModel's line-broadening prior (DESDT2 2, RFWBAS 80). With the narrow-line simulated basis sets, LCModel's defaults scale water-referenced concentrations 8-15 % low; the widened prior recovers synthetic spectra of known concentration and agrees with an independent fitter (spant). LCModel's own priors stay one setting away.
       - In GABA-edited MEGA-PRESS the fit separates GABA from co-edited macromolecules (MM3co) with a soft constraint to the macromolecule peak at 0.915 ppm, following Zöllner et al. (2022). GABA+ (GABA + MM3co) is robust; the split between GABA and MM3co rests on the model's assumptions.
       - With a T1 image from the same session, MindMap segments it in the browser, the voxel is placed from the spectroscopy header and drawn on the T1, and concentrations are corrected for the voxel's grey matter, white matter and CSF as in Gasparovic et al. 2006, with Osprey's constants.
+      - For functional MRS (fMRS), unaveraged multi-transient unedited acquisitions can be binned into sliding windows, event blocks or condition-pooled spectra from a BIDS events.tsv or CSV schedule while preserving transient timestamps and sharing a single compatible water reference (including Siemens OnlyRFoff scans). Optional BOLD linewidth matching equalises bin linewidths via exponential broadening before fitting, LCModel settings expose empirical macromolecule fitting (nsimul=0) and baseline stiffness (dkntmn), and the Time course view reports QC trajectories, windowed temporal GLMs and a two-stage fixed-template dynamic spectral projection GLM across all kept complex transients (inspired by Clarke et al. 2024, with Newey-West HAC standard errors conditional on the grand-mean templates).
     packages:
       - { name: LCModel 6.3-1N (Rust port), url: https://github.com/schorschinho/LCModel, role: linear-combination model fitting }
       - { name: FID-A (Rust port), url: https://github.com/CIC-methods/FID-A, role: preprocessing, file readers and basis-set simulation }
@@ -1400,6 +1401,14 @@ apps:
         reference: "Clarke WT, Bell TK, Emir UE, Mikkelsen M, Oeltzschner G, Shamaei A, Soher BJ, Wilson M. NIfTI-MRS: A standard data format for magnetic resonance spectroscopy. Magn Reson Med. 2022;88(6):2358-2370."
         doi: 10.1002/mrm.29418
         code: https://github.com/wtclarke/spec2nii
+      - group: Functional spectroscopy
+        title: 7 T fMRS and BOLD linewidth matching
+        reference: "Bednařík P, Tkáč I, Giove F, DiNuzzo M, Deelchand DK, Emir UE, Eberly LE, Mangia S. Neurochemical and BOLD responses during neuronal activation measured in the human visual cortex at 7 Tesla. J Cereb Blood Flow Metab. 2015;35(4):601-610."
+        doi: 10.1038/jcbfm.2014.233
+      - group: Functional spectroscopy
+        title: Dynamic (2D) spectral fitting
+        reference: "Clarke WT, Ligneul C, Cottaar M, Ip IB, Jbabdi S. Universal dynamic fitting of magnetic resonance spectroscopy. Magn Reson Med. 2024;91(6):2229-2246."
+        doi: 10.1002/mrm.30001
       - group: DICOM conversion
         title: dcm2niix
         reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47-56."

@@ -126,15 +126,14 @@ pub fn to_fida_layout(input: &Spectra, check: &EditCheck) -> Spectra {
     out
 }
 
-/// Drop empty transients (Philips stores a short water reference in a block
-/// padded with zero rows, which FID-A's VAX decoding reads as 2^-129, not 0);
-/// averaging them in would scale the signal down by the padding. A transient
-/// is empty when its largest value is below 1e-12 of the largest overall.
-/// Returns the data unchanged when none are empty.
-pub fn drop_empty_transients(input: &Spectra) -> Spectra {
+/// Drop empty transients and also return `(original_count, kept_original_indices)`
+/// so functional MRS preserves the true acquisition timeline even when empty
+/// rows are compacted out.
+pub fn drop_empty_transients_with_indices(input: &Spectra) -> (Spectra, usize, Vec<usize>) {
     let a = input.dims.averages;
     if a == 0 || a != input.sz.len() {
-        return input.clone();
+        let count = if a > 0 { input.size(a) } else { 1 };
+        return (input.clone(), count, (0..count).collect());
     }
     let na = input.size(a);
     let block = input.fids.len() / na;
@@ -142,7 +141,7 @@ pub fn drop_empty_transients(input: &Spectra) -> Spectra {
     let largest = (0..na).map(peak).fold(0.0, f64::max);
     let keep: Vec<usize> = (0..na).filter(|&k| peak(k) > 1e-12 * largest).collect();
     if keep.len() == na || keep.is_empty() {
-        return input.clone();
+        return (input.clone(), na, (0..na).collect());
     }
     let mut out = input.clone();
     out.fids = keep.iter().flat_map(|&k| input.fids[k * block..(k + 1) * block].iter().copied()).collect();
@@ -154,5 +153,14 @@ pub fn drop_empty_transients(input: &Spectra) -> Spectra {
     out.squeeze_sz();
     out.averages = keep.len();
     out.raw_averages = keep.len();
-    out
+    (out, na, keep)
+}
+
+/// Drop empty transients (Philips stores a short water reference in a block
+/// padded with zero rows, which FID-A's VAX decoding reads as 2^-129, not 0);
+/// averaging them in would scale the signal down by the padding. A transient
+/// is empty when its largest value is below 1e-12 of the largest overall.
+/// Returns the data unchanged when none are empty.
+pub fn drop_empty_transients(input: &Spectra) -> Spectra {
+    drop_empty_transients_with_indices(input).0
 }

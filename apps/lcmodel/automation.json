@@ -66,6 +66,7 @@
             "press-1.5t-te30",
             "slaser-7t-te28",
             "steam-7t-te8",
+            "steam-7t-te6",
             "megapress-3t-te68-diff",
             "press-1.5t-te35",
             "press-1.5t-te144",
@@ -106,6 +107,17 @@
             "lcmodel"
           ],
           "default": "widened"
+        },
+        "simulateMacromolecules": {
+          "type": "boolean",
+          "description": "Include LCModel's built-in simulated macromolecule and lipid peaks for unedited fits. Set false (nsimul=0) when your custom .BASIS file already includes an empirically measured macromolecule spectrum.",
+          "default": true
+        },
+        "baselineStiffness": {
+          "type": "number",
+          "description": "LCModel spline baseline knot spacing (dkntmn, ppm). Larger values stiffen the baseline (useful at 7 T short TE and in fMRS); LCModel's default when absent.",
+          "minimum": 0.05,
+          "maximum": 10
         },
         "removeBadAverages": {
           "type": "boolean",
@@ -345,6 +357,7 @@
             "press-1.5t-te30",
             "slaser-7t-te28",
             "steam-7t-te8",
+            "steam-7t-te6",
             "megapress-3t-te68-diff",
             "press-1.5t-te35",
             "press-1.5t-te144",
@@ -385,6 +398,17 @@
             "lcmodel"
           ],
           "default": "widened"
+        },
+        "simulateMacromolecules": {
+          "type": "boolean",
+          "description": "Include LCModel's built-in simulated macromolecule and lipid peaks for unedited fits. Set false (nsimul=0) when your custom .BASIS file already includes an empirically measured macromolecule spectrum.",
+          "default": true
+        },
+        "baselineStiffness": {
+          "type": "number",
+          "description": "LCModel spline baseline knot spacing (dkntmn, ppm). Larger values stiffen the baseline (useful at 7 T short TE and in fMRS); LCModel's default when absent.",
+          "minimum": 0.05,
+          "maximum": 10
         },
         "removeBadAverages": {
           "type": "boolean",
@@ -453,6 +477,216 @@
           "mediaType": "text/html",
           "minimum": 1,
           "maximum": 4096
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    },
+    "fit-fmrs": {
+      "title": "Functional MRS time-course and condition analysis",
+      "description": "Preprocess unaveraged multi-transient unedited MRS data on a fixed-TR timeline (transient k at k × TR, assuming no mid-scan pauses), bin transients by sliding windows or stimulus events, optionally equalise BOLD linewidths, fit each bin with LCModel, and run windowed and two-stage fixed-template dynamic spectral projection GLMs.",
+      "mode": "batch",
+      "inputs": {
+        "spectra": {
+          "source": "files",
+          "type": "neuro:spectroscopy",
+          "formats": [
+            "twix",
+            "ge-pfile",
+            "siemens-dicom",
+            "philips-sdat",
+            "nifti-mrs",
+            "bruker"
+          ],
+          "description": "Unaveraged multi-transient spectroscopy acquisition with optional water reference (including Siemens OnlyRFoff).",
+          "minimum": 1,
+          "maximum": 512
+        },
+        "events": {
+          "source": "files",
+          "type": "neuro:table",
+          "formats": [
+            "tsv",
+            "csv"
+          ],
+          "description": "Optional BIDS events.tsv or CSV stimulus schedule with onset, duration and trial_type columns, aligned on the fixed-TR acquisition timeline (transient k at k × TR; assumes no mid-scan pauses).",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "basis": {
+          "source": "files",
+          "type": "file:lcmodel-basis",
+          "formats": [
+            "lcmodel-basis"
+          ],
+          "description": "Optional LCModel .BASIS file; overrides basisSet.",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "basisSet": {
+          "type": "string",
+          "description": "Library basis set, or auto for the recommendation.",
+          "enum": [
+            "auto",
+            "press-3t-te30",
+            "press-3t-te35",
+            "press-3t-te144",
+            "steam-3t-te20",
+            "slaser-3t-te30",
+            "special-3t-te8.5",
+            "press-1.5t-te30",
+            "slaser-7t-te28",
+            "steam-7t-te8",
+            "steam-7t-te6",
+            "megapress-3t-te68-diff",
+            "press-1.5t-te35",
+            "press-1.5t-te144",
+            "steam-1.5t-te20",
+            "press-3t-te80",
+            "steam-3t-te8",
+            "slaser-3t-te35",
+            "slaser-3t-te30-shaped",
+            "slaser-3t-te35-shaped",
+            "press-3t-te30-shaped",
+            "press-3t-te35-shaped",
+            "press-3t-te80-shaped",
+            "press-3t-te144-shaped",
+            "slaser-7t-te28-shaped",
+            "megapress-3t-te80-diff",
+            "megapress-3t-te80-mmsup-diff"
+          ],
+          "default": "auto"
+        },
+        "fmrsMode": {
+          "type": "string",
+          "description": "Temporal binning mode: sliding windows, event blocks, or condition-pooled spectra.",
+          "enum": [
+            "sliding",
+            "blocks",
+            "conditions"
+          ],
+          "default": "sliding"
+        },
+        "fmrsWindow": {
+          "type": "number",
+          "description": "Transients per window in sliding mode.",
+          "minimum": 1,
+          "maximum": 1024,
+          "default": 4
+        },
+        "fmrsStep": {
+          "type": "number",
+          "description": "Transient step between consecutive windows in sliding mode; defaults to fmrsWindow.",
+          "minimum": 1,
+          "maximum": 1024
+        },
+        "matchLinewidth": {
+          "type": "boolean",
+          "description": "Equalise linewidths across bins via exponential broadening before fitting (BOLD linewidth matching).",
+          "default": false
+        },
+        "dynamicGlm": {
+          "type": "boolean",
+          "description": "Fit a two-stage fixed-template dynamic spectral projection GLM across all kept complex transients with BOLD linewidth and frequency-shift terms and Newey-West HAC standard errors.",
+          "default": true
+        },
+        "lineBroadening": {
+          "type": "string",
+          "description": "LCModel's line-broadening prior for unedited spectra.",
+          "enum": [
+            "widened",
+            "lcmodel"
+          ],
+          "default": "widened"
+        },
+        "simulateMacromolecules": {
+          "type": "boolean",
+          "description": "Include LCModel's built-in simulated macromolecule and lipid peaks. Set false (nsimul=0) with an empirical MM basis.",
+          "default": true
+        },
+        "baselineStiffness": {
+          "type": "number",
+          "description": "LCModel spline baseline knot spacing (dkntmn, ppm).",
+          "minimum": 0.05,
+          "maximum": 10
+        },
+        "removeBadAverages": {
+          "type": "boolean",
+          "description": "Remove bad averages (FID-A op_rmbadaverages) while preserving original transient indices.",
+          "default": true
+        },
+        "badAverageSd": {
+          "type": "number",
+          "description": "Bad-average threshold in standard deviations; FID-A's default when absent.",
+          "minimum": 1,
+          "maximum": 10
+        },
+        "driftCorrection": {
+          "type": "boolean",
+          "description": "Correct per-transient frequency and phase drift before binning.",
+          "default": true
+        },
+        "phaseAndReference": {
+          "type": "boolean",
+          "description": "Phase and reference all transients consistently from the grand mean.",
+          "default": true
+        },
+        "waterScaling": {
+          "type": "boolean",
+          "description": "Scale every bin to the shared water reference when present.",
+          "default": true
+        },
+        "eddyCurrentCorrection": {
+          "type": "boolean",
+          "description": "Eddy-current correction with the shared water reference.",
+          "default": true
+        },
+        "ppmStart": {
+          "type": "number",
+          "description": "Upper end of the fit range in ppm.",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "ppmEnd": {
+          "type": "number",
+          "description": "Lower end of the fit range in ppm.",
+          "minimum": -1,
+          "maximum": 10
+        }
+      },
+      "artifacts": {
+        "fmrsReport": {
+          "type": "file:mrs-report",
+          "mediaType": "text/html",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "fmrsTimeCourse": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "fmrsTimeCourseWide": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "fmrsTransients": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "fmrsStats": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
         }
       },
       "engines": [

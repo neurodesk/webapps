@@ -115,6 +115,16 @@
       "linewidth_Hz": 2.0
     },
     {
+      "id": "steam-7t-te6",
+      "sequence": "STEAM",
+      "field_T": 7.0,
+      "te_ms": 6,
+      "tm_ms": 32,
+      "points": 8192,
+      "bandwidth_Hz": 8000,
+      "linewidth_Hz": 2.0
+    },
+    {
       "id": "press-1.5t-te35",
       "sequence": "PRESS",
       "field_T": 1.5,

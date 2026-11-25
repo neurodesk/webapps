@@ -39,6 +39,9 @@ self.onmessage = async ({ data: job }) => {
     } else if (job.type === "process") {
       result = lcm.process(job.dataset, job.options);
       if (result.error) throw new Error(result.error);
+    } else if (job.type === "processFmrs") {
+      result = lcm.processFmrs(job.dataset, job.options);
+      if (result.error) throw new Error(result.error);
     } else if (job.type === "fit") {
       const files = { ...job.files };
       if (job.basis.library) files[job.basis.name] = await basisText(job.basis.library);
