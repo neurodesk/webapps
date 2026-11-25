@@ -221,20 +221,20 @@ test('surface scenes hide 3D anatomy by default and honor FreeBrowse visibility 
 
 test('surface selection preserves ACS and the other selected layouts', async ({ page }, testInfo) => {
   // Six layouts and the desktop and phone captures can exceed the default on software WebGL.
-  test.setTimeout(60_000);
+  test.setTimeout(90_000);
   await deliverSurfaces(page);
   for (const mode of ['Multi view', 'Axial view', 'Coronal view', 'Sagittal view', 'Multi+Render', 'Render view']) {
     await page.locator('.nd-volume-toggle').filter({ hasText: 'Source-grid QC overlay' }).getByRole('button', { name: 'View', exact: true }).click();
-    await expect(page.locator('#runButton')).toBeEnabled();
+    await expect(page.locator('#runButton')).toBeEnabled({ timeout: 30_000 });
     const layout = page.getByRole('radio', { name: mode, exact: true });
     await layout.click();
     const left = page.getByRole('checkbox', { name: 'Show Left mid-surface', exact: true });
     await left.check();
-    await expect(left).toBeEnabled();
+    await expect(left).toBeEnabled({ timeout: 30_000 });
     await expect(layout).toHaveAttribute('data-state', 'on');
     const row = page.locator('.nd-volume-toggle').filter({ hasText: 'Right mid-surface' });
     await row.getByRole('button', { name: 'View', exact: true }).click();
-    await expect(row.getByRole('checkbox')).toBeEnabled();
+    await expect(row.getByRole('checkbox')).toBeEnabled({ timeout: 30_000 });
     await expect(layout).toHaveAttribute('data-state', 'on');
     await expect(row.getByRole('checkbox')).toBeChecked();
     await expect(left).toBeChecked();
@@ -246,7 +246,7 @@ test('surface selection preserves ACS and the other selected layouts', async ({ 
       await page.setViewportSize({ width: 1280, height: 720 });
       const withBoundary = await page.locator('#gl1').screenshot();
       await row.getByRole('checkbox').uncheck();
-      await expect(row.getByRole('checkbox')).toBeEnabled();
+      await expect(row.getByRole('checkbox')).toBeEnabled({ timeout: 30_000 });
       expect(withBoundary.equals(await page.locator('#gl1').screenshot())).toBe(false);
       await expect(layout).toHaveAttribute('data-state', 'on');
     }
