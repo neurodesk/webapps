@@ -239,7 +239,12 @@ export async function segment({
   offline = offlineByDefault(),
   onProgress = () => {},
 } = {}) {
-  if (!input || !output) throw new Error('An input image and an output directory are required.');
+  if (typeof input !== 'string' || !input.trim() || typeof output !== 'string' || !output.trim()) {
+    throw new Error('An input image and an output directory are required.');
+  }
+  if (typeof cacheDir !== 'string' || !cacheDir.trim()) {
+    throw new Error('cacheDir must be a non-empty path.');
+  }
   const plan = resolveTaskPlan({ task, resolution, subset });
   const intraOpNumThreads = resolveThreads(threads);
   const destination = resolve(output);

@@ -70,7 +70,7 @@ export function resolveTaskPlan({ task = 'total', resolution, subset = 'all' } =
   if (task === 'total') {
     const resolvedResolution = resolution ?? 'fast';
     if (resolvedResolution === 'fast') {
-      if (subset && subset !== 'all') {
+      if (subset !== 'all') {
         throw new Error(`Subset "${subset}" requires full resolution (1.5 mm) for task "${task}".`);
       }
       return { task: spec, resolution: 'fast', subset: 'all', models: [modelById('total-ct-3mm')], cropModel: null };
@@ -87,7 +87,7 @@ export function resolveTaskPlan({ task = 'total', resolution, subset = 'all' } =
   if (task === 'total_mr') {
     const resolvedResolution = resolution ?? 'fast';
     if (resolvedResolution === 'fast') {
-      if (subset && subset !== 'all') {
+      if (subset !== 'all') {
         throw new Error(`Subset "${subset}" requires full resolution (1.5 mm) for task "${task}".`);
       }
       return { task: spec, resolution: 'fast', subset: 'all', models: [modelById('total-mr-3mm')], cropModel: null };
@@ -105,7 +105,7 @@ export function resolveTaskPlan({ task = 'total', resolution, subset = 'all' } =
     if (resolution !== undefined && resolution !== 'full') {
       throw new Error(`Task "${task}" only supports full resolution (got "${resolution}").`);
     }
-    if (subset && subset !== 'all') {
+    if (subset !== 'all') {
       throw new Error(`Task "${task}" does not support subset "${subset}".`);
     }
     return { task: spec, resolution: 'full', subset: 'all', models: [modelById('vertebrae-mr')], cropModel: null };
@@ -114,7 +114,7 @@ export function resolveTaskPlan({ task = 'total', resolution, subset = 'all' } =
     if (resolution !== undefined && resolution !== 'full') {
       throw new Error(`Task "${task}" only supports full resolution (got "${resolution}").`);
     }
-    if (subset && subset !== 'all') {
+    if (subset !== 'all') {
       throw new Error(`Task "${task}" does not support subset "${subset}".`);
     }
     return {

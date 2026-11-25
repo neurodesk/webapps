@@ -339,6 +339,22 @@ describe('TotalSegmentator Node API and CLI (offline)', () => {
         /failed checksum verification/,
       );
 
+      // downloadModels and segment reject empty cacheDir and empty subset before claiming output or accessing models.
+      await assert.rejects(
+        () => segment({ input: scanPath, output: join(work, 'empty-cache-out'), cacheDir: '', offline: true }),
+        /cacheDir must be a non-empty path/,
+      );
+      await assert.rejects(() => stat(join(work, 'empty-cache-out')), { code: 'ENOENT' });
+      await assert.rejects(
+        () => segment({ input: scanPath, output: join(work, 'empty-subset-out'), subset: '', offline: true }),
+        /requires full resolution/,
+      );
+      await assert.rejects(() => stat(join(work, 'empty-subset-out')), { code: 'ENOENT' });
+      await assert.rejects(
+        () => downloadModels({ task: 'total', subset: '', cacheDir: badCache, offline: true }),
+        /requires full resolution/,
+      );
+
       // downloadModels rejects --resolution / --subset when --task is omitted.
       await assert.rejects(
         () => downloadModels({ resolution: 'typo', cacheDir: badCache, offline: true }),

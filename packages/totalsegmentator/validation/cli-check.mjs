@@ -149,6 +149,26 @@ async function runCase({
     const count = rows.slice(1).filter((cols) => cols[groupIdx] === group && Number(cols[volumeIdx]) > 0).length;
     check(count > 0, `${label}: model group "${group}" contributed ${count} structure(s)`);
   }
+  return seg.raw.subarray(seg.voxOffset);
+}
+
+// Stamps conflicting qform_code=2 (180-deg Y flip, quatern_c=1) alongside sform_code=1 (true srow)
+// onto a full CT scan so comparing its mask byte-for-byte with an sform-only run proves inference
+// selected sform over qform and preserved both transforms.
+function buildDualTransformCopy(srcBuf) {
+  const src = inspectRawNifti1(srcBuf);
+  const out = Buffer.from(src.raw);
+  const v = new DataView(out.buffer, out.byteOffset, out.byteLength);
+  const le = v.getInt32(0, true) === 348;
+  v.setInt16(252, 2, le);
+  v.setInt16(254, 1, le);
+  v.setFloat32(256, 0, le);
+  v.setFloat32(260, 1, le);
+  v.setFloat32(264, 0, le);
+  v.setFloat32(268, 11, le);
+  v.setFloat32(272, 22, le);
+  v.setFloat32(276, 33, le);
+  return out;
 }
 
 // Crops a central trunk subvolume from the pinned CT scan and stamps distinct qform_code=2
@@ -224,10 +244,13 @@ const mrInput = await pinnedExample('mr-abdomen');
 
 const work = await mkdtemp(join(tmpdir(), 'totalseg-cli-check-'));
 try {
+  const ctBytes = await readFile(ctInput);
+  const dualCt = join(work, 'ct_dual_transform.nii');
+  await writeFile(dualCt, buildDualTransformCopy(ctBytes));
   const croppedCt = join(work, 'ct_trunk_crop.nii');
-  await writeFile(croppedCt, buildCroppedDualTransformCt(await readFile(ctInput)));
+  await writeFile(croppedCt, buildCroppedDualTransformCt(ctBytes));
 
-  await runCase({
+  const ctFastMask = await runCase({
     label: 'CT fast 3mm',
     input: ctInput,
     output: join(work, 'ct-fast'),
@@ -238,6 +261,22 @@ try {
     meanColumn: 'mean_hu',
     checkStructure: { slug: 'liver', minMl: 400, maxMl: 4000 },
   });
+
+  const dualCtMask = await runCase({
+    label: 'CT fast 3mm (dual qform_code=2 flip vs sform_code=1)',
+    input: dualCt,
+    output: join(work, 'ct-fast-dual'),
+    args: ['--task', 'total', '--resolution', 'fast'],
+    expectedModelIds: ['total-ct-3mm'],
+    expectedFiles: ['ct_dual_transform_totalseg_total.nii.gz', 'ct_dual_transform_totalseg_total_stats.tsv'],
+    minStructures: 35,
+    meanColumn: 'mean_hu',
+    checkStructure: { slug: 'liver', minMl: 400, maxMl: 4000 },
+  });
+  check(
+    Buffer.compare(Buffer.from(dualCtMask), Buffer.from(ctFastMask)) === 0,
+    'CT dual qform_code=2/sform_code=1 mask matches sform-only baseline voxel-for-voxel',
+  );
 
   await runCase({
     label: 'MRI fast 3mm (LPS)',
