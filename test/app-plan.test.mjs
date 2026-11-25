@@ -4719,11 +4719,14 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       new Map([[
         'pnpm-lock.yaml',
         {
-          before: stringify({ lockfileVersion: '9.0', importers: { 'packages/demo': { dependencies: { yaml: { specifier: '2.0.0', version: '2.0.0' } } } }, packages: { 'yaml@2.0.0': {} }, snapshots: { 'yaml@2.0.0': {} } }),
-          after: stringify({ lockfileVersion: '9.0', importers: { 'packages/demo': { dependencies: { yaml: { specifier: '2.1.0', version: '2.1.0' } } } }, packages: { 'yaml@2.1.0': {} }, snapshots: { 'yaml@2.1.0': {} } }),
+          before: stringify({ lockfileVersion: '9.0', importers: { 'packages/demo': { dependencies: { yaml: { specifier: '2.0.0', version: '2.0.0' } } } }, packages: { 'yaml@2.0.0': { resolution: { integrity: 'sha512-before' } } }, snapshots: { 'yaml@2.0.0': {} } }),
+          after: stringify({ lockfileVersion: '9.0', importers: { 'packages/demo': { dependencies: { yaml: { specifier: '2.1.0', version: '2.1.0' } } } }, packages: { 'yaml@2.1.0': { resolution: { integrity: 'sha512-after' } } }, snapshots: { 'yaml@2.1.0': {} } }),
         },
       ]]),
-      (plan) => assert.equal(plan.allApps, true),
+      (plan) => {
+        assert.equal(plan.allApps, true);
+        assert.match(plan.reasons.fallback ?? '', /importer packages\/demo changed its dependency entries; ci\.yml's per-app jobs run packages\/demo/);
+      },
     ],
     [
       'CI step cd into workspace with pnpm run lint keeps standalone lint edge',
@@ -4823,11 +4826,14 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       new Map([[
         'pnpm-lock.yaml',
         {
-          before: stringify({ lockfileVersion: '9.0', importers: { 'packages/demo': { dependencies: { 'startup-hook': { specifier: '1.0.0', version: '1.0.0' } } } }, packages: { 'startup-hook@1.0.0': {} }, snapshots: { 'startup-hook@1.0.0': {} } }),
-          after: stringify({ lockfileVersion: '9.0', importers: { 'packages/demo': { dependencies: { 'startup-hook': { specifier: '1.1.0', version: '1.1.0' } } } }, packages: { 'startup-hook@1.1.0': {} }, snapshots: { 'startup-hook@1.1.0': {} } }),
+          before: stringify({ lockfileVersion: '9.0', importers: { 'packages/demo': { dependencies: { 'startup-hook': { specifier: '1.0.0', version: '1.0.0' } } } }, packages: { 'startup-hook@1.0.0': { resolution: { integrity: 'sha512-before' } } }, snapshots: { 'startup-hook@1.0.0': {} } }),
+          after: stringify({ lockfileVersion: '9.0', importers: { 'packages/demo': { dependencies: { 'startup-hook': { specifier: '1.1.0', version: '1.1.0' } } } }, packages: { 'startup-hook@1.1.0': { resolution: { integrity: 'sha512-after' } } }, snapshots: { 'startup-hook@1.1.0': {} } }),
         },
       ]]),
-      (plan) => assert.equal(plan.allApps, true),
+      (plan) => {
+        assert.equal(plan.allApps, true);
+        assert.match(plan.reasons.fallback ?? '', /importer packages\/demo changed its dependency entries; ci\.yml's per-app jobs run packages\/demo/);
+      },
     ],
     [
       'dynamic external import in eager workspace file selects all apps on lockfile update',
@@ -4848,10 +4854,131 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       new Map([[
         'pnpm-lock.yaml',
         {
-          before: stringify({ lockfileVersion: '9.0', importers: { 'packages/demo': { dependencies: { 'startup-hook': { specifier: '1.0.0', version: '1.0.0' } } } }, packages: { 'startup-hook@1.0.0': {} }, snapshots: { 'startup-hook@1.0.0': {} } }),
-          after: stringify({ lockfileVersion: '9.0', importers: { 'packages/demo': { dependencies: { 'startup-hook': { specifier: '1.1.0', version: '1.1.0' } } } }, packages: { 'startup-hook@1.1.0': {} }, snapshots: { 'startup-hook@1.1.0': {} } }),
+          before: stringify({ lockfileVersion: '9.0', importers: { 'packages/demo': { dependencies: { 'startup-hook': { specifier: '1.0.0', version: '1.0.0' } } } }, packages: { 'startup-hook@1.0.0': { resolution: { integrity: 'sha512-before' } } }, snapshots: { 'startup-hook@1.0.0': {} } }),
+          after: stringify({ lockfileVersion: '9.0', importers: { 'packages/demo': { dependencies: { 'startup-hook': { specifier: '1.1.0', version: '1.1.0' } } } }, packages: { 'startup-hook@1.1.0': { resolution: { integrity: 'sha512-after' } } }, snapshots: { 'startup-hook@1.1.0': {} } }),
         },
       ]]),
+      (plan) => {
+        assert.equal(plan.allApps, true);
+        assert.match(plan.reasons.fallback ?? '', /importer packages\/demo changed its dependency entries; ci\.yml's per-app jobs run packages\/demo/);
+      },
+    ],
+    [
+      'top-level provisioners.n4.provision() call keeps startup file in shared CI coverage',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ run: 'node scripts/e2e-test-data.mjs n4' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/e2e-test-data.mjs': "import './lib/e2e-test-data.mjs';\n",
+        'scripts/lib/e2e-test-data.mjs': "export const provisioners = { n4: { provision: () => readFileSync('packages/demo/boot.json') } };\nprovisioners.n4.provision();\n",
+        'packages/demo/package.json': JSON.stringify({ name: '@nd/demo' }),
+        'packages/demo/boot.json': '{}',
+      },
+      'packages/demo/boot.json',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'locally shadowed pathToFileURL in imported library guard stays in shared CI coverage',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ run: 'node scripts/e2e-test-data.mjs n4' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/e2e-test-data.mjs': "import './lib/e2e-test-data.mjs';\n",
+        'scripts/lib/e2e-test-data.mjs': "import { helper } from './boot-lib.mjs';\nexport const provisioners = { n4: { provision: () => helper() } };\n",
+        'scripts/lib/boot-lib.mjs': "export function helper() { return 1; }\nconst pathToFileURL = () => ({ href: import.meta.url });\nfunction loadBoot() { return readFileSync('packages/demo/boot.json'); }\nif (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) loadBoot();\n",
+        'packages/demo/package.json': JSON.stringify({ name: '@nd/demo' }),
+        'packages/demo/boot.json': '{}',
+      },
+      'packages/demo/boot.json',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'site script dynamically importing workspace package selects site build on package edit',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'node scripts/site-load.mjs' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/site-load.mjs': "await import('@nd/demo');\n",
+        'packages/demo/package.json': JSON.stringify({ name: '@nd/demo' }),
+        'packages/demo/src/index.js': 'export const x = 1;\n',
+      },
+      'packages/demo/src/index.js',
+      new Map(),
+      (plan) => assert.equal(plan.site, true),
+    ],
+    [
+      'site script side-effect importing workspace package selects site build on package edit',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'node scripts/site-load.mjs' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/site-load.mjs': "import '@nd/demo';\n",
+        'packages/demo/package.json': JSON.stringify({ name: '@nd/demo' }),
+        'packages/demo/src/index.js': 'export const x = 1;\n',
+      },
+      'packages/demo/src/index.js',
+      new Map(),
+      (plan) => assert.equal(plan.site, true),
+    ],
+    [
+      'printf -v mutating CHECK env var before npm run preserves workspace lint runner edge',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ env: { CHECK: 'test' }, run: 'printf -v CHECK %s lint; npm --prefix apps/n4 run "$CHECK"' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/lint.mjs': 'export const lint = 1;\n',
+        'apps/n4/package.json': JSON.stringify({
+          name: '@nd/n4',
+          scripts: { lint: 'node ../../scripts/lint.mjs --workspace && node --check index.js' },
+        }),
+      },
+      'scripts/lint.mjs',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'pnpm -w run "$CHECK" with CHECK=lint expands root lint script in CI',
+      {
+        'package.json': JSON.stringify({ name: 'root', scripts: { lint: 'node scripts/lint.mjs' } }),
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ env: { CHECK: 'lint' }, run: 'pnpm -w run "$CHECK"' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/lint.mjs': 'export const lint = 1;\n',
+      },
+      'scripts/lint.mjs',
+      new Map(),
       (plan) => assert.equal(plan.allApps, true),
     ],
     [

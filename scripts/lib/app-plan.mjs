@@ -4,7 +4,7 @@ import { isAlias, isMap, isScalar, isSeq, parse, parseDocument } from 'yaml';
 import { LockfileAnalysisError, lockfileImpact } from './lockfile-impact.mjs';
 import { onlyAddsExports } from './module-closure.mjs';
 import { EMBEDDED_VERSION_FILES, releaseBookkeeping } from './release-bookkeeping.mjs';
-import { CATALOG, INDEPENDENT_CONFIG, SITE, reachableFrom } from './workspace-graph.mjs';
+import { CATALOG, INDEPENDENT_CONFIG, SITE } from './workspace-graph.mjs';
 import { handoffCatalogEntry, validateAppInformation } from './app-information.mjs';
 import { appCatalogIds, parseAppsRegistry } from './apps-registry.mjs';
 import { validateStandalone } from './standalone.mjs';
@@ -859,6 +859,21 @@ export function e2eTestDataImpact({ before, after }) {
 // it, that file's.
 const E2E_DATA_SCRIPTS = new Set(['scripts/e2e-test-data.mjs', E2E_TEST_DATA]);
 
+function reachableWithRuntime(graph, start) {
+  const seen = new Set([start]);
+  const pending = [start];
+  while (pending.length) {
+    const node = pending.pop();
+    for (const next of [...(graph.edges.get(node) ?? []), ...(graph.runtimeWorkspaceEdges?.get(node) ?? [])]) {
+      if (!seen.has(next)) {
+        seen.add(next);
+        pending.push(next);
+      }
+    }
+  }
+  return seen;
+}
+
 // Nodes reached by per-app CI jobs, keeping eager/top-level workspace imports
 // of e2e-test-data scripts while skipping only lazy (inside-function) workspace
 // references attributable to individual app provisioners.
@@ -982,13 +997,13 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
   if (!changedPaths.length) return everything('no changed paths: no base revision, an unreadable diff, or a full run');
 
   const appIds = new Set(registry.apps.map((app) => app.id));
-  const reach = graph && new Map(registry.apps.map((app) => [app.id, reachableFrom(graph, `apps/${app.id}`)]));
-  const catalog = graph && reachableFrom(graph, CATALOG);
+  const reach = graph && new Map(registry.apps.map((app) => [app.id, reachableWithRuntime(graph, `apps/${app.id}`)]));
+  const catalog = graph && reachableWithRuntime(graph, CATALOG);
   // Everything per-app CI jobs reach, keeping eager/top-level workspace imports
   // of scripts/e2e-test-data.mjs while skipping only lazy per-app provisioner
   // workspace references.
   const catalogShared = graph && catalogSharedNodes(graph);
-  const site = graph && reachableFrom(graph, SITE);
+  const site = graph && reachableWithRuntime(graph, SITE);
   const appReasons = new Map();
   const editedApps = new Set();
   const siteReasons = [];

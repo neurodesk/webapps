@@ -79,17 +79,17 @@ export function siteJobNames(ci) {
 // Root files a set of CI commands names, following `pnpm <root script>` calls.
 function namedByCommands(commands, rootScripts, root = null, rootPackageName = null) {
   const named = new Set();
-  const pending = commands.map((entry) => (typeof entry === 'string' ? { cmd: entry, workingDir: null } : entry));
+  const pending = commands.map((entry) => (typeof entry === 'string' ? { cmd: entry, workingDir: null, env: null } : entry));
   const expanded = new Set();
   while (pending.length) {
     const current = pending.pop();
     for (const match of current.cmd.matchAll(ROOT_NAMED)) if (match[1]) named.add(match[1]);
     for (const [, rootFile] of current.cmd.matchAll(ROOT_PATH)) named.add(rootFile);
     const nonRootWorkingDir = isStaticNonRootDir(current.workingDir, root);
-    for (const script of extractPnpmRootScripts(current.cmd, { requireRootFlag: nonRootWorkingDir, baseDir: current.workingDir ?? '.', root, rootPackageName })) {
+    for (const script of extractPnpmRootScripts(current.cmd, { requireRootFlag: nonRootWorkingDir, baseDir: current.workingDir ?? '.', root, rootPackageName, rootScripts, stepEnv: current.env ?? null })) {
       if (!expanded.has(script)) {
         expanded.add(script);
-        if (rootScripts[script]) pending.push({ cmd: rootScripts[script], workingDir: null });
+        if (rootScripts[script]) pending.push({ cmd: rootScripts[script], workingDir: null, env: current.env ?? null });
       }
     }
   }
@@ -366,26 +366,86 @@ function isProcessArgv1Node(node) {
   );
 }
 
-function isPathToFileUrlArgv1Href(node) {
+function isPathToFileUrlArgv1Href(node, auth) {
   if (node?.type !== 'MemberExpression' || node.computed || node.property?.type !== 'Identifier' || node.property.name !== 'href') return false;
   const call = node.object;
-  if (call?.type !== 'CallExpression' || calleeNameOf(call) !== 'pathToFileURL' || call.arguments?.length !== 1) return false;
+  if (call?.type !== 'CallExpression' || call.callee?.type !== 'Identifier' || call.callee.name !== 'pathToFileURL' || call.arguments?.length !== 1) return false;
+  if (!auth?.hasAuthenticPathToFileUrl || auth.processShadowed) return false;
   const arg = call.arguments[0];
   if (isProcessArgv1Node(arg)) return true;
-  return Boolean(arg?.type === 'CallExpression' && calleeNameOf(arg) === 'resolve' && arg.arguments?.length === 1 && isProcessArgv1Node(arg.arguments[0]));
+  return Boolean(
+    auth.hasAuthenticResolve
+    && arg?.type === 'CallExpression'
+    && arg.callee?.type === 'Identifier'
+    && arg.callee.name === 'resolve'
+    && arg.arguments?.length === 1
+    && isProcessArgv1Node(arg.arguments[0]),
+  );
+}
+
+// Verify that `pathToFileURL` comes from `node:url`, `resolve` from `node:path`,
+// and neither those bindings nor `process` are shadowed or reassigned in the module.
+function esmGuardImportAuth(ast) {
+  let pathToFileUrlImported = false;
+  let resolveImported = false;
+  let shadowedPathToFileUrl = false;
+  let shadowedResolve = false;
+  let processShadowed = false;
+  for (const stmt of ast?.body ?? []) {
+    if (stmt.type === 'ImportDeclaration' && stmt.source?.type === 'Literal') {
+      const src = stmt.source.value;
+      for (const spec of stmt.specifiers ?? []) {
+        const local = spec.local?.name;
+        if (local === 'process') processShadowed = true;
+        if (local === 'pathToFileURL') {
+          if (spec.type === 'ImportSpecifier' && spec.imported?.name === 'pathToFileURL' && (src === 'node:url' || src === 'url')) pathToFileUrlImported = true;
+          else shadowedPathToFileUrl = true;
+        }
+        if (local === 'resolve') {
+          if (spec.type === 'ImportSpecifier' && spec.imported?.name === 'resolve' && (src === 'node:path' || src === 'path')) resolveImported = true;
+          else shadowedResolve = true;
+        }
+      }
+    }
+  }
+  const checkDeclName = (name) => {
+    if (name === 'pathToFileURL') shadowedPathToFileUrl = true;
+    if (name === 'resolve') shadowedResolve = true;
+    if (name === 'process') processShadowed = true;
+  };
+  const scan = (node) => {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      for (const item of node) scan(item);
+      return;
+    }
+    if ((node.type === 'FunctionDeclaration' || node.type === 'ClassDeclaration') && node.id?.name) checkDeclName(node.id.name);
+    if (node.type === 'VariableDeclarator' && node.id?.type === 'Identifier') checkDeclName(node.id.name);
+    if (node.type === 'AssignmentExpression' && node.left?.type === 'Identifier') checkDeclName(node.left.name);
+    for (const key of Object.keys(node)) {
+      if (!AST_SKIP.has(key)) scan(node[key]);
+    }
+  };
+  scan(ast);
+  return {
+    hasAuthenticPathToFileUrl: pathToFileUrlImported && !shadowedPathToFileUrl,
+    hasAuthenticResolve: resolveImported && !shadowedResolve,
+    processShadowed,
+  };
 }
 
 // Strict Node ESM CLI entry guard: `if (import.meta.url === pathToFileURL(resolve(process.argv[1])).href)`
-// (optionally guarded on the left with `process.argv[1] && ...`). Arbitrary truthy
-// checks like `if (import.meta.url)` do NOT match and stay eager.
-function isStrictEsmMainGuard(ifNode) {
+// (optionally guarded on the left with `process.argv[1] && ...`), with authentic
+// `node:url`/`node:path` imports and unshadowed `process`. Arbitrary truthy checks
+// like `if (import.meta.url)` or locally shadowed helpers do NOT match.
+function isStrictEsmMainGuard(ifNode, auth) {
   if (ifNode?.type !== 'IfStatement') return false;
   let eq = ifNode.test;
   if (eq?.type === 'LogicalExpression' && eq.operator === '&&' && isProcessArgv1Node(eq.left)) eq = eq.right;
   if (eq?.type !== 'BinaryExpression' || eq.operator !== '===') return false;
   return (
-    (isImportMetaUrlNode(eq.left) && isPathToFileUrlArgv1Href(eq.right))
-    || (isImportMetaUrlNode(eq.right) && isPathToFileUrlArgv1Href(eq.left))
+    (isImportMetaUrlNode(eq.left) && isPathToFileUrlArgv1Href(eq.right, auth))
+    || (isImportMetaUrlNode(eq.right) && isPathToFileUrlArgv1Href(eq.left, auth))
   );
 }
 
@@ -486,10 +546,22 @@ function computeProvisionerOnlyRanges(ast) {
     if (!exportedNames.has(name) && isFunctionNode(node)) privateFns.set(name, node);
   }
   const privateFnToName = new Map([...privateFns].map(([name, node]) => [node, name]));
+  const provisionTestDataFn = exportedNames.has('provisionTestData') && isFunctionNode(bindings.get('provisionTestData'))
+    ? bindings.get('provisionTestData')
+    : null;
   const nonProvisionerReferenced = new Set();
   const privateFnDeps = new Map([...privateFns.keys()].map((name) => [name, new Set()]));
+  let provisionersUsedAtStartup = false;
 
   walkAstIdentifiers(ast, (idNode, ancestors) => {
+    if (idNode.name === 'provisionTestData') {
+      provisionersUsedAtStartup = true;
+      return;
+    }
+    if (idNode.name === 'provisioners' && (!provisionTestDataFn || !ancestors.includes(provisionTestDataFn))) {
+      provisionersUsedAtStartup = true;
+      return;
+    }
     if (provisionIdentRefNodes.has(idNode)) return;
     if (ancestors.some((a) => provisionFnNodes.has(a))) return;
     const enclosingPrivate = ancestors.find((a) => privateFnToName.has(a));
@@ -499,6 +571,8 @@ function computeProvisionerOnlyRanges(ast) {
     }
     nonProvisionerReferenced.add(idNode.name);
   });
+
+  if (provisionersUsedAtStartup) return [];
 
   for (let changed = true; changed;) {
     changed = false;
@@ -541,11 +615,12 @@ function computeUnreachableExportRanges(ast, importedNames) {
     }
   }
   const fnDeps = new Map([...fnBindings.keys()].map((name) => [name, new Set()]));
+  const guardAuth = esmGuardImportAuth(ast);
 
   const isInStrictMainGuard = (ancestors, node) => {
     for (let i = 0; i < ancestors.length; i += 1) {
       const ancestor = ancestors[i];
-      if (isStrictEsmMainGuard(ancestor)) {
+      if (isStrictEsmMainGuard(ancestor, guardAuth)) {
         const next = i + 1 < ancestors.length ? ancestors[i + 1] : node;
         if (next === ancestor.consequent) return true;
       }
@@ -1162,22 +1237,28 @@ const PNPM_BIN = /(?:^|\/)pnpm(?:\.(?:cjs|mjs|js|cmd|exe))?$/;
 const NPM_BIN = /(?:^|\/)npm(?:\.(?:cjs|mjs|js|cmd|exe))?$/;
 const YARN_BIN = /(?:^|\/)yarn(?:\.(?:cjs|mjs|js|cmd|exe))?$/;
 
+function resolveSingleCommandEnvVar(word, rawCmd, stepEnv) {
+  if (!stepEnv) return null;
+  const varMatch = word.match(/^\$(?:([A-Za-z_]\w*)|\{([A-Za-z_]\w*)\})$/);
+  if (!varMatch) return null;
+  if (splitShellCommands(rawCmd).length !== 1 || /`|\$\(/.test(rawCmd)) return null;
+  const varName = varMatch[1] ?? varMatch[2];
+  const reassigned = new RegExp(String.raw`(?:^|[\s;&|()])(?:(?:export|declare|local|typeset|readonly)\s+(?:-[A-Za-z]+\s+)*)?${varName}\+?=`).test(rawCmd);
+  if (reassigned || !Object.hasOwn(stepEnv, varName)) return null;
+  return String(stepEnv[varName]).trim();
+}
+
 function scriptMayInvokeLint(scriptWord, { stepEnv = null, rawCmd = '', releaseTestScripts = null } = {}) {
   if (!scriptWord) return false;
   if (scriptWord === 'lint') return true;
   if (!/[$`*]/.test(scriptWord) && !scriptWord.includes('${{')) return false;
-  const varMatch = scriptWord.match(/^\$(?:([A-Za-z_]\w*)|\{([A-Za-z_]\w*)\})$/);
-  if (varMatch && stepEnv) {
-    const varName = varMatch[1] ?? varMatch[2];
-    const reassigned = new RegExp(String.raw`(?:^|[\s;&|()])(?:(?:export|declare|local|typeset|readonly)\s+(?:-[A-Za-z]+\s+)*)?${varName}\+?=|\bread\b[^;&|]*\b${varName}\b|\beval\b`).test(rawCmd);
-    if (!reassigned && Object.hasOwn(stepEnv, varName)) {
-      const val = String(stepEnv[varName]).trim();
-      if (val === '${{ matrix.release_test }}') {
-        return !releaseTestScripts || releaseTestScripts.has('lint');
-      }
-      if (!/[$`*]/.test(val) && !val.includes('${{')) {
-        return val === 'lint';
-      }
+  const val = resolveSingleCommandEnvVar(scriptWord, rawCmd, stepEnv);
+  if (val !== null) {
+    if (val === '${{ matrix.release_test }}') {
+      return !releaseTestScripts || releaseTestScripts.has('lint');
+    }
+    if (!/[$`*]/.test(val) && !val.includes('${{')) {
+      return val === 'lint';
     }
   }
   return true;
@@ -1434,7 +1515,7 @@ function filterTargetsRoot(filterVal, cwdDirs, root, rootPackageName) {
 // `$(...)`, backticks), `cd` back to the repository root, and pnpm flags
 // (`--silent`, `--if-present`, `-w`, `--workspace-root`, `--dir <root>`,
 // `--filter <root>`) in any order before or after `run`.
-function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.', root = null, rootPackageName = null, depth = 0 } = {}) {
+function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.', root = null, rootPackageName = null, rootScripts = null, stepEnv = null, depth = 0 } = {}) {
   const scripts = [];
   if (depth > 4) return scripts;
   let cwdDirs = new Set([baseDir]);
@@ -1473,7 +1554,7 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
     const mayRunAtRoot = !requireRootFlag || cwdDirs.has('.');
     for (const subst of extractCommandSubstitutions(token)) {
       for (const from of cwdDirs) {
-        scripts.push(...extractPnpmRootScripts(subst, { requireRootFlag: !mayRunAtRoot, baseDir: from, root, rootPackageName, depth: depth + 1 }));
+        scripts.push(...extractPnpmRootScripts(subst, { requireRootFlag: !mayRunAtRoot, baseDir: from, root, rootPackageName, rootScripts, stepEnv: null, depth: depth + 1 }));
       }
     }
     const words = tokenizeShellWords(token);
@@ -1482,7 +1563,7 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
       if (words[start] === 'eval' && start + 1 < words.length) {
         const body = words.slice(start + 1).join(' ');
         for (const from of cwdDirs) {
-          scripts.push(...extractPnpmRootScripts(body, { requireRootFlag: !mayRunAtRoot, baseDir: from, root, rootPackageName, depth: depth + 1 }));
+          scripts.push(...extractPnpmRootScripts(body, { requireRootFlag: !mayRunAtRoot, baseDir: from, root, rootPackageName, rootScripts, stepEnv: null, depth: depth + 1 }));
         }
         break;
       }
@@ -1491,7 +1572,7 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
           if (words[k] === '--') break;
           if (/^-[a-zA-Z]*c$/.test(words[k]) && k + 1 < words.length) {
             for (const from of cwdDirs) {
-              scripts.push(...extractPnpmRootScripts(words[k + 1], { requireRootFlag: !mayRunAtRoot, baseDir: from, root, rootPackageName, depth: depth + 1 }));
+              scripts.push(...extractPnpmRootScripts(words[k + 1], { requireRootFlag: !mayRunAtRoot, baseDir: from, root, rootPackageName, rootScripts, stepEnv: null, depth: depth + 1 }));
             }
             break;
           }
@@ -1503,7 +1584,8 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
         }
         continue;
       }
-      if (!PNPM_BIN.test(words[start])) continue;
+      const kind = PNPM_BIN.test(words[start]) ? 'pnpm' : NPM_BIN.test(words[start]) ? 'npm' : YARN_BIN.test(words[start]) ? 'yarn' : null;
+      if (!kind) continue;
       let idx = start + 1;
       let hasRootFlag = false;
       let hasNonRootFilter = false;
@@ -1512,8 +1594,16 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
       for (; idx < words.length; idx++) {
         const word = words[idx];
         if (word === '--') break;
-        if (word === '-w' || word === '--workspace-root') {
+        if (word === '--workspace-root' || (kind === 'pnpm' && word === '-w')) {
           hasRootFlag = true;
+          continue;
+        }
+        if (
+          word === '--workspace' || word.startsWith('--workspace=') ||
+          (kind === 'npm' && (word === '-w' || word.startsWith('-w=')))
+        ) {
+          if (!word.includes('=')) idx++;
+          hasNonRootFilter = true;
           continue;
         }
         if (
@@ -1526,8 +1616,8 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
           continue;
         }
         if (
-          word === '--dir' || word === '-C' || word === '--prefix' ||
-          word.startsWith('--dir=') || word.startsWith('-C=') || word.startsWith('--prefix=')
+          word === '--dir' || word === '-C' || word === '--prefix' || word === '--cwd' ||
+          word.startsWith('--dir=') || word.startsWith('-C=') || word.startsWith('--prefix=') || word.startsWith('--cwd=')
         ) {
           const dirVal = word.includes('=') ? word.slice(word.indexOf('=') + 1) : words[++idx];
           if (!dirVal || !root || isUncertainCdTarget(dirVal)) {
@@ -1557,8 +1647,17 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
           seenRun = true;
           continue;
         }
-        if ((hasRootFlag || (!hasNonRootFilter && !hasNonRootDir && mayRunAtRoot)) && /^[A-Za-z0-9_@][\w.:/@-]*$/.test(word)) {
-          scripts.push(word);
+        if (hasRootFlag || (!hasNonRootFilter && !hasNonRootDir && mayRunAtRoot)) {
+          if (/^[A-Za-z0-9_@][\w.:/@-]*$/.test(word)) {
+            scripts.push(word);
+          } else if (/[$`*]|\$\{\{/.test(word)) {
+            const val = resolveSingleCommandEnvVar(word, command, stepEnv);
+            if (val !== null && /^[A-Za-z0-9_@][\w.:/@-]*$/.test(val)) {
+              scripts.push(val);
+            } else if (rootScripts) {
+              scripts.push(...Object.keys(rootScripts));
+            }
+          }
         }
         break;
       }
@@ -1579,7 +1678,7 @@ function expandedCommandTexts(commands, rootScripts, root = null, rootPackageNam
     const current = pending.pop();
     entries.push(current);
     const nonRootWorkingDir = isStaticNonRootDir(current.workingDir, root);
-    for (const script of extractPnpmRootScripts(current.cmd, { requireRootFlag: nonRootWorkingDir, baseDir: current.workingDir ?? '.', root, rootPackageName })) {
+    for (const script of extractPnpmRootScripts(current.cmd, { requireRootFlag: nonRootWorkingDir, baseDir: current.workingDir ?? '.', root, rootPackageName, rootScripts, stepEnv: current.env ?? null })) {
       if (!expanded.has(script)) {
         expanded.add(script);
         if (rootScripts[script]) pending.push({ cmd: rootScripts[script], workingDir: null, env: current.env ?? null });
@@ -1599,7 +1698,7 @@ function expandedRootScriptsFromWorkspace(commands, rootScripts, { baseDir = '.'
   const texts = [];
   const pending = [];
   for (const cmd of commands) {
-    for (const script of extractPnpmRootScripts(cmd, { requireRootFlag: true, baseDir, root, rootPackageName })) {
+    for (const script of extractPnpmRootScripts(cmd, { requireRootFlag: true, baseDir, root, rootPackageName, rootScripts })) {
       if (!names.has(script)) {
         names.add(script);
         if (rootScripts[script]) pending.push(rootScripts[script]);
@@ -1609,7 +1708,7 @@ function expandedRootScriptsFromWorkspace(commands, rootScripts, { baseDir = '.'
   while (pending.length) {
     const command = pending.pop();
     texts.push(command);
-    for (const script of extractPnpmRootScripts(command, { root, rootPackageName })) {
+    for (const script of extractPnpmRootScripts(command, { root, rootPackageName, rootScripts })) {
       if (!names.has(script)) {
         names.add(script);
         if (rootScripts[script]) pending.push(rootScripts[script]);
@@ -1916,7 +2015,8 @@ export async function loadConservativeWorkspaceGraph(root) {
         const pkgName = spec.value.startsWith('@') ? spec.value.split('/').slice(0, 2).join('/') : spec.value.split('/')[0];
         if (nodeByPackageName.has(pkgName)) {
           const wsNode = nodeByPackageName.get(pkgName);
-          runtimeTargets.add(wsNode);
+          if (spec.kind === 'dynamic' || spec.kind === 'require') uses.add(wsNode);
+          else runtimeTargets.add(wsNode);
           recordWorkspaceRef(wsNode, spec.range);
         } else if (fileOwner) {
           externalImporterDeps.set(file, fileOwner);
@@ -1980,10 +2080,12 @@ export async function loadConservativeWorkspaceGraph(root) {
   // other scripts (`pnpm <script>`; a package's own scripts are not root ones).
   const jobScripts = new Map(Object.entries(ci?.jobs ?? {}).map(([id, job]) => {
     const jobWorkingDir = job?.defaults?.run?.['working-directory'] ?? workflowWorkingDir;
+    const jobEnv = job?.env && typeof job.env === 'object' ? { ...workflowEnv, ...job.env } : workflowEnv;
     return [id, namedByCommands(
       (Array.isArray(job?.steps) ? job.steps : []).map((step) => ({
         cmd: String(step?.run ?? ''),
         workingDir: step?.['working-directory'] ?? jobWorkingDir ?? null,
+        env: step?.env && typeof step.env === 'object' ? { ...jobEnv, ...step.env } : jobEnv,
       })),
       rootScripts,
       root,
