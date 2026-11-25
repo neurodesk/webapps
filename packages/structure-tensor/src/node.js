@@ -900,6 +900,7 @@ function inspectPngChunks(bytes) {
       }
       hasCicpSrgb = true;
     } else if (type === "iCCP") {
+      if (iccp) throw new Error("Duplicate PNG iCCP chunk.");
       if (length < 3) throw new Error("Invalid PNG iCCP chunk (truncated).");
       let nul = dataStart;
       while (nul < chunkEnd && bytes[nul] !== 0) nul += 1;
@@ -999,6 +1000,7 @@ function inspectJpegIcc(bytes) {
   let totalIccChunks = 0;
   let components = [];
   let adobeTransform = null;
+  const adobeTransformOffsets = [];
   let pos = 2;
   while (pos + 4 <= bytes.byteLength) {
     if (bytes[pos] !== 0xff) break;
@@ -1035,6 +1037,7 @@ function inspectJpegIcc(bytes) {
       iccChunks.set(seqNo, bytes.subarray(segDataStart + 14, segEnd));
     } else if (marker === 0xee && segLen >= 14 && ascii(bytes, segDataStart, 5) === "Adobe") {
       adobeTransform = bytes[segDataStart + 11];
+      adobeTransformOffsets.push(segDataStart + 11);
     } else if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc && components.length === 0) {
       if (segLen >= 8) {
         const nComp = bytes[segDataStart + 5];
@@ -1070,7 +1073,7 @@ function inspectJpegIcc(bytes) {
     const assembled = Buffer.concat(parts);
     validateIccProfile(assembled, null, "JPEG");
   }
-  return { components, adobeTransform };
+  return { components, adobeTransform, adobeTransformOffsets };
 }
 
 function upsampleFancy2D(sub, cw, ch, x, y, subX, subY) {
@@ -1110,10 +1113,17 @@ function decodeJpegGreyscale(bytes) {
   const useRoundedYcbcr = meta.components.length === 3
     && (meta.adobeTransform === null || meta.adobeTransform === 1)
     && !isRawRgb;
-  // jpeg-js decodes stored grid order, ignoring EXIF orientation (matching ImageJ & apps/structure-tensor/src/io.js).
-  // For standard 3-component YCbCr JPEGs, decode raw Y/Cb/Cr and apply libjpeg-turbo fancy chroma upsampling
-  // + rounded 16-bit fixed-point YCbCr->RGB (avoiding jpeg-js's float-to-Uint8 truncation bias).
-  const decoded = jpeg.decode(bytes, {
+  // jpeg-js@0.4.4 overrides colorTransform: false whenever an Adobe APP14 segment has transformCode === 1
+  // (YCbCr), which would double-convert YCbCr->RGB. Neutralize transformCode to 0 on a temporary copy so
+  // jpeg-js outputs raw Y/Cb/Cr for our exact libjpeg-turbo fancy upsampler + fixed-point YCbCr->RGB pass.
+  let decodeBytes = bytes;
+  if (useRoundedYcbcr && meta.adobeTransform === 1 && meta.adobeTransformOffsets.length > 0) {
+    decodeBytes = Uint8Array.from(bytes);
+    for (const off of meta.adobeTransformOffsets) {
+      decodeBytes[off] = 0;
+    }
+  }
+  const decoded = jpeg.decode(decodeBytes, {
     useTArray: true,
     formatAsRGBA: true,
     ...(useRoundedYcbcr || isRawRgb ? { colorTransform: false } : {}),
