@@ -6,7 +6,7 @@ import { createNiftiFromVolume, parseNiftiHeader } from "@neurodesk/webapp-compo
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { writeTiffStack } from "@neurodesk/webapp-components/file-io/tiff";
-import { APP, EXAMPLE_OPTICS, checkPsfSpacing, niftiGeometry, niftiSpacingUm, outputNames, provenance, setNiftiSpacing, spacingComplete, stackNifti, stackTiff, stem } from "../src/config.js";
+import { APP, EXAMPLE_OPTICS, checkPsfSpacing, deconvolvedNifti, niftiGeometry, niftiSpacingUm, outputNames, provenance, setNiftiSpacing, spacingComplete, stackNifti, stackTiff, stem } from "../src/config.js";
 import { formatOf, readVolume } from "../src/input.js";
 import { stageNotices } from "../scripts/stage-notices.mjs";
 import examples from "../examples.json" with { type: "json" };
@@ -258,4 +258,60 @@ test("a NIfTI header that understates its data stops inflating at the file limit
   const inflate = streams.at(-1);
   assert.ok(inflate.cancelled);
   assert.ok(inflate.chunks <= 6, `consumed ${inflate.chunks} chunks`);
+});
+
+test("web deconvolvedNifti writes valid NIfTI-2 preserving qform and sform verbatim or rescaling when edited", async () => {
+  const dims = [4, 6, 8];
+  const voxels = new Float32Array(dims[0] * dims[1] * dims[2]).fill(3.5);
+  const buf = new ArrayBuffer(544 + voxels.byteLength);
+  const v = new DataView(buf);
+  v.setInt32(0, 540, true);
+  new Uint8Array(buf, 4, 8).set([0x6e, 0x2b, 0x32, 0x00, 0x0d, 0x0a, 0x1a, 0x0a]);
+  v.setInt16(12, 16, true);
+  v.setInt16(14, 32, true);
+  v.setBigInt64(16, 3n, true);
+  v.setBigInt64(24, BigInt(dims[2]), true);
+  v.setBigInt64(32, BigInt(dims[1]), true);
+  v.setBigInt64(40, BigInt(dims[0]), true);
+  for (let i = 0; i < 4; i += 1) v.setBigInt64(48 + i * 8, 1n, true);
+  v.setFloat64(104, 1, true);
+  v.setFloat64(112, 0.1, true);
+  v.setFloat64(120, 0.1, true);
+  v.setFloat64(128, 0.25, true);
+  v.setBigInt64(168, 544n, true);
+  v.setFloat64(176, 1, true);
+  v.setFloat64(184, 0, true);
+  v.setInt32(344, 1, true);
+  v.setFloat64(376, 12, true);
+  v.setInt32(348, 2, true);
+  v.setFloat64(400, 2, true);
+  v.setFloat64(440, -3, true);
+  v.setFloat64(480, 4, true);
+  v.setInt32(500, 3, true); // micrometres
+  new Uint8Array(buf, 544).set(new Uint8Array(voxels.buffer));
+
+  const volume = await readVolume(new File([buf], "nifti2.nii"));
+  assert.equal(volume.niftiVersion, 2);
+  assert.equal(volume.niftiHeader, null);
+
+  // Unedited spacing: verbatim qform & sform preserved in NIfTI-2 output
+  const outUnedited = deconvolvedNifti(voxels, volume, volume.spacingUm, { spacingOverridden: false });
+  const dvUn = new DataView(outUnedited);
+  assert.equal(dvUn.getInt32(0, true), 540);
+  assert.equal(dvUn.getInt32(344, true), 1);
+  assert.equal(dvUn.getFloat64(376, true), 12);
+  assert.equal(dvUn.getInt32(348, true), 2);
+  assert.equal(dvUn.getFloat64(400, true), 2);
+  assert.equal(dvUn.getFloat64(440, true), -3);
+  assert.equal(dvUn.getFloat64(480, true), 4);
+
+  // Edited spacing: pixdim and sform columns rescaled cleanly in NIfTI-2 output
+  const outEdited = deconvolvedNifti(voxels, volume, { x: 0.2, y: 0.2, z: 0.5 }, { spacingOverridden: true });
+  const dvEd = new DataView(outEdited);
+  assert.equal(dvEd.getInt32(0, true), 540);
+  assert.ok(Math.abs(dvEd.getFloat64(112, true) - 0.2) < 1e-12);
+  assert.ok(Math.abs(dvEd.getFloat64(128, true) - 0.5) < 1e-12);
+  assert.ok(Math.abs(dvEd.getFloat64(400, true) - 0.2) < 1e-12);
+  assert.ok(Math.abs(dvEd.getFloat64(440, true) + 0.2) < 1e-12);
+  assert.ok(Math.abs(dvEd.getFloat64(480, true) - 0.5) < 1e-12);
 });

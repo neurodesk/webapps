@@ -1,0 +1,37 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "structure-tensor-v",
+  "displayName": "Structure Tensor",
+  "app": "structure-tensor",
+  "bundleModels": false,
+  "run": "input.tif results",
+  "readme": {
+    "run": "Compute 2D or 3D structure-tensor orientation, coherency and energy maps",
+    "notes": [
+      "Input is a TIFF, OME-TIFF, NIfTI (.nii, .nii.gz), PNG, JPEG, or a sequence of 2D slices.",
+      "Outputs orientation/azimuth/elevation, coherency, energy, HSB/RGB direction maps, vectors and CSV.",
+      "Add --help for options: --sigma, --rho, --min-coherency, --min-energy, and --overwrite.",
+      "",
+      "No network connection is required and no external models are downloaded.",
+      "Please cite Rezakhaniha et al. 2012 (OrientationJ) and Püspöki et al. 2016."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "structure-tensor"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "structure-tensor.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "structure-tensor"
+    }
+  }
+}

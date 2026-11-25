@@ -25,7 +25,6 @@ on:
       - 'packages/components/src/fft/**'
       - 'packages/components/src/file-io/**'
       - 'packages/components/src/volume/**'
-      - 'packages/components/src/worker/**'
       - 'packages/node-drivers/package.json'
       - 'packages/node-drivers/src/dcm2niix.js'
       - 'packages/node-drivers/src/mindgrab-worker.js'
@@ -72,7 +71,9 @@ jobs:
         calcium-imaging-native
         calmar-native
         carotid-flow-native
+        cellpose-native
         compute-server-native
+        deconvolution-native
         deface-native
         degibbs-native
         denoise-native
@@ -98,10 +99,8 @@ jobs:
         niimath-native
         noddi-native
         node-drivers
+        omezarr-convert-native
         sdc-native
-        seedseg-native
-        skin-chromophore-native
-        spinalcordtoolbox-native
       sweeps: >-
         ants-native
         bison-native
@@ -113,7 +112,9 @@ jobs:
         calcium-imaging-native
         calmar-native
         carotid-flow-native
+        cellpose-native
         compute-server-native
+        deconvolution-native
         deface-native
         degibbs-native
         denoise-native
@@ -139,10 +140,8 @@ jobs:
         niimath-native
         noddi-native
         node-drivers
+        omezarr-convert-native
         sdc-native
-        seedseg-native
-        skin-chromophore-native
-        spinalcordtoolbox-native
 
   # Fails where ci withholds the full plan too: every call was skipped.
   full-plan-withheld:
@@ -266,6 +265,17 @@ jobs:
       pull-requests: read
     secrets: inherit
 
+  cellpose-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"cellpose-native"')) }}
+    uses: ./.github/workflows/cellpose-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
   compute-server-native:
     needs: gate
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"compute-server-native"')) }}
@@ -273,6 +283,17 @@ jobs:
     permissions:
       actions: read
       contents: write
+      pull-requests: read
+    secrets: inherit
+
+  deconvolution-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"deconvolution-native"')) }}
+    uses: ./.github/workflows/deconvolution-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
       pull-requests: read
     secrets: inherit
 
@@ -547,43 +568,21 @@ jobs:
       pull-requests: read
     secrets: inherit
 
+  omezarr-convert-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"omezarr-convert-native"')) }}
+    uses: ./.github/workflows/omezarr-convert-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
   sdc-native:
     needs: gate
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"sdc-native"')) }}
     uses: ./.github/workflows/sdc-native.yml
-    permissions:
-      actions: read
-      contents: write
-      id-token: write
-      pull-requests: read
-    secrets: inherit
-
-  seedseg-native:
-    needs: gate
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"seedseg-native"')) }}
-    uses: ./.github/workflows/seedseg-native.yml
-    permissions:
-      actions: read
-      contents: write
-      id-token: write
-      pull-requests: read
-    secrets: inherit
-
-  skin-chromophore-native:
-    needs: gate
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"skin-chromophore-native"')) }}
-    uses: ./.github/workflows/skin-chromophore-native.yml
-    permissions:
-      actions: read
-      contents: write
-      id-token: write
-      pull-requests: read
-    secrets: inherit
-
-  spinalcordtoolbox-native:
-    needs: gate
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"spinalcordtoolbox-native"')) }}
-    uses: ./.github/workflows/spinalcordtoolbox-native.yml
     permissions:
       actions: read
       contents: write

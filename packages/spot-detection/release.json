@@ -1,0 +1,38 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "spot-detection-v",
+  "displayName": "Spot Detection",
+  "app": "spot-detection",
+  "bundleModels": false,
+  "run": "stack.tif results",
+  "readme": {
+    "run": "Detect smFISH spots in a 2D or 3D TIFF stack (Big-FISH LoG detector)",
+    "notes": [
+      "Input is a single-channel 2D or 3D TIFF image/stack (uint8, uint16, float32 or float64).",
+      "Pass --labels cells.tif to assign spots to cells and write per-cell spot counts.",
+      "Pass --projection for 2D maximum-intensity projection detection, or --threshold for manual threshold.",
+      "Add --help for voxel size, spot radius, sub-pixel fit, and overwrite options.",
+      "",
+      "No network connection is required and no external models are downloaded.",
+      "Please cite Imbert et al. 2022 (Big-FISH, RNA 28:786-805)."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "spot-detection"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "spot-detection.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "spot-detection"
+    }
+  }
+}

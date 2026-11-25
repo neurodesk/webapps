@@ -1512,7 +1512,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: lightsheet-atlas
     catalog: microscopy
     path: lightsheet-atlas
@@ -1591,7 +1591,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: gliomoda
     path: gliomoda
     catalog: neuro
@@ -1699,7 +1699,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: microscope-qc
     path: microscope-qc
     catalog: microscopy
@@ -1805,7 +1805,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: omezarr-convert
     path: omezarr-convert
     catalog: microscopy
@@ -1830,7 +1830,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: histo2mri
     path: histo2mri
     catalog: microscopy
@@ -1963,7 +1963,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: medsam2
     path: medsam2
     catalog: neuro

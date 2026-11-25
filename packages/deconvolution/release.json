@@ -1,0 +1,38 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "deconvolution-v",
+  "displayName": "Deconvolution",
+  "app": "deconvolution",
+  "bundleModels": false,
+  "run": "stack.tif results",
+  "readme": {
+    "run": "Deconvolve a 3D microscopy stack with Richardson-Lucy or RL-TV",
+    "notes": [
+      "Input is a single-channel 3D TIFF, OME-TIFF, ImageJ TIFF or NIfTI (.nii, .nii.gz) stack.",
+      "Choose --modality widefield (default) or confocal, or supply a measured bead stack with --psf.",
+      "Choose --method rl (default) or rltv with --tv-weight and --iterations.",
+      "Add --help for every optical parameter, voxel size override, and output option.",
+      "",
+      "No network connection is required and no external models are downloaded.",
+      "Please cite Gibson & Lanni 1991, Richardson 1972 / Lucy 1974, and Dey et al. 2006 (RL-TV)."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "deconvolution"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "deconvolution.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "deconvolution"
+    }
+  }
+}
