@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { spawn, spawnSync } from "node:child_process";
+import { mkdtemp, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { writeTiffStack } from "@neurodesk/webapp-components/file-io/tiff";
 import {
+  OUTPUT_LOCK_FILE,
   checkInstallation,
   claimOutputDirectory,
   parseCliOptions,
@@ -15,6 +16,7 @@ import {
 } from "../src/node.js";
 
 const binPath = fileURLToPath(new URL("../bin/microscope-qc.js", import.meta.url));
+const NODE_MODULE_URL = new URL("../src/node.js", import.meta.url).href;
 
 function runCli(args) {
   return spawnSync(process.execPath, [binPath, ...args], { encoding: "utf8" });
@@ -44,14 +46,22 @@ test("CLI rejects empty string flags, cross-mode options, and disallowed subcomm
   assert.match(help.stdout, /Usage: microscope-qc/);
 });
 
-test("parseCliOptions validates optics and analysis ranges before I/O", () => {
+test("parseCliOptions validates unknown keys, types, prototype-safe enums, and optics ranges before I/O", () => {
+  assert.throws(() => parseCliOptions({ bogusOpt: "1" }), /Unknown option/);
+  assert.throws(() => parseCliOptions({ analysis: "constructor" }), /Option --analysis/);
   assert.throws(() => parseCliOptions({ analysis: "bad" }), /Option --analysis/);
+  assert.throws(() => parseCliOptions({ microscope: "toString" }), /Option --microscope/);
   assert.throws(() => parseCliOptions({ microscope: "electron" }), /Option --microscope/);
+  assert.throws(() => parseCliOptions({ na: true }), /finite number/);
+  assert.throws(() => parseCliOptions({ "no-blur": "yes" }), /boolean/);
   assert.throws(() => parseCliOptions({ na: "1.4", "refractive-index": "1.33" }), /must be below/);
   assert.throws(() => parseCliOptions({ step: "0" }), /Option --step/);
   const ok = parseCliOptions({ analysis: "psf", microscope: "widefield", na: "0.95", "refractive-index": "1.0", emission: "515" });
   assert.equal(ok.na, 0.95);
   assert.equal(ok.emission, 515);
+  const protoCli = runCli(["img.tif", "out", "--analysis=constructor"]);
+  assert.notEqual(protoCli.status, 0);
+  assert.match(protoCli.stderr, /Option --analysis/);
 });
 
 test("self-check honors --cache-dir and checks synthetic bead FWHM offline", async () => {
@@ -72,22 +82,68 @@ test("self-check honors --cache-dir and checks synthetic bead FWHM offline", asy
   }
 });
 
-test("claimOutputDirectory enforces O_EXCL exclusivity and cleans up created dir on failure", async () => {
+test("claimOutputDirectory uses shared .neurodesk-cli.lock, rejects symlinks, and cleans up on SIGTERM", async () => {
   const work = await mkdtemp(join(tmpdir(), "microscope-qc-lock-"));
   try {
+    assert.equal(OUTPUT_LOCK_FILE, ".neurodesk-cli.lock");
     const fresh = join(work, "fresh");
     const claim = await claimOutputDirectory(fresh);
     await assert.rejects(claimOutputDirectory(fresh), /already in use/);
     await claim.release({ removeDirIfEmpty: true });
     await assert.rejects(stat(fresh), { code: "ENOENT" });
+
+    const linkPath = join(work, "link-dir");
+    await symlink(join(work, "real"), linkPath);
+    await assert.rejects(claimOutputDirectory(linkPath), /symbolic link/);
+
+    const sigDir = join(work, "sigterm-dir");
+    const child = spawn(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `import { claimOutputDirectory } from ${JSON.stringify(NODE_MODULE_URL)};
+         await claimOutputDirectory(${JSON.stringify(sigDir)});
+         process.stdout.write("LOCKED\\n");
+         setInterval(() => {}, 1000);`,
+      ],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    await new Promise((resolveReady, rejectReady) => {
+      let out = "";
+      child.stdout.on("data", (chunk) => {
+        out += chunk.toString();
+        if (out.includes("LOCKED")) resolveReady();
+      });
+      child.on("error", rejectReady);
+      child.on("exit", (code) => rejectReady(new Error(`child exited early: ${code}`)));
+    });
+    child.kill("SIGTERM");
+    await new Promise((resolveExit) => child.on("exit", resolveExit));
+    await assert.rejects(stat(sigDir), { code: "ENOENT" });
   } finally {
     await rm(work, { recursive: true, force: true });
   }
 });
 
-test("writeStagedOutputs rolls back renamed outputs on mid-batch rename failure", async () => {
+test("writeStagedOutputs cleans up failed writeFile .partial and preserves unrelated replacements during rollback", async () => {
   const work = await mkdtemp(join(tmpdir(), "microscope-qc-stage-"));
   try {
+    await assert.rejects(
+      writeStagedOutputs(
+        work,
+        [{ name: "first.csv", bytes: new Uint8Array([1, 2, 3]) }],
+        {
+          writeFileFn: async (p, bytes, opts) => {
+            await writeFile(p, bytes.subarray(0, 1), opts);
+            throw Object.assign(new Error("EFBIG"), { code: "EFBIG" });
+          },
+        },
+      ),
+      /EFBIG/,
+    );
+    assert.deepEqual(await readdir(work), []);
+
     let calls = 0;
     await assert.rejects(
       writeStagedOutputs(
@@ -99,14 +155,20 @@ test("writeStagedOutputs rolls back renamed outputs on mid-batch rename failure"
         {
           renameFn: async (src, dst) => {
             calls += 1;
-            if (calls === 2) throw new Error("rename failure");
-            return rename(src, dst);
+            if (calls === 1) {
+              await rename(src, dst);
+              await rm(dst);
+              await writeFile(dst, "external");
+              return;
+            }
+            throw new Error("rename failure");
           },
         },
       ),
       /rename failure/,
     );
-    assert.deepEqual(await readdir(work), []);
+    assert.equal(await readFile(join(work, "first.csv"), "utf8"), "external");
+    assert.deepEqual(await readdir(work), ["first.csv"]);
   } finally {
     await rm(work, { recursive: true, force: true });
   }

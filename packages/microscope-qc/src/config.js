@@ -57,7 +57,7 @@ function number(values, field, label, { min = -Infinity, max = Infinity, optiona
 
 export function readSettings(values) {
   const analysis = values.analysis;
-  if (!(analysis in ANALYSES)) throw new SettingsError("analysis", `Choose an analysis: ${Object.keys(ANALYSES).join(" or ")}.`);
+  if (!Object.hasOwn(ANALYSES, analysis)) throw new SettingsError("analysis", `Choose an analysis: ${Object.keys(ANALYSES).join(" or ")}.`);
   if (analysis === "field") {
     return {
       analysis,
@@ -67,7 +67,7 @@ export function readSettings(values) {
     };
   }
   const microscope = values.microscope;
-  if (!(microscope in MICROSCOPES)) throw new SettingsError("microscope", `Choose a microscope type: ${Object.keys(MICROSCOPES).join(", ")}.`);
+  if (!Object.hasOwn(MICROSCOPES, microscope)) throw new SettingsError("microscope", `Choose a microscope type: ${Object.keys(MICROSCOPES).join(", ")}.`);
   const na = number(values, "na", "the numerical aperture", { min: 0, max: 1.7, exclusiveMin: true });
   const refractiveIndex = number(values, "refractiveIndex", "the immersion refractive index", { min: 1, max: 2 });
   if (na >= refractiveIndex) throw new SettingsError("na", `The NA (${na}) must be below the refractive index (${refractiveIndex}).`);

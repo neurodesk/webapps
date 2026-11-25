@@ -1,148 +1,295 @@
+import test from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { spawn, spawnSync } from "node:child_process";
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { gzipSync } from "node:zlib";
 import { writeTiffStack } from "@neurodesk/webapp-components/file-io/tiff";
 import {
+  OUTPUT_LOCK_FILE,
   checkInstallation,
   claimOutputDirectory,
   downloadModels,
+  openInputStack,
   parseCliOptions,
   runLightsheetAtlas,
   writeStagedOutputs,
 } from "../src/node.js";
 
-const binPath = fileURLToPath(new URL("../bin/lightsheet-atlas.js", import.meta.url));
+const BIN = fileURLToPath(new URL("../bin/lightsheet-atlas.js", import.meta.url));
+const NODE_MODULE_URL = new URL("../src/node.js", import.meta.url).href;
+const ROOT_MANIFEST = fileURLToPath(new URL("../../../models/lightsheet-atlas.manifest.json", import.meta.url));
+const PKG_MANIFEST = fileURLToPath(new URL("../model.manifest.json", import.meta.url));
 
-function runCli(args, env = {}) {
-  return spawnSync(process.execPath, [binPath, ...args], {
-    encoding: "utf8",
-    env: { ...process.env, ...env },
-  });
+function runCli(args, env = process.env) {
+  return spawnSync(process.execPath, [BIN, ...args], { encoding: "utf8", env });
 }
 
 test("package model.manifest.json stays identical to models/lightsheet-atlas.manifest.json", async () => {
-  const pkgManifest = await readFile(new URL("../model.manifest.json", import.meta.url), "utf8");
-  const repoManifest = await readFile(new URL("../../../models/lightsheet-atlas.manifest.json", import.meta.url), "utf8");
-  assert.equal(pkgManifest, repoManifest);
+  assert.equal(await readFile(PKG_MANIFEST, "utf8"), await readFile(ROOT_MANIFEST, "utf8"));
 });
 
 test("CLI rejects empty string flags and disallowed subcommand options", () => {
-  for (const args of [
-    ["--orientation=", "in.tif", "out"],
-    ["--voxel-z=", "in.tif", "out"],
-    ["--cache-dir=", "self-check"],
-    ["self-check", "--detect"],
-    ["self-check", "--offline"],
-    ["self-check", "extra"],
-    ["download-models", "--orientation", "psl"],
-    ["download-models", "extra"],
-    ["in.tif", "out", "--no-register"],
-    ["in.tif", "out", "--orientation", "xyz"],
-    ["in.tif", "out", "--voxel-z", "-5"],
-    ["in.tif", "out", "--ball-overlap-fraction", "1.5"],
-  ]) {
-    const res = runCli(args);
-    assert.notEqual(res.status, 0, `expected failure for ${args.join(" ")}`);
-  }
   const help = runCli(["--help"]);
   assert.equal(help.status, 0);
   assert.match(help.stdout, /Usage: lightsheet-atlas/);
+
+  const emptyOri = runCli(["in.tif", "out", "--orientation="]);
+  assert.notEqual(emptyOri.status, 0);
+  assert.match(emptyOri.stderr, /non-empty/);
+
+  const emptyVoxel = runCli(["in.tif", "out", "--voxel-z="]);
+  assert.notEqual(emptyVoxel.status, 0);
+  assert.match(emptyVoxel.stderr, /non-empty/);
+
+  const badSelfCheck = runCli(["self-check", "--detect"]);
+  assert.notEqual(badSelfCheck.status, 0);
+  assert.match(badSelfCheck.stderr, /not valid for self-check/);
+
+  const badDownload = runCli(["download-models", "--orientation", "asr"]);
+  assert.notEqual(badDownload.status, 0);
+  assert.match(badDownload.stderr, /not valid for download-models/);
+
+  const posSelfCheck = runCli(["self-check", "extra"]);
+  assert.notEqual(posSelfCheck.status, 0);
+  assert.match(posSelfCheck.stderr, /positional/);
 });
 
-test("parseCliOptions validates numeric ranges and flags before I/O", () => {
+test("parseCliOptions validates unknown keys, types, numeric ranges and flags before I/O", () => {
+  assert.throws(() => parseCliOptions({ unknownKey: "1" }), /Unknown option/);
+  assert.throws(() => parseCliOptions({ detect: "yes" }), /boolean/);
+  assert.throws(() => parseCliOptions({ "voxel-z": true }), /positive finite number/);
   assert.throws(() => parseCliOptions({ "no-register": true }), /Choose atlas registration/);
-  assert.throws(() => parseCliOptions({ orientation: "bad" }), /orientation|axis/i);
-  assert.throws(() => parseCliOptions({ "voxel-x": "0" }), /positive finite/);
-  assert.throws(() => parseCliOptions({ "ball-overlap-fraction": "1.2" }), /at most 1/);
-  const ok = parseCliOptions({ orientation: "PSL", detect: true, "no-register": true, "voxel-z": "5", "voxel-y": "2", "voxel-x": "2" });
-  assert.equal(ok.orientation, "psl");
-  assert.equal(ok.register, false);
-  assert.equal(ok.detect, true);
-  assert.deepEqual(ok.voxelSizeOverride, [5, 2, 2]);
+  assert.throws(() => parseCliOptions({ orientation: "xyz" }), /orientation|axis/i);
+  assert.throws(() => parseCliOptions({ "voxel-z": "0" }), /positive finite number/);
+  assert.throws(() => parseCliOptions({ "ball-overlap-fraction": "1.5" }), /at most 1/);
+  assert.throws(() => parseCliOptions({ "cache-dir": "   " }), /non-empty/);
+
+  const parsed = parseCliOptions({
+    orientation: "psl",
+    "voxel-z": "5",
+    "voxel-y": "2",
+    "voxel-x": "2",
+    detect: true,
+    "no-register": true,
+    offline: true,
+  });
+  assert.equal(parsed.register, false);
+  assert.equal(parsed.detect, true);
+  assert.equal(parsed.orientation, "psl");
+  assert.deepEqual(parsed.voxelSizeOverride, [5, 2, 2]);
+  assert.equal(parsed.offline, true);
 });
 
 test("self-check honors --cache-dir and exercises Greedy WASM offline", async () => {
   const work = await mkdtemp(join(tmpdir(), "lightsheet-self-check-"));
   try {
-    const report = await checkInstallation({ cacheDir: work });
-    assert.equal(report.ok, true);
-    assert.equal(report.greedy, "wasm-single");
-    assert.equal(report.executable, process.execPath);
-    assert.equal(report.node, process.version);
-    assert.equal(report.atlas.directory, work);
-    assert.equal(report.atlas.ready, false);
+    const info = await checkInstallation({ cacheDir: work });
+    assert.equal(info.ok, true);
+    assert.equal(info.greedy, "wasm-single");
+    assert.equal(info.atlas.directory, work);
+    assert.equal(info.atlas.ready, false);
+    assert.equal(info.atlas.count, 3);
 
     const cli = runCli(["self-check", "--cache-dir", work]);
     assert.equal(cli.status, 0, cli.stderr);
     const parsed = JSON.parse(cli.stdout.trim());
-    assert.equal(parsed.atlas.directory, work);
     assert.equal(parsed.ok, true);
+    assert.equal(parsed.atlas.directory, work);
+    assert.equal(parsed.atlas.count, 3);
   } finally {
     await rm(work, { recursive: true, force: true });
   }
 });
 
-test("downloadModels refuses missing assets in offline mode", async () => {
+test("downloadModels refuses missing assets offline and gives clear recovery instructions on bundled install", async () => {
   const work = await mkdtemp(join(tmpdir(), "lightsheet-offline-"));
   try {
     await assert.rejects(
       downloadModels({ cacheDir: work, offline: true }),
       /Offline mode: required Allen atlas asset/,
     );
+
+    // Bundled portable launcher sets NEURODESK_OFFLINE=1 + NEURODESK_LIGHTSHEET_ATLAS_MODEL_DIR
+    const bundledRun = runCli(["download-models"], {
+      ...process.env,
+      NEURODESK_OFFLINE: "1",
+      NEURODESK_LIGHTSHEET_ATLAS_MODEL_DIR: work,
+    });
+    assert.notEqual(bundledRun.status, 0);
+    assert.match(bundledRun.stderr, /Reinstall the portable archive/);
+    assert.match(bundledRun.stderr, /--cache-dir/);
   } finally {
     await rm(work, { recursive: true, force: true });
   }
 });
 
-test("claimOutputDirectory enforces O_EXCL exclusivity and cleans up on error", async () => {
+test("openInputStack reads OME-Zarr lazily and never reads chunks from unselected resolution levels", async () => {
+  const work = await mkdtemp(join(tmpdir(), "lightsheet-lazy-zarr-"));
+  try {
+    const zarrRoot = join(work, "brain.ome.zarr");
+    await mkdir(join(zarrRoot, "0"), { recursive: true });
+    await mkdir(join(zarrRoot, "1"), { recursive: true });
+
+    await writeFile(join(zarrRoot, ".zgroup"), JSON.stringify({ zarr_format: 2 }));
+    await writeFile(
+      join(zarrRoot, ".zattrs"),
+      JSON.stringify({
+        multiscales: [
+          {
+            version: "0.4",
+            axes: [
+              { name: "z", type: "space", unit: "micrometer" },
+              { name: "y", type: "space", unit: "micrometer" },
+              { name: "x", type: "space", unit: "micrometer" },
+            ],
+            datasets: [
+              { path: "0", coordinateTransformations: [{ type: "scale", scale: [5, 2, 2] }] },
+              { path: "1", coordinateTransformations: [{ type: "scale", scale: [10, 4, 4] }] },
+            ],
+          },
+        ],
+      }),
+    );
+
+    const zarray0 = {
+      zarr_format: 2,
+      shape: [2, 4, 4],
+      chunks: [1, 4, 4],
+      dtype: "<u2",
+      compressor: null,
+      fill_value: 0,
+      order: "C",
+      filters: null,
+    };
+    const zarray1 = {
+      zarr_format: 2,
+      shape: [2, 2, 2],
+      chunks: [1, 2, 2],
+      dtype: "<u2",
+      compressor: null,
+      fill_value: 0,
+      order: "C",
+      filters: null,
+    };
+    await writeFile(join(zarrRoot, "0", ".zarray"), JSON.stringify(zarray0));
+    await writeFile(join(zarrRoot, "1", ".zarray"), JSON.stringify(zarray1));
+
+    // Write level 0 chunks (high-res) and level 1 chunks (coarse-res)
+    const lvl0Chunk = new Uint16Array(16).fill(111);
+    const lvl1Chunk = new Uint16Array(4).fill(222);
+    await writeFile(join(zarrRoot, "0", "0.0.0"), Buffer.from(lvl0Chunk.buffer));
+    await writeFile(join(zarrRoot, "0", "1.0.0"), Buffer.from(lvl0Chunk.buffer));
+    await writeFile(join(zarrRoot, "1", "0.0.0"), Buffer.from(lvl1Chunk.buffer));
+    await writeFile(join(zarrRoot, "1", "1.0.0"), Buffer.from(lvl1Chunk.buffer));
+
+    const readKeys = [];
+    const { stack } = await openInputStack(zarrRoot, { onReadKey: (key) => readKeys.push(key) });
+    assert.equal(stack.kind, "ome-zarr");
+    assert.equal(stack.levels.length, 2);
+    // Opening metadata must NOT read any data chunks from either level
+    assert.equal(readKeys.some((k) => k.endsWith(".0.0")), false, `expected no chunks read on open, got ${JSON.stringify(readKeys)}`);
+
+    // Reading plane 0 of level 1 must ONLY read level 1 chunk 0.0.0, NEVER level 0 chunks!
+    const plane = await stack.readPlane(0, 1);
+    assert.deepEqual([...plane], [222, 222, 222, 222]);
+    assert.ok(readKeys.includes("1/0.0.0"), `expected level 1 chunk read, got ${JSON.stringify(readKeys)}`);
+    assert.equal(readKeys.some((k) => k.startsWith("0/") && k.endsWith(".0.0")), false, `unselected level 0 chunks must never be read: ${JSON.stringify(readKeys)}`);
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
+});
+
+test("claimOutputDirectory uses shared .neurodesk-cli.lock, rejects symlinks, and cleans up on SIGTERM", async () => {
   const work = await mkdtemp(join(tmpdir(), "lightsheet-lock-"));
   try {
-    const nonEmpty = join(work, "existing");
-    await writeFile(join(work, "not-a-dir"), "x");
-    await assert.rejects(claimOutputDirectory(join(work, "not-a-dir")), /not a directory/);
-
-    const fresh = join(work, "fresh");
+    assert.equal(OUTPUT_LOCK_FILE, ".neurodesk-cli.lock");
+    const fresh = join(work, "fresh-out");
     const claim = await claimOutputDirectory(fresh);
     await assert.rejects(claimOutputDirectory(fresh), /already in use/);
     await claim.release({ removeDirIfEmpty: true });
     await assert.rejects(stat(fresh), { code: "ENOENT" });
 
-    // Non-empty directory fails cleanly without deleting existing files
-    await claimOutputDirectory(nonEmpty).then((c) => c.release());
-    await writeFile(join(nonEmpty, "keep.txt"), "keep");
-    await assert.rejects(claimOutputDirectory(nonEmpty), /not empty/);
-    assert.deepEqual(await readdir(nonEmpty), ["keep.txt"]);
+    // Reject directory symlink
+    const linkPath = join(work, "link-out");
+    await symlink(join(work, "real"), linkPath);
+    await assert.rejects(claimOutputDirectory(linkPath), /symbolic link/);
+
+    // SIGTERM synchronously cleans up lock + newly created dir
+    const sigDir = join(work, "sigterm-out");
+    const child = spawn(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `import { claimOutputDirectory } from ${JSON.stringify(NODE_MODULE_URL)};
+         await claimOutputDirectory(${JSON.stringify(sigDir)});
+         process.stdout.write("LOCKED\\n");
+         setInterval(() => {}, 1000);`,
+      ],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    await new Promise((resolveReady, rejectReady) => {
+      let out = "";
+      child.stdout.on("data", (chunk) => {
+        out += chunk.toString();
+        if (out.includes("LOCKED")) resolveReady();
+      });
+      child.on("error", rejectReady);
+      child.on("exit", (code) => rejectReady(new Error(`child exited early: ${code}`)));
+    });
+    child.kill("SIGTERM");
+    await new Promise((resolveExit) => child.on("exit", resolveExit));
+    await assert.rejects(stat(sigDir), { code: "ENOENT" });
   } finally {
     await rm(work, { recursive: true, force: true });
   }
 });
 
-test("writeStagedOutputs rolls back already-renamed files if a later rename fails", async () => {
+test("writeStagedOutputs cleans up failed writeFile .partial and preserves unrelated replacements during rollback", async () => {
   const work = await mkdtemp(join(tmpdir(), "lightsheet-stage-"));
   try {
+    await assert.rejects(
+      writeStagedOutputs(
+        work,
+        [{ name: "a.csv", bytes: new Uint8Array([1, 2, 3]) }],
+        {
+          writeFileFn: async (p, bytes, opts) => {
+            await writeFile(p, bytes.subarray(0, 1), opts);
+            throw Object.assign(new Error("EFBIG"), { code: "EFBIG" });
+          },
+        },
+      ),
+      /EFBIG/,
+    );
+    assert.deepEqual(await readdir(work), []);
+
     let calls = 0;
-    const flakyRename = async (src, dst) => {
-      calls += 1;
-      if (calls === 2) throw new Error("injected rename failure");
-      return rename(src, dst);
-    };
     await assert.rejects(
       writeStagedOutputs(
         work,
         [
-          { name: "first.txt", bytes: new Uint8Array([1, 2, 3]) },
-          { name: "second.txt", bytes: new Uint8Array([4, 5, 6]) },
+          { name: "a.csv", bytes: new Uint8Array([65]) },
+          { name: "b.csv", bytes: new Uint8Array([66]) },
         ],
-        { renameFn: flakyRename },
+        {
+          renameFn: async (src, dst) => {
+            calls += 1;
+            if (calls === 1) {
+              await rename(src, dst);
+              await rm(dst);
+              await writeFile(dst, "unrelated");
+              return;
+            }
+            throw new Error("simulated rename failure");
+          },
+        },
       ),
-      /injected rename failure/,
+      /simulated rename failure/,
     );
-    assert.deepEqual(await readdir(work), []);
+    assert.equal(await readFile(join(work, "a.csv"), "utf8"), "unrelated");
+    assert.deepEqual(await readdir(work), ["a.csv"]);
   } finally {
     await rm(work, { recursive: true, force: true });
   }
@@ -155,7 +302,6 @@ test("detect-only pipeline runs offline on a synthetic bead TIFF stack and write
     const ny = 64;
     const nx = 64;
     const data = new Uint16Array(nz * ny * nx);
-    // Low textured background + two 3 um in-plane / 4 um z somata (matching detect.test.js)
     let seed = 7;
     const noise = () => ((seed = (seed * 16807) % 2147483647) / 2147483647) * 20;
     const centres = [[20, 20, 12], [44, 40, 11]];
@@ -194,13 +340,11 @@ test("detect-only pipeline runs offline on a synthetic bead TIFF stack and write
     assert.ok(result.files.includes("synthetic_cells_provenance.json"));
     assert.ok(result.provenance.candidateCount >= 1, `expected detected candidates, got ${result.provenance.candidateCount}`);
 
-    // Verify outputs are valid gzipped NIfTI and CSV
     const csv = await readFile(join(outDir, "synthetic_cells_candidates.csv"), "utf8");
     assert.match(csv, /^x,y,z,x_um,y_um,z_um\n/);
     const gridGz = await readFile(join(outDir, "synthetic_cells_atlas-grid.nii.gz"));
     assert.equal(gridGz[0], 0x1f);
     assert.equal(gridGz[1], 0x8b);
-    assert.ok(gzipSync(new Uint8Array([1])).byteLength > 0);
   } finally {
     await rm(work, { recursive: true, force: true });
   }

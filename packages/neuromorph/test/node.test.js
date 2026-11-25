@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { spawn, spawnSync } from "node:child_process";
+import { mkdtemp, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
+  OUTPUT_LOCK_FILE,
   checkInstallation,
   claimOutputDirectory,
   parseCliOptions,
@@ -14,6 +15,7 @@ import {
 } from "../src/node.js";
 
 const binPath = fileURLToPath(new URL("../bin/neuromorph.js", import.meta.url));
+const NODE_MODULE_URL = new URL("../src/node.js", import.meta.url).href;
 
 function runCli(args) {
   return spawnSync(process.execPath, [binPath, ...args], { encoding: "utf8" });
@@ -39,7 +41,10 @@ test("CLI rejects empty string flags, invalid ranges, and disallowed subcommand 
   assert.match(help.stdout, /Usage: neuromorph/);
 });
 
-test("parseCliOptions validates Sholl step before I/O", () => {
+test("parseCliOptions validates unknown keys, types, and Sholl step before I/O", () => {
+  assert.throws(() => parseCliOptions({ "shol-step": "10" }), /Unknown option/);
+  assert.throws(() => parseCliOptions({ "sholl-step": true }), /positive finite/);
+  assert.throws(() => parseCliOptions({ "no-repair": "yes" }), /boolean/);
   assert.throws(() => parseCliOptions({ "sholl-step": "0" }), /positive finite/);
   assert.throws(() => parseCliOptions({ "sholl-step": "abc" }), /positive finite/);
   assert.throws(() => parseCliOptions({ "sholl-step": "2000000" }), /<= 1000000/);
@@ -64,22 +69,75 @@ test("self-check honors --cache-dir offline", async () => {
   }
 });
 
-test("claimOutputDirectory enforces O_EXCL exclusivity and cleans up created dir on failure", async () => {
+test("claimOutputDirectory uses shared .neurodesk-cli.lock, rejects symlinks, and cleans up on SIGTERM", async () => {
   const work = await mkdtemp(join(tmpdir(), "neuromorph-lock-"));
   try {
+    assert.equal(OUTPUT_LOCK_FILE, ".neurodesk-cli.lock");
     const fresh = join(work, "fresh");
     const claim = await claimOutputDirectory(fresh);
     await assert.rejects(claimOutputDirectory(fresh), /already in use/);
     await claim.release({ removeDirIfEmpty: true });
     await assert.rejects(stat(fresh), { code: "ENOENT" });
+
+    // Cross-CLI shared lock contention: a pre-existing .neurodesk-cli.lock blocks claiming
+    const sharedDir = join(work, "shared-lock");
+    const otherLockClaim = await claimOutputDirectory(sharedDir);
+    assert.equal((await readdir(sharedDir))[0], ".neurodesk-cli.lock");
+    await assert.rejects(claimOutputDirectory(sharedDir), /already in use/);
+    await otherLockClaim.release({ removeDirIfEmpty: true });
+
+    const linkPath = join(work, "link-dir");
+    await symlink(join(work, "real"), linkPath);
+    await assert.rejects(claimOutputDirectory(linkPath), /symbolic link/);
+
+    const sigDir = join(work, "sigterm-dir");
+    const child = spawn(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `import { claimOutputDirectory } from ${JSON.stringify(NODE_MODULE_URL)};
+         await claimOutputDirectory(${JSON.stringify(sigDir)});
+         process.stdout.write("LOCKED\\n");
+         setInterval(() => {}, 1000);`,
+      ],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    await new Promise((resolveReady, rejectReady) => {
+      let out = "";
+      child.stdout.on("data", (chunk) => {
+        out += chunk.toString();
+        if (out.includes("LOCKED")) resolveReady();
+      });
+      child.on("error", rejectReady);
+      child.on("exit", (code) => rejectReady(new Error(`child exited early: ${code}`)));
+    });
+    child.kill("SIGTERM");
+    await new Promise((resolveExit) => child.on("exit", resolveExit));
+    await assert.rejects(stat(sigDir), { code: "ENOENT" });
   } finally {
     await rm(work, { recursive: true, force: true });
   }
 });
 
-test("writeStagedOutputs rolls back already-renamed files if a later rename fails", async () => {
+test("writeStagedOutputs cleans up failed writeFile .partial and preserves unrelated replacements during rollback", async () => {
   const work = await mkdtemp(join(tmpdir(), "neuromorph-stage-"));
   try {
+    await assert.rejects(
+      writeStagedOutputs(
+        work,
+        [{ name: "one.csv", bytes: new Uint8Array([1, 2, 3]) }],
+        {
+          writeFileFn: async (p, bytes, opts) => {
+            await writeFile(p, bytes.subarray(0, 1), opts);
+            throw Object.assign(new Error("EFBIG"), { code: "EFBIG" });
+          },
+        },
+      ),
+      /EFBIG/,
+    );
+    assert.deepEqual(await readdir(work), []);
+
     let calls = 0;
     await assert.rejects(
       writeStagedOutputs(
@@ -91,14 +149,20 @@ test("writeStagedOutputs rolls back already-renamed files if a later rename fail
         {
           renameFn: async (src, dst) => {
             calls += 1;
-            if (calls === 2) throw new Error("rename fail");
-            return rename(src, dst);
+            if (calls === 1) {
+              await rename(src, dst);
+              await rm(dst);
+              await writeFile(dst, "external");
+              return;
+            }
+            throw new Error("rename fail");
           },
         },
       ),
       /rename fail/,
     );
-    assert.deepEqual(await readdir(work), []);
+    assert.equal(await readFile(join(work, "one.csv"), "utf8"), "external");
+    assert.deepEqual(await readdir(work), ["one.csv"]);
   } finally {
     await rm(work, { recursive: true, force: true });
   }

@@ -123,7 +123,7 @@ export function sectionsInVolume(volume, items, maxBytes = MAX_VOLUME_OUTPUT_BYT
       rgba.set([value[0], value[1], value[2], 255], 4 * index);
     });
   }
-  return { bytes: rgbaNifti(rgba, volume.dims, volume.affine), written };
+  return { bytes: rgbaNifti(rgba, volume.dims, volume.affine, { header: volume.header ?? null }), written };
 }
 
 /** The registration's parameters and scores, for the report download. */

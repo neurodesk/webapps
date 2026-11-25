@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { spawn, spawnSync } from "node:child_process";
+import { mkdtemp, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { imagejDescription, writeTiffStack } from "@neurodesk/webapp-components/file-io/tiff";
 import { parseShiftsCsv } from "../src/outputs.js";
 import {
+  OUTPUT_LOCK_FILE,
   checkInstallation,
   claimOutputDirectory,
   parseCliOptions,
@@ -16,6 +17,7 @@ import {
 } from "../src/node.js";
 
 const binPath = fileURLToPath(new URL("../bin/calcium-imaging.js", import.meta.url));
+const NODE_MODULE_URL = new URL("../src/node.js", import.meta.url).href;
 
 function runCli(args) {
   return spawnSync(process.execPath, [binPath, ...args], { encoding: "utf8" });
@@ -43,9 +45,14 @@ test("CLI rejects empty string flags, invalid ranges, and disallowed subcommand 
   assert.match(help.stdout, /Usage: calcium-imaging/);
 });
 
-test("parseCliOptions validates enums and numeric bounds before I/O", () => {
-  assert.throws(() => parseCliOptions({ motion: "invalid" }), /Unknown motion correction/);
-  assert.throws(() => parseCliOptions({ normalization: "invalid" }), /Unknown normalisation/);
+test("parseCliOptions validates unknown keys, types, enums and numeric bounds before I/O", () => {
+  assert.throws(() => parseCliOptions({ bogusOption: "1" }), /Unknown option/);
+  assert.throws(() => parseCliOptions({ motion: "constructor" }), /Option --motion/);
+  assert.throws(() => parseCliOptions({ motion: "invalid" }), /Option --motion/);
+  assert.throws(() => parseCliOptions({ normalization: "toString" }), /Option --normalization/);
+  assert.throws(() => parseCliOptions({ normalization: "invalid" }), /Option --normalization/);
+  assert.throws(() => parseCliOptions({ "frame-rate": true }), /finite number/);
+  assert.throws(() => parseCliOptions({ "no-deconvolution": "yes" }), /boolean/);
   assert.throws(() => parseCliOptions({ "frame-rate": "-1" }), /Frame rate must be/);
   assert.throws(() => parseCliOptions({ "max-shift": "2.5" }), /whole number/);
   const ok = parseCliOptions({ motion: "rigid", "frame-rate": "10", "no-deconvolution": true });
@@ -70,22 +77,68 @@ test("self-check honors --cache-dir and runs synthetic registration offline", as
   }
 });
 
-test("claimOutputDirectory enforces O_EXCL lock and cleans up newly created dir on failure", async () => {
+test("claimOutputDirectory uses shared .neurodesk-cli.lock, rejects symlinks, and cleans up on SIGTERM", async () => {
   const work = await mkdtemp(join(tmpdir(), "calcium-lock-"));
   try {
+    assert.equal(OUTPUT_LOCK_FILE, ".neurodesk-cli.lock");
     const fresh = join(work, "fresh");
     const claim = await claimOutputDirectory(fresh);
     await assert.rejects(claimOutputDirectory(fresh), /already in use/);
     await claim.release({ removeDirIfEmpty: true });
     await assert.rejects(stat(fresh), { code: "ENOENT" });
+
+    const linkPath = join(work, "symlink-dir");
+    await symlink(join(work, "real"), linkPath);
+    await assert.rejects(claimOutputDirectory(linkPath), /symbolic link/);
+
+    const sigDir = join(work, "sigterm-dir");
+    const child = spawn(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `import { claimOutputDirectory } from ${JSON.stringify(NODE_MODULE_URL)};
+         await claimOutputDirectory(${JSON.stringify(sigDir)});
+         process.stdout.write("LOCKED\\n");
+         setInterval(() => {}, 1000);`,
+      ],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    await new Promise((resolveReady, rejectReady) => {
+      let out = "";
+      child.stdout.on("data", (chunk) => {
+        out += chunk.toString();
+        if (out.includes("LOCKED")) resolveReady();
+      });
+      child.on("error", rejectReady);
+      child.on("exit", (code) => rejectReady(new Error(`child exited early: ${code}`)));
+    });
+    child.kill("SIGTERM");
+    await new Promise((resolveExit) => child.on("exit", resolveExit));
+    await assert.rejects(stat(sigDir), { code: "ENOENT" });
   } finally {
     await rm(work, { recursive: true, force: true });
   }
 });
 
-test("writeStagedOutputs rolls back renamed outputs on mid-batch rename error", async () => {
+test("writeStagedOutputs cleans up failed writeFile .partial and preserves unrelated replacements during rollback", async () => {
   const work = await mkdtemp(join(tmpdir(), "calcium-stage-"));
   try {
+    await assert.rejects(
+      writeStagedOutputs(
+        work,
+        [{ name: "a.csv", bytes: new Uint8Array([1, 2, 3]) }],
+        {
+          writeFileFn: async (p, bytes, opts) => {
+            await writeFile(p, bytes.subarray(0, 1), opts);
+            throw Object.assign(new Error("EFBIG"), { code: "EFBIG" });
+          },
+        },
+      ),
+      /EFBIG/,
+    );
+    assert.deepEqual(await readdir(work), []);
+
     let calls = 0;
     await assert.rejects(
       writeStagedOutputs(
@@ -97,14 +150,20 @@ test("writeStagedOutputs rolls back renamed outputs on mid-batch rename error", 
         {
           renameFn: async (src, dst) => {
             calls += 1;
-            if (calls === 2) throw new Error("rename boom");
-            return rename(src, dst);
+            if (calls === 1) {
+              await rename(src, dst);
+              await rm(dst);
+              await writeFile(dst, "external");
+              return;
+            }
+            throw new Error("rename boom");
           },
         },
       ),
       /rename boom/,
     );
-    assert.deepEqual(await readdir(work), []);
+    assert.equal(await readFile(join(work, "a.csv"), "utf8"), "external");
+    assert.deepEqual(await readdir(work), ["a.csv"]);
   } finally {
     await rm(work, { recursive: true, force: true });
   }

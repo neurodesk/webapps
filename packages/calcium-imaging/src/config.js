@@ -53,7 +53,7 @@ export class SettingsError extends Error {
 /** Validated run settings from raw form or CLI values. Throws SettingsError naming the field. */
 export function readSettings(values) {
   const settings = { ...DEFAULTS };
-  if (!(values.motion in MOTION_LABELS)) throw new SettingsError("motion", `Unknown motion correction "${values.motion}".`);
+  if (!Object.hasOwn(MOTION_LABELS, values.motion)) throw new SettingsError("motion", `Unknown motion correction "${values.motion}".`);
   settings.motion = values.motion;
   if (!["none", "phase"].includes(values.normalization ?? "none")) throw new SettingsError("normalization", `Unknown normalisation "${values.normalization}".`);
   settings.normalization = values.normalization ?? "none";

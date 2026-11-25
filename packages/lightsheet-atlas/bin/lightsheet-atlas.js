@@ -90,9 +90,12 @@ try {
     } else if (command === "download-models") {
       if (positionals.length !== 1) throw new Error("download-models does not accept positional arguments.");
       rejectDisallowedOptions("download-models", values, ["cache-dir", "offline"]);
+      const explicitCacheDir = values["cache-dir"];
+      const bundledReadOnly = !explicitCacheDir && process.env.NEURODESK_OFFLINE === "1" && Boolean(process.env.NEURODESK_LIGHTSHEET_ATLAS_MODEL_DIR);
+      const offline = values.offline === true ? true : bundledReadOnly;
       const result = await downloadModels({
-        cacheDir: values["cache-dir"],
-        offline: values.offline,
+        cacheDir: explicitCacheDir,
+        offline,
         onProgress: (message) => process.stderr.write(`${message}\n`),
       });
       console.log(`${result.count} Allen CCFv3 atlas files verified in ${result.directory}`);

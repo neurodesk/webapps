@@ -2414,12 +2414,12 @@ importers:
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../components
-      fast-png:
-        specifier: 8.0.0
-        version: 8.0.0
       jpeg-js:
         specifier: 0.4.4
         version: 0.4.4
+      pngjs:
+        specifier: 7.0.0
+        version: 7.0.0
 
   packages/hmc:
     dependencies:

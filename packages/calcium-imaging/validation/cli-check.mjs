@@ -72,9 +72,14 @@ try {
   const shifts = parseShiftsCsv(await readFile(join(outDir, `${stem}_shifts.csv`), "utf8"));
   check(shifts.length === 400, `shifts.csv contains all 400 frames (got ${shifts.length})`);
 
-  // Compare rigid shifts against CaImAn reference (up to global template offset)
-  const refShifts = caimanRef.shifts;
-  if (Array.isArray(refShifts) && refShifts.length === shifts.length) {
+  // Compare rigid shifts against CaImAn's recorded reference (fail loudly if fixture key is missing/malformed)
+  const refShifts = caimanRef?.caimanRegisterTranslation;
+  const validRef =
+    Array.isArray(refShifts)
+    && refShifts.length === shifts.length
+    && refShifts.every((pair) => Array.isArray(pair) && pair.length === 2 && Number.isFinite(pair[0]) && Number.isFinite(pair[1]));
+  check(validRef, `caimanRegisterTranslation reference fixture is valid (${Array.isArray(refShifts) ? refShifts.length : "missing"} shifts)`);
+  if (validRef) {
     const meanDy = shifts.reduce((s, v, i) => s + (v[0] - refShifts[i][0]), 0) / shifts.length;
     const meanDx = shifts.reduce((s, v, i) => s + (v[1] - refShifts[i][1]), 0) / shifts.length;
     let maxErr = 0;

@@ -2,7 +2,8 @@
 // Reads SWC reconstructions (single file, multiple files, or a directory), repairs & validates them,
 // computes NeuroM-compatible morphometrics, Sholl intersections, and bifurcation tables.
 import { randomUUID } from "node:crypto";
-import { mkdir, open, readFile, readdir, rename, rm, rmdir, stat, writeFile } from "node:fs/promises";
+import { rmdirSync, unlinkSync } from "node:fs";
+import { lstat, mkdir, open, readFile, readdir, rename, rm, rmdir, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, join, relative, resolve } from "node:path";
 import packageJson from "../package.json" with { type: "json" };
 import { analyse, buildMorphology } from "./morph/morphometrics.js";
@@ -10,14 +11,26 @@ import { bifurcationsCsv, morphometricsCsv, shollCsv, summary } from "./morph/ou
 import { readSwc, writeSwc } from "./morph/swc.js";
 import { repairedName, stem } from "./names.js";
 
-const OUTPUT_LOCK_FILE = ".neurodesk-neuromorph.lock";
+export const OUTPUT_LOCK_FILE = ".neurodesk-cli.lock";
 const MAX_SWC_FILE_BYTES = 128 * 1024 * 1024;
 const collator = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
+const ALLOWED_OPTION_KEYS = new Set(["sholl-step", "no-repair", "offline"]);
 
 /** Validates CLI flags before touching input files or output directories. */
 export function parseCliOptions(values = {}) {
+  if (values === null || typeof values !== "object" || Array.isArray(values)) {
+    throw new TypeError("Options must be a plain object.");
+  }
+  for (const key of Object.keys(values)) {
+    if (!ALLOWED_OPTION_KEYS.has(key)) {
+      throw new Error(`Unknown option '--${key}'.`);
+    }
+  }
   let shollStep = 10;
   if (values["sholl-step"] !== undefined) {
+    if (typeof values["sholl-step"] !== "number" && typeof values["sholl-step"] !== "string") {
+      throw new Error(`Option --sholl-step must be a positive finite number, got ${typeof values["sholl-step"]}.`);
+    }
     const trimmed = String(values["sholl-step"]).trim();
     if (!trimmed) throw new Error("Option --sholl-step requires a non-empty value.");
     shollStep = Number(trimmed);
@@ -25,13 +38,20 @@ export function parseCliOptions(values = {}) {
       throw new Error(`Option --sholl-step must be a positive finite number <= 1000000, got '${values["sholl-step"]}'.`);
     }
   }
+  if (values["no-repair"] !== undefined && typeof values["no-repair"] !== "boolean") {
+    throw new Error(`Option --no-repair must be a boolean, got ${typeof values["no-repair"]}.`);
+  }
+  if (values.offline !== undefined && typeof values.offline !== "boolean") {
+    throw new Error(`Option --offline must be a boolean, got ${typeof values.offline}.`);
+  }
   const repair = values["no-repair"] ? false : true;
   return { shollStep, repair };
 }
 
 /**
- * Exclusively claims `outputDir` with an O_EXCL lock file, cleaning up the lock AND any newly
- * created directory on ANY error (including write/readdir errors or non-empty directory).
+ * Exclusively claims `outputDir` with the shared `.neurodesk-cli.lock` O_EXCL lock file,
+ * rejecting directory symlinks, registering SIGINT/SIGTERM cleanup handlers while held, and
+ * cleaning up the lock and any newly created directory on error or release.
  */
 export async function claimOutputDirectory(outputDir) {
   if (typeof outputDir !== "string" || !outputDir.trim()) {
@@ -40,7 +60,10 @@ export async function claimOutputDirectory(outputDir) {
   const directory = resolve(outputDir);
   let createdDir = false;
   try {
-    const info = await stat(directory);
+    const info = await lstat(directory);
+    if (info.isSymbolicLink()) {
+      throw new Error(`Output path '${directory}' must not be a symbolic link.`);
+    }
     if (!info.isDirectory()) {
       throw new Error(`Output path '${directory}' exists and is not a directory.`);
     }
@@ -48,14 +71,59 @@ export async function claimOutputDirectory(outputDir) {
     if (error.code !== "ENOENT") throw error;
     await mkdir(directory, { recursive: true });
     createdDir = true;
+    const createdInfo = await lstat(directory);
+    if (createdInfo.isSymbolicLink() || !createdInfo.isDirectory()) {
+      throw new Error(`Output path '${directory}' is not a regular directory.`);
+    }
   }
 
   const lockPath = join(directory, OUTPUT_LOCK_FILE);
   let handle = null;
-  let lockAcquired = false;
+  let lockActive = false;
+  let signalsRegistered = false;
+
+  const cleanupSync = () => {
+    if (!lockActive) return;
+    lockActive = false;
+    try {
+      unlinkSync(lockPath);
+    } catch {
+      // ignore
+    }
+    if (createdDir) {
+      try {
+        rmdirSync(directory);
+      } catch {
+        // leave non-empty dir intact
+      }
+    }
+  };
+
+  const unregisterSignals = () => {
+    if (!signalsRegistered) return;
+    signalsRegistered = false;
+    process.off("SIGINT", onSigInt);
+    process.off("SIGTERM", onSigTerm);
+  };
+
+  const handleSignal = (signal) => {
+    unregisterSignals();
+    cleanupSync();
+    if (process.platform === "win32") {
+      process.exit(signal === "SIGINT" ? 130 : 143);
+    }
+    process.kill(process.pid, signal);
+  };
+  const onSigInt = () => handleSignal("SIGINT");
+  const onSigTerm = () => handleSignal("SIGTERM");
+
   try {
     handle = await open(lockPath, "wx");
-    lockAcquired = true;
+    lockActive = true;
+    process.on("SIGINT", onSigInt);
+    process.on("SIGTERM", onSigTerm);
+    signalsRegistered = true;
+
     await handle.writeFile(`${process.pid}\n${new Date().toISOString()}\n`);
     await handle.close();
     handle = null;
@@ -65,8 +133,10 @@ export async function claimOutputDirectory(outputDir) {
       throw new Error(`Output directory ${directory} is not empty. Choose a new or empty directory.`);
     }
   } catch (error) {
+    unregisterSignals();
     await handle?.close().catch(() => {});
-    if (lockAcquired) {
+    if (lockActive) {
+      lockActive = false;
       await rm(lockPath, { force: true }).catch(() => {});
     }
     if (createdDir) {
@@ -82,7 +152,11 @@ export async function claimOutputDirectory(outputDir) {
     directory,
     createdDir,
     async release({ removeDirIfEmpty = false } = {}) {
-      await rm(lockPath, { force: true }).catch(() => {});
+      unregisterSignals();
+      if (lockActive) {
+        lockActive = false;
+        await rm(lockPath, { force: true }).catch(() => {});
+      }
       if (removeDirIfEmpty && createdDir) {
         await rmdir(directory).catch(() => {});
       }
@@ -91,31 +165,57 @@ export async function claimOutputDirectory(outputDir) {
 }
 
 /**
- * Stages every output file to a `.partial` path first, then renames all files into place.
- * Rolls back already-renamed outputs and removes all `.partial` files if any step fails.
+ * Stages every output file to a `.partial` path first (registering each path BEFORE `writeFile`),
+ * then renames all files into place. On error, unlinks `.partial` files and rolls back ONLY
+ * final outputs this run created (verified by lstat + dev/ino).
  */
-export async function writeStagedOutputs(directory, files, { renameFn = rename } = {}) {
+export async function writeStagedOutputs(directory, files, { renameFn = rename, writeFileFn = writeFile } = {}) {
   const runId = randomUUID().slice(0, 8);
   const staged = [];
   const renamed = [];
+  const seenNames = new Set();
   try {
     for (const { name, bytes } of files) {
+      if (typeof name !== "string" || !name || name.includes("/") || name.includes("\\") || name === "." || name === "..") {
+        throw new Error(`Invalid output filename '${name}'.`);
+      }
+      const lower = name.toLowerCase();
+      if (seenNames.has(lower)) {
+        throw new Error(`Duplicate output filename '${name}'.`);
+      }
+      seenNames.add(lower);
+
       const partialPath = join(directory, `.${name}.${runId}.partial`);
       const finalPath = join(directory, name);
-      await writeFile(partialPath, bytes, { flag: "wx" });
-      staged.push({ name, partialPath, finalPath });
+      const item = { name, partialPath, finalPath };
+      staged.push(item);
+      await writeFileFn(partialPath, bytes, { flag: "wx" });
     }
     for (const item of staged) {
+      const existing = await lstat(item.finalPath).catch((error) => {
+        if (error.code === "ENOENT") return null;
+        throw error;
+      });
+      if (existing) {
+        throw new Error(`Refusing to overwrite existing output '${item.name}'.`);
+      }
+      const stagedInfo = await lstat(item.partialPath);
       await renameFn(item.partialPath, item.finalPath);
-      renamed.push(item.finalPath);
+      renamed.push({ finalPath: item.finalPath, dev: stagedInfo.dev, ino: stagedInfo.ino });
     }
     return staged.map((item) => item.name);
   } catch (error) {
     for (const item of staged) {
-      await rm(item.partialPath, { force: true }).catch(() => {});
+      const info = await lstat(item.partialPath).catch(() => null);
+      if (info && info.isFile() && !info.isSymbolicLink()) {
+        await unlink(item.partialPath).catch(() => {});
+      }
     }
-    for (const finalPath of renamed) {
-      await rm(finalPath, { force: true }).catch(() => {});
+    for (const { finalPath, dev, ino } of renamed) {
+      const info = await lstat(finalPath).catch(() => null);
+      if (info && info.isFile() && !info.isSymbolicLink() && info.dev === dev && info.ino === ino) {
+        await unlink(finalPath).catch(() => {});
+      }
     }
     throw error;
   }

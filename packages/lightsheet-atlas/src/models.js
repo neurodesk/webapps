@@ -76,6 +76,15 @@ export async function downloadModels({
     }
     if (offline) {
       const reason = existing ? "checksum mismatch" : "missing";
+      const bundledDir = process.env.NEURODESK_LIGHTSHEET_ATLAS_MODEL_DIR
+        ? resolve(process.env.NEURODESK_LIGHTSHEET_ATLAS_MODEL_DIR)
+        : null;
+      if (bundledDir && directory === bundledDir && offlineByDefault()) {
+        throw new Error(
+          `Offline mode: bundled Allen atlas asset '${asset.filename}' is ${reason} in ${directory}. `
+          + `Reinstall the portable archive, or run 'lightsheet-atlas download-models --cache-dir <writable-dir>' while online and pass '--cache-dir <writable-dir>'.`,
+        );
+      }
       throw new Error(`Offline mode: required Allen atlas asset '${asset.filename}' is ${reason} in ${directory}. Run 'lightsheet-atlas download-models --cache-dir "${directory}"' while online.`);
     }
     if (typeof fetchImpl !== "function") {

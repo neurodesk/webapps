@@ -2,14 +2,15 @@
 // Registers 2D histology sections (TIFF, PNG, JPEG) to a 3D MRI volume (NIfTI) using the exact
 // same Greedy NMI rigid, affine, plane search and deformable SVF pipeline as the Histo2MRI web app.
 import { randomUUID } from "node:crypto";
-import { mkdir, open, readFile, readdir, rename, rm, rmdir, stat, writeFile } from "node:fs/promises";
+import { rmdirSync, unlinkSync } from "node:fs";
+import { lstat, mkdir, open, readFile, readdir, rename, rm, rmdir, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { gzipSync } from "node:zlib";
 import { loadGreedySingleThread } from "@neurodesk/greedy/single";
 import { registerAffineGreedy, registerRigidGreedy, registerSvfGreedy } from "@neurodesk/greedy";
 import { readTiffImage } from "@neurodesk/webapp-components/file-io/tiff";
-import { decode as decodePng } from "fast-png";
 import jpeg from "jpeg-js";
+import { PNG } from "pngjs";
 import packageJson from "../package.json" with { type: "json" };
 import { SECTION_OUTPUT_KINDS, outputNames, runSettings, runSummary } from "./config.js";
 import { mriVolume, rgbaNifti } from "./core/nifti.js";
@@ -18,15 +19,82 @@ import { axisPlanes } from "./core/plane.js";
 import { DEFAULTS, preflightSection, registerSection } from "./core/register.js";
 import { readStrictNiftiVolume } from "./nifti-io.js";
 
-const OUTPUT_LOCK_FILE = ".neurodesk-histo2mri.lock";
+export const OUTPUT_LOCK_FILE = ".neurodesk-cli.lock";
 const MAX_MRI_FILE_BYTES = 512 * 1024 * 1024;
 const MAX_SECTION_FILE_BYTES = 256 * 1024 * 1024;
 const MAX_SECTION_DECODED_BYTES = 256 * 1024 * 1024;
 const ITERATIONS_RE = /^\d+x\d+x\d+$/;
 const AXIS_MAP = Object.freeze({ 0: 0, 1: 1, 2: 2, i: 0, j: 1, k: 2 });
+const CONTRAST_SET = new Set(["auto", "haematoxylin", "eosin", "dab"]);
+const ALLOWED_OPTION_KEYS = new Set([
+  "axis",
+  "slice",
+  "step",
+  "tilt-a",
+  "tilt-b",
+  "pixel-size",
+  "contrast",
+  "orientation",
+  "no-refine-plane",
+  "search-offset",
+  "search-tilt",
+  "no-deformable",
+  "linear-iterations",
+  "deformable-iterations",
+  "offline",
+]);
+
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+const CRC32_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    table[i] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(bytes) {
+  let c = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) {
+    c = CRC32_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+  }
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function assertPlainOptions(values) {
+  if (values === null || typeof values !== "object" || Array.isArray(values)) {
+    throw new TypeError("Options must be a plain object.");
+  }
+  for (const key of Object.keys(values)) {
+    if (!ALLOWED_OPTION_KEYS.has(key)) {
+      throw new Error(`Unknown option '--${key}'.`);
+    }
+  }
+}
+
+function parseBooleanOpt(raw, flag) {
+  if (raw === undefined) return false;
+  if (typeof raw !== "boolean") {
+    throw new Error(`Option --${flag} must be a boolean, got ${typeof raw}.`);
+  }
+  return raw;
+}
+
+function parseStringOpt(raw, flag) {
+  if (raw === undefined) return undefined;
+  if (typeof raw !== "string" || !raw.trim()) {
+    throw new Error(`Option --${flag} requires a non-empty string value.`);
+  }
+  return raw.trim();
+}
 
 function parseFiniteOpt(raw, flag, { min = -Infinity, max = Infinity, exclusiveMin = false } = {}) {
   if (raw === undefined) return undefined;
+  if (typeof raw !== "number" && typeof raw !== "string") {
+    throw new Error(`Option --${flag} must be a finite number, got ${typeof raw}.`);
+  }
   const trimmed = String(raw).trim();
   if (!trimmed) throw new Error(`Option --${flag} requires a non-empty value.`);
   const value = Number(trimmed);
@@ -39,7 +107,15 @@ function parseFiniteOpt(raw, flag, { min = -Infinity, max = Infinity, exclusiveM
 
 /** Validates CLI flags before touching input files or claiming OUTPUT_DIR. */
 export function parseCliOptions(values = {}) {
-  const axisRaw = values.axis === undefined ? "2" : String(values.axis).trim().toLowerCase();
+  assertPlainOptions(values);
+
+  let axisRaw = "2";
+  if (values.axis !== undefined) {
+    if (typeof values.axis !== "string" && typeof values.axis !== "number") {
+      throw new Error(`Option --axis must be one of 0, 1, 2, i, j, k, got ${typeof values.axis}.`);
+    }
+    axisRaw = String(values.axis).trim().toLowerCase();
+  }
   if (!Object.hasOwn(AXIS_MAP, axisRaw)) {
     throw new Error(`Option --axis must be one of 0, 1, 2, i, j, k, got '${values.axis}'.`);
   }
@@ -53,23 +129,35 @@ export function parseCliOptions(values = {}) {
   const searchOffset = parseFiniteOpt(values["search-offset"], "search-offset", { min: 0, max: 10 }) ?? DEFAULTS.searchOffset;
   const searchTilt = parseFiniteOpt(values["search-tilt"], "search-tilt", { min: 0, max: 10 }) ?? DEFAULTS.searchTilt;
 
-  const contrast = values.contrast ?? DEFAULTS.contrast;
-  if (!["auto", "haematoxylin", "eosin", "dab"].includes(contrast)) {
+  const contrast = parseStringOpt(values.contrast, "contrast") ?? DEFAULTS.contrast;
+  if (!CONTRAST_SET.has(contrast)) {
     throw new Error(`Option --contrast must be one of auto, haematoxylin, eosin, dab, got '${contrast}'.`);
   }
-  const orientation = values.orientation ?? DEFAULTS.orientation;
-  if (orientation !== "auto" && !/^[0-7]$/.test(String(orientation))) {
-    throw new Error(`Option --orientation must be auto or 0..7, got '${orientation}'.`);
+
+  let orientation = DEFAULTS.orientation;
+  if (values.orientation !== undefined) {
+    if (typeof values.orientation !== "string" && typeof values.orientation !== "number") {
+      throw new Error(`Option --orientation must be auto or 0..7, got ${typeof values.orientation}.`);
+    }
+    const rawOrientation = String(values.orientation).trim();
+    if (rawOrientation !== "auto" && !/^[0-7]$/.test(rawOrientation)) {
+      throw new Error(`Option --orientation must be auto or 0..7, got '${values.orientation}'.`);
+    }
+    orientation = rawOrientation;
   }
 
-  const linearIterations = values["linear-iterations"] ?? DEFAULTS.linearIterations;
+  const linearIterations = parseStringOpt(values["linear-iterations"], "linear-iterations") ?? DEFAULTS.linearIterations;
   if (!ITERATIONS_RE.test(linearIterations)) {
     throw new Error(`Option --linear-iterations must be three x-separated integers (e.g. 100x50x10), got '${linearIterations}'.`);
   }
-  const deformableIterations = values["deformable-iterations"] ?? DEFAULTS.deformableIterations;
+  const deformableIterations = parseStringOpt(values["deformable-iterations"], "deformable-iterations") ?? DEFAULTS.deformableIterations;
   if (!ITERATIONS_RE.test(deformableIterations)) {
     throw new Error(`Option --deformable-iterations must be three x-separated integers (e.g. 0x0x200), got '${deformableIterations}'.`);
   }
+
+  const noRefinePlane = parseBooleanOpt(values["no-refine-plane"], "no-refine-plane");
+  const noDeformable = parseBooleanOpt(values["no-deformable"], "no-deformable");
+  parseBooleanOpt(values.offline, "offline");
 
   return {
     axis,
@@ -80,18 +168,44 @@ export function parseCliOptions(values = {}) {
     pixelSize,
     contrast,
     orientation,
-    refinePlane: !values["no-refine-plane"],
+    refinePlane: !noRefinePlane,
     searchOffset,
     searchTilt,
-    deformable: !values["no-deformable"],
+    deformable: !noDeformable,
     linearIterations,
     deformableIterations,
   };
 }
 
 /**
- * Exclusively claims `outputDir` with an O_EXCL lock file, cleaning up the lock AND any newly
- * created directory on ANY error (including write/readdir errors or non-empty directory).
+ * Allocates case-insensitive, collision-free output filename sets for all input sections BEFORE
+ * claiming OUTPUT_DIR or running Greedy registration.
+ */
+export function allocateUniqueOutputNames(sectionNames) {
+  const usedLower = new Set(["sections_in_mri.nii.gz"]);
+  const allocated = [];
+  for (const rawName of sectionNames) {
+    const baseStem = outputNames(rawName).registration.replace(/_registration\.json$/, "");
+    let candidateStem = baseStem;
+    let suffix = 2;
+    for (;;) {
+      const candidateNames = outputNames(`${candidateStem}.png`);
+      const lowerList = Object.values(candidateNames).map((entry) => entry.toLowerCase());
+      if (lowerList.every((lower) => !usedLower.has(lower))) {
+        for (const lower of lowerList) usedLower.add(lower);
+        allocated.push(candidateNames);
+        break;
+      }
+      candidateStem = `${baseStem}_${suffix++}`;
+    }
+  }
+  return allocated;
+}
+
+/**
+ * Exclusively claims `outputDir` with the shared `.neurodesk-cli.lock` O_EXCL lock file,
+ * rejecting directory symlinks, registering SIGINT/SIGTERM cleanup handlers while held, and
+ * cleaning up the lock and any newly created directory on error or release.
  */
 export async function claimOutputDirectory(outputDir) {
   if (typeof outputDir !== "string" || !outputDir.trim()) {
@@ -100,7 +214,10 @@ export async function claimOutputDirectory(outputDir) {
   const directory = resolve(outputDir);
   let createdDir = false;
   try {
-    const info = await stat(directory);
+    const info = await lstat(directory);
+    if (info.isSymbolicLink()) {
+      throw new Error(`Output path '${directory}' must not be a symbolic link.`);
+    }
     if (!info.isDirectory()) {
       throw new Error(`Output path '${directory}' exists and is not a directory.`);
     }
@@ -108,14 +225,59 @@ export async function claimOutputDirectory(outputDir) {
     if (error.code !== "ENOENT") throw error;
     await mkdir(directory, { recursive: true });
     createdDir = true;
+    const createdInfo = await lstat(directory);
+    if (createdInfo.isSymbolicLink() || !createdInfo.isDirectory()) {
+      throw new Error(`Output path '${directory}' is not a regular directory.`);
+    }
   }
 
   const lockPath = join(directory, OUTPUT_LOCK_FILE);
   let handle = null;
-  let lockAcquired = false;
+  let lockActive = false;
+  let signalsRegistered = false;
+
+  const cleanupSync = () => {
+    if (!lockActive) return;
+    lockActive = false;
+    try {
+      unlinkSync(lockPath);
+    } catch {
+      // ignore already-removed lock
+    }
+    if (createdDir) {
+      try {
+        rmdirSync(directory);
+      } catch {
+        // leave directory intact if non-empty
+      }
+    }
+  };
+
+  const unregisterSignals = () => {
+    if (!signalsRegistered) return;
+    signalsRegistered = false;
+    process.off("SIGINT", onSigInt);
+    process.off("SIGTERM", onSigTerm);
+  };
+
+  const handleSignal = (signal) => {
+    unregisterSignals();
+    cleanupSync();
+    if (process.platform === "win32") {
+      process.exit(signal === "SIGINT" ? 130 : 143);
+    }
+    process.kill(process.pid, signal);
+  };
+  const onSigInt = () => handleSignal("SIGINT");
+  const onSigTerm = () => handleSignal("SIGTERM");
+
   try {
     handle = await open(lockPath, "wx");
-    lockAcquired = true;
+    lockActive = true;
+    process.on("SIGINT", onSigInt);
+    process.on("SIGTERM", onSigTerm);
+    signalsRegistered = true;
+
     await handle.writeFile(`${process.pid}\n${new Date().toISOString()}\n`);
     await handle.close();
     handle = null;
@@ -125,8 +287,10 @@ export async function claimOutputDirectory(outputDir) {
       throw new Error(`Output directory ${directory} is not empty. Choose a new or empty directory.`);
     }
   } catch (error) {
+    unregisterSignals();
     await handle?.close().catch(() => {});
-    if (lockAcquired) {
+    if (lockActive) {
+      lockActive = false;
       await rm(lockPath, { force: true }).catch(() => {});
     }
     if (createdDir) {
@@ -142,7 +306,11 @@ export async function claimOutputDirectory(outputDir) {
     directory,
     createdDir,
     async release({ removeDirIfEmpty = false } = {}) {
-      await rm(lockPath, { force: true }).catch(() => {});
+      unregisterSignals();
+      if (lockActive) {
+        lockActive = false;
+        await rm(lockPath, { force: true }).catch(() => {});
+      }
       if (removeDirIfEmpty && createdDir) {
         await rmdir(directory).catch(() => {});
       }
@@ -151,90 +319,157 @@ export async function claimOutputDirectory(outputDir) {
 }
 
 /**
- * Stages every output file to a `.partial` path first, then renames all files into place.
- * Rolls back already-renamed outputs and removes all `.partial` files if any step fails.
+ * Stages every output file to a `.partial` path first (recording each `.partial` BEFORE calling
+ * `writeFile` so failed/short writes are always cleaned up), then renames all files into place.
+ * On error, rolls back ONLY files this run created (verified via lstat + dev/ino, never deleting
+ * directories, symlinks, or unrelated replacements).
  */
-export async function writeStagedOutputs(directory, files, { renameFn = rename } = {}) {
+export async function writeStagedOutputs(directory, files, { renameFn = rename, writeFileFn = writeFile } = {}) {
   const runId = randomUUID().slice(0, 8);
   const staged = [];
   const renamed = [];
+  const seenNames = new Set();
   try {
     for (const { name, bytes } of files) {
+      if (typeof name !== "string" || !name || name.includes("/") || name.includes("\\") || name === "." || name === "..") {
+        throw new Error(`Invalid output filename '${name}'.`);
+      }
+      const lower = name.toLowerCase();
+      if (seenNames.has(lower)) {
+        throw new Error(`Duplicate output filename '${name}'.`);
+      }
+      seenNames.add(lower);
+
       const partialPath = join(directory, `.${name}.${runId}.partial`);
       const finalPath = join(directory, name);
-      await writeFile(partialPath, bytes, { flag: "wx" });
-      staged.push({ name, partialPath, finalPath });
+      const item = { name, partialPath, finalPath };
+      // Register BEFORE writeFile so partial/failed writes (e.g. EFBIG/ENOSPC) are cleaned up.
+      staged.push(item);
+      await writeFileFn(partialPath, bytes, { flag: "wx" });
     }
     for (const item of staged) {
+      const existing = await lstat(item.finalPath).catch((error) => {
+        if (error.code === "ENOENT") return null;
+        throw error;
+      });
+      if (existing) {
+        throw new Error(`Refusing to overwrite existing output '${item.name}'.`);
+      }
+      const stagedInfo = await lstat(item.partialPath);
       await renameFn(item.partialPath, item.finalPath);
-      renamed.push(item.finalPath);
+      renamed.push({ finalPath: item.finalPath, dev: stagedInfo.dev, ino: stagedInfo.ino });
     }
     return staged.map((item) => item.name);
   } catch (error) {
     for (const item of staged) {
-      await rm(item.partialPath, { force: true }).catch(() => {});
+      const info = await lstat(item.partialPath).catch(() => null);
+      if (info && info.isFile() && !info.isSymbolicLink()) {
+        await unlink(item.partialPath).catch(() => {});
+      }
     }
-    for (const finalPath of renamed) {
-      await rm(finalPath, { force: true }).catch(() => {});
+    for (const { finalPath, dev, ino } of renamed) {
+      const info = await lstat(finalPath).catch(() => null);
+      if (info && info.isFile() && !info.isSymbolicLink() && info.dev === dev && info.ino === ino) {
+        await unlink(finalPath).catch(() => {});
+      }
     }
     throw error;
   }
 }
 
-function unpackPngBits(data, width, height, depth) {
-  if (depth >= 8) return data;
-  const out = new Uint8Array(width * height);
-  const rowBytes = Math.ceil((width * depth) / 8);
-  const mask = (1 << depth) - 1;
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const bit = x * depth;
-      out[y * width + x] = (data[y * rowBytes + (bit >> 3)] >> (8 - depth - (bit & 7))) & mask;
-    }
-  }
-  return out;
-}
-
-/** Decodes a PNG buffer in pure Node into interleaved section pixels { width, height, channels, bitsPerSample, maxValue, data, pixelSize }. */
-export function decodePngSection(bytes, name) {
-  if (bytes.byteLength < 24 || bytes[0] !== 0x89 || bytes[1] !== 0x50 || bytes[2] !== 0x4e || bytes[3] !== 0x47) {
+/** Verifies PNG signature, chunk layout, every chunk's IEEE CRC32, IHDR bounds, and IEND presence. */
+function verifyPngStructure(bytes, name) {
+  if (bytes.byteLength < 33 || !PNG_SIGNATURE.every((b, i) => bytes[i] === b)) {
     throw new Error(`${name} is not a valid PNG file.`);
   }
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const ihdrWidth = view.getUint32(16, false);
-  const ihdrHeight = view.getUint32(20, false);
-  const ihdrDepth = bytes[24];
-  const estBytes = ihdrWidth * ihdrHeight * 4 * (ihdrDepth === 16 ? 2 : 1);
-  if (estBytes > MAX_SECTION_DECODED_BYTES) {
-    throw new Error(`${name} (${ihdrWidth} × ${ihdrHeight}) exceeds the 256 MiB section memory limit.`);
-  }
+  let offset = 8;
+  let sawIhdr = false;
+  let sawIend = false;
+  let width = 0;
+  let height = 0;
+  let bitDepth = 8;
 
-  const image = decodePng(bytes);
-  const { width, height, depth } = image;
-  if (image.palette) {
-    const indices = unpackPngBits(image.data, width, height, depth);
-    const rgb = new Uint8Array(width * height * 3);
-    for (let i = 0; i < indices.length; i++) {
-      const entry = image.palette[indices[i]] ?? [0, 0, 0];
-      rgb[i * 3] = entry[0];
-      rgb[i * 3 + 1] = entry[1];
-      rgb[i * 3 + 2] = entry[2];
+  while (offset < bytes.byteLength) {
+    if (offset + 12 > bytes.byteLength) {
+      throw new Error(`${name}: truncated PNG chunk header.`);
     }
-    return { width, height, channels: 3, bitsPerSample: 8, maxValue: 255, data: rgb, pixelSize: null };
-  }
-  const alpha = image.channels === 2 || image.channels === 4;
-  const channels = alpha ? image.channels - 1 : image.channels;
-  let data = image.channels === 1 ? unpackPngBits(image.data, width, height, depth) : image.data;
-  if (alpha) {
-    const Typed = depth === 16 ? Uint16Array : Uint8Array;
-    const stripped = new Typed(width * height * channels);
-    for (let i = 0, o = 0; i < data.length; i += image.channels) {
-      for (let c = 0; c < channels; c++) stripped[o++] = data[i + c];
+    const length = view.getUint32(offset, false);
+    const chunkEnd = offset + 12 + length;
+    if (chunkEnd > bytes.byteLength) {
+      throw new Error(`${name}: truncated PNG chunk payload.`);
     }
-    data = stripped;
+    const type = String.fromCharCode(bytes[offset + 4], bytes[offset + 5], bytes[offset + 6], bytes[offset + 7]);
+    const expectedCrc = view.getUint32(offset + 8 + length, false);
+    const actualCrc = crc32(bytes.subarray(offset + 4, offset + 8 + length));
+    if (actualCrc !== expectedCrc) {
+      throw new Error(`${name}: PNG chunk '${type}' failed CRC32 verification.`);
+    }
+    if (offset === 8) {
+      if (type !== "IHDR" || length !== 13) {
+        throw new Error(`${name}: PNG does not begin with a valid IHDR chunk.`);
+      }
+      sawIhdr = true;
+      width = view.getUint32(offset + 8, false);
+      height = view.getUint32(offset + 12, false);
+      bitDepth = bytes[offset + 16];
+      if (!width || !height) {
+        throw new Error(`${name}: PNG has zero width or height.`);
+      }
+      const estBytes = width * height * 4 * (bitDepth === 16 ? 2 : 1);
+      if (estBytes > MAX_SECTION_DECODED_BYTES) {
+        throw new Error(`${name} (${width} × ${height}) exceeds the 256 MiB section memory limit.`);
+      }
+    }
+    offset = chunkEnd;
+    if (type === "IEND") {
+      sawIend = true;
+      break;
+    }
   }
-  const maxValue = depth === 16 ? 65535 : depth < 8 ? (1 << depth) - 1 : 255;
-  return { width, height, channels, bitsPerSample: depth, maxValue, data, pixelSize: null };
+  if (!sawIhdr || !sawIend) {
+    throw new Error(`${name}: PNG is missing required IHDR or IEND chunk.`);
+  }
+  return { width, height, bitDepth };
+}
+
+/**
+ * Decodes a PNG buffer in pure Node using pngjs@7.0.0 with strict chunk CRC32 verification
+ * and Chromium webapp parity (zeros RGB on fully transparent alpha === 0 pixels, including tRNS).
+ */
+export function decodePngSection(bytes, name) {
+  const input = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const { width: ihdrWidth, height: ihdrHeight } = verifyPngStructure(input, name);
+  const decoded = PNG.sync.read(Buffer.from(input.buffer, input.byteOffset, input.byteLength), {
+    checkCRC: true,
+    skipRescale: false,
+  });
+  if (decoded.width !== ihdrWidth || decoded.height !== ihdrHeight) {
+    throw new Error(`${name}: decoded PNG dimensions (${decoded.width} × ${decoded.height}) do not match IHDR (${ihdrWidth} × ${ihdrHeight}).`);
+  }
+  const pixels = decoded.width * decoded.height;
+  const rgb = new Uint8Array(pixels * 3);
+  for (let i = 0; i < pixels; i++) {
+    const a = decoded.data[i * 4 + 3];
+    if (a === 0) {
+      rgb[i * 3] = 0;
+      rgb[i * 3 + 1] = 0;
+      rgb[i * 3 + 2] = 0;
+    } else {
+      rgb[i * 3] = decoded.data[i * 4];
+      rgb[i * 3 + 1] = decoded.data[i * 4 + 1];
+      rgb[i * 3 + 2] = decoded.data[i * 4 + 2];
+    }
+  }
+  return {
+    width: decoded.width,
+    height: decoded.height,
+    channels: 3,
+    bitsPerSample: 8,
+    maxValue: 255,
+    data: rgb,
+    pixelSize: null,
+  };
 }
 
 /** Decodes a JPEG buffer in pure Node into interleaved RGB pixels. */
@@ -325,6 +560,7 @@ export async function runHisto2Mri({
   options = {},
   onLog = () => {},
   renameFn = rename,
+  writeFileFn = writeFile,
 } = {}) {
   if (typeof mriPath !== "string" || !mriPath.trim()) {
     throw new Error("MRI NIfTI path is required.");
@@ -338,6 +574,9 @@ export async function runHisto2Mri({
   for (const path of sectionPaths) {
     sections.push(await readSectionFile(path));
   }
+
+  // Allocate unique, case-insensitive collision-free output stems BEFORE registration.
+  const sectionOutputNames = allocateUniqueOutputNames(sections.map(({ name }) => name));
 
   const defaultIndex = Math.floor(mri.volume.dims[parsed.axis] / 2);
   const pixelSize = parsed.pixelSize ?? inferSquareOmePixelSize(sections);
@@ -369,7 +608,7 @@ export async function runHisto2Mri({
   });
 
   // Preflight every section before claiming OUTPUT_DIR / running Greedy
-  for (const [n, { name, image }] of sections.entries()) {
+  for (const [n, { image }] of sections.entries()) {
     preflightSection({ volume: mri.volume, section: image, plane: planeOf(n), options: settings.options });
   }
 
@@ -382,7 +621,6 @@ export async function runHisto2Mri({
     const outputs = [];
     const registered = [];
     const reports = [];
-    const usedNames = new Set();
 
     for (const [n, { name, image }] of sections.entries()) {
       onLog(`Registering ${name} (slice ${planeOf(n).index}, axis ${axisName})…`);
@@ -404,13 +642,7 @@ export async function runHisto2Mri({
       });
       reports.push(report);
 
-      let names = outputNames(name);
-      if (usedNames.has(names.registration)) {
-        const numbered = name.replace(/(\.[^.]+)$/, `_${n + 1}$1`);
-        names = outputNames(numbered);
-      }
-      usedNames.add(names.registration);
-
+      const names = sectionOutputNames[n];
       const bytesByKind = {
         warped: new Uint8Array(gzipSync(rgbaNifti(warped.rgba, [warped.nu, warped.nv, 1], planeSform(result.plane, warped.spacing)))),
         plane: new Uint8Array(gzipSync(images.plane)),
@@ -435,7 +667,7 @@ export async function runHisto2Mri({
       outputs.push({ name: "sections_in_mri.nii.gz", bytes: new Uint8Array(gzipSync(bytes)) });
     }
 
-    const written = await writeStagedOutputs(claim.directory, outputs, { renameFn });
+    const written = await writeStagedOutputs(claim.directory, outputs, { renameFn, writeFileFn });
     succeeded = true;
     return {
       outputDir: claim.directory,

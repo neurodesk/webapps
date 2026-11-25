@@ -2,7 +2,8 @@
 // Runs the exact same MetroloJ_QC bead PSF FWHM and field illumination uniformity pipelines
 // as the Microscope QC web application.
 import { randomUUID } from "node:crypto";
-import { mkdir, open, readFile, readdir, rename, rm, rmdir, stat, writeFile } from "node:fs/promises";
+import { rmdirSync, unlinkSync } from "node:fs";
+import { lstat, mkdir, open, readFile, readdir, rename, rm, rmdir, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { inspectTiffStack, readTiffStack, writeTiffStack } from "@neurodesk/webapp-components/file-io/tiff";
 import packageJson from "../package.json" with { type: "json" };
@@ -34,7 +35,7 @@ import {
   reportJson,
 } from "./outputs.js";
 
-const OUTPUT_LOCK_FILE = ".neurodesk-microscope-qc.lock";
+export const OUTPUT_LOCK_FILE = ".neurodesk-cli.lock";
 
 const PSF_ONLY_FLAGS = [
   "microscope",
@@ -53,8 +54,26 @@ const PSF_ONLY_FLAGS = [
 
 const FIELD_ONLY_FLAGS = ["step", "no-blur", "reference-max"];
 
+const ALLOWED_OPTION_KEYS = new Set([
+  "analysis",
+  "offline",
+  ...PSF_ONLY_FLAGS,
+  ...FIELD_ONLY_FLAGS,
+]);
+
+function parseBooleanOpt(raw, flag) {
+  if (raw === undefined) return false;
+  if (typeof raw !== "boolean") {
+    throw new Error(`Option --${flag} must be a boolean, got ${typeof raw}.`);
+  }
+  return raw;
+}
+
 function parseNumberOpt(raw, flag, { min = -Infinity, max = Infinity, exclusiveMin = false, integer = false } = {}) {
   if (raw === undefined) return undefined;
+  if (typeof raw !== "number" && typeof raw !== "string") {
+    throw new Error(`Option --${flag} must be a finite number, got ${typeof raw}.`);
+  }
   const trimmed = String(raw).trim();
   if (!trimmed) throw new Error(`Option --${flag} requires a non-empty value.`);
   const value = Number(trimmed);
@@ -70,8 +89,16 @@ function parseNumberOpt(raw, flag, { min = -Infinity, max = Infinity, exclusiveM
 
 /** Validates all CLI options before touching input files or claiming OUTPUT_DIR. */
 export function parseCliOptions(values = {}) {
+  if (values === null || typeof values !== "object" || Array.isArray(values)) {
+    throw new TypeError("Options must be a plain object.");
+  }
+  for (const key of Object.keys(values)) {
+    if (!ALLOWED_OPTION_KEYS.has(key)) {
+      throw new Error(`Unknown option '--${key}'.`);
+    }
+  }
   const analysis = values.analysis ?? "auto";
-  if (analysis !== "auto" && !(analysis in ANALYSES)) {
+  if (typeof analysis !== "string" || (analysis !== "auto" && !Object.hasOwn(ANALYSES, analysis))) {
     throw new Error(`Option --analysis must be one of auto, ${Object.keys(ANALYSES).join(", ")}.`);
   }
   if (analysis === "psf") {
@@ -84,7 +111,7 @@ export function parseCliOptions(values = {}) {
       if (values[flag] !== undefined) throw new Error(`Option --${flag} is only valid for PSF bead analysis.`);
     }
   }
-  if (values.microscope !== undefined && !(values.microscope in MICROSCOPES)) {
+  if (values.microscope !== undefined && (typeof values.microscope !== "string" || !Object.hasOwn(MICROSCOPES, values.microscope))) {
     throw new Error(`Option --microscope must be one of ${Object.keys(MICROSCOPES).join(", ")}.`);
   }
 
@@ -93,6 +120,11 @@ export function parseCliOptions(values = {}) {
   if (na !== undefined && refractiveIndex !== undefined && na >= refractiveIndex) {
     throw new Error(`Option --na (${na}) must be below --refractive-index (${refractiveIndex}).`);
   }
+
+  const includeSaturated = parseBooleanOpt(values["include-saturated"], "include-saturated");
+  const noBlur = parseBooleanOpt(values["no-blur"], "no-blur");
+  const referenceMax = parseBooleanOpt(values["reference-max"], "reference-max");
+  parseBooleanOpt(values.offline, "offline");
 
   return {
     analysis,
@@ -107,18 +139,19 @@ export function parseCliOptions(values = {}) {
     boxRadius: parseNumberOpt(values["box-radius"], "box-radius", { min: 0, max: 100, exclusiveMin: true }),
     prominence: parseNumberOpt(values.prominence, "prominence", { min: 0, exclusiveMin: true }),
     minR2: parseNumberOpt(values["min-r2"], "min-r2", { min: 0, max: 1 }) ?? 0.95,
-    excludeSaturated: !values["include-saturated"],
+    excludeSaturated: !includeSaturated,
     step: parseNumberOpt(values.step, "step", { min: 1, max: 50, integer: true }) ?? 10,
-    blur: !values["no-blur"],
-    referenceZone: !values["reference-max"],
+    blur: !noBlur,
+    referenceZone: !referenceMax,
     hasPsfFlags: PSF_ONLY_FLAGS.some((flag) => values[flag] !== undefined),
     hasFieldFlags: FIELD_ONLY_FLAGS.some((flag) => values[flag] !== undefined),
   };
 }
 
 /**
- * Exclusively claims `outputDir` with an O_EXCL lock file, cleaning up the lock AND any newly
- * created directory on ANY failure (including write/readdir errors or non-empty directory).
+ * Exclusively claims `outputDir` with the shared `.neurodesk-cli.lock` O_EXCL lock file,
+ * rejecting directory symlinks, registering SIGINT/SIGTERM cleanup handlers while held, and
+ * cleaning up the lock and any newly created directory on error or release.
  */
 export async function claimOutputDirectory(outputDir) {
   if (typeof outputDir !== "string" || !outputDir.trim()) {
@@ -127,7 +160,10 @@ export async function claimOutputDirectory(outputDir) {
   const directory = resolve(outputDir);
   let createdDir = false;
   try {
-    const info = await stat(directory);
+    const info = await lstat(directory);
+    if (info.isSymbolicLink()) {
+      throw new Error(`Output path '${directory}' must not be a symbolic link.`);
+    }
     if (!info.isDirectory()) {
       throw new Error(`Output path '${directory}' exists and is not a directory.`);
     }
@@ -135,14 +171,59 @@ export async function claimOutputDirectory(outputDir) {
     if (error.code !== "ENOENT") throw error;
     await mkdir(directory, { recursive: true });
     createdDir = true;
+    const createdInfo = await lstat(directory);
+    if (createdInfo.isSymbolicLink() || !createdInfo.isDirectory()) {
+      throw new Error(`Output path '${directory}' is not a regular directory.`);
+    }
   }
 
   const lockPath = join(directory, OUTPUT_LOCK_FILE);
   let handle = null;
-  let lockAcquired = false;
+  let lockActive = false;
+  let signalsRegistered = false;
+
+  const cleanupSync = () => {
+    if (!lockActive) return;
+    lockActive = false;
+    try {
+      unlinkSync(lockPath);
+    } catch {
+      // ignore
+    }
+    if (createdDir) {
+      try {
+        rmdirSync(directory);
+      } catch {
+        // leave non-empty dir intact
+      }
+    }
+  };
+
+  const unregisterSignals = () => {
+    if (!signalsRegistered) return;
+    signalsRegistered = false;
+    process.off("SIGINT", onSigInt);
+    process.off("SIGTERM", onSigTerm);
+  };
+
+  const handleSignal = (signal) => {
+    unregisterSignals();
+    cleanupSync();
+    if (process.platform === "win32") {
+      process.exit(signal === "SIGINT" ? 130 : 143);
+    }
+    process.kill(process.pid, signal);
+  };
+  const onSigInt = () => handleSignal("SIGINT");
+  const onSigTerm = () => handleSignal("SIGTERM");
+
   try {
     handle = await open(lockPath, "wx");
-    lockAcquired = true;
+    lockActive = true;
+    process.on("SIGINT", onSigInt);
+    process.on("SIGTERM", onSigTerm);
+    signalsRegistered = true;
+
     await handle.writeFile(`${process.pid}\n${new Date().toISOString()}\n`);
     await handle.close();
     handle = null;
@@ -152,8 +233,10 @@ export async function claimOutputDirectory(outputDir) {
       throw new Error(`Output directory ${directory} is not empty. Choose a new or empty directory.`);
     }
   } catch (error) {
+    unregisterSignals();
     await handle?.close().catch(() => {});
-    if (lockAcquired) {
+    if (lockActive) {
+      lockActive = false;
       await rm(lockPath, { force: true }).catch(() => {});
     }
     if (createdDir) {
@@ -169,7 +252,11 @@ export async function claimOutputDirectory(outputDir) {
     directory,
     createdDir,
     async release({ removeDirIfEmpty = false } = {}) {
-      await rm(lockPath, { force: true }).catch(() => {});
+      unregisterSignals();
+      if (lockActive) {
+        lockActive = false;
+        await rm(lockPath, { force: true }).catch(() => {});
+      }
       if (removeDirIfEmpty && createdDir) {
         await rmdir(directory).catch(() => {});
       }
@@ -178,31 +265,57 @@ export async function claimOutputDirectory(outputDir) {
 }
 
 /**
- * Stages every output file to a `.partial` path first, then renames all files into place.
- * Rolls back already-renamed outputs and removes all `.partial` files if any step fails.
+ * Stages every output file to a `.partial` path first (registering each path BEFORE `writeFile`),
+ * then renames all files into place. On error, unlinks `.partial` files and rolls back ONLY
+ * final outputs this run created (verified by lstat + dev/ino).
  */
-export async function writeStagedOutputs(directory, files, { renameFn = rename } = {}) {
+export async function writeStagedOutputs(directory, files, { renameFn = rename, writeFileFn = writeFile } = {}) {
   const runId = randomUUID().slice(0, 8);
   const staged = [];
   const renamed = [];
+  const seenNames = new Set();
   try {
     for (const { name, bytes } of files) {
+      if (typeof name !== "string" || !name || name.includes("/") || name.includes("\\") || name === "." || name === "..") {
+        throw new Error(`Invalid output filename '${name}'.`);
+      }
+      const lower = name.toLowerCase();
+      if (seenNames.has(lower)) {
+        throw new Error(`Duplicate output filename '${name}'.`);
+      }
+      seenNames.add(lower);
+
       const partialPath = join(directory, `.${name}.${runId}.partial`);
       const finalPath = join(directory, name);
-      await writeFile(partialPath, bytes, { flag: "wx" });
-      staged.push({ name, partialPath, finalPath });
+      const item = { name, partialPath, finalPath };
+      staged.push(item);
+      await writeFileFn(partialPath, bytes, { flag: "wx" });
     }
     for (const item of staged) {
+      const existing = await lstat(item.finalPath).catch((error) => {
+        if (error.code === "ENOENT") return null;
+        throw error;
+      });
+      if (existing) {
+        throw new Error(`Refusing to overwrite existing output '${item.name}'.`);
+      }
+      const stagedInfo = await lstat(item.partialPath);
       await renameFn(item.partialPath, item.finalPath);
-      renamed.push(item.finalPath);
+      renamed.push({ finalPath: item.finalPath, dev: stagedInfo.dev, ino: stagedInfo.ino });
     }
     return staged.map((item) => item.name);
   } catch (error) {
     for (const item of staged) {
-      await rm(item.partialPath, { force: true }).catch(() => {});
+      const info = await lstat(item.partialPath).catch(() => null);
+      if (info && info.isFile() && !info.isSymbolicLink()) {
+        await unlink(item.partialPath).catch(() => {});
+      }
     }
-    for (const finalPath of renamed) {
-      await rm(finalPath, { force: true }).catch(() => {});
+    for (const { finalPath, dev, ino } of renamed) {
+      const info = await lstat(finalPath).catch(() => null);
+      if (info && info.isFile() && !info.isSymbolicLink() && info.dev === dev && info.ino === ino) {
+        await unlink(finalPath).catch(() => {});
+      }
     }
     throw error;
   }
