@@ -997,12 +997,27 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
   if (!changedPaths.length) return everything('no changed paths: no base revision, an unreadable diff, or a full run');
 
   const appIds = new Set(registry.apps.map((app) => app.id));
-  const reach = graph && new Map(registry.apps.map((app) => [app.id, reachableWithRuntime(graph, `apps/${app.id}`)]));
+  const reach = graph && new Map(registry.apps.map((app) => {
+    const reached = reachableWithRuntime(graph, `apps/${app.id}`);
+    for (const extra of graph.provisionerAppEdges?.get(app.id) ?? []) {
+      for (const node of reachableWithRuntime(graph, extra)) reached.add(node);
+    }
+    return [app.id, reached];
+  }));
   const catalog = graph && reachableWithRuntime(graph, CATALOG);
   // Everything per-app CI jobs reach, keeping eager/top-level workspace imports
-  // of scripts/e2e-test-data.mjs while skipping only lazy per-app provisioner
-  // workspace references.
+  // of scripts/e2e-test-data.mjs while attributing lazy per-app provisioner
+  // workspace references to their owning apps (or falling back to shared when
+  // an owner is not a registered app).
   const catalogShared = graph && catalogSharedNodes(graph);
+  if (graph?.provisionerAppEdges) {
+    for (const [ownerApp, targets] of graph.provisionerAppEdges) {
+      if (appIds.has(ownerApp)) continue;
+      for (const target of targets) {
+        for (const node of reachableWithRuntime(graph, target)) catalogShared.add(node);
+      }
+    }
+  }
   const site = graph && reachableWithRuntime(graph, SITE);
   const appReasons = new Map();
   const editedApps = new Set();
@@ -1104,6 +1119,10 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
       continue;
     }
     if (path === E2E_TEST_DATA && manifests.get(path)) {
+      if (graph?.e2eProvisionersNarrowable === false) {
+        shared(`${path}: callers import provisioners directly or bypass provisionTestData`);
+        continue;
+      }
       const impact = e2eTestDataImpact(manifests.get(path));
       if (impact.shared) {
         shared(`${path}: ${impact.shared}`);

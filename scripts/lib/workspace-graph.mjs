@@ -95,13 +95,12 @@ function namedByCommands(commands, rootScripts, root = null, rootPackageName = n
     for (const match of current.cmd.matchAll(ROOT_NAMED)) if (match[1]) named.add(match[1]);
     for (const [, rootFile] of current.cmd.matchAll(ROOT_PATH)) named.add(rootFile);
     const nonRootWorkingDir = isStaticNonRootDir(current.workingDir, root);
-    const envKey = stableEnvKey(current.env);
-    for (const script of extractPnpmRootScripts(current.cmd, { requireRootFlag: nonRootWorkingDir, baseDir: current.workingDir ?? '.', root, rootPackageName, rootScripts, stepEnv: current.env ?? null })) {
+    for (const { script, env } of extractPnpmRootScripts(current.cmd, { requireRootFlag: nonRootWorkingDir, baseDir: current.workingDir ?? '.', root, rootPackageName, rootScripts, stepEnv: current.env ?? null })) {
       expanded.add(script);
-      const visitKey = `${script}\0${envKey}`;
+      const visitKey = `${script}\0${stableEnvKey(env)}`;
       if (!visited.has(visitKey)) {
         visited.add(visitKey);
-        if (script !== ANY_ROOT_SCRIPT && rootScripts[script]) pending.push({ cmd: rootScripts[script], workingDir: null, env: current.env ?? null });
+        if (script !== ANY_ROOT_SCRIPT && rootScripts[script]) pending.push({ cmd: rootScripts[script], workingDir: null, env });
       }
     }
   }
@@ -431,7 +430,10 @@ function astMayMutateProcessArgv(ast, allowGuardIf = false) {
       for (const item of node) scan(item, ancestors);
       return;
     }
-    if (allowGuardIf && node.type === 'IfStatement' && isStrictEsmMainGuardSyntax(node)) return;
+    if (allowGuardIf && node.type === 'IfStatement' && isStrictEsmMainGuardSyntax(node)) {
+      if (node.alternate) scan(node.alternate, [...ancestors, node]);
+      return;
+    }
     if (node.type === 'Identifier') {
       const parent = ancestors[ancestors.length - 1];
       const isNonComputedProp =
@@ -625,44 +627,46 @@ function collectTopLevelBindings(ast) {
   return { bindings, exportedNames };
 }
 
-// Return AST ranges in `scripts/lib/e2e-test-data.mjs` provably belonging only
-// to individual app provisioners: direct `provisioners.<app>[.cpu].provision`
-// function bodies and private (non-exported) top-level functions referenced
-// exclusively from inside those provision bodies.
+// Return AST ranges and owning app ids in `scripts/lib/e2e-test-data.mjs`
+// provably belonging only to individual app provisioners: direct
+// `provisioners.<app>[.cpu].provision` function bodies and private (non-exported)
+// top-level functions referenced exclusively from inside those provision bodies.
 function computeProvisionerOnlyRanges(ast) {
-  if (!ast) return [];
+  if (!ast) return { ok: false, entries: [] };
   const { bindings, exportedNames } = collectTopLevelBindings(ast);
   const provisionersObj = bindings.get('provisioners');
-  if (provisionersObj?.type !== 'ObjectExpression') return [];
+  if (provisionersObj?.type !== 'ObjectExpression') return { ok: false, entries: [] };
   // Bail out if `provisioners` is re-exported under another name or as default.
   for (const stmt of ast.body ?? []) {
     if (stmt.type === 'ExportNamedDeclaration') {
       for (const spec of stmt.specifiers ?? []) {
-        if (spec.local?.name === 'provisioners' && spec.exported?.name !== 'provisioners') return [];
+        if (spec.local?.name === 'provisioners' && spec.exported?.name !== 'provisioners') return { ok: false, entries: [] };
       }
     } else if (stmt.type === 'ExportDefaultDeclaration' && stmt.declaration?.type === 'Identifier' && stmt.declaration.name === 'provisioners') {
-      return [];
+      return { ok: false, entries: [] };
     }
   }
-  const provisionFnNodes = new Set();
-  const provisionIdentRefNodes = new Set();
-  const recordProvisionProp = (obj) => {
+  const provisionFnApps = new Map();
+  const provisionIdentApps = new Map();
+  const recordProvisionProp = (obj, appId) => {
     if (obj?.type !== 'ObjectExpression') return;
     for (const prop of obj.properties ?? []) {
       if (prop.type !== 'Property' || prop.computed) continue;
       const key = prop.key?.type === 'Identifier' ? prop.key.name : prop.key?.type === 'Literal' ? String(prop.key.value) : null;
       if (key === 'provision') {
-        if (prop.value?.type === 'FunctionExpression' || prop.value?.type === 'ArrowFunctionExpression') provisionFnNodes.add(prop.value);
-        else if (prop.value?.type === 'Identifier') provisionIdentRefNodes.add(prop.value);
+        if (prop.value?.type === 'FunctionExpression' || prop.value?.type === 'ArrowFunctionExpression') provisionFnApps.set(prop.value, appId);
+        else if (prop.value?.type === 'Identifier') provisionIdentApps.set(prop.value, appId);
       } else if (key === 'cpu') {
-        recordProvisionProp(prop.value);
+        recordProvisionProp(prop.value, appId);
       }
     }
   };
   for (const prop of provisionersObj.properties ?? []) {
-    if (prop.type === 'Property') recordProvisionProp(prop.value);
+    if (prop.type !== 'Property' || prop.computed) return { ok: false, entries: [] };
+    const appId = prop.key?.type === 'Identifier' ? prop.key.name : prop.key?.type === 'Literal' ? String(prop.key.value) : null;
+    if (!appId) return { ok: false, entries: [] };
+    recordProvisionProp(prop.value, appId);
   }
-  if (provisionFnNodes.size === 0 && provisionIdentRefNodes.size === 0) return [];
 
   const privateFns = new Map();
   for (const [name, node] of bindings) {
@@ -674,6 +678,7 @@ function computeProvisionerOnlyRanges(ast) {
     : null;
   const nonProvisionerReferenced = new Set();
   const privateFnDeps = new Map([...privateFns.keys()].map((name) => [name, new Set()]));
+  const privateFnApps = new Map([...privateFns.keys()].map((name) => [name, new Set()]));
   let provisionersUsedAtStartup = false;
 
   walkAstIdentifiers(ast, (idNode, ancestors) => {
@@ -685,8 +690,15 @@ function computeProvisionerOnlyRanges(ast) {
       provisionersUsedAtStartup = true;
       return;
     }
-    if (provisionIdentRefNodes.has(idNode)) return;
-    if (ancestors.some((a) => provisionFnNodes.has(a))) return;
+    if (provisionIdentApps.has(idNode)) {
+      if (privateFnApps.has(idNode.name)) privateFnApps.get(idNode.name).add(provisionIdentApps.get(idNode));
+      return;
+    }
+    const enclosingProvision = ancestors.find((a) => provisionFnApps.has(a));
+    if (enclosingProvision) {
+      if (privateFnApps.has(idNode.name)) privateFnApps.get(idNode.name).add(provisionFnApps.get(enclosingProvision));
+      return;
+    }
     const enclosingPrivate = ancestors.find((a) => privateFnToName.has(a));
     if (enclosingPrivate) {
       privateFnDeps.get(privateFnToName.get(enclosingPrivate)).add(idNode.name);
@@ -695,7 +707,7 @@ function computeProvisionerOnlyRanges(ast) {
     nonProvisionerReferenced.add(idNode.name);
   });
 
-  if (provisionersUsedAtStartup) return [];
+  if (provisionersUsedAtStartup) return { ok: false, entries: [] };
 
   for (let changed = true; changed;) {
     changed = false;
@@ -707,16 +719,30 @@ function computeProvisionerOnlyRanges(ast) {
         }
       }
     }
+    for (const [caller, apps] of privateFnApps) {
+      for (const dep of privateFnDeps.get(caller) ?? []) {
+        const depApps = privateFnApps.get(dep);
+        if (!depApps) continue;
+        for (const appId of apps) {
+          if (!depApps.has(appId)) {
+            depApps.add(appId);
+            changed = true;
+          }
+        }
+      }
+    }
   }
 
-  const ranges = [];
-  for (const fn of provisionFnNodes) {
-    if (Array.isArray(fn.range)) ranges.push(fn.range);
+  const entries = [];
+  for (const [fn, appId] of provisionFnApps) {
+    if (Array.isArray(fn.range)) entries.push({ range: fn.range, apps: new Set([appId]) });
   }
   for (const [name, fn] of privateFns) {
-    if (!nonProvisionerReferenced.has(name) && Array.isArray(fn.range)) ranges.push(fn.range);
+    if (!nonProvisionerReferenced.has(name) && Array.isArray(fn.range)) {
+      entries.push({ range: fn.range, apps: privateFnApps.get(name) ?? new Set() });
+    }
   }
-  return ranges;
+  return { ok: true, entries };
 }
 
 // Return AST ranges of top-level functions in an imported root library module
@@ -1633,6 +1659,25 @@ function filterTargetsRoot(filterVal, cwdDirs, root, rootPackageName) {
   return false;
 }
 
+function effectiveChildEnv(words, runnerIdx, command, stepEnv) {
+  if (!stepEnv) return null;
+  if (splitShellCommands(command).length !== 1 || /`|\$\(/.test(command)) return null;
+  const merged = { ...stepEnv };
+  for (let i = 0; i < runnerIdx; i++) {
+    const word = words[i];
+    const assign = word.match(/^([A-Za-z_]\w*)=(.*)$/);
+    if (assign) {
+      const [, name, val] = assign;
+      if (/[$`*]/.test(val) || val.includes('${{')) return null;
+      merged[name] = val;
+      continue;
+    }
+    // Wrappers like `env`, `command`, `timeout`, `if`, etc. can alter env.
+    if (word === 'env' || word === 'export' || word === 'unset') return null;
+  }
+  return merged;
+}
+
 // Extract root package.json script names invoked via `pnpm`, allowing shell
 // wrappers (`if`, `elif`, `while`, `until`, `timeout`, `bash -c`, `eval`,
 // `$(...)`, backticks), `cd` back to the repository root, and pnpm flags
@@ -1709,6 +1754,7 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
       }
       const kind = PNPM_BIN.test(words[start]) ? 'pnpm' : NPM_BIN.test(words[start]) ? 'npm' : YARN_BIN.test(words[start]) ? 'yarn' : null;
       if (!kind) continue;
+      const childEnv = effectiveChildEnv(words, start, command, stepEnv);
       let idx = start + 1;
       let hasRootFlag = false;
       let hasNonRootFilter = false;
@@ -1772,14 +1818,16 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
         }
         if (hasRootFlag || (!hasNonRootFilter && !hasNonRootDir && mayRunAtRoot)) {
           if (/^[A-Za-z0-9_@][\w.:/@-]*$/.test(word)) {
-            scripts.push(word);
+            scripts.push({ script: word, env: childEnv });
           } else if (/[$`*]|\$\{\{/.test(word)) {
             const val = resolveSingleCommandEnvVar(word, command, stepEnv);
             if (val !== null && /^[A-Za-z0-9_@][\w.:/@-]*$/.test(val)) {
-              scripts.push(val);
+              scripts.push({ script: val, env: childEnv });
             } else {
-              scripts.push(ANY_ROOT_SCRIPT);
-              if (rootScripts) scripts.push(...Object.keys(rootScripts));
+              scripts.push({ script: ANY_ROOT_SCRIPT, env: null });
+              if (rootScripts) {
+                for (const key of Object.keys(rootScripts)) scripts.push({ script: key, env: null });
+              }
             }
           }
         }
@@ -1802,12 +1850,11 @@ function expandedCommandTexts(commands, rootScripts, root = null, rootPackageNam
     const current = pending.pop();
     entries.push(current);
     const nonRootWorkingDir = isStaticNonRootDir(current.workingDir, root);
-    const envKey = stableEnvKey(current.env);
-    for (const script of extractPnpmRootScripts(current.cmd, { requireRootFlag: nonRootWorkingDir, baseDir: current.workingDir ?? '.', root, rootPackageName, rootScripts, stepEnv: current.env ?? null })) {
-      const visitKey = `${script}\0${envKey}`;
+    for (const { script, env } of extractPnpmRootScripts(current.cmd, { requireRootFlag: nonRootWorkingDir, baseDir: current.workingDir ?? '.', root, rootPackageName, rootScripts, stepEnv: current.env ?? null })) {
+      const visitKey = `${script}\0${stableEnvKey(env)}`;
       if (!visited.has(visitKey)) {
         visited.add(visitKey);
-        if (script !== ANY_ROOT_SCRIPT && rootScripts[script]) pending.push({ cmd: rootScripts[script], workingDir: null, env: current.env ?? null });
+        if (script !== ANY_ROOT_SCRIPT && rootScripts[script]) pending.push({ cmd: rootScripts[script], workingDir: null, env });
       }
     }
   }
@@ -1824,7 +1871,7 @@ function expandedRootScriptsFromWorkspace(commands, rootScripts, { baseDir = '.'
   const texts = [];
   const pending = [];
   for (const cmd of commands) {
-    for (const script of extractPnpmRootScripts(cmd, { requireRootFlag: true, baseDir, root, rootPackageName, rootScripts })) {
+    for (const { script } of extractPnpmRootScripts(cmd, { requireRootFlag: true, baseDir, root, rootPackageName, rootScripts })) {
       if (!names.has(script)) {
         names.add(script);
         if (script !== ANY_ROOT_SCRIPT && rootScripts[script]) pending.push(rootScripts[script]);
@@ -1834,7 +1881,7 @@ function expandedRootScriptsFromWorkspace(commands, rootScripts, { baseDir = '.'
   while (pending.length) {
     const command = pending.pop();
     texts.push(command);
-    for (const script of extractPnpmRootScripts(command, { root, rootPackageName, rootScripts })) {
+    for (const { script } of extractPnpmRootScripts(command, { root, rootPackageName, rootScripts })) {
       if (!names.has(script)) {
         names.add(script);
         if (script !== ANY_ROOT_SCRIPT && rootScripts[script]) pending.push(rootScripts[script]);
@@ -2198,16 +2245,46 @@ export async function loadConservativeWorkspaceGraph(root) {
     }
     return false;
   };
+  const provisionerAppEdges = new Map();
+  let e2eProvisionersNarrowable = true;
   const rangeContains = (outer, inner) => outer[0] <= inner[0] && inner[1] <= outer[1];
   for (const [file, { ast, workspaceRefs }] of analyzedRootFiles) {
-    if (workspaceRefs.length === 0) continue;
-    let skipRanges = [];
     if (file === 'scripts/lib/e2e-test-data.mjs') {
       const mode = rootFileImportModes.get(file);
-      if (!catalogDirect.has(file) && mode && !mode.allExports && !mode.names.has('provisioners')) {
-        skipRanges = computeProvisionerOnlyRanges(ast);
+      const callerSafe = !catalogDirect.has(file) && Boolean(mode) && !mode.allExports && !mode.names.has('provisioners');
+      const prov = callerSafe ? computeProvisionerOnlyRanges(ast) : { ok: false, entries: [] };
+      e2eProvisionersNarrowable = prov.ok;
+      if (!prov.ok || workspaceRefs.length === 0) continue;
+      const allTargets = new Set();
+      const eagerTargets = new Set();
+      const targetOwners = new Map();
+      for (const { target, range } of workspaceRefs) {
+        allTargets.add(target);
+        const matching = prov.entries.filter((entry) => rangeContains(entry.range, range));
+        if (matching.length === 0 || matching.some((entry) => entry.apps.size === 0)) {
+          eagerTargets.add(target);
+        } else {
+          const owners = targetOwners.get(target) ?? new Set();
+          for (const entry of matching) for (const appId of entry.apps) owners.add(appId);
+          targetOwners.set(target, owners);
+        }
       }
-    } else if (!catalogDirect.has(file) && /^(?:scripts|test-utils|registry|test)\//.test(file)) {
+      const lazyTargets = new Set([...allTargets].filter((target) => !eagerTargets.has(target)));
+      if (lazyTargets.size > 0) {
+        lazyWorkspaceEdges.set(file, lazyTargets);
+        for (const target of lazyTargets) {
+          for (const appId of targetOwners.get(target) ?? []) {
+            const set = provisionerAppEdges.get(appId) ?? new Set();
+            set.add(target);
+            provisionerAppEdges.set(appId, set);
+          }
+        }
+      }
+      continue;
+    }
+    if (workspaceRefs.length === 0) continue;
+    let skipRanges = [];
+    if (!catalogDirect.has(file) && /^(?:scripts|test-utils|registry|test)\//.test(file)) {
       const mode = rootFileImportModes.get(file);
       if (mode && !mode.allExports && mode.names.size > 0) {
         skipRanges = computeUnreachableExportRanges(ast, mode.names, coLoadedMutatesArgv(file));
@@ -2250,6 +2327,8 @@ export async function loadConservativeWorkspaceGraph(root) {
     nodes: Object.freeze(nodes),
     edges,
     lazyWorkspaceEdges,
+    provisionerAppEdges,
+    e2eProvisionersNarrowable,
     runtimeWorkspaceEdges,
     externalImporterDeps,
     rootScriptsRun,
