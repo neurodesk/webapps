@@ -207,13 +207,21 @@ export function expectedApps({ apps, changedPaths, workspace, lockClosures = nul
   return { expected, exempt, unattributed: changedPaths.filter((path) => !owned.has(path)) };
 }
 
+const LINT_TOOLING = /^scripts\/(?:lint\.mjs$|quality\/)/;
+
 // Rule families the oracle has no independent expectation for: a row whose
 // plan narrowed through one of them reads `0 misses` without being checked.
-// `manifests` maps a changed file to its { before, after } texts.
-export function uncheckedRules({ plan, changedPaths, manifests }) {
+// `manifests` maps a changed file to its { before, after } texts, and
+// `catalogExcluded` (optional) holds root paths excluded by the per-app
+// catalogue traversal cutoff.
+export function uncheckedRules({ plan, changedPaths, manifests, catalogExcluded = null }) {
   if (plan.reasons.fallback) return [];
   const unchecked = [];
   if (changedPaths.includes('.github/workflows/ci.yml')) unchecked.push('ci.yml jobs');
+  if (changedPaths.includes('pnpm-workspace.yaml')) unchecked.push('pnpm-workspace.yaml');
+  if (changedPaths.includes('scripts/lib/e2e-test-data.mjs')) unchecked.push('e2e-test-data provisioners');
+  if (changedPaths.some((path) => LINT_TOOLING.test(path))) unchecked.push('lint tooling');
+  if (catalogExcluded && changedPaths.some((path) => catalogExcluded.has(path))) unchecked.push('catalogue traversal');
   const registry = manifests.get('registry/apps.yml');
   if (registry) {
     try {

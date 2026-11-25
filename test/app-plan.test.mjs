@@ -7,7 +7,7 @@ import { dirname, join, relative as relativePath, resolve as resolvePath } from 
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { parse, stringify } from 'yaml';
-import { AUTOMATION_CATALOG_READERS, changedManifests, changedPathsFromGit, CI_JOB_SCOPES, CLASSIFIED_ENTRY_FIELDS, createAppPlan, e2eTestDataImpact, EASTER_EGG_INPUTS, EASTER_EGG_JOB, EASTER_EGG_OUTPUT, EASTER_EGG_PACKAGES, easterEggCannotRead, HANDOFF_CATALOG_READERS, WORKSPACE_MANIFESTS, INDEPENDENT_ROOT_DEV_DEPENDENCIES, packageTestsCanSkipOnDraft, RUNTIME_MANIFEST_READERS, UnreadableDiffError, SITE_DATA_KEYS, SITE_KEY_READERS, SITE_ONLY_FILES, SITE_THEME_CONSUMERS, SITE_THEME_FILES, workspaceConfigImpact } from '../scripts/lib/app-plan.mjs';
+import { AUTOMATION_CATALOG_READERS, catalogReachable, changedManifests, changedPathsFromGit, CI_JOB_SCOPES, CLASSIFIED_ENTRY_FIELDS, createAppPlan, e2eTestDataImpact, EASTER_EGG_INPUTS, EASTER_EGG_JOB, EASTER_EGG_OUTPUT, EASTER_EGG_PACKAGES, easterEggCannotRead, HANDOFF_CATALOG_READERS, WORKSPACE_MANIFESTS, INDEPENDENT_ROOT_DEV_DEPENDENCIES, packageTestsCanSkipOnDraft, RUNTIME_MANIFEST_READERS, UnreadableDiffError, SITE_DATA_KEYS, SITE_KEY_READERS, SITE_ONLY_FILES, SITE_THEME_CONSUMERS, SITE_THEME_FILES, workspaceConfigImpact } from '../scripts/lib/app-plan.mjs';
 import { siteCheckApps, smokeApps } from '../scripts/lib/smoke-apps.mjs';
 import { loadAppInformation } from '../scripts/lib/app-information.mjs';
 import { hostedThemeOptions } from '../scripts/lib/catalog-sites.mjs';
@@ -2697,7 +2697,7 @@ test('an app runs its @heavy browser tests only when the change edits it, a fail
   assert.ok(createAppPlan(registry, ['apps/sdc/src/main.js'], workspace).gpuApps.include.every((entry) => !('heavy_tests' in entry)));
 });
 
-test('pnpm-workspace.yaml narrows when only minimumReleaseAgeExclude changes', async () => {
+test('pnpm-workspace.yaml narrows only for valid exact-version minimumReleaseAgeExclude relaxations and unlocked removals', async () => {
   const registry = await loadAppsRegistry();
   const workspace = await graph;
   const before = await readFile(new URL('../pnpm-workspace.yaml', import.meta.url), 'utf8');
@@ -2711,28 +2711,46 @@ test('pnpm-workspace.yaml narrows when only minimumReleaseAgeExclude changes', a
   assert.equal(narrowed.site, false);
   assert.equal(narrowed.reasons.fallback, null);
 
-  // Removing the key or editing another setting falls back to the complete catalog.
-  const withoutKey = stringify({ ...parsed, minimumReleaseAgeExclude: undefined });
-  assert.equal(workspaceConfigImpact({ before, after: withoutKey }).scoped, true);
+  // Removing an exclusion whose package@version is still resolved in pnpm-lock.yaml
+  // (or without a head lockfile) falls back because frozen install rechecks release age.
+  const withoutBrainchop = stringify({
+    ...parsed,
+    minimumReleaseAgeExclude: parsed.minimumReleaseAgeExclude.filter((entry) => !entry.startsWith('@brainchop/core@')),
+  });
+  assert.match(workspaceConfigImpact({ before, after: withoutBrainchop }).shared, /without a head lockfile/);
+  const lockWithBrainchop = stringify({ lockfileVersion: '9.0', packages: { '@brainchop/core@1.0.0': {} } });
+  assert.match(workspaceConfigImpact({ before, after: withoutBrainchop, lockAfter: lockWithBrainchop }).shared, /still resolved by pnpm-lock\.yaml/);
+  const lockWithoutBrainchop = stringify({ lockfileVersion: '9.0', packages: { 'other@1.0.0': {} } });
+  assert.deepEqual(workspaceConfigImpact({ before, after: withoutBrainchop, lockAfter: lockWithoutBrainchop }), { scoped: true });
+
+  // Invalid specs, duplicates, other settings, YAML merge keys, and anchors/aliases fall back.
   for (const [label, edit] of [
     ['packages', (doc) => ({ ...doc, packages: [...doc.packages, 'extra/*'] })],
     ['allowBuilds', (doc) => ({ ...doc, allowBuilds: { ...doc.allowBuilds, esbuild: false } })],
     ['overrides', (doc) => ({ ...doc, overrides: { ...doc.overrides, pako: '2.1.1' } })],
     ['unknown key', (doc) => ({ ...doc, hoist: false })],
     ['non-string exclusion', (doc) => ({ ...doc, minimumReleaseAgeExclude: [123] })],
+    ['non-exact latest tag', (doc) => ({ ...doc, minimumReleaseAgeExclude: [...doc.minimumReleaseAgeExclude, 'foo@latest'] })],
+    ['semver range', (doc) => ({ ...doc, minimumReleaseAgeExclude: [...doc.minimumReleaseAgeExclude, 'foo@^1.0.0'] })],
+    ['duplicate package name', (doc) => ({ ...doc, minimumReleaseAgeExclude: [...doc.minimumReleaseAgeExclude, 'foo@1.0.0', 'foo@2.0.0'] })],
   ]) {
     const after = stringify(edit(parsed));
     const fallback = createAppPlan(registry, ['pnpm-workspace.yaml'], workspace, new Map([['pnpm-workspace.yaml', { before, after }]]));
     assert.equal(fallback.allApps, true, label);
     assert.match(fallback.reasons.fallback, /^pnpm-workspace\.yaml:/, label);
   }
+  const quotedMerge = 'packages:\n  - apps/*\n"<<":\n  recursiveInstall: false\n';
+  const unquotedMerge = 'packages:\n  - apps/*\n<<:\n  recursiveInstall: false\n';
+  assert.match(workspaceConfigImpact({ before: quotedMerge, after: unquotedMerge }).shared, /merge keys/);
+  const withAnchor = 'packages:\n  - apps/*\nminimumReleaseAgeExclude:\n  - &pkg foo@1.0.0\n';
+  assert.match(workspaceConfigImpact({ before, after: withAnchor }).shared, /anchors/);
   assert.match(workspaceConfigImpact({ before, after: ': bad: [yaml' }).shared, /does not parse/);
   assert.match(workspaceConfigImpact({ before, after: '- list\n' }).shared, /not a YAML mapping/);
   // Without before/after texts, pnpm-workspace.yaml falls back conservatively.
   assert.equal(createAppPlan(registry, ['pnpm-workspace.yaml'], workspace).allApps, true);
 });
 
-test('scripts/lib/e2e-test-data.mjs narrows to apps whose provisioner entries changed', async () => {
+test('scripts/lib/e2e-test-data.mjs narrows to apps whose pure provisioner entries changed', async () => {
   const registry = await loadAppsRegistry();
   const workspace = await graph;
   const before = await readFile(new URL('../scripts/lib/e2e-test-data.mjs', import.meta.url), 'utf8');
@@ -2752,7 +2770,7 @@ test('scripts/lib/e2e-test-data.mjs narrows to apps whose provisioner entries ch
   const removeDenoise = before.replace('  denoise: { env: [], provision: async () => ({}) },\n', '');
   assert.deepEqual(e2eTestDataImpact({ before, after: removeDenoise }), { changed: ['denoise'] });
 
-  // Editing only unpublished reasons selects no apps (workspace-contracts tests it).
+  // Editing only plain-string unpublished reasons selects no apps (workspace-contracts tests it).
   const editUnpublished = before.replace(
     "TOPOFIT_SURFACE_REPLAY: 'OpenRecon validation surfaces, not licensed for release',",
     "TOPOFIT_SURFACE_REPLAY: 'OpenRecon validation surfaces, not licensed for release',\n  NEW_UNPUBLISHED: 'not public',",
@@ -2761,9 +2779,15 @@ test('scripts/lib/e2e-test-data.mjs narrows to apps whose provisioner entries ch
   assert.deepEqual(unpublishedPlan.selected, []);
   assert.equal(unpublishedPlan.site, false);
 
-  // Shared helper edits, structural hazards, self-references, and syntax errors fall back to the whole catalog.
+  // Shared helper edits, load-time side effects, prototype setters, structural hazards, self-references, and syntax errors fall back.
   for (const [label, after] of [
     ['shared helper', before.replace('const flag = (name) => ({ env: [name], provision: async () => ({ [name]: \'1\' }) });', 'const flag = (name) => ({ env: [name], provision: async () => ({ [name]: \'2\' }) });')],
+    ['side-effectful provisioner initializer', before.replace('denoise: { env: [], provision: async () => ({}) },', 'denoise: (globalThis.fetch = undefined, { env: [], provision: async () => ({}) }),')],
+    ['side-effectful unpublished value', before.replace("TOPOFIT_SURFACE_REPLAY: 'OpenRecon validation surfaces, not licensed for release',", "TOPOFIT_SURFACE_REPLAY: (globalThis.fetch = undefined, 'reason'),")],
+    ['prototype setter in provisioners', before.replace('denoise: { env: [], provision: async () => ({}) },', 'denoise: { env: [], provision: async () => ({}) },\n  __proto__: { env: [], provision: async () => ({}) },')],
+    ['prototype setter in unpublished', before.replace("TOPOFIT_SURFACE_REPLAY: 'OpenRecon validation surfaces, not licensed for release',", "TOPOFIT_SURFACE_REPLAY: 'OpenRecon validation surfaces, not licensed for release',\n  __proto__: 'mutated',")],
+    ['arbitrary call in provisioners', before.replace('denoise: { env: [], provision: async () => ({}) },', "denoise: run('echo', ['hi']),")],
+    ['non-literal env element', before.replace('denoise: { env: [], provision: async () => ({}) },', 'denoise: { env: [root], provision: async () => ({}) },')],
     ['spread element', before.replace('denoise: { env: [], provision: async () => ({}) },', '...extraProvisioners,')],
     ['computed key', before.replace('denoise: { env: [], provision: async () => ({}) },', '[dynamicId]: { env: [], provision: async () => ({}) },')],
     ['self-reference', before.replace('denoise: { env: [], provision: async () => ({}) },', 'denoise: { env: [], provision: async (c) => provisioners.sdc.provision(c) },')],
@@ -2775,11 +2799,11 @@ test('scripts/lib/e2e-test-data.mjs narrows to apps whose provisioner entries ch
   }
 });
 
-test('per-app CI traversal does not leak through package directories into app-specific root helpers', async () => {
+test('per-app CI traversal keeps bare package imports while excluding incidental package-directory references', async () => {
   const registry = await loadAppsRegistry();
   const workspace = await graph;
-  // scripts/lib/e2e-test-data.mjs names exes/dwi, which points to packages/sdc,
-  // which imports mindgrab-asset-path-plugin.mjs; that must not poison CATALOG.
+  // scripts/lib/e2e-test-data.mjs names exes/dwi as a data path (not a JS import),
+  // which reaches packages/sdc -> mindgrab-asset-path-plugin.mjs; that must not poison CATALOG.
   const pluginPlan = createAppPlan(registry, ['scripts/lib/mindgrab-asset-path-plugin.mjs'], workspace);
   assert.equal(pluginPlan.reasons.fallback, null);
   assert.equal(pluginPlan.allApps, false);
@@ -2792,6 +2816,24 @@ test('per-app CI traversal does not leak through package directories into app-sp
   for (const path of ['scripts/e2e-test-data.mjs', 'scripts/probe-hardware-gpu.mjs', 'test-utils/hardware-gpu.mjs', 'scripts/desktop/scientific-evidence.mjs', 'test-utils/dwi-tracking-crop.mjs']) {
     assert.equal(createAppPlan(registry, [path], workspace).allApps, true, path);
   }
+
+  // A real bare import of a workspace package from a per-app CI script is still traversed.
+  const syntheticGraph = {
+    edges: new Map([
+      [CATALOG, new Set(['scripts/e2e-test-data.mjs'])],
+      ['scripts/e2e-test-data.mjs', new Set(['exes/dwi', 'packages/shared-cli'])],
+      ['exes/dwi', new Set(['scripts/incidental-only.mjs'])],
+      ['packages/shared-cli', new Set(['scripts/fixture-core.mjs'])],
+      ['scripts/incidental-only.mjs', new Set()],
+      ['scripts/fixture-core.mjs', new Set()],
+    ]),
+    scriptImports: new Map([['scripts/e2e-test-data.mjs', new Set(['packages/shared-cli'])]]),
+  };
+  const reached = catalogReachable(syntheticGraph);
+  assert.equal(reached.has('packages/shared-cli'), true);
+  assert.equal(reached.has('scripts/fixture-core.mjs'), true);
+  assert.equal(reached.has('exes/dwi'), false);
+  assert.equal(reached.has('scripts/incidental-only.mjs'), false);
 });
 
 test('lint runner and scripts/quality files select no apps and no site build', async () => {
@@ -2808,24 +2850,27 @@ test('lint runner and scripts/quality files select no apps and no site build', a
   assert.equal(plan.reasons.fallback, null);
 });
 
-test('changedManifests loads pnpm-workspace.yaml and scripts/lib/e2e-test-data.mjs from git', async (t) => {
+test('changedManifests loads pnpm-workspace.yaml, pnpm-lock.yaml, and scripts/lib/e2e-test-data.mjs from git', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'neurodesk-manifests-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const git = (...args) => execFileSync('git', ['-c', 'user.name=planner', '-c', 'user.email=planner@example.org', ...args], { cwd: root, encoding: 'utf8' }).trim();
   git('init', '--quiet');
   await mkdir(join(root, 'scripts/lib'), { recursive: true });
-  await writeFile(join(root, 'pnpm-workspace.yaml'), 'packages:\n  - apps/*\n');
+  await writeFile(join(root, 'pnpm-workspace.yaml'), 'packages:\n  - apps/*\nminimumReleaseAgeExclude:\n  - old@0.1.0\n');
+  await writeFile(join(root, 'pnpm-lock.yaml'), 'lockfileVersion: "9.0"\npackages:\n  old@0.1.0: {}\n');
   await writeFile(join(root, 'scripts/lib/e2e-test-data.mjs'), 'export const provisioners = {};\n');
   git('add', '.');
   git('commit', '--quiet', '-m', 'base');
   const base = git('rev-parse', 'HEAD');
   await writeFile(join(root, 'pnpm-workspace.yaml'), 'packages:\n  - apps/*\nminimumReleaseAgeExclude:\n  - foo@1.0.0\n');
+  await writeFile(join(root, 'pnpm-lock.yaml'), 'lockfileVersion: "9.0"\npackages:\n  foo@1.0.0: {}\n');
   await writeFile(join(root, 'scripts/lib/e2e-test-data.mjs'), 'export const provisioners = { denoise: { env: [], provision: async () => ({}) } };\n');
   git('add', '.');
   git('commit', '--quiet', '-m', 'head');
   const manifests = changedManifests({ base, head: 'HEAD', cwd: root, changedPaths: ['pnpm-workspace.yaml', 'scripts/lib/e2e-test-data.mjs'] });
   assert.equal(manifests.has('pnpm-workspace.yaml'), true);
+  assert.equal(manifests.has('pnpm-lock.yaml'), true);
   assert.equal(manifests.has('scripts/lib/e2e-test-data.mjs'), true);
-  assert.deepEqual(workspaceConfigImpact(manifests.get('pnpm-workspace.yaml')), { scoped: true });
+  assert.deepEqual(workspaceConfigImpact({ ...manifests.get('pnpm-workspace.yaml'), lockAfter: manifests.get('pnpm-lock.yaml').after }), { scoped: true });
   assert.deepEqual(e2eTestDataImpact(manifests.get('scripts/lib/e2e-test-data.mjs')), { changed: ['denoise'] });
 });

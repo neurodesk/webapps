@@ -16,11 +16,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { parse } from 'yaml';
-import { changedManifests, changedPathsFromGit, createAppPlan, UnreadableDiffError } from './lib/app-plan.mjs';
+import { catalogReachable, changedManifests, changedPathsFromGit, createAppPlan, UnreadableDiffError } from './lib/app-plan.mjs';
 import { compareSelection, expectedApps, failureCandidates, parseableClosure, republishedPackages, supersededMerges, uncheckedRules, workspaceClosures } from './lib/app-plan-shadow.mjs';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
 import { listJobs, listRuns, mapLimited, mergedPullRequests } from './lib/github-actions.mjs';
-import { loadConservativeWorkspaceGraph, WorkspaceGraphConfigurationError } from './lib/workspace-graph.mjs';
+import { CATALOG, loadConservativeWorkspaceGraph, reachableFrom, WorkspaceGraphConfigurationError } from './lib/workspace-graph.mjs';
 
 const execFileAsync = promisify(execFile);
 const argv = process.argv.slice(2);
@@ -143,6 +143,9 @@ async function shadow(pr, scratch) {
       offlineLock: manifests.get('registry/offline-assets.lock.json') ?? null,
     });
     const comparison = compareSelection({ catalog: registry, plan, oracle });
+    const fullCatalog = reachableFrom(graph, CATALOG);
+    const scopedCatalog = catalogReachable(graph);
+    const catalogExcluded = new Set([...fullCatalog].filter((node) => !scopedCatalog.has(node) && /^(?:scripts|test-utils|registry|test)\//.test(node)));
     return {
       ...row,
       base,
@@ -151,7 +154,7 @@ async function shadow(pr, scratch) {
       ...comparison,
       site: plan.site,
       easterEgg: plan.easterEgg,
-      unchecked: uncheckedRules({ plan, changedPaths, manifests }),
+      unchecked: uncheckedRules({ plan, changedPaths, manifests, catalogExcluded }),
       expected: Object.fromEntries(oracle.expected),
       reasons: plan.reasons,
       exempt: oracle.exempt,

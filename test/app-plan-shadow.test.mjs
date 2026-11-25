@@ -153,4 +153,13 @@ test('the shadow report names the rule families it cannot check', () => {
   assert.deepEqual(uncheckedRules({ plan, changedPaths: ['.github/workflows/ci.yml', 'registry/apps.yml'], manifests }), ['ci.yml jobs', 'registry site keys']);
   assert.deepEqual(uncheckedRules({ plan, changedPaths: ['registry/apps.yml'], manifests: new Map([['registry/apps.yml', { before: site('x'), after: site('x') }]]) }), []);
   assert.deepEqual(uncheckedRules({ plan: { reasons: { fallback: 'everything' } }, changedPaths: ['.github/workflows/ci.yml'], manifests }), []);
+  assert.deepEqual(
+    uncheckedRules({
+      plan,
+      changedPaths: ['pnpm-workspace.yaml', 'scripts/lib/e2e-test-data.mjs', 'scripts/quality/lint-inventory.mjs', 'scripts/lib/mindgrab-asset-path-plugin.mjs'],
+      manifests: new Map(),
+      catalogExcluded: new Set(['scripts/lib/mindgrab-asset-path-plugin.mjs']),
+    }),
+    ['pnpm-workspace.yaml', 'e2e-test-data provisioners', 'lint tooling', 'catalogue traversal'],
+  );
 });

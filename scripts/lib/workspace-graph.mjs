@@ -210,6 +210,10 @@ export async function loadConservativeWorkspaceGraph(root) {
     pendingRootFiles.push(...named);
   }
 
+  // Workspace package directories loaded via explicit JS/TS imports in a root
+  // or package source file (as opposed to incidental directory/data references
+  // matched by SCRIPT_REFERENCE).
+  const scriptImports = new Map();
   while (pendingRootFiles.length) {
     const file = pendingRootFiles.pop();
     if (edges.has(file)) continue;
@@ -229,9 +233,15 @@ export async function loadConservativeWorkspaceGraph(root) {
         uses.add(`${top}/${name}`);
       }
     }
+    const directImports = new Set();
     for (const [, name] of text.matchAll(BARE_IMPORT)) {
-      if (nodeByPackageName.has(name)) uses.add(nodeByPackageName.get(name));
+      if (nodeByPackageName.has(name)) {
+        const target = nodeByPackageName.get(name);
+        uses.add(target);
+        directImports.add(target);
+      }
     }
+    if (directImports.size) scriptImports.set(file, directImports);
     const imports = [...text.matchAll(ROOT_IMPORT)].map(([, path]) => relative(root, resolve(root, dirname(file), path)).split(sep).join('/'));
     const named = [...text.matchAll(ROOT_NAMED)].map(([, path, dir, name]) => path ?? `${dir}/${name}`);
     for (const [, directory] of text.matchAll(ROOT_GLOB)) {
@@ -261,6 +271,7 @@ export async function loadConservativeWorkspaceGraph(root) {
   const graph = {
     nodes: Object.freeze(nodes),
     edges,
+    scriptImports,
     rootScriptsRun,
     jobScripts,
     moduleUsers: (path) => (moduleUsers ??= sharedModuleUsers(root, graph))(path),
