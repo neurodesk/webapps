@@ -3633,6 +3633,30 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       (plan) => assert.equal(plan.allApps, true),
     ],
     [
+      'workspace script preserves caller baseDir across conditional cd for --dir lint',
+      {
+        'apps/n4/package.json': JSON.stringify({ name: '@nd/n4', scripts: { test: 'false && cd ../../packages/base; pnpm --dir ../sdc run lint' } }),
+        'apps/sdc/package.json': JSON.stringify({ name: '@nd/sdc', scripts: { lint: 'node ../../scripts/quality/sdc-helper.mjs' } }),
+        'packages/base/package.json': JSON.stringify({ name: '@nd/base' }),
+        'packages/sdc/package.json': JSON.stringify({ name: '@nd/pkg-sdc', scripts: { lint: 'echo pkg-sdc' } }),
+        'scripts/quality/sdc-helper.mjs': 'export const s = 1;\n',
+      },
+      'scripts/quality/sdc-helper.mjs',
+      new Map(),
+      (plan) => assert.deepEqual(plan.selected.map((app) => app.id).sort(), ['n4', 'sdc']),
+    ],
+    [
+      'workspace expanded root script follows parent-relative helper paths',
+      {
+        'package.json': JSON.stringify({ name: 'root', scripts: { 'quality:check': 'cd apps/n4 && node ../../scripts/quality/check.mjs' } }),
+        'apps/n4/package.json': JSON.stringify({ name: '@nd/n4', scripts: { test: 'pnpm -w run quality:check' } }),
+        'scripts/quality/check.mjs': 'export const c = 1;\n',
+      },
+      'scripts/quality/check.mjs',
+      new Map(),
+      (plan) => assert.deepEqual(plan.selected.map((app) => app.id), ['n4']),
+    ],
+    [
       'CI step cd into workspace with pnpm run lint keeps standalone lint edge',
       {
         '.github/workflows/ci.yml': stringify({

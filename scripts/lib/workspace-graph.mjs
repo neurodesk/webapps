@@ -580,7 +580,7 @@ function lintTargetsInCommands(commands, context) {
       const cdMatches = [...token.matchAll(SHELL_CD_TARGET)].map(([, dir]) => dir);
       if (cdMatches.length > 0) {
         const nextDirs = new Set(activeDirs);
-        const bases = activeDirs.size > 0 ? [...activeDirs] : [baseDir];
+        const bases = new Set([...(baseDir !== '.' ? [baseDir] : []), ...(activeDirs.size > 0 ? activeDirs : [baseDir])]);
         for (const dir of cdMatches) {
           for (const from of bases) {
             if (from === AMBIGUOUS_DIR || dir === '-' || dir.includes('$') || dir.includes('*')) {
@@ -610,7 +610,7 @@ function lintTargetsInCommands(commands, context) {
       const filters = [...token.matchAll(FILTER_ARG)].map(([, target]) => target);
       if (!recursive && filters.length > 0) {
         let allResolved = true;
-        const resolveBases = activeDirs.size > 0 ? [...activeDirs] : [baseDir];
+        const resolveBases = new Set([...(baseDir !== '.' ? [baseDir] : []), ...(activeDirs.size > 0 ? activeDirs : [baseDir])]);
         for (const filter of filters) {
           let resolvedAny = false;
           for (const from of resolveBases) {
@@ -803,7 +803,12 @@ export async function loadConservativeWorkspaceGraph(root) {
           pendingRootFiles.push(match[1]);
         }
       }
+      for (const [, rootFile] of cmd.matchAll(ROOT_PATH)) {
+        uses.add(rootFile);
+        pendingRootFiles.push(rootFile);
+      }
       for (const [, tests] of cmd.matchAll(COMMAND_PACKAGE_TESTS)) uses.add(tests);
+      for (const [, tests] of cmd.matchAll(PACKAGE_TESTS)) uses.add(tests);
       for (const [, document] of cmd.matchAll(DOCUMENT_REFERENCE)) uses.add(document);
       for (const [, top, name, inner] of cmd.matchAll(SCRIPT_REFERENCE)) {
         if (!nodeSet.has(`${top}/${name}`)) continue;
