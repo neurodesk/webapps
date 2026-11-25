@@ -220,6 +220,8 @@ test('surface scenes hide 3D anatomy by default and honor FreeBrowse visibility 
 });
 
 test('surface selection preserves ACS and the other selected layouts', async ({ page }, testInfo) => {
+  // Six layouts and the desktop and phone captures can exceed the default on software WebGL.
+  test.setTimeout(60_000);
   await deliverSurfaces(page);
   for (const mode of ['Multi view', 'Axial view', 'Coronal view', 'Sagittal view', 'Multi+Render', 'Render view']) {
     await page.locator('.nd-volume-toggle').filter({ hasText: 'Source-grid QC overlay' }).getByRole('button', { name: 'View', exact: true }).click();
