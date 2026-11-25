@@ -24,6 +24,8 @@ const SRGB_ICC_PRIMARIES = Object.freeze({
   bXYZ: Object.freeze([0.1431, 0.0606, 0.7141]),
 });
 const ICC_PRIMARY_TOLERANCE = 0.015;
+const ICC_TRC_LINEAR_TOLERANCE = 0.003;
+const ICC_TRC_SRGB_TOLERANCE = 0.008;
 
 const PNG_CRC_TABLE = (() => {
   const table = new Uint32Array(256);
@@ -43,6 +45,18 @@ function pngCrc32(view, start, end) {
     c = PNG_CRC_TABLE[(c ^ view[i]) & 0xff] ^ (c >>> 8);
   }
   return (c ^ 0xffffffff) >>> 0;
+}
+
+function linearToSrgb(linear) {
+  if (linear <= 0) return 0;
+  if (linear >= 1) return 1;
+  return linear <= 0.0031308 ? 12.92 * linear : 1.055 * Math.pow(linear, 1 / 2.4) - 0.055;
+}
+
+function srgbToLinear(u) {
+  if (u <= 0) return 0;
+  if (u >= 1) return 1;
+  return u <= 0.04045 ? u / 12.92 : Math.pow((u + 0.055) / 1.055, 2.4);
 }
 
 function readUint16BE(view, offset) {
@@ -89,13 +103,72 @@ function asciiSlice(view, start, end) {
   return out;
 }
 
+function isValidSrgbTrc(profile, tagOffset, tagSize) {
+  if (tagOffset + 12 > profile.length || tagSize < 12) return false;
+  const type = asciiSlice(profile, tagOffset, tagOffset + 4);
+
+  if (type === "curv") {
+    const count = readUint32BE(profile, tagOffset + 8);
+    // Reject identity/linear (count=0) and single pure power-law gamma (count=1, e.g. 2.2).
+    if (count < 2) return false;
+    const needed = 12 + count * 2;
+    if (needed > tagSize || tagOffset + needed > profile.length) return false;
+    const denom = count - 1;
+    for (let i = 0; i < count; i += 1) {
+      const u = i / denom;
+      const val = readUint16BE(profile, tagOffset + 12 + i * 2) / 65535;
+      if (Math.abs(val - srgbToLinear(u)) > ICC_TRC_LINEAR_TOLERANCE) return false;
+      if (Math.abs(linearToSrgb(val) - u) > ICC_TRC_SRGB_TOLERANCE) return false;
+    }
+    return true;
+  }
+
+  if (type === "para") {
+    const funcType = readUint16BE(profile, tagOffset + 8);
+    if (funcType !== 3 && funcType !== 4) return false;
+    const needed = funcType === 3 ? 32 : 40;
+    if (needed > tagSize || tagOffset + needed > profile.length) return false;
+    const g = readInt32BE(profile, tagOffset + 12) / 65536;
+    const a = readInt32BE(profile, tagOffset + 16) / 65536;
+    const b = readInt32BE(profile, tagOffset + 20) / 65536;
+    const c = readInt32BE(profile, tagOffset + 24) / 65536;
+    const d = readInt32BE(profile, tagOffset + 28) / 65536;
+    const e = funcType === 4 ? readInt32BE(profile, tagOffset + 32) / 65536 : 0;
+    const f = funcType === 4 ? readInt32BE(profile, tagOffset + 36) / 65536 : 0;
+    if (
+      Math.abs(g - 2.4) > 0.05 ||
+      Math.abs(a - 1 / 1.055) > 0.01 ||
+      Math.abs(b - 0.055 / 1.055) > 0.01 ||
+      Math.abs(c - 1 / 12.92) > 0.01 ||
+      Math.abs(d - 0.04045) > 0.01 ||
+      Math.abs(e) > 0.002 ||
+      Math.abs(f) > 0.002
+    ) {
+      return false;
+    }
+    for (let k = 0; k <= 255; k += 1) {
+      const u = k / 255;
+      const val = u >= d ? Math.pow(a * u + b, g) + e : c * u + f;
+      if (!Number.isFinite(val)) return false;
+      if (Math.abs(val - srgbToLinear(u)) > ICC_TRC_LINEAR_TOLERANCE) return false;
+      if (Math.abs(linearToSrgb(val) - u) > ICC_TRC_SRGB_TOLERANCE) return false;
+    }
+    return true;
+  }
+
+  return false;
+}
+
 function parseIccTags(profile) {
   const tags = {
     description: "",
     rXYZ: null,
     gXYZ: null,
     bXYZ: null,
-    trcLinearOrNonSrgb: false,
+    rTRC: null,
+    gTRC: null,
+    bTRC: null,
+    kTRC: null,
   };
   if (profile.length < 132) return tags;
   const tagCount = Math.min(readUint32BE(profile, 128), 256);
@@ -142,24 +215,7 @@ function parseIccTags(profile) {
         ];
       }
     } else if (sig === "rTRC" || sig === "gTRC" || sig === "bTRC" || sig === "kTRC") {
-      const type = asciiSlice(profile, tagOffset, tagOffset + 4);
-      if (type === "curv") {
-        const count = readUint32BE(profile, tagOffset + 8);
-        if (count === 0) {
-          // Identity (linear gamma 1.0) TRC
-          tags.trcLinearOrNonSrgb = true;
-        } else if (count === 1 && tagOffset + 14 <= profile.length) {
-          const gamma = readUint16BE(profile, tagOffset + 12) / 256;
-          if (Math.abs(gamma - 2.2) > 0.25) {
-            tags.trcLinearOrNonSrgb = true;
-          }
-        }
-      } else if (type === "para" && tagOffset + 16 <= profile.length) {
-        const g = readInt32BE(profile, tagOffset + 12) / 65536;
-        if (g < 1.8 || g > 2.6) {
-          tags.trcLinearOrNonSrgb = true;
-        }
-      }
+      tags[sig] = isValidSrgbTrc(profile, tagOffset, tagSize);
     }
   }
   return tags;
@@ -192,11 +248,6 @@ function validateIccProfile(profile, chunkName, name) {
       `${name}: embedded non-sRGB ICC color profile "${label}" is not supported in the CLI; convert the image to sRGB first.`,
     );
   }
-  if (tags.trcLinearOrNonSrgb) {
-    throw new Error(
-      `${name}: embedded ICC color profile "${label}" uses a non-sRGB transfer curve; convert the image to sRGB first.`,
-    );
-  }
 
   if (colorSpace === "RGB") {
     const primariesMatch =
@@ -208,11 +259,16 @@ function validateIccProfile(profile, chunkName, name) {
         `${name}: embedded non-sRGB ICC color profile "${label}" (primaries do not match sRGB) is not supported in the CLI; convert the image to sRGB first.`,
       );
     }
+    if (tags.rTRC !== true || tags.gTRC !== true || tags.bTRC !== true) {
+      throw new Error(
+        `${name}: embedded ICC color profile "${label}" is missing or uses a non-sRGB transfer curve (rTRC/gTRC/bTRC); convert the image to sRGB first.`,
+      );
+    }
     return label;
   }
 
-  // GRAY profile: must explicitly identify sRGB in the ICC profile's own desc tag (never trust iCCP keyword alone).
-  if (!tags.description || !SRGB_PROFILE_RE.test(tags.description)) {
+  // GRAY profile: require sRGB description AND valid sRGB kTRC transfer curve.
+  if (!tags.description || !SRGB_PROFILE_RE.test(tags.description) || tags.kTRC !== true) {
     throw new Error(
       `${name}: embedded non-sRGB ICC color profile "${label}" is not supported in the CLI; convert the image to sRGB first.`,
     );
@@ -294,18 +350,32 @@ function inspectPngColorChunks(view, name) {
   return { hasSrgb, gamma, iccLabel };
 }
 
-function applyGammaToSrgb(rgba, fileGamma) {
+function applyGammaToSrgb8(rgba, fileGamma) {
   const lut = new Uint8Array(256);
   const invGamma = 1 / fileGamma;
   for (let i = 0; i < 256; i += 1) {
     const linear = Math.pow(i / 255, invGamma);
-    const srgb = linear <= 0.0031308 ? 12.92 * linear : 1.055 * Math.pow(linear, 1 / 2.4) - 0.055;
-    lut[i] = Math.min(255, Math.max(0, Math.round(srgb * 255)));
+    lut[i] = Math.min(255, Math.max(0, Math.round(linearToSrgb(linear) * 255)));
   }
   for (let i = 0; i < rgba.length; i += 4) {
     rgba[i] = lut[rgba[i]];
     rgba[i + 1] = lut[rgba[i + 1]];
     rgba[i + 2] = lut[rgba[i + 2]];
+  }
+}
+
+function applyGamma16ToSrgb8(data16, rgba, fileGamma) {
+  const lut = new Uint8Array(65536);
+  const invGamma = 1 / fileGamma;
+  for (let i = 0; i < 65536; i += 1) {
+    const linear = Math.pow(i / 65535, invGamma);
+    lut[i] = Math.min(255, Math.max(0, Math.round(linearToSrgb(linear) * 255)));
+  }
+  for (let i = 0; i < data16.length; i += 4) {
+    rgba[i] = lut[data16[i]];
+    rgba[i + 1] = lut[data16[i + 1]];
+    rgba[i + 2] = lut[data16[i + 2]];
+    rgba[i + 3] = Math.round((data16[i + 3] * 255) / 65535);
   }
 }
 
@@ -467,8 +537,9 @@ function applyExifOrientation(rgba, width, height, orientation) {
  * Decode a PNG or JPEG byte buffer to tightly-backed 8-bit sRGB RGBA pixels without DOM or Canvas.
  * Preflights header dimensions before decompressing so oversized images are rejected cleanly.
  * Verifies PNG chunk CRCs, decodes tRNS/Adam7/sub-byte/16-bit PNGs, applies exact PNG gAMA -> sRGB
- * whenever gAMA is present without sRGB/iCCP, validates PNG cHRM and embedded ICC primaries/curves,
- * and applies JPEG EXIF orientation (1..8).
+ * (preserving 16-bit precision before 8-bit quantization) whenever gAMA is present without sRGB/iCCP,
+ * validates PNG cHRM and embedded ICC primaries + piecewise sRGB TRC curves, and applies JPEG EXIF
+ * orientation (1..8).
  */
 export function decodeRasterBytes(bytes, { name = "image", maxBytes = MAX_INPUT_BYTES } = {}) {
   const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
@@ -510,20 +581,27 @@ export function decodeRasterBytes(bytes, { name = "image", maxBytes = MAX_INPUT_
   }
 
   const pngMeta = inspectPngColorChunks(view, name);
+  const needsGamma = !pngMeta.hasSrgb && !pngMeta.iccLabel && pngMeta.gamma !== null;
+  const is16Bit = view.length > 24 && view[24] === 16;
   const buffer = Buffer.from(view.buffer, view.byteOffset, view.byteLength);
-  const png = PNG.sync.read(buffer, { checkCRC: true, skipRescale: false });
+  const png = PNG.sync.read(buffer, { checkCRC: true, skipRescale: needsGamma && is16Bit });
   if (png.width !== header.width || png.height !== header.height) {
     throw new Error(
       `Decoded PNG dimensions (${png.width}x${png.height}) do not match header (${header.width}x${header.height}).`,
     );
   }
   const rgba = new Uint8ClampedArray(png.width * png.height * 4);
-  rgba.set(png.data);
 
   let gammaApplied = null;
-  if (!pngMeta.hasSrgb && !pngMeta.iccLabel && pngMeta.gamma !== null) {
-    applyGammaToSrgb(rgba, pngMeta.gamma);
+  if (needsGamma && png.depth === 16) {
+    applyGamma16ToSrgb8(png.data, rgba, pngMeta.gamma);
     gammaApplied = pngMeta.gamma;
+  } else {
+    rgba.set(png.data);
+    if (needsGamma) {
+      applyGammaToSrgb8(rgba, pngMeta.gamma);
+      gammaApplied = pngMeta.gamma;
+    }
   }
 
   const colorSpaceDescription = pngMeta.iccLabel

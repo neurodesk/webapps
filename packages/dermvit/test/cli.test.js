@@ -92,7 +92,50 @@ function makeXyzTag([x, y, z]) {
   return buf;
 }
 
-function makeFakeIccProfile(description, { colorSpace = "RGB ", primaries = SRGB_PRIMARIES } = {}) {
+function makeSrgbParaType3Tag() {
+  const buf = Buffer.alloc(32, 0);
+  Buffer.from("para", "ascii").copy(buf, 0);
+  buf.writeUInt16BE(3, 8);
+  buf.writeInt32BE(Math.round(2.4 * 65536), 12);
+  buf.writeInt32BE(Math.round((1 / 1.055) * 65536), 16);
+  buf.writeInt32BE(Math.round((0.055 / 1.055) * 65536), 20);
+  buf.writeInt32BE(Math.round((1 / 12.92) * 65536), 24);
+  buf.writeInt32BE(Math.round(0.04045 * 65536), 28);
+  return buf;
+}
+
+function makeSrgbCurvLutTag(count = 256) {
+  const buf = Buffer.alloc(12 + count * 2, 0);
+  Buffer.from("curv", "ascii").copy(buf, 0);
+  buf.writeUInt32BE(count, 8);
+  for (let i = 0; i < count; i += 1) {
+    const u = i / (count - 1);
+    const linear = u <= 0.04045 ? u / 12.92 : Math.pow((u + 0.055) / 1.055, 2.4);
+    buf.writeUInt16BE(Math.round(linear * 65535), 12 + i * 2);
+  }
+  return buf;
+}
+
+function makePureGammaCurvTag(gamma = 2.2) {
+  const buf = Buffer.alloc(14, 0);
+  Buffer.from("curv", "ascii").copy(buf, 0);
+  buf.writeUInt32BE(1, 8);
+  buf.writeUInt16BE(Math.round(gamma * 256), 12);
+  return buf;
+}
+
+function makePureGammaParaType0Tag(gamma = 2.2) {
+  const buf = Buffer.alloc(16, 0);
+  Buffer.from("para", "ascii").copy(buf, 0);
+  buf.writeUInt16BE(0, 8);
+  buf.writeInt32BE(Math.round(gamma * 65536), 12);
+  return buf;
+}
+
+function makeFakeIccProfile(
+  description,
+  { colorSpace = "RGB ", primaries = SRGB_PRIMARIES, trcTag = makeSrgbParaType3Tag() } = {},
+) {
   const header = Buffer.alloc(128, 0);
   Buffer.from(colorSpace, "ascii").copy(header, 16);
   Buffer.from("acsp", "ascii").copy(header, 36);
@@ -108,6 +151,11 @@ function makeFakeIccProfile(description, { colorSpace = "RGB ", primaries = SRGB
     tagEntries.push(["rXYZ", makeXyzTag(primaries.rXYZ)]);
     tagEntries.push(["gXYZ", makeXyzTag(primaries.gXYZ)]);
     tagEntries.push(["bXYZ", makeXyzTag(primaries.bXYZ)]);
+  }
+  if (trcTag) {
+    tagEntries.push(["rTRC", trcTag]);
+    tagEntries.push(["gTRC", trcTag]);
+    tagEntries.push(["bTRC", trcTag]);
   }
 
   const tagTable = Buffer.alloc(4 + tagEntries.length * 12);
@@ -299,39 +347,65 @@ test("decodeRasterBytes converts PNG gAMA (linear and 45455) to sRGB, validates 
   assert.equal(decDarkGamma.rgba[0], 7);
   assert.equal(decDarkGamma.rgba[3], 255);
 
+  // 1c. 16-bit linear PNG (gAMA = 100000) with sample 128 must preserve 16-bit precision before 8-bit quantization -> 6 (not 0)
+  const row16 = Buffer.alloc(1 + 8);
+  row16[0] = 0;
+  row16.writeUInt16BE(128, 1);
+  row16.writeUInt16BE(128, 3);
+  row16.writeUInt16BE(128, 5);
+  row16.writeUInt16BE(65535, 7);
+  const linear16Png = buildCustomPng(
+    { width: 1, height: 1, depth: 16, colorType: 6 },
+    [pngChunk("gAMA", gamaData)],
+    row16,
+  );
+  const decLin16 = decodeRasterBytes(linear16Png, { name: "linear16.png" });
+  assert.equal(decLin16.gammaApplied, 1);
+  assert.equal(decLin16.rgba[0], 6);
+  assert.equal(decLin16.rgba[3], 255);
+
   // 2. Non-sRGB PNG iCCP rejected even when disguised under iCCP keyword "sRGB" (Adobe RGB primaries)
+  const makeIccpPng = (keyword, profile) =>
+    buildCustomPng(
+      { width: 1, height: 1, depth: 8, colorType: 2 },
+      [pngChunk("iCCP", Buffer.concat([Buffer.from(`${keyword}\0`, "ascii"), Buffer.from([0]), deflateSync(profile)]))],
+      Buffer.from([0, 100, 100, 100]),
+    );
+
   const disguisedAdobeProfile = makeFakeIccProfile("sRGB", { primaries: ADOBE_RGB_PRIMARIES });
-  const disguisedIccp = Buffer.concat([
-    Buffer.from("sRGB\0", "ascii"),
-    Buffer.from([0]),
-    deflateSync(disguisedAdobeProfile),
-  ]);
-  const disguisedPng = buildCustomPng(
-    { width: 1, height: 1, depth: 8, colorType: 2 },
-    [pngChunk("iCCP", disguisedIccp)],
-    Buffer.from([0, 100, 100, 100]),
-  );
-  assert.throws(() => decodeRasterBytes(disguisedPng, { name: "disguised-adobe.png" }), /non-sRGB ICC/);
+  assert.throws(() => decodeRasterBytes(makeIccpPng("sRGB", disguisedAdobeProfile), { name: "disguised-adobe.png" }), /non-sRGB ICC/);
 
-  // 2b. Display P3 iCCP rejected; genuine sRGB ICC (matching sRGB D50 primaries) accepted
+  // 2b. sRGB primaries with missing TRC tags, pure gamma 2.2 curv (count=1), or para type 0 are ALL rejected
+  const missingTrcProfile = makeFakeIccProfile("sRGB IEC61966-2.1", { primaries: SRGB_PRIMARIES, trcTag: null });
+  assert.throws(() => decodeRasterBytes(makeIccpPng("sRGB", missingTrcProfile), { name: "missing-trc.png" }), /transfer curve/);
+
+  const pureCurvProfile = makeFakeIccProfile("sRGB IEC61966-2.1", {
+    primaries: SRGB_PRIMARIES,
+    trcTag: makePureGammaCurvTag(2.2),
+  });
+  assert.throws(() => decodeRasterBytes(makeIccpPng("sRGB", pureCurvProfile), { name: "pure-curv.png" }), /transfer curve/);
+
+  const pureParaProfile = makeFakeIccProfile("sRGB IEC61966-2.1", {
+    primaries: SRGB_PRIMARIES,
+    trcTag: makePureGammaParaType0Tag(2.2),
+  });
+  assert.throws(() => decodeRasterBytes(makeIccpPng("sRGB", pureParaProfile), { name: "pure-para.png" }), /transfer curve/);
+
+  // 2c. Display P3 iCCP rejected; genuine sRGB ICC with para type 3 AND curv LUT both accepted
   const p3Profile = makeFakeIccProfile("Display P3", { primaries: ADOBE_RGB_PRIMARIES });
-  const p3Iccp = Buffer.concat([Buffer.from("Display P3\0", "ascii"), Buffer.from([0]), deflateSync(p3Profile)]);
-  const p3Png = buildCustomPng(
-    { width: 1, height: 1, depth: 8, colorType: 2 },
-    [pngChunk("iCCP", p3Iccp)],
-    Buffer.from([0, 100, 100, 100]),
-  );
-  assert.throws(() => decodeRasterBytes(p3Png, { name: "p3.png" }), /non-sRGB ICC/);
+  assert.throws(() => decodeRasterBytes(makeIccpPng("Display P3", p3Profile), { name: "p3.png" }), /non-sRGB ICC/);
 
-  const srgbProfile = makeFakeIccProfile("sRGB IEC61966-2.1", { primaries: SRGB_PRIMARIES });
-  const srgbIccp = Buffer.concat([Buffer.from("sRGB\0", "ascii"), Buffer.from([0]), deflateSync(srgbProfile)]);
-  const srgbPng = buildCustomPng(
-    { width: 1, height: 1, depth: 8, colorType: 2 },
-    [pngChunk("iCCP", srgbIccp)],
-    Buffer.from([0, 100, 100, 100]),
-  );
-  const decSrgb = decodeRasterBytes(srgbPng, { name: "srgb.png" });
-  assert.equal(decSrgb.rgba[0], 100);
+  const srgbParaProfile = makeFakeIccProfile("sRGB IEC61966-2.1", {
+    primaries: SRGB_PRIMARIES,
+    trcTag: makeSrgbParaType3Tag(),
+  });
+  assert.equal(decodeRasterBytes(makeIccpPng("sRGB", srgbParaProfile), { name: "srgb-para.png" }).rgba[0], 100);
+
+  const srgbCurvProfile = makeFakeIccProfile("sRGB IEC61966-2.1", {
+    primaries: SRGB_PRIMARIES,
+    trcTag: makeSrgbCurvLutTag(256),
+  });
+  assert.equal(decodeRasterBytes(makeIccpPng("sRGB", srgbCurvProfile), { name: "srgb-curv.png" }).rgba[0], 100);
 
   // 2c. SMPTE-C cHRM rejected (outside 0.005 tolerance); sRGB cHRM accepted
   const makeChrm = (vals) => {
