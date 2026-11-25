@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs';
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { lstat, readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { parse } from 'yaml';
 import { sharedModuleUsers } from './shared-module-users.mjs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
@@ -25,9 +25,9 @@ const MAX_TEXT_BYTES = 1024 * 1024;
 // joined onto a computed repository root.
 const REFERENCE = /(?:(?:\.\.\/)+|['"`])(packages|exes)\/([\w.-]+)/g;
 // Scripts address packages from the repository root, in either form, and
-// sometimes a single file in one. Put `json` before `[cm]?[jt]s` and require a
-// complete path boundary so `.json` does not truncate to `.js` and `.json.gz`
-// does not truncate to `.json`.
+// sometimes a single file in one. Put `json` before `[cm]?[jt]s` with a path
+// boundary so `.json` does not truncate to `.js` and `.json.gz` does not
+// truncate to `.json`; `isCompleteScriptFile` further checks quoted literals.
 const SCRIPT_REFERENCE = /\b(packages|exes)(?:\/|['"],\s*['"])([\w.-]+)((?:\/[\w.-]+)*\/[\w.-]+\.(?:json|[cm]?[jt]s|md)(?=[\s'"`),;:\]}]|$))?/g;
 // Documentation counts only where code reads that exact file.
 const DOCUMENT_REFERENCE = /\b((?:packages|exes)\/[\w.-]+\/(?:[\w.-]+\/)*[\w.-]+\.md)\b/g;
@@ -125,8 +125,37 @@ function exists(path) {
   return stat(path).then(() => true, () => false);
 }
 
-function isFile(path) {
-  return stat(path).then((entry) => entry.isFile(), () => false);
+// Regular file with no symlink at the leaf or any intermediate path component.
+async function isRegularUnlinkedFile(root, target) {
+  const full = join(root, target);
+  const entry = await lstat(full).catch(() => null);
+  if (!entry?.isFile()) return false;
+  try {
+    const [realRoot, realFull] = await Promise.all([realpath(root), realpath(full)]);
+    return realFull === join(realRoot, target);
+  } catch {
+    return false;
+  }
+}
+
+// Whether a SCRIPT_REFERENCE file match ends at a real path boundary: when the
+// path is opened by a quote (or uses the comma-separated join form), require the
+// exact same closing quote immediately after the filename so `'ref.json archive'`
+// does not narrow to `ref.json`.
+function isCompleteScriptFile(text, match) {
+  const after = text[match.index + match[0].length];
+  if (after && !/[\s'"`),;:\]}]/.test(after)) return false;
+  const sepStart = match.index + match[1].length;
+  if (text[sepStart] !== '/') {
+    const secondQuote = match[0].slice(match[1].length + 1).match(/['"`]/)?.[0];
+    return Boolean(secondQuote && after === secondQuote);
+  }
+  let i = match.index - 1;
+  while (i >= 0 && /[\w./-]/.test(text[i])) i--;
+  if (i >= 0 && (text[i] === "'" || text[i] === '"' || text[i] === '`') && (i === 0 || text[i - 1] !== '\\')) {
+    return after === text[i];
+  }
+  return true;
 }
 
 async function readPackageJson(dir) {
@@ -225,10 +254,11 @@ export async function loadConservativeWorkspaceGraph(root) {
     const source = await readFile(join(root, file), 'utf8').catch(() => null);
     if (source === null) continue;
     const text = withoutLineComments(source, file);
-    for (const [, top, name, inner] of text.matchAll(SCRIPT_REFERENCE)) {
+    for (const match of text.matchAll(SCRIPT_REFERENCE)) {
+      const [, top, name, inner] = match;
       if (!nodeSet.has(`${top}/${name}`)) continue;
-      const target = inner && `${top}/${name}${inner}`;
-      if (target && await isFile(join(root, target))) {
+      const target = inner && isCompleteScriptFile(text, match) && `${top}/${name}${inner}`;
+      if (target && await isRegularUnlinkedFile(root, target)) {
         uses.add(target);
         pendingRootFiles.push(target);
       } else {

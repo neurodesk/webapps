@@ -2808,6 +2808,14 @@ test('scripts/lib/e2e-test-data.mjs narrows to apps whose pure provisioner entri
   assert.deepEqual(denoisePlan.selected.map((app) => app.id), ['denoise']);
   assert.equal(denoisePlan.siteCode, false);
   assert.equal(denoisePlan.reasons.fallback, null);
+  assert.equal(denoisePlan.browserApps.include.every(({ heavy_tests: run }) => run), true, 'scoped provisioner edit runs @heavy tests');
+
+  // Changing NODDI's reference provisioner selects noddi with heavy_tests: true so @heavy reference.spec.js runs.
+  const editNoddi = before.replace("NODDI_BROWSER_REFERENCE: 'check'", "NODDI_BROWSER_REFERENCE: 'write'");
+  assert.notEqual(editNoddi, before);
+  const noddiPlan = createAppPlan(registry, ['scripts/lib/e2e-test-data.mjs'], workspace, new Map([['scripts/lib/e2e-test-data.mjs', { before, after: editNoddi }]]));
+  assert.deepEqual(noddiPlan.selected.map((app) => app.id), ['noddi']);
+  assert.equal(noddiPlan.browserApps.include.every(({ heavy_tests: run }) => run), true, 'noddi provisioner edit runs @heavy browser reference');
 
   // Removing a provisioner entry selects only that app.
   const removeDenoise = before.replace('  denoise: { env: [], provision: async () => ({}) },\n', '');
@@ -2908,8 +2916,8 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
   assert.equal(reached.has('exes/data-only/nested/reference.manifest.json'), true, 'exact .json manifest edge');
   assert.equal(reached.has('scripts/from-data-only.mjs'), false, 'exact .json reference does not pull in exes/data-only code');
 
-  // Prefix collisions (.json.gz alongside .json) and directories named *.json must
-  // retain the whole workspace-directory edge rather than narrowing to a misleading prefix.
+  // Prefix collisions (.json.gz, spaces in quoted names), symlinks, and directories named *.json
+  // must retain the whole workspace-directory edge rather than narrowing to a misleading prefix or link.
   const prefixRoot = await mkdtemp(join(tmpdir(), 'neurodesk-json-prefix-'));
   t.after(() => rm(prefixRoot, { recursive: true, force: true }));
   const prefixFiles = {
@@ -2922,10 +2930,17 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
         'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
       },
     }),
-    'scripts/site.mjs': "const archive = 'exes/data/reference.json.gz';\n",
+    'scripts/site.mjs': [
+      "const archive = 'exes/data/reference.json.gz';",
+      "const spaced = 'exes/spaced/reference.json archive';",
+      "const linked = 'exes/linked/fixture.json';",
+    ].join('\n'),
     'scripts/app-ci.mjs': "const mod = require('../packages/pkg/fixture.json');\n",
     'exes/data/reference.json': '{}',
     'exes/data/reference.json.gz': 'compressed',
+    'exes/spaced/reference.json': '{}',
+    'exes/spaced/reference.json archive': 'actual',
+    'exes/linked/target.json': '{"real":true}',
     'packages/pkg/package.json': JSON.stringify({ name: '@nd/pkg' }),
     'packages/pkg/fixture.json/index.js': "import '../../../scripts/from-dir-json.mjs';\n",
     'scripts/from-dir-json.mjs': '',
@@ -2934,8 +2949,11 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
     await mkdir(dirname(join(prefixRoot, path)), { recursive: true });
     await writeFile(join(prefixRoot, path), text);
   }
+  await symlink('target.json', join(prefixRoot, 'exes/linked/fixture.json'));
   const prefixGraph = await loadConservativeWorkspaceGraph(prefixRoot);
   assert.equal(createAppPlan(registry, ['exes/data/reference.json.gz'], prefixGraph).site, true, '.json.gz keeps exes/data edge');
+  assert.equal(createAppPlan(registry, ['exes/spaced/reference.json archive'], prefixGraph).site, true, 'quoted filename with space keeps exes/spaced edge');
+  assert.equal(createAppPlan(registry, ['exes/linked/target.json'], prefixGraph).site, true, 'symlink keeps exes/linked edge');
   assert.equal(reachableFrom(prefixGraph, CATALOG).has('scripts/from-dir-json.mjs'), true, 'directory named fixture.json keeps packages/pkg edge');
 });
 

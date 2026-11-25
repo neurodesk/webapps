@@ -791,8 +791,8 @@ function shardedEntries(app) {
 // dispatch of every app, an unknown base). An app reached only through shared
 // code leaves them to the nightly run, also when the planner selected every
 // app for a change it could not narrow (ci.yml, an unresolved lockfile).
-function editsApp(app, changedPaths, edited, carried) {
-  if (!changedPaths.length || carried.has(app.id)) return true;
+function editsApp(app, changedPaths, edited, carried, editedApps = new Set()) {
+  if (!changedPaths.length || carried.has(app.id) || editedApps.has(app.id)) return true;
   return edited.some((path) => [`apps/${app.id}/`, `packages/${app.id}/`, `exes/${app.id}/`].some((prefix) => path.startsWith(prefix))
     || path === `models/${app.id}.manifest.json`);
 }
@@ -874,6 +874,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
   const catalog = graph && reachableFrom(graph, CATALOG);
   const site = graph && reachableFrom(graph, SITE);
   const appReasons = new Map();
+  const editedApps = new Set();
   const siteReasons = [];
   const bookkeeping = [];
   let fallback = null;
@@ -987,7 +988,10 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
       }
       if (graph && site.has(path)) siteBuild(path);
       for (const id of impact.changed) {
-        if (appIds.has(id)) select(id, `${path}: the ${id} provisioner changed`);
+        if (appIds.has(id)) {
+          select(id, `${path}: the ${id} provisioner changed`);
+          editedApps.add(id);
+        }
       }
       continue;
     }
@@ -1163,6 +1167,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
   const apps = registry.apps.filter((app) => appReasons.has(app.id));
   return {
     apps,
+    editedApps,
     site: siteReasons.length > 0,
     siteCode,
     reasons: { fallback: null, apps: Object.fromEntries(apps.map((app) => [app.id, appReasons.get(app.id)])), site: siteReasons },
@@ -1246,7 +1251,8 @@ export function createAppPlan(registry, changedPaths = [], graph = null, manifes
   const { site, reasons } = affected;
   const releasable = selected.filter((app) => app.ci.release);
   const edited = changedPaths.filter((path) => !(affected.bookkeeping ?? []).includes(path));
-  const heavy = (entry) => ({ ...entry, heavy_tests: editsApp(registry.apps.find((app) => app.id === entry.app), changedPaths, edited, carried) });
+  const editedApps = affected.editedApps ?? new Set();
+  const heavy = (entry) => ({ ...entry, heavy_tests: editsApp(registry.apps.find((app) => app.id === entry.app), changedPaths, edited, carried, editedApps) });
   const browserTested = selected.filter((app) => app.ci.browser_test);
   const gpuTested = selected.filter((app) => app.ci.hardware_gpu);
   // What a pull request's homepage-easter-egg job does; a draft plans it as a ready pull request does.
