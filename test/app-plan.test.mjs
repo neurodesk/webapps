@@ -3657,6 +3657,37 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       (plan) => assert.deepEqual(plan.selected.map((app) => app.id), ['n4']),
     ],
     [
+      'cd back to repository root resolves subsequent workspace cd for lint',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'cd apps/n4 && cd ../.. && cd apps/sdc && pnpm run lint' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/lint.mjs': 'export const lint = 1;\n',
+        'apps/n4/package.json': JSON.stringify({ name: '@nd/n4', scripts: { lint: 'echo n4' } }),
+        'apps/sdc/package.json': JSON.stringify({ name: '@nd/sdc', scripts: { lint: 'node ../../scripts/lint.mjs --workspace' } }),
+      },
+      'scripts/lint.mjs',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'workspace pnpm --workspace-root with extra options resolves root script',
+      {
+        'package.json': JSON.stringify({ name: 'root', scripts: { 'quality:check': 'node scripts/quality/check.mjs' } }),
+        'apps/n4/package.json': JSON.stringify({ name: '@nd/n4', scripts: { test: 'pnpm --workspace-root --silent run quality:check' } }),
+        'apps/sdc/package.json': JSON.stringify({ name: '@nd/sdc', scripts: { test: 'pnpm --dir ../.. --silent run quality:check' } }),
+        'scripts/quality/check.mjs': 'export const c = 1;\n',
+      },
+      'scripts/quality/check.mjs',
+      new Map(),
+      (plan) => assert.deepEqual(plan.selected.map((app) => app.id).sort(), ['n4', 'sdc']),
+    ],
+    [
       'CI step cd into workspace with pnpm run lint keeps standalone lint edge',
       {
         '.github/workflows/ci.yml': stringify({

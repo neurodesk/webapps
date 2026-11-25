@@ -46,7 +46,6 @@ const SOURCE_FILE = /\.[cm]?[jt]s$/;
 // A whole line that is a `//` comment. Triple-slash lines stay: TypeScript's
 // `/// <reference path>` directives are compiler inputs.
 const LINE_COMMENT = /^[ \t]*\/\/(?!\/).*$/gm;
-const ROOT_SCRIPT_CALL = /\bpnpm\s+(?:(?:-w|--workspace-root)\s+)?(?:run\s+)?['"]?([A-Za-z0-9_@][\w.:/@-]*)['"]?/g;
 // An app's code names a file of another app by a relative path: a kit its build
 // stages, a fixture its tests read.
 const APP_CODE = /\.[cm]?[jt]sx?$/;
@@ -77,7 +76,7 @@ export function siteJobNames(ci) {
 }
 
 // Root files a set of CI commands names, following `pnpm <root script>` calls.
-function namedByCommands(commands, rootScripts) {
+function namedByCommands(commands, rootScripts, root = null) {
   const named = new Set();
   const pending = [...commands];
   const expanded = new Set();
@@ -85,7 +84,7 @@ function namedByCommands(commands, rootScripts) {
     const command = pending.pop();
     for (const match of command.matchAll(ROOT_NAMED)) if (match[1]) named.add(match[1]);
     for (const [, rootFile] of command.matchAll(ROOT_PATH)) named.add(rootFile);
-    for (const [, script] of command.matchAll(ROOT_SCRIPT_CALL)) {
+    for (const script of extractPnpmRootScripts(command, { root })) {
       if (!expanded.has(script)) {
         expanded.add(script);
         if (rootScripts[script]) pending.push(rootScripts[script]);
@@ -559,39 +558,48 @@ function lintTargetsInCommands(commands, context) {
     if (INDEPENDENT_LINT_SCRIPT.test(rawCmd.trim())) continue;
     if (!/\blint\b/.test(rawCmd)) continue;
     const nonRootWorkingDir = Boolean(workingDir && workingDir.trim() && !/^\.\/?$/.test(workingDir.trim()));
-    // Possible directories tracked conservatively across segments: a `cd` in a
-    // pipeline, short-circuited `&&`/`||`, background job, or branch never drops
-    // the caller's existing directories. Empty means root (for CI steps) or the
-    // owning workspace itself (already handled by manifestScanText).
+    // Possible directories tracked conservatively across segments: `cwdDirs`
+    // keeps `.` and all reached directories so returning to the repository root
+    // (`cd ../..`) resolves subsequent relative `cd` calls; `activeDirs` tracks
+    // non-root directories entered via `working-directory` or `cd`.
+    let cwdDirs = new Set([nonRootWorkingDir ? workingDir.trim() : baseDir]);
     let activeDirs = new Set(nonRootWorkingDir ? [workingDir.trim()] : []);
     const dirStack = [];
     for (const token of splitShellCommands(rawCmd)) {
       if (token === '(') {
-        dirStack.push(new Set(activeDirs));
+        dirStack.push({ cwd: new Set(cwdDirs), active: new Set(activeDirs) });
         continue;
       }
       if (token === ')') {
-        if (dirStack.length > 0) activeDirs = dirStack.pop();
+        if (dirStack.length > 0) {
+          const prev = dirStack.pop();
+          cwdDirs = prev.cwd;
+          activeDirs = prev.active;
+        }
         continue;
       }
       if (/\bpopd\b/.test(token)) {
+        cwdDirs = new Set([...cwdDirs, AMBIGUOUS_DIR]);
         activeDirs = new Set([...activeDirs, AMBIGUOUS_DIR]);
       }
       const cdMatches = [...token.matchAll(SHELL_CD_TARGET)].map(([, dir]) => dir);
       if (cdMatches.length > 0) {
-        const nextDirs = new Set(activeDirs);
-        const bases = new Set([...(baseDir !== '.' ? [baseDir] : []), ...(activeDirs.size > 0 ? activeDirs : [baseDir])]);
+        const nextCwd = new Set(cwdDirs);
+        const nextActive = new Set(activeDirs);
         for (const dir of cdMatches) {
-          for (const from of bases) {
+          for (const from of cwdDirs) {
             if (from === AMBIGUOUS_DIR || dir === '-' || dir.includes('$') || dir.includes('*')) {
-              nextDirs.add(AMBIGUOUS_DIR);
+              nextCwd.add(AMBIGUOUS_DIR);
+              nextActive.add(AMBIGUOUS_DIR);
             } else {
-              const rel = relative(root, resolve(root, from, dir)).split(sep).join('/').replace(/\/+$/, '');
-              if (rel && rel !== '.') nextDirs.add(rel);
+              const rel = relative(root, resolve(root, from, dir)).split(sep).join('/').replace(/\/+$/, '') || '.';
+              if (!rel.startsWith('..')) nextCwd.add(rel);
+              if (rel !== '.' && !rel.startsWith('..')) nextActive.add(rel);
             }
           }
         }
-        activeDirs = nextDirs;
+        cwdDirs = nextCwd;
+        activeDirs = nextActive;
       }
       if (!/\blint\b/.test(token)) continue;
       if (AMBIGUOUS_LINT_EXEC.test(token)) {
@@ -604,13 +612,13 @@ function lintTargetsInCommands(commands, context) {
       const hasNonRootCrossFlag = /(?:^|[\s;|&(])(?:--filter|-F|--dir|-C|--prefix|--cwd|-r|--recursive|--workspace(?:=|\s)|--workspaces)/.test(token);
       if (!hasCrossFlag && activeDirs.size === 0) continue;
       // `pnpm -w run lint` / `pnpm --workspace-root run lint` runs the root lint
-      // script (handled by ROOT_SCRIPT_CALL), not every workspace member.
+      // script (handled by extractPnpmRootScripts), not every workspace member.
       if (hasRootFlag && !hasNonRootCrossFlag) continue;
       const recursive = /(?:^|\s)(?:-r|--recursive)(?:\s|$)/.test(token);
       const filters = [...token.matchAll(FILTER_ARG)].map(([, target]) => target);
       if (!recursive && filters.length > 0) {
         let allResolved = true;
-        const resolveBases = new Set([...(baseDir !== '.' ? [baseDir] : []), ...(activeDirs.size > 0 ? activeDirs : [baseDir])]);
+        const resolveBases = new Set([...(baseDir !== '.' ? [baseDir] : []), ...(activeDirs.size > 0 ? activeDirs : cwdDirs)]);
         for (const filter of filters) {
           let resolvedAny = false;
           for (const from of resolveBases) {
@@ -649,17 +657,125 @@ function lintTargetsInCommands(commands, context) {
   return targets;
 }
 
+const PNPM_VALUE_OPTIONS = new Set([
+  '--reporter', '--loglevel', '--config', '--store-dir', '--virtual-store-dir', '--modules-dir',
+  '--color', '--workspace-concurrency', '--network-concurrency', '--fetch-retries',
+  '--child-concurrency', '--filter', '-F', '--dir', '-C', '--prefix', '--cwd', '--stream-prefix',
+]);
+
+function tokenizeShellWords(segment) {
+  const words = [];
+  let current = '';
+  let quote = null;
+  let hasToken = false;
+  for (let i = 0; i < segment.length; i++) {
+    const ch = segment[i];
+    const next = segment[i + 1];
+    if (quote === "'") {
+      if (ch === "'") quote = null;
+      else current += ch;
+      hasToken = true;
+      continue;
+    }
+    if (ch === '\\' && next !== undefined) {
+      current += next;
+      hasToken = true;
+      i++;
+      continue;
+    }
+    if (quote === '"') {
+      if (ch === '"') quote = null;
+      else current += ch;
+      hasToken = true;
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      hasToken = true;
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      if (hasToken) {
+        words.push(current);
+        current = '';
+        hasToken = false;
+      }
+      continue;
+    }
+    current += ch;
+    hasToken = true;
+  }
+  if (hasToken) words.push(current);
+  return words;
+}
+
+// Extract root package.json script names invoked via `pnpm`, allowing pnpm flags
+// (such as `--silent`, `--if-present`, `--reporter <v>`, `-w`, `--workspace-root`,
+// or `--dir <root>`) in any order before or after `run`.
+function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.', root = null } = {}) {
+  const scripts = [];
+  for (const token of splitShellCommands(command)) {
+    if (token === '(' || token === ')') continue;
+    const words = tokenizeShellWords(token);
+    let idx = 0;
+    while (idx < words.length && (/^[A-Za-z_]\w*=/.test(words[idx]) || /^(?:then|else|do|time|env|!)$/.test(words[idx]))) idx++;
+    if (words[idx] !== 'pnpm') continue;
+    idx++;
+    let hasRootFlag = false;
+    let hasNonRootTarget = false;
+    let seenRun = false;
+    for (; idx < words.length; idx++) {
+      const word = words[idx];
+      if (word === '--') break;
+      if (word === '-w' || word === '--workspace-root') {
+        hasRootFlag = true;
+        continue;
+      }
+      if (word === '--filter' || word === '-F' || word.startsWith('--filter=') || word.startsWith('-F=')) {
+        hasNonRootTarget = true;
+        if ((word === '--filter' || word === '-F') && idx + 1 < words.length) idx++;
+        continue;
+      }
+      if (word === '--dir' || word === '-C' || word.startsWith('--dir=') || word.startsWith('-C=')) {
+        const dirVal = word.includes('=') ? word.slice(word.indexOf('=') + 1) : words[++idx];
+        if (dirVal && root && !dirVal.includes('$') && !baseDir.includes('$')) {
+          const rel = relative(root, resolve(root, baseDir, dirVal)).split(sep).join('/').replace(/\/+$/, '');
+          if (!rel || rel === '.') hasRootFlag = true;
+          else hasNonRootTarget = true;
+        } else {
+          hasNonRootTarget = true;
+        }
+        continue;
+      }
+      if (word.startsWith('-')) {
+        if (PNPM_VALUE_OPTIONS.has(word) && idx + 1 < words.length) idx++;
+        continue;
+      }
+      if (!seenRun && (word === 'run' || word === 'run-script')) {
+        seenRun = true;
+        continue;
+      }
+      if (!hasNonRootTarget && (!requireRootFlag || hasRootFlag) && /^[A-Za-z0-9_@][\w.:/@-]*$/.test(word)) {
+        scripts.push(word);
+      }
+      break;
+    }
+  }
+  return scripts;
+}
+
 // Expand CI commands through root package.json scripts without stripping
 // `pnpm --filter`, so workspace script invocations (such as `--filter @nd/n4 lint`)
 // remain visible before deciding whether standalone lint scripts can be omitted.
-function expandedCommandTexts(commands, rootScripts) {
+function expandedCommandTexts(commands, rootScripts, root = null) {
   const entries = [];
   const pending = commands.map((entry) => (typeof entry === 'string' ? { cmd: entry, workingDir: null } : entry));
   const expanded = new Set();
   while (pending.length) {
     const current = pending.pop();
     entries.push(current);
-    for (const [, script] of current.cmd.matchAll(ROOT_SCRIPT_CALL)) {
+    const nonRootWorkingDir = Boolean(current.workingDir && current.workingDir.trim() && !/^\.\/?$/.test(current.workingDir.trim()));
+    for (const script of extractPnpmRootScripts(current.cmd, { requireRootFlag: nonRootWorkingDir, baseDir: current.workingDir ?? '.', root })) {
       if (!expanded.has(script)) {
         expanded.add(script);
         if (rootScripts[script]) pending.push({ cmd: rootScripts[script], workingDir: null });
@@ -669,18 +785,17 @@ function expandedCommandTexts(commands, rootScripts) {
   return entries;
 }
 
-const WORKSPACE_ROOT_SCRIPT_CALL = /\bpnpm\s+(?:-w|--workspace-root)\s+(?:run\s+)?['"]?([A-Za-z0-9_@][\w.:/@-]*)['"]?/g;
 const COMMAND_PACKAGE_TESTS = /(?:^|[\s'"`(=])(?:\.\/)?(packages\/[\w.-]+\/tests?)(?:\/|$)/gm;
 
 // Expand root package.json scripts explicitly invoked from a workspace manifest
-// via `pnpm -w [run] <script>` or `pnpm --workspace-root [run] <script>`,
-// returning both the expanded command texts and all invoked root script names.
-function expandedRootScriptsFromWorkspace(commands, rootScripts) {
+// via `pnpm -w [run] <script>`, `pnpm --workspace-root [run] <script>`, or
+// `pnpm --dir <root> [run] <script>`, returning expanded commands and names.
+function expandedRootScriptsFromWorkspace(commands, rootScripts, { baseDir = '.', root = null } = {}) {
   const names = new Set();
   const texts = [];
   const pending = [];
   for (const cmd of commands) {
-    for (const [, script] of cmd.matchAll(WORKSPACE_ROOT_SCRIPT_CALL)) {
+    for (const script of extractPnpmRootScripts(cmd, { requireRootFlag: true, baseDir, root })) {
       if (!names.has(script)) {
         names.add(script);
         if (rootScripts[script]) pending.push(rootScripts[script]);
@@ -690,7 +805,7 @@ function expandedRootScriptsFromWorkspace(commands, rootScripts) {
   while (pending.length) {
     const command = pending.pop();
     texts.push(command);
-    for (const [, script] of command.matchAll(ROOT_SCRIPT_CALL)) {
+    for (const script of extractPnpmRootScripts(command, { root })) {
       if (!names.has(script)) {
         names.add(script);
         if (rootScripts[script]) pending.push(rootScripts[script]);
@@ -753,10 +868,10 @@ export async function loadConservativeWorkspaceGraph(root) {
     [SITE, rawRuns(siteJobNames(ci))],
     [CATALOG, rawRuns(CATALOG_JOBS)],
   ];
-  const expandedByEntry = new Map(rawEntries.map(([node, raw]) => [node, expandedCommandTexts(raw, rootScripts)]));
+  const expandedByEntry = new Map(rawEntries.map(([node, raw]) => [node, expandedCommandTexts(raw, rootScripts, root)]));
   const workspaceRootScriptInfo = new Map(nodes.map((node) => {
     const allScripts = Object.values(manifests.get(node)?.scripts ?? {}).map(String);
-    return [node, expandedRootScriptsFromWorkspace(allScripts, rootScripts)];
+    return [node, expandedRootScriptsFromWorkspace(allScripts, rootScripts, { baseDir: node, root })];
   }));
   const workspaceRootScripts = new Map([...workspaceRootScriptInfo].map(([node, { names }]) => [node, names]));
   const workspaceExpandedScripts = new Map(nodes.map((node) => {
@@ -852,7 +967,7 @@ export async function loadConservativeWorkspaceGraph(root) {
   const rootConfigs = (await readdir(root)).filter((name) => /^(?:[\w-]+\.config\.[cm]?[jt]s|tsconfig[\w.-]*\.json)$/.test(name) && !INDEPENDENT_CONFIG.test(name));
   const rootScriptsRun = new Map();
   for (const [node, commands] of entries) {
-    const { named, expanded } = namedByCommands(commands, rootScripts);
+    const { named, expanded } = namedByCommands(commands, rootScripts, root);
     if (node === SITE) for (const config of rootConfigs) named.add(config);
     for (const lintTarget of lintTargetsInCommands(expandedByEntry.get(node) ?? [], lintTargetContext)) {
       named.add(lintTarget);
@@ -952,6 +1067,7 @@ export async function loadConservativeWorkspaceGraph(root) {
   const jobScripts = new Map(Object.entries(ci?.jobs ?? {}).map(([id, job]) => [id, namedByCommands(
     (Array.isArray(job?.steps) ? job.steps : []).map((step) => String(step?.run ?? '').replace(/pnpm --filter \S+ (?:run )?\S+/g, '')),
     rootScripts,
+    root,
   ).expanded]));
   const naming = new Map();
   const graph = {
