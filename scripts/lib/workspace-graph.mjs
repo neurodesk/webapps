@@ -1011,7 +1011,9 @@ function ciCommandsPreserveMatrixApp(catalogCmds, entryFile, root = null) {
     const stepEnv = typeof entry === 'string' ? null : entry.env ?? null;
     const workingDir = typeof entry === 'string' ? null : entry.workingDir ?? null;
     const shell = typeof entry === 'string' ? null : entry.shell ?? null;
+    if (shell && shell !== 'bash' && shell !== 'sh') return false;
     if (UNSAFE_EXEC_ENV_TEXT.test(cmd)) return false;
+    if (stepEnv && Object.keys(stepEnv).some((key) => UNSAFE_EXEC_ENV.test(key))) return false;
     if (stepEnv && Object.values(stepEnv).some((val) => String(val ?? '').includes(entryBase))) return false;
     const segments = splitShellCommands(cmd);
     for (let segIdx = 0; segIdx < segments.length; segIdx++) {
@@ -1019,7 +1021,20 @@ function ciCommandsPreserveMatrixApp(catalogCmds, entryFile, root = null) {
       const words = tokenizeShellWordsWithExpansion(seg);
       if (words.length === 0) continue;
       let startIdx = 0;
-      while (startIdx < words.length && SHELL_CONTROL_PREFIXES.has(words[startIdx].value)) startIdx++;
+      while (startIdx < words.length) {
+        const val = words[startIdx].value;
+        if (SHELL_CONTROL_PREFIXES.has(val)) {
+          startIdx++;
+          continue;
+        }
+        const envAssign = val.match(/^([A-Za-z_]\w*)\+?=/);
+        if (envAssign) {
+          if (UNSAFE_EXEC_ENV.test(envAssign[1])) return false;
+          startIdx++;
+          continue;
+        }
+        break;
+      }
       const cmdWords = words.slice(startIdx);
       if (cmdWords.length === 0) continue;
       const cmdName = cmdWords[0].value.split('/').pop();
@@ -1036,9 +1051,7 @@ function ciCommandsPreserveMatrixApp(catalogCmds, entryFile, root = null) {
       }
       const entryIdx = words.findIndex((w) => matchesEntryWord(w.value, workingDir));
       if (entryIdx < 0) continue;
-      if (shell && shell !== 'bash' && shell !== 'sh') return false;
       if (!isRepoRootWorkingDir(workingDir, root)) return false;
-      if (stepEnv && Object.keys(stepEnv).some((key) => UNSAFE_EXEC_ENV.test(key))) return false;
       if (segIdx !== 0 || /`|\$\(/.test(seg)) return false;
       if (entryIdx !== 1 || words[0].raw !== 'node' || entryIdx + 1 >= words.length) return false;
       const entryNorm = posix.normalize(words[entryIdx].value.replace(/^\/+/, ''));
@@ -2443,6 +2456,23 @@ export async function loadConservativeWorkspaceGraph(root) {
     }
     return expanded;
   };
+  const expandJobSteps = async (job) => {
+    const out = [];
+    const jobWorkingDir = job?.defaults?.run?.['working-directory'] ?? workflowWorkingDir;
+    const jobShell = job?.defaults?.run?.shell ?? workflowShell;
+    const jobEnv = job?.env && typeof job.env === 'object' ? { ...workflowEnv, ...job.env } : workflowEnv;
+    for (const step of Array.isArray(job?.steps) ? job.steps : []) {
+      const stepEnv = step?.env && typeof step.env === 'object' ? { ...jobEnv, ...step.env } : jobEnv;
+      const stepWorkingDir = step?.['working-directory'] ?? jobWorkingDir ?? null;
+      const stepShell = step?.shell ?? jobShell ?? null;
+      if (typeof step?.uses === 'string' && step.uses.startsWith('./')) {
+        out.push(...await loadLocalCompositeSteps(step.uses, stepEnv, stepWorkingDir, stepShell));
+      } else {
+        out.push({ cmd: String(step?.run ?? ''), workingDir: stepWorkingDir, shell: stepShell, env: stepEnv });
+      }
+    }
+    return out;
+  };
   const rawRuns = async (names) => {
     const out = [];
     for (const name of names) {
@@ -2451,19 +2481,7 @@ export async function loadConservativeWorkspaceGraph(root) {
       if (!Array.isArray(steps) || steps.length === 0) {
         throw new WorkspaceGraphConfigurationError(`ci.yml job ${name} has no step list; update the workspace graph's CI entry points`);
       }
-      const jobWorkingDir = job?.defaults?.run?.['working-directory'] ?? workflowWorkingDir;
-      const jobShell = job?.defaults?.run?.shell ?? workflowShell;
-      const jobEnv = job?.env && typeof job.env === 'object' ? { ...workflowEnv, ...job.env } : workflowEnv;
-      for (const step of steps) {
-        const stepEnv = step?.env && typeof step.env === 'object' ? { ...jobEnv, ...step.env } : jobEnv;
-        const stepWorkingDir = step?.['working-directory'] ?? jobWorkingDir ?? null;
-        const stepShell = step?.shell ?? jobShell ?? null;
-        if (typeof step?.uses === 'string' && step.uses.startsWith('./')) {
-          out.push(...await loadLocalCompositeSteps(step.uses, stepEnv, stepWorkingDir, stepShell));
-        } else {
-          out.push({ cmd: String(step?.run ?? ''), workingDir: stepWorkingDir, shell: stepShell, env: stepEnv });
-        }
-      }
+      out.push(...await expandJobSteps(job));
     }
     return out;
   };
@@ -2912,21 +2930,11 @@ export async function loadConservativeWorkspaceGraph(root) {
   // ids whose code names `identifier`, read on first use.
   let moduleUsers;
   // The root package.json scripts each ci.yml job runs, directly or through
-  // other scripts (`pnpm <script>`; a package's own scripts are not root ones).
-  const jobScripts = new Map(Object.entries(ci?.jobs ?? {}).map(([id, job]) => {
-    const jobWorkingDir = job?.defaults?.run?.['working-directory'] ?? workflowWorkingDir;
-    const jobEnv = job?.env && typeof job.env === 'object' ? { ...workflowEnv, ...job.env } : workflowEnv;
-    return [id, namedByCommands(
-      (Array.isArray(job?.steps) ? job.steps : []).map((step) => ({
-        cmd: String(step?.run ?? ''),
-        workingDir: step?.['working-directory'] ?? jobWorkingDir ?? null,
-        env: step?.env && typeof step.env === 'object' ? { ...jobEnv, ...step.env } : jobEnv,
-      })),
-      rootScripts,
-      root,
-      rootPackageName,
-    ).expanded];
-  }));
+  // local composite actions or other scripts (`pnpm <script>`; a package's own scripts are not root ones).
+  const jobScripts = new Map();
+  for (const [id, job] of Object.entries(ci?.jobs ?? {})) {
+    jobScripts.set(id, namedByCommands(await expandJobSteps(job), rootScripts, root, rootPackageName).expanded);
+  }
   const naming = new Map();
   const graph = {
     nodes: Object.freeze(nodes),
