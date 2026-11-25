@@ -10,6 +10,9 @@ import { niftiUnits } from "../units.js";
 import { imageStem, note } from "./source.js";
 
 const TYPES = { 2: "uint8", 4: "int16", 8: "int32", 16: "float32", 64: "float64", 256: "int8", 512: "uint16", 768: "uint32" };
+const NIFTI2_MAGIC = [0x6e, 0x2b, 0x32, 0x00, 0x0d, 0x0a, 0x1a, 0x0a];
+const NIFTI2_PAIR_MAGIC = [0x6e, 0x69, 0x32, 0x00, 0x0d, 0x0a, 0x1a, 0x0a];
+const VELTKAMP_SPLIT = 134217729; // 2^27 + 1
 
 function ascii(bytes, offset, length) {
   let out = "";
@@ -17,11 +20,74 @@ function ascii(bytes, offset, length) {
   return out;
 }
 
-function quaternionToAffine(quatern, qoffset, pixDims) {
+function bytesEqualAt(bytes, offset, expected) {
+  if (offset + expected.length > bytes.byteLength) return false;
+  for (let i = 0; i < expected.length; i += 1) {
+    if (bytes[offset + i] !== expected[i]) return false;
+  }
+  return true;
+}
+
+function twoSum(a, b) {
+  const s = a + b;
+  const v = s - a;
+  const e = (a - (s - v)) + (b - v);
+  return [s, e];
+}
+
+function twoProd(a, b) {
+  const p = a * b;
+  const ca = VELTKAMP_SPLIT * a;
+  const ah = ca - (ca - a);
+  const al = a - ah;
+  const cb = VELTKAMP_SPLIT * b;
+  const bh = cb - (cb - b);
+  const bl = b - bh;
+  const e = ((ah * bh - p) + ah * bl + al * bh) + al * bl;
+  return [p, e];
+}
+
+function growExpansion(expansion, b) {
+  const out = [];
+  let q = b;
+  for (let i = 0; i < expansion.length; i += 1) {
+    const [sum, err] = twoSum(q, expansion[i]);
+    q = sum;
+    if (err !== 0) out.push(err);
+  }
+  if (q !== 0 || out.length === 0) out.push(q);
+  return out;
+}
+
+function exactQuaternionW2(b, c, d) {
+  const [b2h, b2l] = twoProd(b, b);
+  const [c2h, c2l] = twoProd(c, c);
+  const [d2h, d2l] = twoProd(d, d);
+  let exp = [1];
+  for (const term of [-b2h, -b2l, -c2h, -c2l, -d2h, -d2l]) {
+    exp = growExpansion(exp, term);
+  }
+  let sum = 0;
+  for (let i = 0; i < exp.length; i += 1) sum += exp[i];
+  return sum;
+}
+
+function quaternionToAffine(quatern, qoffset, pixDims, isNifti2) {
   const [b, c, d] = quatern;
-  const aSq = 1.0 - (b * b + c * c + d * d);
-  if (!Number.isFinite(aSq) || aSq < -1e-5) throw new Error("Invalid NIfTI quaternion in qform.");
-  const a = aSq > 0 ? Math.sqrt(aSq) : 0;
+  if (!Number.isFinite(b) || !Number.isFinite(c) || !Number.isFinite(d) || Math.abs(b) > 2 || Math.abs(c) > 2 || Math.abs(d) > 2) {
+    throw new Error("Invalid NIfTI quaternion in qform.");
+  }
+  // NiBabel 5.3.3 fillpositive two-sided threshold: 3 * eps (float32 for NIfTI-1, float64 for NIfTI-2).
+  const absThresh = isNifti2 ? 3 * Number.EPSILON : 3 * (2 ** -23);
+  const w2 = exactQuaternionW2(b, c, d);
+  let a;
+  if (Math.abs(w2) < absThresh) {
+    a = 0;
+  } else if (w2 < 0) {
+    throw new Error("Invalid NIfTI quaternion in qform.");
+  } else {
+    a = Math.sqrt(w2);
+  }
   const r00 = a * a + b * b - c * c - d * d;
   const r01 = 2 * (b * c - a * d);
   const r02 = 2 * (b * d + a * c);
@@ -92,6 +158,9 @@ export function parseNiftiAnyHeader(bufferLike) {
     datatype = view.getInt16(70, littleEndian);
     pixDims = Array.from({ length: 8 }, (_, i) => view.getFloat32(76 + i * 4, littleEndian));
     const rawOffset = view.getFloat32(108, littleEndian);
+    if (!Number.isFinite(rawOffset) || rawOffset < 0 || (rawOffset !== 0 && rawOffset < 352)) {
+      throw new Error(`Invalid NIfTI-1 vox_offset (${rawOffset}): single-file NIfTI-1 requires vox_offset >= 352.`);
+    }
     voxOffset = rawOffset === 0 ? 352 : Math.ceil(rawOffset);
     rawSlope = view.getFloat32(112, littleEndian);
     rawInter = view.getFloat32(116, littleEndian);
@@ -102,9 +171,12 @@ export function parseNiftiAnyHeader(bufferLike) {
     qoffset = [view.getFloat32(268, littleEndian), view.getFloat32(272, littleEndian), view.getFloat32(276, littleEndian)];
     srow = [0, 1, 2].map((r) => [0, 1, 2, 3].map((c) => view.getFloat32(280 + (r * 4 + c) * 4, littleEndian)));
   } else {
-    const magic = ascii(bytes, 4, 4);
-    if (magic === "ni2\0") throw new Error("Two-file .hdr/.img pairs are not supported. Use a single-file .nii or .nii.gz image.");
-    if (magic !== "n+2\0") throw new Error("Input must be a NIfTI-1 or NIfTI-2 image.");
+    if (bytesEqualAt(bytes, 4, NIFTI2_PAIR_MAGIC)) {
+      throw new Error("Two-file .hdr/.img pairs are not supported. Use a single-file .nii or .nii.gz image.");
+    }
+    if (!bytesEqualAt(bytes, 4, NIFTI2_MAGIC)) {
+      throw new Error("Input must be a NIfTI-1 or NIfTI-2 image.");
+    }
     datatype = view.getInt16(12, littleEndian);
     dims = Array.from({ length: 8 }, (_, i) => {
       const value = Number(view.getBigInt64(16 + i * 8, littleEndian));
@@ -113,7 +185,9 @@ export function parseNiftiAnyHeader(bufferLike) {
     });
     pixDims = Array.from({ length: 8 }, (_, i) => view.getFloat64(104 + i * 8, littleEndian));
     const rawOffset = Number(view.getBigInt64(168, littleEndian));
-    if (!Number.isSafeInteger(rawOffset)) throw new Error("Invalid NIfTI-2 voxel offset.");
+    if (!Number.isSafeInteger(rawOffset) || rawOffset < 0 || (rawOffset !== 0 && rawOffset < 544)) {
+      throw new Error(`Invalid NIfTI-2 vox_offset (${rawOffset}): single-file NIfTI-2 requires vox_offset >= 544.`);
+    }
     voxOffset = rawOffset === 0 ? 544 : rawOffset;
     rawSlope = view.getFloat64(176, littleEndian);
     rawInter = view.getFloat64(184, littleEndian);
@@ -134,7 +208,7 @@ export function parseNiftiAnyHeader(bufferLike) {
       new Float64Array([0, 0, 0, 1]),
     ];
   } else if (qformCode > 0) {
-    affine = quaternionToAffine(quatern, qoffset, pixDims);
+    affine = quaternionToAffine(quatern, qoffset, pixDims, niftiVersion === 2);
   } else {
     const dx = Math.abs(pixDims[1]) || 1;
     const dy = Math.abs(pixDims[2]) || 1;
@@ -196,7 +270,7 @@ export async function openNiftiSource(file, { signal } = {}) {
   const ArrayType = ARRAY_TYPES[dtype];
   const bytesPer = ArrayType.BYTES_PER_ELEMENT;
   const planeVoxels = shape.y * shape.x;
-  const minOffset = header.niftiVersion === 2 ? 540 : 348;
+  const minOffset = header.niftiVersion === 2 ? 544 : 352;
   const start = Math.ceil(header.voxOffset);
   if (start < minOffset || start + shape.t * shape.z * planeVoxels * bytesPer > buffer.byteLength) {
     throw new Error("The NIfTI file is shorter than its header says.");

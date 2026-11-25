@@ -356,3 +356,213 @@ test("strict Node API validation, failed-write .partial cleanup, and SIGTERM loc
   assert.equal(exited.signal, "SIGTERM");
   await assert.rejects(() => lstat(sigDir), { code: "ENOENT" });
 });
+
+test("Sol r2: signal-safe lock/overwrite rollback, atomic non-overwrite, empty-dir refusal, NIfTI-1/2 strictness, and plain options", async (t) => {
+  const work = await mkdtemp(join(tmpdir(), "omezarr-r2-"));
+  t.after(() => rm(work, { recursive: true, force: true }));
+
+  // 1. Strict plain options: reject non-plain objects, unknown undefined keys, inherited props, null aliases
+  assert.throws(() => parseCliOptions(new Date()), /plain object/);
+  assert.throws(() => parseCliOptions(Object.create({ overwrite: true })), /plain object/);
+  assert.throws(() => parseCliOptions({ unknownKey: undefined }), /Unknown option/);
+  assert.throws(() => parseCliOptions({ "compression-level": null }), /integer/);
+  await assert.rejects(() => checkInstallation(new Date()), /plain object/);
+  await assert.rejects(() => checkInstallation({ unknownKey: undefined }), /Unknown option/);
+
+  // 2. Symlink overwrite refusal
+  const symDir = join(work, "sym-out");
+  await mkdir(symDir);
+  const { symlink } = await import("node:fs/promises");
+  await writeFile(join(work, "target.txt"), "precious");
+  await symlink(join(work, "target.txt"), join(symDir, "out.bin"));
+  await assert.rejects(
+    () => commitOutputs(symDir, [{ kind: "file", name: "out.bin", data: Buffer.from("new") }], { overwrite: true }),
+    /symbolic link/,
+  );
+  assert.equal(await readFile(join(work, "target.txt"), "utf8"), "precious");
+
+  // 3. Atomic non-overwrite TOCTOU: concurrent file created after lstat is untouched (both linkSync & ENOTSUP->COPYFILE_EXCL)
+  const raceDir = join(work, "race-out");
+  await mkdir(raceDir);
+  await assert.rejects(
+    () => commitOutputs(raceDir, [{ kind: "file", name: "race.bin", data: Buffer.from("new") }], {
+      overwrite: false,
+      writeFileFn: async (p, data, opts) => {
+        await writeFile(p, data, opts);
+        await writeFile(join(raceDir, "race.bin"), "concurrent-winner");
+      },
+    }),
+    /already exists/,
+  );
+  assert.equal(await readFile(join(raceDir, "race.bin"), "utf8"), "concurrent-winner");
+  assert.deepEqual(await readdir(raceDir), ["race.bin"]);
+
+  const enotsupDir = join(work, "enotsup-out");
+  await mkdir(enotsupDir);
+  await assert.rejects(
+    () => commitOutputs(enotsupDir, [{ kind: "file", name: "race2.bin", data: Buffer.from("new") }], {
+      overwrite: false,
+      writeFileFn: async (p, data, opts) => {
+        await writeFile(p, data, opts);
+        await writeFile(join(enotsupDir, "race2.bin"), "concurrent-winner-2");
+      },
+      linkFn: () => {
+        throw Object.assign(new Error("ENOTSUP"), { code: "ENOTSUP" });
+      },
+    }),
+    /already exists/,
+  );
+  assert.equal(await readFile(join(enotsupDir, "race2.bin"), "utf8"), "concurrent-winner-2");
+  assert.deepEqual(await readdir(enotsupDir), ["race2.bin"]);
+
+  // 4. Concurrent empty-dir creation for --format dir --overwrite is atomically refused via mkdirSync
+  const emptyRaceDir = join(work, "empty-dir-race");
+  await mkdir(emptyRaceDir);
+  const stagedSub = join(emptyRaceDir, ".sample.ome.zarr.abc.partial");
+  await mkdir(stagedSub);
+  await writeFile(join(stagedSub, "zarr.json"), "{}");
+  await assert.rejects(
+    () => commitOutputs(
+      emptyRaceDir,
+      [
+        { kind: "file", name: "sample_summary.json", data: Buffer.from("{}") },
+        { kind: "staged-dir", name: "sample.ome.zarr", stagedPath: stagedSub },
+      ],
+      {
+        overwrite: true,
+        writeFileFn: async (p, data, opts) => {
+          await writeFile(p, data, opts);
+          // Concurrent process creates empty directory right before publication
+          await mkdir(join(emptyRaceDir, "sample.ome.zarr"));
+        },
+      },
+    ),
+    /Cannot overwrite existing path/,
+  );
+  assert.deepEqual(await readdir(join(emptyRaceDir, "sample.ome.zarr")), []);
+  assert.deepEqual(await readdir(emptyRaceDir), ["sample.ome.zarr"]);
+
+  // 5. Subprocess SIGTERM mid-overwrite restores original file from .backup and removes .neurodesk-cli.lock
+  const midDir = join(work, "mid-overwrite");
+  await mkdir(midDir);
+  await writeFile(join(midDir, "a.bin"), "original-a");
+  await writeFile(join(midDir, "b.bin"), "original-b");
+  const nodeUrl = new URL("../src/node.js", import.meta.url).href;
+  const child = spawn(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `import { rename } from "node:fs/promises";
+       import { claimOutputDir, commitOutputs } from ${JSON.stringify(nodeUrl)};
+       setInterval(() => {}, 1000);
+       const claim = await claimOutputDir(${JSON.stringify(midDir)}, { overwrite: true });
+       let calls = 0;
+       await commitOutputs(${JSON.stringify(midDir)}, [
+         { kind: "file", name: "a.bin", data: Buffer.from("new-a") },
+         { kind: "file", name: "b.bin", data: Buffer.from("new-b") },
+       ], {
+         overwrite: true,
+         claim,
+         renameFn: async (src, dst) => {
+           calls += 1;
+           await rename(src, dst);
+           if (calls === 2) {
+             process.stdout.write("MID_BACKUP\\n");
+             await new Promise(() => {});
+           }
+         },
+       });`,
+    ],
+    { stdio: ["ignore", "pipe", "pipe"] },
+  );
+  await new Promise((resolveReady, rejectReady) => {
+    let out = "";
+    child.stdout.on("data", (chunk) => {
+      out += chunk.toString();
+      if (out.includes("MID_BACKUP")) resolveReady();
+    });
+    child.on("error", rejectReady);
+    child.on("exit", (code) => rejectReady(new Error(`child exited early: ${code}`)));
+  });
+  const exitPromise = new Promise((res) => child.on("exit", (code, signal) => res({ code, signal })));
+  child.kill("SIGTERM");
+  const exited = await exitPromise;
+  assert.equal(exited.signal, "SIGTERM");
+  assert.equal(await readFile(join(midDir, "a.bin"), "utf8"), "original-a");
+  assert.equal(await readFile(join(midDir, "b.bin"), "utf8"), "original-b");
+  assert.deepEqual((await readdir(midDir)).sort(), ["a.bin", "b.bin"]);
+
+  // 5b. Subprocess SIGTERM during async lock acquisition defers until open settles and leaves NO stale lock
+  const lockSigDir = join(work, "sig-during-open");
+  const child2 = spawn(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `import { open } from "node:fs/promises";
+       import { claimOutputDir } from ${JSON.stringify(nodeUrl)};
+       await claimOutputDir(${JSON.stringify(lockSigDir)}, {
+         openFn: async (p, flags, mode) => {
+           const h = await open(p, flags, mode);
+           process.stdout.write("CREATED_LOCK\\n");
+           await new Promise((r) => setTimeout(r, 150));
+           return h;
+         },
+       });`,
+    ],
+    { stdio: ["ignore", "pipe", "pipe"] },
+  );
+  await new Promise((resolveReady, rejectReady) => {
+    let out = "";
+    child2.stdout.on("data", (chunk) => {
+      out += chunk.toString();
+      if (out.includes("CREATED_LOCK")) resolveReady();
+    });
+    child2.on("error", rejectReady);
+    child2.on("exit", (code) => rejectReady(new Error(`child2 exited early: ${code}`)));
+  });
+  const exit2 = new Promise((res) => child2.on("exit", (code, signal) => res({ code, signal })));
+  child2.kill("SIGTERM");
+  const exited2 = await exit2;
+  assert.equal(exited2.signal, "SIGTERM");
+  await assert.rejects(() => lstat(lockSigDir), { code: "ENOENT" });
+
+  // 6. Strict NIfTI-1/2 validation & NiBabel 5.3.3 quaternion parity
+  const badMagic2 = new ArrayBuffer(544);
+  new DataView(badMagic2).setInt32(0, 540, true);
+  new Uint8Array(badMagic2, 4, 8).set([0x6e, 0x2b, 0x32, 0x00, 0x00, 0x0a, 0x1a, 0x0a]);
+  assert.throws(() => niftiAffine(badMagic2), /NIfTI/);
+
+  const badOff1 = new ArrayBuffer(352);
+  const dv1 = new DataView(badOff1);
+  dv1.setInt32(0, 348, true);
+  new Uint8Array(badOff1, 344, 4).set([0x6e, 0x2b, 0x31, 0x00]);
+  dv1.setFloat32(108, 348, true);
+  assert.throws(() => niftiAffine(badOff1), /vox_offset/);
+
+  const badOff2 = new ArrayBuffer(544);
+  const dv2 = new DataView(badOff2);
+  dv2.setInt32(0, 540, true);
+  new Uint8Array(badOff2, 4, 8).set([0x6e, 0x2b, 0x32, 0x00, 0x0d, 0x0a, 0x1a, 0x0a]);
+  dv2.setBigInt64(168, 540n, true);
+  assert.throws(() => niftiAffine(badOff2), /vox_offset/);
+
+  // NiBabel 5.3.3 NIfTI-2 near-180° quaternion
+  const q2Buf = new ArrayBuffer(544);
+  const q2 = new DataView(q2Buf);
+  q2.setInt32(0, 540, true);
+  new Uint8Array(q2Buf, 4, 8).set([0x6e, 0x2b, 0x32, 0x00, 0x0d, 0x0a, 0x1a, 0x0a]);
+  q2.setFloat64(104, 1, true);
+  q2.setFloat64(112, 1, true);
+  q2.setFloat64(120, 1, true);
+  q2.setFloat64(128, 1, true);
+  q2.setInt32(344, 1, true);
+  q2.setFloat64(352, 1 + Number.EPSILON, true);
+  q2.setFloat64(360, Math.sqrt(0.875 * Number.EPSILON), true);
+  q2.setFloat64(368, 0, true);
+  assert.ok(Number.isFinite(niftiAffine(q2Buf)[0][0]));
+  q2.setFloat64(352, 1 + 2 * Number.EPSILON, true);
+  q2.setFloat64(360, 0, true);
+  assert.throws(() => niftiAffine(q2Buf), /Invalid NIfTI quaternion/);
+});

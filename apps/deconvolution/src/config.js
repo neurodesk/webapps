@@ -6,6 +6,8 @@ export {
   EXAMPLE_OPTICS,
   checkPsfSpacing,
   checkSquarePixels,
+  createFloat32Nifti2,
+  deconvolvedNifti,
   niftiGeometry,
   niftiSpacingUm,
   outputNames,

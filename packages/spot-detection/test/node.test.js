@@ -254,6 +254,37 @@ test("strict Node API validation, cross-CLI shared lock, and failed-write .parti
       /EFBIG/,
     );
     assert.deepEqual(readdirSync(sharedDir), []);
+
+    // Sol r2: non-plain options, unknown undefined keys, inherited props, null aliases, symlink refusal, TOCTOU non-overwrite
+    assert.throws(() => parseCliOptions(new Date()), /plain object/);
+    assert.throws(() => parseCliOptions(Object.create({ overwrite: true })), /plain object/);
+    assert.throws(() => parseCliOptions({ unknownKey: undefined }), /Unknown option/);
+    assert.throws(() => parseCliOptions({ "no-subpixel": null }), /must be a boolean/);
+    await assert.rejects(() => checkInstallation(new Date()), /plain object/);
+    await assert.rejects(() => checkInstallation({ extra: undefined }), /Unknown option/);
+
+    const { symlinkSync, readFileSync: rfSync, mkdirSync: mdSync } = await import("node:fs");
+    writeFileSync(join(work, "target.csv"), "precious");
+    symlinkSync(join(work, "target.csv"), join(sharedDir, "sym.csv"));
+    await assert.rejects(
+      () => commitOutputs(sharedDir, [{ name: "sym.csv", data: Buffer.from("x") }], { overwrite: true }),
+      /symbolic link/,
+    );
+    assert.equal(rfSync(join(work, "target.csv"), "utf8"), "precious");
+
+    const raceDir = join(work, "race");
+    mdSync(raceDir);
+    await assert.rejects(
+      () => commitOutputs(raceDir, [{ name: "out.csv", data: Buffer.from("new") }], {
+        overwrite: false,
+        writeFileFn: async (p, data) => {
+          writeFileSync(p, data);
+          writeFileSync(join(raceDir, "out.csv"), "winner");
+        },
+      }),
+      /already exists/,
+    );
+    assert.equal(rfSync(join(raceDir, "out.csv"), "utf8"), "winner");
   } finally {
     rmSync(work, { recursive: true, force: true });
   }

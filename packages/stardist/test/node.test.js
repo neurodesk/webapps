@@ -216,4 +216,36 @@ test("strict Node API validation and failed-write .partial cleanup", async (t) =
     /EFBIG/,
   );
   assert.deepEqual(await readdir(dir), []);
+
+  // Sol r2: non-plain options, unknown undefined keys, inherited props, null alias, symlink refusal, TOCTOU non-overwrite
+  assert.throws(() => parseCliOptions(new Date()), /plain object/);
+  assert.throws(() => parseCliOptions(Object.create({ overwrite: true })), /plain object/);
+  assert.throws(() => parseCliOptions({ unknownKey: undefined }), /Unknown option/);
+  assert.throws(() => parseCliOptions({ "cache-dir": null }), /non-empty/);
+  await assert.rejects(() => checkInstallation(new Date()), /plain object/);
+  await assert.rejects(() => checkInstallation({ extra: undefined }), /Unknown option/);
+  await assert.rejects(() => downloadModels({ unknownKey: undefined }), /Unknown option/);
+
+  const { symlink } = await import("node:fs/promises");
+  await writeFile(join(work, "target.tif"), "precious");
+  await symlink(join(work, "target.tif"), join(dir, "sym.tif"));
+  await assert.rejects(
+    () => commitOutputs(dir, [{ name: "sym.tif", data: Buffer.from("x") }], { overwrite: true }),
+    /symbolic link/,
+  );
+  assert.equal(await readFile(join(work, "target.tif"), "utf8"), "precious");
+
+  const raceDir = join(work, "race");
+  await mkdir(raceDir);
+  await assert.rejects(
+    () => commitOutputs(raceDir, [{ name: "out.tif", data: Buffer.from("new") }], {
+      overwrite: false,
+      writeFileFn: async (p, data, opts) => {
+        await writeFile(p, data, opts);
+        await writeFile(join(raceDir, "out.tif"), "winner");
+      },
+    }),
+    /already exists/,
+  );
+  assert.equal(await readFile(join(raceDir, "out.tif"), "utf8"), "winner");
 });

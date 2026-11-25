@@ -2,8 +2,24 @@
 // Runs the exact same Big-FISH LoG detector, elbow threshold, sub-pixel fit, per-cell counter
 // and NIfTI spot-ring overlay writer as the Spot detection web application.
 import { randomBytes } from "node:crypto";
-import { constants as fsConstants, rmSync, rmdirSync, unlinkSync } from "node:fs";
-import { lstat, mkdir, open, readdir, rename, rm, rmdir, stat, unlink, writeFile } from "node:fs/promises";
+import {
+  closeSync,
+  constants as fsConstants,
+  copyFileSync,
+  existsSync,
+  linkSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  rmdirSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { lstat, open, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { gzipSync } from "node:zlib";
@@ -151,32 +167,53 @@ function parseNumeric(raw, flag, { min = -Infinity, exclusiveMin = false, float3
   return value;
 }
 
-export function parseCliOptions(values = {}) {
-  if (values === null || typeof values !== "object" || Array.isArray(values)) {
-    throw new Error("Options must be a plain object.");
+function assertPlainOptions(options, allowedKeys, context = "Options") {
+  if (options === undefined) return {};
+  if (options === null || typeof options !== "object" || Array.isArray(options)) {
+    throw new Error(`${context} must be a plain object.`);
   }
-  for (const [key, value] of Object.entries(values)) {
-    if (value !== undefined && !ALLOWED_OPTION_KEYS.has(key)) {
+  const proto = Object.getPrototypeOf(options);
+  if (proto !== Object.prototype && proto !== null) {
+    throw new Error(`${context} must be a plain object.`);
+  }
+  for (const key of Object.keys(options)) {
+    if (!allowedKeys.has(key)) {
       throw new Error(`Unknown option '${key}'.`);
     }
   }
-  const labelsPath = assertNonEmptyString(values.labels, "labels") ?? null;
-  const voxelZ = parseNumeric(values["voxel-z"] ?? values.voxelZ, "voxel-z", { min: 0, exclusiveMin: true, float32Positive: true, float32Mm: true });
-  const voxelYx = parseNumeric(values["voxel-yx"] ?? values.voxelYx, "voxel-yx", { min: 0, exclusiveMin: true, float32Positive: true, float32Mm: true });
-  const radiusZ = parseNumeric(values["radius-z"] ?? values.radiusZ, "radius-z", { min: 0, exclusiveMin: true, float32Positive: true });
-  const radiusYx = parseNumeric(values["radius-yx"] ?? values.radiusYx, "radius-yx", { min: 0, exclusiveMin: true, float32Positive: true });
-  const threshold = parseNumeric(values.threshold, "threshold", { min: 0 });
-  const projection = parseBooleanOption(values.projection, "projection");
-  const subpixel = !parseBooleanOption(values["no-subpixel"] ?? values.noSubpixel, "no-subpixel");
-  const overwrite = parseBooleanOption(values.overwrite, "overwrite");
+  return options;
+}
+
+function readAliasedOption(options, primary, alias) {
+  const hasPrimary = Object.hasOwn(options, primary) && options[primary] !== undefined;
+  const hasAlias = alias && Object.hasOwn(options, alias) && options[alias] !== undefined;
+  if (hasPrimary && hasAlias) {
+    throw new Error(`Specify either '${primary}' or '${alias}', not both.`);
+  }
+  if (hasPrimary) return options[primary];
+  if (hasAlias) return options[alias];
+  return undefined;
+}
+
+export function parseCliOptions(values) {
+  const opts = assertPlainOptions(values, ALLOWED_OPTION_KEYS, "Options");
+  const labelsPath = assertNonEmptyString(opts.labels, "labels") ?? null;
+  const voxelZ = parseNumeric(readAliasedOption(opts, "voxel-z", "voxelZ"), "voxel-z", { min: 0, exclusiveMin: true, float32Positive: true, float32Mm: true });
+  const voxelYx = parseNumeric(readAliasedOption(opts, "voxel-yx", "voxelYx"), "voxel-yx", { min: 0, exclusiveMin: true, float32Positive: true, float32Mm: true });
+  const radiusZ = parseNumeric(readAliasedOption(opts, "radius-z", "radiusZ"), "radius-z", { min: 0, exclusiveMin: true, float32Positive: true });
+  const radiusYx = parseNumeric(readAliasedOption(opts, "radius-yx", "radiusYx"), "radius-yx", { min: 0, exclusiveMin: true, float32Positive: true });
+  const threshold = parseNumeric(opts.threshold, "threshold", { min: 0 });
+  const projection = parseBooleanOption(opts.projection, "projection");
+  const subpixel = !parseBooleanOption(readAliasedOption(opts, "no-subpixel", "noSubpixel"), "no-subpixel");
+  const overwrite = parseBooleanOption(opts.overwrite, "overwrite");
   const envOffline = process.env.NEURODESK_OFFLINE === "1";
-  if (values.offline !== undefined) {
-    const explicit = parseBooleanOption(values.offline, "offline");
+  if (Object.hasOwn(opts, "offline") && opts.offline !== undefined) {
+    const explicit = parseBooleanOption(opts.offline, "offline");
     if (envOffline && explicit === false) {
       throw new Error("Cannot set offline: false while NEURODESK_OFFLINE=1 is active.");
     }
   }
-  const offline = envOffline || Boolean(values.offline);
+  const offline = envOffline || Boolean(opts.offline);
 
   // Validate eagerly before any file I/O using default voxel sizes if omitted.
   detectionSettings({
@@ -234,85 +271,194 @@ async function readBoundedInputFile(filePath, maxFileBytes = MAX_CLI_FILE_BYTES)
   }
 }
 
-async function mkdirTracking(targetDir) {
-  const created = [];
+const LINK_FALLBACK_CODES = new Set(["EXDEV", "EPERM", "ENOTSUP", "ENOSYS"]);
+
+function ensureDirectoryChainSync(targetDir, createdOut) {
+  const missing = [];
   let cursor = resolve(targetDir);
-  const toCreate = [];
   while (true) {
     try {
-      const info = await stat(cursor);
+      const info = statSync(cursor);
       if (!info.isDirectory()) throw new Error(`Output path '${targetDir}' exists and is not a directory.`);
       break;
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
       const parent = dirname(cursor);
       if (parent === cursor) break;
-      toCreate.push(cursor);
+      missing.push(cursor);
       cursor = parent;
     }
   }
-  for (let i = toCreate.length - 1; i >= 0; i -= 1) {
+  for (let i = missing.length - 1; i >= 0; i -= 1) {
     try {
-      await mkdir(toCreate[i]);
-      created.push(toCreate[i]);
+      mkdirSync(missing[i]);
+      createdOut.push(missing[i]);
     } catch (error) {
       if (error.code === "EEXIST") {
-        const info = await stat(toCreate[i]);
+        const info = statSync(missing[i]);
         if (!info.isDirectory()) throw new Error(`Output path '${targetDir}' exists and is not a directory.`);
       } else {
-        for (let j = created.length - 1; j >= 0; j -= 1) await rmdir(created[j]).catch(() => {});
         throw error;
       }
     }
   }
-  return created;
 }
 
-export async function claimOutputDir(outputDir, { overwrite = false, readdirFn = readdir } = {}) {
+function rollbackPublishSync(pubState) {
+  if (!pubState || pubState.committed) return true;
+  let ok = true;
+  const renameRollback = pubState.renameSyncFn ?? renameSync;
+
+  if (pubState.pendingPublish && !pubState.pendingPublish.hadBackup) {
+    const { target, partialPath } = pubState.pendingPublish;
+    if (!partialPath || !existsSync(partialPath)) {
+      try {
+        lstatSync(target);
+        rmSync(target, { force: true });
+      } catch (error) {
+        if (error.code !== "ENOENT") ok = false;
+      }
+    }
+  }
+  pubState.pendingPublish = null;
+
+  while (pubState.published.length > 0) {
+    const entry = pubState.published[pubState.published.length - 1];
+    if (!entry.hadBackup) {
+      try {
+        rmSync(entry.target, { force: true });
+        pubState.published.pop();
+      } catch (error) {
+        if (error.code === "ENOENT") pubState.published.pop();
+        else {
+          ok = false;
+          break;
+        }
+      }
+    } else {
+      pubState.published.pop();
+    }
+  }
+
+  if (pubState.pendingBackup) {
+    const { target, backup } = pubState.pendingBackup;
+    let backupExists = false;
+    let targetExists = false;
+    try {
+      lstatSync(backup);
+      backupExists = true;
+    } catch {
+      // Backup was not created before interruption.
+    }
+    try {
+      lstatSync(target);
+      targetExists = true;
+    } catch {
+      // Target is absent and needs restore.
+    }
+    if (backupExists && !targetExists) {
+      try {
+        renameRollback(backup, target);
+      } catch {
+        ok = false;
+      }
+    }
+    pubState.pendingBackup = null;
+  }
+
+  while (pubState.backups.length > 0) {
+    const entry = pubState.backups[pubState.backups.length - 1];
+    try {
+      renameRollback(entry.backup, entry.target);
+      pubState.backups.pop();
+    } catch (error) {
+      if (error.code === "ENOENT") pubState.backups.pop();
+      else {
+        ok = false;
+        break;
+      }
+    }
+  }
+
+  for (const item of pubState.staged) {
+    if (!item.partialPath) continue;
+    try {
+      rmSync(item.partialPath, { force: true });
+    } catch (error) {
+      if (error.code !== "ENOENT") ok = false;
+    }
+  }
+  return ok;
+}
+
+const CLAIM_OPTION_KEYS = new Set(["overwrite", "readdirFn", "openFn"]);
+
+export async function claimOutputDir(outputDir, options) {
+  const opts = assertPlainOptions(options, CLAIM_OPTION_KEYS, "claimOutputDir options");
+  const overwrite = parseBooleanOption(opts.overwrite, "overwrite");
+  const readdirFn = opts.readdirFn ?? readdir;
+  const openFn = opts.openFn;
   if (typeof outputDir !== "string" || !outputDir.trim()) throw new Error("Output directory path is required.");
   const dir = resolve(outputDir);
-  const createdDirs = await mkdirTracking(dir);
-  const cleanupCreated = async () => {
-    for (let i = createdDirs.length - 1; i >= 0; i -= 1) await rmdir(createdDirs[i]).catch(() => {});
-  };
   const lockPath = join(dir, LOCK_NAME);
-  let lockHandle;
-  try {
-    lockHandle = await open(lockPath, fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY, 0o600);
-  } catch (error) {
-    await cleanupCreated();
-    if (error.code === "EEXIST") {
-      throw new Error(`Output directory '${outputDir}' is locked by another running CLI process (or contains ${LOCK_NAME}).`);
-    }
-    throw error;
-  }
-  let lockHeld = true;
-  const activePartials = new Set();
 
-  const cleanupSyncOnSignal = (signal) => {
-    for (const p of activePartials) {
+  const createdDirs = [];
+  const activePartials = new Set();
+  let lockHeld = false;
+  let acquiring = false;
+  let pendingSignal = null;
+  let handlingSignal = false;
+  let activePublish = null;
+  let rollbackFailed = false;
+
+  const cleanupSync = ({ removeCreated = false, fromSignal = false } = {}) => {
+    let ok = !rollbackFailed;
+    if (activePublish && !activePublish.committed) {
+      if (!rollbackPublishSync(activePublish)) {
+        ok = false;
+        rollbackFailed = true;
+      } else {
+        activePublish = null;
+      }
+    }
+    for (const p of [...activePartials]) {
       try {
         rmSync(p, { recursive: true, force: true });
+        activePartials.delete(p);
       } catch {
-        // Ignore best-effort cleanup error on terminating signal.
+        if (existsSync(p)) ok = false;
+        else activePartials.delete(p);
       }
     }
-    activePartials.clear();
-    if (lockHeld) {
-      lockHeld = false;
+    if (lockHeld && ok) {
       try {
         unlinkSync(lockPath);
-      } catch {
-        // Ignore best-effort lock unlink error on terminating signal.
+        lockHeld = false;
+      } catch (error) {
+        if (error.code === "ENOENT") lockHeld = false;
+        else ok = false;
       }
     }
-    for (let i = createdDirs.length - 1; i >= 0; i -= 1) {
-      try {
-        rmdirSync(createdDirs[i]);
-      } catch {
-        // Ignore non-empty or already-removed directory on terminating signal.
+    if ((removeCreated || fromSignal) && ok && !lockHeld) {
+      for (let i = createdDirs.length - 1; i >= 0; i -= 1) {
+        try {
+          if (readdirSync(createdDirs[i]).length === 0) rmdirSync(createdDirs[i]);
+        } catch {
+          // Ignore non-empty or already-removed directory during cleanup.
+        }
       }
     }
+    return ok;
+  };
+
+  const cleanupSyncOnSignal = (signal) => {
+    if (handlingSignal) return;
+    if (acquiring) {
+      pendingSignal = signal;
+      return;
+    }
+    handlingSignal = true;
+    cleanupSync({ removeCreated: true, fromSignal: true });
     process.off("SIGINT", cleanupSyncOnSignal);
     process.off("SIGTERM", cleanupSyncOnSignal);
     process.kill(process.pid, signal);
@@ -322,22 +468,69 @@ export async function claimOutputDir(outputDir, { overwrite = false, readdirFn =
   process.on("SIGTERM", cleanupSyncOnSignal);
 
   const release = async ({ removeCreated = false } = {}) => {
+    cleanupSync({ removeCreated });
     process.off("SIGINT", cleanupSyncOnSignal);
     process.off("SIGTERM", cleanupSyncOnSignal);
-    for (const p of activePartials) {
-      await rm(p, { recursive: true, force: true }).catch(() => {});
-    }
-    activePartials.clear();
-    if (lockHeld) {
-      lockHeld = false;
-      await unlink(lockPath).catch(() => {});
-    }
-    if (removeCreated) await cleanupCreated();
   };
+
+  const lockPayload = `${JSON.stringify({ tool: "spot-detection", pid: process.pid, host: hostname(), startedAt: Date.now() })}\n`;
   try {
-    await lockHandle.writeFile(`${JSON.stringify({ tool: "spot-detection", pid: process.pid, host: hostname(), startedAt: Date.now() })}\n`, "utf8");
-    await lockHandle.close();
-    lockHandle = null;
+    ensureDirectoryChainSync(dir, createdDirs);
+    if (openFn) {
+      acquiring = true;
+      let handle = null;
+      try {
+        handle = await openFn(lockPath, fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY, 0o600);
+        lockHeld = true;
+      } catch (error) {
+        acquiring = false;
+        cleanupSync({ removeCreated: true });
+        process.off("SIGINT", cleanupSyncOnSignal);
+        process.off("SIGTERM", cleanupSyncOnSignal);
+        if (pendingSignal) {
+          const sig = pendingSignal;
+          pendingSignal = null;
+          process.kill(process.pid, sig);
+        }
+        if (error.code === "EEXIST") {
+          throw new Error(`Output directory '${outputDir}' is locked by another running CLI process (or contains ${LOCK_NAME}).`);
+        }
+        throw error;
+      }
+      acquiring = false;
+      if (pendingSignal) {
+        if (handle) await handle.close().catch(() => {});
+        const sig = pendingSignal;
+        pendingSignal = null;
+        cleanupSyncOnSignal(sig);
+      }
+      try {
+        await handle.writeFile(lockPayload, "utf8");
+      } finally {
+        await handle.close();
+      }
+    } else {
+      let fd = null;
+      try {
+        fd = openSync(lockPath, "wx", 0o600);
+        lockHeld = true;
+        writeFileSync(fd, lockPayload, "utf8");
+      } catch (error) {
+        if (error.code === "EEXIST") {
+          throw new Error(`Output directory '${outputDir}' is locked by another running CLI process (or contains ${LOCK_NAME}).`);
+        }
+        throw error;
+      } finally {
+        if (fd !== null) {
+          try {
+            closeSync(fd);
+          } catch {
+            // Ignore close error after lock creation.
+          }
+        }
+      }
+    }
+
     if (!overwrite) {
       const entries = (await readdirFn(dir)).filter((name) => name !== LOCK_NAME);
       if (entries.length > 0) {
@@ -345,104 +538,202 @@ export async function claimOutputDir(outputDir, { overwrite = false, readdirFn =
       }
     }
   } catch (error) {
-    if (lockHandle) await lockHandle.close().catch(() => {});
     await release({ removeCreated: true });
     throw error;
   }
+
   return {
     dir,
+    lockPath,
     createdDirs,
     trackPartial: (p) => { activePartials.add(p); },
     untrackPartial: (p) => { activePartials.delete(p); },
+    beginPublish: (pubState) => { activePublish = pubState; },
+    endPublish: (pubState) => { if (activePublish === pubState) activePublish = null; },
+    markRollbackFailed: () => { rollbackFailed = true; },
     release,
   };
 }
 
-export async function commitOutputs(
-  dir,
-  files,
-  { overwrite = false, renameFn = rename, writeFileFn = writeFile, trackPartial, untrackPartial } = {},
-) {
+function publishFileNonOverwriteSync(partialPath, finalPath, { linkFn, copyFileFn }) {
+  const doLink = linkFn ?? linkSync;
+  const doCopy = copyFileFn ?? ((src, dst) => copyFileSync(src, dst, fsConstants.COPYFILE_EXCL));
+  try {
+    doLink(partialPath, finalPath);
+  } catch (error) {
+    if (error.code === "EEXIST") {
+      throw new Error(`Output file '${finalPath}' already exists. Choose a new directory or pass --overwrite.`);
+    }
+    if (LINK_FALLBACK_CODES.has(error.code)) {
+      try {
+        doCopy(partialPath, finalPath);
+      } catch (copyError) {
+        if (copyError.code === "EEXIST") {
+          throw new Error(`Output file '${finalPath}' already exists. Choose a new directory or pass --overwrite.`);
+        }
+        throw copyError;
+      }
+    } else {
+      throw error;
+    }
+  }
+  try {
+    unlinkSync(partialPath);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+}
+
+const COMMIT_OPTION_KEYS = new Set([
+  "overwrite",
+  "renameFn",
+  "writeFileFn",
+  "linkFn",
+  "copyFileFn",
+  "trackPartial",
+  "untrackPartial",
+  "claim",
+]);
+
+export async function commitOutputs(dir, files, options) {
+  const opts = assertPlainOptions(options, COMMIT_OPTION_KEYS, "commitOutputs options");
+  const overwrite = parseBooleanOption(opts.overwrite, "overwrite");
+  const hasCustomRename = opts.renameFn !== undefined && opts.renameFn !== rename;
+  const renameFn = opts.renameFn ?? rename;
+  const writeFileFn = opts.writeFileFn ?? writeFile;
+  const linkFn = opts.linkFn;
+  const copyFileFn = opts.copyFileFn;
+  const claim = opts.claim;
+  const trackPartial = opts.trackPartial ?? claim?.trackPartial;
+  const untrackPartial = opts.untrackPartial ?? claim?.untrackPartial;
+
   const token = randomBytes(6).toString("hex");
   for (const file of files) {
     const target = join(dir, file.name);
     try {
       const info = await lstat(target);
       if (info.isDirectory()) throw new Error(`Cannot write '${file.name}' because '${target}' is a directory.`);
+      if (info.isSymbolicLink()) throw new Error(`Cannot overwrite symbolic link '${target}'. Remove the symlink or choose a new output directory.`);
       if (!overwrite) throw new Error(`Output file '${target}' already exists. Choose a new directory or pass --overwrite.`);
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
     }
   }
 
-  const staged = [];
+  const pubState = {
+    staged: [],
+    published: [],
+    backups: [],
+    pendingBackup: null,
+    pendingPublish: null,
+    committed: false,
+    renameSyncFn: renameSync,
+  };
+  claim?.beginPublish?.(pubState);
+
   try {
     for (const file of files) {
       const partialPath = join(dir, `.${file.name}.${token}.partial`);
       const entry = { name: file.name, partialPath, finalPath: join(dir, file.name) };
-      staged.push(entry);
+      pubState.staged.push(entry);
       trackPartial?.(partialPath);
       await writeFileFn(partialPath, file.data, { flag: "wx" });
     }
-  } catch (error) {
-    for (const entry of staged) {
-      await rm(entry.partialPath, { force: true }).catch(() => {});
-      untrackPartial?.(entry.partialPath);
-    }
-    throw error;
-  }
 
-  const backedUp = [];
-  const committed = [];
-  try {
+    const backedUpSet = new Set();
     if (overwrite) {
-      for (const entry of staged) {
+      for (const entry of pubState.staged) {
         let info = null;
         try {
-          info = await lstat(entry.finalPath);
+          info = lstatSync(entry.finalPath);
         } catch (error) {
           if (error.code !== "ENOENT") throw error;
         }
         if (info) {
           if (info.isDirectory()) throw new Error(`Cannot overwrite existing directory '${entry.finalPath}'.`);
+          if (info.isSymbolicLink()) throw new Error(`Cannot overwrite symbolic link '${entry.finalPath}'.`);
           const backupPath = join(dir, `.${entry.name}.${token}.backup`);
-          await renameFn(entry.finalPath, backupPath);
-          backedUp.push({ finalPath: entry.finalPath, backupPath });
+          pubState.pendingBackup = { target: entry.finalPath, backup: backupPath };
+          if (hasCustomRename) {
+            await renameFn(entry.finalPath, backupPath);
+          } else {
+            renameSync(entry.finalPath, backupPath);
+          }
+          pubState.backups.push({ target: entry.finalPath, backup: backupPath });
+          backedUpSet.add(entry.finalPath);
+          pubState.pendingBackup = null;
         }
       }
     }
-    for (const entry of staged) {
-      await renameFn(entry.partialPath, entry.finalPath);
-      untrackPartial?.(entry.partialPath);
-      committed.push(entry);
+
+    for (const entry of pubState.staged) {
+      const hadBackup = backedUpSet.has(entry.finalPath);
+      if (!overwrite && !hasCustomRename) {
+        publishFileNonOverwriteSync(entry.partialPath, entry.finalPath, { linkFn, copyFileFn });
+        pubState.published.push({ target: entry.finalPath, hadBackup: false, kind: "file" });
+        untrackPartial?.(entry.partialPath);
+      } else {
+        pubState.pendingPublish = { target: entry.finalPath, partialPath: entry.partialPath, hadBackup, kind: "file" };
+        if (hasCustomRename) {
+          await renameFn(entry.partialPath, entry.finalPath);
+        } else {
+          renameSync(entry.partialPath, entry.finalPath);
+        }
+        pubState.published.push({ target: entry.finalPath, hadBackup, kind: "file" });
+        pubState.pendingPublish = null;
+        untrackPartial?.(entry.partialPath);
+      }
     }
+    pubState.committed = true;
   } catch (error) {
-    for (let i = committed.length - 1; i >= 0; i -= 1) await unlink(committed[i].finalPath).catch(() => {});
-    for (let i = backedUp.length - 1; i >= 0; i -= 1) await rename(backedUp[i].backupPath, backedUp[i].finalPath).catch(() => {});
-    for (const entry of staged) {
-      await rm(entry.partialPath, { force: true }).catch(() => {});
+    const ok = rollbackPublishSync(pubState);
+    if (!ok) claim?.markRollbackFailed?.();
+    for (const entry of pubState.staged) {
       untrackPartial?.(entry.partialPath);
     }
+    claim?.endPublish?.(pubState);
     throw error;
   }
 
-  for (const backup of backedUp) await rm(backup.backupPath, { force: true }).catch(() => {});
-  return committed.map((entry) => entry.finalPath);
+  for (const backup of pubState.backups) await rm(backup.backup, { force: true }).catch(() => {});
+  claim?.endPublish?.(pubState);
+  return pubState.staged.map((entry) => entry.finalPath);
 }
 
 /**
  * Detects smFISH spots in one TIFF image or stack (with optional cell labels TIFF) and writes
  * spots CSV, gzipped NIfTI overlay, optional per-cell counts CSV, and provenance JSON atomically.
  */
-export async function detectSpotsFile({
-  input,
-  outputDir,
-  options = {},
-  onProgress,
-  maxFileBytes = MAX_CLI_FILE_BYTES,
-  renameFn = rename,
-  readdirFn = readdir,
-} = {}) {
+const DETECT_ARG_KEYS = new Set([
+  "input",
+  "outputDir",
+  "options",
+  "onProgress",
+  "maxFileBytes",
+  "renameFn",
+  "readdirFn",
+  "openFn",
+  "linkFn",
+  "copyFileFn",
+]);
+
+export async function detectSpotsFile(arg) {
+  const validated = assertPlainOptions(arg, DETECT_ARG_KEYS, "detectSpotsFile arguments");
+  const {
+    input,
+    outputDir,
+    options = {},
+    onProgress,
+    maxFileBytes = MAX_CLI_FILE_BYTES,
+    renameFn = rename,
+    readdirFn = readdir,
+    openFn,
+    linkFn,
+    copyFileFn,
+  } = validated;
+  if (onProgress !== undefined && typeof onProgress !== "function") {
+    throw new Error("onProgress must be a function.");
+  }
   const parsed = parseCliOptions(options);
   if (!input || !String(input).trim()) throw new Error("Input file path is required.");
   if (!outputDir || !String(outputDir).trim()) throw new Error("Output directory path is required.");
@@ -474,7 +765,7 @@ export async function detectSpotsFile({
   });
   checkRun(image, settings, labels);
 
-  const reservation = await claimOutputDir(outputDir, { overwrite: parsed.overwrite, readdirFn });
+  const reservation = await claimOutputDir(outputDir, { overwrite: parsed.overwrite, readdirFn, ...(openFn ? { openFn } : {}) });
   let committed = false;
   try {
     const started = performance.now();
@@ -505,8 +796,9 @@ export async function detectSpotsFile({
     const written = await commitOutputs(reservation.dir, outputFiles, {
       overwrite: parsed.overwrite,
       renameFn,
-      trackPartial: reservation.trackPartial,
-      untrackPartial: reservation.untrackPartial,
+      ...(linkFn ? { linkFn } : {}),
+      ...(copyFileFn ? { copyFileFn } : {}),
+      claim: reservation,
     });
     committed = true;
 
@@ -525,16 +817,12 @@ export async function detectSpotsFile({
 }
 
 /** Offline self-check: detects synthetic diffraction-limited spots and verifies exact recovery. */
-export async function checkInstallation(opts = {}) {
-  if (opts === null || typeof opts !== "object" || Array.isArray(opts)) {
-    throw new Error("Options must be a plain object.");
-  }
-  for (const [key, value] of Object.entries(opts)) {
-    if (value !== undefined && key !== "cacheDir") {
-      throw new Error(`Unknown option '${key}' for checkInstallation.`);
-    }
-  }
-  const cacheDir = opts.cacheDir !== undefined ? assertNonEmptyString(opts.cacheDir, "cache-dir") : undefined;
+const CHECK_OPTION_KEYS = new Set(["cacheDir", "cache-dir"]);
+
+export async function checkInstallation(opts) {
+  const validated = assertPlainOptions(opts, CHECK_OPTION_KEYS, "checkInstallation options");
+  const cacheDirRaw = readAliasedOption(validated, "cache-dir", "cacheDir");
+  const cacheDir = cacheDirRaw !== undefined ? assertNonEmptyString(cacheDirRaw, "cache-dir") : undefined;
   const resolvedCache = cacheDir ? resolve(cacheDir) : undefined;
   const image = syntheticImage([64, 64], 12, 3);
   const result = analyse(image, {

@@ -1,7 +1,9 @@
 // Shared DOM-free deconvolution formatting, geometry, output naming and provenance helpers.
 // Used by both the web app (apps/deconvolution) and the portable CLI (@neurodesk/deconvolution).
-import { createNiftiFromVolume } from "@neurodesk/webapp-components/file-io";
+import { createFloat32Nifti, createNiftiFromVolume } from "@neurodesk/webapp-components/file-io";
 import { imagejDescription, writeTiffStack } from "@neurodesk/webapp-components/file-io/tiff";
+
+const NIFTI2_MAGIC = [0x6e, 0x2b, 0x32, 0x00, 0x0d, 0x0a, 0x1a, 0x0a];
 
 /** The form's starting values: an oil objective, widefield, green emission. */
 export const DEFAULT_OPTICS = Object.freeze({
@@ -96,14 +98,35 @@ export function stackNifti(data, dims, spacingUm) {
 }
 
 /**
- * Sets the voxel size of a NIfTI-1 file in place: pixdim 1-3 in the header's own unit and the
- * sform's columns rescaled to it, keeping their direction and the origin. The qform takes its
- * scale from pixdim, so it follows while preserving both qform and sform codes/rotations.
+ * Sets the voxel size of a NIfTI-1 or NIfTI-2 file in place: pixdim 1-3 in the header's own unit
+ * and the sform's columns rescaled to it, keeping their direction and the origin. The qform takes
+ * its scale from pixdim, so it follows while preserving both qform and sform codes/rotations.
  * @param {ArrayBuffer} buffer
  */
 export function setNiftiSpacing(buffer, spacingUm) {
   const view = new DataView(buffer);
-  const littleEndian = view.getInt32(0, true) === 348;
+  const hdrLe = view.getInt32(0, true);
+  const hdrBe = view.getInt32(0, false);
+  if (hdrLe === 540 || hdrBe === 540) {
+    const littleEndian = hdrLe === 540;
+    const factor = NIFTI_UNIT_UM[view.getInt32(500, littleEndian) & 7] ?? 1000;
+    const sformCode = view.getInt32(348, littleEndian);
+    ["x", "y", "z"].forEach((axis, column) => {
+      const size = spacingUm[axis] / factor;
+      view.setFloat64(112 + 8 * column, size, littleEndian);
+      if (sformCode > 0) {
+        const at = [0, 1, 2].map((row) => 400 + 32 * row + 8 * column);
+        const norm = Math.hypot(...at.map((offset) => view.getFloat64(offset, littleEndian)));
+        if (norm > 0) {
+          for (const offset of at) {
+            view.setFloat64(offset, (view.getFloat64(offset, littleEndian) * size) / norm, littleEndian);
+          }
+        }
+      }
+    });
+    return buffer;
+  }
+  const littleEndian = hdrLe === 348;
   const factor = NIFTI_UNIT_UM[view.getUint8(123) & 7] ?? 1000;
   ["x", "y", "z"].forEach((axis, column) => {
     const size = spacingUm[axis] / factor;
@@ -113,6 +136,63 @@ export function setNiftiSpacing(buffer, spacingUm) {
     if (norm > 0) for (const offset of at) view.setFloat32(offset, (view.getFloat32(offset, littleEndian) * size) / norm, littleEndian);
   });
   return buffer;
+}
+
+/**
+ * Writes a Float32 NIfTI-2 buffer preserving both qform and sform verbatim
+ * (rescaling pixdim and sform columns only when spacingOverrideUm is provided).
+ * @returns {ArrayBuffer}
+ */
+export function createFloat32Nifti2(data, meta, spacingOverrideUm = null) {
+  const f32 = data instanceof Float32Array ? data : Float32Array.from(data);
+  const [nx, ny, nz] = [meta.nx, meta.ny, meta.nz];
+  const buf = new ArrayBuffer(544 + f32.byteLength);
+  const v = new DataView(buf);
+  v.setInt32(0, 540, true);
+  new Uint8Array(buf, 4, 8).set(NIFTI2_MAGIC);
+  v.setInt16(12, 16, true); // float32
+  v.setInt16(14, 32, true);
+  v.setBigInt64(16, 3n, true);
+  v.setBigInt64(24, BigInt(nx), true);
+  v.setBigInt64(32, BigInt(ny), true);
+  v.setBigInt64(40, BigInt(nz), true);
+  for (let i = 0; i < 4; i += 1) v.setBigInt64(48 + i * 8, 1n, true);
+
+  const pixDims = meta.pixDims.slice(0, 8);
+  const srow = meta.srow.map((r) => r.slice());
+  const xyztUnits = meta.xyztUnits;
+  for (let i = 0; i < 8; i += 1) v.setFloat64(104 + i * 8, pixDims[i] ?? 0, true);
+  v.setBigInt64(168, 544n, true);
+  v.setFloat64(176, 1, true);
+  v.setFloat64(184, 0, true);
+  v.setInt32(344, meta.qformCode, true);
+  v.setInt32(348, meta.sformCode, true);
+  for (let i = 0; i < 3; i += 1) v.setFloat64(352 + i * 8, meta.quatern[i], true);
+  for (let i = 0; i < 3; i += 1) v.setFloat64(376 + i * 8, meta.qoffset[i], true);
+  for (let r = 0; r < 3; r += 1) {
+    for (let c = 0; c < 4; c += 1) v.setFloat64(400 + (r * 4 + c) * 8, srow[r][c], true);
+  }
+  v.setInt32(500, xyztUnits, true);
+  new Uint8Array(buf, 544).set(new Uint8Array(f32.buffer, f32.byteOffset, f32.byteLength));
+  return spacingOverrideUm ? setNiftiSpacing(buf, spacingOverrideUm) : buf;
+}
+
+/**
+ * Serializes a deconvolved estimate into NIfTI-1 or NIfTI-2 matching the input volume,
+ * preserving both qform and sform verbatim unless `spacingOverridden` is true.
+ * @returns {ArrayBuffer}
+ */
+export function deconvolvedNifti(estimate, input, spacingUm, { spacingOverridden = true } = {}) {
+  if (input?.format === "nifti") {
+    if (input.niftiVersion === 2 && input.niftiMeta) {
+      return createFloat32Nifti2(estimate, input.niftiMeta, spacingOverridden ? spacingUm : null);
+    }
+    if (input.niftiHeader) {
+      const base = createFloat32Nifti(estimate, input.niftiHeader);
+      return spacingOverridden ? setNiftiSpacing(base, spacingUm) : base;
+    }
+  }
+  return stackNifti(estimate, input.dims, spacingUm);
 }
 
 /** A float32 ImageJ TIFF z stack calibrated in micrometres, which Fiji and tifffile open as such. */

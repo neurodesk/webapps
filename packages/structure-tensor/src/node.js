@@ -2,8 +2,24 @@
 // Runs the exact same 2D/3D Gaussian structure-tensor analysis as the Structure Tensor web application,
 // using pure-Node TIFF/NIfTI-1/NIfTI-2/PNG/JPEG I/O with atomic output staging and exclusive directory locking.
 import { randomBytes } from "node:crypto";
-import { constants as fsConstants, rmSync, rmdirSync, unlinkSync } from "node:fs";
-import { lstat, mkdir, open, readdir, rename, rm, rmdir, stat, unlink, writeFile } from "node:fs/promises";
+import {
+  closeSync,
+  constants as fsConstants,
+  copyFileSync,
+  existsSync,
+  linkSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  rmdirSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { lstat, open, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { crc32, gunzipSync, gzipSync, inflateSync } from "node:zlib";
@@ -33,6 +49,8 @@ export const MAX_CLI_FILE_BYTES = MAX_INPUT_BYTES;
 export const LOCK_NAME = ".neurodesk-cli.lock";
 
 const NIFTI2_MAGIC = [0x6e, 0x2b, 0x32, 0x00, 0x0d, 0x0a, 0x1a, 0x0a];
+const NIFTI2_PAIR_MAGIC = [0x6e, 0x69, 0x32, 0x00, 0x0d, 0x0a, 0x1a, 0x0a];
+const VELTKAMP_SPLIT = 134217729; // 2^27 + 1
 const NIFTI_DATATYPES = {
   2: { read: (v, o) => v.getUint8(o), bytes: 1 },
   4: { read: (v, o, le) => v.getInt16(o, le), bytes: 2 },
@@ -141,34 +159,55 @@ function parseNumeric(raw, flag) {
   return value;
 }
 
-export function parseCliOptions(values = {}) {
-  if (values === null || typeof values !== "object" || Array.isArray(values)) {
-    throw new Error("Options must be a plain object.");
+function assertPlainOptions(options, allowedKeys, context = "Options") {
+  if (options === undefined) return {};
+  if (options === null || typeof options !== "object" || Array.isArray(options)) {
+    throw new Error(`${context} must be a plain object.`);
   }
-  for (const [key, value] of Object.entries(values)) {
-    if (value !== undefined && !ALLOWED_OPTION_KEYS.has(key)) {
+  const proto = Object.getPrototypeOf(options);
+  if (proto !== Object.prototype && proto !== null) {
+    throw new Error(`${context} must be a plain object.`);
+  }
+  for (const key of Object.keys(options)) {
+    if (!allowedKeys.has(key)) {
       throw new Error(`Unknown option '${key}'.`);
     }
   }
-  const sigma = parseNumeric(values.sigma, "sigma");
-  const rho = parseNumeric(values.rho, "rho");
-  const minCoherency = parseNumeric(values["min-coherency"] ?? values.minCoherency, "min-coherency");
-  const minEnergy = parseNumeric(values["min-energy"] ?? values.minEnergy, "min-energy");
+  return options;
+}
+
+function readAliasedOption(options, primary, alias) {
+  const hasPrimary = Object.hasOwn(options, primary) && options[primary] !== undefined;
+  const hasAlias = alias && Object.hasOwn(options, alias) && options[alias] !== undefined;
+  if (hasPrimary && hasAlias) {
+    throw new Error(`Specify either '${primary}' or '${alias}', not both.`);
+  }
+  if (hasPrimary) return options[primary];
+  if (hasAlias) return options[alias];
+  return undefined;
+}
+
+export function parseCliOptions(values) {
+  const opts = assertPlainOptions(values, ALLOWED_OPTION_KEYS, "Options");
+  const sigma = parseNumeric(opts.sigma, "sigma");
+  const rho = parseNumeric(opts.rho, "rho");
+  const minCoherency = parseNumeric(readAliasedOption(opts, "min-coherency", "minCoherency"), "min-coherency");
+  const minEnergy = parseNumeric(readAliasedOption(opts, "min-energy", "minEnergy"), "min-energy");
   const settings = analysisSettings({
     ...(sigma !== undefined ? { sigma } : {}),
     ...(rho !== undefined ? { rho } : {}),
     ...(minCoherency !== undefined ? { minCoherency } : {}),
     ...(minEnergy !== undefined ? { minEnergy } : {}),
   });
-  const overwrite = parseBooleanOption(values.overwrite, "overwrite");
+  const overwrite = parseBooleanOption(opts.overwrite, "overwrite");
   const envOffline = process.env.NEURODESK_OFFLINE === "1";
-  if (values.offline !== undefined) {
-    const explicit = parseBooleanOption(values.offline, "offline");
+  if (Object.hasOwn(opts, "offline") && opts.offline !== undefined) {
+    const explicit = parseBooleanOption(opts.offline, "offline");
     if (envOffline && explicit === false) {
       throw new Error("Cannot set offline: false while NEURODESK_OFFLINE=1 is active.");
     }
   }
-  const offline = envOffline || Boolean(values.offline);
+  const offline = envOffline || Boolean(opts.offline);
   return { settings, overwrite, offline };
 }
 
@@ -178,11 +217,74 @@ function ascii(bytes, offset, length) {
   return out;
 }
 
-function quaternionToAffine(quatern, qoffset, pixDims) {
+function bytesEqualAt(bytes, offset, expected) {
+  if (offset + expected.length > bytes.byteLength) return false;
+  for (let i = 0; i < expected.length; i += 1) {
+    if (bytes[offset + i] !== expected[i]) return false;
+  }
+  return true;
+}
+
+function twoSum(a, b) {
+  const s = a + b;
+  const v = s - a;
+  const e = (a - (s - v)) + (b - v);
+  return [s, e];
+}
+
+function twoProd(a, b) {
+  const p = a * b;
+  const ca = VELTKAMP_SPLIT * a;
+  const ah = ca - (ca - a);
+  const al = a - ah;
+  const cb = VELTKAMP_SPLIT * b;
+  const bh = cb - (cb - b);
+  const bl = b - bh;
+  const e = ((ah * bh - p) + ah * bl + al * bh) + al * bl;
+  return [p, e];
+}
+
+function growExpansion(expansion, b) {
+  const out = [];
+  let q = b;
+  for (let i = 0; i < expansion.length; i += 1) {
+    const [sum, err] = twoSum(q, expansion[i]);
+    q = sum;
+    if (err !== 0) out.push(err);
+  }
+  if (q !== 0 || out.length === 0) out.push(q);
+  return out;
+}
+
+function exactQuaternionW2(b, c, d) {
+  const [b2h, b2l] = twoProd(b, b);
+  const [c2h, c2l] = twoProd(c, c);
+  const [d2h, d2l] = twoProd(d, d);
+  let exp = [1];
+  for (const term of [-b2h, -b2l, -c2h, -c2l, -d2h, -d2l]) {
+    exp = growExpansion(exp, term);
+  }
+  let sum = 0;
+  for (let i = 0; i < exp.length; i += 1) sum += exp[i];
+  return sum;
+}
+
+function quaternionToAffine(quatern, qoffset, pixDims, isNifti2) {
   const [b, c, d] = quatern;
-  const aSq = 1.0 - (b * b + c * c + d * d);
-  if (!Number.isFinite(aSq) || aSq < -1e-5) throw new Error("Invalid NIfTI quaternion in qform.");
-  const a = aSq > 0 ? Math.sqrt(aSq) : 0;
+  if (!Number.isFinite(b) || !Number.isFinite(c) || !Number.isFinite(d) || Math.abs(b) > 2 || Math.abs(c) > 2 || Math.abs(d) > 2) {
+    throw new Error("Invalid NIfTI quaternion in qform.");
+  }
+  // NiBabel 5.3.3 fillpositive two-sided threshold: 3 * eps (float32 for NIfTI-1, float64 for NIfTI-2).
+  const absThresh = isNifti2 ? 3 * Number.EPSILON : 3 * (2 ** -23);
+  const w2 = exactQuaternionW2(b, c, d);
+  let a;
+  if (Math.abs(w2) < absThresh) {
+    a = 0;
+  } else if (w2 < 0) {
+    throw new Error("Invalid NIfTI quaternion in qform.");
+  } else {
+    a = Math.sqrt(w2);
+  }
   const r00 = a * a + b * b - c * c - d * d;
   const r01 = 2 * (b * c - a * d);
   const r02 = 2 * (b * d + a * c);
@@ -253,6 +355,9 @@ export function parseNiftiAnyHeader(bufferLike) {
     datatype = view.getInt16(70, littleEndian);
     pixDims = Array.from({ length: 8 }, (_, i) => view.getFloat32(76 + i * 4, littleEndian));
     const rawOffset = view.getFloat32(108, littleEndian);
+    if (!Number.isFinite(rawOffset) || rawOffset < 0 || (rawOffset !== 0 && rawOffset < 352)) {
+      throw new Error(`Invalid NIfTI-1 vox_offset (${rawOffset}): single-file NIfTI-1 requires vox_offset >= 352.`);
+    }
     voxOffset = rawOffset === 0 ? 352 : Math.ceil(rawOffset);
     rawSlope = view.getFloat32(112, littleEndian);
     rawInter = view.getFloat32(116, littleEndian);
@@ -263,9 +368,12 @@ export function parseNiftiAnyHeader(bufferLike) {
     qoffset = [view.getFloat32(268, littleEndian), view.getFloat32(272, littleEndian), view.getFloat32(276, littleEndian)];
     srow = [0, 1, 2].map((r) => [0, 1, 2, 3].map((c) => view.getFloat32(280 + (r * 4 + c) * 4, littleEndian)));
   } else {
-    const magic = ascii(bytes, 4, 4);
-    if (magic === "ni2\0") throw new Error("Two-file .hdr/.img pairs are not supported.");
-    if (magic !== "n+2\0") throw new Error("Invalid NIfTI-2 magic.");
+    if (bytesEqualAt(bytes, 4, NIFTI2_PAIR_MAGIC)) {
+      throw new Error("Two-file .hdr/.img pairs are not supported.");
+    }
+    if (!bytesEqualAt(bytes, 4, NIFTI2_MAGIC)) {
+      throw new Error("Invalid NIfTI-2 magic.");
+    }
     datatype = view.getInt16(12, littleEndian);
     dims = Array.from({ length: 8 }, (_, i) => {
       const val = Number(view.getBigInt64(16 + i * 8, littleEndian));
@@ -274,7 +382,9 @@ export function parseNiftiAnyHeader(bufferLike) {
     });
     pixDims = Array.from({ length: 8 }, (_, i) => view.getFloat64(104 + i * 8, littleEndian));
     const rawOffset = Number(view.getBigInt64(168, littleEndian));
-    if (!Number.isSafeInteger(rawOffset)) throw new Error("Invalid NIfTI-2 voxel offset.");
+    if (!Number.isSafeInteger(rawOffset) || rawOffset < 0 || (rawOffset !== 0 && rawOffset < 544)) {
+      throw new Error(`Invalid NIfTI-2 vox_offset (${rawOffset}): single-file NIfTI-2 requires vox_offset >= 544.`);
+    }
     voxOffset = rawOffset === 0 ? 544 : rawOffset;
     rawSlope = view.getFloat64(176, littleEndian);
     rawInter = view.getFloat64(184, littleEndian);
@@ -290,7 +400,7 @@ export function parseNiftiAnyHeader(bufferLike) {
   if (sformCode > 0) {
     affine = [srow[0].slice(), srow[1].slice(), srow[2].slice(), [0, 0, 0, 1]];
   } else if (qformCode > 0) {
-    affine = quaternionToAffine(quatern, qoffset, pixDims);
+    affine = quaternionToAffine(quatern, qoffset, pixDims, niftiVersion === 2);
   } else {
     const nx = Math.max(1, dims[1]);
     const ny = Math.max(1, dims[2]);
@@ -422,61 +532,229 @@ function isPngBytes(bytes) {
     && bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a;
 }
 
-const SRGB_NAME_RE = /\bsrgb\b|srgb2014|iec\s*61966[- ]2\.1/i;
+const NON_SRGB_PROFILE_RE =
+  /\b(p3|display\s*p3|dci[- ]?p3|adobe\s*rgb|adobe\s*1998|prophoto|romm|rec\.?\s*2020|bt\.?\s*2020|wide\s*gamut|cmyk|linear|scrgb|aces|apple\s*rgb|colormatch|eci\s*rgb|smpte)\b/i;
+const SRGB_NAME_RE = /\bsrgb\b|srgb2014|iec\s*61966[- ]2[.-]1|srgb\s*iec61966/i;
+const MAX_ICC_BYTES = 4 * 1024 * 1024;
 const SRGB_CHRM = [31270, 32900, 64000, 33000, 30000, 60000, 15000, 6000];
+const SRGB_ICC_PRIMARIES = Object.freeze({
+  rXYZ: Object.freeze([0.4361, 0.2225, 0.0139]),
+  gXYZ: Object.freeze([0.3851, 0.7169, 0.0971]),
+  bXYZ: Object.freeze([0.1431, 0.0606, 0.7141]),
+});
+const ICC_PRIMARY_TOLERANCE = 0.015;
+const ICC_TRC_LINEAR_TOLERANCE = 0.003;
+const ICC_TRC_SRGB_TOLERANCE = 0.008;
 
-function extractIccDescription(iccBytes) {
-  if (iccBytes.byteLength < 132) return null;
-  const view = new DataView(iccBytes.buffer, iccBytes.byteOffset, iccBytes.byteLength);
-  const tagCount = view.getUint32(128, false);
-  for (let i = 0; i < tagCount && 132 + (i + 1) * 12 <= iccBytes.byteLength; i += 1) {
-    const base = 132 + i * 12;
-    const sig = ascii(iccBytes, base, 4);
-    if (sig !== "desc") continue;
-    const offset = view.getUint32(base + 4, false);
-    const size = view.getUint32(base + 8, false);
-    if (offset + size > iccBytes.byteLength || size < 12) return null;
-    const tagType = ascii(iccBytes, offset, 4);
-    if (tagType === "desc") {
-      const len = view.getUint32(offset + 8, false);
-      const end = Math.min(offset + 12 + len, offset + size);
-      return ascii(iccBytes, offset + 12, Math.max(0, end - (offset + 12))).replace(/\0+$/, "");
+function linearToSrgb(linear) {
+  if (linear <= 0) return 0;
+  if (linear >= 1) return 1;
+  return linear <= 0.0031308 ? 12.92 * linear : 1.055 * (linear ** (1 / 2.4)) - 0.055;
+}
+
+function srgbToLinear(u) {
+  if (u <= 0) return 0;
+  if (u >= 1) return 1;
+  return u <= 0.04045 ? u / 12.92 : ((u + 0.055) / 1.055) ** 2.4;
+}
+
+function readUint16BE(view, offset) {
+  return (view[offset] << 8) | view[offset + 1];
+}
+
+function readUint32BE(view, offset) {
+  return (
+    ((view[offset] << 24) >>> 0) +
+    (view[offset + 1] << 16) +
+    (view[offset + 2] << 8) +
+    view[offset + 3]
+  );
+}
+
+function readInt32BE(view, offset) {
+  return (
+    (view[offset] << 24) |
+    (view[offset + 1] << 16) |
+    (view[offset + 2] << 8) |
+    view[offset + 3]
+  );
+}
+
+function isValidSrgbTrc(profile, tagOffset, tagSize) {
+  if (tagOffset + 12 > profile.length || tagSize < 12) return false;
+  const type = ascii(profile, tagOffset, 4);
+
+  if (type === "curv") {
+    const count = readUint32BE(profile, tagOffset + 8);
+    // Reject identity/linear (count=0) and single pure power-law gamma (count=1, e.g. 2.2).
+    if (count < 2) return false;
+    const needed = 12 + count * 2;
+    if (needed > tagSize || tagOffset + needed > profile.length) return false;
+    const denom = count - 1;
+    // Validate both stored entries and the linearly interpolated curve (ICC.1:2022 §10.6).
+    for (let i = 0; i < count; i += 1) {
+      const u = i / denom;
+      const val = readUint16BE(profile, tagOffset + 12 + i * 2) / 65535;
+      if (Math.abs(val - srgbToLinear(u)) > ICC_TRC_LINEAR_TOLERANCE) return false;
+      if (Math.abs(linearToSrgb(val) - u) > ICC_TRC_SRGB_TOLERANCE) return false;
     }
-    if (tagType === "mluc" && size >= 28) {
-      const strLen = view.getUint32(offset + 20, false);
-      const strOff = view.getUint32(offset + 24, false);
-      if (offset + strOff + strLen <= iccBytes.byteLength) {
-        let out = "";
-        for (let j = 0; j + 1 < strLen; j += 2) {
-          out += String.fromCharCode(view.getUint16(offset + strOff + j, false));
+    for (let k = 0; k <= 255; k += 1) {
+      const u = k / 255;
+      const pos = u * denom;
+      const lo = Math.floor(pos);
+      const hi = Math.min(denom, lo + 1);
+      const frac = pos - lo;
+      const v0 = readUint16BE(profile, tagOffset + 12 + lo * 2) / 65535;
+      const v1 = readUint16BE(profile, tagOffset + 12 + hi * 2) / 65535;
+      const val = v0 + (v1 - v0) * frac;
+      if (Math.abs(val - srgbToLinear(u)) > ICC_TRC_LINEAR_TOLERANCE) return false;
+      if (Math.abs(linearToSrgb(val) - u) > ICC_TRC_SRGB_TOLERANCE) return false;
+    }
+    return true;
+  }
+
+  if (type === "para") {
+    const funcType = readUint16BE(profile, tagOffset + 8);
+    if (funcType !== 3 && funcType !== 4) return false;
+    const needed = funcType === 3 ? 32 : 40;
+    if (needed > tagSize || tagOffset + needed > profile.length) return false;
+    const g = readInt32BE(profile, tagOffset + 12) / 65536;
+    const a = readInt32BE(profile, tagOffset + 16) / 65536;
+    const b = readInt32BE(profile, tagOffset + 20) / 65536;
+    const c = readInt32BE(profile, tagOffset + 24) / 65536;
+    const d = readInt32BE(profile, tagOffset + 28) / 65536;
+    const e = funcType === 4 ? readInt32BE(profile, tagOffset + 32) / 65536 : 0;
+    const f = funcType === 4 ? readInt32BE(profile, tagOffset + 36) / 65536 : 0;
+    if (
+      Math.abs(g - 2.4) > 0.05 ||
+      Math.abs(a - 1 / 1.055) > 0.01 ||
+      Math.abs(b - 0.055 / 1.055) > 0.01 ||
+      Math.abs(c - 1 / 12.92) > 0.01 ||
+      Math.abs(d - 0.04045) > 0.01 ||
+      Math.abs(e) > 0.002 ||
+      Math.abs(f) > 0.002
+    ) {
+      return false;
+    }
+    for (let k = 0; k <= 255; k += 1) {
+      const u = k / 255;
+      const val = u >= d ? ((a * u + b) ** g) + e : c * u + f;
+      if (!Number.isFinite(val)) return false;
+      if (Math.abs(val - srgbToLinear(u)) > ICC_TRC_LINEAR_TOLERANCE) return false;
+      if (Math.abs(linearToSrgb(val) - u) > ICC_TRC_SRGB_TOLERANCE) return false;
+    }
+    return true;
+  }
+
+  return false;
+}
+
+function parseIccTags(profile) {
+  const tags = {
+    description: "",
+    rXYZ: null,
+    gXYZ: null,
+    bXYZ: null,
+    rTRC: null,
+    gTRC: null,
+    bTRC: null,
+    kTRC: null,
+  };
+  if (profile.length < 132) return tags;
+  const tagCount = Math.min(readUint32BE(profile, 128), 256);
+  for (let i = 0; i < tagCount; i += 1) {
+    const entryOffset = 132 + i * 12;
+    if (entryOffset + 12 > profile.length) break;
+    const sig = ascii(profile, entryOffset, 4);
+    const tagOffset = readUint32BE(profile, entryOffset + 4);
+    const tagSize = readUint32BE(profile, entryOffset + 8);
+    if (tagOffset + 12 > profile.length || tagSize < 12) continue;
+
+    if (sig === "desc") {
+      const type = ascii(profile, tagOffset, 4);
+      if (type === "desc") {
+        const len = readUint32BE(profile, tagOffset + 8);
+        const start = tagOffset + 12;
+        const stop = Math.min(profile.length, start + Math.min(len, tagSize - 12));
+        tags.description = ascii(profile, start, Math.max(0, stop - start)).replace(/\0+$/, "").trim();
+      } else if (type === "mluc" && tagOffset + 28 <= profile.length) {
+        const recordCount = readUint32BE(profile, tagOffset + 8);
+        if (recordCount >= 1) {
+          const strLen = readUint32BE(profile, tagOffset + 20);
+          const strOff = readUint32BE(profile, tagOffset + 24);
+          const start = tagOffset + strOff;
+          const stop = Math.min(profile.length, start + strLen);
+          let text = "";
+          for (let p = start; p + 1 < stop; p += 2) {
+            const code = (profile[p] << 8) | profile[p + 1];
+            if (code === 0) break;
+            text += String.fromCharCode(code);
+          }
+          tags.description = text.trim();
         }
-        return out.replace(/\0+$/, "");
       }
+    } else if (sig === "rXYZ" || sig === "gXYZ" || sig === "bXYZ") {
+      if (tagOffset + 20 <= profile.length && ascii(profile, tagOffset, 4) === "XYZ ") {
+        tags[sig] = [
+          readInt32BE(profile, tagOffset + 8) / 65536,
+          readInt32BE(profile, tagOffset + 12) / 65536,
+          readInt32BE(profile, tagOffset + 16) / 65536,
+        ];
+      }
+    } else if (sig === "rTRC" || sig === "gTRC" || sig === "bTRC" || sig === "kTRC") {
+      tags[sig] = isValidSrgbTrc(profile, tagOffset, tagSize);
     }
   }
-  return null;
+  return tags;
+}
+
+function matchesPrimary(actual, expected) {
+  if (!actual) return false;
+  return (
+    Math.abs(actual[0] - expected[0]) <= ICC_PRIMARY_TOLERANCE &&
+    Math.abs(actual[1] - expected[1]) <= ICC_PRIMARY_TOLERANCE &&
+    Math.abs(actual[2] - expected[2]) <= ICC_PRIMARY_TOLERANCE
+  );
 }
 
 function validateIccProfile(iccBytes, profileName, kind) {
-  if (iccBytes.byteLength >= 20) {
-    const colorSpace = ascii(iccBytes, 16, 4);
-    if (colorSpace !== "RGB " && colorSpace !== "GRAY") {
-      throw new Error(`Unsupported non-sRGB ICC color space '${colorSpace.trim()}' in ${kind}. Convert to sRGB first.`);
-    }
+  const profile = iccBytes instanceof Uint8Array ? iccBytes : new Uint8Array(iccBytes);
+  if (profile.length < 132 || ascii(profile, 36, 4) !== "acsp") {
+    throw new Error(`Embedded ICC profile in ${kind} is truncated or invalid.`);
   }
-  const desc = extractIccDescription(iccBytes);
-  const label = desc || profileName || "unnamed";
-  if (!SRGB_NAME_RE.test(label) && !(profileName && SRGB_NAME_RE.test(profileName))) {
+  const colorSpace = ascii(profile, 16, 4).trim();
+  const tags = parseIccTags(profile);
+  const label = tags.description || profileName || colorSpace || "unnamed";
+
+  if (colorSpace !== "RGB" && colorSpace !== "GRAY") {
+    throw new Error(`Unsupported non-sRGB ICC color space '${colorSpace}' ('${label}') in ${kind}. Convert to sRGB first.`);
+  }
+  if (tags.description && NON_SRGB_PROFILE_RE.test(tags.description)) {
     throw new Error(`Unsupported non-sRGB ICC profile '${label}' in ${kind}. Convert to sRGB first.`);
   }
+
+  if (colorSpace === "RGB") {
+    const primariesMatch =
+      matchesPrimary(tags.rXYZ, SRGB_ICC_PRIMARIES.rXYZ) &&
+      matchesPrimary(tags.gXYZ, SRGB_ICC_PRIMARIES.gXYZ) &&
+      matchesPrimary(tags.bXYZ, SRGB_ICC_PRIMARIES.bXYZ);
+    if (!primariesMatch) {
+      throw new Error(`Unsupported non-sRGB ICC profile '${label}' (primaries do not match sRGB) in ${kind}. Convert to sRGB first.`);
+    }
+    if (tags.rTRC !== true || tags.gTRC !== true || tags.bTRC !== true) {
+      throw new Error(`Unsupported non-sRGB ICC profile '${label}' (missing or non-sRGB transfer curve rTRC/gTRC/bTRC) in ${kind}. Convert to sRGB first.`);
+    }
+    return label;
+  }
+
+  if (!tags.description || !SRGB_NAME_RE.test(tags.description) || tags.kTRC !== true) {
+    throw new Error(`Unsupported non-sRGB ICC profile '${label}' in ${kind}. Convert to sRGB first.`);
+  }
+  return label;
 }
 
 function linearToSrgbByte(linear) {
-  const clamped = Math.max(0, Math.min(1, linear));
-  const srgb = clamped <= 0.0031308
-    ? 12.92 * clamped
-    : 1.055 * (clamped ** (1 / 2.4)) - 0.055;
-  return Math.max(0, Math.min(255, Math.round(srgb * 255)));
+  return Math.max(0, Math.min(255, Math.round(linearToSrgb(linear) * 255)));
 }
 
 function buildGamaToSrgbLut(gamma) {
@@ -488,9 +766,29 @@ function buildGamaToSrgbLut(gamma) {
   return lut;
 }
 
+function roundHalfToEven(x) {
+  const f = Math.floor(x);
+  const d = x - f;
+  if (d > 0.5) return f + 1;
+  if (d < 0.5) return f;
+  return (f & 1) === 0 ? f : f + 1;
+}
+
+const INV_255_F32 = Math.fround(1 / 255);
+
+/**
+ * Matches Chromium/Skia Canvas2D 8-bit premultiply + float32 unpremultiply round-half-to-even
+ * (0/65536 mismatches across all (v, a) pairs against Chromium OffscreenCanvas).
+ */
+function premulUnpremulChannel(v, a, invAf) {
+  const p = ((v * a + 128) + ((v * a + 128) >> 8)) >> 8;
+  const u = Math.min(1, Math.fround(Math.fround(p * INV_255_F32) * invAf));
+  return Math.min(255, roundHalfToEven(Math.fround(u * 255)));
+}
+
 /**
  * Validates every PNG chunk's IEEE CRC32, checks IHDR dimensions against the voxel budget,
- * validates color profile chunks (iCCP, cHRM, cICP), and returns gAMA metadata for sRGB parity.
+ * validates color profile chunks (cICP, iCCP, cHRM), and returns bitDepth + gAMA metadata for sRGB parity.
  */
 function inspectPngChunks(bytes) {
   if (!isPngBytes(bytes)) throw new Error("Invalid PNG signature.");
@@ -498,9 +796,11 @@ function inspectPngChunks(bytes) {
   let pos = 8;
   let width = 0;
   let height = 0;
+  let bitDepth = 8;
   let hasIhdr = false;
   let hasIend = false;
   let hasSrgb = false;
+  let hasCicpSrgb = false;
   let gama = null;
   let chrm = null;
   let iccp = null;
@@ -520,6 +820,7 @@ function inspectPngChunks(bytes) {
       if (length < 13) throw new Error("Truncated PNG IHDR chunk.");
       width = view.getUint32(dataStart, false);
       height = view.getUint32(dataStart + 4, false);
+      bitDepth = bytes[dataStart + 8];
       hasIhdr = true;
       const tooLarge = voxelRefusal([width, height, 1]);
       if (tooLarge) throw new Error(tooLarge);
@@ -527,16 +828,25 @@ function inspectPngChunks(bytes) {
       hasSrgb = true;
     } else if (type === "gAMA" && length === 4) {
       const raw = view.getUint32(dataStart, false);
-      if (raw > 0) gama = raw / 100000;
+      if (raw === 0) throw new Error("Invalid PNG gAMA value 0.");
+      gama = raw / 100000;
     } else if (type === "cHRM" && length === 32) {
       chrm = Array.from({ length: 8 }, (_, k) => view.getUint32(dataStart + k * 4, false));
-    } else if (type === "cICP" && length >= 3) {
+    } else if (type === "cICP") {
+      if (length !== 4) {
+        throw new Error(`Invalid PNG cICP chunk length (${length}; expected 4).`);
+      }
       const primaries = bytes[dataStart];
       const transfer = bytes[dataStart + 1];
       const matrix = bytes[dataStart + 2];
-      if (primaries !== 1 || transfer !== 13 || matrix !== 0) {
-        throw new Error(`Unsupported non-sRGB PNG color profile (cICP ${primaries}/${transfer}/${matrix}). Convert to sRGB first.`);
+      const fullRange = bytes[dataStart + 3];
+      // PNG-3 §11.3.3.5: sRGB full range requires [1, 13, 0, 1]; narrow range (0) is rejected.
+      if (primaries !== 1 || transfer !== 13 || matrix !== 0 || fullRange !== 1) {
+        throw new Error(
+          `Unsupported non-sRGB PNG color profile (cICP ${primaries}/${transfer}/${matrix}/range=${fullRange}). Convert to full-range sRGB first.`,
+        );
       }
+      hasCicpSrgb = true;
     } else if (type === "iCCP" && length > 2) {
       let nul = dataStart;
       while (nul < chunkEnd && bytes[nul] !== 0) nul += 1;
@@ -545,7 +855,7 @@ function inspectPngChunks(bytes) {
       const method = bytes[nul + 1];
       if (method !== 0) throw new Error(`Unsupported PNG iCCP compression method ${method}.`);
       const compressed = bytes.subarray(nul + 2, chunkEnd);
-      const inflated = inflateSync(compressed, { maxOutputLength: 2 * 1024 * 1024 });
+      const inflated = inflateSync(compressed, { maxOutputLength: MAX_ICC_BYTES });
       iccp = { profileName, bytes: inflated };
     } else if (type === "IEND") {
       hasIend = true;
@@ -555,31 +865,33 @@ function inspectPngChunks(bytes) {
   }
 
   if (!hasIhdr || !hasIend) throw new Error("Incomplete PNG file (missing IHDR or IEND).");
-  if (!hasSrgb) {
+  if (!hasCicpSrgb) {
     if (iccp) {
       validateIccProfile(iccp.bytes, iccp.profileName, "PNG");
-    } else if (chrm) {
+    } else if (!hasSrgb && chrm) {
       const nonSrgb = chrm.some((val, idx) => Math.abs(val - SRGB_CHRM[idx]) > 500);
       if (nonSrgb) {
         throw new Error("Unsupported non-sRGB PNG chromaticity (cHRM). Convert to sRGB first.");
       }
     }
   }
-  return { width, height, hasSrgb, gama: hasSrgb || iccp ? null : gama };
+  const hasExplicitSrgb = hasCicpSrgb || hasSrgb || Boolean(iccp);
+  return { width, height, bitDepth, hasSrgb: hasExplicitSrgb, gama: hasExplicitSrgb ? null : gama };
 }
 
 /**
  * Decodes a PNG in pure Node via pngjs@7.0.0 with full per-chunk CRC32 checks,
- * color-profile validation, gAMA->sRGB transfer, and Chromium Canvas2D alpha parity
- * (transparent pixels zero RGB; 0 < a < 255 matches 8-bit premultiply/unpremultiply).
+ * strict color-profile validation, 16-bit strip-high-byte parity (matching Chromium's libpng),
+ * gAMA->sRGB transfer, and exact Chromium/Skia Canvas2D alpha premul/unpremul parity.
  */
 export function decodePngGreyscale(bytes) {
   const meta = inspectPngChunks(bytes);
+  const is16Bit = meta.bitDepth === 16;
   const png = PNG.sync.read(Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength), {
     checkCRC: true,
-    skipRescale: false,
+    skipRescale: is16Bit,
   });
-  const { width, height, data: rgba } = png;
+  const { width, height, data: rawRgba } = png;
   const tooLarge = voxelRefusal([width, height, 1]);
   if (tooLarge) throw new Error(tooLarge);
 
@@ -587,24 +899,24 @@ export function decodePngGreyscale(bytes) {
   const n = width * height;
   const out = new Float64Array(n);
   for (let i = 0; i < n; i += 1) {
-    const a = rgba[4 * i + 3];
+    const a = is16Bit ? (rawRgba[4 * i + 3] >> 8) : rawRgba[4 * i + 3];
     if (a === 0) {
       out[i] = 0;
       continue;
     }
-    let r = rgba[4 * i];
-    let g = rgba[4 * i + 1];
-    let b = rgba[4 * i + 2];
+    let r = is16Bit ? (rawRgba[4 * i] >> 8) : rawRgba[4 * i];
+    let g = is16Bit ? (rawRgba[4 * i + 1] >> 8) : rawRgba[4 * i + 1];
+    let b = is16Bit ? (rawRgba[4 * i + 2] >> 8) : rawRgba[4 * i + 2];
     if (gamaLut) {
       r = gamaLut[r];
       g = gamaLut[g];
       b = gamaLut[b];
     }
     if (a < 255) {
-      const pm = (c) => Math.min(255, Math.round((Math.round((c * a) / 255) * 255) / a));
-      r = pm(r);
-      g = pm(g);
-      b = pm(b);
+      const invAf = Math.fround(1 / Math.fround(a * INV_255_F32));
+      r = premulUnpremulChannel(r, a, invAf);
+      g = premulUnpremulChannel(g, a, invAf);
+      b = premulUnpremulChannel(b, a, invAf);
     }
     out[i] = (r + g + b) / 3;
   }
@@ -638,16 +950,26 @@ function inspectJpegIcc(bytes) {
     if (marker === 0xe2 && segLen >= 16 && ascii(bytes, segDataStart, 12) === "ICC_PROFILE\0") {
       const seqNo = bytes[segDataStart + 12];
       const count = bytes[segDataStart + 13];
-      totalIccChunks = Math.max(totalIccChunks, count);
-      iccChunks.set(seqNo, bytes.subarray(segDataStart + 14, segEnd));
+      if (seqNo >= 1 && count >= 1 && seqNo <= count) {
+        totalIccChunks = Math.max(totalIccChunks, count);
+        iccChunks.set(seqNo, bytes.subarray(segDataStart + 14, segEnd));
+      }
     }
     pos = segEnd;
   }
-  if (iccChunks.size > 0) {
+  if (totalIccChunks > 0 && iccChunks.size > 0) {
     const parts = [];
+    let totalBytes = 0;
     for (let i = 1; i <= totalIccChunks; i += 1) {
       const part = iccChunks.get(i);
-      if (part) parts.push(part);
+      if (!part) {
+        throw new Error(`Incomplete JPEG APP2 ICC_PROFILE segments (${iccChunks.size}/${totalIccChunks}).`);
+      }
+      totalBytes += part.length;
+      if (totalBytes > MAX_ICC_BYTES) {
+        throw new Error("Embedded JPEG ICC profile exceeds size limit.");
+      }
+      parts.push(part);
     }
     const assembled = Buffer.concat(parts);
     validateIccProfile(assembled, null, "JPEG");
@@ -694,7 +1016,7 @@ export async function readImageFile(filePath, { maxFileBytes = MAX_CLI_FILE_BYTE
 
     const type = NIFTI_DATATYPES[hdr.datatype];
     if (!type) throw new Error(`${name}: unsupported NIfTI datatype ${hdr.datatype}.`);
-    const minOffset = hdr.niftiVersion === 2 ? 540 : 348;
+    const minOffset = hdr.niftiVersion === 2 ? 544 : 352;
     const start = Math.ceil(hdr.voxOffset);
     const total = dims[0] * dims[1] * dims[2];
     if (!Number.isSafeInteger(start) || start < minOffset || start + total * type.bytes > rawBuf.byteLength) {
@@ -814,12 +1136,14 @@ export async function loadInputImages(inputs, { maxFileBytes = MAX_CLI_FILE_BYTE
   };
 }
 
-async function ensureDirectoryChain(targetDir) {
+const LINK_FALLBACK_CODES = new Set(["EXDEV", "EPERM", "ENOTSUP", "ENOSYS"]);
+
+function ensureDirectoryChainSync(targetDir, createdOut) {
   const missing = [];
   let cursor = resolve(targetDir);
   while (true) {
     try {
-      const info = await stat(cursor);
+      const info = statSync(cursor);
       if (!info.isDirectory()) throw new Error(`Output path '${targetDir}' collides with an existing non-directory '${cursor}'.`);
       break;
     } catch (error) {
@@ -830,97 +1154,247 @@ async function ensureDirectoryChain(targetDir) {
       cursor = parent;
     }
   }
-  const created = [];
   for (let i = missing.length - 1; i >= 0; i -= 1) {
     try {
-      await mkdir(missing[i]);
-      created.push(missing[i]);
+      mkdirSync(missing[i]);
+      createdOut.push(missing[i]);
     } catch (error) {
       if (error.code === "EEXIST") {
-        const info = await stat(missing[i]);
+        const info = statSync(missing[i]);
         if (!info.isDirectory()) throw new Error(`Output path '${targetDir}' collides with an existing non-directory '${missing[i]}'.`);
       } else {
-        for (let j = created.length - 1; j >= 0; j -= 1) await rmdir(created[j]).catch(() => {});
         throw error;
       }
     }
   }
-  return created;
 }
 
-export async function claimOutputDir(outputDir, { overwrite = false, readdirFn = readdir } = {}) {
+function rollbackPublishSync(pubState) {
+  if (!pubState || pubState.committed) return true;
+  let ok = true;
+  const renameRollback = pubState.renameSyncFn ?? renameSync;
+
+  if (pubState.pendingPublish && !pubState.pendingPublish.hadBackup) {
+    const { target, partialPath } = pubState.pendingPublish;
+    if (!partialPath || !existsSync(partialPath)) {
+      try {
+        lstatSync(target);
+        rmSync(target, { force: true });
+      } catch (error) {
+        if (error.code !== "ENOENT") ok = false;
+      }
+    }
+  }
+  pubState.pendingPublish = null;
+
+  while (pubState.published.length > 0) {
+    const entry = pubState.published[pubState.published.length - 1];
+    if (!entry.hadBackup) {
+      try {
+        rmSync(entry.target, { force: true });
+        pubState.published.pop();
+      } catch (error) {
+        if (error.code === "ENOENT") pubState.published.pop();
+        else {
+          ok = false;
+          break;
+        }
+      }
+    } else {
+      pubState.published.pop();
+    }
+  }
+
+  if (pubState.pendingBackup) {
+    const { target, backup } = pubState.pendingBackup;
+    let backupExists = false;
+    let targetExists = false;
+    try {
+      lstatSync(backup);
+      backupExists = true;
+    } catch {
+      // Backup was not created before interruption.
+    }
+    try {
+      lstatSync(target);
+      targetExists = true;
+    } catch {
+      // Target is absent and needs restore.
+    }
+    if (backupExists && !targetExists) {
+      try {
+        renameRollback(backup, target);
+      } catch {
+        ok = false;
+      }
+    }
+    pubState.pendingBackup = null;
+  }
+
+  while (pubState.backups.length > 0) {
+    const entry = pubState.backups[pubState.backups.length - 1];
+    try {
+      renameRollback(entry.backup, entry.target);
+      pubState.backups.pop();
+    } catch (error) {
+      if (error.code === "ENOENT") pubState.backups.pop();
+      else {
+        ok = false;
+        break;
+      }
+    }
+  }
+
+  for (const item of pubState.staged) {
+    if (!item.partialPath) continue;
+    try {
+      rmSync(item.partialPath, { force: true });
+    } catch (error) {
+      if (error.code !== "ENOENT") ok = false;
+    }
+  }
+  return ok;
+}
+
+const CLAIM_OPTION_KEYS = new Set(["overwrite", "readdirFn", "openFn"]);
+
+export async function claimOutputDir(outputDir, options) {
+  const opts = assertPlainOptions(options, CLAIM_OPTION_KEYS, "claimOutputDir options");
+  const overwrite = parseBooleanOption(opts.overwrite, "overwrite");
+  const readdirFn = opts.readdirFn ?? readdir;
+  const openFn = opts.openFn;
   if (typeof outputDir !== "string" || !outputDir.trim()) throw new Error("Output directory path is required.");
   const dir = resolve(outputDir);
-  const createdDirs = await ensureDirectoryChain(dir);
   const lockPath = join(dir, LOCK_NAME);
-  let lockAcquired = false;
-  let lockHandle = null;
-  const activePartials = new Set();
 
-  const cleanupSyncOnSignal = (signal) => {
-    for (const p of activePartials) {
+  const createdDirs = [];
+  const activePartials = new Set();
+  let lockHeld = false;
+  let acquiring = false;
+  let pendingSignal = null;
+  let handlingSignal = false;
+  let activePublish = null;
+  let rollbackFailed = false;
+
+  const cleanupSync = ({ removeCreated = false, fromSignal = false } = {}) => {
+    let ok = !rollbackFailed;
+    if (activePublish && !activePublish.committed) {
+      if (!rollbackPublishSync(activePublish)) {
+        ok = false;
+        rollbackFailed = true;
+      } else {
+        activePublish = null;
+      }
+    }
+    for (const p of [...activePartials]) {
       try {
         rmSync(p, { recursive: true, force: true });
+        activePartials.delete(p);
       } catch {
-        // Ignore best-effort cleanup error on terminating signal.
+        if (existsSync(p)) ok = false;
+        else activePartials.delete(p);
       }
     }
-    activePartials.clear();
-    if (lockAcquired) {
-      lockAcquired = false;
+    if (lockHeld && ok) {
       try {
         unlinkSync(lockPath);
-      } catch {
-        // Ignore best-effort lock unlink error on terminating signal.
+        lockHeld = false;
+      } catch (error) {
+        if (error.code === "ENOENT") lockHeld = false;
+        else ok = false;
       }
     }
-    for (let i = createdDirs.length - 1; i >= 0; i -= 1) {
-      try {
-        rmdirSync(createdDirs[i]);
-      } catch {
-        // Ignore non-empty or already-removed directory on terminating signal.
+    if ((removeCreated || fromSignal) && ok && !lockHeld) {
+      for (let i = createdDirs.length - 1; i >= 0; i -= 1) {
+        try {
+          if (readdirSync(createdDirs[i]).length === 0) rmdirSync(createdDirs[i]);
+        } catch {
+          // Ignore non-empty or already-removed directory during cleanup.
+        }
       }
     }
+    return ok;
+  };
+
+  const cleanupSyncOnSignal = (signal) => {
+    if (handlingSignal) return;
+    if (acquiring) {
+      pendingSignal = signal;
+      return;
+    }
+    handlingSignal = true;
+    cleanupSync({ removeCreated: true, fromSignal: true });
     process.off("SIGINT", cleanupSyncOnSignal);
     process.off("SIGTERM", cleanupSyncOnSignal);
     process.kill(process.pid, signal);
   };
 
+  process.on("SIGINT", cleanupSyncOnSignal);
+  process.on("SIGTERM", cleanupSyncOnSignal);
+
   const release = async ({ removeCreated = false } = {}) => {
+    cleanupSync({ removeCreated });
     process.off("SIGINT", cleanupSyncOnSignal);
     process.off("SIGTERM", cleanupSyncOnSignal);
-    for (const p of activePartials) {
-      await rm(p, { recursive: true, force: true }).catch(() => {});
-    }
-    activePartials.clear();
-    if (lockAcquired) {
-      lockAcquired = false;
-      await unlink(lockPath).catch(() => {});
-    }
-    if (removeCreated) {
-      for (let i = createdDirs.length - 1; i >= 0; i -= 1) {
-        await rmdir(createdDirs[i]).catch(() => {});
-      }
-    }
   };
 
+  const lockPayload = `${JSON.stringify({ tool: "structure-tensor", pid: process.pid, host: hostname(), startedAt: new Date().toISOString() })}\n`;
   try {
-    const flags = fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY;
-    try {
-      lockHandle = await open(lockPath, flags, 0o600);
-      lockAcquired = true;
-    } catch (error) {
-      if (error.code === "EEXIST") {
-        throw new Error(`Output directory '${outputDir}' is locked by another running CLI process (or contains ${LOCK_NAME}).`);
+    ensureDirectoryChainSync(dir, createdDirs);
+    if (openFn) {
+      acquiring = true;
+      let handle = null;
+      try {
+        handle = await openFn(lockPath, fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY, 0o600);
+        lockHeld = true;
+      } catch (error) {
+        acquiring = false;
+        cleanupSync({ removeCreated: true });
+        process.off("SIGINT", cleanupSyncOnSignal);
+        process.off("SIGTERM", cleanupSyncOnSignal);
+        if (pendingSignal) {
+          const sig = pendingSignal;
+          pendingSignal = null;
+          process.kill(process.pid, sig);
+        }
+        if (error.code === "EEXIST") {
+          throw new Error(`Output directory '${outputDir}' is locked by another running CLI process (or contains ${LOCK_NAME}).`);
+        }
+        throw error;
       }
-      throw error;
+      acquiring = false;
+      if (pendingSignal) {
+        if (handle) await handle.close().catch(() => {});
+        const sig = pendingSignal;
+        pendingSignal = null;
+        cleanupSyncOnSignal(sig);
+      }
+      try {
+        await handle.writeFile(lockPayload, "utf8");
+      } finally {
+        await handle.close();
+      }
+    } else {
+      let fd = null;
+      try {
+        fd = openSync(lockPath, "wx", 0o600);
+        lockHeld = true;
+        writeFileSync(fd, lockPayload, "utf8");
+      } catch (error) {
+        if (error.code === "EEXIST") {
+          throw new Error(`Output directory '${outputDir}' is locked by another running CLI process (or contains ${LOCK_NAME}).`);
+        }
+        throw error;
+      } finally {
+        if (fd !== null) {
+          try {
+            closeSync(fd);
+          } catch {
+            // Ignore close error after lock creation.
+          }
+        }
+      }
     }
-    process.on("SIGINT", cleanupSyncOnSignal);
-    process.on("SIGTERM", cleanupSyncOnSignal);
-
-    await lockHandle.writeFile(JSON.stringify({ tool: "structure-tensor", pid: process.pid, host: hostname(), startedAt: new Date().toISOString() }), "utf8");
-    await lockHandle.close();
-    lockHandle = null;
 
     if (!overwrite) {
       const entries = (await readdirFn(dir)).filter((name) => name !== LOCK_NAME);
@@ -929,104 +1403,202 @@ export async function claimOutputDir(outputDir, { overwrite = false, readdirFn =
       }
     }
   } catch (error) {
-    if (lockHandle) await lockHandle.close().catch(() => {});
     await release({ removeCreated: true });
     throw error;
   }
+
   return {
     dir,
+    lockPath,
     createdDirs,
     trackPartial: (p) => { activePartials.add(p); },
     untrackPartial: (p) => { activePartials.delete(p); },
+    beginPublish: (pubState) => { activePublish = pubState; },
+    endPublish: (pubState) => { if (activePublish === pubState) activePublish = null; },
+    markRollbackFailed: () => { rollbackFailed = true; },
     release,
   };
 }
 
-export async function commitOutputs(
-  dir,
-  files,
-  { overwrite = false, renameFn = rename, writeFileFn = writeFile, trackPartial, untrackPartial } = {},
-) {
+function publishFileNonOverwriteSync(partialPath, finalPath, { linkFn, copyFileFn }) {
+  const doLink = linkFn ?? linkSync;
+  const doCopy = copyFileFn ?? ((src, dst) => copyFileSync(src, dst, fsConstants.COPYFILE_EXCL));
+  try {
+    doLink(partialPath, finalPath);
+  } catch (error) {
+    if (error.code === "EEXIST") {
+      throw new Error(`Output file '${finalPath}' already exists. Choose a new directory or pass --overwrite.`);
+    }
+    if (LINK_FALLBACK_CODES.has(error.code)) {
+      try {
+        doCopy(partialPath, finalPath);
+      } catch (copyError) {
+        if (copyError.code === "EEXIST") {
+          throw new Error(`Output file '${finalPath}' already exists. Choose a new directory or pass --overwrite.`);
+        }
+        throw copyError;
+      }
+    } else {
+      throw error;
+    }
+  }
+  try {
+    unlinkSync(partialPath);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+}
+
+const COMMIT_OPTION_KEYS = new Set([
+  "overwrite",
+  "renameFn",
+  "writeFileFn",
+  "linkFn",
+  "copyFileFn",
+  "trackPartial",
+  "untrackPartial",
+  "claim",
+]);
+
+export async function commitOutputs(dir, files, options) {
+  const opts = assertPlainOptions(options, COMMIT_OPTION_KEYS, "commitOutputs options");
+  const overwrite = parseBooleanOption(opts.overwrite, "overwrite");
+  const hasCustomRename = opts.renameFn !== undefined && opts.renameFn !== rename;
+  const renameFn = opts.renameFn ?? rename;
+  const writeFileFn = opts.writeFileFn ?? writeFile;
+  const linkFn = opts.linkFn;
+  const copyFileFn = opts.copyFileFn;
+  const claim = opts.claim;
+  const trackPartial = opts.trackPartial ?? claim?.trackPartial;
+  const untrackPartial = opts.untrackPartial ?? claim?.untrackPartial;
+
   const token = randomBytes(6).toString("hex");
   for (const file of files) {
     const target = join(dir, file.name);
     try {
       const info = await lstat(target);
       if (info.isDirectory()) throw new Error(`Cannot write '${file.name}' because '${target}' is a directory.`);
+      if (info.isSymbolicLink()) throw new Error(`Cannot overwrite symbolic link '${target}'. Remove the symlink or choose a new output directory.`);
       if (!overwrite) throw new Error(`Output file '${target}' already exists. Choose a new directory or pass --overwrite.`);
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
     }
   }
 
-  const staged = [];
+  const pubState = {
+    staged: [],
+    published: [],
+    backups: [],
+    pendingBackup: null,
+    pendingPublish: null,
+    committed: false,
+    renameSyncFn: renameSync,
+  };
+  claim?.beginPublish?.(pubState);
+
   try {
     for (const file of files) {
       const partialPath = join(dir, `.${file.name}.${token}.partial`);
       const entry = { name: file.name, partialPath, finalPath: join(dir, file.name) };
-      staged.push(entry);
+      pubState.staged.push(entry);
       trackPartial?.(partialPath);
       await writeFileFn(partialPath, file.data, { flag: "wx" });
     }
-  } catch (error) {
-    for (const entry of staged) {
-      await rm(entry.partialPath, { force: true }).catch(() => {});
-      untrackPartial?.(entry.partialPath);
-    }
-    throw error;
-  }
 
-  const backedUp = [];
-  const committed = [];
-  try {
+    const backedUpSet = new Set();
     if (overwrite) {
-      for (const entry of staged) {
+      for (const entry of pubState.staged) {
         let info = null;
         try {
-          info = await lstat(entry.finalPath);
+          info = lstatSync(entry.finalPath);
         } catch (error) {
           if (error.code !== "ENOENT") throw error;
         }
         if (info) {
           if (info.isDirectory()) throw new Error(`Cannot overwrite existing directory '${entry.finalPath}'.`);
+          if (info.isSymbolicLink()) throw new Error(`Cannot overwrite symbolic link '${entry.finalPath}'.`);
           const backupPath = join(dir, `.${entry.name}.${token}.backup`);
-          await renameFn(entry.finalPath, backupPath);
-          backedUp.push({ finalPath: entry.finalPath, backupPath });
+          pubState.pendingBackup = { target: entry.finalPath, backup: backupPath };
+          if (hasCustomRename) {
+            await renameFn(entry.finalPath, backupPath);
+          } else {
+            renameSync(entry.finalPath, backupPath);
+          }
+          pubState.backups.push({ target: entry.finalPath, backup: backupPath });
+          backedUpSet.add(entry.finalPath);
+          pubState.pendingBackup = null;
         }
       }
     }
-    for (const entry of staged) {
-      await renameFn(entry.partialPath, entry.finalPath);
-      untrackPartial?.(entry.partialPath);
-      committed.push(entry);
+
+    for (const entry of pubState.staged) {
+      const hadBackup = backedUpSet.has(entry.finalPath);
+      if (!overwrite && !hasCustomRename) {
+        publishFileNonOverwriteSync(entry.partialPath, entry.finalPath, { linkFn, copyFileFn });
+        pubState.published.push({ target: entry.finalPath, hadBackup: false, kind: "file" });
+        untrackPartial?.(entry.partialPath);
+      } else {
+        pubState.pendingPublish = { target: entry.finalPath, partialPath: entry.partialPath, hadBackup, kind: "file" };
+        if (hasCustomRename) {
+          await renameFn(entry.partialPath, entry.finalPath);
+        } else {
+          renameSync(entry.partialPath, entry.finalPath);
+        }
+        pubState.published.push({ target: entry.finalPath, hadBackup, kind: "file" });
+        pubState.pendingPublish = null;
+        untrackPartial?.(entry.partialPath);
+      }
     }
+    pubState.committed = true;
   } catch (error) {
-    for (let i = committed.length - 1; i >= 0; i -= 1) await unlink(committed[i].finalPath).catch(() => {});
-    for (let i = backedUp.length - 1; i >= 0; i -= 1) await rename(backedUp[i].backupPath, backedUp[i].finalPath).catch(() => {});
-    for (const entry of staged) {
-      await rm(entry.partialPath, { force: true }).catch(() => {});
+    const ok = rollbackPublishSync(pubState);
+    if (!ok) claim?.markRollbackFailed?.();
+    for (const entry of pubState.staged) {
       untrackPartial?.(entry.partialPath);
     }
+    claim?.endPublish?.(pubState);
     throw error;
   }
 
-  for (const backup of backedUp) await rm(backup.backupPath, { force: true }).catch(() => {});
-  return committed.map((entry) => entry.finalPath);
+  for (const backup of pubState.backups) await rm(backup.backup, { force: true }).catch(() => {});
+  claim?.endPublish?.(pubState);
+  return pubState.staged.map((entry) => entry.finalPath);
 }
 
 /**
  * Runs 2D or 3D structure-tensor orientation analysis on one image (or a stack of 2D slices)
  * and writes all maps, colour map, orientation distribution CSV, and summary JSON atomically.
  */
-export async function analyseStructureTensorFile({
-  inputs,
-  outputDir,
-  options = {},
-  onProgress,
-  maxFileBytes = MAX_CLI_FILE_BYTES,
-  renameFn = rename,
-  readdirFn = readdir,
-} = {}) {
+const ANALYSE_ARG_KEYS = new Set([
+  "inputs",
+  "outputDir",
+  "options",
+  "onProgress",
+  "maxFileBytes",
+  "renameFn",
+  "readdirFn",
+  "openFn",
+  "linkFn",
+  "copyFileFn",
+]);
+
+export async function analyseStructureTensorFile(arg) {
+  const validated = assertPlainOptions(arg, ANALYSE_ARG_KEYS, "analyseStructureTensorFile arguments");
+  const {
+    inputs,
+    outputDir,
+    options = {},
+    onProgress,
+    maxFileBytes = MAX_CLI_FILE_BYTES,
+    renameFn = rename,
+    readdirFn = readdir,
+    openFn,
+    linkFn,
+    copyFileFn,
+  } = validated;
+  if (onProgress !== undefined && typeof onProgress !== "function") {
+    throw new Error("onProgress must be a function.");
+  }
   const parsed = parseCliOptions(options);
   const inputList = Array.isArray(inputs) ? inputs : [inputs];
   if (inputList.length === 0 || inputList.some((p) => typeof p !== "string" || !p.trim())) {
@@ -1038,7 +1610,7 @@ export async function analyseStructureTensorFile({
   const refusal = imageRefusal(image, parsed.settings);
   if (refusal) throw new Error(refusal);
 
-  const reservation = await claimOutputDir(outputDir, { overwrite: parsed.overwrite, readdirFn });
+  const reservation = await claimOutputDir(outputDir, { overwrite: parsed.overwrite, readdirFn, ...(openFn ? { openFn } : {}) });
   let committed = false;
   try {
     const started = performance.now();
@@ -1121,8 +1693,9 @@ export async function analyseStructureTensorFile({
     const written = await commitOutputs(reservation.dir, outputFiles, {
       overwrite: parsed.overwrite,
       renameFn,
-      trackPartial: reservation.trackPartial,
-      untrackPartial: reservation.untrackPartial,
+      ...(linkFn ? { linkFn } : {}),
+      ...(copyFileFn ? { copyFileFn } : {}),
+      claim: reservation,
     });
     committed = true;
 
@@ -1141,16 +1714,12 @@ export async function analyseStructureTensorFile({
 }
 
 /** Offline self-check: analyses a synthetic 45° grating and verifies exact angle and coherency. */
-export async function checkInstallation(opts = {}) {
-  if (opts === null || typeof opts !== "object" || Array.isArray(opts)) {
-    throw new Error("Options must be a plain object.");
-  }
-  for (const [key, value] of Object.entries(opts)) {
-    if (value !== undefined && key !== "cacheDir") {
-      throw new Error(`Unknown option '${key}' for checkInstallation.`);
-    }
-  }
-  const cacheDir = opts.cacheDir !== undefined ? assertNonEmptyString(opts.cacheDir, "cache-dir") : undefined;
+const CHECK_OPTION_KEYS = new Set(["cacheDir", "cache-dir"]);
+
+export async function checkInstallation(opts) {
+  const validated = assertPlainOptions(opts, CHECK_OPTION_KEYS, "checkInstallation options");
+  const cacheDirRaw = readAliasedOption(validated, "cache-dir", "cacheDir");
+  const cacheDir = cacheDirRaw !== undefined ? assertNonEmptyString(cacheDirRaw, "cache-dir") : undefined;
   const resolvedCache = cacheDir ? resolve(cacheDir) : undefined;
   const n = 32;
   const data = new Float64Array(n * n);

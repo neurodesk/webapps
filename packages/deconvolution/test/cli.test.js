@@ -337,4 +337,72 @@ test("strict Node API validation and failed-write .partial cleanup", async (t) =
     /EFBIG/,
   );
   assert.deepEqual(await readdir(dir), []);
+
+  // Sol r2: strict plain options, undefined unknown key, inherited prototype, null alias, symlink refusal, TOCTOU non-overwrite
+  assert.throws(() => parseCliOptions(new Date()), /plain object/);
+  assert.throws(() => parseCliOptions(Object.create({ overwrite: true })), /plain object/);
+  assert.throws(() => parseCliOptions({ unknownKey: undefined }), /Unknown option/);
+  assert.throws(() => parseCliOptions({ "voxel-xy": null }), /finite number/);
+  await assert.rejects(() => checkInstallation(new Date()), /plain object/);
+  await assert.rejects(() => checkInstallation({ extra: undefined }), /Unknown option/);
+
+  // Strict NIfTI-1/2 header & NiBabel 5.3.3 quaternion parity
+  const { niftiAffine } = await import("../src/input.js");
+  const badMagic2 = new ArrayBuffer(544);
+  new DataView(badMagic2).setInt32(0, 540, true);
+  new Uint8Array(badMagic2, 4, 8).set([0x6e, 0x2b, 0x32, 0x00, 0x00, 0x0a, 0x1a, 0x0a]);
+  assert.throws(() => niftiAffine(badMagic2), /NIfTI/);
+
+  const badOff1 = new ArrayBuffer(352);
+  new DataView(badOff1).setInt32(0, 348, true);
+  new Uint8Array(badOff1, 344, 4).set([0x6e, 0x2b, 0x31, 0x00]);
+  new DataView(badOff1).setFloat32(108, 348, true);
+  assert.throws(() => niftiAffine(badOff1), /vox_offset/);
+
+  const badOff2 = new ArrayBuffer(544);
+  new DataView(badOff2).setInt32(0, 540, true);
+  new Uint8Array(badOff2, 4, 8).set([0x6e, 0x2b, 0x32, 0x00, 0x0d, 0x0a, 0x1a, 0x0a]);
+  new DataView(badOff2).setBigInt64(168, 540n, true);
+  assert.throws(() => niftiAffine(badOff2), /vox_offset/);
+
+  const q2Buf = new ArrayBuffer(544);
+  const q2 = new DataView(q2Buf);
+  q2.setInt32(0, 540, true);
+  new Uint8Array(q2Buf, 4, 8).set([0x6e, 0x2b, 0x32, 0x00, 0x0d, 0x0a, 0x1a, 0x0a]);
+  q2.setFloat64(104, 1, true);
+  q2.setFloat64(112, 1, true);
+  q2.setFloat64(120, 1, true);
+  q2.setFloat64(128, 1, true);
+  q2.setInt32(344, 1, true);
+  q2.setFloat64(352, 1 + Number.EPSILON, true);
+  q2.setFloat64(360, Math.sqrt(0.875 * Number.EPSILON), true);
+  q2.setFloat64(368, 0, true);
+  assert.ok(Number.isFinite(niftiAffine(q2Buf)[0][0]));
+  q2.setFloat64(352, 1 + 2 * Number.EPSILON, true);
+  q2.setFloat64(360, 0, true);
+  assert.throws(() => niftiAffine(q2Buf), /Invalid NIfTI quaternion/);
+
+  // Symlink overwrite refusal and non-overwrite TOCTOU
+  const { symlink } = await import("node:fs/promises");
+  await writeFile(join(work, "target.tif"), "precious");
+  await symlink(join(work, "target.tif"), join(dir, "sym.tif"));
+  await assert.rejects(
+    () => commitOutputs(dir, [{ name: "sym.tif", data: Buffer.from("x") }], { overwrite: true }),
+    /symbolic link/,
+  );
+  assert.equal(await readFile(join(work, "target.tif"), "utf8"), "precious");
+
+  const raceDir = join(work, "race");
+  await mkdir(raceDir);
+  await assert.rejects(
+    () => commitOutputs(raceDir, [{ name: "out.tif", data: Buffer.from("new") }], {
+      overwrite: false,
+      writeFileFn: async (p, data, opts) => {
+        await writeFile(p, data, opts);
+        await writeFile(join(raceDir, "out.tif"), "winner");
+      },
+    }),
+    /already exists/,
+  );
+  assert.equal(await readFile(join(raceDir, "out.tif"), "utf8"), "winner");
 });

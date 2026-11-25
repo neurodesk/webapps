@@ -267,7 +267,7 @@ function buildCustomPng({ width, height, bitDepth, colorType, interlace = 0, raw
   ]);
 }
 
-test("PNG decoding parity: 3x2 1-bit, 1-bit Adam7, tRNS, invalid IDAT CRC, transparent RGB zeroing, gAMA->sRGB, non-sRGB cHRM/iCCP", () => {
+test("PNG decoding parity: 3x2 1-bit, 1-bit Adam7, tRNS, invalid IDAT CRC, transparent RGB zeroing, gAMA->sRGB, non-sRGB cHRM/iCCP", async () => {
   // 1. 3x2 1-bit greyscale PNG with row padding bits:
   // Row 0: [1, 0, 1] -> 0b10100000 = 0xa0; Row 1: [0, 1, 0] -> 0b01000000 = 0x40
   const png1bit = buildCustomPng({
@@ -384,6 +384,7 @@ test("PNG decoding parity: 3x2 1-bit, 1-bit Adam7, tRNS, invalid IDAT CRC, trans
   // 8. Non-sRGB iCCP rejected cleanly
   const fakeIcc = Buffer.alloc(132);
   Buffer.from("RGB ").copy(fakeIcc, 16);
+  Buffer.from("acsp").copy(fakeIcc, 36);
   const iccpPayload = Buffer.concat([Buffer.from("Display P3\0"), Buffer.from([0]), deflateSync(fakeIcc)]);
   const pngBadIccp = buildCustomPng({
     width: 2,
@@ -394,6 +395,160 @@ test("PNG decoding parity: 3x2 1-bit, 1-bit Adam7, tRNS, invalid IDAT CRC, trans
     extraChunks: [pngChunk("iCCP", iccpPayload)],
   });
   assert.throws(() => decodePngGreyscale(pngBadIccp), /non-sRGB ICC profile/);
+
+  // 9. 16-bit linear PNG (gAMA=100000): sample16=200 strips high byte -> 0 (matching Chromium OffscreenCanvas), 256 -> 13
+  const gamaLin = Buffer.alloc(4);
+  gamaLin.writeUInt32BE(100000, 0);
+  const raw16 = Buffer.alloc(1 + 4);
+  raw16[0] = 0;
+  raw16.writeUInt16BE(200, 1);
+  raw16.writeUInt16BE(256, 3);
+  const png16Linear = buildCustomPng({
+    width: 2,
+    height: 1,
+    bitDepth: 16,
+    colorType: 0,
+    rawScanlines: raw16,
+    extraChunks: [pngChunk("gAMA", gamaLin)],
+  });
+  const dec16Linear = decodePngGreyscale(png16Linear);
+  assert.equal(dec16Linear.data[0], 0);
+  assert.equal(dec16Linear.data[1], 13);
+
+  // 10. Exact Chromium/Skia alpha premul/unpremul parity: (gray=22, alpha=6) -> 42, (64, 2) -> 128, (64, 10) -> 77
+  const pngAlphaParity = buildCustomPng({
+    width: 3,
+    height: 1,
+    bitDepth: 8,
+    colorType: 6,
+    rawScanlines: [0, 22, 22, 22, 6, 64, 64, 64, 2, 64, 64, 64, 10],
+  });
+  const decAlphaParity = decodePngGreyscale(pngAlphaParity);
+  assert.equal(decAlphaParity.data[0], 42);
+  assert.equal(decAlphaParity.data[1], 128);
+  assert.equal(decAlphaParity.data[2], 77);
+
+  // 11. Narrow-range cICP [1, 13, 0, 0] rejected; full-range [1, 13, 0, 1] accepted
+  const pngNarrowCicp = buildCustomPng({
+    width: 2,
+    height: 1,
+    bitDepth: 8,
+    colorType: 0,
+    rawScanlines: [0, 100, 200],
+    extraChunks: [pngChunk("cICP", Buffer.from([1, 13, 0, 0]))],
+  });
+  assert.throws(() => decodePngGreyscale(pngNarrowCicp), /non-sRGB PNG color profile/);
+  const pngFullCicp = buildCustomPng({
+    width: 2,
+    height: 1,
+    bitDepth: 8,
+    colorType: 0,
+    rawScanlines: [0, 100, 200],
+    extraChunks: [pngChunk("cICP", Buffer.from([1, 13, 0, 1]))],
+  });
+  assert.deepEqual(Array.from(decodePngGreyscale(pngFullCicp).data), [100, 200]);
+
+  // 12. Real ICC profile with sRGB description + sRGB primaries + LINEAR TRC rejected in BOTH PNG and JPEG
+  function buildIccProfile({ linearTrc }) {
+    const descStr = Buffer.from("sRGB IEC61966-2.1\0", "ascii");
+    const descTag = Buffer.alloc(12 + descStr.length);
+    descTag.write("desc", 0, "ascii");
+    descTag.writeUInt32BE(descStr.length, 8);
+    descStr.copy(descTag, 12);
+    const makeXyz = (x, y, z) => {
+      const b = Buffer.alloc(20);
+      b.write("XYZ ", 0, "ascii");
+      b.writeInt32BE(Math.round(x * 65536), 8);
+      b.writeInt32BE(Math.round(y * 65536), 12);
+      b.writeInt32BE(Math.round(z * 65536), 16);
+      return b;
+    };
+    let trcTag;
+    if (linearTrc) {
+      trcTag = Buffer.alloc(16);
+      trcTag.write("curv", 0, "ascii");
+      trcTag.writeUInt32BE(2, 8);
+      trcTag.writeUInt16BE(0, 12);
+      trcTag.writeUInt16BE(65535, 14);
+    } else {
+      trcTag = Buffer.alloc(32);
+      trcTag.write("para", 0, "ascii");
+      trcTag.writeUInt16BE(3, 8);
+      trcTag.writeInt32BE(Math.round(2.4 * 65536), 12);
+      trcTag.writeInt32BE(Math.round((1 / 1.055) * 65536), 16);
+      trcTag.writeInt32BE(Math.round((0.055 / 1.055) * 65536), 20);
+      trcTag.writeInt32BE(Math.round((1 / 12.92) * 65536), 24);
+      trcTag.writeInt32BE(Math.round(0.04045 * 65536), 28);
+    }
+    const tagEntries = [
+      ["desc", descTag],
+      ["rXYZ", makeXyz(0.4361, 0.2225, 0.0139)],
+      ["gXYZ", makeXyz(0.3851, 0.7169, 0.0971)],
+      ["bXYZ", makeXyz(0.1431, 0.0606, 0.7141)],
+      ["rTRC", trcTag],
+      ["gTRC", trcTag],
+      ["bTRC", trcTag],
+    ];
+    const headerLen = 132 + tagEntries.length * 12;
+    let offset = headerLen;
+    const chunks = [];
+    const table = Buffer.alloc(tagEntries.length * 12);
+    tagEntries.forEach(([sig, buf], idx) => {
+      table.write(sig, idx * 12, "ascii");
+      table.writeUInt32BE(offset, idx * 12 + 4);
+      table.writeUInt32BE(buf.length, idx * 12 + 8);
+      chunks.push(buf);
+      offset += buf.length;
+    });
+    const hdr = Buffer.alloc(132);
+    hdr.writeUInt32BE(offset, 0);
+    hdr.write("RGB ", 16, "ascii");
+    hdr.write("acsp", 36, "ascii");
+    hdr.writeUInt32BE(tagEntries.length, 128);
+    return Buffer.concat([hdr, table, ...chunks]);
+  }
+  const linearIcc = buildIccProfile({ linearTrc: true });
+  const validSrgbIcc = buildIccProfile({ linearTrc: false });
+  const pngLinearIcc = buildCustomPng({
+    width: 2,
+    height: 1,
+    bitDepth: 8,
+    colorType: 0,
+    rawScanlines: [0, 100, 200],
+    extraChunks: [pngChunk("iCCP", Buffer.concat([Buffer.from("sRGB\0"), Buffer.from([0]), deflateSync(linearIcc)]))],
+  });
+  assert.throws(() => decodePngGreyscale(pngLinearIcc), /non-sRGB transfer curve/);
+  const pngValidIcc = buildCustomPng({
+    width: 2,
+    height: 1,
+    bitDepth: 8,
+    colorType: 0,
+    rawScanlines: [0, 100, 200],
+    extraChunks: [pngChunk("iCCP", Buffer.concat([Buffer.from("sRGB\0"), Buffer.from([0]), deflateSync(validSrgbIcc)]))],
+  });
+  assert.deepEqual(Array.from(decodePngGreyscale(pngValidIcc).data), [100, 200]);
+
+  // Also test linear-TRC ICC embedded in JPEG APP2 ICC_PROFILE
+  const jpegMod = await import("jpeg-js");
+  const baseJpeg = jpegMod.default.encode({ data: Buffer.from([100, 100, 100, 255, 200, 200, 200, 255]), width: 2, height: 1 }, 95).data;
+  const app2Payload = Buffer.concat([Buffer.from("ICC_PROFILE\0"), Buffer.from([1, 1]), linearIcc]);
+  const app2Seg = Buffer.alloc(4 + app2Payload.length);
+  app2Seg[0] = 0xff;
+  app2Seg[1] = 0xe2;
+  app2Seg.writeUInt16BE(2 + app2Payload.length, 2);
+  app2Payload.copy(app2Seg, 4);
+  const jpegWithLinearIcc = Buffer.concat([baseJpeg.subarray(0, 2), app2Seg, baseJpeg.subarray(2)]);
+  const jpegWork = mkdtempSync(join(tmpdir(), "st-jpeg-icc-"));
+  try {
+    const jpgPath = join(jpegWork, "linear-icc.jpg");
+    writeFileSync(jpgPath, jpegWithLinearIcc);
+    await assert.rejects(
+      () => analyseStructureTensorFile({ inputs: [jpgPath], outputDir: join(jpegWork, "out") }),
+      /non-sRGB transfer curve/,
+    );
+  } finally {
+    rmSync(jpegWork, { recursive: true, force: true });
+  }
 });
 
 test("NIfTI-2 3D analysis preserves qform and sform in NIfTI-2 outputs and strict Node API validation works", async () => {
@@ -486,6 +641,58 @@ test("NIfTI-2 3D analysis preserves qform and sform in NIfTI-2 outputs and stric
     assert.equal(odv.getFloat64(424, true), 99);
     assert.equal(odv.getFloat64(440, true), -3);
     assert.equal(odv.getFloat64(480, true), 4);
+
+    // Sol r2: strict NIfTI-1/2 header validation & NiBabel 5.3.3 quaternion parity
+    const badMagic = buf.slice(0);
+    new Uint8Array(badMagic)[8] = 0x00; // corrupt byte 4 of 8-byte magic
+    assert.throws(() => extractNibabelAffine(badMagic), /Invalid NIfTI-2 magic/);
+
+    const badOffset2 = buf.slice(0);
+    new DataView(badOffset2).setBigInt64(168, 540n, true);
+    assert.throws(() => extractNibabelAffine(badOffset2), /vox_offset/);
+
+    const badOffset1 = new ArrayBuffer(352);
+    const dv1 = new DataView(badOffset1);
+    dv1.setInt32(0, 348, true);
+    new Uint8Array(badOffset1, 344, 4).set([0x6e, 0x2b, 0x31, 0x00]);
+    dv1.setFloat32(108, 348, true);
+    assert.throws(() => extractNibabelAffine(badOffset1), /vox_offset/);
+
+    // NIfTI-1 near-180° quaternion (b = 1 - 2^-24 => |w^2| < 3*f32_eps => w = 0)
+    const q1Buf = new ArrayBuffer(352);
+    const q1 = new DataView(q1Buf);
+    q1.setInt32(0, 348, true);
+    new Uint8Array(q1Buf, 344, 4).set([0x6e, 0x2b, 0x31, 0x00]);
+    q1.setFloat32(76, 1, true);
+    q1.setFloat32(80, 1, true);
+    q1.setFloat32(84, 1, true);
+    q1.setFloat32(88, 1, true);
+    q1.setInt16(252, 1, true);
+    q1.setFloat32(256, 1 - 2 ** -24, true);
+    const aff1 = extractNibabelAffine(q1Buf);
+    assert.equal(aff1[1][2], 0, "w=0 when |w^2| < 3*f32_eps");
+
+    // NIfTI-2 Sol case: b = 1 + eps, c = sqrt(0.875*eps) => exact w^2 = -2.875*eps => w = 0
+    const q2Buf = buf.slice(0);
+    const q2 = new DataView(q2Buf);
+    q2.setInt32(348, 0, true); // disable sform so qform is used
+    q2.setInt32(344, 1, true);
+    q2.setFloat64(352, 1 + Number.EPSILON, true);
+    q2.setFloat64(360, Math.sqrt(0.875 * Number.EPSILON), true);
+    q2.setFloat64(368, 0, true);
+    const aff2 = extractNibabelAffine(q2Buf);
+    assert.ok(Number.isFinite(aff2[0][0]), "NIfTI-2 exact Dekker/Shewchuk quaternion accepted");
+    q2.setFloat64(352, 1 + 2 * Number.EPSILON, true);
+    q2.setFloat64(360, 0, true);
+    assert.throws(() => extractNibabelAffine(q2Buf), /Invalid NIfTI quaternion/);
+
+    // Strict plain-object, unknown undefined key, inherited prototype, and null alias validation
+    assert.throws(() => parseCliOptions(new Date()), /plain object/);
+    assert.throws(() => parseCliOptions(Object.create({ overwrite: true })), /plain object/);
+    assert.throws(() => parseCliOptions({ unknownKey: undefined }), /Unknown option/);
+    assert.throws(() => parseCliOptions({ "min-coherency": null }), /finite number/);
+    await assert.rejects(() => checkInstallation(new Date()), /plain object/);
+    await assert.rejects(() => checkInstallation({ extra: undefined }), /Unknown option/);
   } finally {
     rmSync(work, { recursive: true, force: true });
   }
