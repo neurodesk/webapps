@@ -95,6 +95,19 @@ function namedByCommands(commands, rootScripts, root = null, rootPackageName = n
     for (const match of current.cmd.matchAll(ROOT_NAMED)) if (match[1]) named.add(match[1]);
     for (const [, rootFile] of current.cmd.matchAll(ROOT_PATH)) named.add(rootFile);
     const nonRootWorkingDir = isStaticNonRootDir(current.workingDir, root);
+    const staticWd = nonRootWorkingDir && typeof current.workingDir === 'string' ? current.workingDir.trim().replace(/\/+$/, '') : null;
+    for (const seg of splitShellCommands(current.cmd)) {
+      for (const word of tokenizeShellWordsWithExpansion(seg)) {
+        if (!word.value || /[$`*?[{]/.test(word.value)) continue;
+        const candidate = staticWd
+          ? posix.normalize(`${staticWd}/${word.value}`)
+          : posix.normalize(word.value.replace(/^\/+/, ''));
+        if (candidate.startsWith('..')) continue;
+        if (ROOT_DIRS.some((dir) => candidate.startsWith(dir)) || ROOT_CONFIG.test(candidate)) {
+          named.add(candidate);
+        }
+      }
+    }
     for (const { script, env } of extractPnpmRootScripts(current.cmd, { requireRootFlag: nonRootWorkingDir, baseDir: current.workingDir ?? '.', root, rootPackageName, rootScripts, stepEnv: current.env ?? null })) {
       expanded.add(script);
       const visitKey = `${script}\0${stableEnvKey(env)}`;
@@ -905,20 +918,87 @@ function tokenizeShellWordsWithExpansion(segment) {
 const UNSAFE_EXEC_ENV = /^(?:NODE_|BASH_ENV$|BASH_FUNC_|BASHOPTS$|ENV$|ZDOTDIR$|SHELLOPTS$|PS4$|PROMPT_COMMAND$|IFS$|CDPATH$|PATH$|FPATH$|LD_|DYLD_|GLOBIGNORE$|EXECIGNORE$)/;
 const UNSAFE_EXEC_ENV_TEXT = /\b(?:NODE_OPTIONS|NODE_PATH|BASH_ENV|BASH_FUNC_|BASHOPTS|ZDOTDIR|SHELLOPTS|PROMPT_COMMAND|LD_PRELOAD|DYLD_INSERT_LIBRARIES)\b/;
 
+function isRepoRootWorkingDir(workingDir, root) {
+  if (!workingDir) return true;
+  const trimmed = typeof workingDir === 'string' ? workingDir.trim() : '';
+  if (!trimmed) return true;
+  if (isUncertainCdTarget(trimmed)) return false;
+  if (!root) return trimmed === '.' || trimmed === './';
+  const rel = relative(root, resolve(root, trimmed)).split(sep).join('/').replace(/\/+$/, '');
+  return rel === '' || rel === '.';
+}
+
+function shellGlobMatches(pattern, target) {
+  if (!pattern || !target) return false;
+  const expandBraces = (text) => {
+    const match = text.match(/\{([^{}]+)\}/);
+    if (!match || !match[1].includes(',')) return [text];
+    const parts = match[1].split(',');
+    if (parts.length > 16) return null;
+    const prefix = text.slice(0, match.index);
+    const suffix = text.slice(match.index + match[0].length);
+    const results = [];
+    for (const part of parts) {
+      const sub = expandBraces(`${prefix}${part}${suffix}`);
+      if (!sub) return null;
+      results.push(...sub);
+      if (results.length > 64) return null;
+    }
+    return results;
+  };
+  const expanded = expandBraces(pattern);
+  if (!expanded) return true;
+  for (const pat of expanded) {
+    let re = '^';
+    for (let i = 0; i < pat.length; i++) {
+      const ch = pat[i];
+      if (ch === '*') {
+        if (pat[i + 1] === '*') {
+          re += '.*';
+          i++;
+        } else {
+          re += '[^/]*';
+        }
+      } else if (ch === '?') {
+        re += '[^/]';
+      } else if (ch === '[') {
+        const end = pat.indexOf(']', i + 1);
+        if (end === -1) {
+          re += '\\[';
+        } else {
+          let cls = pat.slice(i + 1, end);
+          if (cls.startsWith('!')) cls = `^${cls.slice(1)}`;
+          re += `[${cls}]`;
+          i = end;
+        }
+      } else {
+        re += ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      }
+    }
+    re += '$';
+    try {
+      if (new RegExp(re).test(target)) return true;
+    } catch {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Whether every CATALOG CI invocation of `entryFile` runs plain `node <entryFile>`
 // (no preloads, flags, wrappers, custom shells, or startup/runtime env hooks) and
 // passes `${{ matrix.app }}` (directly or via one unconcatenated single-step env var)
 // as its first CLI argument.
-function ciCommandsPreserveMatrixApp(catalogCmds, entryFile) {
+function ciCommandsPreserveMatrixApp(catalogCmds, entryFile, root = null) {
   const entryBase = entryFile.split('/').pop();
   const matchesEntryWord = (value, workingDir) => {
     const clean = value.replace(/^\/+/, '');
     const normalized = posix.normalize(clean);
     if (normalized === entryFile) return true;
-    if (workingDir) {
-      const joined = posix.normalize(`${workingDir}/${value}`);
-      if (joined === entryFile) return true;
-    }
+    const wdNorm = workingDir && !isRepoRootWorkingDir(workingDir, root) ? workingDir.trim().replace(/\/+$/, '') : null;
+    const candidate = wdNorm ? posix.normalize(`${wdNorm}/${value}`) : normalized;
+    if (candidate === entryFile) return true;
+    if (/[*?[{]/.test(candidate) && shellGlobMatches(candidate, entryFile)) return true;
     return value.includes(entryBase) && normalized !== 'scripts/lib/e2e-test-data.mjs';
   };
   for (const entry of catalogCmds ?? []) {
@@ -932,10 +1012,22 @@ function ciCommandsPreserveMatrixApp(catalogCmds, entryFile) {
     for (let segIdx = 0; segIdx < segments.length; segIdx++) {
       const seg = segments[segIdx];
       const words = tokenizeShellWordsWithExpansion(seg);
+      if (words.length === 0) continue;
+      if (words[0].value === 'eval') return false;
+      if ((words[0].value === 'bash' || words[0].value === 'sh') && words.some((w) => w.value === '-c')) return false;
+      if (words[0].value === 'node') {
+        if (words.length < 2 || words[1].value.startsWith('-') || /[$`*?[{]/.test(words[1].value)) return false;
+      } else if (
+        words[0].value !== 'echo'
+        && words[0].value !== 'printf'
+        && words.some((w, idx) => idx > 0 && w.value === 'node')
+      ) {
+        return false;
+      }
       const entryIdx = words.findIndex((w) => matchesEntryWord(w.value, workingDir));
       if (entryIdx < 0) continue;
       if (shell && shell !== 'bash' && shell !== 'sh') return false;
-      if (workingDir) return false;
+      if (!isRepoRootWorkingDir(workingDir, root)) return false;
       if (stepEnv && Object.keys(stepEnv).some((key) => UNSAFE_EXEC_ENV.test(key))) return false;
       if (segIdx !== 0 || /`|\$\(/.test(seg)) return false;
       if (entryIdx !== 1 || words[0].raw !== 'node' || entryIdx + 1 >= words.length) return false;
@@ -2678,7 +2770,7 @@ export async function loadConservativeWorkspaceGraph(root) {
     return false;
   };
   const provisionerAppEdges = new Map();
-  let e2eProvisionersNarrowable = true;
+  let e2eProvisionersNarrowable = false;
   const rangeContains = (outer, inner) => outer[0] <= inner[0] && inner[1] <= outer[1];
   for (const [file, { ast, workspaceRefs }] of analyzedRootFiles) {
     if (file === 'scripts/lib/e2e-test-data.mjs') {
@@ -2698,7 +2790,7 @@ export async function loadConservativeWorkspaceGraph(root) {
           }
           const callerAst = analyzedRootFiles.get(importerFile)?.ast;
           if (
-            !ciCommandsPreserveMatrixApp(expandedByEntry.get(CATALOG), importerFile)
+            !ciCommandsPreserveMatrixApp(expandedByEntry.get(CATALOG), importerFile, root)
             || !dispatchBindings.every((b) => callerPreservesAppIdentity(callerAst, b.local))
           ) {
             callersPreserveIdentity = false;
