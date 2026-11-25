@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@fideus-labs/ngff-zarr": "0.38.0",
+    "@neurodesk/stitching": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
     "@niivue/niivue": "1.0.0-rc.26"
   },

@@ -1,0 +1,39 @@
+{
+  "name": "@neurodesk/neuromorph",
+  "version": "0.1.20261124",
+  "description": "SWC neuron morphology validation, repair, morphometrics and Sholl analysis core and portable command line",
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {},
+  "bin": {
+    "neuromorph": "./bin/neuromorph.js"
+  },
+  "exports": {
+    ".": "./src/morph/morphometrics.js",
+    "./morph/morphometrics": "./src/morph/morphometrics.js",
+    "./morph/outputs": "./src/morph/outputs.js",
+    "./morph/swc": "./src/morph/swc.js",
+    "./morph/tubes": "./src/morph/tubes.js",
+    "./names": "./src/names.js",
+    "./node": "./src/node.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check bin/neuromorph.js && node --check src/node.js && node --check src/names.js && node --check src/morph/swc.js && node --check src/morph/morphometrics.js && node --check src/morph/outputs.js && node --check src/morph/tubes.js && node --check validation/cli-check.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/neuromorph"
+  }
+}

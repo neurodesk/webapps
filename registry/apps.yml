@@ -1538,7 +1538,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: calcium-imaging
     path: calcium-imaging
     catalog: microscopy
@@ -1565,7 +1565,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: spot-detection
     path: spot-detection
     catalog: microscopy
@@ -1645,7 +1645,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
 
   - id: stitching
     catalog: microscopy
@@ -1673,7 +1673,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: structure-tensor
     path: structure-tensor
     catalog: microscopy
@@ -1725,7 +1725,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: microsam
     path: microsam
     catalog: microscopy
@@ -1856,7 +1856,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: tumour-report
     path: tumour-report
     catalog: neuro

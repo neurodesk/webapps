@@ -1,0 +1,39 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "microscope-qc-v",
+  "displayName": "Microscope QC",
+  "app": "microscope-qc",
+  "bundleModels": false,
+  "run": "beads.ome.tif results",
+  "readme": {
+    "run": "Measure bead PSF FWHM or field illumination uniformity (MetroloJ_QC)",
+    "notes": [
+      "Input is a single-channel TIFF or OME-TIFF bead z-stack (PSF) or 2D slide image (field).",
+      "Analysis mode defaults to auto (psf for z-stacks, field for 2D images).",
+      "OME-XML optics and voxel sizes are read automatically; override with --na, --emission, etc.",
+      "Add --help for every option.",
+      "",
+      "No network connection is required and no external model files are downloaded.",
+      "Please cite Faklaris et al. 2022 (MetroloJ_QC, J Cell Biol 221:e202107093)",
+      "and Zipfel, Williams & Webb 2003 (Nat Biotechnol 21:1369) for multiphoton."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "microscope-qc"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "microscope-qc.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "microscope-qc"
+    }
+  }
+}

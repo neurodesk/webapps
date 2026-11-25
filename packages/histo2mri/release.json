@@ -1,0 +1,38 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "histo2mri-v",
+  "displayName": "Histo2MRI",
+  "app": "histo2mri",
+  "bundleModels": false,
+  "run": "mri.nii.gz section.tif out --slice 50",
+  "readme": {
+    "run": "Register 2D histology sections (TIFF, PNG, JPEG) to a 3D NIfTI MRI volume",
+    "notes": [
+      "Input is one 3D NIfTI MRI (.nii or .nii.gz) and one or more 2D histology sections.",
+      "Specify --axis (0/i, 1/j, 2/k; default 2) and --slice N (default middle slice).",
+      "Runs Greedy NMI rigid, affine, plane search and deformable SVF registration.",
+      "Add --help for every option.",
+      "",
+      "No network connection is required and no external model files are downloaded.",
+      "Please cite Yushkevich et al. 2016 (Greedy) and Ruifrok & Johnston 2001 (colour deconvolution)."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "histo2mri"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "histo2mri.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "histo2mri"
+    }
+  }
+}

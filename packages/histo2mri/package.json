@@ -1,0 +1,49 @@
+{
+  "name": "@neurodesk/histo2mri",
+  "version": "0.1.20261124",
+  "description": "2D histology section to 3D MRI registration (Greedy NMI rigid, affine, plane search and deformable warp) core and portable command line",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@neurodesk/greedy": "workspace:*",
+    "@neurodesk/webapp-components": "workspace:*",
+    "fast-png": "8.0.0",
+    "jpeg-js": "0.4.4"
+  },
+  "bin": {
+    "histo2mri": "./bin/histo2mri.js"
+  },
+  "exports": {
+    ".": "./src/core/register.js",
+    "./core/colour": "./src/core/colour.js",
+    "./core/image2d": "./src/core/image2d.js",
+    "./core/matrix": "./src/core/matrix.js",
+    "./core/nifti": "./src/core/nifti.js",
+    "./core/nmi": "./src/core/nmi.js",
+    "./core/outputs": "./src/core/outputs.js",
+    "./core/plane": "./src/core/plane.js",
+    "./core/register": "./src/core/register.js",
+    "./config": "./src/config.js",
+    "./nifti-io": "./src/nifti-io.js",
+    "./node": "./src/node.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check bin/histo2mri.js && node --check src/node.js && node --check src/nifti-io.js && node --check src/config.js && node --check src/core/colour.js && node --check src/core/image2d.js && node --check src/core/matrix.js && node --check src/core/nifti.js && node --check src/core/nmi.js && node --check src/core/outputs.js && node --check src/core/plane.js && node --check src/core/register.js && node --check validation/cli-check.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/histo2mri"
+  }
+}
