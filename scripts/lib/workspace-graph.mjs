@@ -145,8 +145,8 @@ const FILE_READER_CALLS = new Set(['readFile', 'readFileSync', 'require']);
 const PATH_JOIN_CALLS = new Set(['join', 'resolve']);
 const EXEC_ARRAY_CALLS = new Set(['run', 'execFile', 'execFileSync', 'spawn', 'spawnSync']);
 const INDEPENDENT_LINT_SCRIPT = /^node\s+(?:\.\.\/)+scripts\/lint\.mjs(?:\s+--workspace)?$/;
-const FILTER_ARG = /(?:--filter|-F)(?:=|\s+)['"]?([^\s'"]+)['"]?/g;
-const CROSS_WORKSPACE_FLAG = /(?:--filter|-F|-r|--recursive|--workspace|-w|--workspaces)(?:=|\s|$)/;
+const FILTER_ARG = /(?:^|[\s;|&(])(?:--filter|-F|--dir|-C|--prefix|--cwd)(?:=|\s+)['"]?([^\s'"]+)['"]?/g;
+const CROSS_WORKSPACE_FLAG = /(?:^|[\s;|&(])(?:--filter|-F|--dir|-C|--prefix|--cwd|-r|--recursive|--workspace|-w|--workspaces)(?:=|\s|$)/;
 
 function calleeNameOf(callNode) {
   const callee = callNode?.callee;
@@ -161,8 +161,9 @@ function calleeNameOf(callNode) {
 // `require`), (3) element of an ArrayExpression passed directly to a subprocess
 // runner (`run`/`execFile`/`execFileSync`/`spawn`/`spawnSync`), or (4) direct
 // VariableDeclarator initializer whose binding is never referenced elsewhere.
-function isStandalonePathLiteral(node, ancestors, referencedIdentifiers, readerArgIdentifiers) {
+function isStandalonePathLiteral(node, ancestors, referencedIdentifiers, readerArgIdentifiers, pathDerivedIdentifiers) {
   if (node.type !== 'Literal' || typeof node.value !== 'string') return false;
+  const isJsonLiteral = node.value.endsWith('.json');
   const parent = ancestors[ancestors.length - 1];
   if (!parent) return false;
   if (DIRECT_MODULE_PARENTS.has(parent.type) && parent.source === node) return true;
@@ -203,7 +204,10 @@ function isStandalonePathLiteral(node, ancestors, referencedIdentifiers, readerA
     if (ancestor.type === 'VariableDeclarator' && ancestor.init === child) {
       const exported = ancestors[i - 1]?.type === 'VariableDeclaration' && ancestors[i - 2]?.type === 'ExportNamedDeclaration';
       if (exported) return false;
-      if (ancestor.id?.type === 'Identifier' && readerArgIdentifiers.has(ancestor.id.name)) return false;
+      if (ancestor.id?.type === 'Identifier') {
+        if (pathDerivedIdentifiers.has(ancestor.id.name)) return false;
+        if (!isJsonLiteral && readerArgIdentifiers.has(ancestor.id.name)) return false;
+      }
       if (consumedByReader) continue;
       if (
         ancestors[i - 1]?.type === 'VariableDeclaration' &&
@@ -220,6 +224,8 @@ function isStandalonePathLiteral(node, ancestors, referencedIdentifiers, readerA
       if (!consumedByReader) {
         if (FILE_READER_CALLS.has(name)) consumedByReader = true;
         else if (!PATH_JOIN_CALLS.has(name) || ancestor.arguments[ancestor.arguments.length - 1] !== child) return false;
+      } else if (isJsonLiteral && FILE_READER_CALLS.has(name)) {
+        continue;
       } else if (
         name !== 'parse' ||
         ancestor.callee?.type !== 'MemberExpression' ||
@@ -247,6 +253,7 @@ function collectScriptStringLiterals(text, file) {
   }
   const referencedIdentifiers = new Set();
   const readerArgIdentifiers = new Set();
+  const pathDerivedIdentifiers = new Set();
   const candidates = [];
   const ancestors = [];
   const walk = (node) => {
@@ -260,13 +267,21 @@ function collectScriptStringLiterals(text, file) {
       const isDeclId = parent?.type === 'VariableDeclarator' && parent.id === node;
       if (!isDeclId) {
         referencedIdentifiers.add(node.name);
+        if (parent?.type === 'BinaryExpression' || parent?.type === 'TemplateLiteral') {
+          pathDerivedIdentifiers.add(node.name);
+        }
         if (
           parent?.type === 'CallExpression' &&
           Array.isArray(parent.arguments) &&
-          parent.arguments.includes(node) &&
-          (FILE_READER_CALLS.has(calleeNameOf(parent)) || PATH_JOIN_CALLS.has(calleeNameOf(parent)) || EXEC_ARRAY_CALLS.has(calleeNameOf(parent)))
+          parent.arguments.includes(node)
         ) {
-          readerArgIdentifiers.add(node.name);
+          const callee = calleeNameOf(parent);
+          if (PATH_JOIN_CALLS.has(callee) || EXEC_ARRAY_CALLS.has(callee)) {
+            pathDerivedIdentifiers.add(node.name);
+            readerArgIdentifiers.add(node.name);
+          } else if (FILE_READER_CALLS.has(callee)) {
+            readerArgIdentifiers.add(node.name);
+          }
         }
       }
     }
@@ -289,7 +304,7 @@ function collectScriptStringLiterals(text, file) {
       (isStringLiteral || (isTemplate && node.expressions.length === 0)) &&
       chain[chain.length - 1]?.type === 'VariableDeclarator' &&
       /(?:^|\n)[ \t]*\/\//.test(text.slice(node.range[0] + 1, node.range[1] - 1));
-    const standalone = isStandalonePathLiteral(node, chain, referencedIdentifiers, readerArgIdentifiers) || commentLine;
+    const standalone = isStandalonePathLiteral(node, chain, referencedIdentifiers, readerArgIdentifiers, pathDerivedIdentifiers) || commentLine;
     return { start: node.range[0], end: node.range[1], standalone };
   });
 }
@@ -336,13 +351,18 @@ function lintTargetsInCommands(commands, { nodeByPackageName, nodeSet, manifests
     if (!/\b(?:pnpm|npm|yarn)\b/.test(cmd) || !/\blint\b/.test(cmd) || !CROSS_WORKSPACE_FLAG.test(cmd)) continue;
     // `pnpm -w run lint` / `pnpm --workspace-root run lint` runs the root lint
     // script (handled by ROOT_SCRIPT_CALL), not every workspace member.
-    if (/(?:^|\s)(?:-w|--workspace-root)(?:\s|$)/.test(cmd) && !/(?:--filter|-F|-r|--recursive|--workspace(?:=|\s)|--workspaces)/.test(cmd)) continue;
+    if (/(?:^|\s)(?:-w|--workspace-root)(?:\s|$)/.test(cmd) && !/(?:^|[\s;|&(])(?:--filter|-F|--dir|-C|--prefix|--cwd|-r|--recursive|--workspace(?:=|\s)|--workspaces)/.test(cmd)) continue;
     const recursive = /(?:^|\s)(?:-r|--recursive)(?:\s|$)/.test(cmd);
     const filters = [...cmd.matchAll(FILTER_ARG)].map(([, target]) => target);
     if (!recursive && filters.length > 0) {
       let allResolved = true;
       for (const filter of filters) {
-        const workspaceNode = nodeByPackageName.get(filter) ?? (nodeSet.has(filter) ? filter : null);
+        const normalized = filter.replace(/^\.\//, '').replace(/\/+$/, '');
+        const prefixNode = normalized.match(/^(?:apps|packages|exes)\/[^/]+/)?.[0];
+        const workspaceNode =
+          nodeByPackageName.get(filter) ??
+          (nodeSet.has(normalized) ? normalized : null) ??
+          (prefixNode && nodeSet.has(prefixNode) ? prefixNode : null);
         if (workspaceNode) targets.add(workspaceNode);
         else allResolved = false;
       }
@@ -561,13 +581,18 @@ export async function loadConservativeWorkspaceGraph(root) {
     if (/^(?:packages|exes)\/.*\.json$/.test(file)) {
       const jsonText = await readFile(join(root, file), 'utf8').catch(() => null);
       if (jsonText !== null) {
-        for (const [, top, name, inner] of jsonText.matchAll(SCRIPT_REFERENCE)) {
+        for (const match of jsonText.matchAll(SCRIPT_REFERENCE)) {
+          const [, top, name, inner] = match;
           if (!nodeSet.has(`${top}/${name}`)) continue;
-          uses.add(`${top}/${name}`);
-          const target = inner && `${top}/${name}${inner}`;
+          const prev = jsonText[match.index - 1];
+          const next = jsonText[match.index + match[0].length];
+          const completeJsonString = (prev === '"' || (prev === '/' && jsonText.slice(match.index - 3, match.index) === '"./')) && next === '"';
+          const target = inner && completeJsonString && `${top}/${name}${inner}`;
           if (target && await isRegularUnlinkedFile(root, target)) {
             uses.add(target);
             pendingRootFiles.push(target);
+          } else {
+            uses.add(`${top}/${name}`);
           }
         }
         for (const [, path, dir, name] of jsonText.matchAll(ROOT_NAMED)) {

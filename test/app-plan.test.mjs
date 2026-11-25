@@ -3020,6 +3020,7 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
       "import { exportedAnchor } from './exported-anchor.mjs'; readFileSync(join(exportedAnchor, '..', 'actual.json'));",
       "readFileSync(JSON.parse(readFileSync('exes/indirect/path.json', 'utf8')));",
       "const splitPath = JSON.parse(readFileSync('exes/split-indirect/path.json', 'utf8')); readFileSync(splitPath);",
+      "const derivedPath = JSON.parse(readFileSync('exes/derived/path.json', 'utf8')); readFileSync(derivedPath + '.gz');",
       "const linked = 'exes/linked/fixture.json';",
     ].join('\n'),
     'scripts/exported-anchor.mjs': "export const exportedAnchor = resolve('exes/exported/anchor.json');\n",
@@ -3030,9 +3031,11 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
     ].join('\n'),
     'exes/config/path.json': '"scripts/runtime-input.mjs"',
     'scripts/runtime-input.mjs': 'export const ok = true;\n',
-    'exes/chain/outer.json': '"exes/chain/inner.json"',
-    'exes/chain/inner.json': '"scripts/quality/check-indirect.mjs"',
+    'exes/chain/outer.json': '"exes/chain-target/inner.json"',
+    'exes/chain-target/inner.json': '"scripts/quality/check-indirect.mjs"',
+    'exes/chain-target/unrelated.mjs': "import '../../scripts/quality/unrelated-sibling.mjs';\n",
     'scripts/quality/check-indirect.mjs': 'export const chained = true;\n',
+    'scripts/quality/unrelated-sibling.mjs': 'export const unrelated = true;\n',
     'exes/data/reference.json': '{}',
     'exes/data/reference.json.gz': 'compressed',
     'exes/spaced/reference.json': '{}',
@@ -3058,6 +3061,9 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
     'exes/indirect/actual.json': '{"indirect":true}',
     'exes/split-indirect/path.json': '"exes/split-indirect/actual.json"',
     'exes/split-indirect/actual.json': '{"split":true}',
+    'exes/derived/path.json': '"exes/derived/actual.json"',
+    'exes/derived/actual.json': '{"derived":true}',
+    'exes/derived/actual.json.gz': 'derived-gz',
     'exes/linked/target.json': '{"real":true}',
     'packages/pkg/package.json': JSON.stringify({ name: '@nd/pkg' }),
     'packages/pkg/fixture.json/index.js': "import '../../../scripts/from-dir-json.mjs';\n",
@@ -3081,10 +3087,12 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
   assert.equal(createAppPlan(registry, ['exes/exported/actual.json'], prefixGraph).site, true, 'exported resolve(anchor.json) keeps exes/exported edge');
   assert.equal(createAppPlan(registry, ['exes/indirect/actual.json'], prefixGraph).site, true, 'nested readFileSync(JSON.parse(readFileSync(path.json))) keeps exes/indirect edge');
   assert.equal(createAppPlan(registry, ['exes/split-indirect/actual.json'], prefixGraph).site, true, 'split-statement JSON indirect read keeps exes/split-indirect edge');
+  assert.equal(createAppPlan(registry, ['exes/derived/actual.json.gz'], prefixGraph).site, true, 'derived path from JSON read keeps exes/derived edge');
   assert.equal(createAppPlan(registry, ['exes/linked/target.json'], prefixGraph).site, true, 'symlink keeps exes/linked edge');
   assert.equal(reachableFrom(prefixGraph, CATALOG).has('scripts/from-dir-json.mjs'), true, 'directory named fixture.json keeps packages/pkg edge');
   assert.equal(createAppPlan(registry, ['scripts/runtime-input.mjs'], prefixGraph).allApps, true, 'split JSON read targeting scripts/runtime-input.mjs reaches CATALOG');
   assert.equal(createAppPlan(registry, ['scripts/quality/check-indirect.mjs'], prefixGraph).allApps, true, 'chained JSON reads outer.json -> inner.json -> check-indirect.mjs reach CATALOG');
+  assert.equal(createAppPlan(registry, ['scripts/quality/unrelated-sibling.mjs'], prefixGraph).selected.length, 0, 'exact chained JSON target does not pull unrelated sibling into CATALOG');
 });
 
 test('lint runner and scripts/quality files select nothing when unreached, and honor confirmed CI or app reachability', async (t) => {
@@ -3440,6 +3448,75 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       'packages/check/test/check.mjs',
       new Map(),
       (plan) => assert.deepEqual(plan.selected.map((app) => app.id), ['niimath']),
+    ],
+    [
+      'package test file imported by a root script invoked via pnpm -w selects the calling app',
+      {
+        'package.json': JSON.stringify({ name: 'root', scripts: { verify: 'node scripts/ci.mjs' } }),
+        'apps/niimath/package.json': JSON.stringify({ name: '@nd/niimath', scripts: { build: 'pnpm -w run verify' } }),
+        'scripts/ci.mjs': "import '../packages/check/test/check.mjs';\n",
+        'packages/check/package.json': JSON.stringify({ name: '@nd/check' }),
+        'packages/check/test/check.mjs': 'export const ok = 1;\n',
+      },
+      'packages/check/test/check.mjs',
+      new Map(),
+      (plan) => assert.deepEqual(plan.selected.map((app) => app.id), ['niimath']),
+    ],
+    [
+      'package test file imported by a script run in app-tests selects all apps',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'node scripts/ci.mjs' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/ci.mjs': "import '../packages/check/test/check.mjs';\n",
+        'packages/check/package.json': JSON.stringify({ name: '@nd/check' }),
+        'packages/check/test/check.mjs': 'export const ok = 1;\n',
+      },
+      'packages/check/test/check.mjs',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'package source file imported by a script run in app-tests selects all apps',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'node scripts/ci.mjs' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/ci.mjs': "import '../packages/check/src/helper.mjs';\n",
+        'packages/check/package.json': JSON.stringify({ name: '@nd/check' }),
+        'packages/check/src/helper.mjs': 'export const ok = 1;\n',
+      },
+      'packages/check/src/helper.mjs',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'pnpm --dir apps/niimath run lint in app-tests keeps standalone lint edge',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'pnpm --dir apps/niimath run lint' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/lint.mjs': 'export const lint = 1;\n',
+        'apps/niimath/package.json': JSON.stringify({ name: '@nd/niimath', scripts: { lint: 'node ../../scripts/lint.mjs --workspace' } }),
+      },
+      'scripts/lint.mjs',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
     ],
     [
       'one explicit CI lint target does not restore unrelated apps standalone lint edges',

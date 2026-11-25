@@ -857,10 +857,25 @@ export function e2eTestDataImpact({ before, after }) {
 // reach only those that read them and a document only those that read that
 // file; any other file reaches its package's users and, if a root file names
 // it, that file's.
+const E2E_DATA_SCRIPTS = new Set(['scripts/e2e-test-data.mjs', E2E_TEST_DATA]);
+
+function reachableWithout(graph, start, excluded) {
+  const seen = new Set();
+  const stack = [start];
+  while (stack.length) {
+    const node = stack.pop();
+    if (seen.has(node) || excluded.has(node)) continue;
+    seen.add(node);
+    for (const next of graph.edges.get(node) ?? []) stack.push(next);
+  }
+  return seen;
+}
+
 function graphNodes(path, graph) {
   const packageTests = path.match(/^packages\/[^/]+\/tests?(?=\/)/)?.[0];
   const document = /^(?:packages|exes)\/.*\.md$/.test(path) && path;
-  if (packageTests || document) return [packageTests || document];
+  if (packageTests) return [packageTests, graph?.edges.has(path) ? path : null].filter(Boolean);
+  if (document) return [document];
   return [path.match(/^(packages|exes)\/[^/]+(?=\/)/)?.[0], ROOT_FILE.test(path) || graph?.edges.has(path) ? path : null].filter(Boolean);
 }
 
@@ -957,14 +972,10 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
   const appIds = new Set(registry.apps.map((app) => app.id));
   const reach = graph && new Map(registry.apps.map((app) => [app.id, reachableFrom(graph, `apps/${app.id}`)]));
   const catalog = graph && reachableFrom(graph, CATALOG);
-  // Workspace packages explicitly targeted by a per-app CI command (such as
-  // `pnpm --filter @nd/pkg lint`), as opposed to packages reached only through
-  // per-app data provisioning scripts.
-  const catalogWorkspace = graph && new Set(
-    [...(graph.edges.get(CATALOG) ?? [])]
-      .filter((node) => /^(?:apps|packages|exes)\//.test(node))
-      .flatMap((node) => [...reachableFrom(graph, node)]),
-  );
+  // Everything per-app CI jobs reach outside the per-app data provisioner
+  // (scripts/e2e-test-data.mjs), which names packages only to provision
+  // individual apps' test fixtures.
+  const catalogShared = graph && reachableWithout(graph, CATALOG, E2E_DATA_SCRIPTS);
   const site = graph && reachableFrom(graph, SITE);
   const appReasons = new Map();
   const editedApps = new Set();
@@ -987,7 +998,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
   // Selects whatever reaches `node` or a file below it.
   const selectReaching = (node, reason) => {
     const within = (candidate) => candidate === node || candidate.startsWith(`${node}/`);
-    if ((ROOT_FILE.test(`${node}/`) && [...catalog].some(within)) || [...catalogWorkspace].some(within)) {
+    if ((ROOT_FILE.test(`${node}/`) && [...catalog].some(within)) || [...catalogShared].some(within)) {
       shared(`${reason}; ci.yml's per-app jobs run ${node}`);
     }
     if ([...site].some(within)) siteBuild(reason);
@@ -1004,7 +1015,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     }
     const appId = path.match(/^apps\/([^/]+)\//)?.[1] ?? path.match(MODEL_MANIFEST)?.[1];
     if (appIds.has(appId)) {
-      if (catalogWorkspace?.has(`apps/${appId}`)) {
+      if (catalogShared?.has(`apps/${appId}`)) {
         shared(`${path}: ci.yml's per-app jobs run apps/${appId}`);
         continue;
       }
@@ -1042,7 +1053,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
       for (const [importer, reason] of impact.importers) {
         const importerApp = importer.match(/^apps\/([^/]+)$/)?.[1];
         if (appIds.has(importerApp)) {
-          if (catalogWorkspace?.has(importer)) shared(`${path}: ${reason}; ci.yml's per-app jobs run ${importer}`);
+          if (catalogShared?.has(importer)) shared(`${path}: ${reason}; ci.yml's per-app jobs run ${importer}`);
           else if (graph) selectReaching(importer, `${path}: ${reason}`);
           else select(importerApp, `${path}: ${reason}`);
         } else if (importer === '.') shared(`${path}: ${reason}; the root's dependencies resolve for every workspace member`);
@@ -1222,6 +1233,10 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     // A module of the shared component package reaches the apps that load it.
     const loadedBy = graph?.moduleUsers?.(path);
     if (loadedBy) {
+      if (loadedBy.some((user) => catalogShared.has(user))) {
+        shared(`${path}: ci.yml's per-app jobs run it`);
+        continue;
+      }
       if (loadedBy.some((user) => site.has(user))) siteBuild(path);
       for (const candidate of registry.apps) {
         const user = loadedBy.find((user) => reach.get(candidate.id).has(user));
@@ -1231,9 +1246,10 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     }
     const nodes = graphNodes(path, graph);
     if (graph && nodes.length) {
-      // Per-app jobs name packages only to provision their own app's data,
-      // unless a per-app CI command explicitly targets a workspace package.
-      if ((ROOT_FILE.test(path) && catalog.has(path)) || nodes.some((node) => catalogWorkspace.has(node))) {
+      // Per-app jobs reach packages through e2e-test-data.mjs only to provision
+      // an individual app's data; any root file or any node reached outside the
+      // data provisioner runs for every app.
+      if ((ROOT_FILE.test(path) && catalog.has(path)) || nodes.some((node) => catalogShared.has(node))) {
         shared(`${path}: ci.yml's per-app jobs run it`);
         continue;
       }
