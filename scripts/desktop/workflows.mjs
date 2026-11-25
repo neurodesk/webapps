@@ -505,7 +505,7 @@ export async function verifyWorkflow(id, page, { root, resources, desktop, compu
     await page.locator('#movingInput').setInputFiles({ name: primary.name, mimeType: 'application/gzip', buffer: await readFile(join(resources, asset.path)) });
     await page.locator('#settingsSection').evaluate(section => { section.open = true; });
     await page.locator('#synthsrBackend').selectOption('wasm');
-    await page.locator('#brainExtractor').selectOption('synthstrip');
+    await page.locator('#mindgrabBackend').selectOption('cpu');
     await page.locator('#normalization').selectOption('greedy');
     await expect(page.locator('#runButton')).toBeEnabled({ timeout: 60000 });
     await page.locator('#runButton').click();

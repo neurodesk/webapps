@@ -3,8 +3,12 @@ import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import { unzipSync } from 'fflate';
 import { readVolume } from '@neurodesk/synthsr';
-import { asBuffer, sameGeometry } from '../../../packages/syncro/src/pipeline.js';
 import { assertHardwareAdapter, hardwareGpu, readAdapterInfo } from '../../../test-utils/hardware-gpu.mjs';
+
+const asBuffer = (bytes) => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+// The MNI template grid, compared as the SYNcro core does (dims equal, affine within 0.01 mm).
+const sameGeometry = (a, b) => a.dims.every((d, i) => d === b.dims[i])
+  && a.affine.every((row, r) => row.every((value, c) => Math.abs(value - b.affine[r][c]) <= 0.01));
 
 test.beforeEach(async ({ page }, testInfo) => {
   if (!hardwareGpu) return;
@@ -58,6 +62,7 @@ test('pinned T1 example completes with the WASM SynthSR backend', async ({ page 
   expect(templateSupport).toBeGreaterThan(0);
   expect(overlap / templateSupport).toBeGreaterThanOrEqual(0.1);
   const provenance = JSON.parse(new TextDecoder().decode(files['provenance.json']));
+  expect(new TextDecoder().decode(files['commands.sh'])).toMatch(/^synthsr /m);
   expect(provenance.stages.synthsr).toMatchObject({ backend: 'wasm', flip: true, tiled: false });
   if (hardwareGpu) expect(provenance.stages.mindgrab.backend).toBe('webgpu');
 });
@@ -75,12 +80,14 @@ test('cropped head fixture cannot publish nearly empty normalized outputs', asyn
   await page.locator('#movingInput').setInputFiles(fileURLToPath(new URL('../../../exes/synthseg/test/fixtures/small.nii.gz', import.meta.url)));
   await expect(page.locator('#runButton')).toBeEnabled();
   await expect(page.locator('#synthsrBackend')).toHaveValue('webgpu');
-  await expect(page.locator('#brainExtractor')).toHaveValue('mindgrab');
+  await expect(page.locator('#mindgrabBackend')).toHaveValue('auto');
   await expect(page.locator('#normalization')).toHaveValue('greedy');
   await page.locator('#settingsSection > summary').click();
   await page.locator('#synthsrBackend').selectOption('wasm');
   await page.locator('#runButton').click();
-  await expect(page.locator('#statusText')).toContainText('Normalization failed', { timeout: 19 * 60 * 1000 });
+  // Refused either by the coverage gate or earlier, when the few-voxel "brain" leaves Greedy's deformable NMI
+  // histogram empty (BrainChop Core MindGrab in the browser); either way nothing is published.
+  await expect(page.locator('#statusText')).toContainText(/Normalization failed|non-finite values/, { timeout: 19 * 60 * 1000 });
   await expect(page.locator('#download')).toBeDisabled();
   await expect(page.locator('#downloadSelected')).toBeDisabled();
   await expect(page.locator('#runButton')).toBeEnabled();

@@ -8,3 +8,4 @@ rust-version.workspace = true
 [dependencies]
 fastprep-core = { path = "../core" }
 libc = "0.2"
+neurodesk-pipeline-host = { path = "../../pipeline-host", features = ["native"] }

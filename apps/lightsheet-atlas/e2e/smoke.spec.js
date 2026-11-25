@@ -14,14 +14,19 @@ const brainreg = JSON.parse(readFileSync(new URL("../validation/brainreg-referen
 const manifest = JSON.parse(readFileSync(new URL("../../../models/lightsheet-atlas.manifest.json", import.meta.url), "utf8"));
 const example = (id) => examples.find((entry) => entry.id === id);
 
-// Serve the pinned example and atlas bytes from a checksum-verified Node cache, so a slow or
-// dropped connection to Hugging Face under load does not fail a scientific test. The bytes are the
-// hosted ones (fetchPinned downloads and checks them against the manifests' sha256).
-const PINNED = [...examples.flatMap((entry) => entry.files), ...manifest.assets];
-test.beforeEach(async ({ page }, testInfo) => {
-  if (testInfo.title.includes("failed example download")) return;
-  for (const asset of PINNED) {
-    await page.context().route(asset.url, async (route) => route.fulfill({ body: await fetchPinned(asset) }));
+// Verify and load the pinned bytes before Chromium starts any download with its own stall limit.
+const pinnedAssets = [...examples.flatMap((entry) => entry.files), ...manifest.assets];
+const pinnedBytes = new Map();
+test.beforeAll(async () => {
+  test.setTimeout(180_000);
+  await Promise.all(pinnedAssets.map(async (asset) => {
+    pinnedBytes.set(asset.url, await fetchPinned(asset));
+  }));
+});
+
+test.beforeEach(async ({ page }) => {
+  for (const [url, body] of pinnedBytes) {
+    await page.context().route(url, (route) => route.fulfill({ body }));
   }
 });
 
@@ -162,7 +167,7 @@ test("a wrong orientation is refused at its field", async ({ page }) => {
 test("a failed example download can be retried", async ({ page }) => {
   test.setTimeout(120000);
   const entry = example("cellfinder-crop");
-  const hosted = Buffer.from(await (await fetch(entry.files[0].url)).arrayBuffer());
+  const hosted = pinnedBytes.get(entry.files[0].url);
   let failing = true;
   let failures = 0;
   // Every request fails, automatic retries included, until the test lets the pinned bytes through.

@@ -1,0 +1,22 @@
+[package]
+name = "neurodesk-pipeline-host"
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0"
+rust-version = "1.85"
+publish = false
+
+[features]
+# Native processes and files (fastprep and syncro command lines).
+native = ["dep:libc"]
+# A JavaScript host object (fastprep and syncro WebAssembly builds).
+web = ["dep:js-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures"]
+
+[dependencies]
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+js-sys = { version = "0.3", optional = true }
+wasm-bindgen = { version = "0.2", optional = true }
+wasm-bindgen-futures = { version = "0.4", optional = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = { version = "0.2", optional = true }

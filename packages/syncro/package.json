@@ -2,47 +2,33 @@
   "name": "@neurodesk/syncro",
   "version": "0.9.20261124",
   "type": "module",
-  "description": "SYNcro spatial normalization for browsers and standalone computers",
+  "description": "SYNcro spatial normalization: the shared Rust core's WebAssembly build for the web app, the native command's tool manifest and its release check",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=22"
   },
-  "bin": {
-    "syncro": "./bin/syncro.js"
-  },
   "exports": {
-    ".": "./dist/index.js",
-    "./node": "./dist/node.js"
+    "./core": "./wasm/syncro_wasm.js"
   },
   "files": [
-    "dist",
-    "bin",
     "data",
     "README.md",
     "LICENSE",
     "NOTICE",
-    "release.json",
+    "tools.json",
     "validation/README.md",
-    "validation/results"
+    "validation/results",
+    "wasm"
   ],
   "scripts": {
-    "build": "node scripts/build.mjs",
     "test": "node --test test/*.test.js",
-    "lint": "node --check src/pipeline.js && node --check src/node.js"
-  },
-  "dependencies": {
-    "@brainchop/core": "1.0.0",
-    "@neurodesk/node-drivers": "workspace:*",
-    "onnxruntime-node": "1.29.0",
-    "nifti-reader-js": "0.8.0"
+    "build:wasm": "node scripts/build-wasm.mjs",
+    "test:core": "node scripts/build-wasm.mjs && node --test test/core/*.test.js",
+    "lint": "node --check validation/package-check.mjs && node --check scripts/build-wasm.mjs"
   },
   "devDependencies": {
-    "@neurodesk/brain-extraction": "workspace:*",
-    "@neurodesk/greedy": "workspace:*",
     "@neurodesk/registration": "workspace:*",
     "@neurodesk/synthsr": "workspace:*",
-    "@neurodesk/synthstrip": "workspace:*",
-    "@playwright/test": "1.64.0",
-    "esbuild": "^0.25.0"
+    "@playwright/test": "1.64.0"
   }
 }

@@ -17,7 +17,7 @@ const repository = 'owner/repo';
 // Hours after 20 Nov 2026 00:00 UTC, after the cutover.
 const at = hours => new Date(Date.UTC(2026, 10, 20) + hours * 3600e3).toISOString();
 const AGREEMENT = 'Error: HTTP status code: 403. A required agreement is missing or has expired.';
-const SYNCRO = '.github/workflows/syncro-native.yml';
+const GREEDY = '.github/workflows/greedy-native.yml';
 const LINKS = '.github/workflows/standalone-links.yml';
 
 function attempt(overrides = {}) {
@@ -150,7 +150,7 @@ test('the notarizing workflows and the workflows with a job that continues on er
   const facts = await workflowFacts(workflows);
   assert.deepEqual(facts, expected);
   // native.yml notarizes nothing itself, but runs native workflows whose macOS jobs can.
-  for (const file of ['syncro-native', 'standalone', 'synthseg-portable', 'node-cli', 'bison-native', 'native']) assert.ok(facts.notarizing.includes(`.github/workflows/${file}.yml`), file);
+  for (const file of ['greedy-native', 'standalone', 'synthseg-portable', 'node-cli', 'bison-native', 'native']) assert.ok(facts.notarizing.includes(`.github/workflows/${file}.yml`), file);
   for (const file of ['ci', 'node-cli-portable', 'quality', 'workflow-reports']) assert.ok(!facts.notarizing.includes(`.github/workflows/${file}.yml`), file);
   assert.ok(facts.notarizing.length >= 39, 'every workflow the replaced alert listed');
   assert.deepEqual(facts.continuesOnError, ['.github/workflows/ci.yml', '.github/workflows/deploy-pages.yml', '.github/workflows/standalone.yml']);
@@ -182,7 +182,7 @@ test('a listing that fills two adjacent seconds is split per second, and a full 
 
 test('a notarization failure whose rerun passed before the next tick is still alerted', async () => {
   // A release dispatch fails notarization at 03:00 and its rerun passes at 05:00; the tick runs at 06:47.
-  const failed = attempt({ id: 500, name: 'syncro-native', path: SYNCRO, event: 'workflow_dispatch', head_branch: 'syncro-v1' });
+  const failed = attempt({ id: 500, name: 'greedy-native', path: GREEDY, event: 'workflow_dispatch', head_branch: 'greedy-v1' });
   const passed = { ...failed, run_attempt: 2, conclusion: 'success', run_started_at: at(4), updated_at: at(5) };
   const client = github({
     runs: [failed, passed],
@@ -213,8 +213,8 @@ test('a notarization failure inside a workflow native.yml called on schedule is 
 
 test('a notarization failure is alerted whichever attempt the API qualifies with its ref', async () => {
   // The tag dispatch of the replayed release: attempt 1 fails notarization and attempt 2 passes.
-  for (const [first, second] of [[SYNCRO, `${SYNCRO}@syncro-v1`], [`${SYNCRO}@syncro-v1`, SYNCRO]]) {
-    const failed = attempt({ id: 500, name: 'syncro-native', path: first, event: 'workflow_dispatch', head_branch: 'syncro-v1' });
+  for (const [first, second] of [[GREEDY, `${GREEDY}@greedy-v1`], [`${GREEDY}@greedy-v1`, GREEDY]]) {
+    const failed = attempt({ id: 500, name: 'greedy-native', path: first, event: 'workflow_dispatch', head_branch: 'greedy-v1' });
     const passed = { ...failed, path: second, run_attempt: 2, conclusion: 'success', run_started_at: at(4), updated_at: at(5) };
     const client = github({
       runs: [failed, passed],
@@ -227,9 +227,9 @@ test('a notarization failure is alerted whichever attempt the API qualifies with
 });
 
 test('a failed notarizing run of an event its current workflow file does not declare is alerted', async () => {
-  // syncro-native.yml runs on push and workflow_dispatch today; an older tag declared release.
-  const release = attempt({ id: 600, name: 'syncro-native', path: `${SYNCRO}@syncro-v0`, event: 'release', head_branch: 'syncro-v0' });
-  const pullRequest = attempt({ id: 601, name: 'syncro-native', path: SYNCRO, event: 'pull_request', head_branch: 'feature' });
+  // greedy-native.yml runs on push and workflow_dispatch today; an older tag declared release.
+  const release = attempt({ id: 600, name: 'greedy-native', path: `${GREEDY}@greedy-v0`, event: 'release', head_branch: 'greedy-v0' });
+  const pullRequest = attempt({ id: 601, name: 'greedy-native', path: GREEDY, event: 'pull_request', head_branch: 'feature' });
   const client = github({
     runs: [release, pullRequest],
     jobs: { '600:1': [{ id: 61, name: 'portable / release', conclusion: 'failure', labels: ['macos-15'] }] },
@@ -241,11 +241,11 @@ test('a failed notarizing run of an event its current workflow file does not dec
 });
 
 test('a notarization failure is alerted when its workflow file was renamed after the run', async () => {
-  // The reviewer's replay: syncro-native.yml became syncro-native.yaml, and the new workflow's
+  // The reviewer's replay: greedy-native.yml became greedy-native.yaml, and the new workflow's
   // listing returns the failed run with its historical path.
   const directory = await mkdtemp(join(tmpdir(), 'renamed-'));
-  await writeFile(join(directory, 'syncro-native.yaml'), 'name: syncro-native\non:\n  workflow_dispatch:\njobs:\n  build:\n    steps:\n      - run: xcrun notarytool submit\n');
-  const failed = attempt({ id: 500, name: 'syncro-native', path: SYNCRO, listed_under: `${SYNCRO.replace(/\.yml$/, '.yaml')}`, event: 'workflow_dispatch', head_branch: 'syncro-v1' });
+  await writeFile(join(directory, 'greedy-native.yaml'), 'name: greedy-native\non:\n  workflow_dispatch:\njobs:\n  build:\n    steps:\n      - run: xcrun notarytool submit\n');
+  const failed = attempt({ id: 500, name: 'greedy-native', path: GREEDY, listed_under: `${GREEDY.replace(/\.yml$/, '.yaml')}`, event: 'workflow_dispatch', head_branch: 'greedy-v1' });
   const client = github({
     runs: [failed],
     jobs: { '500:1': [{ id: 51, name: 'mac', conclusion: 'failure', labels: ['macos-15'] }] },
@@ -286,7 +286,7 @@ test('the first tick after a long gap reports every failure in the lookback', as
 
 test('a repeated tick writes nothing and runs no report again', async () => {
   const failed = attempt({ id: 1 });
-  const notarized = attempt({ id: 2, name: 'syncro-native', path: SYNCRO, event: 'push' });
+  const notarized = attempt({ id: 2, name: 'greedy-native', path: GREEDY, event: 'push' });
   const client = github({
     runs: [failed, notarized],
     jobs: { '2:1': [{ id: 21, name: 'portable / release', conclusion: 'failure', labels: ['macos-15'] }] },
@@ -341,7 +341,7 @@ const HANDOFF = Date.parse('2026-11-18T12:00:00Z');
 function handoff() {
   const hours = value => new Date(HANDOFF + value * 3600e3).toISOString();
   const nightly = id => attempt({ id, workflow_id: id, name: `nightly-${id}`, created_at: hours(-0.5), run_started_at: hours(-0.5), updated_at: hours(0) });
-  const release = id => attempt({ id, name: 'syncro-native', path: SYNCRO, event: 'workflow_dispatch', head_branch: 'syncro-v1', created_at: hours(-1), run_started_at: hours(-1), updated_at: hours(0) });
+  const release = id => attempt({ id, name: 'greedy-native', path: GREEDY, event: 'workflow_dispatch', head_branch: 'greedy-v1', created_at: hours(-1), run_started_at: hours(-1), updated_at: hours(0) });
   const client = github({
     runs: [nightly(1), release(2)],
     jobs: { '2:1': [{ id: 21, name: 'portable / release', conclusion: 'failure', labels: ['macos-15'] }] },
@@ -411,8 +411,8 @@ test('each attempt gets the scheduled report and the notarization alert it quali
   const scheduled = attempt({ id: 1 });
   const branch = attempt({ id: 2, head_branch: 'feature' });
   const fork = attempt({ id: 3, head_repository: { full_name: 'fork/repo' } });
-  const release = attempt({ id: 4, name: 'syncro-native', path: SYNCRO, event: 'workflow_dispatch', head_branch: 'syncro-v1' });
-  const pullRequest = attempt({ id: 5, name: 'syncro-native', path: SYNCRO, event: 'pull_request', head_branch: 'feature' });
+  const release = attempt({ id: 4, name: 'greedy-native', path: GREEDY, event: 'workflow_dispatch', head_branch: 'greedy-v1' });
+  const pullRequest = attempt({ id: 5, name: 'greedy-native', path: GREEDY, event: 'pull_request', head_branch: 'feature' });
   const running = attempt({ id: 6, status: 'in_progress', conclusion: null });
   const client = github({
     jobs: { '4:1': [{ id: 41, name: 'portable / release', conclusion: 'failure', labels: ['macos-15'] }] },

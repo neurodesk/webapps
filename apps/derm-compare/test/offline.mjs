@@ -36,16 +36,16 @@ function syntheticDermPng({ name, dx = 0, dy = 0, angleDeg = 0, radiusX = 30, ra
   };
 }
 
-// Offline verification: upload two synthetic PNG captures to #baselineInput and #followupInput,
+// Offline verification: upload two synthetic PNG captures to #fixedInput and #movingInput,
 // run rigid alignment and CIEDE2000 analysis, and verify outputs and downloads.
 export async function verifyOffline(page, { download }) {
   const basePng = syntheticDermPng({ name: "baseline.png", dx: 0, dy: 0, angleDeg: 0, radiusX: 28, radiusY: 20, lesionRgb: [115, 74, 56] });
   const follPng = syntheticDermPng({ name: "followup.png", dx: 7, dy: -5, angleDeg: 9, radiusX: 33, radiusY: 23, lesionRgb: [72, 40, 32] });
 
-  await page.locator("#baselineInput").setInputFiles(basePng);
-  await expect(page.locator("#baselineInfo")).toContainText("baseline.png");
-  await page.locator("#followupInput").setInputFiles(follPng);
-  await expect(page.locator("#followupInfo")).toContainText("followup.png");
+  await page.locator("#fixedInput").setInputFiles(basePng);
+  await expect(page.locator("#fixedInfo")).toContainText("baseline.png");
+  await page.locator("#movingInput").setInputFiles(follPng);
+  await expect(page.locator("#movingInfo")).toContainText("followup.png");
 
   await expect(page.locator("#runButton")).toBeEnabled();
   await page.locator("#runButton").click();

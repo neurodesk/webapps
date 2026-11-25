@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { lstat, mkdir, mkdtemp, readFile, readdir, readlink, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { deflateSync } from "node:zlib";
@@ -537,7 +537,8 @@ test("reserveOutputDir uses shared .neurodesk-cli.lock and publishOutputs cleans
     const txDir = join(work, "tx");
     await mkdir(txDir);
     await writeFile(join(txDir, "a.txt"), "original-a");
-    await symlink("/nonexistent-neurodesk-target", join(txDir, "dangling.txt"));
+    const danglingTarget = resolve("/nonexistent-neurodesk-target");
+    await symlink(danglingTarget, join(txDir, "dangling.txt"));
     await mkdir(join(txDir, "b.txt"));
     await assert.rejects(() =>
       publishOutputs(
@@ -553,7 +554,7 @@ test("reserveOutputDir uses shared .neurodesk-cli.lock and publishOutputs cleans
     );
     assert.equal(await readFile(join(txDir, "a.txt"), "utf8"), "original-a");
     assert.equal((await lstat(join(txDir, "dangling.txt"))).isSymbolicLink(), true);
-    assert.equal(await readlink(join(txDir, "dangling.txt")), "/nonexistent-neurodesk-target");
+    assert.equal(resolve(await readlink(join(txDir, "dangling.txt"))), danglingTarget);
     const entries = await readdir(txDir);
     assert.deepEqual(entries.sort(), ["a.txt", "b.txt", "dangling.txt"]);
   } finally {

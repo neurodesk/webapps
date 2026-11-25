@@ -1,128 +1,52 @@
-# SYNcro portable releases
+# SYNcro native releases
 
-## Decision
+SYNcro runs one Rust pipeline on both hosts. The browser builds the core as
+WebAssembly. The standalone command builds the CLI and runs each stage as a
+native process. [SYNcro command reference](../../packages/syncro/README.md)
 
-SYNcro's Windows x64 and Linux x64 downloads are portable directories with a
-small native launcher, a private checksum-pinned Node runtime, and the existing
-JavaScript application tree. The launcher only locates the adjacent runtime and
-forwards the user's arguments. The validated JavaScript pipeline remains the
-sole scientific implementation.
+## Package contents
 
-This design was selected over Node's Single Executable Application format.
-SYNcro must still ship ONNX Runtime's native addon, the ANTs JavaScript and
-WebAssembly files, and the MNI template beside the executable. SEA would add
-injection, signature mutation, CommonJS bootstrap, and Node-version-specific
-loader rules without removing that external application tree.
+| Target | Format | Entry point |
+| --- | --- | --- |
+| Linux x64 (Ubuntu 24.04) | `.tar.gz` | `syncro` in the extracted directory |
+| Windows x64 | `.zip` | `syncro.exe` in the extracted directory |
+| macOS Apple silicon | `.pkg` | `/usr/local/bin/syncro` |
 
-The macOS arm64 download is an installer package with the same directory,
-installed in `/usr/local/lib/neurodesk/syncro` with a `/usr/local/bin/syncro`
-symlink. Every Mach-O file is signed with the hardened runtime. A release
-installer is signed with a Developer ID and notarized by Apple.
+On macOS, the installer places the package under
+`/usr/local/lib/neurodesk/syncro` and links the command into `/usr/local/bin`.
+Every package includes the MNI template, tool binaries, model weights, and tool
+licenses. Greedy builds from the release checkout so it includes the same fixes
+as the browser build. The packager verifies the SHA-256 of each downloaded tool
+release. Optional ANTs SyN uses an installation on `PATH` or in `ANTSPATH`.
+[Tool manifest](../../packages/syncro/tools.json)
 
-The packager runs `syncro download-models` into the directory, so every
-download includes the checksum-pinned models and runs offline from first use.
+## Package validation
 
-## Ownership
+Run the packager on the target operating system with Python 3.13, Node.js, and
+Rust installed.
 
-- `packages/syncro` owns the CLI, scientific pipeline, model cache, and
-  `release.json`, the target names and run command the packager reads.
-- `exes/node-cli` owns the launcher, private-runtime acquisition, dependency
-  pruning, archive layout, checksums, manifests, and extracted-archive checks.
-  It is shared with TopoFit and reads `packages/syncro/release.json`.
-- `.github/workflows/syncro-native.yml` calls the shared
-  `node-cli-portable.yml` workflow, which owns target runners and release
-  permissions. Build jobs are read-only; only the final publisher may write.
-- The shell's Standalone action renders SYNcro's downloads from
-  `registry/standalone.json`, into which the standalone catalog automation
-  imports each signed, verified release. `apps/syncro` has no download dialog
-  of its own.
-
-The version in `packages/syncro/package.json` is authoritative. Repository
-tests require `apps/syncro/package.json` to agree with it because the generic
-web release and native release attach assets to the same `syncro-vVERSION` tag.
-
-## Archive contract
-
-Each archive contains one top-level directory:
-
-```text
-syncro-VERSION-TARGET/
-  syncro[.exe]
-  runtime/node[.exe]
-  app/bin/syncro.js
-  app/dist/
-  app/data/
-  app/node_modules/
-  licenses/
-  LICENSE
-  NOTICE
-  README.txt
-  manifest.json
+```sh
+python3 scripts/package-syncro.py package linux-x64
 ```
 
-The packager downloads an exact official Node distribution and checks its
-committed SHA-256 before copying the runtime and license. It deploys the frozen
-production dependency graph with optional ONNX Runtime downloads disabled,
-keeps only the target's `napi-v6` CPU runtime, rejects foreign native payloads
-and symlinks, and records every archived file in a sorted manifest. Archive
-metadata is normalized so the same source and toolchain produce the same bytes.
+The packager extracts the resulting file and runs the CLI on a pinned scan.
+The check compares output geometry, brain overlap, and image correlations
+against the MNI template. It verifies that the lesion follows the pathological
+image and checks resume after an interrupted run. Results, the archive SHA-256,
+and any signing evidence go into the validation receipt beside the package.
+[Release check](../../packages/syncro/validation/package-check.mjs)
 
-The launcher never searches `PATH`. On Unix it replaces itself with the private
-Node process; on Windows it returns the child process's exit status. It
-preserves the caller's working directory, environment, standard streams, and
-native argument strings.
+## Publishing
 
-## Verification
+The `syncro-native.yml` workflow tests the Rust workspaces and compares the
+WebAssembly commands against the Rust test fixtures. The release dispatch uses
+`sign_release` and checks that the selected commit matches the release tag.
+It signs and notarizes the macOS installer and applies the repository's
+Windows signing configuration. After verifying the receipts, the workflow
+uploads the packages to the existing release and dispatches the Standalone
+catalog import.
 
-Each target is packaged and tested on its target GitHub runner. Verification
-extracts the completed archive into a fresh path containing spaces and invokes
-the extracted executable, never the staging tree. On macOS it installs the
-package with `installer` and invokes `/usr/local/bin/syncro`. Every check runs
-with an empty temporary `HOME`, `USERPROFILE` and XDG directories, and fails if
-SYNcro writes there.
-
-`syncro self-check` loads `onnxruntime-node`, creates a small tensor, verifies
-the template and registration WebAssembly, imports the registration module,
-and reports the actual Node executable path. Portable verification requires
-that path to be inside the extracted private runtime. It also exercises help,
-argument validation, output preservation, and the empty offline-cache boundary.
-
-`validation/package-check.mjs` then normalises OpenNeuro ds000001 sub-01's T1w
-scan offline through the installed command, with a synthetic 6 mm lesion 30 mm
-left of the head's centre. It judges the outputs against references that do
-not come from SYNcro: the FSL MNI152 1 mm brain template, pinned by SHA-256,
-and the lesion's hemisphere, fixed by construction. The warped synthetic brain
-must reach Dice 0.95 and correlation 0.78 with the template, the warped scan
-correlation 0.65 inside the template brain, and the lesion must land left of
-the midline with its centre at x between -42 and -18 mm. The archives measured
-Dice 0.9665 and correlations 0.815 and 0.701 on all three targets. The run
-takes about 4 minutes on the Linux and Windows runners and 6 on macOS arm64.
-The comparison with the Neurodesk container remains in
-[the validation report](../../packages/syncro/validation/README.md).
-
-Every build produces the archive, `<archive>.sha256`, and
-`<archive>.validation.txt`. The publisher requires every target's set, rechecks
-them, requires an existing `syncro-vVERSION` release whose tag points to the
-workflow commit, and uploads only the allowlisted files with replace semantics.
-The generic release workflow remains the sole creator of the release and web
-archive; native publication is an idempotent follow-up.
-
-## User interface
-
-The bar's Standalone action lists the release downloads with their checksums
-and the extraction or `installer` command from the shared catalog. Native
-archives stay on GitHub Releases and do not increase the web bundle.
-
-## Accepted tradeoffs
-
-- The download is a multi-file directory rather than a literal single-file
-  application, preserving normal ESM, native-addon, and filesystem semantics.
-- A private Node runtime increases archive size but makes the user-facing
-  command self-contained and repeatable.
-- The initial Windows launcher may be unsigned. Published checksums establish
-  integrity; Authenticode can be added later without changing the archive or
-  runtime contracts.
-- The macOS installer needs an administrator password because it writes to
-  `/usr/local`. The Windows and Linux archives run from any directory.
-- Only a signed run of `syncro-native.yml` (`sign_release`) publishes, so a
-  release never carries the ad hoc signed test installer.
+The web app and Rust workspace share the version in
+`apps/syncro/package.json`. The release tooling synchronizes the Cargo version.
+Pre-migration tags keep their original Node CLI release source and installation
+commands. [SYNcro native workflow](../../.github/workflows/syncro-native.yml)

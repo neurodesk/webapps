@@ -171,32 +171,15 @@
       "version": "1.4.20261016",
       "target": "niimath/1.4.20261016",
       "deduplicate": true,
-      "consumers": ["bison", "fastprep"],
+      "consumers": ["bison", "fastprep", "syncro"],
       "match_by": "sha256",
-      "reason": "Share the @niivue/niimath 1.4.20261016 binary used by BISON and fastprep; each app keeps the single-threaded niimath module in its own worker bundle, which names the binary in a static new URL.",
+      "reason": "Share the @niivue/niimath 1.4.20261016 binary used by BISON, fastprep and SYNcro; each app keeps the single-threaded niimath module in its own worker bundle, which names the binary in a static new URL.",
       "files": [
         {
           "name": "niimath.wasm",
           "source_app": "bison",
           "source": "assets/niimath-CnyQdwnS.wasm",
           "sha256": "1df1e54f373bef8d405c99771bdb99a60d82894907f520b044714a9746a294c1"
-        }
-      ]
-    },
-    {
-      "id": "niimath-wasm-bsd",
-      "version": "0.9.25",
-      "target": "niimath/runtime-support-bsd-7facb787",
-      "deduplicate": true,
-      "consumers": ["deface", "syncro"],
-      "match_by": "sha256",
-      "reason": "Share the BSD-only niimath binary vendored in packages/runtime-support (src/niimath) used by Deface and SYNcro; each app keeps the single-threaded niimath module in its own worker bundle, which names the binary in a static new URL.",
-      "files": [
-        {
-          "name": "niimath.wasm",
-          "source_app": "deface",
-          "source": "assets/niimath-B7cfsv2E.wasm",
-          "sha256": "7facb7870512b4b5c84c9bc21742ddbefdadb03e8198d1edef9bbac1078a266b"
         }
       ]
     },

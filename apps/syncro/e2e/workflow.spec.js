@@ -36,6 +36,27 @@ test('built runtime asset URLs return executable modules and WebAssembly',async(
  expect(weights.ok()).toBe(true);
  expect((await weights.body()).byteLength).toBeGreaterThan(100_000);
 });
+test('accepts a qform-only NIfTI-2 scan with a 180-degree rotation', async ({ page }) => {
+  const buffer = Buffer.alloc(544 + 16 ** 3);
+  buffer.writeInt32LE(540, 0);
+  buffer.set([110, 43, 50, 0, 13, 10, 26, 10], 4);
+  buffer.writeInt16LE(2, 12);
+  buffer.writeInt16LE(8, 14);
+  [3, 16, 16, 16, 1, 1, 1, 1].forEach((n, axis) => {
+    buffer.writeBigInt64LE(BigInt(n), 16 + 8 * axis);
+    buffer.writeDoubleLE(1, 104 + 8 * axis);
+  });
+  buffer.writeBigInt64LE(544n, 168);
+  buffer.writeInt32LE(1, 344);
+  buffer.writeDoubleLE(Math.sqrt(0.5), 352);
+  buffer.writeDoubleLE(Math.sqrt(0.5), 360);
+  for (let index = 544; index < buffer.length; index++) buffer[index] = index % 200;
+  await page.goto('./');
+  await page.locator('#movingInput').setInputFiles({ name: 'qform.nii', mimeType: 'application/octet-stream', buffer });
+  await expect(page.locator('#runButton')).toBeEnabled();
+  await expect(page.locator('#viewLabel')).toContainText('qform.nii');
+  await expect(page.locator('#viewerError')).toBeHidden();
+});
 test('geometry error keeps the explicit lesion input available before inference',async({page})=>{
  const modelRequests=[];page.context().on('request',r=>{if(r.url().includes('.onnx'))modelRequests.push(r.url());});
  await page.goto('./');
@@ -54,7 +75,7 @@ test('cancellation restores input controls and an unreadable file keeps the prev
  await page.addInitScript(()=>{
   const OriginalWorker=window.Worker;
   window.Worker=class extends OriginalWorker {
-   postMessage(job,...rest){if(job.synthsrBackend){window.sentBackend=job.synthsrBackend;window.sentBrainExtractor=job.brainExtractor;window.sentNormalization=job.normalization;}return super.postMessage(job,...rest);}
+   postMessage(job,...rest){if(job.synthsrBackend){window.sentBackend=job.synthsrBackend;window.sentMindgrabBackend=job.mindgrabBackend;window.sentNormalization=job.normalization;}return super.postMessage(job,...rest);}
   };
  });
  await page.goto('./');
@@ -62,23 +83,23 @@ test('cancellation restores input controls and an unreadable file keeps the prev
  await expect(page.locator('#runButton')).toBeEnabled({timeout:30000});
  await page.getByText('Processing settings',{exact:true}).click();
  await expect(page.locator('#synthsrBackend')).toHaveValue('webgpu');
- await expect(page.locator('#brainExtractor')).toHaveValue('mindgrab');
+ await expect(page.locator('#mindgrabBackend')).toHaveValue('auto');
  await expect(page.locator('#normalization')).toHaveValue('greedy');
  await page.context().route('**/MNI152_T1_1mm_brain.nii.gz',()=>{});
  await page.locator('#runButton').click();
  await expect(page.locator('#synthsrBackend')).toBeDisabled();
- await expect(page.locator('#brainExtractor')).toBeDisabled();
+ await expect(page.locator('#mindgrabBackend')).toBeDisabled();
  expect(await page.evaluate(()=>window.sentBackend)).toBe('webgpu');
- expect(await page.evaluate(()=>window.sentBrainExtractor)).toBe('mindgrab');
+ expect(await page.evaluate(()=>window.sentMindgrabBackend)).toBe('auto');
  expect(await page.evaluate(()=>window.sentNormalization)).toBe('greedy');
  await page.locator('#cancel').click();
  await expect(page.locator('#statusText')).toContainText('cancelled');
  await expect(page.locator('#movingInput')).toBeEnabled();
  await expect(page.locator('#synthsrBackend')).toBeEnabled();
- await expect(page.locator('#brainExtractor')).toBeEnabled();
+ await expect(page.locator('#mindgrabBackend')).toBeEnabled();
  await expect(page.locator('#normalization')).toBeEnabled();
  await expect(page.locator('#synthsrBackend')).toHaveValue('webgpu');
- await expect(page.locator('#brainExtractor')).toHaveValue('mindgrab');
+ await expect(page.locator('#mindgrabBackend')).toHaveValue('auto');
  await expect(page.locator('#normalization')).toHaveValue('greedy');
  await expect(page.locator('#download')).toBeDisabled();
  // A file that cannot be read leaves the previous scan in place.

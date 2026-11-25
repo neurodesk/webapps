@@ -9,11 +9,26 @@ import { portableCommand } from './portable-command.mjs';
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 
 // Rust tools with their own workflow. The release tooling keeps each Cargo.toml at the app's version
-// (EMBEDDED_VERSION_SITES), so the app release tag names the release their archives attach to.
+// (EMBEDDED_VERSION_SITES), so the app release tag names the release their archives attach to. `replaced`:
+// the app shipped through exes/node-cli before; a snapshot that still has its release.json (an older tag)
+// is described by that portable source alone.
 const RUST_RELEASES = Object.freeze({
   greedy: { workflow: 'greedy-native.yml', targets: ['linux-x64', 'macos-arm64', 'windows-x64'] },
   synthsr: { workflow: 'synthsr-native.yml', targets: ['linux-x64', 'macos-arm64', 'windows-x64'] },
   synthseg: { workflow: 'synthseg-native.yml', targets: ['macos-arm64'] },
+  syncro: {
+    workflow: 'syncro-native.yml',
+    targets: ['linux-x64', 'macos-arm64', 'windows-x64'],
+    replaced: true,
+    spec: {
+      run: 'input.nii.gz results --threads 4',
+      targets: {
+        'linux-x64': { archive: 'tar.gz', executable: 'syncro' },
+        'macos-arm64': { archive: 'pkg', executable: 'syncro' },
+        'windows-x64': { archive: 'zip', executable: 'syncro.exe' },
+      },
+    },
+  },
 });
 
 // A release.json without an app field predates exes/node-cli (SYNcro before 0.4): it names its package
@@ -72,8 +87,9 @@ function claim(releases, app, source) {
 // catalog links its pinned assets (externalCatalog) without building, dispatching or importing anything.
 export function nativeReleases(specs) {
   const releases = new Map();
-  for (const [app, release] of Object.entries(RUST_RELEASES)) {
-    claim(releases, app, { ...release, publishInput: 'sign_release', portable: false, spec: null });
+  for (const [app, { replaced, ...release }] of Object.entries(RUST_RELEASES)) {
+    if (replaced && specs.has(app)) continue;
+    claim(releases, app, { publishInput: 'sign_release', portable: false, spec: null, ...release });
   }
   for (const [app, { packageDir, spec, legacy }] of specs) {
     const targets = Object.keys(spec.targets);

@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { lstat, mkdir, mkdtemp, readdir, readFile, rename, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
@@ -52,7 +52,7 @@ test("CLI rejects disallowed flags on self-check and download-models", () => {
 
   const scCache = runBin(["self-check", "--cache-dir", "/tmp/c"]);
   assert.equal(scCache.status, 0);
-  assert.equal(JSON.parse(scCache.stdout).cacheDir, "/tmp/c");
+  assert.equal(JSON.parse(scCache.stdout).cacheDir, resolve("/tmp/c"));
 
   assert.notEqual(runBin(["self-check", "--cache-dir="]).status, 0);
   assert.notEqual(runBin(["self-check", "--iterations", "5"]).status, 0);
