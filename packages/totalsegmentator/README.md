@@ -1,6 +1,18 @@
 # @neurodesk/totalsegmentator
 
-Browser-native inference engine for openly licensed Apache-2.0 **TotalSegmentator v2** models (CT and MRI) on WebGPU and WebAssembly via ONNX Runtime Web.
+Browser and standalone command-line inference engine for openly licensed Apache-2.0 **TotalSegmentator v2** models (CT and MRI) on WebGPU, WebAssembly, and ONNX Runtime Node (CPU).
+
+## Command line
+
+```bash
+totalsegmentator self-check
+totalsegmentator scan.nii.gz out --task total --resolution fast
+totalsegmentator scan.nii.gz out --task total_mr --resolution full --subset organs
+totalsegmentator scan.nii.gz out --task abdominal_muscles
+totalsegmentator download-models
+```
+
+Portable archives (`linux-x64` `.tar.gz`, `macos-arm64` `.pkg`, `windows-x64` `.zip`) bundle a private Node.js runtime, ONNX Runtime CPU binding, and all 12 SHA-256-verified ONNX models for offline execution.
 
 ## Included models
 
