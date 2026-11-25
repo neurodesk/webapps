@@ -4982,6 +4982,104 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       (plan) => assert.equal(plan.allApps, true),
     ],
     [
+      'two CI steps expanding the same dispatcher script with different env values keep both targets',
+      {
+        'package.json': JSON.stringify({
+          name: 'root',
+          scripts: {
+            dispatch: 'pnpm -w run "$CHECK"',
+            first: 'node scripts/quality/first.mjs',
+            second: 'node scripts/quality/second.mjs',
+          },
+        }),
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': {
+              steps: [
+                { env: { CHECK: 'first' }, run: 'pnpm dispatch' },
+                { env: { CHECK: 'second' }, run: 'pnpm dispatch' },
+              ],
+            },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/quality/first.mjs': 'export const first = 1;\n',
+        'scripts/quality/second.mjs': 'export const second = 1;\n',
+      },
+      'scripts/quality/second.mjs',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'unresolved dynamic root script invocation covers deleted root scripts in package.json',
+      {
+        'package.json': JSON.stringify({ name: 'root', scripts: { keep: 'echo ok' } }),
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'pnpm -w run "$CHECK"' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+      },
+      'package.json',
+      new Map([
+        ['package.json', {
+          before: JSON.stringify({ name: 'root', scripts: { keep: 'echo ok', removed: 'node scripts/quality/helper.mjs' } }),
+          after: JSON.stringify({ name: 'root', scripts: { keep: 'echo ok' } }),
+        }],
+        ['pnpm-lock.yaml', {
+          before: stringify({ lockfileVersion: '9.0', importers: { '.': {} }, packages: {}, snapshots: {} }),
+          after: stringify({ lockfileVersion: '9.0', importers: { '.': {} }, packages: {}, snapshots: {} }),
+        }],
+      ]),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'mutating process.argv[1] before ESM main guard in imported helper stays in shared CI coverage',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ run: 'node scripts/e2e-test-data.mjs n4' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/e2e-test-data.mjs': "import './lib/e2e-test-data.mjs';\n",
+        'scripts/lib/e2e-test-data.mjs': "import { helper } from './boot-lib.mjs';\nexport const provisioners = { n4: { provision: () => helper() } };\n",
+        'scripts/lib/boot-lib.mjs': "import { resolve } from 'node:path';\nimport { fileURLToPath, pathToFileURL } from 'node:url';\nexport function helper() { return 1; }\nfunction loadBoot() { return readFileSync('packages/demo/boot.json'); }\nprocess.argv[1] = fileURLToPath(import.meta.url);\nif (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) loadBoot();\n",
+        'packages/demo/package.json': JSON.stringify({ name: '@nd/demo' }),
+        'packages/demo/boot.json': '{}',
+      },
+      'packages/demo/boot.json',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'CLI importing provisioners and calling provisioners.n4.provision() stays in shared CI coverage',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ run: 'node scripts/e2e-test-data.mjs n4' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/e2e-test-data.mjs': "import { provisioners } from './lib/e2e-test-data.mjs';\nprovisioners.n4.provision();\n",
+        'scripts/lib/e2e-test-data.mjs': "export const provisioners = { n4: { provision: () => readFileSync('packages/demo/boot.json') } };\n",
+        'packages/demo/package.json': JSON.stringify({ name: '@nd/demo' }),
+        'packages/demo/boot.json': '{}',
+      },
+      'packages/demo/boot.json',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
       'dynamic script name in CI preserves chained workspace lint runner edge',
       {
         '.github/workflows/ci.yml': stringify({

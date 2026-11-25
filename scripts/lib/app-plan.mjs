@@ -4,7 +4,7 @@ import { isAlias, isMap, isScalar, isSeq, parse, parseDocument } from 'yaml';
 import { LockfileAnalysisError, lockfileImpact } from './lockfile-impact.mjs';
 import { onlyAddsExports } from './module-closure.mjs';
 import { EMBEDDED_VERSION_FILES, releaseBookkeeping } from './release-bookkeeping.mjs';
-import { CATALOG, INDEPENDENT_CONFIG, SITE } from './workspace-graph.mjs';
+import { ANY_ROOT_SCRIPT, CATALOG, INDEPENDENT_CONFIG, SITE } from './workspace-graph.mjs';
 import { handoffCatalogEntry, validateAppInformation } from './app-information.mjs';
 import { appCatalogIds, parseAppsRegistry } from './apps-registry.mjs';
 import { validateStandalone } from './standalone.mjs';
@@ -1242,13 +1242,13 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
         // selects every app, and a workspace invocation selects whatever reaches
         // that workspace; a script nothing runs selects nothing.
         for (const name of scripts) {
-          const jobs = [...graph.jobScripts].filter(([, run]) => run.has(name)).map(([id]) => id);
+          const jobs = [...graph.jobScripts].filter(([, run]) => run.has(name) || run.has(ANY_ROOT_SCRIPT)).map(([id]) => id);
           if (jobs.length) {
             if (jobs.every((id) => CI_JOB_SCOPES[id] === 'site')) siteBuild(`${path}: the site CI jobs run root script ${name}`);
             else shared(`${path}: ci.yml's ${jobs.join(', ')} ${jobs.length === 1 ? 'job runs' : 'jobs run'} root script ${name}`);
           }
           for (const [workspaceNode, rootNames] of graph.workspaceRootScripts ?? []) {
-            if (rootNames.has(name)) selectReaching(workspaceNode, `${path}: ${workspaceNode} runs root script ${name}`);
+            if (rootNames.has(name) || rootNames.has(ANY_ROOT_SCRIPT)) selectReaching(workspaceNode, `${path}: ${workspaceNode} runs root script ${name}`);
           }
         }
         continue;

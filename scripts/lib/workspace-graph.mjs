@@ -55,6 +55,9 @@ const RELATIVE_PATH = /(['"`])((?:\.\.\/)+[^'"`\s$]*)\1/g;
 export const INDEPENDENT_CONFIG = /^(?:eslint|knip|stryker)\.config\.m?js$/;
 export const CATALOG = '(catalog)';
 export const SITE = '(site)';
+// Wildcard sentinel recorded in `jobScripts` / `workspaceRootScripts` when a
+// command runs an unresolvable dynamic root script name (e.g. `pnpm -w run "$CHECK"`).
+export const ANY_ROOT_SCRIPT = '*';
 // The ci.yml jobs that run once per selected app.
 export const CATALOG_JOBS = ['app-tests', 'browser-e2e', 'browser-e2e-gpu'];
 
@@ -77,19 +80,28 @@ export function siteJobNames(ci) {
 }
 
 // Root files a set of CI commands names, following `pnpm <root script>` calls.
+function stableEnvKey(env) {
+  if (!env || typeof env !== 'object') return '';
+  return JSON.stringify(Object.entries(env).sort(([a], [b]) => a.localeCompare(b)));
+}
+
 function namedByCommands(commands, rootScripts, root = null, rootPackageName = null) {
   const named = new Set();
   const pending = commands.map((entry) => (typeof entry === 'string' ? { cmd: entry, workingDir: null, env: null } : entry));
   const expanded = new Set();
+  const visited = new Set();
   while (pending.length) {
     const current = pending.pop();
     for (const match of current.cmd.matchAll(ROOT_NAMED)) if (match[1]) named.add(match[1]);
     for (const [, rootFile] of current.cmd.matchAll(ROOT_PATH)) named.add(rootFile);
     const nonRootWorkingDir = isStaticNonRootDir(current.workingDir, root);
+    const envKey = stableEnvKey(current.env);
     for (const script of extractPnpmRootScripts(current.cmd, { requireRootFlag: nonRootWorkingDir, baseDir: current.workingDir ?? '.', root, rootPackageName, rootScripts, stepEnv: current.env ?? null })) {
-      if (!expanded.has(script)) {
-        expanded.add(script);
-        if (rootScripts[script]) pending.push({ cmd: rootScripts[script], workingDir: null, env: current.env ?? null });
+      expanded.add(script);
+      const visitKey = `${script}\0${envKey}`;
+      if (!visited.has(visitKey)) {
+        visited.add(visitKey);
+        if (script !== ANY_ROOT_SCRIPT && rootScripts[script]) pending.push({ cmd: rootScripts[script], workingDir: null, env: current.env ?? null });
       }
     }
   }
@@ -383,14 +395,115 @@ function isPathToFileUrlArgv1Href(node, auth) {
   );
 }
 
+const SAFE_PROCESS_READ_PROPS = new Set(['pid', 'version', 'versions', 'platform', 'arch', 'env', 'execPath', 'stdout', 'stderr', 'exit']);
+
+function isSafeProcessUse(idNode, ancestors) {
+  const parent = ancestors[ancestors.length - 1];
+  const grandparent = ancestors[ancestors.length - 2];
+  if (parent?.type !== 'MemberExpression' || parent.object !== idNode || parent.computed) return false;
+  const prop = parent.property?.type === 'Identifier' ? parent.property.name : null;
+  if (!prop) return false;
+  if (grandparent?.type === 'AssignmentExpression' && grandparent.left === parent) return false;
+  if (grandparent?.type === 'UpdateExpression' && grandparent.argument === parent) return false;
+  if (SAFE_PROCESS_READ_PROPS.has(prop)) return true;
+  if (prop === 'argv') {
+    const greatGrand = ancestors[ancestors.length - 3];
+    return Boolean(
+      grandparent?.type === 'MemberExpression'
+      && grandparent.object === parent
+      && !grandparent.computed
+      && (grandparent.property?.name === 'slice' || grandparent.property?.name === 'includes')
+      && greatGrand?.type === 'CallExpression'
+      && greatGrand.callee === grandparent,
+    );
+  }
+  return false;
+}
+
+// Whether an AST may mutate `process` or `process.argv` (outside a strict ESM
+// main guard's own condition/body).
+function astMayMutateProcessArgv(ast, allowGuardIf = false) {
+  if (!ast) return true;
+  let unsafe = false;
+  const scan = (node, ancestors = []) => {
+    if (unsafe || !node || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      for (const item of node) scan(item, ancestors);
+      return;
+    }
+    if (allowGuardIf && node.type === 'IfStatement' && isStrictEsmMainGuardSyntax(node)) return;
+    if (node.type === 'Identifier') {
+      const parent = ancestors[ancestors.length - 1];
+      const isNonComputedProp =
+        (parent?.type === 'MemberExpression' && !parent.computed && parent.property === node)
+        || (parent?.type === 'Property' && !parent.computed && parent.key === node);
+      if (!isNonComputedProp) {
+        if (node.name === 'Reflect') {
+          unsafe = true;
+          return;
+        }
+        if (node.name === 'globalThis' || node.name === 'global') {
+          const grandparent = ancestors[ancestors.length - 2];
+          const isSafeGlobalRead =
+            parent?.type === 'MemberExpression'
+            && parent.object === node
+            && !parent.computed
+            && parent.property?.type === 'Identifier'
+            && parent.property.name !== 'process'
+            && !(grandparent?.type === 'AssignmentExpression' && grandparent.left === parent)
+            && !(grandparent?.type === 'UpdateExpression' && grandparent.argument === parent);
+          if (!isSafeGlobalRead) {
+            unsafe = true;
+            return;
+          }
+        }
+        if (node.name === 'process' && !isSafeProcessUse(node, ancestors)) {
+          unsafe = true;
+          return;
+        }
+      }
+      if (node.name === 'argv') {
+        const isSafeProcessArgv = parent?.type === 'MemberExpression' && parent.property === node && parent.object?.type === 'Identifier' && parent.object.name === 'process' && isSafeProcessUse(parent.object, ancestors);
+        if (!isSafeProcessArgv) {
+          unsafe = true;
+          return;
+        }
+      }
+    }
+    ancestors.push(node);
+    for (const key of Object.keys(node)) {
+      if (!AST_SKIP.has(key)) scan(node[key], ancestors);
+    }
+    ancestors.pop();
+  };
+  scan(ast);
+  return unsafe;
+}
+
+function isStrictEsmMainGuardSyntax(ifNode) {
+  if (ifNode?.type !== 'IfStatement') return false;
+  let eq = ifNode.test;
+  if (eq?.type === 'LogicalExpression' && eq.operator === '&&' && isProcessArgv1Node(eq.left)) eq = eq.right;
+  if (eq?.type !== 'BinaryExpression' || eq.operator !== '===') return false;
+  const isHref = (node) => {
+    if (node?.type !== 'MemberExpression' || node.computed || node.property?.type !== 'Identifier' || node.property.name !== 'href') return false;
+    const call = node.object;
+    if (call?.type !== 'CallExpression' || call.callee?.type !== 'Identifier' || call.callee.name !== 'pathToFileURL' || call.arguments?.length !== 1) return false;
+    const arg = call.arguments[0];
+    if (isProcessArgv1Node(arg)) return true;
+    return Boolean(arg?.type === 'CallExpression' && arg.callee?.type === 'Identifier' && arg.callee.name === 'resolve' && arg.arguments?.length === 1 && isProcessArgv1Node(arg.arguments[0]));
+  };
+  return (isImportMetaUrlNode(eq.left) && isHref(eq.right)) || (isImportMetaUrlNode(eq.right) && isHref(eq.left));
+}
+
 // Verify that `pathToFileURL` comes from `node:url`, `resolve` from `node:path`,
-// and neither those bindings nor `process` are shadowed or reassigned in the module.
-function esmGuardImportAuth(ast) {
+// and neither those bindings nor `process`/`process.argv` are shadowed or mutated.
+function esmGuardImportAuth(ast, anyModuleMutatesArgv = false) {
   let pathToFileUrlImported = false;
   let resolveImported = false;
   let shadowedPathToFileUrl = false;
   let shadowedResolve = false;
-  let processShadowed = false;
+  let processShadowed = anyModuleMutatesArgv || astMayMutateProcessArgv(ast, true);
   for (const stmt of ast?.body ?? []) {
     if (stmt.type === 'ImportDeclaration' && stmt.source?.type === 'Literal') {
       const src = stmt.source.value;
@@ -521,6 +634,16 @@ function computeProvisionerOnlyRanges(ast) {
   const { bindings, exportedNames } = collectTopLevelBindings(ast);
   const provisionersObj = bindings.get('provisioners');
   if (provisionersObj?.type !== 'ObjectExpression') return [];
+  // Bail out if `provisioners` is re-exported under another name or as default.
+  for (const stmt of ast.body ?? []) {
+    if (stmt.type === 'ExportNamedDeclaration') {
+      for (const spec of stmt.specifiers ?? []) {
+        if (spec.local?.name === 'provisioners' && spec.exported?.name !== 'provisioners') return [];
+      }
+    } else if (stmt.type === 'ExportDefaultDeclaration' && stmt.declaration?.type === 'Identifier' && stmt.declaration.name === 'provisioners') {
+      return [];
+    }
+  }
   const provisionFnNodes = new Set();
   const provisionIdentRefNodes = new Set();
   const recordProvisionProp = (obj) => {
@@ -599,7 +722,7 @@ function computeProvisionerOnlyRanges(ast) {
 // Return AST ranges of top-level functions in an imported root library module
 // that are unreachable from both module-load execution (excluding strict Node
 // ESM main-entry guards) and the set of export names actually imported.
-function computeUnreachableExportRanges(ast, importedNames) {
+function computeUnreachableExportRanges(ast, importedNames, anyModuleMutatesArgv = false) {
   if (!ast || !importedNames?.size) return [];
   const { bindings } = collectTopLevelBindings(ast);
   const fnBindings = new Map([...bindings].filter(([, node]) => isFunctionNode(node)));
@@ -615,7 +738,7 @@ function computeUnreachableExportRanges(ast, importedNames) {
     }
   }
   const fnDeps = new Map([...fnBindings.keys()].map((name) => [name, new Set()]));
-  const guardAuth = esmGuardImportAuth(ast);
+  const guardAuth = esmGuardImportAuth(ast, anyModuleMutatesArgv);
 
   const isInStrictMainGuard = (ancestors, node) => {
     for (let i = 0; i < ancestors.length; i += 1) {
@@ -681,7 +804,7 @@ function analyzeScriptFile(text, file) {
       return;
     }
     if (node.type === 'ImportDeclaration' && node.source?.type === 'Literal' && typeof node.source.value === 'string') {
-      const namedOnly = node.specifiers.length > 0 && node.specifiers.every((s) => s.type === 'ImportSpecifier');
+      const namedOnly = node.specifiers.every((s) => s.type === 'ImportSpecifier');
       specifiers.push({
         value: node.source.value,
         range: node.source.range ?? node.range ?? [0, 0],
@@ -1654,8 +1777,9 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
             const val = resolveSingleCommandEnvVar(word, command, stepEnv);
             if (val !== null && /^[A-Za-z0-9_@][\w.:/@-]*$/.test(val)) {
               scripts.push(val);
-            } else if (rootScripts) {
-              scripts.push(...Object.keys(rootScripts));
+            } else {
+              scripts.push(ANY_ROOT_SCRIPT);
+              if (rootScripts) scripts.push(...Object.keys(rootScripts));
             }
           }
         }
@@ -1673,15 +1797,17 @@ function extractPnpmRootScripts(command, { requireRootFlag = false, baseDir = '.
 function expandedCommandTexts(commands, rootScripts, root = null, rootPackageName = null) {
   const entries = [];
   const pending = commands.map((entry) => (typeof entry === 'string' ? { cmd: entry, workingDir: null, env: null } : entry));
-  const expanded = new Set();
+  const visited = new Set();
   while (pending.length) {
     const current = pending.pop();
     entries.push(current);
     const nonRootWorkingDir = isStaticNonRootDir(current.workingDir, root);
+    const envKey = stableEnvKey(current.env);
     for (const script of extractPnpmRootScripts(current.cmd, { requireRootFlag: nonRootWorkingDir, baseDir: current.workingDir ?? '.', root, rootPackageName, rootScripts, stepEnv: current.env ?? null })) {
-      if (!expanded.has(script)) {
-        expanded.add(script);
-        if (rootScripts[script]) pending.push({ cmd: rootScripts[script], workingDir: null, env: current.env ?? null });
+      const visitKey = `${script}\0${envKey}`;
+      if (!visited.has(visitKey)) {
+        visited.add(visitKey);
+        if (script !== ANY_ROOT_SCRIPT && rootScripts[script]) pending.push({ cmd: rootScripts[script], workingDir: null, env: current.env ?? null });
       }
     }
   }
@@ -1701,7 +1827,7 @@ function expandedRootScriptsFromWorkspace(commands, rootScripts, { baseDir = '.'
     for (const script of extractPnpmRootScripts(cmd, { requireRootFlag: true, baseDir, root, rootPackageName, rootScripts })) {
       if (!names.has(script)) {
         names.add(script);
-        if (rootScripts[script]) pending.push(rootScripts[script]);
+        if (script !== ANY_ROOT_SCRIPT && rootScripts[script]) pending.push(rootScripts[script]);
       }
     }
   }
@@ -1711,7 +1837,7 @@ function expandedRootScriptsFromWorkspace(commands, rootScripts, { baseDir = '.'
     for (const script of extractPnpmRootScripts(command, { root, rootPackageName, rootScripts })) {
       if (!names.has(script)) {
         names.add(script);
-        if (rootScripts[script]) pending.push(rootScripts[script]);
+        if (script !== ANY_ROOT_SCRIPT && rootScripts[script]) pending.push(rootScripts[script]);
       }
     }
   }
@@ -2048,16 +2174,43 @@ export async function loadConservativeWorkspaceGraph(root) {
     }
   }
   const catalogDirect = edges.get(CATALOG) ?? new Set();
+  const rootReachable = (start) => {
+    const seen = new Set([start]);
+    const stack = [start];
+    while (stack.length) {
+      for (const next of edges.get(stack.pop()) ?? []) {
+        if (/^(?:scripts|test-utils|registry|test)\//.test(next) && !seen.has(next)) {
+          seen.add(next);
+          stack.push(next);
+        }
+      }
+    }
+    return seen;
+  };
+  const entryReaches = new Map([...catalogDirect].map((entry) => [entry, rootReachable(entry)]));
+  const coLoadedMutatesArgv = (targetFile) => {
+    for (const [entry, reached] of entryReaches) {
+      if (!reached.has(targetFile)) continue;
+      for (const peer of reached) {
+        if (!analyzedRootFiles.has(peer)) continue;
+        if (astMayMutateProcessArgv(analyzedRootFiles.get(peer).ast, peer !== entry)) return true;
+      }
+    }
+    return false;
+  };
   const rangeContains = (outer, inner) => outer[0] <= inner[0] && inner[1] <= outer[1];
   for (const [file, { ast, workspaceRefs }] of analyzedRootFiles) {
     if (workspaceRefs.length === 0) continue;
     let skipRanges = [];
     if (file === 'scripts/lib/e2e-test-data.mjs') {
-      skipRanges = computeProvisionerOnlyRanges(ast);
+      const mode = rootFileImportModes.get(file);
+      if (!catalogDirect.has(file) && mode && !mode.allExports && !mode.names.has('provisioners')) {
+        skipRanges = computeProvisionerOnlyRanges(ast);
+      }
     } else if (!catalogDirect.has(file) && /^(?:scripts|test-utils|registry|test)\//.test(file)) {
       const mode = rootFileImportModes.get(file);
       if (mode && !mode.allExports && mode.names.size > 0) {
-        skipRanges = computeUnreachableExportRanges(ast, mode.names);
+        skipRanges = computeUnreachableExportRanges(ast, mode.names, coLoadedMutatesArgv(file));
       }
     }
     if (skipRanges.length === 0) continue;
