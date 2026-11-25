@@ -1,0 +1,17 @@
+@neurodesk/brainchop wraps the pinned @brainchop/core (v1.0.0, MIT License,
+https://github.com/neuroneural/brainchop-core) threaded CPU WebAssembly modules
+for whole-brain T1-weighted MRI segmentation and tissue fraction mapping.
+
+Bundled models in @brainchop/core:
+- MindMap-24 (mindmap): 18-class cortical and subcortical segmentation and GM/WM/CSF tissue fractions
+- MindMap-16 (mindmap-fast): lightweight 18-class segmentation
+- MindSnap-104 (mindsnap): 104-region Desikan-Killiany cortical, subcortical and corpus callosum atlas
+
+See @brainchop/core's THIRD_PARTY_NOTICES.md (included under licenses/npm in
+portable releases) for full upstream attributions.
+
+Please cite:
+Masoud M et al. Brainchop: In-browser MRI volumetric segmentation and rendering.
+Journal of Open Source Software, 2023.
+Fani A et al. MindGrab for BrainChop: fast and accurate skull stripping for
+command line and browser. arXiv, 2025.

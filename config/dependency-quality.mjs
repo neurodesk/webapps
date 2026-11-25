@@ -15,6 +15,7 @@ export const generatedSources = {
   'packages/runtime-support/src/nifti-js/index.js': 'Self-contained bundled NIfTI parser with embedded CommonJS modules.',
   'apps/brainchomp/public/brainchomp/': 'Committed Emscripten glue from neuroneural/brainchomp-lib.',
   'apps/brainchomp/vendor/brainchomp/': 'Vendored brainchomp-lib browser runtime bundle.',
+  'packages/brainchomp/wasm/brainchomp.js': 'Committed Emscripten glue from neuroneural/brainchomp-lib.',
 };
 
 export function isGenerated(path) {

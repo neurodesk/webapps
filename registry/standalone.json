@@ -2433,7 +2433,7 @@
     },
     "brainchop": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
       "downloads": [],
       "containers": []
@@ -2569,7 +2569,7 @@
     },
     "tumour-report": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
       "downloads": [],
       "containers": []
@@ -2647,7 +2647,7 @@
     },
     "brainchomp": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
       "downloads": [],
       "containers": []

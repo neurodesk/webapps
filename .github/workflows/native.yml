@@ -31,6 +31,7 @@ on:
       - 'packages/node-drivers/src/mindgrab-worker.js'
       - 'packages/node-drivers/src/mindgrab.js'
       - 'packages/node-drivers/src/niimath.js'
+      - 'packages/node-drivers/src/output-dir.js'
       - 'packages/runtime-support/**'
       - 'packages/runtime-support/package.json'
       - 'packages/runtime-support/src/mindgrab/**'
@@ -65,6 +66,8 @@ jobs:
         bison-native
         brain-extraction-native
         brain2print-native
+        brainchomp-native
+        brainchop-native
         browserqc-native
         calcium-imaging-native
         calmar-native
@@ -99,13 +102,13 @@ jobs:
         seedseg-native
         skin-chromophore-native
         spinalcordtoolbox-native
-        stitching-native
-        syncro-native
       sweeps: >-
         ants-native
         bison-native
         brain-extraction-native
         brain2print-native
+        brainchomp-native
+        brainchop-native
         browserqc-native
         calcium-imaging-native
         calmar-native
@@ -140,8 +143,6 @@ jobs:
         seedseg-native
         skin-chromophore-native
         spinalcordtoolbox-native
-        stitching-native
-        syncro-native
 
   # Fails where ci withholds the full plan too: every call was skipped.
   full-plan-withheld:
@@ -192,6 +193,28 @@ jobs:
     needs: gate
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"brain2print-native"')) }}
     uses: ./.github/workflows/brain2print-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  brainchomp-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"brainchomp-native"')) }}
+    uses: ./.github/workflows/brainchomp-native.yml
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      pull-requests: read
+    secrets: inherit
+
+  brainchop-native:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"brainchop-native"')) }}
+    uses: ./.github/workflows/brainchop-native.yml
     permissions:
       actions: read
       contents: write
@@ -561,28 +584,6 @@ jobs:
     needs: gate
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"spinalcordtoolbox-native"')) }}
     uses: ./.github/workflows/spinalcordtoolbox-native.yml
-    permissions:
-      actions: read
-      contents: write
-      id-token: write
-      pull-requests: read
-    secrets: inherit
-
-  stitching-native:
-    needs: gate
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"stitching-native"')) }}
-    uses: ./.github/workflows/stitching-native.yml
-    permissions:
-      actions: read
-      contents: write
-      id-token: write
-      pull-requests: read
-    secrets: inherit
-
-  syncro-native:
-    needs: gate
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.action != 'converted_to_draft')) && needs.gate.outputs.withheld != 'true' && !(needs.gate.result == 'success' && startsWith(needs.gate.outputs.skips, '[') && endsWith(needs.gate.outputs.skips, ']') && contains(needs.gate.outputs.skips, '"syncro-native"')) }}
-    uses: ./.github/workflows/syncro-native.yml
     permissions:
       actions: read
       contents: write

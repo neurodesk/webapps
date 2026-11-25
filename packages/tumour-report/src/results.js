@@ -1,6 +1,6 @@
 // Output serializers, NIfTI writers, TSV/JSON report builders, and parity comparison
 // utilities for @neurodesk/tumour-report.
-import { writeVolume } from '@neurodesk/synthsr';
+import { writeNiftiVolume } from '@neurodesk/webapp-components/file-io/nifti-volume';
 
 export const REPORT_SCHEMA_VERSION = 1;
 
@@ -126,6 +126,8 @@ export function buildReport({
   tumourType = 'glioblastoma',
   dims,
   affine,
+  transforms = null,
+  niftiVersion = null,
   brainMask = null,
   tumourMask,
   mniMask = null,
@@ -164,19 +166,28 @@ export function buildReport({
     },
     tumourMask: {
       name: names.tumourMask,
-      bytes: writeVolume({ data: tumourMask, dims, affine }, 'Raidionics v1.3 contrast-enhancing tumour core mask'),
+      bytes: writeNiftiVolume(
+        { data: tumourMask, dims, affine, transforms, version: niftiVersion },
+        'Raidionics v1.3 contrast-enhancing tumour core mask',
+      ),
     },
   };
   if (brainMask) {
     out.brainMask = {
       name: names.brainMask,
-      bytes: writeVolume({ data: brainMask, dims, affine }, 'Raidionics v1.3 brain mask'),
+      bytes: writeNiftiVolume(
+        { data: brainMask, dims, affine, transforms, version: niftiVersion },
+        'Raidionics v1.3 brain mask',
+      ),
     };
   }
   if (mniMask && mniDims && mniAffine) {
     out.tumourMaskMni = {
       name: names.tumourMaskMni,
-      bytes: writeVolume({ data: mniMask, dims: mniDims, affine: mniAffine }, 'Tumour core mask in MNI ICBM152 2009a 1mm space'),
+      bytes: writeNiftiVolume(
+        { data: mniMask, dims: mniDims, affine: mniAffine },
+        'Tumour core mask in MNI ICBM152 2009a 1mm space',
+      ),
     };
   }
   return out;
