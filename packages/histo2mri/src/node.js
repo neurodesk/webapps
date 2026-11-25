@@ -2,7 +2,7 @@
 // Registers 2D histology sections (TIFF, PNG, JPEG) to a 3D MRI volume (NIfTI) using the exact
 // same Greedy NMI rigid, affine, plane search and deformable SVF pipeline as the Histo2MRI web app.
 import { randomUUID } from "node:crypto";
-import { closeSync, lstatSync, mkdirSync, openSync, readdirSync, renameSync, rmdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, constants as fsConstants, copyFileSync, lstatSync, mkdirSync, openSync, readdirSync, renameSync, rmdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { link, lstat, readFile, rename, rm, rmdir, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { gzipSync } from "node:zlib";
@@ -411,7 +411,7 @@ export async function claimOutputDirectory(outputDir) {
 /**
  * Stages every output file to a `.partial` path first (registering each path BEFORE `writeFile`),
  * then atomically publishes via hard link (`link` + `unlink`, failing with `EEXIST` without
- * overwriting if a destination already exists, falling back to `lstat`+`rename` only when the
+ * overwriting if a destination already exists, falling back to atomic `copyFileSync(..., COPYFILE_EXCL)` only when the
  * filesystem does not support hard links). Rolls back ONLY files this run created (verified by
  * `lstat` + `dev`/`ino`), and marks the lock on incomplete rollback.
  */
@@ -466,17 +466,19 @@ export async function writeStagedOutputs(
         if (!LINK_FALLBACK_CODES.has(error.code)) {
           throw error;
         }
-        const existing = await lstat(item.finalPath).catch((err) => {
-          if (err.code === "ENOENT") return null;
-          throw err;
-        });
-        if (existing) {
+        try {
+          copyFileSync(item.partialPath, item.finalPath, fsConstants.COPYFILE_EXCL);
+        } catch (copyError) {
           pub.pendingRename = null;
-          throw new Error(`Refusing to overwrite existing output '${item.name}'.`);
+          if (copyError.code === "EEXIST") {
+            throw new Error(`Refusing to overwrite existing output '${item.name}'.`, { cause: copyError });
+          }
+          throw copyError;
         }
-        await renameFn(item.partialPath, item.finalPath);
-        pub.published.push({ finalPath: item.finalPath, dev: item.dev, ino: item.ino });
+        const copiedInfo = lstatSync(item.finalPath);
+        pub.published.push({ finalPath: item.finalPath, dev: copiedInfo.dev, ino: copiedInfo.ino });
         pub.pendingRename = null;
+        await unlink(item.partialPath);
       }
     }
     pub.committed = true;
