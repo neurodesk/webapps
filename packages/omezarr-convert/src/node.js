@@ -390,25 +390,33 @@ function rollbackPublishSync(pubState) {
   if (pubState.pendingBackup) {
     const { target, backup } = pubState.pendingBackup;
     let backupExists = false;
-    let targetExists = false;
+    let targetInfo = null;
     try {
       lstatSync(backup);
       backupExists = true;
-    } catch {
-      // Backup was not created before interruption.
+    } catch (statError) {
+      if (statError.code !== "ENOENT") ok = false;
     }
     try {
-      lstatSync(target);
-      targetExists = true;
-    } catch {
-      // Target is absent and needs restore.
+      targetInfo = lstatSync(target);
+    } catch (statError) {
+      if (statError.code !== "ENOENT") ok = false;
     }
-    if (backupExists && !targetExists) {
-      try {
-        renameRollback(backup, target);
-      } catch {
+    if (backupExists) {
+      if (targetInfo) {
+        // Target is occupied (e.g. raced symlink/file/dir) while backup still exists;
+        // do not clobber target and keep the lock on disk.
         ok = false;
+      } else {
+        try {
+          renameRollback(backup, target);
+        } catch {
+          ok = false;
+        }
       }
+    } else if (!targetInfo) {
+      // Both target and backup are missing: backup disappeared before post-rename check.
+      ok = false;
     }
     pubState.pendingBackup = null;
   }

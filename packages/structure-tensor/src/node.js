@@ -925,14 +925,13 @@ function inspectPngChunks(bytes) {
   }
 
   if (!hasIhdr || !hasIend) throw new Error("Incomplete PNG file (missing IHDR or IEND).");
-  if (!hasCicpSrgb) {
-    if (iccp) {
-      validateIccProfile(iccp.bytes, iccp.profileName, "PNG");
-    } else if (!hasSrgb && chrm) {
-      const nonSrgb = chrm.some((val, idx) => Math.abs(val - SRGB_CHRM[idx]) > 500);
-      if (nonSrgb) {
-        throw new Error("Unsupported non-sRGB PNG chromaticity (cHRM). Convert to sRGB first.");
-      }
+  if (iccp) {
+    validateIccProfile(iccp.bytes, iccp.profileName, "PNG");
+  }
+  if (!hasCicpSrgb && !iccp && !hasSrgb && chrm) {
+    const nonSrgb = chrm.some((val, idx) => Math.abs(val - SRGB_CHRM[idx]) > 500);
+    if (nonSrgb) {
+      throw new Error("Unsupported non-sRGB PNG chromaticity (cHRM). Convert to sRGB first.");
     }
   }
   const hasExplicitSrgb = hasCicpSrgb || hasSrgb || Boolean(iccp);
@@ -1084,16 +1083,20 @@ function upsampleFancy2D(sub, cw, ch, x, y, subX, subY) {
     const s01 = sub[cy * cw + cxN];
     const s10 = sub[cyN * cw + cx];
     const s11 = sub[cyN * cw + cxN];
-    return (9 * s00 + 3 * s01 + 3 * s10 + s11 + 8) >> 4;
+    // Exact libjpeg-turbo h2v2_fancy_upsample alternating rounding bias (+8 even col, +7 odd col).
+    const bias = (x & 1) === 0 ? 8 : 7;
+    return (9 * s00 + 3 * s01 + 3 * s10 + s11 + bias) >> 4;
   }
   if (subX) {
     const cx = x >> 1;
     const cxN = (x & 1) === 0 ? Math.max(0, cx - 1) : Math.min(cw - 1, cx + 1);
-    return (3 * sub[y * cw + cx] + sub[y * cw + cxN] + 2) >> 2;
+    const bias = (x & 1) === 0 ? 1 : 2;
+    return (3 * sub[y * cw + cx] + sub[y * cw + cxN] + bias) >> 2;
   }
   const cy = y >> 1;
   const cyN = (y & 1) === 0 ? Math.max(0, cy - 1) : Math.min(ch - 1, cy + 1);
-  return (3 * sub[cy * cw + x] + sub[cyN * cw + x] + 2) >> 2;
+  const bias = (y & 1) === 0 ? 1 : 2;
+  return (3 * sub[cy * cw + x] + sub[cyN * cw + x] + bias) >> 2;
 }
 
 function decodeJpegGreyscale(bytes) {
@@ -1104,7 +1107,9 @@ function decodeJpegGreyscale(bytes) {
         && meta.components[0].id === 0x52
         && meta.components[1].id === 0x47
         && meta.components[2].id === 0x42));
-  const useRoundedYcbcr = meta.components.length === 3 && meta.adobeTransform === null && !isRawRgb;
+  const useRoundedYcbcr = meta.components.length === 3
+    && (meta.adobeTransform === null || meta.adobeTransform === 1)
+    && !isRawRgb;
   // jpeg-js decodes stored grid order, ignoring EXIF orientation (matching ImageJ & apps/structure-tensor/src/io.js).
   // For standard 3-component YCbCr JPEGs, decode raw Y/Cb/Cr and apply libjpeg-turbo fancy chroma upsampling
   // + rounded 16-bit fixed-point YCbCr->RGB (avoiding jpeg-js's float-to-Uint8 truncation bias).
@@ -1389,25 +1394,33 @@ function rollbackPublishSync(pubState) {
   if (pubState.pendingBackup) {
     const { target, backup } = pubState.pendingBackup;
     let backupExists = false;
-    let targetExists = false;
+    let targetInfo = null;
     try {
       lstatSync(backup);
       backupExists = true;
-    } catch {
-      // Backup was not created before interruption.
+    } catch (statError) {
+      if (statError.code !== "ENOENT") ok = false;
     }
     try {
-      lstatSync(target);
-      targetExists = true;
-    } catch {
-      // Target is absent and needs restore.
+      targetInfo = lstatSync(target);
+    } catch (statError) {
+      if (statError.code !== "ENOENT") ok = false;
     }
-    if (backupExists && !targetExists) {
-      try {
-        renameRollback(backup, target);
-      } catch {
+    if (backupExists) {
+      if (targetInfo) {
+        // Target is occupied (e.g. raced symlink/file/dir) while backup still exists;
+        // do not clobber target and keep the lock on disk.
         ok = false;
+      } else {
+        try {
+          renameRollback(backup, target);
+        } catch {
+          ok = false;
+        }
       }
+    } else if (!targetInfo) {
+      // Both target and backup are missing: backup disappeared before post-rename check.
+      ok = false;
     }
     pubState.pendingBackup = null;
   }
