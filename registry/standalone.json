@@ -2673,7 +2673,41 @@
       "desktop": true,
       "profile": "batch",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/tumour-report-v0.1.20261124/tumour-report-0.1.20261124-linux-x64.tar.gz",
+          "sha256": "820bad674b56a74e933e24ae9d86b337a85f2c6bd1249add34d7d2f7107b0692",
+          "bytes": 163660793,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/tumour-report-v0.1.20261124/tumour-report-0.1.20261124-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": true,
+          "command": "tar -xzf tumour-report-0.1.20261124-linux-x64.tar.gz\n./tumour-report-0.1.20261124-linux-x64/tumour-report t1c.nii.gz results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/tumour-report-v0.1.20261124/tumour-report-0.1.20261124-macos-arm64.pkg",
+          "sha256": "a280d88f863bcc59a26c3de72dc0470002df05c089731d9d4a4ddb07fb0b5e47",
+          "bytes": 165389205,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/tumour-report-v0.1.20261124/tumour-report-0.1.20261124-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": true,
+          "command": "sudo installer -pkg tumour-report-0.1.20261124-macos-arm64.pkg -target /\ntumour-report self-check\ntumour-report t1c.nii.gz results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/tumour-report-v0.1.20261124/tumour-report-0.1.20261124-windows-x64.zip",
+          "sha256": "955103f4795e98660074750706950f68b1ccd0c127abeb70d0fe8c0c2a1cb8ad",
+          "bytes": 166138978,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/tumour-report-v0.1.20261124/tumour-report-0.1.20261124-windows-x64.zip.validation.txt",
+          "modelsIncluded": true,
+          "command": "Expand-Archive -Path .\\tumour-report-0.1.20261124-windows-x64.zip -DestinationPath .\n.\\tumour-report-0.1.20261124-windows-x64\\tumour-report.exe t1c.nii.gz results"
+        }
+      ],
       "containers": []
     },
     "denoise": {
