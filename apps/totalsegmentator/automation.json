@@ -41,8 +41,7 @@
             "fast",
             "full"
           ],
-          "default": "fast",
-          "description": "Model resolution for total and total_mr: fast (3 mm single model) or full (1.5 mm multi-part)."
+          "description": "Model resolution for total and total_mr: fast (3 mm single model, default) or full (1.5 mm multi-part). Omit or pass full for vertebrae_mr and abdominal_muscles."
         },
         "subset": {
           "type": "string",

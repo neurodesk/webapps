@@ -81,13 +81,14 @@ jobs:
           TOP_WORKFLOW: ${{ github.workflow_ref }}
           CALLS: ${{ inputs.calls }}
         run: |
-          if [ "$WORKFLOW" != native ] && [[ "$TOP_WORKFLOW" == */.github/workflows/native.yml@* ]]; then
+          is_dispatcher() { [ "$1" = native ] || [[ "$1" =~ ^native-([2-9]|[1-9][0-9]+)$ ]]; }
+          if ! is_dispatcher "$WORKFLOW" && [[ "$TOP_WORKFLOW" =~ /\.github/workflows/native(-([2-9]|[1-9][0-9]+))?\.yml@ ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           elif [ "$EVENT_NAME" = pull_request ]; then
             if [ "$DRAFT" = true ]; then
               echo "run=false" >> "$GITHUB_OUTPUT"
-              if [ "$WORKFLOW" = native ]; then
-                # A draft runs nothing: it skips by name every workflow native.yml lists.
+              if is_dispatcher "$WORKFLOW"; then
+                # A draft runs nothing: it skips by name every workflow this dispatcher lists.
                 skips=$(jq -cn --arg names "$CALLS" '$names | split(" ") | map(select(. != ""))')
                 echo "skips=$skips" >> "$GITHUB_OUTPUT"
               fi
@@ -124,7 +125,8 @@ jobs:
           CALLS: ${{ inputs.calls }}
           SWEEPS: ${{ inputs.sweeps }}
         run: |
-          if [ "$WORKFLOW" = native ]; then
+          is_dispatcher() { [ "$1" = native ] || [[ "$1" =~ ^native-([2-9]|[1-9][0-9]+)$ ]]; }
+          if is_dispatcher "$WORKFLOW"; then
             if [ "$EVENT_NAME" = schedule ]; then
               eligible=$SWEEPS
               set -- --sweep
@@ -142,7 +144,7 @@ jobs:
             answer="${RUNNER_TEMP:?}/native-skips.json"
             rm -f "$answer"
             status=0
-            NATIVE_ELIGIBLE="$eligible" NATIVE_SKIPS="$answer" node scripts/workflow-gate.mjs --native "$@" --head "$HEAD_SHA" || status=$?
+            NATIVE_ELIGIBLE="$eligible" NATIVE_SKIPS="$answer" node scripts/workflow-gate.mjs --native --workflow "$WORKFLOW" "$@" --head "$HEAD_SHA" || status=$?
             if grep -qx 'withheld=true' "$GITHUB_OUTPUT"; then
               exit 0
             fi

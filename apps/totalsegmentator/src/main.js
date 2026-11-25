@@ -664,7 +664,7 @@ registerAppAutomation({
     segment: async ({ inputs, parameters, signal, progress: reportProgress }) => {
       const plan = resolveTaskPlan({
         task: parameters?.task ?? "total",
-        resolution: parameters?.resolution ?? "fast",
+        resolution: parameters?.resolution,
         subset: parameters?.subset ?? "all",
       });
       if (parameters?.backend !== undefined && !["auto", "wasm"].includes(parameters.backend)) {
