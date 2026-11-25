@@ -139,27 +139,51 @@ async function isRegularUnlinkedFile(root, target) {
 }
 
 const AST_SKIP = new Set(['loc', 'range', 'start', 'end', 'tokens', 'comments', 'parent']);
-const VALUE_WRAPPERS = new Set(['ConditionalExpression', 'LogicalExpression', 'SequenceExpression', 'ArrayExpression']);
-const COMPUTED_PARENTS = new Set(['BinaryExpression', 'MemberExpression', 'TaggedTemplateExpression']);
+const DIRECT_MODULE_PARENTS = new Set(['ImportDeclaration', 'ExportNamedDeclaration', 'ExportAllDeclaration', 'ImportExpression']);
+const STATEMENT_BOUNDARY = new Set(['ExpressionStatement', 'VariableDeclaration', 'ReturnStatement', 'BlockStatement', 'Program']);
 const INDEPENDENT_LINT_SCRIPT = /^node\s+(?:\.\.\/)+scripts\/lint\.mjs(?:\s+--workspace)?$/;
-const FILTERED_LINT_CALL = /pnpm\s+(?:--filter|-F)\s+['"]?([^\s'"]+)['"]?\s+(?:run\s+)?lint\b/g;
+const FILTER_ARG = /(?:--filter|-F)(?:=|\s+)['"]?([^\s'"]+)['"]?/g;
+const CROSS_WORKSPACE_FLAG = /(?:--filter|-F|-r|--recursive|--workspace|-w)(?:=|\s|$)/;
 
-function hasComputedPathAncestor(ancestors) {
-  for (let i = ancestors.length - 1; i >= 0; i--) {
+// Whether a string literal sits in a whitelisted standalone path context:
+// (1) static/dynamic import/export source, (2) direct CallExpression argument,
+// (3) element of an ArrayExpression passed directly to a CallExpression, or
+// (4) direct VariableDeclarator initializer whose binding is never referenced
+// elsewhere in the script, with only CallExpression/AwaitExpression/VariableDeclarator
+// wrappers up to the enclosing statement.
+function isStandalonePathLiteral(node, ancestors, referencedIdentifiers) {
+  if (node.type !== 'Literal' || typeof node.value !== 'string') return false;
+  const parent = ancestors[ancestors.length - 1];
+  if (!parent) return false;
+  if (DIRECT_MODULE_PARENTS.has(parent.type) && parent.source === node) return true;
+  if (parent.type === 'VariableDeclarator' && parent.init === node && parent.id?.type === 'Identifier') {
+    const grandParent = ancestors[ancestors.length - 2];
+    return grandParent?.type === 'VariableDeclaration' && !referencedIdentifiers.has(parent.id.name);
+  }
+  let callIndex = -1;
+  if (parent.type === 'CallExpression' && Array.isArray(parent.arguments) && parent.arguments.includes(node)) {
+    callIndex = ancestors.length - 1;
+  } else if (parent.type === 'ArrayExpression') {
+    const grandParent = ancestors[ancestors.length - 2];
+    if (grandParent?.type === 'CallExpression' && Array.isArray(grandParent.arguments) && grandParent.arguments.includes(parent)) {
+      callIndex = ancestors.length - 2;
+    }
+  }
+  if (callIndex < 0) return false;
+  for (let i = callIndex - 1; i >= 0; i--) {
     const ancestor = ancestors[i];
-    if (ancestor.type === 'TemplateLiteral' && ancestor.expressions.length > 0) return true;
+    const child = ancestors[i + 1];
+    if (STATEMENT_BOUNDARY.has(ancestor.type)) return true;
+    if (ancestor.type === 'AwaitExpression' && ancestor.argument === child) continue;
+    if (ancestor.type === 'VariableDeclarator' && ancestor.init === child) continue;
+    if (ancestor.type === 'CallExpression' && Array.isArray(ancestor.arguments) && ancestor.arguments.includes(child)) continue;
+    return false;
   }
-  for (let i = ancestors.length - 1; i >= 0; i--) {
-    const type = ancestors[i].type;
-    if (VALUE_WRAPPERS.has(type)) continue;
-    return COMPUTED_PARENTS.has(type);
-  }
-  return false;
+  return true;
 }
 
 // Collect string and template literal ranges in a script so SCRIPT_REFERENCE can
-// verify whether a file path match is a complete, non-computed literal expression
-// (including across inline comments and enclosing conditionals/logical/array wrappers).
+// narrow to an exact file only for whitelisted standalone path literals.
 function collectScriptStringLiterals(text, file) {
   let ast;
   try {
@@ -167,7 +191,8 @@ function collectScriptStringLiterals(text, file) {
   } catch {
     return null;
   }
-  const literals = [];
+  const referencedIdentifiers = new Set();
+  const candidates = [];
   const ancestors = [];
   const walk = (node) => {
     if (!node || typeof node !== 'object') return;
@@ -175,11 +200,15 @@ function collectScriptStringLiterals(text, file) {
       for (const item of node) walk(item);
       return;
     }
+    if (node.type === 'Identifier') {
+      const parent = ancestors[ancestors.length - 1];
+      const isDeclId = parent?.type === 'VariableDeclarator' && parent.id === node;
+      if (!isDeclId) referencedIdentifiers.add(node.name);
+    }
     const isStringLiteral = node.type === 'Literal' && typeof node.value === 'string';
     const isTemplate = node.type === 'TemplateLiteral';
     if ((isStringLiteral || isTemplate) && Array.isArray(node.range)) {
-      const computed = (isTemplate && node.expressions.length > 0) || hasComputedPathAncestor(ancestors);
-      literals.push({ start: node.range[0], end: node.range[1], computed });
+      candidates.push({ node, ancestors: [...ancestors] });
     }
     ancestors.push(node);
     for (const key of Object.keys(node)) {
@@ -188,11 +217,20 @@ function collectScriptStringLiterals(text, file) {
     ancestors.pop();
   };
   walk(ast);
-  return literals;
+  return candidates.map(({ node, ancestors: chain }) => {
+    const isStringLiteral = node.type === 'Literal' && typeof node.value === 'string';
+    const isTemplate = node.type === 'TemplateLiteral';
+    const commentLine =
+      (isStringLiteral || (isTemplate && node.expressions.length === 0)) &&
+      chain[chain.length - 1]?.type === 'VariableDeclarator' &&
+      /(?:^|\n)[ \t]*\/\//.test(text.slice(node.range[0] + 1, node.range[1] - 1));
+    const standalone = isStandalonePathLiteral(node, chain, referencedIdentifiers) || commentLine;
+    return { start: node.range[0], end: node.range[1], standalone };
+  });
 }
 
 // Whether a SCRIPT_REFERENCE file match ends at a real path boundary and, when
-// inside a JS string/template literal, spans the complete non-computed literal.
+// inside a JS string/template literal, spans a complete whitelisted literal.
 function isCompleteScriptFile(text, match, literals) {
   const start = match.index;
   const end = match.index + match[0].length;
@@ -201,11 +239,11 @@ function isCompleteScriptFile(text, match, literals) {
   if (literals !== null) {
     const litAtEnd = literals.find((lit) => lit.start < end && end <= lit.end);
     if (litAtEnd) {
-      if (litAtEnd.computed) return false;
+      if (!litAtEnd.standalone) return false;
       const tail = text.slice(end, litAtEnd.end - 1);
       if (tail.length > 0 && !(tail === '\n' && text.slice(litAtEnd.start + 1, start).includes('//'))) return false;
       const litAtStart = literals.find((lit) => lit.start <= start && start < lit.end);
-      if (litAtStart && litAtStart !== litAtEnd && litAtStart.computed) return false;
+      if (litAtStart && litAtStart !== litAtEnd && !litAtStart.standalone) return false;
       return true;
     }
     return true;
@@ -221,6 +259,30 @@ function isCompleteScriptFile(text, match, literals) {
     return after === text[i];
   }
   return true;
+}
+
+// Workspace nodes whose `lint` script may be executed by any cross-workspace
+// lint invocation (`pnpm --filter <pkg> lint`, `--filter=<pkg>`, `-r lint`).
+function lintTargetsInCommands(commands, { nodeByPackageName, nodeSet, manifests }) {
+  const targets = new Set();
+  const allLintNodes = () => [...manifests.entries()].filter(([, manifest]) => typeof manifest?.scripts?.lint === 'string').map(([node]) => node);
+  for (const cmd of commands) {
+    if (!/\blint\b/.test(cmd) || !CROSS_WORKSPACE_FLAG.test(cmd)) continue;
+    const recursive = /(?:^|\s)(?:-r|--recursive)(?:\s|$)/.test(cmd);
+    const filters = [...cmd.matchAll(FILTER_ARG)].map(([, target]) => target);
+    if (!recursive && filters.length > 0) {
+      let allResolved = true;
+      for (const filter of filters) {
+        const workspaceNode = nodeByPackageName.get(filter) ?? (nodeSet.has(filter) ? filter : null);
+        if (workspaceNode) targets.add(workspaceNode);
+        else allResolved = false;
+      }
+      if (!allResolved) for (const node of allLintNodes()) targets.add(node);
+    } else {
+      for (const node of allLintNodes()) targets.add(node);
+    }
+  }
+  return targets;
 }
 
 // Expand CI commands through root package.json scripts without stripping
@@ -293,7 +355,7 @@ export async function loadConservativeWorkspaceGraph(root) {
   const expandedByEntry = new Map(rawEntries.map(([node, raw]) => [node, expandedCommandTexts(raw, rootScripts)]));
   const ciInvokesLint = [...expandedByEntry.values()].flat().some((cmd) => /\blint\b/.test(cmd));
   const workspaceCrossInvokesLint = [...manifests.values()].some((manifest) =>
-    Object.entries(manifest?.scripts ?? {}).some(([name, cmd]) => name !== 'lint' && /(?:--filter|-F|-r|--recursive)\b[^\n]*\blint\b/.test(String(cmd))),
+    Object.entries(manifest?.scripts ?? {}).some(([name, cmd]) => name !== 'lint' && /\blint\b/.test(String(cmd)) && CROSS_WORKSPACE_FLAG.test(String(cmd))),
   );
   const stripStandaloneLint = !ciInvokesLint && !workspaceCrossInvokesLint;
 
@@ -313,6 +375,10 @@ export async function loadConservativeWorkspaceGraph(root) {
           if (target) uses.add(target);
         }
       }
+    }
+    const nonLintScripts = Object.entries(manifest?.scripts ?? {}).filter(([name]) => name !== 'lint').map(([, cmd]) => String(cmd));
+    for (const lintTarget of lintTargetsInCommands(nonLintScripts, { nodeByPackageName, nodeSet, manifests })) {
+      uses.add(lintTarget);
     }
     const manifestPath = join(root, node, 'package.json');
     for await (const file of textFiles(join(root, node))) {
@@ -348,11 +414,8 @@ export async function loadConservativeWorkspaceGraph(root) {
   for (const [node, commands] of entries) {
     const { named, expanded } = namedByCommands(commands, rootScripts);
     if (node === SITE) for (const config of rootConfigs) named.add(config);
-    for (const cmd of expandedByEntry.get(node) ?? []) {
-      for (const [, filterTarget] of cmd.matchAll(FILTERED_LINT_CALL)) {
-        const workspaceNode = nodeByPackageName.get(filterTarget) ?? (nodeSet.has(filterTarget) ? filterTarget : null);
-        if (workspaceNode) named.add(workspaceNode);
-      }
+    for (const lintTarget of lintTargetsInCommands(expandedByEntry.get(node) ?? [], { nodeByPackageName, nodeSet, manifests })) {
+      named.add(lintTarget);
     }
     edges.set(node, named);
     rootScriptsRun.set(node, expanded);
