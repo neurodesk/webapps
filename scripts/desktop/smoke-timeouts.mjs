@@ -8,6 +8,7 @@ export const WORKFLOW_STARTUP_HEADROOM_MS = 2 * 60 * 1000;
 // Standalone dialog checks so long multi-stage CPU pipelines are not killed early.
 export const LONG_WORKFLOW_BUDGETS_MS = Object.freeze({
   ants: 22 * 60 * 1000,
+  aurora: 34 * 60 * 1000,
   brain2print: 22 * 60 * 1000,
   brainqcnet: 19 * 60 * 1000,
   degibbs: 16 * 60 * 1000,

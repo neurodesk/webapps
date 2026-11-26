@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "app": "aurora",
+  "license": "CC-BY-4.0",
+  "preprocessing_contract": {
+    "source": "packages/aurora/src/pipeline.js",
+    "grid": "240 x 240 x 155 BraTS/SRI24 skull-stripped atlas grid at 1 mm isotropic; no resampling or reorientation",
+    "layout": "NCDHW in nibabel/MONAI (X, Y, Z) axis order; NIfTI x-fastest buffer reordered to C-order (X, Y, Z) for inference and restored on output",
+    "normalization": "np.nan_to_num followed by MONAI ScaleIntensityRangePercentiles(lower=0.5, upper=99.5, b_min=0, b_max=1, clip=True)",
+    "prediction": "MONAI SlidingWindowInferer(roi_size=(192, 192, 32), overlap=0.5, mode=gaussian, sigma_scale=0.125, padding_mode=replicate), deterministic tta=False baseline",
+    "labels": "Two independent sigmoid channels thresholded at >= 0.5: label 1 = peritumoral oedema (channel 0 only), label 2 = metastasis (enhancing + necrosis, channel 1, overwrites label 1)"
+  },
+  "assets": [
+    {
+      "id": "t1c-o_best",
+      "filename": "aurora-t1c-o_best.onnx",
+      "bytes": 11553858,
+      "sha256": "020f8ac41e799878522c9b9abc48c75d54dd622a533623229f9244647dd8680d",
+      "network": "BasicUNet",
+      "channels": [
+        "t1c"
+      ],
+      "patch": [
+        192,
+        192,
+        32
+      ],
+      "overlap": 0.5,
+      "threshold": 0.5,
+      "checkpoint_sha256": "21f71222cbb4e8bf4fc1ae8ba9acfb1673f9fb16c1ef038bffa4d33a5c1a115d",
+      "checkpoint_md5": "5cbb214b74196c985bde38401e0474df",
+      "float16_max_logit_change": 0.02183,
+      "source_url": "https://zenodo.org/records/10557069/files/t1c-o_best.tar"
+    }
+  ],
+  "source_commit": "BrainLesion/AURORA v0.2.7 (0d2b1d0) with Zenodo 10557069 weights v1.0.0 (t1c-o_best.tar, md5 5cbb214b74196c985bde38401e0474df), as baked into vnmd/brainles-aurora_0.2.7@sha256:bf283ad8f84516b9906b3fd2dad3453312dad2a051587d0174c9c092847bcf30",
+  "graph_optimization": "Mish decomposed to x * tanh(softplus(x)) for opset 17 compatibility; four 3D ConvTranspose layers rewritten as equivalent 1x1x1 Conv plus depth-to-space for native WebGPU execution; convolution weights stored as float16 with Cast to float32 compute. Built by packages/aurora/scripts/export_model.py",
+  "repository": "neurodeskorg/webapps",
+  "revision": "9ea32f6bb6fc9d4c9e4259e3125b9bec432073f1",
+  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/9ea32f6bb6fc9d4c9e4259e3125b9bec432073f1/aurora/models/"
+}

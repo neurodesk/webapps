@@ -3375,3 +3375,31 @@ apps:
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
+
+  aurora:
+    about:
+      - "AURORA segments brain metastases from a skull-stripped, contrast-enhanced T1 (T1c) MRI in the browser using the BrainLesion AURORA v0.2.7 MONAI 3D BasicUNet (t1c-o_best, deterministic baseline without test-time augmentation). Inference runs locally on WebGPU when a hardware GPU is available, or on threaded WebAssembly CPU."
+      - "Inputs must be skull-stripped and registered to the 240 × 240 × 155, 1 mm isotropic BraTS/SRI24 atlas grid; off-grid volumes are refused before inference. Output preserves upstream AURORA's two independent sigmoid channels as a combined label map (label 1 = peritumoral oedema, label 2 = metastasis enhancing + necrosis overwriting label 1), separate binary channel masks, per-region volumes (mL), and 26-connected metastasis lesion counts (minimum 5 voxels)."
+      - "For multi-modality combinations (T1, FLAIR, T2) or 13-pass test-time augmentation, use the Neurodesk brainles-aurora 0.2.7 container listed under Standalone."
+    packages:
+      - { name: BrainLes AURORA, url: https://github.com/BrainLesion/AURORA, role: "brain metastasis segmentation network and weights (v0.2.7, t1c-o_best)" }
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai/, role: browser WebGPU and WebAssembly inference }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Brain metastasis segmentation
+        title: Identifying core MRI sequences for reliable automatic brain metastasis segmentation
+        reference: "Buchner JA, Peeken JC, Etzel L, Ezhov I, Mayinger M, Christ SM, Brunner TB, Wittig A, Menze BH, Zimmer C, Wiestler B, Kofler F. Identifying core MRI sequences for reliable automatic brain metastasis segmentation. Radiotherapy and Oncology. 2023;188:109901."
+        doi: 10.1016/j.radonc.2023.109901
+        code: https://github.com/BrainLesion/AURORA
+      - group: Brain metastasis segmentation
+        title: AURORA multicenter study
+        reference: "Buchner JA, Kofler F, Etzel L, Mayinger M, Christ SM, Brunner TB, Wittig A, Menze B, Zimmer C, Meyer B, Wiestler B, Peeken JC. Development and external validation of an MRI-based neural network for brain metastasis segmentation in the AURORA multicenter study. Radiotherapy and Oncology. 2022;178:109425."
+        doi: 10.1016/j.radonc.2022.11.014
+      - group: Example data
+        title: BraTS-METS 2023 challenge dataset
+        reference: "Moawad AW, Janas A, Baid U, Ramakrishnan D, Jekel L, Krantchev K, et al. The Brain Tumor Segmentation (BraTS-METS) Challenge 2023: Brain Metastasis Segmentation on Pre-treatment MRI. arXiv:2306.00838. 2023 (CC BY 4.0)."
+        url: https://arxiv.org/abs/2306.00838
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
