@@ -162,6 +162,7 @@ export const WORKFLOWS = Object.freeze({
   'CI approval report': 'report',
   'ci-usage': 'report',
   'scheduled workflow failure reports': 'report',
+  'unused-code-triage': 'report',
   'workflow failure reports': 'report',
 });
 

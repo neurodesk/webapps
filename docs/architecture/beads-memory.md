@@ -62,11 +62,22 @@ node scripts/beads.mjs sync --remote origin --push
 
 ## Safe-outputs applier contract (Phase 2 `gh-aw` bridge)
 
-Scheduled GitHub Agentic Workflows (`gh-aw`) must never hold direct write tokens in the LLM container. Instead:
+Scheduled GitHub Agentic Workflows (`gh-aw`) must never hold direct write tokens in the LLM container. The weekly unused-code triage workflow ([unused-code-triage.md](../../.github/workflows/unused-code-triage.md), compiled to [unused-code-triage.lock.yml](../../.github/workflows/unused-code-triage.lock.yml)) enforces a strict three-stage pipeline:
 
-1. A deterministic pre-step runs `node scripts/beads.mjs export --format snapshot --max-items 100` to hand the read-only agent a bounded, sanitized view.
-2. The read-only agent emits structured mutation intents (`ops.json`).
-3. After `gh-aw` threat detection passes, a privileged `safe-outputs` job executes reviewed default-branch code:
+1. **Read-only `agent` job (`contents: read`, `copilot-requests: write`):** Checks out the default branch with `persist-credentials: false`, generates the Knip unused-code report (`node scripts/report-unused-code.mjs --baseline ""`), exports a bounded snapshot of `memory/beads` (`node scripts/beads.mjs sync --remote origin` + `export --format snapshot --max-items 100`), strips `.git` before `gh-aw` credential setup, and marks `apps/` and `quality-artifacts/unused-code/` read-only. The GitHub Copilot agent runs with `tools.bash: false`, `tools.edit: false`, and `tools.github: false`, inspecting files solely through read-only `mcp-scripts` (`read_triage_artifact`, `list_app_files`, `read_app_file`, `search_app_files`) and emitting structured `upsert_unused_code_bead` items (or `noop`).
+2. **Fail-closed `detection` job:** `gh-aw` threat detection runs with `continue-on-error: false` (`report-as-issue: false`). All built-in issue-reporting hooks (`noop`, `report-failure-as-issue`, `report-failed-jobs`, `report-missing-tool`, `report-incomplete`, `report-missing-data`) are disabled so no job in the workflow holds `issues: write`.
+3. **Deterministic `upsert_unused_code_bead` safe-outputs job (`contents: write`, default-branch checkout with `persist-credentials: false`):** Gated on `needs.detection.outputs.detection_success == 'true' && needs.detection.outputs.detection_conclusion == 'success'` and enforced again via `--require-clean-detection`. Runs [scripts/apply-beads-safe-outputs.mjs](../../scripts/apply-beads-safe-outputs.mjs) (backed by [scripts/lib/beads-safe-outputs.mjs](../../scripts/lib/beads-safe-outputs.mjs) and `applyRemoteBeadsRef` in [scripts/lib/beads.mjs](../../scripts/lib/beads.mjs)), which validates registered first-party non-upstream apps, checks real app roots and regular-file containment under `apps/<app>/`, applies `--safe --single-app --max-creates 5 --max-updates 10` directly against the fetched remote tip, and pushes with `--force-with-lease` (revalidating `expected_revision` on concurrent push races rather than silently merging; dry-run previews and failed pushes leave local `refs/heads/memory/beads` untouched so retries always publish cleanly).
+
+### Running, previewing, and recompiling
+
+- **Manual dry-run preview:** Trigger `unused-code-triage` via `workflow_dispatch` with `dry_run: true` to inspect the generated `GITHUB_STEP_SUMMARY` without committing or pushing to `refs/heads/memory/beads`.
+- **Recompiling after editing `.github/workflows/unused-code-triage.md`:**
+
+```bash
+gh aw compile --strict --approve unused-code-triage
+```
+
+- **Direct local `--safe` applier invocation:**
 
 ```bash
 node scripts/beads.mjs apply ops.json \

@@ -631,11 +631,17 @@ export function summarizeBeads(beadsMap, { now = new Date(), maxItems = 100 } = 
       links: bead.links,
       lastSeenAt: bead.lastSeenAt,
     }));
+  const closedDedupeKeys = listBeads(beadsMap, { status: 'closed' })
+    .map((bead) => bead.dedupeKey)
+    .filter((key) => typeof key === 'string' && key.length > 0)
+    .sort()
+    .slice(0, Math.max(maxItems * 2, 200));
   return {
     schemaVersion: SCHEMA_VERSION,
     generatedAt: new Date(nowMs).toISOString(),
     total: beadsMap.size,
     openCount: items.length,
+    closedDedupeKeys,
     items,
   };
 }
@@ -864,6 +870,11 @@ export function applyOperations(beadsMap, operations, options = {}) {
           if (singleAppOnly && !(nextScope.type === 'app' && nextScope.targets.length === 1)) {
             throw new BeadsValidationError(`Updated scope for ${existing.id} must target a single app`);
           }
+          if (singleAppOnly && existing.scope.targets[0] !== nextScope.targets[0]) {
+            throw new BeadsValidationError(
+              `Bead ${existing.id} is scoped to app "${existing.scope.targets[0]}", not "${nextScope.targets[0]}"`,
+            );
+          }
         }
         const mergedLinks = mergeLinks(existing.links, op.links);
         const linksChanged = JSON.stringify(mergedLinks) !== JSON.stringify(existing.links);
@@ -992,10 +1003,16 @@ export function applyOperations(beadsMap, operations, options = {}) {
         bead.priority = op.priority;
       }
       if (op.scope !== undefined) {
-        bead.scope = normalizeScope(op.scope);
-        if (singleAppOnly && !isSingleAppScope(bead)) {
+        const nextScope = normalizeScope(op.scope);
+        if (singleAppOnly && !(nextScope.type === 'app' && nextScope.targets.length === 1)) {
           throw new BeadsValidationError(`Updated scope for ${bead.id} must target a single app`);
         }
+        if (singleAppOnly && bead.scope.targets[0] !== nextScope.targets[0]) {
+          throw new BeadsValidationError(
+            `Bead ${bead.id} is scoped to app "${bead.scope.targets[0]}", not "${nextScope.targets[0]}"`,
+          );
+        }
+        bead.scope = nextScope;
       }
       if (op.links !== undefined) bead.links = mergeLinks(bead.links, op.links);
       if (op.note !== undefined) {
@@ -1531,20 +1548,47 @@ export function commitBeadsToRef(cwd, beadsMap, { ref = DEFAULT_BEADS_REF, expec
   return commitSha;
 }
 
-export function mutateBeadsRef(cwd, operations, { ref = DEFAULT_BEADS_REF, message = 'beads: apply operations', maxRetries = 5, ...applyOptions } = {}) {
+export function mutateBeadsRef(cwd, operations, {
+  ref = DEFAULT_BEADS_REF,
+  message = 'beads: apply operations',
+  maxRetries = 5,
+  skipClosedUpserts = false,
+  ...applyOptions
+} = {}) {
   assertMemoryRef(ref);
   const repoTop = resolveGitRoot(cwd);
   assertNotSymbolicRef(repoTop, ref);
   assertRefNotCheckedOut(repoTop, ref);
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const { sha, beads } = readBeadsTree(repoTop, ref);
-    const result = applyOperations(beads, operations, applyOptions);
+    let effectiveOps = operations;
+    let skippedClosed = [];
+    if (skipClosedUpserts) {
+      const filtered = filterClosedUpsertOperations(beads, operations, {
+        singleAppOnly: Boolean(applyOptions.singleAppOnly),
+      });
+      effectiveOps = filtered.activeOperations;
+      skippedClosed = filtered.skippedClosed;
+      if (effectiveOps.length === 0 && skippedClosed.length > 0) {
+        return {
+          beads,
+          changedIds: [],
+          createdIds: [],
+          updatedIds: [],
+          untouchedIds: [],
+          skippedClosed,
+          commitSha: sha,
+          changed: false,
+        };
+      }
+    }
+    const result = applyOperations(beads, effectiveOps, applyOptions);
     if (result.changedIds.length === 0 && sha !== null) {
-      return { ...result, commitSha: sha, changed: false };
+      return { ...result, skippedClosed, commitSha: sha, changed: false };
     }
     try {
       const commitSha = commitBeadsToRef(repoTop, result.beads, { ref, expectedParentSha: sha, message });
-      return { ...result, commitSha, changed: true };
+      return { ...result, skippedClosed, commitSha, changed: true };
     } catch (error) {
       if (error instanceof BeadsConflictError && attempt + 1 < maxRetries) continue;
       throw error;
@@ -1576,14 +1620,23 @@ export function initBeadsRef(cwd, { ref = DEFAULT_BEADS_REF } = {}) {
   }
 }
 
-function remoteBranchExists(repoTop, remote, ref) {
+function remoteBranchSha(repoTop, remote, ref) {
   try {
-    const out = git(['ls-remote', '--exit-code', '--', remote, ref], { cwd: repoTop }).trim();
-    return Boolean(out);
+    const out = git(['ls-remote', '--exit-code', '--refs', '--', remote, ref], { cwd: repoTop }).trim();
+    if (!out) return null;
+    for (const line of out.split(/\r?\n/)) {
+      const [sha, name] = line.split('\t');
+      if (name === ref && /^[0-9a-f]{40}$/i.test(sha || '')) return sha;
+    }
+    return null;
   } catch (error) {
-    if (error.status === 2) return false;
+    if (error.status === 2) return null;
     throw new Error(`Failed to query remote "${remote}" for ${ref}: ${error.stderr || error.message}`);
   }
+}
+
+function remoteBranchExists(repoTop, remote, ref) {
+  return Boolean(remoteBranchSha(repoTop, remote, ref));
 }
 
 export function syncBeadsRef(cwd, { ref = DEFAULT_BEADS_REF, remote = 'origin', push = false, maxRetries = 5 } = {}) {
@@ -1604,9 +1657,18 @@ export function syncBeadsRef(cwd, { ref = DEFAULT_BEADS_REF, remote = 'origin', 
   const shortBranch = ref.replace(/^refs\/heads\//, '');
   const trackingRef = `refs/remotes/${remote}/${shortBranch}`;
   assertNotSymbolicRef(repoTop, trackingRef);
-  const remoteExists = remoteBranchExists(repoTop, remote, ref);
+  let remoteExists = remoteBranchExists(repoTop, remote, ref);
   if (remoteExists) {
-    git(['-c', `remote.${remote}.fetch=`, 'fetch', '--no-tags', '--no-prune', '--no-recurse-submodules', '--no-write-fetch-head', '--refmap=', '--', remote, `+${ref}:${trackingRef}`], { cwd: repoTop });
+    try {
+      git(['-c', `remote.${remote}.fetch=`, 'fetch', '--no-tags', '--no-prune', '--no-recurse-submodules', '--no-write-fetch-head', '--refmap=', '--', remote, `+${ref}:${trackingRef}`], { cwd: repoTop });
+    } catch (error) {
+      const detail = `${error?.stderr || ''}\n${error?.message || ''}`;
+      if (/couldn't find remote ref|no such ref/i.test(detail)) {
+        remoteExists = false;
+      } else {
+        throw error;
+      }
+    }
   }
   const remoteState = remoteExists ? readBeadsTree(repoTop, trackingRef) : { sha: null, beads: new Map() };
 
@@ -1691,4 +1753,220 @@ export function syncBeadsRef(cwd, { ref = DEFAULT_BEADS_REF, remote = 'origin', 
   }
 
   return { ref, remote, remoteFetched: remoteExists, sha: finalSha, count: mergedCount, pushed };
+}
+
+function isLeasePushRejection(error) {
+  const detail = `${error?.stderr || ''}\n${error?.message || ''}`;
+  return /stale info|non-fast-forward|fetch first|\[rejected\]|failed to update ref|remote ref updated|cannot lock ref|incorrect old value provided|expected [0-9a-f]{7,40}/i.test(detail);
+}
+
+function hasLocalCommitObject(repoTop, sha) {
+  try {
+    return git(['cat-file', '-t', sha], { cwd: repoTop }).trim() === 'commit';
+  } catch {
+    return false;
+  }
+}
+
+function fetchRemoteBeadsTreeNoRef(repoTop, remote, ref, maxFetchAttempts = 3) {
+  for (let i = 0; i < maxFetchAttempts; i++) {
+    const remoteSha = remoteBranchSha(repoTop, remote, ref);
+    if (!remoteSha) return { sha: null, beads: new Map() };
+    try {
+      git([
+        '-c', `remote.${remote}.fetch=`,
+        'fetch',
+        '--no-tags',
+        '--no-prune',
+        '--no-recurse-submodules',
+        '--no-write-fetch-head',
+        '--refmap=',
+        '--',
+        remote,
+        ref,
+      ], { cwd: repoTop });
+    } catch (error) {
+      const detail = `${error?.stderr || ''}\n${error?.message || ''}`;
+      if (/couldn't find remote ref|no such ref/i.test(detail) && i + 1 < maxFetchAttempts) {
+        continue;
+      }
+      throw error;
+    }
+    if (hasLocalCommitObject(repoTop, remoteSha)) {
+      return readBeadsTree(repoTop, remoteSha);
+    }
+  }
+  throw new BeadsConflictError(`Remote ${remote} ${ref} moved concurrently during fetch`);
+}
+
+export function filterClosedUpsertOperations(beadsMap, operations, { singleAppOnly = false } = {}) {
+  const closedByKey = new Map();
+  for (const bead of beadsMap.values()) {
+    if (bead.status === 'closed' && bead.dedupeKey) {
+      closedByKey.set(bead.dedupeKey, bead);
+    }
+  }
+  const activeOperations = [];
+  const skippedClosed = [];
+  for (const op of operations) {
+    if (op?.op === 'upsert' && typeof op.dedupeKey === 'string' && closedByKey.has(op.dedupeKey)) {
+      const bead = closedByKey.get(op.dedupeKey);
+      if (singleAppOnly) {
+        if (!isSingleAppScope(bead)) {
+          activeOperations.push(op);
+          continue;
+        }
+        if (op.scope !== undefined) {
+          const nextScope = normalizeScope(op.scope);
+          if (!(nextScope.type === 'app' && nextScope.targets.length === 1) || bead.scope.targets[0] !== nextScope.targets[0]) {
+            activeOperations.push(op);
+            continue;
+          }
+        }
+      }
+      skippedClosed.push({
+        dedupeKey: op.dedupeKey,
+        beadId: bead.id,
+        reason: `bead ${bead.id} is already closed; skipping to respect maintainer disposition`,
+      });
+      continue;
+    }
+    activeOperations.push(op);
+  }
+  return { activeOperations, skippedClosed };
+}
+
+export function applyRemoteBeadsRef(cwd, operations, {
+  ref = DEFAULT_BEADS_REF,
+  remote = 'origin',
+  message = 'beads: update',
+  dryRun = false,
+  skipClosedUpserts = false,
+  maxRetries = 5,
+  beforePush = null,
+  ...applyOpts
+} = {}) {
+  assertMemoryRef(ref);
+  const repoTop = resolveGitRoot(cwd);
+  assertNotSymbolicRef(repoTop, ref);
+  assertRefNotCheckedOut(repoTop, ref);
+  assertConfiguredRemote(repoTop, remote);
+
+  if (!dryRun) {
+    const rawPushUrls = git(['remote', 'get-url', '--push', '--all', '--', remote], { cwd: repoTop });
+    const pushUrls = rawPushUrls.length === 0 ? [] : rawPushUrls.replace(/\r?\n$/, '').split('\n');
+    if (pushUrls.length !== 1) {
+      throw new BeadsValidationError(`Remote "${remote}" has ${pushUrls.length} push URLs; beads remote apply requires a single push destination for atomic --force-with-lease`);
+    }
+  }
+
+  const shortBranch = ref.replace(/^refs\/heads\//, '');
+  const trackingRef = `refs/remotes/${remote}/${shortBranch}`;
+  assertNotSymbolicRef(repoTop, trackingRef);
+
+  const attempts = dryRun ? 1 : Math.max(1, maxRetries);
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const remoteState = fetchRemoteBeadsTreeNoRef(repoTop, remote, ref);
+
+    let effectiveOps = operations;
+    let skippedClosed = [];
+    if (skipClosedUpserts) {
+      const filtered = filterClosedUpsertOperations(remoteState.beads, operations, {
+        singleAppOnly: Boolean(applyOpts.singleAppOnly),
+      });
+      effectiveOps = filtered.activeOperations;
+      skippedClosed = filtered.skippedClosed;
+    }
+
+    if (effectiveOps.length === 0) {
+      return {
+        ref,
+        remote,
+        dryRun: Boolean(dryRun),
+        changed: false,
+        pushed: false,
+        commitSha: remoteState.sha,
+        createdIds: [],
+        updatedIds: [],
+        untouchedIds: [],
+        skippedClosed,
+        count: remoteState.beads.size,
+      };
+    }
+
+    const applied = applyOperations(remoteState.beads, effectiveOps, applyOpts);
+    const changed = applied.changedIds.length > 0;
+    if (dryRun || !changed) {
+      return {
+        ref,
+        remote,
+        dryRun: Boolean(dryRun),
+        changed,
+        pushed: false,
+        commitSha: remoteState.sha,
+        createdIds: applied.createdIds,
+        updatedIds: applied.updatedIds,
+        untouchedIds: applied.untouchedIds,
+        skippedClosed,
+        count: applied.beads.size,
+      };
+    }
+
+    const treeSha = buildTreeFromMap(repoTop, applied.beads);
+    const parents = remoteState.sha ? [remoteState.sha] : [];
+    const commitSha = commitTree(repoTop, treeSha, parents, message);
+
+    if (typeof beforePush === 'function') {
+      beforePush({ attempt, expectedSha: remoteState.sha, commitSha });
+    }
+
+    const leaseArg = remoteState.sha ? `--force-with-lease=${ref}:${remoteState.sha}` : `--force-with-lease=${ref}:`;
+    try {
+      git(['-c', `remote.${remote}.fetch=`, '-c', `remote.${remote}.mirror=false`, 'push', '--no-follow-tags', '--recurse-submodules=no', leaseArg, '--', remote, `${commitSha}:${ref}`], { cwd: repoTop });
+    } catch (error) {
+      if (isLeasePushRejection(error)) {
+        if (attempt + 1 < attempts) continue;
+        throw new BeadsConflictError(`Concurrent remote update conflict on ${remote}/${shortBranch} after ${attempts} attempt(s)`);
+      }
+      throw error;
+    }
+
+    // Remote push succeeded; local tracking/mirror ref updates are strictly best-effort so a local
+    // ref lock error never turns a published push into a reported failure.
+    try {
+      git(['update-ref', '--no-deref', trackingRef, commitSha], { cwd: repoTop });
+    } catch {
+      // Best-effort tracking ref mirror update.
+    }
+    const localSha = gitRefSha(repoTop, ref);
+    if (!localSha) {
+      try {
+        updateMemoryRefCas(repoTop, ref, commitSha, ZERO_OID);
+      } catch {
+        // Best-effort local mirror update; remote push already succeeded.
+      }
+    } else if (localSha === remoteState.sha || isAncestor(repoTop, localSha, commitSha)) {
+      try {
+        updateMemoryRefCas(repoTop, ref, commitSha, localSha);
+      } catch {
+        // Best-effort local mirror update; remote push already succeeded.
+      }
+    }
+
+    return {
+      ref,
+      remote,
+      dryRun: false,
+      changed: true,
+      pushed: true,
+      commitSha,
+      createdIds: applied.createdIds,
+      updatedIds: applied.updatedIds,
+      untouchedIds: applied.untouchedIds,
+      skippedClosed,
+      count: applied.beads.size,
+    };
+  }
+
+  throw new BeadsConflictError(`Failed to apply remote update on ${remote}/${shortBranch}`);
 }
