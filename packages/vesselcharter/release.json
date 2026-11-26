@@ -1,0 +1,39 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "vesselcharter-v",
+  "displayName": "VesselCharter",
+  "app": "vesselcharter",
+  "run": "vessels.nii.gz results",
+  "readme": {
+    "run": "Characterise vessel diameter, branching and tortuosity from a 3D binary mask",
+    "notes": [
+      "Give a 3D binary NIfTI vessel mask (such as the segmentation output from VesselBoost)",
+      "and a new or empty output directory.",
+      "Optionally pass --brain-mask BRAIN.nii.gz on the same grid to compute ROI vessel",
+      "volume fraction, length density and junction density.",
+      "Add --help for every setting.",
+      "No network connection is required. Input is NIfTI only.",
+      "",
+      "VesselCharter is research software. Review resolution-limited flags on thin vessels",
+      "whose diameter is under twice the largest voxel spacing."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "vesselcharter"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "vesselcharter.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "vesselcharter"
+    }
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "oracle": "scikit-image + SciPy + Skan (BSD-3-Clause)",
+  "versions": {
+    "python": "3.12.14",
+    "numpy": "2.5.5",
+    "scipy": "1.18.1",
+    "nibabel": "5.5.0",
+    "scikit_image": "0.26.0",
+    "skan": "0.13.1"
+  },
+  "fixture": {
+    "path": "apps/vesselboost/test/fixtures/upstream-reference/lausanne-tof-crop-192x192x64_vesselboost-manual_0429.nii.gz",
+    "sha256": "6502ec4c92e57bc98fda8d2c33f6cbd305d147a6d12b9982cf0932a2e37a3a1d",
+    "shape": [
+      192,
+      192,
+      64
+    ],
+    "spacing_mm": [
+      0.46875,
+      0.46875,
+      0.699999988079071
+    ],
+    "vessel_voxels": 33894
+  },
+  "edt_parity": {
+    "max_abs_diff_mm": 0,
+    "max_fg_abs_diff_mm": 0,
+    "scipy_max_mm": 2.838965708752255,
+    "scipy_mean_mm": 0.868959132623367
+  },
+  "same_skeleton_graph_parity": {
+    "skeleton_voxels": 1615,
+    "skan_branch_count": 221,
+    "skan_total_length_mm": 1132.7186,
+    "vesselcharter_unpruned_segment_count": 137,
+    "vesselcharter_unpruned_raw_length_mm": 1068.0026,
+    "length_relative_diff": 0.057133
+  },
+  "independent_lee94_comparison": {
+    "skimage_skeleton_voxels": 1395,
+    "vesselcharter_skeleton_voxels": 1615,
+    "skimage_skan_branch_count": 120,
+    "skimage_skan_total_length_mm": 976.1903,
+    "vesselcharter_default_segment_count": 111,
+    "vesselcharter_default_smoothed_length_mm": 964.6748,
+    "vesselcharter_default_raw_length_mm": 1056.1251,
+    "vesselcharter_default_median_diameter_mm": 1.1827,
+    "vesselcharter_default_equiv_diameter_mm": 1.8905,
+    "skimage_to_vc_median_sep_mm": 0,
+    "skimage_to_vc_p90_sep_mm": 0.6629,
+    "vc_to_skimage_median_sep_mm": 0,
+    "note": "scikit-image's Homann Lee94 omits endpoint preservation during sequential Step-2 re-verification, dropping 2 of 35 connected components and shortening free tips. VesselCharter preserves all 35 components and full branch tips while keeping median centerline separation at 0.0-0.47 mm (<= 1 voxel)."
+  }
+}
