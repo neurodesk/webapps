@@ -24,6 +24,7 @@ network.
 | `packages/lcmodel/src/tissue.js` | LCModel's tissue- and alpha-corrected concentrations, the relaxation times behind them, when the correction applies, and its two downloads; the app and the `lcmodel` command line both use it | `packages/lcmodel/test/tissue.test.js` |
 | `packages/lcmodel/src/lcmodel-io.js:1-321` (all but `fillGaps`) | The control file every LCModel fit runs with, and how the app reads LCModel's .COORD and .TABLE files back: the concentrations, QC summary, curves, diagnostics and stop messages users see and download | `packages/lcmodel/test/lcmodel-io.test.js` |
 | `packages/lcmodel/src/voxel.js` | Which T1 voxels the spectroscopy voxel covers and the GM, WM and CSF fractions behind every tissue-corrected concentration | `packages/lcmodel/test/voxel.test.js`, without its three large-grid tests |
+| `packages/components/src/automation/abort.js` | Shared abortable task wrapper used across apps; a defect leaks abort listeners, hangs cancellation when cleanup fails, or exposes stale results after abort | `packages/components/test/automation-abort.test.js` |
 
 `formatG` is mutated by line range because the rest of `index.js` drives the
 WebAssembly module. Its command selects the two `printf` tests by name; the rest
@@ -334,6 +335,20 @@ no new survivor remains from the metadata validation:
   excluded-tool list only removes an empty `devDependencies` mapping. pnpm
   omits that empty mapping; all actual roots and their closures remain
   identical.
+
+The 2026-11-26 `automation-abort` pilot assessed 20 mutants in
+`packages/components/src/automation/abort.js`: the initial 2-test suite left 6
+survivors (missing signal, failing `cancel()` callback, and late task resolution
+racing an async `cancel()`). Adding behavioral tests for those contracts raised
+detection to 18 of 20 mutants (7 killed, 11 timed out, 2 equivalent survivors,
+no compile or runtime errors). Rerun with
+`MUTATION_MODULE=automation-abort pnpm exec stryker run stryker.config.mjs`.
+
+Equivalent mutants in `automation-abort`:
+
+- `abort.js:10`, `{ once: true }` to `{}` or `{ once: false }`: an `AbortSignal`
+  dispatches `abort` at most once in its lifetime and `finally` removes the
+  listener.
 
 The pilot on 2026-10-10 killed all 10 mutants in `disconnectome.js`.
 

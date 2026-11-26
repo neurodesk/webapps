@@ -29,6 +29,10 @@ function displayUpdate(update, count) {
   return { index, options };
 }
 
+/**
+ * @param {any} nv
+ * @param {{ tabs?: any, regions?: any }} [options]
+ */
 export function createNiivueAdapter(nv, { tabs, regions } = {}) {
   let location = null;
   const context = nv.createExtensionContext?.();

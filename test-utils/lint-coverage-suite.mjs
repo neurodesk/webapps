@@ -49,7 +49,7 @@ test('every owned tracked source receives nonempty correctness rules', async () 
   }
   assert.ok(files.length > 1500);
   // Rolled-out projects stay typed; see the inventory in docs/development/correctness-lint.md.
-  for (const name of ['zarro', 'deface', 'dwi2trx', 'browserqc', 'agentic', 'dicompare']) assert.ok(typedPromiseProjects.some((project) => project.name === name), name);
+  for (const name of ['zarro', 'deface', 'dwi2trx', 'browserqc', 'agentic', 'dicompare', 'components-automation']) assert.ok(typedPromiseProjects.some((project) => project.name === name), name);
   await assertCoverage(eslint, files);
 });
 
@@ -65,12 +65,13 @@ test('an ignore or empty configuration cannot silently remove owned source', asy
     return { rules: { 'no-unreachable': [2], 'no-dupe-keys': [2], 'no-constant-condition': [2] } };
   } };
   for (const project of typedPromiseProjects) {
-    const { tsconfig } = project;
-    const file = `${sourceDirectory(project)}new-file.ts`;
+    const { tsconfig, includeJs } = project;
+    const ext = includeJs ? 'js' : 'ts';
+    const file = `${sourceDirectory(project)}new-file.${ext}`;
     const otherProject = typedPromiseProjects.find((other) => other !== project).tsconfig;
     await assert.rejects(assertCoverage(coreOnly, [file]), /No effective correctness rules/);
     const typedConfig = (floating, project) => ({ async calculateConfigForFile() {
-      const rules = { 'no-unreachable': [2], 'no-dupe-keys': [2], 'no-constant-condition': [2], '@typescript-eslint/no-misused-promises': [2] };
+      const rules = { 'no-unreachable': [2], 'no-dupe-keys': [2], 'no-constant-condition': [2], ...(includeJs ? { 'no-undef': [2] } : {}), '@typescript-eslint/no-misused-promises': [2] };
       return { rules: { ...rules, '@typescript-eslint/no-floating-promises': [2, floating] }, languageOptions: { parserOptions: { project } } };
     } });
     await assertCoverage(typedConfig({ ignoreVoid: false }, [`./${tsconfig}`]), [file]);
@@ -174,20 +175,26 @@ test('preserved workspace tasks include chained checks and no empty turbo fallba
 test('each typed project checks new source, async callbacks and ignored promises', async () => {
   const floating = '@typescript-eslint/no-floating-promises';
   const misused = '@typescript-eslint/no-misused-promises';
-  const cases = [
-    ['floating.ts', 'export {}; Promise.resolve(1);', floating],
-    ['void.ts', 'export {}; void Promise.resolve(1);', floating],
-    ['callback.ts', 'export {}; document.addEventListener("click", async () => { await Promise.resolve(1); });', misused],
-    ['condition.ts', 'export {}; if (Promise.resolve(true)) { console.log("unreachable decision"); }', misused],
-    ['awaited.ts', 'export async function run() { await Promise.resolve(1); }', null],
-    ['handled.ts', 'export {}; Promise.reject(new Error("reported")).catch((error: unknown) => { console.error(error); });', null],
-  ];
-  const directories = [];
+  const casesFor = (includeJs) => {
+    const ext = includeJs ? 'js' : 'ts';
+    return [
+      [`floating.${ext}`, 'export {}; Promise.resolve(1);', floating],
+      [`thenable.${ext}`, includeJs ? '/** @returns {PromiseLike<number>} */\nfunction make() { return { then(onFulfilled) { return Promise.resolve(onFulfilled ? onFulfilled(1) : /** @type {any} */ (1)); } }; }\nexport function run() { make(); }' : 'function make(): PromiseLike<number> { return { then(onFulfilled) { return Promise.resolve(onFulfilled ? onFulfilled(1) : 1 as never); } }; }\nexport function run() { make(); }', floating],
+      [`void.${ext}`, 'export {}; void Promise.resolve(1);', floating],
+      [`callback.${ext}`, 'export {}; document.addEventListener("click", async () => { await Promise.resolve(1); });', misused],
+      [`condition.${ext}`, 'export {}; if (Promise.resolve(true)) { console.log("unreachable decision"); }', misused],
+      [`awaited.${ext}`, 'export async function run() { await Promise.resolve(1); }', null],
+      [`handled.${ext}`, includeJs ? 'export {}; Promise.reject(new Error("reported")).catch((error) => { console.error(error); });' : 'export {}; Promise.reject(new Error("reported")).catch((error: unknown) => { console.error(error); });', null],
+    ];
+  };
+  const entries = [];
   try {
     for (const project of typedPromiseProjects) {
       const sources = sourceDirectory(project);
+      const ext = project.includeJs ? 'js' : 'ts';
+      const cases = casesFor(project.includeJs);
       const directory = await canaryDirectory(`${sources}promise-canary-`);
-      directories.push(directory);
+      entries.push({ directory, ext });
       for (const [name, source] of cases) await writeFile(join(directory, name), source);
       const results = await eslint.lintFiles(cases.map(([name]) => join(directory, name)));
       for (const [name, , expected] of cases) {
@@ -198,37 +205,39 @@ test('each typed project checks new source, async callbacks and ignored promises
         if (expected) assert.ok(errors.some((message) => message.ruleId === expected), `${sources}${name}`);
         else assert.deepEqual(errors, [], `${sources}${name}`);
       }
-      const newFile = join(directory, 'floating.ts').slice(root.length);
+      const newFile = join(directory, `floating.${ext}`).slice(root.length);
       assert.ok(sourceInventory(root).includes(newFile));
       await assertCoverage(eslint, [newFile]);
       // TypeScript itself rejects an always-true promise condition; the gate's compile step would report it first.
-      await rm(join(directory, 'condition.ts'));
+      await rm(join(directory, `condition.${ext}`));
     }
     const result = spawnSync('pnpm', ['lint:correctness'], { cwd: root, encoding: 'utf8' });
     assert.equal(result.status, 1);
-    for (const directory of directories) {
+    for (const { directory, ext } of entries) {
       const prefix = directory.slice(root.length).replaceAll('\\', '/');
-      assert.match(result.stderr, new RegExp(`${prefix}/floating\\.ts:1:12 @typescript-eslint/no-floating-promises`));
-      assert.match(result.stderr, new RegExp(`${prefix}/void\\.ts:1:12 @typescript-eslint/no-floating-promises`));
-      assert.match(result.stderr, new RegExp(`${prefix}/callback\\.ts:1:\\d+ @typescript-eslint/no-misused-promises`));
+      assert.match(result.stderr, new RegExp(`${prefix}/floating\\.${ext}:1:12 @typescript-eslint/no-floating-promises`));
+      assert.match(result.stderr, new RegExp(`${prefix}/thenable\\.${ext}:\\d+:\\d+ @typescript-eslint/no-floating-promises`));
+      assert.match(result.stderr, new RegExp(`${prefix}/void\\.${ext}:1:12 @typescript-eslint/no-floating-promises`));
+      assert.match(result.stderr, new RegExp(`${prefix}/callback\\.${ext}:1:\\d+ @typescript-eslint/no-misused-promises`));
     }
   } finally {
-    for (const directory of directories) await rm(directory, { recursive: true, force: true });
+    for (const { directory } of entries) await rm(directory, { recursive: true, force: true });
   }
 });
 
 test('a typed project that does not compile fails the gate instead of typing promises as any', async () => {
   for (const project of typedPromiseProjects) {
-    const { tsconfig } = project;
+    const { tsconfig, includeJs } = project;
+    const ext = includeJs ? 'js' : 'ts';
     const directory = await canaryDirectory(`${sourceDirectory(project)}type-canary-`);
     try {
-      const file = join(directory, 'unresolved.ts');
+      const file = join(directory, `unresolved.${ext}`);
       await writeFile(file, 'import { load } from "./missing-module.js";\nexport function run() { load(); }\n');
       // The parser would type the unresolved import as any and report nothing; the compile step must fail first.
       const relativeFile = file.slice(root.length).replaceAll('\\', '/');
       await assert.rejects(inspect(eslint, [relativeFile], {}), (error) => {
         assert.match(error.message, new RegExp(`${tsconfig.replaceAll('.', '\\.')} does not compile`));
-        assert.match(error.message, /unresolved\.ts\(1,\d+\): error TS2307/);
+        assert.match(error.message, new RegExp(`unresolved\\.${ext}\\(1,\\d+\\): error TS2307`));
         return true;
       });
     } finally {

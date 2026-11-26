@@ -89,6 +89,7 @@ entire catalog is a separate migration.
 | Root agentic tests (`test/agentic`, `test-utils/agentic-browser.ts`, `e2e.config.ts`) | 3 | `tsconfig.agentic.json` compiles | 0 | Typed; `test:e2e:types` still compiles it with TypeScript 7 |
 | DWI2TRX (`apps/dwi2trx/src`) | 21 | `apps/dwi2trx/tsconfig.json` compiles | 10 floating, all in `main.ts` | Typed; findings fixed |
 | Dicompare (`apps/dicompare/src`) | 140 | `apps/dicompare/tsconfig.json` compiles | 86 after upstream sync: 34 floating, 52 misused | Typed; findings fixed on 2026-10-17, adaptations in `upstream.json` |
+| Components automation (`packages/components/src/automation`) | 12 JS | `packages/components/tsconfig.automation-lint.json` compiles (`allowJs` + `checkJs`) | 3 floating (`app-automation.js`, `await-pipeline-step.js`) | Typed JS pilot; findings fixed on 2026-11-26 |
 
 The root agentic tests had no findings: their promises are already awaited.
 Their project now includes `test/agentic/**/*.ts` so a new file in a

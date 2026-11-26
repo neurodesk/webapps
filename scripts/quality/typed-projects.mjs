@@ -1,8 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 
-// TypeScript projects whose sources receive the type-aware promise rules.
-// Each `sources` entry is a directory (trailing `/`, every TS source below it) or
+// TypeScript and checkJs projects whose sources receive the type-aware promise rules.
+// Each `sources` entry is a directory (trailing `/`, every matched source below it) or
 // one file. Those sources are linted against `tsconfig`, which the pinned
 // TypeScript 5 compiler must accept first. See docs/development/correctness-lint.md.
 export const typedPromiseProjects = [
@@ -16,20 +16,31 @@ export const typedPromiseProjects = [
     tsconfig: 'tsconfig.agentic.json',
   },
   { name: 'dicompare', sources: ['apps/dicompare/src/'], tsconfig: 'apps/dicompare/tsconfig.json' },
+  {
+    name: 'components-automation',
+    sources: ['packages/components/src/automation/'],
+    tsconfig: 'packages/components/tsconfig.automation-lint.json',
+    includeJs: true,
+  },
 ];
 
 export const promiseRules = ['@typescript-eslint/no-floating-promises', '@typescript-eslint/no-misused-promises'];
 
 const typescriptSource = /\.[cm]?tsx?$/;
+const javascriptOrTypescriptSource = /\.(?:[cm]?js|jsx|[cm]?ts|tsx)$/;
 
 export function typedProjectFor(file) {
-  if (!typescriptSource.test(file)) return undefined;
-  return typedPromiseProjects.find(({ sources }) => sources.some((source) => source.endsWith('/') ? file.startsWith(source) : file === source));
+  return typedPromiseProjects.find((project) => {
+    const pattern = project.includeJs ? javascriptOrTypescriptSource : typescriptSource;
+    if (!pattern.test(file)) return false;
+    return project.sources.some((source) => source.endsWith('/') ? file.startsWith(source) : file === source);
+  });
 }
 
 // ESLint `files` patterns covering the same sources as typedProjectFor.
-export function typedSourceGlobs({ sources }) {
-  return sources.map((source) => source.endsWith('/') ? `${source}**/*.{ts,tsx,mts,cts}` : source);
+export function typedSourceGlobs({ sources, includeJs }) {
+  const extensions = includeJs ? '{js,mjs,cjs,jsx,ts,tsx,mts,cts}' : '{ts,tsx,mts,cts}';
+  return sources.map((source) => source.endsWith('/') ? `${source}**/*.${extensions}` : source);
 }
 
 // The lint parser does not report semantic errors: an unresolved import becomes

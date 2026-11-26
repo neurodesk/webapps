@@ -1,0 +1,14 @@
+[
+  {
+    "file": "apps/histo2mri/src/core/nmi.js",
+    "kind": "files",
+    "name": "apps/histo2mri/src/core/nmi.js",
+    "reason": "Pre-existing unused re-export shim for @neurodesk/histo2mri/core/nmi pending review or removal."
+  },
+  {
+    "file": "exes/syncro/scripts/freeze-deshear.mjs",
+    "kind": "files",
+    "name": "exes/syncro/scripts/freeze-deshear.mjs",
+    "reason": "Historical pre-port fixture generator referencing removed packages/syncro/src/pipeline.js, retained for provenance of exes/syncro/core/tests/deshear.rs."
+  }
+]

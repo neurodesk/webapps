@@ -27,6 +27,11 @@ async function candidate(file, sidecars, signal) {
   return { filename: file.name, sha256: await sha256(bytes, signal), dimensions: header.dims.slice(1, header.dims[0] + 1), metadata };
 }
 
+/**
+ * @param {File[]} files
+ * @param {any} input
+ * @param {{ selection?: any, convertDicom?: any, signal?: AbortSignal }} [options]
+ */
 export async function prepareImageInput(files, input, { selection, convertDicom, signal } = {}) {
   const direct = files.filter(isNifti);
   const dicom = files.filter(file => !isNifti(file) && !/\.(?:json|bval|bvec)$/i.test(file.name));

@@ -104,6 +104,13 @@ export const modules = [
     files: ['packages/lcmodel/package.json', 'packages/lcmodel/test/voxel.test.js'],
     command: 'node --test --test-skip-pattern=oblique --test-skip-pattern=oriented packages/lcmodel/test/voxel.test.js',
   },
+  {
+    id: 'automation-abort',
+    file: 'packages/components/src/automation/abort.js',
+    mutate: 'packages/components/src/automation/abort.js',
+    files: ['packages/components/package.json', 'packages/components/test/automation-abort.test.js'],
+    command: 'node --test packages/components/test/automation-abort.test.js',
+  },
 ];
 
 // The PR canary: tableName, a small naming function in the first module.

@@ -5,6 +5,9 @@ export const agentServerPort = 4242;
  * Connects the page's NiiVue viewer to an nv-mcp server on this computer, such as `neurodesk-mcp`, so an agent can
  * drive it with nv-mcp's tools. Nothing connects until `connect()`, which a person starts from the page; the client
  * then keeps retrying until `disconnect()`, so the server may start before or after.
+ *
+ * @param {() => any} findViewer
+ * @param {{ port?: number, WebSocket?: typeof WebSocket, storage?: Pick<Storage, 'getItem' | 'setItem'> | null }} [options]
  */
 export function createAgentConnection(findViewer, { port = agentServerPort, WebSocket, storage } = {}) {
   const watchers = new Set();
