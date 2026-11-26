@@ -17,6 +17,7 @@ export const exclusions = {
   'packages/easy-mp2rage/wasm/mp2rage_wasm.js': 'Generated wasm-bindgen glue, rebuilt by WASM parity CI.',
   'packages/nii2tvx/wasm/nii2tvx.mjs': 'Generated Emscripten glue, rebuilt by make.',
   'packages/ants-denoise/wasm/ants-denoise.mjs': 'Generated Emscripten glue, rebuilt by scripts/build.sh in that package.',
+  'packages/laynii/wasm/laynii.mjs': 'Generated Emscripten glue, rebuilt by scripts/build.sh in that package.',
   'packages/n4/wasm/n4-bias.mjs': 'Generated Emscripten glue, rebuilt by scripts/build.sh in that package.',
   'packages/hmc-registration/wasm/hmc-registration.mjs': 'Generated Emscripten glue, rebuilt by scripts/build.sh in that package.',
   'packages/registration/wasm/syncro-registration.mjs': 'Generated Emscripten glue.',

@@ -87,7 +87,7 @@ export function callCondition(name, { sweep }) {
 export const WITHHELD_CONDITION = `\${{ !cancelled() && ${NOT_DRAFT_CONDITION} && needs.gate.outputs.withheld == 'true' }}`;
 
 export function renderNativeWorkflow(workflows, { name = DISPATCHER, cron = shardCron(0) } = {}) {
-  const gateFiles = [`.github/workflows/${name}.yml`, '.github/workflows/pr-gate.yml', 'scripts/workflow-gate.mjs', 'scripts/lib/workflow-gate.mjs'];
+  const gateFiles = [`.github/workflows/${name}.yml`, '.github/workflows/pr-gate.yml', 'scripts/workflow-gate.mjs', 'scripts/lib/workflow-gate.mjs', 'scripts/lib/native-dispatcher.mjs'];
   const paths = [...gateFiles, ...new Set(workflows.flatMap(([, flow]) => sharedPaths(flow)).sort())];
   const calls = workflows.flatMap(([calledName, flow]) => [
     '',
