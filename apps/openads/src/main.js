@@ -114,27 +114,35 @@ let job = null;
 const view = { baseKey: null, overlayKey: null };
 const rememberedAssignments = new WeakMap();
 
+function sameFileSet(a, b) {
+  if (a.length !== b.length) return false;
+  const remaining = new Set(a);
+  return b.every((file) => remaining.delete(file));
+}
+
 function rememberCurrentAssignment() {
   if (!files.length) return;
-  const key = files[0];
-  const entries = rememberedAssignments.get(key) || [];
-  const next = { files: [...files], assigned: { ...assigned } };
-  const idx = entries.findIndex(
-    (entry) => entry.files.length === next.files.length && entry.files.every((f, i) => f === next.files[i]),
-  );
-  if (idx >= 0) entries[idx] = next;
-  else entries.push(next);
-  rememberedAssignments.set(key, entries);
+  const roleByFile = new Map();
+  for (const { role } of ROLES) {
+    const idx = assigned[role];
+    if (idx !== null && files[idx]) roleByFile.set(files[idx], role);
+  }
+  const next = { files: [...files], roleByFile };
+  for (const key of files) {
+    const entries = rememberedAssignments.get(key) || [];
+    const idx = entries.findIndex((entry) => sameFileSet(entry.files, next.files));
+    if (idx >= 0) entries[idx] = next;
+    else entries.push(next);
+    rememberedAssignments.set(key, entries);
+  }
 }
 
 function findRememberedAssignment(list) {
   if (!list.length) return null;
   const entries = rememberedAssignments.get(list[0]);
   if (!entries) return null;
-  const match = entries.find(
-    (entry) => entry.files.length === list.length && entry.files.every((f, i) => f === list[i]),
-  );
-  return match ? { ...match.assigned } : null;
+  const match = entries.find((entry) => sameFileSet(entry.files, list));
+  return match ? match.roleByFile : null;
 }
 
 function hasLoadedImage() {
@@ -462,10 +470,11 @@ toolbar.control('overlayOpacity').addEventListener('input', (event) => {
   }
 });
 
-async function loadInputFiles(incoming, explicitRoleByFile = null, signal = null, restoredAssigned = null) {
+async function loadInputFiles(incoming, explicitRoleByFile = null, signal = null, restoredRoleByFile = null) {
   const list = Array.from((await incoming) || []);
   if (!list.length) return inputGeneration;
   const current = begin('loading', 'Reading input files…', signal);
+  const generation = ++inputGeneration;
   const assertStillCurrent = () => {
     if (job !== current || current.controller.signal.aborted) {
       throw current.controller.signal.reason || new DOMException('Import superseded.', 'AbortError');
@@ -495,9 +504,16 @@ async function loadInputFiles(incoming, explicitRoleByFile = null, signal = null
         if (role) explicitRoles[role] = idx;
       });
     }
-    const generation = ++inputGeneration;
     files = all;
-    assigned = restoredAssigned ? { ...restoredAssigned } : assignRoles(files, explicitRoles);
+    if (restoredRoleByFile instanceof Map) {
+      assigned = Object.fromEntries(ROLES.map(({ role }) => [role, null]));
+      all.forEach((file, idx) => {
+        const role = restoredRoleByFile.get(file);
+        if (role && role in assigned && assigned[role] === null) assigned[role] = idx;
+      });
+    } else {
+      assigned = assignRoles(files, explicitRoles);
+    }
     rememberCurrentAssignment();
     syncInputFiles(files);
     renderInputs();

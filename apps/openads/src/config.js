@@ -79,11 +79,11 @@ export function assignRoles(files, explicitRoles = {}) {
         jsonIndices.push(index);
       }
     });
-    const exactMatch = jsonIndices.find((index) => stripExtension(files[index].name) === pwiStem);
-    if (exactMatch !== undefined) {
-      assigned['pwi-json'] = exactMatch;
-      used.add(exactMatch);
-    } else {
+    const exactMatches = jsonIndices.filter((index) => stripExtension(files[index].name) === pwiStem);
+    if (exactMatches.length === 1) {
+      assigned['pwi-json'] = exactMatches[0];
+      used.add(exactMatches[0]);
+    } else if (exactMatches.length === 0) {
       const pwiNamed = jsonIndices.filter((index) => classifyFileName(files[index].name) === 'pwi-json');
       if (pwiNamed.length === 1) {
         assigned['pwi-json'] = pwiNamed[0];

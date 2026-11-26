@@ -28,6 +28,9 @@ test('assignRoles matches PWI JSON sidecar to the selected PWI scan and skips un
 
   const stemWins = assignRoles(mkFiles(['case_dsc_run-1.json', 'case_dsc_run-2.json', 'case_dsc_run-2.nii.gz']));
   assert.equal(stemWins['pwi-json'], 1);
+
+  const duplicateStem = assignRoles(mkFiles(['case_pwi.json', 'case_pwi.json', 'case_pwi.nii.gz']));
+  assert.equal(duplicateStem['pwi-json'], null);
 });
 
 test('detectMode chooses dwi-pwi, dwi, or mni-report accurately', () => {
