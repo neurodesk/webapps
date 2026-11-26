@@ -6656,6 +6656,55 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       new Map(),
       (plan) => assert.equal(plan.allApps, true),
     ],
+    [
+      'dispatcher default parameter mutating app fails closed',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ env: { APP: '${{ matrix.app }}' }, run: 'node scripts/e2e-test-data.mjs "$APP"' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/e2e-test-data.mjs': "import { provisionTestData } from './lib/e2e-test-data.mjs';\nconst [app] = process.argv.slice(2);\nawait provisionTestData(app);\n",
+        'scripts/lib/e2e-test-data.mjs': "import { readFileSync } from 'node:fs';\nexport const provisioners = { noddi: { provision: () => readFileSync('exes/ref/sample.txt') } };\nexport async function provisionTestData(app, cache = (app = 'noddi')) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+        'exes/ref/sample.txt': 'data\n',
+      },
+      'exes/ref/sample.txt',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'dynamic cross-workspace npm --prefix command preserves standalone lint runner edge',
+      {
+        'scripts/lint.mjs': 'export const lint = 1;\n',
+        'apps/n4/package.json': JSON.stringify({ name: '@nd/n4', scripts: { build: 'npm --prefix ../../packages/demo run "$CHECK"' } }),
+        'packages/demo/package.json': JSON.stringify({ name: '@nd/demo', scripts: { lint: 'node ../../scripts/lint.mjs --workspace' } }),
+      },
+      'scripts/lint.mjs',
+      new Map(),
+      (plan) => assert.deepEqual(plan.selected.map((app) => app.id), ['n4']),
+    ],
+    [
+      'mutable default fs namespace aliased and patched does not narrow JSON path away from siblings',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'node scripts/ci-helper.mjs' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/ci-helper.mjs': "import fs from 'node:fs';\nconst io = fs;\nconst orig = io.readFileSync;\nio.readFileSync = () => orig('exes/demo/sample.json', 'utf8');\nfs.readFileSync('exes/demo/manifest.json', 'utf8');\n",
+        'exes/demo/manifest.json': '{}',
+        'exes/demo/sample.json': '{}',
+      },
+      'exes/demo/sample.json',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
   ]) {
     const caseRoot = await mkdtemp(join(tmpdir(), 'neurodesk-cross-lint-'));
     t.after(() => rm(caseRoot, { recursive: true, force: true }));

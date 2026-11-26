@@ -135,15 +135,15 @@ function analyzeScriptFile(source, file) {
       specifiers.push({ value: null, kind, range: node.range, namedImports: null, localBindings: null });
     }
   };
-  // Collect authentic `readFile`/`readFileSync` and `join`/`resolve` bindings
-  // imported from Node built-in `fs` / `path` modules and reject any binding
-  // that is shadowed, reassigned, or mutated anywhere in the module.
+  // Collect authentic named `readFile`/`readFileSync` and `join`/`resolve`
+  // bindings imported from Node built-in `fs`/`path` modules. Reject any file
+  // that imports mutable default/namespace `fs`/`path` objects or
+  // `syncBuiltinESMExports`, or shadows/reassigns those local binding names.
   const fsModules = new Set(['node:fs', 'fs', 'node:fs/promises', 'fs/promises']);
   const pathModules = new Set(['node:path', 'path', 'node:path/posix', 'path/posix']);
   const readFileIds = new Set();
-  const fsNamespaces = new Set();
   const pathJoinIds = new Set();
-  const pathNamespaces = new Set();
+  let hasMutableBuiltinImport = /\bsyncBuiltinESMExports\b/.test(source);
   for (const stmt of ast.body ?? []) {
     if (stmt.type !== 'ImportDeclaration' || stmt.source?.type !== 'Literal') continue;
     const mod = stmt.source.value;
@@ -151,23 +151,23 @@ function analyzeScriptFile(source, file) {
       for (const spec of stmt.specifiers ?? []) {
         if (spec.type === 'ImportSpecifier' && (moduleExportName(spec.imported) === 'readFile' || moduleExportName(spec.imported) === 'readFileSync') && spec.local?.name) {
           readFileIds.add(spec.local.name);
-        } else if ((spec.type === 'ImportDefaultSpecifier' || spec.type === 'ImportNamespaceSpecifier') && spec.local?.name) {
-          fsNamespaces.add(spec.local.name);
+        } else if (spec.type === 'ImportDefaultSpecifier' || spec.type === 'ImportNamespaceSpecifier') {
+          hasMutableBuiltinImport = true;
         }
       }
     } else if (pathModules.has(mod)) {
       for (const spec of stmt.specifiers ?? []) {
         if (spec.type === 'ImportSpecifier' && (moduleExportName(spec.imported) === 'join' || moduleExportName(spec.imported) === 'resolve') && spec.local?.name) {
           pathJoinIds.add(spec.local.name);
-        } else if ((spec.type === 'ImportDefaultSpecifier' || spec.type === 'ImportNamespaceSpecifier') && spec.local?.name) {
-          pathNamespaces.add(spec.local.name);
+        } else if (spec.type === 'ImportDefaultSpecifier' || spec.type === 'ImportNamespaceSpecifier') {
+          hasMutableBuiltinImport = true;
         }
       }
     }
   }
-  const trackedBindings = new Set([...readFileIds, ...fsNamespaces, ...pathJoinIds, ...pathNamespaces]);
+  const trackedBindings = new Set([...readFileIds, ...pathJoinIds]);
   const taintedBindings = new Set();
-  if (trackedBindings.size > 0) {
+  if (!hasMutableBuiltinImport && trackedBindings.size > 0) {
     const taint = (name) => {
       if (trackedBindings.has(name)) taintedBindings.add(name);
     };
@@ -184,10 +184,8 @@ function analyzeScriptFile(source, file) {
         for (const param of node.params) collectPatternNames(param, taint);
       }
       if (node.type === 'CatchClause' && node.param) collectPatternNames(node.param, taint);
-      if (node.type === 'Identifier' && trackedBindings.has(node.name)) {
-        const parent = anc[anc.length - 1];
-        if (isWriteTarget(node, anc)) taint(node.name);
-        if (parent?.type === 'MemberExpression' && parent.object === node && isWriteTarget(parent, anc.slice(0, -1))) taint(node.name);
+      if (node.type === 'Identifier' && trackedBindings.has(node.name) && isWriteTarget(node, anc)) {
+        taint(node.name);
       }
       anc.push(node);
       for (const key of Object.keys(node)) {
@@ -206,42 +204,20 @@ function analyzeScriptFile(source, file) {
       : (callee?.type === 'MemberExpression' && !callee.computed && callee.property?.type === 'Identifier' ? callee.property.name : null);
     return name === 'join' || name === 'resolve' || name === 'concat';
   };
-  const isAuthenticPathJoinCall = (call) => {
-    if (call?.type !== 'CallExpression') return false;
-    const callee = call.callee;
-    if (callee?.type === 'Identifier') {
-      return pathJoinIds.has(callee.name) && !taintedBindings.has(callee.name);
-    }
-    if (
-      callee?.type === 'MemberExpression'
-      && !callee.computed
-      && callee.object?.type === 'Identifier'
-      && pathNamespaces.has(callee.object.name)
-      && !taintedBindings.has(callee.object.name)
-      && callee.property?.type === 'Identifier'
-    ) {
-      return callee.property.name === 'join' || callee.property.name === 'resolve';
-    }
-    return false;
-  };
-  const isAuthenticReadFileCall = (call) => {
-    if (call?.type !== 'CallExpression') return false;
-    const callee = call.callee;
-    if (callee?.type === 'Identifier') {
-      return readFileIds.has(callee.name) && !taintedBindings.has(callee.name);
-    }
-    if (
-      callee?.type === 'MemberExpression'
-      && !callee.computed
-      && callee.object?.type === 'Identifier'
-      && fsNamespaces.has(callee.object.name)
-      && !taintedBindings.has(callee.object.name)
-      && callee.property?.type === 'Identifier'
-    ) {
-      return callee.property.name === 'readFile' || callee.property.name === 'readFileSync';
-    }
-    return false;
-  };
+  const isAuthenticPathJoinCall = (call) => Boolean(
+    !hasMutableBuiltinImport
+    && call?.type === 'CallExpression'
+    && call.callee?.type === 'Identifier'
+    && pathJoinIds.has(call.callee.name)
+    && !taintedBindings.has(call.callee.name),
+  );
+  const isAuthenticReadFileCall = (call) => Boolean(
+    !hasMutableBuiltinImport
+    && call?.type === 'CallExpression'
+    && call.callee?.type === 'Identifier'
+    && readFileIds.has(call.callee.name)
+    && !taintedBindings.has(call.callee.name),
+  );
   const isDirectJsonRead = (node) => {
     const parent = ancestors[ancestors.length - 1];
     if (!parent) return false;
@@ -899,6 +875,9 @@ function computeProvisionerOnlyRanges(ast) {
     }
     anc.pop();
   };
+  for (const param of (dispatchNode.params ?? []).slice(1)) {
+    checkDispatchParam(param);
+  }
   checkDispatchParam(dispatchNode.body);
   if (dispatchParamReassigned) return { ok: false, entries: [] };
   const provisionFns = new Set(provisionFnApps.keys());
@@ -1534,11 +1513,15 @@ export async function loadConservativeWorkspaceGraph(root) {
     if (step.actionDir && PINNED_LINT_FREE_ACTIONS.has(step.actionDir)) return false;
     return /\b(?:sh|bash|dash|zsh|eval|exec|source)\b/.test(step.cmd) || /\bnode\s+(?:-[a-z]*[ep]\b|--eval\b|--print\b)/.test(step.cmd);
   });
+  const CROSS_WORKSPACE_TARGET = /(?:--filter\b|-F\b|--dir\b|-C\b|--prefix\b|--cwd\b|-r\b|--recursive\b|\brecursive\b|-w\b|--workspace|\bcd\s+|\.\.)/;
   const anyCrossWorkspaceLint = nodes.some((node) =>
     Object.entries(manifests.get(node)?.scripts ?? {}).some(([k, v]) => {
       if (k === 'lint') return false;
       const str = String(v);
-      return /\blint\b/i.test(str) && /(?:--filter\b|-F\b|--dir\b|-C\b|--prefix\b|--cwd\b|-r\b|--recursive\b|\brecursive\b|-w\b|--workspace|\bcd\s+|\.\.)/.test(str);
+      if (!CROSS_WORKSPACE_TARGET.test(str)) return false;
+      return /\blint\b/i.test(str)
+        || (/\b(?:pnpm|npm|yarn)\b/.test(str) && /[$`]|\$\{\{/.test(str))
+        || /\b(?:eval|exec)\b|\b(?:sh|bash|dash|zsh)\s+-[a-z]*c\b/.test(str);
     }),
   );
   const canStripStandaloneLint =
