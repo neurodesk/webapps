@@ -3403,3 +3403,27 @@ apps:
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
+
+  instanseg:
+    about:
+      - "InstanSeg segments cell nuclei in 2D RGB brightfield histology images (such as H&E tissue sections) in the browser using the pinned InstanSeg brightfield_nuclei model (instanseg_models_v0.1.1 / v0.1.2, Apache-2.0). Inference runs locally on WebGPU when a hardware GPU is available, or on threaded WebAssembly CPU."
+      - "Images are normalised per channel with the 0.1–99.9 percentile window, optionally resampled to the model's native 0.5 µm/px resolution when pixel size (up to 2 µm/px) is provided or read from OME-TIFF/TIFF metadata, and tiled automatically with 80 px overlap and dual-IoU seam stitching for images larger than the tile size."
+      - "Post-processing runs the exact 61-parameter ProbabilityNet pixel classifier, connected-component flood-fill with hole filling, winner-takes-all coordinate assignment, and sparse intersection-over-minimum-area merging (IoMA > 0.3), exporting a calibrated 16-bit (or 32-bit above 65,535 nuclei) label TIFF and a per-nucleus morphometry CSV. For fluorescence microscopy, whole-slide images, or whole-cell segmentation, use the Neurodesk instanseg 0.1.2 container listed under Standalone."
+    packages:
+      - { name: InstanSeg, url: https://github.com/instanseg/instanseg, role: "brightfield_nuclei U-Net backbone and post-processing algorithm (v0.1.2 / instanseg_models_v0.1.1)" }
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai/, role: browser WebGPU and WebAssembly inference }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Nucleus segmentation
+        title: "InstanSeg: an embedding-based instance segmentation algorithm optimized for accurate, efficient and portable cell segmentation"
+        reference: "Goldsborough T, Philps B, O'Callaghan A, Inglis F, Leplat L, Filby A, Bilen H, Bankhead P. InstanSeg: an embedding-based instance segmentation algorithm optimized for accurate, efficient and portable cell segmentation. arXiv:2408.15954. 2024."
+        doi: 10.48550/arXiv.2408.15954
+        code: https://github.com/instanseg/instanseg
+      - group: Browser runtime
+        title: ONNX Runtime
+        reference: "ONNX Runtime developers. ONNX Runtime [Computer software]."
+        url: https://onnxruntime.ai/
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue

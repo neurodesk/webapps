@@ -139,6 +139,7 @@ test('microscopy catalogue groups apps by task without repeating its domain', as
     stardist: 'segmentation',
     cellpose: 'segmentation',
     microsam: 'segmentation',
+    instanseg: 'segmentation',
     'spot-detection': 'spot-detection',
     'calcium-imaging': 'calcium-imaging',
     zarro: 'visualization',

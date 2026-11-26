@@ -43,6 +43,8 @@ for each app are recorded in `registry/apps.yml`.
 - `apps/laynii`: BSD-3-Clause (`packages/laynii/LICENSE`), browser interface for `@neurodesk/laynii`
 - `packages/aurora`: Apache-2.0 (`packages/aurora/LICENSE`, `packages/aurora/NOTICE`), browser inference pipeline for `BrainLesion/AURORA` v0.2.7 (`t1c-o_best`); pretrained model weights from Zenodo 10557069 are CC-BY-4.0 (`models/aurora.manifest.json`)
 - `apps/aurora`: Apache-2.0 (`packages/aurora/LICENSE`), browser interface for `@neurodesk/aurora`
+- `packages/instanseg`: Apache-2.0 (`packages/instanseg/LICENSE`, `packages/instanseg/NOTICE`), browser inference pipeline and post-processing port for `instanseg/instanseg` v0.1.2 (`brightfield_nuclei` from `instanseg_models_v0.1.1`, Apache-2.0; `models/instanseg.manifest.json`)
+- `apps/instanseg`: Apache-2.0 (`packages/instanseg/LICENSE`), browser interface for `@neurodesk/instanseg`
 - `apps/stardist`: BSD-3-Clause (`apps/stardist/LICENSE`), as the StarDist 0.9.1 and CSBDeep 0.8.1 code it
   ports and the pretrained `2D_versatile_fluo`, `2D_versatile_he`, `2D_paper_dsb2018` and `3D_demo` models
   it runs; attribution, and the Boost Software License of the bundled `clipper-lib`, in `apps/stardist/NOTICE`.

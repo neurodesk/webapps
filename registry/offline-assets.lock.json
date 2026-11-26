@@ -5797,6 +5797,21 @@
       "contentType": "application/gzip",
       "kind": "example",
       "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d92e42ac7515e9089de3c4996f61aa05af3cbee0/instanseg/examples/he_brightfield_512.ome.tif": {
+      "sha256": "5c03877e27e07ead98f5fac7bcc671c6b2a3687dfed8d754dfeff2f4ef7b006d",
+      "bytes": 744085,
+      "contentType": "image/tiff",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d92e42ac7515e9089de3c4996f61aa05af3cbee0/instanseg/models/instanseg-brightfield-nuclei.onnx": {
+      "sha256": "62c392fef7f014a0f5847e839b37783f7a732f731136646705dd40ca5a696c46",
+      "bytes": 15287206,
+      "contentType": "application/octet-stream",
+      "kind": "model",
+      "license": "Apache-2.0",
+      "dependencies": []
     }
   },
   "apps": {
@@ -7263,6 +7278,10 @@
     "aurora": [
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/9ea32f6bb6fc9d4c9e4259e3125b9bec432073f1/aurora/examples/BraTS-MET-00110-000-t1c.nii.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/9ea32f6bb6fc9d4c9e4259e3125b9bec432073f1/aurora/models/aurora-t1c-o_best.onnx"
+    ],
+    "instanseg": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d92e42ac7515e9089de3c4996f61aa05af3cbee0/instanseg/examples/he_brightfield_512.ome.tif",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d92e42ac7515e9089de3c4996f61aa05af3cbee0/instanseg/models/instanseg-brightfield-nuclei.onnx"
     ]
   }
 }

@@ -1,0 +1,17 @@
+[
+  {
+    "id": "he-brightfield-512",
+    "label": "H&E brightfield histology (InstanSeg)",
+    "description": "Calibrated 512 × 512 RGB H&E brightfield histology OME-TIFF at 0.500 µm/px from InstanSeg's HE_example.tif (Apache-2.0).",
+    "expectedResult": "About 1,115 cell nuclei segmented; download the 16-bit calibrated label TIFF and per-nucleus morphometry CSV.",
+    "files": [
+      {
+        "role": "image",
+        "name": "he_brightfield_512.ome.tif",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d92e42ac7515e9089de3c4996f61aa05af3cbee0/instanseg/examples/he_brightfield_512.ome.tif",
+        "sha256": "5c03877e27e07ead98f5fac7bcc671c6b2a3687dfed8d754dfeff2f4ef7b006d",
+        "bytes": 744085
+      }
+    ]
+  }
+]

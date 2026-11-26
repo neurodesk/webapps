@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>InstanSeg — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Input image</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" multiple data-neurodesk-input="image" aria-label="Choose a 2D RGB brightfield TIFF, OME-TIFF or PNG image" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop a 2D RGB TIFF, OME-TIFF or PNG image</span>
+          </label>
+          <p class="nd-hint">2D RGB brightfield histology up to 16 MP (0.5 µm/px native).
+            <span class="nd-info-icon" tabindex="0" aria-label="About brightfield inputs">i<span class="nd-info-tooltip">InstanSeg brightfield_nuclei segments 2D RGB brightfield histology images (H&amp;E, DAB) in TIFF, OME-TIFF, or PNG up to 4096 × 4096 pixels. Calibrated images are resampled automatically to 0.5 µm/px and mapped back to original pixels. For whole-slide images or multiplex fluorescence, use the Standalone container.</span></span>
+          </p>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Nucleus segmentation</summary>
+        <div class="nd-section-content">
+          <p id="modelHint" class="nd-hint">Model: Brightfield nuclei (brightfield_nuclei v0.1.1).</p>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <div class="nd-field">
+                <label for="pixelSize">Pixel size (µm/px)
+                  <span class="nd-info-icon" tabindex="0" aria-label="About pixel size">i<span class="nd-info-tooltip">Physical pixel spacing in micrometres. Leave blank to use the file metadata or run at the native 0.5 µm/px model scale without resampling.</span></span>
+                </label>
+                <input id="pixelSize" type="number" min="0.05" max="2" step="0.01" placeholder="Auto (0.50 µm)" />
+              </div>
+              <div class="nd-field">
+                <label for="seedThreshold">Seed threshold <small>0.05–0.95</small>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the seed threshold">i<span class="nd-info-tooltip">Minimum local-maximum seediness score required to propose a nucleus. Higher values keep fewer, higher-confidence detections (default 0.70).</span></span>
+                </label>
+                <input id="seedThreshold" type="number" min="0.05" max="0.95" step="0.01" value="0.7" />
+              </div>
+              <div class="nd-field">
+                <label for="maskThreshold">Mask threshold <small>0.05–0.95</small>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the mask threshold">i<span class="nd-info-tooltip">Pixel probability threshold for each nucleus mask (default 0.53).</span></span>
+                </label>
+                <input id="maskThreshold" type="number" min="0.05" max="0.95" step="0.01" value="0.53" />
+              </div>
+              <div class="nd-field">
+                <label for="overlapThreshold">Overlap merge <small>0.05–0.95</small>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About overlap merging">i<span class="nd-info-tooltip">Intersection-over-minimum-area threshold above which overlapping seed masks are merged into one nucleus (default 0.30).</span></span>
+                </label>
+                <input id="overlapThreshold" type="number" min="0.05" max="0.95" step="0.01" value="0.3" />
+              </div>
+              <div class="nd-field">
+                <label for="tileSize">Tile size (px)
+                  <span class="nd-info-icon" tabindex="0" aria-label="About tile size">i<span class="nd-info-tooltip">Images larger than the tile size are split into overlapping tiles and stitched across seams (default 512 px).</span></span>
+                </label>
+                <select id="tileSize">
+                  <option value="512" selected>512 × 512 (default)</option>
+                  <option value="384">384 × 384</option>
+                  <option value="768">768 × 768</option>
+                </select>
+              </div>
+              <div class="nd-field">
+                <label for="backend">Processing</label>
+                <select id="backend">
+                  <option value="auto">Automatic</option>
+                  <option value="wasm">CPU</option>
+                </select>
+                <p class="nd-hint">Automatic uses the GPU through WebGPU when available.</p>
+              </div>
+              <button id="resetSettings" class="nd-btn nd-btn-secondary nd-btn-sm" type="button">Model defaults</button>
+            </div>
+          </details>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Segment nuclei</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Image viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop a 2D RGB brightfield image anywhere, or choose an example.</p>
+        <p id="viewerNotice" class="nd-viewer-notice" hidden></p>
+      </div>
+      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Processing progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel processing" aria-label="Cancel processing" hidden>×</button>
+    </footer>
+
+    <template id="privacyContent">
+      <p>Images are processed locally in this browser and are never uploaded. The InstanSeg model (15.3 MB) is downloaded from Hugging Face, verified against its pinned SHA-256 checksum, and cached in this browser.</p>
+    </template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "app": "instanseg",
+  "license": "Apache-2.0",
+  "preprocessing_contract": {
+    "source": "packages/instanseg/src/pipeline.js",
+    "input": "Bounded 2D RGB brightfield microscopy image (TIFF, OME-TIFF, or PNG; 16x16 up to 16 MP / 4096x4096)",
+    "pixel_size": "Native 0.5 um/px; calibrated inputs differing by > 1% are bilinear-resampled (align_corners=False) to 0.5 um/px before inference and nearest-neighbour resampled back on output",
+    "normalization": "Per-channel 0.1-99.9 percentile scaling (eps=1e-3), clamped to [-2, 3], reflect-padded bottom/right to a multiple of 16",
+    "prediction": "2D InstanSeg_UNet (m.fcn, 5 dense channels: dx, dy, sigma0, sigma1, seediness), 61-parameter ProbabilityNet over 64x64 per-seed windows, 8-connected fragment flood-fill & hole-filling, winner-takes-all pixel assignment, sparse IoMA (> 0.3) connected-component merging, and 512x512 overlap-tile stitching (overlap=80, max_cell_size=20, dual-IoU > 0.1)"
+  },
+  "assets": [
+    {
+      "id": "brightfield_nuclei",
+      "filename": "instanseg-brightfield-nuclei.onnx",
+      "bytes": 15287206,
+      "sha256": "62c392fef7f014a0f5847e839b37783f7a732f731136646705dd40ca5a696c46",
+      "network": "InstanSeg_UNet",
+      "channels": 3,
+      "pixel_size": 0.5,
+      "defaults": {
+        "maskThreshold": 0.53,
+        "seedThreshold": 0.7,
+        "peakDistance": 5,
+        "overlapThreshold": 0.3,
+        "windowSize": 32,
+        "cleanupFragments": true,
+        "tileSize": 512
+      },
+      "source_sha256": "427aa9cfe961b6d0012e2abf6befc6a9f76398db5d28dc2302ad911327d1c448",
+      "fp32_max_diff": 0.000069,
+      "source_url": "https://github.com/instanseg/instanseg/releases/download/instanseg_models_v0.1.1/brightfield_nuclei.zip"
+    }
+  ],
+  "source_commit": "instanseg/instanseg v0.1.2 (bc36594d68e555ebd940f5917a1ce0eed6048b15) with instanseg_models_v0.1.1 brightfield_nuclei.zip (Apache-2.0), matching vnmd/instanseg_0.1.2:20261125",
+  "graph_optimization": "2D InstanSeg_UNet backbone (m.fcn) exported with dynamic height/width axes at opset 17 (Add, Concat, Constant, Conv, MaxPool, Relu, Resize) in exact float32 precision; 61-parameter ProbabilityNet and instance decoder ported to pure JS. Built by packages/instanseg/scripts/export_model.py",
+  "repository": "neurodeskorg/webapps",
+  "revision": "d92e42ac7515e9089de3c4996f61aa05af3cbee0",
+  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d92e42ac7515e9089de3c4996f61aa05af3cbee0/instanseg/models/"
+}

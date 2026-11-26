@@ -3405,6 +3405,22 @@
           "apptainerName": "brainles-aurora_0.2.7_20261024"
         }
       ]
+    },
+    "instanseg": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": [
+        {
+          "id": "instanseg",
+          "label": "instanseg 0.1.2 (20261125)",
+          "url": "https://hub.docker.com/r/vnmd/instanseg_0.1.2",
+          "dockerImage": "vnmd/instanseg_0.1.2:20261125",
+          "apptainerUrl": "https://neurocontainers.neurodesk.workers.dev/instanseg_0.1.2_20261125.simg",
+          "apptainerName": "instanseg_0.1.2_20261125"
+        }
+      ]
     }
   }
 }
