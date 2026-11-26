@@ -944,6 +944,44 @@ test('unused-code-triage mcp-scripts enforce strict file caps, byte caps, and an
   const symArtifact = runTool('read_triage_artifact', { name: 'summary.md' });
   assert.notEqual(symArtifact.status, 0);
   assert.match(symArtifact.stderr, /Artifact directory invalid/);
+
+  // search_app_files reports incomplete coverage when files > 512 KiB are skipped or > 100 matches exist
+  mkdirSync(join(scratch, 'apps', 'searchable'), { recursive: true });
+  writeFileSync(join(scratch, 'apps', 'searchable', 'small.js'), 'const foundToken = 1;\n', 'utf8');
+  const cleanSearch = runTool('search_app_files', { app: 'searchable', query: 'foundToken' });
+  assert.equal(cleanSearch.status, 0, cleanSearch.stderr);
+  const cleanOut = JSON.parse(cleanSearch.stdout);
+  assert.equal(cleanOut.complete, true);
+  assert.equal(cleanOut.truncated_by_match_limit, false);
+  assert.equal(cleanOut.skipped_large_file_count, 0);
+  assert.deepEqual(cleanOut.skipped_large_files, []);
+  assert.equal(cleanOut.count, 1);
+
+  writeFileSync(
+    join(scratch, 'apps', 'searchable', 'vendored.js'),
+    `${'a'.repeat(520 * 1024)}\nNVImage\n`,
+    'utf8',
+  );
+  const largeSkippedSearch = runTool('search_app_files', { app: 'searchable', query: 'NVImage' });
+  assert.equal(largeSkippedSearch.status, 0, largeSkippedSearch.stderr);
+  const largeOut = JSON.parse(largeSkippedSearch.stdout);
+  assert.equal(largeOut.complete, false);
+  assert.equal(largeOut.truncated_by_match_limit, false);
+  assert.equal(largeOut.skipped_large_file_count, 1);
+  assert.deepEqual(largeOut.skipped_large_files, ['apps/searchable/vendored.js']);
+  assert.equal(largeOut.count, 0);
+
+  writeFileSync(
+    join(scratch, 'apps', 'searchable', 'many-hits.js'),
+    Array.from({ length: 105 }, (_, i) => `const hit_${i} = REPEAT_SYM;`).join('\n'),
+    'utf8',
+  );
+  const matchCapSearch = runTool('search_app_files', { app: 'searchable', query: 'REPEAT_SYM' });
+  assert.equal(matchCapSearch.status, 0, matchCapSearch.stderr);
+  const matchCapOut = JSON.parse(matchCapSearch.stdout);
+  assert.equal(matchCapOut.complete, false);
+  assert.equal(matchCapOut.truncated_by_match_limit, true);
+  assert.equal(matchCapOut.count, 100);
 });
 
 test('gh-aw triage workflow and safe-outputs bridge select no apps or site builds in app-plan', async () => {

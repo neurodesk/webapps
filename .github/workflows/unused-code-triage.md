@@ -270,24 +270,35 @@ mcp-scripts:
       if (fs.existsSync(path.join(appDir, 'upstream.json'))) throw new Error('Upstream-tracked app is out of scope');
       const appReal = fs.realpathSync(appDir);
       const matches = [];
+      const skippedLargeFiles = [];
+      let skippedLargeFileCount = 0;
+      let truncatedByMatchLimit = false;
       const walk = (dir) => {
-        if (matches.length >= 100) return;
+        if (truncatedByMatchLimit) return;
         for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-          if (matches.length >= 100) return;
+          if (truncatedByMatchLimit) return;
           if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name === '.git') continue;
           const full = path.join(dir, entry.name);
           if (entry.isSymbolicLink()) continue;
           if (entry.isDirectory()) {
             walk(full);
           } else if (entry.isFile()) {
+            const relFile = `apps/${app}/${path.relative(appReal, full).replaceAll(path.sep, '/')}`;
             const stat = fs.statSync(full);
-            if (stat.size > 512 * 1024) continue;
+            if (stat.size > 512 * 1024) {
+              skippedLargeFileCount += 1;
+              if (skippedLargeFiles.length < 50) skippedLargeFiles.push(relFile);
+              continue;
+            }
             const text = fs.readFileSync(full, 'utf8');
             if (!text.includes(query)) continue;
-            const relFile = `apps/${app}/${path.relative(appReal, full).replaceAll(path.sep, '/')}`;
             const lines = text.split('\n');
-            for (let i = 0; i < lines.length && matches.length < 100; i++) {
+            for (let i = 0; i < lines.length; i++) {
               if (lines[i].includes(query)) {
+                if (matches.length >= 100) {
+                  truncatedByMatchLimit = true;
+                  return;
+                }
                 matches.push({ file: relFile, line: i + 1, text: lines[i].slice(0, 200) });
               }
             }
@@ -295,7 +306,16 @@ mcp-scripts:
         }
       };
       walk(appReal);
-      return { app, query, count: matches.length, matches };
+      return {
+        app,
+        query,
+        count: matches.length,
+        complete: !truncatedByMatchLimit && skippedLargeFileCount === 0,
+        truncated_by_match_limit: truncatedByMatchLimit,
+        skipped_large_file_count: skippedLargeFileCount,
+        skipped_large_files: skippedLargeFiles,
+        matches,
+      };
 safe-outputs:
   timeout-minutes: 10
   report-failure-as-issue: false
@@ -419,6 +439,7 @@ Inspect the report-only Knip candidates (unused exports, types, dependencies, de
    - **Skip** shared packages (`packages/*`), native executables (`exes/*`), root `scripts/*`, and `test-utils/*`.
 2. **Verify every candidate in source code before emitting a bead:**
    - Read the referenced file with `read_app_file` and search the app with `search_app_files` to confirm the symbol/dependency is genuinely unused.
+   - If `search_app_files` returns `complete: false` (e.g., `skipped_large_file_count > 0` or `truncated_by_match_limit: true`), inspect the skipped large files with `read_app_file` or skip the candidate rather than treating missing matches as proof of unused code.
    - **Skip** anything loaded dynamically at runtime (`_runtime/`, worker URLs, HTML `<script>`/`<link>`, `examples.json`, Vite config, or public API exports consumed by tests or other packages).
 3. **Deduplicate cleanly against `beads-snapshot.json`:**
    - Use deterministic `dedupe_key` format: `knip:apps/<app>/<relative-file>:<symbol>`.

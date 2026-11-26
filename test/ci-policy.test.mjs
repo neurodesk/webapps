@@ -544,9 +544,30 @@ function parseVerifiedGhAwLock(file, text, sourceMarkdown) {
   return { meta, manifest, frontmatter: parsedMd.frontmatter };
 }
 
+const GH_AW_BOILERPLATE_ALLOWED_JOB_KEYS = new Set(['name', 'needs', 'if', 'runs-on', 'permissions', 'concurrency', 'env', 'outputs', 'steps']);
+const GH_AW_SAFE_OUTPUT_ALLOWED_JOB_KEYS = new Set(['name', 'needs', 'if', 'runs-on', 'permissions', 'env', 'outputs', 'steps']);
+const GH_AW_ALLOWED_BOILERPLATE_RUNNERS = new Set(['ubuntu-slim', 'ubuntu-latest']);
+
+function hasOnlyAllowedJobKeys(job, allowedKeys) {
+  if (!job || typeof job !== 'object' || Array.isArray(job)) return false;
+  return Object.keys(job).every((key) => allowedKeys.has(key));
+}
+
 function isVerifiedBoilerplateJob(id, job, frontmatter) {
   if (!GH_AW_BOILERPLATE_JOBS.has(id)) return false;
   if (Object.hasOwn(frontmatter?.jobs ?? {}, id)) return false;
+  if (!hasOnlyAllowedJobKeys(job, GH_AW_BOILERPLATE_ALLOWED_JOB_KEYS)) return false;
+  if (!GH_AW_ALLOWED_BOILERPLATE_RUNNERS.has(job['runs-on'])) return false;
+  if (job.concurrency !== undefined) {
+    if (id !== 'conclusion' || !job.concurrency || typeof job.concurrency !== 'object' || Array.isArray(job.concurrency)) {
+      return false;
+    }
+    const cKeys = Object.keys(job.concurrency);
+    if (!cKeys.every((key) => key === 'group' || key === 'cancel-in-progress' || key === 'queue')) return false;
+    if (typeof job.concurrency.group !== 'string' || !job.concurrency.group.startsWith('gh-aw-conclusion-')) return false;
+    if (job.concurrency['cancel-in-progress'] !== undefined && job.concurrency['cancel-in-progress'] !== false) return false;
+    if (job.concurrency.queue !== undefined && job.concurrency.queue !== 'max') return false;
+  }
   const allowedActions = GH_AW_BOILERPLATE_ALLOWED_ACTIONS[id];
   const steps = Array.isArray(job?.steps) ? job.steps : [];
   if (steps.length === 0) return false;
@@ -581,10 +602,13 @@ function isCompilerSafeJobDownloadStep(step) {
 
 function isStepBoundedSafeOutputJob(id, job, frontmatter) {
   const safeOutputsTimeoutOk = hasValidTimeout(frontmatter?.['safe-outputs']?.['timeout-minutes']);
-  const declaredSafeOutputJobs = new Set(
-    Object.keys(frontmatter?.['safe-outputs']?.jobs ?? {}).map((name) => name.replaceAll('-', '_')),
+  const safeOutputJobsById = new Map(
+    Object.entries(frontmatter?.['safe-outputs']?.jobs ?? {}).map(([name, cfg]) => [name.replaceAll('-', '_'), cfg]),
   );
-  if (!safeOutputsTimeoutOk || !declaredSafeOutputJobs.has(id)) return false;
+  if (!safeOutputsTimeoutOk || !safeOutputJobsById.has(id)) return false;
+  if (!hasOnlyAllowedJobKeys(job, GH_AW_SAFE_OUTPUT_ALLOWED_JOB_KEYS)) return false;
+  const expectedRunner = safeOutputJobsById.get(id)?.['runs-on'] ?? 'ubuntu-latest';
+  if (job['runs-on'] !== expectedRunner) return false;
   const steps = Array.isArray(job?.steps) ? job.steps : [];
   if (steps.length < 2) return false;
   const [firstStep, ...authoredSteps] = steps;
@@ -808,6 +832,32 @@ test('gh-aw timeout exemption requires verified frontmatter/body hashes, exact c
   const alteredSafeDownload = validLock.replace('          path: ${{ runner.temp }}/gh-aw/safe-jobs/\n', '          path: /tmp/review-demo/\n');
   assert.deepEqual(
     findJobsMissingTimeout([{ file: 'demo.lock.yml', text: alteredSafeDownload, sourceMarkdown: validMd }]),
+    ['demo.lock.yml: record_finding'],
+  );
+
+  // Adding job-level execution settings (services, container, strategy) to boilerplate or safe-output jobs rejects the exemption.
+  const conclusionWithServices = validLock.replace(
+    '  conclusion:\n    runs-on: ubuntu-slim\n',
+    '  conclusion:\n    runs-on: ubuntu-slim\n    services:\n      redis:\n        image: redis:7\n',
+  );
+  assert.deepEqual(
+    findJobsMissingTimeout([{ file: 'demo.lock.yml', text: conclusionWithServices, sourceMarkdown: validMd }]),
+    ['demo.lock.yml: conclusion'],
+  );
+  const activationWithContainer = validLock.replace(
+    '  activation:\n    runs-on: ubuntu-slim\n',
+    '  activation:\n    runs-on: ubuntu-slim\n    container: node:22\n',
+  );
+  assert.deepEqual(
+    findJobsMissingTimeout([{ file: 'demo.lock.yml', text: activationWithContainer, sourceMarkdown: validMd }]),
+    ['demo.lock.yml: activation'],
+  );
+  const safeJobWithServices = validLock.replace(
+    '  record_finding:\n    runs-on: ubuntu-latest\n',
+    '  record_finding:\n    runs-on: ubuntu-latest\n    services:\n      redis:\n        image: redis:7\n',
+  );
+  assert.deepEqual(
+    findJobsMissingTimeout([{ file: 'demo.lock.yml', text: safeJobWithServices, sourceMarkdown: validMd }]),
     ['demo.lock.yml: record_finding'],
   );
 
