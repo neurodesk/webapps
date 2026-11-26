@@ -13,7 +13,6 @@ const MEMORY_REF_PATTERN = /^refs\/heads\/memory\/[a-z0-9][a-z0-9._/-]*$/;
 const REMOTE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const RELEASED_LEASE_HASH_PATTERN = /^[0-9a-f]{12}$/;
 const ISO_TIMESTAMP_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})$/;
-const CANONICAL_UTC_ISO_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const ZERO_OID = '0000000000000000000000000000000000000000';
 
 export const LIMITS = Object.freeze({
@@ -304,16 +303,27 @@ function leaseKey(lease) {
     claimedAt: lease.claimedAt,
     expiresAt: lease.expiresAt,
   }).slice(0, 12);
-  return `${lease.claimedAt}|${lease.expiresAt}|${hash}`;
+  return `v2:${lease.claimedAt}|${lease.expiresAt}|${hash}`;
+}
+
+function tombstoneClaimedAt(entry) {
+  const body = entry.startsWith('v2:') ? entry.slice(3) : entry;
+  return body.slice(0, body.indexOf('|'));
+}
+
+function sortTombstones(entries) {
+  return [...new Set(entries)].sort((a, b) =>
+    tombstoneClaimedAt(a).localeCompare(tombstoneClaimedAt(b)) || a.localeCompare(b),
+  );
 }
 
 function trimReleasedLeases(entries, existingFloorAt = null) {
-  const sorted = uniqueSorted(entries);
+  const sorted = sortTombstones(entries);
   let floorAt = existingFloorAt;
   if (sorted.length > LIMITS.releasedLeases) {
     const overflowCount = sorted.length - LIMITS.releasedLeases;
     for (let i = 0; i < overflowCount; i++) {
-      const evictedClaimedAt = sorted[i].split('|')[0];
+      const evictedClaimedAt = tombstoneClaimedAt(sorted[i]);
       if (!floorAt || evictedClaimedAt > floorAt) {
         floorAt = evictedClaimedAt;
       }
@@ -337,25 +347,28 @@ function normalizeReleasedLeases(raw = []) {
     if (typeof item !== 'string') {
       throw new BeadsValidationError(`releasedLeases[${idx}] must be a string`);
     }
-    const firstPipe = item.indexOf('|');
-    if (firstPipe <= 0) {
-      throw new BeadsValidationError(`releasedLeases[${idx}] must have format "<claimedAt>|<expiresAt>|<hash>"`);
-    }
-    const parts = item.split('|');
-    if (parts.length === 3 && CANONICAL_UTC_ISO_PATTERN.test(parts[0]) && CANONICAL_UTC_ISO_PATTERN.test(parts[1]) && RELEASED_LEASE_HASH_PATTERN.test(parts[2])) {
+    if (item.startsWith('v2:')) {
+      const parts = item.slice(3).split('|');
+      if (parts.length !== 3 || !RELEASED_LEASE_HASH_PATTERN.test(parts[2])) {
+        throw new BeadsValidationError(`releasedLeases[${idx}] must have format "v2:<claimedAt>|<expiresAt>|<hash>"`);
+      }
       const claimedAt = assertIsoTimestamp(parts[0], `releasedLeases[${idx}].claimedAt`);
       const expiresAt = assertIsoTimestamp(parts[1], `releasedLeases[${idx}].expiresAt`);
       if (Date.parse(expiresAt) <= Date.parse(claimedAt)) {
         throw new BeadsValidationError(`releasedLeases[${idx}] expiresAt must be after claimedAt`);
       }
-      return `${claimedAt}|${expiresAt}|${parts[2]}`;
+      return `v2:${claimedAt}|${expiresAt}|${parts[2]}`;
+    }
+    const firstPipe = item.indexOf('|');
+    if (firstPipe <= 0) {
+      throw new BeadsValidationError(`releasedLeases[${idx}] must have format "v2:<claimedAt>|<expiresAt>|<hash>"`);
     }
     // Legacy schema-v1 tombstone format: "<claimedAt>|<owner>" (owner is preserved verbatim)
     const claimedAt = assertIsoTimestamp(item.slice(0, firstPipe), `releasedLeases[${idx}].claimedAt`);
     const owner = assertNonEmptyString(item.slice(firstPipe + 1), `releasedLeases[${idx}].owner`, LIMITS.actor);
     return `${claimedAt}|${owner}`;
   });
-  return uniqueSorted(normalized);
+  return sortTombstones(normalized);
 }
 
 export function validateBead(raw) {
@@ -993,7 +1006,7 @@ export function applyOperations(beadsMap, operations, options = {}) {
       if (typeof ttlHours !== 'number' || !Number.isFinite(ttlHours) || ttlHours <= 0 || ttlHours > 168) {
         throw new BeadsValidationError('ttlHours must be between 0 and 168');
       }
-      const lastReleasedIso = bead.releasedLeases?.at(-1)?.split('|')[0];
+      const lastReleasedIso = bead.releasedLeases?.length ? tombstoneClaimedAt(bead.releasedLeases.at(-1)) : null;
       const minClaimMs = Math.max(
         opNowMs,
         bead.reopenedAt ? Date.parse(bead.reopenedAt) + 1 : -Infinity,
@@ -1524,6 +1537,14 @@ export function syncBeadsRef(cwd, { ref = DEFAULT_BEADS_REF, remote = 'origin', 
   assertNotSymbolicRef(repoTop, ref);
   assertConfiguredRemote(repoTop, remote);
 
+  if (push) {
+    const rawPushUrls = git(['remote', 'get-url', '--push', '--all', '--', remote], { cwd: repoTop });
+    const pushUrls = rawPushUrls.length === 0 ? [] : rawPushUrls.replace(/\r?\n$/, '').split('\n');
+    if (pushUrls.length !== 1) {
+      throw new BeadsValidationError(`Remote "${remote}" has ${pushUrls.length} push URLs; beads sync requires a single push destination for atomic --force-with-lease`);
+    }
+  }
+
   const shortBranch = ref.replace(/^refs\/heads\//, '');
   const trackingRef = `refs/remotes/${remote}/${shortBranch}`;
   assertNotSymbolicRef(repoTop, trackingRef);
@@ -1604,13 +1625,6 @@ export function syncBeadsRef(cwd, { ref = DEFAULT_BEADS_REF, remote = 'origin', 
 
   let pushed = false;
   if (push && finalSha) {
-    const pushUrls = git(['remote', 'get-url', '--push', '--all', '--', remote], { cwd: repoTop })
-      .split('\n')
-      .map((u) => u.trim())
-      .filter(Boolean);
-    if (pushUrls.length > 1) {
-      throw new BeadsValidationError(`Remote "${remote}" has ${pushUrls.length} push URLs; beads sync requires a single push destination for atomic --force-with-lease`);
-    }
     const leaseArg = remoteState.sha ? `--force-with-lease=${ref}:${remoteState.sha}` : `--force-with-lease=${ref}:`;
     git(['-c', `remote.${remote}.fetch=`, '-c', `remote.${remote}.mirror=false`, 'push', '--no-follow-tags', '--recurse-submodules=no', leaseArg, '--', remote, `${finalSha}:${ref}`], { cwd: repoTop });
     git(['update-ref', '--no-deref', trackingRef, finalSha], { cwd: repoTop });

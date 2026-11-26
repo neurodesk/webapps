@@ -142,19 +142,21 @@ test('schema validation, deterministic dedupe IDs, bounds, ref validation, and J
   assert.throws(() => validateBead({ ...bead, createdAt: '2026-02-30T12:00:00+01:00' }), BeadsValidationError);
   assert.throws(() => validateBead({ ...bead, createdAt: '9999-12-31T23:30:00-02:00' }), BeadsValidationError);
   assert.throws(() => validateBead({ ...bead, releasedLeases: ['junk'] }), BeadsValidationError);
-  assert.throws(() => validateBead({ ...bead, releasedLeases: ['November 26, 2026|November 27, 2026|abcdef123456'] }), BeadsValidationError);
+  assert.throws(() => validateBead({ ...bead, releasedLeases: ['v2:November 26, 2026|November 27, 2026|abcdef123456'] }), BeadsValidationError);
+  assert.throws(() => validateBead({ ...bead, releasedLeases: ['v2:2026-11-26T00:00:00.000Z|2026-11-25T00:00:00.000Z|abcdef123456'] }), BeadsValidationError);
   assert.throws(() => applyOperations(new Map(), [{ op: 'create', title: 'Null prio', scope: { type: 'repo', targets: [] }, priority: null }]), BeadsValidationError);
   assert.throws(() => applyOperations(new Map(), [{ op: 'upsert', dedupeKey: 'k:null', title: 'Null prio', scope: { type: 'repo', targets: [] }, priority: null }]), BeadsValidationError);
-  // Legacy schema-v1 records carrying leaseReleasedAt or "<claimedAt>|<owner>" tombstones (including "|" in owner) load cleanly
+  // Legacy schema-v1 records carrying leaseReleasedAt or "<claimedAt>|<owner>" tombstones survive repeated validation
   const legacyNull = validateBead({ ...bead, leaseReleasedAt: null });
   assert.equal(legacyNull.leaseFloorAt, null);
   const legacyTs = validateBead({ ...bead, leaseReleasedAt: '2026-11-26T00:30:00.000Z' });
   assert.equal(legacyTs.leaseFloorAt, '2026-11-26T00:30:00.000Z');
   const legacyTombstone = validateBead({ ...bead, releasedLeases: ['2026-11-26T00:00:00.000Z|worker|lane'] });
-  assert.deepEqual(legacyTombstone.releasedLeases, ['2026-11-26T00:00:00.000Z|worker|lane']);
-  // Legacy owner that looks like "<offset-iso>|<hex12>" must stay verbatim rather than being rewritten
+  assert.deepEqual(validateBead(legacyTombstone).releasedLeases, ['2026-11-26T00:00:00.000Z|worker|lane']);
+  const legacyIsoLikeOwner = validateBead({ ...bead, releasedLeases: ['2026-11-26T00:00:00+00:00|2026-11-25T23:00:00.000Z|abcdef123456'] });
+  assert.deepEqual(validateBead(legacyIsoLikeOwner).releasedLeases, ['2026-11-26T00:00:00.000Z|2026-11-25T23:00:00.000Z|abcdef123456']);
   const legacyOffsetOwner = validateBead({ ...bead, releasedLeases: ['2026-11-26T00:00:00.000Z|2026-11-26T06:00:00+01:00|abcdef123456'] });
-  assert.deepEqual(legacyOffsetOwner.releasedLeases, ['2026-11-26T00:00:00.000Z|2026-11-26T06:00:00+01:00|abcdef123456']);
+  assert.deepEqual(validateBead(legacyOffsetOwner).releasedLeases, ['2026-11-26T00:00:00.000Z|2026-11-26T06:00:00+01:00|abcdef123456']);
   // Valid calendar ISO dates in years 0000-0099 (e.g. leap year 0000-02-29) are accepted
   assert.equal(validateBead({ ...bead, createdAt: '0000-02-29T12:00:00Z' }).createdAt, '0000-02-29T12:00:00.000Z');
   const maxSafeMap = new Map([[bead.id, { ...bead, revision: Number.MAX_SAFE_INTEGER }]]);
@@ -907,13 +909,18 @@ test('git orphan-branch store handles subdirectories, CAS bootstrap, fast-forwar
     assert.ok(execFileSync('git', ['rev-parse', '--verify', 'refs/heads/memory/beads'], { cwd: insteadRealBare, encoding: 'utf8' }).trim());
     assert.equal(execFileSync('git', ['for-each-ref', 'refs/heads/memory/beads'], { cwd: insteadWrongBare, encoding: 'utf8' }).trim(), '');
 
-    // remote.<name>.mirror=true still allows single-ref beads push, while multiple push URLs are rejected atomically
+    // remote.<name>.mirror=true still allows single-ref beads push, while multiple push URLs (including whitespace paths) fail before any local ref writes
     execFileSync('git', ['config', 'remote.aliased.mirror', 'true'], { cwd: symRepo, stdio: 'ignore' });
     mutateBeadsRef(symRepo, [{ op: 'create', title: 'Mirror config push', scope: { type: 'repo', targets: [] } }], { actor: 'sym' });
     syncBeadsRef(symRepo, { remote: 'aliased', push: true });
-    execFileSync('git', ['remote', 'set-url', '--add', '--push', 'aliased', insteadRealBare], { cwd: symRepo, stdio: 'ignore' });
-    execFileSync('git', ['remote', 'set-url', '--add', '--push', 'aliased', insteadWrongBare], { cwd: symRepo, stdio: 'ignore' });
-    assert.throws(() => syncBeadsRef(symRepo, { remote: 'aliased', push: true }), BeadsValidationError);
+    const multiPushRepo = join(root, 'multi-push-repo');
+    mkdirSync(multiPushRepo, { recursive: true });
+    initGitRepo(multiPushRepo);
+    execFileSync('git', ['remote', 'add', 'origin', insteadRealBare], { cwd: multiPushRepo, stdio: 'ignore' });
+    execFileSync('git', ['remote', 'set-url', '--add', '--push', 'origin', insteadRealBare], { cwd: multiPushRepo, stdio: 'ignore' });
+    execFileSync('git', ['remote', 'set-url', '--add', '--push', 'origin', ' '], { cwd: multiPushRepo, stdio: 'ignore' });
+    assert.throws(() => syncBeadsRef(multiPushRepo, { remote: 'origin', push: true }), BeadsValidationError);
+    assert.equal(execFileSync('git', ['for-each-ref', 'refs/heads/memory/'], { cwd: multiPushRepo, encoding: 'utf8' }).trim(), '');
 
     // Pull-only sync must ignore configured remote refmaps and fetch.recurseSubmodules=true
     const subUpstream = join(root, 'sub-upstream.git');
