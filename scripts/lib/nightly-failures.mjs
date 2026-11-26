@@ -253,3 +253,70 @@ export async function reportNightlyFailure({ run, repository, defaultBranch, cli
   return { issue: created.number, created: true };
 }
 
+function reportedAttemptTime(body, fallback) {
+  const header = body?.slice(0, 1000) ?? '';
+  const updated = header.match(/^- (?:Started: [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.+-]+Z?\. )?Updated: ([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.+-]+Z?)\.$/m)?.[1];
+  const parsed = updated ? time(updated) : Number.NaN;
+  return Number.isNaN(parsed) ? time(fallback) : parsed;
+}
+
+export async function closeRecoveredNightlyIssue({ run, repository, defaultBranch, client, dryRun = false, openIssue = null }) {
+  if (run.event !== 'schedule' || run.status !== 'completed' || run.conclusion !== 'success') {
+    return { skipped: 'Not a passing completed scheduled workflow' };
+  }
+  if (!defaultBranch || run.head_branch !== defaultBranch || run.head_repository?.full_name !== repository) {
+    return { skipped: 'Not a default-branch run from this repository' };
+  }
+  const runId = numeric(run.id);
+  const attempt = numeric(run.run_attempt ?? 1);
+  const workflowId = numeric(run.workflow_id);
+  const workflowMarker = `<!-- nightly-workflow:${workflowId} -->`;
+  const recoveryMarker = `<!-- nightly-recovery:${runId}:attempt:${attempt} -->`;
+  let issue = openIssue;
+  if (!issue) {
+    const issues = await client.list('/issues?state=open&creator=github-actions%5Bbot%5D&sort=created&direction=desc');
+    issue = issues.find(entry => entry.state === 'open' && !entry.pull_request && entry.user?.login === 'github-actions[bot]' && entry.body?.startsWith(workflowMarker));
+  }
+  if (!issue || issue.state !== 'open' || issue.pull_request || issue.user?.login !== 'github-actions[bot]' || !issue.body?.startsWith(workflowMarker)) {
+    return { skipped: 'No open issue for workflow' };
+  }
+  const comments = await client.list(`/issues/${numeric(issue.number)}/comments`);
+  const botComments = comments.filter(comment => comment.user?.login === 'github-actions[bot]');
+  if (botComments.some(comment => comment.body?.startsWith(recoveryMarker))) {
+    return { ...(dryRun && { dryRun: true }), duplicate: true, issue: issue.number };
+  }
+  let latestFailureAt = reportedAttemptTime(issue.body, issue.created_at);
+  for (const comment of botComments) {
+    if (!comment.body?.startsWith('<!-- nightly-run:')) continue;
+    const commentTime = reportedAttemptTime(comment.body, comment.created_at);
+    if (!Number.isNaN(commentTime) && (Number.isNaN(latestFailureAt) || commentTime > latestFailureAt)) {
+      latestFailureAt = commentTime;
+    }
+  }
+  const runCompletedAt = time(run.updated_at);
+  if (!Number.isNaN(latestFailureAt) && !(runCompletedAt > latestFailureAt)) {
+    return { skipped: 'Passing run is not newer than the latest reported failure' };
+  }
+  const runPath = `/actions/runs/${runId}`;
+  const jobs = await client.list(`${runPath}/attempts/${attempt}/jobs`, 'jobs');
+  const failed = jobs.filter(job => BAD_CONCLUSIONS.has(job.conclusion));
+  const cancelled = jobs.filter(job => job.conclusion === 'cancelled');
+  const succeeded = jobs.filter(job => job.conclusion === 'success');
+  if (failed.length || cancelled.length) return { skipped: 'Run has failed or cancelled jobs' };
+  if (!succeeded.length) return { skipped: 'Run had no passing jobs' };
+  const runUrl = `https://github.com/${repository}/actions/runs/${runId}/attempts/${attempt}`;
+  const body = [
+    recoveryMarker,
+    `## Scheduled workflow recovered: ${plain(run.name)}`,
+    '',
+    `[Run ${runId}, attempt ${attempt}](${runUrl}) passed cleanly on \`${plain(run.head_branch)}\` at commit \`${plain(run.head_sha)}\` (${succeeded.length} ${succeeded.length === 1 ? 'job' : 'jobs'} passed).`,
+    `- Started: ${plain(run.run_started_at ?? run.created_at)}. Updated: ${plain(run.updated_at)}.`,
+    '',
+    'Closing this issue automatically. A future scheduled failure will reopen it.',
+  ].join('\n');
+  if (dryRun) return { dryRun: true, issue: issue.number, closed: true, body };
+  await client.request(`/issues/${numeric(issue.number)}/comments`, { method: 'POST', body: { body } });
+  await client.request(`/issues/${numeric(issue.number)}`, { method: 'PATCH', body: { state: 'closed', state_reason: 'completed' } });
+  return { issue: issue.number, closed: true };
+}
+

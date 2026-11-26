@@ -1,10 +1,11 @@
 import { readdir, readFile } from 'node:fs/promises';
-import { reportNightlyFailure } from './nightly-failures.mjs';
+import { closeRecoveredNightlyIssue, reportNightlyFailure } from './nightly-failures.mjs';
 import { alertNotarization } from './notarization-alert.mjs';
 
 // One scheduled reporter for every finished workflow run attempt: a failed or
 // incomplete scheduled attempt on the default branch gets a workflow issue
-// (nightly-failures.mjs), and a failed non-pull-request attempt of a workflow
+// (nightly-failures.mjs), a subsequent clean passing scheduled attempt closes
+// that open workflow issue, and a failed non-pull-request attempt of a workflow
 // that notarizes gets the Apple notarization alert (notarization-alert.mjs).
 //
 // A tick keeps no cursor. It lists the candidate runs created in the lookback
@@ -165,15 +166,49 @@ export async function reportedMarkers(client, since) {
 
 const markerOf = (kind, attempt) => `<!-- ${kind === 'scheduled' ? 'nightly' : 'notarization'}-run:${attempt.id}:attempt:${attempt.run_attempt ?? 1} -->`;
 
+const attemptKey = attempt => `${attempt.id}:${attempt.run_attempt ?? 1}`;
+
+// For each scheduled workflow that has a clean passing attempt newer (by both
+// completion and creation time) than every failed or incomplete attempt in the
+// lookback, return that latest passing attempt.
+function recoveryCandidates(ordered, { repository, defaultBranch, cutover, failedAttempts, erroredWorkflows }) {
+  const byWorkflow = new Map();
+  for (const attempt of ordered) {
+    if (attempt.status !== 'completed' || !(completedAt(attempt) >= time(cutover))) continue;
+    if (!isScheduledReport(attempt, { repository, defaultBranch })) continue;
+    const workflowId = String(attempt.workflow_id);
+    if (!byWorkflow.has(workflowId)) byWorkflow.set(workflowId, []);
+    byWorkflow.get(workflowId).push(attempt);
+  }
+  const candidates = [];
+  for (const [workflowId, list] of byWorkflow) {
+    if (erroredWorkflows.has(workflowId)) continue;
+    const isUnhealthy = attempt => attempt.conclusion !== 'success' || failedAttempts.has(attemptKey(attempt));
+    const passing = list.filter(attempt => !isUnhealthy(attempt));
+    if (!passing.length) continue;
+    const best = passing[passing.length - 1];
+    const hasNewerAttemptOfSameRun = list.some(other => other.id === best.id && Number(other.run_attempt ?? 1) > Number(best.run_attempt ?? 1));
+    if (hasNewerAttemptOfSameRun) continue;
+    const dominatedByUnhealthy = list.some(other => isUnhealthy(other) && (completedAt(other) >= completedAt(best) || time(other.created_at) > time(best.created_at)));
+    if (dominatedByUnhealthy) continue;
+    candidates.push({ workflowId, attempt: best });
+  }
+  return candidates;
+}
+
 // Reports each attempt, oldest first, one at a time so that reports on one issue never race, and
-// lists the attempts whose marker `reported` already holds.
+// lists the attempts whose marker `reported` already holds. After failure reports complete, any
+// open scheduled workflow issue whose latest completed scheduled attempt passed cleanly is closed.
 // A report that throws is recorded and the others still run; the caller fails the tick, and
 // the next tick checks the attempt again because it still has no marker.
 export async function reportWorkflowRuns({ attempts, repository, defaultBranch, notarizingRuns = new Set(), continuesOnError = [], cutover = CUTOVER, reported = new Set(), client, dryRun = false }) {
   const results = [];
   const marked = [];
+  const failedAttempts = new Set();
+  const erroredWorkflows = new Set();
   const ordered = [...attempts].sort((a, b) => completedAt(a) - completedAt(b) || a.id - b.id || a.run_attempt - b.run_attempt);
   for (const run of ordered) {
+    if (reported.has(markerOf('scheduled', run))) failedAttempts.add(attemptKey(run));
     for (const kind of reportsFor(run, { repository, defaultBranch, notarizingRuns, continuesOnError, cutover })) {
       if (reported.has(markerOf(kind, run))) {
         marked.push(`${kind} ${run.id}:${run.run_attempt ?? 1}`);
@@ -184,7 +219,37 @@ export async function reportWorkflowRuns({ attempts, repository, defaultBranch, 
         const result = kind === 'scheduled'
           ? await reportNightlyFailure({ run, repository, defaultBranch, client, dryRun })
           : await alertNotarization({ run, repository, client, dryRun });
+        if (kind === 'scheduled' && !result?.skipped) failedAttempts.add(attemptKey(run));
         results.push({ ...entry, result });
+      } catch (error) {
+        if (kind === 'scheduled') erroredWorkflows.add(String(run.workflow_id));
+        results.push({ ...entry, error: error.message });
+      }
+    }
+  }
+  const recoveries = recoveryCandidates(ordered, { repository, defaultBranch, cutover, failedAttempts, erroredWorkflows });
+  if (recoveries.length) {
+    let openIssues = [];
+    let listError = null;
+    try {
+      openIssues = (await client.list('/issues?state=open&creator=github-actions%5Bbot%5D&sort=created&direction=desc'))
+        .filter(issue => issue.state === 'open' && !issue.pull_request && issue.user?.login === 'github-actions[bot]');
+    } catch (error) {
+      listError = error;
+    }
+    for (const { workflowId, attempt } of recoveries) {
+      const entry = { kind: 'recovery', run: attempt.id, attempt: attempt.run_attempt ?? 1, workflow: attempt.name, conclusion: attempt.conclusion };
+      if (listError) {
+        results.push({ ...entry, error: listError.message });
+        continue;
+      }
+      const marker = `<!-- nightly-workflow:${workflowId} -->`;
+      const openIssue = openIssues.find(issue => issue.body?.startsWith(marker));
+      if (!openIssue) continue;
+      try {
+        const result = await closeRecoveredNightlyIssue({ run: attempt, repository, defaultBranch, client, dryRun, openIssue });
+        if (result.closed) results.push({ ...entry, result });
+        else if (result.duplicate) marked.push(`recovery ${attempt.id}:${attempt.run_attempt ?? 1}`);
       } catch (error) {
         results.push({ ...entry, error: error.message });
       }

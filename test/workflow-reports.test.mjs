@@ -87,7 +87,10 @@ function github({ runs = [], jobs = {}, logs = {} } = {}) {
       }
       const issue = path.match(/^\/issues\/(\d+)$/);
       if (issue && options.method === 'PATCH') {
-        Object.assign(issues.find(each => each.number === Number(issue[1])), options.body);
+        const target = issues.find(each => each.number === Number(issue[1]));
+        Object.assign(target, options.body);
+        if (options.body.state === 'closed' && !options.body.closed_at) target.closed_at = new Date().toISOString();
+        if (options.body.state === 'open') target.closed_at = null;
         return {};
       }
       if (/^\/issues\/\d+\/assignees$/.test(path)) return {};
@@ -451,4 +454,111 @@ test('a dry run of the command writes no step summary', async () => {
   await assert.rejects(stat(join(directory, 'dry.md')), { code: 'ENOENT' });
   await run('tick.md');
   assert.match(await readFile(join(directory, 'tick.md'), 'utf8'), /0 runs listed/);
+});
+
+test('a clean passing scheduled run auto-closes its open workflow issue, stays quiet on repeat ticks, respects manual reopen, and reopens on a later failure', async () => {
+  const failed = attempt({ id: 100, workflow_id: 7, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', created_at: at(2), updated_at: at(3) });
+  const passed = attempt({ id: 101, workflow_id: 7, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', conclusion: 'success', created_at: at(26), run_started_at: at(26), updated_at: at(27) });
+  const clientWithPass = github({
+    runs: [failed, passed],
+    jobs: {
+      '100:1': [{ id: 1001, name: 'report', conclusion: 'failure', steps: [] }],
+      '101:1': [{ id: 1011, name: 'report', conclusion: 'success', steps: [] }],
+    },
+  });
+  await tick(clientWithPass, at(7));
+  assert.equal(clientWithPass.issues[0].state, 'open');
+  const recovered = await tick(clientWithPass, at(28));
+  assert.equal(clientWithPass.issues[0].state, 'closed');
+  assert.equal(clientWithPass.issues[0].state_reason, 'completed');
+  assert.equal(recovered.results.length, 1);
+  assert.equal(recovered.results[0].kind, 'recovery');
+  assert.deepEqual(recovered.results[0].result, { issue: 1, closed: true });
+  assert.match(clientWithPass.comments.get(1)[0].body, /^<!-- nightly-recovery:101:attempt:1 -->/);
+
+  // Repeated tick writes nothing.
+  const writesBefore = clientWithPass.writes.length;
+  const repeated = await tick(clientWithPass, at(30));
+  assert.equal(clientWithPass.writes.length, writesBefore);
+  assert.deepEqual(repeated.results, []);
+
+  // A human manually reopens the issue: the same passing run does not re-close it.
+  Object.assign(clientWithPass.issues[0], { state: 'open', closed_at: null });
+  const reopenTick = await tick(clientWithPass, at(31));
+  assert.equal(clientWithPass.issues[0].state, 'open');
+  assert.deepEqual(reopenTick.results, []);
+  assert.ok(reopenTick.marked.includes('recovery 101:1'));
+
+  // A later scheduled failure after recovery reopens a closed issue cleanly.
+  Object.assign(clientWithPass.issues[0], { state: 'closed', closed_at: new Date().toISOString() });
+  clientWithPass.runs.push(attempt({ id: 102, workflow_id: 7, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', conclusion: 'failure', created_at: at(50), run_started_at: at(50), updated_at: at(51) }));
+  await tick(clientWithPass, at(52));
+  assert.equal(clientWithPass.issues[0].state, 'open');
+  assert.deepEqual(reported(clientWithPass), ['nightly 100:1', 'nightly 102:1']);
+});
+
+test('auto-close handles same-tick rerun recovery and dry-run previews without closing on stale reruns, failed continue-on-error jobs, or errored reports', async () => {
+  // Same-tick recovery: attempt 1 fails at 03:00, attempt 2 passes at 05:00, tick runs at 06:47.
+  const fail1 = attempt({ id: 200, workflow_id: 11, name: 'standalone-links', created_at: at(2), updated_at: at(3) });
+  const pass2 = { ...fail1, run_attempt: 2, conclusion: 'success', run_started_at: at(4), updated_at: at(5) };
+  const sameTick = github({
+    runs: [fail1, pass2],
+    jobs: {
+      '200:1': [{ id: 2001, name: 'check', conclusion: 'failure', steps: [] }],
+      '200:2': [{ id: 2002, name: 'check', conclusion: 'success', steps: [] }],
+    },
+  });
+  const sameResult = await tick(sameTick, at(6.8));
+  assert.deepEqual(reported(sameTick), ['nightly 200:1']);
+  assert.equal(sameTick.issues[0].state, 'closed');
+  assert.deepEqual(sameResult.results.map(entry => entry.kind), ['scheduled', 'recovery']);
+
+  // Stale rerun passing after a newer run failed MUST NOT close the issue.
+  const oldFail = attempt({ id: 300, workflow_id: 12, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', created_at: at(2), updated_at: at(3) });
+  const newFail = attempt({ id: 301, workflow_id: 12, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', created_at: at(26), run_started_at: at(26), updated_at: at(27) });
+  const oldRerunPass = { ...oldFail, run_attempt: 2, conclusion: 'success', run_started_at: at(28), updated_at: at(29) };
+  const stale = github({
+    runs: [oldFail, newFail, oldRerunPass],
+    jobs: {
+      '300:1': [{ id: 3001, name: 'report', conclusion: 'failure', steps: [] }],
+      '301:1': [{ id: 3011, name: 'report', conclusion: 'failure', steps: [] }],
+      '300:2': [{ id: 3002, name: 'report', conclusion: 'success', steps: [] }],
+    },
+  });
+  await tick(stale, at(30));
+  assert.equal(stale.issues[0].state, 'open');
+
+  // Continue-on-error workflow whose passing run still had a failed job stays open.
+  const ciFail = attempt({ id: 400, workflow_id: 13, name: 'ci', path: '.github/workflows/ci.yml', conclusion: 'failure', created_at: at(2), updated_at: at(3) });
+  const ciSoftFail = attempt({ id: 401, workflow_id: 13, name: 'ci', path: '.github/workflows/ci.yml', conclusion: 'success', created_at: at(26), run_started_at: at(26), updated_at: at(27) });
+  const soft = github({
+    runs: [ciFail, ciSoftFail],
+    jobs: {
+      '400:1': [{ id: 4001, name: 'app-tests', conclusion: 'failure', steps: [] }],
+      '401:1': [
+        { id: 4011, name: 'app-tests', conclusion: 'success', steps: [] },
+        { id: 4012, name: 'example-cache-retention', conclusion: 'failure', steps: [] },
+      ],
+    },
+  });
+  await tick(soft, at(28));
+  assert.equal(soft.issues[0].state, 'open');
+
+  // Dry-run previews closing an existing open issue without writing.
+  const dryClient = github({
+    runs: [attempt({ id: 501, workflow_id: 14, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', conclusion: 'success', created_at: at(26), run_started_at: at(26), updated_at: at(27) })],
+    jobs: { '501:1': [{ id: 5011, name: 'report', conclusion: 'success', steps: [] }] },
+  });
+  dryClient.issues.push({
+    number: 810, state: 'open', user: { login: 'github-actions[bot]' }, created_at: at(4),
+    body: `<!-- nightly-workflow:14 -->\n<!-- nightly-run:500:attempt:1 -->\n- Updated: ${at(3)}.`,
+  });
+  const dryTick = await tick(dryClient, at(28), { dryRun: true });
+  assert.equal(dryTick.results.length, 1);
+  assert.equal(dryTick.results[0].kind, 'recovery');
+  assert.equal(dryTick.results[0].result.dryRun, true);
+  assert.equal(dryTick.results[0].result.closed, true);
+  assert.equal(dryTick.results[0].result.issue, 810);
+  assert.equal(dryClient.issues[0].state, 'open');
+  assert.deepEqual(dryClient.writes, []);
 });
