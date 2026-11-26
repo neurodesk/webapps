@@ -634,11 +634,16 @@ async function runJob(job) {
     }
     let pwiMeta = null;
     if (files['pwi-json']) {
+      let parsed;
       try {
-        pwiMeta = JSON.parse(await files['pwi-json'].text());
+        parsed = JSON.parse(await files['pwi-json'].text());
       } catch (err) {
         throw new Error(`Invalid PWI JSON sidecar: ${err.message}`);
       }
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('Invalid PWI JSON sidecar: expected a JSON object.');
+      }
+      pwiMeta = parsed;
     }
     let rawTr;
     if (pwiMeta && Object.hasOwn(pwiMeta, 'RepetitionTime')) {

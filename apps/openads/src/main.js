@@ -16,7 +16,7 @@ import {
 import { createElement } from '@neurodesk/webapp-components/core';
 import { downloadFile } from '@neurodesk/webapp-components/file-io';
 import { readImageFiles } from '@neurodesk/runtime-support/dcm2niix-client';
-import { registerAppAutomation, runAbortable } from '@neurodesk/webapp-components/automation';
+import { registerAppAutomation, createNiivueAdapter, runAbortable } from '@neurodesk/webapp-components/automation';
 import { projectSubjectOntoCohort, cohortSummaryCsv } from '@neurodesk/openads';
 import { APP, ROLES, assignRoles, detectMode, inferSubjectId } from './config.js';
 import { renderReportView } from './report.js';
@@ -35,6 +35,7 @@ mountImagingWorkspace({
 let viewer = null;
 let viewerReady = null;
 let maskEditor = null;
+let automation = null;
 let viewQueue = Promise.resolve();
 let viewRevision = 0;
 let activeViewTab = 'multiplanar';
@@ -106,10 +107,35 @@ $('privacyBtn').onclick = () => info.open('Privacy', $('privacyContent'));
 
 let files = [];
 let assigned = Object.fromEntries(ROLES.map(({ role }) => [role, null]));
+let inputGeneration = 0;
 let outputs = {};
 let lastResult = null;
 let job = null;
 const view = { baseKey: null, overlayKey: null };
+const rememberedAssignments = new WeakMap();
+
+function rememberCurrentAssignment() {
+  if (!files.length) return;
+  const key = files[0];
+  const entries = rememberedAssignments.get(key) || [];
+  const next = { files: [...files], assigned: { ...assigned } };
+  const idx = entries.findIndex(
+    (entry) => entry.files.length === next.files.length && entry.files.every((f, i) => f === next.files[i]),
+  );
+  if (idx >= 0) entries[idx] = next;
+  else entries.push(next);
+  rememberedAssignments.set(key, entries);
+}
+
+function findRememberedAssignment(list) {
+  if (!list.length) return null;
+  const entries = rememberedAssignments.get(list[0]);
+  if (!entries) return null;
+  const match = entries.find(
+    (entry) => entry.files.length === list.length && entry.files.every((f, i) => f === list[i]),
+  );
+  return match ? { ...match.assigned } : null;
+}
 
 function hasLoadedImage() {
   return Boolean(view.baseKey && outputs[view.baseKey]);
@@ -124,6 +150,8 @@ for (const { role, label, name } of ROLES) {
       if (other !== role && idx !== null && assigned[other] === idx) assigned[other] = null;
     }
     assigned[role] = idx;
+    inputGeneration += 1;
+    rememberCurrentAssignment();
     renderInputs();
     clearResults();
     void show();
@@ -180,10 +208,15 @@ const results = createResultList({
             if (!stage || !outputs[stage]) return;
             outputs[stage].file = editedFile;
             outputs[stage].edited = true;
-            const reusedDirectly = stage === 'stroke_mni' && assigned.mask !== null;
+            const reusedDirectly = stage === 'stroke_mni'
+              && lastResult?.mode === 'mni-report'
+              && assigned.mask !== null
+              && detectMode(assigned).mode === 'mni-report';
             if (reusedDirectly) {
+              inputGeneration += 1;
               files[assigned.mask] = editedFile;
               if (outputs.input_mask) outputs.input_mask.file = editedFile;
+              rememberCurrentAssignment();
               syncInputFiles(files);
               renderInputs();
             }
@@ -194,7 +227,7 @@ const results = createResultList({
                   className: 'nd-report-notes openads-edit-note',
                   text: reusedDirectly
                     ? 'Mask edited after report generation — click Run analysis to refresh volumes, RF calls and StrokeView cohort.'
-                    : 'Mask edited after report generation — download or assign the edited mask under MNI lesion mask to refresh reporting.',
+                    : 'Mask edited after report generation — download or assign the edited mask under MNI lesion mask (without DWI) to refresh reporting.',
                 }),
               );
             }
@@ -369,6 +402,7 @@ async function ensureViewer() {
       await nv.attachToCanvas($('gl1'));
       viewer = nv;
       layouts.multiplanar();
+      automation?.registerViewer('main', createNiivueAdapter(nv));
       return nv;
     })().catch((err) => {
       viewerReady = null;
@@ -428,9 +462,9 @@ toolbar.control('overlayOpacity').addEventListener('input', (event) => {
   }
 });
 
-async function loadInputFiles(incoming, explicitRoleByFile = null, signal = null) {
+async function loadInputFiles(incoming, explicitRoleByFile = null, signal = null, restoredAssigned = null) {
   const list = Array.from((await incoming) || []);
-  if (!list.length) return;
+  if (!list.length) return inputGeneration;
   const current = begin('loading', 'Reading input files…', signal);
   const assertStillCurrent = () => {
     if (job !== current || current.controller.signal.aborted) {
@@ -461,8 +495,10 @@ async function loadInputFiles(incoming, explicitRoleByFile = null, signal = null
         if (role) explicitRoles[role] = idx;
       });
     }
+    const generation = ++inputGeneration;
     files = all;
-    assigned = assignRoles(files, explicitRoles);
+    assigned = restoredAssigned ? { ...restoredAssigned } : assignRoles(files, explicitRoles);
+    rememberCurrentAssignment();
     syncInputFiles(files);
     renderInputs();
     clearResults();
@@ -472,6 +508,7 @@ async function loadInputFiles(incoming, explicitRoleByFile = null, signal = null
     } catch (viewerErr) {
       log.log(`Viewer preview unavailable: ${viewerErr?.message || viewerErr}`, 'error');
     }
+    return generation;
   } catch (err) {
     if (job === current) {
       end(current, err.message || 'Could not read input files.', { success: false, error: err?.name !== 'AbortError' });
@@ -501,7 +538,11 @@ $('exampleControl').append(exampleControl);
 
 $('imageInput').addEventListener('change', (event) => {
   const picked = event.target.files;
-  if (picked?.length) void loadInputFiles(picked).catch(() => {});
+  if (picked?.length) {
+    const list = Array.from(picked);
+    const restored = findRememberedAssignment(list);
+    void loadInputFiles(list, null, null, restored).catch(() => {});
+  }
 });
 
 function buildDownloads(reporting) {
@@ -518,7 +559,10 @@ function buildDownloads(reporting) {
   return list;
 }
 
-function runAnalysis(options = {}, signal = null) {
+function runAnalysis(options = {}, signal = null, expectedGeneration = null) {
+  if (expectedGeneration !== null && inputGeneration !== expectedGeneration) {
+    return Promise.reject(new DOMException('Inputs were replaced before analysis started.', 'AbortError'));
+  }
   const plan = detectMode(assigned);
   if (!plan.ready) {
     status('Load DWI + b0/ADC or an MNI152 lesion mask first.', true);
@@ -576,7 +620,7 @@ function runAnalysis(options = {}, signal = null) {
     if (msg.type === 'result') {
       try {
         const { reporting, outputVolumes, elapsedSeconds } = msg.result;
-        lastResult = msg.result;
+        lastResult = { ...msg.result, mode: plan.mode };
         const nextOutputs = buildInputOutputs();
         for (const vol of outputVolumes) {
           nextOutputs[vol.key] = {
@@ -692,10 +736,11 @@ $('cancelButton').addEventListener('click', () => {
   end(job, 'Cancelled.', { success: false });
 });
 
-registerAppAutomation({
+automation = registerAppAutomation({
   app: APP.id,
   operations: {
     analyze: async ({ inputs, parameters, signal }) => {
+      exampleControl.cancel();
       const incoming = [];
       const explicitRoleByFile = new Map();
       for (const { role } of ROLES) {
@@ -706,32 +751,18 @@ registerAppAutomation({
         }
       }
       if (!incoming.length) throw new Error('Supply DWI+b0/ADC or an MNI152 stroke mask.');
-      await loadInputFiles(incoming, explicitRoleByFile, signal);
+      const generation = await loadInputFiles(incoming, explicitRoleByFile, signal);
       signal?.throwIfAborted();
+      if (generation !== inputGeneration) {
+        throw new DOMException('Inputs were replaced before analysis started.', 'AbortError');
+      }
       if (parameters?.runSyn !== undefined) $('runSyn').checked = Boolean(parameters.runSyn);
       if (parameters?.runShap !== undefined) $('runShap').checked = Boolean(parameters.runShap);
       if (parameters?.threshold !== undefined) $('threshold').value = String(parameters.threshold);
       if (parameters?.cohortK !== undefined) $('cohortK').value = String(parameters.cohortK);
-      return runAbortable(signal, () => runAnalysis(parameters || {}, signal));
+      return runAbortable(signal, () => runAnalysis(parameters || {}, signal, generation));
     },
   },
-  reset: () => {
-    void maskEditor?.cancel();
-    if (job) {
-      job.controller.abort(new DOMException('Reset.', 'AbortError'));
-      end(job, 'Ready', { success: false });
-    }
-    files = [];
-    assigned = Object.fromEntries(ROLES.map(({ role }) => [role, null]));
-    syncInputFiles([]);
-    renderInputs();
-    clearResults();
-    progress.reset();
-    activeViewTab = 'multiplanar';
-    toolbar.setActive('multiplanar');
-    setReportVisible(false);
-  },
-  viewer: () => viewer,
 });
 
 refreshControls();

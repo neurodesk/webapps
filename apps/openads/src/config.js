@@ -13,10 +13,22 @@ export const ROLES = [
   { role: 'brainmask', label: 'MNI brain mask', name: 'Pre-registered MNI152 brain mask' },
 ];
 
+function stripExtension(name) {
+  return String(name || '')
+    .toLowerCase()
+    .replace(/\.nii\.gz$|\.nii$|\.json$/i, '');
+}
+
 export function classifyFileName(name) {
   const lower = String(name || '').toLowerCase();
   if (lower.endsWith('.json')) {
-    return 'pwi-json';
+    if (
+      /(^|[_\-.])(pwi|dsc|perf|perfusion|ttp)([_\-.]|$)/.test(lower)
+      && !/(^|[_\-.])(dwi|adc|b0|bzero|trace|t1w?|t2w?|flair|mask)([_\-.]|$)/.test(lower)
+    ) {
+      return 'pwi-json';
+    }
+    return null;
   }
   if (/(^|[_\-.])(brain[-_]?mask|dwibrain[-_]?mask|pwibrain[-_]?mask)([_\-.]|$)/.test(lower)) {
     return 'brainmask';
@@ -54,11 +66,31 @@ export function assignRoles(files, explicitRoles = {}) {
   files.forEach((file, index) => {
     if (used.has(index)) return;
     const role = classifyFileName(file.name);
-    if (role && assigned[role] === null) {
+    if (role && role !== 'pwi-json' && assigned[role] === null) {
       assigned[role] = index;
       used.add(index);
     }
   });
+  if (assigned['pwi-json'] === null && assigned.pwi !== null) {
+    const pwiStem = stripExtension(files[assigned.pwi].name);
+    const jsonIndices = [];
+    files.forEach((file, index) => {
+      if (!used.has(index) && String(file.name || '').toLowerCase().endsWith('.json')) {
+        jsonIndices.push(index);
+      }
+    });
+    const exactMatch = jsonIndices.find((index) => stripExtension(files[index].name) === pwiStem);
+    if (exactMatch !== undefined) {
+      assigned['pwi-json'] = exactMatch;
+      used.add(exactMatch);
+    } else {
+      const pwiNamed = jsonIndices.filter((index) => classifyFileName(files[index].name) === 'pwi-json');
+      if (pwiNamed.length === 1) {
+        assigned['pwi-json'] = pwiNamed[0];
+        used.add(pwiNamed[0]);
+      }
+    }
+  }
   return assigned;
 }
 

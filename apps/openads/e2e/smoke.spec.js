@@ -66,10 +66,25 @@ test('example selector loads StrokeFAIR MNI case, runs reporting + TreeSHAP + St
   expect(view.getInt32(0, true)).toBe(348);
   expect([view.getInt16(42, true), view.getInt16(44, true), view.getInt16(46, true)]).toEqual([182, 218, 182]);
 
-  // Verify mask editor opens via start(), applies edits, and feeds the edited mask into re-runs
+  // Verify mask editor opens via start(), paints voxels, applies edits, and feeds the edited mask into re-runs
+  const beforeStatus = await page.locator('#statusText').textContent();
+  const beforeMatch = beforeStatus?.match(/—\s*([\d.]+)\s*mL/);
+  expect(beforeMatch).not.toBeNull();
+  const beforeMl = Number(beforeMatch[1]);
+
   await page.locator('#resultList .nd-volume-toggle[data-stage="stroke_mni"] .nd-edit-btn').click();
   const editor = page.locator('nd-mask-editor');
   await expect(editor).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('button', { name: 'Axial', exact: true }).click();
+  await editor.getByRole('button', { name: 'Draw', exact: true }).click();
+  const box = await page.locator('#gl1').boundingBox();
+  const y = box.y + box.height / 2;
+  await page.mouse.move(box.x + box.width * 0.3, y);
+  await page.mouse.down();
+  for (let step = 1; step <= 12; step++) {
+    await page.mouse.move(box.x + box.width * (0.3 + 0.03 * step), y);
+  }
+  await page.mouse.up();
   await editor.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect(editor).toBeHidden({ timeout: 20_000 });
   await expect(page.locator('#resultList .nd-volume-toggle[data-stage="stroke_mni"]')).toContainText('(edited)');
@@ -79,6 +94,10 @@ test('example selector loads StrokeFAIR MNI case, runs reporting + TreeSHAP + St
   await expect(page.locator('#statusText')).toContainText(/Done in /, { timeout: 120_000 });
   await expect(page.locator('.openads-edit-note')).toHaveCount(0);
   await expect(page.locator('#resultList .nd-volume-toggle[data-stage="stroke_mni"]')).not.toContainText('(edited)');
+  const afterStatus = await page.locator('#statusText').textContent();
+  const afterMatch = afterStatus?.match(/—\s*([\d.]+)\s*mL/);
+  expect(afterMatch).not.toBeNull();
+  expect(Number(afterMatch[1])).toBeGreaterThan(beforeMl);
 });
 
 test('page drop via the shared shell loads and classifies a dropped NIfTI file', async ({ page }) => {

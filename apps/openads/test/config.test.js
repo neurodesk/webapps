@@ -9,8 +9,25 @@ test('APP metadata and filename role classification cover DWI, ADC, b0, PWI, JSO
   assert.equal(classifyFileName('02e8eb42_b0.nii.gz'), 'b0');
   assert.equal(classifyFileName('02e8eb42_PWI.nii.gz'), 'pwi');
   assert.equal(classifyFileName('02e8eb42_PWI.json'), 'pwi-json');
+  assert.equal(classifyFileName('02e8eb42_DWI.json'), null);
   assert.equal(classifyFileName('sub-02e8eb42_stroke_space-MNI152.nii.gz'), 'mask');
   assert.equal(classifyFileName('sub-02e8eb42_brain-mask_space-MNI152.nii.gz'), 'brainmask');
+});
+
+test('assignRoles matches PWI JSON sidecar to the selected PWI scan and skips unrelated or ambiguous JSONs', () => {
+  const mkFiles = (names) => names.map((name) => ({ name }));
+
+  const paired = assignRoles(mkFiles(['case_dwi.json', 'case_pwi.nii.gz', 'case_pwi.json']));
+  assert.equal(paired['pwi-json'], 2);
+
+  const unrelatedOnly = assignRoles(mkFiles(['case_dwi.json', 'case_pwi.nii.gz']));
+  assert.equal(unrelatedOnly['pwi-json'], null);
+
+  const ambiguous = assignRoles(mkFiles(['case_dsc_run-1.json', 'case_dsc_run-2.json', 'case_perfusion.nii.gz']));
+  assert.equal(ambiguous['pwi-json'], null);
+
+  const stemWins = assignRoles(mkFiles(['case_dsc_run-1.json', 'case_dsc_run-2.json', 'case_dsc_run-2.nii.gz']));
+  assert.equal(stemWins['pwi-json'], 1);
 });
 
 test('detectMode chooses dwi-pwi, dwi, or mni-report accurately', () => {
