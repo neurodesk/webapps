@@ -271,6 +271,11 @@ test('an imaging workspace page carries its region classes, so it is laid out be
   assert.match(stamped, /<header title="1 > 0" id='controls' class="nd-imaging-controls">/);
   assert.match(stamped, /<footer id="status" class="nd-imaging-status">/);
 
+  const quoted = injectCompositeTheme(page.replace('class="app-viewer"', 'class=\'a"b\''), { ...metadata, shell: 'imaging-workspace' });
+  assert.match(quoted, /<main id="viewer" class='a"b nd-imaging-viewer'>/, 'a class keeps its own quotes');
+  const nested = page.replace('<header id="controls"></header>', '<template><template></template><header id="controls"></header></template>');
+  assert.doesNotMatch(injectCompositeTheme(nested, { ...metadata, shell: 'imaging-workspace' }), /nd-imaging-/, 'a region inside a template is not a region of the page');
+
   const partial = page.replace(' id="viewer"', ' id="canvas"');
   assert.doesNotMatch(injectCompositeTheme(partial, { ...metadata, shell: 'imaging-workspace' }), /nd-imaging-/, 'a page without all three regions is left to its app');
 });
