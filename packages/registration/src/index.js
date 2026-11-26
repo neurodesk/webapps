@@ -47,6 +47,16 @@ export async function createRegistration({createModule,wasmBinary,onLog=()=>{}})
   }
   let next=0;
   const jobs=new Set();
+  function cleanupDir(dir, suppress) {
+    try {
+      for(const name of module.FS.readdir(dir))if(!['.','..'].includes(name))module.FS.unlink(dir+'/'+name);
+      module.FS.rmdir(dir);
+    } catch (error) {
+      if (!suppress) throw error;
+    } finally {
+      jobs.delete(dir);
+    }
+  }
   return {
     importTransforms({fixed,transforms}) {
       const dir=`/job-${next++}`,prefix=dir+'/result-',fixedPath=dir+'/fixed.nii';
@@ -64,6 +74,52 @@ export async function createRegistration({createModule,wasmBinary,onLog=()=>{}})
       const transforms=Object.fromEntries(names.map(name=>[name,module.FS.readFile(prefix+name)]));
       const warped=module.FS.readFile(prefix+'brain.nii.gz');
       return {warped,transforms,dir,prefix,fixedPath,seed};
+    },
+    registerWithArgs({fixed,moving,buildArgs,transformNames=['0GenericAffine.mat']}) {
+      const dir=`/job-${next++}`;
+      const fixedPath=dir+'/fixed.nii',movingPath=dir+'/moving.nii',prefix=dir+'/result-',outPath=prefix+'warped.nii';
+      let created=false,failed=false;
+      try {
+        module.FS.mkdir(dir);jobs.add(dir);created=true;
+        module.FS.writeFile(fixedPath,new Uint8Array(fixed));module.FS.writeFile(movingPath,new Uint8Array(moving));
+        call(buildArgs(fixedPath,movingPath,prefix,outPath));
+        const transforms={};
+        for(const name of transformNames){
+          try { transforms[name]=module.FS.readFile(prefix+name).slice(); } catch { /* optional transform */ }
+        }
+        const warped=module.FS.readFile(outPath).slice();
+        return {warped,transforms};
+      } catch (error) {
+        failed=true;
+        throw error;
+      } finally {
+        if (created) cleanupDir(dir, failed);
+      }
+    },
+    applyTransforms({fixed,moving,transforms,interpolation='linear',fill=0}) {
+      if(!['linear','nearest'].includes(interpolation)||!Number.isFinite(fill))throw new Error('Invalid resampling settings.');
+      if(!Array.isArray(transforms)||!transforms.length)throw new Error('At least one transform is required.');
+      const dir=`/job-${next++}`;
+      const fixedPath=dir+'/fixed.nii',movingPath=dir+'/moving.nii',outPath=dir+'/warped.nii.gz';
+      let created=false,failed=false;
+      try {
+        module.FS.mkdir(dir);jobs.add(dir);created=true;
+        module.FS.writeFile(fixedPath,new Uint8Array(fixed));module.FS.writeFile(movingPath,new Uint8Array(moving));
+        const specs=[];
+        for(let i=0;i<transforms.length;i++){
+          const item=transforms[i];
+          const path=`${dir}/t${i}-${item.name}`;
+          module.FS.writeFile(path,new Uint8Array(item.bytes));
+          specs.push(item.invert?`inverse:${path}`:path);
+        }
+        call(['--apply',fixedPath,movingPath,outPath,interpolation,String(fill),...specs]);
+        return module.FS.readFile(outPath).slice();
+      } catch (error) {
+        failed=true;
+        throw error;
+      } finally {
+        if (created) cleanupDir(dir, failed);
+      }
     },
     apply({registration,moving,interpolation='linear',fill=0}) {
       if(!['linear','nearest'].includes(interpolation)||!Number.isFinite(fill))throw new Error('Invalid resampling settings.');

@@ -3403,3 +3403,64 @@ apps:
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
+  openads:
+    builders: "Developed from OpenADS (ADSWeb) and StrokeView by Andreia V. Faria, Chin-Fu Liu, and the Faria Lab (Johns Hopkins University School of Medicine, https://strokefair.org), ported to Neurodesk Webapps in collaboration with the Neurodesk team. © The Johns Hopkins University — JHU Non-Profit Research Software License."
+    about:
+      - "OpenADS (created by the Faria Lab at Johns Hopkins University) segments acute ischemic stroke core lesions on DWI/ADC and hypoperfusion deficits on 4D PWI/TTP, maps segmentations to MNI152 1 mm space, computes core-penumbra mismatch, and generates structured radiological reports with JHU-ICBM arterial territory, lobar, MCA-ASPECTS and hydrocephalus scoring, plus posterior-circulation (pcASPECTS) overlap and TreeSHAP attributions."
+      - "Raw native-space DWI + b0/ADC scans (including multi-volume 4D DWI with optional .bval sidecars) run end-to-end in the browser: automatic ADC calculation, SynthStrip brain extraction, ANTs MNI152 registration (fast affine by default, or optional SyN nonlinear warp for affsyn reporting), 16-pass DAGMNet ONNX segmentation (using ADSWeb's lightweight browser variant with zero-filled Prob_IS prior and percentile+z-score DWI normalization), and inverse-transform native mask restoration. Adding 4D PWI runs BIDS SliceTiming correction (when supplied), Gd concentration TTP mapping, coregistration and DAGMNet PWI hypoperfusion segmentation."
+      - "Every run also includes exact TreeSHAP per-region feature attributions (and logistic log-odds attributions for pcASPECTS Thalamus/Midbrain) and the Faria Lab's StrokeView cohort explorer, projecting the patient's Quantitative Feature Vector onto the 1,861-subject StrokeFAIR acute stroke UMAP reference to summarize clinical phenotypes of the nearest cases. Licensed under the JHU Non-Profit Research Software License Agreement (non-commercial academic/non-profit research use only; not a clinical diagnostic tool)."
+    packages:
+      - { name: "Faria Lab — OpenADS (ADSWeb & DAGMNet)", url: https://github.com/farialab/OpenADS, role: "acute stroke DWI/PWI segmentation, JHU-ICBM atlases and automated radiological reporting (JHU Non-Profit Research License)" }
+      - { name: "Faria Lab — StrokeView & StrokeFAIR", url: https://strokeview.strokefair.org/, role: "1,861-patient StrokeFAIR UMAP cohort projection and clinical phenotype matching" }
+      - { name: SynthStrip, url: https://surfer.nmr.mgh.harvard.edu/docs/synthstrip/, role: "skull stripping on native DWI and PWI scans" }
+      - { name: "ANTs (WebAssembly)", url: https://github.com/ANTsX/ANTs, role: "MNI152 affine/SyN registration and native-space mask restoration" }
+      - { name: "ONNX Runtime Web", url: https://onnxruntime.ai/, role: "client-side DAGMNet and Random Forest classifier inference" }
+      - { name: dcm2niix, url: https://github.com/rordenlab/dcm2niix, role: "local DICOM to NIfTI conversion" }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: "image viewer and mask editor" }
+    citations:
+      - group: Acute stroke segmentation (Faria Lab, JHU)
+        title: OpenADS / DAGMNet
+        reference: "Liu C-F, Hsu J, Xu X, Ramachandran S, Wang V, Miller MI, Hillis AE, Faria AV. Deep learning-based detection and segmentation of diffusion abnormalities in acute ischemic stroke. Communications Medicine. 2021;1:61."
+        doi: 10.1038/s43856-021-00062-8
+        code: https://github.com/farialab/OpenADS
+      - group: Radiological reporting and StrokeView (Faria Lab, JHU)
+        title: Automatic comprehensive ASPECTS reports in clinical acute stroke MRIs
+        reference: "Liu C-F, Li J, Kim G, Miller MI, Hillis AE, Faria AV. Automatic comprehensive ASPECTS reports in clinical acute stroke MRIs. Scientific Reports. 2023;13:3784."
+        doi: 10.1038/s41598-023-30242-6
+      - group: Radiological reporting and StrokeView (Faria Lab, JHU)
+        title: Automatic comprehensive radiological reports for acute stroke MRIs
+        reference: "Liu C-F, Zhao Y, Yedavalli V, Leigh R, Falcao V, Miller MI, Hillis AE, Faria AV. Automatic comprehensive radiological reports for clinical acute stroke MRIs. Communications Medicine. 2023;3:95."
+        doi: 10.1038/s43856-023-00327-4
+      - group: Atlases and cohort data (Faria Lab, JHU)
+        title: Digital 3D Brain MRI Arterial Territories Atlas
+        reference: "Liu C-F, Hsu J, Xu X, et al. Digital 3D Brain MRI Arterial Territories Atlas. Scientific Data. 2023;10:74."
+        doi: 10.1038/s41597-022-01923-0
+      - group: Atlases and cohort data (Faria Lab, JHU)
+        title: StrokeFAIR Acute Stroke MRI Dataset & StrokeView Cohort
+        reference: "Liu C-F, Leigh R, Johnson B, Urrutia V, Hsu J, Xu X, Li X, Mori S, Hillis AE, Faria AV. A large public dataset of annotated clinical MRIs and metadata of patients with acute stroke. Scientific Data. 2023;10:548. (ICPSR 38464: doi:10.3886/ICPSR38464.v5)"
+        doi: 10.1038/s41597-023-02457-9
+        url: https://strokefair.org/
+      - group: Brain extraction
+        title: SynthStrip
+        reference: "Hoopes A, Mora JS, Dalca AV, Fischl B, Hoffmann M. SynthStrip: skull-stripping for any brain image. NeuroImage. 2022;260:119474."
+        doi: 10.1016/j.neuroimage.2022.119474
+      - group: Registration
+        title: ANTs (SyN)
+        reference: "Avants BB, Tustison NJ, Song G, et al. A reproducible evaluation of ANTs similarity metric performance in brain image registration. NeuroImage. 2011;54(3):2033–2044."
+        doi: 10.1016/j.neuroimage.2010.09.025
+      - group: Explainability
+        title: TreeSHAP
+        reference: "Lundberg SM, Erion G, Chen H, et al. From local explanations to global understanding with explainable AI for trees. Nature Machine Intelligence. 2020;2:56–67."
+        doi: 10.1038/s42256-019-0138-9
+      - group: Conversion and inference
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+      - group: Conversion and inference
+        title: ONNX Runtime
+        reference: "ONNX Runtime developers. ONNX Runtime [Computer software]."
+        url: https://onnxruntime.ai/
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue

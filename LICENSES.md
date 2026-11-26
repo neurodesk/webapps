@@ -94,6 +94,7 @@ for each app are recorded in `registry/apps.yml`.
 - `apps/browserqc`: BSD-2-Clause (`apps/browserqc/LICENSE`)
 - `apps/surfannotate`: MIT (`apps/surfannotate/LICENSE`); bundled third-party
   notices in `apps/surfannotate/THIRD-PARTY.md`
+- `apps/openads`, `packages/openads`: JHU Non-Profit Research Software License Agreement (`apps/openads/LICENSE`, `packages/openads/LICENSE`, `© The Johns Hopkins University`); derived from OpenADS (ADSWeb) and StrokeView by Andreia V. Faria, Chin-Fu Liu, and the Faria Lab (Johns Hopkins University School of Medicine). Non-commercial academic and non-profit research use only; attribution and third-party notices are in `apps/openads/NOTICE` and `packages/openads/NOTICE`.
 - `packages/vesselboost`: UNLICENSED / NOASSERTION; extracted source preserves the upstream app status. QSM.rs and Rust third-party notices are included under `packages/vesselboost/preprocessing/`.
 - `packages/spinalcordtoolbox`: UNLICENSED / NOASSERTION; extracted source preserves the upstream app status.
 - `apps/vesselboost`, `apps/spinalcordtoolbox`, `apps/calmar`, and `apps/dicompare`:

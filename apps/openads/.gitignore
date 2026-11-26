@@ -1,0 +1,4 @@
+dist/
+public/registration/
+test-results/
+playwright-report/

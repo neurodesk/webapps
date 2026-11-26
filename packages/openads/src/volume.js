@@ -1,0 +1,1020 @@
+// Pure NIfTI-1 3D/4D volume I/O, RAS canonical reorientation, DWI/b0 ADC calculation,
+// normalization, padding, and binary mask morphology for OpenADS.
+
+const HEADER_SIZE = 348;
+const VOX_OFFSET = 352;
+const DT_UINT8 = 2;
+const DT_INT16 = 4;
+const DT_INT32 = 8;
+const DT_FLOAT32 = 16;
+const DT_FLOAT64 = 64;
+const DT_UINT16 = 512;
+
+export const voxelCount = (dims) => dims[0] * dims[1] * dims[2];
+
+export async function gunzipIfNeeded(bytes) {
+  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  if (u8.length >= 2 && u8[0] === 0x1f && u8[1] === 0x8b) {
+    const stream = new Blob([u8]).stream().pipeThrough(new DecompressionStream('gzip'));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+  return u8;
+}
+
+export async function gzipBytes(bytes) {
+  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const stream = new Blob([u8]).stream().pipeThrough(new CompressionStream('gzip'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+function readTypedVoxel(view, offset, datatype, littleEndian) {
+  switch (datatype) {
+    case DT_UINT8:
+      return [view.getUint8(offset), 1];
+    case DT_INT16:
+      return [view.getInt16(offset, littleEndian), 2];
+    case DT_INT32:
+      return [view.getInt32(offset, littleEndian), 4];
+    case DT_FLOAT32:
+      return [view.getFloat32(offset, littleEndian), 4];
+    case DT_FLOAT64:
+      return [view.getFloat64(offset, littleEndian), 8];
+    case DT_UINT16:
+      return [view.getUint16(offset, littleEndian), 2];
+    default:
+      throw new Error(`Unsupported NIfTI datatype: ${datatype}`);
+  }
+}
+
+const SPATIAL_UNIT_MM = { 0: 1, 1: 1000, 2: 1, 3: 0.001 };
+const TIME_UNIT_SEC = { 0: 1, 8: 1, 16: 0.001, 24: 1e-6 };
+
+export function quaternionToAffine(qb, qc, qd, qx, qy, qz, pixdim, qfac = 1) {
+  const sumSq = qb * qb + qc * qc + qd * qd;
+  const a = sumSq >= 1 ? 0 : Math.sqrt(1 - sumSq);
+  const dx = Math.abs(pixdim[0]) || 1;
+  const dy = Math.abs(pixdim[1]) || 1;
+  const dz = (Math.abs(pixdim[2]) || 1) * (qfac < 0 ? -1 : 1);
+  const affine = new Float32Array(16);
+  affine[0] = (a * a + qb * qb - qc * qc - qd * qd) * dx;
+  affine[1] = 2 * (qb * qc - a * qd) * dy;
+  affine[2] = 2 * (qb * qd + a * qc) * dz;
+  affine[3] = qx;
+  affine[4] = 2 * (qb * qc + a * qd) * dx;
+  affine[5] = (a * a + qc * qc - qb * qb - qd * qd) * dy;
+  affine[6] = 2 * (qc * qd - a * qb) * dz;
+  affine[7] = qy;
+  affine[8] = 2 * (qb * qd - a * qc) * dx;
+  affine[9] = 2 * (qc * qd + a * qb) * dy;
+  affine[10] = (a * a + qd * qd - qb * qb - qc * qc) * dz;
+  affine[11] = qz;
+  affine[15] = 1;
+  return affine;
+}
+
+export function affineToQform(affine) {
+  const c0 = [affine[0], affine[4], affine[8]];
+  const c1 = [affine[1], affine[5], affine[9]];
+  const c2 = [affine[2], affine[6], affine[10]];
+  const dx = Math.hypot(c0[0], c0[1], c0[2]);
+  const dy = Math.hypot(c1[0], c1[1], c1[2]);
+  const dz = Math.hypot(c2[0], c2[1], c2[2]);
+  if (!(dx > 0 && dy > 0 && dz > 0)) return null;
+  const r0 = c0.map((v) => v / dx);
+  const r1 = c1.map((v) => v / dy);
+  let r2 = c2.map((v) => v / dz);
+  const dot = (u, v) => u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
+  if (Math.abs(dot(r0, r1)) > 1e-3 || Math.abs(dot(r0, r2)) > 1e-3 || Math.abs(dot(r1, r2)) > 1e-3) {
+    return null;
+  }
+  const det =
+    r0[0] * (r1[1] * r2[2] - r1[2] * r2[1]) -
+    r1[0] * (r0[1] * r2[2] - r0[2] * r2[1]) +
+    r2[0] * (r0[1] * r1[2] - r0[2] * r1[1]);
+  const qfac = det < 0 ? -1 : 1;
+  if (qfac < 0) r2 = r2.map((v) => -v);
+
+  const m00 = r0[0], m01 = r1[0], m02 = r2[0];
+  const m10 = r0[1], m11 = r1[1], m12 = r2[1];
+  const m20 = r0[2], m21 = r1[2], m22 = r2[2];
+  let a, b, c, d;
+  const tr = m00 + m11 + m22 + 1;
+  if (tr > 0.5) {
+    a = 0.5 * Math.sqrt(tr);
+    b = 0.25 * (m21 - m12) / a;
+    c = 0.25 * (m02 - m20) / a;
+    d = 0.25 * (m10 - m01) / a;
+  } else if (m00 >= m11 && m00 >= m22) {
+    const s = 2 * Math.sqrt(Math.max(1e-12, 1 + m00 - m11 - m22));
+    a = (m21 - m12) / s;
+    b = 0.25 * s;
+    c = (m01 + m10) / s;
+    d = (m02 + m20) / s;
+  } else if (m11 >= m22) {
+    const s = 2 * Math.sqrt(Math.max(1e-12, 1 + m11 - m00 - m22));
+    a = (m02 - m20) / s;
+    b = (m01 + m10) / s;
+    c = 0.25 * s;
+    d = (m12 + m21) / s;
+  } else {
+    const s = 2 * Math.sqrt(Math.max(1e-12, 1 + m22 - m00 - m11));
+    a = (m10 - m01) / s;
+    b = (m02 + m20) / s;
+    c = (m12 + m21) / s;
+    d = 0.25 * s;
+  }
+  if (a < 0) {
+    a = -a;
+    b = -b;
+    c = -c;
+    d = -d;
+  }
+  return { qfac, qb: b, qc: c, qd: d, qx: affine[3], qy: affine[7], qz: affine[11], pixdim: [dx, dy, dz] };
+}
+
+function readAffine(view, pixdim, littleEndian) {
+  const qformCode = view.getInt16(252, littleEndian);
+  const sformCode = view.getInt16(254, littleEndian);
+  let affine;
+  if (sformCode > 0) {
+    affine = new Float32Array(16);
+    affine[15] = 1;
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 4; c++) {
+        affine[r * 4 + c] = view.getFloat32(280 + r * 16 + c * 4, littleEndian);
+      }
+    }
+  } else if (qformCode > 0) {
+    const qfac = view.getFloat32(76, littleEndian) < 0 ? -1 : 1;
+    const qb = view.getFloat32(256, littleEndian);
+    const qc = view.getFloat32(260, littleEndian);
+    const qd = view.getFloat32(264, littleEndian);
+    const qx = view.getFloat32(268, littleEndian);
+    const qy = view.getFloat32(272, littleEndian);
+    const qz = view.getFloat32(276, littleEndian);
+    affine = quaternionToAffine(qb, qc, qd, qx, qy, qz, pixdim, qfac);
+  } else {
+    affine = new Float32Array(16);
+    affine[0] = Math.abs(pixdim[0]) || 1;
+    affine[5] = Math.abs(pixdim[1]) || 1;
+    affine[10] = Math.abs(pixdim[2]) || 1;
+    affine[15] = 1;
+  }
+  for (let i = 0; i < 16; i++) {
+    if (!Number.isFinite(affine[i])) {
+      throw new Error('NIfTI volume has non-finite affine entries.');
+    }
+  }
+  return affine;
+}
+
+function parseXyztUnits(view) {
+  const xyzt = view.getUint8(123);
+  const spatialCode = xyzt & 0x07;
+  const timeCode = xyzt & 0x38;
+  return {
+    xyzt,
+    spatialCode,
+    timeCode,
+    spatialScaleMm: SPATIAL_UNIT_MM[spatialCode] ?? 1,
+    timeScaleSec: TIME_UNIT_SEC[timeCode] ?? 1,
+  };
+}
+
+function affineVoxelSpacing(affine) {
+  return [
+    Math.hypot(affine[0], affine[4], affine[8]),
+    Math.hypot(affine[1], affine[5], affine[9]),
+    Math.hypot(affine[2], affine[6], affine[10]),
+  ];
+}
+
+export function assertMatchingGeometry(volA, volB, labelA = 'volume A', labelB = 'volume B', { tol = 1e-2 } = {}) {
+  if (!volA?.dims || !volB?.dims) {
+    throw new Error(`Missing geometry for ${labelA} or ${labelB}.`);
+  }
+  for (let i = 0; i < 3; i++) {
+    if (volA.dims[i] !== volB.dims[i]) {
+      throw new Error(
+        `Grid dimension mismatch between ${labelA} (${volA.dims.slice(0, 3).join('×')}) and ${labelB} (${volB.dims.slice(0, 3).join('×')}).`,
+      );
+    }
+  }
+  const expected = voxelCount(volA.dims);
+  if (volA.voxels && volA.voxels.length !== expected) {
+    throw new Error(`${labelA} voxel buffer (${volA.voxels.length}) does not match its grid (${expected}).`);
+  }
+  if (volB.voxels && volB.voxels.length !== expected) {
+    throw new Error(`${labelB} voxel buffer (${volB.voxels.length}) does not match its grid (${expected}).`);
+  }
+  if (volA.spatialUnit && volB.spatialUnit && volA.spatialUnit !== volB.spatialUnit) {
+    throw new Error(`Spatial unit mismatch between ${labelA} and ${labelB}.`);
+  }
+  if (volA.pixdim && volB.pixdim) {
+    for (let i = 0; i < 3; i++) {
+      const a = Math.abs(volA.pixdim[i]);
+      const b = Math.abs(volB.pixdim[i]);
+      if (!Number.isFinite(a) || !Number.isFinite(b) || Math.abs(a - b) > tol) {
+        throw new Error(`Voxel spacing mismatch between ${labelA} (${a}) and ${labelB} (${b}) on axis ${i}.`);
+      }
+    }
+  }
+  if (volA.affine && volB.affine) {
+    for (let i = 0; i < 16; i++) {
+      const a = volA.affine[i];
+      const b = volB.affine[i];
+      if (!Number.isFinite(a) || !Number.isFinite(b) || Math.abs(a - b) > tol) {
+        throw new Error(
+          `Physical affine mismatch between ${labelA} and ${labelB} at entry ${i} (${a} vs ${b}). Resample to a common grid first.`,
+        );
+      }
+    }
+  }
+}
+
+export function readNifti(bytes) {
+  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const view = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  const le = view.getInt32(0, true) === HEADER_SIZE;
+  if (!le && view.getInt32(0, false) !== HEADER_SIZE) {
+    throw new Error('Not a valid NIfTI-1 volume (invalid header size).');
+  }
+  const dims = [view.getInt16(42, le), view.getInt16(44, le), view.getInt16(46, le)];
+  const units = parseXyztUnits(view);
+  const rawPixdim = [view.getFloat32(80, le), view.getFloat32(84, le), view.getFloat32(88, le)];
+  const datatype = view.getInt16(70, le);
+  const voxOffset = view.getFloat32(108, le) || VOX_OFFSET;
+  const slope = view.getFloat32(112, le);
+  const inter = view.getFloat32(116, le);
+  const applyScale = Number.isFinite(slope) && slope !== 0;
+  const safeInter = Number.isFinite(inter) ? inter : 0;
+
+  const n = voxelCount(dims);
+  const voxels = new Float32Array(n);
+  let cursor = voxOffset;
+  for (let i = 0; i < n; i++) {
+    const [val, step] = readTypedVoxel(view, cursor, datatype, le);
+    cursor += step;
+    voxels[i] = applyScale ? val * slope + safeInter : val;
+  }
+  const affine = readAffine(view, rawPixdim, le);
+  if (units.spatialScaleMm !== 1) {
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 4; c++) affine[r * 4 + c] *= units.spatialScaleMm;
+    }
+  }
+  const spacing = affineVoxelSpacing(affine);
+  const pixdim = spacing.map((s, i) => (s > 0 ? s : Math.abs(rawPixdim[i]) * units.spatialScaleMm));
+  return { dims, pixdim, voxels, affine, datatype, spatialUnit: 'mm' };
+}
+
+export function readNifti4D(bytes) {
+  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const view = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  const le = view.getInt32(0, true) === HEADER_SIZE;
+  if (!le && view.getInt32(0, false) !== HEADER_SIZE) {
+    throw new Error('Not a valid NIfTI-1 volume (invalid header size).');
+  }
+  const ndim = view.getInt16(40, le);
+  const nx = view.getInt16(42, le);
+  const ny = view.getInt16(44, le);
+  const nz = view.getInt16(46, le);
+  const nt = ndim >= 4 ? Math.max(1, view.getInt16(48, le)) : 1;
+  const dims = [nx, ny, nz, nt];
+  const units = parseXyztUnits(view);
+  const rawPixdim = [
+    view.getFloat32(80, le),
+    view.getFloat32(84, le),
+    view.getFloat32(88, le),
+    view.getFloat32(92, le),
+  ];
+  const datatype = view.getInt16(70, le);
+  const voxOffset = view.getFloat32(108, le) || VOX_OFFSET;
+  const slope = view.getFloat32(112, le);
+  const inter = view.getFloat32(116, le);
+  const applyScale = Number.isFinite(slope) && slope !== 0;
+  const safeInter = Number.isFinite(inter) ? inter : 0;
+
+  const total = nx * ny * nz * nt;
+  const voxels = new Float32Array(total);
+  let cursor = voxOffset;
+  for (let i = 0; i < total; i++) {
+    const [val, step] = readTypedVoxel(view, cursor, datatype, le);
+    cursor += step;
+    voxels[i] = applyScale ? val * slope + safeInter : val;
+  }
+  const affine = readAffine(view, rawPixdim, le);
+  if (units.spatialScaleMm !== 1) {
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 4; c++) affine[r * 4 + c] *= units.spatialScaleMm;
+    }
+  }
+  const spacing = affineVoxelSpacing(affine);
+  const pixdim = [
+    spacing[0] > 0 ? spacing[0] : Math.abs(rawPixdim[0]) * units.spatialScaleMm,
+    spacing[1] > 0 ? spacing[1] : Math.abs(rawPixdim[1]) * units.spatialScaleMm,
+    spacing[2] > 0 ? spacing[2] : Math.abs(rawPixdim[2]) * units.spatialScaleMm,
+    Math.abs(rawPixdim[3]) * units.timeScaleSec,
+  ];
+  return { dims, pixdim, voxels, affine, datatype, spatialUnit: 'mm', timeUnitCode: units.timeCode };
+}
+
+export function writeNiftiFloat32(vol) {
+  const [nx, ny, nz] = vol.dims;
+  const voxels = vol.voxels instanceof Float32Array ? vol.voxels : Float32Array.from(vol.voxels);
+  const buf = new ArrayBuffer(VOX_OFFSET + voxels.byteLength);
+  const view = new DataView(buf);
+  const le = true;
+  view.setInt32(0, HEADER_SIZE, le);
+  view.setInt16(40, 3, le);
+  view.setInt16(42, nx, le);
+  view.setInt16(44, ny, le);
+  view.setInt16(46, nz, le);
+  for (let k = 4; k <= 7; k++) {
+    view.setInt16(40 + k * 2, 1, le);
+  }
+  view.setInt16(70, DT_FLOAT32, le);
+  view.setInt16(72, 32, le);
+  const qf = vol.affine ? affineToQform(vol.affine) : null;
+  view.setFloat32(76, qf ? qf.qfac : 1, le);
+  view.setFloat32(80, qf ? qf.pixdim[0] : vol.pixdim[0], le);
+  view.setFloat32(84, qf ? qf.pixdim[1] : vol.pixdim[1], le);
+  view.setFloat32(88, qf ? qf.pixdim[2] : vol.pixdim[2], le);
+  view.setFloat32(108, VOX_OFFSET, le);
+  view.setFloat32(112, 1, le);
+  view.setInt8(123, 2);
+  if (qf) {
+    view.setInt16(252, 1, le);
+    view.setFloat32(256, qf.qb, le);
+    view.setFloat32(260, qf.qc, le);
+    view.setFloat32(264, qf.qd, le);
+    view.setFloat32(268, qf.qx, le);
+    view.setFloat32(272, qf.qy, le);
+    view.setFloat32(276, qf.qz, le);
+  } else {
+    view.setInt16(252, 0, le);
+  }
+  view.setInt16(254, 1, le);
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 4; c++) {
+      view.setFloat32(280 + r * 16 + c * 4, vol.affine[r * 4 + c], le);
+    }
+  }
+  new Uint8Array(buf, 344, 4).set([0x6e, 0x2b, 0x31, 0x00]);
+  new Uint8Array(buf, VOX_OFFSET).set(new Uint8Array(voxels.buffer, voxels.byteOffset, voxels.byteLength));
+  return new Uint8Array(buf);
+}
+
+export async function writeNiftiGz(vol) {
+  return gzipBytes(writeNiftiFloat32(vol));
+}
+
+const OPPOSITE_AXIS = { R: 'L', L: 'R', A: 'P', P: 'A', S: 'I', I: 'S' };
+const AXIS_GROUP = { L: 0, R: 0, P: 1, A: 1, I: 2, S: 2 };
+const RAS = ['R', 'A', 'S'];
+
+export function affineToAxCodes(affine) {
+  const codes = [];
+  const used = new Set();
+  for (let col = 0; col < 3; col++) {
+    let bestRow = 0;
+    let bestAbs = -1;
+    for (let row = 0; row < 3; row++) {
+      const mag = Math.abs(affine[row * 4 + col]);
+      if (mag > bestAbs && !used.has(row)) {
+        bestAbs = mag;
+        bestRow = row;
+      }
+    }
+    used.add(bestRow);
+    const positive = affine[bestRow * 4 + col] >= 0;
+    const base = RAS[bestRow];
+    codes.push(positive ? base : OPPOSITE_AXIS[base]);
+  }
+  return codes;
+}
+
+function axisMapping(fromCodes, toCodes) {
+  const srcAxis = [];
+  const flip = [];
+  for (let i = 0; i < 3; i++) {
+    const target = toCodes[i];
+    const found = fromCodes.findIndex((c) => AXIS_GROUP[c] === AXIS_GROUP[target]);
+    if (found < 0) {
+      throw new Error(`Cannot map orientation ${fromCodes.join('')} to ${toCodes.join('')}.`);
+    }
+    srcAxis.push(found);
+    flip.push(fromCodes[found] !== target);
+  }
+  return { srcAxis, flip };
+}
+
+function reorientArray3D(voxels, dims, fromCodes, toCodes) {
+  const { srcAxis, flip } = axisMapping(fromCodes, toCodes);
+  const outDims = [dims[srcAxis[0]], dims[srcAxis[1]], dims[srcAxis[2]]];
+  const out = new Float32Array(voxelCount(outDims));
+  const strides = [1, dims[0], dims[0] * dims[1]];
+  const srcIdx = [0, 0, 0];
+  for (let z = 0; z < outDims[2]; z++) {
+    for (let y = 0; y < outDims[1]; y++) {
+      for (let x = 0; x < outDims[0]; x++) {
+        const dst = [x, y, z];
+        let flat = 0;
+        for (let a = 0; a < 3; a++) {
+          const sa = srcAxis[a];
+          srcIdx[sa] = flip[a] ? dims[sa] - 1 - dst[a] : dst[a];
+          flat += srcIdx[sa] * strides[sa];
+        }
+        out[x + y * outDims[0] + z * outDims[0] * outDims[1]] = voxels[flat];
+      }
+    }
+  }
+  return { data: out, dims: outDims };
+}
+
+function reorientAffine(affine, dims, fromCodes, toCodes) {
+  const { srcAxis, flip } = axisMapping(fromCodes, toCodes);
+  const out = new Float32Array(16);
+  for (let c = 0; c < 3; c++) {
+    const sa = srcAxis[c];
+    const sign = flip[c] ? -1 : 1;
+    for (let r = 0; r < 3; r++) {
+      out[r * 4 + c] = affine[r * 4 + sa] * sign;
+    }
+  }
+  const shift = [0, 0, 0];
+  for (let c = 0; c < 3; c++) {
+    const sa = srcAxis[c];
+    shift[sa] = flip[c] ? dims[sa] - 1 : 0;
+  }
+  for (let r = 0; r < 3; r++) {
+    out[r * 4 + 3] =
+      affine[r * 4 + 0] * shift[0] +
+      affine[r * 4 + 1] * shift[1] +
+      affine[r * 4 + 2] * shift[2] +
+      affine[r * 4 + 3];
+  }
+  out[15] = 1;
+  return out;
+}
+
+export function reorientVolumeToRAS(vol) {
+  const codes = affineToAxCodes(vol.affine);
+  if (codes[0] === 'R' && codes[1] === 'A' && codes[2] === 'S') {
+    return vol;
+  }
+  const { srcAxis } = axisMapping(codes, RAS);
+  const { data, dims } = reorientArray3D(vol.voxels, vol.dims, codes, RAS);
+  const pixdim = [vol.pixdim[srcAxis[0]], vol.pixdim[srcAxis[1]], vol.pixdim[srcAxis[2]]];
+  const affine = reorientAffine(vol.affine, vol.dims, codes, RAS);
+  return { dims, pixdim, voxels: data, affine, datatype: vol.datatype };
+}
+
+export function reorientVolume4DToRAS(vol) {
+  const codes = affineToAxCodes(vol.affine);
+  const [nx, ny, nz, nt] = vol.dims;
+  if (codes[0] === 'R' && codes[1] === 'A' && codes[2] === 'S') {
+    return vol;
+  }
+  const frameLen = nx * ny * nz;
+  let outDims3 = [nx, ny, nz];
+  let outVoxels = null;
+  for (let t = 0; t < nt; t++) {
+    const frame = vol.voxels.subarray(t * frameLen, (t + 1) * frameLen);
+    const res = reorientArray3D(frame, [nx, ny, nz], codes, RAS);
+    if (!outVoxels) {
+      outDims3 = res.dims;
+      outVoxels = new Float32Array(voxelCount(outDims3) * nt);
+    }
+    outVoxels.set(res.data, t * res.data.length);
+  }
+  const { srcAxis } = axisMapping(codes, RAS);
+  const pixdim = [vol.pixdim[srcAxis[0]], vol.pixdim[srcAxis[1]], vol.pixdim[srcAxis[2]], vol.pixdim[3]];
+  const affine = reorientAffine(vol.affine, [nx, ny, nz], codes, RAS);
+  return {
+    dims: [outDims3[0], outDims3[1], outDims3[2], nt],
+    pixdim,
+    voxels: outVoxels,
+    affine,
+    datatype: vol.datatype,
+  };
+}
+
+export function extractFrame3D(vol4d, frameIndex) {
+  const [nx, ny, nz] = vol4d.dims;
+  const frameLen = nx * ny * nz;
+  return {
+    dims: [nx, ny, nz],
+    pixdim: [vol4d.pixdim[0], vol4d.pixdim[1], vol4d.pixdim[2]],
+    voxels: vol4d.voxels.slice(frameIndex * frameLen, (frameIndex + 1) * frameLen),
+    affine: vol4d.affine.slice(),
+    datatype: vol4d.datatype,
+  };
+}
+
+export async function loadNiftiBytes(bytes) {
+  const raw = await gunzipIfNeeded(bytes);
+  return reorientVolumeToRAS(readNifti(raw));
+}
+
+export async function loadNifti4DRawBytes(bytes) {
+  const raw = await gunzipIfNeeded(bytes);
+  return readNifti4D(raw);
+}
+
+export async function loadNifti4DBytes(bytes) {
+  const raw = await gunzipIfNeeded(bytes);
+  return reorientVolume4DToRAS(readNifti4D(raw));
+}
+
+export function maskVolume(vol, mask) {
+  const voxels = new Float32Array(vol.voxels.length);
+  for (let i = 0; i < voxels.length; i++) {
+    voxels[i] = mask[i] ? vol.voxels[i] : 0;
+  }
+  return { ...vol, voxels };
+}
+
+export function fToC(data, dims) {
+  const [nx, ny, nz] = dims;
+  const out = new Float32Array(data.length);
+  for (let z = 0; z < nz; z++) {
+    for (let y = 0; y < ny; y++) {
+      for (let x = 0; x < nx; x++) {
+        out[(x * ny + y) * nz + z] = data[x + y * nx + z * nx * ny];
+      }
+    }
+  }
+  return out;
+}
+
+export function cToF(data, dims) {
+  const [nx, ny, nz] = dims;
+  const out = new Float32Array(data.length);
+  for (let z = 0; z < nz; z++) {
+    for (let y = 0; y < ny; y++) {
+      for (let x = 0; x < nx; x++) {
+        out[x + y * nx + z * nx * ny] = data[(x * ny + y) * nz + z];
+      }
+    }
+  }
+  return out;
+}
+
+export function centerPad(data, dims, target) {
+  const out = new Float32Array(voxelCount(target));
+  const offsets = [0, 1, 2].map((i) => Math.floor((target[i] - dims[i]) / 2));
+  for (let z = 0; z < dims[2]; z++) {
+    const tz = z + offsets[2];
+    if (tz < 0 || tz >= target[2]) continue;
+    for (let y = 0; y < dims[1]; y++) {
+      const ty = y + offsets[1];
+      if (ty < 0 || ty >= target[1]) continue;
+      for (let x = 0; x < dims[0]; x++) {
+        const tx = x + offsets[0];
+        if (tx < 0 || tx >= target[0]) continue;
+        out[tx + ty * target[0] + tz * target[0] * target[1]] =
+          data[x + y * dims[0] + z * dims[0] * dims[1]];
+      }
+    }
+  }
+  return { data: out, offsets };
+}
+
+export function uncenterPad(padded, target, dims, offsets, make = (n) => new Float32Array(n)) {
+  const out = make(voxelCount(dims));
+  for (let z = 0; z < dims[2]; z++) {
+    const sz = z + offsets[2];
+    if (sz < 0 || sz >= target[2]) continue;
+    for (let y = 0; y < dims[1]; y++) {
+      const sy = y + offsets[1];
+      if (sy < 0 || sy >= target[1]) continue;
+      for (let x = 0; x < dims[0]; x++) {
+        const sx = x + offsets[0];
+        if (sx < 0 || sx >= target[0]) continue;
+        out[x + y * dims[0] + z * dims[0] * dims[1]] =
+          padded[sx + sy * target[0] + sz * target[0] * target[1]];
+      }
+    }
+  }
+  return out;
+}
+
+function percentileOfSorted(sorted, p) {
+  const n = sorted.length;
+  if (n === 0) return 0;
+  if (n === 1) return sorted[0];
+  const idx = (p / 100) * (n - 1);
+  const lo = Math.floor(idx);
+  const hi = Math.ceil(idx);
+  if (lo === hi) return sorted[lo];
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+}
+
+export function percentileClipRescaleInMask(data, mask, pLow = 1, pHigh = 99) {
+  let nonNegCount = 0;
+  for (let i = 0; i < data.length; i++) {
+    if (mask[i] && data[i] >= 0) nonNegCount++;
+  }
+  const sorted = new Float32Array(nonNegCount);
+  let k = 0;
+  for (let i = 0; i < data.length; i++) {
+    if (mask[i] && data[i] >= 0) sorted[k++] = data[i];
+  }
+  sorted.sort();
+  const lower = percentileOfSorted(sorted, pLow);
+  const upper = percentileOfSorted(sorted, pHigh);
+  const range = upper - lower;
+  const out = new Float32Array(data.length);
+  for (let i = 0; i < data.length; i++) {
+    if (!mask[i]) continue;
+    let v = data[i];
+    if (v < lower) v = lower;
+    if (v > upper) v = upper;
+    out[i] = range > 0 ? (v - lower) / range : 0;
+  }
+  return out;
+}
+
+export function zscoreInMask(data, mask, eps = 1e-6) {
+  let count = 0;
+  let sum = 0;
+  for (let i = 0; i < data.length; i++) {
+    if (mask[i]) {
+      sum += data[i];
+      count++;
+    }
+  }
+  let mean;
+  let std;
+  if (count >= 10) {
+    mean = sum / count;
+    let ss = 0;
+    for (let i = 0; i < data.length; i++) {
+      if (mask[i]) {
+        const d = data[i] - mean;
+        ss += d * d;
+      }
+    }
+    std = Math.sqrt(ss / count);
+  } else {
+    let s = 0;
+    for (let i = 0; i < data.length; i++) s += data[i];
+    mean = data.length ? s / data.length : 0;
+    let ss = 0;
+    for (let i = 0; i < data.length; i++) {
+      const d = data[i] - mean;
+      ss += d * d;
+    }
+    std = data.length ? Math.sqrt(ss / data.length) : 1;
+  }
+  const denom = std > eps ? std : eps;
+  const out = new Float32Array(data.length);
+  for (let i = 0; i < data.length; i++) {
+    out[i] = (data[i] - mean) / denom;
+  }
+  return out;
+}
+
+export function removeSmallObjects(mask, dims, minSize) {
+  const [nx, ny, nz] = dims;
+  const n = nx * ny * nz;
+  const label = new Int32Array(n).fill(-1);
+  const stack = new Int32Array(n);
+  const sizes = [];
+  let current = 0;
+  for (let s = 0; s < n; s++) {
+    if (mask[s] === 0 || label[s] !== -1) continue;
+    let top = 0;
+    stack[top++] = s;
+    label[s] = current;
+    let size = 0;
+    while (top > 0) {
+      const p = stack[--top];
+      size++;
+      const x = p % nx;
+      const y = ((p / nx) | 0) % ny;
+      const z = (p / (nx * ny)) | 0;
+      if (x > 0 && mask[p - 1] && label[p - 1] === -1) {
+        label[p - 1] = current;
+        stack[top++] = p - 1;
+      }
+      if (x < nx - 1 && mask[p + 1] && label[p + 1] === -1) {
+        label[p + 1] = current;
+        stack[top++] = p + 1;
+      }
+      if (y > 0 && mask[p - nx] && label[p - nx] === -1) {
+        label[p - nx] = current;
+        stack[top++] = p - nx;
+      }
+      if (y < ny - 1 && mask[p + nx] && label[p + nx] === -1) {
+        label[p + nx] = current;
+        stack[top++] = p + nx;
+      }
+      if (z > 0 && mask[p - nx * ny] && label[p - nx * ny] === -1) {
+        label[p - nx * ny] = current;
+        stack[top++] = p - nx * ny;
+      }
+      if (z < nz - 1 && mask[p + nx * ny] && label[p + nx * ny] === -1) {
+        label[p + nx * ny] = current;
+        stack[top++] = p + nx * ny;
+      }
+    }
+    sizes[current] = size;
+    current++;
+  }
+  const out = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    const l = label[i];
+    out[i] = l >= 0 && sizes[l] >= minSize ? 1 : 0;
+  }
+  return out;
+}
+
+export function binaryClosing2x2x2(mask, dims) {
+  const [nx, ny, nz] = dims;
+  const at = (a, x, y, z) =>
+    x < 0 || y < 0 || z < 0 || x >= nx || y >= ny || z >= nz ? 0 : a[x + y * nx + z * nx * ny];
+  const dilated = new Uint8Array(nx * ny * nz);
+  for (let z = 0; z < nz; z++) {
+    for (let y = 0; y < ny; y++) {
+      for (let x = 0; x < nx; x++) {
+        let v = 0;
+        for (let dz = -1; dz <= 0 && !v; dz++) {
+          for (let dy = -1; dy <= 0 && !v; dy++) {
+            for (let dx = -1; dx <= 0 && !v; dx++) {
+              if (at(mask, x + dx, y + dy, z + dz)) v = 1;
+            }
+          }
+        }
+        dilated[x + y * nx + z * nx * ny] = v;
+      }
+    }
+  }
+  const out = new Uint8Array(nx * ny * nz);
+  for (let z = 0; z < nz; z++) {
+    for (let y = 0; y < ny; y++) {
+      for (let x = 0; x < nx; x++) {
+        let v = 1;
+        for (let dz = 0; dz <= 1 && v; dz++) {
+          for (let dy = 0; dy <= 1 && v; dy++) {
+            for (let dx = 0; dx <= 1 && v; dx++) {
+              if (!at(dilated, x + dx, y + dy, z + dz)) v = 0;
+            }
+          }
+        }
+        out[x + y * nx + z * nx * ny] = v;
+      }
+    }
+  }
+  return out;
+}
+
+export function binaryFillHoles(mask, dims) {
+  const [nx, ny, nz] = dims;
+  const n = nx * ny * nz;
+  const idx = (x, y, z) => x + y * nx + z * nx * ny;
+  const outside = new Uint8Array(n);
+  const stack = new Int32Array(n);
+  let top = 0;
+  const push = (p) => {
+    if (!mask[p] && !outside[p]) {
+      outside[p] = 1;
+      stack[top++] = p;
+    }
+  };
+  for (let z = 0; z < nz; z++) {
+    for (let y = 0; y < ny; y++) {
+      for (let x = 0; x < nx; x++) {
+        if (x === 0 || y === 0 || z === 0 || x === nx - 1 || y === ny - 1 || z === nz - 1) {
+          push(idx(x, y, z));
+        }
+      }
+    }
+  }
+  while (top > 0) {
+    const p = stack[--top];
+    const x = p % nx;
+    const y = ((p / nx) | 0) % ny;
+    const z = (p / (nx * ny)) | 0;
+    if (x > 0) push(p - 1);
+    if (x < nx - 1) push(p + 1);
+    if (y > 0) push(p - nx);
+    if (y < ny - 1) push(p + nx);
+    if (z > 0) push(p - nx * ny);
+    if (z < nz - 1) push(p + nx * ny);
+  }
+  const out = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    out[i] = mask[i] || !outside[i] ? 1 : 0;
+  }
+  return out;
+}
+
+export function dagmnetPostprocess(mask, dims, minSize = 50) {
+  const closed = binaryClosing2x2x2(mask, dims);
+  const filled = binaryFillHoles(closed, dims);
+  return minSize > 0 ? removeSmallObjects(filled, dims, minSize) : filled;
+}
+
+export function parseBvals(text) {
+  const trimmed = String(text ?? '').trim();
+  if (!trimmed) {
+    throw new Error('Empty .bval file.');
+  }
+  const tokens = trimmed.split(/\s+/);
+  const values = tokens.map((tok) => Number(tok));
+  if (!values.length || values.some((v) => !Number.isFinite(v) || v < 0)) {
+    throw new Error('Invalid .bval file: expected non-negative finite numbers.');
+  }
+  return values;
+}
+
+function arithmeticMeanFrames(vol4d, indices) {
+  const frame0 = extractFrame3D(vol4d, indices[0]);
+  if (indices.length === 1) return frame0;
+  const n = frame0.voxels.length;
+  const out = new Float32Array(n);
+  const inv = 1 / indices.length;
+  for (const fIdx of indices) {
+    const src = extractFrame3D(vol4d, fIdx).voxels;
+    for (let i = 0; i < n; i++) out[i] += src[i] * inv;
+  }
+  return { ...frame0, voxels: out };
+}
+
+function geometricMeanFrames(vol4d, indices) {
+  const frame0 = extractFrame3D(vol4d, indices[0]);
+  if (indices.length === 1) return frame0;
+  const n = frame0.voxels.length;
+  const logSum = new Float64Array(n);
+  const validCount = new Uint16Array(n);
+  for (const fIdx of indices) {
+    const src = extractFrame3D(vol4d, fIdx).voxels;
+    for (let i = 0; i < n; i++) {
+      const v = src[i];
+      if (v > 0) {
+        logSum[i] += Math.log(v);
+        validCount[i] += 1;
+      }
+    }
+  }
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    if (validCount[i] === indices.length) {
+      out[i] = Math.exp(logSum[i] / indices.length);
+    }
+  }
+  return { ...frame0, voxels: out };
+}
+
+export function extractDwiB0From4D(vol4d, bvals = null) {
+  const nt = vol4d.dims[3];
+  if (nt === 1) {
+    return {
+      dwi: extractFrame3D(vol4d, 0),
+      b0: null,
+      bvalue: 1000,
+      usedBvals: false,
+      checkSwap: false,
+      note: null,
+    };
+  }
+  if (bvals != null) {
+    if (!Array.isArray(bvals) || bvals.length !== nt) {
+      throw new Error(`DWI .bval entry count (${bvals?.length ?? 0}) does not match 4D DWI volume count (${nt}).`);
+    }
+    const maxB = Math.max(...bvals);
+    if (maxB <= 50) {
+      throw new Error(`DWI .bval contains no diffusion-weighted shell (max b = ${maxB}).`);
+    }
+    const lowIndices = [];
+    const highIndices = [];
+    const highTol = Math.max(50, maxB * 0.1);
+    for (let i = 0; i < nt; i++) {
+      if (bvals[i] <= 50) lowIndices.push(i);
+      else if (maxB - bvals[i] <= highTol) highIndices.push(i);
+    }
+    if (!highIndices.length) {
+      throw new Error(`Could not identify high-b DWI volumes in .bval (max b = ${maxB}).`);
+    }
+    const meanHighB = highIndices.reduce((s, idx) => s + bvals[idx], 0) / highIndices.length;
+    const meanLowB = lowIndices.length ? lowIndices.reduce((s, idx) => s + bvals[idx], 0) / lowIndices.length : 0;
+    const effectiveB = Math.max(1, meanHighB - meanLowB);
+    return {
+      dwi: geometricMeanFrames(vol4d, highIndices),
+      b0: lowIndices.length ? arithmeticMeanFrames(vol4d, lowIndices) : null,
+      bvalue: effectiveB,
+      usedBvals: true,
+      checkSwap: false,
+      note: `4D DWI (${nt} volumes) split via .bval: ${highIndices.length} high-b (b≈${Math.round(meanHighB)}) and ${lowIndices.length} b0 volume${lowIndices.length === 1 ? '' : 's'}`,
+    };
+  }
+  if (nt === 2) {
+    return {
+      dwi: extractFrame3D(vol4d, 0),
+      b0: extractFrame3D(vol4d, 1),
+      bvalue: 1000,
+      usedBvals: false,
+      checkSwap: true,
+      note: `2-volume 4D DWI (${vol4d.dims.join('×')}) without .bval — inferring DWI/b0 order from median intensity`,
+    };
+  }
+  // Multi-volume clinical 4D DWI without .bval (e.g., b0 + 3 directions/trace): separate by median signal.
+  const medians = [];
+  for (let t = 0; t < nt; t++) {
+    medians.push(medianNonZero(extractFrame3D(vol4d, t).voxels));
+  }
+  const maxMed = Math.max(...medians);
+  const minMed = Math.min(...medians);
+  if (maxMed <= 0 || maxMed <= minMed * 1.15) {
+    throw new Error(
+      `Cannot separate b0 and high-b frames in ${nt}-volume 4D DWI without a .bval file. Include the matching .bval sidecar or supply separate 3D DWI and b0/ADC scans.`,
+    );
+  }
+  const b0Cutoff = maxMed * 0.85;
+  const lowIndices = [];
+  const highIndices = [];
+  for (let t = 0; t < nt; t++) {
+    if (medians[t] >= b0Cutoff) lowIndices.push(t);
+    else highIndices.push(t);
+  }
+  if (!lowIndices.length || !highIndices.length) {
+    throw new Error(
+      `Cannot separate b0 and high-b frames in ${nt}-volume 4D DWI without a .bval file. Supply the matching .bval file or separate 3D volumes.`,
+    );
+  }
+  return {
+    dwi: geometricMeanFrames(vol4d, highIndices),
+    b0: arithmeticMeanFrames(vol4d, lowIndices),
+    bvalue: 1000,
+    usedBvals: false,
+    checkSwap: false,
+    note: `${nt}-volume 4D DWI without .bval — inferred ${lowIndices.length} b0 and ${highIndices.length} trace/high-b frames by median intensity (supply .bval for exact b-values)`,
+  };
+}
+
+// Compute ADC from DWI and b0 using OpenADS ADCCalculator formula: -ln((DWI+eps)/(b0+eps))/bvalue.
+// Automatically detects if the two volumes were supplied in swapped (b0, DWI) order when combined in 4D.
+function medianNonZero(arr) {
+  const vals = [];
+  for (let i = 0; i < arr.length; i++) {
+    if (arr[i] > 0) vals.push(arr[i]);
+  }
+  if (!vals.length) return 0;
+  vals.sort((a, b) => a - b);
+  return vals[vals.length >> 1];
+}
+
+export function detectSwappedDwiB0(volA, volB) {
+  // b0 typically has substantially higher median signal intensity than b=1000 DWI.
+  const medA = medianNonZero(volA);
+  const medB = medianNonZero(volB);
+  return medA > medB * 1.1;
+}
+
+export function computeAdcVoxels(dwiVoxels, b0Voxels, bvalue = 1000, eps = 1e-10) {
+  if (!dwiVoxels || !b0Voxels || dwiVoxels.length !== b0Voxels.length) {
+    throw new Error(`DWI (${dwiVoxels?.length ?? 0}) and b0 (${b0Voxels?.length ?? 0}) voxel buffers must have identical length.`);
+  }
+  if (!Number.isFinite(bvalue) || bvalue <= 0) {
+    throw new Error(`Invalid b-value (${bvalue}); expected a positive number.`);
+  }
+  const n = dwiVoxels.length;
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const d = dwiVoxels[i];
+    const b = b0Voxels[i];
+    if (b > 0 && d > 0) {
+      out[i] = -Math.log((d + eps) / (b + eps)) / bvalue;
+    }
+  }
+  return out;
+}
+
+export function prepareDwiAdc({ dwi, b0 = null, adc = null, bvalue = 1000, checkSwap = false }) {
+  if (adc) {
+    assertMatchingGeometry(dwi, adc, 'DWI', 'ADC');
+    return { dwi, adc, b0, adcWasComputed: false, orderWasSwapped: false };
+  }
+  if (!b0) {
+    throw new Error('Provide an ADC image or a b0 volume alongside DWI so ADC can be computed.');
+  }
+  assertMatchingGeometry(dwi, b0, 'DWI', 'b0');
+  let dwiVol = dwi;
+  let b0Vol = b0;
+  let orderWasSwapped = false;
+  if (checkSwap && detectSwappedDwiB0(dwi.voxels, b0.voxels)) {
+    orderWasSwapped = true;
+    dwiVol = b0;
+    b0Vol = dwi;
+  }
+  const adcVoxels = computeAdcVoxels(dwiVol.voxels, b0Vol.voxels, bvalue);
+  return {
+    dwi: dwiVol,
+    adc: { ...dwiVol, voxels: adcVoxels },
+    b0: b0Vol,
+    adcWasComputed: true,
+    orderWasSwapped,
+  };
+}

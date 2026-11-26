@@ -138,8 +138,8 @@
       "version": "0.1.2",
       "target": "syncro-registration/0.1.2",
       "deduplicate": true,
-      "consumers": ["ants", "syncro"],
-      "reason": "Share the ANTs SyN registration binary of packages/registration used by ANTs and SYNcro while each app keeps the pthread module inside its service-worker scope; the module finds the binary through its static new URL(\"syncro-registration.wasm\").",
+      "consumers": ["ants", "openads", "syncro"],
+      "reason": "Share the ANTs SyN registration binary of packages/registration used by ANTs, OpenADS and SYNcro while each app keeps the pthread module inside its service-worker scope; the module finds the binary through its static new URL(\"syncro-registration.wasm\").",
       "files": [
         {
           "name": "syncro-registration.wasm",

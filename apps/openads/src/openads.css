@@ -1,0 +1,17 @@
+.openads-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: var(--nd-space-sm); margin-bottom: var(--nd-space-md); }
+.openads-kpi { padding: var(--nd-space-sm); border: 1px solid var(--nd-color-border); border-radius: var(--nd-radius-sm); background: var(--nd-color-surface); }
+.openads-kpi-label { display: block; font-size: 0.7rem; color: var(--nd-color-text-muted); }
+.openads-kpi-value { display: block; font-size: 1rem; font-weight: 600; color: var(--nd-color-text); margin-top: 2px; }
+.openads-pre { padding: var(--nd-space-sm); border: 1px solid var(--nd-color-border); border-radius: var(--nd-radius-sm); background: var(--nd-color-surface); font-family: var(--nd-font-mono); font-size: 0.72rem; overflow-x: auto; white-space: pre; margin: var(--nd-space-sm) 0; }
+.openads-bar-track { height: 8px; width: 120px; background: var(--nd-color-border); border-radius: var(--nd-radius-sm); overflow: hidden; display: inline-block; vertical-align: middle; }
+.openads-bar-pos { display: block; height: 100%; background: var(--nd-color-error); }
+.openads-bar-neg { display: block; height: 100%; background: var(--nd-color-primary); }
+.openads-umap-wrap { border: 1px solid var(--nd-color-border); border-radius: var(--nd-radius-sm); background: var(--nd-color-surface); padding: var(--nd-space-sm); margin-bottom: var(--nd-space-md); }
+.openads-umap-svg { width: 100%; height: auto; max-height: 360px; display: block; }
+.openads-umap-dot { fill: var(--nd-color-text-muted); opacity: 0.45; }
+.openads-umap-nn { fill: var(--nd-color-warning); opacity: 0.9; }
+.openads-umap-self { fill: var(--nd-color-primary); stroke: var(--nd-color-text); stroke-width: 1.5; }
+.openads-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: var(--nd-space-md); }
+.openads-actions { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--nd-space-sm) var(--nd-space-md); margin: var(--nd-space-sm) 0 var(--nd-space-md); }
+.openads-panel { padding-top: var(--nd-space-md); }
+.openads-section-h { font-size: 0.85rem; font-weight: 600; margin: var(--nd-space-md) 0 var(--nd-space-xs); color: var(--nd-color-text); }

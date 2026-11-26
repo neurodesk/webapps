@@ -3405,6 +3405,13 @@
           "apptainerName": "brainles-aurora_0.2.7_20261024"
         }
       ]
+    },
+    "openads": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
     }
   }
 }
