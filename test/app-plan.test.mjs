@@ -2718,7 +2718,7 @@ test('an app runs its @heavy browser tests only when the change edits it, a fail
 });
 
 function unexpectedExemptPathReads(entries) {
-  const exemptRef = /\.github\/aw\/|\b(?:AGENTS|AGENT|CLAUDE)\.md\b/;
+  const exemptRef = /\.github\/aw\b|\.github['"],\s*['"]aw['"]|\b(?:AGENTS|AGENT|CLAUDE)\.md\b/;
   const allowedMetadata = (file) => /^apps\/[^/]+\/upstream\.json$/.test(file)
     || file === 'apps/spinalcordtoolbox/.specify/init-options.json'
     || file === 'scripts/lib/app-plan.mjs'
@@ -2740,17 +2740,19 @@ function unexpectedExemptPathReads(entries) {
 }
 
 test('no app build, package source, root script or workflow reads .github/aw/ or scoped agent guides', async () => {
-  // Verify the guard itself rejects injected app-local, cross-app and .github/aw/ reads.
+  // Verify the guard itself rejects injected app-local, cross-app and .github/aw/ reads (including joined paths).
   assert.deepEqual(
     unexpectedExemptPathReads([
       ['apps/bison/scripts/build.mjs', "readFileSync(new URL('../AGENTS.md', import.meta.url));"],
       ['apps/elastix/scripts/build.mjs', "readFileSync('../../apps/bison/AGENTS.md', 'utf8');"],
       ['apps/bison/scripts/build.mjs', "readFileSync('../../.github/aw/actions-lock.json', 'utf8');"],
+      ['apps/bison/scripts/join-build.mjs', "readFileSync(join(repoRoot, '.github/aw', 'actions-lock.json'), 'utf8');"],
+      ['apps/bison/scripts/split-build.mjs', "readFileSync(join(repoRoot, '.github', 'aw', 'actions-lock.json'), 'utf8');"],
       ['apps/bison/scripts/comment-only.mjs', '// See AGENTS.md for build notes\nexport const ok = true;'],
     ]),
-    ['apps/bison/scripts/build.mjs', 'apps/elastix/scripts/build.mjs', 'apps/bison/scripts/build.mjs'],
+    ['apps/bison/scripts/build.mjs', 'apps/elastix/scripts/build.mjs', 'apps/bison/scripts/build.mjs', 'apps/bison/scripts/join-build.mjs', 'apps/bison/scripts/split-build.mjs'],
   );
-  const candidates = filesNaming('\\.github/aw/|\\b(AGENTS|AGENT|CLAUDE)\\.md\\b');
+  const candidates = filesNaming('\\.github/aw\\b|\\.github[\'"],[[:space:]]*[\'"]aw[\'"]|\\b(AGENTS|AGENT|CLAUDE)\\.md\\b');
   const entries = await Promise.all(candidates.map(async (file) => [file, await readFile(join(repoRoot, file), 'utf8')]));
   assert.deepEqual(unexpectedExemptPathReads(entries), []);
 });
