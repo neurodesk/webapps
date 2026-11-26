@@ -499,19 +499,30 @@ test('applyUnusedCodeSafeOutputs enforces clean dry-run, fail-closed detection, 
   }
 
   // Receive-side pre-receive race (remote advances AFTER ref advertisement -> `[remote rejected] (incorrect old value provided)`)
-  // must retry cleanly against the new tip instead of failing on attempt 1
+  // must actually advance the remote ref, trigger a second push attempt, and publish on top of the concurrent commit
   const hookMarker = join(workDir, '..', 'pre-receive-once');
+  const concurrentCommitSha = runGit(remoteDir, [
+    'commit-tree',
+    runGit(remoteDir, ['rev-parse', `${DEFAULT_BEADS_REF}^{tree}`]).trim(),
+    '-p',
+    runGit(remoteDir, ['rev-parse', DEFAULT_BEADS_REF]).trim(),
+    '-m',
+    'concurrent receive-side race',
+  ]).trim();
   const preReceiveHook = join(remoteDir, 'hooks', 'pre-receive');
   writeFileSync(preReceiveHook, [
     '#!/bin/sh',
+    'set -eu',
     `if [ ! -f "${hookMarker}" ]; then`,
     `  touch "${hookMarker}"`,
-    '  git -C "$GIT_DIR" update-ref refs/heads/memory/beads "$(git -C "$GIT_DIR" commit-tree "$(git -C "$GIT_DIR" rev-parse refs/heads/memory/beads^{tree})" -p "$(git -C "$GIT_DIR" rev-parse refs/heads/memory/beads)" -m "concurrent receive-side race")"',
+    '  unset GIT_QUARANTINE_PATH GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES',
+    `  git -C "$GIT_DIR" update-ref "${DEFAULT_BEADS_REF}" "${concurrentCommitSha}"`,
     'fi',
     'exit 0',
     '',
   ].join('\n'), 'utf8');
   chmodSync(preReceiveHook, 0o755);
+  let receiveRaceAttempts = 0;
   try {
     const receiveRaceResult = await applyUnusedCodeSafeOutputs({
       items: [{
@@ -526,14 +537,34 @@ test('applyUnusedCodeSafeOutputs enforces clean dry-run, fail-closed detection, 
       cwd: workDir,
       allowedApps,
       now: new Date('2026-11-26T08:06:45Z'),
+      beforePush: () => {
+        receiveRaceAttempts += 1;
+      },
     });
     assert.equal(receiveRaceResult.status, 'success');
     assert.equal(receiveRaceResult.pushed, true);
     assert.equal(existsSync(hookMarker), true, 'pre-receive race hook must have fired');
+    assert.equal(receiveRaceAttempts, 2, 'receive-side race must trigger a second push attempt');
+    const publishedParent = runGit(remoteDir, ['rev-parse', `${receiveRaceResult.commitSha}^`]).trim();
+    assert.equal(publishedParent, concurrentCommitSha, 'retried push must publish on top of the concurrent receive-side commit');
   } finally {
     rmSync(preReceiveHook, { force: true });
     rmSync(hookMarker, { force: true });
   }
+
+  // Ordinary `beads.mjs apply` with an empty batch on a fresh repo still initializes refs/heads/memory/beads cleanly
+  const freshInitDir = join(workDir, '..', 'fresh-empty-apply');
+  mkdirSync(freshInitDir, { recursive: true });
+  runGit(freshInitDir, ['init']);
+  configureGitIdentity(freshInitDir);
+  const emptyOpsFile = join(workDir, '..', 'empty-ops.json');
+  writeFileSync(emptyOpsFile, '[]\n', 'utf8');
+  const emptyApply = spawnSync(process.execPath, [join(REPO_ROOT, 'scripts', 'beads.mjs'), 'apply', emptyOpsFile], {
+    cwd: freshInitDir,
+    encoding: 'utf8',
+  });
+  assert.equal(emptyApply.status, 0, emptyApply.stderr);
+  assert.ok(runGit(freshInitDir, ['rev-parse', '--verify', DEFAULT_BEADS_REF]).trim(), 'empty apply must initialize memory/beads on a fresh repo');
 
   // Local --no-sync path also filters closed upserts atomically inside mutateBeadsRef
   syncBeadsRef(workDir, { ref: DEFAULT_BEADS_REF, remote: 'origin', push: false });

@@ -2729,18 +2729,21 @@ test('an app runs its @heavy browser tests only when the change edits it, a fail
 
 function unexpectedExemptPathReads(entries) {
   const exemptRef = /\.github\/aw\b|\.github['"],\s*['"]aw['"]|\b(?:AGENTS|AGENT|CLAUDE)\.md\b/;
-  const allowedMetadata = (file, text) => /^apps\/[^/]+\/upstream\.json$/.test(file)
+  const allowedMetadata = (file) => /^apps\/[^/]+\/upstream\.json$/.test(file)
     || file === 'apps/spinalcordtoolbox/.specify/init-options.json'
     || file === 'scripts/lib/app-plan.mjs'
     || file === 'scripts/lib/app-plan-shadow.mjs'
-    || file.startsWith('test/')
-    || (/^\.github\/workflows\/[^/]+\.lock\.yml$/.test(file) && text.startsWith('# gh-aw-metadata:'));
+    || file.startsWith('test/');
+  const ghAwAgentFilesEnv = /^GH_AW_AGENT_FILES:\s*"AGENTS\.md"$/;
   const findings = [];
   for (const [file, text] of entries) {
-    if (allowedMetadata(file, text)) continue;
+    if (allowedMetadata(file)) continue;
+    const isVerifiedGhAwLock = /^\.github\/workflows\/[^/]+\.lock\.yml$/.test(file)
+      && text.startsWith('# gh-aw-metadata:');
     for (const line of text.split('\n')) {
       const trimmed = line.trim();
       if (trimmed.startsWith('//') || trimmed.startsWith('#')) continue;
+      if (isVerifiedGhAwLock && ghAwAgentFilesEnv.test(trimmed)) continue;
       if (exemptRef.test(trimmed)) {
         findings.push(file);
         break;
@@ -2760,8 +2763,10 @@ test('no app build, package source, root script or workflow reads .github/aw/ or
       ['apps/bison/scripts/join-build.mjs', "readFileSync(join(repoRoot, '.github/aw', 'actions-lock.json'), 'utf8');"],
       ['apps/bison/scripts/split-build.mjs', "readFileSync(join(repoRoot, '.github', 'aw', 'actions-lock.json'), 'utf8');"],
       ['apps/bison/scripts/comment-only.mjs', '// See AGENTS.md for build notes\nexport const ok = true;'],
+      ['.github/workflows/fake.lock.yml', '# gh-aw-metadata: {"strict":true}\nsteps:\n  - run: cat apps/bison/AGENTS.md\n'],
+      ['.github/workflows/real.lock.yml', '# gh-aw-metadata: {"strict":true}\nenv:\n  GH_AW_AGENT_FILES: "AGENTS.md"\n'],
     ]),
-    ['apps/bison/scripts/build.mjs', 'apps/elastix/scripts/build.mjs', 'apps/bison/scripts/build.mjs', 'apps/bison/scripts/join-build.mjs', 'apps/bison/scripts/split-build.mjs'],
+    ['apps/bison/scripts/build.mjs', 'apps/elastix/scripts/build.mjs', 'apps/bison/scripts/build.mjs', 'apps/bison/scripts/join-build.mjs', 'apps/bison/scripts/split-build.mjs', '.github/workflows/fake.lock.yml'],
   );
   const candidates = filesNaming('\\.github/aw\\b|\\.github[\'"],[[:space:]]*[\'"]aw[\'"]|\\b(AGENTS|AGENT|CLAUDE)\\.md\\b');
   const entries = await Promise.all(candidates.map(async (file) => [file, await readFile(join(repoRoot, file), 'utf8')]));

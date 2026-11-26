@@ -1556,18 +1556,18 @@ export function mutateBeadsRef(cwd, operations, {
       const filtered = filterClosedUpsertOperations(beads, operations);
       effectiveOps = filtered.activeOperations;
       skippedClosed = filtered.skippedClosed;
-    }
-    if (effectiveOps.length === 0) {
-      return {
-        beads,
-        changedIds: [],
-        createdIds: [],
-        updatedIds: [],
-        untouchedIds: [],
-        skippedClosed,
-        commitSha: sha,
-        changed: false,
-      };
+      if (effectiveOps.length === 0 && skippedClosed.length > 0) {
+        return {
+          beads,
+          changedIds: [],
+          createdIds: [],
+          updatedIds: [],
+          untouchedIds: [],
+          skippedClosed,
+          commitSha: sha,
+          changed: false,
+        };
+      }
     }
     const result = applyOperations(beads, effectiveOps, applyOptions);
     if (result.changedIds.length === 0 && sha !== null) {
@@ -1750,18 +1750,26 @@ function fetchRemoteBeadsTreeNoRef(repoTop, remote, ref, maxFetchAttempts = 3) {
   for (let i = 0; i < maxFetchAttempts; i++) {
     const remoteSha = remoteBranchSha(repoTop, remote, ref);
     if (!remoteSha) return { sha: null, beads: new Map() };
-    git([
-      '-c', `remote.${remote}.fetch=`,
-      'fetch',
-      '--no-tags',
-      '--no-prune',
-      '--no-recurse-submodules',
-      '--no-write-fetch-head',
-      '--refmap=',
-      '--',
-      remote,
-      ref,
-    ], { cwd: repoTop });
+    try {
+      git([
+        '-c', `remote.${remote}.fetch=`,
+        'fetch',
+        '--no-tags',
+        '--no-prune',
+        '--no-recurse-submodules',
+        '--no-write-fetch-head',
+        '--refmap=',
+        '--',
+        remote,
+        ref,
+      ], { cwd: repoTop });
+    } catch (error) {
+      const detail = `${error?.stderr || ''}\n${error?.message || ''}`;
+      if (/couldn't find remote ref|no such ref/i.test(detail) && i + 1 < maxFetchAttempts) {
+        continue;
+      }
+      throw error;
+    }
     if (hasLocalCommitObject(repoTop, remoteSha)) {
       return readBeadsTree(repoTop, remoteSha);
     }

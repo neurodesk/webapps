@@ -381,6 +381,45 @@ const GH_AW_BOILERPLATE_ALLOWED_ACTIONS = Object.freeze({
   pre_activation: new Set(['github/gh-aw-actions/setup', 'actions/github-script']),
   unlock: new Set(['github/gh-aw-actions/setup', 'actions/github-script']),
 });
+const GH_AW_ACTIVATION_SPARSE_CHECKOUT = '.github\n.agents\n.claude\n.codex\n.gemini\n.pi';
+const GH_AW_GITHUB_SCRIPT_DISPATCH = /^const path = require\('path'\);\nconst actionsDir = path\.join\(process\.env\.RUNNER_TEMP, 'gh-aw', 'actions'\);\nconst \{ setupGlobals \} = require\(path\.join\(actionsDir, 'setup_globals\.cjs'\)\);\nsetupGlobals\(core, github, context, exec, io, getOctokit\);\nconst \{ main \} = require\(path\.join\(actionsDir, '[a-z0-9_]+\.cjs'\)\);\nawait main\((?:core, context|core|)\);$/;
+const GH_AW_GITHUB_SCRIPT_PROMPT = /^const promptEnvironment = new Set\(\[(?:"[A-Z0-9_]+",)*"[A-Z0-9_]+"\]\);\nfor \(const name of Object\.keys\(process\.env\)\) \{\n {2}if \(!promptEnvironment\.has\(name\)\) delete process\.env\[name\];\n\}\nglobal\.core = core;\nglobal\.context = context;\nconst \{ main \} = require\(process\.env\.GH_AW_ACTIONS_DIR \+ '\/(?:create_prompt|interpolate_prompt)\.cjs'\);\nawait main\((?:core|)\);$/;
+
+function isVerifiedBoilerplateActionStep(id, step, allowedActions) {
+  if (!PINNED_ACTION.test(step.uses)) return false;
+  const actionRepo = step.uses.slice(0, step.uses.lastIndexOf('@'));
+  if (actionRepo === 'github/gh-aw-actions/setup') {
+    return step.name === 'Setup Scripts'
+      && step.with?.destination === '${{ runner.temp }}/gh-aw/actions';
+  }
+  if (actionRepo === 'actions/checkout') {
+    const sparse = typeof step.with?.['sparse-checkout'] === 'string'
+      ? step.with['sparse-checkout'].replace(/\r\n/g, '\n').trim()
+      : '';
+    return id === 'activation'
+      && step.name === 'Checkout .github and .agents folders'
+      && step.with?.['persist-credentials'] === false
+      && step.with?.['sparse-checkout-cone-mode'] === true
+      && step.with?.['fetch-depth'] === 1
+      && sparse === GH_AW_ACTIVATION_SPARSE_CHECKOUT;
+  }
+  if (!allowedActions.has(actionRepo)) return false;
+  if (actionRepo === 'actions/github-script') {
+    const script = typeof step.with?.script === 'string'
+      ? step.with.script.replace(/\r\n/g, '\n').trim()
+      : '';
+    return GH_AW_GITHUB_SCRIPT_DISPATCH.test(script) || GH_AW_GITHUB_SCRIPT_PROMPT.test(script);
+  }
+  if (actionRepo === 'actions/upload-artifact' || actionRepo === 'actions/download-artifact') {
+    const rawPath = typeof step.with?.path === 'string'
+      ? step.with.path.replace(/\r\n/g, '\n').trim()
+      : '';
+    if (!rawPath) return false;
+    const paths = rawPath.split('\n').map((line) => line.trim()).filter(Boolean);
+    return paths.length > 0 && paths.every((p) => p.startsWith('/tmp/gh-aw/'));
+  }
+  return false;
+}
 
 function parseVerifiedGhAwLock(file, text, sourceMarkdown) {
   if (!file.endsWith('.lock.yml') || typeof sourceMarkdown !== 'string') return null;
@@ -436,14 +475,7 @@ function isVerifiedBoilerplateJob(id, job, frontmatter) {
   }
   return steps.every((step) => {
     if (typeof step?.uses === 'string') {
-      if (!PINNED_ACTION.test(step.uses)) return false;
-      const actionRepo = step.uses.slice(0, step.uses.lastIndexOf('@'));
-      if (allowedActions.has(actionRepo)) return true;
-      // activation includes one compiler-generated sparse checkout of .github and .agents.
-      return id === 'activation'
-        && actionRepo === 'actions/checkout'
-        && step.name === 'Checkout .github and .agents folders'
-        && typeof step.with?.['sparse-checkout'] === 'string';
+      return isVerifiedBoilerplateActionStep(id, step, allowedActions);
     }
     if (typeof step?.run !== 'string') return false;
     const normalizedRun = step.run.replace(/\r\n/g, '\n').trim();
@@ -538,6 +570,21 @@ test('gh-aw timeout exemption requires verified frontmatter/body hashes, exact c
     '    steps:',
     '      - name: Setup Scripts',
     `        uses: github/gh-aw-actions/setup@${setupSha}`,
+    '        with:',
+    '          destination: ${{ runner.temp }}/gh-aw/actions',
+    '      - name: Checkout .github and .agents folders',
+    `        uses: actions/checkout@${checkoutSha}`,
+    '        with:',
+    '          persist-credentials: false',
+    '          sparse-checkout: |',
+    '            .github',
+    '            .agents',
+    '            .claude',
+    '            .codex',
+    '            .gemini',
+    '            .pi',
+    '          sparse-checkout-cone-mode: true',
+    '          fetch-depth: 1',
     '      - run: bash "${RUNNER_TEMP}/gh-aw/actions/mask_otlp_headers.sh"',
     '  agent:',
     '    runs-on: ubuntu-latest',
@@ -562,6 +609,8 @@ test('gh-aw timeout exemption requires verified frontmatter/body hashes, exact c
     '    steps:',
     '      - name: Setup Scripts',
     `        uses: github/gh-aw-actions/setup@${setupSha}`,
+    '        with:',
+    '          destination: ${{ runner.temp }}/gh-aw/actions',
   ].join('\n');
   assert.deepEqual(findJobsMissingTimeout([{ file: 'demo.lock.yml', text: validLock, sourceMarkdown: validMd }]), []);
 
@@ -598,6 +647,24 @@ test('gh-aw timeout exemption requires verified frontmatter/body hashes, exact c
   assert.deepEqual(
     findJobsMissingTimeout([{ file: 'demo.lock.yml', text: injectedConclusionCheckout, sourceMarkdown: validMd }]),
     ['demo.lock.yml: conclusion'],
+  );
+  // Appending a pinned actions/github-script step with custom inline JS (e.g. a 60s wait) to conclusion rejects the exemption.
+  const injectedCustomScript = [
+    validLock,
+    '      - name: Wait',
+    '        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3',
+    '        with:',
+    '          script: await new Promise((r) => setTimeout(r, 60000));',
+  ].join('\n');
+  assert.deepEqual(
+    findJobsMissingTimeout([{ file: 'demo.lock.yml', text: injectedCustomScript, sourceMarkdown: validMd }]),
+    ['demo.lock.yml: conclusion'],
+  );
+  // Altering activation sparse-checkout pattern rejects the exemption.
+  const alteredSparseCheckout = validLock.replace('            .pi\n', '            apps\n');
+  assert.deepEqual(
+    findJobsMissingTimeout([{ file: 'demo.lock.yml', text: alteredSparseCheckout, sourceMarkdown: validMd }]),
+    ['demo.lock.yml: activation'],
   );
 
   // Untimed `uses:` action step inside a safe-output job STILL fails.
