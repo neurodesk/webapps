@@ -85,7 +85,7 @@ function renderSummaryTab(container, data) {
   const kpis = createElement('div', { className: 'openads-kpis' }, [
     kpi('Lesion volume', `${volumes.totalMl.toFixed(2)} mL`),
     kpi('Left / Right', `${volumes.leftMl.toFixed(1)} / ${volumes.rightMl.toFixed(1)} mL`),
-    kpi('Lesion / ICV', `${icvMl > 0 ? ((volumes.totalMl / icvMl) * 100).toFixed(2) : '0.00'}%`),
+    kpi('Lesion / ICV', icvMl != null && icvMl > 0 ? `${((volumes.totalMl / icvMl) * 100).toFixed(2)}%` : 'N.A.'),
     kpi('MCA ASPECTS', report.aspectsScore != null ? `${report.aspectsScore} / 10` : 'N.A.'),
     kpi('Hydrocephalus', hydrocephalus ? `${hydrocephalus.predict} (${(hydrocephalus.probability * 100).toFixed(0)}%)` : 'N.A.'),
   ]);
@@ -433,7 +433,6 @@ export function renderReportView(root, data) {
     for (const [tid, btn] of Object.entries(buttons)) {
       const isActive = tid === id;
       btn.setAttribute('aria-pressed', String(isActive));
-      btn.setAttribute('aria-selected', String(isActive));
       btn.classList.toggle('active', isActive);
     }
     panel.replaceChildren();

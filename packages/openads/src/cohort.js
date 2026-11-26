@@ -1,5 +1,6 @@
 // StrokeView client-side UMAP projection and k-NN clinical phenotype matching
 // against the 1,861-subject StrokeFAIR acute stroke reference cohort.
+import { csvCell } from './atlases.js';
 
 const CONTINUOUS_METRICS = [
   { key: 'Age', label: 'Age (years)' },
@@ -146,7 +147,5 @@ export function cohortSummaryCsv(summary) {
       rows.push([`  ${entry.value}`, `${entry.count} (${entry.percent.toFixed(0)}%)`, String(group.n)]);
     }
   }
-  return rows
-    .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))
-    .join('\n') + '\n';
+  return rows.map((r) => r.map(csvCell).join(',')).join('\n') + '\n';
 }

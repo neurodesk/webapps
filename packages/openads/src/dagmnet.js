@@ -99,18 +99,28 @@ export async function runDagmnetDwi({
   adc,
   dims,
   mask = null,
+  probIs = null,
   threshold = 0.5,
   minSize = 50,
   runPass,
   onPass = () => {},
 }) {
   const n = voxelCount(dims);
+  if (dwi.length !== n || adc.length !== n) {
+    throw new Error(`DAGMNet DWI inputs must match grid voxel count (${n}).`);
+  }
+  if (probIs && probIs.length !== n) {
+    throw new Error(`DAGMNet DWI Prob_IS channel length (${probIs.length}) must match grid (${n}).`);
+  }
   const dwiClean = cleanFinite(dwi);
   const adcClean = cleanFinite(adc);
 
   let dwiZ;
   let adcZ;
   if (mask) {
+    if (mask.length !== n) {
+      throw new Error(`DAGMNet DWI brain mask length (${mask.length}) must match grid (${n}).`);
+    }
     dwiZ = zscoreInMask(percentileClipRescaleInMask(dwiClean, mask), mask);
     adcZ = zscoreInMask(percentileClipRescaleInMask(adcClean, mask), mask);
   } else {
@@ -124,8 +134,12 @@ export async function runDagmnetDwi({
 
   const dwiPad = centerPad(dwiZ, dims, PAD_SHAPE);
   const adcPad = centerPad(adcZ, dims, PAD_SHAPE);
-  const zerosPad = new Float32Array(voxelCount(PAD_SHAPE));
-  const channels = [dwiPad.data, adcPad.data, zerosPad];
+  // Matches ADSWeb browser deployment: when the 48 MB population Prob_IS templates are not
+  // supplied, channel 3 is zero-filled; callers may pass an explicit Prob_IS prior via `probIs`.
+  const probIsPad = probIs
+    ? centerPad(cleanFinite(probIs), dims, PAD_SHAPE).data
+    : new Float32Array(voxelCount(PAD_SHAPE));
+  const channels = [dwiPad.data, adcPad.data, probIsPad];
 
   const winDims = [PAD_SHAPE[0] / DS, PAD_SHAPE[1] / DS, PAD_SHAPE[2] / ZS];
   const winVoxels = voxelCount(winDims);
@@ -172,15 +186,23 @@ export async function runDagmnetPwi({
   dwi,
   adc,
   ttp,
+  strokeMask = null,
   symclassic = null,
   dims,
-  threshold = 0.5,
+  threshold = 0.49,
   minSize = 50,
   runPass,
   onPass = () => {},
 }) {
   const n = voxelCount(dims);
-  const sym = symclassic || new Float32Array(n);
+  if (dwi.length !== n || adc.length !== n || ttp.length !== n) {
+    throw new Error(`DAGMNet PWI inputs must match grid voxel count (${n}).`);
+  }
+  const ch4Input = strokeMask ?? symclassic;
+  if (ch4Input && ch4Input.length !== n) {
+    throw new Error(`DAGMNet PWI stroke-mask channel length (${ch4Input.length}) must match grid (${n}).`);
+  }
+  const sym = ch4Input || new Float32Array(n);
   const dwiClean = cleanFinite(dwi);
   const adcClean = cleanFinite(adc);
   const ttpClean = cleanFinite(ttp);

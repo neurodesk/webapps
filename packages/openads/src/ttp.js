@@ -59,7 +59,24 @@ export function defaultSliceTiming(nz, tr, code = 3) {
 
 export function sliceTimeCorrection(pwi, dims, tr, sliceTiming, epsilon = 1e-6) {
   const [nx, ny, nz, nt] = dims;
-  const timing = sliceTiming && sliceTiming.length === nz ? sliceTiming : defaultSliceTiming(nz, tr, 3);
+  if (!Number.isFinite(tr) || tr <= 0) {
+    throw new Error(`Invalid PWI repetition time (${tr}).`);
+  }
+  if (!Number.isInteger(nt) || nt < 2) {
+    throw new Error(`Slice-time correction requires a 4D PWI series (received ${nt} frame${nt === 1 ? '' : 's'}).`);
+  }
+  let timing;
+  if (sliceTiming != null) {
+    if (!Array.isArray(sliceTiming) || sliceTiming.length !== nz) {
+      throw new Error(`SliceTiming length (${sliceTiming?.length}) does not match PWI slice count (${nz}).`);
+    }
+    if (!sliceTiming.every((v) => Number.isFinite(v) && v >= 0)) {
+      throw new Error('SliceTiming contains non-finite or negative entries.');
+    }
+    timing = sliceTiming;
+  } else {
+    timing = defaultSliceTiming(nz, tr, 3);
+  }
   const minTiming = Math.min(...timing);
   const timeRef = new Float64Array(nt);
   for (let t = 0; t < nt; t++) timeRef[t] = minTiming + tr * t;
@@ -497,16 +514,34 @@ export function computeTtpVolume({
   pixdim,
   mask,
   sliceTiming = null,
+  skipSliceTimeCorrection = false,
   echoTime = TTP_DEFAULTS.echoTime,
   onProgress = () => {},
 }) {
   const [nx, ny, nz, nt] = dims;
+  const minFrames = TTP_DEFAULTS.baselineVolumesMin + TTP_DEFAULTS.skipVolumes + 3;
+  if (!Number.isInteger(nt) || nt < minFrames) {
+    throw new Error(`4D PWI series requires at least ${minFrames} time frames for baseline and peak detection (received ${nt}).`);
+  }
+  if (!Number.isFinite(echoTime) || echoTime <= 0) {
+    throw new Error(`Invalid PWI EchoTime (${echoTime}).`);
+  }
   const dims3 = [nx, ny, nz];
   const pixdim3 = [pixdim[0], pixdim[1], pixdim[2]];
-  const tr = pixdim[3] > 0 ? pixdim[3] : 1.7;
+  const tr = Number.isFinite(pixdim[3]) && pixdim[3] > 0 ? pixdim[3] : 1.7;
 
-  onProgress('Slice-time correction');
-  const { data: stc, timeRef } = sliceTimeCorrection(pwi, dims, tr, sliceTiming);
+  let stc;
+  let timeRef;
+  if (skipSliceTimeCorrection) {
+    stc = pwi;
+    timeRef = new Float64Array(nt);
+    for (let t = 0; t < nt; t++) timeRef[t] = tr * t;
+  } else {
+    onProgress('Slice-time correction');
+    const stcRes = sliceTimeCorrection(pwi, dims, tr, sliceTiming);
+    stc = stcRes.data;
+    timeRef = stcRes.timeRef;
+  }
   const baselineVolumes = Math.max(
     TTP_DEFAULTS.baselineVolumesMin,
     Math.round(nt * TTP_DEFAULTS.baselinePercentage),

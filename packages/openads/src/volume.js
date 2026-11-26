@@ -46,21 +46,173 @@ function readTypedVoxel(view, offset, datatype, littleEndian) {
   }
 }
 
-function readAffine(view, pixdim, littleEndian) {
+const SPATIAL_UNIT_MM = { 0: 1, 1: 1000, 2: 1, 3: 0.001 };
+const TIME_UNIT_SEC = { 0: 1, 8: 1, 16: 0.001, 24: 1e-6 };
+
+export function quaternionToAffine(qb, qc, qd, qx, qy, qz, pixdim, qfac = 1) {
+  const sumSq = qb * qb + qc * qc + qd * qd;
+  const a = sumSq >= 1 ? 0 : Math.sqrt(1 - sumSq);
+  const dx = Math.abs(pixdim[0]) || 1;
+  const dy = Math.abs(pixdim[1]) || 1;
+  const dz = (Math.abs(pixdim[2]) || 1) * (qfac < 0 ? -1 : 1);
   const affine = new Float32Array(16);
+  affine[0] = (a * a + qb * qb - qc * qc - qd * qd) * dx;
+  affine[1] = 2 * (qb * qc - a * qd) * dy;
+  affine[2] = 2 * (qb * qd + a * qc) * dz;
+  affine[3] = qx;
+  affine[4] = 2 * (qb * qc + a * qd) * dx;
+  affine[5] = (a * a + qc * qc - qb * qb - qd * qd) * dy;
+  affine[6] = 2 * (qc * qd - a * qb) * dz;
+  affine[7] = qy;
+  affine[8] = 2 * (qb * qd - a * qc) * dx;
+  affine[9] = 2 * (qc * qd + a * qb) * dy;
+  affine[10] = (a * a + qd * qd - qb * qb - qc * qc) * dz;
+  affine[11] = qz;
   affine[15] = 1;
-  if (view.getInt16(254, littleEndian) > 0) {
+  return affine;
+}
+
+export function affineToQform(affine) {
+  const c0 = [affine[0], affine[4], affine[8]];
+  const c1 = [affine[1], affine[5], affine[9]];
+  const c2 = [affine[2], affine[6], affine[10]];
+  const dx = Math.hypot(c0[0], c0[1], c0[2]);
+  const dy = Math.hypot(c1[0], c1[1], c1[2]);
+  const dz = Math.hypot(c2[0], c2[1], c2[2]);
+  if (!(dx > 0 && dy > 0 && dz > 0)) return null;
+  const r0 = c0.map((v) => v / dx);
+  const r1 = c1.map((v) => v / dy);
+  let r2 = c2.map((v) => v / dz);
+  const dot = (u, v) => u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
+  if (Math.abs(dot(r0, r1)) > 1e-3 || Math.abs(dot(r0, r2)) > 1e-3 || Math.abs(dot(r1, r2)) > 1e-3) {
+    return null;
+  }
+  const det =
+    r0[0] * (r1[1] * r2[2] - r1[2] * r2[1]) -
+    r1[0] * (r0[1] * r2[2] - r0[2] * r2[1]) +
+    r2[0] * (r0[1] * r1[2] - r0[2] * r1[1]);
+  const qfac = det < 0 ? -1 : 1;
+  if (qfac < 0) r2 = r2.map((v) => -v);
+
+  const m00 = r0[0], m01 = r1[0], m02 = r2[0];
+  const m10 = r0[1], m11 = r1[1], m12 = r2[1];
+  const m20 = r0[2], m21 = r1[2], m22 = r2[2];
+  let a, b, c, d;
+  const tr = m00 + m11 + m22 + 1;
+  if (tr > 0.5) {
+    a = 0.5 * Math.sqrt(tr);
+    b = 0.25 * (m21 - m12) / a;
+    c = 0.25 * (m02 - m20) / a;
+    d = 0.25 * (m10 - m01) / a;
+  } else if (m00 >= m11 && m00 >= m22) {
+    const s = 2 * Math.sqrt(Math.max(1e-12, 1 + m00 - m11 - m22));
+    a = (m21 - m12) / s;
+    b = 0.25 * s;
+    c = (m01 + m10) / s;
+    d = (m02 + m20) / s;
+  } else if (m11 >= m22) {
+    const s = 2 * Math.sqrt(Math.max(1e-12, 1 + m11 - m00 - m22));
+    a = (m02 - m20) / s;
+    b = (m01 + m10) / s;
+    c = 0.25 * s;
+    d = (m12 + m21) / s;
+  } else {
+    const s = 2 * Math.sqrt(Math.max(1e-12, 1 + m22 - m00 - m11));
+    a = (m10 - m01) / s;
+    b = (m02 + m20) / s;
+    c = (m12 + m21) / s;
+    d = 0.25 * s;
+  }
+  if (a < 0) {
+    a = -a;
+    b = -b;
+    c = -c;
+    d = -d;
+  }
+  return { qfac, qb: b, qc: c, qd: d, qx: affine[3], qy: affine[7], qz: affine[11], pixdim: [dx, dy, dz] };
+}
+
+function readAffine(view, pixdim, littleEndian) {
+  const qformCode = view.getInt16(252, littleEndian);
+  const sformCode = view.getInt16(254, littleEndian);
+  let affine;
+  if (sformCode > 0) {
+    affine = new Float32Array(16);
+    affine[15] = 1;
     for (let r = 0; r < 3; r++) {
       for (let c = 0; c < 4; c++) {
         affine[r * 4 + c] = view.getFloat32(280 + r * 16 + c * 4, littleEndian);
       }
     }
+  } else if (qformCode > 0) {
+    const qfac = view.getFloat32(76, littleEndian) < 0 ? -1 : 1;
+    const qb = view.getFloat32(256, littleEndian);
+    const qc = view.getFloat32(260, littleEndian);
+    const qd = view.getFloat32(264, littleEndian);
+    const qx = view.getFloat32(268, littleEndian);
+    const qy = view.getFloat32(272, littleEndian);
+    const qz = view.getFloat32(276, littleEndian);
+    affine = quaternionToAffine(qb, qc, qd, qx, qy, qz, pixdim, qfac);
   } else {
-    affine[0] = pixdim[0] || 1;
-    affine[5] = pixdim[1] || 1;
-    affine[10] = pixdim[2] || 1;
+    affine = new Float32Array(16);
+    affine[0] = Math.abs(pixdim[0]) || 1;
+    affine[5] = Math.abs(pixdim[1]) || 1;
+    affine[10] = Math.abs(pixdim[2]) || 1;
+    affine[15] = 1;
+  }
+  for (let i = 0; i < 16; i++) {
+    if (!Number.isFinite(affine[i])) {
+      throw new Error('NIfTI volume has non-finite affine entries.');
+    }
   }
   return affine;
+}
+
+function parseXyztUnits(view) {
+  const xyzt = view.getUint8(123);
+  const spatialCode = xyzt & 0x07;
+  const timeCode = xyzt & 0x38;
+  return {
+    xyzt,
+    spatialCode,
+    timeCode,
+    spatialScaleMm: SPATIAL_UNIT_MM[spatialCode] ?? 1,
+    timeScaleSec: TIME_UNIT_SEC[timeCode] ?? 1,
+  };
+}
+
+export function assertMatchingGeometry(volA, volB, labelA = 'volume A', labelB = 'volume B', { tol = 1e-2 } = {}) {
+  if (!volA?.dims || !volB?.dims) {
+    throw new Error(`Missing geometry for ${labelA} or ${labelB}.`);
+  }
+  for (let i = 0; i < 3; i++) {
+    if (volA.dims[i] !== volB.dims[i]) {
+      throw new Error(
+        `Grid dimension mismatch between ${labelA} (${volA.dims.slice(0, 3).join('×')}) and ${labelB} (${volB.dims.slice(0, 3).join('×')}).`,
+      );
+    }
+  }
+  const expected = voxelCount(volA.dims);
+  if (volA.voxels && volA.voxels.length < expected) {
+    throw new Error(`${labelA} voxel buffer (${volA.voxels.length}) is shorter than its grid (${expected}).`);
+  }
+  if (volB.voxels && volB.voxels.length < expected) {
+    throw new Error(`${labelB} voxel buffer (${volB.voxels.length}) is shorter than its grid (${expected}).`);
+  }
+  if (volA.spatialUnit && volB.spatialUnit && volA.spatialUnit !== volB.spatialUnit) {
+    throw new Error(`Spatial unit mismatch between ${labelA} and ${labelB}.`);
+  }
+  if (volA.affine && volB.affine) {
+    for (let i = 0; i < 16; i++) {
+      const a = volA.affine[i];
+      const b = volB.affine[i];
+      if (!Number.isFinite(a) || !Number.isFinite(b) || Math.abs(a - b) > tol) {
+        throw new Error(
+          `Physical affine mismatch between ${labelA} and ${labelB} at entry ${i} (${a} vs ${b}). Resample to a common grid first.`,
+        );
+      }
+    }
+  }
 }
 
 export function readNifti(bytes) {
@@ -71,12 +223,18 @@ export function readNifti(bytes) {
     throw new Error('Not a valid NIfTI-1 volume (invalid header size).');
   }
   const dims = [view.getInt16(42, le), view.getInt16(44, le), view.getInt16(46, le)];
-  const pixdim = [view.getFloat32(80, le), view.getFloat32(84, le), view.getFloat32(88, le)];
+  const units = parseXyztUnits(view);
+  const pixdim = [
+    Math.abs(view.getFloat32(80, le)) * units.spatialScaleMm,
+    Math.abs(view.getFloat32(84, le)) * units.spatialScaleMm,
+    Math.abs(view.getFloat32(88, le)) * units.spatialScaleMm,
+  ];
   const datatype = view.getInt16(70, le);
   const voxOffset = view.getFloat32(108, le) || VOX_OFFSET;
-  let slope = view.getFloat32(112, le);
+  const slope = view.getFloat32(112, le);
   const inter = view.getFloat32(116, le);
-  if (slope === 0 || !Number.isFinite(slope)) slope = 1;
+  const applyScale = Number.isFinite(slope) && slope !== 0;
+  const safeInter = Number.isFinite(inter) ? inter : 0;
 
   const n = voxelCount(dims);
   const voxels = new Float32Array(n);
@@ -84,10 +242,16 @@ export function readNifti(bytes) {
   for (let i = 0; i < n; i++) {
     const [val, step] = readTypedVoxel(view, cursor, datatype, le);
     cursor += step;
-    voxels[i] = val * slope + inter;
+    voxels[i] = applyScale ? val * slope + safeInter : val;
   }
-  const affine = readAffine(view, pixdim, le);
-  return { dims, pixdim, voxels, affine, datatype };
+  const rawPixdim = [view.getFloat32(80, le), view.getFloat32(84, le), view.getFloat32(88, le)];
+  const affine = readAffine(view, rawPixdim, le);
+  if (units.spatialScaleMm !== 1) {
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 4; c++) affine[r * 4 + c] *= units.spatialScaleMm;
+    }
+  }
+  return { dims, pixdim, voxels, affine, datatype, spatialUnit: 'mm' };
 }
 
 export function readNifti4D(bytes) {
@@ -97,22 +261,31 @@ export function readNifti4D(bytes) {
   if (!le && view.getInt32(0, false) !== HEADER_SIZE) {
     throw new Error('Not a valid NIfTI-1 volume (invalid header size).');
   }
+  const ndim = view.getInt16(40, le);
   const nx = view.getInt16(42, le);
   const ny = view.getInt16(44, le);
   const nz = view.getInt16(46, le);
-  const nt = Math.max(1, view.getInt16(48, le));
+  const nt = ndim >= 4 ? Math.max(1, view.getInt16(48, le)) : 1;
   const dims = [nx, ny, nz, nt];
-  const pixdim = [
+  const units = parseXyztUnits(view);
+  const rawPixdim = [
     view.getFloat32(80, le),
     view.getFloat32(84, le),
     view.getFloat32(88, le),
     view.getFloat32(92, le),
   ];
+  const pixdim = [
+    Math.abs(rawPixdim[0]) * units.spatialScaleMm,
+    Math.abs(rawPixdim[1]) * units.spatialScaleMm,
+    Math.abs(rawPixdim[2]) * units.spatialScaleMm,
+    Math.abs(rawPixdim[3]) * units.timeScaleSec,
+  ];
   const datatype = view.getInt16(70, le);
   const voxOffset = view.getFloat32(108, le) || VOX_OFFSET;
-  let slope = view.getFloat32(112, le);
+  const slope = view.getFloat32(112, le);
   const inter = view.getFloat32(116, le);
-  if (slope === 0 || !Number.isFinite(slope)) slope = 1;
+  const applyScale = Number.isFinite(slope) && slope !== 0;
+  const safeInter = Number.isFinite(inter) ? inter : 0;
 
   const total = nx * ny * nz * nt;
   const voxels = new Float32Array(total);
@@ -120,10 +293,15 @@ export function readNifti4D(bytes) {
   for (let i = 0; i < total; i++) {
     const [val, step] = readTypedVoxel(view, cursor, datatype, le);
     cursor += step;
-    voxels[i] = val * slope + inter;
+    voxels[i] = applyScale ? val * slope + safeInter : val;
   }
-  const affine = readAffine(view, pixdim, le);
-  return { dims, pixdim, voxels, affine, datatype };
+  const affine = readAffine(view, rawPixdim, le);
+  if (units.spatialScaleMm !== 1) {
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 4; c++) affine[r * 4 + c] *= units.spatialScaleMm;
+    }
+  }
+  return { dims, pixdim, voxels, affine, datatype, spatialUnit: 'mm', timeUnitCode: units.timeCode };
 }
 
 export function writeNiftiFloat32(vol) {
@@ -142,14 +320,25 @@ export function writeNiftiFloat32(vol) {
   }
   view.setInt16(70, DT_FLOAT32, le);
   view.setInt16(72, 32, le);
-  view.setFloat32(76, 1, le);
-  view.setFloat32(80, vol.pixdim[0], le);
-  view.setFloat32(84, vol.pixdim[1], le);
-  view.setFloat32(88, vol.pixdim[2], le);
+  const qf = vol.affine ? affineToQform(vol.affine) : null;
+  view.setFloat32(76, qf ? qf.qfac : 1, le);
+  view.setFloat32(80, qf ? qf.pixdim[0] : vol.pixdim[0], le);
+  view.setFloat32(84, qf ? qf.pixdim[1] : vol.pixdim[1], le);
+  view.setFloat32(88, qf ? qf.pixdim[2] : vol.pixdim[2], le);
   view.setFloat32(108, VOX_OFFSET, le);
   view.setFloat32(112, 1, le);
-  view.setInt8(123, 66);
-  view.setInt16(252, 1, le);
+  view.setInt8(123, 2);
+  if (qf) {
+    view.setInt16(252, 1, le);
+    view.setFloat32(256, qf.qb, le);
+    view.setFloat32(260, qf.qc, le);
+    view.setFloat32(264, qf.qd, le);
+    view.setFloat32(268, qf.qx, le);
+    view.setFloat32(272, qf.qy, le);
+    view.setFloat32(276, qf.qz, le);
+  } else {
+    view.setInt16(252, 0, le);
+  }
   view.setInt16(254, 1, le);
   for (let r = 0; r < 3; r++) {
     for (let c = 0; c < 4; c++) {
@@ -311,6 +500,11 @@ export function extractFrame3D(vol4d, frameIndex) {
 export async function loadNiftiBytes(bytes) {
   const raw = await gunzipIfNeeded(bytes);
   return reorientVolumeToRAS(readNifti(raw));
+}
+
+export async function loadNifti4DRawBytes(bytes) {
+  const raw = await gunzipIfNeeded(bytes);
+  return readNifti4D(raw);
 }
 
 export async function loadNifti4DBytes(bytes) {
@@ -628,6 +822,12 @@ export function detectSwappedDwiB0(volA, volB) {
 }
 
 export function computeAdcVoxels(dwiVoxels, b0Voxels, bvalue = 1000, eps = 1e-10) {
+  if (!dwiVoxels || !b0Voxels || dwiVoxels.length !== b0Voxels.length) {
+    throw new Error(`DWI (${dwiVoxels?.length ?? 0}) and b0 (${b0Voxels?.length ?? 0}) voxel buffers must have identical length.`);
+  }
+  if (!Number.isFinite(bvalue) || bvalue <= 0) {
+    throw new Error(`Invalid b-value (${bvalue}); expected a positive number.`);
+  }
   const n = dwiVoxels.length;
   const out = new Float32Array(n);
   for (let i = 0; i < n; i++) {
@@ -642,11 +842,13 @@ export function computeAdcVoxels(dwiVoxels, b0Voxels, bvalue = 1000, eps = 1e-10
 
 export function prepareDwiAdc({ dwi, b0 = null, adc = null, bvalue = 1000, checkSwap = false }) {
   if (adc) {
+    assertMatchingGeometry(dwi, adc, 'DWI', 'ADC');
     return { dwi, adc, b0, adcWasComputed: false, orderWasSwapped: false };
   }
   if (!b0) {
     throw new Error('Provide an ADC image or a b0 volume alongside DWI so ADC can be computed.');
   }
+  assertMatchingGeometry(dwi, b0, 'DWI', 'b0');
   let dwiVol = dwi;
   let b0Vol = b0;
   let orderWasSwapped = false;

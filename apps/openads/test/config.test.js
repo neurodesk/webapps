@@ -24,6 +24,9 @@ test('detectMode chooses dwi-pwi, dwi, or mni-report accurately', () => {
   const pwi = assignRoles(mkFiles(['02e8eb42_DWI.nii.gz', '02e8eb42_ADC.nii.gz', '02e8eb42_PWI.nii.gz', '02e8eb42_PWI.json']));
   assert.equal(detectMode(pwi).mode, 'dwi-pwi');
 
+  const stackedPwi = assignRoles(mkFiles(['02e8eb42_DWI.nii.gz', '02e8eb42_PWI.nii.gz']));
+  assert.equal(detectMode(stackedPwi).mode, 'dwi-pwi');
+
   assert.equal(inferSubjectId(mkFiles(['sub-02e8eb42_DWI.nii.gz'])), 'sub-02e8eb42');
   assert.equal(inferSubjectId(mkFiles(['02e8eb42_DWI.nii.gz'])), 'sub-02e8eb42');
 });

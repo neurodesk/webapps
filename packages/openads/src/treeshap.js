@@ -241,20 +241,30 @@ export function evaluateAtlasShap({ atlasKey, manifest, forestsByRoi, qfvMap }) 
     let rawVec = baseVec;
     let featureNames = manifest.features;
     if (atlasKey === 'aspectpc') {
-      const m = new Map(manifest.features.map((f, i) => [f, baseVec[i]]));
-      const vol = m.get('volml') ?? 0;
+      const m = new Map();
+      manifest.features.forEach((f, i) => {
+        m.set(f, baseVec[i]);
+        m.set(f.toLowerCase(), baseVec[i]);
+      });
+      const getVal = (key) => m.get(key) ?? m.get(key.toLowerCase()) ?? 0;
+      const vol = getVal('volml');
       const logv = Math.log10(Math.max(vol, 1e-6));
       m.set('logvol', logv);
       m.set('sqrtvol', Math.sqrt(Math.max(vol, 0)));
       for (const name of ['PCA', 'Thalamus', 'Cerebellum', 'Pons', 'Midbrain']) {
-        m.set(`${name}_x_vol`, (m.get(name) ?? 0) * logv);
+        const val = getVal(name);
+        m.set(name, val);
+        m.set(name.toLowerCase(), val);
+        m.set(`${name}_x_vol`, val * logv);
+        m.set(`${name.toLowerCase()}_x_vol`, val * logv);
       }
-      rawVec = entry.featureCols.map((c) => m.get(c) ?? 0);
+      rawVec = entry.featureCols.map((c) => getVal(c));
       featureNames = entry.featureCols;
     }
 
     const rounded = rawVec.map(round4);
     const scaled = standardize(rounded, entry);
+    const scaledF32 = Float32Array.from(scaled);
     if (entry.kind === 'linear') {
       let score = entry.intercept;
       for (let i = 0; i < scaled.length; i++) score += entry.coef[i] * scaled[i];
@@ -271,8 +281,8 @@ export function evaluateAtlasShap({ atlasKey, manifest, forestsByRoi, qfvMap }) 
 
     const forest = forestsByRoi.get(entry.roi);
     if (!forest) continue;
-    const [p0, p1] = predictForest(forest, Float32Array.from(standardize(rawVec, entry)));
-    const { values, base } = treeShapForest(forest, Float32Array.from(scaled), 1);
+    const [p0, p1] = predictForest(forest, scaledF32);
+    const { values, base } = treeShapForest(forest, scaledF32, 1);
     const attributions = featureNames
       .map((feature, i) => ({ feature, value: rounded[i], attribution: values[i] }))
       .sort((a, b) => Math.abs(b.attribution) - Math.abs(a.attribution));

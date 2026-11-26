@@ -11,7 +11,7 @@
 .openads-umap-dot { fill: var(--nd-color-text-muted); opacity: 0.45; }
 .openads-umap-nn { fill: var(--nd-color-warning); opacity: 0.9; }
 .openads-umap-self { fill: var(--nd-color-primary); stroke: var(--nd-color-text); stroke-width: 1.5; }
-.openads-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: var(--nd-space-md); }
+.openads-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: var(--nd-space-md); }
 .openads-actions { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--nd-space-sm) var(--nd-space-md); margin: var(--nd-space-sm) 0 var(--nd-space-md); }
 .openads-panel { padding-top: var(--nd-space-md); }
 .openads-section-h { font-size: 0.85rem; font-weight: 600; margin: var(--nd-space-md) 0 var(--nd-space-xs); color: var(--nd-color-text); }

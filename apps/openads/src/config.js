@@ -67,11 +67,13 @@ export function detectMode(assigned) {
   const hasAdcOrB0 = assigned.adc !== null || assigned.b0 !== null;
   const hasPwi = assigned.pwi !== null;
   const hasMask = assigned.mask !== null;
-  if (hasDwi && hasAdcOrB0 && hasPwi) {
+  if (hasDwi && hasPwi) {
     return {
       mode: 'dwi-pwi',
       ready: true,
-      label: 'Full DWI core + 4D PWI hypoperfusion + mismatch + StrokeView report',
+      label: hasAdcOrB0
+        ? 'Full DWI core + 4D PWI hypoperfusion + mismatch + StrokeView report'
+        : '4D DWI+b0 core + 4D PWI hypoperfusion + mismatch + StrokeView report',
     };
   }
   if (hasDwi && hasAdcOrB0) {

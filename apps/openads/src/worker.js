@@ -14,6 +14,9 @@ import {
   assetIntegrity,
   loadNiftiBytes,
   loadNifti4DBytes,
+  loadNifti4DRawBytes,
+  reorientVolume4DToRAS,
+  assertMatchingGeometry,
   extractFrame3D,
   writeNiftiFloat32,
   writeNiftiGz,
@@ -23,7 +26,9 @@ import {
   prepareDwiAdc,
   runDagmnetDwi,
   runDagmnetPwi,
+  sliceTimeCorrection,
   computeTtpVolume,
+  TTP_DEFAULTS,
   ATLAS_SPECS,
   VENTRICLES_SPEC,
   computeLesionVolumes,
@@ -218,28 +223,31 @@ async function runReportingPipeline({
       atlasVol.voxels,
       atlasVol.dims,
       lookup,
+      { maskAffine: lesionVol.affine, atlasAffine: atlasVol.affine },
     );
   }
 
   let ventricles = null;
   if (adcMniVol && brainMaskVol) {
-    try {
-      const [ventVol, ventLookup] = await Promise.all([
-        fetchVerifiedNifti(VENTRICLES_SPEC.niftiPath),
-        fetchVerifiedJson(VENTRICLES_SPEC.lookupPath),
-      ]);
-      ventricles = computeVentricleFeatures(
-        adcMniVol.voxels,
-        brainMaskVol.voxels,
-        lesionVol.dims,
-        ventVol.voxels,
-        ventVol.dims,
-        ventLookup,
-        VENTRICLES_SPEC.adcThreshold,
-      );
-    } catch (err) {
-      log(`Ventricle features skipped: ${err.message}`);
-    }
+    const [ventVol, ventLookup] = await Promise.all([
+      fetchVerifiedNifti(VENTRICLES_SPEC.niftiPath),
+      fetchVerifiedJson(VENTRICLES_SPEC.lookupPath),
+    ]);
+    ventricles = computeVentricleFeatures(
+      adcMniVol.voxels,
+      brainMaskVol.voxels,
+      adcMniVol.dims,
+      ventVol.voxels,
+      ventVol.dims,
+      ventLookup,
+      VENTRICLES_SPEC.adcThreshold,
+      {
+        adcAffine: adcMniVol.affine,
+        brainMaskDims: brainMaskVol.dims,
+        brainMaskAffine: brainMaskVol.affine,
+        ventAffine: ventVol.affine,
+      },
+    );
   }
 
   const qfv = computeQfvVectors(atlasStats, volumes.totalMl);
@@ -390,6 +398,8 @@ async function runJob(job) {
     const maskVol = await loadNiftiBytes(await files.mask.arrayBuffer());
     const adcVol = files.adc ? await loadNiftiBytes(await files.adc.arrayBuffer()) : null;
     const brainMaskVol = files.brainmask ? await loadNiftiBytes(await files.brainmask.arrayBuffer()) : null;
+    if (adcVol) assertMatchingGeometry(maskVol, adcVol, 'MNI lesion mask', 'MNI ADC');
+    if (brainMaskVol) assertMatchingGeometry(maskVol, brainMaskVol, 'MNI lesion mask', 'MNI brain mask');
 
     const reporting = await runReportingPipeline({
       subjectId,
@@ -434,17 +444,18 @@ async function runJob(job) {
   const dwiRawBytes = new Uint8Array(await files.dwi.arrayBuffer());
   let dwiVol;
   let b0From4d = null;
-  try {
-    const vol4d = await loadNifti4DBytes(dwiRawBytes);
-    if (vol4d.dims[3] >= 2) {
-      log(`4D DWI detected (${vol4d.dims.join('×')}) — extracting DWI & b0 volumes`);
-      dwiVol = extractFrame3D(vol4d, 0);
-      b0From4d = extractFrame3D(vol4d, 1);
-    } else {
-      dwiVol = await loadNiftiBytes(dwiRawBytes);
-    }
-  } catch {
-    dwiVol = await loadNiftiBytes(dwiRawBytes);
+  const vol4d = await loadNifti4DBytes(dwiRawBytes);
+  if (vol4d.dims[3] > 2) {
+    throw new Error(
+      `Ambiguous 4D DWI input with ${vol4d.dims[3]} volumes. Supply separate 3D DWI and b0/ADC scans (or a 2-volume DWI+b0 stack).`,
+    );
+  }
+  if (vol4d.dims[3] === 2) {
+    log(`2-volume 4D DWI detected (${vol4d.dims.join('×')}) — extracting DWI & b0 volumes`);
+    dwiVol = extractFrame3D(vol4d, 0);
+    b0From4d = extractFrame3D(vol4d, 1);
+  } else {
+    dwiVol = extractFrame3D(vol4d, 0);
   }
   const adcInput = files.adc ? await loadNiftiBytes(await files.adc.arrayBuffer()) : null;
   const b0Input = files.b0 ? await loadNiftiBytes(await files.b0.arrayBuffer()) : null;
@@ -613,19 +624,40 @@ async function runJob(job) {
   let mismatch = null;
   if (mode === 'dwi-pwi' && files.pwi) {
     progress(0.56, 'Reading 4D PWI series…');
-    const pwi4d = await loadNifti4DBytes(await files.pwi.arrayBuffer());
+    // Load in native acquisition order first so BIDS SliceTiming aligns with acquisition slices.
+    const pwiRaw = await loadNifti4DRawBytes(await files.pwi.arrayBuffer());
+    const minPwiFrames = TTP_DEFAULTS.baselineVolumesMin + TTP_DEFAULTS.skipVolumes + 3;
+    if (pwiRaw.dims[3] < minPwiFrames) {
+      throw new Error(
+        `PWI input must be a 4D perfusion series with at least ${minPwiFrames} time frames (received ${pwiRaw.dims[3]}).`,
+      );
+    }
     let pwiMeta = null;
     if (files['pwi-json']) {
       try {
         pwiMeta = JSON.parse(await files['pwi-json'].text());
-      } catch {
-        pwiMeta = null;
+      } catch (err) {
+        throw new Error(`Invalid PWI JSON sidecar: ${err.message}`);
       }
     }
-    const tr = pwiMeta?.RepetitionTime > 0 ? pwiMeta.RepetitionTime : pwi4d.pixdim[3] > 0 ? pwi4d.pixdim[3] : 1.7;
-    const sliceTiming = Array.isArray(pwiMeta?.SliceTiming) && pwiMeta.SliceTiming.length === pwi4d.dims[2]
-      ? pwiMeta.SliceTiming
-      : null;
+    const rawTr = Number.isFinite(pwiMeta?.RepetitionTime) && pwiMeta.RepetitionTime > 0
+      ? (pwiMeta.RepetitionTime > 20 ? pwiMeta.RepetitionTime / 1000 : pwiMeta.RepetitionTime)
+      : pwiRaw.pixdim[3] > 0
+        ? pwiRaw.pixdim[3]
+        : 1.7;
+    const echoTime = Number.isFinite(pwiMeta?.EchoTime) && pwiMeta.EchoTime > 0
+      ? (pwiMeta.EchoTime > 1 ? pwiMeta.EchoTime / 1000 : pwiMeta.EchoTime)
+      : TTP_DEFAULTS.echoTime;
+    const sliceTiming = Array.isArray(pwiMeta?.SliceTiming) ? pwiMeta.SliceTiming : null;
+    if (sliceTiming && sliceTiming.length !== pwiRaw.dims[2]) {
+      throw new Error(
+        `PWI SliceTiming length (${sliceTiming.length}) does not match acquisition slice count (${pwiRaw.dims[2]}).`,
+      );
+    }
+
+    progress(0.57, 'Applying slice-time correction in acquisition order…');
+    const stcRaw = sliceTimeCorrection(pwiRaw.voxels, pwiRaw.dims, rawTr, sliceTiming);
+    const pwi4d = reorientVolume4DToRAS({ ...pwiRaw, voxels: stcRaw.data });
 
     const pwiFrame0 = extractFrame3D(pwi4d, 0);
     const pwiMask = await stripBrain(pwiFrame0, 0.58, 0.06);
@@ -635,9 +667,10 @@ async function runJob(job) {
     const ttpRes = computeTtpVolume({
       pwi: pwi4d.voxels,
       dims: pwi4d.dims,
-      pixdim: [pwi4d.pixdim[0], pwi4d.pixdim[1], pwi4d.pixdim[2], tr],
+      pixdim: [pwi4d.pixdim[0], pwi4d.pixdim[1], pwi4d.pixdim[2], rawTr],
       mask: pwiMask,
-      sliceTiming,
+      skipSliceTimeCorrection: true,
+      echoTime,
       onProgress: (stage) => log(`TTP: ${stage}`),
     });
     const ttpNativeVol = { ...pwiFrame0, voxels: ttpRes.ttp };
@@ -673,6 +706,7 @@ async function runJob(job) {
         dwi: normInMask(affDwiVol.voxels),
         adc: normInMask(affAdcVol.voxels),
         ttp: normInMask(ttpMniVol.voxels),
+        strokeMask: strokeMniVol.voxels,
         dims: affDwiVol.dims,
         threshold,
       },

@@ -1,6 +1,6 @@
 // JHU-ICBM atlas overlap, QFV computation, Random Forest feature preparation,
 // CSV generation, core-penumbra mismatch, and OpenADS Automatic Radiological Report.
-import { voxelCount } from './volume.js';
+import { voxelCount, assertMatchingGeometry } from './volume.js';
 
 export const MNI182_DIMS = [182, 218, 182];
 
@@ -134,14 +134,14 @@ export function computeLesionVolumes(lesion, dims, pixdim) {
 }
 
 export function computeIcvMl(brainMask, dims, pixdim) {
-  if (!brainMask) return 1200;
+  if (!brainMask) return null;
   const vv = voxelVolumeMl(pixdim);
   let count = 0;
   const n = voxelCount(dims);
   for (let i = 0; i < n; i++) {
     if (brainMask[i] > 0.5) count++;
   }
-  return count > 0 ? count * vv : 1200;
+  return count > 0 ? count * vv : null;
 }
 
 export function computeMismatch(coreMask, hpMask, dims, pixdim) {
@@ -168,16 +168,20 @@ export function computeMismatch(coreMask, hpMask, dims, pixdim) {
   return { coreMl, hpMl, overlapMl, penumbraMl, mismatchVolumeMl, mismatchRatio };
 }
 
-export function computeAtlasOverlap(binaryMask, maskDims, atlasLabels, atlasDims, lookup) {
-  if (
-    atlasDims[0] !== maskDims[0] ||
-    atlasDims[1] !== maskDims[1] ||
-    atlasDims[2] !== maskDims[2]
-  ) {
-    throw new Error(
-      `Atlas grid ${atlasDims.join('x')} does not match lesion mask grid ${maskDims.join('x')}.`,
-    );
-  }
+export function computeAtlasOverlap(
+  binaryMask,
+  maskDims,
+  atlasLabels,
+  atlasDims,
+  lookup,
+  { maskAffine = null, atlasAffine = null } = {},
+) {
+  assertMatchingGeometry(
+    { dims: maskDims, affine: maskAffine, voxels: binaryMask },
+    { dims: atlasDims, affine: atlasAffine, voxels: atlasLabels },
+    'lesion mask',
+    'atlas',
+  );
   const numRegions = lookup.regions.length;
   const counts = new Array(numRegions).fill(0);
   for (let i = 0; i < atlasLabels.length; i++) {
@@ -195,10 +199,28 @@ export function computeAtlasOverlap(binaryMask, maskDims, atlasLabels, atlasDims
   }));
 }
 
-export function computeVentricleFeatures(adcMni, brainMask, dims, ventLabels, ventDims, lookup, threshold = 0.549) {
-  if (ventDims[0] !== dims[0] || ventDims[1] !== dims[1] || ventDims[2] !== dims[2]) {
-    throw new Error(`Ventricles atlas grid ${ventDims.join('x')} does not match ADC grid ${dims.join('x')}.`);
-  }
+export function computeVentricleFeatures(
+  adcMni,
+  brainMask,
+  dims,
+  ventLabels,
+  ventDims,
+  lookup,
+  threshold = 0.549,
+  { adcAffine = null, brainMaskDims = dims, brainMaskAffine = null, ventAffine = null } = {},
+) {
+  assertMatchingGeometry(
+    { dims, affine: adcAffine, voxels: adcMni },
+    { dims: ventDims, affine: ventAffine, voxels: ventLabels },
+    'ADC',
+    'ventricles atlas',
+  );
+  assertMatchingGeometry(
+    { dims: brainMaskDims, affine: brainMaskAffine, voxels: brainMask },
+    { dims: ventDims, affine: ventAffine, voxels: ventLabels },
+    'brain mask',
+    'ventricles atlas',
+  );
   const n = ventLabels.length;
   let count = 0;
   let sum = 0;
@@ -438,10 +460,11 @@ export function buildRfFeatureRequests(atlasStats, totalMl, pixdim, ventricles =
   return requests;
 }
 
-function csvCell(v) {
-  if (typeof v === 'number') return String(v);
-  const s = String(v ?? '');
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+export function csvCell(v) {
+  if (typeof v === 'number') return Number.isFinite(v) ? String(v) : '';
+  let s = String(v ?? '');
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
 const csvRow = (arr) => arr.map(csvCell).join(',');
@@ -494,8 +517,11 @@ export function buildRadiologicalReportText({
   const aspectsAffected = (interpretation.aspects || []).filter((r) => r.predict === 'AFFECTED');
   const aspectsScore = interpretation.aspects?.length ? 10 - aspectsAffected.length : null;
 
+  const icvClause = icvMl != null && icvMl > 0
+    ? `${((volumes.totalMl / icvMl) * 100).toFixed(2)}% of ICV`
+    : 'ICV unavailable';
   const summary = [
-    `Area of ${finding} is ${sideLabel}, with ${volumes.totalMl.toFixed(2)} mL (L ${volumes.leftMl.toFixed(2)} mL / R ${volumes.rightMl.toFixed(2)} mL; ${icvMl > 0 ? ((volumes.totalMl / icvMl) * 100).toFixed(2) : '0.00'}% of ICV).`,
+    `Area of ${finding} is ${sideLabel}, with ${volumes.totalMl.toFixed(2)} mL (L ${volumes.leftMl.toFixed(2)} mL / R ${volumes.rightMl.toFixed(2)} mL; ${icvClause}).`,
     vascAffected.length
       ? `Arterial territory: ${vascAffected.map((r) => formatRegionName(r.region)).join(', ')}.`
       : 'No significant arterial territory involvement predicted.',

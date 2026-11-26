@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
 
 const examples = JSON.parse(readFileSync(new URL('../examples.json', import.meta.url), 'utf8'));
 
@@ -50,12 +51,51 @@ test('example selector loads StrokeFAIR MNI case, runs reporting + TreeSHAP + St
   await expect(page.locator('.openads-umap-svg')).toBeVisible();
   await expect(page.locator('#reportView')).toContainText('Clinical phenotype');
 
-  // Verify download from output result list
+  // Verify download of the generated MNI stroke mask and inspect its NIfTI-1 header
   const [dl] = await Promise.all([
     page.waitForEvent('download'),
-    page.locator('#resultList .nd-download-btn').first().click(),
+    page.locator('#resultList .nd-volume-toggle[data-stage="stroke_mni"] .nd-download-btn').click(),
   ]);
-  expect(dl.suggestedFilename()).toMatch(/\.nii\.gz$/);
+  expect(dl.suggestedFilename()).toBe('sub-02e8eb42_stroke-mask_space-MNI152.nii.gz');
+  const dlPath = await dl.path();
+  const gz = readFileSync(dlPath);
+  expect(gz[0]).toBe(0x1f);
+  expect(gz[1]).toBe(0x8b);
+  const raw = gunzipSync(gz);
+  const view = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+  expect(view.getInt32(0, true)).toBe(348);
+  expect([view.getInt16(42, true), view.getInt16(44, true), view.getInt16(46, true)]).toEqual([182, 218, 182]);
+});
+
+test('dropping a NIfTI file directly onto the upload zone loads and classifies it', async ({ page }) => {
+  await page.goto('./');
+  await page.evaluate(() => {
+    const buf = new ArrayBuffer(352 + 8 * 4);
+    const view = new DataView(buf);
+    view.setInt32(0, 348, true);
+    view.setInt16(40, 3, true);
+    view.setInt16(42, 2, true);
+    view.setInt16(44, 2, true);
+    view.setInt16(46, 2, true);
+    view.setInt16(70, 16, true);
+    view.setInt16(72, 32, true);
+    view.setFloat32(80, 1, true);
+    view.setFloat32(84, 1, true);
+    view.setFloat32(88, 1, true);
+    view.setFloat32(108, 352, true);
+    view.setFloat32(112, 1, true);
+    view.setInt16(254, 1, true);
+    view.setFloat32(280, 1, true);
+    view.setFloat32(300, 1, true);
+    view.setFloat32(320, 1, true);
+    new Uint8Array(buf, 344, 4).set([0x6e, 0x2b, 0x31, 0x00]);
+    const file = new File([buf], 'sub-drop_stroke_space-MNI152.nii', { type: 'application/octet-stream' });
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    document.getElementById('dropZone').dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+  });
+  await expect(page.locator('#maskSelect')).toHaveValue('0', { timeout: 10_000 });
+  await expect(page.locator('#runButton')).toBeEnabled();
 });
 
 test('example loading handles failure and retry cleanly', async ({ page }) => {

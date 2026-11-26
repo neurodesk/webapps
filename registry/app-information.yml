@@ -2846,7 +2846,7 @@ apps:
   openads:
     builders: "Built in collaboration with Andreia V. Faria and the Faria Lab (Johns Hopkins University, https://strokefair.org) and the Neurodesk team, integrating ADSWeb (OpenADS) and StrokeView."
     about:
-      - "OpenADS segments acute ischemic stroke core lesions on DWI/ADC and hypoperfusion deficits on 4D PWI/TTP, maps segmentations to MNI152 1 mm space, computes core-penumbra mismatch, and generates structured radiological reports with JHU-ICBM arterial territory, lobar, MCA-ASPECTS, pcASPECTS and hydrocephalus scoring."
+      - "OpenADS segments acute ischemic stroke core lesions on DWI/ADC and hypoperfusion deficits on 4D PWI/TTP, maps segmentations to MNI152 1 mm space, computes core-penumbra mismatch, and generates structured radiological reports with JHU-ICBM arterial territory, lobar, MCA-ASPECTS and hydrocephalus scoring, plus posterior-circulation (pcASPECTS) overlap and TreeSHAP attributions."
       - "Raw native-space DWI + b0/ADC scans run end-to-end in the browser: automatic ADC calculation from DWI + b0, SynthStrip brain extraction, ANTs MNI152 registration (affine, with optional SyN nonlinear warp), 16-pass DAGMNet ONNX segmentation and inverse-transform native mask restoration. Adding 4D PWI runs slice-time correction, Gd concentration TTP mapping, coregistration and DAGMNet PWI hypoperfusion segmentation."
       - "Every run also includes exact TreeSHAP per-region feature attributions and the StrokeView cohort explorer, projecting the patient's Quantitative Feature Vector onto a 1,861-subject StrokeFAIR acute stroke UMAP reference to summarize clinical phenotypes of the nearest cases. Research use only — not a clinical diagnostic tool."
     packages:

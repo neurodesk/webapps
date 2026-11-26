@@ -36,6 +36,7 @@ mountImagingWorkspace({
 let viewer = null;
 let viewerReady = null;
 let maskEditor = null;
+let editingKey = null;
 let viewQueue = Promise.resolve();
 let viewRevision = 0;
 let activeViewTab = 'multiplanar';
@@ -158,6 +159,12 @@ const results = createResultList({
   },
   onEdit: (key, entry) => {
     if (!viewer || !entry?.file || job?.kind === 'running') return;
+    editingKey = key;
+    if (key === 'stroke_native' && outputs.input_dwi) view.baseKey = 'input_dwi';
+    else if (key === 'hp_native' && outputs.input_pwi) view.baseKey = 'input_pwi';
+    else if ((key === 'stroke_mni' || key === 'hp_mni') && (outputs.dwi_mni || outputs.adc_mni)) {
+      view.baseKey = outputs.dwi_mni ? 'dwi_mni' : 'adc_mni';
+    }
     view.overlayKey = key;
     if (activeViewTab === 'report') {
       activeViewTab = 'multiplanar';
@@ -170,16 +177,34 @@ const results = createResultList({
           nv: viewer,
           labelNames: { 1: 'Lesion' },
           onApply: (editedFile) => {
-            outputs[key].file = editedFile;
-            outputs[key].edited = true;
-            status(`Updated ${outputs[key].label} mask.`);
+            const targetKey = editingKey;
+            editingKey = null;
+            if (!targetKey || !outputs[targetKey]) return;
+            outputs[targetKey].file = editedFile;
+            outputs[targetKey].edited = true;
+            const note = $('reportView').querySelector('.openads-edit-note');
+            if (!note && lastResult) {
+              $('reportView').prepend(
+                createElement('p', {
+                  className: 'nd-report-notes openads-edit-note',
+                  text: 'Mask edited after report generation — re-run MNI reporting with the updated mask to refresh volumes, RF calls and StrokeView cohort.',
+                }),
+              );
+            }
+            status(`Updated ${outputs[targetKey].label} mask.`);
             void show();
           },
-          onCancel: () => status('Mask editing cancelled.'),
+          onCancel: () => {
+            editingKey = null;
+            status('Mask editing cancelled.');
+          },
         });
         toolbar.after(maskEditor);
       }
-      maskEditor.open(entry.file);
+      maskEditor.open(outputs[key].file);
+    }).catch((err) => {
+      editingKey = null;
+      status(err?.message || 'Could not open mask editor.', true);
     });
   },
   onDownload: (_key, entry) => downloadFile(entry.file),
@@ -242,19 +267,24 @@ function renderInputs() {
   refreshControls();
 }
 
-function rebuildInputOutputs() {
-  outputs = {};
+function buildInputOutputs() {
+  const next = {};
   for (const { role, label } of ROLES) {
     if (role === 'pwi-json') continue;
     const idx = assigned[role];
     if (idx === null) continue;
-    outputs[`input_${role}`] = {
+    next[`input_${role}`] = {
       label: `${label} (input)`,
       file: files[idx],
       isOverlay: role === 'mask' || role === 'brainmask',
       editable: false,
     };
   }
+  return next;
+}
+
+function rebuildInputOutputs() {
+  outputs = buildInputOutputs();
   const basePreference = ['input_dwi', 'input_adc', 'input_b0', 'input_pwi', 'input_mask'];
   view.baseKey = basePreference.find((k) => outputs[k]) || null;
   view.overlayKey = outputs.input_mask && view.baseKey !== 'input_mask' ? 'input_mask' : null;
@@ -288,7 +318,7 @@ function renderResultList() {
 async function ensureViewer() {
   if (!viewerReady) {
     viewerReady = (async () => {
-      viewer = new NiiVue({
+      const nv = new NiiVue({
         dragAndDropEnabled: false,
         backColor: [0, 0, 0, 1],
         show3Dcrosshair: true,
@@ -296,10 +326,15 @@ async function ensureViewer() {
           $('location').textContent = data?.string || '';
         },
       });
-      await viewer.attachToCanvas($('gl1'));
+      await nv.attachToCanvas($('gl1'));
+      viewer = nv;
       layouts.multiplanar();
-      return viewer;
-    })();
+      return nv;
+    })().catch((err) => {
+      viewerReady = null;
+      viewer = null;
+      throw err;
+    });
   }
   return viewerReady;
 }
@@ -314,7 +349,7 @@ function show() {
     return Promise.resolve();
   }
   $('emptyState').hidden = true;
-  viewQueue = viewQueue.then(async () => {
+  viewQueue = viewQueue.catch(() => {}).then(async () => {
     if (rev !== viewRevision) return;
     const nv = await ensureViewer();
     const list = [{ file: base.file, colormap: 'gray', opacity: 1 }];
@@ -354,7 +389,7 @@ toolbar.control('overlayOpacity').addEventListener('input', (event) => {
 });
 
 async function loadInputFiles(incoming, explicitRoles = {}) {
-  const list = Array.from(incoming || []);
+  const list = Array.from((await incoming) || []);
   if (!list.length) return;
   const current = begin('loading', 'Reading input files…');
   try {
@@ -367,9 +402,11 @@ async function loadInputFiles(incoming, explicitRoles = {}) {
         converted.push(...imageCandidates);
       } else {
         const result = await readImageFiles(imageCandidates, { niftiOnly: false });
+        if (job !== current || current.controller.signal.aborted) return;
         for (const item of result) converted.push(item);
       }
     }
+    if (job !== current || current.controller.signal.aborted) return;
     const all = [...converted, ...jsonFiles];
     if (!all.length) throw new Error('No supported NIfTI, DICOM or JSON files found.');
     files = all;
@@ -377,7 +414,11 @@ async function loadInputFiles(incoming, explicitRoles = {}) {
     renderInputs();
     clearResults();
     end(current, `Loaded ${files.length} file${files.length === 1 ? '' : 's'}.`);
-    await show();
+    try {
+      await show();
+    } catch (viewerErr) {
+      log.log(`Viewer preview unavailable: ${viewerErr?.message || viewerErr}`, 'error');
+    }
   } catch (err) {
     end(current, err.message || 'Could not read input files.', { success: false, error: true });
     throw err;
@@ -403,8 +444,12 @@ const exampleControl = createExampleSelector({
 });
 $('exampleControl').append(exampleControl);
 
-bindFileDrop($('dropZone'), (dropped) => {
-  void loadInputFiles(dropped);
+bindFileDrop($('dropZone'), (droppedPromise) => {
+  void Promise.resolve(droppedPromise)
+    .then((dropped) => {
+      if (dropped?.length) return loadInputFiles(dropped);
+    })
+    .catch((err) => status(err?.message || 'Could not read dropped files.', true));
 });
 $('imageInput').addEventListener('change', (event) => {
   const picked = event.target.files;
@@ -451,7 +496,13 @@ function runAnalysis(options = {}) {
   });
   current.completion = { resolve: resolveCompletion, reject: rejectCompletion };
 
-  const worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
+  let worker;
+  try {
+    worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
+  } catch (err) {
+    end(current, err?.message || 'Could not start OpenADS worker.', { success: false, error: true });
+    return completion;
+  }
   current.worker = worker;
 
   worker.onmessage = async ({ data: msg }) => {
@@ -470,80 +521,90 @@ function runAnalysis(options = {}) {
       return;
     }
     if (msg.type === 'result') {
-      const { reporting, outputVolumes, elapsedSeconds } = msg.result;
-      lastResult = msg.result;
-      for (const vol of outputVolumes) {
-        outputs[vol.key] = {
-          label: vol.label,
-          file: new File([vol.bytes], vol.filename, { type: 'application/gzip' }),
-          isOverlay: Boolean(vol.isOverlay),
-          editable: Boolean(vol.editable),
-        };
-      }
-      const downloads = buildDownloads(reporting);
-      const reportFile = downloads[0].file;
-      const vascCsvFile = downloads.find((d) => d.file.name.includes('VASCULAR_QFV'))?.file;
-      let cohortCsvFile = null;
-      if (reporting.cohortRefs?.lobe && reporting.qfv?.lobe) {
-        const proj = projectSubjectOntoCohort({
-          qfvByRegion: reporting.qfv.lobe.byRegion,
-          refData: reporting.cohortRefs.lobe,
-          kNeighbors: cohortK,
-        });
-        cohortCsvFile = new File(
-          [cohortSummaryCsv(proj.summary)],
-          `${subjectId}_strokeview_lobe_neighbors.csv`,
-          { type: 'text/csv' },
+      try {
+        const { reporting, outputVolumes, elapsedSeconds } = msg.result;
+        lastResult = msg.result;
+        const nextOutputs = buildInputOutputs();
+        for (const vol of outputVolumes) {
+          nextOutputs[vol.key] = {
+            label: vol.label,
+            file: new File([vol.bytes], vol.filename, { type: 'application/gzip' }),
+            isOverlay: Boolean(vol.isOverlay),
+            editable: Boolean(vol.editable),
+          };
+        }
+        outputs = nextOutputs;
+        const downloads = buildDownloads(reporting);
+        const reportFile = downloads[0].file;
+        const vascCsvFile = downloads.find((d) => d.file.name.includes('VASCULAR_QFV'))?.file;
+        let cohortCsvFile = null;
+        if (reporting.cohortRefs?.lobe && reporting.qfv?.lobe) {
+          const proj = projectSubjectOntoCohort({
+            qfvByRegion: reporting.qfv.lobe.byRegion,
+            refData: reporting.cohortRefs.lobe,
+            kNeighbors: cohortK,
+          });
+          cohortCsvFile = new File(
+            [cohortSummaryCsv(proj.summary)],
+            `${subjectId}_strokeview_lobe_neighbors.csv`,
+            { type: 'text/csv' },
+          );
+        }
+
+        const summary = $('summaryMetrics');
+        summary.hidden = false;
+        summary.replaceChildren(
+          createElement('p', {
+            className: 'nd-hint',
+            text: `Core ${reporting.volumes.totalMl.toFixed(1)} mL · ASPECTS ${reporting.report.aspectsScore ?? 'N.A.'}/10${reporting.mismatch ? ` · HP ${reporting.mismatch.hpMl.toFixed(1)} mL` : ''}`,
+          }),
         );
-      }
 
-      const summary = $('summaryMetrics');
-      summary.hidden = false;
-      summary.replaceChildren(
-        createElement('p', {
-          className: 'nd-hint',
-          text: `Core ${reporting.volumes.totalMl.toFixed(1)} mL · ASPECTS ${reporting.report.aspectsScore ?? 'N.A.'}/10${reporting.mismatch ? ` · HP ${reporting.mismatch.hpMl.toFixed(1)} mL` : ''}`,
-        }),
-      );
+        renderReportView($('reportView'), {
+          ...reporting,
+          defaultK: cohortK,
+          downloads,
+        });
 
-      renderReportView($('reportView'), {
-        ...reporting,
-        defaultK: cohortK,
-        downloads,
-      });
+        if (outputs.dwi_mni) view.baseKey = 'dwi_mni';
+        else if (outputs.adc_mni) view.baseKey = 'adc_mni';
+        if (outputs.stroke_mni) view.overlayKey = 'stroke_mni';
 
-      if (outputs.dwi_mni) view.baseKey = 'dwi_mni';
-      else if (outputs.adc_mni) view.baseKey = 'adc_mni';
-      if (outputs.stroke_mni) view.overlayKey = 'stroke_mni';
+        $('outputSection').open = true;
+        renderResultList();
+        activeViewTab = 'report';
+        toolbar.setActive('report');
+        setReportVisible(true);
+        try {
+          await show();
+        } catch (viewerErr) {
+          log.log(`Viewer preview unavailable: ${viewerErr?.message || viewerErr}`, 'error');
+        }
 
-      $('outputSection').open = true;
-      renderResultList();
-      activeViewTab = 'report';
-      toolbar.setActive('report');
-      setReportVisible(true);
-      await show();
+        const lesionFile = outputs.stroke_mni?.file || outputs.input_mask?.file;
+        const artifacts = [
+          ...(lesionFile ? [{ role: 'lesion_mask', file: lesionFile }] : []),
+          { role: 'radiological_report', file: reportFile },
+          ...(vascCsvFile ? [{ role: 'qfv_vascular', file: vascCsvFile }] : []),
+          ...(cohortCsvFile ? [{ role: 'cohort_summary', file: cohortCsvFile }] : []),
+        ];
 
-      const lesionFile = outputs.stroke_mni?.file || outputs.input_mask?.file;
-      const artifacts = [
-        ...(lesionFile ? [{ role: 'lesion_mask', file: lesionFile }] : []),
-        { role: 'radiological_report', file: reportFile },
-        ...(vascCsvFile ? [{ role: 'qfv_vascular', file: vascCsvFile }] : []),
-        ...(cohortCsvFile ? [{ role: 'cohort_summary', file: cohortCsvFile }] : []),
-      ];
-
-      end(current, `Done in ${elapsedSeconds}s — ${reporting.volumes.totalMl.toFixed(2)} mL, ASPECTS ${reporting.report.aspectsScore ?? 'N.A.'}.`, {
-        success: true,
-        value: {
-          artifacts,
-          measurements: {
-            subjectId,
-            lesionVolumeMl: reporting.volumes.totalMl,
-            aspectsScore: reporting.report.aspectsScore,
-            hydrocephalus: reporting.hydrocephalus?.predict ?? null,
-            mismatchVolumeMl: reporting.mismatch?.mismatchVolumeMl ?? null,
+        end(current, `Done in ${elapsedSeconds}s — ${reporting.volumes.totalMl.toFixed(2)} mL, ASPECTS ${reporting.report.aspectsScore ?? 'N.A.'}.`, {
+          success: true,
+          value: {
+            artifacts,
+            measurements: {
+              subjectId,
+              lesionVolumeMl: reporting.volumes.totalMl,
+              aspectsScore: reporting.report.aspectsScore,
+              hydrocephalus: reporting.hydrocephalus?.predict ?? null,
+              mismatchVolumeMl: reporting.mismatch?.mismatchVolumeMl ?? null,
+            },
           },
-        },
-      });
+        });
+      } catch (err) {
+        end(current, err?.message || 'Failed to publish OpenADS results.', { success: false, error: true });
+      }
     }
   };
 
@@ -551,15 +612,19 @@ function runAnalysis(options = {}) {
     end(current, event.message || 'OpenADS worker crashed.', { success: false, error: true });
   };
 
-  worker.postMessage({
-    mode: plan.mode,
-    subjectId,
-    files: selectedFiles,
-    runSyn,
-    runShap,
-    threshold,
-    assetBase: new URL('./', window.location.href).href,
-  });
+  try {
+    worker.postMessage({
+      mode: plan.mode,
+      subjectId,
+      files: selectedFiles,
+      runSyn,
+      runShap,
+      threshold,
+      assetBase: new URL('./', window.location.href).href,
+    });
+  } catch (err) {
+    end(current, err?.message || 'Could not send inputs to OpenADS worker.', { success: false, error: true });
+  }
 
   return completion;
 }
