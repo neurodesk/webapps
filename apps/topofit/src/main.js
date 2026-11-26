@@ -7,6 +7,8 @@ import { runDcm2niix, readImageFiles } from '@neurodesk/runtime-support/dcm2niix
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace';
 import { createElement } from '@neurodesk/webapp-components/core';
 import { downloadArrayBuffer, downloadFile } from '@neurodesk/webapp-components/file-io';
+import { writeMz3 } from '@neurodesk/webapp-components/file-io/mesh';
+import { Niimath } from '@niivue/niimath';
 import {
   bindInfoTooltips,
   createResultList,
@@ -192,58 +194,59 @@ async function refreshNormalArrows() {
   }
 }
 
-// Printable STL: niimath simplifies and smooths each surface, TopoFit writes the STL.
+// Printable STL: niimath simplifies and smooths each surface and writes binary STL directly.
 function stlStages() {
   const available = [...surfaceStages].filter((stage) => reconstruction?.surfaces?.vertices[stage.replace('-', '.')]);
   const ticked = available.filter((stage) => visibleMeshes.has(stage));
   return ticked.length ? ticked : available;
 }
 
-function exportStl(stages, reduce, smooth) {
+async function exportStl(stages, reduce, smooth) {
   if (busy || viewerBusy) return;
   operation = 'STL export';
   setBusy(true);
   status(`Preparing ${stages.length} printable ${stages.length === 1 ? 'surface' : 'surfaces'}…`);
+  const niimath = new Niimath();
+  let cancelled = false;
+  const cancel = () => {
+    cancelled = true;
+    niimath.dispose('STL export cancelled');
+  };
+  cancelRun = cancel;
   try {
-    const active = new Worker(new URL('./stl-worker.js', import.meta.url), { type: 'module' });
-    worker = active;
-    const finish = () => {
-      active.terminate();
-      worker = null;
-      setBusy(false);
-    };
-    active.onmessage = ({ data }) => {
-      if (worker !== active) return;
-      if (data.type === 'progress') status(`Simplifying surface ${data.done} of ${data.total}…`);
-      if (data.type === 'result') {
-        for (const file of data.files) downloadArrayBuffer(file.bytes, file.name, 'model/stl');
-        status(`Saved ${data.files.map((file) => `${file.name} · ${file.triangles.toLocaleString()} triangles`).join(', ')}`);
-        finish();
+    await niimath.init();
+    const files = [];
+    for (const stage of stages) {
+      if (cancelled) return;
+      const surfaceName = stage.replace('-', '.');
+      const name = `${surfaceName}.stl`;
+      const mz3 = writeMz3(
+        reconstruction.surfaces.vertices[surfaceName],
+        reconstruction.surfaces.faces[stage.slice(0, 2)],
+      );
+      const output = await niimath
+        .image(mz3, 'in.mz3')
+        .args(['-r', String(reduce), '-s', String(smooth), '-v', '0'])
+        .run('out.stl');
+      if (cancelled) return;
+      const bytes = await output.arrayBuffer();
+      if (cancelled) return;
+      const triangles = bytes.byteLength >= 84 ? new DataView(bytes).getUint32(80, true) : 0;
+      if (!triangles || bytes.byteLength !== 84 + triangles * 50) {
+        throw new Error(`Simplifying ${name} left no triangles. Keep a larger fraction.`);
       }
-      if (data.type === 'error') {
-        status(`STL export failed: ${data.message}`, true);
-        finish();
-      }
-    };
-    active.onerror = (event) => {
-      if (worker !== active) return;
-      status(`STL export failed: ${event.message || 'The STL worker could not run.'}`, true);
-      finish();
-    };
-    active.postMessage({
-      reduce,
-      smooth,
-      surfaces: stages.map((stage) => ({
-        name: `${stage.replace('-', '.')}.stl`,
-        vertices: reconstruction.surfaces.vertices[stage.replace('-', '.')],
-        faces: reconstruction.surfaces.faces[stage.slice(0, 2)],
-      })),
-    });
+      files.push({ name, bytes, triangles });
+      status(`Simplifying surface ${files.length} of ${stages.length}…`);
+    }
+    if (cancelled) return;
+    for (const file of files) downloadArrayBuffer(file.bytes, file.name, 'model/stl');
+    status(`Saved ${files.map((file) => `${file.name} · ${file.triangles.toLocaleString()} triangles`).join(', ')}`);
   } catch (error) {
-    worker?.terminate();
-    worker = null;
-    status(`STL export failed: ${error.message}`, true);
-    setBusy(false);
+    if (!cancelled) status(`STL export failed: ${error instanceof Error ? error.message : String(error)}`, true);
+  } finally {
+    niimath.dispose();
+    if (cancelRun === cancel) cancelRun = null;
+    if (!cancelled) setBusy(false);
   }
 }
 

@@ -1958,8 +1958,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/components
       '@niivue/niimath':
-        specifier: 1.4.20260909
-        version: 1.4.20260909
+        specifier: 1.4.20261114
+        version: 1.4.20261114
       '@niivue/niivue':
         specifier: 1.0.0-rc.26
         version: 1.0.0-rc.26

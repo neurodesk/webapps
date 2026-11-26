@@ -946,10 +946,13 @@ test('STL export serializes processing and cancellation rejects late results', a
     const NativeWorker = window.Worker;
     window.Worker = class extends NativeWorker {
       postMessage(job, ...rest) {
-        if (!job.surfaces) return super.postMessage(job, ...rest);
+        if (job?.outName !== 'out.stl') return super.postMessage(job, ...rest);
+        const stl = new Uint8Array(84 + 50);
+        new DataView(stl.buffer).setUint32(80, 1, true);
         window.finishStl = () => this.onmessage({ data: {
-          type: 'result',
-          files: [{ name: 'stale.stl', bytes: new ArrayBuffer(84), triangles: 0 }],
+          blob: new Blob([stl]),
+          outName: 'out.stl',
+          exitCode: 0,
         } });
       }
     };
@@ -960,6 +963,7 @@ test('STL export serializes processing and cancellation rejects late results', a
   await page.locator('#stlSaveButton').click();
   await expect(page.locator('#imageInput')).toBeDisabled();
   await expect(page.locator('#runButton')).toBeDisabled();
+  await expect.poll(() => page.evaluate(() => typeof window.finishStl)).toBe('function');
   await page.locator('#cancelButton').click();
   await expectReady(page.locator('#stlButton')).toBeEnabled();
   await expect(page.locator('#statusText')).toContainText('STL export cancelled');
