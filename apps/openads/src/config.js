@@ -7,6 +7,7 @@ export const ROLES = [
   { role: 'dwi', label: 'DWI', name: 'Diffusion-weighted MRI (DWI)' },
   { role: 'adc', label: 'ADC', name: 'Apparent Diffusion Coefficient (ADC)' },
   { role: 'b0', label: 'b0', name: 'b0 diffusion image' },
+  { role: 'bval', label: 'DWI bval', name: 'DWI b-values (.bval)' },
   { role: 'pwi', label: 'PWI (4D)', name: '4D Perfusion-weighted MRI (PWI)' },
   { role: 'pwi-json', label: 'PWI JSON', name: 'PWI BIDS JSON sidecar' },
   { role: 'mask', label: 'MNI lesion mask', name: 'Pre-registered MNI152 stroke mask' },
@@ -16,11 +17,14 @@ export const ROLES = [
 function stripExtension(name) {
   return String(name || '')
     .toLowerCase()
-    .replace(/\.nii\.gz$|\.nii$|\.json$/i, '');
+    .replace(/\.nii\.gz$|\.nii$|\.json$|\.bval$/i, '');
 }
 
 export function classifyFileName(name) {
   const lower = String(name || '').toLowerCase();
+  if (lower.endsWith('.bval')) {
+    return 'bval';
+  }
   if (lower.endsWith('.json')) {
     if (
       /(^|[_\-.])(pwi|dsc|perf|perfusion|ttp)([_\-.]|$)/.test(lower)
@@ -66,11 +70,28 @@ export function assignRoles(files, explicitRoles = {}) {
   files.forEach((file, index) => {
     if (used.has(index)) return;
     const role = classifyFileName(file.name);
-    if (role && role !== 'pwi-json' && assigned[role] === null) {
+    if (role && role !== 'pwi-json' && role !== 'bval' && assigned[role] === null) {
       assigned[role] = index;
       used.add(index);
     }
   });
+  if (assigned.bval === null && assigned.dwi !== null) {
+    const dwiStem = stripExtension(files[assigned.dwi].name);
+    const bvalIndices = [];
+    files.forEach((file, index) => {
+      if (!used.has(index) && String(file.name || '').toLowerCase().endsWith('.bval')) {
+        bvalIndices.push(index);
+      }
+    });
+    const exactBvals = bvalIndices.filter((index) => stripExtension(files[index].name) === dwiStem);
+    if (exactBvals.length === 1) {
+      assigned.bval = exactBvals[0];
+      used.add(exactBvals[0]);
+    } else if (exactBvals.length === 0 && bvalIndices.length === 1) {
+      assigned.bval = bvalIndices[0];
+      used.add(bvalIndices[0]);
+    }
+  }
   if (assigned['pwi-json'] === null && assigned.pwi !== null) {
     const pwiStem = stripExtension(files[assigned.pwi].name);
     const jsonIndices = [];

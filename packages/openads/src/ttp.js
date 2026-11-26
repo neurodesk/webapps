@@ -1,4 +1,5 @@
 // Pure 4D PWI -> Time-To-Peak (TTP) perfusion map calculation (OpenADS TTP pipeline).
+import { dagmnetPostprocess } from './volume.js';
 
 export const TTP_DEFAULTS = {
   echoTime: 0.03,
@@ -500,9 +501,8 @@ function denoiseTtp(ttpIn, mask, dims, pixdim3, params) {
         const cz = Math.floor(qz / cellSize);
         let bestDist = Infinity;
         let bestVal = knownValues[0];
-        let ring = 0;
-        let found = false;
-        while (!found && ring < maxRing) {
+        let maxNeededRing = maxRing;
+        for (let ring = 0; ring < maxNeededRing; ring++) {
           for (let ddz = -ring; ddz <= ring; ddz++) {
             for (let ddy = -ring; ddy <= ring; ddy++) {
               for (let ddx = -ring; ddx <= ring; ddx++) {
@@ -517,14 +517,16 @@ function denoiseTtp(ttpIn, mask, dims, pixdim3, params) {
                   if (dist < bestDist) {
                     bestDist = dist;
                     bestVal = knownValues[k];
-                    found = true;
                   }
                 }
               }
             }
           }
-          ring++;
-          if (found && ring > 2) break;
+          if (bestDist < Infinity) {
+            // Any cell at Chebyshev distance > r is at least r * cellSize away from any point in cell (cx, cy, cz).
+            const bound = Math.ceil(Math.sqrt(bestDist) / cellSize) + 1;
+            if (bound < maxNeededRing) maxNeededRing = bound;
+          }
         }
         out[v] = bestVal;
       }
@@ -614,4 +616,92 @@ export function computeTtpVolume({
     quantileThresholds: TTP_DEFAULTS.quantileThresholds,
   });
   return { ttp, dims: dims3, timeRefSeconds: Array.from(timeRef), baselineVolumes };
+}
+
+// Hemispheric TTP asymmetry prior matching OpenADS HypoperfusionGenerator's core symmetry step
+// (used as channel 4 for DAGMNet PWI ch4 in MNI152 space).
+export function computeSymClassicPrior(
+  ttp,
+  brainMask,
+  dims,
+  { sigmaTh = 2, symRadius = 3, symThreshold = 0.7, minSize = 50 } = {},
+) {
+  const [nx, ny, nz] = dims;
+  const n = nx * ny * nz;
+  if (ttp.length !== n || brainMask.length !== n) {
+    throw new Error(`computeSymClassicPrior inputs must match grid voxel count (${n}).`);
+  }
+  const ttpPro = new Float32Array(n);
+  for (let z = 0; z < nz; z++) {
+    const off = z * nx * ny;
+    let sum = 0;
+    let cnt = 0;
+    for (let i = 0; i < nx * ny; i++) {
+      const val = ttp[off + i];
+      if (brainMask[off + i] && Number.isFinite(val) && val > 0) {
+        sum += val;
+        cnt++;
+      }
+    }
+    if (cnt < 10) continue;
+    const mean = sum / cnt;
+    let ss = 0;
+    for (let i = 0; i < nx * ny; i++) {
+      const val = ttp[off + i];
+      if (brainMask[off + i] && Number.isFinite(val) && val > 0) {
+        const d = val - mean;
+        ss += d * d;
+      }
+    }
+    const cutoff = mean - sigmaTh * Math.sqrt(ss / cnt);
+    for (let i = 0; i < nx * ny; i++) {
+      const val = ttp[off + i];
+      if (brainMask[off + i] && Number.isFinite(val) && val >= cutoff) {
+        ttpPro[off + i] = val;
+      }
+    }
+  }
+
+  const diffMask = new Uint8Array(n);
+  const mid = nx >> 1;
+  let rightCount = 0;
+  let leftCount = 0;
+  for (let z = 0; z < nz; z++) {
+    const off = z * nx * ny;
+    for (let y = 0; y < ny; y++) {
+      for (let x = 0; x < nx; x++) {
+        const val = ttpPro[off + y * nx + x];
+        if (val <= 0) continue;
+        const fx = nx - 1 - x;
+        let maxFlip = 0;
+        const y0 = Math.max(0, y - symRadius);
+        const y1 = Math.min(ny - 1, y + symRadius);
+        const x0 = Math.max(0, fx - symRadius);
+        const x1 = Math.min(nx - 1, fx + symRadius);
+        for (let yy = y0; yy <= y1; yy++) {
+          const row = off + yy * nx;
+          for (let xx = x0; xx <= x1; xx++) {
+            const v = ttpPro[row + xx];
+            if (v > maxFlip) maxFlip = v;
+          }
+        }
+        if (val - maxFlip > symThreshold) {
+          diffMask[off + y * nx + x] = 1;
+          if (x < mid) rightCount++;
+          else leftCount++;
+        }
+      }
+    }
+  }
+
+  const keepRight = rightCount > leftCount;
+  for (let z = 0; z < nz; z++) {
+    const off = z * nx * ny;
+    for (let y = 0; y < ny; y++) {
+      for (let x = 0; x < nx; x++) {
+        if ((x < mid) !== keepRight) diffMask[off + y * nx + x] = 0;
+      }
+    }
+  }
+  return Float32Array.from(dagmnetPostprocess(diffMask, dims, minSize));
 }

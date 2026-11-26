@@ -14,10 +14,14 @@ test('app boots with shared bar, dialogs, theme switch and cross-origin isolatio
   await expect(bar).toHaveCount(1);
   await bar.getByRole('button', { name: 'About', exact: true }).click();
   await expect(page.locator('dialog[open]')).toContainText('Faria Lab');
+  await expect(page.locator('dialog[open]')).toContainText('Johns Hopkins University');
+  await expect(page.locator('dialog[open]')).toContainText('JHU Non-Profit Research');
   await page.locator('dialog[open]').getByRole('button', { name: 'Close', exact: true }).click();
 
   await bar.getByRole('button', { name: 'Cite', exact: true }).click();
   await expect(page.locator('dialog[open]').last()).toContainText('Automatic comprehensive radiological reports');
+  await expect(page.locator('dialog[open]').last()).toContainText('Automatic comprehensive ASPECTS reports');
+  await expect(page.locator('dialog[open]').last()).toContainText('StrokeFAIR');
   await page.locator('dialog[open]').last().getByRole('button', { name: 'Close', exact: true }).click();
 
   await bar.getByRole('button', { name: 'Privacy', exact: true }).click();
@@ -39,11 +43,15 @@ test('example selector loads StrokeFAIR MNI case, runs reporting + TreeSHAP + St
   await page.locator('#runButton').click();
   await expect(page.locator('#reportView')).toBeVisible({ timeout: 120_000 });
   await expect(page.locator('#reportView')).toContainText('Automatic Radiological Report');
+  await expect(page.locator('#reportView')).toContainText('103.99 mL');
+  await expect(page.locator('#reportView')).toContainText('MNI152');
+  await expect(page.locator('#reportView')).toContainText('Faria Lab');
   await expect(page.locator('#reportView')).toContainText('MCA ASPECTS');
 
   // Switch to TreeSHAP tab
   await page.locator('#reportView').getByRole('button', { name: 'Atlases & TreeSHAP' }).click();
   await expect(page.locator('#reportView')).toContainText('TreeSHAP feature attributions');
+  await expect(page.locator('#reportView')).toContainText('aa-shap QFV models');
   await expect(page.locator('.openads-bar-track').first()).toBeVisible();
 
   // Switch to StrokeView cohort UMAP tab

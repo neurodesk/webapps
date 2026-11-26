@@ -814,7 +814,144 @@ export function binaryFillHoles(mask, dims) {
 export function dagmnetPostprocess(mask, dims, minSize = 50) {
   const closed = binaryClosing2x2x2(mask, dims);
   const filled = binaryFillHoles(closed, dims);
-  return removeSmallObjects(filled, dims, minSize);
+  return minSize > 0 ? removeSmallObjects(filled, dims, minSize) : filled;
+}
+
+export function parseBvals(text) {
+  const trimmed = String(text ?? '').trim();
+  if (!trimmed) {
+    throw new Error('Empty .bval file.');
+  }
+  const tokens = trimmed.split(/\s+/);
+  const values = tokens.map((tok) => Number(tok));
+  if (!values.length || values.some((v) => !Number.isFinite(v) || v < 0)) {
+    throw new Error('Invalid .bval file: expected non-negative finite numbers.');
+  }
+  return values;
+}
+
+function arithmeticMeanFrames(vol4d, indices) {
+  const frame0 = extractFrame3D(vol4d, indices[0]);
+  if (indices.length === 1) return frame0;
+  const n = frame0.voxels.length;
+  const out = new Float32Array(n);
+  const inv = 1 / indices.length;
+  for (const fIdx of indices) {
+    const src = extractFrame3D(vol4d, fIdx).voxels;
+    for (let i = 0; i < n; i++) out[i] += src[i] * inv;
+  }
+  return { ...frame0, voxels: out };
+}
+
+function geometricMeanFrames(vol4d, indices) {
+  const frame0 = extractFrame3D(vol4d, indices[0]);
+  if (indices.length === 1) return frame0;
+  const n = frame0.voxels.length;
+  const logSum = new Float64Array(n);
+  const validCount = new Uint16Array(n);
+  for (const fIdx of indices) {
+    const src = extractFrame3D(vol4d, fIdx).voxels;
+    for (let i = 0; i < n; i++) {
+      const v = src[i];
+      if (v > 0) {
+        logSum[i] += Math.log(v);
+        validCount[i] += 1;
+      }
+    }
+  }
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    if (validCount[i] === indices.length) {
+      out[i] = Math.exp(logSum[i] / indices.length);
+    }
+  }
+  return { ...frame0, voxels: out };
+}
+
+export function extractDwiB0From4D(vol4d, bvals = null) {
+  const nt = vol4d.dims[3];
+  if (nt === 1) {
+    return {
+      dwi: extractFrame3D(vol4d, 0),
+      b0: null,
+      bvalue: 1000,
+      usedBvals: false,
+      checkSwap: false,
+      note: null,
+    };
+  }
+  if (bvals != null) {
+    if (!Array.isArray(bvals) || bvals.length !== nt) {
+      throw new Error(`DWI .bval entry count (${bvals?.length ?? 0}) does not match 4D DWI volume count (${nt}).`);
+    }
+    const maxB = Math.max(...bvals);
+    if (maxB <= 50) {
+      throw new Error(`DWI .bval contains no diffusion-weighted shell (max b = ${maxB}).`);
+    }
+    const lowIndices = [];
+    const highIndices = [];
+    const highTol = Math.max(50, maxB * 0.1);
+    for (let i = 0; i < nt; i++) {
+      if (bvals[i] <= 50) lowIndices.push(i);
+      else if (maxB - bvals[i] <= highTol) highIndices.push(i);
+    }
+    if (!highIndices.length) {
+      throw new Error(`Could not identify high-b DWI volumes in .bval (max b = ${maxB}).`);
+    }
+    const meanHighB = highIndices.reduce((s, idx) => s + bvals[idx], 0) / highIndices.length;
+    const meanLowB = lowIndices.length ? lowIndices.reduce((s, idx) => s + bvals[idx], 0) / lowIndices.length : 0;
+    const effectiveB = Math.max(1, meanHighB - meanLowB);
+    return {
+      dwi: geometricMeanFrames(vol4d, highIndices),
+      b0: lowIndices.length ? arithmeticMeanFrames(vol4d, lowIndices) : null,
+      bvalue: effectiveB,
+      usedBvals: true,
+      checkSwap: false,
+      note: `4D DWI (${nt} volumes) split via .bval: ${highIndices.length} high-b (b≈${Math.round(meanHighB)}) and ${lowIndices.length} b0 volume${lowIndices.length === 1 ? '' : 's'}`,
+    };
+  }
+  if (nt === 2) {
+    return {
+      dwi: extractFrame3D(vol4d, 0),
+      b0: extractFrame3D(vol4d, 1),
+      bvalue: 1000,
+      usedBvals: false,
+      checkSwap: true,
+      note: `2-volume 4D DWI (${vol4d.dims.join('×')}) without .bval — inferring DWI/b0 order from median intensity`,
+    };
+  }
+  // Multi-volume clinical 4D DWI without .bval (e.g., b0 + 3 directions/trace): separate by median signal.
+  const medians = [];
+  for (let t = 0; t < nt; t++) {
+    medians.push(medianNonZero(extractFrame3D(vol4d, t).voxels));
+  }
+  const maxMed = Math.max(...medians);
+  const minMed = Math.min(...medians);
+  if (maxMed <= 0 || maxMed <= minMed * 1.15) {
+    throw new Error(
+      `Cannot separate b0 and high-b frames in ${nt}-volume 4D DWI without a .bval file. Include the matching .bval sidecar or supply separate 3D DWI and b0/ADC scans.`,
+    );
+  }
+  const b0Cutoff = maxMed * 0.85;
+  const lowIndices = [];
+  const highIndices = [];
+  for (let t = 0; t < nt; t++) {
+    if (medians[t] >= b0Cutoff) lowIndices.push(t);
+    else highIndices.push(t);
+  }
+  if (!lowIndices.length || !highIndices.length) {
+    throw new Error(
+      `Cannot separate b0 and high-b frames in ${nt}-volume 4D DWI without a .bval file. Supply the matching .bval file or separate 3D volumes.`,
+    );
+  }
+  return {
+    dwi: geometricMeanFrames(vol4d, highIndices),
+    b0: arithmeticMeanFrames(vol4d, lowIndices),
+    bvalue: 1000,
+    usedBvals: false,
+    checkSwap: false,
+    note: `${nt}-volume 4D DWI without .bval — inferred ${lowIndices.length} b0 and ${highIndices.length} trace/high-b frames by median intensity (supply .bval for exact b-values)`,
+  };
 }
 
 // Compute ADC from DWI and b0 using OpenADS ADCCalculator formula: -ln((DWI+eps)/(b0+eps))/bvalue.

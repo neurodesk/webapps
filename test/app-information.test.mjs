@@ -93,7 +93,7 @@ const REQUIRED_METHODS = {
   'wound-planimetry': ['pubmed.ncbi.nlm.nih.gov/2916597', '10.1109/TSMC.1979.4310076', '10.1155/2014/851582', 'File:Neuropathic_heel_ulcer_diabetic.jpg', 'File:Venous_ulcer_dorsal_leg.jpg'],
   'derm-compare': ['10.1001/archderm.142.9.1113', '10.1067/mjd.2000.107504', '10.1016/j.artmed.2012.08.002', '10.1002/col.20070', '10.1016/s0010-4825(97)00020-6', '10.2352/CIC.2004.12.1.art00008', '10.1109/TSMC.1979.4310076', 'isic-archive.com'],
   dermvit: ['10.48550/arXiv.2010.11929', '10.1038/sdata.2018.161', '10.2352/CIC.2004.12.1.art00008', '10.1007/978-3-319-10590-1_53', 'onnxruntime.ai', 'isic-archive.com'],
-  openads: ['10.1038/s43856-021-00062-8', '10.1038/s43856-023-00327-4', '10.1038/s41597-022-01923-0', '10.1016/j.neuroimage.2022.119474', '10.1016/j.neuroimage.2010.09.025', '10.1038/s42256-019-0138-9', '10.1016/j.jneumeth.2016.03.001', 'onnxruntime.ai', 'github.com/niivue/niivue'],
+  openads: ['10.1038/s43856-021-00062-8', '10.1038/s41598-023-30242-6', '10.1038/s43856-023-00327-4', '10.1038/s41597-022-01923-0', '10.1038/s41597-023-02457-9', '10.1016/j.neuroimage.2022.119474', '10.1016/j.neuroimage.2010.09.025', '10.1038/s42256-019-0138-9', '10.1016/j.jneumeth.2016.03.001', 'onnxruntime.ai', 'github.com/niivue/niivue'],
 };
 
 test('every registered app has app information with packages and cited methods', () => {

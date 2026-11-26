@@ -502,6 +502,8 @@ export function buildRadiologicalReportText({
   interpretation,
   hydrocephalus = null,
   mismatch = null,
+  spaceLabel = 'MNI152',
+  nativeVolumeMl = null,
 }) {
   const sideLabel =
     volumes.leftMl > 0.01 && volumes.rightMl > 0.01
@@ -521,8 +523,14 @@ export function buildRadiologicalReportText({
   const icvClause = icvMl != null && icvMl > 0
     ? `${((volumes.totalMl / icvMl) * 100).toFixed(2)}% of ICV`
     : 'ICV unavailable';
+  const nativeClause = nativeVolumeMl != null && Number.isFinite(nativeVolumeMl)
+    ? `; native-space ${nativeVolumeMl.toFixed(2)} mL`
+    : '';
+  const hydroProbText = hydrocephalus && Number.isFinite(hydrocephalus.probability)
+    ? `p = ${hydrocephalus.probability.toFixed(3)}`
+    : 'p = N.A.';
   const summary = [
-    `Area of ${finding} is ${sideLabel}, with ${volumes.totalMl.toFixed(2)} mL (L ${volumes.leftMl.toFixed(2)} mL / R ${volumes.rightMl.toFixed(2)} mL; ${icvClause}).`,
+    `Area of ${finding} is ${sideLabel}, with ${volumes.totalMl.toFixed(2)} mL in ${spaceLabel} space (L ${volumes.leftMl.toFixed(2)} mL / R ${volumes.rightMl.toFixed(2)} mL; ${icvClause}${nativeClause}).`,
     vascAffected.length
       ? `Arterial territory: ${vascAffected.map((r) => formatRegionName(r.region)).join(', ')}.`
       : 'No significant arterial territory involvement predicted.',
@@ -531,12 +539,12 @@ export function buildRadiologicalReportText({
       : 'No significant lobar or deep-structure involvement predicted.',
     hydrocephalus
       ? hydrocephalus.predict === 'AFFECTED'
-        ? `Hydrocephalus predicted (p = ${hydrocephalus.probability.toFixed(3)}).`
-        : `No hydrocephalus predicted (p = ${hydrocephalus.probability.toFixed(3)}).`
+        ? `Hydrocephalus predicted (${hydroProbText}).`
+        : `No hydrocephalus predicted (${hydroProbText}).`
       : 'Hydrocephalus not evaluated (requires MNI-space ADC and brain mask).',
     aspectsScore != null ? `Predicted MCA-ASPECTS: ${aspectsScore} / 10.` : '',
     mismatch
-      ? `Core-penumbra mismatch: Core ${mismatch.coreMl.toFixed(2)} mL, Hypoperfusion ${mismatch.hpMl.toFixed(2)} mL, Mismatch ${mismatch.mismatchVolumeMl.toFixed(2)} mL${mismatch.mismatchRatio != null ? ` (ratio ${mismatch.mismatchRatio.toFixed(2)}x)` : ''}.`
+      ? `Core-penumbra mismatch (${spaceLabel} space): Core ${mismatch.coreMl.toFixed(2)} mL, Hypoperfusion ${mismatch.hpMl.toFixed(2)} mL, Mismatch ${mismatch.mismatchVolumeMl.toFixed(2)} mL${mismatch.mismatchRatio != null ? ` (ratio ${mismatch.mismatchRatio.toFixed(2)}x)` : ''}.`
       : '',
   ]
     .filter(Boolean)
@@ -562,7 +570,7 @@ export function buildRadiologicalReportText({
       : []),
     formatTableSection('MCA ASPECTS regions', interpretation.aspects || []),
     '',
-    `Subject: ${subjectId} | Modality: ${modality}`,
+    `Subject: ${subjectId} | Modality: ${modality} | Reporting space: ${spaceLabel}`,
   ];
 
   return {

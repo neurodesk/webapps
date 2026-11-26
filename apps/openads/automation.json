@@ -34,6 +34,14 @@
           "minimum": 0,
           "maximum": 1
         },
+        "bval": {
+          "source": "files",
+          "type": "neuro:metadata",
+          "formats": ["text"],
+          "description": "Optional FSL .bval sidecar specifying b-values for multi-volume 4D DWI",
+          "minimum": 0,
+          "maximum": 1
+        },
         "pwi": {
           "source": "files",
           "type": "neuro:volume",
@@ -83,9 +91,16 @@
         "threshold": {
           "type": "number",
           "default": 0.5,
-          "minimum": 0.1,
-          "maximum": 0.9,
-          "description": "Probability threshold applied to DAGMNet segmentation outputs"
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Probability threshold applied to DAGMNet DWI stroke segmentation"
+        },
+        "pwiThreshold": {
+          "type": "number",
+          "default": 0.49,
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Probability threshold applied to DAGMNet PWI hypoperfusion segmentation"
         },
         "cohortK": {
           "type": "integer",

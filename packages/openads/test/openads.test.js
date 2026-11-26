@@ -7,12 +7,15 @@ import {
   readNifti,
   readNifti4D,
   reorientVolumeToRAS,
+  parseBvals,
+  extractDwiB0From4D,
   prepareDwiAdc,
   computeAdcVoxels,
   dagmnetPostprocess,
   runDagmnetDwi,
   runDagmnetPwi,
   computeTtpVolume,
+  computeSymClassicPrior,
   sliceTimeCorrection,
   computeIcvMl,
   computeLesionVolumes,
@@ -545,4 +548,124 @@ test('readNifti derives voxel spacing from affine, rejects oversized buffers, an
     () => sliceTimeCorrection(pwi, dims, 2.0, null, { sliceEncodingDirection: 'constructor' }),
     /Unsupported BIDS SliceEncodingDirection/,
   );
+});
+
+test('Opus 5.5 parity fixes: multi-volume 4D DWI + bval, DWI small lacunes & brain mask, logistic SHAP, null hydrocephalus prob', async () => {
+  // 4-volume clinical DWI (1 b0 + 3 b=1000 directions) with .bval and without .bval
+  const dims4d = [2, 2, 2, 4];
+  const n3 = 8;
+  const vox4d = new Float32Array(n3 * 4);
+  for (let i = 0; i < n3; i++) {
+    vox4d[i] = 1000; // b0
+    vox4d[n3 + i] = 200; // dir 1
+    vox4d[2 * n3 + i] = 400; // dir 2
+    vox4d[3 * n3 + i] = 800; // dir 3 -> geometric mean = 400
+  }
+  const vol4d = { dims: dims4d, pixdim: [1, 1, 1, 1], affine: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], voxels: vox4d };
+  const bvals = parseBvals('0 1000 1000 1000');
+  const withBval = extractDwiB0From4D(vol4d, bvals);
+  assert.equal(withBval.usedBvals, true);
+  assert.equal(withBval.bvalue, 1000);
+  assert.ok(Math.abs(withBval.b0.voxels[0] - 1000) < 1e-4);
+  assert.ok(Math.abs(withBval.dwi.voxels[0] - 400) < 1e-3);
+
+  const withoutBval = extractDwiB0From4D(vol4d, null);
+  assert.equal(withoutBval.usedBvals, false);
+  assert.ok(Math.abs(withoutBval.b0.voxels[0] - 1000) < 1e-4);
+  assert.ok(Math.abs(withoutBval.dwi.voxels[0] - 400) < 1e-3);
+
+  // DWI postprocessing preserves small (<50-voxel) lacunes and zeros outside brain mask
+  const smallDims = [8, 8, 8];
+  const smallN = 512;
+  const dwiSmall = new Float32Array(smallN).fill(100);
+  const adcSmall = new Float32Array(smallN).fill(0.0008);
+  const brainMask = new Uint8Array(smallN);
+  // Brain inside x=1..5, y=1..5, z=1..5
+  for (let z = 1; z <= 5; z++) {
+    for (let y = 1; y <= 5; y++) {
+      for (let x = 1; x <= 5; x++) {
+        brainMask[x + y * 8 + z * 64] = 1;
+      }
+    }
+  }
+  const dwiRes = await runDagmnetDwi({
+    dwi: dwiSmall,
+    adc: adcSmall,
+    dims: smallDims,
+    mask: brainMask,
+    runPass: async (_t, shape) => {
+      const out = new Float32Array(shape[2] * shape[3] * shape[4]);
+      out.fill(0.9);
+      return out;
+    },
+  });
+  // Outside brain mask must be zeroed, while inside brain (125 voxels -> wait, test a 2x2x2 = 8-voxel lacune!)
+  assert.equal(dwiRes.mask[0], 0);
+  const lacuneMask = new Uint8Array(smallN);
+  for (let z = 2; z <= 3; z++) {
+    for (let y = 2; y <= 3; y++) {
+      for (let x = 2; x <= 3; x++) lacuneMask[x + y * 8 + z * 64] = 1;
+    }
+  }
+  const postLacune = dagmnetPostprocess(lacuneMask, smallDims, 0);
+  let lacuneCount = 0;
+  for (let i = 0; i < postLacune.length; i++) if (postLacune[i]) lacuneCount++;
+  assert.equal(lacuneCount, 8);
+
+  // Logistic regression aspectpc entry uses sigmoid(logit) and logit > 0 with non-zero attributions
+  const linearManifest = {
+    features: ['volml', 'PCA', 'Thalamus', 'Cerebellum', 'Pons', 'Midbrain'],
+    models: [
+      {
+        roi: 'midbrain',
+        kind: 'linear',
+        featureCols: ['volml', 'Midbrain'],
+        scalerMean: [0, 0],
+        scalerScale: [1, 1],
+        coef: [0.5, 2.0],
+        intercept: -1.5,
+      },
+    ],
+  };
+  const qfvPos = new Map([['volml', 1.0], ['Midbrain', 1.0]]);
+  const [linPos] = evaluateAtlasShap({ atlasKey: 'aspectpc', manifest: linearManifest, forestsByRoi: new Map(), qfvMap: qfvPos });
+  // logit = -1.5 + 0.5*1 + 2.0*1 = +1.0 -> sigmoid(1) ≈ 0.7311
+  assert.equal(linPos.kind, 'logistic');
+  assert.equal(linPos.predictedAffected, true);
+  assert.ok(Math.abs(linPos.probability - 1 / (1 + Math.exp(-1))) < 1e-6);
+  assert.equal(linPos.attributions.length, 2);
+  assert.equal(linPos.attributions[0].feature, 'Midbrain');
+  assert.ok(Math.abs(linPos.attributions[0].attribution - 2.0) < 1e-6);
+
+  // Null hydrocephalus probability does not throw and report includes space + native mL
+  const report = buildRadiologicalReportText({
+    subjectId: 'sub-test',
+    modality: 'DWI',
+    volumes: { totalMl: 12.5, leftMl: 12.5, rightMl: 0 },
+    icvMl: 1400,
+    interpretation: { vascular: [], lobe: [], aspects: [] },
+    hydrocephalus: { predict: 'NORMAL', probability: null },
+    spaceLabel: 'MNI152 affsyn',
+    nativeVolumeMl: 11.2,
+  });
+  assert.match(report.text, /p = N\.A\./);
+  assert.match(report.text, /MNI152 affsyn/);
+  assert.match(report.text, /native-space 11\.20 mL/);
+
+  // computeSymClassicPrior flags delayed hemisphere and suppresses contralateral side
+  const symDims = [12, 8, 2];
+  const symN = 192;
+  const symMask = new Uint8Array(symN).fill(1);
+  const symTtp = new Float32Array(symN).fill(10);
+  // Left hemisphere (x >= 6) delayed by +5s -> should be flagged
+  for (let z = 0; z < 2; z++) {
+    for (let y = 2; y < 6; y++) {
+      for (let x = 7; x < 11; x++) {
+        symTtp[x + y * 12 + z * 96] = 15;
+      }
+    }
+  }
+  const symPrior = computeSymClassicPrior(symTtp, symMask, symDims, { minSize: 4 });
+  assert.equal(symPrior[8 + 3 * 12], 1);
+  assert.equal(symPrior[2 + 3 * 12], 0);
 });

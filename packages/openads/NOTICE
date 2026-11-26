@@ -1,0 +1,42 @@
+OpenADS (ADSWeb) & StrokeView — Browser Port for Neurodesk Webapps
+© The Johns Hopkins University (OpenADS, ADSWeb, DAGMNet, JHU-ICBM Arterial Territories Atlas, StrokeView / StrokeFAIR)
+
+This software and its models, atlases, and reference cohort are derived from
+OpenADS (ADSWeb) and StrokeView developed by the Faria Lab at the Johns Hopkins
+University School of Medicine (Andreia V. Faria, Chin-Fu Liu, et al.):
+  - OpenADS / ADSWeb: https://github.com/farialab/OpenADS
+  - StrokeFAIR & StrokeView: https://strokefair.org / https://strokeview.strokefair.org
+
+Licensed under the JHU Non-Profit Research Software License Agreement (see LICENSE).
+Non-commercial academic and non-profit research use only. Commercial use requires a
+separately executed written license agreement with The Johns Hopkins University.
+
+Required Citations:
+  1. Liu C-F, Hsu J, Xu X, Ramachandran S, Wang V, Miller MI, Hillis AE, Faria AV.
+     Deep learning-based detection and segmentation of diffusion abnormalities in
+     acute ischemic stroke. Communications Medicine. 2021;1:61.
+     https://doi.org/10.1038/s43856-021-00062-8
+  2. Liu C-F, Li J, Kim G, Miller MI, Hillis AE, Faria AV.
+     Automatic comprehensive ASPECTS reports in clinical acute stroke MRIs.
+     Scientific Reports. 2023;13:3784.
+     https://doi.org/10.1038/s41598-023-30242-6
+  3. Liu C-F, Zhao Y, Yedavalli V, Leigh R, Falcao V, Miller MI, Hillis AE, Faria AV.
+     Automatic comprehensive radiological reports for clinical acute stroke MRIs.
+     Communications Medicine. 2023;3:95.
+     https://doi.org/10.1038/s43856-023-00327-4
+  4. Liu C-F, Hsu J, Xu X, et al.
+     Digital 3D Brain MRI Arterial Territories Atlas.
+     Scientific Data. 2023;10:74.
+     https://doi.org/10.1038/s41597-022-01923-0
+  5. Liu C-F, Leigh R, Johnson B, Urrutia V, Hsu J, Xu X, Li X, Mori S, Hillis AE, Faria AV.
+     A large public dataset of annotated clinical MRIs and metadata of patients with acute stroke.
+     Scientific Data. 2023;10:548.
+     https://doi.org/10.1038/s41597-023-02457-9
+     Dataset (ICPSR 38464): https://doi.org/10.3886/ICPSR38464.v5
+
+Third-Party Components:
+  - SynthStrip (FreeSurfer / MGH): https://surfer.nmr.mgh.harvard.edu/docs/synthstrip/
+  - ANTs (Apache-2.0): https://github.com/ANTsX/ANTs
+  - ONNX Runtime Web (MIT): https://onnxruntime.ai/
+  - dcm2niix (BSD-3-Clause): https://github.com/rordenlab/dcm2niix
+  - NiiVue (BSD-2-Clause): https://github.com/niivue/niivue

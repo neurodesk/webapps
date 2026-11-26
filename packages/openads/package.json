@@ -3,7 +3,7 @@
   "version": "0.1.20261125",
   "description": "OpenADS acute stroke DWI/PWI segmentation, radiological reporting, TreeSHAP and StrokeView cohort analysis",
   "type": "module",
-  "license": "Apache-2.0",
+  "license": "SEE LICENSE IN LICENSE",
   "engines": {
     "node": ">=22"
   },
@@ -30,6 +30,8 @@
   "files": [
     "src",
     "model.manifest.json",
+    "LICENSE",
+    "NOTICE",
     "README.md"
   ]
 }

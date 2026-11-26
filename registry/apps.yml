@@ -2163,7 +2163,7 @@ apps:
     model_manifest: models/openads.manifest.json
     asset_manifest_schema: scientific-assets-v1
     source: neurodesk/webapps@local
-    license: Apache-2.0
+    license: JHU-Non-Profit-Research
     maintainers: [neurodesk]
     support_status: experimental
     shell: imaging-workspace

@@ -101,7 +101,7 @@ export async function runDagmnetDwi({
   mask = null,
   probIs = null,
   threshold = 0.5,
-  minSize = 50,
+  minSize = 0,
   runPass,
   onPass = () => {},
 }) {
@@ -170,6 +170,11 @@ export async function runDagmnetDwi({
     probPad[i] = count[i] > 0 ? pred[i] / count[i] : 0;
   }
   const prob = uncenterPad(probPad, PAD_SHAPE, dims, dwiPad.offsets);
+  if (mask) {
+    for (let i = 0; i < n; i++) {
+      if (!mask[i]) prob[i] = 0;
+    }
+  }
   const rawMask = new Uint8Array(n);
   for (let i = 0; i < n; i++) {
     rawMask[i] = prob[i] >= threshold ? 1 : 0;
@@ -182,12 +187,20 @@ export async function runDagmnetDwi({
   return { mask: finalMask, prob, dims, lesionVoxels };
 }
 
+function zscoreInMaskZeroBg(data, mask, eps = 1e-6) {
+  const z = zscoreInMask(data, mask, eps);
+  for (let i = 0; i < z.length; i++) {
+    if (!mask[i]) z[i] = 0;
+  }
+  return z;
+}
+
 export async function runDagmnetPwi({
   dwi,
   adc,
   ttp,
-  strokeMask = null,
   symclassic = null,
+  strokeMask = null,
   dims,
   threshold = 0.49,
   minSize = 50,
@@ -198,23 +211,29 @@ export async function runDagmnetPwi({
   if (dwi.length !== n || adc.length !== n || ttp.length !== n) {
     throw new Error(`DAGMNet PWI inputs must match grid voxel count (${n}).`);
   }
-  const ch4Input = strokeMask ?? symclassic;
+  const ch4Input = symclassic ?? strokeMask;
   if (ch4Input && ch4Input.length !== n) {
-    throw new Error(`DAGMNet PWI stroke-mask channel length (${ch4Input.length}) must match grid (${n}).`);
+    throw new Error(`DAGMNet PWI channel 4 length (${ch4Input.length}) must match grid (${n}).`);
   }
-  const sym = ch4Input || new Float32Array(n);
   const dwiClean = cleanFinite(dwi);
   const adcClean = cleanFinite(adc);
   const ttpClean = cleanFinite(ttp);
-  const symClean = cleanFinite(sym);
+  const ch4Clean = ch4Input ? cleanFinite(ch4Input) : null;
 
   const brainMask = new Uint8Array(n);
   for (let i = 0; i < n; i++) {
-    brainMask[i] = dwiClean[i] !== 0 || adcClean[i] !== 0 || ttpClean[i] !== 0 || symClean[i] !== 0 ? 1 : 0;
+    brainMask[i] = dwiClean[i] !== 0 || adcClean[i] !== 0 || ttpClean[i] !== 0 || (ch4Clean && ch4Clean[i] !== 0) ? 1 : 0;
   }
 
-  const padded = [dwiClean, adcClean, ttpClean, symClean].map((ch) =>
-    centerPad(zscoreInMask(ch, brainMask), dims, PAD_SHAPE),
+  // Zero voxels outside brainMask after z-scoring so background air stays at 0 (matches ONNX model training).
+  const padded = [dwiClean, adcClean, ttpClean, ch4Clean].map((ch) =>
+    ch
+      ? centerPad(zscoreInMaskZeroBg(ch, brainMask), dims, PAD_SHAPE)
+      : { data: new Float32Array(voxelCount(PAD_SHAPE)), offsets: [
+          Math.floor((PAD_SHAPE[0] - dims[0]) / 2),
+          Math.floor((PAD_SHAPE[1] - dims[1]) / 2),
+          Math.floor((PAD_SHAPE[2] - dims[2]) / 2),
+        ] },
   );
   const winDims = [PAD_SHAPE[0] / ZS, PAD_SHAPE[1] / DS, PAD_SHAPE[2] / DS];
   const winVoxels = voxelCount(winDims);

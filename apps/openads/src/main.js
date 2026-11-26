@@ -282,6 +282,7 @@ function refreshControls() {
   $('runSyn').disabled = busy;
   $('runShap').disabled = busy;
   $('threshold').disabled = busy;
+  $('pwiThreshold').disabled = busy;
   $('cohortK').disabled = busy;
   results.inert = job?.kind === 'running';
   $('modeHint').textContent = plan.label;
@@ -351,7 +352,7 @@ function renderInputs() {
 function buildInputOutputs() {
   const next = {};
   for (const { role, label } of ROLES) {
-    if (role === 'pwi-json') continue;
+    if (role === 'pwi-json' || role === 'bval') continue;
     const idx = assigned[role];
     if (idx === null) continue;
     next[`input_${role}`] = {
@@ -481,8 +482,9 @@ async function loadInputFiles(incoming, explicitRoleByFile = null, signal = null
     }
   };
   try {
-    const jsonFiles = list.filter((f) => f.name.toLowerCase().endsWith('.json'));
-    const imageCandidates = list.filter((f) => !f.name.toLowerCase().endsWith('.json'));
+    const isSidecar = (f) => /\.(json|bval)$/i.test(f.name);
+    const sidecarFiles = list.filter(isSidecar);
+    const imageCandidates = list.filter((f) => !isSidecar(f));
     const converted = [];
     if (imageCandidates.length) {
       const niftiOnly = imageCandidates.every((f) => /\.nii(\.gz)?$/i.test(f.name));
@@ -495,8 +497,8 @@ async function loadInputFiles(incoming, explicitRoleByFile = null, signal = null
       }
     }
     assertStillCurrent();
-    const all = [...converted, ...jsonFiles];
-    if (!all.length) throw new Error('No supported NIfTI, DICOM or JSON files found.');
+    const all = [...converted, ...sidecarFiles];
+    if (!all.length) throw new Error('No supported NIfTI, DICOM, JSON or bval files found.');
     const explicitRoles = {};
     if (explicitRoleByFile instanceof Map) {
       all.forEach((file, idx) => {
@@ -575,6 +577,12 @@ function buildDownloads(reporting) {
   return list;
 }
 
+function parseThreshold(raw, fallback) {
+  if (raw === undefined || raw === null || raw === '') return fallback;
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= 0 && value <= 1 ? value : fallback;
+}
+
 function runAnalysis(options = {}, signal = null, expectedGeneration = null) {
   if (expectedGeneration !== null && inputGeneration !== expectedGeneration) {
     return Promise.reject(new DOMException('Inputs were replaced before analysis started.', 'AbortError'));
@@ -586,7 +594,8 @@ function runAnalysis(options = {}, signal = null, expectedGeneration = null) {
   }
   const runSyn = options.runSyn ?? $('runSyn').checked;
   const runShap = options.runShap ?? $('runShap').checked;
-  const threshold = Number(options.threshold ?? $('threshold').value) || 0.5;
+  const threshold = parseThreshold(options.threshold ?? $('threshold').value, 0.5);
+  const pwiThreshold = parseThreshold(options.pwiThreshold ?? $('pwiThreshold').value, 0.49);
   const cohortK = Math.max(10, Math.min(250, parseInt(options.cohortK ?? $('cohortK').value, 10) || 50));
   const subjectId = inferSubjectId(files);
 
@@ -733,6 +742,7 @@ function runAnalysis(options = {}, signal = null, expectedGeneration = null) {
       runSyn,
       runShap,
       threshold,
+      pwiThreshold,
       assetBase: new URL('./', window.location.href).href,
     });
   } catch (err) {
@@ -775,6 +785,7 @@ automation = registerAppAutomation({
       if (parameters?.runSyn !== undefined) $('runSyn').checked = Boolean(parameters.runSyn);
       if (parameters?.runShap !== undefined) $('runShap').checked = Boolean(parameters.runShap);
       if (parameters?.threshold !== undefined) $('threshold').value = String(parameters.threshold);
+      if (parameters?.pwiThreshold !== undefined) $('pwiThreshold').value = String(parameters.pwiThreshold);
       if (parameters?.cohortK !== undefined) $('cohortK').value = String(parameters.cohortK);
       return runAbortable(signal, () => runAnalysis(parameters || {}, signal, generation));
     },

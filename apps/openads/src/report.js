@@ -81,25 +81,34 @@ function overlapTable(title, rows) {
 }
 
 function renderSummaryTab(container, data) {
-  const { report, volumes, icvMl, interpretation, hydrocephalus, mismatch, downloads } = data;
+  const { report, volumes, icvMl, interpretation, hydrocephalus, mismatch, downloads, spaceLabel, nativeVolumeMl } = data;
+  const space = spaceLabel || 'MNI152';
+  const hydroValue = hydrocephalus
+    ? Number.isFinite(hydrocephalus.probability)
+      ? `${hydrocephalus.predict} (${(hydrocephalus.probability * 100).toFixed(0)}%)`
+      : hydrocephalus.predict
+    : 'N.A.';
   const kpis = createElement('div', { className: 'openads-kpis' }, [
-    kpi('Lesion volume', `${volumes.totalMl.toFixed(2)} mL`),
-    kpi('Left / Right', `${volumes.leftMl.toFixed(1)} / ${volumes.rightMl.toFixed(1)} mL`),
+    kpi(`Lesion volume (${space})`, `${volumes.totalMl.toFixed(2)} mL`),
+    ...(nativeVolumeMl != null && Number.isFinite(nativeVolumeMl)
+      ? [kpi('Native volume', `${nativeVolumeMl.toFixed(2)} mL`)]
+      : []),
+    kpi(`Left / Right (${space})`, `${volumes.leftMl.toFixed(1)} / ${volumes.rightMl.toFixed(1)} mL`),
     kpi('Lesion / ICV', icvMl != null && icvMl > 0 ? `${((volumes.totalMl / icvMl) * 100).toFixed(2)}%` : 'N.A.'),
     kpi('MCA ASPECTS', report.aspectsScore != null ? `${report.aspectsScore} / 10` : 'N.A.'),
-    kpi('Hydrocephalus', hydrocephalus ? `${hydrocephalus.predict} (${(hydrocephalus.probability * 100).toFixed(0)}%)` : 'N.A.'),
+    kpi('Hydrocephalus', hydroValue),
   ]);
   if (mismatch) {
     kpis.append(
-      kpi('Hypoperfusion', `${mismatch.hpMl.toFixed(2)} mL`),
-      kpi('Mismatch', `${mismatch.mismatchVolumeMl.toFixed(2)} mL${mismatch.mismatchRatio != null ? ` (${mismatch.mismatchRatio.toFixed(2)}×)` : ''}`),
+      kpi(`Hypoperfusion (${space})`, `${mismatch.hpMl.toFixed(2)} mL`),
+      kpi(`Mismatch (${space})`, `${mismatch.mismatchVolumeMl.toFixed(2)} mL${mismatch.mismatchRatio != null ? ` (${mismatch.mismatchRatio.toFixed(2)}×)` : ''}`),
     );
   }
   container.append(kpis);
   container.append(
     createElement('p', {
       className: 'nd-report-notes',
-      text: 'Research use only — automated predictions are not clinical diagnostic reports.',
+      text: 'Powered by OpenADS (ADSWeb) & StrokeView from the Faria Lab, Johns Hopkins University (JHU Non-Profit Research Software License). Research use only — not a clinical diagnostic report.',
     }),
   );
 
@@ -129,6 +138,12 @@ function renderShapTab(container, data) {
   const { atlasStats, shap } = data;
   const shapSection = createElement('div');
   shapSection.append(createElement('h3', { className: 'openads-section-h', text: 'TreeSHAP feature attributions' }));
+  shapSection.append(
+    createElement('p', {
+      className: 'nd-report-notes',
+      text: 'Attributions explain the OpenADS aa-shap QFV models (random forests, plus logistic log-odds models for pcASPECTS Thalamus and Midbrain), which are separate from the mL-input ONNX RF classifiers shown on the Summary tab.',
+    }),
+  );
   const atlasKeys = Object.keys(shap || {}).filter((k) => Array.isArray(shap[k]) && shap[k].length);
   if (!atlasKeys.length) {
     shapSection.append(createElement('p', { className: 'nd-hint', text: 'Enable TreeSHAP in Advanced settings to inspect per-ROI attributions.' }));
@@ -150,18 +165,19 @@ function renderShapTab(container, data) {
       const item = list.find((entry) => entry.roi === roiSelect.value) || list[0];
       chartBox.replaceChildren();
       if (!item || !item.attributions?.length) {
-        chartBox.append(createElement('p', { className: 'nd-hint', text: 'No forest attributions for this ROI.' }));
+        chartBox.append(createElement('p', { className: 'nd-hint', text: 'No attributions available for this ROI.' }));
         return;
       }
       const maxAbs = Math.max(1e-4, ...item.attributions.map((a) => Math.abs(a.attribution)));
       const scroll = createElement('div', { className: 'nd-table-scroll' });
       const table = createElement('table', { className: 'nd-data-table' });
+      const attrHeading = item.kind === 'logistic' ? 'Log-odds (+ → affected)' : 'SHAP (+ → affected)';
       table.append(
         createElement('thead', {}, [
           createElement('tr', {}, [
             createElement('th', { text: 'Feature' }),
             createElement('th', { text: 'QFV' }),
-            createElement('th', { text: 'SHAP (+ → affected)' }),
+            createElement('th', { text: attrHeading }),
             createElement('th', { text: 'Magnitude' }),
           ]),
         ]),

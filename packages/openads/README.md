@@ -13,3 +13,9 @@ Developed in collaboration with Andreia V. Faria and the Faria Lab (Johns Hopkin
 - `@neurodesk/openads/treeshap` — Exact Lundberg TreeSHAP binary forest decoder and evaluator (`models/aa-shap/*.bin`).
 - `@neurodesk/openads/cohort` — StrokeView 1,861-patient UMAP projection via inverse-distance-weighted k-NN in scaled QFV space and nearest-neighbor clinical phenotype summaries.
 - `@neurodesk/openads/assets` — Commit-pinned Hugging Face URLs and SHA-256 checksums (`model.manifest.json`).
+
+## Attribution & License
+
+© The Johns Hopkins University. Derived from [OpenADS (ADSWeb)](https://github.com/farialab/OpenADS) and [StrokeView / StrokeFAIR](https://strokefair.org) developed by **Andreia V. Faria, Chin-Fu Liu, and the Faria Lab** (Johns Hopkins University School of Medicine).
+
+Licensed under the **JHU Non-Profit Research Software License Agreement** — see [LICENSE](./LICENSE) and [NOTICE](./NOTICE) for full terms and required citations. Non-commercial academic and non-profit research use only.

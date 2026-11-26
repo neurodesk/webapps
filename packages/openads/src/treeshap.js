@@ -60,8 +60,13 @@ export function decodeForestBinary(buffer, entry) {
     throw new Error(`Forest ${entry.file}: byte length mismatch (${offset} != ${buffer.byteLength}).`);
   }
 
+  let maxTreeLen = 1;
+  for (let t = 0; t < nTrees; t++) {
+    const len = offsets[t + 1] - offsets[t];
+    if (len > maxTreeLen) maxTreeLen = len;
+  }
   let maxDepth = 0;
-  const depthStack = new Int32Array(1024);
+  const depthStack = new Int32Array(maxTreeLen);
   for (let t = 0; t < nTrees; t++) {
     const base = offsets[t];
     const len = offsets[t + 1] - base;
@@ -266,15 +271,25 @@ export function evaluateAtlasShap({ atlasKey, manifest, forestsByRoi, qfvMap }) 
     const scaled = standardize(rounded, entry);
     const scaledF32 = Float32Array.from(scaled);
     if (entry.kind === 'linear') {
-      let score = entry.intercept;
-      for (let i = 0; i < scaled.length; i++) score += entry.coef[i] * scaled[i];
+      let logit = entry.intercept;
+      const contributions = new Float64Array(scaled.length);
+      for (let i = 0; i < scaled.length; i++) {
+        const contrib = entry.coef[i] * scaled[i];
+        contributions[i] = contrib;
+        logit += contrib;
+      }
+      const probability = 1 / (1 + Math.exp(-logit));
+      const attributions = featureNames
+        .map((feature, i) => ({ feature, value: rounded[i], attribution: contributions[i] }))
+        .sort((a, b) => Math.abs(b.attribution) - Math.abs(a.attribution));
       outputs.push({
         roi: entry.roi,
-        featureNames,
-        values: rounded.map(() => 0),
-        baseValue: score,
-        outValue: score,
-        predictedAffected: score > 0.5,
+        kind: 'logistic',
+        probability,
+        predictedAffected: logit > 0,
+        baseValue: entry.intercept,
+        outValue: logit,
+        attributions,
       });
       continue;
     }

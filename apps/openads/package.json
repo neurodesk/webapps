@@ -3,7 +3,7 @@
   "version": "0.1.20261125",
   "private": true,
   "type": "module",
-  "license": "Apache-2.0",
+  "license": "SEE LICENSE IN LICENSE",
   "scripts": {
     "dev": "node scripts/copy-runtime.mjs && vite",
     "build": "node scripts/copy-runtime.mjs && vite build && node ../../scripts/theme-app-dist.mjs --app openads",

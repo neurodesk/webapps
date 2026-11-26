@@ -21,13 +21,14 @@ import {
   writeNiftiFloat32,
   writeNiftiGz,
   maskVolume,
-  percentileClipRescaleInMask,
-  zscoreInMask,
+  parseBvals,
+  extractDwiB0From4D,
   prepareDwiAdc,
   runDagmnetDwi,
   runDagmnetPwi,
   sliceTimeCorrection,
   computeTtpVolume,
+  computeSymClassicPrior,
   TTP_DEFAULTS,
   ATLAS_SPECS,
   VENTRICLES_SPEC,
@@ -184,11 +185,14 @@ async function runRfClassifier(modelPath, features) {
   try {
     outputs = await session.run({ [session.inputNames[0]]: input });
     const labelRaw = Number(outputs[session.outputNames[0]].data[0]);
-    const probData = outputs[session.outputNames[1]]?.data;
-    const prob = probData ? (probData.length >= 2 ? Number(probData[1]) : Number(probData[0])) : null;
+    const probOut = session.outputNames.length > 1 ? outputs[session.outputNames[1]] : null;
+    let prob = null;
+    if (probOut?.data && probOut.data.length) {
+      prob = probOut.data.length >= 2 ? Number(probOut.data[1]) : Number(probOut.data[0]);
+    }
     return {
       predict: labelRaw === 1 ? 'AFFECTED' : 'NORMAL',
-      probability: prob != null ? Math.round(prob * 1000) / 1000 : null,
+      probability: prob != null && Number.isFinite(prob) ? Math.round(prob * 1000) / 1000 : null,
     };
   } finally {
     input.dispose();
@@ -203,6 +207,8 @@ async function runReportingPipeline({
   adcMniVol = null,
   brainMaskVol = null,
   mismatch = null,
+  spaceLabel = 'MNI152',
+  nativeVolumeMl = null,
   runShap = true,
   baseProgress = 0.65,
   span = 0.35,
@@ -327,6 +333,8 @@ async function runReportingPipeline({
     interpretation,
     hydrocephalus,
     mismatch,
+    spaceLabel,
+    nativeVolumeMl,
   });
 
   const csvFiles = {
@@ -342,6 +350,8 @@ async function runReportingPipeline({
   return {
     subjectId,
     modality,
+    spaceLabel,
+    nativeVolumeMl,
     volumes: { totalMl: volumes.totalMl, leftMl: volumes.leftMl, rightMl: volumes.rightMl, totalVoxels: volumes.totalVoxels },
     icvMl,
     atlasStats,
@@ -390,7 +400,16 @@ async function runDagmnetOnnx(modelPath, fn, params, baseProgress, span, label) 
 
 async function runJob(job) {
   const started = performance.now();
-  const { mode, subjectId, files, runSyn, runShap, threshold, assetBase } = job;
+  const {
+    mode,
+    subjectId,
+    files,
+    runSyn,
+    runShap,
+    threshold = 0.5,
+    pwiThreshold = 0.49,
+    assetBase,
+  } = job;
   const outputVolumes = [];
 
   if (mode === 'mni-report') {
@@ -442,28 +461,18 @@ async function runJob(job) {
   // Full native DWI (+ optional 4D PWI) pipeline
   progress(0.02, 'Reading native DWI/ADC volumes…');
   const dwiRawBytes = new Uint8Array(await files.dwi.arrayBuffer());
-  let dwiVol;
-  let b0From4d = null;
   const vol4d = await loadNifti4DBytes(dwiRawBytes);
-  if (vol4d.dims[3] > 2) {
-    throw new Error(
-      `Ambiguous 4D DWI input with ${vol4d.dims[3]} volumes. Supply separate 3D DWI and b0/ADC scans (or a 2-volume DWI+b0 stack).`,
-    );
-  }
-  if (vol4d.dims[3] === 2) {
-    log(`2-volume 4D DWI detected (${vol4d.dims.join('×')}) — extracting DWI & b0 volumes`);
-    dwiVol = extractFrame3D(vol4d, 0);
-    b0From4d = extractFrame3D(vol4d, 1);
-  } else {
-    dwiVol = extractFrame3D(vol4d, 0);
-  }
+  const bvals = files.bval ? parseBvals(await files.bval.text()) : null;
+  const extracted = extractDwiB0From4D(vol4d, bvals);
+  if (extracted.note) log(extracted.note);
   const adcInput = files.adc ? await loadNiftiBytes(await files.adc.arrayBuffer()) : null;
   const b0Input = files.b0 ? await loadNiftiBytes(await files.b0.arrayBuffer()) : null;
   const prep = prepareDwiAdc({
-    dwi: dwiVol,
-    b0: b0Input || b0From4d,
+    dwi: extracted.dwi,
+    b0: b0Input || extracted.b0,
     adc: adcInput,
-    checkSwap: Boolean(b0From4d && !b0Input),
+    bvalue: extracted.bvalue,
+    checkSwap: Boolean(extracted.checkSwap && !b0Input),
   });
   log(
     prep.adcWasComputed
@@ -517,6 +526,7 @@ async function runJob(job) {
   const affDwiVol = await loadNiftiBytes(affDwiBytes);
   const affAdcVol = await loadNiftiBytes(affAdcBytes);
 
+  let synState = null;
   if (runSyn) {
     progress(0.33, 'Running ANTs SyN nonlinear registration (may take several minutes)…');
     log('Running ANTs SyN nonlinear warp against JHU_MNI_SS_ADC_ss_to_MNI');
@@ -529,13 +539,15 @@ async function runJob(job) {
       transformNames: ['0GenericAffine.mat', '1Warp.nii.gz', '1InverseWarp.nii.gz'],
     });
     if (synRes.transforms['1Warp.nii.gz'] && synRes.transforms['0GenericAffine.mat']) {
+      const synTransforms = [
+        { name: '1Warp.nii.gz', bytes: synRes.transforms['1Warp.nii.gz'] },
+        { name: '0GenericAffine.mat', bytes: synRes.transforms['0GenericAffine.mat'] },
+      ];
+      synState = { templateBytes: synTemplateBytes, transforms: synTransforms };
       const synDwi = ants.applyTransforms({
         fixed: synTemplateBytes,
         moving: writeNiftiFloat32(affDwiVol),
-        transforms: [
-          { name: '1Warp.nii.gz', bytes: synRes.transforms['1Warp.nii.gz'] },
-          { name: '0GenericAffine.mat', bytes: synRes.transforms['0GenericAffine.mat'] },
-        ],
+        transforms: synTransforms,
         interpolation: 'linear',
       });
       outputVolumes.push({
@@ -579,6 +591,51 @@ async function runJob(job) {
     transforms: [{ name: 'aff.mat', bytes: dwiAffineMat, invert: true }],
     interpolation: 'nearest',
   });
+  const strokeNativeVol = await loadNiftiBytes(strokeNativeBytes);
+  const nativeVolumeMl = computeLesionVolumes(
+    strokeNativeVol.voxels,
+    strokeNativeVol.dims,
+    strokeNativeVol.pixdim,
+  ).totalMl;
+
+  let reportLesionVol = strokeMniVol;
+  let reportAdcVol = affAdcVol;
+  let reportBrainMaskVol = { ...affDwiVol, voxels: Float32Array.from(affMaskBin) };
+  let spaceLabel = 'MNI152 affine';
+  if (synState) {
+    progress(0.55, 'Warping lesion, ADC and brain mask into MNI152 affsyn space…');
+    log('Warping stroke mask, ADC and brain mask through SyN transform for upstream affsyn reporting');
+    const synStrokeBytes = ants.applyTransforms({
+      fixed: synState.templateBytes,
+      moving: writeNiftiFloat32(strokeMniVol),
+      transforms: synState.transforms,
+      interpolation: 'nearest',
+    });
+    const synAdcBytes = ants.applyTransforms({
+      fixed: synState.templateBytes,
+      moving: writeNiftiFloat32(affAdcVol),
+      transforms: synState.transforms,
+      interpolation: 'linear',
+    });
+    const synMaskBytes = ants.applyTransforms({
+      fixed: synState.templateBytes,
+      moving: writeNiftiFloat32(reportBrainMaskVol),
+      transforms: synState.transforms,
+      interpolation: 'nearest',
+    });
+    reportLesionVol = await loadNiftiBytes(synStrokeBytes);
+    reportAdcVol = await loadNiftiBytes(synAdcBytes);
+    reportBrainMaskVol = await loadNiftiBytes(synMaskBytes);
+    spaceLabel = 'MNI152 affsyn';
+    outputVolumes.push({
+      key: 'stroke_mni_affsyn',
+      label: 'Stroke core mask (MNI152 SyN)',
+      filename: `${subjectId}_stroke-mask_space-MNI152_affsyn.nii.gz`,
+      bytes: await writeNiftiGz(reportLesionVol),
+      isOverlay: true,
+      editable: true,
+    });
+  }
 
   outputVolumes.push(
     {
@@ -681,11 +738,17 @@ async function runJob(job) {
       sliceTiming = pwiMeta.SliceTiming;
     }
 
-    progress(0.57, 'Applying slice-time correction in acquisition order…');
-    const stcRaw = sliceTimeCorrection(pwiRaw.voxels, pwiRaw.dims, rawTr, sliceTiming, {
-      sliceEncodingDirection,
-    });
-    const pwi4d = reorientVolume4DToRAS({ ...pwiRaw, voxels: stcRaw.data });
+    let pwi4d;
+    if (sliceTiming) {
+      progress(0.57, 'Applying slice-time correction in acquisition order…');
+      const stcRaw = sliceTimeCorrection(pwiRaw.voxels, pwiRaw.dims, rawTr, sliceTiming, {
+        sliceEncodingDirection,
+      });
+      pwi4d = reorientVolume4DToRAS({ ...pwiRaw, voxels: stcRaw.data });
+    } else {
+      log('No BIDS SliceTiming provided in PWI sidecar — skipping slice-time correction rather than assuming slice order.');
+      pwi4d = reorientVolume4DToRAS(pwiRaw);
+    }
 
     const pwiFrame0 = extractFrame3D(pwi4d, 0);
     const pwiMask = await stripBrain(pwiFrame0, 0.58, 0.06);
@@ -726,17 +789,18 @@ async function runJob(job) {
     });
     const ttpMniVol = await loadNiftiBytes(ttpMniBytes);
 
-    const normInMask = (v) => zscoreInMask(percentileClipRescaleInMask(v, affMaskBin), affMaskBin);
+    // Match upstream DAGMNet PWI ch4: single z-score inside brainMask (zero background) + hemispheric TTP symClassic prior.
+    const symClassicPrior = computeSymClassicPrior(ttpMniVol.voxels, affMaskBin, affDwiVol.dims);
     const hpSeg = await runDagmnetOnnx(
       'models/dagmnet_pwi_ch4.onnx',
       runDagmnetPwi,
       {
-        dwi: normInMask(affDwiVol.voxels),
-        adc: normInMask(affAdcVol.voxels),
-        ttp: normInMask(ttpMniVol.voxels),
-        strokeMask: strokeMniVol.voxels,
+        dwi: affDwiVol.voxels,
+        adc: affAdcVol.voxels,
+        ttp: ttpMniVol.voxels,
+        symclassic: symClassicPrior,
         dims: affDwiVol.dims,
-        threshold,
+        threshold: pwiThreshold,
       },
       0.73,
       0.13,
@@ -760,7 +824,22 @@ async function runJob(job) {
       interpolation: 'nearest',
     });
 
-    mismatch = computeMismatch(strokeMniVol.voxels, hpMniVol.voxels, affDwiVol.dims, affDwiVol.pixdim);
+    let reportHpVol = hpMniVol;
+    if (synState) {
+      const synHpBytes = ants.applyTransforms({
+        fixed: synState.templateBytes,
+        moving: writeNiftiFloat32(hpMniVol),
+        transforms: synState.transforms,
+        interpolation: 'nearest',
+      });
+      reportHpVol = await loadNiftiBytes(synHpBytes);
+    }
+    mismatch = computeMismatch(
+      reportLesionVol.voxels,
+      reportHpVol.voxels,
+      reportLesionVol.dims,
+      reportLesionVol.pixdim,
+    );
     outputVolumes.push(
       {
         key: 'ttp_mni',
@@ -791,10 +870,12 @@ async function runJob(job) {
   const reporting = await runReportingPipeline({
     subjectId,
     modality: 'DWI',
-    lesionVol: strokeMniVol,
-    adcMniVol: affAdcVol,
-    brainMaskVol: { ...affDwiVol, voxels: Float32Array.from(affMaskBin) },
+    lesionVol: reportLesionVol,
+    adcMniVol: reportAdcVol,
+    brainMaskVol: reportBrainMaskVol,
     mismatch,
+    spaceLabel,
+    nativeVolumeMl,
     runShap,
     baseProgress: mode === 'dwi-pwi' ? 0.86 : 0.72,
     span: mode === 'dwi-pwi' ? 0.13 : 0.27,
