@@ -547,17 +547,32 @@ function parseVerifiedGhAwLock(file, text, sourceMarkdown) {
 const GH_AW_BOILERPLATE_ALLOWED_JOB_KEYS = new Set(['name', 'needs', 'if', 'runs-on', 'permissions', 'concurrency', 'env', 'outputs', 'steps']);
 const GH_AW_SAFE_OUTPUT_ALLOWED_JOB_KEYS = new Set(['name', 'needs', 'if', 'runs-on', 'permissions', 'env', 'outputs', 'steps']);
 const GH_AW_ALLOWED_BOILERPLATE_RUNNERS = new Set(['ubuntu-slim', 'ubuntu-latest']);
+const GH_AW_BOILERPLATE_RUN_STEP_KEYS = new Set(['id', 'name', 'if', 'env', 'continue-on-error', 'run']);
+const GH_AW_BOILERPLATE_USES_STEP_KEYS = new Set(['id', 'name', 'if', 'env', 'continue-on-error', 'uses', 'with']);
+const GH_AW_SAFE_DOWNLOAD_STEP_KEYS = new Set(['name', 'uses', 'with', 'continue-on-error']);
+const GH_AW_BOILERPLATE_ENV_KEY = /^(?:GH_AW_|OTEL_)[A-Z0-9_]+$/;
 
-function hasOnlyAllowedJobKeys(job, allowedKeys) {
-  if (!job || typeof job !== 'object' || Array.isArray(job)) return false;
-  return Object.keys(job).every((key) => allowedKeys.has(key));
+function hasOnlyAllowedKeys(obj, allowedKeys) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
+  return Object.keys(obj).every((key) => allowedKeys.has(key));
+}
+
+function hasSafeBoilerplateEnv(env) {
+  if (env === undefined) return true;
+  if (!env || typeof env !== 'object' || Array.isArray(env)) return false;
+  for (const [key, value] of Object.entries(env)) {
+    if (!GH_AW_BOILERPLATE_ENV_KEY.test(key)) return false;
+    if (key === 'GH_AW_ACTIONS_DIR' && value !== '${{ runner.temp }}/gh-aw/actions') return false;
+  }
+  return true;
 }
 
 function isVerifiedBoilerplateJob(id, job, frontmatter) {
   if (!GH_AW_BOILERPLATE_JOBS.has(id)) return false;
   if (Object.hasOwn(frontmatter?.jobs ?? {}, id)) return false;
-  if (!hasOnlyAllowedJobKeys(job, GH_AW_BOILERPLATE_ALLOWED_JOB_KEYS)) return false;
+  if (!hasOnlyAllowedKeys(job, GH_AW_BOILERPLATE_ALLOWED_JOB_KEYS)) return false;
   if (!GH_AW_ALLOWED_BOILERPLATE_RUNNERS.has(job['runs-on'])) return false;
+  if (!hasSafeBoilerplateEnv(job.env)) return false;
   if (job.concurrency !== undefined) {
     if (id !== 'conclusion' || !job.concurrency || typeof job.concurrency !== 'object' || Array.isArray(job.concurrency)) {
       return false;
@@ -576,16 +591,20 @@ function isVerifiedBoilerplateJob(id, job, frontmatter) {
     return false;
   }
   return steps.every((step) => {
+    if (!hasSafeBoilerplateEnv(step?.env)) return false;
     if (typeof step?.uses === 'string') {
-      return isVerifiedBoilerplateActionStep(id, step, allowedActions);
+      return hasOnlyAllowedKeys(step, GH_AW_BOILERPLATE_USES_STEP_KEYS)
+        && isVerifiedBoilerplateActionStep(id, step, allowedActions);
     }
     if (typeof step?.run !== 'string') return false;
+    if (!hasOnlyAllowedKeys(step, GH_AW_BOILERPLATE_RUN_STEP_KEYS)) return false;
     const normalizedRun = step.run.replace(/\r\n/g, '\n').trim();
     return GH_AW_BOILERPLATE_ACTION_SCRIPT.test(normalizedRun) || GH_AW_BOILERPLATE_EXACT_RUNS.has(normalizedRun);
   });
 }
 
 function isCompilerSafeJobDownloadStep(step) {
+  if (!hasOnlyAllowedKeys(step, GH_AW_SAFE_DOWNLOAD_STEP_KEYS)) return false;
   if (step?.name !== 'Download agent output artifact' || !GH_AW_DOWNLOAD_ARTIFACT.test(step?.uses ?? '')) {
     return false;
   }
@@ -606,7 +625,7 @@ function isStepBoundedSafeOutputJob(id, job, frontmatter) {
     Object.entries(frontmatter?.['safe-outputs']?.jobs ?? {}).map(([name, cfg]) => [name.replaceAll('-', '_'), cfg]),
   );
   if (!safeOutputsTimeoutOk || !safeOutputJobsById.has(id)) return false;
-  if (!hasOnlyAllowedJobKeys(job, GH_AW_SAFE_OUTPUT_ALLOWED_JOB_KEYS)) return false;
+  if (!hasOnlyAllowedKeys(job, GH_AW_SAFE_OUTPUT_ALLOWED_JOB_KEYS)) return false;
   const expectedRunner = safeOutputJobsById.get(id)?.['runs-on'] ?? 'ubuntu-latest';
   if (job['runs-on'] !== expectedRunner) return false;
   const steps = Array.isArray(job?.steps) ? job.steps : [];
@@ -858,6 +877,32 @@ test('gh-aw timeout exemption requires verified frontmatter/body hashes, exact c
   );
   assert.deepEqual(
     findJobsMissingTimeout([{ file: 'demo.lock.yml', text: safeJobWithServices, sourceMarkdown: validMd }]),
+    ['demo.lock.yml: record_finding'],
+  );
+
+  // Adding custom step execution settings (shell, working-directory, or non-GH_AW env vars like BASH_ENV) rejects the exemption.
+  const activationWithCustomShell = validLock.replace(
+    '      - run: bash "${RUNNER_TEMP}/gh-aw/actions/mask_otlp_headers.sh"\n',
+    '      - shell: python3 {0}\n        run: bash "${RUNNER_TEMP}/gh-aw/actions/mask_otlp_headers.sh"\n',
+  );
+  assert.deepEqual(
+    findJobsMissingTimeout([{ file: 'demo.lock.yml', text: activationWithCustomShell, sourceMarkdown: validMd }]),
+    ['demo.lock.yml: activation'],
+  );
+  const activationWithBashEnv = validLock.replace(
+    '      - run: bash "${RUNNER_TEMP}/gh-aw/actions/mask_otlp_headers.sh"\n',
+    '      - env:\n          BASH_ENV: /tmp/evil.sh\n        run: bash "${RUNNER_TEMP}/gh-aw/actions/mask_otlp_headers.sh"\n',
+  );
+  assert.deepEqual(
+    findJobsMissingTimeout([{ file: 'demo.lock.yml', text: activationWithBashEnv, sourceMarkdown: validMd }]),
+    ['demo.lock.yml: activation'],
+  );
+  const safeDownloadWithEnv = validLock.replace(
+    '      - name: Download agent output artifact\n',
+    '      - name: Download agent output artifact\n        env:\n          NODE_OPTIONS: --require=/tmp/evil.js\n',
+  );
+  assert.deepEqual(
+    findJobsMissingTimeout([{ file: 'demo.lock.yml', text: safeDownloadWithEnv, sourceMarkdown: validMd }]),
     ['demo.lock.yml: record_finding'],
   );
 

@@ -439,7 +439,9 @@ Inspect the report-only Knip candidates (unused exports, types, dependencies, de
    - **Skip** shared packages (`packages/*`), native executables (`exes/*`), root `scripts/*`, and `test-utils/*`.
 2. **Verify every candidate in source code before emitting a bead:**
    - Read the referenced file with `read_app_file` and search the app with `search_app_files` to confirm the symbol/dependency is genuinely unused.
-   - If `search_app_files` returns `complete: false` (e.g., `skipped_large_file_count > 0` or `truncated_by_match_limit: true`), inspect the skipped large files with `read_app_file` or skip the candidate rather than treating missing matches as proof of unused code.
+   - If `search_app_files` returns `complete: false`, do **not** treat missing matches as proof of unused code:
+     - If `truncated_by_match_limit` is `true`, **skip** the candidate (later references may have been omitted after the 100-match cap).
+     - If `skipped_large_file_count > 0`, **skip** the candidate unless `skipped_large_file_count === skipped_large_files.length` and you have inspected every listed skipped file with `read_app_file` and confirmed no reference exists.
    - **Skip** anything loaded dynamically at runtime (`_runtime/`, worker URLs, HTML `<script>`/`<link>`, `examples.json`, Vite config, or public API exports consumed by tests or other packages).
 3. **Deduplicate cleanly against `beads-snapshot.json`:**
    - Use deterministic `dedupe_key` format: `knip:apps/<app>/<relative-file>:<symbol>`.
