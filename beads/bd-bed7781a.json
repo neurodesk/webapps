@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "bd-bed7781a",
+  "revision": 1,
+  "title": "Complete WP10/WP11 Apple-silicon WebGPU and native Metal parity checks",
+  "summary": "Run full-volume native Metal and larger-buffer WebGPU parity checks on target Apple-silicon hardware and record evidence.",
+  "kind": "hardware",
+  "status": "open",
+  "priority": 2,
+  "scope": {
+    "type": "shared",
+    "targets": [
+      "desktop",
+      "synthseg"
+    ]
+  },
+  "dedupeKey": "hardware:automation:wp10-wp11-apple-silicon",
+  "deps": {
+    "blockedBy": [],
+    "parent": null,
+    "discoveredFrom": null
+  },
+  "links": {
+    "evidence": [
+      "docs/architecture/agent-automation-work-packages.md"
+    ]
+  },
+  "lease": null,
+  "journal": [],
+  "createdAt": "2026-11-26T02:48:31.873Z",
+  "updatedAt": "2026-11-26T02:48:31.873Z",
+  "lastSeenAt": "2026-11-26T02:48:31.873Z",
+  "closedAt": null,
+  "closeReason": null
+}

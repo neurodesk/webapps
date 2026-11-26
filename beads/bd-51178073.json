@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "bd-51178073",
+  "revision": 1,
+  "title": "Support gh-aw compiled lockfile activation/conclusion jobs in ci-policy test",
+  "summary": "gh-aw v1.2.2 omits timeout-minutes on generated activation and conclusion boilerplate jobs while setting them on agent, detection, and safe_outputs.",
+  "kind": "maintenance",
+  "status": "open",
+  "priority": 1,
+  "scope": {
+    "type": "repo",
+    "targets": []
+  },
+  "dedupeKey": "gh-aw:ci-policy:lockfile-timeouts",
+  "deps": {
+    "blockedBy": [],
+    "parent": null,
+    "discoveredFrom": null
+  },
+  "links": {
+    "evidence": [
+      "docs/architecture/beads-memory.md",
+      "test/ci-policy.test.mjs"
+    ]
+  },
+  "lease": null,
+  "journal": [],
+  "createdAt": "2026-11-26T02:48:31.873Z",
+  "updatedAt": "2026-11-26T02:48:31.873Z",
+  "lastSeenAt": "2026-11-26T02:48:31.873Z",
+  "closedAt": null,
+  "closeReason": null
+}

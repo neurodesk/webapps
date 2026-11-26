@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "id": "bd-bcf4e9ab",
+  "revision": 1,
+  "title": "Deferred SynthSeg 2026-09-10 audit cleanups",
+  "summary": "Share CLI shell/NIfTI decode/volume math with exes/synthsr, drop metal-f16 and unused scripts/{compare_seg,check_onnx}.py, and move per-run is_finite off hot path.",
+  "kind": "followup",
+  "status": "open",
+  "priority": 2,
+  "scope": {
+    "type": "exe",
+    "targets": [
+      "synthseg"
+    ]
+  },
+  "dedupeKey": "agents:exes:synthseg-audit-cleanups",
+  "deps": {
+    "blockedBy": [],
+    "parent": null,
+    "discoveredFrom": null
+  },
+  "links": {
+    "evidence": [
+      "exes/AGENTS.md"
+    ]
+  },
+  "lease": null,
+  "journal": [],
+  "createdAt": "2026-11-26T02:48:31.873Z",
+  "updatedAt": "2026-11-26T02:48:31.873Z",
+  "lastSeenAt": "2026-11-26T02:48:31.873Z",
+  "closedAt": null,
+  "closeReason": null
+}

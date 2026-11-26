@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "bd-a12e36f9",
+  "revision": 1,
+  "title": "Drop direct niimath callMain path in topofit",
+  "summary": "Adopt fluent Niimath STL output and drop manual writeMz3/readMz3 round-trip now that @niivue/niimath > 1.4.20260909 has shipped.",
+  "kind": "maintenance",
+  "status": "open",
+  "priority": 2,
+  "scope": {
+    "type": "app",
+    "targets": [
+      "topofit"
+    ]
+  },
+  "dedupeKey": "agents:topofit:niimath-stl",
+  "deps": {
+    "blockedBy": [],
+    "parent": null,
+    "discoveredFrom": null
+  },
+  "links": {
+    "evidence": [
+      "apps/dwi2trx/AGENTS.md",
+      "apps/topofit/AGENTS.md"
+    ]
+  },
+  "lease": null,
+  "journal": [],
+  "createdAt": "2026-11-26T02:48:31.873Z",
+  "updatedAt": "2026-11-26T02:48:31.873Z",
+  "lastSeenAt": "2026-11-26T02:48:31.873Z",
+  "closedAt": null,
+  "closeReason": null
+}

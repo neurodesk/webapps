@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "id": "bd-b91f16bc",
+  "revision": 1,
+  "title": "Return vendored FreeBrowse build to npm registry pin",
+  "summary": "Blocked until upstream FreeBrowse publishes the unreleased development branch features to npm.",
+  "kind": "blocker",
+  "status": "blocked",
+  "priority": 2,
+  "scope": {
+    "type": "package",
+    "targets": [
+      "runtime-support"
+    ]
+  },
+  "dedupeKey": "agents:runtime-support:freebrowse-unpin",
+  "deps": {
+    "blockedBy": [],
+    "parent": null,
+    "discoveredFrom": null
+  },
+  "links": {
+    "evidence": [
+      "packages/runtime-support/AGENTS.md"
+    ]
+  },
+  "lease": null,
+  "journal": [],
+  "createdAt": "2026-11-26T02:48:31.873Z",
+  "updatedAt": "2026-11-26T02:48:31.873Z",
+  "lastSeenAt": "2026-11-26T02:48:31.873Z",
+  "closedAt": null,
+  "closeReason": null
+}

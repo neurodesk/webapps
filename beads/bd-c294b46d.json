@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "bd-c294b46d",
+  "revision": 1,
+  "title": "Pin a real marker-detection example for SeedSeg",
+  "summary": "apps/seedseg/examples.json is currently empty; blocked on selecting and pinning an openly licensed marker-detection dataset on Hugging Face.",
+  "kind": "blocker",
+  "status": "blocked",
+  "priority": 2,
+  "scope": {
+    "type": "app",
+    "targets": [
+      "seedseg"
+    ]
+  },
+  "dedupeKey": "audit:seedseg:real-marker-example",
+  "deps": {
+    "blockedBy": [],
+    "parent": null,
+    "discoveredFrom": null
+  },
+  "links": {
+    "evidence": [
+      "apps/seedseg/examples.json",
+      "docs/architecture/interface-audit.md"
+    ]
+  },
+  "lease": null,
+  "journal": [],
+  "createdAt": "2026-11-26T02:48:31.873Z",
+  "updatedAt": "2026-11-26T02:48:31.873Z",
+  "lastSeenAt": "2026-11-26T02:48:31.873Z",
+  "closedAt": null,
+  "closeReason": null
+}
