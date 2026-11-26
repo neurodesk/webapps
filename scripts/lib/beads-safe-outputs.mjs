@@ -370,24 +370,22 @@ export async function applyUnusedCodeSafeOutputs(rawOutput, {
     };
   }
 
-  const { beads: localBeads } = readBeadsFromRef(cwd, ref);
-  const { activeOperations, skippedClosed } = filterClosedUpsertOperations(localBeads, operations);
-  const allSkipped = mergeSkippedClosed(skippedClosed);
-
-  if (activeOperations.length === 0) {
-    return {
-      status: 'skipped',
-      staged: previewOnly,
-      pushed: false,
-      createdIds: [],
-      updatedIds: [],
-      untouchedIds: [],
-      skipped: allSkipped,
-      message: `All ${skippedClosed.length} finding(s) correspond to already-closed beads; no writes needed.`,
-    };
-  }
-
   if (previewOnly) {
+    const { beads: localBeads } = readBeadsFromRef(cwd, ref);
+    const { activeOperations, skippedClosed } = filterClosedUpsertOperations(localBeads, operations);
+    const allSkipped = mergeSkippedClosed(skippedClosed);
+    if (activeOperations.length === 0) {
+      return {
+        status: 'skipped',
+        staged: true,
+        pushed: false,
+        createdIds: [],
+        updatedIds: [],
+        untouchedIds: [],
+        skipped: allSkipped,
+        message: `All ${skippedClosed.length} finding(s) correspond to already-closed beads; no writes needed.`,
+      };
+    }
     const preview = applyOperations(localBeads, activeOperations, safeOpts);
     return {
       status: 'skipped',
@@ -401,11 +399,29 @@ export async function applyUnusedCodeSafeOutputs(rawOutput, {
     };
   }
 
-  const applied = mutateBeadsRef(cwd, activeOperations, {
+  const applied = mutateBeadsRef(cwd, operations, {
     ref,
     message: 'beads: weekly unused-code triage',
+    skipClosedUpserts: true,
     ...safeOpts,
   });
+  const allSkipped = mergeSkippedClosed(applied.skippedClosed ?? []);
+  const allSkippedAsClosed = applied.createdIds.length === 0
+    && applied.updatedIds.length === 0
+    && applied.untouchedIds.length === 0
+    && (applied.skippedClosed?.length ?? 0) > 0;
+  if (allSkippedAsClosed) {
+    return {
+      status: 'skipped',
+      staged: false,
+      pushed: false,
+      createdIds: [],
+      updatedIds: [],
+      untouchedIds: [],
+      skipped: allSkipped,
+      message: `All ${applied.skippedClosed.length} finding(s) correspond to already-closed beads; no writes needed.`,
+    };
+  }
   return {
     status: 'success',
     staged: false,

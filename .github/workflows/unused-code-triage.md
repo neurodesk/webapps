@@ -18,14 +18,14 @@ permissions:
 engine:
   id: copilot
   args:
+    - "--available-tools"
+    - "mcpscripts,safeoutputs"
     - "--deny-tool"
     - "shell"
     - "--deny-tool"
     - "write"
     - "--deny-tool"
     - "url"
-    - "--excluded-tools"
-    - "bash,shell,powershell,view,grep,glob,edit,create,web_fetch,fetch_url,url"
 strict: true
 checkout: false
 timeout-minutes: 15
@@ -85,10 +85,14 @@ mcp-scripts:
         type: number
         description: "Maximum lines to return (default 200, max 400)"
         required: false
+      char_offset:
+        type: number
+        description: "0-based character offset within the selected line slice for paging long single-line JSON (default 0)"
+        required: false
     script: |
       const fs = require('node:fs');
       const path = require('node:path');
-      const MAX_CHARS = 32768;
+      const MAX_BYTES = 32768;
       const allowed = new Set(['summary.md', 'knip.json', 'beads-snapshot.json']);
       if (!allowed.has(name)) {
         throw new Error('Allowed artifacts: summary.md, knip.json, beads-snapshot.json');
@@ -116,9 +120,21 @@ mcp-scripts:
       const count = Math.min(400, Math.max(1, Number.isInteger(max_lines) ? max_lines : 200));
       const slice = lines.slice(start - 1, start - 1 + count);
       const rawContent = slice.join('\n');
-      const truncated = rawContent.length > MAX_CHARS;
-      const content = truncated ? rawContent.slice(0, MAX_CHARS) : rawContent;
-      return { total_lines: lines.length, start_line: start, end_line: start + slice.length - 1, truncated, content };
+      const offset = Math.max(0, Number.isInteger(char_offset) ? char_offset : 0);
+      const remaining = rawContent.slice(offset);
+      let content = '';
+      let usedBytes = 0;
+      let consumedChars = 0;
+      for (const ch of remaining) {
+        const chBytes = Buffer.byteLength(ch, 'utf8');
+        if (usedBytes + chBytes > MAX_BYTES) break;
+        content += ch;
+        usedBytes += chBytes;
+        consumedChars += ch.length;
+      }
+      const truncated = offset + consumedChars < rawContent.length;
+      const next_char_offset = truncated ? offset + consumedChars : null;
+      return { total_lines: lines.length, start_line: start, end_line: start + slice.length - 1, char_offset: offset, next_char_offset, bytes: usedBytes, truncated, content };
   list_app_files:
     description: "List source files inside a first-party non-upstream app directory apps/<app>/"
     inputs:
@@ -182,10 +198,14 @@ mcp-scripts:
         type: number
         description: "Maximum lines to return (default 200, max 400)"
         required: false
+      char_offset:
+        type: number
+        description: "0-based character offset within the selected line slice (default 0)"
+        required: false
     script: |
       const fs = require('node:fs');
       const path = require('node:path');
-      const MAX_CHARS = 32768;
+      const MAX_BYTES = 32768;
       if (!/^[a-z][a-z0-9-]*$/.test(app || '')) throw new Error('Invalid app id');
       if (typeof file !== 'string' || !file.startsWith(`apps/${app}/`) || file.includes('..') || file.includes('\\')) {
         throw new Error(`File must be inside apps/${app}/`);
@@ -209,9 +229,21 @@ mcp-scripts:
       const count = Math.min(400, Math.max(1, Number.isInteger(max_lines) ? max_lines : 200));
       const slice = lines.slice(start - 1, start - 1 + count);
       const rawContent = slice.join('\n');
-      const truncated = rawContent.length > MAX_CHARS;
-      const content = truncated ? rawContent.slice(0, MAX_CHARS) : rawContent;
-      return { file, total_lines: lines.length, start_line: start, end_line: start + slice.length - 1, truncated, content };
+      const offset = Math.max(0, Number.isInteger(char_offset) ? char_offset : 0);
+      const remaining = rawContent.slice(offset);
+      let content = '';
+      let usedBytes = 0;
+      let consumedChars = 0;
+      for (const ch of remaining) {
+        const chBytes = Buffer.byteLength(ch, 'utf8');
+        if (usedBytes + chBytes > MAX_BYTES) break;
+        content += ch;
+        usedBytes += chBytes;
+        consumedChars += ch.length;
+      }
+      const truncated = offset + consumedChars < rawContent.length;
+      const next_char_offset = truncated ? offset + consumedChars : null;
+      return { file, total_lines: lines.length, start_line: start, end_line: start + slice.length - 1, char_offset: offset, next_char_offset, bytes: usedBytes, truncated, content };
   search_app_files:
     description: "Plain substring search across regular files strictly inside apps/<app>/ (no shell or regex execution)"
     inputs:
@@ -342,6 +374,7 @@ safe-outputs:
           id: apply
           timeout-minutes: 5
           env:
+            DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
             DRY_RUN: ${{ inputs.dry_run }}
             GITHUB_TOKEN: ${{ github.token }}
             GH_AW_DETECTION_SUCCESS: ${{ needs.detection.outputs.detection_success }}
@@ -350,6 +383,10 @@ safe-outputs:
             GIT_COMMITTER_NAME: github-actions[bot]
             GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
           run: |
+            if [ "${GITHUB_REF}" != "refs/heads/${DEFAULT_BRANCH}" ]; then
+              echo "Refusing to apply Beads safe outputs outside exact default branch refs/heads/${DEFAULT_BRANCH} (got ${GITHUB_REF})" >&2
+              exit 1
+            fi
             ARGS=(--actor gh-aw/unused-code-triage --max-creates 5 --max-updates 10 --require-clean-detection)
             if [ "${DRY_RUN}" = "true" ]; then
               ARGS+=(--dry-run)

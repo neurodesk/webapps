@@ -2729,14 +2729,15 @@ test('an app runs its @heavy browser tests only when the change edits it, a fail
 
 function unexpectedExemptPathReads(entries) {
   const exemptRef = /\.github\/aw\b|\.github['"],\s*['"]aw['"]|\b(?:AGENTS|AGENT|CLAUDE)\.md\b/;
-  const allowedMetadata = (file) => /^apps\/[^/]+\/upstream\.json$/.test(file)
+  const allowedMetadata = (file, text) => /^apps\/[^/]+\/upstream\.json$/.test(file)
     || file === 'apps/spinalcordtoolbox/.specify/init-options.json'
     || file === 'scripts/lib/app-plan.mjs'
     || file === 'scripts/lib/app-plan-shadow.mjs'
-    || file.startsWith('test/');
+    || file.startsWith('test/')
+    || (/^\.github\/workflows\/[^/]+\.lock\.yml$/.test(file) && text.startsWith('# gh-aw-metadata:'));
   const findings = [];
   for (const [file, text] of entries) {
-    if (allowedMetadata(file)) continue;
+    if (allowedMetadata(file, text)) continue;
     for (const line of text.split('\n')) {
       const trimmed = line.trim();
       if (trimmed.startsWith('//') || trimmed.startsWith('#')) continue;

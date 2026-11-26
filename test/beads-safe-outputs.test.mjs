@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
@@ -498,6 +498,69 @@ test('applyUnusedCodeSafeOutputs enforces clean dry-run, fail-closed detection, 
     rmSync(trackingLockFile, { force: true });
   }
 
+  // Receive-side pre-receive race (remote advances AFTER ref advertisement -> `[remote rejected] (incorrect old value provided)`)
+  // must retry cleanly against the new tip instead of failing on attempt 1
+  const hookMarker = join(workDir, '..', 'pre-receive-once');
+  const preReceiveHook = join(remoteDir, 'hooks', 'pre-receive');
+  writeFileSync(preReceiveHook, [
+    '#!/bin/sh',
+    `if [ ! -f "${hookMarker}" ]; then`,
+    `  touch "${hookMarker}"`,
+    '  git -C "$GIT_DIR" update-ref refs/heads/memory/beads "$(git -C "$GIT_DIR" commit-tree "$(git -C "$GIT_DIR" rev-parse refs/heads/memory/beads^{tree})" -p "$(git -C "$GIT_DIR" rev-parse refs/heads/memory/beads)" -m "concurrent receive-side race")"',
+    'fi',
+    'exit 0',
+    '',
+  ].join('\n'), 'utf8');
+  chmodSync(preReceiveHook, 0o755);
+  try {
+    const receiveRaceResult = await applyUnusedCodeSafeOutputs({
+      items: [{
+        type: UNUSED_CODE_ITEM_TYPE,
+        app: 'alpha',
+        dedupe_key: 'knip:apps/alpha/src/other.js:receiverace',
+        title: 'Retries cleanly on receive-side incorrect old value provided race',
+        summary: 'Verified unused.',
+        evidence: 'apps/alpha/src/other.js',
+      }],
+    }, {
+      cwd: workDir,
+      allowedApps,
+      now: new Date('2026-11-26T08:06:45Z'),
+    });
+    assert.equal(receiveRaceResult.status, 'success');
+    assert.equal(receiveRaceResult.pushed, true);
+    assert.equal(existsSync(hookMarker), true, 'pre-receive race hook must have fired');
+  } finally {
+    rmSync(preReceiveHook, { force: true });
+    rmSync(hookMarker, { force: true });
+  }
+
+  // Local --no-sync path also filters closed upserts atomically inside mutateBeadsRef
+  syncBeadsRef(workDir, { ref: DEFAULT_BEADS_REF, remote: 'origin', push: false });
+  const localClosedResult = await applyUnusedCodeSafeOutputs({
+    items: [
+      { ...rawOutput.items[0], summary: 'Closed bead repeated in local --no-sync mode' },
+      {
+        type: UNUSED_CODE_ITEM_TYPE,
+        app: 'alpha',
+        dedupe_key: 'knip:apps/alpha/src/other.js:localafterclose',
+        title: 'Local mode creates unrelated bead while skipping closed bead',
+        summary: 'Verified unused.',
+        evidence: 'apps/alpha/src/other.js',
+      },
+    ],
+  }, {
+    cwd: workDir,
+    allowedApps,
+    skipSync: true,
+    now: new Date('2026-11-26T08:06:50Z'),
+  });
+  assert.equal(localClosedResult.status, 'success');
+  assert.equal(localClosedResult.pushed, false);
+  assert.equal(localClosedResult.createdIds.length, 1);
+  assert.equal(localClosedResult.skipped.length, 1);
+  assert.match(localClosedResult.skipped[0].reason, /already closed/);
+
   // All-invalid batch rejects without touching remote
   await assert.rejects(
     () => applyUnusedCodeSafeOutputs({ items: [rawOutput.items[1]] }, { cwd: workDir, allowedApps }),
@@ -530,7 +593,7 @@ test('applyUnusedCodeSafeOutputs enforces clean dry-run, fail-closed detection, 
     /maxCreates/,
   );
   syncBeadsRef(verifyDir, { ref: DEFAULT_BEADS_REF, remote: 'origin', push: false });
-  assert.equal(readBeadsFromRef(verifyDir, DEFAULT_BEADS_REF).beads.size, 5);
+  assert.equal(readBeadsFromRef(verifyDir, DEFAULT_BEADS_REF).beads.size, 6);
 });
 
 test('apply-beads-safe-outputs CLI honors detection gate, writes escaped summary/outputs, and sanitizes stderr on warnings and fatal errors', (t) => {
@@ -686,10 +749,10 @@ test('unused-code-triage gh-aw workflow enforces read-only no-shell agent, zero 
   assert.doesNotMatch(execStep.run, /--allow-tool github\b/, 'agent must not be granted GitHub MCP tools');
   assert.match(execStep.run, /--allow-tool mcpscripts\b/);
   assert.match(execStep.run, /--allow-tool safeoutputs\b/);
+  assert.match(execStep.run, /--available-tools mcpscripts,safeoutputs\b/);
   assert.match(execStep.run, /--deny-tool shell\b/);
   assert.match(execStep.run, /--deny-tool write\b/);
   assert.match(execStep.run, /--deny-tool url\b/);
-  assert.match(execStep.run, /--excluded-tools bash,shell,powershell,view,grep,glob,edit,create,web_fetch,fetch_url,url\b/);
 
   // Threat detection must fail closed (not warn mode)
   const detConclusion = flow.jobs.detection.steps.find((step) => step.id === 'detection_conclusion');
@@ -719,8 +782,10 @@ test('unused-code-triage gh-aw workflow enforces read-only no-shell agent, zero 
   assert.equal(checkoutStep?.with?.['persist-credentials'], false, 'checkout must not persist credentials on disk');
   assert.equal(checkoutStep?.with?.ref, '${{ github.sha }}', 'applier checkout must pin to the exact same github.sha as agent');
   const applyStep = safeJob.steps.find((step) => step.id === 'apply');
+  assert.match(applyStep?.run ?? '', /if \[ "\$\{GITHUB_REF\}" != "refs\/heads\/\$\{DEFAULT_BRANCH\}" \]/, 'apply step must enforce exact case-sensitive default branch');
   assert.match(applyStep?.run ?? '', /node scripts\/apply-beads-safe-outputs\.mjs/);
   assert.match(applyStep?.run ?? '', /--require-clean-detection/);
+  assert.equal(applyStep?.env?.DEFAULT_BRANCH, '${{ github.event.repository.default_branch }}');
   assert.equal(applyStep?.env?.GH_AW_DETECTION_SUCCESS, '${{ needs.detection.outputs.detection_success }}');
   assert.equal(typeof applyStep?.['timeout-minutes'], 'number');
 });
@@ -740,7 +805,7 @@ test('unused-code-triage mcp-scripts enforce strict file caps, byte caps, and an
     writeFileSync(join(scratch, 'apps', 'many', 'dir-a', `f${String(i).padStart(3, '0')}.js`), 'x\n', 'utf8');
     writeFileSync(join(scratch, 'apps', 'many', 'dir-b', `g${String(i).padStart(3, '0')}.js`), 'y\n', 'utf8');
   }
-  writeFileSync(join(scratch, 'apps', 'many', 'huge.js'), `${'a'.repeat(50000)}\n`, 'utf8');
+  writeFileSync(join(scratch, 'apps', 'many', 'huge.js'), `${'😀'.repeat(12000)}TAIL_MARKER\n`, 'utf8');
 
   const outsideQa = join(scratch, 'outside-qa');
   mkdirSync(join(outsideQa, 'unused-code'), { recursive: true });
@@ -765,12 +830,20 @@ test('unused-code-triage mcp-scripts enforce strict file caps, byte caps, and an
   assert.equal(listOut.files.length, 500);
   assert.equal(listOut.truncated, true);
 
-  // read_app_file caps output at 32 KB even for a 50 KB single-line file
-  const readHuge = runTool('read_app_file', { app: 'many', file: 'apps/many/huge.js' });
-  assert.equal(readHuge.status, 0, readHuge.stderr);
-  const hugeOut = JSON.parse(readHuge.stdout);
-  assert.equal(hugeOut.truncated, true);
-  assert.equal(hugeOut.content.length, 32768);
+  // read_app_file caps output strictly at 32768 UTF-8 bytes even for multi-byte Unicode and supports char_offset paging to the tail
+  const readPage1 = runTool('read_app_file', { app: 'many', file: 'apps/many/huge.js' });
+  assert.equal(readPage1.status, 0, readPage1.stderr);
+  const page1 = JSON.parse(readPage1.stdout);
+  assert.equal(page1.truncated, true);
+  assert.ok(Buffer.byteLength(page1.content, 'utf8') <= 32768, 'UTF-8 output must never exceed 32768 bytes');
+  assert.equal(typeof page1.next_char_offset, 'number');
+
+  const readPage2 = runTool('read_app_file', { app: 'many', file: 'apps/many/huge.js', char_offset: page1.next_char_offset });
+  assert.equal(readPage2.status, 0, readPage2.stderr);
+  const page2 = JSON.parse(readPage2.stdout);
+  assert.equal(page2.truncated, false);
+  assert.equal(page2.next_char_offset, null);
+  assert.ok(page2.content.endsWith('TAIL_MARKER\n'), 'char_offset paging must recover the tail of a long single-line file');
 
   // read_triage_artifact rejects symlinked quality-artifacts parent directory
   const symArtifact = runTool('read_triage_artifact', { name: 'summary.md' });

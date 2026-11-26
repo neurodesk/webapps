@@ -1537,20 +1537,45 @@ export function commitBeadsToRef(cwd, beadsMap, { ref = DEFAULT_BEADS_REF, expec
   return commitSha;
 }
 
-export function mutateBeadsRef(cwd, operations, { ref = DEFAULT_BEADS_REF, message = 'beads: apply operations', maxRetries = 5, ...applyOptions } = {}) {
+export function mutateBeadsRef(cwd, operations, {
+  ref = DEFAULT_BEADS_REF,
+  message = 'beads: apply operations',
+  maxRetries = 5,
+  skipClosedUpserts = false,
+  ...applyOptions
+} = {}) {
   assertMemoryRef(ref);
   const repoTop = resolveGitRoot(cwd);
   assertNotSymbolicRef(repoTop, ref);
   assertRefNotCheckedOut(repoTop, ref);
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const { sha, beads } = readBeadsTree(repoTop, ref);
-    const result = applyOperations(beads, operations, applyOptions);
+    let effectiveOps = operations;
+    let skippedClosed = [];
+    if (skipClosedUpserts) {
+      const filtered = filterClosedUpsertOperations(beads, operations);
+      effectiveOps = filtered.activeOperations;
+      skippedClosed = filtered.skippedClosed;
+    }
+    if (effectiveOps.length === 0) {
+      return {
+        beads,
+        changedIds: [],
+        createdIds: [],
+        updatedIds: [],
+        untouchedIds: [],
+        skippedClosed,
+        commitSha: sha,
+        changed: false,
+      };
+    }
+    const result = applyOperations(beads, effectiveOps, applyOptions);
     if (result.changedIds.length === 0 && sha !== null) {
-      return { ...result, commitSha: sha, changed: false };
+      return { ...result, skippedClosed, commitSha: sha, changed: false };
     }
     try {
       const commitSha = commitBeadsToRef(repoTop, result.beads, { ref, expectedParentSha: sha, message });
-      return { ...result, commitSha, changed: true };
+      return { ...result, skippedClosed, commitSha, changed: true };
     } catch (error) {
       if (error instanceof BeadsConflictError && attempt + 1 < maxRetries) continue;
       throw error;
@@ -1710,7 +1735,15 @@ export function syncBeadsRef(cwd, { ref = DEFAULT_BEADS_REF, remote = 'origin', 
 
 function isLeasePushRejection(error) {
   const detail = `${error?.stderr || ''}\n${error?.message || ''}`;
-  return /stale info|non-fast-forward|fetch first|\[rejected\]|failed to update ref|remote ref updated|cannot lock ref|expected [0-9a-f]{7,40}/i.test(detail);
+  return /stale info|non-fast-forward|fetch first|\[rejected\]|failed to update ref|remote ref updated|cannot lock ref|incorrect old value provided|expected [0-9a-f]{7,40}/i.test(detail);
+}
+
+function hasLocalCommitObject(repoTop, sha) {
+  try {
+    return git(['cat-file', '-t', sha], { cwd: repoTop }).trim() === 'commit';
+  } catch {
+    return false;
+  }
 }
 
 function fetchRemoteBeadsTreeNoRef(repoTop, remote, ref, maxFetchAttempts = 3) {
@@ -1729,7 +1762,7 @@ function fetchRemoteBeadsTreeNoRef(repoTop, remote, ref, maxFetchAttempts = 3) {
       remote,
       ref,
     ], { cwd: repoTop });
-    if (gitRefSha(repoTop, remoteSha) === remoteSha) {
+    if (hasLocalCommitObject(repoTop, remoteSha)) {
       return readBeadsTree(repoTop, remoteSha);
     }
   }

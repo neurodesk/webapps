@@ -375,6 +375,13 @@ function computeGhAwFrontmatterHash(normalizedFrontmatter) {
     .digest('hex');
 }
 
+const GH_AW_BOILERPLATE_ALLOWED_ACTIONS = Object.freeze({
+  activation: new Set(['github/gh-aw-actions/setup', 'actions/github-script', 'actions/upload-artifact']),
+  conclusion: new Set(['github/gh-aw-actions/setup', 'actions/download-artifact', 'actions/github-script', 'actions/upload-artifact']),
+  pre_activation: new Set(['github/gh-aw-actions/setup', 'actions/github-script']),
+  unlock: new Set(['github/gh-aw-actions/setup', 'actions/github-script']),
+});
+
 function parseVerifiedGhAwLock(file, text, sourceMarkdown) {
   if (!file.endsWith('.lock.yml') || typeof sourceMarkdown !== 'string') return null;
   const lines = text.split(/\r?\n/);
@@ -406,14 +413,13 @@ function parseVerifiedGhAwLock(file, text, sourceMarkdown) {
   if (!parsedMd || !parsedMd.frontmatter || typeof parsedMd.frontmatter !== 'object') return null;
   const computedBodyHash = createHash('sha256').update(parsedMd.body).digest('hex');
   if (computedBodyHash !== meta.body_hash) return null;
-  // Workflows using imports or body template expressions hash additional canonical fields;
-  // reject stale frontmatter cryptographically for standalone workflows.
-  const hasImportsOrBodyExpressions = Boolean(parsedMd.frontmatter.imports)
-    || /\$\{\{\s*(?:env|vars)\./.test(parsedMd.body);
-  if (!hasImportsOrBodyExpressions) {
-    const computedFrontmatterHash = computeGhAwFrontmatterHash(parsedMd.normalizedFrontmatter);
-    if (computedFrontmatterHash !== meta.frontmatter_hash) return null;
+  // Require exact frontmatter_hash verification; reject workflows using imports or body env/vars
+  // expressions from this exemption rather than skipping the frontmatter hash check.
+  if (parsedMd.frontmatter.imports !== undefined || /\$\{\{\s*(?:env|vars)\./.test(parsedMd.body)) {
+    return null;
   }
+  const computedFrontmatterHash = computeGhAwFrontmatterHash(parsedMd.normalizedFrontmatter);
+  if (computedFrontmatterHash !== meta.frontmatter_hash) return null;
 
   return { meta, manifest, frontmatter: parsedMd.frontmatter };
 }
@@ -421,6 +427,7 @@ function parseVerifiedGhAwLock(file, text, sourceMarkdown) {
 function isVerifiedBoilerplateJob(id, job, frontmatter) {
   if (!GH_AW_BOILERPLATE_JOBS.has(id)) return false;
   if (Object.hasOwn(frontmatter?.jobs ?? {}, id)) return false;
+  const allowedActions = GH_AW_BOILERPLATE_ALLOWED_ACTIONS[id];
   const steps = Array.isArray(job?.steps) ? job.steps : [];
   if (steps.length === 0) return false;
   const setupStep = steps[0];
@@ -428,7 +435,16 @@ function isVerifiedBoilerplateJob(id, job, frontmatter) {
     return false;
   }
   return steps.every((step) => {
-    if (typeof step?.uses === 'string') return PINNED_ACTION.test(step.uses);
+    if (typeof step?.uses === 'string') {
+      if (!PINNED_ACTION.test(step.uses)) return false;
+      const actionRepo = step.uses.slice(0, step.uses.lastIndexOf('@'));
+      if (allowedActions.has(actionRepo)) return true;
+      // activation includes one compiler-generated sparse checkout of .github and .agents.
+      return id === 'activation'
+        && actionRepo === 'actions/checkout'
+        && step.name === 'Checkout .github and .agents folders'
+        && typeof step.with?.['sparse-checkout'] === 'string';
+    }
     if (typeof step?.run !== 'string') return false;
     const normalizedRun = step.run.replace(/\r\n/g, '\n').trim();
     return GH_AW_BOILERPLATE_ACTION_SCRIPT.test(normalizedRun) || GH_AW_BOILERPLATE_EXACT_RUNS.has(normalizedRun);
@@ -555,9 +571,13 @@ test('gh-aw timeout exemption requires verified frontmatter/body hashes, exact c
     ['regular.yml: activation', 'regular.yml: record_finding', 'regular.yml: conclusion'],
   );
 
-  // Stale frontmatter (e.g. changing max-turns without recompiling) or stale body rejects the exemption.
+  // Stale frontmatter (including adding imports alongside edits) or stale body rejects the exemption.
   assert.deepEqual(
     findJobsMissingTimeout([{ file: 'demo.lock.yml', text: validLock, sourceMarkdown: validMd.replace('max-turns: 25', 'max-turns: 99') }]),
+    ['demo.lock.yml: activation', 'demo.lock.yml: record_finding', 'demo.lock.yml: conclusion'],
+  );
+  assert.deepEqual(
+    findJobsMissingTimeout([{ file: 'demo.lock.yml', text: validLock, sourceMarkdown: validMd.replace('max-turns: 25', 'imports: []\nmax-turns: 99') }]),
     ['demo.lock.yml: activation', 'demo.lock.yml: record_finding', 'demo.lock.yml: conclusion'],
   );
   assert.deepEqual(
@@ -565,7 +585,7 @@ test('gh-aw timeout exemption requires verified frontmatter/body hashes, exact c
     ['demo.lock.yml: activation', 'demo.lock.yml: record_finding', 'demo.lock.yml: conclusion'],
   );
 
-  // Appending arbitrary shell commands to a recognized boilerplate script rejects the exemption.
+  // Appending arbitrary shell commands or unexpected pinned action steps to boilerplate jobs rejects the exemption.
   const appendedBoilerplate = validLock.replace(
     'bash "${RUNNER_TEMP}/gh-aw/actions/mask_otlp_headers.sh"',
     'bash "${RUNNER_TEMP}/gh-aw/actions/mask_otlp_headers.sh" && pnpm test',
@@ -573,6 +593,11 @@ test('gh-aw timeout exemption requires verified frontmatter/body hashes, exact c
   assert.deepEqual(
     findJobsMissingTimeout([{ file: 'demo.lock.yml', text: appendedBoilerplate, sourceMarkdown: validMd }]),
     ['demo.lock.yml: activation'],
+  );
+  const injectedConclusionCheckout = `${validLock}\n      - uses: actions/checkout@${checkoutSha}\n`;
+  assert.deepEqual(
+    findJobsMissingTimeout([{ file: 'demo.lock.yml', text: injectedConclusionCheckout, sourceMarkdown: validMd }]),
+    ['demo.lock.yml: conclusion'],
   );
 
   // Untimed `uses:` action step inside a safe-output job STILL fails.
