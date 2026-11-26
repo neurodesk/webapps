@@ -34,17 +34,32 @@ export function hostedAppTitle(title, siteTitle = DEFAULT_BRAND.siteTitle) {
 
 // mountImagingWorkspace gives these regions their classes, but only once the app bundle has run.
 // Carrying them in the document lets the first paint use the final layout.
-const workspaceRegions = [['controls', 'nd-imaging-controls'], ['viewer', 'nd-imaging-viewer'], ['status', 'nd-imaging-status']];
+const workspaceRegions = { controls: 'nd-imaging-controls', viewer: 'nd-imaging-viewer', status: 'nd-imaging-status' };
+// A comment, an element whose content is not markup, or an opening tag: only a tag can be a region.
+const pageToken = /<!--[\s\S]*?-->|<(script|style|template|textarea)\b[\s\S]*?<\/\1\s*>|<[a-z][a-z0-9-]*(?:[^>"']|"[^"]*"|'[^']*')*>/gi;
+const tagAttribute = /\s([^\s"'>=/]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+)))?/g;
+
+function tagAttributes(tag) {
+  return new Map([...tag.matchAll(tagAttribute)].reverse().map((match) => (
+    [match[1].toLowerCase(), { text: match[0], value: match[2] ?? match[3] ?? match[4] ?? '' }]
+  )));
+}
 
 function stampWorkspaceRegions(html) {
-  const tags = workspaceRegions.map(([id]) => new RegExp(`<[a-z][a-z0-9-]*\\b[^>]*\\sid=["']${id}["'][^>]*>`, 'i'));
-  if (!tags.every((tag) => tag.test(html))) return html;
-  return workspaceRegions.reduce((stamped, [, className], index) => stamped.replace(tags[index], (tag) => {
-    const existing = tag.match(/\sclass=(["'])(.*?)\1/i);
-    if (!existing) return tag.replace(/\/?>$/, (end) => ` class="${className}"${end}`);
-    if (existing[2].split(/\s+/).includes(className)) return tag;
-    return tag.replace(existing[0], ` class=${existing[1]}${`${existing[2]} ${className}`.trim()}${existing[1]}`);
-  }), html);
+  const regionTags = [...html.matchAll(pageToken)]
+    .filter((match) => !match[1] && !match[0].startsWith('<!--'))
+    .map((match) => tagAttributes(match[0]).get('id')?.value);
+  if (!Object.keys(workspaceRegions).every((id) => regionTags.includes(id))) return html;
+  return html.replace(pageToken, (tag, inert) => {
+    if (inert || tag.startsWith('<!--')) return tag;
+    const attributes = tagAttributes(tag);
+    const className = workspaceRegions[attributes.get('id')?.value];
+    if (!className) return tag;
+    const existing = attributes.get('class');
+    if (!existing) return tag.replace(/\s*\/?>$/, (end) => ` class="${className}"${end}`);
+    if (existing.value.split(/\s+/).includes(className)) return tag;
+    return tag.replace(existing.text, ` class="${`${existing.value} ${className}`.trim()}"`);
+  });
 }
 
 export function hasIconLink(html) {

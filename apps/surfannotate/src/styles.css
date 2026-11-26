@@ -78,7 +78,8 @@ summary:focus-visible {
 
 /* -- application shell -------------------------------------------------- */
 
-.nd-imaging-workspace {
+/* The page before it mounts: outranks the shared grid, yields to the shared phone layout. */
+.nd-imaging-workspace, [id="app"]:has(> .nd-imaging-controls):has(> .nd-imaging-viewer):has(> .nd-imaging-status) {
   grid-template-columns: minmax(340px, 372px) minmax(0, 1fr);
   grid-template-rows: 62px minmax(0, 1fr) auto;
   color: var(--nd-brand-menu);
@@ -665,7 +666,7 @@ summary:focus-visible {
 }
 
 @media (max-width: 900px) {
-  .nd-imaging-workspace { grid-template-columns: minmax(310px, 340px) minmax(0, 1fr); }
+  .nd-imaging-workspace, [id="app"]:has(> .nd-imaging-controls):has(> .nd-imaging-viewer):has(> .nd-imaging-status) { grid-template-columns: minmax(310px, 340px) minmax(0, 1fr); }
 }
 
 @media (max-width: 720px) {

@@ -40,9 +40,9 @@ nd-imaging-brand {
 }
 
 /* Until mountImagingWorkspace wraps them, the regions the hosted page already
-   carries are laid out on the body, so the first paint matches the mounted one. */
+   carries are laid out on their parent, so the first paint matches the mounted one. */
 .nd-imaging-workspace,
-body:has(> .nd-imaging-controls):has(> .nd-imaging-viewer) {
+:not(.nd-imaging-workspace):has(> .nd-imaging-controls):has(> .nd-imaging-viewer) {
   display: grid;
   grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;

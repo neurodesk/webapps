@@ -262,6 +262,15 @@ test('an imaging workspace page carries its region classes, so it is laid out be
   assert.equal(injectCompositeTheme(themed, { ...metadata, shell: 'imaging-workspace' }), themed);
 
   assert.doesNotMatch(injectCompositeTheme(page, metadata), /nd-imaging-/, 'other shells keep their own layout');
+  const inert = page.replace('<header id="controls">', '<header title="1 > 0" id=\'controls\'>')
+    .replace('<body>', '<body><!-- <main id="viewer"> --><template><footer id="status"></footer></template>'
+      + '<script>const markup = \'<header id="controls">\';</script>');
+  const stamped = injectCompositeTheme(inert, { ...metadata, shell: 'imaging-workspace' });
+  assert.match(stamped, /<!-- <main id="viewer"> --><template><footer id="status"><\/footer><\/template>/, 'comments and templates are not markup of the page');
+  assert.match(stamped, /const markup = '<header id="controls">';/);
+  assert.match(stamped, /<header title="1 > 0" id='controls' class="nd-imaging-controls">/);
+  assert.match(stamped, /<footer id="status" class="nd-imaging-status">/);
+
   const partial = page.replace(' id="viewer"', ' id="canvas"');
   assert.doesNotMatch(injectCompositeTheme(partial, { ...metadata, shell: 'imaging-workspace' }), /nd-imaging-/, 'a page without all three regions is left to its app');
 });
