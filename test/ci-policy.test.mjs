@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFile, readdir } from 'node:fs/promises';
+import { isBuiltin } from 'node:module';
+import { dirname, relative, resolve } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
+import sourceParser from '@neurodesk/code-quality';
 import YAML from 'yaml';
 
 const workflow = async (name) => YAML.parse(await readFile(new URL(`../.github/workflows/${name}.yml`, import.meta.url), 'utf8'));
@@ -346,4 +350,90 @@ test('every non-reusable workflow job declares an explicit timeout-minutes', asy
     }
   }
   assert.deepEqual(missing, [], `jobs missing explicit timeout-minutes: ${missing.join(', ')}`);
+});
+
+function moduleSpecifiers(source, filePath) {
+  const ast = sourceParser.parse(source, { filePath, sourceType: 'module' });
+  const specifiers = [];
+  const walk = (node) => {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item);
+      return;
+    }
+    if (
+      (node.type === 'ImportDeclaration' || node.type === 'ExportNamedDeclaration' || node.type === 'ExportAllDeclaration')
+      && typeof node.source?.value === 'string'
+    ) {
+      specifiers.push(node.source.value);
+    } else if (node.type === 'ImportExpression' && node.source?.type === 'Literal' && typeof node.source.value === 'string') {
+      specifiers.push(node.source.value);
+    } else if (
+      node.type === 'CallExpression'
+      && node.callee?.type === 'Identifier'
+      && node.callee.name === 'require'
+      && node.arguments?.[0]?.type === 'Literal'
+      && typeof node.arguments[0].value === 'string'
+    ) {
+      specifiers.push(node.arguments[0].value);
+    }
+    for (const [key, value] of Object.entries(node)) {
+      if (key === 'parent' || key === 'loc' || key === 'range' || key === 'tokens' || key === 'comments') continue;
+      if (value && typeof value === 'object') walk(value);
+    }
+  };
+  walk(ast);
+  return specifiers;
+}
+
+test('workflow scripts executed before pnpm install import only Node built-ins', async () => {
+  const repoRoot = fileURLToPath(new URL('../', import.meta.url));
+  const dir = new URL('../.github/workflows/', import.meta.url);
+  const preInstallScripts = new Map();
+  for (const file of (await readdir(dir)).filter((name) => /\.ya?ml$/.test(name)).sort()) {
+    const flow = YAML.parse(await readFile(new URL(file, dir), 'utf8'));
+    for (const [jobId, job] of Object.entries(flow.jobs ?? {})) {
+      let installed = false;
+      for (const step of job.steps ?? []) {
+        if (typeof step.run !== 'string') continue;
+        for (const line of step.run.split('\n')) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith('#')) continue;
+          if (/\b(?:pnpm\s+install|npm\s+(?:ci|install))\b/.test(trimmed)) {
+            installed = true;
+            continue;
+          }
+          if (installed) continue;
+          for (const match of trimmed.matchAll(/\bnode\s+(?:--[\w=-]+\s+)*(scripts\/[\w./-]+\.[cm]?js)\b/g)) {
+            const callers = preInstallScripts.get(match[1]) ?? [];
+            callers.push(`${file}:${jobId}`);
+            preInstallScripts.set(match[1], callers);
+          }
+        }
+      }
+    }
+  }
+  assert.ok(preInstallScripts.has('scripts/ci-usage-report.mjs'), 'ci-usage-report.mjs runs without pnpm install and must be checked');
+
+  const violations = [];
+  for (const [entry, callers] of [...preInstallScripts].sort()) {
+    const visited = new Set();
+    const pending = [resolve(repoRoot, entry)];
+    while (pending.length) {
+      const file = pending.pop();
+      if (visited.has(file)) continue;
+      visited.add(file);
+      const source = await readFile(file, 'utf8');
+      for (const specifier of moduleSpecifiers(source, file)) {
+        if (isBuiltin(specifier)) continue;
+        if (specifier.startsWith('.')) {
+          pending.push(resolve(dirname(file), specifier));
+          continue;
+        }
+        const from = relative(repoRoot, file).replaceAll('\\', '/');
+        violations.push(`${entry} (${callers.join(', ')}): ${from} imports non-builtin "${specifier}"`);
+      }
+    }
+  }
+  assert.deepEqual(violations, [], `scripts run before pnpm install must not import packages:\n${violations.join('\n')}`);
 });
