@@ -191,7 +191,7 @@ function markdown(rows, candidates, superseded) {
     '',
     `Oracle misses: ${done.reduce((sum, row) => sum + row.misses.length, 0)}.`,
     '',
-    `Not checked: the oracle has no expectation of its own for registry site keys (SITE_KEY_READERS) or ci.yml jobs (CI_JOB_SCOPES), so a row narrowed through them reads 0 misses unchecked. Rows narrowed through them: ${done.filter((row) => row.unchecked?.length).map((row) => `#${row.pr} (${row.unchecked.join(', ')})`).join(', ') || 'none'}. Easter egg runs: ${done.filter((row) => row.easterEgg?.length).length}/${done.length}.`,
+    `Not checked: the oracle has no expectation of its own for the rule families flagged by uncheckedRules (registry site keys, ci.yml jobs, pnpm-workspace.yaml, e2e-test-data provisioners, and lint tooling), so a row narrowed through them reads 0 misses unchecked. Rows narrowed through them: ${done.filter((row) => row.unchecked?.length).map((row) => `#${row.pr} (${row.unchecked.join(', ')})`).join(', ') || 'none'}. Easter egg runs: ${done.filter((row) => row.easterEgg?.length).length}/${done.length}.`,
     '',
     '| PR | Selected | Full | Misses | Egg | Fallback or reasons |',
     '| --- | --- | --- | --- | --- | --- |',
