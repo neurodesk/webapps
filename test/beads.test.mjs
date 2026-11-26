@@ -476,17 +476,61 @@ test('mergeBeadsMaps preserves closed status, bumps revision on merge, caps evid
   assert.equal(mergedRelease.get(idA).status, 'open');
   assert.equal(mergedRelease.get(idA).lease, null);
 
+  // Stale release on an unleased snapshot must NOT clear another actor's active claim
+  const staleUnleasedRelease = applyOperations(base, [
+    { op: 'release', id: idA, owner: 'worker-b' },
+  ], { actor: 'worker-b', lockActor: true, now: t2 }).beads;
+  const mergedStaleRelease = mergeBeadsMaps(staleUnleasedRelease, claimedBranch);
+  assert.equal(mergedStaleRelease.get(idA).status, 'in_progress');
+  assert.equal(mergedStaleRelease.get(idA).lease?.owner, 'worker-a');
+
+  // Single-batch ordered transitions (release->claim, close->reopen) survive merges with notes
+  const releaseThenClaim = applyOperations(claimedBranch, [
+    { op: 'release', id: idA, owner: 'worker-a' },
+    { op: 'claim', id: idA, owner: 'worker-b', ttlHours: 24 },
+  ], { actor: 'worker-b', now: t2 }).beads;
+  const mergedReclaim = mergeBeadsMaps(claimedWithLateNote, releaseThenClaim);
+  assert.equal(mergedReclaim.get(idA).status, 'in_progress');
+  assert.equal(mergedReclaim.get(idA).lease?.owner, 'worker-b');
+
+  const closeThenReopen = applyOperations(base, [
+    { op: 'close', id: idA, reason: 'Temporary close' },
+    { op: 'reopen', id: idA, note: 'Reopened in same batch' },
+  ], { actor: 'host-2', now: t1 }).beads;
+  const mergedBatchReopen = mergeBeadsMaps(closedWithLateNote, closeThenReopen);
+  assert.equal(mergedBatchReopen.get(idA).status, 'open');
+
+  // Audit notes must NOT discard concurrent dep_add or explicit status: blocked
+  const depBlockedBranch = applyOperations(base, [
+    { op: 'dep_add', id: idA, blockedBy: idB },
+  ], { actor: 'triage', now: t1 }).beads;
+  const mergedDepAndNotes = mergeBeadsMaps(noisyNotesBranch, depBlockedBranch);
+  assert.deepEqual(mergedDepAndNotes.get(idA).deps.blockedBy, [idB]);
+  assert.ok(!readyBeads(mergedDepAndNotes, { now: t2 }).some((b) => b.id === idA));
+
+  const statusBlockedBranch = applyOperations(base, [
+    { op: 'update', id: idA, status: 'blocked' },
+  ], { actor: 'triage', now: t1 }).beads;
+  const mergedBlockedAndNotes = mergeBeadsMaps(noisyNotesBranch, statusBlockedBranch);
+  assert.equal(mergedBlockedAndNotes.get(idA).status, 'blocked');
+  assert.ok(!readyBeads(mergedBlockedAndNotes, { now: t2 }).some((b) => b.id === idA));
+
   // Divergent merge rejects overflowing MAX_SAFE_INTEGER revision
   const maxLeft = new Map([[idA, { ...structuredClone(titleA.get(idA)), revision: Number.MAX_SAFE_INTEGER }]]);
   const maxRight = new Map([[idA, { ...structuredClone(titleB.get(idA)), revision: Number.MAX_SAFE_INTEGER }]]);
   assert.throws(() => mergeBeadsMaps(maxLeft, maxRight), BeadsValidationError);
 
-  // Merge must reject duplicate dedupeKey across two distinct bead IDs
+  // Merge must reject duplicate dedupeKey across two distinct bead IDs AND keyed-vs-unkeyed ID collision
   const dupKeyLeft = applyOperations(new Map(), [{ op: 'create', id: 'bd-11111111', title: 'Left', scope: { type: 'repo', targets: [] } }], { now: t0 }).beads;
   const dupKeyRight = applyOperations(new Map(), [{ op: 'create', id: 'bd-22222222', title: 'Right', scope: { type: 'repo', targets: [] } }], { now: t0 }).beads;
   dupKeyLeft.get('bd-11111111').dedupeKey = 'shared:key';
   dupKeyRight.get('bd-22222222').dedupeKey = 'shared:key';
   assert.throws(() => mergeBeadsMaps(dupKeyLeft, dupKeyRight), BeadsConflictError);
+
+  const keyedSide = applyOperations(new Map(), [{ op: 'create', id: 'bd-44444444', title: 'Keyed', scope: { type: 'repo', targets: [] } }], { now: t0 }).beads;
+  const unkeyedSide = applyOperations(new Map(), [{ op: 'create', id: 'bd-44444444', title: 'Unkeyed', scope: { type: 'repo', targets: [] } }], { now: t0 }).beads;
+  keyedSide.get('bd-44444444').dedupeKey = 'knip:unique';
+  assert.throws(() => mergeBeadsMaps(keyedSide, unkeyedSide), BeadsConflictError);
 
   // Evidence lists exceeding LIMITS.evidence when combined are capped cleanly instead of aborting
   const ev1 = Array.from({ length: 15 }, (_, i) => `docs/ev-a-${String(i).padStart(2, '0')}.md`);
@@ -655,7 +699,7 @@ test('git orphan-branch store handles subdirectories, CAS bootstrap, fast-forwar
     execFileSync('git', ['update-ref', 'refs/heads/memory/malformed-tab', tabCommit], { cwd: cloneC, stdio: 'ignore' });
     assert.throws(() => readBeadsFromRef(cloneC, 'refs/heads/memory/malformed-tab'), BeadsValidationError);
 
-    // Empty subdirectory under beads/ must also be rejected
+    // Empty subdirectory under beads/ and symlink (120000) schema/bead entries must be rejected
     const emptyTree = execFileSync('git', ['mktree'], { cwd: cloneC, input: '', encoding: 'utf8' }).trim();
     const nestedBeadsTree = execFileSync('git', ['mktree'], {
       cwd: cloneC,
@@ -671,15 +715,49 @@ test('git orphan-branch store handles subdirectories, CAS bootstrap, fast-forwar
     execFileSync('git', ['update-ref', 'refs/heads/memory/malformed-subdir', nestedCommit], { cwd: cloneC, stdio: 'ignore' });
     assert.throws(() => readBeadsFromRef(cloneC, 'refs/heads/memory/malformed-subdir'), BeadsValidationError);
 
-    // Pull-only sync must ignore configured remote refmaps (must never overwrite local main)
+    const symlinkSchemaTree = execFileSync('git', ['mktree'], {
+      cwd: cloneC,
+      input: `120000 blob ${schemaBlob}\tschema.json\n`,
+      encoding: 'utf8',
+    }).trim();
+    const symlinkSchemaCommit = execFileSync('git', ['commit-tree', symlinkSchemaTree, '-m', 'symlink schema'], { cwd: cloneC, encoding: 'utf8' }).trim();
+    execFileSync('git', ['update-ref', 'refs/heads/memory/malformed-symlink', symlinkSchemaCommit], { cwd: cloneC, stdio: 'ignore' });
+    assert.throws(() => readBeadsFromRef(cloneC, 'refs/heads/memory/malformed-symlink'), BeadsValidationError);
+
+    // sync --push must ignore push.followTags=true (never publish unrelated annotated tags)
+    execFileSync('git', ['tag', '-a', 'hmc-v0.0.1', '-m', 'unrelated tag', 'refs/heads/main'], { cwd: mainRepo, stdio: 'ignore' });
+    execFileSync('git', ['config', 'push.followTags', 'true'], { cwd: mainRepo, stdio: 'ignore' });
+    syncBeadsRef(mainRepo, { remote: 'origin', push: true });
+    assert.equal(execFileSync('git', ['ls-remote', '--tags', 'origin'], { cwd: mainRepo, encoding: 'utf8' }).trim(), '');
+
+    // Pull-only sync must ignore configured remote refmaps and fetch.recurseSubmodules=true
+    const subUpstream = join(root, 'sub-upstream.git');
+    const subSeed = join(root, 'sub-seed');
+    mkdirSync(subUpstream, { recursive: true });
+    mkdirSync(subSeed, { recursive: true });
+    execFileSync('git', ['init', '--bare', '-b', 'main', subUpstream], { stdio: 'ignore' });
+    initGitRepo(subSeed);
+    execFileSync('git', ['remote', 'add', 'origin', subUpstream], { cwd: subSeed, stdio: 'ignore' });
+    execFileSync('git', ['push', '-u', 'origin', 'main'], { cwd: subSeed, stdio: 'ignore' });
+
     const detachedClone = join(root, 'detached-clone');
     execFileSync('git', ['clone', bareRemote, detachedClone], { stdio: 'ignore' });
+    execFileSync('git', ['-c', 'protocol.file.allow=always', 'submodule', 'add', subUpstream, 'ext-sub'], { cwd: detachedClone, stdio: 'ignore' });
+    const subOriginBefore = execFileSync('git', ['rev-parse', 'refs/remotes/origin/main'], { cwd: join(detachedClone, 'ext-sub'), encoding: 'utf8' }).trim();
+    // Advance submodule upstream after adding it
+    writeFileSync(join(subSeed, 'README.md'), '# updated\n', 'utf8');
+    execFileSync('git', ['add', 'README.md'], { cwd: subSeed, stdio: 'ignore' });
+    execFileSync('git', ['commit', '-m', 'advance sub'], { cwd: subSeed, stdio: 'ignore' });
+    execFileSync('git', ['push', 'origin', 'main'], { cwd: subSeed, stdio: 'ignore' });
+
     execFileSync('git', ['checkout', '--detach'], { cwd: detachedClone, stdio: 'ignore' });
     const detachedMainBefore = execFileSync('git', ['rev-parse', 'refs/heads/main'], { cwd: detachedClone, encoding: 'utf8' }).trim();
     execFileSync('git', ['config', '--add', 'remote.origin.fetch', '+refs/heads/memory/beads:refs/heads/main'], { cwd: detachedClone, stdio: 'ignore' });
+    execFileSync('git', ['config', 'fetch.recurseSubmodules', 'true'], { cwd: detachedClone, stdio: 'ignore' });
     const isolatedSync = syncBeadsRef(detachedClone, { remote: 'origin', push: false });
     assert.equal(isolatedSync.count, 4);
     assert.equal(execFileSync('git', ['rev-parse', 'refs/heads/main'], { cwd: detachedClone, encoding: 'utf8' }).trim(), detachedMainBefore);
+    assert.equal(execFileSync('git', ['rev-parse', 'refs/remotes/origin/main'], { cwd: join(detachedClone, 'ext-sub'), encoding: 'utf8' }).trim(), subOriginBefore);
 
     // CLI-level validation & safe apply tests
     assert.notEqual(runCli(cloneC, ['list', '--ref', 'refs/heads/main']).status, 0);
