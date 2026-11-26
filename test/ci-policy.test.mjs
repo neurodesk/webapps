@@ -330,20 +330,154 @@ test('contract and correctness owners replace duplicate invocations without losi
   }
 });
 
-test('every non-reusable workflow job declares an explicit timeout-minutes', async () => {
-  const dir = new URL('../.github/workflows/', import.meta.url);
+const GH_AW_BOILERPLATE_JOBS = new Set(['pre_activation', 'activation', 'conclusion', 'unlock']);
+
+function hasValidTimeout(timeout) {
+  return (Number.isInteger(timeout) && timeout > 0)
+    || (typeof timeout === 'string' && /^\$\{\{[\s\S]+\}\}$/.test(timeout.trim()));
+}
+
+function parseMarkdownFrontmatter(markdown) {
+  const match = markdown.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
+  if (!match) return null;
+  try {
+    return YAML.parse(match[1]);
+  } catch {
+    return null;
+  }
+}
+
+function findJobsMissingTimeout(entries) {
   const missing = [];
-  for (const file of (await readdir(dir)).filter((name) => name.endsWith('.yml')).sort()) {
-    const flow = YAML.parse(await readFile(new URL(file, dir), 'utf8'));
-    for (const [id, job] of Object.entries(flow.jobs ?? {})) {
-      if (job.uses) continue;
-      const timeout = job['timeout-minutes'];
-      const validNumber = Number.isInteger(timeout) && timeout > 0;
-      const validExpr = typeof timeout === 'string' && /^\$\{\{[\s\S]+\}\}$/.test(timeout.trim());
-      if (!validNumber && !validExpr) {
-        missing.push(`${file}: ${id}`);
+  for (const { file, text, sourceMarkdown } of entries) {
+    const flow = YAML.parse(text);
+    const isGhAwLock = file.endsWith('.lock.yml')
+      && text.startsWith('# gh-aw-metadata:')
+      && typeof sourceMarkdown === 'string';
+    const frontmatter = isGhAwLock ? parseMarkdownFrontmatter(sourceMarkdown) : null;
+    const safeOutputsTimeoutOk = frontmatter
+      && hasValidTimeout(frontmatter['safe-outputs']?.['timeout-minutes']);
+    const declaredSafeOutputJobs = new Set(
+      Object.keys(frontmatter?.['safe-outputs']?.jobs ?? {}).map((name) => name.replaceAll('-', '_')),
+    );
+
+    for (const [id, job] of Object.entries(flow?.jobs ?? {})) {
+      if (job?.uses) continue;
+      if (hasValidTimeout(job?.['timeout-minutes'])) continue;
+
+      if (isGhAwLock && frontmatter) {
+        // gh-aw v1.2.2 compiler boilerplate jobs cannot take explicit timeout-minutes in source frontmatter.
+        if (GH_AW_BOILERPLATE_JOBS.has(id)) continue;
+        // gh-aw v1.2.2 rejects timeout-minutes on safe-outputs.jobs.<id>, so require safe-outputs.timeout-minutes
+        // in the paired .md source plus explicit step-level timeout-minutes on every `run:` step in the job.
+        if (declaredSafeOutputJobs.has(id) && safeOutputsTimeoutOk) {
+          const runSteps = (job.steps ?? []).filter((step) => typeof step?.run === 'string');
+          if (runSteps.length > 0 && runSteps.every((step) => hasValidTimeout(step['timeout-minutes']))) {
+            continue;
+          }
+        }
       }
+
+      missing.push(`${file}: ${id}`);
     }
   }
+  return missing;
+}
+
+test('every non-reusable workflow job declares an explicit timeout-minutes', async () => {
+  const dir = new URL('../.github/workflows/', import.meta.url);
+  const files = await readdir(dir);
+  const fileSet = new Set(files);
+  const entries = [];
+  for (const file of files.filter((name) => name.endsWith('.yml')).sort()) {
+    const text = await readFile(new URL(file, dir), 'utf8');
+    let sourceMarkdown = null;
+    if (file.endsWith('.lock.yml')) {
+      const mdName = `${file.slice(0, -'.lock.yml'.length)}.md`;
+      if (fileSet.has(mdName)) {
+        sourceMarkdown = await readFile(new URL(mdName, dir), 'utf8');
+      }
+    }
+    entries.push({ file, text, sourceMarkdown });
+  }
+  const missing = findJobsMissingTimeout(entries);
   assert.deepEqual(missing, [], `jobs missing explicit timeout-minutes: ${missing.join(', ')}`);
+});
+
+test('gh-aw timeout exemption only covers verified compiled boilerplate and step-bounded safe-output jobs', () => {
+  const validMd = [
+    '---',
+    'name: demo',
+    'safe-outputs:',
+    '  timeout-minutes: 10',
+    '  jobs:',
+    '    record-finding:',
+    '      runs-on: ubuntu-latest',
+    '---',
+    'body',
+  ].join('\n');
+  const validLock = [
+    '# gh-aw-metadata: {"compiler_version":"v1.2.2"}',
+    'jobs:',
+    '  activation:',
+    '    runs-on: ubuntu-slim',
+    '  agent:',
+    '    runs-on: ubuntu-latest',
+    '    timeout-minutes: 20',
+    '  detection:',
+    '    runs-on: ubuntu-latest',
+    '    timeout-minutes: 10',
+    '  safe_outputs:',
+    '    runs-on: ubuntu-latest',
+    '    timeout-minutes: 10',
+    '  record_finding:',
+    '    runs-on: ubuntu-latest',
+    '    steps:',
+    '      - run: echo ok',
+    '        timeout-minutes: 5',
+    '  conclusion:',
+    '    runs-on: ubuntu-slim',
+  ].join('\n');
+  assert.deepEqual(findJobsMissingTimeout([{ file: 'demo.lock.yml', text: validLock, sourceMarkdown: validMd }]), []);
+
+  // Normal .yml workflows get no exemption even if a job is named activation/conclusion.
+  assert.deepEqual(
+    findJobsMissingTimeout([{ file: 'regular.yml', text: 'jobs:\n  activation:\n    runs-on: ubuntu-latest\n', sourceMarkdown: null }]),
+    ['regular.yml: activation'],
+  );
+
+  // A .lock.yml without gh-aw header or paired .md gets no exemption.
+  assert.deepEqual(
+    findJobsMissingTimeout([{ file: 'fake.lock.yml', text: 'jobs:\n  activation:\n    runs-on: ubuntu-latest\n', sourceMarkdown: validMd }]),
+    ['fake.lock.yml: activation'],
+  );
+  assert.deepEqual(
+    findJobsMissingTimeout([{ file: 'orphan.lock.yml', text: validLock, sourceMarkdown: null }]),
+    ['orphan.lock.yml: activation', 'orphan.lock.yml: record_finding', 'orphan.lock.yml: conclusion'],
+  );
+
+  // Core gh-aw jobs (agent, detection, safe_outputs) and custom non-safe-output jobs still require job-level timeout-minutes.
+  const missingCore = [
+    '# gh-aw-metadata: {"compiler_version":"v1.2.2"}',
+    'jobs:',
+    '  agent:',
+    '    runs-on: ubuntu-latest',
+    '  detection:',
+    '    runs-on: ubuntu-latest',
+    '  safe_outputs:',
+    '    runs-on: ubuntu-latest',
+    '  custom_extra:',
+    '    runs-on: ubuntu-latest',
+  ].join('\n');
+  assert.deepEqual(
+    findJobsMissingTimeout([{ file: 'demo.lock.yml', text: missingCore, sourceMarkdown: validMd }]),
+    ['demo.lock.yml: agent', 'demo.lock.yml: detection', 'demo.lock.yml: safe_outputs', 'demo.lock.yml: custom_extra'],
+  );
+
+  // A safe-output custom job missing step-level timeout-minutes on any run step still fails.
+  const unboundedStep = validLock.replace('        timeout-minutes: 5\n', '');
+  assert.deepEqual(
+    findJobsMissingTimeout([{ file: 'demo.lock.yml', text: unboundedStep, sourceMarkdown: validMd }]),
+    ['demo.lock.yml: record_finding'],
+  );
 });
