@@ -1,7 +1,7 @@
 // The workspace graph's path rules on a small fixture tree: which directories and root files
 // each node reaches, so a change selects the apps and CI jobs that use it.
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test, { after } from 'node:test';
@@ -427,4 +427,72 @@ test('lint and mutation-testing configs are independent of the site build', () =
   for (const name of ['vite.config.mjs', 'eslint.config.cjs', 'eslint.config.ts', 'my-eslint.config.mjs', 'eslint.config.mjs.bak', 'eslint-config.mjs']) {
     assert.ok(!INDEPENDENT_CONFIG.test(name), name);
   }
+});
+
+test('script references narrow to complete regular .json files and keep directory edges on computed paths, symlinks and directories', async () => {
+  const root = await fixture({
+    'package.json': json({ scripts: {} }),
+    '.github/workflows/ci.yml': stringify(jobs({
+      'composite-site': ['node scripts/site.mjs'],
+      'app-tests': ['node scripts/app.mjs'],
+      'browser-e2e': ['echo e2e'],
+      'browser-e2e-gpu': ['echo gpu'],
+    })),
+    'scripts/site.mjs': [
+      "const exact = 'exes/exact/nested/reference.manifest.json';",
+      "const joined = join('exes', 'joined/reference.json');",
+      "const archive = 'exes/archive/reference.json.gz';",
+      "const spaced = 'exes/spaced/reference.json extra';",
+      "const concatAfter = 'exes/concat-after/reference.json' + '.gz';",
+      "const methodAfter = 'exes/method-after/reference.json'.replace('a', 'b');",
+      "const indexAfter = 'exes/index-after/reference.json'[0];",
+      "const concatBefore = prefix + 'exes/concat-before/reference.json';",
+      'const templated = `${base}exes/templated/reference.json`;',
+      "const joinConcat = join('exes', 'join-concat/reference.json' + '.gz');",
+      "const linked = 'exes/linked/fixture.json';",
+      "const linkedDir = 'exes/linked-dir/sub/fixture.json';",
+      "const dotSeg = 'exes/dot-seg/./fixture.json';",
+    ].join('\n'),
+    'scripts/app.mjs': "const dir = 'packages/dir-json/fixture.json';\n",
+    'exes/exact/nested/reference.manifest.json': '{}\n',
+    'exes/exact/tool.js': "import '../../scripts/from-exact.mjs';\n",
+    'exes/joined/reference.json': '{}\n',
+    'exes/joined/tool.js': "import '../../scripts/from-joined.mjs';\n",
+    'exes/archive/reference.json': '{}\n',
+    'exes/archive/reference.json.gz': 'gz\n',
+    'exes/spaced/reference.json': '{}\n',
+    'exes/concat-after/reference.json': '{}\n',
+    'exes/method-after/reference.json': '{}\n',
+    'exes/index-after/reference.json': '{}\n',
+    'exes/concat-before/reference.json': '{}\n',
+    'exes/templated/reference.json': '{}\n',
+    'exes/join-concat/reference.json': '{}\n',
+    'exes/linked/target.json': '{}\n',
+    'exes/linked-dir/real/fixture.json': '{}\n',
+    'exes/dot-seg/fixture.json': '{}\n',
+    'packages/dir-json/package.json': json({ name: '@nd/dir-json' }),
+    'packages/dir-json/fixture.json/index.js': "import '../../../scripts/from-dir-json.mjs';\n",
+    'scripts/from-exact.mjs': '',
+    'scripts/from-joined.mjs': '',
+    'scripts/from-dir-json.mjs': '',
+  });
+  await symlink('target.json', join(root, 'exes/linked/fixture.json'));
+  await symlink('real', join(root, 'exes/linked-dir/sub'));
+  const graph = await loadConservativeWorkspaceGraph(root);
+  const siteEdges = graph.edges.get('scripts/site.mjs');
+  const siteReach = reachableFrom(graph, SITE);
+  assert.ok(siteEdges.has('exes/exact/nested/reference.manifest.json'));
+  assert.ok(!siteEdges.has('exes/exact'));
+  assert.ok(!siteReach.has('scripts/from-exact.mjs'));
+  assert.ok(siteEdges.has('exes/joined/reference.json'));
+  assert.ok(!siteEdges.has('exes/joined'));
+  assert.ok(!siteReach.has('scripts/from-joined.mjs'));
+  for (const dir of [
+    'exes/archive', 'exes/spaced', 'exes/concat-after', 'exes/method-after',
+    'exes/index-after', 'exes/concat-before', 'exes/templated', 'exes/join-concat',
+    'exes/linked', 'exes/linked-dir', 'exes/dot-seg',
+  ]) {
+    assert.ok(siteEdges.has(dir), `${dir} keeps its directory edge`);
+  }
+  assert.ok(reachableFrom(graph, CATALOG).has('scripts/from-dir-json.mjs'));
 });
