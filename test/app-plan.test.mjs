@@ -148,6 +148,12 @@ test('contract tests, tooling, docs and other workflows select no apps and no si
   const registry = await loadAppsRegistry();
   const plan = createAppPlan(registry, [
     'AGENTS.md',
+    'apps/elastix/AGENTS.md',
+    'apps/calmar/CLAUDE.md',
+    'apps/vesselboost/AGENT.md',
+    'packages/node-drivers/AGENTS.md',
+    'packages/components/src/webmcp/AGENTS.md',
+    'exes/AGENTS.md',
     'packages/components/CHANGELOG.md',
     'test/app-plan.test.mjs',
     'test/standalone-links.test.mjs',
@@ -158,6 +164,7 @@ test('contract tests, tooling, docs and other workflows select no apps and no si
     'scripts/check-standalone-links.mjs',
     '.github/workflows/lcmodel-native.yml',
     '.github/workflows/standalone-links.yml',
+    '.github/aw/actions-lock.json',
     'scripts/quality/package.json',
     'eslint.config.js',
     'config/dependency-baseline.json',
@@ -1327,7 +1334,7 @@ test('a draft pull request skips package-tests only when every changed path lies
   const registry = await loadAppsRegistry();
   const workspace = await graph;
   const pkgs = (paths, options) => createAppPlan(registry, paths, workspace, new Map(), options).packageTests;
-  for (const path of ['docs/quality/ci-development-tiers.md', '.changeset/brave-owls.md', 'README.md', 'site/easter-eggs/vessel-surfer/src/main.js']) {
+  for (const path of ['docs/quality/ci-development-tiers.md', '.changeset/brave-owls.md', 'README.md', 'AGENTS.md', 'apps/elastix/AGENTS.md', 'packages/components/src/webmcp/AGENTS.md', 'exes/AGENTS.md', 'site/easter-eggs/vessel-surfer/src/main.js']) {
     assert.equal(packageTestsCanSkipOnDraft(path), true, path);
     assert.deepEqual(pkgs([path], { draft: true }), [], path);
   }
@@ -2701,10 +2708,63 @@ test('an app runs its @heavy browser tests only when the change edits it, a fail
   // Release bookkeeping in the app's own directory is not an edit, and a diff of only bookkeeping is no full run.
   const changelog = heavy(createAppPlan(registry, ['packages/components/src/styles/imaging-workspace.css', 'apps/sdc/CHANGELOG.md'], workspace));
   assert.equal(changelog.sdc, false);
+  // Scoped agent guides do not trigger draft app selection or @heavy tests on mixed diffs.
+  const guideMixed = ['packages/components/src/styles/imaging-workspace.css', 'apps/bison/AGENTS.md', 'packages/bison/AGENTS.md'];
+  const guideDraft = createAppPlan(registry, guideMixed, workspace, new Map(), { draft: true });
+  assert.deepEqual(guideDraft.selected, []);
+  const guideReady = createAppPlan(registry, guideMixed, workspace);
+  assert.equal(heavy(guideReady).bison, false);
+  // A cross-app reader of an app's agent guide is still selected when graph.appReaders reports it.
+  const readerGraph = {
+    ...workspace,
+    appReaders: (path) => (path === 'apps/bison/AGENTS.md' ? ['elastix'] : workspace.appReaders(path)),
+  };
+  const withReader = createAppPlan(registry, ['apps/bison/AGENTS.md'], readerGraph);
+  assert.deepEqual(withReader.selected.map((app) => app.id), ['elastix']);
   const onlyBookkeeping = createAppPlan(registry, ['apps/sdc/CHANGELOG.md'], workspace, new Map(), { carried: new Map([['synthseg', ['browser-e2e (synthseg)']]]) });
   assert.deepEqual(heavy(onlyBookkeeping), { synthseg: true });
   // The tag is measured in the CPU job; the macOS GPU job runs every test.
   assert.ok(createAppPlan(registry, ['apps/sdc/src/main.js'], workspace).gpuApps.include.every((entry) => !('heavy_tests' in entry)));
+});
+
+function unexpectedExemptPathReads(entries) {
+  const exemptRef = /\.github\/aw\b|\.github['"],\s*['"]aw['"]|\b(?:AGENTS|AGENT|CLAUDE)\.md\b/;
+  const allowedMetadata = (file) => /^apps\/[^/]+\/upstream\.json$/.test(file)
+    || file === 'apps/spinalcordtoolbox/.specify/init-options.json'
+    || file === 'scripts/lib/app-plan.mjs'
+    || file === 'scripts/lib/app-plan-shadow.mjs'
+    || file.startsWith('test/');
+  const findings = [];
+  for (const [file, text] of entries) {
+    if (allowedMetadata(file)) continue;
+    for (const line of text.split('\n')) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('//') || trimmed.startsWith('#')) continue;
+      if (exemptRef.test(trimmed)) {
+        findings.push(file);
+        break;
+      }
+    }
+  }
+  return findings;
+}
+
+test('no app build, package source, root script or workflow reads .github/aw/ or scoped agent guides', async () => {
+  // Verify the guard itself rejects injected app-local, cross-app and .github/aw/ reads (including joined paths).
+  assert.deepEqual(
+    unexpectedExemptPathReads([
+      ['apps/bison/scripts/build.mjs', "readFileSync(new URL('../AGENTS.md', import.meta.url));"],
+      ['apps/elastix/scripts/build.mjs', "readFileSync('../../apps/bison/AGENTS.md', 'utf8');"],
+      ['apps/bison/scripts/build.mjs', "readFileSync('../../.github/aw/actions-lock.json', 'utf8');"],
+      ['apps/bison/scripts/join-build.mjs', "readFileSync(join(repoRoot, '.github/aw', 'actions-lock.json'), 'utf8');"],
+      ['apps/bison/scripts/split-build.mjs', "readFileSync(join(repoRoot, '.github', 'aw', 'actions-lock.json'), 'utf8');"],
+      ['apps/bison/scripts/comment-only.mjs', '// See AGENTS.md for build notes\nexport const ok = true;'],
+    ]),
+    ['apps/bison/scripts/build.mjs', 'apps/elastix/scripts/build.mjs', 'apps/bison/scripts/build.mjs', 'apps/bison/scripts/join-build.mjs', 'apps/bison/scripts/split-build.mjs'],
+  );
+  const candidates = filesNaming('\\.github/aw\\b|\\.github[\'"],[[:space:]]*[\'"]aw[\'"]|\\b(AGENTS|AGENT|CLAUDE)\\.md\\b');
+  const entries = await Promise.all(candidates.map(async (file) => [file, await readFile(join(repoRoot, file), 'utf8')]));
+  assert.deepEqual(unexpectedExemptPathReads(entries), []);
 });
 
 test('pnpm-workspace.yaml narrows only for valid exact-version minimumReleaseAgeExclude relaxations and unlocked removals', async () => {
