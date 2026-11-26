@@ -805,8 +805,8 @@ export function applyOperations(beadsMap, operations, options = {}) {
       if (op.id !== undefined && (typeof op.id !== 'string' || !BEAD_ID_PATTERN.test(op.id))) {
         throw new BeadsValidationError(`Invalid bead id: ${op.id}`);
       }
-      if (op.op === 'upsert' && requireExpectedRevision && !dedupeKey && !op.id) {
-        throw new BeadsValidationError('Safe upsert requires dedupeKey or id for idempotent identity');
+      if (requireExpectedRevision && !dedupeKey && !op.id) {
+        throw new BeadsValidationError(`Safe ${op.op} requires dedupeKey or id for idempotent identity`);
       }
 
       const byKey = dedupeKey ? findByDedupeKey(next, dedupeKey) : null;
@@ -1228,11 +1228,14 @@ export function mergeBeadsMaps(localMap, remoteMap) {
     if (winner.status === 'closed') {
       if (other.lease) combinedReleased.push(leaseKey(other.lease));
     } else {
-      const isSuperseded = (lease) =>
-        releasedSet.has(leaseKey(lease))
-        || releasedSet.has(`${lease.claimedAt}|${lease.owner}`)
-        || Boolean(effectiveLeaseFloorAt && lease.claimedAt <= effectiveLeaseFloorAt)
-        || Boolean(maxReopenedAt && lease.claimedAt < maxReopenedAt);
+      const isSuperseded = (lease) => {
+        const key = leaseKey(lease);
+        return releasedSet.has(key)
+          || releasedSet.has(key.slice(3))
+          || releasedSet.has(`${lease.claimedAt}|${lease.owner}`)
+          || Boolean(effectiveLeaseFloorAt && lease.claimedAt <= effectiveLeaseFloorAt)
+          || Boolean(maxReopenedAt && lease.claimedAt < maxReopenedAt);
+      };
       const survivingByKey = new Map();
       for (const lease of [local.lease, remote.lease]) {
         if (!lease || isSuperseded(lease)) continue;
@@ -1314,6 +1317,22 @@ function assertNotSymbolicRef(repoTop, ref) {
   }
   if (isSymbolic) {
     throw new BeadsValidationError(`Ref must not be a symbolic ref: ${ref}`);
+  }
+}
+
+function assertRefNotCheckedOut(repoTop, ref) {
+  const output = git(['worktree', 'list', '--porcelain'], { cwd: repoTop });
+  let currentWorktree = null;
+  for (const line of output.split('\n')) {
+    if (line.startsWith('worktree ')) {
+      currentWorktree = line.slice('worktree '.length);
+    } else if (line === `branch ${ref}`) {
+      throw new BeadsConflictError(
+        `Ref ${ref} is checked out in worktree ${currentWorktree ?? '(unknown)'}; detach or switch branches before writing via beads plumbing`,
+      );
+    } else if (line === '') {
+      currentWorktree = null;
+    }
   }
 }
 
@@ -1466,6 +1485,7 @@ export function commitBeadsToRef(cwd, beadsMap, { ref = DEFAULT_BEADS_REF, expec
   assertMemoryRef(ref);
   const repoTop = resolveGitRoot(cwd);
   assertNotSymbolicRef(repoTop, ref);
+  assertRefNotCheckedOut(repoTop, ref);
   const treeSha = buildTreeFromMap(repoTop, beadsMap);
   const parents = expectedParentSha ? [expectedParentSha] : [];
   const commitSha = commitTree(repoTop, treeSha, parents, message, authorName, authorEmail);
@@ -1482,6 +1502,7 @@ export function mutateBeadsRef(cwd, operations, { ref = DEFAULT_BEADS_REF, messa
   assertMemoryRef(ref);
   const repoTop = resolveGitRoot(cwd);
   assertNotSymbolicRef(repoTop, ref);
+  assertRefNotCheckedOut(repoTop, ref);
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const { sha, beads } = readBeadsTree(repoTop, ref);
     const result = applyOperations(beads, operations, applyOptions);
@@ -1503,6 +1524,7 @@ export function initBeadsRef(cwd, { ref = DEFAULT_BEADS_REF } = {}) {
   assertMemoryRef(ref);
   const repoTop = resolveGitRoot(cwd);
   assertNotSymbolicRef(repoTop, ref);
+  assertRefNotCheckedOut(repoTop, ref);
   const existing = gitRefSha(repoTop, ref);
   if (existing) return { sha: existing, created: false };
   try {
@@ -1535,6 +1557,7 @@ export function syncBeadsRef(cwd, { ref = DEFAULT_BEADS_REF, remote = 'origin', 
   assertMemoryRef(ref);
   const repoTop = resolveGitRoot(cwd);
   assertNotSymbolicRef(repoTop, ref);
+  assertRefNotCheckedOut(repoTop, ref);
   assertConfiguredRemote(repoTop, remote);
 
   if (push) {

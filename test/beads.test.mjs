@@ -311,7 +311,12 @@ test('safe-outputs applier enforces revision checks on upserts, resulting single
     scope: { type: 'app', targets: ['syncro'] },
   }], { now: tLater }), BeadsConflictError);
 
-  // Safe upsert requires identity (dedupeKey or id), and upsert with expectedRevision must not create
+  // Safe create and upsert require identity (dedupeKey or id), and upsert with expectedRevision must not create
+  assert.throws(() => applyOperations(updated.beads, [{
+    op: 'create',
+    title: 'No identity safe create',
+    scope: { type: 'app', targets: ['syncro'] },
+  }], { ...safeOpts, now: tLater }), BeadsValidationError);
   assert.throws(() => applyOperations(updated.beads, [{
     op: 'upsert',
     title: 'No identity safe upsert',
@@ -409,6 +414,7 @@ test('safe-outputs applier enforces revision checks on upserts, resulting single
   // Safe mode enforces maxCreates cap atomically
   const tooMany = Array.from({ length: 3 }, (_, i) => ({
     op: 'create',
+    dedupeKey: `knip:cap:${i}`,
     title: `Item ${i}`,
     scope: { type: 'app', targets: ['syncro'] },
   }));
@@ -556,7 +562,7 @@ test('mergeBeadsMaps preserves closed status, bumps revision on merge, caps evid
   assert.equal(m123.get(idA).status, 'in_progress');
   assert.equal(m123.get(idA).lease?.owner, 'worker-a');
 
-  // Legacy "<claimedAt>|<owner>" tombstone still suppresses the released claim on merge
+  // Legacy "<claimedAt>|<owner>" and unprefixed "<claimedAt>|<expiresAt>|<hash>" tombstones both suppress the released claim on merge
   const legacyReleasedMap = new Map([[idA, validateBead({
     ...structuredClone(base.get(idA)),
     revision: 3,
@@ -566,6 +572,18 @@ test('mergeBeadsMaps preserves closed status, bumps revision on merge, caps evid
   const mergedLegacyTombstone = mergeBeadsMaps(legacyReleasedMap, claimedBranch);
   assert.equal(mergedLegacyTombstone.get(idA).status, 'open');
   assert.equal(mergedLegacyTombstone.get(idA).lease, null);
+
+  const v2Key = releasedBranch.get(idA).releasedLeases[0];
+  assert.ok(v2Key.startsWith('v2:'));
+  const unprefixedReleasedMap = new Map([[idA, validateBead({
+    ...structuredClone(base.get(idA)),
+    revision: 3,
+    stateRevision: 3,
+    releasedLeases: [v2Key.slice(3)],
+  })]]);
+  const mergedUnprefixedTombstone = mergeBeadsMaps(unprefixedReleasedMap, claimedBranch);
+  assert.equal(mergedUnprefixedTombstone.get(idA).status, 'open');
+  assert.equal(mergedUnprefixedTombstone.get(idA).lease, null);
 
   // Adding audit notes to a tied branch must NEVER flip which scheduling edit wins
   const tiedTitle = applyOperations(base, [{ op: 'update', id: idA, title: 'Tied title' }], { actor: 'host-1', now: t1 }).beads;
@@ -921,6 +939,16 @@ test('git orphan-branch store handles subdirectories, CAS bootstrap, fast-forwar
     execFileSync('git', ['remote', 'set-url', '--add', '--push', 'origin', ' '], { cwd: multiPushRepo, stdio: 'ignore' });
     assert.throws(() => syncBeadsRef(multiPushRepo, { remote: 'origin', push: true }), BeadsValidationError);
     assert.equal(execFileSync('git', ['for-each-ref', 'refs/heads/memory/'], { cwd: multiPushRepo, encoding: 'utf8' }).trim(), '');
+
+    // Writing to a memory ref currently checked out in a linked worktree is rejected so no worktree is dirtied
+    const checkedOutWt = join(root, 'checked-out-memory');
+    execFileSync('git', ['worktree', 'add', checkedOutWt, 'memory/beads'], { cwd: symRepo, stdio: 'ignore' });
+    assert.throws(
+      () => mutateBeadsRef(symRepo, [{ op: 'create', title: 'Should not dirty worktree', scope: { type: 'repo', targets: [] } }], { actor: 'sym' }),
+      BeadsConflictError,
+    );
+    assert.equal(execFileSync('git', ['status', '--porcelain'], { cwd: checkedOutWt, encoding: 'utf8' }), '');
+    execFileSync('git', ['worktree', 'remove', checkedOutWt], { cwd: symRepo, stdio: 'ignore' });
 
     // Pull-only sync must ignore configured remote refmaps and fetch.recurseSubmodules=true
     const subUpstream = join(root, 'sub-upstream.git');
