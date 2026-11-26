@@ -406,6 +406,21 @@ const GH_AW_BOILERPLATE_CJS_MODULES = Object.freeze({
 const GH_AW_SETUP_ALLOWED_WITH_KEYS = new Set(['destination', 'job-name', 'trace-id', 'parent-span-id', 'safe-output-artifact-client']);
 const GH_AW_CHECKOUT_EXACT_WITH_KEYS = ['fetch-depth', 'persist-credentials', 'sparse-checkout', 'sparse-checkout-cone-mode'];
 const GH_AW_SCRIPT_ALLOWED_WITH_KEYS = new Set(['script', 'github-token']);
+const GH_AW_UPLOAD_ALLOWED_WITH_KEYS = new Set(['name', 'path', 'if-no-files-found', 'retention-days', 'overwrite', 'include-hidden-files']);
+const GH_AW_BOILERPLATE_UPLOAD_NAMES = Object.freeze({
+  activation: new Set(['aic-usage-scan-v2', 'info', 'activation']),
+  conclusion: new Set(['usage']),
+});
+const GH_AW_RETENTION_EXPR = /^\$\{\{\s*vars\.GH_AW_DEFAULT_ARTIFACT_RETENTION_DAYS\s*\|\|\s*'\d+'\s*\}\}$/;
+const GH_AW_BOILERPLATE_DOWNLOAD_SPECS = Object.freeze({
+  conclusion: [
+    { keys: ['name', 'path'], name: 'info', path: '/tmp/gh-aw/' },
+    { keys: ['name', 'path'], name: 'detection', path: '/tmp/gh-aw/threat-detection/' },
+    { keys: ['merge-multiple', 'path', 'pattern'], pattern: '{agent,agent-output-fallback}', 'merge-multiple': true, path: '/tmp/gh-aw/' },
+    { keys: ['merge-multiple', 'path', 'pattern'], pattern: 'safe-outputs-items', 'merge-multiple': true, path: '/tmp/gh-aw/' },
+  ],
+});
+const GH_AW_LITERAL_TMP_PATH = /^\/tmp\/gh-aw(?:\/[A-Za-z0-9._-]+)*\/?$/;
 const GH_AW_ACTIVATION_SPARSE_CHECKOUT = '.github\n.agents\n.claude\n.codex\n.gemini\n.pi';
 const GH_AW_GITHUB_SCRIPT_DISPATCH = /^const path = require\('path'\);\nconst actionsDir = path\.join\(process\.env\.RUNNER_TEMP, 'gh-aw', 'actions'\);\nconst \{ setupGlobals \} = require\(path\.join\(actionsDir, 'setup_globals\.cjs'\)\);\nsetupGlobals\(core, github, context, exec, io, getOctokit\);\nconst \{ main \} = require\(path\.join\(actionsDir, '([a-z0-9_]+\.cjs)'\)\);\nawait main\((?:core, context|core|)\);$/;
 const GH_AW_GITHUB_SCRIPT_PROMPT = /^const promptEnvironment = new Set\(\[(?:"[A-Z0-9_]+",)*"[A-Z0-9_]+"\]\);\nfor \(const name of Object\.keys\(process\.env\)\) \{\n {2}if \(!promptEnvironment\.has\(name\)\) delete process\.env\[name\];\n\}\nglobal\.core = core;\nglobal\.context = context;\nconst \{ main \} = require\(process\.env\.GH_AW_ACTIONS_DIR \+ '\/((?:create_prompt|interpolate_prompt)\.cjs)'\);\nawait main\((?:core|)\);$/;
@@ -413,9 +428,35 @@ const GH_AW_GITHUB_SCRIPT_PROMPT = /^const promptEnvironment = new Set\(\[(?:"[A
 function isSafeTmpGhAwPath(rawPath) {
   if (typeof rawPath !== 'string') return false;
   const trimmed = rawPath.trim();
-  if (!trimmed || trimmed.includes('\\') || trimmed.split('/').includes('..')) return false;
+  if (!GH_AW_LITERAL_TMP_PATH.test(trimmed) || trimmed.split('/').includes('..')) return false;
   const normalized = posixPath.normalize(trimmed);
   return normalized === '/tmp/gh-aw' || normalized.startsWith('/tmp/gh-aw/');
+}
+
+function isVerifiedBoilerplateUploadStep(id, withObj, withKeys) {
+  const allowedNames = GH_AW_BOILERPLATE_UPLOAD_NAMES[id];
+  if (!allowedNames || !allowedNames.has(withObj.name)) return false;
+  if (!withKeys.every((key) => GH_AW_UPLOAD_ALLOWED_WITH_KEYS.has(key))) return false;
+  if (withObj['if-no-files-found'] !== 'ignore') return false;
+  if (withObj.overwrite !== undefined && withObj.overwrite !== true) return false;
+  if (withObj['include-hidden-files'] !== undefined && withObj['include-hidden-files'] !== true) return false;
+  if (typeof withObj['retention-days'] !== 'string' || !GH_AW_RETENTION_EXPR.test(withObj['retention-days'].trim())) return false;
+  const rawPath = typeof withObj.path === 'string'
+    ? withObj.path.replace(/\r\n/g, '\n').trim()
+    : '';
+  if (!rawPath) return false;
+  const paths = rawPath.split('\n').map((line) => line.trim()).filter(Boolean);
+  return paths.length > 0 && paths.every((p) => isSafeTmpGhAwPath(p));
+}
+
+function isVerifiedBoilerplateDownloadStep(id, withObj, withKeys) {
+  const specs = GH_AW_BOILERPLATE_DOWNLOAD_SPECS[id];
+  if (!specs) return false;
+  const sortedKeys = withKeys.slice().sort();
+  return specs.some((spec) => (
+    sortedKeys.length === spec.keys.length
+    && sortedKeys.every((key, i) => key === spec.keys[i] && withObj[key] === spec[key])
+  ));
 }
 
 function isVerifiedBoilerplateActionStep(id, step, allowedActions) {
@@ -452,13 +493,11 @@ function isVerifiedBoilerplateActionStep(id, step, allowedActions) {
     if (!match) return false;
     return GH_AW_BOILERPLATE_CJS_MODULES[id]?.has(match[1]) === true;
   }
-  if (actionRepo === 'actions/upload-artifact' || actionRepo === 'actions/download-artifact') {
-    const rawPath = typeof withObj.path === 'string'
-      ? withObj.path.replace(/\r\n/g, '\n').trim()
-      : '';
-    if (!rawPath) return false;
-    const paths = rawPath.split('\n').map((line) => line.trim()).filter(Boolean);
-    return paths.length > 0 && paths.every((p) => isSafeTmpGhAwPath(p));
+  if (actionRepo === 'actions/upload-artifact') {
+    return isVerifiedBoilerplateUploadStep(id, withObj, withKeys);
+  }
+  if (actionRepo === 'actions/download-artifact') {
+    return isVerifiedBoilerplateDownloadStep(id, withObj, withKeys);
   }
   return false;
 }
@@ -754,6 +793,16 @@ test('gh-aw timeout exemption requires verified frontmatter/body hashes, exact c
   const traversalDownload = validLock.replace('          path: /tmp/gh-aw/\n', '          path: /tmp/gh-aw/../review-demo/\n');
   assert.deepEqual(
     findJobsMissingTimeout([{ file: 'demo.lock.yml', text: traversalDownload, sourceMarkdown: validMd }]),
+    ['demo.lock.yml: conclusion'],
+  );
+  const expressionDownload = validLock.replace('          path: /tmp/gh-aw/\n', '          path: /tmp/gh-aw/${{ github.event.inputs.dir }}\n');
+  assert.deepEqual(
+    findJobsMissingTimeout([{ file: 'demo.lock.yml', text: expressionDownload, sourceMarkdown: validMd }]),
+    ['demo.lock.yml: conclusion'],
+  );
+  const alteredSelectorDownload = validLock.replace('          name: info\n', '          name: other-artifact\n');
+  assert.deepEqual(
+    findJobsMissingTimeout([{ file: 'demo.lock.yml', text: alteredSelectorDownload, sourceMarkdown: validMd }]),
     ['demo.lock.yml: conclusion'],
   );
   const alteredSafeDownload = validLock.replace('          path: ${{ runner.temp }}/gh-aw/safe-jobs/\n', '          path: /tmp/review-demo/\n');

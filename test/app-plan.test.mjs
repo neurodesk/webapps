@@ -2729,7 +2729,7 @@ test('an app runs its @heavy browser tests only when the change edits it, a fail
 
 function hasVerifiedGhAwLockMetadata(file, text) {
   if (!/^\.github\/workflows\/[^/]+\.lock\.yml$/.test(file)) return false;
-  const firstLine = text.split('\n', 1)[0] ?? '';
+  const firstLine = text.split(/\r?\n/, 1)[0] ?? '';
   const match = firstLine.match(/^# gh-aw-metadata:\s*(\{.*\})$/);
   if (!match) return false;
   try {
@@ -2821,8 +2821,10 @@ test('no app build, package source, root script or workflow reads .github/aw/ or
       ['.github/workflows/run-block.lock.yml', '# gh-aw-metadata: {"strict":true,"compiler_version":"v1.2.2"}\njobs:\n  activation:\n    steps:\n      - run: |\n          GH_AW_AGENT_FILES: "AGENTS.md"\n'],
       ['.github/workflows/bad-header.lock.yml', '# gh-aw-metadata: not-json\njobs:\n  activation:\n    steps:\n      - name: Save agent config folders for base branch restoration\n        env:\n          GH_AW_AGENT_FILES: "AGENTS.md"\n        run: bash "${RUNNER_TEMP}/gh-aw/actions/save_base_github_folders.sh"\n'],
       ['.github/workflows/real.lock.yml', '# gh-aw-metadata: {"strict":true,"compiler_version":"v1.2.2"}\njobs:\n  activation:\n    steps:\n      - name: Save agent config folders for base branch restoration\n        env:\n          GH_AW_AGENT_FILES: "AGENTS.md"\n        run: bash "${RUNNER_TEMP}/gh-aw/actions/save_base_github_folders.sh"\n'],
+      ['.github/workflows/real-crlf.lock.yml', '# gh-aw-metadata: {"strict":true,"compiler_version":"v1.2.2"}\r\njobs:\r\n  activation:\r\n    steps:\r\n      - name: Save agent config folders for base branch restoration\r\n        env:\r\n          GH_AW_AGENT_FILES: "AGENTS.md"\r\n        run: bash "${RUNNER_TEMP}/gh-aw/actions/save_base_github_folders.sh"\r\n'],
+      ['.github/workflows/bad-crlf.lock.yml', '# gh-aw-metadata: {"strict":true,"compiler_version":"v1.2.2"}\r\njobs:\r\n  activation:\r\n    steps:\r\n      - run: cat AGENTS.md\r\n'],
     ]),
-    ['apps/bison/scripts/build.mjs', 'apps/elastix/scripts/build.mjs', 'apps/bison/scripts/build.mjs', 'apps/bison/scripts/join-build.mjs', 'apps/bison/scripts/split-build.mjs', '.github/workflows/fake.lock.yml', '.github/workflows/run-block.lock.yml', '.github/workflows/bad-header.lock.yml'],
+    ['apps/bison/scripts/build.mjs', 'apps/elastix/scripts/build.mjs', 'apps/bison/scripts/build.mjs', 'apps/bison/scripts/join-build.mjs', 'apps/bison/scripts/split-build.mjs', '.github/workflows/fake.lock.yml', '.github/workflows/run-block.lock.yml', '.github/workflows/bad-header.lock.yml', '.github/workflows/bad-crlf.lock.yml'],
   );
   const candidates = filesNaming('\\.github/aw\\b|\\.github[\'"],[[:space:]]*[\'"]aw[\'"]|\\b(AGENTS|AGENT|CLAUDE)\\.md\\b');
   const entries = await Promise.all(candidates.map(async (file) => [file, await readFile(join(repoRoot, file), 'utf8')]));

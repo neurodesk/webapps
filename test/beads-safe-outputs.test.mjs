@@ -593,6 +593,69 @@ test('applyUnusedCodeSafeOutputs enforces clean dry-run, fail-closed detection, 
   assert.equal(localClosedResult.skipped.length, 1);
   assert.match(localClosedResult.skipped[0].reason, /already closed/);
 
+  // Cross-app stored bead ownership check: a bead scoped to upstreamapp (or another app) with the same
+  // dedupeKey and expected_revision MUST NOT be updated, replayed, or silently skipped as closed by alpha.
+  const crossAppKey = 'knip:apps/alpha/src/other.js:crossapp';
+  syncBeadsRef(verifyDir, { ref: DEFAULT_BEADS_REF, remote: 'origin', push: false });
+  const crossCreated = mutateBeadsRef(verifyDir, [{
+    op: 'create',
+    dedupeKey: crossAppKey,
+    title: 'Upstream-scoped bead with colliding key',
+    summary: 'Owned by upstreamapp.',
+    scope: { type: 'app', targets: ['upstreamapp'] },
+  }], { actor: 'maintainer', now: new Date('2026-11-26T08:06:55Z') });
+  syncBeadsRef(verifyDir, { ref: DEFAULT_BEADS_REF, remote: 'origin', push: true });
+  const crossId = crossCreated.createdIds[0];
+
+  const crossPayload = {
+    items: [{
+      type: UNUSED_CODE_ITEM_TYPE,
+      app: 'alpha',
+      dedupe_key: crossAppKey,
+      title: 'Attempt to update upstreamapp bead as alpha',
+      summary: 'Cross-app overwrite attempt.',
+      evidence: 'apps/alpha/src/other.js',
+      expected_revision: 1,
+    }],
+  };
+  await assert.rejects(
+    () => applyUnusedCodeSafeOutputs(crossPayload, {
+      cwd: workDir,
+      allowedApps,
+      dryRun: true,
+      now: new Date('2026-11-26T08:07:00Z'),
+    }),
+    /scoped to app "upstreamapp", not "alpha"/,
+  );
+  await assert.rejects(
+    () => applyUnusedCodeSafeOutputs(crossPayload, {
+      cwd: workDir,
+      allowedApps,
+      now: new Date('2026-11-26T08:07:05Z'),
+    }),
+    /scoped to app "upstreamapp", not "alpha"/,
+  );
+  // Even after closing the upstreamapp bead, alpha must still be rejected on scope mismatch rather than skipped as closed.
+  syncBeadsRef(verifyDir, { ref: DEFAULT_BEADS_REF, remote: 'origin', push: false });
+  mutateBeadsRef(verifyDir, [{
+    op: 'close',
+    id: crossId,
+    reason: 'Closed upstreamapp bead',
+  }], { actor: 'maintainer', now: new Date('2026-11-26T08:07:10Z') });
+  syncBeadsRef(verifyDir, { ref: DEFAULT_BEADS_REF, remote: 'origin', push: true });
+  await assert.rejects(
+    () => applyUnusedCodeSafeOutputs({
+      items: [{ ...crossPayload.items[0], expected_revision: 2 }],
+    }, {
+      cwd: workDir,
+      allowedApps,
+      now: new Date('2026-11-26T08:07:15Z'),
+    }),
+    /scoped to app "upstreamapp", not "alpha"/,
+  );
+  syncBeadsRef(verifyDir, { ref: DEFAULT_BEADS_REF, remote: 'origin', push: false });
+  assert.equal(readBeadsFromRef(verifyDir, DEFAULT_BEADS_REF).beads.get(crossId).summary, 'Owned by upstreamapp.');
+
   // All-invalid batch rejects without touching remote
   await assert.rejects(
     () => applyUnusedCodeSafeOutputs({ items: [rawOutput.items[1]] }, { cwd: workDir, allowedApps }),
@@ -625,7 +688,7 @@ test('applyUnusedCodeSafeOutputs enforces clean dry-run, fail-closed detection, 
     /maxCreates/,
   );
   syncBeadsRef(verifyDir, { ref: DEFAULT_BEADS_REF, remote: 'origin', push: false });
-  assert.equal(readBeadsFromRef(verifyDir, DEFAULT_BEADS_REF).beads.size, 6);
+  assert.equal(readBeadsFromRef(verifyDir, DEFAULT_BEADS_REF).beads.size, 7);
 });
 
 test('apply-beads-safe-outputs CLI honors detection gate, writes escaped summary/outputs, and sanitizes stderr on warnings and fatal errors', (t) => {

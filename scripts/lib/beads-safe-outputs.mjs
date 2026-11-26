@@ -372,7 +372,9 @@ export async function applyUnusedCodeSafeOutputs(rawOutput, {
 
   if (previewOnly) {
     const { beads: localBeads } = readBeadsFromRef(cwd, ref);
-    const { activeOperations, skippedClosed } = filterClosedUpsertOperations(localBeads, operations);
+    const { activeOperations, skippedClosed } = filterClosedUpsertOperations(localBeads, operations, {
+      singleAppOnly: true,
+    });
     const allSkipped = mergeSkippedClosed(skippedClosed);
     if (activeOperations.length === 0) {
       return {

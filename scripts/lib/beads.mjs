@@ -870,6 +870,11 @@ export function applyOperations(beadsMap, operations, options = {}) {
           if (singleAppOnly && !(nextScope.type === 'app' && nextScope.targets.length === 1)) {
             throw new BeadsValidationError(`Updated scope for ${existing.id} must target a single app`);
           }
+          if (singleAppOnly && existing.scope.targets[0] !== nextScope.targets[0]) {
+            throw new BeadsValidationError(
+              `Bead ${existing.id} is scoped to app "${existing.scope.targets[0]}", not "${nextScope.targets[0]}"`,
+            );
+          }
         }
         const mergedLinks = mergeLinks(existing.links, op.links);
         const linksChanged = JSON.stringify(mergedLinks) !== JSON.stringify(existing.links);
@@ -998,10 +1003,16 @@ export function applyOperations(beadsMap, operations, options = {}) {
         bead.priority = op.priority;
       }
       if (op.scope !== undefined) {
-        bead.scope = normalizeScope(op.scope);
-        if (singleAppOnly && !isSingleAppScope(bead)) {
+        const nextScope = normalizeScope(op.scope);
+        if (singleAppOnly && !(nextScope.type === 'app' && nextScope.targets.length === 1)) {
           throw new BeadsValidationError(`Updated scope for ${bead.id} must target a single app`);
         }
+        if (singleAppOnly && bead.scope.targets[0] !== nextScope.targets[0]) {
+          throw new BeadsValidationError(
+            `Bead ${bead.id} is scoped to app "${bead.scope.targets[0]}", not "${nextScope.targets[0]}"`,
+          );
+        }
+        bead.scope = nextScope;
       }
       if (op.links !== undefined) bead.links = mergeLinks(bead.links, op.links);
       if (op.note !== undefined) {
@@ -1553,7 +1564,9 @@ export function mutateBeadsRef(cwd, operations, {
     let effectiveOps = operations;
     let skippedClosed = [];
     if (skipClosedUpserts) {
-      const filtered = filterClosedUpsertOperations(beads, operations);
+      const filtered = filterClosedUpsertOperations(beads, operations, {
+        singleAppOnly: Boolean(applyOptions.singleAppOnly),
+      });
       effectiveOps = filtered.activeOperations;
       skippedClosed = filtered.skippedClosed;
       if (effectiveOps.length === 0 && skippedClosed.length > 0) {
@@ -1786,22 +1799,35 @@ function fetchRemoteBeadsTreeNoRef(repoTop, remote, ref, maxFetchAttempts = 3) {
   throw new BeadsConflictError(`Remote ${remote} ${ref} moved concurrently during fetch`);
 }
 
-export function filterClosedUpsertOperations(beadsMap, operations) {
+export function filterClosedUpsertOperations(beadsMap, operations, { singleAppOnly = false } = {}) {
   const closedByKey = new Map();
   for (const bead of beadsMap.values()) {
     if (bead.status === 'closed' && bead.dedupeKey) {
-      closedByKey.set(bead.dedupeKey, bead.id);
+      closedByKey.set(bead.dedupeKey, bead);
     }
   }
   const activeOperations = [];
   const skippedClosed = [];
   for (const op of operations) {
     if (op?.op === 'upsert' && typeof op.dedupeKey === 'string' && closedByKey.has(op.dedupeKey)) {
-      const beadId = closedByKey.get(op.dedupeKey);
+      const bead = closedByKey.get(op.dedupeKey);
+      if (singleAppOnly) {
+        if (!isSingleAppScope(bead)) {
+          activeOperations.push(op);
+          continue;
+        }
+        if (op.scope !== undefined) {
+          const nextScope = normalizeScope(op.scope);
+          if (!(nextScope.type === 'app' && nextScope.targets.length === 1) || bead.scope.targets[0] !== nextScope.targets[0]) {
+            activeOperations.push(op);
+            continue;
+          }
+        }
+      }
       skippedClosed.push({
         dedupeKey: op.dedupeKey,
-        beadId,
-        reason: `bead ${beadId} is already closed; skipping to respect maintainer disposition`,
+        beadId: bead.id,
+        reason: `bead ${bead.id} is already closed; skipping to respect maintainer disposition`,
       });
       continue;
     }
@@ -1845,7 +1871,9 @@ export function applyRemoteBeadsRef(cwd, operations, {
     let effectiveOps = operations;
     let skippedClosed = [];
     if (skipClosedUpserts) {
-      const filtered = filterClosedUpsertOperations(remoteState.beads, operations);
+      const filtered = filterClosedUpsertOperations(remoteState.beads, operations, {
+        singleAppOnly: Boolean(applyOpts.singleAppOnly),
+      });
       effectiveOps = filtered.activeOperations;
       skippedClosed = filtered.skippedClosed;
     }
