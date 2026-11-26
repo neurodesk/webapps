@@ -9,7 +9,7 @@
 // entry for every workflow file and every job of ci.yml.
 import { percentile } from './ci-minutes.mjs';
 import { LARGE_RUN_JOBS, ofPullRequest } from './ci-usage.mjs';
-import { isDispatcher } from './workflow-gate.mjs';
+import { isDispatcher } from './native-dispatcher.mjs';
 
 // What a job spends its runner on.
 //   plan: decides what to run (planner, gate, plan marker); tests nothing
@@ -162,6 +162,7 @@ export const WORKFLOWS = Object.freeze({
   'CI approval report': 'report',
   'ci-usage': 'report',
   'scheduled workflow failure reports': 'report',
+  'unused-code-triage': 'report',
   'workflow failure reports': 'report',
 });
 
