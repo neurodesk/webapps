@@ -1,0 +1,40 @@
+{
+  "upstream": {
+    "package": "laynii",
+    "version": "2.10.0",
+    "commit": "9febedf0157740dc7987fa5098f3e53e70a1c915"
+  },
+  "example": {
+    "id": "occipital-t2star",
+    "rim": {
+      "name": "Ding2016_occip_rim.nii.gz",
+      "sha256": "ca944ebb87836d4b0799dc31fb22d8cd4ed50f5186e1c39d81dc414c57340dfd"
+    },
+    "signal": {
+      "name": "Ding2016_occip_T2star.nii.gz",
+      "sha256": "6c13b980cb59e06a7eecea6c9b61bd341edaf7b97bfa530ecef06f652db256ba"
+    }
+  },
+  "cases": [
+    {
+      "id": "default-equidist-3",
+      "layersEquidistSha256": "98f2316782ee985d0719a600bc3e75707fa4f57936d3b41db61be885e141d8ba",
+      "metricEquidistSha256": "9a60342c6e5abeab64c4f84aa8dc7a1b5093a3f5e8ba41a7014dbd095600fef6",
+      "profile": [
+        { "layer": 1, "mean": 130.203, "std": 11.3132, "voxels": 319887 },
+        { "layer": 2, "mean": 131.667, "std": 11.0116, "voxels": 221900 },
+        { "layer": 3, "mean": 148.285, "std": 12.4714, "voxels": 215808 }
+      ]
+    },
+    {
+      "id": "equivol-thickness-3",
+      "layersEquivolSha256": "aa996ef04fc9e3593df7688913278d0de882cc024969333ad4a6860ec3340cae",
+      "thicknessSha256": "fb4ddecb4154e6ba312b815c49b9db42a33f9a182a11b5a9c1a987b4b41ae793",
+      "profile": [
+        { "layer": 1, "mean": 125.784, "std": 7.57129, "voxels": 188346 },
+        { "layer": 2, "mean": 132.461, "std": 11.2824, "voxels": 321703 },
+        { "layer": 3, "mean": 147.708, "std": 12.6376, "voxels": 247546 }
+      ]
+    }
+  ]
+}

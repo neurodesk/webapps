@@ -2173,3 +2173,29 @@ apps:
       shared_runtime: false
       browser_test: true
       release: true
+  - id: laynii
+    path: laynii
+    catalog: neuro
+    title: LayNii
+    description: Compute cortical layers and laminar profiles with LayNii.
+    categories: [functional-imaging]
+    keywords: [layer-fMRI, laminar, cortical layers, equivolume, equidistant, cortical depth, thickness, profile, 7T, LayNii]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [nifti, dicom]
+    hardware: cpu
+    handoff: none
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: BSD-3-Clause
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: true

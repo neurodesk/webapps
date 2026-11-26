@@ -1,0 +1,46 @@
+[
+  {
+    "id": "occipital-t2star",
+    "label": "Occipital cortex (1 mm T2*)",
+    "description": "Human occipital cortex rim segmentation (130 × 114 × 107, 1.0 mm) and matched T2*-weighted volume from LayNii's Ding et al. (2016) test data.",
+    "expectedResult": "Downloadable equidistant/equivolume layer maps, cortical depth metric and a 3-layer T2* laminar profile table and plot in seconds.",
+    "files": [
+      {
+        "role": "image",
+        "name": "Ding2016_occip_rim.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d2449b9ed41ae4d1e7fd8caa4142a5a64186b1bc/laynii/examples/Ding2016_occip_rim.nii.gz",
+        "sha256": "ca944ebb87836d4b0799dc31fb22d8cd4ed50f5186e1c39d81dc414c57340dfd",
+        "bytes": 87500
+      },
+      {
+        "role": "signal",
+        "name": "Ding2016_occip_T2star.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d2449b9ed41ae4d1e7fd8caa4142a5a64186b1bc/laynii/examples/Ding2016_occip_T2star.nii.gz",
+        "sha256": "6c13b980cb59e06a7eecea6c9b61bd341edaf7b97bfa530ecef06f652db256ba",
+        "bytes": 5494429
+      }
+    ]
+  },
+  {
+    "id": "motor-7t-bold",
+    "label": "7T motor cortex (0.2 mm BOLD)",
+    "description": "Ultra-high-resolution 7T human motor cortex rim (648 × 648 × 15, 0.20 × 0.20 × 0.32 mm) and matched BOLD activation map from Huber et al. (2021).",
+    "expectedResult": "Equidistant or equivolume cortical layers and a 7T motor BOLD laminar profile table and plot across cortical depth.",
+    "files": [
+      {
+        "role": "image",
+        "name": "sc_rim.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d2449b9ed41ae4d1e7fd8caa4142a5a64186b1bc/laynii/examples/sc_rim.nii.gz",
+        "sha256": "c7b32e4c8bbe7376c125ae35504656e3ea12220dfac29d4efea6779bcab08238",
+        "bytes": 174121
+      },
+      {
+        "role": "signal",
+        "name": "sc_BOLD_act.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d2449b9ed41ae4d1e7fd8caa4142a5a64186b1bc/laynii/examples/sc_BOLD_act.nii.gz",
+        "sha256": "8fad3572509b3bb9ba0c78e231bae5ada87a60b9fd010b145b330200a8158a38",
+        "bytes": 7364937
+      }
+    ]
+  }
+]

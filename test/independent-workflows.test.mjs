@@ -275,7 +275,7 @@ test('native packages share one gated publisher while signing stays isolated', a
 
 test('native and independent test workflows pin actions and discard checkout credentials', async () => {
   const portable = (await portableCallers()).map(([name]) => name);
-  for (const name of ['synthsr-native', 'synthseg-native', ...portable, 'node-cli-portable', 'node-cli', 'greedy-native', 'sct-full-tests', 'native-nifti', 'native-publish', 'standalone-links', 'hmc-registration', 'n4-wasm-source', 'desktop-source-approval']) {
+  for (const name of ['synthsr-native', 'synthseg-native', ...portable, 'node-cli-portable', 'node-cli', 'greedy-native', 'sct-full-tests', 'native-nifti', 'native-publish', 'standalone-links', 'hmc-registration', 'laynii-wasm-source', 'n4-wasm-source', 'desktop-source-approval']) {
     const flow = await workflow(name);
     for (const job of Object.values(flow.jobs)) {
       if (job.uses) assert.match(job.uses, /^\.\/\.github\/workflows\/[\w-]+\.yml$/, `${name}: ${job.uses}`);

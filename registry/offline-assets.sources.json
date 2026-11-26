@@ -8117,6 +8117,32 @@
         "bytes": 13930,
         "kind": "example"
       }
+    ],
+    "laynii": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d2449b9ed41ae4d1e7fd8caa4142a5a64186b1bc/laynii/examples/Ding2016_occip_rim.nii.gz",
+        "sha256": "ca944ebb87836d4b0799dc31fb22d8cd4ed50f5186e1c39d81dc414c57340dfd",
+        "bytes": 87500,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d2449b9ed41ae4d1e7fd8caa4142a5a64186b1bc/laynii/examples/Ding2016_occip_T2star.nii.gz",
+        "sha256": "6c13b980cb59e06a7eecea6c9b61bd341edaf7b97bfa530ecef06f652db256ba",
+        "bytes": 5494429,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d2449b9ed41ae4d1e7fd8caa4142a5a64186b1bc/laynii/examples/sc_rim.nii.gz",
+        "sha256": "c7b32e4c8bbe7376c125ae35504656e3ea12220dfac29d4efea6779bcab08238",
+        "bytes": 174121,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d2449b9ed41ae4d1e7fd8caa4142a5a64186b1bc/laynii/examples/sc_BOLD_act.nii.gz",
+        "sha256": "8fad3572509b3bb9ba0c78e231bae5ada87a60b9fd010b145b330200a8158a38",
+        "bytes": 7364937,
+        "kind": "example"
+      }
     ]
   },
   "exclusions": [],

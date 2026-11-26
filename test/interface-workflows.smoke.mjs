@@ -1293,6 +1293,52 @@ try {
     await expect(page.locator('#shiftDates')).toBeChecked();
     await expect(page.locator('#outputSection')).not.toHaveAttribute('open', '');
   });
+  await check('laynii', async page => {
+    const rimBuf = (() => {
+      const dims = [16, 16, 16];
+      const nvox = dims[0] * dims[1] * dims[2];
+      const buf = Buffer.alloc(352 + nvox * 2);
+      buf.writeInt32LE(348, 0);
+      buf.writeInt16LE(3, 40);
+      buf.writeInt16LE(dims[0], 42);
+      buf.writeInt16LE(dims[1], 44);
+      buf.writeInt16LE(dims[2], 46);
+      buf.writeInt16LE(1, 48);
+      buf.writeInt16LE(4, 70);
+      buf.writeInt16LE(16, 72);
+      buf.writeFloatLE(0.5, 80);
+      buf.writeFloatLE(0.5, 84);
+      buf.writeFloatLE(0.5, 88);
+      buf.writeFloatLE(352, 108);
+      buf.writeFloatLE(1, 112);
+      buf.write('n+1\0', 344, 'ascii');
+      for (let z = 2; z < 14; z++) for (let y = 2; y < 14; y++) for (let x = 3; x <= 12; x++) {
+        const v = x === 3 ? 2 : x === 12 ? 1 : 3;
+        buf.writeInt16LE(v, 352 + (x + y * 16 + z * 256) * 2);
+      }
+      return buf;
+    })();
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await page.locator('#imageInput').setInputFiles({ name: 'interface_rim.nii', mimeType: 'application/octet-stream', buffer: rimBuf });
+    await expect(page.locator('#fileInfo')).toContainText('interface_rim.nii · 16 × 16 × 16');
+    await page.locator('#nrLayers').fill('4');
+    const advanced = page.locator('#advancedSettings > summary');
+    await expect(page.locator('#iterSmooth')).toBeHidden();
+    await advanced.tap();
+    await page.locator('#iterSmooth').fill('25');
+    await page.locator('#thickness').check();
+    await advanced.tap();
+    await expect(page.locator('#iterSmooth')).toBeHidden();
+    await advanced.tap();
+    await expect(page.locator('#iterSmooth')).toHaveValue('25');
+    await expect(page.locator('#thickness')).toBeChecked();
+    await page.locator('#runButton').tap();
+    await expect(page.locator('#statusText')).toHaveText('Cortical layers ready', { timeout: 60000 });
+    await expect(page.locator('#outputSection')).toHaveAttribute('open', '');
+    await expect(page.locator('#resultList')).toContainText('Equidistant layers (4)');
+    await expect(page.locator('#resultList')).toContainText('Cortical thickness (mm)');
+  });
 } finally { await browser.close(); await site.close(); }
 if (failures.length) throw new Error(failures.join('\n'));
 requireChecked(checked, selection, 'Interface workflows');

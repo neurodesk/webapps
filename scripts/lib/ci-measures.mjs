@@ -103,6 +103,7 @@ export const WORKFLOWS = Object.freeze({
   'histo2mri-native': TEST,
   'hmc-native': TEST,
   'hmc-registration': TEST,
+  'laynii-wasm-source': TEST,
   'lcmodel-native': TEST,
   'lightsheet-atlas-native': TEST,
   'microscope-qc-native': TEST,

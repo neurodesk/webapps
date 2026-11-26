@@ -1,0 +1,13 @@
+LayNii WebAssembly library
+Copyright 2026 Neurodesk contributors
+
+wasm/laynii.wasm is LayNii (LN2_LAYERS and LN2_PROFILE) compiled to WebAssembly.
+LayNii, BSD-3-Clause, Laurentius Huber, Omer Faruk Gulban and contributors.
+https://github.com/layerfMRI/LAYNII
+LayNii source: 9febedf0157740dc7987fa5098f3e53e70a1c915 (v2.10.0).
+Build toolchain: itkwasm/emscripten@sha256:d6c35290a9f1c5cfeb8168c18bbf64d78394cd111b6a19c6091921e98a3aaa1d
+
+Huber L, Poser BA, Bandettini PA, Arora K, Wagstyl K, Cho S, Goense J,
+Nothnagel N, Morgan AT, van den Hurk J, Mueller AK, Reynolds RC, Glen DR,
+Goebel RW, Gulban OF (2021). LayNii: A software suite for layer-fMRI.
+NeuroImage 237:118091. https://doi.org/10.1016/j.neuroimage.2021.118091
